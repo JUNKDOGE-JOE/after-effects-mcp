@@ -1,0 +1,138 @@
+"""Schema validation: every verb rejects bad args and accepts good ones."""
+
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
+
+from aebm_mcp import schemas as S
+
+
+def test_registry_has_15_verbs():
+    assert len(S.SCHEMAS) == 15
+    assert set(S.SCHEMAS) == {
+        "ae.init", "ae.overview", "ae.layers", "ae.readProps", "ae.exec",
+        "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.applyEffect",
+        "ae.createLayer", "ae.setProperty", "ae.moveLayer", "ae.selectLayers",
+        "ae.setTime", "ae.getTime",
+    }
+
+
+def test_init_accepts_bool():
+    assert S.AeInitArgs(refresh_only=True).refresh_only is True
+    assert S.AeInitArgs().refresh_only is False
+
+
+def test_init_rejects_unknown_field():
+    with pytest.raises(ValidationError):
+        S.AeInitArgs(foo=1)
+
+
+def test_overview_is_empty():
+    S.AeOverviewArgs()  # no error
+    with pytest.raises(ValidationError):
+        S.AeOverviewArgs(foo=1)
+
+
+def test_layers_optional_comp_id():
+    assert S.AeLayersArgs().comp_id is None
+    assert S.AeLayersArgs(comp_id="42").comp_id == "42"
+
+
+def test_read_props_requires_code():
+    with pytest.raises(ValidationError):
+        S.AeReadPropsArgs()
+    assert S.AeReadPropsArgs(code="x").code == "x"
+
+
+def test_exec_timeout_bounds():
+    # Too low
+    with pytest.raises(ValidationError):
+        S.AeExecArgs(code="x", timeout_sec=0)
+    # Too high
+    with pytest.raises(ValidationError):
+        S.AeExecArgs(code="x", timeout_sec=601)
+    # Default
+    assert S.AeExecArgs(code="x").timeout_sec == 30
+
+
+def test_checkpoint_limit_positive():
+    with pytest.raises(ValidationError):
+        S.AeCheckpointArgs(limit=0)
+    assert S.AeCheckpointArgs(limit=5).limit == 5
+
+
+def test_revert_requires_id():
+    with pytest.raises(ValidationError):
+        S.AeRevertArgs()
+    assert S.AeRevertArgs(checkpoint_id="abc").checkpoint_id == "abc"
+
+
+def test_snapshot_method_enum():
+    assert S.AeSnapshotArgs().method == "DesktopCopy"
+    with pytest.raises(ValidationError):
+        S.AeSnapshotArgs(method="Bogus")
+
+
+def test_apply_effect_required():
+    with pytest.raises(ValidationError):
+        S.AeApplyEffectArgs()
+    ok = S.AeApplyEffectArgs(layer_id=1, effect_match_name="ADBE Gaussian Blur 2")
+    assert ok.layer_id == 1
+
+
+def test_create_layer_types():
+    for t in ["solid", "text", "shape", "null", "adjustment", "camera", "light"]:
+        assert S.AeCreateLayerArgs(type=t, name="x").type == t
+    with pytest.raises(ValidationError):
+        S.AeCreateLayerArgs(type="bogus", name="x")
+
+
+def test_create_layer_name_non_empty():
+    with pytest.raises(ValidationError):
+        S.AeCreateLayerArgs(type="solid", name="")
+
+
+def test_create_layer_color_tuple():
+    args = S.AeCreateLayerArgs(type="solid", name="x", color=(1.0, 0.5, 0.0, 1.0))
+    assert args.color == (1.0, 0.5, 0.0, 1.0)
+
+
+def test_set_property_required():
+    with pytest.raises(ValidationError):
+        S.AeSetPropertyArgs()
+    ok = S.AeSetPropertyArgs(layer_id=1, path="Transform/Position", value=[100, 200])
+    assert ok.path == "Transform/Position"
+
+
+def test_move_layer_positive_indices():
+    with pytest.raises(ValidationError):
+        S.AeMoveLayerArgs(layer_id=0, to_index=1)
+    with pytest.raises(ValidationError):
+        S.AeMoveLayerArgs(layer_id=1, to_index=0)
+
+
+def test_select_layers_allows_list_or_literal():
+    assert S.AeSelectLayersArgs(layer_ids="all").layer_ids == "all"
+    assert S.AeSelectLayersArgs(layer_ids="none").layer_ids == "none"
+    assert S.AeSelectLayersArgs(layer_ids=[1, 2]).layer_ids == [1, 2]
+    with pytest.raises(ValidationError):
+        S.AeSelectLayersArgs(layer_ids="everything")
+
+
+def test_set_time_non_negative():
+    assert S.AeSetTimeArgs(time=0.0).time == 0.0
+    with pytest.raises(ValidationError):
+        S.AeSetTimeArgs(time=-0.1)
+
+
+def test_get_time_optional_comp_id():
+    assert S.AeGetTimeArgs().comp_id is None
+
+
+def test_every_schema_can_generate_json_schema():
+    """MCP tools/list will call .model_json_schema() on every verb."""
+    for name, cls in S.SCHEMAS.items():
+        schema = cls.model_json_schema()
+        assert schema["type"] == "object", name
+        assert "properties" in schema, name
