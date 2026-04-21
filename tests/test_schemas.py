@@ -8,13 +8,15 @@ from pydantic import ValidationError
 from aebm_mcp import schemas as S
 
 
-def test_registry_has_15_verbs():
-    assert len(S.SCHEMAS) == 15
+def test_registry_has_17_verbs():
+    # v0.6.2: 15 verbs. v0.7-A: +ae.isolateToggle +ae.toastQuery -> 17.
+    assert len(S.SCHEMAS) == 17, f"expected 17 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.layers", "ae.readProps", "ae.exec",
         "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.applyEffect",
         "ae.createLayer", "ae.setProperty", "ae.moveLayer", "ae.selectLayers",
         "ae.setTime", "ae.getTime",
+        "ae.isolateToggle", "ae.toastQuery",
     }
 
 
@@ -136,3 +138,19 @@ def test_every_schema_can_generate_json_schema():
         schema = cls.model_json_schema()
         assert schema["type"] == "object", name
         assert "properties" in schema, name
+
+
+def test_isolate_toggle_schema_is_empty():
+    # No args required -- it's pure toggle.
+    args = S.AeIsolateToggleArgs()
+    assert args.model_dump() == {}
+
+
+def test_toast_query_schema_is_empty():
+    args = S.AeToastQueryArgs()
+    assert args.model_dump() == {}
+
+
+def test_isolate_toggle_rejects_extra_fields():
+    with pytest.raises(ValidationError):
+        S.AeIsolateToggleArgs(foo="bar")

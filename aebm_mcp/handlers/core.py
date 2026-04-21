@@ -239,3 +239,48 @@ async def _run_apply_effect(args: schemas.AeApplyEffectArgs, ctx: Any) -> Any:
 
 
 register("ae.applyEffect", schemas.AeApplyEffectArgs, _run_apply_effect)
+
+
+# ---------------------------------------------------------------------------
+# v0.7-A: ae.isolateToggle -- forwards to plugin via Invoke-AebmTool default route.
+# ---------------------------------------------------------------------------
+
+
+async def _run_isolate_toggle(args: schemas.AeIsolateToggleArgs, ctx: Any) -> Any:
+    async def _call() -> Any:
+        # Arguments dict omitted: PS Invoke-AebmTool defaults -Arguments to @{}.
+        raw = await bridge.run_ps(
+            "Invoke-AebmTool",
+            {"Tool": "aebm.isolateToggle"},
+            timeout_sec=10.0,
+        )
+        return _try_json(raw)
+
+    return await progress.run_with_timeout(
+        ctx, _call(), timeout_sec=15.0, start_msg="ae.isolateToggle..."
+    )
+
+
+register("ae.isolateToggle", schemas.AeIsolateToggleArgs, _run_isolate_toggle)
+
+
+# ---------------------------------------------------------------------------
+# v0.7-A: ae.toastQuery -- read current toast queue snapshot for assertions.
+# ---------------------------------------------------------------------------
+
+
+async def _run_toast_query(args: schemas.AeToastQueryArgs, ctx: Any) -> Any:
+    async def _call() -> Any:
+        raw = await bridge.run_ps(
+            "Invoke-AebmTool",
+            {"Tool": "aebm.toastQuery"},
+            timeout_sec=5.0,
+        )
+        return _try_json(raw)
+
+    return await progress.run_with_timeout(
+        ctx, _call(), timeout_sec=8.0, start_msg="ae.toastQuery..."
+    )
+
+
+register("ae.toastQuery", schemas.AeToastQueryArgs, _run_toast_query)

@@ -185,6 +185,21 @@ class AeGetTimeArgs(_StrictModel):
 
 
 # ---------------------------------------------------------------------------
+# v0.7-A additions (Topic B: Isolate Selected + Toast Query)
+# ---------------------------------------------------------------------------
+
+
+class AeIsolateToggleArgs(_StrictModel):
+    """ae.isolateToggle -- toggle Motion4-style '/' timeline isolation session."""
+    pass
+
+
+class AeToastQueryArgs(_StrictModel):
+    """ae.toastQuery -- read current active toast queue for test assertions."""
+    pass
+
+
+# ---------------------------------------------------------------------------
 # Registry of verb -> schema (handlers.core / handlers.typed reference this)
 # ---------------------------------------------------------------------------
 
@@ -205,6 +220,8 @@ SCHEMAS = {
     "ae.selectLayers": AeSelectLayersArgs,
     "ae.setTime": AeSetTimeArgs,
     "ae.getTime": AeGetTimeArgs,
+    "ae.isolateToggle": AeIsolateToggleArgs,
+    "ae.toastQuery":    AeToastQueryArgs,
 }
 
-assert len(SCHEMAS) == 15, f"expected 15 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 17, f"expected 17 verbs, got {len(SCHEMAS)}"
