@@ -22,10 +22,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-log = logging.getLogger("aebm_mcp.snapshot")
+log = logging.getLogger("after_effects_mcp.snapshot")
 
 if sys.platform != "win32":
-    raise ImportError("aebm_mcp.snapshot is Windows-only")
+    raise ImportError("after_effects_mcp.snapshot is Windows-only")
 
 
 # ---------------------------------------------------------------------------
@@ -408,7 +408,7 @@ def _bitmap_to_png(hbm: int, width: int, height: int, hdc_src: int, out_path: Pa
 
 
 def _default_out_path() -> Path:
-    # REPO_ROOT is mcp/aebm_mcp/snapshot.py -> mcp/aebm_mcp/ -> mcp/ -> repo
+    # REPO_ROOT is mcp/after_effects_mcp/snapshot.py -> mcp/after_effects_mcp/ -> mcp/ -> repo
     repo_root = Path(__file__).resolve().parents[2]
     out_dir = repo_root / "release" / "logs" / "integration_runs"
     out_dir.mkdir(parents=True, exist_ok=True)

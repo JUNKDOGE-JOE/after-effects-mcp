@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "aebm": {
+      "command": "python",
+      "args": [
+        "-m", "uv", "run",
+        "--directory",
+        "<PATH_TO_AFTER_EFFECTS_MCP_REPO>",
+        "python", "-m", "after_effects_mcp"
+      ],
+      "env": {
+        "AE_BRIDGE_ROOT": "<PATH_TO_PLUGIN_REPO_WITH_AEBM_BRIDGE>"
+      }
+    }
+  }
+}

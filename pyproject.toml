@@ -1,12 +1,12 @@
 [project]
-name = "aebm-mcp"
+name = "after-effects-mcp"
 version = "0.6.2"
-description = "MCP server for BlendifyAE (AEBM) — 15 verbs wrapping the aebm-file PowerShell bridge"
+description = "MCP server exposing After Effects automation via the aebm file-polling bridge protocol"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
-    { name = "BlendifyAE" },
+    { name = "after-effects-mcp contributors" },
 ]
 dependencies = [
     "mcp>=1.0.0",
@@ -21,19 +21,19 @@ dev = [
 ]
 
 [project.scripts]
-aebm-mcp = "aebm_mcp.__main__:main"
+after-effects-mcp = "after_effects_mcp.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["aebm_mcp"]
+packages = ["after_effects_mcp"]
 
 [tool.hatch.build]
 include = [
-    "aebm_mcp/**/*.py",
-    "aebm_mcp/jsx_templates/*.jsx",
+    "after_effects_mcp/**/*.py",
+    "after_effects_mcp/jsx_templates/*.jsx",
 ]
 
 [tool.pytest.ini_options]

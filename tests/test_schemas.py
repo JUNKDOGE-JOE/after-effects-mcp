@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from aebm_mcp import schemas as S
+from after_effects_mcp import schemas as S
 
 
 def test_registry_has_17_verbs():

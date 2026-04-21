@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  tests:
+    name: Python tests (pytest)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install uv
+        shell: pwsh
+        run: pip install uv
+
+      - name: Sync dev deps
+        shell: pwsh
+        env:
+          UV_LINK_MODE: copy
+        run: python -m uv sync --extra dev
+
+      - name: Set up dummy AE_BRIDGE_ROOT for tests
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "test-bridge-root/scripts" | Out-Null
+          New-Item -ItemType File -Force -Path "test-bridge-root/scripts/backend_interface.ps1" | Out-Null
+          "AE_BRIDGE_ROOT=$(Resolve-Path test-bridge-root)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Run pytest
+        shell: pwsh
+        env:
+          UV_LINK_MODE: copy
+        run: python -m uv run pytest -v

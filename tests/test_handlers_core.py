@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from aebm_mcp import schemas as S
-from aebm_mcp.handlers import HANDLERS, load_all
+from after_effects_mcp import schemas as S
+from after_effects_mcp.handlers import HANDLERS, load_all
 
 
 @pytest.fixture(autouse=True)
@@ -104,20 +104,20 @@ async def test_apply_effect_builds_jsx(mock_bridge):
 
 @pytest.mark.asyncio
 async def test_snapshot_error_on_non_windows(monkeypatch):
-    """When aebm_mcp.snapshot import fails, handler returns a clean error.
+    """When after_effects_mcp.snapshot import fails, handler returns a clean error.
     Uses monkeypatch to make the import fail."""
     import sys
     _, run_fn = HANDLERS["ae.snapshot"]
     # Force the import to fail by temporarily removing the module and
     # poisoning the module cache entry.
-    orig = sys.modules.pop("aebm_mcp.snapshot", None)
-    sys.modules["aebm_mcp.snapshot"] = None  # type: ignore[assignment]
+    orig = sys.modules.pop("after_effects_mcp.snapshot", None)
+    sys.modules["after_effects_mcp.snapshot"] = None  # type: ignore[assignment]
     try:
         result = await run_fn(S.AeSnapshotArgs(), None)
         assert result["ok"] is False
         assert "unavailable" in result["error"]
     finally:
         if orig is not None:
-            sys.modules["aebm_mcp.snapshot"] = orig
+            sys.modules["after_effects_mcp.snapshot"] = orig
         else:
-            sys.modules.pop("aebm_mcp.snapshot", None)
+            sys.modules.pop("after_effects_mcp.snapshot", None)

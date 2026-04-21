@@ -1,6 +1,6 @@
 """Shared pytest fixtures.
 
-Mock bridge: intercepts aebm_mcp.bridge.run_ps / invoke_ae_* so handler tests
+Mock bridge: intercepts after_effects_mcp.bridge.run_ps / invoke_ae_* so handler tests
 never actually spawn pwsh. Each test registers a dict of expected (function,
 kwargs) -> response string.
 """
@@ -16,14 +16,14 @@ import pytest
 
 @pytest.fixture
 def mock_bridge(monkeypatch):
-    """Replace aebm_mcp.bridge invoke_ae_* with AsyncMocks that record calls.
+    """Replace after_effects_mcp.bridge invoke_ae_* with AsyncMocks that record calls.
 
     Yields a namespace with:
       - calls: list of (name, args, kwargs) tuples
       - responses: dict mapping function name -> canned response str
       - set_response(name, value): set canned response
     """
-    from aebm_mcp import bridge
+    from after_effects_mcp import bridge
 
     class MockNS:
         def __init__(self) -> None:

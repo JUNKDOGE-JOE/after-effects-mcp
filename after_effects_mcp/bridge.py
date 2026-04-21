@@ -28,24 +28,79 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-log = logging.getLogger("aebm_mcp.bridge")
+log = logging.getLogger("after_effects_mcp.bridge")
 
 
 # ---------------------------------------------------------------------------
-# Repo layout
+# Bridge root resolution
 # ---------------------------------------------------------------------------
+# The MCP server wraps an AE plugin that implements the aebm file-polling
+# protocol. The plugin ships PowerShell scripts (backend_interface.ps1 +
+# backend_aebm_file.ps1) that this server shells out to.
+#
+# The AE_BRIDGE_ROOT env var must point at a checkout of such a plugin.
+# No sibling-path autodetection -- explicit wins over implicit.
 
-# mcp/aebm_mcp/bridge.py -> mcp/ -> <repo root>
-REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPTS_DIR = REPO_ROOT / "scripts"
-BACKEND_INTERFACE_PS1 = SCRIPTS_DIR / "backend_interface.ps1"
+
+def _resolve_bridge_root() -> Path:
+    """Locate the AE plugin checkout that implements the aebm file-polling bridge.
+
+    Requires the AE_BRIDGE_ROOT environment variable to point at a directory
+    containing scripts/backend_interface.ps1. Raises RuntimeError with an
+    actionable message if not set or the path is invalid.
+    """
+    env = os.environ.get("AE_BRIDGE_ROOT")
+    if env:
+        p = Path(env).resolve()
+        script = p / "scripts" / "backend_interface.ps1"
+        if script.is_file():
+            return p
+        raise RuntimeError(
+            f"AE_BRIDGE_ROOT={env} does not contain scripts/backend_interface.ps1. "
+            "Expected a checkout of an AE plugin that implements the aebm "
+            "file-polling protocol."
+        )
+    raise RuntimeError(
+        "AE_BRIDGE_ROOT environment variable is not set. "
+        "Set it to the checkout path of an AE plugin that implements the aebm "
+        "file-polling protocol. See README.md 'Environment Setup'."
+    )
+
+
+# Lazy resolution: do NOT validate at import time. Tests mock subprocess
+# at a higher layer and should be able to `from after_effects_mcp import
+# bridge` without AE_BRIDGE_ROOT set.
+#
+# First call to any bridge-reading function (run_ps / invoke_ae_*) triggers
+# resolution + caches the result. Absent env var -> RuntimeError only at
+# first use, not at import.
+
+_cached_bridge_root: Optional[Path] = None
+
+
+def bridge_root() -> Path:
+    """Return (and cache) the resolved BRIDGE_ROOT. Raises RuntimeError if
+    AE_BRIDGE_ROOT is unset or invalid. Safe to call multiple times."""
+    global _cached_bridge_root
+    if _cached_bridge_root is None:
+        _cached_bridge_root = _resolve_bridge_root()
+    return _cached_bridge_root
+
+
+def backend_interface_ps1() -> Path:
+    return bridge_root() / "scripts" / "backend_interface.ps1"
+
+
+def scripts_dir() -> Path:
+    return bridge_root() / "scripts"
 
 
 def _ensure_interface_exists() -> None:
-    if not BACKEND_INTERFACE_PS1.exists():
+    ps1 = backend_interface_ps1()
+    if not ps1.exists():
         raise FileNotFoundError(
-            f"backend_interface.ps1 not found at {BACKEND_INTERFACE_PS1}. "
-            f"The MCP server must run from within the repo worktree."
+            f"backend_interface.ps1 not found at {ps1}. "
+            f"Check AE_BRIDGE_ROOT env var points at a valid plugin checkout."
         )
 
 
@@ -134,7 +189,7 @@ def _build_powershell_script(invocation: str, code_var: Optional[str] = None) ->
         "$env:AE_BACKEND = 'aebm-file'",
         # Dot-source the interface. PSScriptRoot is the caller's PSScriptRoot
         # fallback; use the absolute path we resolved in Python.
-        f". '{_ps_escape_single(str(BACKEND_INTERFACE_PS1))}'",
+        f". '{_ps_escape_single(str(backend_interface_ps1()))}'",
         "Initialize-Backend | Out-Null",
     ]
     if code_var:

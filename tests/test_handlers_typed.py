@@ -6,9 +6,9 @@ import json
 
 import pytest
 
-from aebm_mcp import schemas as S
-from aebm_mcp.handlers import HANDLERS, load_all
-from aebm_mcp.handlers import typed as T
+from after_effects_mcp import schemas as S
+from after_effects_mcp.handlers import HANDLERS, load_all
+from after_effects_mcp.handlers import typed as T
 
 
 @pytest.fixture(autouse=True)

@@ -22,5 +22,5 @@ def register(name: str, schema: Type[BaseModel], run_fn: RunFn) -> None:
 def load_all() -> None:
     """Import core + typed modules so they register their handlers."""
     # Imported for side effects (registration via @register or explicit register() calls).
-    from aebm_mcp.handlers import core  # noqa: F401
-    from aebm_mcp.handlers import typed  # noqa: F401
+    from after_effects_mcp.handlers import core  # noqa: F401
+    from after_effects_mcp.handlers import typed  # noqa: F401

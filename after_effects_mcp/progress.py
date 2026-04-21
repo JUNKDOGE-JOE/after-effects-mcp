@@ -18,7 +18,7 @@ import contextlib
 import logging
 from typing import Any, Awaitable, Optional
 
-log = logging.getLogger("aebm_mcp.progress")
+log = logging.getLogger("after_effects_mcp.progress")
 
 
 async def _safe_report_progress(
