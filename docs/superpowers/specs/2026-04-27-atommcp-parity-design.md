@@ -322,8 +322,8 @@ walk path → 对 `i in 1..numKeyframes` 读 `keyTime / keyValue / keyInInterpol
 3. JSX 序列（避开 `app.project.save(File)` 的 fsName 副作用）：
    ```javascript
    if (app.project.file === null) {
-     // untitled 项目，无原文件可拷贝
-     throw new Error("checkpoint requires a saved project; save the .aep first");
+     // untitled 项目：静默跳过，不报错不写盘
+     return JSON.stringify({ok: true, skipped: true, reason: "untitled-project"});
    }
    app.project.save();                                 // 落盘到原路径（无副作用）
    var src = app.project.file;
@@ -333,7 +333,7 @@ walk path → 对 `i in 1..numKeyframes` 读 `keyTime / keyValue / keyInInterpol
 
    关键点：**绝不能用 `app.project.save(File(checkpointPath))`**——这会把当前 project 的 fsName 切到 checkpoint 路径，污染用户工作流。先 `save()` 到原路径再 `File.copy()` 是无副作用的。
 
-   **untitled project 降级**：`app.project.file === null` 时返回 `{ok: false, error: "checkpoint requires a saved project; save the .aep first"}`。这与 Atom 行为一致（Atom 在 unsaved 项目上 checkpoint 也是降级，见 ATOM_INTEGRATION.md "checkpoint: unavailable"）。
+   **untitled project 静默跳过**：`app.project.file === null` 时不报错不写盘，返回 `{ok: true, skipped: true, reason: "untitled-project", id: null}`。理由：用户随时可能 New Project 后立刻让 Claude 跑一段 `ae.exec(..., checkpoint_label="x")`，硬报错会让 Claude 进入"我得先让用户存盘"的循环；静默跳过则保留 verb 的写动作仍然执行，只是无 rollback 能力。用户存盘后下次调用自然恢复。这与 Atom 行为对齐（Atom 在 unsaved 项目上 checkpoint 也是降级，见 ATOM_INTEGRATION.md "checkpoint: unavailable"）。
 4. 写元数据 `<id>.json`：`{id, label, ts: ISO8601, sourceProjectPath, activeCompId, currentTime, sizeBytes}`。
 5. 触发 retention：按 ts 降序保留 `AEBM_CHECKPOINT_KEEP` (默认 50) 个，多余的删 `.aep` + `.json`。
 
@@ -344,8 +344,11 @@ walk path → 对 `i in 1..numKeyframes` 读 `keyTime / keyValue / keyInInterpol
 **出参**：
 
 ```json
-// action: "create"
+// action: "create" (saved project)
 {"ok": true, "id": "1714180800000_a3f2bc91", "label": "before risky write", "path": "C:/.../1714180800000_a3f2bc91.aep", "sizeBytes": 12345678}
+
+// action: "create" (untitled project — silent skip)
+{"ok": true, "skipped": true, "reason": "untitled-project", "id": null}
 
 // action: "list"
 {"ok": true, "checkpoints": [{"id": "...", "label": "...", "ts": "2026-04-27T...", "sizeBytes": 12345678, "activeCompId": "12"}], "total": 17}
@@ -474,7 +477,7 @@ live 测试失败时，conftest 在 `tests/live/_artifacts/<test_name>/` 落：
 
 | 风险 | 概率 | 影响 | 缓解 |
 |---|---|---|---|
-| `app.project.save()` 副作用切换 fsName | 高 | checkpoint 把用户工程文件路径改了 | 用 `File.copy()` 而非 save；untitled project 直接降级返回 error |
+| `app.project.save()` 副作用切换 fsName | 高 | checkpoint 把用户工程文件路径改了 | 用 `File.copy()` 而非 save(File)；untitled project 静默跳过 (`skipped: true`) 不写盘 |
 | `scanPropertyTree` 在大 comp 爆栈/超时 | 中 | bridge timeout | `max_depth` 默认 4，文档明确"超过 4 层非常罕见"；`ae.exec` `timeout_sec` 提到 60s |
 | `getExpressions` 输出超大（千行表达式工程） | 中 | MCP 消息体超 stdio buffer | `max_results` 默 200 + truncated 标记 |
 | `searchProject` 跨 scope 性能 | 低 | 单次 5s+ | 默认 limit 100；scope 可裁 |
