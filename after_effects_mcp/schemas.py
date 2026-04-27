@@ -77,9 +77,23 @@ class AeExecArgs(_StrictModel):
     )
 
 
+CheckpointAction = Literal["create", "list"]
+
+
 class AeCheckpointArgs(_StrictModel):
-    """ae.checkpoint — list recent checkpoints (stub: returns empty)."""
-    limit: int = Field(20, ge=1, le=200)
+    """ae.checkpoint — create or list .aep snapshots."""
+    action: CheckpointAction = Field(
+        "list",
+        description="'create' = save .aep snapshot; 'list' = enumerate existing.",
+    )
+    label: str = Field(
+        "",
+        description="Human-readable tag (used when action='create').",
+    )
+    limit: int = Field(
+        20, ge=1, le=200,
+        description="Max entries returned when action='list'.",
+    )
 
 
 class AeRevertArgs(_StrictModel):

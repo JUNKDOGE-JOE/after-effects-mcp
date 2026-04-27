@@ -174,3 +174,21 @@ def test_ae_ping_extra_forbidden():
 def test_ae_ping_in_registry():
     assert "ae.ping" in S.SCHEMAS
     assert S.SCHEMAS["ae.ping"] is S.AePingArgs
+
+
+def test_ae_checkpoint_default_action_is_list():
+    a = S.AeCheckpointArgs()
+    assert a.action == "list"
+    assert a.label == ""
+    assert a.limit == 20
+
+
+def test_ae_checkpoint_create_with_label():
+    a = S.AeCheckpointArgs(action="create", label="before risky write")
+    assert a.action == "create"
+    assert a.label == "before risky write"
+
+
+def test_ae_checkpoint_invalid_action():
+    with pytest.raises(ValidationError):
+        S.AeCheckpointArgs(action="delete")
