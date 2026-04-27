@@ -55,7 +55,13 @@ async def test_exec_forwards_all_args(mock_bridge):
         timeout_sec=60,
     )
     await run_fn(args, None)
-    name, a, kw = next(c for c in mock_bridge.calls if c[0] == "invoke_ae_exec")
+    # With checkpoint_label set, _run_exec first calls invoke_ae_exec for the
+    # path probe and (if project is untitled) skips the checkpoint JSX, then
+    # calls invoke_ae_exec for the actual user code. Filter for the user call.
+    name, a, kw = next(
+        c for c in mock_bridge.calls
+        if c[0] == "invoke_ae_exec" and c[2].get("code") == "JSON.stringify({a:1})"
+    )
     assert kw["code"] == "JSON.stringify({a:1})"
     assert kw["undo_group_name"] == "unit"
     assert kw["checkpoint_label"] == "t1"
@@ -263,6 +269,59 @@ async def test_revert_unknown_id_returns_error(tmp_path, monkeypatch):
     result = await _run_revert(args, ctx=None)
     assert result["ok"] is False
     assert "not found" in result["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_exec_with_label_creates_checkpoint(tmp_path, monkeypatch):
+    from after_effects_mcp import checkpoint_store
+    store = checkpoint_store.CheckpointStore(root=tmp_path)
+    monkeypatch.setattr("after_effects_mcp.handlers.core._store", store)
+
+    # Seed a saved project file response
+    monkeypatch.setattr(store, "make_id", lambda: "exec_id")
+    d = store._dir_for("C:/Foo.aep")
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "exec_id.aep").write_bytes(b"\x00" * 1024)
+
+    call_log = []
+    async def _resp(*a, **kw):
+        call_log.append(kw.get("code", ""))
+        if call_log[-1].startswith("JSON.stringify({ok:true,") and "path:" in call_log[-1]:
+            return json.dumps({"ok": True, "path": "C:/Foo.aep"})
+        if "checkpoint_create" in call_log[-1] or "File.copy" in call_log[-1]:
+            return json.dumps({
+                "ok": True, "sourceProjectPath": "C:/Foo.aep",
+                "sizeBytes": 1024, "activeCompId": None, "currentTime": 0.0,
+                "savedTo": str(d / "exec_id.aep"),
+            })
+        return json.dumps({"ok": True, "result": 42})
+    monkeypatch.setattr("after_effects_mcp.bridge.invoke_ae_exec", _resp)
+
+    from after_effects_mcp.handlers.core import _run_exec
+    args = schemas.AeExecArgs(code="42", checkpoint_label="risky")
+    result = await _run_exec(args, ctx=None)
+    assert result["ok"] is True
+    # Meta sidecar should have been written
+    assert (d / "exec_id.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_exec_no_label_skips_checkpoint(tmp_path, monkeypatch):
+    from after_effects_mcp import checkpoint_store
+    store = checkpoint_store.CheckpointStore(root=tmp_path)
+    monkeypatch.setattr("after_effects_mcp.handlers.core._store", store)
+
+    async def _resp(*a, **kw):
+        return json.dumps({"ok": True, "result": 1})
+    monkeypatch.setattr("after_effects_mcp.bridge.invoke_ae_exec", _resp)
+
+    from after_effects_mcp.handlers.core import _run_exec
+    args = schemas.AeExecArgs(code="1", checkpoint_label=None)
+    result = await _run_exec(args, ctx=None)
+    assert result["ok"] is True
+    # Store should be empty
+    d = store._dir_for("C:/Foo.aep")
+    assert not d.exists() or list(d.glob("*.aep")) == []
 
 
 @pytest.mark.asyncio

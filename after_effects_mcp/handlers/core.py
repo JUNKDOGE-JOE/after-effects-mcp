@@ -145,18 +145,53 @@ register("ae.readProps", schemas.AeReadPropsArgs, _run_read_props)
 
 async def _run_exec(args: schemas.AeExecArgs, ctx: Any) -> Any:
     async def _call() -> Any:
+        checkpoint_skipped: Optional[str] = None
+        if args.checkpoint_label:
+            project_path = await _resolve_project_path(ctx)
+            if not project_path:
+                checkpoint_skipped = "untitled-project"
+            else:
+                cid = _store.make_id()
+                dst = _store.aep_path(project_path, cid)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                tmpl = _load_jsx("checkpoint_create.jsx")
+                jsx_cp = tmpl.substitute(dst_path=json.dumps(str(dst), ensure_ascii=False))
+                try:
+                    cp_out = await bridge.invoke_ae_exec(code=jsx_cp, timeout_sec=60.0)
+                    cp_parsed = _try_json(cp_out)
+                    if isinstance(cp_parsed, dict) and cp_parsed.get("ok"):
+                        if cp_parsed.get("skipped"):
+                            checkpoint_skipped = cp_parsed.get("reason") or "skipped"
+                        else:
+                            _store.write_meta(
+                                source_project_path=project_path, cid=cid,
+                                label=args.checkpoint_label,
+                                active_comp_id=cp_parsed.get("activeCompId"),
+                                current_time=float(cp_parsed.get("currentTime") or 0.0),
+                                size_bytes=int(
+                                    cp_parsed.get("sizeBytes") or dst.stat().st_size
+                                ),
+                            )
+                            _store.prune(project_path)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("auto-checkpoint failed: %s", e)
+                    checkpoint_skipped = f"checkpoint-failed: {e}"
+
         out = await bridge.invoke_ae_exec(
             code=args.code,
             undo_group_name=args.undo_group_name,
             checkpoint_label=args.checkpoint_label,
             timeout_sec=float(args.timeout_sec),
         )
-        return _try_json(out)
+        parsed = _try_json(out)
+        if isinstance(parsed, dict) and checkpoint_skipped:
+            parsed.setdefault("checkpointSkipped", checkpoint_skipped)
+        return parsed
 
     return await progress.run_with_timeout(
         ctx,
         _call(),
-        timeout_sec=float(args.timeout_sec) + 10.0,
+        timeout_sec=float(args.timeout_sec) + 70.0,
         start_msg="ae.exec...",
     )
 
