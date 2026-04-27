@@ -1,0 +1,9 @@
+{
+  "name": "ae-mcp-host",
+  "version": "0.1.0",
+  "private": true,
+  "main": "server.js",
+  "dependencies": {
+    "express": "^4.18.0"
+  }
+}
