@@ -1,6 +1,6 @@
 [project]
 name = "after-effects-mcp"
-version = "0.6.2"
+version = "0.7.0"
 description = "MCP server exposing After Effects automation via the aebm file-polling bridge protocol"
 readme = "README.md"
 requires-python = ">=3.10"
