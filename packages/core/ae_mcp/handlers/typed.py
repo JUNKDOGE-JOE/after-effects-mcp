@@ -21,10 +21,15 @@ from pathlib import Path
 from string import Template
 from typing import Any, Optional
 
-from ae_mcp import bridge, progress, schemas
+from ae_mcp import progress, schemas
+from ae_mcp.backends import discovery as _discovery
 from ae_mcp.handlers import register
 
 log = logging.getLogger("ae_mcp.handlers.typed")
+
+
+def _backend():
+    return _discovery.select_backend()
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "jsx_templates"
 
@@ -87,9 +92,9 @@ async def _run_create_layer(args: schemas.AeCreateLayerArgs, ctx: Any) -> Any:
     )
 
     async def _call() -> Any:
-        out = await bridge.invoke_ae_exec(
+        out = await _backend().exec(
             code=jsx,
-            undo_group_name=f"MCP createLayer: {args.name}",
+            undo_group=f"MCP createLayer: {args.name}",
             timeout_sec=30.0,
         )
         return _try_json_or_raw(out)
@@ -118,9 +123,9 @@ async def _run_set_property(args: schemas.AeSetPropertyArgs, ctx: Any) -> Any:
     )
 
     async def _call() -> Any:
-        out = await bridge.invoke_ae_exec(
+        out = await _backend().exec(
             code=jsx,
-            undo_group_name=f"MCP setProperty: {args.path}",
+            undo_group=f"MCP setProperty: {args.path}",
             timeout_sec=30.0,
         )
         return _try_json_or_raw(out)
@@ -147,8 +152,8 @@ async def _run_move_layer(args: schemas.AeMoveLayerArgs, ctx: Any) -> Any:
     )
 
     async def _call() -> Any:
-        out = await bridge.invoke_ae_exec(
-            code=jsx, undo_group_name="MCP moveLayer", timeout_sec=30.0
+        out = await _backend().exec(
+            code=jsx, undo_group="MCP moveLayer", timeout_sec=30.0
         )
         return _try_json_or_raw(out)
 
@@ -180,8 +185,8 @@ async def _run_select_layers(args: schemas.AeSelectLayersArgs, ctx: Any) -> Any:
     )
 
     async def _call() -> Any:
-        out = await bridge.invoke_ae_exec(
-            code=jsx, undo_group_name="MCP selectLayers", timeout_sec=20.0
+        out = await _backend().exec(
+            code=jsx, undo_group="MCP selectLayers", timeout_sec=20.0
         )
         return _try_json_or_raw(out)
 
@@ -206,8 +211,8 @@ async def _run_set_time(args: schemas.AeSetTimeArgs, ctx: Any) -> Any:
     )
 
     async def _call() -> Any:
-        out = await bridge.invoke_ae_exec(
-            code=jsx, undo_group_name="MCP setTime", timeout_sec=20.0
+        out = await _backend().exec(
+            code=jsx, undo_group="MCP setTime", timeout_sec=20.0
         )
         return _try_json_or_raw(out)
 
@@ -229,7 +234,7 @@ async def _run_get_time(args: schemas.AeGetTimeArgs, ctx: Any) -> Any:
     jsx = tmpl.substitute(comp_expr=_comp_expr(args.comp_id))
 
     async def _call() -> Any:
-        out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=20.0)
+        out = await _backend().exec(code=jsx, timeout_sec=20.0)
         return _try_json_or_raw(out)
 
     return await progress.run_with_timeout(
@@ -345,7 +350,7 @@ async def _run_get_properties(args: schemas.AeGetPropertiesArgs, ctx: Any) -> An
     jsx = render_get_properties(args)
 
     async def _call() -> Any:
-        out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=20.0)
+        out = await _backend().exec(code=jsx, timeout_sec=20.0)
         return _try_json_or_raw(out)
 
     return await progress.run_with_timeout(
@@ -375,7 +380,7 @@ async def _run_scan_property_tree(args: schemas.AeScanPropertyTreeArgs, ctx: Any
     jsx = render_scan_property_tree(args)
 
     async def _call() -> Any:
-        out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=30.0)
+        out = await _backend().exec(code=jsx, timeout_sec=30.0)
         return _try_json_or_raw(out)
 
     return await progress.run_with_timeout(
@@ -406,7 +411,7 @@ async def _run_inspect_property_capabilities(
     jsx = render_inspect_property_capabilities(args)
 
     async def _call() -> Any:
-        out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=15.0)
+        out = await _backend().exec(code=jsx, timeout_sec=15.0)
         return _try_json_or_raw(out)
 
     return await progress.run_with_timeout(
@@ -438,7 +443,7 @@ async def _run_get_expressions(args: schemas.AeGetExpressionsArgs, ctx: Any) -> 
     jsx = render_get_expressions(args)
 
     async def _call() -> Any:
-        out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=30.0)
+        out = await _backend().exec(code=jsx, timeout_sec=30.0)
         return _try_json_or_raw(out)
 
     return await progress.run_with_timeout(
@@ -467,7 +472,7 @@ async def _run_get_keyframes(args: schemas.AeGetKeyframesArgs, ctx: Any) -> Any:
     jsx = render_get_keyframes(args)
 
     async def _call() -> Any:
-        out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=20.0)
+        out = await _backend().exec(code=jsx, timeout_sec=20.0)
         return _try_json_or_raw(out)
 
     return await progress.run_with_timeout(
@@ -496,7 +501,7 @@ async def _run_search_project(args: schemas.AeSearchProjectArgs, ctx: Any) -> An
     jsx = render_search_project(args)
 
     async def _call() -> Any:
-        out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=30.0)
+        out = await _backend().exec(code=jsx, timeout_sec=30.0)
         return _try_json_or_raw(out)
 
     return await progress.run_with_timeout(

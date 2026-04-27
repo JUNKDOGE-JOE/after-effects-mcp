@@ -90,14 +90,12 @@ def test_render_get_time_with_comp_id():
     assert "itemByID(42)" in jsx
 
 
-# -------- Dispatch round-trips (using mock_bridge) --------
+# -------- Dispatch round-trips (using mock_backend) --------
 
 
 @pytest.mark.asyncio
-async def test_create_layer_dispatches_exec(mock_bridge):
-    mock_bridge.set_response(
-        "invoke_ae_exec", '{"ok":true,"layerId":2,"name":"x","index":2}'
-    )
+async def test_create_layer_dispatches_exec(mock_backend):
+    mock_backend.set_response('{"ok":true,"layerId":2,"name":"x","index":2}')
     _, run_fn = HANDLERS["ae.createLayer"]
     result = await run_fn(S.AeCreateLayerArgs(type="solid", name="x"), None)
     assert result["ok"] is True
@@ -105,10 +103,8 @@ async def test_create_layer_dispatches_exec(mock_bridge):
 
 
 @pytest.mark.asyncio
-async def test_set_property_dispatches(mock_bridge):
-    mock_bridge.set_response(
-        "invoke_ae_exec", '{"ok":true,"previous":[0,0],"current":[100,200]}'
-    )
+async def test_set_property_dispatches(mock_backend):
+    mock_backend.set_response('{"ok":true,"previous":[0,0],"current":[100,200]}')
     _, run_fn = HANDLERS["ae.setProperty"]
     result = await run_fn(
         S.AeSetPropertyArgs(layer_id=1, path="Transform/Position", value=[100, 200]),
@@ -118,25 +114,24 @@ async def test_set_property_dispatches(mock_bridge):
 
 
 @pytest.mark.asyncio
-async def test_select_layers_all_dispatches(mock_bridge):
-    mock_bridge.set_response("invoke_ae_exec", '{"ok":true,"selected":[1,2]}')
+async def test_select_layers_all_dispatches(mock_backend):
+    mock_backend.set_response('{"ok":true,"selected":[1,2]}')
     _, run_fn = HANDLERS["ae.selectLayers"]
     result = await run_fn(S.AeSelectLayersArgs(layer_ids="all"), None)
     assert result["selected"] == [1, 2]
 
 
 @pytest.mark.asyncio
-async def test_set_time_dispatches(mock_bridge):
-    mock_bridge.set_response("invoke_ae_exec", '{"ok":true,"time":1.5}')
+async def test_set_time_dispatches(mock_backend):
+    mock_backend.set_response('{"ok":true,"time":1.5}')
     _, run_fn = HANDLERS["ae.setTime"]
     result = await run_fn(S.AeSetTimeArgs(time=1.5), None)
     assert result["time"] == 1.5
 
 
 @pytest.mark.asyncio
-async def test_get_time_dispatches(mock_bridge):
-    mock_bridge.set_response(
-        "invoke_ae_exec",
+async def test_get_time_dispatches(mock_backend):
+    mock_backend.set_response(
         '{"ok":true,"time":0.0,"duration":10.0,"numLayers":3,"compId":42}',
     )
     _, run_fn = HANDLERS["ae.getTime"]
@@ -145,10 +140,8 @@ async def test_get_time_dispatches(mock_bridge):
 
 
 @pytest.mark.asyncio
-async def test_move_layer_dispatches(mock_bridge):
-    mock_bridge.set_response(
-        "invoke_ae_exec", '{"ok":true,"fromIndex":3,"toIndex":1}'
-    )
+async def test_move_layer_dispatches(mock_backend):
+    mock_backend.set_response('{"ok":true,"fromIndex":3,"toIndex":1}')
     _, run_fn = HANDLERS["ae.moveLayer"]
     result = await run_fn(S.AeMoveLayerArgs(layer_id=3, to_index=1), None)
     assert result["fromIndex"] == 3
@@ -169,9 +162,8 @@ def test_render_get_properties_substitutes_query():
 
 
 @pytest.mark.asyncio
-async def test_run_get_properties(mock_bridge):
-    mock_bridge.set_response(
-        "invoke_ae_exec",
+async def test_run_get_properties(mock_backend):
+    mock_backend.set_response(
         json.dumps({"ok": True, "total": 1, "results": [
             {"layerId": 1, "propPath": "Transform/Position",
              "propType": "ThreeD_SPATIAL", "value": [0,0,0],
@@ -195,9 +187,8 @@ def test_render_scan_property_tree():
 
 
 @pytest.mark.asyncio
-async def test_run_scan_property_tree(mock_bridge):
-    mock_bridge.set_response(
-        "invoke_ae_exec",
+async def test_run_scan_property_tree(mock_backend):
+    mock_backend.set_response(
         json.dumps({"ok": True, "layerId": 1, "layerName": "L",
                     "tree": {"children": []}, "truncatedAt": None}),
     )
@@ -216,9 +207,8 @@ def test_render_inspect_property_capabilities():
 
 
 @pytest.mark.asyncio
-async def test_run_inspect_property_capabilities(mock_bridge):
-    mock_bridge.set_response(
-        "invoke_ae_exec",
+async def test_run_inspect_property_capabilities(mock_backend):
+    mock_backend.set_response(
         json.dumps({"ok": True, "exists": True, "canSetValue": True,
                     "canSetExpression": True, "valueDimension": 3}),
     )
@@ -237,9 +227,8 @@ def test_render_get_expressions():
 
 
 @pytest.mark.asyncio
-async def test_run_get_expressions(mock_bridge):
-    mock_bridge.set_response(
-        "invoke_ae_exec",
+async def test_run_get_expressions(mock_backend):
+    mock_backend.set_response(
         json.dumps({"ok": True, "expressions": [], "grouped": {}, "truncated": False}),
     )
     from ae_mcp.handlers.typed import _run_get_expressions
@@ -257,9 +246,8 @@ def test_render_get_keyframes():
 
 
 @pytest.mark.asyncio
-async def test_run_get_keyframes(mock_bridge):
-    mock_bridge.set_response(
-        "invoke_ae_exec",
+async def test_run_get_keyframes(mock_backend):
+    mock_backend.set_response(
         json.dumps({"ok": True, "numKeyframes": 0, "keyframes": []}),
     )
     from ae_mcp.handlers.typed import _run_get_keyframes
@@ -278,9 +266,8 @@ def test_render_search_project():
 
 
 @pytest.mark.asyncio
-async def test_run_search_project(mock_bridge):
-    mock_bridge.set_response(
-        "invoke_ae_exec",
+async def test_run_search_project(mock_backend):
+    mock_backend.set_response(
         json.dumps({"ok": True, "hits": [], "truncated": False}),
     )
     from ae_mcp.handlers.typed import _run_search_project
