@@ -1,4 +1,4 @@
-"""Core 9 handler behaviour (against mock bridge)."""
+"""Core handler behaviour (against mock backend)."""
 
 from __future__ import annotations
 
@@ -16,18 +16,17 @@ def _load():
 
 
 @pytest.mark.asyncio
-async def test_init_calls_bridge_and_returns_dict(mock_bridge):
-    mock_bridge.set_response("invoke_ae_init", '{"pluginVersion":"aebm-file"}')
+async def test_init_calls_bridge_and_returns_dict(mock_backend):
+    mock_backend.set_response('{"pluginVersion":"aebm-file"}')
     _, run_fn = HANDLERS["ae.init"]
     result = await run_fn(S.AeInitArgs(refresh_only=True), None)
     assert result == {"pluginVersion": "aebm-file"}
-    assert any(c[0] == "invoke_ae_init" for c in mock_bridge.calls)
+    assert len(mock_backend.calls) >= 1
 
 
 @pytest.mark.asyncio
-async def test_overview_returns_parsed_json(mock_bridge):
-    mock_bridge.set_response(
-        "invoke_ae_overview",
+async def test_overview_returns_parsed_json(mock_backend):
+    mock_backend.set_response(
         '{"project":"x.aep","numItems":3,"activeItemId":null}',
     )
     _, run_fn = HANDLERS["ae.overview"]
@@ -36,17 +35,26 @@ async def test_overview_returns_parsed_json(mock_bridge):
 
 
 @pytest.mark.asyncio
-async def test_layers_passes_comp_id(mock_bridge):
-    mock_bridge.set_response("invoke_ae_layers", '{"compId":42,"layers":[]}')
+async def test_layers_passes_comp_id(mock_backend):
+    mock_backend.set_response('{"compId":42,"layers":[]}')
     _, run_fn = HANDLERS["ae.layers"]
     await run_fn(S.AeLayersArgs(comp_id="42"), None)
-    name, args, kwargs = next(c for c in mock_bridge.calls if c[0] == "invoke_ae_layers")
-    assert kwargs.get("comp_id") == "42"
+    # The JSX sent to the backend should reference the comp id
+    assert len(mock_backend.calls) >= 1
+    jsx = mock_backend.calls[-1]["code"]
+    assert "42" in jsx
 
 
 @pytest.mark.asyncio
-async def test_exec_forwards_all_args(mock_bridge):
-    mock_bridge.set_response("invoke_ae_exec", '{"ok":true}')
+async def test_exec_forwards_all_args(mock_backend):
+    # With checkpoint_label set, _run_exec first calls backend.exec for the
+    # path probe (returns untitled project), then calls backend.exec for
+    # the actual user code.
+    responses = iter([
+        json.dumps({"ok": True, "path": None}),   # path probe -> untitled, skip checkpoint
+        json.dumps({"ok": True}),                  # user code
+    ])
+    mock_backend.set_response(lambda **kw: next(responses))
     _, run_fn = HANDLERS["ae.exec"]
     args = S.AeExecArgs(
         code="JSON.stringify({a:1})",
@@ -54,44 +62,40 @@ async def test_exec_forwards_all_args(mock_bridge):
         checkpoint_label="t1",
         timeout_sec=60,
     )
-    await run_fn(args, None)
-    # With checkpoint_label set, _run_exec first calls invoke_ae_exec for the
-    # path probe and (if project is untitled) skips the checkpoint JSX, then
-    # calls invoke_ae_exec for the actual user code. Filter for the user call.
-    name, a, kw = next(
-        c for c in mock_bridge.calls
-        if c[0] == "invoke_ae_exec" and c[2].get("code") == "JSON.stringify({a:1})"
+    result = await run_fn(args, None)
+    # Find the call that ran the user code
+    user_call = next(
+        c for c in mock_backend.calls
+        if c["code"] == "JSON.stringify({a:1})"
     )
-    assert kw["code"] == "JSON.stringify({a:1})"
-    assert kw["undo_group_name"] == "unit"
-    assert kw["checkpoint_label"] == "t1"
-    assert kw["timeout_sec"] == 60.0
+    assert user_call["code"] == "JSON.stringify({a:1})"
+    assert user_call["undo_group"] == "unit"
+    # checkpoint_label is None in exec call because backend.manages_checkpoints is False
+    assert user_call["checkpoint_label"] is None
+    assert user_call["timeout_sec"] == 60.0
 
 
 @pytest.mark.asyncio
-async def test_read_props_routes_through_exec(mock_bridge):
-    # ae.readProps uses invoke_ae_exec under the hood (aebm-file requires code)
-    mock_bridge.set_response("invoke_ae_exec", '{"value":42}')
+async def test_read_props_routes_through_exec(mock_backend):
+    # ae.readProps uses backend.exec under the hood
+    mock_backend.set_response('{"value":42}')
     _, run_fn = HANDLERS["ae.readProps"]
     result = await run_fn(S.AeReadPropsArgs(code="JSON.stringify({value:42})"), None)
     assert result == {"value": 42}
 
 
-
-
-
 @pytest.mark.asyncio
-async def test_apply_effect_builds_jsx(mock_bridge):
-    mock_bridge.set_response(
-        "invoke_ae_exec", '{"ok":true,"effectIndex":1,"effectName":"Gaussian Blur"}'
+async def test_apply_effect_builds_jsx(mock_backend):
+    mock_backend.set_response(
+        '{"ok":true,"effectIndex":1,"effectName":"Gaussian Blur"}'
     )
     _, run_fn = HANDLERS["ae.applyEffect"]
     args = S.AeApplyEffectArgs(layer_id=3, effect_match_name="ADBE Gaussian Blur 2")
     result = await run_fn(args, None)
     assert result["ok"] is True
     # Verify the JSX we send contains the match name and layer index.
-    name, a, kw = next(c for c in mock_bridge.calls if c[0] == "invoke_ae_exec")
-    jsx = kw["code"]
+    assert len(mock_backend.calls) >= 1
+    jsx = mock_backend.calls[-1]["code"]
     assert "ADBE Gaussian Blur 2" in jsx
     assert "comp.layer(3)" in jsx
 
@@ -123,9 +127,8 @@ from ae_mcp.handlers.core import _run_ping  # noqa: F401 — added in this task
 
 
 @pytest.mark.asyncio
-async def test_ae_ping_default(mock_bridge):
-    mock_bridge.set_response(
-        "invoke_ae_exec",
+async def test_ae_ping_default(mock_backend):
+    mock_backend.set_response(
         json.dumps({"ok": True, "pong": "pong", "aeVersion": "26.0", "latencyMs": 5}),
     )
     args = schemas.AePingArgs()
@@ -135,16 +138,15 @@ async def test_ae_ping_default(mock_bridge):
 
 
 @pytest.mark.asyncio
-async def test_ae_ping_custom(mock_bridge):
-    mock_bridge.set_response(
-        "invoke_ae_exec",
+async def test_ae_ping_custom(mock_backend):
+    mock_backend.set_response(
         json.dumps({"ok": True, "pong": "hello", "aeVersion": "26.0", "latencyMs": 4}),
     )
     args = schemas.AePingArgs(expect="hello")
     result = await _run_ping(args, ctx=None)
     assert result["pong"] == "hello"
     # Verify the JSX sent included the expected token
-    sent_kwargs = mock_bridge.calls[-1][2]
+    sent_kwargs = mock_backend.calls[-1]
     assert "hello" in sent_kwargs["code"]
 
 
@@ -159,7 +161,7 @@ from ae_mcp import schemas
 
 
 @pytest.mark.asyncio
-async def test_checkpoint_list_default_returns_disk_entries(mock_bridge, tmp_path, monkeypatch):
+async def test_checkpoint_list_default_returns_disk_entries(mock_backend, tmp_path, monkeypatch):
     # Force checkpoint_store root to tmp_path
     from ae_mcp import checkpoint_store, handlers
     store = checkpoint_store.CheckpointStore(root=tmp_path)
@@ -175,9 +177,8 @@ async def test_checkpoint_list_default_returns_disk_entries(mock_bridge, tmp_pat
         current_time=0.0, size_bytes=1024,
     )
 
-    # Mock the bridge call that fetches current project path
-    mock_bridge.set_response(
-        "invoke_ae_exec",
+    # Mock the backend call that fetches current project path
+    mock_backend.set_response(
         json.dumps({"ok": True, "path": "C:/MyProject.aep"}),
     )
 
@@ -192,33 +193,30 @@ async def test_checkpoint_list_default_returns_disk_entries(mock_bridge, tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_checkpoint_create_writes_meta(mock_bridge, tmp_path, monkeypatch):
+async def test_checkpoint_create_writes_meta(mock_backend, tmp_path, monkeypatch):
     from ae_mcp import checkpoint_store
     store = checkpoint_store.CheckpointStore(root=tmp_path)
     monkeypatch.setattr("ae_mcp.handlers.core._store", store)
 
-    # Mock the bridge: first call resolves current project path; second
-    # call runs the checkpoint_create JSX and returns saved metadata.
-    responses = iter([
-        json.dumps({"ok": True, "path": "C:/Foo.aep"}),
-        json.dumps({
-            "ok": True, "sourceProjectPath": "C:/Foo.aep",
-            "savedTo": str(tmp_path / "Foo" / "<id>.aep"),
-            "sizeBytes": 4096, "activeCompId": "1",
-            "currentTime": 0.0
-        }),
-    ])
-    async def _resp(*a, **kw):
-        return next(responses)
-    monkeypatch.setattr("ae_mcp.bridge.invoke_ae_exec", _resp)
-
-    # Prepare the .aep that the JSX claims to have written. We have to write
-    # the file ourselves — the mocked bridge didn't actually run AE.
+    # Prepare the .aep that the JSX claims to have written.
     d = store._dir_for("C:/Foo.aep")
     d.mkdir(parents=True, exist_ok=True)
     # The handler will deterministically produce the id; we patch make_id.
     monkeypatch.setattr(store, "make_id", lambda: "fixed_id")
     (d / "fixed_id.aep").write_bytes(b"\x00" * 4096)
+
+    # Mock the backend: first call resolves current project path; second
+    # call runs the checkpoint_create JSX and returns saved metadata.
+    responses = iter([
+        json.dumps({"ok": True, "path": "C:/Foo.aep"}),
+        json.dumps({
+            "ok": True, "sourceProjectPath": "C:/Foo.aep",
+            "savedTo": str(tmp_path / "Foo" / "fixed_id.aep"),
+            "sizeBytes": 4096, "activeCompId": "1",
+            "currentTime": 0.0
+        }),
+    ])
+    mock_backend.set_response(lambda **kw: next(responses))
 
     from ae_mcp.handlers.core import _run_checkpoint
     args = schemas.AeCheckpointArgs(action="create", label="label-A")
@@ -232,7 +230,7 @@ async def test_checkpoint_create_writes_meta(mock_bridge, tmp_path, monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_checkpoint_create_untitled_skipped(mock_bridge, tmp_path, monkeypatch):
+async def test_checkpoint_create_untitled_skipped(mock_backend, tmp_path, monkeypatch):
     from ae_mcp import checkpoint_store
     store = checkpoint_store.CheckpointStore(root=tmp_path)
     monkeypatch.setattr("ae_mcp.handlers.core._store", store)
@@ -240,9 +238,7 @@ async def test_checkpoint_create_untitled_skipped(mock_bridge, tmp_path, monkeyp
     responses = iter([
         json.dumps({"ok": True, "path": None}),  # untitled
     ])
-    async def _resp(*a, **kw):
-        return next(responses)
-    monkeypatch.setattr("ae_mcp.bridge.invoke_ae_exec", _resp)
+    mock_backend.set_response(lambda **kw: next(responses))
 
     from ae_mcp.handlers.core import _run_checkpoint
     args = schemas.AeCheckpointArgs(action="create", label="x")
@@ -255,14 +251,12 @@ async def test_checkpoint_create_untitled_skipped(mock_bridge, tmp_path, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_revert_unknown_id_returns_error(tmp_path, monkeypatch):
+async def test_revert_unknown_id_returns_error(mock_backend, tmp_path, monkeypatch):
     from ae_mcp import checkpoint_store
     store = checkpoint_store.CheckpointStore(root=tmp_path)
     monkeypatch.setattr("ae_mcp.handlers.core._store", store)
 
-    async def _resp(*a, **kw):
-        return json.dumps({"ok": True, "path": "C:/Foo.aep"})
-    monkeypatch.setattr("ae_mcp.bridge.invoke_ae_exec", _resp)
+    mock_backend.set_response(json.dumps({"ok": True, "path": "C:/Foo.aep"}))
 
     from ae_mcp.handlers.core import _run_revert
     args = schemas.AeRevertArgs(checkpoint_id="missing", branch_before_revert=False)
@@ -272,7 +266,7 @@ async def test_revert_unknown_id_returns_error(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_exec_with_label_creates_checkpoint(tmp_path, monkeypatch):
+async def test_exec_with_label_creates_checkpoint(mock_backend, tmp_path, monkeypatch):
     from ae_mcp import checkpoint_store
     store = checkpoint_store.CheckpointStore(root=tmp_path)
     monkeypatch.setattr("ae_mcp.handlers.core._store", store)
@@ -283,19 +277,18 @@ async def test_exec_with_label_creates_checkpoint(tmp_path, monkeypatch):
     d.mkdir(parents=True, exist_ok=True)
     (d / "exec_id.aep").write_bytes(b"\x00" * 1024)
 
-    call_log = []
-    async def _resp(*a, **kw):
-        call_log.append(kw.get("code", ""))
-        if call_log[-1].startswith("JSON.stringify({ok:true,") and "path:" in call_log[-1]:
+    def _resp(code="", **kw):
+        if "app.project.file" in code and "path:" in code:
             return json.dumps({"ok": True, "path": "C:/Foo.aep"})
-        if "checkpoint_create" in call_log[-1] or "File.copy" in call_log[-1]:
+        if "checkpoint_create" in code or "File.copy" in code:
             return json.dumps({
                 "ok": True, "sourceProjectPath": "C:/Foo.aep",
                 "sizeBytes": 1024, "activeCompId": None, "currentTime": 0.0,
                 "savedTo": str(d / "exec_id.aep"),
             })
         return json.dumps({"ok": True, "result": 42})
-    monkeypatch.setattr("ae_mcp.bridge.invoke_ae_exec", _resp)
+
+    mock_backend.set_response(_resp)
 
     from ae_mcp.handlers.core import _run_exec
     args = schemas.AeExecArgs(code="42", checkpoint_label="risky")
@@ -306,14 +299,12 @@ async def test_exec_with_label_creates_checkpoint(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_exec_no_label_skips_checkpoint(tmp_path, monkeypatch):
+async def test_exec_no_label_skips_checkpoint(mock_backend, tmp_path, monkeypatch):
     from ae_mcp import checkpoint_store
     store = checkpoint_store.CheckpointStore(root=tmp_path)
     monkeypatch.setattr("ae_mcp.handlers.core._store", store)
 
-    async def _resp(*a, **kw):
-        return json.dumps({"ok": True, "result": 1})
-    monkeypatch.setattr("ae_mcp.bridge.invoke_ae_exec", _resp)
+    mock_backend.set_response(json.dumps({"ok": True, "result": 1}))
 
     from ae_mcp.handlers.core import _run_exec
     args = schemas.AeExecArgs(code="1", checkpoint_label=None)
@@ -325,7 +316,7 @@ async def test_exec_no_label_skips_checkpoint(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_revert_known_id_calls_jsx(tmp_path, monkeypatch):
+async def test_revert_known_id_calls_jsx(mock_backend, tmp_path, monkeypatch):
     from ae_mcp import checkpoint_store
     store = checkpoint_store.CheckpointStore(root=tmp_path)
     monkeypatch.setattr("ae_mcp.handlers.core._store", store)
@@ -340,20 +331,22 @@ async def test_revert_known_id_calls_jsx(tmp_path, monkeypatch):
                      size_bytes=1024)
 
     calls = []
-    async def _resp(*a, **kw):
-        calls.append(kw.get("code", ""))
+
+    def _resp(code="", **kw):
+        calls.append(code)
         # First: project-path probe; second: revert.jsx
-        if "app.project.file" in kw.get("code", "") and len(calls) == 1:
+        if "app.project.file" in code and len(calls) == 1:
             return json.dumps({"ok": True, "path": "C:/Foo.aep"})
         return json.dumps({"ok": True, "reverted": True,
                            "openedPath": str(aep)})
-    monkeypatch.setattr("ae_mcp.bridge.invoke_ae_exec", _resp)
+
+    mock_backend.set_response(_resp)
 
     from ae_mcp.handlers.core import _run_revert
     args = schemas.AeRevertArgs(checkpoint_id="abc_x", branch_before_revert=False)
     result = await _run_revert(args, ctx=None)
     assert result["ok"] is True
     assert result.get("reverted") is True
-    # The second call to invoke_ae_exec should have rendered revert.jsx
+    # The second call to backend.exec should have rendered revert.jsx
     aep_posix = aep.as_posix()
     assert any(aep_posix in c for c in calls)

@@ -5,7 +5,7 @@ ae.checkpoint, ae.revert, ae.snapshot, ae.applyEffect.
 
 Each handler:
   1. validates pydantic args (already done by server.py before dispatch),
-  2. calls into bridge.run_ps / bridge.invoke_ae_* or snapshot.capture_ae_viewer,
+  2. calls into _backend().exec() or snapshot.capture_ae_viewer,
   3. parses JSON where possible and returns dict/str.
 """
 
@@ -17,10 +17,15 @@ from pathlib import Path
 from string import Template
 from typing import Any, Optional
 
-from ae_mcp import bridge, checkpoint_store, progress, schemas
+from ae_mcp import checkpoint_store, progress, schemas
+from ae_mcp.backends import discovery as _discovery
 from ae_mcp.handlers import register
 
 log = logging.getLogger("ae_mcp.handlers.core")
+
+
+def _backend():
+    return _discovery.select_backend()
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +58,7 @@ def _load_jsx(name: str) -> Template:
 
 
 async def _resolve_project_path(ctx: Any) -> Optional[str]:
-    out = await bridge.invoke_ae_exec(
+    out = await _backend().exec(
         code=(
             'JSON.stringify({ok:true,'
             'path: app.project.file ? app.project.file.fsName : null})'
@@ -72,8 +77,11 @@ async def _resolve_project_path(ctx: Any) -> Optional[str]:
 
 
 async def _run_init(args: schemas.AeInitArgs, ctx: Any) -> Any:
+    tmpl = _load_jsx("init.jsx")
+    jsx = tmpl.substitute(refresh_only="true" if args.refresh_only else "false")
+
     async def _call() -> Any:
-        out = await bridge.invoke_ae_init(refresh_only=args.refresh_only)
+        out = await _backend().exec(jsx, timeout_sec=20.0)
         return _try_json(out)
 
     return await progress.run_with_timeout(
@@ -90,8 +98,11 @@ register("ae.init", schemas.AeInitArgs, _run_init)
 
 
 async def _run_overview(args: schemas.AeOverviewArgs, ctx: Any) -> Any:
+    tmpl = _load_jsx("overview.jsx")
+    jsx = tmpl.substitute()
+
     async def _call() -> Any:
-        out = await bridge.invoke_ae_overview()
+        out = await _backend().exec(jsx, timeout_sec=15.0)
         return _try_json(out)
 
     return await progress.run_with_timeout(
@@ -108,8 +119,12 @@ register("ae.overview", schemas.AeOverviewArgs, _run_overview)
 
 
 async def _run_layers(args: schemas.AeLayersArgs, ctx: Any) -> Any:
+    from ae_mcp.handlers.typed import _comp_expr  # type: ignore
+    tmpl = _load_jsx("get_layers.jsx")
+    jsx = tmpl.substitute(comp_expr=_comp_expr(args.comp_id))
+
     async def _call() -> Any:
-        out = await bridge.invoke_ae_layers(comp_id=args.comp_id)
+        out = await _backend().exec(jsx, timeout_sec=15.0)
         return _try_json(out)
 
     return await progress.run_with_timeout(
@@ -127,7 +142,7 @@ register("ae.layers", schemas.AeLayersArgs, _run_layers)
 
 async def _run_read_props(args: schemas.AeReadPropsArgs, ctx: Any) -> Any:
     async def _call() -> Any:
-        out = await bridge.invoke_ae_exec(code=args.code, timeout_sec=20.0)
+        out = await _backend().exec(args.code, timeout_sec=20.0)
         return _try_json(out)
 
     return await progress.run_with_timeout(
@@ -144,9 +159,11 @@ register("ae.readProps", schemas.AeReadPropsArgs, _run_read_props)
 
 
 async def _run_exec(args: schemas.AeExecArgs, ctx: Any) -> Any:
+    backend = _backend()
+
     async def _call() -> Any:
         checkpoint_skipped: Optional[str] = None
-        if args.checkpoint_label:
+        if args.checkpoint_label and not backend.manages_checkpoints:
             project_path = await _resolve_project_path(ctx)
             if not project_path:
                 checkpoint_skipped = "untitled-project"
@@ -157,7 +174,7 @@ async def _run_exec(args: schemas.AeExecArgs, ctx: Any) -> Any:
                 tmpl = _load_jsx("checkpoint_create.jsx")
                 jsx_cp = tmpl.substitute(dst_path=json.dumps(str(dst), ensure_ascii=False))
                 try:
-                    cp_out = await bridge.invoke_ae_exec(code=jsx_cp, timeout_sec=60.0)
+                    cp_out = await backend.exec(code=jsx_cp, timeout_sec=60.0)
                     cp_parsed = _try_json(cp_out)
                     if isinstance(cp_parsed, dict) and cp_parsed.get("ok"):
                         if cp_parsed.get("skipped"):
@@ -168,19 +185,22 @@ async def _run_exec(args: schemas.AeExecArgs, ctx: Any) -> Any:
                                 label=args.checkpoint_label,
                                 active_comp_id=cp_parsed.get("activeCompId"),
                                 current_time=float(cp_parsed.get("currentTime") or 0.0),
-                                size_bytes=int(
-                                    cp_parsed.get("sizeBytes") or dst.stat().st_size
-                                ),
+                                size_bytes=int(cp_parsed.get("sizeBytes") or dst.stat().st_size),
                             )
                             _store.prune(project_path)
                 except Exception as e:  # noqa: BLE001
                     log.warning("auto-checkpoint failed: %s", e)
                     checkpoint_skipped = f"checkpoint-failed: {e}"
+        elif args.checkpoint_label and backend.manages_checkpoints:
+            checkpoint_skipped = "delegated-to-backend"
 
-        out = await bridge.invoke_ae_exec(
+        # Skip undo wrap if backend already does it
+        undo = None if backend.manages_undo else args.undo_group_name
+
+        out = await backend.exec(
             code=args.code,
-            undo_group_name=args.undo_group_name,
-            checkpoint_label=args.checkpoint_label,
+            undo_group=undo,
+            checkpoint_label=args.checkpoint_label if backend.manages_checkpoints else None,
             timeout_sec=float(args.timeout_sec),
         )
         parsed = _try_json(out)
@@ -189,10 +209,7 @@ async def _run_exec(args: schemas.AeExecArgs, ctx: Any) -> Any:
         return parsed
 
     return await progress.run_with_timeout(
-        ctx,
-        _call(),
-        timeout_sec=float(args.timeout_sec) + 70.0,
-        start_msg="ae.exec...",
+        ctx, _call(), timeout_sec=float(args.timeout_sec) + 70.0, start_msg="ae.exec...",
     )
 
 
@@ -227,9 +244,9 @@ async def _run_checkpoint(args: schemas.AeCheckpointArgs, ctx: Any) -> Any:
         dst.parent.mkdir(parents=True, exist_ok=True)
         tmpl = _load_jsx("checkpoint_create.jsx")
         jsx = tmpl.substitute(dst_path=json.dumps(str(dst), ensure_ascii=False))
-        out = await bridge.invoke_ae_exec(
+        out = await _backend().exec(
             code=jsx,
-            undo_group_name=f"MCP checkpoint: {args.label or cid}",
+            undo_group=f"MCP checkpoint: {args.label or cid}",
             timeout_sec=60.0,
         )
         parsed = _try_json(out)
@@ -283,7 +300,7 @@ async def _run_revert(args: schemas.AeRevertArgs, ctx: Any) -> Any:
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 tmpl = _load_jsx("checkpoint_create.jsx")
                 jsx = tmpl.substitute(dst_path=json.dumps(str(dst), ensure_ascii=False))
-                out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=60.0)
+                out = await _backend().exec(code=jsx, timeout_sec=60.0)
                 parsed = _try_json(out)
                 if isinstance(parsed, dict) and parsed.get("ok") and not parsed.get("skipped"):
                     _store.write_meta(
@@ -298,7 +315,7 @@ async def _run_revert(args: schemas.AeRevertArgs, ctx: Any) -> Any:
                 log.warning("branch_before_revert failed: %s", e)
         tmpl = _load_jsx("revert.jsx")
         jsx = tmpl.substitute(aep_path=json.dumps(aep.as_posix(), ensure_ascii=False))
-        out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=60.0)
+        out = await _backend().exec(code=jsx, timeout_sec=60.0)
         parsed = _try_json(out)
         if isinstance(parsed, dict) and parsed.get("ok"):
             parsed["branchedFromId"] = branched_from
@@ -378,7 +395,7 @@ async def _run_apply_effect(args: schemas.AeApplyEffectArgs, ctx: Any) -> Any:
     jsx = _apply_effect_jsx(args.comp_id, args.layer_id, args.effect_match_name)
 
     async def _call() -> Any:
-        out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=30.0)
+        out = await _backend().exec(code=jsx, timeout_sec=30.0)
         return _try_json(out)
 
     return await progress.run_with_timeout(
@@ -390,19 +407,25 @@ register("ae.applyEffect", schemas.AeApplyEffectArgs, _run_apply_effect)
 
 
 # ---------------------------------------------------------------------------
-# v0.7-A: ae.isolateToggle -- forwards to plugin via Invoke-AebmTool default route.
+# v0.7-A: ae.isolateToggle — JSX-based fallback (AEBM backend routes via marker fn)
 # ---------------------------------------------------------------------------
 
 
 async def _run_isolate_toggle(args: schemas.AeIsolateToggleArgs, ctx: Any) -> Any:
-    async def _call() -> Any:
-        # Arguments dict omitted: PS Invoke-AebmTool defaults -Arguments to @{}.
-        raw = await bridge.run_ps(
-            "Invoke-AebmTool",
-            {"Tool": "aebm.isolateToggle"},
-            timeout_sec=10.0,
-        )
-        return _try_json(raw)
+    # JSX is a marker the AEBM backend recognizes and routes to its
+    # plugin-specific Invoke-AebmTool. Other backends just see normal JSX
+    # and either fall back or report unsupported.
+    jsx = (
+        '(function(){'
+        'if (typeof __aebm_isolate_toggle__ === "function") {'
+        '  return JSON.stringify(__aebm_isolate_toggle__());'
+        '}'
+        'return JSON.stringify({ok:false,error:"isolateToggle requires AEBM backend"});'
+        '})()'
+    )
+
+    async def _call():
+        return _try_json(await _backend().exec(jsx, timeout_sec=10.0))
 
     return await progress.run_with_timeout(
         ctx, _call(), timeout_sec=15.0, start_msg="ae.isolateToggle..."
@@ -413,18 +436,22 @@ register("ae.isolateToggle", schemas.AeIsolateToggleArgs, _run_isolate_toggle)
 
 
 # ---------------------------------------------------------------------------
-# v0.7-A: ae.toastQuery -- read current toast queue snapshot for assertions.
+# v0.7-A: ae.toastQuery — read current toast queue snapshot for assertions.
 # ---------------------------------------------------------------------------
 
 
 async def _run_toast_query(args: schemas.AeToastQueryArgs, ctx: Any) -> Any:
-    async def _call() -> Any:
-        raw = await bridge.run_ps(
-            "Invoke-AebmTool",
-            {"Tool": "aebm.toastQuery"},
-            timeout_sec=5.0,
-        )
-        return _try_json(raw)
+    jsx = (
+        '(function(){'
+        'if (typeof __aebm_toast_query__ === "function") {'
+        '  return JSON.stringify(__aebm_toast_query__());'
+        '}'
+        'return JSON.stringify({ok:false,error:"toastQuery requires AEBM backend"});'
+        '})()'
+    )
+
+    async def _call():
+        return _try_json(await _backend().exec(jsx, timeout_sec=5.0))
 
     return await progress.run_with_timeout(
         ctx, _call(), timeout_sec=8.0, start_msg="ae.toastQuery..."
@@ -454,7 +481,7 @@ async def _run_ping(args: schemas.AePingArgs, ctx: Any) -> Any:
     jsx = _ping_template().substitute(expect=json.dumps(args.expect, ensure_ascii=False))
 
     async def _call() -> Any:
-        out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=10.0)
+        out = await _backend().exec(code=jsx, timeout_sec=10.0)
         return _try_json(out)
 
     return await progress.run_with_timeout(
