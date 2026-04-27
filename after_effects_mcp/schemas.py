@@ -235,6 +235,13 @@ class AeScanPropertyTreeArgs(_StrictModel):
     include_values: bool = Field(True, description="Set false to skip .value reads.")
 
 
+class AeInspectPropertyCapabilitiesArgs(_StrictModel):
+    """ae.inspectPropertyCapabilities — what can be mutated on a property path."""
+    comp_id: Optional[str] = Field(None)
+    layer_id: int = Field(..., ge=1)
+    path: str = Field(..., description="'Transform/Position' style path.")
+
+
 # ---------------------------------------------------------------------------
 # Registry of verb -> schema (handlers.core / handlers.typed reference this)
 # ---------------------------------------------------------------------------
@@ -261,6 +268,7 @@ SCHEMAS = {
     "ae.toastQuery":    AeToastQueryArgs,
     "ae.getProperties": AeGetPropertiesArgs,
     "ae.scanPropertyTree": AeScanPropertyTreeArgs,
+    "ae.inspectPropertyCapabilities": AeInspectPropertyCapabilitiesArgs,
 }
 
-assert len(SCHEMAS) == 20, f"expected 20 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 21, f"expected 21 verbs, got {len(SCHEMAS)}"

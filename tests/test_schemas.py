@@ -11,7 +11,8 @@ from after_effects_mcp import schemas as S
 def test_registry_has_17_verbs():
     # v0.6.2: 15 verbs. v0.7-A: +ae.isolateToggle +ae.toastQuery -> 17. v0.7-1: +ae.ping -> 18.
     # Task 4.1: +ae.getProperties -> 19. Task 4.2: +ae.scanPropertyTree -> 20.
-    assert len(S.SCHEMAS) == 20, f"expected 20 verbs, got {len(S.SCHEMAS)}"
+    # Task 4.3: +ae.inspectPropertyCapabilities -> 21.
+    assert len(S.SCHEMAS) == 21, f"expected 21 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.layers", "ae.readProps", "ae.exec",
         "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.applyEffect", "ae.ping",
@@ -19,6 +20,7 @@ def test_registry_has_17_verbs():
         "ae.setTime", "ae.getTime",
         "ae.isolateToggle", "ae.toastQuery",
         "ae.getProperties", "ae.scanPropertyTree",
+        "ae.inspectPropertyCapabilities",
     }
 
 
@@ -222,3 +224,9 @@ def test_scan_property_tree_max_depth_clamped():
     from pydantic import ValidationError
     with pytest.raises(ValidationError):
         S.AeScanPropertyTreeArgs(layer_id=1, max_depth=99)
+
+
+def test_inspect_property_capabilities_required():
+    a = S.AeInspectPropertyCapabilitiesArgs(layer_id=1, path="Transform/Position")
+    assert a.layer_id == 1
+    assert a.path == "Transform/Position"

@@ -384,3 +384,36 @@ async def _run_scan_property_tree(args: schemas.AeScanPropertyTreeArgs, ctx: Any
 
 
 register("ae.scanPropertyTree", schemas.AeScanPropertyTreeArgs, _run_scan_property_tree)
+
+
+# ---------------------------------------------------------------------------
+# ae.inspectPropertyCapabilities
+# ---------------------------------------------------------------------------
+
+
+def render_inspect_property_capabilities(args: schemas.AeInspectPropertyCapabilitiesArgs) -> str:
+    tmpl = _load_template("inspect_property_capabilities.jsx")
+    return tmpl.substitute(
+        comp_expr=_comp_expr(args.comp_id),
+        layer_id=int(args.layer_id),
+        path=_json_literal(args.path),
+    )
+
+
+async def _run_inspect_property_capabilities(
+    args: schemas.AeInspectPropertyCapabilitiesArgs, ctx: Any
+) -> Any:
+    jsx = render_inspect_property_capabilities(args)
+
+    async def _call() -> Any:
+        out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=15.0)
+        return _try_json_or_raw(out)
+
+    return await progress.run_with_timeout(
+        ctx, _call(), timeout_sec=20.0, start_msg="ae.inspectPropertyCapabilities..."
+    )
+
+
+register("ae.inspectPropertyCapabilities",
+         schemas.AeInspectPropertyCapabilitiesArgs,
+         _run_inspect_property_capabilities)

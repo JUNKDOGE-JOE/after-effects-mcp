@@ -205,3 +205,24 @@ async def test_run_scan_property_tree(mock_bridge):
     args = schemas.AeScanPropertyTreeArgs(layer_id=1)
     result = await _run_scan_property_tree(args, ctx=None)
     assert result["ok"] is True
+
+
+def test_render_inspect_property_capabilities():
+    from after_effects_mcp.handlers.typed import render_inspect_property_capabilities
+    args = schemas.AeInspectPropertyCapabilitiesArgs(layer_id=1, path="Transform/Position")
+    jsx = render_inspect_property_capabilities(args)
+    assert '"Transform/Position"' in jsx
+    assert "comp.layer(1)" in jsx
+
+
+@pytest.mark.asyncio
+async def test_run_inspect_property_capabilities(mock_bridge):
+    mock_bridge.set_response(
+        "invoke_ae_exec",
+        json.dumps({"ok": True, "exists": True, "canSetValue": True,
+                    "canSetExpression": True, "valueDimension": 3}),
+    )
+    from after_effects_mcp.handlers.typed import _run_inspect_property_capabilities
+    args = schemas.AeInspectPropertyCapabilitiesArgs(layer_id=1, path="Transform/Position")
+    result = await _run_inspect_property_capabilities(args, ctx=None)
+    assert result["canSetExpression"] is True
