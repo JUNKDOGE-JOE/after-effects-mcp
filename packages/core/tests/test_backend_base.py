@@ -43,3 +43,30 @@ def test_default_capability_flags_are_false():
     b = Minimal()
     assert b.manages_undo is False
     assert b.manages_checkpoints is False
+
+
+import pytest
+from ae_mcp.backends.mock import MockBackend
+
+
+@pytest.mark.asyncio
+async def test_mock_backend_records_calls():
+    mb = MockBackend()
+    mb.set_response('JSON.stringify({ok:true})')
+    out = await mb.exec("foo")
+    assert out == 'JSON.stringify({ok:true})'
+    assert len(mb.calls) == 1
+    assert mb.calls[0]["code"] == "foo"
+
+
+@pytest.mark.asyncio
+async def test_mock_backend_health_check_default_true():
+    mb = MockBackend()
+    assert await mb.health_check() is True
+
+
+@pytest.mark.asyncio
+async def test_mock_backend_can_simulate_failure():
+    mb = MockBackend()
+    mb.set_health(False)
+    assert await mb.health_check() is False
