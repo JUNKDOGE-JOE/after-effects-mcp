@@ -8,36 +8,17 @@ from pydantic import ValidationError
 from ae_mcp import schemas as S
 
 
-def test_registry_has_24_verbs():
-    # 22 base verbs + ae.isolateToggle + ae.toastQuery (AEBMethod plugin
-    # specific) = 24. The plugin-specific pair lives in ae-mcp because
-    # the plugin and the MCP are sibling halves of the same product.
-    assert len(S.SCHEMAS) == 24, f"expected 24 verbs, got {len(S.SCHEMAS)}"
+def test_registry_has_22_verbs():
+    assert len(S.SCHEMAS) == 22, f"expected 22 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.layers", "ae.readProps", "ae.exec",
         "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.applyEffect", "ae.ping",
         "ae.createLayer", "ae.setProperty", "ae.moveLayer", "ae.selectLayers",
         "ae.setTime", "ae.getTime",
-        "ae.isolateToggle", "ae.toastQuery",
         "ae.getProperties", "ae.scanPropertyTree",
         "ae.inspectPropertyCapabilities", "ae.getExpressions",
         "ae.getKeyframes", "ae.searchProject",
     }
-
-
-def test_isolate_toggle_schema_is_empty():
-    args = S.AeIsolateToggleArgs()
-    assert args.model_dump() == {}
-
-
-def test_toast_query_schema_is_empty():
-    args = S.AeToastQueryArgs()
-    assert args.model_dump() == {}
-
-
-def test_isolate_toggle_rejects_extra_fields():
-    with pytest.raises(ValidationError):
-        S.AeIsolateToggleArgs(foo="bar")
 
 
 def test_init_accepts_bool():

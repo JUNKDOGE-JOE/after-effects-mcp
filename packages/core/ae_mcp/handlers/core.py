@@ -407,58 +407,6 @@ register("ae.applyEffect", schemas.AeApplyEffectArgs, _run_apply_effect)
 
 
 # ---------------------------------------------------------------------------
-# ae.isolateToggle — AEBMethod plugin: timeline isolation session toggle.
-# ---------------------------------------------------------------------------
-
-
-async def _run_isolate_toggle(args: schemas.AeIsolateToggleArgs, ctx: Any) -> Any:
-    jsx = (
-        '(function(){'
-        'if (typeof __aebm_isolate_toggle__ === "function") {'
-        '  return JSON.stringify(__aebm_isolate_toggle__());'
-        '}'
-        'return JSON.stringify({ok:false,error:"isolateToggle requires the AEBM plugin marker fn"});'
-        '})()'
-    )
-
-    async def _call():
-        return _try_json(await _backend().exec(jsx, timeout_sec=10.0))
-
-    return await progress.run_with_timeout(
-        ctx, _call(), timeout_sec=15.0, start_msg="ae.isolateToggle..."
-    )
-
-
-register("ae.isolateToggle", schemas.AeIsolateToggleArgs, _run_isolate_toggle)
-
-
-# ---------------------------------------------------------------------------
-# ae.toastQuery — AEBMethod plugin: read current toast queue snapshot.
-# ---------------------------------------------------------------------------
-
-
-async def _run_toast_query(args: schemas.AeToastQueryArgs, ctx: Any) -> Any:
-    jsx = (
-        '(function(){'
-        'if (typeof __aebm_toast_query__ === "function") {'
-        '  return JSON.stringify(__aebm_toast_query__());'
-        '}'
-        'return JSON.stringify({ok:false,error:"toastQuery requires the AEBM plugin marker fn"});'
-        '})()'
-    )
-
-    async def _call():
-        return _try_json(await _backend().exec(jsx, timeout_sec=5.0))
-
-    return await progress.run_with_timeout(
-        ctx, _call(), timeout_sec=8.0, start_msg="ae.toastQuery..."
-    )
-
-
-register("ae.toastQuery", schemas.AeToastQueryArgs, _run_toast_query)
-
-
-# ---------------------------------------------------------------------------
 # ae.ping — handshake smoke test for live diagnostics
 # ---------------------------------------------------------------------------
 
