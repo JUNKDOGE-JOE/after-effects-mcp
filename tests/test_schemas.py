@@ -12,7 +12,8 @@ def test_registry_has_17_verbs():
     # v0.6.2: 15 verbs. v0.7-A: +ae.isolateToggle +ae.toastQuery -> 17. v0.7-1: +ae.ping -> 18.
     # Task 4.1: +ae.getProperties -> 19. Task 4.2: +ae.scanPropertyTree -> 20.
     # Task 4.3: +ae.inspectPropertyCapabilities -> 21. Task 4.4: +ae.getExpressions -> 22.
-    assert len(S.SCHEMAS) == 22, f"expected 22 verbs, got {len(S.SCHEMAS)}"
+    # Task 4.5: +ae.getKeyframes -> 23.
+    assert len(S.SCHEMAS) == 23, f"expected 23 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.layers", "ae.readProps", "ae.exec",
         "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.applyEffect", "ae.ping",
@@ -21,6 +22,7 @@ def test_registry_has_17_verbs():
         "ae.isolateToggle", "ae.toastQuery",
         "ae.getProperties", "ae.scanPropertyTree",
         "ae.inspectPropertyCapabilities", "ae.getExpressions",
+        "ae.getKeyframes",
     }
 
 
@@ -242,3 +244,8 @@ def test_get_expressions_required_comp_id():
 def test_get_expressions_layer_ids_optional():
     a = S.AeGetExpressionsArgs(comp_id="12", layer_ids=[1, 2], prop="ADBE Position")
     assert a.layer_ids == [1, 2]
+
+
+def test_get_keyframes_required():
+    a = S.AeGetKeyframesArgs(layer_id=1, path="Transform/Position")
+    assert a.layer_id == 1

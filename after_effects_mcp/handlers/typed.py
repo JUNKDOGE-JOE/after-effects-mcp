@@ -447,3 +447,32 @@ async def _run_get_expressions(args: schemas.AeGetExpressionsArgs, ctx: Any) -> 
 
 
 register("ae.getExpressions", schemas.AeGetExpressionsArgs, _run_get_expressions)
+
+
+# ---------------------------------------------------------------------------
+# ae.getKeyframes
+# ---------------------------------------------------------------------------
+
+
+def render_get_keyframes(args: schemas.AeGetKeyframesArgs) -> str:
+    tmpl = _load_template("get_keyframes.jsx")
+    return tmpl.substitute(
+        comp_expr=_comp_expr(args.comp_id),
+        layer_id=int(args.layer_id),
+        path=_json_literal(args.path),
+    )
+
+
+async def _run_get_keyframes(args: schemas.AeGetKeyframesArgs, ctx: Any) -> Any:
+    jsx = render_get_keyframes(args)
+
+    async def _call() -> Any:
+        out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=20.0)
+        return _try_json_or_raw(out)
+
+    return await progress.run_with_timeout(
+        ctx, _call(), timeout_sec=30.0, start_msg="ae.getKeyframes..."
+    )
+
+
+register("ae.getKeyframes", schemas.AeGetKeyframesArgs, _run_get_keyframes)

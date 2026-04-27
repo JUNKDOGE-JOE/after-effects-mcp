@@ -250,6 +250,13 @@ class AeGetExpressionsArgs(_StrictModel):
     max_results: int = Field(200, ge=1, le=1000)
 
 
+class AeGetKeyframesArgs(_StrictModel):
+    """ae.getKeyframes — keyframe data for a property path."""
+    comp_id: Optional[str] = Field(None)
+    layer_id: int = Field(..., ge=1)
+    path: str = Field(...)
+
+
 # ---------------------------------------------------------------------------
 # Registry of verb -> schema (handlers.core / handlers.typed reference this)
 # ---------------------------------------------------------------------------
@@ -278,6 +285,7 @@ SCHEMAS = {
     "ae.scanPropertyTree": AeScanPropertyTreeArgs,
     "ae.inspectPropertyCapabilities": AeInspectPropertyCapabilitiesArgs,
     "ae.getExpressions": AeGetExpressionsArgs,
+    "ae.getKeyframes": AeGetKeyframesArgs,
 }
 
-assert len(SCHEMAS) == 22, f"expected 22 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 23, f"expected 23 verbs, got {len(SCHEMAS)}"
