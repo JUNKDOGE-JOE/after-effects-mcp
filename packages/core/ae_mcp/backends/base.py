@@ -10,6 +10,7 @@ ALL_VERBS: Set[str] = {
     "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.applyEffect",
     "ae.createLayer", "ae.setProperty", "ae.moveLayer", "ae.selectLayers",
     "ae.setTime", "ae.getTime",
+    "ae.isolateToggle", "ae.toastQuery",
     "ae.ping",
     "ae.getProperties", "ae.scanPropertyTree",
     "ae.inspectPropertyCapabilities", "ae.getExpressions",
