@@ -284,3 +284,34 @@ async def _run_toast_query(args: schemas.AeToastQueryArgs, ctx: Any) -> Any:
 
 
 register("ae.toastQuery", schemas.AeToastQueryArgs, _run_toast_query)
+
+
+# ---------------------------------------------------------------------------
+# ae.ping — handshake smoke test for live diagnostics
+# ---------------------------------------------------------------------------
+
+from functools import lru_cache as _lru_cache
+from pathlib import Path as _Path
+from string import Template as _Template
+
+_PING_TEMPLATE_PATH = _Path(__file__).resolve().parent.parent / "jsx_templates" / "ping.jsx"
+
+
+@_lru_cache(maxsize=1)
+def _ping_template() -> _Template:
+    return _Template(_PING_TEMPLATE_PATH.read_text(encoding="utf-8"))
+
+
+async def _run_ping(args: schemas.AePingArgs, ctx: Any) -> Any:
+    jsx = _ping_template().substitute(expect=json.dumps(args.expect, ensure_ascii=False))
+
+    async def _call() -> Any:
+        out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=10.0)
+        return _try_json(out)
+
+    return await progress.run_with_timeout(
+        ctx, _call(), timeout_sec=15.0, start_msg="ae.ping..."
+    )
+
+
+register("ae.ping", schemas.AePingArgs, _run_ping)

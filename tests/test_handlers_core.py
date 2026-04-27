@@ -121,3 +121,34 @@ async def test_snapshot_error_on_non_windows(monkeypatch):
             sys.modules["after_effects_mcp.snapshot"] = orig
         else:
             sys.modules.pop("after_effects_mcp.snapshot", None)
+
+
+import pytest
+from after_effects_mcp import schemas
+from after_effects_mcp.handlers.core import _run_ping  # noqa: F401 — added in this task
+
+
+@pytest.mark.asyncio
+async def test_ae_ping_default(mock_bridge):
+    mock_bridge.set_response(
+        "invoke_ae_exec",
+        json.dumps({"ok": True, "pong": "pong", "aeVersion": "26.0", "latencyMs": 5}),
+    )
+    args = schemas.AePingArgs()
+    result = await _run_ping(args, ctx=None)
+    assert result["ok"] is True
+    assert result["pong"] == "pong"
+
+
+@pytest.mark.asyncio
+async def test_ae_ping_custom(mock_bridge):
+    mock_bridge.set_response(
+        "invoke_ae_exec",
+        json.dumps({"ok": True, "pong": "hello", "aeVersion": "26.0", "latencyMs": 4}),
+    )
+    args = schemas.AePingArgs(expect="hello")
+    result = await _run_ping(args, ctx=None)
+    assert result["pong"] == "hello"
+    # Verify the JSX sent included the expected token
+    sent_kwargs = mock_bridge.calls[-1][2]
+    assert "hello" in sent_kwargs["code"]
