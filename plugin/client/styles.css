@@ -83,6 +83,12 @@ body {
     border-radius: 3px;
     cursor: pointer;
 }
+.mcp-note {
+    margin-bottom: 6px;
+    color: #9a9a9a;
+    font-size: 10px;
+    line-height: 1.35;
+}
 .mcp-row pre {
     background: #1a1a1a;
     border: 1px solid #3a3a3a;

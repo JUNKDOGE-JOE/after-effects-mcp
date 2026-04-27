@@ -17,7 +17,7 @@ simple RPC 插件链路已经实现：CEP 面板、HTTP bridge backend、30 个 
 - `uv run pytest -q`: 152 passed, 20 live tests deselected
 - `uv run pytest packages/core/tests/live -o addopts='' -vv`: 20 passed, 需要 AE 打开并且 ae-mcp 面板绿灯
 
-这已经达到 Atom 级 AE 操作 MVP：agent 可以检查、修改、预览、checkpoint/revert、使用 skill，并创建基础 rig。`ae.generateImage` 明确不在范围内，图像生成交给 agent/model 侧，ae-mcp 负责导入和操作 AE。
+这已经达到一个可用的 AE 操作 MVP：agent 可以检查、修改、预览、checkpoint/revert、使用 skill，并创建基础 rig。`ae.generateImage` 明确不在范围内，图像生成交给 agent/model 侧，ae-mcp 负责导入和操作 AE。
 
 ### Verb Surface
 
@@ -46,6 +46,13 @@ simple RPC 插件链路已经实现：CEP 面板、HTTP bridge backend、30 个 
 
 ### 安装
 
+文档导览：
+
+- [docs/INSTALL.md](docs/INSTALL.md): 安装、MCP 客户端配置、首次接入 smoke、常见排障
+- [docs/WORKFLOW.md](docs/WORKFLOW.md): Agent + MCP + AE 插件如何协同工作，以及推荐的日常使用节奏
+- [docs/REFERENCE.md](docs/REFERENCE.md): tool surface、参数、能力边界、返回语义
+- [docs/RELEASE.md](docs/RELEASE.md): ZXP 打包、发布 smoke、发布前缺口
+
 开发安装：
 
 ```powershell
@@ -56,7 +63,7 @@ cd ..\..
 .\scripts\install-plugin-dev.ps1
 ```
 
-重启 After Effects，然后打开 `Window -> Extensions -> ae-mcp`。更多配置见 [docs/INSTALL.md](docs/INSTALL.md)。
+重启 After Effects，然后打开 `Window -> Extensions -> ae-mcp`。如果目标是让外部 Agent app 直接接入，请优先看 [docs/INSTALL.md](docs/INSTALL.md) 和 [docs/WORKFLOW.md](docs/WORKFLOW.md)。
 
 ### 测试
 
@@ -85,16 +92,15 @@ uv run pytest packages/core/tests/live -o addopts='' -vv
 
 更多 release 步骤见 [docs/RELEASE.md](docs/RELEASE.md)。
 
-### 借鉴与声明
+### 实现说明
 
-ae-mcp 是独立实现，不 vendoring Atom、FX Console 或 AtomX 的代码。
+ae-mcp 是独立实现，不包含其他产品的代码或资源文件。
 
-设计和行为参考了：
+设计目标包括：
 
-- Atom 风格的 AE 操作面：面向 agent 的检查、修改、预览和 reusable workflow。
-- FX Console 风格的即时预览体验：快速 viewer feedback，而不是每次都真实渲染。
-- Adobe CEP 和 ExtendScript API。
-- Model Context Protocol。
+- 面向 agent 的 AE 检查、修改、预览和 reusable workflow。
+- 快速 viewer feedback，而不是每次都真实渲染。
+- 基于 Adobe CEP、ExtendScript API 和 Model Context Protocol 的本地自动化链路。
 
 第三方组件：
 
@@ -125,7 +131,7 @@ Current verification:
 - `uv run pytest -q`: 152 passed, 20 live tests deselected
 - `uv run pytest packages/core/tests/live -o addopts='' -vv`: 20 passed with AE open and the ae-mcp panel green
 
-This is an Atom-level AE operation MVP: agents can inspect, mutate, preview, checkpoint/revert, use skills, and create basic rigs in After Effects. `ae.generateImage` is intentionally out of scope; image generation belongs on the agent/model side.
+This is a usable AE operation MVP: agents can inspect, mutate, preview, checkpoint/revert, use skills, and create basic rigs in After Effects. `ae.generateImage` is intentionally out of scope; image generation belongs on the agent/model side.
 
 ### Verb Surface
 
@@ -154,6 +160,13 @@ Expression-bearing workflows should run `ae.validateExpressions` before visual r
 
 ### Install
 
+Document guide:
+
+- [docs/INSTALL.md](docs/INSTALL.md): installation, MCP client config, first-run smoke, and troubleshooting
+- [docs/WORKFLOW.md](docs/WORKFLOW.md): how the Agent, MCP server, and AE plugin work together in day-to-day use
+- [docs/REFERENCE.md](docs/REFERENCE.md): tool surface, arguments, capability boundaries, and return shapes
+- [docs/RELEASE.md](docs/RELEASE.md): ZXP packaging, release smoke, and known pre-release gaps
+
 Developer install:
 
 ```powershell
@@ -164,7 +177,7 @@ cd ..\..
 .\scripts\install-plugin-dev.ps1
 ```
 
-Restart After Effects, then open `Window -> Extensions -> ae-mcp`. See [docs/INSTALL.md](docs/INSTALL.md) for configuration.
+Restart After Effects, then open `Window -> Extensions -> ae-mcp`. If the goal is to connect an external Agent app, start with [docs/INSTALL.md](docs/INSTALL.md) and [docs/WORKFLOW.md](docs/WORKFLOW.md).
 
 ### Test
 
@@ -193,16 +206,15 @@ Use Adobe `ZXPSignCmd`:
 
 See [docs/RELEASE.md](docs/RELEASE.md) for the release checklist.
 
-### Credits And Inspirations
+### Implementation Notes
 
-ae-mcp is an independent implementation. It does not vendor Atom, FX Console, or AtomX code.
+ae-mcp is an independent implementation. It does not include code or asset files from other products.
 
-Design and behavior were informed by:
+Design goals include:
 
-- Atom-style AE operation surfaces for agent-facing inspection, mutation, preview, and reusable workflows.
-- FX Console-style instant preview expectations: fast viewer feedback instead of forcing a true render every time.
-- Adobe CEP and ExtendScript APIs.
-- The Model Context Protocol.
+- Agent-facing AE inspection, mutation, preview, and reusable workflows.
+- Fast viewer feedback instead of forcing a true render every time.
+- A local automation path built on Adobe CEP, ExtendScript APIs, and the Model Context Protocol.
 
 Third-party components:
 

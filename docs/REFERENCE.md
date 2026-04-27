@@ -8,7 +8,7 @@
 |---|---|
 | MCP transport | stdio JSON-RPC 2.0 |
 | AE transport | HTTP RPC, `127.0.0.1:11488` |
-| 入口 | `python -m ae_mcp` |
+| 入口 | `ae-mcp` |
 | Backend | `AE_MCP_BACKEND=ae-mcp` |
 | Plugin URL | `AE_MCP_PLUGIN_URL=http://127.0.0.1:11488` |
 | Handler count | 30 verbs，按 backend `supported_verbs()` 过滤 |
@@ -162,7 +162,7 @@ ae-mcp 是独立实现，参考了 Atom 风格 AE 操作面和 FX Console 风格
 |---|---|
 | MCP transport | stdio JSON-RPC 2.0 |
 | AE transport | HTTP RPC, `127.0.0.1:11488` |
-| Entry point | `python -m ae_mcp` |
+| Entry point | `ae-mcp` |
 | Backend | `AE_MCP_BACKEND=ae-mcp` |
 | Plugin URL | `AE_MCP_PLUGIN_URL=http://127.0.0.1:11488` |
 | Handler count | 30 verbs, filtered by backend `supported_verbs()` |

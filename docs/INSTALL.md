@@ -5,8 +5,15 @@
 ae-mcp 使用 simple RPC 链路：
 
 ```text
-MCP client -> Python ae-mcp -> HTTP 127.0.0.1:11488 -> CEP panel -> AE ExtendScript
+MCP client -> ae-mcp launcher -> Python ae_mcp server -> HTTP 127.0.0.1:11488 -> CEP panel -> AE ExtendScript
 ```
+
+这条链路有两个独立安装面：
+
+1. AE 侧插件：CEP 面板，负责开本地 HTTP host 并把请求转给 ExtendScript。
+2. Agent 侧 MCP server：`ae-mcp` 命令，负责把 MCP 工具请求转成对面板的 HTTP 调用。
+
+如果只装其中一边，用户的 Agent 都无法真正驱动 AE。
 
 ### 开发安装
 
@@ -20,26 +27,73 @@ cd ..\..
 .\scripts\install-plugin-dev.ps1
 ```
 
-重启 After Effects，然后打开 `Window -> Extensions -> ae-mcp`。面板应显示绿色状态：`Listening on 127.0.0.1:11488`。
+这适合仓库维护者和本地开发。它会把 workspace 里的 `ae-mcp`、`ae-mcp-bridge` 和 `ae-mcp-snapshot-mss` 都装进当前环境。
+
+### 用户安装：让 Agent 接入
+
+如果你是从仓库 checkout 直接使用，而不是在这个仓库里开发，推荐分两步：
+
+1. 安装 Python 侧 MCP 组件到你的 Agent 可见环境：
+
+```powershell
+pip install .\packages\core .\packages\bridge .\packages\snapshot-mss
+```
+
+这一步会提供：
+
+- `ae-mcp` launcher
+- `ae-mcp` backend entry point
+- `ae.previewFrame` 需要的 snapshotter
+
+2. 安装并打开 AE 面板：
+
+```powershell
+cd plugin\host
+npm ci
+cd ..\..
+.\scripts\install-plugin-dev.ps1
+```
+
+然后重启 After Effects，打开 `Window -> Extensions -> ae-mcp`。面板应显示绿色状态：`Listening on 127.0.0.1:11488`。
 
 ### MCP 客户端配置
 
-可以使用面板里显示的配置块，或手动配置：
+推荐使用 `ae-mcp` launcher，而不是 `python -m ae_mcp`。
+
+原因：
+
+- `ae-mcp` 更适合 GUI 启动的 Agent app。
+- 它避免依赖某个特定 shell/venv 是否被继承。
+- 如果你的 Agent app 不继承 PATH，可以把 `command` 改成 `ae-mcp.exe` 的完整路径。
+
+默认配置：
 
 ```json
 {
-  "ae": {
-    "command": "python",
-    "args": ["-m", "ae_mcp"],
-    "env": {
-      "AE_MCP_BACKEND": "ae-mcp",
-      "AE_MCP_PLUGIN_URL": "http://127.0.0.1:11488"
+  "mcpServers": {
+    "ae": {
+      "command": "ae-mcp",
+      "env": {
+        "AE_MCP_BACKEND": "ae-mcp",
+        "AE_MCP_PLUGIN_URL": "http://127.0.0.1:11488"
+      }
     }
   }
 }
 ```
 
-先运行 `ae.ping`，再在简单 comp 里试 `ae.previewFrame` 和 `ae.createRig`。
+如果端口在面板里改过，记得同步更新 `AE_MCP_PLUGIN_URL`。
+
+### 首次接入 smoke
+
+1. 启动 After Effects。
+2. 打开 `Window -> Extensions -> ae-mcp`。
+3. 确认面板绿灯。
+4. 把面板里的 `MCP config` 复制到你的 Agent 客户端配置文件。
+5. 在 Agent 里先运行 `ae.ping`。
+6. 再在一个简单 comp 里试 `ae.previewFrame` 和 `ae.createRig`。
+
+更完整的日常协作流程见 [docs/WORKFLOW.md](WORKFLOW.md)。
 
 ### 预期 smoke 结果
 
@@ -58,6 +112,8 @@ uv run pytest packages/core/tests/live -o addopts='' -vv
 
 - 菜单里没有面板：重新运行 `scripts/install-plugin-dev.ps1`，然后重启 AE。
 - 面板红灯：查看面板里的 `Last error` 和日志区域。
+- `ae-mcp` 命令找不到：把 `command` 改成安装环境里的 `ae-mcp.exe` 绝对路径。
+- 报 `AE_MCP_BACKEND='ae-mcp' but no such backend installed`：说明当前 Python 环境缺 `ae-mcp-bridge`。
 - 端口冲突：在面板中修改端口，并同步更新 `AE_MCP_PLUGIN_URL`。
 - `evalScript` 超时：先关闭 AE 模态弹窗；如果仍然卡住，重启 AE。
 - `ae.snapshot` 是诊断截图；`ae.previewFrame` 是快速 viewer capture，不是真实渲染。
@@ -67,8 +123,15 @@ uv run pytest packages/core/tests/live -o addopts='' -vv
 ae-mcp uses the simple RPC path:
 
 ```text
-MCP client -> Python ae-mcp -> HTTP 127.0.0.1:11488 -> CEP panel -> AE ExtendScript
+MCP client -> ae-mcp launcher -> Python ae_mcp server -> HTTP 127.0.0.1:11488 -> CEP panel -> AE ExtendScript
 ```
+
+This path has two separate install surfaces:
+
+1. The AE-side plugin: a CEP panel that exposes the local HTTP host and forwards work into ExtendScript.
+2. The Agent-side MCP server: the `ae-mcp` command that translates MCP tool calls into HTTP requests to the panel.
+
+If either side is missing, the user's Agent cannot actually drive After Effects.
 
 ### Developer Install
 
@@ -82,26 +145,73 @@ cd ..\..
 .\scripts\install-plugin-dev.ps1
 ```
 
-Restart After Effects, then open `Window -> Extensions -> ae-mcp`. The panel should show a green status line: `Listening on 127.0.0.1:11488`.
+This is for maintainers and local development. It installs the workspace copies of `ae-mcp`, `ae-mcp-bridge`, and `ae-mcp-snapshot-mss` into the active environment.
+
+### User Install: connect an Agent
+
+If you are using the repo checkout directly rather than developing inside this repo, use two steps:
+
+1. Install the Python-side MCP components into the environment your Agent app can launch:
+
+```powershell
+pip install .\packages\core .\packages\bridge .\packages\snapshot-mss
+```
+
+This provides:
+
+- the `ae-mcp` launcher
+- the `ae-mcp` backend entry point
+- the snapshotter required by `ae.previewFrame`
+
+2. Install and open the AE panel:
+
+```powershell
+cd plugin\host
+npm ci
+cd ..\..
+.\scripts\install-plugin-dev.ps1
+```
+
+Then restart After Effects and open `Window -> Extensions -> ae-mcp`. The panel should show a green status line: `Listening on 127.0.0.1:11488`.
 
 ### MCP Client Config
 
-Use the block shown in the panel, or configure manually:
+Prefer the `ae-mcp` launcher instead of `python -m ae_mcp`.
+
+Why:
+
+- `ae-mcp` is more reliable for GUI-launched Agent apps.
+- It avoids depending on a specific shell or inherited virtualenv.
+- If your Agent app does not inherit PATH, you can replace `command` with the full path to `ae-mcp.exe`.
+
+Default config:
 
 ```json
 {
-  "ae": {
-    "command": "python",
-    "args": ["-m", "ae_mcp"],
-    "env": {
-      "AE_MCP_BACKEND": "ae-mcp",
-      "AE_MCP_PLUGIN_URL": "http://127.0.0.1:11488"
+  "mcpServers": {
+    "ae": {
+      "command": "ae-mcp",
+      "env": {
+        "AE_MCP_BACKEND": "ae-mcp",
+        "AE_MCP_PLUGIN_URL": "http://127.0.0.1:11488"
+      }
     }
   }
 }
 ```
 
-Run `ae.ping` first. Then try `ae.previewFrame` and `ae.createRig` in a simple comp.
+If you change the panel port, update `AE_MCP_PLUGIN_URL` to match.
+
+### First-Run Smoke
+
+1. Launch After Effects.
+2. Open `Window -> Extensions -> ae-mcp`.
+3. Confirm the panel is green.
+4. Copy the `MCP config` block from the panel into your Agent client's config file.
+5. Run `ae.ping` first from the Agent.
+6. Then try `ae.previewFrame` and `ae.createRig` in a simple comp.
+
+For the day-to-day collaboration flow, see [docs/WORKFLOW.md](WORKFLOW.md).
 
 ### Expected Smoke Result
 
@@ -120,6 +230,8 @@ Current expected result: `20 passed`.
 
 - Panel missing from the menu: rerun `scripts/install-plugin-dev.ps1`, then restart AE.
 - Panel red: read the panel `Last error` line and log area.
+- `ae-mcp` command not found: change `command` to the absolute path of `ae-mcp.exe` in the installed environment.
+- `AE_MCP_BACKEND='ae-mcp' but no such backend installed`: the current Python environment is missing `ae-mcp-bridge`.
 - Port conflict: edit the port in the panel and update `AE_MCP_PLUGIN_URL`.
 - `evalScript` timeouts: close AE modal dialogs first; restart AE if calls still hang.
 - `ae.snapshot` is diagnostic capture. `ae.previewFrame` is fast viewer capture, not a true render.

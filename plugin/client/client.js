@@ -27,12 +27,13 @@
 
     function updateMcpConfig(port) {
         var config = {
-            ae: {
-                command: 'python',
-                args: ['-m', 'ae_mcp'],
-                env: {
-                    AE_MCP_BACKEND: 'ae-mcp',
-                    AE_MCP_PLUGIN_URL: 'http://127.0.0.1:' + port
+            mcpServers: {
+                ae: {
+                    command: 'ae-mcp',
+                    env: {
+                        AE_MCP_BACKEND: 'ae-mcp',
+                        AE_MCP_PLUGIN_URL: 'http://127.0.0.1:' + port
+                    }
                 }
             }
         };
