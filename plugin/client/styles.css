@@ -1,0 +1,66 @@
+body {
+    margin: 0;
+    padding: 0;
+    background: #2a2a2a;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 12px;
+}
+.panel { padding: 12px; }
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 12px;
+}
+.header h1 { margin: 0; font-size: 14px; font-weight: 600; }
+#version { color: #888; font-size: 10px; }
+.status-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+}
+.light {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+.light.off       { background: #555; }
+.light.starting  { background: #ffaa00; }
+.light.ok        { background: #00cc44; }
+.light.error     { background: #ff3333; }
+.config-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+.config-row label { flex-shrink: 0; }
+.config-row input {
+    flex: 1;
+    background: #1a1a1a;
+    color: #e0e0e0;
+    border: 1px solid #444;
+    padding: 4px 6px;
+    border-radius: 3px;
+}
+.config-row button {
+    background: #444;
+    color: #e0e0e0;
+    border: 1px solid #555;
+    padding: 4px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+.config-row button:hover { background: #555; }
+.log-row pre {
+    background: #1a1a1a;
+    padding: 8px;
+    margin: 0;
+    max-height: 80px;
+    overflow-y: auto;
+    font-size: 10px;
+    line-height: 1.4;
+    color: #aaa;
+}

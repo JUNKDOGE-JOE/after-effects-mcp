@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>ae-mcp</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="panel">
+        <div class="header">
+            <h1>ae-mcp</h1>
+            <span id="version">v0.1.0</span>
+        </div>
+        <div class="status-row">
+            <span id="status-light" class="light off"></span>
+            <span id="status-text">Starting...</span>
+        </div>
+        <div class="config-row">
+            <label>HTTP port:</label>
+            <input id="port-input" type="number" value="11488" min="1024" max="65535">
+            <button id="apply-port">Apply</button>
+        </div>
+        <div class="log-row">
+            <pre id="log"></pre>
+        </div>
+    </div>
+
+    <script src="CSInterface.js"></script>
+    <script src="client.js"></script>
+</body>
+</html>
