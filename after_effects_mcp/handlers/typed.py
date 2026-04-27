@@ -417,3 +417,33 @@ async def _run_inspect_property_capabilities(
 register("ae.inspectPropertyCapabilities",
          schemas.AeInspectPropertyCapabilitiesArgs,
          _run_inspect_property_capabilities)
+
+
+# ---------------------------------------------------------------------------
+# ae.getExpressions
+# ---------------------------------------------------------------------------
+
+
+def render_get_expressions(args: schemas.AeGetExpressionsArgs) -> str:
+    tmpl = _load_template("get_expressions.jsx")
+    return tmpl.substitute(
+        comp_expr=_comp_expr(args.comp_id),
+        layer_ids_js=_json_literal(list(args.layer_ids)) if args.layer_ids else "null",
+        prop_filter_js=_json_literal(args.prop) if args.prop else "null",
+        max_results=int(args.max_results),
+    )
+
+
+async def _run_get_expressions(args: schemas.AeGetExpressionsArgs, ctx: Any) -> Any:
+    jsx = render_get_expressions(args)
+
+    async def _call() -> Any:
+        out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=30.0)
+        return _try_json_or_raw(out)
+
+    return await progress.run_with_timeout(
+        ctx, _call(), timeout_sec=40.0, start_msg="ae.getExpressions..."
+    )
+
+
+register("ae.getExpressions", schemas.AeGetExpressionsArgs, _run_get_expressions)

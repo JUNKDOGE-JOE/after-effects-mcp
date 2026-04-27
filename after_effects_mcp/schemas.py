@@ -242,6 +242,14 @@ class AeInspectPropertyCapabilitiesArgs(_StrictModel):
     path: str = Field(..., description="'Transform/Position' style path.")
 
 
+class AeGetExpressionsArgs(_StrictModel):
+    """ae.getExpressions — read all expressions in a comp."""
+    comp_id: str = Field(..., description="AE comp id (required).")
+    layer_ids: Optional[List[int]] = Field(None, description="Restrict to these layers.")
+    prop: Optional[str] = Field(None, description="matchName substring filter.")
+    max_results: int = Field(200, ge=1, le=1000)
+
+
 # ---------------------------------------------------------------------------
 # Registry of verb -> schema (handlers.core / handlers.typed reference this)
 # ---------------------------------------------------------------------------
@@ -269,6 +277,7 @@ SCHEMAS = {
     "ae.getProperties": AeGetPropertiesArgs,
     "ae.scanPropertyTree": AeScanPropertyTreeArgs,
     "ae.inspectPropertyCapabilities": AeInspectPropertyCapabilitiesArgs,
+    "ae.getExpressions": AeGetExpressionsArgs,
 }
 
-assert len(SCHEMAS) == 21, f"expected 21 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 22, f"expected 22 verbs, got {len(SCHEMAS)}"

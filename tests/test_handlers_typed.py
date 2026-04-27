@@ -226,3 +226,23 @@ async def test_run_inspect_property_capabilities(mock_bridge):
     args = schemas.AeInspectPropertyCapabilitiesArgs(layer_id=1, path="Transform/Position")
     result = await _run_inspect_property_capabilities(args, ctx=None)
     assert result["canSetExpression"] is True
+
+
+def test_render_get_expressions():
+    from after_effects_mcp.handlers.typed import render_get_expressions
+    args = schemas.AeGetExpressionsArgs(comp_id="12", layer_ids=[1], prop="Position")
+    jsx = render_get_expressions(args)
+    assert '"Position"' in jsx
+    assert '[1]' in jsx
+
+
+@pytest.mark.asyncio
+async def test_run_get_expressions(mock_bridge):
+    mock_bridge.set_response(
+        "invoke_ae_exec",
+        json.dumps({"ok": True, "expressions": [], "grouped": {}, "truncated": False}),
+    )
+    from after_effects_mcp.handlers.typed import _run_get_expressions
+    args = schemas.AeGetExpressionsArgs(comp_id="12")
+    result = await _run_get_expressions(args, ctx=None)
+    assert result["ok"] is True
