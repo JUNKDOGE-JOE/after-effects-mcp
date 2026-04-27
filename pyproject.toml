@@ -1,12 +1,9 @@
 [tool.uv.workspace]
-# ae-mcp is an integrated AE-agent product. The AE plugin half is TBD
-# (to be designed/built — not AEBMethod, which is a different unrelated
-# project). Once the plugin design is decided, its bridge package will
-# become a workspace member here.
-members = ["packages/core", "packages/snapshot-mss"]
+members = ["packages/core", "packages/bridge", "packages/snapshot-mss"]
 
 [tool.uv.sources]
 ae-mcp                = { workspace = true }
+ae-mcp-bridge         = { workspace = true }
 ae-mcp-snapshot-mss   = { workspace = true }
 
 # Workspace-level dev dependency group. Run `uv sync --group dev` to install
@@ -15,11 +12,12 @@ ae-mcp-snapshot-mss   = { workspace = true }
 dev = [
     "pytest>=7.4",
     "pytest-asyncio>=0.23",
+    "respx>=0.21",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["packages/core/tests", "packages/snapshot-mss/tests"]
+testpaths = ["packages/core/tests", "packages/bridge/tests", "packages/snapshot-mss/tests"]
 markers = [
     "live: requires real AE + a backend reachable; opt-in via AEBM_LIVE_TESTS=1",
     "live_smoke: 3-verb handshake subset of live tests",
