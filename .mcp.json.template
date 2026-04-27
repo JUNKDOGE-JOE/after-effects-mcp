@@ -3,13 +3,12 @@
     "ae": {
       "command": "python",
       "args": [
-        "-m", "uv", "run",
-        "--directory", "<PATH_TO_THIS_REPO_OR_PIP_INSTALL_LOCATION>",
-        "python", "-m", "ae_mcp"
+        "-m",
+        "ae_mcp"
       ],
       "env": {
-        "AE_MCP_BACKEND": "<aebm | other-installed-backend>",
-        "AE_BRIDGE_ROOT": "<only if AE_MCP_BACKEND=aebm — path to AEBMethod plugin checkout>"
+        "AE_MCP_BACKEND": "ae-mcp",
+        "AE_MCP_PLUGIN_URL": "http://127.0.0.1:11488"
       }
     }
   }

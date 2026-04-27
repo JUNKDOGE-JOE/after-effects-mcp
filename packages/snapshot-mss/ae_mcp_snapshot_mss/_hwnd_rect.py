@@ -37,12 +37,14 @@ def find_ae_main_hwnd() -> Optional[int]:
     from ctypes import wintypes
     user32 = ctypes.WinDLL("user32", use_last_error=True)
 
-    found = []
+    found: list[tuple[int, int]] = []
     EnumWindowsProc = ctypes.WINFUNCTYPE(
         wintypes.BOOL, wintypes.HWND, wintypes.LPARAM,
     )
 
     def callback(hwnd, lparam):
+        if not user32.IsWindowVisible(hwnd):
+            return True
         length = user32.GetWindowTextLengthW(hwnd)
         if length == 0:
             return True
@@ -50,9 +52,20 @@ def find_ae_main_hwnd() -> Optional[int]:
         user32.GetWindowTextW(hwnd, buf, length + 1)
         title = buf.value
         if "After Effects" in title:
-            found.append(hwnd)
-            return False
+            if user32.IsIconic(hwnd):
+                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            user32.SetForegroundWindow(hwnd)
+            rect = wintypes.RECT()
+            if user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                width = max(0, rect.right - rect.left)
+                height = max(0, rect.bottom - rect.top)
+                area = width * height
+                if area > 0 and rect.left > -30000 and rect.top > -30000:
+                    found.append((area, int(hwnd)))
         return True
 
     user32.EnumWindows(EnumWindowsProc(callback), 0)
-    return found[0] if found else None
+    if not found:
+        return None
+    found.sort(reverse=True)
+    return found[0][1]
