@@ -74,8 +74,10 @@ Restart your MCP client. `/mcp` (or equivalent) should list 24 tools under `ae.*
 
 `ae-mcp` does not ship any backend. The Backend interface is public; AE plugin authors publish their own integration packages.
 
-Known third-party backends (not endorsed, listed for reference):
-- `ae-mcp-backend-aebm` — adapts AEBMethod's file-polling protocol (lives in a sibling repo; install via `pip install -e <path-to-backend-aebm>`)
+No published third-party backends yet. (A reference impl for AEBMethod
+existed during spec 3a development but was archived 2026-04-27; see
+`E:/Code/_archive/2026-04-27_ae-mcp-backend-aebm/STATUS.md` if recovery
+is ever needed.)
 
 If you author and publish a backend, send a PR to add it to this list.
 
