@@ -1,47 +1,17 @@
-[project]
-name = "after-effects-mcp"
-version = "0.7.0"
-description = "MCP server exposing After Effects automation via the aebm file-polling bridge protocol"
-readme = "README.md"
-requires-python = ">=3.10"
-license = { text = "MIT" }
-authors = [
-    { name = "after-effects-mcp contributors" },
-]
-dependencies = [
-    "mcp>=1.0.0",
-    "pydantic>=2.5.0",
-    "pillow>=10.0.0",
-]
+[tool.uv.workspace]
+members = ["packages/core", "packages/backend-aebm", "packages/backend-atom", "packages/snapshot-mss"]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.4",
-    "pytest-asyncio>=0.23",
-]
-
-[project.scripts]
-after-effects-mcp = "after_effects_mcp.__main__:main"
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["after_effects_mcp"]
-
-[tool.hatch.build]
-include = [
-    "after_effects_mcp/**/*.py",
-    "after_effects_mcp/jsx_templates/*.jsx",
-]
+[tool.uv.sources]
+ae-mcp                = { workspace = true }
+ae-mcp-backend-aebm   = { workspace = true }
+ae-mcp-backend-atom   = { workspace = true }
+ae-mcp-snapshot-mss   = { workspace = true }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
-pythonpath = ["."]
+testpaths = ["packages/core/tests", "packages/backend-aebm/tests", "packages/backend-atom/tests", "packages/snapshot-mss/tests"]
 markers = [
-    "live: requires real AE + aebm panel loaded; opt-in via AEBM_LIVE_TESTS=1",
+    "live: requires real AE + a backend reachable; opt-in via AEBM_LIVE_TESTS=1",
     "live_smoke: 3-verb handshake subset of live tests",
 ]
 addopts = "-m 'not live and not live_smoke'"

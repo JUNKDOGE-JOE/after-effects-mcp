@@ -17,10 +17,10 @@ from pathlib import Path
 from string import Template
 from typing import Any, Optional
 
-from after_effects_mcp import bridge, checkpoint_store, progress, schemas
-from after_effects_mcp.handlers import register
+from ae_mcp import bridge, checkpoint_store, progress, schemas
+from ae_mcp.handlers import register
 
-log = logging.getLogger("after_effects_mcp.handlers.core")
+log = logging.getLogger("ae_mcp.handlers.core")
 
 
 # ---------------------------------------------------------------------------
@@ -319,7 +319,7 @@ register("ae.revert", schemas.AeRevertArgs, _run_revert)
 
 async def _run_snapshot(args: schemas.AeSnapshotArgs, ctx: Any) -> Any:
     try:
-        from after_effects_mcp import snapshot as snap
+        from ae_mcp import snapshot as snap
     except ImportError as e:  # non-Windows
         return {"ok": False, "error": f"snapshot unavailable: {e}"}
 

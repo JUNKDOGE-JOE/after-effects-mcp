@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from after_effects_mcp import bridge
+from ae_mcp import bridge
 
 
 def _live_enabled() -> bool:

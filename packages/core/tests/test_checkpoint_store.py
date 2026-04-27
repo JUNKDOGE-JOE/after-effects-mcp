@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from after_effects_mcp.checkpoint_store import CheckpointStore
+from ae_mcp.checkpoint_store import CheckpointStore
 
 
 def _touch_aep(path: Path, size: int = 1024) -> None:

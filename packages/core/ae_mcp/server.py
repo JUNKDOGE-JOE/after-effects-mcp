@@ -19,9 +19,9 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
-from after_effects_mcp.handlers import HANDLERS, load_all
+from ae_mcp.handlers import HANDLERS, load_all
 
-log = logging.getLogger("after_effects_mcp.server")
+log = logging.getLogger("ae_mcp.server")
 
 
 def _format_result(result: Any) -> str:

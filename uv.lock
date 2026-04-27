@@ -2,10 +2,15 @@ version = 1
 revision = 3
 requires-python = ">=3.10"
 
+[manifest]
+members = [
+    "ae-mcp",
+]
+
 [[package]]
-name = "after-effects-mcp"
-version = "0.7.0"
-source = { editable = "." }
+name = "ae-mcp"
+version = "0.1.0"
+source = { editable = "packages/core" }
 dependencies = [
     { name = "mcp" },
     { name = "pillow" },

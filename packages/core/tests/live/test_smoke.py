@@ -10,8 +10,8 @@ import json
 
 import pytest
 
-from after_effects_mcp import bridge, schemas
-from after_effects_mcp.handlers.core import _run_ping
+from ae_mcp import bridge, schemas
+from ae_mcp.handlers.core import _run_ping
 
 
 pytestmark = [pytest.mark.live, pytest.mark.live_smoke]
@@ -37,7 +37,7 @@ async def test_exec_arithmetic(live_bridge):
 
 @pytest.mark.asyncio
 async def test_snapshot_writes_png(live_bridge, artifact_dir, tmp_path):
-    from after_effects_mcp import snapshot
+    from ae_mcp import snapshot
     out_path = tmp_path / "ae_smoke.png"
     result = snapshot.capture_ae_viewer(out_path=str(out_path))
     assert result["ok"] is True

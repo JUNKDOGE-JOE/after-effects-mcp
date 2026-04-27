@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from after_effects_mcp import bridge
+from ae_mcp import bridge
 
 
 def test_format_ps_value_basic():

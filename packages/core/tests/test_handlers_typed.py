@@ -6,9 +6,9 @@ import json
 
 import pytest
 
-from after_effects_mcp import schemas as S
-from after_effects_mcp.handlers import HANDLERS, load_all
-from after_effects_mcp.handlers import typed as T
+from ae_mcp import schemas as S
+from ae_mcp.handlers import HANDLERS, load_all
+from ae_mcp.handlers import typed as T
 
 
 @pytest.fixture(autouse=True)
@@ -157,11 +157,11 @@ async def test_move_layer_dispatches(mock_bridge):
 
 import json
 import pytest
-from after_effects_mcp import schemas
+from ae_mcp import schemas
 
 
 def test_render_get_properties_substitutes_query():
-    from after_effects_mcp.handlers.typed import render_get_properties
+    from ae_mcp.handlers.typed import render_get_properties
     args = schemas.AeGetPropertiesArgs(layer_ids=[1, 2], query="pos rot|opacity")
     jsx = render_get_properties(args)
     assert '"pos rot|opacity"' in jsx
@@ -178,7 +178,7 @@ async def test_run_get_properties(mock_bridge):
              "hasExpression": False, "hasKeyframes": False}
         ]}),
     )
-    from after_effects_mcp.handlers.typed import _run_get_properties
+    from ae_mcp.handlers.typed import _run_get_properties
     args = schemas.AeGetPropertiesArgs(layer_ids=[1], query="position")
     result = await _run_get_properties(args, ctx=None)
     assert result["ok"] is True
@@ -186,7 +186,7 @@ async def test_run_get_properties(mock_bridge):
 
 
 def test_render_scan_property_tree():
-    from after_effects_mcp.handlers.typed import render_scan_property_tree
+    from ae_mcp.handlers.typed import render_scan_property_tree
     args = schemas.AeScanPropertyTreeArgs(layer_id=3, max_depth=2, include_values=False)
     jsx = render_scan_property_tree(args)
     assert "comp.layer(3)" in jsx
@@ -201,14 +201,14 @@ async def test_run_scan_property_tree(mock_bridge):
         json.dumps({"ok": True, "layerId": 1, "layerName": "L",
                     "tree": {"children": []}, "truncatedAt": None}),
     )
-    from after_effects_mcp.handlers.typed import _run_scan_property_tree
+    from ae_mcp.handlers.typed import _run_scan_property_tree
     args = schemas.AeScanPropertyTreeArgs(layer_id=1)
     result = await _run_scan_property_tree(args, ctx=None)
     assert result["ok"] is True
 
 
 def test_render_inspect_property_capabilities():
-    from after_effects_mcp.handlers.typed import render_inspect_property_capabilities
+    from ae_mcp.handlers.typed import render_inspect_property_capabilities
     args = schemas.AeInspectPropertyCapabilitiesArgs(layer_id=1, path="Transform/Position")
     jsx = render_inspect_property_capabilities(args)
     assert '"Transform/Position"' in jsx
@@ -222,14 +222,14 @@ async def test_run_inspect_property_capabilities(mock_bridge):
         json.dumps({"ok": True, "exists": True, "canSetValue": True,
                     "canSetExpression": True, "valueDimension": 3}),
     )
-    from after_effects_mcp.handlers.typed import _run_inspect_property_capabilities
+    from ae_mcp.handlers.typed import _run_inspect_property_capabilities
     args = schemas.AeInspectPropertyCapabilitiesArgs(layer_id=1, path="Transform/Position")
     result = await _run_inspect_property_capabilities(args, ctx=None)
     assert result["canSetExpression"] is True
 
 
 def test_render_get_expressions():
-    from after_effects_mcp.handlers.typed import render_get_expressions
+    from ae_mcp.handlers.typed import render_get_expressions
     args = schemas.AeGetExpressionsArgs(comp_id="12", layer_ids=[1], prop="Position")
     jsx = render_get_expressions(args)
     assert '"Position"' in jsx
@@ -242,14 +242,14 @@ async def test_run_get_expressions(mock_bridge):
         "invoke_ae_exec",
         json.dumps({"ok": True, "expressions": [], "grouped": {}, "truncated": False}),
     )
-    from after_effects_mcp.handlers.typed import _run_get_expressions
+    from ae_mcp.handlers.typed import _run_get_expressions
     args = schemas.AeGetExpressionsArgs(comp_id="12")
     result = await _run_get_expressions(args, ctx=None)
     assert result["ok"] is True
 
 
 def test_render_get_keyframes():
-    from after_effects_mcp.handlers.typed import render_get_keyframes
+    from ae_mcp.handlers.typed import render_get_keyframes
     args = schemas.AeGetKeyframesArgs(layer_id=1, path="Transform/Position")
     jsx = render_get_keyframes(args)
     assert '"Transform/Position"' in jsx
@@ -262,14 +262,14 @@ async def test_run_get_keyframes(mock_bridge):
         "invoke_ae_exec",
         json.dumps({"ok": True, "numKeyframes": 0, "keyframes": []}),
     )
-    from after_effects_mcp.handlers.typed import _run_get_keyframes
+    from ae_mcp.handlers.typed import _run_get_keyframes
     args = schemas.AeGetKeyframesArgs(layer_id=1, path="Transform/Position")
     result = await _run_get_keyframes(args, ctx=None)
     assert result["numKeyframes"] == 0
 
 
 def test_render_search_project():
-    from after_effects_mcp.handlers.typed import render_search_project
+    from ae_mcp.handlers.typed import render_search_project
     args = schemas.AeSearchProjectArgs(query="hero", scope=["layers"], limit=10)
     jsx = render_search_project(args)
     assert '"hero"' in jsx
@@ -283,7 +283,7 @@ async def test_run_search_project(mock_bridge):
         "invoke_ae_exec",
         json.dumps({"ok": True, "hits": [], "truncated": False}),
     )
-    from after_effects_mcp.handlers.typed import _run_search_project
+    from ae_mcp.handlers.typed import _run_search_project
     args = schemas.AeSearchProjectArgs(query="x")
     result = await _run_search_project(args, ctx=None)
     assert result["ok"] is True

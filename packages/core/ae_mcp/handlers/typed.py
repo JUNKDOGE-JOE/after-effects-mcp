@@ -6,7 +6,7 @@ Each handler:
   2. substitutes placeholders with JSON-safe literals,
   3. dispatches via bridge.invoke_ae_exec under progress.run_with_timeout.
 
-JSX templates live in after_effects_mcp/jsx_templates/*.jsx and use Python
+JSX templates live in ae_mcp/jsx_templates/*.jsx and use Python
 string.Template substitution (${name} placeholders). Chose Template over
 .format because JSX is full of single braces; $$ only matters for literal
 dollar signs, which are rare in JSX.
@@ -21,10 +21,10 @@ from pathlib import Path
 from string import Template
 from typing import Any, Optional
 
-from after_effects_mcp import bridge, progress, schemas
-from after_effects_mcp.handlers import register
+from ae_mcp import bridge, progress, schemas
+from ae_mcp.handlers import register
 
-log = logging.getLogger("after_effects_mcp.handlers.typed")
+log = logging.getLogger("ae_mcp.handlers.typed")
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "jsx_templates"
 

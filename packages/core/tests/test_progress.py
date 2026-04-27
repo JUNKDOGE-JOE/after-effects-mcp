@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from after_effects_mcp import progress
+from ae_mcp import progress
 
 
 class FakeCtx:

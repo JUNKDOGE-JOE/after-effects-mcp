@@ -28,7 +28,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-log = logging.getLogger("after_effects_mcp.bridge")
+log = logging.getLogger("ae_mcp.bridge")
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +68,7 @@ def _resolve_bridge_root() -> Path:
 
 
 # Lazy resolution: do NOT validate at import time. Tests mock subprocess
-# at a higher layer and should be able to `from after_effects_mcp import
+# at a higher layer and should be able to `from ae_mcp import
 # bridge` without AE_BRIDGE_ROOT set.
 #
 # First call to any bridge-reading function (run_ps / invoke_ae_*) triggers

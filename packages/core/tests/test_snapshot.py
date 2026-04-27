@@ -10,7 +10,7 @@ import pytest
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only")
 def test_snapshot_module_loads():
-    from after_effects_mcp import snapshot
+    from ae_mcp import snapshot
     assert hasattr(snapshot, "capture_ae_viewer")
     assert hasattr(snapshot, "get_ae_main_hwnd")
     assert hasattr(snapshot, "enum_ae_child_windows")
@@ -19,7 +19,7 @@ def test_snapshot_module_loads():
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only")
 def test_constants():
-    from after_effects_mcp import snapshot
+    from ae_mcp import snapshot
     assert snapshot.SRCCOPY == 0x00CC0020
     assert snapshot.CAPTUREBLT == 0x40000000
     assert snapshot.PW_RENDERFULLCONTENT == 0x2
@@ -27,7 +27,7 @@ def test_constants():
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only")
 def test_rect_layout():
-    from after_effects_mcp import snapshot
+    from ae_mcp import snapshot
     import ctypes
     r = snapshot.RECT(1, 2, 3, 4)
     assert r.left == 1 and r.top == 2 and r.right == 3 and r.bottom == 4
@@ -36,6 +36,6 @@ def test_rect_layout():
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only")
 def test_capture_rejects_bad_method():
-    from after_effects_mcp import snapshot
+    from ae_mcp import snapshot
     with pytest.raises(ValueError):
         snapshot.capture_ae_viewer(method="BogusMethod")

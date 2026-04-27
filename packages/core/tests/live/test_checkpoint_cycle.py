@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from after_effects_mcp import bridge, schemas
-from after_effects_mcp.handlers.core import _run_checkpoint, _run_revert
+from ae_mcp import bridge, schemas
+from ae_mcp.handlers.core import _run_checkpoint, _run_revert
 
 
 pytestmark = pytest.mark.live
