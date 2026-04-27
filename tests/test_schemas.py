@@ -10,15 +10,15 @@ from after_effects_mcp import schemas as S
 
 def test_registry_has_17_verbs():
     # v0.6.2: 15 verbs. v0.7-A: +ae.isolateToggle +ae.toastQuery -> 17. v0.7-1: +ae.ping -> 18.
-    # Task 4.1: +ae.getProperties -> 19.
-    assert len(S.SCHEMAS) == 19, f"expected 19 verbs, got {len(S.SCHEMAS)}"
+    # Task 4.1: +ae.getProperties -> 19. Task 4.2: +ae.scanPropertyTree -> 20.
+    assert len(S.SCHEMAS) == 20, f"expected 20 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.layers", "ae.readProps", "ae.exec",
         "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.applyEffect", "ae.ping",
         "ae.createLayer", "ae.setProperty", "ae.moveLayer", "ae.selectLayers",
         "ae.setTime", "ae.getTime",
         "ae.isolateToggle", "ae.toastQuery",
-        "ae.getProperties",
+        "ae.getProperties", "ae.scanPropertyTree",
     }
 
 
@@ -209,3 +209,16 @@ def test_get_properties_layer_ids_must_be_list():
     from pydantic import ValidationError
     with pytest.raises(ValidationError):
         S.AeGetPropertiesArgs(layer_ids="all", query="x")
+
+
+def test_scan_property_tree_defaults():
+    a = S.AeScanPropertyTreeArgs(layer_id=1)
+    assert a.max_depth == 4
+    assert a.include_values is True
+
+
+def test_scan_property_tree_max_depth_clamped():
+    import pytest
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        S.AeScanPropertyTreeArgs(layer_id=1, max_depth=99)

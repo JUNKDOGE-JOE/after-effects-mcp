@@ -183,3 +183,25 @@ async def test_run_get_properties(mock_bridge):
     result = await _run_get_properties(args, ctx=None)
     assert result["ok"] is True
     assert result["total"] == 1
+
+
+def test_render_scan_property_tree():
+    from after_effects_mcp.handlers.typed import render_scan_property_tree
+    args = schemas.AeScanPropertyTreeArgs(layer_id=3, max_depth=2, include_values=False)
+    jsx = render_scan_property_tree(args)
+    assert "comp.layer(3)" in jsx
+    assert "var maxDepth = 2;" in jsx
+    assert "var includeValues = false;" in jsx
+
+
+@pytest.mark.asyncio
+async def test_run_scan_property_tree(mock_bridge):
+    mock_bridge.set_response(
+        "invoke_ae_exec",
+        json.dumps({"ok": True, "layerId": 1, "layerName": "L",
+                    "tree": {"children": []}, "truncatedAt": None}),
+    )
+    from after_effects_mcp.handlers.typed import _run_scan_property_tree
+    args = schemas.AeScanPropertyTreeArgs(layer_id=1)
+    result = await _run_scan_property_tree(args, ctx=None)
+    assert result["ok"] is True

@@ -227,6 +227,14 @@ class AeGetPropertiesArgs(_StrictModel):
     limit: int = Field(50, ge=1, le=500, description="Pagination size.")
 
 
+class AeScanPropertyTreeArgs(_StrictModel):
+    """ae.scanPropertyTree — deep DFS dump of one layer's property tree."""
+    comp_id: Optional[str] = Field(None, description="AE comp id. Omit for active.")
+    layer_id: int = Field(..., ge=1, description="1-based layer index.")
+    max_depth: int = Field(4, ge=1, le=10, description="DFS depth cap.")
+    include_values: bool = Field(True, description="Set false to skip .value reads.")
+
+
 # ---------------------------------------------------------------------------
 # Registry of verb -> schema (handlers.core / handlers.typed reference this)
 # ---------------------------------------------------------------------------
@@ -252,6 +260,7 @@ SCHEMAS = {
     "ae.isolateToggle": AeIsolateToggleArgs,
     "ae.toastQuery":    AeToastQueryArgs,
     "ae.getProperties": AeGetPropertiesArgs,
+    "ae.scanPropertyTree": AeScanPropertyTreeArgs,
 }
 
-assert len(SCHEMAS) == 19, f"expected 19 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 20, f"expected 20 verbs, got {len(SCHEMAS)}"

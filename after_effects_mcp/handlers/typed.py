@@ -354,3 +354,33 @@ async def _run_get_properties(args: schemas.AeGetPropertiesArgs, ctx: Any) -> An
 
 
 register("ae.getProperties", schemas.AeGetPropertiesArgs, _run_get_properties)
+
+
+# ---------------------------------------------------------------------------
+# ae.scanPropertyTree
+# ---------------------------------------------------------------------------
+
+
+def render_scan_property_tree(args: schemas.AeScanPropertyTreeArgs) -> str:
+    tmpl = _load_template("scan_property_tree.jsx")
+    return tmpl.substitute(
+        comp_expr=_comp_expr(args.comp_id),
+        layer_id=int(args.layer_id),
+        max_depth=int(args.max_depth),
+        include_values="true" if args.include_values else "false",
+    )
+
+
+async def _run_scan_property_tree(args: schemas.AeScanPropertyTreeArgs, ctx: Any) -> Any:
+    jsx = render_scan_property_tree(args)
+
+    async def _call() -> Any:
+        out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=30.0)
+        return _try_json_or_raw(out)
+
+    return await progress.run_with_timeout(
+        ctx, _call(), timeout_sec=40.0, start_msg="ae.scanPropertyTree..."
+    )
+
+
+register("ae.scanPropertyTree", schemas.AeScanPropertyTreeArgs, _run_scan_property_tree)
