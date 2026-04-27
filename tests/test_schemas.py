@@ -12,8 +12,8 @@ def test_registry_has_17_verbs():
     # v0.6.2: 15 verbs. v0.7-A: +ae.isolateToggle +ae.toastQuery -> 17. v0.7-1: +ae.ping -> 18.
     # Task 4.1: +ae.getProperties -> 19. Task 4.2: +ae.scanPropertyTree -> 20.
     # Task 4.3: +ae.inspectPropertyCapabilities -> 21. Task 4.4: +ae.getExpressions -> 22.
-    # Task 4.5: +ae.getKeyframes -> 23.
-    assert len(S.SCHEMAS) == 23, f"expected 23 verbs, got {len(S.SCHEMAS)}"
+    # Task 4.5: +ae.getKeyframes -> 23. Task 4.6: +ae.searchProject -> 24 (FINAL).
+    assert len(S.SCHEMAS) == 24, f"expected 24 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.layers", "ae.readProps", "ae.exec",
         "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.applyEffect", "ae.ping",
@@ -22,7 +22,7 @@ def test_registry_has_17_verbs():
         "ae.isolateToggle", "ae.toastQuery",
         "ae.getProperties", "ae.scanPropertyTree",
         "ae.inspectPropertyCapabilities", "ae.getExpressions",
-        "ae.getKeyframes",
+        "ae.getKeyframes", "ae.searchProject",
     }
 
 
@@ -249,3 +249,21 @@ def test_get_expressions_layer_ids_optional():
 def test_get_keyframes_required():
     a = S.AeGetKeyframesArgs(layer_id=1, path="Transform/Position")
     assert a.layer_id == 1
+
+
+def test_search_project_defaults():
+    a = S.AeSearchProjectArgs(query="hero")
+    assert a.scope == ["layers", "expressions", "effects", "comps", "items"]
+    assert a.limit == 100
+
+
+def test_search_project_scope_subset():
+    a = S.AeSearchProjectArgs(query="x", scope=["layers"])
+    assert a.scope == ["layers"]
+
+
+def test_search_project_invalid_scope():
+    import pytest
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        S.AeSearchProjectArgs(query="x", scope=["bogus"])

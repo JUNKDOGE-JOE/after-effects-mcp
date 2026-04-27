@@ -257,6 +257,19 @@ class AeGetKeyframesArgs(_StrictModel):
     path: str = Field(...)
 
 
+SearchScope = Literal["layers", "expressions", "effects", "comps", "items"]
+
+
+class AeSearchProjectArgs(_StrictModel):
+    """ae.searchProject — fuzzy search across the whole project."""
+    query: str = Field(..., description="Multi-word AND; '|' OR groups.")
+    scope: List[SearchScope] = Field(
+        default_factory=lambda: ["layers", "expressions", "effects", "comps", "items"],
+        description="Which kinds of objects to scan.",
+    )
+    limit: int = Field(100, ge=1, le=500)
+
+
 # ---------------------------------------------------------------------------
 # Registry of verb -> schema (handlers.core / handlers.typed reference this)
 # ---------------------------------------------------------------------------
@@ -286,6 +299,7 @@ SCHEMAS = {
     "ae.inspectPropertyCapabilities": AeInspectPropertyCapabilitiesArgs,
     "ae.getExpressions": AeGetExpressionsArgs,
     "ae.getKeyframes": AeGetKeyframesArgs,
+    "ae.searchProject": AeSearchProjectArgs,
 }
 
-assert len(SCHEMAS) == 23, f"expected 23 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 24, f"expected 24 verbs, got {len(SCHEMAS)}"

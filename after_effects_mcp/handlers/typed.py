@@ -476,3 +476,32 @@ async def _run_get_keyframes(args: schemas.AeGetKeyframesArgs, ctx: Any) -> Any:
 
 
 register("ae.getKeyframes", schemas.AeGetKeyframesArgs, _run_get_keyframes)
+
+
+# ---------------------------------------------------------------------------
+# ae.searchProject
+# ---------------------------------------------------------------------------
+
+
+def render_search_project(args: schemas.AeSearchProjectArgs) -> str:
+    tmpl = _load_template("search_project.jsx")
+    return tmpl.substitute(
+        query_js=_json_literal(args.query),
+        scope_js=_json_literal(list(args.scope)),
+        limit=int(args.limit),
+    )
+
+
+async def _run_search_project(args: schemas.AeSearchProjectArgs, ctx: Any) -> Any:
+    jsx = render_search_project(args)
+
+    async def _call() -> Any:
+        out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=30.0)
+        return _try_json_or_raw(out)
+
+    return await progress.run_with_timeout(
+        ctx, _call(), timeout_sec=40.0, start_msg="ae.searchProject..."
+    )
+
+
+register("ae.searchProject", schemas.AeSearchProjectArgs, _run_search_project)

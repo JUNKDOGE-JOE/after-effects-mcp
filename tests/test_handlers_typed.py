@@ -266,3 +266,24 @@ async def test_run_get_keyframes(mock_bridge):
     args = schemas.AeGetKeyframesArgs(layer_id=1, path="Transform/Position")
     result = await _run_get_keyframes(args, ctx=None)
     assert result["numKeyframes"] == 0
+
+
+def test_render_search_project():
+    from after_effects_mcp.handlers.typed import render_search_project
+    args = schemas.AeSearchProjectArgs(query="hero", scope=["layers"], limit=10)
+    jsx = render_search_project(args)
+    assert '"hero"' in jsx
+    assert '"layers"' in jsx
+    assert "var limit = 10;" in jsx
+
+
+@pytest.mark.asyncio
+async def test_run_search_project(mock_bridge):
+    mock_bridge.set_response(
+        "invoke_ae_exec",
+        json.dumps({"ok": True, "hits": [], "truncated": False}),
+    )
+    from after_effects_mcp.handlers.typed import _run_search_project
+    args = schemas.AeSearchProjectArgs(query="x")
+    result = await _run_search_project(args, ctx=None)
+    assert result["ok"] is True
