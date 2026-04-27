@@ -40,3 +40,8 @@ include = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "live: requires real AE + aebm panel loaded; opt-in via AEBM_LIVE_TESTS=1",
+    "live_smoke: 3-verb handshake subset of live tests",
+]
+addopts = "-m 'not live and not live_smoke'"
