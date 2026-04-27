@@ -10,7 +10,7 @@ to **0.1.0** as part of becoming a standalone, plugin-agnostic product.
 pip uninstall after-effects-mcp
 
 # 2) Install the new core + at least one backend
-pip install ae-mcp ae-mcp-backend-aebm   # or ae-mcp-backend-atom
+pip install ae-mcp ae-mcp-backend-aebm
 pip install ae-mcp-snapshot-mss          # optional: enables ae.snapshot
 
 # 3) Update your .mcp.json — see .mcp.json.template
@@ -36,4 +36,4 @@ install a snapshotter.
 ## What got better
 - Pluggable: any AE plugin author can publish their own backend
 - Cross-platform: macOS/Linux can now use `ae.snapshot`
-- Decoupled: core has zero AEBM/Atom-specific code
+- Decoupled: core has zero plugin-specific code

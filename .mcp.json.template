@@ -8,9 +8,8 @@
         "python", "-m", "ae_mcp"
       ],
       "env": {
-        "AE_MCP_BACKEND": "<aebm | atom | other-installed-backend>",
-        "AE_BRIDGE_ROOT": "<only if AE_MCP_BACKEND=aebm — path to AEBMethod plugin checkout>",
-        "ATOM_MCP_URL": "<only if AE_MCP_BACKEND=atom — default http://127.0.0.1:11487/mcp>"
+        "AE_MCP_BACKEND": "<aebm | other-installed-backend>",
+        "AE_BRIDGE_ROOT": "<only if AE_MCP_BACKEND=aebm — path to AEBMethod plugin checkout>"
       }
     }
   }

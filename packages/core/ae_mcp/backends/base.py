@@ -30,11 +30,11 @@ class Backend(ABC):
     backend module.
     """
 
-    name: str  # e.g. "aebm", "atom" — value matched against AE_MCP_BACKEND env var
+    name: str  # e.g. "aebm" — value matched against AE_MCP_BACKEND env var
 
     # Capability hints. Override in subclasses if backend handles these natively
-    # (e.g. Atom auto-wraps undo groups and auto-checkpoints; in that case core
-    # should skip its own wrapping/checkpointing).
+    # (e.g. some plugins auto-wrap undo groups and auto-checkpoint; in that
+    # case core should skip its own wrapping/checkpointing).
     manages_undo: bool = False
     manages_checkpoints: bool = False
 

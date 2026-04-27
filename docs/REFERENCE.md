@@ -35,7 +35,7 @@ handlers/* (24 verbs) — render JSX templates, call backend.exec(jsx)
 [ Backend implementation in a separate pip package ]
    |
    v
-AE plugin (AEBM file queue / Atom HTTP / your own)
+AE plugin (AEBM file queue / your own)
    |
    v
 After Effects (ExtendScript runtime)
@@ -130,7 +130,7 @@ Opt-in end-to-end tests against a real AE instance.
 
 ```powershell
 $env:AEBM_LIVE_TESTS = "1"
-$env:AE_MCP_BACKEND = "aebm"      # or atom
+$env:AE_MCP_BACKEND = "aebm"
 $env:AE_BRIDGE_ROOT = "E:/Code/AEBMethod"   # for aebm backend
 python -m uv run pytest -m live_smoke
 python -m uv run pytest -m live

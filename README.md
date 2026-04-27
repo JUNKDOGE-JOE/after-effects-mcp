@@ -36,11 +36,12 @@ pip install ae-mcp
 
 # 2) At least one backend — pick one matching your AE plugin:
 pip install ae-mcp-backend-aebm     # for AEBMethod plugin
-pip install ae-mcp-backend-atom     # for Atom plugin
 
 # 3) Optional: cross-platform snapshot for ae.snapshot
 pip install ae-mcp-snapshot-mss
 ```
+
+The reference backend that ships in this repo is `ae-mcp-backend-aebm`. Other AE plugin authors are encouraged to publish their own backend packages registering entry-point group `ae_mcp.backends` — see "Writing a new backend" below.
 
 If you have multiple backends installed, set `AE_MCP_BACKEND` to choose.
 
@@ -63,19 +64,15 @@ Copy `.mcp.json.template` to your client config (e.g., `~/.claude.json` for Clau
 }
 ```
 
-Replace `AE_MCP_BACKEND` and the per-backend env vars (`AE_BRIDGE_ROOT`, `ATOM_MCP_URL`, etc.) per the backend you chose.
+Replace `AE_MCP_BACKEND` and the per-backend env vars (`AE_BRIDGE_ROOT`, etc.) per the backend you chose.
 
 Restart your MCP client. `/mcp` (or equivalent) should list 24 tools under `ae.*` (23 if you didn't install a snapshotter).
 
 ## Backends
 
-### `ae-mcp-backend-aebm`
+### `ae-mcp-backend-aebm` (reference implementation)
 
 Adapts AEBMethod's file-polling protocol. Requires the AEBMethod AE plugin loaded; reads `AE_BRIDGE_ROOT` env var to find the plugin's PowerShell scripts. Foreground-AE constraint applies (AEGP idle hook is throttled when AE is in background).
-
-### `ae-mcp-backend-atom`
-
-Adapts Atom's HTTP MCP server. Requires Atom AE plugin with MCP Mode enabled. Reads `ATOM_MCP_URL` (default `http://127.0.0.1:11487/mcp`). Works without AE in foreground (HTTP listener is independent of AE's idle hook).
 
 ### Writing a new backend
 
@@ -86,12 +83,12 @@ Implement `ae_mcp.backends.base.Backend` (subclass with `exec`, `health_check`, 
 ```powershell
 git clone <this-repo>
 cd after-effects-mcp
-python -m uv sync                                      # installs all 4 packages editable
+python -m uv sync                                      # installs all 3 packages editable
 $env:AE_BRIDGE_ROOT = "E:/Code/AEBMethod"
 python -m uv run pytest -m "not live and not live_smoke" -v
 ```
 
-Tests: 138 unit tests across `packages/{core,backend-aebm,backend-atom,snapshot-mss}/tests/`.
+Tests: ~130 unit tests across `packages/{core,backend-aebm,snapshot-mss}/tests/`.
 
 ## Live tests
 
@@ -103,6 +100,9 @@ $env:AE_MCP_BACKEND = "aebm"
 $env:AE_BRIDGE_ROOT = "E:/Code/AEBMethod"
 python -m uv run pytest -m live_smoke      # 3-case canary, ~30s
 python -m uv run pytest -m live            # full ~10 cases, ~2-3min
+
+# Note: aebm backend uses AEGP idle hook polling, which is throttled when AE
+# is in background. Keep AE in foreground while running live tests.
 ```
 
 CI does not run live tests (hosted runners cannot drive a GUI Adobe app). See `docs/REFERENCE.md`.

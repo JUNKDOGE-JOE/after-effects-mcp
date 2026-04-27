@@ -45,9 +45,8 @@ def select_backend() -> Backend:
     if not installed:
         raise BackendSelectionError(
             "no AE backend installed.\n"
-            "  Install one of:\n"
+            "  Install one, e.g.:\n"
             "    pip install ae-mcp-backend-aebm    (for AEBMethod plugin)\n"
-            "    pip install ae-mcp-backend-atom    (for Atom plugin)\n"
             "  Or write your own backend (see Backend Author Guide — "
             "deferred to spec 3c)."
         )

@@ -1,15 +1,14 @@
 [tool.uv.workspace]
-members = ["packages/core", "packages/backend-aebm", "packages/backend-atom", "packages/snapshot-mss"]
+members = ["packages/core", "packages/backend-aebm", "packages/snapshot-mss"]
 
 [tool.uv.sources]
 ae-mcp                = { workspace = true }
 ae-mcp-backend-aebm   = { workspace = true }
-ae-mcp-backend-atom   = { workspace = true }
 ae-mcp-snapshot-mss   = { workspace = true }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["packages/core/tests", "packages/backend-aebm/tests", "packages/backend-atom/tests", "packages/snapshot-mss/tests"]
+testpaths = ["packages/core/tests", "packages/backend-aebm/tests", "packages/snapshot-mss/tests"]
 markers = [
     "live: requires real AE + a backend reachable; opt-in via AEBM_LIVE_TESTS=1",
     "live_smoke: 3-verb handshake subset of live tests",

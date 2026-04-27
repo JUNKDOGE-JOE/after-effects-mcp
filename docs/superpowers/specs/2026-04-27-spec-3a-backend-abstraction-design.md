@@ -4,6 +4,16 @@
 **Status**: Draft — pending user review
 **Predecessor**: `after-effects-mcp` v0.7.0（24 verbs，但跟 AEBM 文件队列协议硬耦合，包名/版本号都从 AEBMethod 时代继承）
 **Target**: `ae-mcp` 0.1.0（独立产品 fresh start——重命名 + 版本号重置 + 后端解耦 + OS 无关）
+
+> **Post-implementation amendment (2026-04-27)**: spec originally proposed shipping
+> two reference backends (`backend-aebm` + `backend-atom`). After implementation,
+> the user decided `backend-atom` does not belong in this repo — `ae-mcp` is an
+> independent product, and shipping a free integration for the closed-source
+> Atom plugin would (a) effectively endorse a competitor, (b) impose protocol-
+> drift maintenance on us, and (c) blur the "independent" positioning. `backend-
+> atom/` was deleted. Only `backend-aebm` (which targets AEBMethod, the user's
+> own plugin) remains as a reference impl in this monorepo. Anyone who wants
+> Atom support can write/publish their own backend package.
 **Related future specs**: spec 3b（多 client install 文档），spec 3c（PyPI 发布 + Backend Author Guide）
 
 **Naming reset**: spec 3a 同时完成 PyPI 包名、Python 模块名、MCP server 名的"去 AEBM 化"工作（原计划 spec 3b 内容前移）。理由：版本号 0.7→0.1 在数字层面是降级，不重命名 PyPI 会让 pip 拒绝升级路径；既然要重命名，spec 3b 缩窄为"多 client install 文档"。
