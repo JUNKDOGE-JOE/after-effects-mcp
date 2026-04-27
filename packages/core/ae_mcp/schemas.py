@@ -54,8 +54,8 @@ class AeLayersArgs(_StrictModel):
 class AeReadPropsArgs(_StrictModel):
     """ae.readProps — run read-only JSX and return its JSON.
 
-    The aebm-file backend does NOT implement the Atom-style path walker, so
-    callers must supply explicit JSX. See AEBM_MCP.md for examples.
+    Caller supplies explicit JSX; the backend runs it via Backend.exec().
+    Use this for ad-hoc reads not covered by the typed read verbs.
     """
     code: str = Field(
         ...,
@@ -70,7 +70,7 @@ class AeExecArgs(_StrictModel):
         None, description="Undo-stack label; helps identify scripted edits."
     )
     checkpoint_label: Optional[str] = Field(
-        None, description="Human-readable checkpoint tag (ignored in aebm-file)."
+        None, description="Non-empty: auto-create a checkpoint before run (skipped if backend.manages_checkpoints)."
     )
     timeout_sec: int = Field(
         30, ge=1, le=600, description="Per-call timeout in seconds (default 30)."
@@ -97,7 +97,7 @@ class AeCheckpointArgs(_StrictModel):
 
 
 class AeRevertArgs(_StrictModel):
-    """ae.revert — revert to a checkpoint (stub: returns NotImplemented)."""
+    """ae.revert — revert to a previously saved checkpoint by id."""
     checkpoint_id: str = Field(..., description="Checkpoint id to revert to.")
     branch_before_revert: bool = Field(
         False, description="If true, branch current state before reverting."
@@ -105,7 +105,7 @@ class AeRevertArgs(_StrictModel):
 
 
 class AeSnapshotArgs(_StrictModel):
-    """ae.snapshot — capture a PNG of the AE viewer via Win32 BitBlt."""
+    """ae.snapshot — capture a PNG of the AE viewer (via active Snapshotter)."""
     out_path: Optional[str] = Field(
         None, description="PNG output path. Default: release/logs/integration_runs/ae_viewer_<ts>.png"
     )
@@ -117,7 +117,7 @@ class AeSnapshotArgs(_StrictModel):
     )
     method: SnapshotMethod = Field(
         "DesktopCopy",
-        description="DesktopCopy (default, works for D3D11) or PrintWindow (GDI-only, diagnostic).",
+        description="Capture method hint forwarded to the active Snapshotter; meaning is implementation-defined.",
     )
 
 
