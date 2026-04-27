@@ -117,6 +117,11 @@ class AeApplyEffectArgs(_StrictModel):
     )
 
 
+class AePingArgs(_StrictModel):
+    """ae.ping — handshake smoke test for live diagnostics."""
+    expect: str = Field("pong", description="String to echo back.")
+
+
 # ---------------------------------------------------------------------------
 # Typed 6 (Python builds JSX, dispatches via ae.exec)
 # ---------------------------------------------------------------------------
@@ -214,6 +219,7 @@ SCHEMAS = {
     "ae.revert": AeRevertArgs,
     "ae.snapshot": AeSnapshotArgs,
     "ae.applyEffect": AeApplyEffectArgs,
+    "ae.ping": AePingArgs,
     "ae.createLayer": AeCreateLayerArgs,
     "ae.setProperty": AeSetPropertyArgs,
     "ae.moveLayer": AeMoveLayerArgs,
@@ -224,4 +230,4 @@ SCHEMAS = {
     "ae.toastQuery":    AeToastQueryArgs,
 }
 
-assert len(SCHEMAS) == 17, f"expected 17 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 18, f"expected 18 verbs, got {len(SCHEMAS)}"

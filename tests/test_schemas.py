@@ -9,11 +9,11 @@ from after_effects_mcp import schemas as S
 
 
 def test_registry_has_17_verbs():
-    # v0.6.2: 15 verbs. v0.7-A: +ae.isolateToggle +ae.toastQuery -> 17.
-    assert len(S.SCHEMAS) == 17, f"expected 17 verbs, got {len(S.SCHEMAS)}"
+    # v0.6.2: 15 verbs. v0.7-A: +ae.isolateToggle +ae.toastQuery -> 17. v0.7-1: +ae.ping -> 18.
+    assert len(S.SCHEMAS) == 18, f"expected 18 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.layers", "ae.readProps", "ae.exec",
-        "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.applyEffect",
+        "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.applyEffect", "ae.ping",
         "ae.createLayer", "ae.setProperty", "ae.moveLayer", "ae.selectLayers",
         "ae.setTime", "ae.getTime",
         "ae.isolateToggle", "ae.toastQuery",
@@ -154,3 +154,23 @@ def test_toast_query_schema_is_empty():
 def test_isolate_toggle_rejects_extra_fields():
     with pytest.raises(ValidationError):
         S.AeIsolateToggleArgs(foo="bar")
+
+
+def test_ae_ping_default():
+    a = S.AePingArgs()
+    assert a.expect == "pong"
+
+
+def test_ae_ping_custom_expect():
+    a = S.AePingArgs(expect="hello")
+    assert a.expect == "hello"
+
+
+def test_ae_ping_extra_forbidden():
+    with pytest.raises(ValidationError):
+        S.AePingArgs(expect="x", junk=1)
+
+
+def test_ae_ping_in_registry():
+    assert "ae.ping" in S.SCHEMAS
+    assert S.SCHEMAS["ae.ping"] is S.AePingArgs
