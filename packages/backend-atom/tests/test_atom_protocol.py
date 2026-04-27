@@ -80,3 +80,39 @@ async def test_non_200_raises_protocol_error():
                 await c.initialize()
         finally:
             await c.aclose()
+
+
+from ae_mcp_backend_atom import AtomBackend
+
+
+@pytest.mark.asyncio
+async def test_atom_backend_exec_returns_text():
+    async with respx.mock(base_url="http://127.0.0.1:11487") as mock:
+        mock.post("/mcp").mock(side_effect=[
+            Response(200, headers={"Mcp-Session-Id": "sid"}, json={"result": {}}),
+            Response(202),
+            Response(200, json={"result": {"content": [{"type": "text", "text": "42"}]}}),
+        ])
+        b = AtomBackend("http://127.0.0.1:11487/mcp")
+        try:
+            out = await b.exec(code="40+2")
+            assert out == "42"
+        finally:
+            await b.shutdown()
+
+
+def test_atom_backend_capability_flags():
+    assert AtomBackend.manages_undo is True
+    assert AtomBackend.manages_checkpoints is True
+
+
+def test_atom_backend_from_env_default_url(monkeypatch):
+    monkeypatch.delenv("ATOM_MCP_URL", raising=False)
+    b = AtomBackend.from_env()
+    assert b.url == "http://127.0.0.1:11487/mcp"
+
+
+def test_atom_backend_from_env_custom_url(monkeypatch):
+    monkeypatch.setenv("ATOM_MCP_URL", "http://localhost:9999/mcp")
+    b = AtomBackend.from_env()
+    assert b.url == "http://localhost:9999/mcp"
