@@ -108,11 +108,11 @@ with your local paths. Example after edit:
 }
 ```
 
-Restart Claude Code. `/mcp` should list 15 verbs under `mcp__aebm__ae_*`.
+Restart Claude Code. `/mcp` should list 24 verbs under `mcp__aebm__ae_*`.
 
 ## Verb reference
 
-See [`docs/REFERENCE.md`](docs/REFERENCE.md) for the full spec (15 verbs,
+See [`docs/REFERENCE.md`](docs/REFERENCE.md) for the full spec (24 verbs,
 protocol, async + progress contract, error shapes, troubleshooting).
 
 | # | verb | purpose |
@@ -132,13 +132,20 @@ protocol, async + progress contract, error shapes, troubleshooting).
 | 13 | `ae.selectLayers` | select all/none/by id |
 | 14 | `ae.setTime` | set comp current time |
 | 15 | `ae.getTime` | read comp current time |
+| 16 | `ae.ping` | bridge handshake (live test smoke) |
+| 17 | `ae.getProperties` | property name search across layers |
+| 18 | `ae.scanPropertyTree` | DFS dump of one layer's prop tree |
+| 19 | `ae.inspectPropertyCapabilities` | what can be set on a property path |
+| 20 | `ae.getExpressions` | read all expressions in a comp |
+| 21 | `ae.getKeyframes` | keyframes for a property path |
+| 22 | `ae.searchProject` | fuzzy search project items/layers/effects/expressions |
 
 Plus two diagnostic / agent-convenience verbs:
 
 | # | verb | purpose |
 |---|---|---|
-| 16 | `ae.isolateToggle` | toggle Motion4-style `/` timeline isolation session |
-| 17 | `ae.toastQuery` | read current active toast queue (for test assertions) |
+| 23 | `ae.isolateToggle` | toggle Motion4-style `/` timeline isolation session |
+| 24 | `ae.toastQuery` | read current active toast queue (for test assertions) |
 
 ## Tests
 
@@ -149,6 +156,20 @@ python -m uv run pytest -v
 
 CI runs on every push via `.github/workflows/ci.yml` (windows-2022, Python
 3.10).
+
+## Live tests
+
+Opt-in end-to-end tests that drive a real AE instance.
+
+```powershell
+$env:AEBM_LIVE_TESTS = "1"
+$env:AE_BRIDGE_ROOT  = "E:/Code/AEBMethod"
+python -m uv run pytest -m live_smoke      # 3-case canary, ~30s
+python -m uv run pytest -m live            # full ~10 cases, ~2-3min
+```
+
+CI does not run live tests (hosted runners cannot drive a GUI Adobe app).
+See `docs/REFERENCE.md#live-test-layer`.
 
 ## Layout
 
