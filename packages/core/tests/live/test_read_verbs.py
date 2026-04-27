@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from ae_mcp import bridge, schemas
+from ae_mcp import schemas
 from ae_mcp.handlers.typed import (
     _run_get_properties, _run_scan_property_tree,
     _run_inspect_property_capabilities, _run_get_expressions,
@@ -38,7 +38,7 @@ SETUP_JSX = """
 
 @pytest.fixture
 def probe_scene(clean_project):
-    out = asyncio.run(bridge.invoke_ae_exec(code=SETUP_JSX, timeout_sec=20.0))
+    out = asyncio.run(clean_project.exec(code=SETUP_JSX, timeout_sec=20.0))
     return json.loads(out)
 
 

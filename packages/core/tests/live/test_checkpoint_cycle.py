@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from ae_mcp import bridge, schemas
+from ae_mcp import schemas
 from ae_mcp.handlers.core import _run_checkpoint, _run_revert
 
 
@@ -23,13 +23,15 @@ pytestmark = pytest.mark.live
 
 @pytest.mark.asyncio
 async def test_checkpoint_create_revert_roundtrip(clean_project, tmp_path):
+    live_backend = clean_project
+
     # 1. Save the (empty) project to %TEMP% so it is no longer untitled.
     saved = tmp_path / "probe.aep"
     save_jsx = (
         f'(function(){{ app.project.save(new File({json.dumps(str(saved))})); '
         f'return JSON.stringify({{ok:true,path:app.project.file.fsName}}); }})()'
     )
-    out = await bridge.invoke_ae_exec(code=save_jsx, timeout_sec=20.0)
+    out = await live_backend.exec(code=save_jsx, timeout_sec=20.0)
     assert json.loads(out)["ok"] is True
 
     # 2. Add a comp + layer; save again so the saved state contains them.
@@ -42,7 +44,7 @@ async def test_checkpoint_create_revert_roundtrip(clean_project, tmp_path):
         'return JSON.stringify({ok:true, compId:String(c.id), layerId:s.index});'
         '})()'
     )
-    seed = json.loads(await bridge.invoke_ae_exec(code=seed_jsx, timeout_sec=20.0))
+    seed = json.loads(await live_backend.exec(code=seed_jsx, timeout_sec=20.0))
 
     # 3. ae.checkpoint create
     cp = await _run_checkpoint(
@@ -62,7 +64,7 @@ async def test_checkpoint_create_revert_roundtrip(clean_project, tmp_path):
         f'return JSON.stringify({{ok:true}});'
         f'}})()'
     )
-    await bridge.invoke_ae_exec(code=mut_jsx, timeout_sec=10.0)
+    await live_backend.exec(code=mut_jsx, timeout_sec=10.0)
 
     # 5. ae.revert
     rv = await _run_revert(
@@ -80,7 +82,7 @@ async def test_checkpoint_create_revert_roundtrip(clean_project, tmp_path):
         'return JSON.stringify({ok:true, x:pos[0], y:pos[1]});'
         '})()'
     )
-    val = json.loads(await bridge.invoke_ae_exec(code=check_jsx, timeout_sec=10.0))
+    val = json.loads(await live_backend.exec(code=check_jsx, timeout_sec=10.0))
     assert val["ok"] is True
     assert abs(val["x"] - 100.0) < 0.5
     assert abs(val["y"] - 100.0) < 0.5
