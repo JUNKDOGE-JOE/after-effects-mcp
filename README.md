@@ -2,7 +2,7 @@
 
 Backend-agnostic MCP (Model Context Protocol) server for Adobe After Effects automation.
 
-Lets any MCP-aware client (Claude Code, Cursor, Codex, Continue, ...) drive After Effects through any compatible AE plugin. The MCP itself is a pure protocol layer — it does not ship with or require any specific AE plugin. Backends and screenshot implementations are separate pip packages discovered at runtime via Python entry points.
+Lets any MCP-aware client (Claude Code, Cursor, Codex, Continue, ...) drive After Effects through any compatible AE plugin. The MCP itself is a **pure protocol layer** — this repo contains zero plugin-specific code. Concrete backends and screenshot implementations live in *separate pip packages* discovered at runtime via Python entry points. To use this with a real AE plugin you must install at least one third-party (or your own) backend package.
 
 ## Status
 
@@ -34,14 +34,16 @@ The server has 24 verbs (`ae.init` … `ae.searchProject`). All write verbs and 
 # 1) Core (this package)
 pip install ae-mcp
 
-# 2) At least one backend — pick one matching your AE plugin:
-pip install ae-mcp-backend-aebm     # for AEBMethod plugin
+# 2) A backend matching your AE plugin (NOT in this repo — published separately)
+#    Examples: `ae-mcp-backend-aebm` ships with the AEBMethod plugin's repo.
+#    See "Backends" below.
+pip install ae-mcp-backend-<name>
 
 # 3) Optional: cross-platform snapshot for ae.snapshot
 pip install ae-mcp-snapshot-mss
 ```
 
-The reference backend that ships in this repo is `ae-mcp-backend-aebm`. Other AE plugin authors are encouraged to publish their own backend packages registering entry-point group `ae_mcp.backends` — see "Writing a new backend" below.
+This repo intentionally ships NO concrete backends — `ae-mcp` is a pure MCP layer. Backends are owned by AE plugin authors who publish their own pip packages registering entry-point group `ae_mcp.backends`. See "Writing a new backend" below.
 
 If you have multiple backends installed, set `AE_MCP_BACKEND` to choose.
 
@@ -70,9 +72,12 @@ Restart your MCP client. `/mcp` (or equivalent) should list 24 tools under `ae.*
 
 ## Backends
 
-### `ae-mcp-backend-aebm` (reference implementation)
+`ae-mcp` does not ship any backend. The Backend interface is public; AE plugin authors publish their own integration packages.
 
-Adapts AEBMethod's file-polling protocol. Requires the AEBMethod AE plugin loaded; reads `AE_BRIDGE_ROOT` env var to find the plugin's PowerShell scripts. Foreground-AE constraint applies (AEGP idle hook is throttled when AE is in background).
+Known third-party backends (not endorsed, listed for reference):
+- `ae-mcp-backend-aebm` — adapts AEBMethod's file-polling protocol (lives in a sibling repo; install via `pip install -e <path-to-backend-aebm>`)
+
+If you author and publish a backend, send a PR to add it to this list.
 
 ### Writing a new backend
 
@@ -83,12 +88,16 @@ Implement `ae_mcp.backends.base.Backend` (subclass with `exec`, `health_check`, 
 ```powershell
 git clone <this-repo>
 cd after-effects-mcp
-python -m uv sync                                      # installs all 3 packages editable
-$env:AE_BRIDGE_ROOT = "E:/Code/AEBMethod"
+python -m uv sync --group dev                          # installs core + snapshot-mss editable + pytest
 python -m uv run pytest -m "not live and not live_smoke" -v
 ```
 
-Tests: ~130 unit tests across `packages/{core,backend-aebm,snapshot-mss}/tests/`.
+Tests: ~122 unit tests across `packages/{core,snapshot-mss}/tests/`. Backend tests live in their own repos.
+
+To run the live test suite you also need a backend installed:
+```powershell
+pip install -e <path-to-backend-aebm-repo>             # or another backend
+```
 
 ## Live tests
 

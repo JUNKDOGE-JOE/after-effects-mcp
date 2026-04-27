@@ -9,8 +9,10 @@ to **0.1.0** as part of becoming a standalone, plugin-agnostic product.
 # 1) Uninstall the old package
 pip uninstall after-effects-mcp
 
-# 2) Install the new core + at least one backend
-pip install ae-mcp ae-mcp-backend-aebm
+# 2) Install the new core + at least one backend (backend is published
+#    separately — see your AE plugin author's docs for the package name).
+pip install ae-mcp
+pip install <backend-package>            # e.g. ae-mcp-backend-aebm if your plugin is AEBMethod
 pip install ae-mcp-snapshot-mss          # optional: enables ae.snapshot
 
 # 3) Update your .mcp.json — see .mcp.json.template

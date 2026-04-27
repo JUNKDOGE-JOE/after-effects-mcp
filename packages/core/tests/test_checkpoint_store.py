@@ -116,7 +116,7 @@ def test_prune_keeps_n_newest(tmp_path):
 
 
 def test_keep_env_override(monkeypatch, tmp_path):
-    monkeypatch.setenv("AEBM_CHECKPOINT_KEEP", "2")
+    monkeypatch.setenv("AE_MCP_CHECKPOINT_KEEP", "2")
     store = CheckpointStore(root=tmp_path)
     assert store.keep == 2
 

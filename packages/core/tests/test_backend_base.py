@@ -3,11 +3,14 @@ import pytest
 from ae_mcp.backends.base import Backend, ALL_VERBS
 
 
-def test_all_verbs_constant_has_24_entries():
-    assert len(ALL_VERBS) == 24
+def test_all_verbs_constant_has_22_entries():
+    assert len(ALL_VERBS) == 22
     assert "ae.exec" in ALL_VERBS
     assert "ae.ping" in ALL_VERBS
     assert "ae.searchProject" in ALL_VERBS
+    # plugin-specific verbs MUST NOT be in ALL_VERBS
+    assert "ae.isolateToggle" not in ALL_VERBS
+    assert "ae.toastQuery" not in ALL_VERBS
 
 
 def test_cannot_instantiate_backend_directly():

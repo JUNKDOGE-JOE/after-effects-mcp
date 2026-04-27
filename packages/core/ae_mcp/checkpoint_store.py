@@ -1,7 +1,7 @@
 """Filesystem-backed checkpoint index.
 
 Layout:
-    %TEMP%/aebm_checkpoints/
+    %TEMP%/ae_mcp_checkpoints/
         <project_basename_or__untitled>/
             <id>.aep       # full project copy
             <id>.json      # metadata sidecar
@@ -9,7 +9,7 @@ Layout:
 ID format: <unix_ms>_<8-hex-chars>. The ms prefix sorts lexicographically.
 
 Pruning: retain at most `keep` newest checkpoints per project basename.
-Override default (50) via AEBM_CHECKPOINT_KEEP env var.
+Override default (50) via AE_MCP_CHECKPOINT_KEEP env var.
 
 This module does NOT touch AE — it only manages the directory. Handlers
 elsewhere call `make_id()`, write the .aep via JSX, then call
@@ -44,12 +44,12 @@ def _project_basename(source_path: Optional[str]) -> str:
 class CheckpointStore:
     def __init__(self, root: Optional[Path] = None, keep: Optional[int] = None) -> None:
         if root is None:
-            root = Path(tempfile.gettempdir()) / "aebm_checkpoints"
+            root = Path(tempfile.gettempdir()) / "ae_mcp_checkpoints"
         self.root: Path = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
 
         if keep is None:
-            env = os.environ.get("AEBM_CHECKPOINT_KEEP")
+            env = os.environ.get("AE_MCP_CHECKPOINT_KEEP")
             try:
                 keep = int(env) if env else 50
             except ValueError:

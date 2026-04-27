@@ -5,8 +5,13 @@ requires-python = ">=3.10"
 [manifest]
 members = [
     "ae-mcp",
-    "ae-mcp-backend-aebm",
     "ae-mcp-snapshot-mss",
+]
+
+[manifest.dependency-groups]
+dev = [
+    { name = "pytest", specifier = ">=7.4" },
+    { name = "pytest-asyncio", specifier = ">=0.23" },
 ]
 
 [[package]]
@@ -30,28 +35,6 @@ requires-dist = [
     { name = "mcp", specifier = ">=1.0.0" },
     { name = "pillow", specifier = ">=10.0.0" },
     { name = "pydantic", specifier = ">=2.5.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
-]
-provides-extras = ["dev"]
-
-[[package]]
-name = "ae-mcp-backend-aebm"
-version = "0.1.0"
-source = { editable = "packages/backend-aebm" }
-dependencies = [
-    { name = "ae-mcp" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "ae-mcp", editable = "packages/core" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
 ]

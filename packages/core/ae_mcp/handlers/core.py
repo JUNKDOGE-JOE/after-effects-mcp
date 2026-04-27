@@ -407,61 +407,6 @@ register("ae.applyEffect", schemas.AeApplyEffectArgs, _run_apply_effect)
 
 
 # ---------------------------------------------------------------------------
-# v0.7-A: ae.isolateToggle — JSX-based fallback (AEBM backend routes via marker fn)
-# ---------------------------------------------------------------------------
-
-
-async def _run_isolate_toggle(args: schemas.AeIsolateToggleArgs, ctx: Any) -> Any:
-    # JSX is a marker the AEBM backend recognizes and routes to its
-    # plugin-specific Invoke-AebmTool. Other backends just see normal JSX
-    # and either fall back or report unsupported.
-    jsx = (
-        '(function(){'
-        'if (typeof __aebm_isolate_toggle__ === "function") {'
-        '  return JSON.stringify(__aebm_isolate_toggle__());'
-        '}'
-        'return JSON.stringify({ok:false,error:"isolateToggle requires AEBM backend"});'
-        '})()'
-    )
-
-    async def _call():
-        return _try_json(await _backend().exec(jsx, timeout_sec=10.0))
-
-    return await progress.run_with_timeout(
-        ctx, _call(), timeout_sec=15.0, start_msg="ae.isolateToggle..."
-    )
-
-
-register("ae.isolateToggle", schemas.AeIsolateToggleArgs, _run_isolate_toggle)
-
-
-# ---------------------------------------------------------------------------
-# v0.7-A: ae.toastQuery — read current toast queue snapshot for assertions.
-# ---------------------------------------------------------------------------
-
-
-async def _run_toast_query(args: schemas.AeToastQueryArgs, ctx: Any) -> Any:
-    jsx = (
-        '(function(){'
-        'if (typeof __aebm_toast_query__ === "function") {'
-        '  return JSON.stringify(__aebm_toast_query__());'
-        '}'
-        'return JSON.stringify({ok:false,error:"toastQuery requires AEBM backend"});'
-        '})()'
-    )
-
-    async def _call():
-        return _try_json(await _backend().exec(jsx, timeout_sec=5.0))
-
-    return await progress.run_with_timeout(
-        ctx, _call(), timeout_sec=8.0, start_msg="ae.toastQuery..."
-    )
-
-
-register("ae.toastQuery", schemas.AeToastQueryArgs, _run_toast_query)
-
-
-# ---------------------------------------------------------------------------
 # ae.ping — handshake smoke test for live diagnostics
 # ---------------------------------------------------------------------------
 

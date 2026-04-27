@@ -1,14 +1,21 @@
 [tool.uv.workspace]
-members = ["packages/core", "packages/backend-aebm", "packages/snapshot-mss"]
+members = ["packages/core", "packages/snapshot-mss"]
 
 [tool.uv.sources]
 ae-mcp                = { workspace = true }
-ae-mcp-backend-aebm   = { workspace = true }
 ae-mcp-snapshot-mss   = { workspace = true }
+
+# Workspace-level dev dependency group. Run `uv sync --group dev` to install
+# pytest etc. for running tests across all sub-packages.
+[dependency-groups]
+dev = [
+    "pytest>=7.4",
+    "pytest-asyncio>=0.23",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["packages/core/tests", "packages/backend-aebm/tests", "packages/snapshot-mss/tests"]
+testpaths = ["packages/core/tests", "packages/snapshot-mss/tests"]
 markers = [
     "live: requires real AE + a backend reachable; opt-in via AEBM_LIVE_TESTS=1",
     "live_smoke: 3-verb handshake subset of live tests",

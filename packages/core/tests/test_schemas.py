@@ -8,18 +8,17 @@ from pydantic import ValidationError
 from ae_mcp import schemas as S
 
 
-def test_registry_has_17_verbs():
-    # v0.6.2: 15 verbs. v0.7-A: +ae.isolateToggle +ae.toastQuery -> 17. v0.7-1: +ae.ping -> 18.
-    # Task 4.1: +ae.getProperties -> 19. Task 4.2: +ae.scanPropertyTree -> 20.
-    # Task 4.3: +ae.inspectPropertyCapabilities -> 21. Task 4.4: +ae.getExpressions -> 22.
-    # Task 4.5: +ae.getKeyframes -> 23. Task 4.6: +ae.searchProject -> 24 (FINAL).
-    assert len(S.SCHEMAS) == 24, f"expected 24 verbs, got {len(S.SCHEMAS)}"
+def test_registry_has_22_verbs():
+    # 22 plugin-agnostic verbs (15 base + ae.ping + 6 typed read verbs).
+    # AEBM-specific verbs (ae.isolateToggle, ae.toastQuery) were removed
+    # for v0.1.0 to keep core plugin-agnostic; backends that want plugin-
+    # specific verbs should add them via a future custom-verb extension.
+    assert len(S.SCHEMAS) == 22, f"expected 22 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.layers", "ae.readProps", "ae.exec",
         "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.applyEffect", "ae.ping",
         "ae.createLayer", "ae.setProperty", "ae.moveLayer", "ae.selectLayers",
         "ae.setTime", "ae.getTime",
-        "ae.isolateToggle", "ae.toastQuery",
         "ae.getProperties", "ae.scanPropertyTree",
         "ae.inspectPropertyCapabilities", "ae.getExpressions",
         "ae.getKeyframes", "ae.searchProject",
@@ -144,22 +143,6 @@ def test_every_schema_can_generate_json_schema():
         schema = cls.model_json_schema()
         assert schema["type"] == "object", name
         assert "properties" in schema, name
-
-
-def test_isolate_toggle_schema_is_empty():
-    # No args required -- it's pure toggle.
-    args = S.AeIsolateToggleArgs()
-    assert args.model_dump() == {}
-
-
-def test_toast_query_schema_is_empty():
-    args = S.AeToastQueryArgs()
-    assert args.model_dump() == {}
-
-
-def test_isolate_toggle_rejects_extra_fields():
-    with pytest.raises(ValidationError):
-        S.AeIsolateToggleArgs(foo="bar")
 
 
 def test_ae_ping_default():

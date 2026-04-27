@@ -1,4 +1,4 @@
-"""Pydantic schemas for the 15 AEBM MCP verbs.
+"""Pydantic schemas for the 22 ae-mcp verbs.
 
 Each schema corresponds 1:1 with a verb in HANDLERS. pydantic generates
 JSON schema for MCP tools/list at runtime; keep field docstrings short — the
@@ -203,21 +203,6 @@ class AeGetTimeArgs(_StrictModel):
     comp_id: Optional[str] = Field(None, description="AE comp id. Omit for active comp.")
 
 
-# ---------------------------------------------------------------------------
-# v0.7-A additions (Topic B: Isolate Selected + Toast Query)
-# ---------------------------------------------------------------------------
-
-
-class AeIsolateToggleArgs(_StrictModel):
-    """ae.isolateToggle -- toggle Motion4-style '/' timeline isolation session."""
-    pass
-
-
-class AeToastQueryArgs(_StrictModel):
-    """ae.toastQuery -- read current active toast queue for test assertions."""
-    pass
-
-
 class AeGetPropertiesArgs(_StrictModel):
     """ae.getProperties — search properties by name across selected layers."""
     comp_id: Optional[str] = Field(None, description="AE comp id. Omit for active.")
@@ -292,8 +277,6 @@ SCHEMAS = {
     "ae.selectLayers": AeSelectLayersArgs,
     "ae.setTime": AeSetTimeArgs,
     "ae.getTime": AeGetTimeArgs,
-    "ae.isolateToggle": AeIsolateToggleArgs,
-    "ae.toastQuery":    AeToastQueryArgs,
     "ae.getProperties": AeGetPropertiesArgs,
     "ae.scanPropertyTree": AeScanPropertyTreeArgs,
     "ae.inspectPropertyCapabilities": AeInspectPropertyCapabilitiesArgs,
@@ -302,4 +285,4 @@ SCHEMAS = {
     "ae.searchProject": AeSearchProjectArgs,
 }
 
-assert len(SCHEMAS) == 24, f"expected 24 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 22, f"expected 22 verbs, got {len(SCHEMAS)}"
