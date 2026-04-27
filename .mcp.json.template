@@ -1,15 +1,15 @@
 {
   "mcpServers": {
-    "aebm": {
+    "ae": {
       "command": "python",
       "args": [
         "-m", "uv", "run",
-        "--directory",
-        "<PATH_TO_AFTER_EFFECTS_MCP_REPO>",
-        "python", "-m", "after_effects_mcp"
+        "--directory", "<PATH_TO_THIS_REPO_OR_PIP_INSTALL_LOCATION>",
+        "python", "-m", "ae_mcp"
       ],
       "env": {
-        "AE_BRIDGE_ROOT": "<PATH_TO_PLUGIN_REPO_WITH_AEBM_BRIDGE>"
+        "AE_MCP_BACKEND": "<aebm | other-installed-backend>",
+        "AE_BRIDGE_ROOT": "<only if AE_MCP_BACKEND=aebm — path to AEBMethod plugin checkout>"
       }
     }
   }
