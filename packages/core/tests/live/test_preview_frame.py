@@ -93,3 +93,55 @@ async def test_preview_frame_multiple_times_with_base64(preview_scene, artifact_
     for frame in result["frames"]:
         assert frame["sizeBytes"] > 100
         assert frame["base64"]
+
+
+# Regression: previewFrame must give different bytes per time when content
+# at those times is visibly different. Before the repaint_delay_ms fix,
+# every frame was a stale capture of the same viewer state.
+ANIMATED_SETUP_JSX = """
+(function(){
+  try {
+    var comp = app.project.items.addComp("PreviewAnim", 320, 180, 1, 2.0, 30);
+    var s = comp.layers.addSolid([1,1,1], "Mover", 60, 60, 1, 2.0);
+    var pos = s.property("ADBE Transform Group").property("ADBE Position");
+    pos.setValueAtTime(0.0, [40, 90]);
+    pos.setValueAtTime(1.0, [280, 90]);
+    comp.openInViewer();
+    return JSON.stringify({ok:true, compId: String(comp.id)});
+  } catch (e) { return JSON.stringify({ok:false, error:String(e)}); }
+})()
+"""
+
+
+@pytest.mark.asyncio
+async def test_preview_frame_captures_different_times_distinctly(clean_project, artifact_dir):
+    """Before fix: all frames were byte-identical because viewer hadn't repainted
+    between time-set and capture. After fix: frames at distinct times must
+    differ in pixel content (we use file bytes as a cheap proxy)."""
+    out = asyncio.run(clean_project.exec(code=ANIMATED_SETUP_JSX, timeout_sec=20.0)) \
+        if False else await clean_project.exec(code=ANIMATED_SETUP_JSX, timeout_sec=20.0)
+    parsed = json.loads(out)
+    assert parsed["ok"] is True, parsed
+    comp_id = parsed["compId"]
+
+    result = await _run_preview_frame(
+        schemas.AePreviewFrameArgs(
+            comp_id=comp_id,
+            times=[0.0, 1.0],
+            out_dir=str(artifact_dir),
+            repaint_delay_ms=400,
+        ),
+        ctx=None,
+    )
+    assert result["ok"] is True
+    assert len(result["frames"]) == 2
+
+    p0 = Path(result["frames"][0]["path"])
+    p1 = Path(result["frames"][1]["path"])
+    b0 = p0.read_bytes()
+    b1 = p1.read_bytes()
+    assert b0 != b1, (
+        "previewFrame returned byte-identical frames for visibly distinct comp "
+        "times — the AE viewer didn't repaint between captures. Likely a "
+        "regression of the repaint_delay_ms fix."
+    )

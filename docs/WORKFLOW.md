@@ -145,6 +145,13 @@ flowchart TD
 - 完整 rigging 平台
 - 单安装即用的 HTTP-only MCP 插件
 
+## 7. 平台说明
+
+- Windows 是当前唯一做过 CI 和 live 实机验证的平台。
+- macOS 已补安装脚本和文档路径，但还没有做实机验证。
+- 在 macOS 上，`ae.previewFrame` 和窗口定位相关行为尤其值得谨慎，因为当前仓库没有 mac 实机覆盖。
+- 如果你在 macOS 上试跑这条链路，请优先从 `ae.ping` 开始，跑出问题后提 GitHub issue，并附上 AE 版本、macOS 版本、Python 版本和面板日志。
+
 ## English
 
 This document describes how the Agent, MCP server, and AE plugin work together. For installation steps, see [docs/INSTALL.md](INSTALL.md).
@@ -289,3 +296,10 @@ It is not yet a good fit for treating ae-mcp as:
 - a precise comp-crop renderer
 - a complete rigging platform
 - a single-install HTTP-only MCP plugin
+
+## 7. Platform Notes
+
+- Windows is the only platform currently covered by CI and live hardware verification.
+- macOS now has an install script and documented paths, but has not yet been hardware-verified.
+- On macOS, treat `ae.previewFrame` and window-targeting behavior with extra caution because this repository does not yet have real-machine coverage there.
+- If you try the full path on macOS, start with `ae.ping`, and if anything fails, please open a GitHub issue with your AE version, macOS version, Python version, and panel logs.

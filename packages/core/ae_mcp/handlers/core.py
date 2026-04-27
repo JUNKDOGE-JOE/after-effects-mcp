@@ -11,10 +11,11 @@ Each handler:
 
 from __future__ import annotations
 
+import asyncio
+import base64
 import json
 import logging
 import shutil
-import base64
 import tempfile
 import uuid
 from pathlib import Path
@@ -467,6 +468,12 @@ async def _run_preview_frame(args: schemas.AePreviewFrameArgs, ctx: Any) -> Any:
             prepared = _try_json(out)
             if not isinstance(prepared, dict) or not prepared.get("ok"):
                 return prepared
+
+            # Yield to AE's main thread so the viewer can repaint at the new
+            # comp.time before we screen-grab. Without this we capture the
+            # stale viewer (the JSX returned before AE drew anything new).
+            if args.repaint_delay_ms > 0:
+                await asyncio.sleep(args.repaint_delay_ms / 1000.0)
 
             snap = await snapper.capture(
                 Path(frame_request["path"]),

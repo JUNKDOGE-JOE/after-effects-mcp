@@ -17,6 +17,12 @@ simple RPC 插件链路已经实现：CEP 面板、HTTP bridge backend、30 个 
 - `uv run pytest -q`: 152 passed, 20 live tests deselected
 - `uv run pytest packages/core/tests/live -o addopts='' -vv`: 20 passed, 需要 AE 打开并且 ae-mcp 面板绿灯
 
+平台现状：
+
+- Windows 是当前唯一做过 CI 和 live 验证的平台。
+- macOS 已补安装脚本和文档路径，但还没有完成实机验证。
+- 如果你在 macOS 上跑通或遇到问题，请在 GitHub issues 反馈环境和日志。
+
 这已经达到一个可用的 AE 操作 MVP：agent 可以检查、修改、预览、checkpoint/revert、使用 skill，并创建基础 rig。`ae.generateImage` 明确不在范围内，图像生成交给 agent/model 侧，ae-mcp 负责导入和操作 AE。
 
 ### Verb Surface
@@ -53,7 +59,7 @@ simple RPC 插件链路已经实现：CEP 面板、HTTP bridge backend、30 个 
 - [docs/REFERENCE.md](docs/REFERENCE.md): tool surface、参数、能力边界、返回语义
 - [docs/RELEASE.md](docs/RELEASE.md): ZXP 打包、发布 smoke、发布前缺口
 
-开发安装：
+Windows 开发安装：
 
 ```powershell
 uv sync --all-packages --group dev
@@ -62,6 +68,18 @@ npm ci
 cd ..\..
 .\scripts\install-plugin-dev.ps1
 ```
+
+macOS 开发安装：
+
+```bash
+uv sync --all-packages --group dev
+cd plugin/host
+npm ci
+cd ../..
+./scripts/install-plugin-dev-macos.sh
+```
+
+macOS 路径和脚本目前未做实机验证。如果你试跑发现问题，请提交 GitHub issue，并附上 AE 版本、macOS 版本和面板日志。
 
 重启 After Effects，然后打开 `Window -> Extensions -> ae-mcp`。如果目标是让外部 Agent app 直接接入，请优先看 [docs/INSTALL.md](docs/INSTALL.md) 和 [docs/WORKFLOW.md](docs/WORKFLOW.md)。
 
@@ -131,6 +149,12 @@ Current verification:
 - `uv run pytest -q`: 152 passed, 20 live tests deselected
 - `uv run pytest packages/core/tests/live -o addopts='' -vv`: 20 passed with AE open and the ae-mcp panel green
 
+Platform status:
+
+- Windows is the only platform currently covered by CI and live verification.
+- macOS now has an install script and documented paths, but has not yet been hardware-verified.
+- If you try it on macOS and hit problems, please open a GitHub issue with your environment details and panel logs.
+
 This is a usable AE operation MVP: agents can inspect, mutate, preview, checkpoint/revert, use skills, and create basic rigs in After Effects. `ae.generateImage` is intentionally out of scope; image generation belongs on the agent/model side.
 
 ### Verb Surface
@@ -167,7 +191,7 @@ Document guide:
 - [docs/REFERENCE.md](docs/REFERENCE.md): tool surface, arguments, capability boundaries, and return shapes
 - [docs/RELEASE.md](docs/RELEASE.md): ZXP packaging, release smoke, and known pre-release gaps
 
-Developer install:
+Windows developer install:
 
 ```powershell
 uv sync --all-packages --group dev
@@ -176,6 +200,18 @@ npm ci
 cd ..\..
 .\scripts\install-plugin-dev.ps1
 ```
+
+macOS developer install:
+
+```bash
+uv sync --all-packages --group dev
+cd plugin/host
+npm ci
+cd ../..
+./scripts/install-plugin-dev-macos.sh
+```
+
+The macOS path and script are not yet hardware-verified in this repository. If you test them and find issues, please open a GitHub issue with your AE version, macOS version, and panel logs.
 
 Restart After Effects, then open `Window -> Extensions -> ae-mcp`. If the goal is to connect an external Agent app, start with [docs/INSTALL.md](docs/INSTALL.md) and [docs/WORKFLOW.md](docs/WORKFLOW.md).
 
