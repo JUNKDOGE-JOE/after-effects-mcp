@@ -2,9 +2,18 @@
 
 **Date**: 2026-04-27
 **Status**: Draft — pending user review
-**Predecessor**: v0.7.0 (24 verbs，但跟 AEBM 文件队列协议硬耦合)
-**Target**: v0.8.0 (core 与任何具体 AE 插件 / 任何 OS 解耦；通过 entry points 可插拔扩展)
-**Related future specs**: spec 3b（去 AEBM 化命名 + 多 client install 文档），spec 3c（PyPI 发布 + Backend Author Guide）
+**Predecessor**: `after-effects-mcp` v0.7.0（24 verbs，但跟 AEBM 文件队列协议硬耦合，包名/版本号都从 AEBMethod 时代继承）
+**Target**: `ae-mcp` 0.1.0（独立产品 fresh start——重命名 + 版本号重置 + 后端解耦 + OS 无关）
+**Related future specs**: spec 3b（多 client install 文档），spec 3c（PyPI 发布 + Backend Author Guide）
+
+**Naming reset**: spec 3a 同时完成 PyPI 包名、Python 模块名、MCP server 名的"去 AEBM 化"工作（原计划 spec 3b 内容前移）。理由：版本号 0.7→0.1 在数字层面是降级，不重命名 PyPI 会让 pip 拒绝升级路径；既然要重命名，spec 3b 缩窄为"多 client install 文档"。
+
+| 维度 | v0.7.0（旧） | 0.1.0（新） |
+|---|---|---|
+| PyPI 包名 | `after-effects-mcp` | `ae-mcp` |
+| Python 模块名 | `after_effects_mcp` | `ae_mcp` |
+| MCP server 名（`.mcp.json` 里） | `aebm` | `ae` |
+| 仓库 git remote | `after-effects-mcp` | 不变（git 仓库名跟产品名解耦无所谓） |
 
 ---
 
@@ -16,9 +25,9 @@
 
 具体交付：
 
-- **核心包 `after-effects-mcp`** 不再 import 任何具体 backend 代码，不再读 `AE_BRIDGE_ROOT`，不再 spawn pwsh，不再触碰 `%TEMP%/aebm_bridge/`。
+- **核心包 `ae-mcp`** 不再 import 任何具体 backend 代码，不再读 `AE_BRIDGE_ROOT`，不再 spawn pwsh，不再触碰 `%TEMP%/aebm_bridge/`。
 - **抽象 `Backend` ABC**（`packages/core/.../backends/base.py`）定义 6 个核心方法。
-- **Entry-point 发现机制**：core 启动时通过 Python `importlib.metadata.entry_points()` 扫描 group `after_effects_mcp.backends`，列出已安装 backend，按 `AE_MCP_BACKEND` env var 选择。
+- **Entry-point 发现机制**：core 启动时通过 Python `importlib.metadata.entry_points()` 扫描 group `ae_mcp.backends`，列出已安装 backend，按 `AE_MCP_BACKEND` env var 选择。
 - **两个 reference backend 包**（同仓库 monorepo，独立 pyproject）：
   - `ae-mcp-backend-aebm` — 适配 AEBMethod 文件队列（搬现有 bridge.py 重写为 Backend 实现）
   - `ae-mcp-backend-atom` — 适配 Atom MCP HTTP（直接 Python httpx，不再走 pwsh）
@@ -36,7 +45,7 @@
 | 从 PyPI 发布 | 留给 spec 3c |
 | 重命名包 / 工具命名空间（去 AEBM 化） | 留给 spec 3b |
 | 第三方 backend author guide 文档 | 留给 spec 3c |
-| 删除 `bridge.py` 的兼容垫片 | v0.7→v0.8 是 BREAKING；不留向后兼容（README 顶部明示） |
+| 删除 `bridge.py` 的兼容垫片 | 包名整体重命名（`after-effects-mcp`→`ae-mcp`），旧包 PyPI 冻结即历史记录，无需在新包内留 shim |
 
 ---
 
@@ -47,10 +56,10 @@ after-effects-mcp/                  ← 当前仓库根，转 monorepo
 ├── pyproject.toml                  workspace 根（uv workspace 配置）
 ├── packages/
 │   ├── core/
-│   │   ├── pyproject.toml          name = "after-effects-mcp"
-│   │   ├── after_effects_mcp/
+│   │   ├── pyproject.toml          name = "ae-mcp"
+│   │   ├── ae_mcp/
 │   │   │   ├── __init__.py
-│   │   │   ├── __main__.py         entry: python -m after_effects_mcp
+│   │   │   ├── __main__.py         entry: python -m ae_mcp
 │   │   │   ├── server.py           tools/list / tools/call dispatcher
 │   │   │   ├── schemas.py          24 个 pydantic 模型（不变）
 │   │   │   ├── progress.py         heartbeat / timeout（不变）
@@ -69,21 +78,21 @@ after-effects-mcp/                  ← 当前仓库根，转 monorepo
 │   │   └── tests/                  仅 core unit (mock backend + 文件系统测试)
 │   ├── backend-aebm/
 │   │   ├── pyproject.toml          name = "ae-mcp-backend-aebm"
-│   │   │                            entry-points: after_effects_mcp.backends.aebm
+│   │   │                            entry-points: ae_mcp.backends.aebm
 │   │   ├── ae_mcp_backend_aebm/
 │   │   │   └── __init__.py         AEBMBackend(Backend) — 搬 bridge.py 内容重写
 │   │   └── tests/                  pwsh 编码 + 文件队列协议单测（mock subprocess）
 │   ├── backend-atom/
 │   │   ├── pyproject.toml          name = "ae-mcp-backend-atom"
 │   │   │                            dependencies = ["httpx>=0.27"]
-│   │   │                            entry-points: after_effects_mcp.backends.atom
+│   │   │                            entry-points: ae_mcp.backends.atom
 │   │   ├── ae_mcp_backend_atom/
 │   │   │   └── __init__.py         AtomBackend(Backend) — 新写 HTTP client
 │   │   └── tests/                  HTTP handshake + session-id + stale-recovery 单测
 │   └── snapshot-mss/
 │       ├── pyproject.toml          name = "ae-mcp-snapshot-mss"
 │       │                            dependencies = ["mss>=10.0"]
-│       │                            entry-points: after_effects_mcp.snapshot.mss
+│       │                            entry-points: ae_mcp.snapshot.mss
 │       ├── ae_mcp_snapshot_mss/
 │       │   └── __init__.py         MssSnapshotter(Snapshotter) — mss + OS HWND→rect
 │       └── tests/
@@ -123,7 +132,7 @@ class Backend(ABC):
     """Abstract bridge between MCP layer and a concrete AE plugin protocol.
 
     A backend is a separate pip package that registers itself via entry
-    point group `after_effects_mcp.backends`. Core never imports any
+    point group `ae_mcp.backends`. Core never imports any
     concrete backend module.
     """
 
@@ -197,7 +206,7 @@ class Snapshotter(ABC):
     """Capture AE viewer / main window pixels to a PNG file.
 
     Like Backend, snapshot implementations are separate pip packages
-    discovered via entry point group `after_effects_mcp.snapshot`.
+    discovered via entry point group `ae_mcp.snapshot`.
     Core's `ae.snapshot` verb is hidden from tools/list if no
     snapshotter is installed.
     """
@@ -249,9 +258,9 @@ import importlib.metadata
 import os
 from typing import Dict, Optional
 
-from after_effects_mcp.backends.base import Backend
+from ae_mcp.backends.base import Backend
 
-ENTRY_POINT_GROUP = "after_effects_mcp.backends"
+ENTRY_POINT_GROUP = "ae_mcp.backends"
 
 
 def list_installed_backends() -> Dict[str, type[Backend]]:
@@ -306,7 +315,7 @@ class BackendSelectionError(RuntimeError):
     pass
 ```
 
-**Snapshot discovery 同结构**，entry-point group `after_effects_mcp.snapshot`，附加 `supports_platform()` 过滤。
+**Snapshot discovery 同结构**，entry-point group `ae_mcp.snapshot`，附加 `supports_platform()` 过滤。
 
 ---
 
@@ -314,7 +323,7 @@ class BackendSelectionError(RuntimeError):
 
 ### 6.1 backend-aebm（搬迁现有 bridge.py）
 
-- 把 `after_effects_mcp/bridge.py` 的全部内容（subprocess pwsh + AE_BRIDGE_ROOT 解析 + 文件队列等待）移到 `packages/backend-aebm/ae_mcp_backend_aebm/__init__.py`，包装成 `class AEBMBackend(Backend)`。
+- 把 `ae_mcp/bridge.py` 的全部内容（subprocess pwsh + AE_BRIDGE_ROOT 解析 + 文件队列等待）移到 `packages/backend-aebm/ae_mcp_backend_aebm/__init__.py`，包装成 `class AEBMBackend(Backend)`。
 - 现有 `bridge.invoke_ae_init`、`invoke_ae_layers` 等动词级方法**删掉**——AEBM backend 只暴露 `exec(code, ...)`。所有动词通过 core 渲染 JSX 模板调过来。
   - 注：AEBMethod 插件原生支持的 `Invoke-AeInit / Invoke-AeOverview / Invoke-AeLayers` 这些动词，AEBMBackend 内部仍可路由到对应 pwsh 调用以利用插件已有优化路径——但这是**实现细节**，不暴露给 core。具体做法：在 backend 内部根据 JSX 模板的"模板名"标记决定走哪条路径。**或者**简化为全部走 `Invoke-AeExec`，放弃微优化。本 spec 推荐后者：YAGNI，等实测有性能差距再优化。
 - `from_env()` 读 `AE_BRIDGE_ROOT`，找不到/路径无效时 raise `EnvironmentError`，明确指引"set AE_BRIDGE_ROOT to your AEBMethod plugin checkout"。
@@ -322,7 +331,7 @@ class BackendSelectionError(RuntimeError):
 - 入口注册（pyproject.toml）：
 
   ```toml
-  [project.entry-points."after_effects_mcp.backends"]
+  [project.entry-points."ae_mcp.backends"]
   aebm = "ae_mcp_backend_aebm:AEBMBackend"
   ```
 
@@ -444,7 +453,7 @@ CI 矩阵：
 
 ```bash
 # 必装
-pip install after-effects-mcp
+pip install ae-mcp
 
 # 选一个或多个 backend
 pip install ae-mcp-backend-aebm     # 用 AEBMethod 插件
@@ -459,9 +468,9 @@ pip install ae-mcp-snapshot-mss     # 跨平台
 ```json
 {
   "mcpServers": {
-    "after-effects": {
+    "ae": {
       "command": "python",
-      "args": ["-m", "after_effects_mcp"],
+      "args": ["-m", "ae_mcp"],
       "env": {
         "AE_MCP_BACKEND": "atom",
         "ATOM_MCP_URL": "http://127.0.0.1:11487/mcp"
@@ -473,16 +482,31 @@ pip install ae-mcp-snapshot-mss     # 跨平台
 
 模板里**不出现** `AE_BRIDGE_ROOT`、不出现 `aebm`、不出现 `AEBMethod`。
 
-### 10.3 v0.7 → v0.8 迁移指引
+### 10.3 `after-effects-mcp` v0.7 → `ae-mcp` 0.1 迁移指引
 
 README 顶部加 BREAKING CHANGE banner：
 
-> **v0.8 BREAKING**: This server is now backend-agnostic. After upgrading
-> from v0.7, you must `pip install ae-mcp-backend-aebm` (or a different
-> backend) and replace `AE_BRIDGE_ROOT` in your `.mcp.json` with
-> `AE_MCP_BACKEND=aebm`. See MIGRATION.md.
+> **Renamed and rebooted**: This project was previously published as
+> `after-effects-mcp` (v0.7 and earlier). It has been renamed to `ae-mcp`
+> and reset to **0.1.0** as part of becoming a standalone, plugin-agnostic
+> product. The old `after-effects-mcp` package is frozen on PyPI; please
+> migrate. See MIGRATION.md.
 
-短迁移文档 `MIGRATION.md`：1 page，5 行 PowerShell 命令。
+短迁移文档 `MIGRATION.md`（~1 page）：
+
+```powershell
+# 1) Uninstall the old package
+pip uninstall after-effects-mcp
+
+# 2) Install the new core + at least one backend
+pip install ae-mcp ae-mcp-backend-aebm   # or ae-mcp-backend-atom
+pip install ae-mcp-snapshot-mss          # optional: enables ae.snapshot
+
+# 3) Update your .mcp.json:
+#    - server key:    "aebm" -> "ae"
+#    - command/args:  python -m after_effects_mcp -> python -m ae_mcp
+#    - env:           AE_BRIDGE_ROOT=...  -> AE_MCP_BACKEND=aebm + AE_BRIDGE_ROOT=...
+```
 
 ---
 
@@ -493,7 +517,7 @@ README 顶部加 BREAKING CHANGE banner：
 | Atom HTTP 协议比文档复杂（如 SSE 流式响应在 tools/call 时启用） | 中 | atom backend 实现卡壳 | ATOM_INTEGRATION.md 已踩过坑；spec 期不补足时 fallback 到 atom 仅支持 `ae.exec`（缩窄 supported_verbs），后续迭代 |
 | `mss` 在 macOS 上抓特定 HWND（其实是 `windowID`）API 不直接 | 中 | macOS snapshot 不能精确抓 viewer 子面板 | macOS 先实现"main_window=true"模式抓整窗，子面板留 spec 3c+ |
 | uv workspace 在 Windows + 中文路径 + 嵌套 venv 下罕见 bug | 低 | 开发期 sync 失败 | 用 `python -m uv` 调用避免 PATH 问题（同 v0.7） |
-| 现有 v0.7 用户升级踩坑 | 中 | 升级阻力 | MIGRATION.md + README banner + 保留 `bridge.py` 一层兼容 import 警告（导入时 raise DeprecationWarning） |
+| 现有 `after-effects-mcp` v0.7 用户错过 rename 通知 | 中 | 升级阻力 / 用户停在旧版 | (a) MIGRATION.md + README banner；(b) 旧 PyPI `after-effects-mcp` 上架最后一个版本 v0.7.99，README 改成"已迁移至 `ae-mcp`，停止更新"；(c) 旧仓库 git README 同步指向新包 |
 | Backend 可以乱写、不遵守 ABC 契约 | 中 | 第三方 backend 行为不一致 | 提供 `BackendComplianceTestSuite` 让 backend 作者自测；spec 3c 配合发布 |
 
 ---
@@ -518,8 +542,8 @@ README 顶部加 BREAKING CHANGE banner：
 
 ## 13. 验收标准
 
-1. ✅ `pip install after-effects-mcp` 单装，启动 server，调任意 verb 返回 `{ok:false, error:"no AE backend installed..."}`，进程不死。
-2. ✅ `pip install after-effects-mcp ae-mcp-backend-aebm`，设 `AE_BRIDGE_ROOT` + `AE_MCP_BACKEND=aebm`，对接 AEBMethod 实机，全 24 verb live 测试通过。
+1. ✅ `pip install ae-mcp` 单装，启动 server，调任意 verb 返回 `{ok:false, error:"no AE backend installed..."}`，进程不死。
+2. ✅ `pip install ae-mcp ae-mcp-backend-aebm`，设 `AE_BRIDGE_ROOT` + `AE_MCP_BACKEND=aebm`，对接 AEBMethod 实机，全 24 verb live 测试通过。
 3. ✅ 切到 `AE_MCP_BACKEND=atom` + Atom 插件，**同一套 24 verb live 测试通过**（`ae.checkpoint`/`ae.revert` 因 Atom 内置可能跳过本地 store——这是预期行为）。
 4. ✅ `tools/list` 在仅装 atom backend、不装 snapshot-mss 时返回 23 个 verb（`ae.snapshot` 隐藏）。
 5. ✅ macOS 上 `pip install` core + atom + snapshot-mss 能装、能跑 atom backend、能抓 main window 截图。
@@ -542,7 +566,9 @@ README 顶部加 BREAKING CHANGE banner：
 | `init/overview/layers` | backend 直接动词 / core 渲染 JSX | core 渲染 JSX | backend 接口最小化；JSX 模板照抄 AEBMethod ps1 即可 |
 | AEBMBackend 是否复用 pwsh `Invoke-AeInit` 等优化路径 | 是 / 否 | 否（YAGNI） | 全走 Invoke-AeExec 简单；性能不够再优化 |
 | Atom 的 undo / checkpoint 双计 | 全交给 backend / 加 capability flags | capability flags (`manages_undo` / `manages_checkpoints`) | 显式契约 > 隐式假定 |
-| 向后兼容 | 留 bridge.py shim / 干净切割 | 干净切割（v0.8 BREAKING） | 保 shim 长期负担；MIGRATION.md 解决迁移 |
+| 向后兼容 | 留 bridge.py shim / 干净切割 | 干净切割（rename + reset） | 保 shim 长期负担；MIGRATION.md 解决迁移 |
+| 版本号 | 跟 AEBM sprint 继续 0.7→0.8 / 重置 1.0 / 重置 0.1 / CalVer | 重置 0.1.0 | 用户决策："独立产品 fresh start，pre-1.0 阶段"；承认 backend ABC 还可能再 breaking 再到 1.0 |
+| 包名 | 保留 `after-effects-mcp` / 改 `ae-mcp` / 其他 | `ae-mcp` | 0.1<0.7 在 pip 视角是降级，必须改名；同时 PyPI/Python 模块/server 名一起重置，避免半半拉拉 |
 
 ---
 
