@@ -59,7 +59,7 @@ def build_server() -> Server:
     """Construct the low-level MCP Server with all 15 verbs registered."""
     load_all()
 
-    server: Server = Server("aebm")
+    server: Server = Server("ae")
 
     @server.list_tools()
     async def _list_tools() -> List[Tool]:
@@ -75,7 +75,7 @@ def build_server() -> Server:
                 log.warning("schema for %s failed: %s", verb_name, e)
                 input_schema = {"type": "object", "properties": {}}
             # Description pulled from the pydantic class docstring.
-            desc = (schema_cls.__doc__ or f"AEBM verb {verb_name}").strip()
+            desc = (schema_cls.__doc__ or f"ae-mcp verb {verb_name}").strip()
             tools.append(
                 Tool(
                     name=verb_name,

@@ -1,106 +1,61 @@
-# after-effects-mcp
+# ae-mcp
 
-MCP (Model Context Protocol) server that exposes After Effects automation
-to Claude Code / Cursor / any MCP client. Wraps the **aebm file-polling
-bridge** protocol: a PowerShell + C++ plugin stack that lets MCP clients
-drive After Effects without hand-dispatching ExtendScript.
+Backend-agnostic MCP (Model Context Protocol) server for Adobe After Effects automation.
+
+Lets any MCP-aware client (Claude Code, Cursor, Codex, Continue, ...) drive After Effects through any compatible AE plugin. The MCP itself is a pure protocol layer — it does not ship with or require any specific AE plugin. Backends and screenshot implementations are separate pip packages discovered at runtime via Python entry points.
 
 ## Status
 
-**Private** — under active development. Will flip to public once the
-backend abstraction layer (Option B) lands, at which point the server
-will support multiple bridge implementations, not just aebm.
+**Pre-1.0** — backend interface may still evolve. Production use is fine; pin major versions in your requirements.
 
 ## Architecture
 
 ```
-After Effects (aebm plugin loaded)
-     |
-     | <file bridge: %TEMP%/aebm_bridge/{in,out,done}/>
-     |
-AE plugin repo: scripts/backend_{interface,aebm_file}.ps1
-     |
-     | <subprocess: powershell -Command>
-     |
-THIS repo: after_effects_mcp/bridge.py
-     |
-     | <MCP stdio JSON-RPC>
-     |
-Claude Code / Cursor / any MCP client
+MCP client (Claude Code / Cursor / Codex / ...)
+        |
+        | stdio JSON-RPC
+        v
+ae-mcp                          (this package — protocol + JSX dispatch)
+        |
+        | abstract Backend.exec(code)
+        v
+[ Backend implementation (separate pip package) ]
+        |
+        | plugin-specific protocol
+        v
+After Effects + AE plugin
 ```
 
-## Prerequisites
-
-- Python 3.10+
-- `uv` (install via `pip install uv`; invoke as `python -m uv` on Windows
-  if `uv` is not on PATH)
-- Windows + PowerShell 5+ (for the bridge subprocess + ctypes snapshot)
-- An AE plugin that implements the aebm file-polling protocol. The
-  canonical implementation lives at
-  [github.com/JUNKDOGEGROUP/BlendifyAE](https://github.com/JUNKDOGEGROUP/BlendifyAE)
-  (`scripts/backend_*.ps1` + `src/bridge/FileQueue.cpp`).
-
-## Environment Setup
-
-Clone this repo and the plugin repo side-by-side:
-
-```
-E:/Code/after-effects-mcp/     (this repo)
-E:/Code/AEBMethod/             (plugin repo; has scripts/backend_interface.ps1)
-```
-
-Set `AE_BRIDGE_ROOT` to point at the plugin repo checkout:
-
-```powershell
-$env:AE_BRIDGE_ROOT = "E:/Code/AEBMethod"
-```
-
-Without `AE_BRIDGE_ROOT`, `bridge.py` raises `RuntimeError` on import.
-There is no sibling-path autodetection — explicit wins over implicit.
+The server has 24 verbs (`ae.init` … `ae.searchProject`). All write verbs and most read verbs route through `Backend.exec(jsx)`. The `ae.snapshot` verb routes through a separate Snapshotter abstraction.
 
 ## Install
 
 ```powershell
-cd E:/Code/after-effects-mcp
-python -m uv sync
+# 1) Core (this package)
+pip install ae-mcp
+
+# 2) At least one backend — pick one matching your AE plugin:
+pip install ae-mcp-backend-aebm     # for AEBMethod plugin
+pip install ae-mcp-backend-atom     # for Atom plugin
+
+# 3) Optional: cross-platform snapshot for ae.snapshot
+pip install ae-mcp-snapshot-mss
 ```
 
-## Run (stdio)
+If you have multiple backends installed, set `AE_MCP_BACKEND` to choose.
 
-```powershell
-cd E:/Code/after-effects-mcp
-$env:AE_BRIDGE_ROOT = "E:/Code/AEBMethod"
-python -m uv run python -m after_effects_mcp
-```
+## Configure your MCP client
 
-Blocks on stdin waiting for an MCP client. Ctrl+C to exit.
-
-## Register with Claude Code
-
-Copy `.mcp.json.template` to your MCP client config:
-
-```powershell
-# Option A: MCP-client-level (applies everywhere)
-Copy-Item .mcp.json.template $HOME/.claude.json
-
-# Option B: project-level (if you want MCP only when in one project)
-Copy-Item .mcp.json.template path/to/your/project/.mcp.json
-```
-
-Then edit the copied file and replace both `<PATH_...>` placeholders
-with your local paths. Example after edit:
+Copy `.mcp.json.template` to your client config (e.g., `~/.claude.json` for Claude Code) and fill in:
 
 ```json
 {
   "mcpServers": {
-    "aebm": {
+    "ae": {
       "command": "python",
-      "args": [
-        "-m", "uv", "run",
-        "--directory", "E:/Code/after-effects-mcp",
-        "python", "-m", "after_effects_mcp"
-      ],
+      "args": ["-m", "ae_mcp"],
       "env": {
+        "AE_MCP_BACKEND": "aebm",
         "AE_BRIDGE_ROOT": "E:/Code/AEBMethod"
       }
     }
@@ -108,86 +63,54 @@ with your local paths. Example after edit:
 }
 ```
 
-Restart Claude Code. `/mcp` should list 24 verbs under `mcp__aebm__ae_*`.
+Replace `AE_MCP_BACKEND` and the per-backend env vars (`AE_BRIDGE_ROOT`, `ATOM_MCP_URL`, etc.) per the backend you chose.
 
-## Verb reference
+Restart your MCP client. `/mcp` (or equivalent) should list 24 tools under `ae.*` (23 if you didn't install a snapshotter).
 
-See [`docs/REFERENCE.md`](docs/REFERENCE.md) for the full spec (24 verbs,
-protocol, async + progress contract, error shapes, troubleshooting).
+## Backends
 
-| # | verb | purpose |
-|---|---|---|
-| 1 | `ae.init` | refresh project snapshot |
-| 2 | `ae.overview` | project-level summary |
-| 3 | `ae.layers` | list layers for a comp |
-| 4 | `ae.readProps` | run read-only JSX |
-| 5 | `ae.exec` | run JSX with undo group |
-| 6 | `ae.checkpoint` | list checkpoints (stub, deferred) |
-| 7 | `ae.revert` | revert to checkpoint (stub, deferred) |
-| 8 | `ae.snapshot` | capture viewer PNG (ctypes BitBlt) |
-| 9 | `ae.applyEffect` | add effect to layer |
-| 10 | `ae.createLayer` | create solid/text/shape/null/adjustment/camera/light |
-| 11 | `ae.setProperty` | write property by path |
-| 12 | `ae.moveLayer` | reorder layer |
-| 13 | `ae.selectLayers` | select all/none/by id |
-| 14 | `ae.setTime` | set comp current time |
-| 15 | `ae.getTime` | read comp current time |
-| 16 | `ae.ping` | bridge handshake (live test smoke) |
-| 17 | `ae.getProperties` | property name search across layers |
-| 18 | `ae.scanPropertyTree` | DFS dump of one layer's prop tree |
-| 19 | `ae.inspectPropertyCapabilities` | what can be set on a property path |
-| 20 | `ae.getExpressions` | read all expressions in a comp |
-| 21 | `ae.getKeyframes` | keyframes for a property path |
-| 22 | `ae.searchProject` | fuzzy search project items/layers/effects/expressions |
+### `ae-mcp-backend-aebm`
 
-Plus two diagnostic / agent-convenience verbs:
+Adapts AEBMethod's file-polling protocol. Requires the AEBMethod AE plugin loaded; reads `AE_BRIDGE_ROOT` env var to find the plugin's PowerShell scripts. Foreground-AE constraint applies (AEGP idle hook is throttled when AE is in background).
 
-| # | verb | purpose |
-|---|---|---|
-| 23 | `ae.isolateToggle` | toggle Motion4-style `/` timeline isolation session |
-| 24 | `ae.toastQuery` | read current active toast queue (for test assertions) |
+### `ae-mcp-backend-atom`
 
-## Tests
+Adapts Atom's HTTP MCP server. Requires Atom AE plugin with MCP Mode enabled. Reads `ATOM_MCP_URL` (default `http://127.0.0.1:11487/mcp`). Works without AE in foreground (HTTP listener is independent of AE's idle hook).
+
+### Writing a new backend
+
+Implement `ae_mcp.backends.base.Backend` (subclass with `exec`, `health_check`, `from_env`), publish as a pip package, register entry point group `ae_mcp.backends`. See spec 3c (Backend Author Guide — TBD).
+
+## Develop
 
 ```powershell
-cd E:/Code/after-effects-mcp
-python -m uv run pytest -v
+git clone <this-repo>
+cd after-effects-mcp
+python -m uv sync                                      # installs all 4 packages editable
+$env:AE_BRIDGE_ROOT = "E:/Code/AEBMethod"
+python -m uv run pytest -m "not live and not live_smoke" -v
 ```
 
-CI runs on every push via `.github/workflows/ci.yml` (windows-2022, Python
-3.10).
+Tests: 138 unit tests across `packages/{core,backend-aebm,backend-atom,snapshot-mss}/tests/`.
 
 ## Live tests
 
-Opt-in end-to-end tests that drive a real AE instance.
+Opt-in end-to-end against a real AE instance:
 
 ```powershell
 $env:AEBM_LIVE_TESTS = "1"
-$env:AE_BRIDGE_ROOT  = "E:/Code/AEBMethod"
+$env:AE_MCP_BACKEND = "aebm"
+$env:AE_BRIDGE_ROOT = "E:/Code/AEBMethod"
 python -m uv run pytest -m live_smoke      # 3-case canary, ~30s
 python -m uv run pytest -m live            # full ~10 cases, ~2-3min
 ```
 
-CI does not run live tests (hosted runners cannot drive a GUI Adobe app).
-See `docs/REFERENCE.md#live-test-layer`.
+CI does not run live tests (hosted runners cannot drive a GUI Adobe app). See `docs/REFERENCE.md`.
 
-## Layout
+## Migrating from `after-effects-mcp` v0.7
 
-```
-after_effects_mcp/
-  server.py       MCP server entry, tools/list + tools/call
-  bridge.py       subprocess pwsh wrapper -> Invoke-Ae* (uses AE_BRIDGE_ROOT)
-  snapshot.py     ctypes Win32 BitBlt, Python port of plugin's viewer_snapshot.ps1
-  schemas.py      pydantic models for all verbs
-  progress.py     asyncio heartbeat for long-running calls
-  handlers/
-    core.py       critical-path verbs (init/overview/layers/readProps/exec/
-                  checkpoint/revert/snapshot/applyEffect + isolateToggle + toastQuery)
-    typed.py      sugar verbs (createLayer/setProperty/moveLayer/selectLayers/
-                  setTime/getTime) that build JSX and hand it to ae.exec
-  jsx_templates/  .jsx string templates used by typed handlers
-docs/
-  REFERENCE.md    full protocol + verb spec
-tests/            pytest suite (73 cases)
-.mcp.json.template  MCP client config template
-```
+See [MIGRATION.md](MIGRATION.md).
+
+## License
+
+MIT.
