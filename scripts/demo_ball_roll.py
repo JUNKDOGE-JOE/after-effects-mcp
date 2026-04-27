@@ -114,7 +114,8 @@ async def main():
     comp_id = info["compId"]
 
     # 2) Render 3 sample frames via ae.previewFrame
-    out_dir = Path("E:/tmp/ball_roll_frames")
+    import tempfile
+    out_dir = Path(tempfile.gettempdir()) / "ball_roll_frames"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     times = [0.0, 2.0, 4.0]

@@ -26,14 +26,7 @@ jobs:
         shell: pwsh
         env:
           UV_LINK_MODE: copy
-        run: python -m uv sync --extra dev
-
-      - name: Set up dummy AE_BRIDGE_ROOT for tests
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path "test-bridge-root/scripts" | Out-Null
-          New-Item -ItemType File -Force -Path "test-bridge-root/scripts/backend_interface.ps1" | Out-Null
-          "AE_BRIDGE_ROOT=$(Resolve-Path test-bridge-root)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        run: python -m uv sync --group dev
 
       - name: Run pytest
         shell: pwsh
