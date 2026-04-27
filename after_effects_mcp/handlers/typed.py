@@ -323,3 +323,34 @@ def render_set_time(args: schemas.AeSetTimeArgs) -> str:
 def render_get_time(args: schemas.AeGetTimeArgs) -> str:
     tmpl = _load_template("get_time.jsx")
     return tmpl.substitute(comp_expr=_comp_expr(args.comp_id))
+
+
+# ---------------------------------------------------------------------------
+# ae.getProperties
+# ---------------------------------------------------------------------------
+
+
+def render_get_properties(args: schemas.AeGetPropertiesArgs) -> str:
+    tmpl = _load_template("get_properties.jsx")
+    return tmpl.substitute(
+        comp_expr=_comp_expr(args.comp_id),
+        layer_ids_js=_json_literal([int(i) for i in args.layer_ids]),
+        query_js=_json_literal(args.query),
+        offset=int(args.offset),
+        limit=int(args.limit),
+    )
+
+
+async def _run_get_properties(args: schemas.AeGetPropertiesArgs, ctx: Any) -> Any:
+    jsx = render_get_properties(args)
+
+    async def _call() -> Any:
+        out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=20.0)
+        return _try_json_or_raw(out)
+
+    return await progress.run_with_timeout(
+        ctx, _call(), timeout_sec=30.0, start_msg="ae.getProperties..."
+    )
+
+
+register("ae.getProperties", schemas.AeGetPropertiesArgs, _run_get_properties)

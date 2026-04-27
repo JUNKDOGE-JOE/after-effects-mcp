@@ -10,13 +10,15 @@ from after_effects_mcp import schemas as S
 
 def test_registry_has_17_verbs():
     # v0.6.2: 15 verbs. v0.7-A: +ae.isolateToggle +ae.toastQuery -> 17. v0.7-1: +ae.ping -> 18.
-    assert len(S.SCHEMAS) == 18, f"expected 18 verbs, got {len(S.SCHEMAS)}"
+    # Task 4.1: +ae.getProperties -> 19.
+    assert len(S.SCHEMAS) == 19, f"expected 19 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.layers", "ae.readProps", "ae.exec",
         "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.applyEffect", "ae.ping",
         "ae.createLayer", "ae.setProperty", "ae.moveLayer", "ae.selectLayers",
         "ae.setTime", "ae.getTime",
         "ae.isolateToggle", "ae.toastQuery",
+        "ae.getProperties",
     }
 
 
@@ -192,3 +194,18 @@ def test_ae_checkpoint_create_with_label():
 def test_ae_checkpoint_invalid_action():
     with pytest.raises(ValidationError):
         S.AeCheckpointArgs(action="delete")
+
+
+def test_get_properties_required_fields():
+    a = S.AeGetPropertiesArgs(layer_ids=[1, 2], query="position")
+    assert a.layer_ids == [1, 2]
+    assert a.query == "position"
+    assert a.offset == 0
+    assert a.limit == 50
+
+
+def test_get_properties_layer_ids_must_be_list():
+    import pytest
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        S.AeGetPropertiesArgs(layer_ids="all", query="x")

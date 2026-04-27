@@ -153,3 +153,33 @@ async def test_move_layer_dispatches(mock_bridge):
     result = await run_fn(S.AeMoveLayerArgs(layer_id=3, to_index=1), None)
     assert result["fromIndex"] == 3
     assert result["toIndex"] == 1
+
+
+import json
+import pytest
+from after_effects_mcp import schemas
+
+
+def test_render_get_properties_substitutes_query():
+    from after_effects_mcp.handlers.typed import render_get_properties
+    args = schemas.AeGetPropertiesArgs(layer_ids=[1, 2], query="pos rot|opacity")
+    jsx = render_get_properties(args)
+    assert '"pos rot|opacity"' in jsx
+    assert '[1, 2]' in jsx or '[1,2]' in jsx
+
+
+@pytest.mark.asyncio
+async def test_run_get_properties(mock_bridge):
+    mock_bridge.set_response(
+        "invoke_ae_exec",
+        json.dumps({"ok": True, "total": 1, "results": [
+            {"layerId": 1, "propPath": "Transform/Position",
+             "propType": "ThreeD_SPATIAL", "value": [0,0,0],
+             "hasExpression": False, "hasKeyframes": False}
+        ]}),
+    )
+    from after_effects_mcp.handlers.typed import _run_get_properties
+    args = schemas.AeGetPropertiesArgs(layer_ids=[1], query="position")
+    result = await _run_get_properties(args, ctx=None)
+    assert result["ok"] is True
+    assert result["total"] == 1

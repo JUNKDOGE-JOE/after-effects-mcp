@@ -218,6 +218,15 @@ class AeToastQueryArgs(_StrictModel):
     pass
 
 
+class AeGetPropertiesArgs(_StrictModel):
+    """ae.getProperties — search properties by name across selected layers."""
+    comp_id: Optional[str] = Field(None, description="AE comp id. Omit for active.")
+    layer_ids: List[int] = Field(..., description="1-based layer indices to scan.")
+    query: str = Field(..., description="Multi-word AND; '|' separates OR groups.")
+    offset: int = Field(0, ge=0, description="Pagination offset.")
+    limit: int = Field(50, ge=1, le=500, description="Pagination size.")
+
+
 # ---------------------------------------------------------------------------
 # Registry of verb -> schema (handlers.core / handlers.typed reference this)
 # ---------------------------------------------------------------------------
@@ -242,6 +251,7 @@ SCHEMAS = {
     "ae.getTime": AeGetTimeArgs,
     "ae.isolateToggle": AeIsolateToggleArgs,
     "ae.toastQuery":    AeToastQueryArgs,
+    "ae.getProperties": AeGetPropertiesArgs,
 }
 
-assert len(SCHEMAS) == 18, f"expected 18 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 19, f"expected 19 verbs, got {len(SCHEMAS)}"
