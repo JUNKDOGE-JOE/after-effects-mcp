@@ -71,12 +71,6 @@ async def test_read_props_routes_through_exec(mock_bridge):
     assert result == {"value": 42}
 
 
-@pytest.mark.asyncio
-async def test_checkpoint_is_stub(mock_bridge):
-    _, run_fn = HANDLERS["ae.checkpoint"]
-    result = await run_fn(S.AeCheckpointArgs(), None)
-    assert result == {"checkpoints": []}
-
 
 @pytest.mark.asyncio
 async def test_revert_is_stub(mock_bridge):
@@ -152,3 +146,109 @@ async def test_ae_ping_custom(mock_bridge):
     # Verify the JSX sent included the expected token
     sent_kwargs = mock_bridge.calls[-1][2]
     assert "hello" in sent_kwargs["code"]
+
+
+# ---------------------------------------------------------------------------
+# ae.checkpoint — real implementation tests (Task 3.4)
+# ---------------------------------------------------------------------------
+
+import json
+from pathlib import Path
+import pytest
+from after_effects_mcp import schemas
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_list_default_returns_disk_entries(mock_bridge, tmp_path, monkeypatch):
+    # Force checkpoint_store root to tmp_path
+    from after_effects_mcp import checkpoint_store, handlers
+    store = checkpoint_store.CheckpointStore(root=tmp_path)
+    monkeypatch.setattr("after_effects_mcp.handlers.core._store", store)
+
+    # Pre-populate one fake checkpoint for "MyProject"
+    d = store._dir_for("C:/MyProject.aep")
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "abc_x.aep").write_bytes(b"\x00" * 1024)
+    store.write_meta(
+        source_project_path="C:/MyProject.aep",
+        cid="abc_x", label="seed", active_comp_id="12",
+        current_time=0.0, size_bytes=1024,
+    )
+
+    # Mock the bridge call that fetches current project path
+    mock_bridge.set_response(
+        "invoke_ae_exec",
+        json.dumps({"ok": True, "path": "C:/MyProject.aep"}),
+    )
+
+    from after_effects_mcp.handlers.core import _run_checkpoint
+    args = schemas.AeCheckpointArgs(action="list", limit=10)
+    result = await _run_checkpoint(args, ctx=None)
+
+    assert result["ok"] is True
+    assert len(result["checkpoints"]) == 1
+    assert result["checkpoints"][0]["id"] == "abc_x"
+    assert result["checkpoints"][0]["label"] == "seed"
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_create_writes_meta(mock_bridge, tmp_path, monkeypatch):
+    from after_effects_mcp import checkpoint_store
+    store = checkpoint_store.CheckpointStore(root=tmp_path)
+    monkeypatch.setattr("after_effects_mcp.handlers.core._store", store)
+
+    # Mock the bridge: first call resolves current project path; second
+    # call runs the checkpoint_create JSX and returns saved metadata.
+    responses = iter([
+        json.dumps({"ok": True, "path": "C:/Foo.aep"}),
+        json.dumps({
+            "ok": True, "sourceProjectPath": "C:/Foo.aep",
+            "savedTo": str(tmp_path / "Foo" / "<id>.aep"),
+            "sizeBytes": 4096, "activeCompId": "1",
+            "currentTime": 0.0
+        }),
+    ])
+    async def _resp(*a, **kw):
+        return next(responses)
+    monkeypatch.setattr("after_effects_mcp.bridge.invoke_ae_exec", _resp)
+
+    # Prepare the .aep that the JSX claims to have written. We have to write
+    # the file ourselves — the mocked bridge didn't actually run AE.
+    d = store._dir_for("C:/Foo.aep")
+    d.mkdir(parents=True, exist_ok=True)
+    # The handler will deterministically produce the id; we patch make_id.
+    monkeypatch.setattr(store, "make_id", lambda: "fixed_id")
+    (d / "fixed_id.aep").write_bytes(b"\x00" * 4096)
+
+    from after_effects_mcp.handlers.core import _run_checkpoint
+    args = schemas.AeCheckpointArgs(action="create", label="label-A")
+    result = await _run_checkpoint(args, ctx=None)
+
+    assert result["ok"] is True
+    assert result["id"] == "fixed_id"
+    assert result["label"] == "label-A"
+    # Meta sidecar exists
+    assert (d / "fixed_id.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_create_untitled_skipped(mock_bridge, tmp_path, monkeypatch):
+    from after_effects_mcp import checkpoint_store
+    store = checkpoint_store.CheckpointStore(root=tmp_path)
+    monkeypatch.setattr("after_effects_mcp.handlers.core._store", store)
+
+    responses = iter([
+        json.dumps({"ok": True, "path": None}),  # untitled
+    ])
+    async def _resp(*a, **kw):
+        return next(responses)
+    monkeypatch.setattr("after_effects_mcp.bridge.invoke_ae_exec", _resp)
+
+    from after_effects_mcp.handlers.core import _run_checkpoint
+    args = schemas.AeCheckpointArgs(action="create", label="x")
+    result = await _run_checkpoint(args, ctx=None)
+
+    assert result["ok"] is True
+    assert result.get("skipped") is True
+    assert result.get("reason") == "untitled-project"
+    assert result.get("id") is None

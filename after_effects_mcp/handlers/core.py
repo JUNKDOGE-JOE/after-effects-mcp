@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from pathlib import Path
+from string import Template
+from typing import Any, Optional
 
-from after_effects_mcp import bridge, progress, schemas
+from after_effects_mcp import bridge, checkpoint_store, progress, schemas
 from after_effects_mcp.handlers import register
 
 log = logging.getLogger("after_effects_mcp.handlers.core")
@@ -36,6 +38,32 @@ def _try_json(text: str) -> Any:
         except json.JSONDecodeError:
             pass
     return {"ok": True, "content": text}
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint helpers
+# ---------------------------------------------------------------------------
+
+_store = checkpoint_store.CheckpointStore()
+_TEMPLATES = Path(__file__).resolve().parent.parent / "jsx_templates"
+
+
+def _load_jsx(name: str) -> Template:
+    return Template((_TEMPLATES / name).read_text(encoding="utf-8"))
+
+
+async def _resolve_project_path(ctx: Any) -> Optional[str]:
+    out = await bridge.invoke_ae_exec(
+        code=(
+            'JSON.stringify({ok:true,'
+            'path: app.project.file ? app.project.file.fsName : null})'
+        ),
+        timeout_sec=10.0,
+    )
+    parsed = _try_json(out)
+    if isinstance(parsed, dict) and parsed.get("ok"):
+        return parsed.get("path")
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -142,8 +170,55 @@ register("ae.exec", schemas.AeExecArgs, _run_exec)
 
 
 async def _run_checkpoint(args: schemas.AeCheckpointArgs, ctx: Any) -> Any:
-    # aebm-file backend returns {"checkpoints":[]} by design in v0.6.2.
-    return {"checkpoints": []}
+    if args.action == "list":
+        async def _call_list() -> Any:
+            project_path = await _resolve_project_path(ctx)
+            entries = _store.list_checkpoints(project_path, limit=args.limit)
+            return {"ok": True, "checkpoints": entries, "total": len(entries)}
+        return await progress.run_with_timeout(
+            ctx, _call_list(), timeout_sec=15.0, start_msg="ae.checkpoint list..."
+        )
+
+    # action == "create"
+    async def _call_create() -> Any:
+        project_path = await _resolve_project_path(ctx)
+        if not project_path:
+            return {
+                "ok": True, "skipped": True,
+                "reason": "untitled-project", "id": None,
+            }
+        cid = _store.make_id()
+        dst = _store.aep_path(project_path, cid)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        tmpl = _load_jsx("checkpoint_create.jsx")
+        jsx = tmpl.substitute(dst_path=json.dumps(str(dst), ensure_ascii=False))
+        out = await bridge.invoke_ae_exec(
+            code=jsx,
+            undo_group_name=f"MCP checkpoint: {args.label or cid}",
+            timeout_sec=60.0,
+        )
+        parsed = _try_json(out)
+        if not (isinstance(parsed, dict) and parsed.get("ok")):
+            return parsed
+        if parsed.get("skipped"):
+            return parsed  # untitled bubbled up from JSX
+        size_bytes = int(parsed.get("sizeBytes") or dst.stat().st_size)
+        _store.write_meta(
+            source_project_path=project_path,
+            cid=cid, label=args.label,
+            active_comp_id=parsed.get("activeCompId"),
+            current_time=float(parsed.get("currentTime") or 0.0),
+            size_bytes=size_bytes,
+        )
+        _store.prune(project_path)
+        return {
+            "ok": True, "id": cid, "label": args.label,
+            "path": str(dst), "sizeBytes": size_bytes,
+        }
+
+    return await progress.run_with_timeout(
+        ctx, _call_create(), timeout_sec=70.0, start_msg="ae.checkpoint create..."
+    )
 
 
 register("ae.checkpoint", schemas.AeCheckpointArgs, _run_checkpoint)
