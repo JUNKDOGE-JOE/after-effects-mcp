@@ -1,12 +1,12 @@
 [tool.uv.workspace]
-# packages/backend-aebm is DEV-ONLY (not published to PyPI; lives here so we
-# can run live tests against a real AE instance). The published ae-mcp core
-# ships zero concrete backends — see packages/backend-aebm/README.md.
-members = ["packages/core", "packages/backend-aebm", "packages/snapshot-mss"]
+# This repo ships ZERO backends. To run live tests, contributors must
+# `pip install -e <path-to-some-backend>` from OUTSIDE this repo before
+# running `pytest -m live`. The repo intentionally has no built-in
+# backend — not even a "dev-only" one — to prevent coupling drift.
+members = ["packages/core", "packages/snapshot-mss"]
 
 [tool.uv.sources]
 ae-mcp                = { workspace = true }
-ae-mcp-backend-aebm   = { workspace = true }
 ae-mcp-snapshot-mss   = { workspace = true }
 
 # Workspace-level dev dependency group. Run `uv sync --group dev` to install

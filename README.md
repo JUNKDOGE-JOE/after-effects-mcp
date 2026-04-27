@@ -74,12 +74,13 @@ Restart your MCP client. `/mcp` (or equivalent) should list 24 tools under `ae.*
 
 `ae-mcp` does not ship any backend. The Backend interface is public; AE plugin authors publish their own integration packages.
 
-No published third-party backends yet. (A reference impl for AEBMethod
-existed during spec 3a development but was archived 2026-04-27; see
-`E:/Code/_archive/2026-04-27_ae-mcp-backend-aebm/STATUS.md` if recovery
-is ever needed.)
+**This repo ships zero backends.** Not even a "dev-only" one. To use
+ae-mcp with a real AE plugin, install a backend pip package from
+elsewhere (your AE plugin author's repo, or write your own) — see
+"Writing a new backend" below.
 
-If you author and publish a backend, send a PR to add it to this list.
+No published third-party backends are listed here yet. If you publish
+one, send a PR to add it.
 
 ### Writing a new backend
 
@@ -106,14 +107,16 @@ pip install -e <path-to-backend-aebm-repo>             # or another backend
 Opt-in end-to-end against a real AE instance:
 
 ```powershell
-$env:AEBM_LIVE_TESTS = "1"
-$env:AE_MCP_BACKEND = "aebm"
-$env:AE_BRIDGE_ROOT = "E:/Code/AEBMethod"
+$env:AE_MCP_LIVE_TESTS = "1"
+
+# You must have a backend installed BEFORE running live tests:
+#   pip install -e <path-to-some-backend-package>
+# The repo does not ship a backend; the live test suite only proves the
+# protocol layer end-to-end against whatever backend you supply.
+
+$env:AE_MCP_BACKEND = "<your backend's name>"
 python -m uv run pytest -m live_smoke      # 3-case canary, ~30s
 python -m uv run pytest -m live            # full ~10 cases, ~2-3min
-
-# Note: aebm backend uses AEGP idle hook polling, which is throttled when AE
-# is in background. Keep AE in foreground while running live tests.
 ```
 
 CI does not run live tests (hosted runners cannot drive a GUI Adobe app). See `docs/REFERENCE.md`.

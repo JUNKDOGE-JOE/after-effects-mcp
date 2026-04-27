@@ -11,13 +11,13 @@ from ae_mcp.backends.discovery import select_backend
 
 
 def _live_enabled() -> bool:
-    return os.environ.get("AEBM_LIVE_TESTS") == "1"
+    return os.environ.get("AE_MCP_LIVE_TESTS") == "1"
 
 
 @pytest.fixture(scope="session", autouse=True)
 def _live_gate():
     if not _live_enabled():
-        pytest.skip("live tests are opt-in: export AEBM_LIVE_TESTS=1")
+        pytest.skip("live tests are opt-in: export AE_MCP_LIVE_TESTS=1")
 
 
 @pytest.fixture(scope="session")

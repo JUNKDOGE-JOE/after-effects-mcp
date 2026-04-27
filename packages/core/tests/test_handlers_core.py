@@ -17,10 +17,10 @@ def _load():
 
 @pytest.mark.asyncio
 async def test_init_calls_bridge_and_returns_dict(mock_backend):
-    mock_backend.set_response('{"pluginVersion":"aebm-file"}')
+    mock_backend.set_response('{"pluginVersion":"test-stub"}')
     _, run_fn = HANDLERS["ae.init"]
     result = await run_fn(S.AeInitArgs(refresh_only=True), None)
-    assert result == {"pluginVersion": "aebm-file"}
+    assert result == {"pluginVersion": "test-stub"}
     assert len(mock_backend.calls) >= 1
 
 

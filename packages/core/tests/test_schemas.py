@@ -10,7 +10,7 @@ from ae_mcp import schemas as S
 
 def test_registry_has_22_verbs():
     # 22 plugin-agnostic verbs (15 base + ae.ping + 6 typed read verbs).
-    # AEBM-specific verbs (ae.isolateToggle, ae.toastQuery) were removed
+    # plugin-specific verbs (ae.isolateToggle, ae.toastQuery) were removed
     # for v0.1.0 to keep core plugin-agnostic; backends that want plugin-
     # specific verbs should add them via a future custom-verb extension.
     assert len(S.SCHEMAS) == 22, f"expected 22 verbs, got {len(S.SCHEMAS)}"
