@@ -1,6 +1,6 @@
 # After Effects MCP Server — Reference
 
-Python MCP server that exposes **15 After Effects verbs** to Claude Code over
+Python MCP server that exposes **24 After Effects verbs** to Claude Code over
 stdio JSON-RPC. This is the "last-mile" wrapper that lets Claude drive AE
 through the existing `aebm-file` PowerShell bridge without hand-dispatching
 `pwsh -Command` via the Bash tool.
@@ -20,9 +20,10 @@ see `README.md`. For the underlying file-polling protocol see
 | Transport | stdio JSON-RPC 2.0 (via the official `mcp` SDK low-level `Server`) |
 | Entry point | `python -m after_effects_mcp` |
 | Backend dependency | `scripts/backend_interface.ps1` with `AE_BACKEND=aebm-file` |
-| Handler count | 15 (9 core + 6 typed sugar) |
+| Handler count | 21 (10 core + 11 typed) |
 | Progress cadence | `ctx.report_progress` every 2 s while a call is in flight |
 | Default per-call timeout | 30 s (overridable via `timeout_sec` on `ae.exec`) |
+| Checkpoint store | `%TEMP%/aebm_checkpoints/<basename>/<id>.aep` + `.json` (keep N=`AEBM_CHECKPOINT_KEEP`, default 50) |
 | Snapshot capture | Python ctypes `BitBlt` (does NOT go through the file queue) |
 
 ---
@@ -34,7 +35,7 @@ Claude Code
     |  (MCP stdio: JSON-RPC 2.0 over stdin/stdout)
     v
 after_effects_mcp.server (Python, asyncio)
-    |-- tools/list        -> 15 verb schemas (pydantic model_json_schema)
+    |-- tools/list        -> 24 verb schemas (pydantic model_json_schema)
     |-- tools/call        -> dispatch to handler, emit progress heartbeats
     |                          |
     |                          v
@@ -74,12 +75,12 @@ AEGP_ExecuteScript -> AE
    so the handler returns `{"ok": false, "error": "timed out after Xs"}`
    on timeout rather than raising.
 
-3. **6 typed verbs are Python-rendered JSX templates dispatched via
+3. **11 typed verbs are Python-rendered JSX templates dispatched via
    `ae.exec`.** They do NOT add new entries to the PowerShell
    `Invoke-Ae*` surface. Rationale: keeping the typed verbs in Python
    means the C++ `FileQueue` stays at 7 verbs + NotImplemented stub, and
    `backend_atom_http.ps1` (still partially present for the Atom-
-   compatibility exit ramp) does not need parallel maintenance of 6 new
+   compatibility exit ramp) does not need parallel maintenance of 11 new
    typed entries.
 
 4. **Every pydantic model uses `ConfigDict(extra="forbid")`.** Unknown
@@ -114,7 +115,7 @@ project, `~/.claude.json` / `claude_desktop_config.json` for global):
 }
 ```
 
-After restarting Claude Code, `/mcp` should list 15 tools under
+After restarting Claude Code, `/mcp` should list 24 tools under
 `aebm.ae.*`. If the list is empty, see **Troubleshooting** below.
 
 > The `python -m uv` invocation works around the `uv.exe` not being on
@@ -170,7 +171,7 @@ bridge wraps it as `{ok: true, content: "<raw text>"}`.
 
 **Why explicit JSX?** The `aebm-file` backend does not implement the
 Atom-style property-path walker. Callers that want a typed read path
-should use `ae.layers` / `ae.getTime` instead.
+should use `ae.layers` / `ae.getTime` / `ae.getProperties` instead.
 
 ### 5. `ae.exec`
 
@@ -180,7 +181,7 @@ Run JSX under an undo group.
 |---|---|---|---|---|
 | `code` | string | yes | — | Full JSX source. |
 | `undo_group_name` | string | no | `"AEBM MCP"` | Undo-stack label. |
-| `checkpoint_label` | string | no | — | Ignored for `aebm-file`; plumbed through for forward-compat. |
+| `checkpoint_label` | string | no | — | Non-empty: auto-create a checkpoint before running JSX. Untitled project → `checkpointSkipped: 'untitled-project'` in result. |
 | `timeout_sec` | int (1-600) | no | 30 | Per-call timeout. |
 
 Returns: whatever the JSX emitted, same shape rules as `ae.readProps`.
@@ -188,28 +189,40 @@ Returns: whatever the JSX emitted, same shape rules as `ae.readProps`.
 **Progress**: heartbeat fires at t+2s, t+4s, ... until the call resolves
 or times out.
 
-### 6. `ae.checkpoint` **(stub)**
+### 6. `ae.checkpoint` **(v0.7 upgrade)**
 
-List recent checkpoints.
+Create or list project checkpoints.
 
 | Arg | Type | Required | Default | Notes |
 |---|---|---|---|---|
-| `limit` | int (1-200) | no | 20 | Clamped range. |
+| `action` | `"create" \| "list"` | no | `"list"` | Default `"list"` preserves v0.6 compatibility. |
+| `label` | string | no | `""` | Human-readable label (recommended for `create`). |
+| `limit` | int (1-200) | no | 20 | Maximum checkpoints returned by `list`. |
 
-Returns: `{ok: true, checkpoints: []}` unconditionally. **Real
-implementation deferred to v0.7** — this stub exists so the tool
-surface does not change when it lands.
+Returns:
 
-### 7. `ae.revert` **(stub)**
+```json
+// action: "create" (saved project)
+{"ok": true, "id": "1714180800000_a3f2bc91", "label": "before risky write", "path": "C:/.../1714180800000_a3f2bc91.aep", "sizeBytes": 12345678}
+
+// action: "create" (untitled project — silent skip)
+{"ok": true, "skipped": true, "reason": "untitled-project", "id": null}
+
+// action: "list"
+{"ok": true, "checkpoints": [{"id": "...", "label": "...", "ts": "2026-04-27T...", "sizeBytes": 12345678, "activeCompId": "12"}], "total": 17}
+```
+
+### 7. `ae.revert`
 
 Revert to a checkpoint.
 
-| Arg | Type | Required | Notes |
-|---|---|---|---|
-| `checkpoint_id` | string | yes | Ignored by stub. |
-| `branch_before_revert` | bool | no | Ignored by stub. |
+| Arg | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| `checkpoint_id` | string | yes | — | From `ae.checkpoint list`. |
+| `branch_before_revert` | bool | no | `true` | Create a `before-revert-<short-id>` checkpoint first. |
 
-Returns: `{ok: false, error: "NotImplemented", reverted: false}`.
+Returns: `{ok, reverted: true, openedPath, branchedFromId?: str}` on success,
+or `{ok: false, error: "checkpoint not found: <id>"}` if the id does not exist.
 
 ### 8. `ae.snapshot`
 
@@ -333,6 +346,163 @@ Read comp current time (seconds).
 
 Returns: `{ok, time, duration, numLayers, compId}`.
 
+### 16. `ae.ping`
+
+Handshake smoke test for live diagnostics.
+
+| Arg | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| `expect` | string | no | `"pong"` | String to echo back. |
+
+Returns: `{ok, pong, aeVersion, latencyMs}`.
+
+### 17. `ae.getProperties`
+
+Structured property search across layers, equivalent to Atom's `get_properties`.
+
+| Arg | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| `comp_id` | string | no | active comp | AE item id. |
+| `layer_ids` | int[] | yes | — | 1-based layer index list. |
+| `query` | string | yes | — | Multi-word AND; `\|`-separated for OR. |
+| `offset` | int (>=0) | no | 0 | Pagination offset. |
+| `limit` | int (1-500) | no | 50 | Pagination page size. |
+
+Returns: `{ok, total, results: [{layerId, propPath, propType, value, hasExpression, hasKeyframes}]}`.
+
+### 18. `ae.scanPropertyTree`
+
+Full property-tree dump for a single layer, equivalent to Atom's `scan_property_tree`.
+
+| Arg | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| `comp_id` | string | no | active comp | — |
+| `layer_id` | int (>=1) | yes | — | — |
+| `max_depth` | int (1-10) | no | 4 | Guards against mask/effects nesting explosion. |
+| `include_values` | bool | no | `true` | Set `false` to get schema only (reduces payload). |
+
+Returns: `{ok, layerId, layerName, tree: <node>, truncatedAt: int|null}`.
+
+Each tree node: `{name, matchName, kind: "PropertyGroup"|"Property", propType, value, hasExpression, numKeyframes, children}`.
+
+### 19. `ae.inspectPropertyCapabilities`
+
+Query what operations are valid on a property path before writing, equivalent to Atom's `inspect_property_capabilities`.
+
+| Arg | Type | Required | Notes |
+|---|---|---|---|
+| `comp_id` | string | no | Active comp if omitted. |
+| `layer_id` | int | yes | — |
+| `path` | string | yes | Same `Transform/Position` style as `ae.setProperty`. |
+
+Returns: `{ok, exists, canSetValue, canSetExpression, canAddKeyframe, propType, valueDimension, hasMin, hasMax, minValue, maxValue, unitsText, numKeyframes, hasExpression}`.
+
+### 20. `ae.getExpressions`
+
+Read all expression source code in a comp, equivalent to Atom's `get_expressions`.
+
+| Arg | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| `comp_id` | string | yes | — | — |
+| `layer_ids` | int[] | no | all layers | Restrict scan to these indices. |
+| `prop` | string | no | — | Filter by matchName substring. |
+| `max_results` | int (1-1000) | no | 200 | Guards against large-project blowup. |
+
+Returns: `{ok, expressions: [{layerId, propPath, expression, enabled, hash}], grouped: {hash: [{layerId, propPath}]}, truncated}`.
+
+### 21. `ae.getKeyframes`
+
+Read keyframes for a single property path, equivalent to Atom's `get_keyframes`.
+
+| Arg | Type | Required | Notes |
+|---|---|---|---|
+| `comp_id` | string | no | Active comp if omitted. |
+| `layer_id` | int | yes | — |
+| `path` | string | yes | Property path. |
+
+Returns: `{ok, numKeyframes, keyframes: [{index, time, value, interpIn, interpOut, easeIn, easeOut, spatialIn, spatialOut}]}`.
+
+### 22. `ae.searchProject`
+
+Cross-project fuzzy search, equivalent to Atom's `search_project`.
+
+| Arg | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| `query` | string | yes | — | Multi-word AND; `\|`-separated for OR. |
+| `scope` | string[] | no | all | Subset of `["layers","expressions","effects","comps","items"]`. |
+| `limit` | int (1-500) | no | 100 | — |
+
+Returns: `{ok, hits: [{kind, compId?, layerId?, name, snippet, score}], truncated}`.
+
+Scoring: `comps`/`items` name hits > `layers` > `effects` > `expression` substrings.
+
+### 23. `ae.isolateToggle`
+
+Toggle solo/isolate state on a layer.
+
+Returns: `{ok, layerId, isolated}`.
+
+### 24. `ae.toastQuery`
+
+Display a toast notification in AE and return user response.
+
+Returns: `{ok, response}`.
+
+---
+
+## Checkpoint store
+
+Real implementation backing `ae.checkpoint` and `ae.revert` (v0.7+). Lives in
+`after_effects_mcp/checkpoint_store.py` — pure Python filesystem index, no AE dependency.
+
+### Layout
+
+```
+%TEMP%/aebm_checkpoints/
+    <project_basename>/      # e.g. "MyProject" for C:/foo/MyProject.aep
+        <id>.aep             # full project copy via File.copy()
+        <id>.json            # metadata sidecar
+    _untitled/               # placeholder for unsaved projects (always empty)
+```
+
+### ID format
+
+`<unix_ms>_<8-hex-chars>` — millisecond prefix gives natural lexicographic sort
+order; module-level monotonic counter ensures strictly increasing ms across
+calls within the same millisecond. Random hex suffix breaks any residual
+collisions and prevents ID guessing.
+
+### Retention
+
+Default: keep the 50 newest checkpoints per project basename, prune older.
+Override via `AEBM_CHECKPOINT_KEEP` env var. `prune()` is called automatically
+after each successful `create` action.
+
+### Untitled project behavior
+
+`app.project.file === null` → `ae.checkpoint create` returns
+`{ok: true, skipped: true, reason: "untitled-project", id: null}`.
+Verb's write action proceeds; only rollback capability is unavailable until
+the user saves the .aep. This avoids a "must save first" loop.
+
+### Save strategy (avoiding fsName drift)
+
+`checkpoint_create.jsx` calls `app.project.save()` (no args, saves to current
+fsName) followed by `File.copy(checkpointPath)`. **Never call
+`app.project.save(File(checkpointPath))`** — that mutates the project's
+fsName, polluting the user's workflow.
+
+### Revert behavior
+
+`ae.revert(id)` closes the current project (no-save) and opens
+`<project_basename>/<id>.aep`. After revert, AE's project file path points at
+the checkpoint .aep, not the original. Subsequent `create` calls record the
+checkpoint .aep as their source. This matches Atom's behavior — revert =
+"continue from this state."
+
+`branch_before_revert=true` (default) creates a `before-revert-<short-id>`
+checkpoint first; failures are logged but do not block the revert itself.
+
 ---
 
 ## Async + progress contract
@@ -381,7 +551,7 @@ async def run_with_timeout(ctx, coro, timeout_sec, interval=2.0,
 | pwsh subprocess non-zero exit | `{ok: false, error: "<stderr text>"}`. |
 | bridge timeout (PS layer) | `{ok: false, error: "aebm-file: timed out waiting for out/<id>.json"}` surfaced verbatim. |
 | handler-level timeout (`run_with_timeout`) | `{ok: false, error: "timed out after 30s"}`. |
-| `ae.revert` stub | `{ok: false, error: "NotImplemented"}`. |
+| `ae.revert` checkpoint not found | `{ok: false, error: "checkpoint not found: <id>"}`. |
 | snapshot on non-Windows | `{ok: false, error: "snapshot is Windows-only"}`. |
 
 ---
@@ -447,7 +617,7 @@ is 0 under cmd.exe / bash; PowerShell's default redirect drops the
 
 - Verify the handler is actually wrapped in `run_with_timeout` /
   `with_heartbeat`. Handlers that forgot the wrapper will block
-  without heartbeats (none of the shipped 15 do — but new ones
+  without heartbeats (none of the shipped 24 do — but new ones
   might).
 - Confirm Claude Code is the client. Other MCP clients may not
   render progress notifications, which makes the heartbeat invisible
@@ -460,15 +630,16 @@ is 0 under cmd.exe / bash; PowerShell's default redirect drops the
 ```
 tests/
   conftest.py              - mock_bridge fixture (replaces bridge.invoke_ae_*)
-  test_schemas.py          - 15 pydantic models, good + bad arg cases
+  test_schemas.py          - pydantic models, good + bad arg cases
   test_bridge.py           - pwsh arg encoding + JSON parse against mock subprocess
-  test_handlers_core.py    - 9 core handlers against mock_bridge
-  test_handlers_typed.py   - 6 typed handlers + JSX render correctness
+  test_handlers_core.py    - core handlers against mock_bridge
+  test_handlers_typed.py   - typed handlers + JSX render correctness
+  test_checkpoint_store.py - filesystem index unit tests (no AE dependency)
   test_snapshot.py         - ctypes signature sanity (Windows-only tests skip elsewhere)
   test_progress.py         - heartbeat cadence + cancel semantics
 ```
 
-Run: `cd mcp && python -m uv run pytest -v`. Expected: 70 tests pass in
+Run: `cd mcp && python -m uv run pytest -v`. Expected: tests pass in
 <1 s without needing AE.
 
 CI: `.github/workflows/build.yml` has a dedicated `python-mcp-tests`
@@ -476,17 +647,45 @@ job on `windows-2022` that installs uv + syncs + pytest. Independent
 matrix from the C++ build — a Python regression cannot block the C++
 job and vice versa.
 
+### Live test layer
+
+Opt-in end-to-end tests that drive a real AE instance through the bridge.
+
+**Activate**: `AEBM_LIVE_TESTS=1`. Without it, every `tests/live/*.py`
+test skips (autouse fixture in `tests/live/conftest.py`).
+
+**Markers**:
+- `live` — full live suite (~10 cases, ~2-3 min on warm AE)
+- `live_smoke` — 3-case ping/exec/snapshot canary (<30 s)
+
+**CI policy**: live tests are excluded from `.github/workflows/ci.yml`
+via `pyproject.toml`'s `addopts = "-m 'not live and not live_smoke'"`.
+Hosted runners cannot drive a GUI Adobe app. Run locally before each
+release.
+
+**Failure artifacts**: `tests/live/_artifacts/<test_name>/` collects
+recent bridge stderr, last `out/<id>.json`, and a snapshot PNG when the
+test failed.
+
+**Run examples**:
+
+```powershell
+$env:AEBM_LIVE_TESTS = "1"
+$env:AE_BRIDGE_ROOT  = "E:/Code/AEBMethod"
+python -m uv run pytest -m live_smoke      # quick canary
+python -m uv run pytest -m live            # full
+```
+
 ---
 
 ## Not doing (explicit backlog)
 
 | Item | Deferred to | Why |
 |---|---|---|
-| Real `ae.checkpoint` / `ae.revert` | v0.7 | Needs on-disk checkpoint store + plugin-side write path. |
 | macOS `ae.snapshot` | v0.7+ | Requires CGWindowListCreateImage port. |
 | HTTP/SSE transport | v0.7 | stdio is enough for single-client Claude Code. |
 | Task-queue style cancel/poll | v0.7+ | Heartbeat + timeout cover current use cases. |
-| Atom's non-critical 9 verbs (inspect_property_capabilities, get_expressions, get_keyframes, search_project, create_skill, generate_image, create_rig, scan_property_tree, edit_skill) | v0.7+ | Not on the critical path; can be synthesized by `ae.readProps` when needed. |
+| Atom's marketplace/cloud 5 verbs (`create_skill`, `edit_skill`, `use_skill`, `generate_image`, `create_rig`) | v0.7+ | Depends on Atom cloud / skill marketplace; no equivalent in a local AE-only MCP. |
 
 ---
 
@@ -495,8 +694,10 @@ job and vice versa.
 - `README.md` — install + run instructions.
 - [AEBM_BRIDGE.md in plugin repo](https://github.com/JUNKDOGEGROUP/BlendifyAE/blob/main/docs/development/AEBM_BRIDGE.md) — underlying file-polling protocol.
 - [ATOM_INTEGRATION.md in plugin repo](https://github.com/JUNKDOGEGROUP/BlendifyAE/blob/main/docs/development/ATOM_INTEGRATION.md) — history of the Atom exit
-  ramp and why the 15-verb surface looks the way it does.
+  ramp and why the verb surface looks the way it does.
 - [ATOM_MCP_CASCADE_RCA.md in plugin repo](https://github.com/JUNKDOGEGROUP/BlendifyAE/blob/main/docs/development/ATOM_MCP_CASCADE_RCA.md) — why we moved away from
   Atom's HTTP MCP.
 - [scripts/viewer_snapshot.ps1 in plugin repo](https://github.com/JUNKDOGEGROUP/BlendifyAE/blob/main/scripts/viewer_snapshot.ps1) — reference implementation that
   `after_effects_mcp/snapshot.py` was ported from.
+- `after_effects_mcp/checkpoint_store.py` — pure Python filesystem checkpoint index.
+- `docs/superpowers/specs/2026-04-27-atommcp-parity-design.md` — full v0.7 design spec.
