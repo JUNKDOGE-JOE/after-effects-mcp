@@ -230,10 +230,48 @@ register("ae.checkpoint", schemas.AeCheckpointArgs, _run_checkpoint)
 
 
 async def _run_revert(args: schemas.AeRevertArgs, ctx: Any) -> Any:
-    return {
-        "reverted": False,
-        "reason": "NotImplemented in aebm-file (v0.6.2). See DECISION_LOG.",
-    }
+    async def _call() -> Any:
+        project_path = await _resolve_project_path(ctx)
+        aep = _store.lookup_aep(project_path, args.checkpoint_id)
+        if aep is None:
+            return {
+                "ok": False,
+                "reverted": False,
+                "error": f"checkpoint not found: {args.checkpoint_id}",
+            }
+        branched_from = None
+        if args.branch_before_revert and project_path:
+            # best-effort branch; never block revert on its failure
+            try:
+                cid = _store.make_id()
+                dst = _store.aep_path(project_path, cid)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                tmpl = _load_jsx("checkpoint_create.jsx")
+                jsx = tmpl.substitute(dst_path=json.dumps(str(dst), ensure_ascii=False))
+                out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=60.0)
+                parsed = _try_json(out)
+                if isinstance(parsed, dict) and parsed.get("ok") and not parsed.get("skipped"):
+                    _store.write_meta(
+                        source_project_path=project_path, cid=cid,
+                        label=f"before-revert-{args.checkpoint_id[:8]}",
+                        active_comp_id=parsed.get("activeCompId"),
+                        current_time=float(parsed.get("currentTime") or 0.0),
+                        size_bytes=int(parsed.get("sizeBytes") or dst.stat().st_size),
+                    )
+                    branched_from = cid
+            except Exception as e:  # noqa: BLE001
+                log.warning("branch_before_revert failed: %s", e)
+        tmpl = _load_jsx("revert.jsx")
+        jsx = tmpl.substitute(aep_path=json.dumps(aep.as_posix(), ensure_ascii=False))
+        out = await bridge.invoke_ae_exec(code=jsx, timeout_sec=60.0)
+        parsed = _try_json(out)
+        if isinstance(parsed, dict) and parsed.get("ok"):
+            parsed["branchedFromId"] = branched_from
+        return parsed
+
+    return await progress.run_with_timeout(
+        ctx, _call(), timeout_sec=80.0, start_msg="ae.revert..."
+    )
 
 
 register("ae.revert", schemas.AeRevertArgs, _run_revert)

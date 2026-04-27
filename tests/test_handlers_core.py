@@ -72,12 +72,6 @@ async def test_read_props_routes_through_exec(mock_bridge):
 
 
 
-@pytest.mark.asyncio
-async def test_revert_is_stub(mock_bridge):
-    _, run_fn = HANDLERS["ae.revert"]
-    result = await run_fn(S.AeRevertArgs(checkpoint_id="abc"), None)
-    assert result["reverted"] is False
-    assert "NotImplemented" in result["reason"]
 
 
 @pytest.mark.asyncio
@@ -252,3 +246,55 @@ async def test_checkpoint_create_untitled_skipped(mock_bridge, tmp_path, monkeyp
     assert result.get("skipped") is True
     assert result.get("reason") == "untitled-project"
     assert result.get("id") is None
+
+
+@pytest.mark.asyncio
+async def test_revert_unknown_id_returns_error(tmp_path, monkeypatch):
+    from after_effects_mcp import checkpoint_store
+    store = checkpoint_store.CheckpointStore(root=tmp_path)
+    monkeypatch.setattr("after_effects_mcp.handlers.core._store", store)
+
+    async def _resp(*a, **kw):
+        return json.dumps({"ok": True, "path": "C:/Foo.aep"})
+    monkeypatch.setattr("after_effects_mcp.bridge.invoke_ae_exec", _resp)
+
+    from after_effects_mcp.handlers.core import _run_revert
+    args = schemas.AeRevertArgs(checkpoint_id="missing", branch_before_revert=False)
+    result = await _run_revert(args, ctx=None)
+    assert result["ok"] is False
+    assert "not found" in result["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_revert_known_id_calls_jsx(tmp_path, monkeypatch):
+    from after_effects_mcp import checkpoint_store
+    store = checkpoint_store.CheckpointStore(root=tmp_path)
+    monkeypatch.setattr("after_effects_mcp.handlers.core._store", store)
+
+    # Seed
+    d = store._dir_for("C:/Foo.aep")
+    d.mkdir(parents=True, exist_ok=True)
+    aep = d / "abc_x.aep"
+    aep.write_bytes(b"\x00" * 1024)
+    store.write_meta(source_project_path="C:/Foo.aep", cid="abc_x",
+                     label="seed", active_comp_id=None, current_time=0.0,
+                     size_bytes=1024)
+
+    calls = []
+    async def _resp(*a, **kw):
+        calls.append(kw.get("code", ""))
+        # First: project-path probe; second: revert.jsx
+        if "app.project.file" in kw.get("code", "") and len(calls) == 1:
+            return json.dumps({"ok": True, "path": "C:/Foo.aep"})
+        return json.dumps({"ok": True, "reverted": True,
+                           "openedPath": str(aep)})
+    monkeypatch.setattr("after_effects_mcp.bridge.invoke_ae_exec", _resp)
+
+    from after_effects_mcp.handlers.core import _run_revert
+    args = schemas.AeRevertArgs(checkpoint_id="abc_x", branch_before_revert=False)
+    result = await _run_revert(args, ctx=None)
+    assert result["ok"] is True
+    assert result.get("reverted") is True
+    # The second call to invoke_ae_exec should have rendered revert.jsx
+    aep_posix = aep.as_posix()
+    assert any(aep_posix in c for c in calls)
