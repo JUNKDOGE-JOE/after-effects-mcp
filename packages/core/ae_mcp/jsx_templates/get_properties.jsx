@@ -35,22 +35,25 @@
 
     var hits = [];
 
-    function visit(prop, layerId, pathSegs, depth) {
+    function visit(prop, layerId, pathSegs, matchSegs, depth) {
         if (depth > 6) return;
         if (prop.propertyType === PropertyType.PROPERTY) {
             if (matches(prop.name, prop.matchName)) {
                 var val = null;
                 try { val = prop.value; } catch (e) { }
                 var score = 0;
-                if (pathSegs[0] === "Transform") score += 10;
+                if (matchSegs[0] === "ADBE Transform Group") score += 10;
                 if (prop.name.toLowerCase().indexOf(orGroups[0][0] || "") !== -1) score += 5;
                 hits.push({
                     layerId: layerId,
+                    propName: prop.name,
+                    matchName: prop.matchName,
                     propPath: pathSegs.join("/"),
+                    matchPath: matchSegs.join("/"),
                     propType: String(prop.propertyValueType),
                     value: val,
                     hasExpression: prop.canSetExpression && (prop.expression !== ""),
-                    hasKeyframes: prop.numKeyframes > 0,
+                    hasKeyframes: prop.numKeys > 0,
                     _score: score
                 });
             }
@@ -58,7 +61,12 @@
             for (var i = 1; i <= prop.numProperties; i++) {
                 var child = prop.property(i);
                 if (!child) continue;
-                visit(child, layerId, pathSegs.concat([child.name]), depth + 1);
+                visit(
+                    child, layerId,
+                    pathSegs.concat([child.name]),
+                    matchSegs.concat([child.matchName]),
+                    depth + 1
+                );
             }
         }
     }
@@ -69,7 +77,7 @@
         for (var pi = 1; pi <= layer.numProperties; pi++) {
             var top = layer.property(pi);
             if (!top) continue;
-            visit(top, layerIds[li], [top.name], 0);
+            visit(top, layerIds[li], [top.name], [top.matchName], 0);
         }
     }
 

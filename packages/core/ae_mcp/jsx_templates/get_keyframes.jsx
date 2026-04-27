@@ -25,7 +25,7 @@
         if (t === KeyframeInterpolationType.HOLD) return "HOLD";
         return "UNKNOWN";
     }
-    var n = prop.numKeyframes;
+    var n = prop.numKeys || 0;
     var keyframes = [];
     for (var k = 1; k <= n; k++) {
         var entry = {

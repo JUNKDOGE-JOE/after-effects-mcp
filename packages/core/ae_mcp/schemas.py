@@ -7,9 +7,9 @@ LLM reads them in the tool-picker.
 
 from __future__ import annotations
 
-from typing import Any, List, Literal, Optional, Tuple, Union
+from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, constr
 
 
 # Common literal set used by several schemas (effects / layer types).
@@ -18,6 +18,7 @@ LayerType = Literal[
 ]
 
 SnapshotMethod = Literal["DesktopCopy", "PrintWindow"]
+NonNegativeFloat = Annotated[float, Field(ge=0)]
 
 
 class _StrictModel(BaseModel):
@@ -118,6 +119,28 @@ class AeSnapshotArgs(_StrictModel):
     method: SnapshotMethod = Field(
         "DesktopCopy",
         description="Capture method hint forwarded to the active Snapshotter; meaning is implementation-defined.",
+    )
+
+
+class AePreviewFrameArgs(_StrictModel):
+    """ae.previewFrame — render real AE comp frames to PNG files."""
+    comp_id: Optional[str] = Field(
+        None, description="AE comp id. Omit for the active comp."
+    )
+    time: Optional[float] = Field(
+        None, ge=0, description="Single frame time in seconds. Ignored when times is set."
+    )
+    times: Optional[List[NonNegativeFloat]] = Field(
+        None, description="Render multiple frame times in seconds."
+    )
+    out_dir: Optional[str] = Field(
+        None, description="Output directory. Default: temp ae_mcp_previews session directory."
+    )
+    include_base64: bool = Field(
+        False, description="Attach base64 PNG bytes to each returned frame."
+    )
+    scale: float = Field(
+        1.0, gt=0, le=4, description="Requested preview scale. MVP renders native comp size."
     )
 
 
@@ -235,6 +258,17 @@ class AeGetExpressionsArgs(_StrictModel):
     max_results: int = Field(200, ge=1, le=1000)
 
 
+class AeValidateExpressionsArgs(_StrictModel):
+    """ae.validateExpressions — force-evaluate expressions and report errors."""
+    comp_id: Optional[str] = Field(None, description="AE comp id. Omit for active comp.")
+    layer_ids: Optional[List[int]] = Field(None, description="Restrict to these layers.")
+    prop: Optional[str] = Field(None, description="matchName/name substring filter.")
+    sample_times: Optional[List[NonNegativeFloat]] = Field(
+        None, description="Times to evaluate. Default: current comp time."
+    )
+    max_results: int = Field(500, ge=1, le=2000)
+
+
 class AeGetKeyframesArgs(_StrictModel):
     """ae.getKeyframes — keyframe data for a property path."""
     comp_id: Optional[str] = Field(None)
@@ -243,6 +277,9 @@ class AeGetKeyframesArgs(_StrictModel):
 
 
 SearchScope = Literal["layers", "expressions", "effects", "comps", "items"]
+SkillTemplateType = Literal["jsx", "prompt"]
+SkillName = constr(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+RigType = Literal["transform_controller", "effect_controls", "puppet_pin_nulls", "apply_preset"]
 
 
 class AeSearchProjectArgs(_StrictModel):
@@ -253,6 +290,55 @@ class AeSearchProjectArgs(_StrictModel):
         description="Which kinds of objects to scan.",
     )
     limit: int = Field(100, ge=1, le=500)
+
+
+class AeSkillListArgs(_StrictModel):
+    """ae.skillList — list stored reusable prompt/JSX skills."""
+    include_templates: bool = Field(
+        False, description="When true, include full template and args_schema."
+    )
+
+
+class AeSkillCreateArgs(_StrictModel):
+    """ae.skillCreate — create a reusable local skill JSON file."""
+    name: SkillName = Field(..., description="Skill id: letters, numbers, dash, underscore.")
+    description: str = Field("", description="Short human description.")
+    template_type: SkillTemplateType = Field("jsx", description="'jsx' or 'prompt'.")
+    template: str = Field(..., min_length=1, description="Template text using ${arg} placeholders.")
+    args_schema: Dict[str, Dict[str, Any]] = Field(
+        default_factory=dict, description="Small JSON schema-ish arg metadata."
+    )
+    overwrite: bool = Field(False, description="Replace existing skill when true.")
+
+
+class AeSkillEditArgs(_StrictModel):
+    """ae.skillEdit — update an existing reusable skill."""
+    name: SkillName = Field(..., description="Existing skill name.")
+    description: Optional[str] = Field(None)
+    template_type: Optional[SkillTemplateType] = Field(None)
+    template: Optional[str] = Field(None, min_length=1)
+    args_schema: Optional[Dict[str, Dict[str, Any]]] = Field(None)
+
+
+class AeSkillDeleteArgs(_StrictModel):
+    """ae.skillDelete — delete a stored local skill."""
+    name: SkillName = Field(..., description="Skill name to delete.")
+
+
+class AeSkillUseArgs(_StrictModel):
+    """ae.skillUse — render a skill, optionally executing JSX skills in AE."""
+    name: SkillName = Field(..., description="Skill name to render/use.")
+    args: Dict[str, Any] = Field(default_factory=dict, description="Template argument values.")
+    execute: bool = Field(False, description="When true, execute rendered JSX in AE.")
+
+
+class AeCreateRigArgs(_StrictModel):
+    """ae.createRig — create controller/expression rigs or apply an AE preset."""
+    comp_id: Optional[str] = Field(None, description="AE comp id. Omit for the active comp.")
+    target_layer_id: int = Field(1, ge=1, description="1-based target layer index.")
+    rig_type: RigType = Field("transform_controller", description="Rig workflow to create.")
+    name: str = Field("Controller", min_length=1, description="Controller layer/effect name.")
+    options: Dict[str, Any] = Field(default_factory=dict, description="Rig-type-specific options.")
 
 
 # ---------------------------------------------------------------------------
@@ -269,6 +355,7 @@ SCHEMAS = {
     "ae.checkpoint": AeCheckpointArgs,
     "ae.revert": AeRevertArgs,
     "ae.snapshot": AeSnapshotArgs,
+    "ae.previewFrame": AePreviewFrameArgs,
     "ae.applyEffect": AeApplyEffectArgs,
     "ae.ping": AePingArgs,
     "ae.createLayer": AeCreateLayerArgs,
@@ -281,8 +368,15 @@ SCHEMAS = {
     "ae.scanPropertyTree": AeScanPropertyTreeArgs,
     "ae.inspectPropertyCapabilities": AeInspectPropertyCapabilitiesArgs,
     "ae.getExpressions": AeGetExpressionsArgs,
+    "ae.validateExpressions": AeValidateExpressionsArgs,
     "ae.getKeyframes": AeGetKeyframesArgs,
     "ae.searchProject": AeSearchProjectArgs,
+    "ae.skillList": AeSkillListArgs,
+    "ae.skillCreate": AeSkillCreateArgs,
+    "ae.skillEdit": AeSkillEditArgs,
+    "ae.skillDelete": AeSkillDeleteArgs,
+    "ae.skillUse": AeSkillUseArgs,
+    "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 22, f"expected 22 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 30, f"expected 30 verbs, got {len(SCHEMAS)}"

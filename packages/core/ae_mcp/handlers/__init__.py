@@ -24,3 +24,5 @@ def load_all() -> None:
     # Imported for side effects (registration via @register or explicit register() calls).
     from ae_mcp.handlers import core  # noqa: F401
     from ae_mcp.handlers import typed  # noqa: F401
+    from ae_mcp.handlers import skills  # noqa: F401
+    from ae_mcp.handlers import rig  # noqa: F401

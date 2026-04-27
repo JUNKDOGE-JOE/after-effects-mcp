@@ -100,6 +100,26 @@ def test_lookup_returns_path(tmp_path):
     assert store.lookup_aep(base, "missing") is None
 
 
+def test_list_from_checkpoint_file_uses_original_source(tmp_path):
+    store = CheckpointStore(root=tmp_path)
+    base = "C:/projects/p.aep"
+    d = store._dir_for(base)
+    cid = "abc_x"
+    _touch_aep(d / f"{cid}.aep")
+    store.write_meta(
+        source_project_path=base,
+        cid=cid,
+        label="seed",
+        active_comp_id=None,
+        current_time=0.0,
+        size_bytes=1024,
+    )
+
+    listed = store.list_checkpoints(str(d / f"{cid}.aep"), limit=10)
+    assert [c["id"] for c in listed] == [cid]
+    assert store.lookup_aep(str(d / f"{cid}.aep"), cid) == d / f"{cid}.aep"
+
+
 def test_prune_keeps_n_newest(tmp_path):
     store = CheckpointStore(root=tmp_path, keep=3)
     base = "C:/p.aep"

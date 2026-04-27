@@ -111,6 +111,238 @@ async def test_snapshot_error_on_no_snapshotter(monkeypatch):
     assert "snapshotter" in result["error"]
 
 
+class _FakeSnapshotter:
+    async def capture(self, out_path, *, hwnd=None, main_window=False, method="auto"):
+        out_path.write_bytes(b"png-bytes")
+        return {
+            "ok": True,
+            "path": str(out_path),
+            "bytes": out_path.stat().st_size,
+            "width": 800,
+            "height": 600,
+            "hwnd": hwnd,
+            "method": method,
+            "mainWindow": main_window,
+        }
+
+
+@pytest.mark.asyncio
+async def test_preview_frame_uses_viewer_snapshot_not_render(monkeypatch, mock_backend, tmp_path):
+    monkeypatch.setattr(
+        "ae_mcp.snapshot.discovery.select_snapshotter",
+        lambda: _FakeSnapshotter(),
+    )
+    mock_backend.set_response(json.dumps({
+        "ok": True,
+        "compId": "7",
+        "compName": "Preview",
+        "time": 0.5,
+    }))
+
+    _, run_fn = HANDLERS["ae.previewFrame"]
+    result = await run_fn(
+        S.AePreviewFrameArgs(comp_id="7", time=0.5, out_dir=str(tmp_path)),
+        None,
+    )
+
+    assert result["ok"] is True
+    assert result["compId"] == "7"
+    assert result["frames"][0]["sizeBytes"] == len(b"png-bytes")
+    assert result["frames"][0]["width"] == 800
+    assert result["frames"][0]["source"] == "viewer"
+    jsx = mock_backend.calls[-1]["code"]
+    assert "saveFrameToPng" not in jsx
+    assert "openInViewer" in jsx
+    assert "itemByID(7)" in jsx
+
+
+@pytest.mark.asyncio
+async def test_preview_frame_can_attach_base64(monkeypatch, mock_backend, tmp_path):
+    monkeypatch.setattr(
+        "ae_mcp.snapshot.discovery.select_snapshotter",
+        lambda: _FakeSnapshotter(),
+    )
+    mock_backend.set_response(json.dumps({
+        "ok": True,
+        "compId": "active",
+        "compName": "Preview",
+        "time": 0,
+    }))
+
+    _, run_fn = HANDLERS["ae.previewFrame"]
+    result = await run_fn(
+        S.AePreviewFrameArgs(out_dir=str(tmp_path), include_base64=True),
+        None,
+    )
+
+    assert result["frames"][0]["sizeBytes"] == len(b"png-bytes")
+    assert result["frames"][0]["base64"] == "cG5nLWJ5dGVz"
+
+
+@pytest.mark.asyncio
+async def test_preview_frame_errors_without_snapshotter(monkeypatch, mock_backend, tmp_path):
+    monkeypatch.setattr("ae_mcp.snapshot.discovery.select_snapshotter", lambda: None)
+    _, run_fn = HANDLERS["ae.previewFrame"]
+    result = await run_fn(S.AePreviewFrameArgs(out_dir=str(tmp_path)), None)
+    assert result["ok"] is False
+    assert "snapshotter" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_skill_crud_and_render(monkeypatch, tmp_path):
+    monkeypatch.setenv("AE_MCP_SKILL_DIR", str(tmp_path))
+    from ae_mcp.handlers.skills import (
+        _run_skill_create, _run_skill_delete, _run_skill_list, _run_skill_use,
+    )
+
+    created = await _run_skill_create(S.AeSkillCreateArgs(
+        name="wiggle-position",
+        description="Add wiggle expression",
+        template_type="jsx",
+        template='prop.expression = "wiggle(" + ${freq} + "," + ${amp} + ")";',
+        args_schema={
+            "freq": {"type": "number", "default": 2},
+            "amp": {"type": "number", "default": 30},
+        },
+    ), None)
+    assert created["ok"] is True
+
+    listed = await _run_skill_list(S.AeSkillListArgs(), None)
+    assert listed["skills"] == [{
+        "name": "wiggle-position",
+        "description": "Add wiggle expression",
+        "template_type": "jsx",
+        "args": ["freq", "amp"],
+    }]
+
+    rendered = await _run_skill_use(S.AeSkillUseArgs(name="wiggle-position"), None)
+    assert rendered["ok"] is True
+    assert "wiggle(" in rendered["rendered"]
+    assert "30" in rendered["rendered"]
+
+    deleted = await _run_skill_delete(S.AeSkillDeleteArgs(name="wiggle-position"), None)
+    assert deleted["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_skill_create_requires_overwrite(monkeypatch, tmp_path):
+    monkeypatch.setenv("AE_MCP_SKILL_DIR", str(tmp_path))
+    from ae_mcp.handlers.skills import _run_skill_create
+
+    args = S.AeSkillCreateArgs(name="same", description="x", template="one")
+    assert (await _run_skill_create(args, None))["ok"] is True
+    duplicate = await _run_skill_create(args, None)
+    assert duplicate["ok"] is False
+    assert "exists" in duplicate["error"]
+
+
+@pytest.mark.asyncio
+async def test_skill_use_missing_arg_fails(monkeypatch, tmp_path):
+    monkeypatch.setenv("AE_MCP_SKILL_DIR", str(tmp_path))
+    from ae_mcp.handlers.skills import _run_skill_create, _run_skill_use
+
+    await _run_skill_create(S.AeSkillCreateArgs(
+        name="needs-arg",
+        description="x",
+        template="${missing}",
+        args_schema={"missing": {"type": "number"}},
+    ), None)
+    result = await _run_skill_use(S.AeSkillUseArgs(name="needs-arg"), None)
+    assert result["ok"] is False
+    assert "missing" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_skill_use_execute_runs_jsx(monkeypatch, tmp_path, mock_backend):
+    monkeypatch.setenv("AE_MCP_SKILL_DIR", str(tmp_path))
+    from ae_mcp.handlers.skills import _run_skill_create, _run_skill_use
+
+    mock_backend.set_response(json.dumps({"ok": True, "mutated": True}))
+    await _run_skill_create(S.AeSkillCreateArgs(
+        name="exec-jsx",
+        description="x",
+        template="JSON.stringify({ok:true,value:${value}})",
+        args_schema={"value": {"type": "number"}},
+    ), None)
+    result = await _run_skill_use(
+        S.AeSkillUseArgs(name="exec-jsx", args={"value": 42}, execute=True),
+        None,
+    )
+    assert result["ok"] is True
+    assert result["mutated"] is True
+    assert "42" in mock_backend.calls[-1]["code"]
+
+
+@pytest.mark.asyncio
+async def test_validate_expressions_builds_jsx_and_reports_invalid(mock_backend):
+    mock_backend.set_response(json.dumps({
+        "ok": True,
+        "valid": False,
+        "checked": 1,
+        "errors": [{
+            "layerId": 1,
+            "propPath": "Text/Source Text",
+            "expressionError": "bad slider reference",
+        }],
+    }))
+    from ae_mcp.handlers.typed import _run_validate_expressions
+
+    result = await _run_validate_expressions(
+        S.AeValidateExpressionsArgs(comp_id="12", layer_ids=[1], sample_times=[0, 1]),
+        None,
+    )
+    assert result["valid"] is False
+    assert result["errors"][0]["expressionError"] == "bad slider reference"
+    jsx = mock_backend.calls[-1]["code"]
+    assert "itemByID(12)" in jsx
+    assert "[0.0, 1.0]" in jsx
+
+
+@pytest.mark.asyncio
+async def test_create_rig_builds_transform_controller_jsx(mock_backend):
+    mock_backend.set_response(json.dumps({
+        "ok": True,
+        "rigType": "transform_controller",
+        "controllerLayerId": 2,
+        "targetLayerId": 1,
+        "createdLayers": [2],
+        "wiredProperties": ["Transform/Position"],
+    }))
+    from ae_mcp.handlers.rig import _run_create_rig
+
+    result = await _run_create_rig(
+        S.AeCreateRigArgs(
+            comp_id="12",
+            target_layer_id=1,
+            rig_type="transform_controller",
+            name="Main CTRL",
+            options={"position": True, "rotation": False, "scale": False, "opacity": False},
+        ),
+        None,
+    )
+    assert result["ok"] is True
+    jsx = mock_backend.calls[-1]["code"]
+    assert "Main CTRL" in jsx
+    assert "transform_controller" in jsx
+    assert "itemByID(12)" in jsx
+
+
+@pytest.mark.asyncio
+async def test_create_rig_missing_preset_path_returns_backend_error(mock_backend):
+    mock_backend.set_response(json.dumps({
+        "ok": False,
+        "error": "preset_path is required for apply_preset",
+    }))
+    from ae_mcp.handlers.rig import _run_create_rig
+
+    result = await _run_create_rig(
+        S.AeCreateRigArgs(target_layer_id=1, rig_type="apply_preset"),
+        None,
+    )
+    assert result["ok"] is False
+    assert "preset_path" in result["error"]
+
+
 import pytest
 from ae_mcp import schemas
 from ae_mcp.handlers.core import _run_ping  # noqa: F401 — added in this task

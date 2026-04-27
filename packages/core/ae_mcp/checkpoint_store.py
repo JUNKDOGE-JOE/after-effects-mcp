@@ -61,6 +61,24 @@ class CheckpointStore:
     def _dir_for(self, source_path: Optional[str]) -> Path:
         return self.root / _project_basename(source_path)
 
+    def _canonical_source_path(self, source_path: Optional[str]) -> Optional[str]:
+        if not source_path:
+            return source_path
+        p = Path(source_path)
+        try:
+            p.resolve().relative_to(self.root.resolve())
+        except (OSError, ValueError):
+            return source_path
+
+        meta_path = p.with_suffix(".json")
+        if not meta_path.exists():
+            return source_path
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return source_path
+        return meta.get("sourceProjectPath") or source_path
+
     def aep_path(self, source_path: Optional[str], cid: str) -> Path:
         return self._dir_for(source_path) / f"{cid}.aep"
 
@@ -109,6 +127,7 @@ class CheckpointStore:
     # ------------------------------------------------------------------- read
 
     def list_checkpoints(self, source_path: Optional[str], *, limit: int = 20) -> List[Dict[str, Any]]:
+        source_path = self._canonical_source_path(source_path)
         d = self._dir_for(source_path)
         if not d.exists():
             return []
@@ -132,6 +151,7 @@ class CheckpointStore:
         return entries[:limit]
 
     def lookup_aep(self, source_path: Optional[str], cid: str) -> Optional[Path]:
+        source_path = self._canonical_source_path(source_path)
         p = self.aep_path(source_path, cid)
         return p if p.exists() else None
 
@@ -139,6 +159,7 @@ class CheckpointStore:
 
     def prune(self, source_path: Optional[str]) -> List[str]:
         """Delete checkpoints beyond `self.keep` newest. Return removed ids."""
+        source_path = self._canonical_source_path(source_path)
         d = self._dir_for(source_path)
         if not d.exists():
             return []

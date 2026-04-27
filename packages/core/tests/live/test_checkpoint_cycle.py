@@ -76,7 +76,13 @@ async def test_checkpoint_create_revert_roundtrip(clean_project, tmp_path):
     # 6. Verify position back to [100,100,0]
     check_jsx = (
         '(function(){'
-        'var c = app.project.itemByName("CycleProbe");'
+        'var c = null;'
+        'for (var i = 1; i <= app.project.numItems; i++) {'
+        '  if (app.project.item(i).name === "CycleProbe") {'
+        '    c = app.project.item(i);'
+        '    break;'
+        '  }'
+        '}'
         'if (!c) return JSON.stringify({ok:false,error:"comp gone"});'
         'var pos = c.layer(1).property("ADBE Transform Group").property("ADBE Position").value;'
         'return JSON.stringify({ok:true, x:pos[0], y:pos[1]});'

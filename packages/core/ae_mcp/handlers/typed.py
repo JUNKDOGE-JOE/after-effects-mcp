@@ -455,6 +455,42 @@ register("ae.getExpressions", schemas.AeGetExpressionsArgs, _run_get_expressions
 
 
 # ---------------------------------------------------------------------------
+# ae.validateExpressions
+# ---------------------------------------------------------------------------
+
+
+def render_validate_expressions(args: schemas.AeValidateExpressionsArgs) -> str:
+    tmpl = _load_template("validate_expressions.jsx")
+    return tmpl.substitute(
+        comp_expr=_comp_expr(args.comp_id),
+        layer_ids_js=_json_literal(list(args.layer_ids)) if args.layer_ids else "null",
+        prop_filter_js=_json_literal(args.prop) if args.prop else "null",
+        sample_times_js=(
+            _json_literal([float(t) for t in args.sample_times])
+            if args.sample_times is not None else "null"
+        ),
+        max_results=int(args.max_results),
+    )
+
+
+async def _run_validate_expressions(
+    args: schemas.AeValidateExpressionsArgs, ctx: Any
+) -> Any:
+    jsx = render_validate_expressions(args)
+
+    async def _call() -> Any:
+        out = await _backend().exec(code=jsx, timeout_sec=30.0)
+        return _try_json_or_raw(out)
+
+    return await progress.run_with_timeout(
+        ctx, _call(), timeout_sec=40.0, start_msg="ae.validateExpressions..."
+    )
+
+
+register("ae.validateExpressions", schemas.AeValidateExpressionsArgs, _run_validate_expressions)
+
+
+# ---------------------------------------------------------------------------
 # ae.getKeyframes
 # ---------------------------------------------------------------------------
 

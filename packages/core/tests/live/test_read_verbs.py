@@ -52,8 +52,8 @@ async def test_get_properties_finds_position(probe_scene):
     result = await _run_get_properties(args, ctx=None)
     assert result["ok"] is True
     assert result["total"] >= 1
-    paths = [r["propPath"] for r in result["results"]]
-    assert any("Position" in p for p in paths)
+    paths = [r.get("matchPath") or r["propPath"] for r in result["results"]]
+    assert any("ADBE Position" in p or "Position" in p for p in paths)
 
 
 @pytest.mark.asyncio

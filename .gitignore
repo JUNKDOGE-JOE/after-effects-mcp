@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 *.egg-info/
 .pytest_cache/
+packages/core/tests/live/_artifacts/
 
 # uv / venv
 .venv/
@@ -11,6 +12,8 @@ __pycache__/
 # Build artifacts
 dist/
 build/
+release/
+plugin/host/node_modules/
 
 # OS
 .DS_Store

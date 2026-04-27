@@ -22,7 +22,7 @@
         };
         if (prop.propertyType === PropertyType.PROPERTY) {
             n.propType = String(prop.propertyValueType);
-            n.numKeyframes = prop.numKeyframes;
+            n.numKeyframes = prop.numKeys || 0;
             n.hasExpression = prop.canSetExpression && (prop.expression !== "");
             if (includeValues) {
                 try { n.value = prop.value; } catch (e) { }

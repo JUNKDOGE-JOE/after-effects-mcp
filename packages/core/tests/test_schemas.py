@@ -8,16 +8,20 @@ from pydantic import ValidationError
 from ae_mcp import schemas as S
 
 
-def test_registry_has_22_verbs():
-    assert len(S.SCHEMAS) == 22, f"expected 22 verbs, got {len(S.SCHEMAS)}"
+def test_registry_has_30_verbs():
+    assert len(S.SCHEMAS) == 30, f"expected 30 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.layers", "ae.readProps", "ae.exec",
-        "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.applyEffect", "ae.ping",
+        "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.previewFrame",
+        "ae.applyEffect", "ae.ping",
         "ae.createLayer", "ae.setProperty", "ae.moveLayer", "ae.selectLayers",
         "ae.setTime", "ae.getTime",
         "ae.getProperties", "ae.scanPropertyTree",
-        "ae.inspectPropertyCapabilities", "ae.getExpressions",
+        "ae.inspectPropertyCapabilities", "ae.getExpressions", "ae.validateExpressions",
         "ae.getKeyframes", "ae.searchProject",
+        "ae.skillList", "ae.skillCreate", "ae.skillEdit",
+        "ae.skillDelete", "ae.skillUse",
+        "ae.createRig",
     }
 
 
@@ -75,6 +79,32 @@ def test_snapshot_method_enum():
     assert S.AeSnapshotArgs().method == "DesktopCopy"
     with pytest.raises(ValidationError):
         S.AeSnapshotArgs(method="Bogus")
+
+
+def test_preview_frame_defaults():
+    args = S.AePreviewFrameArgs()
+    assert args.comp_id is None
+    assert args.time is None
+    assert args.times is None
+    assert args.out_dir is None
+    assert args.include_base64 is False
+    assert args.scale == 1.0
+
+
+def test_preview_frame_accepts_time_modes():
+    single = S.AePreviewFrameArgs(time=0.5)
+    multi = S.AePreviewFrameArgs(times=[0.0, 1.0])
+    assert single.time == 0.5
+    assert multi.times == [0.0, 1.0]
+
+
+def test_preview_frame_rejects_invalid_ranges():
+    with pytest.raises(ValidationError):
+        S.AePreviewFrameArgs(time=-0.1)
+    with pytest.raises(ValidationError):
+        S.AePreviewFrameArgs(times=[0.0, -1.0])
+    with pytest.raises(ValidationError):
+        S.AePreviewFrameArgs(scale=0)
 
 
 def test_apply_effect_required():
@@ -225,6 +255,19 @@ def test_get_expressions_layer_ids_optional():
     assert a.layer_ids == [1, 2]
 
 
+def test_validate_expressions_defaults():
+    a = S.AeValidateExpressionsArgs(comp_id="12")
+    assert a.comp_id == "12"
+    assert a.layer_ids is None
+    assert a.sample_times is None
+    assert a.max_results == 500
+
+
+def test_validate_expressions_sample_times_non_negative():
+    with pytest.raises(ValidationError):
+        S.AeValidateExpressionsArgs(comp_id="12", sample_times=[0, -1])
+
+
 def test_get_keyframes_required():
     a = S.AeGetKeyframesArgs(layer_id=1, path="Transform/Position")
     assert a.layer_id == 1
@@ -246,3 +289,40 @@ def test_search_project_invalid_scope():
     from pydantic import ValidationError
     with pytest.raises(ValidationError):
         S.AeSearchProjectArgs(query="x", scope=["bogus"])
+
+
+def test_skill_create_defaults():
+    args = S.AeSkillCreateArgs(
+        name="wiggle-position",
+        description="Add wiggle",
+        template="wiggle(${freq}, ${amp})",
+    )
+    assert args.template_type == "jsx"
+    assert args.args_schema == {}
+    assert args.overwrite is False
+
+
+def test_skill_name_validation():
+    with pytest.raises(ValidationError):
+        S.AeSkillCreateArgs(name="../bad", description="x", template="x")
+    with pytest.raises(ValidationError):
+        S.AeSkillDeleteArgs(name="")
+
+
+def test_skill_use_defaults():
+    args = S.AeSkillUseArgs(name="wiggle-position")
+    assert args.args == {}
+    assert args.execute is False
+
+
+def test_create_rig_defaults():
+    args = S.AeCreateRigArgs(target_layer_id=1)
+    assert args.comp_id is None
+    assert args.rig_type == "transform_controller"
+    assert args.name == "Controller"
+    assert args.options == {}
+
+
+def test_create_rig_rejects_invalid_type():
+    with pytest.raises(ValidationError):
+        S.AeCreateRigArgs(target_layer_id=1, rig_type="binary_ffx")

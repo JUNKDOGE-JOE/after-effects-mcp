@@ -3,10 +3,14 @@ import pytest
 from ae_mcp.backends.base import Backend, ALL_VERBS
 
 
-def test_all_verbs_constant_has_22_entries():
-    assert len(ALL_VERBS) == 22
+def test_all_verbs_constant_has_30_entries():
+    assert len(ALL_VERBS) == 30
     assert "ae.exec" in ALL_VERBS
     assert "ae.ping" in ALL_VERBS
+    assert "ae.previewFrame" in ALL_VERBS
+    assert "ae.skillUse" in ALL_VERBS
+    assert "ae.createRig" in ALL_VERBS
+    assert "ae.validateExpressions" in ALL_VERBS
     assert "ae.searchProject" in ALL_VERBS
     assert "ae.isolateToggle" not in ALL_VERBS
     assert "ae.toastQuery" not in ALL_VERBS
@@ -24,7 +28,7 @@ def test_backend_subclass_must_define_exec_health_from_env():
         Incomplete()
 
 
-def test_default_supported_verbs_returns_all_24():
+def test_default_supported_verbs_returns_all_known_verbs():
     class Minimal(Backend):
         name = "min"
         async def exec(self, code, **kw): return ""

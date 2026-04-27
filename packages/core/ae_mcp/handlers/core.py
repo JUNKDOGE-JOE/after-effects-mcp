@@ -13,6 +13,10 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
+import base64
+import tempfile
+import uuid
 from pathlib import Path
 from string import Template
 from typing import Any, Optional
@@ -51,10 +55,25 @@ def _try_json(text: str) -> Any:
 
 _store = checkpoint_store.CheckpointStore()
 _TEMPLATES = Path(__file__).resolve().parent.parent / "jsx_templates"
+_PREVIEW_SESSION_ID = uuid.uuid4().hex[:10]
 
 
 def _load_jsx(name: str) -> Template:
     return Template((_TEMPLATES / name).read_text(encoding="utf-8"))
+
+
+def _ensure_checkpoint_file(project_path: str, dst: Path, parsed: dict[str, Any]) -> int | None:
+    size = int(parsed.get("sizeBytes") or 0)
+    if dst.exists() and size > 0:
+        return max(size, dst.stat().st_size)
+
+    src = Path(project_path)
+    if src.exists():
+        shutil.copy2(src, dst)
+
+    if not dst.exists():
+        return None
+    return dst.stat().st_size
 
 
 async def _resolve_project_path(ctx: Any) -> Optional[str]:
@@ -180,14 +199,18 @@ async def _run_exec(args: schemas.AeExecArgs, ctx: Any) -> Any:
                         if cp_parsed.get("skipped"):
                             checkpoint_skipped = cp_parsed.get("reason") or "skipped"
                         else:
-                            _store.write_meta(
-                                source_project_path=project_path, cid=cid,
-                                label=args.checkpoint_label,
-                                active_comp_id=cp_parsed.get("activeCompId"),
-                                current_time=float(cp_parsed.get("currentTime") or 0.0),
-                                size_bytes=int(cp_parsed.get("sizeBytes") or dst.stat().st_size),
-                            )
-                            _store.prune(project_path)
+                            size_bytes = _ensure_checkpoint_file(project_path, dst, cp_parsed)
+                            if size_bytes is None:
+                                checkpoint_skipped = "checkpoint-file-missing"
+                            else:
+                                _store.write_meta(
+                                    source_project_path=project_path, cid=cid,
+                                    label=args.checkpoint_label,
+                                    active_comp_id=cp_parsed.get("activeCompId"),
+                                    current_time=float(cp_parsed.get("currentTime") or 0.0),
+                                    size_bytes=size_bytes,
+                                )
+                                _store.prune(project_path)
                 except Exception as e:  # noqa: BLE001
                     log.warning("auto-checkpoint failed: %s", e)
                     checkpoint_skipped = f"checkpoint-failed: {e}"
@@ -254,7 +277,14 @@ async def _run_checkpoint(args: schemas.AeCheckpointArgs, ctx: Any) -> Any:
             return parsed
         if parsed.get("skipped"):
             return parsed  # untitled bubbled up from JSX
-        size_bytes = int(parsed.get("sizeBytes") or dst.stat().st_size)
+        size_bytes = _ensure_checkpoint_file(project_path, dst, parsed)
+        if size_bytes is None:
+            return {
+                "ok": False,
+                "error": "checkpoint file missing after AE copy",
+                "path": str(dst),
+                "backendResult": parsed,
+            }
         _store.write_meta(
             source_project_path=project_path,
             cid=cid, label=args.label,
@@ -308,7 +338,7 @@ async def _run_revert(args: schemas.AeRevertArgs, ctx: Any) -> Any:
                         label=f"before-revert-{args.checkpoint_id[:8]}",
                         active_comp_id=parsed.get("activeCompId"),
                         current_time=float(parsed.get("currentTime") or 0.0),
-                        size_bytes=int(parsed.get("sizeBytes") or dst.stat().st_size),
+                        size_bytes=_ensure_checkpoint_file(project_path, dst, parsed) or 0,
                     )
                     branched_from = cid
             except Exception as e:  # noqa: BLE001
@@ -355,6 +385,128 @@ async def _run_snapshot(args: schemas.AeSnapshotArgs, ctx: Any) -> Any:
 
 
 register("ae.snapshot", schemas.AeSnapshotArgs, _run_snapshot)
+
+
+# ---------------------------------------------------------------------------
+# ae.previewFrame — fast viewer capture, not a real render.
+# ---------------------------------------------------------------------------
+
+
+def _default_preview_dir() -> Path:
+    return Path(tempfile.gettempdir()) / "ae_mcp_previews" / _PREVIEW_SESSION_ID
+
+
+def _preview_frame_requests(args: schemas.AePreviewFrameArgs, out_dir: Path) -> list[dict[str, Any]]:
+    raw_times: list[float | None]
+    if args.times is not None:
+        raw_times = list(args.times)
+    elif args.time is not None:
+        raw_times = [args.time]
+    else:
+        raw_times = [None]
+
+    comp_part = args.comp_id or "active"
+    call_id = uuid.uuid4().hex[:8]
+    requests: list[dict[str, Any]] = []
+    for index, frame_time in enumerate(raw_times):
+        if frame_time is None:
+            stem = f"{comp_part}_current_{index}_{call_id}"
+        else:
+            stem = f"{comp_part}_{frame_time:.6f}_{index}_{call_id}".replace(".", "_")
+        safe_stem = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in stem)
+        requests.append({
+            "time": frame_time,
+            "path": str(out_dir / f"{safe_stem}.png"),
+        })
+    return requests
+
+
+def _attach_preview_file_data(parsed: dict[str, Any], include_base64: bool) -> dict[str, Any]:
+    frames = parsed.get("frames")
+    if not isinstance(frames, list):
+        return parsed
+
+    for frame in frames:
+        if not isinstance(frame, dict):
+            continue
+        path_value = frame.get("path")
+        if not isinstance(path_value, str):
+            continue
+        p = Path(path_value)
+        if p.exists():
+            frame["sizeBytes"] = p.stat().st_size
+            if include_base64:
+                frame["base64"] = base64.b64encode(p.read_bytes()).decode("ascii")
+    return parsed
+
+
+async def _run_preview_frame(args: schemas.AePreviewFrameArgs, ctx: Any) -> Any:
+    from ae_mcp.handlers.typed import _comp_expr  # type: ignore
+    from ae_mcp.snapshot import discovery as _snap_discovery
+
+    snapper = _snap_discovery.select_snapshotter()
+    if snapper is None:
+        return {"ok": False, "error": "no snapshotter installed (try `pip install ae-mcp-snapshot-mss`)"}
+
+    out_dir = Path(args.out_dir) if args.out_dir else _default_preview_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    frame_requests = _preview_frame_requests(args, out_dir)
+    tmpl = _load_jsx("preview_viewer.jsx")
+
+    async def _call() -> Any:
+        frames: list[dict[str, Any]] = []
+        comp_id: str | None = None
+        comp_name: str | None = None
+
+        for frame_request in frame_requests:
+            jsx = tmpl.substitute(
+                comp_expr=_comp_expr(args.comp_id),
+                time=json.dumps(frame_request["time"]),
+            )
+            out = await _backend().exec(code=jsx, timeout_sec=15.0)
+            prepared = _try_json(out)
+            if not isinstance(prepared, dict) or not prepared.get("ok"):
+                return prepared
+
+            snap = await snapper.capture(
+                Path(frame_request["path"]),
+                main_window=True,
+                method="ViewerCapture",
+            )
+            if not snap.get("ok"):
+                return snap
+
+            comp_id = str(prepared.get("compId"))
+            comp_name = prepared.get("compName")
+            frame = {
+                "time": prepared.get("time"),
+                "path": snap.get("path"),
+                "width": snap.get("width"),
+                "height": snap.get("height"),
+                "sizeBytes": snap.get("bytes"),
+                "source": "viewer",
+                "method": snap.get("method"),
+                "compId": comp_id,
+            }
+            if args.include_base64 and frame["path"]:
+                p = Path(str(frame["path"]))
+                if p.exists():
+                    frame["base64"] = base64.b64encode(p.read_bytes()).decode("ascii")
+            frames.append(frame)
+
+        return {
+            "ok": True,
+            "compId": comp_id,
+            "compName": comp_name,
+            "frames": frames,
+        }
+
+    return await progress.run_with_timeout(
+        ctx, _call(), timeout_sec=60.0, start_msg="ae.previewFrame..."
+    )
+
+
+register("ae.previewFrame", schemas.AePreviewFrameArgs, _run_preview_frame)
 
 
 # ---------------------------------------------------------------------------

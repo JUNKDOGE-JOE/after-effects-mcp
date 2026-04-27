@@ -16,7 +16,6 @@ class HttpBridge(Backend):
 
     def __init__(self, url: str) -> None:
         self.url = url.rstrip("/")
-        self._http = httpx.AsyncClient(timeout=30.0)
 
     @classmethod
     def from_env(cls) -> "HttpBridge":
@@ -25,7 +24,8 @@ class HttpBridge(Backend):
 
     async def health_check(self, timeout_sec: float = 5.0) -> bool:
         try:
-            r = await self._http.get(f"{self.url}/health", timeout=timeout_sec)
+            async with httpx.AsyncClient(timeout=timeout_sec) as http:
+                r = await http.get(f"{self.url}/health")
             return r.status_code == 200 and r.json().get("ok") is True
         except Exception:  # noqa: BLE001
             return False
@@ -45,11 +45,8 @@ class HttpBridge(Backend):
             "timeoutMs": int(timeout_sec * 1000),
         }
         try:
-            r = await self._http.post(
-                f"{self.url}/exec",
-                json=payload,
-                timeout=timeout_sec + 5.0,
-            )
+            async with httpx.AsyncClient(timeout=timeout_sec + 5.0) as http:
+                r = await http.post(f"{self.url}/exec", json=payload)
         except httpx.HTTPError as e:
             raise BackendError(f"HttpBridge: HTTP error: {e}") from e
 
@@ -63,4 +60,4 @@ class HttpBridge(Backend):
         return body.get("result", "")
 
     async def shutdown(self) -> None:
-        await self._http.aclose()
+        return None

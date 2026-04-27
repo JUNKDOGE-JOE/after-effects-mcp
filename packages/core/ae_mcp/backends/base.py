@@ -8,12 +8,17 @@ from typing import Optional, Set
 ALL_VERBS: Set[str] = {
     "ae.init", "ae.overview", "ae.layers", "ae.readProps", "ae.exec",
     "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.applyEffect",
+    "ae.previewFrame",
     "ae.createLayer", "ae.setProperty", "ae.moveLayer", "ae.selectLayers",
     "ae.setTime", "ae.getTime",
     "ae.ping",
     "ae.getProperties", "ae.scanPropertyTree",
     "ae.inspectPropertyCapabilities", "ae.getExpressions",
+    "ae.validateExpressions",
     "ae.getKeyframes", "ae.searchProject",
+    "ae.skillList", "ae.skillCreate", "ae.skillEdit",
+    "ae.skillDelete", "ae.skillUse",
+    "ae.createRig",
 }
 
 
@@ -54,7 +59,7 @@ class Backend(ABC):
         Called once at server startup; failure does NOT abort startup."""
 
     def supported_verbs(self) -> Set[str]:
-        """Default = all 24. Subset return → unsupported verbs hidden from tools/list."""
+        """Default = all known verbs. Subset return -> unsupported verbs hidden from tools/list."""
         return ALL_VERBS
 
     @classmethod

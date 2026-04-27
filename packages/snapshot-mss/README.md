@@ -8,3 +8,7 @@ rect translation is OS-specific.
 
 ## Install
     pip install ae-mcp-snapshot-mss
+
+## License
+
+MIT.

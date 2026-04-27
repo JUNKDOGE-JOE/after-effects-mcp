@@ -19,7 +19,7 @@ dev = [
 asyncio_mode = "auto"
 testpaths = ["packages/core/tests", "packages/bridge/tests", "packages/snapshot-mss/tests"]
 markers = [
-    "live: requires real AE + a backend reachable; opt-in via AEBM_LIVE_TESTS=1",
+    "live: requires real AE + a backend reachable; opt-in via AE_MCP_LIVE_TESTS=1",
     "live_smoke: 3-verb handshake subset of live tests",
 ]
-addopts = "-m 'not live and not live_smoke'"
+addopts = "--import-mode=importlib -m 'not live and not live_smoke'"

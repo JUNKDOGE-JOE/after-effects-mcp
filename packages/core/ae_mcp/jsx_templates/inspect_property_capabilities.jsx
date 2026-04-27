@@ -50,7 +50,7 @@
         minValue: prop.hasMin ? prop.minValue : null,
         maxValue: prop.hasMax ? prop.maxValue : null,
         unitsText: prop.unitsText || null,
-        numKeyframes: prop.numKeyframes,
+        numKeyframes: prop.numKeys || 0,
         hasExpression: (prop.canSetExpression && prop.expression !== "")
     });
 })()

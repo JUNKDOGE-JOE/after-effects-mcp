@@ -9,3 +9,7 @@ this package wraps them as the `Backend` ABC for ae-mcp core.
 
     AE_MCP_BACKEND      = ae-mcp
     AE_MCP_PLUGIN_URL   = http://127.0.0.1:11488   # default
+
+## License
+
+MIT.
