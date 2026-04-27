@@ -24,6 +24,21 @@ from ae_mcp.handlers import HANDLERS, load_all
 log = logging.getLogger("ae_mcp.server")
 
 
+def _filtered_tool_names() -> set:
+    """Return verb names this server should expose, given active backend
+    capabilities + whether a snapshotter is installed."""
+    from ae_mcp.backends import discovery as _discovery
+    from ae_mcp.snapshot import discovery as _snap_discovery
+    try:
+        backend = _discovery.select_backend()
+        supported = backend.supported_verbs()
+    except Exception:
+        return set()
+    if _snap_discovery.select_snapshotter() is None:
+        supported = supported - {"ae.snapshot"}
+    return supported
+
+
 def _format_result(result: Any) -> str:
     """Coerce handler return value into MCP text content.
 
@@ -48,8 +63,11 @@ def build_server() -> Server:
 
     @server.list_tools()
     async def _list_tools() -> List[Tool]:
+        allowed = _filtered_tool_names()
         tools: List[Tool] = []
         for verb_name, (schema_cls, _run_fn) in HANDLERS.items():
+            if verb_name not in allowed:
+                continue
             # pydantic v2: .model_json_schema() returns the full JSON schema.
             try:
                 input_schema = schema_cls.model_json_schema()

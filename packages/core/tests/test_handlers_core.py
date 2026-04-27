@@ -101,24 +101,14 @@ async def test_apply_effect_builds_jsx(mock_backend):
 
 
 @pytest.mark.asyncio
-async def test_snapshot_error_on_non_windows(monkeypatch):
-    """When ae_mcp.snapshot import fails, handler returns a clean error.
-    Uses monkeypatch to make the import fail."""
-    import sys
+async def test_snapshot_error_on_no_snapshotter(monkeypatch):
+    """When no snapshotter is installed, handler returns a clean error."""
+    from unittest.mock import patch
     _, run_fn = HANDLERS["ae.snapshot"]
-    # Force the import to fail by temporarily removing the module and
-    # poisoning the module cache entry.
-    orig = sys.modules.pop("ae_mcp.snapshot", None)
-    sys.modules["ae_mcp.snapshot"] = None  # type: ignore[assignment]
-    try:
+    with patch("ae_mcp.snapshot.discovery._scan_entry_points", return_value={}):
         result = await run_fn(S.AeSnapshotArgs(), None)
-        assert result["ok"] is False
-        assert "unavailable" in result["error"]
-    finally:
-        if orig is not None:
-            sys.modules["ae_mcp.snapshot"] = orig
-        else:
-            sys.modules.pop("ae_mcp.snapshot", None)
+    assert result["ok"] is False
+    assert "snapshotter" in result["error"]
 
 
 import pytest

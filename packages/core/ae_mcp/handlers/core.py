@@ -335,20 +335,20 @@ register("ae.revert", schemas.AeRevertArgs, _run_revert)
 
 
 async def _run_snapshot(args: schemas.AeSnapshotArgs, ctx: Any) -> Any:
+    from ae_mcp.snapshot import discovery as _snap_discovery
+    snapper = _snap_discovery.select_snapshotter()
+    if snapper is None:
+        return {"ok": False, "error":
+                "no snapshotter installed (try `pip install ae-mcp-snapshot-mss`)"}
     try:
-        from ae_mcp import snapshot as snap
-    except ImportError as e:  # non-Windows
-        return {"ok": False, "error": f"snapshot unavailable: {e}"}
-
-    # ctypes calls are synchronous; run directly. Typical cost ~100-200ms.
-    try:
-        result = snap.capture_ae_viewer(
-            out_path=args.out_path,
+        from pathlib import Path
+        out_path = Path(args.out_path) if args.out_path else None
+        return await snapper.capture(
+            out_path,
             hwnd=args.hwnd,
             main_window=args.main_window,
             method=args.method,
         )
-        return result
     except Exception as e:  # noqa: BLE001
         log.exception("ae.snapshot failed")
         return {"ok": False, "error": str(e)}
