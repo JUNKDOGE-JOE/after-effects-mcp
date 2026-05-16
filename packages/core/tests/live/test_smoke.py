@@ -32,6 +32,29 @@ async def test_exec_arithmetic(live_backend):
 
 
 @pytest.mark.asyncio
+async def test_exec_multistatement_with_undo_group(live_backend):
+    """Multi-statement JSX must run every statement under an undo group.
+
+    Regression: the plugin used to wrap user code as
+    `try { return <code>; }` which silently dropped everything past the
+    first statement for multi-statement scripts (`return var x = 1; ...`
+    is not a valid `return` expression).
+
+    This test confirms all statements execute AND the value of the last
+    expression is returned to the caller.
+    """
+    code = (
+        'var a = 10;'
+        'var b = 20;'
+        'var c = a + b;'
+        'JSON.stringify({ok:true, sum:c});'
+    )
+    out = await live_backend.exec(code=code, undo_group="multi-stmt-test", timeout_sec=10.0)
+    parsed = json.loads(out)
+    assert parsed == {"ok": True, "sum": 30}
+
+
+@pytest.mark.asyncio
 async def test_snapshot_writes_png(live_backend, artifact_dir, tmp_path):
     from ae_mcp.snapshot import discovery as _snap_discovery
     snapper = _snap_discovery.select_snapshotter()
