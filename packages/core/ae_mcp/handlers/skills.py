@@ -7,23 +7,12 @@ from typing import Any
 from ae_mcp import progress, schemas
 from ae_mcp.backends import discovery as _discovery
 from ae_mcp.handlers import register
+from ae_mcp.jsx_result import parse_jsx_result as _try_json
 from ae_mcp.skill_store import Skill, SkillError, SkillStore, render_skill
 
 
 def _backend():
     return _discovery.select_backend()
-
-
-def _try_json(text: str) -> Any:
-    if not text:
-        return {"ok": True, "content": ""}
-    stripped = text.lstrip()
-    if stripped[:1] in ("{", "["):
-        try:
-            return json.loads(stripped)
-        except json.JSONDecodeError:
-            pass
-    return {"ok": True, "content": text}
 
 
 def _store() -> SkillStore:

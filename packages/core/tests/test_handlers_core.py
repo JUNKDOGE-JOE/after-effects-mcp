@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
 from ae_mcp import schemas as S
 from ae_mcp.handlers import HANDLERS, load_all
+from ae_mcp.handlers.core import _run_ping
 
 
 @pytest.fixture(autouse=True)
@@ -343,17 +345,12 @@ async def test_create_rig_missing_preset_path_returns_backend_error(mock_backend
     assert "preset_path" in result["error"]
 
 
-import pytest
-from ae_mcp import schemas
-from ae_mcp.handlers.core import _run_ping  # noqa: F401 — added in this task
-
-
 @pytest.mark.asyncio
 async def test_ae_ping_default(mock_backend):
     mock_backend.set_response(
         json.dumps({"ok": True, "pong": "pong", "aeVersion": "26.0", "latencyMs": 5}),
     )
-    args = schemas.AePingArgs()
+    args = S.AePingArgs()
     result = await _run_ping(args, ctx=None)
     assert result["ok"] is True
     assert result["pong"] == "pong"
@@ -364,7 +361,7 @@ async def test_ae_ping_custom(mock_backend):
     mock_backend.set_response(
         json.dumps({"ok": True, "pong": "hello", "aeVersion": "26.0", "latencyMs": 4}),
     )
-    args = schemas.AePingArgs(expect="hello")
+    args = S.AePingArgs(expect="hello")
     result = await _run_ping(args, ctx=None)
     assert result["pong"] == "hello"
     # Verify the JSX sent included the expected token
@@ -375,11 +372,6 @@ async def test_ae_ping_custom(mock_backend):
 # ---------------------------------------------------------------------------
 # ae.checkpoint — real implementation tests (Task 3.4)
 # ---------------------------------------------------------------------------
-
-import json
-from pathlib import Path
-import pytest
-from ae_mcp import schemas
 
 
 @pytest.mark.asyncio
@@ -405,7 +397,7 @@ async def test_checkpoint_list_default_returns_disk_entries(mock_backend, tmp_pa
     )
 
     from ae_mcp.handlers.core import _run_checkpoint
-    args = schemas.AeCheckpointArgs(action="list", limit=10)
+    args = S.AeCheckpointArgs(action="list", limit=10)
     result = await _run_checkpoint(args, ctx=None)
 
     assert result["ok"] is True
@@ -441,7 +433,7 @@ async def test_checkpoint_create_writes_meta(mock_backend, tmp_path, monkeypatch
     mock_backend.set_response(lambda **kw: next(responses))
 
     from ae_mcp.handlers.core import _run_checkpoint
-    args = schemas.AeCheckpointArgs(action="create", label="label-A")
+    args = S.AeCheckpointArgs(action="create", label="label-A")
     result = await _run_checkpoint(args, ctx=None)
 
     assert result["ok"] is True
@@ -463,7 +455,7 @@ async def test_checkpoint_create_untitled_skipped(mock_backend, tmp_path, monkey
     mock_backend.set_response(lambda **kw: next(responses))
 
     from ae_mcp.handlers.core import _run_checkpoint
-    args = schemas.AeCheckpointArgs(action="create", label="x")
+    args = S.AeCheckpointArgs(action="create", label="x")
     result = await _run_checkpoint(args, ctx=None)
 
     assert result["ok"] is True
@@ -481,7 +473,7 @@ async def test_revert_unknown_id_returns_error(mock_backend, tmp_path, monkeypat
     mock_backend.set_response(json.dumps({"ok": True, "path": "C:/Foo.aep"}))
 
     from ae_mcp.handlers.core import _run_revert
-    args = schemas.AeRevertArgs(checkpoint_id="missing", branch_before_revert=False)
+    args = S.AeRevertArgs(checkpoint_id="missing", branch_before_revert=False)
     result = await _run_revert(args, ctx=None)
     assert result["ok"] is False
     assert "not found" in result["error"].lower()
@@ -513,7 +505,7 @@ async def test_exec_with_label_creates_checkpoint(mock_backend, tmp_path, monkey
     mock_backend.set_response(_resp)
 
     from ae_mcp.handlers.core import _run_exec
-    args = schemas.AeExecArgs(code="42", checkpoint_label="risky")
+    args = S.AeExecArgs(code="42", checkpoint_label="risky")
     result = await _run_exec(args, ctx=None)
     assert result["ok"] is True
     # Meta sidecar should have been written
@@ -529,7 +521,7 @@ async def test_exec_no_label_skips_checkpoint(mock_backend, tmp_path, monkeypatc
     mock_backend.set_response(json.dumps({"ok": True, "result": 1}))
 
     from ae_mcp.handlers.core import _run_exec
-    args = schemas.AeExecArgs(code="1", checkpoint_label=None)
+    args = S.AeExecArgs(code="1", checkpoint_label=None)
     result = await _run_exec(args, ctx=None)
     assert result["ok"] is True
     # Store should be empty
@@ -565,7 +557,7 @@ async def test_revert_known_id_calls_jsx(mock_backend, tmp_path, monkeypatch):
     mock_backend.set_response(_resp)
 
     from ae_mcp.handlers.core import _run_revert
-    args = schemas.AeRevertArgs(checkpoint_id="abc_x", branch_before_revert=False)
+    args = S.AeRevertArgs(checkpoint_id="abc_x", branch_before_revert=False)
     result = await _run_revert(args, ctx=None)
     assert result["ok"] is True
     assert result.get("reverted") is True
