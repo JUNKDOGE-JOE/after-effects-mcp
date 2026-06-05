@@ -48,6 +48,47 @@ async def test_layers_passes_comp_id(mock_backend):
 
 
 @pytest.mark.asyncio
+async def test_layers_paging_substituted_and_json_default(mock_backend):
+    mock_backend.set_response('{"ok":true,"compId":"42","layers":[]}')
+    _, run_fn = HANDLERS["ae.layers"]
+    result = await run_fn(S.AeLayersArgs(comp_id="42", offset=5, limit=10), None)
+    assert isinstance(result, dict)  # default format is json
+    jsx = mock_backend.calls[-1]["code"]
+    assert "var offset = 5;" in jsx
+    assert "var limit = 10;" in jsx
+
+
+@pytest.mark.asyncio
+async def test_layers_default_limit_is_all_no_truncation(mock_backend):
+    # Regression: ae.layers must NOT silently cap the default path. With no
+    # limit arg, the JSX receives limit=0 and the (limit > 0) guard returns
+    # every layer — preserving the historical full-enumeration contract. The
+    # JSX also keeps the additive hasParent field alongside the new parent.
+    mock_backend.set_response('{"ok":true,"compId":"42","layers":[]}')
+    _, run_fn = HANDLERS["ae.layers"]
+    await run_fn(S.AeLayersArgs(comp_id="42"), None)
+    jsx = mock_backend.calls[-1]["code"]
+    assert "var limit = 0;" in jsx
+    assert "(limit > 0)" in jsx
+    assert "hasParent" in jsx and "parent:" in jsx
+
+
+@pytest.mark.asyncio
+async def test_layers_text_format_renders_table(mock_backend):
+    mock_backend.set_response(json.dumps({
+        "ok": True, "compId": "42", "compName": "Hero",
+        "total": 1, "offset": 0, "limit": 100, "returned": 1, "hasMore": False,
+        "layers": [{"id": 1, "name": "BG", "type": "solid",
+                    "enabled": True, "isThreeD": False, "parent": None}],
+    }))
+    _, run_fn = HANDLERS["ae.layers"]
+    result = await run_fn(S.AeLayersArgs(comp_id="42", format="text"), None)
+    assert isinstance(result, str)
+    assert 'Comp: "Hero"' in result
+    assert "1 | BG | solid" in result
+
+
+@pytest.mark.asyncio
 async def test_exec_forwards_all_args(mock_backend):
     # With checkpoint_label set, _run_exec first calls backend.exec for the
     # path probe (returns untitled project), then calls backend.exec for
@@ -330,6 +371,59 @@ async def test_create_rig_builds_transform_controller_jsx(mock_backend):
 
 
 @pytest.mark.asyncio
+async def test_create_rig_typed_controls_flow_into_jsx(mock_backend):
+    mock_backend.set_response(json.dumps({
+        "ok": True, "rigType": "effect_controls",
+        "controllerLayerId": 2, "targetLayerId": 1,
+        "createdLayers": [2], "wiredProperties": ["Transform/Opacity"],
+    }))
+    from ae_mcp.handlers.rig import _run_create_rig
+
+    args = S.AeCreateRigArgs(
+        rig_type="effect_controls",
+        target_layer_id=1,
+        name="CTRL",
+        controls=[
+            S.RigControl(name="Amount", type="slider", property="Transform/Opacity"),
+            S.RigControl(name="Spin", type="angle", property="Transform/Rotation"),
+        ],
+    )
+    result = await _run_create_rig(args, None)
+    assert result["ok"] is True
+    jsx = mock_backend.calls[-1]["code"]
+    # Typed controls serialized into options['controls'] for the JSX builder.
+    assert "Amount" in jsx
+    assert "Spin" in jsx
+    assert '"property": "Transform/Rotation"' in jsx
+
+
+@pytest.mark.asyncio
+async def test_create_rig_typed_controls_override_raw_options(mock_backend):
+    # Documented precedence: a typed `controls=` replaces any raw
+    # options['controls'] so the two can't silently conflict.
+    mock_backend.set_response(json.dumps({
+        "ok": True, "rigType": "effect_controls",
+        "controllerLayerId": 2, "targetLayerId": 1,
+        "createdLayers": [2], "wiredProperties": [],
+    }))
+    from ae_mcp.handlers.rig import _run_create_rig
+
+    args = S.AeCreateRigArgs(
+        rig_type="effect_controls",
+        target_layer_id=1,
+        name="CTRL",
+        options={"controls": [
+            {"name": "RAW", "type": "slider", "property": "Transform/Opacity"},
+        ]},
+        controls=[S.RigControl(name="TYPED", type="slider", property="Transform/Opacity")],
+    )
+    await _run_create_rig(args, None)
+    jsx = mock_backend.calls[-1]["code"]
+    assert "TYPED" in jsx
+    assert "RAW" not in jsx
+
+
+@pytest.mark.asyncio
 async def test_create_rig_missing_preset_path_returns_backend_error(mock_backend):
     mock_backend.set_response(json.dumps({
         "ok": False,
@@ -510,6 +604,76 @@ async def test_exec_with_label_creates_checkpoint(mock_backend, tmp_path, monkey
     assert result["ok"] is True
     # Meta sidecar should have been written
     assert (d / "exec_id.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_exec_checkpoint_probe_failure_does_not_abort_edit(mock_backend, monkeypatch):
+    # If the project-path probe blows up (hung/broken bridge or unwritable
+    # store), the user's edit must STILL run; the failure degrades to a
+    # checkpointSkipped note. This is the non-blocking auto-checkpoint
+    # invariant (a thrown error mid-checkpoint can corrupt unrelated state).
+    async def _boom(ctx):
+        raise RuntimeError("bridge exploded")
+
+    monkeypatch.setattr("ae_mcp.handlers.core._resolve_project_path", _boom)
+    mock_backend.set_response(json.dumps({"ok": True, "result": 7}))
+
+    from ae_mcp.handlers.core import _run_exec
+    args = S.AeExecArgs(code="7", checkpoint_label="risky")
+    result = await _run_exec(args, ctx=None)
+
+    assert result["ok"] is True
+    assert "checkpoint-failed" in result["checkpointSkipped"]
+    # The user code actually reached the backend despite the checkpoint failure.
+    assert any(c["code"] == "7" for c in mock_backend.calls)
+
+
+@pytest.mark.asyncio
+async def test_exec_checkpoint_timeout_degrades(mock_backend, monkeypatch):
+    # A hung project-path probe must time out and degrade to a
+    # checkpoint-timeout note rather than stalling or aborting the edit.
+    import asyncio
+
+    async def _hang(ctx):
+        raise asyncio.TimeoutError()
+
+    monkeypatch.setattr("ae_mcp.handlers.core._resolve_project_path", _hang)
+    mock_backend.set_response(json.dumps({"ok": True, "result": 7}))
+
+    from ae_mcp.handlers.core import _run_exec
+    args = S.AeExecArgs(code="7", checkpoint_label="risky")
+    result = await _run_exec(args, ctx=None)
+
+    assert result["ok"] is True
+    assert result["checkpointSkipped"] == "checkpoint-timeout"
+    assert any(c["code"] == "7" for c in mock_backend.calls)
+
+
+@pytest.mark.asyncio
+async def test_exec_checkpoint_bad_result_degrades(mock_backend, tmp_path, monkeypatch):
+    # The snapshot JSX returning a non-ok result must degrade to
+    # 'checkpoint-failed: bad-result' while the user code still runs.
+    from ae_mcp import checkpoint_store
+    store = checkpoint_store.CheckpointStore(root=tmp_path)
+    monkeypatch.setattr("ae_mcp.handlers.core._store", store)
+    monkeypatch.setattr(store, "make_id", lambda: "bad_id")
+
+    def _resp(code="", **kw):
+        if "app.project.file" in code and "path:" in code:
+            return json.dumps({"ok": True, "path": "C:/Foo.aep"})
+        if "checkpoint_create" in code or "File.copy" in code:
+            return json.dumps({"ok": False, "error": "copy failed"})
+        return json.dumps({"ok": True, "result": 9})
+
+    mock_backend.set_response(_resp)
+
+    from ae_mcp.handlers.core import _run_exec
+    args = S.AeExecArgs(code="9", checkpoint_label="risky")
+    result = await _run_exec(args, ctx=None)
+
+    assert result["ok"] is True
+    assert result["checkpointSkipped"] == "checkpoint-failed: bad-result"
+    assert any(c["code"] == "9" for c in mock_backend.calls)
 
 
 @pytest.mark.asyncio
