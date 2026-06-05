@@ -37,7 +37,7 @@
 uv run pytest
 ```
 
-当前预期非 live 结果：`152 passed, 20 deselected`。
+当前预期非 live 结果：`203 passed, 24 deselected`。
 
 AE 打开且面板绿灯时：
 
@@ -48,7 +48,7 @@ $env:AE_MCP_PLUGIN_URL = "http://127.0.0.1:11488"
 uv run pytest packages/core/tests/live -o addopts='' -vv
 ```
 
-当前预期 live 结果：`20 passed`。
+当前预期 live 结果：`24 passed`。
 
 ## English
 
@@ -87,7 +87,7 @@ The script stages the CEP panel, runs `npm ci --omit=dev` for `plugin/host`, cre
 uv run pytest
 ```
 
-Current expected non-live result: `152 passed, 20 deselected`.
+Current expected non-live result: `203 passed, 24 deselected`.
 
 With AE open and panel green:
 
@@ -98,4 +98,4 @@ $env:AE_MCP_PLUGIN_URL = "http://127.0.0.1:11488"
 uv run pytest packages/core/tests/live -o addopts='' -vv
 ```
 
-Current expected live result: `20 passed`.
+Current expected live result: `24 passed`.

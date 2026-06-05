@@ -72,7 +72,8 @@ flowchart TD
 比较稳的一条工作流是：
 
 1. 先用只读工具建立上下文。  
-   常用：`ae.overview`、`ae.layers`、`ae.getProperties`、`ae.scanPropertyTree`
+   常用：`ae.overview`、`ae.layers`、`ae.getProperties`、`ae.scanPropertyTree`  
+   大型 comp 可给 `ae.layers` 传 `format='text'` + `offset`/`limit`，输出更省 token；默认仍一次返回全部图层。
 
 2. 再做窄范围写操作。  
    常用：`ae.setProperty`、`ae.applyEffect`、`ae.createLayer`、`ae.exec`
@@ -224,7 +225,8 @@ flowchart TD
 A stable working rhythm is:
 
 1. Use read tools to establish context first.  
-   Common: `ae.overview`, `ae.layers`, `ae.getProperties`, `ae.scanPropertyTree`
+   Common: `ae.overview`, `ae.layers`, `ae.getProperties`, `ae.scanPropertyTree`  
+   For large comps, pass `ae.layers` `format='text'` + `offset`/`limit` to save tokens; the default still returns all layers.
 
 2. Then do narrow write operations.  
    Common: `ae.setProperty`, `ae.applyEffect`, `ae.createLayer`, `ae.exec`
