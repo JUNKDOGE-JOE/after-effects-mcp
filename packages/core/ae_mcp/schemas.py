@@ -53,7 +53,8 @@ class AeLayersArgs(_StrictModel):
     )
     offset: int = Field(0, ge=0, description="Pagination offset (0-based).")
     limit: int = Field(
-        100, ge=1, le=500, description="Max layers returned (default 100)."
+        0, ge=0, le=10000,
+        description="Max layers to return; 0 (default) returns all (back-compat).",
     )
     format: OutputFormat = Field(
         "json",

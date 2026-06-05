@@ -21,7 +21,10 @@
     var limit = ${limit};
     var total = comp.numLayers;
     var start = offset + 1;                       // AE layers are 1-based
-    var end = Math.min(total, offset + limit);
+    // limit <= 0 means "all": preserves the historical full-enumeration
+    // default so an existing caller that omits limit never silently loses
+    // layers on comps with more than the page size.
+    var end = (limit > 0) ? Math.min(total, offset + limit) : total;
     var layers = [];
     for (var i = start; i <= end; i++) {
         var l = comp.layer(i);
@@ -33,6 +36,7 @@
             inPoint: l.inPoint,
             outPoint: l.outPoint,
             isThreeD: !!l.threeDLayer,
+            hasParent: !!l.parent,
             parent: l.parent ? l.parent.name : null
         });
     }

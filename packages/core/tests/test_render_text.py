@@ -65,3 +65,33 @@ def test_maybe_render_renderer_failure_falls_back_to_dict():
 
     d = {"ok": True}
     assert render_text.maybe_render(d, "text", boom) is d
+
+
+def test_render_layers_limit_all_and_hasmore_yes():
+    # limit=0 (the back-compat "return all" default) renders as limit=all,
+    # and hasMore=True renders as Y.
+    d = {
+        "ok": True, "compName": "Big", "compId": "1",
+        "total": 250, "offset": 0, "limit": 0, "returned": 250, "hasMore": True,
+        "layers": [],
+    }
+    out = render_text.render_layers(d)
+    assert "limit=all" in out
+    assert "hasMore=Y" in out
+
+
+def test_render_layers_name_fallback_when_unnamed():
+    d = {"ok": True, "total": 0, "offset": 0, "limit": 0,
+         "returned": 0, "hasMore": False, "layers": []}
+    out = render_text.render_layers(d)
+    assert 'Comp: "?"' in out
+
+
+def test_render_layers_omits_page_line_when_not_paginated():
+    # No 'offset' key -> the verb wasn't paginated, so no Page: line.
+    d = {"ok": True, "compName": "C", "total": 1,
+         "layers": [{"id": 1, "name": "X", "type": "solid",
+                     "enabled": True, "isThreeD": False, "parent": None}]}
+    out = render_text.render_layers(d)
+    assert "Page:" not in out
+    assert "1 | X | solid" in out

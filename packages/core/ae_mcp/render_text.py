@@ -16,8 +16,10 @@ from typing import Any, Callable, Dict
 
 def _page_line(d: Dict[str, Any]) -> str:
     """Atom-style paging summary line for paginated verbs."""
+    limit = d.get("limit", 0)
+    limit_s = limit if limit else "all"
     return (
-        f"Page: offset={d.get('offset', 0)} limit={d.get('limit', 0)} "
+        f"Page: offset={d.get('offset', 0)} limit={limit_s} "
         f"returned={d.get('returned', 0)} total={d.get('total', 0)} "
         f"hasMore={'Y' if d.get('hasMore') else 'N'}"
     )
