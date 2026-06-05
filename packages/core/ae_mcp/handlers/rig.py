@@ -26,12 +26,18 @@ def _load_jsx(name: str) -> Template:
 async def _run_create_rig(args: schemas.AeCreateRigArgs, ctx: Any) -> Any:
     from ae_mcp.handlers.typed import _comp_expr  # type: ignore
 
+    # Typed `controls` (if given) flow into the existing options['controls']
+    # path the JSX already understands, taking precedence over a raw value.
+    options = dict(args.options)
+    if args.controls is not None:
+        options["controls"] = [c.model_dump() for c in args.controls]
+
     jsx = _load_jsx("create_rig.jsx").substitute(
         comp_expr=_comp_expr(args.comp_id),
         target_layer_id=json.dumps(args.target_layer_id),
         rig_type=json.dumps(args.rig_type),
         name=json.dumps(args.name, ensure_ascii=False),
-        options=json.dumps(args.options, ensure_ascii=False),
+        options=json.dumps(options, ensure_ascii=False),
     )
 
     async def _call() -> Any:

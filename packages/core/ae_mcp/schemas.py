@@ -18,6 +18,7 @@ LayerType = Literal[
 ]
 
 SnapshotMethod = Literal["DesktopCopy", "PrintWindow"]
+OutputFormat = Literal["json", "text"]
 NonNegativeFloat = Annotated[float, Field(ge=0)]
 
 
@@ -45,10 +46,19 @@ class AeOverviewArgs(_StrictModel):
 
 
 class AeLayersArgs(_StrictModel):
-    """ae.layers — list layers in a comp."""
+    """ae.layers — list layers in a comp (paginated)."""
     comp_id: Optional[str] = Field(
         None,
         description="AE comp id. Omit for the active comp.",
+    )
+    offset: int = Field(0, ge=0, description="Pagination offset (0-based).")
+    limit: int = Field(
+        0, ge=0, le=10000,
+        description="Max layers to return; 0 (default) returns all (back-compat).",
+    )
+    format: OutputFormat = Field(
+        "json",
+        description="'json' (default, structured) or 'text' (compact paginated table).",
     )
 
 
@@ -288,6 +298,28 @@ SearchScope = Literal["layers", "expressions", "effects", "comps", "items"]
 SkillTemplateType = Literal["jsx", "prompt"]
 SkillName = constr(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 RigType = Literal["transform_controller", "effect_controls", "puppet_pin_nulls", "apply_preset"]
+RigControlType = Literal["slider", "angle", "checkbox", "color"]
+
+
+class RigControl(_StrictModel):
+    """A single expression control for createRig's effect_controls rig.
+
+    Each control becomes a native AE expression-control effect on the
+    controller (Slider/Angle/Checkbox/Color) wired to drive `property`.
+    """
+    name: str = Field(
+        ..., min_length=1, description="Control display name (also the effect name)."
+    )
+    type: RigControlType = Field(
+        "slider", description="Control kind -> native AE expression control."
+    )
+    property: str = Field(
+        "Transform/Opacity",
+        description=(
+            "Target property to drive. Currently wired for the transform paths "
+            "Transform/Position|Scale|Rotation|Opacity."
+        ),
+    )
 
 
 class AeSearchProjectArgs(_StrictModel):
@@ -346,6 +378,14 @@ class AeCreateRigArgs(_StrictModel):
     target_layer_id: int = Field(1, ge=1, description="1-based target layer index.")
     rig_type: RigType = Field("transform_controller", description="Rig workflow to create.")
     name: str = Field("Controller", min_length=1, description="Controller layer/effect name.")
+    controls: Optional[List[RigControl]] = Field(
+        None,
+        description=(
+            "For rig_type='effect_controls': typed list of expression controls to "
+            "build. Merged into options['controls'] (takes precedence over a raw "
+            "options['controls'])."
+        ),
+    )
     options: Dict[str, Any] = Field(default_factory=dict, description="Rig-type-specific options.")
 
 
