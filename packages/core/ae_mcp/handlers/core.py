@@ -23,7 +23,7 @@ from pathlib import Path
 from string import Template
 from typing import Any, Optional
 
-from ae_mcp import checkpoint_store, progress, schemas
+from ae_mcp import checkpoint_store, progress, render_text, schemas
 from ae_mcp.backends import discovery as _discovery
 from ae_mcp.handlers import register
 from ae_mcp.jsx_result import parse_jsx_result as _try_json
@@ -126,11 +126,16 @@ register("ae.overview", schemas.AeOverviewArgs, _run_overview)
 async def _run_layers(args: schemas.AeLayersArgs, ctx: Any) -> Any:
     from ae_mcp.handlers.typed import _comp_expr  # type: ignore
     tmpl = _load_jsx("get_layers.jsx")
-    jsx = tmpl.substitute(comp_expr=_comp_expr(args.comp_id))
+    jsx = tmpl.substitute(
+        comp_expr=_comp_expr(args.comp_id),
+        offset=int(args.offset),
+        limit=int(args.limit),
+    )
 
     async def _call() -> Any:
         out = await _backend().exec(jsx, timeout_sec=15.0)
-        return _try_json(out)
+        parsed = _try_json(out)
+        return render_text.maybe_render(parsed, args.format, render_text.render_layers)
 
     return await progress.run_with_timeout(
         ctx, _call(), timeout_sec=20.0, start_msg="ae.layers..."
@@ -169,16 +174,23 @@ async def _run_exec(args: schemas.AeExecArgs, ctx: Any) -> Any:
     async def _call() -> Any:
         checkpoint_skipped: Optional[str] = None
         if args.checkpoint_label and not backend.manages_checkpoints:
-            project_path = await _resolve_project_path(ctx)
-            if not project_path:
-                checkpoint_skipped = "untitled-project"
-            else:
-                cid = _store.make_id()
-                dst = _store.aep_path(project_path, cid)
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                tmpl = _load_jsx("checkpoint_create.jsx")
-                jsx_cp = tmpl.substitute(dst_path=json.dumps(str(dst), ensure_ascii=False))
-                try:
+            # Auto-checkpoint is strictly best-effort: a hung path probe, an
+            # unwritable store dir, or a failed snapshot must NEVER abort the
+            # user's edit. The whole block is guarded so any failure degrades
+            # to a `checkpointSkipped` note while the edit still runs. The
+            # probe is time-bounded so a dead bridge can't stall indefinitely.
+            try:
+                project_path = await asyncio.wait_for(
+                    _resolve_project_path(ctx), timeout=15.0
+                )
+                if not project_path:
+                    checkpoint_skipped = "untitled-project"
+                else:
+                    cid = _store.make_id()
+                    dst = _store.aep_path(project_path, cid)
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    tmpl = _load_jsx("checkpoint_create.jsx")
+                    jsx_cp = tmpl.substitute(dst_path=json.dumps(str(dst), ensure_ascii=False))
                     cp_out = await backend.exec(code=jsx_cp, timeout_sec=60.0)
                     cp_parsed = _try_json(cp_out)
                     if isinstance(cp_parsed, dict) and cp_parsed.get("ok"):
@@ -197,9 +209,14 @@ async def _run_exec(args: schemas.AeExecArgs, ctx: Any) -> Any:
                                     size_bytes=size_bytes,
                                 )
                                 _store.prune(project_path)
-                except Exception as e:  # noqa: BLE001
-                    log.warning("auto-checkpoint failed: %s", e)
-                    checkpoint_skipped = f"checkpoint-failed: {e}"
+                    else:
+                        checkpoint_skipped = "checkpoint-failed: bad-result"
+            except asyncio.TimeoutError:
+                log.warning("auto-checkpoint timed out")
+                checkpoint_skipped = "checkpoint-timeout"
+            except Exception as e:  # noqa: BLE001
+                log.warning("auto-checkpoint failed: %s", e)
+                checkpoint_skipped = f"checkpoint-failed: {e}"
         elif args.checkpoint_label and backend.manages_checkpoints:
             checkpoint_skipped = "delegated-to-backend"
 

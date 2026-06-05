@@ -20,6 +20,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
 from ae_mcp.handlers import HANDLERS, load_all
+from ae_mcp.instructions import SERVER_INSTRUCTIONS
 
 log = logging.getLogger("ae_mcp.server")
 
@@ -59,7 +60,7 @@ def build_server() -> Server:
     """Construct the low-level MCP Server with all 15 verbs registered."""
     load_all()
 
-    server: Server = Server("ae")
+    server: Server = Server("ae", instructions=SERVER_INSTRUCTIONS)
 
     @server.list_tools()
     async def _list_tools() -> List[Tool]:
