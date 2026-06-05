@@ -144,7 +144,7 @@ $env:AE_MCP_PLUGIN_URL = "http://127.0.0.1:11488"
 uv run pytest packages/core/tests/live -o addopts='' -vv
 ```
 
-当前预期结果：`20 passed`。
+当前预期结果：`24 passed`。
 
 ### 排障
 
@@ -302,7 +302,7 @@ $env:AE_MCP_PLUGIN_URL = "http://127.0.0.1:11488"
 uv run pytest packages/core/tests/live -o addopts='' -vv
 ```
 
-Current expected result: `20 passed`.
+Current expected result: `24 passed`.
 
 ### Troubleshooting
 

@@ -14,8 +14,10 @@ simple RPC 插件链路已经实现：CEP 面板、HTTP bridge backend、30 个 
 
 当前验证结果：
 
-- `uv run pytest -q`: 152 passed, 20 live tests deselected
-- `uv run pytest packages/core/tests/live -o addopts='' -vv`: 20 passed, 需要 AE 打开并且 ae-mcp 面板绿灯
+- `uv run pytest -q`: 203 passed, 24 live tests deselected
+- `uv run pytest packages/core/tests/live -o addopts='' -vv`: 24 passed, 需要 AE 打开并且 ae-mcp 面板绿灯
+
+> v0.2.0 在保持向后兼容的前提下增强了多个 verb：`ae.layers` 分页 + 紧凑文本、`ae.exec` 运行时 helper、`createRig` 类型化 controls、非阻塞 checkpoint。详见 [CHANGELOG.md](CHANGELOG.md) 与 [docs/REFERENCE.md](docs/REFERENCE.md)。
 
 平台现状：
 
@@ -146,8 +148,10 @@ The simple RPC plugin path is implemented: CEP panel, HTTP bridge backend, 30 `a
 
 Current verification:
 
-- `uv run pytest -q`: 152 passed, 20 live tests deselected
-- `uv run pytest packages/core/tests/live -o addopts='' -vv`: 20 passed with AE open and the ae-mcp panel green
+- `uv run pytest -q`: 203 passed, 24 live tests deselected
+- `uv run pytest packages/core/tests/live -o addopts='' -vv`: 24 passed with AE open and the ae-mcp panel green
+
+> v0.2.0 enhances several verbs without breaking compatibility: `ae.layers` pagination + compact text, `ae.exec` runtime helpers, typed `createRig` controls, and non-blocking checkpoint. See [CHANGELOG.md](CHANGELOG.md) and [docs/REFERENCE.md](docs/REFERENCE.md).
 
 Platform status:
 
