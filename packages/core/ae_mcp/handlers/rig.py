@@ -9,6 +9,7 @@ from typing import Any
 from ae_mcp import progress, schemas
 from ae_mcp.backends import discovery as _discovery
 from ae_mcp.handlers import register
+from ae_mcp.jsx_result import parse_jsx_result as _try_json
 
 
 _TEMPLATES = Path(__file__).resolve().parent.parent / "jsx_templates"
@@ -20,18 +21,6 @@ def _backend():
 
 def _load_jsx(name: str) -> Template:
     return Template((_TEMPLATES / name).read_text(encoding="utf-8"))
-
-
-def _try_json(text: str) -> Any:
-    if not text:
-        return {"ok": True, "content": ""}
-    stripped = text.lstrip()
-    if stripped[:1] in ("{", "["):
-        try:
-            return json.loads(stripped)
-        except json.JSONDecodeError:
-            pass
-    return {"ok": True, "content": text}
 
 
 async def _run_create_rig(args: schemas.AeCreateRigArgs, ctx: Any) -> Any:

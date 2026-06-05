@@ -24,6 +24,7 @@ from typing import Any, Optional
 from ae_mcp import progress, schemas
 from ae_mcp.backends import discovery as _discovery
 from ae_mcp.handlers import register
+from ae_mcp.jsx_result import parse_jsx_result as _try_json_or_raw
 
 log = logging.getLogger("ae_mcp.handlers.typed")
 
@@ -243,23 +244,6 @@ async def _run_get_time(args: schemas.AeGetTimeArgs, ctx: Any) -> Any:
 
 
 register("ae.getTime", schemas.AeGetTimeArgs, _run_get_time)
-
-
-# ---------------------------------------------------------------------------
-# Helper: parse bridge output as JSON, else wrap as {ok,content}.
-# ---------------------------------------------------------------------------
-
-
-def _try_json_or_raw(text: str) -> Any:
-    if not text:
-        return {"ok": True, "content": ""}
-    stripped = text.lstrip()
-    if stripped[:1] in ("{", "["):
-        try:
-            return json.loads(stripped)
-        except json.JSONDecodeError:
-            pass
-    return {"ok": True, "content": text}
 
 
 # ---------------------------------------------------------------------------

@@ -18,6 +18,7 @@ import logging
 import shutil
 import tempfile
 import uuid
+from functools import lru_cache
 from pathlib import Path
 from string import Template
 from typing import Any, Optional
@@ -25,29 +26,13 @@ from typing import Any, Optional
 from ae_mcp import checkpoint_store, progress, schemas
 from ae_mcp.backends import discovery as _discovery
 from ae_mcp.handlers import register
+from ae_mcp.jsx_result import parse_jsx_result as _try_json
 
 log = logging.getLogger("ae_mcp.handlers.core")
 
 
 def _backend():
     return _discovery.select_backend()
-
-
-# ---------------------------------------------------------------------------
-# Utility: parse JSON if it looks like JSON; otherwise return raw text.
-# ---------------------------------------------------------------------------
-
-
-def _try_json(text: str) -> Any:
-    if not text:
-        return {"ok": True, "content": ""}
-    stripped = text.lstrip()
-    if stripped[:1] in ("{", "["):
-        try:
-            return json.loads(stripped)
-        except json.JSONDecodeError:
-            pass
-    return {"ok": True, "content": text}
 
 
 # ---------------------------------------------------------------------------
@@ -569,16 +554,12 @@ register("ae.applyEffect", schemas.AeApplyEffectArgs, _run_apply_effect)
 # ae.ping — handshake smoke test for live diagnostics
 # ---------------------------------------------------------------------------
 
-from functools import lru_cache as _lru_cache
-from pathlib import Path as _Path
-from string import Template as _Template
-
-_PING_TEMPLATE_PATH = _Path(__file__).resolve().parent.parent / "jsx_templates" / "ping.jsx"
+_PING_TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "jsx_templates" / "ping.jsx"
 
 
-@_lru_cache(maxsize=1)
-def _ping_template() -> _Template:
-    return _Template(_PING_TEMPLATE_PATH.read_text(encoding="utf-8"))
+@lru_cache(maxsize=1)
+def _ping_template() -> Template:
+    return Template(_PING_TEMPLATE_PATH.read_text(encoding="utf-8"))
 
 
 async def _run_ping(args: schemas.AePingArgs, ctx: Any) -> Any:

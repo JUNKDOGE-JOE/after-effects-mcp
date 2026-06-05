@@ -6,6 +6,27 @@ let app = null;
 let httpServer = null;
 let currentPort = null;
 
+// Wrap user JSX in app.beginUndoGroup / app.endUndoGroup.
+//
+// Multi-statement user code is evaluated via ExtendScript's `eval()` so that
+// every statement runs and the value of the last expression is returned to
+// CSInterface — same semantics as the no-undoGroup path where `code` is
+// passed to evalScript directly.
+//
+// The earlier `try { return <code>; }` shape silently dropped everything past
+// the first statement: `return var x = 1; ...` is invalid as a `return`
+// expression, so for multi-statement scripts the wrapper executed only
+// `app.beginUndoGroup(...)` (returning undefined) and skipped the rest.
+function wrapWithUndoGroup(code, undoGroup) {
+    return (
+        '(function(){' +
+        'app.beginUndoGroup(' + JSON.stringify(undoGroup) + ');' +
+        'try { return eval(' + JSON.stringify(code) + '); }' +
+        'finally { app.endUndoGroup(); }' +
+        '})()'
+    );
+}
+
 function buildApp() {
     const a = express();
     a.use(express.json({ limit: '5mb' }));
@@ -30,12 +51,7 @@ function buildApp() {
         // Wrap user JSX in undo group if requested. checkpointLabel currently
         // forwarded but unused; later sub-specs will wire it to the checkpoint
         // store.
-        let wrapped = code;
-        if (undoGroup) {
-            wrapped =
-                '(function(){ app.beginUndoGroup(' + JSON.stringify(undoGroup) + '); ' +
-                'try { return ' + code + '; } finally { app.endUndoGroup(); } })()';
-        }
+        const wrapped = undoGroup ? wrapWithUndoGroup(code, undoGroup) : code;
 
         try {
             const result = await jsxBridge.evalScript(wrapped, t);
@@ -81,4 +97,6 @@ module.exports = {
     stop,
     restart,
     setCSInterface: jsxBridge.setCSInterface,
+    // Exported for unit-testing the wrap shape without spinning up Express.
+    wrapWithUndoGroup,
 };
