@@ -56,6 +56,32 @@ def _format_result(result: Any) -> str:
     return repr(result)
 
 
+def expose_tool_name(verb: str) -> str:
+    """Map a canonical verb to its MCP-exposed tool name.
+
+    Verbs are dotted internally ("ae.ping"), but the MCP spec requires tool
+    names to match ``^[a-zA-Z0-9_-]{1,64}$``. Dots are illegal, and strict
+    clients (e.g. Claude Desktop extensions) reject them at handshake time, so
+    we expose dot-free names ("ae.ping" -> "ae_ping").
+    """
+    return verb.replace(".", "_")
+
+
+def resolve_tool_name(name: str, handlers) -> "str | None":
+    """Map an exposed tool name back to its canonical verb.
+
+    Accepts both the exposed dot-free name ("ae_ping") and, for backward
+    compatibility, the original dotted verb ("ae.ping"). Returns ``None`` if
+    the name matches no registered verb.
+    """
+    if name in handlers:
+        return name
+    for verb in handlers:
+        if expose_tool_name(verb) == name:
+            return verb
+    return None
+
+
 def build_server() -> Server:
     """Construct the low-level MCP Server with all 15 verbs registered."""
     load_all()
@@ -79,7 +105,7 @@ def build_server() -> Server:
             desc = (schema_cls.__doc__ or f"ae-mcp verb {verb_name}").strip()
             tools.append(
                 Tool(
-                    name=verb_name,
+                    name=expose_tool_name(verb_name),
                     description=desc,
                     inputSchema=input_schema,
                 )
@@ -88,9 +114,13 @@ def build_server() -> Server:
 
     @server.call_tool()
     async def _call_tool(name: str, arguments: dict | None) -> List[TextContent]:
-        if name not in HANDLERS:
+        # Tools are exposed with dots replaced by underscores; map the exposed
+        # name back to the canonical verb (the dotted name is accepted too).
+        canonical = resolve_tool_name(name, HANDLERS)
+        if canonical is None:
             payload = _format_result({"ok": False, "error": f"unknown tool: {name}"})
             return [TextContent(type="text", text=payload)]
+        name = canonical
 
         schema_cls, run_fn = HANDLERS[name]
 
