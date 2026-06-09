@@ -10,6 +10,11 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### [0.2.1] — 2026-06-08
+
+#### 🐛 修复
+- **部分客户端（如 Claude 桌面版扩展）连接时报错、无法新建对话**——工具名此前带 `.`（如 `ae.ping`），不符合 MCP 工具名规范 `^[a-zA-Z0-9_-]{1,64}$`，严格客户端会拒绝并报 `FrontendRemoteMcpToolDefinition.name`。现在对外统一改用下划线名（`ae.ping` → `ae_ping`），调用时自动映射回去。**仍兼容原有带点名调用，已有调用方不受影响。**
+
 ### [0.2.0] — 2026-06-05
 
 本次发布合并了两个 PR：**#1**（多步操作可靠性）和 **#2**（向 Atom 能力对齐的一轮优化）。
@@ -37,6 +42,11 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### [0.2.1] — 2026-06-08
+
+#### 🐛 Fixed
+- **Some clients (e.g. Claude Desktop extensions) errored on connect and couldn't start a conversation** — tool names were dotted (`ae.ping`), which violates the MCP tool-name pattern `^[a-zA-Z0-9_-]{1,64}$`, so strict clients rejected them with `FrontendRemoteMcpToolDefinition.name`. Exposed names are now underscore-form (`ae.ping` → `ae_ping`), mapped back on call. **The original dotted names are still accepted, so existing callers are unaffected.**
 
 ### [0.2.0] — 2026-06-05
 
