@@ -28,10 +28,108 @@ def _write_meta(path: Path, **fields) -> None:
     path.write_text(json.dumps(meta), encoding="utf-8")
 
 
-def test_store_root_per_basename(tmp_path):
+def test_store_root_per_full_path(tmp_path):
     store = CheckpointStore(root=tmp_path)
     p = store._dir_for("C:/projects/MyProject.aep")
-    assert p == tmp_path / "MyProject"
+    # Dir key keeps a human-readable stem prefix plus a path hash suffix.
+    assert p.parent == tmp_path
+    assert p.name.startswith("MyProject_")
+    assert p.name != "MyProject"
+    p2 = store._dir_for(None)
+    assert p2 == tmp_path / "_untitled"
+
+
+def test_same_basename_different_paths_get_different_dirs(tmp_path):
+    # Issue #10: C:\a\project.aep and C:\b\project.aep must NOT collide.
+    store = CheckpointStore(root=tmp_path)
+    da = store._dir_for("C:/a/project.aep")
+    db = store._dir_for("C:/b/project.aep")
+    assert da != db
+    # Both keep the readable stem prefix for debuggability.
+    assert da.name.startswith("project_")
+    assert db.name.startswith("project_")
+
+
+def test_same_path_is_stable_key(tmp_path):
+    # The same file (even with differing separators/case) hashes the same.
+    store = CheckpointStore(root=tmp_path)
+    d1 = store._dir_for("C:/projects/Same.aep")
+    d2 = store._dir_for("C:\\projects\\Same.aep")
+    assert d1 == d2
+
+
+def test_checkpoints_isolated_across_same_basename_paths(tmp_path):
+    # lookup_aep / list_checkpoints for path A never return path B's data.
+    store = CheckpointStore(root=tmp_path)
+    path_a = "C:/a/project.aep"
+    path_b = "C:/b/project.aep"
+
+    da = store._dir_for(path_a)
+    _touch_aep(da / "aaa_1.aep")
+    store.write_meta(source_project_path=path_a, cid="aaa_1", label="A",
+                     active_comp_id=None, current_time=0.0, size_bytes=1024)
+
+    db = store._dir_for(path_b)
+    _touch_aep(db / "bbb_2.aep")
+    store.write_meta(source_project_path=path_b, cid="bbb_2", label="B",
+                     active_comp_id=None, current_time=0.0, size_bytes=1024)
+
+    listed_a = store.list_checkpoints(path_a, limit=10)
+    listed_b = store.list_checkpoints(path_b, limit=10)
+    assert [c["id"] for c in listed_a] == ["aaa_1"]
+    assert [c["id"] for c in listed_b] == ["bbb_2"]
+
+    # lookup_aep must not cross over.
+    assert store.lookup_aep(path_a, "aaa_1") == da / "aaa_1.aep"
+    assert store.lookup_aep(path_a, "bbb_2") is None
+    assert store.lookup_aep(path_b, "bbb_2") == db / "bbb_2.aep"
+    assert store.lookup_aep(path_b, "aaa_1") is None
+
+
+def test_list_filters_mismatched_source_path(tmp_path):
+    # Belt-and-suspenders: a stray sidecar naming a different project that
+    # somehow lands in this dir is filtered out of results.
+    store = CheckpointStore(root=tmp_path)
+    path_a = "C:/a/project.aep"
+    d = store._dir_for(path_a)
+    # Legit entry for A.
+    _touch_aep(d / "good_1.aep")
+    store.write_meta(source_project_path=path_a, cid="good_1", label="ok",
+                     active_comp_id=None, current_time=0.0, size_bytes=1024)
+    # Stray entry that claims a DIFFERENT project path.
+    _touch_aep(d / "stray_2.aep")
+    _write_meta(d / "stray_2.json", id="stray_2", ts="2026-04-27T11:00:00Z",
+                sourceProjectPath="C:/somewhere/else.aep")
+
+    listed = store.list_checkpoints(path_a, limit=10)
+    assert [c["id"] for c in listed] == ["good_1"]
+
+
+def test_prune_isolated_per_project(tmp_path):
+    # prune for path A must not delete path B's checkpoints.
+    store = CheckpointStore(root=tmp_path, keep=1)
+    path_a = "C:/a/project.aep"
+    path_b = "C:/b/project.aep"
+    da = store._dir_for(path_a)
+    db = store._dir_for(path_b)
+    for i in range(3):
+        ident = f"1714209600{i:03d}_a"
+        _touch_aep(da / f"{ident}.aep")
+        store.write_meta(source_project_path=path_a, cid=ident, label="A",
+                         active_comp_id=None, current_time=0.0, size_bytes=1024)
+    _touch_aep(db / "keepme_b.aep")
+    store.write_meta(source_project_path=path_b, cid="keepme_b", label="B",
+                     active_comp_id=None, current_time=0.0, size_bytes=1024)
+
+    removed = store.prune(path_a)
+    assert len(removed) == 2  # kept 1 of 3 for A
+    # B is untouched.
+    assert (db / "keepme_b.aep").exists()
+    assert [c["id"] for c in store.list_checkpoints(path_b, limit=10)] == ["keepme_b"]
+
+
+def test_store_root_per_basename(tmp_path):
+    store = CheckpointStore(root=tmp_path)
     p2 = store._dir_for(None)
     assert p2 == tmp_path / "_untitled"
 

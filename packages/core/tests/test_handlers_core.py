@@ -694,37 +694,271 @@ async def test_exec_no_label_skips_checkpoint(mock_backend, tmp_path, monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_revert_known_id_calls_jsx(mock_backend, tmp_path, monkeypatch):
+async def test_revert_restores_over_original_and_reopens(mock_backend, tmp_path, monkeypatch):
+    # Issue #10 Bug 1: revert must restore the checkpoint OVER the original
+    # project path and reopen the ORIGINAL — never open the temp copy in
+    # place. Verify the close -> copy(atomic) -> open ordering.
     from ae_mcp import checkpoint_store
     store = checkpoint_store.CheckpointStore(root=tmp_path)
     monkeypatch.setattr("ae_mcp.handlers.core._store", store)
 
-    # Seed
-    d = store._dir_for("C:/Foo.aep")
+    # A REAL on-disk original project (so the atomic replace targets a file).
+    original = tmp_path / "proj" / "Original.aep"
+    original.parent.mkdir(parents=True, exist_ok=True)
+    original.write_bytes(b"LIVE-EDITS")  # current (dirty) on-disk content
+
+    # Seed a checkpoint with DISTINCT content so we can prove the restore.
+    d = store._dir_for(str(original))
     d.mkdir(parents=True, exist_ok=True)
     aep = d / "abc_x.aep"
-    aep.write_bytes(b"\x00" * 1024)
-    store.write_meta(source_project_path="C:/Foo.aep", cid="abc_x",
+    aep.write_bytes(b"CHECKPOINT-STATE")
+    store.write_meta(source_project_path=str(original), cid="abc_x",
                      label="seed", active_comp_id=None, current_time=0.0,
-                     size_bytes=1024)
+                     size_bytes=len(b"CHECKPOINT-STATE"))
 
     calls = []
 
     def _resp(code="", **kw):
         calls.append(code)
-        # First: project-path probe; second: revert.jsx
-        if "app.project.file" in code and len(calls) == 1:
-            return json.dumps({"ok": True, "path": "C:/Foo.aep"})
-        return json.dumps({"ok": True, "reverted": True,
-                           "openedPath": str(aep)})
+        if "app.project.file" in code and "path:" in code:
+            return json.dumps({"ok": True, "path": str(original)})
+        if "app.project.close" in code:
+            return json.dumps({"ok": True, "closed": True})
+        if "app.open" in code:
+            return json.dumps({"ok": True, "openedPath": str(original)})
+        return json.dumps({"ok": True})
 
     mock_backend.set_response(_resp)
 
     from ae_mcp.handlers.core import _run_revert
     args = S.AeRevertArgs(checkpoint_id="abc_x", branch_before_revert=False)
     result = await _run_revert(args, ctx=None)
+
     assert result["ok"] is True
-    assert result.get("reverted") is True
-    # The second call to backend.exec should have rendered revert.jsx
-    aep_posix = aep.as_posix()
-    assert any(aep_posix in c for c in calls)
+    assert result["reverted"] is True
+    assert result["restoredTo"] == str(original)
+
+    # The on-disk ORIGINAL now holds the checkpoint content (restored in place).
+    assert original.read_bytes() == b"CHECKPOINT-STATE"
+
+    # Ordering: a close() call must precede an app.open() call, and the
+    # reopen must target the ORIGINAL path (not the temp checkpoint).
+    close_idx = next(i for i, c in enumerate(calls) if "app.project.close" in c)
+    open_idx = next(i for i, c in enumerate(calls) if "app.open" in c)
+    assert close_idx < open_idx
+    open_code = calls[open_idx]
+    assert original.as_posix() in open_code
+    assert aep.as_posix() not in open_code  # never opens the temp copy
+
+
+@pytest.mark.asyncio
+async def test_revert_uses_atomic_replace(mock_backend, tmp_path, monkeypatch):
+    # The restore copy must go through os.replace (atomic rename) so the
+    # original is never left half-written.
+    from ae_mcp import checkpoint_store
+    store = checkpoint_store.CheckpointStore(root=tmp_path)
+    monkeypatch.setattr("ae_mcp.handlers.core._store", store)
+
+    original = tmp_path / "Original.aep"
+    original.write_bytes(b"OLD")
+    d = store._dir_for(str(original))
+    d.mkdir(parents=True, exist_ok=True)
+    aep = d / "abc_x.aep"
+    aep.write_bytes(b"NEW")
+    store.write_meta(source_project_path=str(original), cid="abc_x",
+                     label="seed", active_comp_id=None, current_time=0.0,
+                     size_bytes=3)
+
+    replace_calls = []
+    import os as _os
+    real_replace = _os.replace
+
+    def _spy_replace(src, dst, *a, **k):
+        replace_calls.append((str(src), str(dst)))
+        return real_replace(src, dst, *a, **k)
+
+    monkeypatch.setattr("ae_mcp.handlers.core.os.replace", _spy_replace)
+
+    def _resp(code="", **kw):
+        if "app.project.file" in code and "path:" in code:
+            return json.dumps({"ok": True, "path": str(original)})
+        if "app.project.close" in code:
+            return json.dumps({"ok": True, "closed": True})
+        if "app.open" in code:
+            return json.dumps({"ok": True, "openedPath": str(original)})
+        return json.dumps({"ok": True})
+
+    mock_backend.set_response(_resp)
+
+    from ae_mcp.handlers.core import _run_revert
+    result = await _run_revert(
+        S.AeRevertArgs(checkpoint_id="abc_x", branch_before_revert=False), ctx=None
+    )
+    assert result["ok"] is True
+    # os.replace was used and its destination is the original path.
+    assert len(replace_calls) == 1
+    assert replace_calls[0][1] == str(original)
+    # The temp source is a SIBLING of the destination (same volume) so the
+    # rename is atomic.
+    assert Path(replace_calls[0][0]).parent == original.parent
+
+
+@pytest.mark.asyncio
+async def test_revert_copy_failure_reopens_original(mock_backend, tmp_path, monkeypatch):
+    # If the Python copy/replace fails AFTER the close, the handler must
+    # reopen the (intact) ORIGINAL and return ok:false/reverted:false so the
+    # user is never left with no project.
+    from ae_mcp import checkpoint_store
+    store = checkpoint_store.CheckpointStore(root=tmp_path)
+    monkeypatch.setattr("ae_mcp.handlers.core._store", store)
+
+    original = tmp_path / "Original.aep"
+    original.write_bytes(b"INTACT")
+    d = store._dir_for(str(original))
+    d.mkdir(parents=True, exist_ok=True)
+    aep = d / "abc_x.aep"
+    aep.write_bytes(b"NEW")
+    store.write_meta(source_project_path=str(original), cid="abc_x",
+                     label="seed", active_comp_id=None, current_time=0.0,
+                     size_bytes=3)
+
+    # Force the restore copy to blow up.
+    def _boom(*a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("ae_mcp.handlers.core.shutil.copyfile", _boom)
+
+    calls = []
+
+    def _resp(code="", **kw):
+        calls.append(code)
+        if "app.project.file" in code and "path:" in code:
+            return json.dumps({"ok": True, "path": str(original)})
+        if "app.project.close" in code:
+            return json.dumps({"ok": True, "closed": True})
+        if "app.open" in code:
+            return json.dumps({"ok": True, "openedPath": str(original)})
+        return json.dumps({"ok": True})
+
+    mock_backend.set_response(_resp)
+
+    from ae_mcp.handlers.core import _run_revert
+    result = await _run_revert(
+        S.AeRevertArgs(checkpoint_id="abc_x", branch_before_revert=False), ctx=None
+    )
+    assert result["ok"] is False
+    assert result["reverted"] is False
+    assert result["recoveredOriginal"] is True
+    # Original on disk is untouched (atomic replace never happened).
+    assert original.read_bytes() == b"INTACT"
+    # A close happened, then a reopen of the ORIGINAL (recovery).
+    assert any("app.project.close" in c for c in calls)
+    reopen = next(c for c in calls if "app.open" in c)
+    assert original.as_posix() in reopen
+
+
+@pytest.mark.asyncio
+async def test_revert_aborts_if_close_fails(mock_backend, tmp_path, monkeypatch):
+    # If the close itself fails, the handler must NOT proceed to copy — the
+    # original is never touched and an error is returned.
+    from ae_mcp import checkpoint_store
+    store = checkpoint_store.CheckpointStore(root=tmp_path)
+    monkeypatch.setattr("ae_mcp.handlers.core._store", store)
+
+    original = tmp_path / "Original.aep"
+    original.write_bytes(b"INTACT")
+    d = store._dir_for(str(original))
+    d.mkdir(parents=True, exist_ok=True)
+    aep = d / "abc_x.aep"
+    aep.write_bytes(b"NEW")
+    store.write_meta(source_project_path=str(original), cid="abc_x",
+                     label="seed", active_comp_id=None, current_time=0.0,
+                     size_bytes=3)
+
+    replace_spy = []
+    monkeypatch.setattr(
+        "ae_mcp.handlers.core.os.replace",
+        lambda *a, **k: replace_spy.append(a),
+    )
+
+    def _resp(code="", **kw):
+        if "app.project.file" in code and "path:" in code:
+            return json.dumps({"ok": True, "path": str(original)})
+        if "app.project.close" in code:
+            return json.dumps({"ok": False, "error": "close() failed: locked"})
+        if "app.open" in code:
+            return json.dumps({"ok": True, "openedPath": str(original)})
+        return json.dumps({"ok": True})
+
+    mock_backend.set_response(_resp)
+
+    from ae_mcp.handlers.core import _run_revert
+    result = await _run_revert(
+        S.AeRevertArgs(checkpoint_id="abc_x", branch_before_revert=False), ctx=None
+    )
+    assert result["ok"] is False
+    assert result["reverted"] is False
+    assert "close" in result["error"].lower()
+    # No copy/replace was attempted; original untouched.
+    assert replace_spy == []
+    assert original.read_bytes() == b"INTACT"
+
+
+@pytest.mark.asyncio
+async def test_revert_untitled_project_refuses(mock_backend, tmp_path, monkeypatch):
+    # An untitled project has no on-disk path to restore over. Reverting it
+    # would make %TEMP% the live project, so the handler refuses.
+    from ae_mcp import checkpoint_store
+    store = checkpoint_store.CheckpointStore(root=tmp_path)
+    monkeypatch.setattr("ae_mcp.handlers.core._store", store)
+
+    # Seed an _untitled checkpoint so lookup succeeds; the refusal is about
+    # there being no live on-disk path, not a missing checkpoint.
+    d = store._dir_for(None)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "u_1.aep").write_bytes(b"X")
+    store.write_meta(source_project_path=None, cid="u_1", label="seed",
+                     active_comp_id=None, current_time=0.0, size_bytes=1)
+
+    calls = []
+
+    def _resp(code="", **kw):
+        calls.append(code)
+        if "app.project.file" in code and "path:" in code:
+            return json.dumps({"ok": True, "path": None})  # untitled
+        return json.dumps({"ok": True})
+
+    mock_backend.set_response(_resp)
+
+    from ae_mcp.handlers.core import _run_revert
+    result = await _run_revert(
+        S.AeRevertArgs(checkpoint_id="u_1", branch_before_revert=False), ctx=None
+    )
+    assert result["ok"] is False
+    assert result["reverted"] is False
+    assert "untitled" in result["error"].lower()
+    # Crucially, the project was NEVER closed (no destructive action taken).
+    assert not any("app.project.close" in c for c in calls)
+    assert not any("app.open" in c for c in calls)
+
+
+def test_revert_close_template_renders_no_throw():
+    from ae_mcp.handlers.core import _load_jsx
+    jsx = _load_jsx("revert_close.jsx").substitute()
+    assert "app.project.close" in jsx
+    assert "DO_NOT_SAVE_CHANGES" in jsx
+    # Never throws: close is wrapped and returns {ok:false,error:...}.
+    assert "ok: false" in jsx and "ok: true" in jsx
+
+
+def test_revert_open_template_substitutes_path_and_no_throw():
+    from ae_mcp.handlers.core import _load_jsx
+    p = "C:/projects/Original.aep"
+    jsx = _load_jsx("revert_open.jsx").substitute(
+        aep_path=json.dumps(p, ensure_ascii=False)
+    )
+    assert json.dumps(p) in jsx
+    assert "app.open" in jsx
+    # Preserves the missing-file guard and never throws.
+    assert "missing" in jsx
+    assert "ok: false" in jsx and "ok: true" in jsx
