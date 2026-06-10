@@ -10,6 +10,8 @@ weak JSON contract:
 - A string beginning with "EvalScript error" (CSInterface's uncaught-error
   sentinel) — surfaces as `{ok:false, error, raw}`. Backstop for the
   jsx-bridge.js sentinel check (see GitHub issue #8).
+- JSON-shaped text that fails `json.loads` — surfaces as `{ok:false, error,
+  raw}` rather than falling through to silent success.
 - Other non-JSON text — returned as `{ok:true, content:text}` because some
   callers intentionally use ae.exec to fetch a string.
 
@@ -29,46 +31,41 @@ from typing import Any
 _NO_VALUE_SENTINELS = frozenset({"undefined", "null"})
 
 
+def _fail(error: str, raw: str) -> dict[str, str | bool]:
+    return {"ok": False, "error": error, "raw": raw}
+
+
 def parse_jsx_result(text: str) -> Any:
     """Parse raw JSX output text into a uniform result dict.
 
     Returns:
         - dict/list from json.loads when text looks like JSON
         - {ok:false, error, raw} for empty or "undefined"/"null" outputs
+        - {ok:false, error, raw} for JSON-shaped text that fails to parse
         - {ok:true, content:text} for other non-JSON strings (back-compat
           for ae.exec users who return raw strings)
     """
     if not text or text.strip() == "":
-        return {
-            "ok": False,
-            "error": "jsx returned no value (empty output)",
-            "raw": text,
-        }
+        return _fail("jsx returned no value (empty output)", text)
 
     stripped = text.strip()
     if stripped in _NO_VALUE_SENTINELS:
-        return {
-            "ok": False,
-            "error": f"jsx evaluated to {stripped}; ensure your code "
-                     "returns JSON.stringify(...) or a value",
-            "raw": text,
-        }
+        return _fail(
+            f"jsx evaluated to {stripped}; ensure your code returns JSON.stringify(...) or a value",
+            text,
+        )
 
     # CSInterface returns the literal "EvalScript error." (the constant
     # EvalScript_ErrMessage) when ExtendScript threw uncaught. jsx-bridge.js
     # rejects it, but this is the Python backstop: surface it as a failure
     # rather than wrapping the error message as ok:true content.
     if stripped.startswith("EvalScript error"):
-        return {
-            "ok": False,
-            "error": stripped,
-            "raw": text,
-        }
+        return _fail(stripped, text)
 
     if stripped[:1] in ("{", "["):
         try:
             return json.loads(stripped)
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as e:
+            return _fail(f"jsx returned JSON-like text that failed to parse: {e}", text)
 
     return {"ok": True, "content": text}
