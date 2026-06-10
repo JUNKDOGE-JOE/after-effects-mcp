@@ -1,6 +1,8 @@
 """The MCP server advertises ae-mcp operating guidance at handshake."""
 from __future__ import annotations
 
+import logging
+
 from ae_mcp.instructions import SERVER_INSTRUCTIONS
 from ae_mcp.server import build_server
 
@@ -28,3 +30,25 @@ def test_build_server_advertises_instructions():
     assert server.instructions == SERVER_INSTRUCTIONS
     opts = server.create_initialization_options()
     assert opts.instructions == SERVER_INSTRUCTIONS
+
+
+def test_filtered_tool_names_logs_when_backend_selection_fails(monkeypatch, caplog):
+    """A failing backend must yield an empty tool list AND a WARNING log —
+    not a silent empty set (issue #8). Previously the bare `except` swallowed
+    the error with zero diagnostic."""
+    from ae_mcp.backends import discovery as _discovery
+    from ae_mcp import server as _server
+
+    def _boom():
+        raise _discovery.BackendSelectionError("no backend configured")
+
+    monkeypatch.setattr(_discovery, "select_backend", _boom)
+
+    with caplog.at_level(logging.WARNING, logger="ae_mcp.server"):
+        result = _server._filtered_tool_names()
+
+    assert result == set()
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert any("backend selection failed" in r.getMessage() for r in warnings), (
+        f"expected a backend-selection WARNING, got: {[r.getMessage() for r in warnings]}"
+    )

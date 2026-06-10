@@ -18,7 +18,7 @@ function evalScript(jsx, timeoutMs) {
         try {
             csInterface.evalScript(jsx, (result) => {
                 clearTimeout(timer);
-                if (typeof result === 'string' && result.startsWith('EvalScript error:')) {
+                if (typeof result === 'string' && result.indexOf('EvalScript error') === 0) {
                     reject(new Error(result));
                 } else {
                     resolve(result);
