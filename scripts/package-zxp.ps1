@@ -1,17 +1,25 @@
 # Build a signed ZXP package for the ae-mcp CEP panel.
 #
 # Usage:
-#   .\scripts\package-zxp.ps1 -ZxpSignCmd C:\Tools\ZXPSignCmd.exe
+#   .\scripts\package-zxp.ps1 -ZxpSignCmd C:\Tools\ZXPSignCmd.exe -CertPassword <pw>
 # Optional:
-#   .\scripts\package-zxp.ps1 -ZxpSignCmd C:\Tools\ZXPSignCmd.exe -CertPath release\ae-mcp.p12 -CertPassword changeit
+#   .\scripts\package-zxp.ps1 -ZxpSignCmd C:\Tools\ZXPSignCmd.exe -CertPassword <pw> -CertPath release\ae-mcp.p12
+#
+# -CertPassword is REQUIRED (no baked-in default secret). The same password is
+# used to create the self-signed cert (if none exists) and to sign.
 
 param(
     [Parameter(Mandatory=$true)]
     [string]$ZxpSignCmd,
 
+    [Parameter(Mandatory=$true)]
+    [string]$CertPassword,
+
     [string]$CertPath = "",
-    [string]$CertPassword = "ae-mcp-dev",
-    [string]$OutputPath = ""
+    [string]$OutputPath = "",
+    # Timestamp server: an untimestamped self-signed ZXP fails validation once
+    # the cert expires. Timestamping pins the signature to signing time.
+    [string]$Tsa = "http://timestamp.digicert.com"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -42,6 +50,10 @@ Copy-Item -Recurse -Force $pluginSrc $stageDir
 if (Test-Path (Join-Path $stageDir 'host\node_modules')) {
     Remove-Item -Recurse -Force (Join-Path $stageDir 'host\node_modules')
 }
+# Never ship the CEF remote-debug port file to end users: it opens a
+# remote-debugging port (the CEF context runs with node enabled), letting any
+# local process attach a DevTools/Node client. Strip it before signing.
+Remove-Item -Force (Join-Path $stageDir '.debug') -ErrorAction SilentlyContinue
 
 Write-Host "[2/4] Installing host production dependencies..."
 Push-Location (Join-Path $stageDir 'host')
@@ -62,7 +74,9 @@ Write-Host "[4/4] Signing package..."
 if (Test-Path $OutputPath) {
     Remove-Item -Force $OutputPath
 }
-& $ZxpSignCmd -sign $stageDir $OutputPath $CertPath $CertPassword
+# -tsa adds a trusted timestamp so the signature stays valid after the cert
+# expires.
+& $ZxpSignCmd -sign $stageDir $OutputPath $CertPath $CertPassword -tsa $Tsa
 
 Write-Host ""
 Write-Host "Wrote $OutputPath"
