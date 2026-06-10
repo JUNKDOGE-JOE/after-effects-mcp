@@ -2,6 +2,7 @@
 const express = require('express');
 const jsxBridge = require('./jsx-bridge');
 const authToken = require('./auth-token');
+const PKG_VERSION = require('./package.json').version;
 
 let app = null;
 let httpServer = null;
@@ -40,7 +41,7 @@ function buildApp() {
         // readiness proxy. /exec is what actually probes AE.
         res.json({
             ok: true,
-            pluginVersion: '0.1.0',
+            pluginVersion: PKG_VERSION,
             port: currentPort,
         });
     });
