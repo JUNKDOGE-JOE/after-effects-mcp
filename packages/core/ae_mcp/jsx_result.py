@@ -7,6 +7,9 @@ weak JSON contract:
 - Empty string or the literal "undefined" / "null" — surfaces as
   `{ok:false, error, raw}`. This catches silent failure modes where the
   wrapping bug or a half-broken template produced no value at all.
+- A string beginning with "EvalScript error" (CSInterface's uncaught-error
+  sentinel) — surfaces as `{ok:false, error, raw}`. Backstop for the
+  jsx-bridge.js sentinel check (see GitHub issue #8).
 - Other non-JSON text — returned as `{ok:true, content:text}` because some
   callers intentionally use ae.exec to fetch a string.
 
@@ -48,6 +51,17 @@ def parse_jsx_result(text: str) -> Any:
             "ok": False,
             "error": f"jsx evaluated to {stripped}; ensure your code "
                      "returns JSON.stringify(...) or a value",
+            "raw": text,
+        }
+
+    # CSInterface returns the literal "EvalScript error." (the constant
+    # EvalScript_ErrMessage) when ExtendScript threw uncaught. jsx-bridge.js
+    # rejects it, but this is the Python backstop: surface it as a failure
+    # rather than wrapping the error message as ok:true content.
+    if stripped.startswith("EvalScript error"):
+        return {
+            "ok": False,
+            "error": stripped,
             "raw": text,
         }
 

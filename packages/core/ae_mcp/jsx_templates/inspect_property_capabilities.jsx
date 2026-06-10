@@ -3,7 +3,7 @@
 (function() {
     var comp = ${comp_expr};
     if (!comp) return JSON.stringify({ok:false,error:"no comp"});
-    var layer = comp.layer(${layer_id});
+    var layer = AEMCP.layerById(comp, ${layer_id});
     if (!layer) return JSON.stringify({ok:false,error:"no layer"});
 
     var segs = (${path}).split("/");

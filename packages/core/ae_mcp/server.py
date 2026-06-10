@@ -33,7 +33,8 @@ def _filtered_tool_names() -> set:
     try:
         backend = _discovery.select_backend()
         supported = backend.supported_verbs()
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        log.warning("backend selection failed; exposing no tools: %s", e)
         return set()
     if _snap_discovery.select_snapshotter() is None:
         supported = supported - {"ae.snapshot"}
