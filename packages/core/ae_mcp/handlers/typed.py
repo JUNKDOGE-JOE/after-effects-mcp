@@ -34,6 +34,13 @@ def _backend():
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "jsx_templates"
 
+# Wall-clock budget (ms) spliced into the search/scan traversal templates so a
+# large project returns partial results with truncated:true instead of running
+# past AE's 30s evalScript timeout (yielding zero output and a blocked UI).
+# Kept as a rendered constant rather than user-facing schema surface; ~20s sits
+# comfortably under the 30s exec timeout. #12
+_TRAVERSAL_BUDGET_MS = 20000
+
 
 @lru_cache(maxsize=16)
 def _load_template(name: str) -> Template:
@@ -357,6 +364,7 @@ def render_scan_property_tree(args: schemas.AeScanPropertyTreeArgs) -> str:
         layer_id=int(args.layer_id),
         max_depth=int(args.max_depth),
         include_values="true" if args.include_values else "false",
+        time_budget_ms=_TRAVERSAL_BUDGET_MS,
     )
 
 
@@ -514,6 +522,7 @@ def render_search_project(args: schemas.AeSearchProjectArgs) -> str:
         query_js=_json_literal(args.query),
         scope_js=_json_literal(list(args.scope)),
         limit=int(args.limit),
+        time_budget_ms=_TRAVERSAL_BUDGET_MS,
     )
 
 

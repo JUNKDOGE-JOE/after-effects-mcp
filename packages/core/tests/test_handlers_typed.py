@@ -274,6 +274,57 @@ def test_render_search_project():
     assert "var limit = 10;" in jsx
 
 
+def test_render_create_layer_position_uses_matchname():
+    # #12: position must be addressed by matchName, not the localized display
+    # names "Transform"/"Position" (null on JP/DE AE -> position silently lost).
+    from ae_mcp.handlers.typed import render_create_layer
+    args = S.AeCreateLayerArgs(type="solid", name="P", position=(10, 20, 0))
+    jsx = render_create_layer(args)
+    assert "AEMCP.propByMatchPath(" in jsx
+    assert "ADBE Transform Group#1/ADBE Position#1" in jsx
+    # The brittle display-name chain is gone.
+    assert 'property("Transform").property("Position")' not in jsx
+
+
+def test_render_search_project_has_time_budget():
+    # #12: traversal must be wall-clock bounded so big projects return partial
+    # results instead of blowing the 30s timeout with zero output.
+    from ae_mcp.handlers.typed import render_search_project, _TRAVERSAL_BUDGET_MS
+    jsx = render_search_project(schemas.AeSearchProjectArgs(query="x"))
+    assert f"var BUDGET_MS = {_TRAVERSAL_BUDGET_MS};" in jsx
+    assert "new Date().getTime()" in jsx
+    assert "overBudget()" in jsx
+    assert "budgetHit" in jsx
+    assert _TRAVERSAL_BUDGET_MS < 30000  # comfortably under the exec timeout
+
+
+def test_render_scan_property_tree_has_time_budget():
+    from ae_mcp.handlers.typed import render_scan_property_tree, _TRAVERSAL_BUDGET_MS
+    jsx = render_scan_property_tree(schemas.AeScanPropertyTreeArgs(layer_id=1))
+    assert f"var BUDGET_MS = {_TRAVERSAL_BUDGET_MS};" in jsx
+    assert "overBudget()" in jsx
+    assert "budgetHit" in jsx
+
+
+def test_render_create_rig_uses_layerById():
+    # #12 (carried from PR #14 review): resolve the target via AEMCP.layerById
+    # so the `if (!target)` guard is reachable and returns the friendly
+    # "target layer not found" message instead of AE's raw exception.
+    from ae_mcp.handlers.rig import _load_jsx
+    import json as _json
+    jsx = _load_jsx("create_rig.jsx").substitute(
+        comp_expr="null",
+        target_layer_id=_json.dumps(99),
+        rig_type=_json.dumps("transform_controller"),
+        name=_json.dumps("Ctrl"),
+        options=_json.dumps({}),
+    )
+    assert "AEMCP.layerById(comp, 99)" in jsx
+    assert "comp.layer(99)" not in jsx
+    assert "target layer not found" in jsx
+
+
+
 @pytest.mark.asyncio
 async def test_run_search_project(mock_backend):
     mock_backend.set_response(
