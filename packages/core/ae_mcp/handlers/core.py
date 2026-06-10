@@ -15,6 +15,7 @@ import asyncio
 import base64
 import json
 import logging
+import os
 import shutil
 import tempfile
 import uuid
@@ -74,6 +75,35 @@ async def _resolve_project_path(ctx: Any) -> Optional[str]:
     if isinstance(parsed, dict) and parsed.get("ok"):
         return parsed.get("path")
     return None
+
+
+def _atomic_replace(src_aep: Path, dst_path: str) -> None:
+    """Copy `src_aep` onto `dst_path` atomically.
+
+    Copy to a sibling temp file on the SAME directory/volume as the
+    destination so os.replace is a true atomic rename (cross-volume
+    os.replace raises). This guarantees the destination is never left
+    half-written: on success it is the full checkpoint; on any failure it
+    is untouched. Raises on failure (caller handles recovery).
+    """
+    dst = Path(dst_path)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{dst.stem}.", suffix=".aep.tmp", dir=str(dst.parent)
+    )
+    os.close(fd)
+    tmp = Path(tmp_name)
+    try:
+        shutil.copyfile(src_aep, tmp)
+        os.replace(tmp, dst)
+    except BaseException:
+        # Clean up the partial temp file; the destination is untouched.
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except OSError:
+            pass
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -324,39 +354,119 @@ async def _run_revert(args: schemas.AeRevertArgs, ctx: Any) -> Any:
                 "reverted": False,
                 "error": f"checkpoint not found: {args.checkpoint_id}",
             }
+        # Preserve the original "checkpoint .aep missing" guard.
+        if not aep.exists():
+            return {
+                "ok": False,
+                "reverted": False,
+                "error": f"checkpoint .aep missing: {aep}",
+            }
+
+        # An untitled project has no on-disk path to restore over. Opening
+        # the temp copy in place would make %TEMP% the live project (the
+        # exact data-loss bug we are fixing), so refuse instead.
+        if not project_path:
+            return {
+                "ok": False,
+                "reverted": False,
+                "error": (
+                    "cannot revert an unsaved/untitled project; save it "
+                    "first so there is a path to restore"
+                ),
+            }
+
         branched_from = None
-        if args.branch_before_revert and project_path:
-            # best-effort branch; never block revert on its failure
-            try:
-                cid = _store.make_id()
-                dst = _store.aep_path(project_path, cid)
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                tmpl = _load_jsx("checkpoint_create.jsx")
-                jsx = tmpl.substitute(dst_path=json.dumps(str(dst), ensure_ascii=False))
-                out = await _backend().exec(code=jsx, timeout_sec=60.0)
-                parsed = _try_json(out)
-                if isinstance(parsed, dict) and parsed.get("ok") and not parsed.get("skipped"):
-                    _store.write_meta(
-                        source_project_path=project_path, cid=cid,
-                        label=f"before-revert-{args.checkpoint_id[:8]}",
-                        active_comp_id=parsed.get("activeCompId"),
-                        current_time=float(parsed.get("currentTime") or 0.0),
-                        size_bytes=_ensure_checkpoint_file(project_path, dst, parsed) or 0,
-                    )
-                    branched_from = cid
-            except Exception as e:  # noqa: BLE001
-                log.warning("branch_before_revert failed: %s", e)
-        tmpl = _load_jsx("revert.jsx")
-        jsx = tmpl.substitute(aep_path=json.dumps(aep.as_posix(), ensure_ascii=False))
-        out = await _backend().exec(code=jsx, timeout_sec=60.0)
-        parsed = _try_json(out)
-        if isinstance(parsed, dict) and parsed.get("ok"):
-            parsed["branchedFromId"] = branched_from
-        return parsed
+        if args.branch_before_revert:
+            branched_from = await _branch_snapshot(project_path, args.checkpoint_id)
+
+        # Step 1: close the current project with NO save (releases file handle).
+        close_tmpl = _load_jsx("revert_close.jsx")
+        close_out = await _backend().exec(code=close_tmpl.substitute(), timeout_sec=60.0)
+        close_parsed = _try_json(close_out)
+        if not (isinstance(close_parsed, dict) and close_parsed.get("ok")):
+            # Close failed — do NOT touch the original file; nothing was changed.
+            err = (close_parsed or {}).get("error") if isinstance(close_parsed, dict) else None
+            return {
+                "ok": False,
+                "reverted": False,
+                "error": f"revert aborted: close failed: {err or close_out}",
+                "branchedFromId": branched_from,
+            }
+
+        # Step 2 (Python): atomically copy the checkpoint .aep over the
+        # original project path. os.replace is atomic, so the original is
+        # never left half-written.
+        try:
+            _atomic_replace(aep, project_path)
+        except Exception as e:  # noqa: BLE001
+            log.warning("revert restore-copy failed: %s", e)
+            # The original on disk is intact (we only did close-no-save and
+            # the replace is atomic). Reopen it so the user is never left
+            # with no project.
+            open_tmpl = _load_jsx("revert_open.jsx")
+            reopen_jsx = open_tmpl.substitute(
+                aep_path=json.dumps(Path(project_path).as_posix(), ensure_ascii=False)
+            )
+            reopened = _try_json(await _backend().exec(code=reopen_jsx, timeout_sec=60.0))
+            recovered = bool(isinstance(reopened, dict) and reopened.get("ok"))
+            return {
+                "ok": False,
+                "reverted": False,
+                "error": f"revert failed during restore: {e}",
+                "recoveredOriginal": recovered,
+                "branchedFromId": branched_from,
+            }
+
+        # Step 3: reopen the (now restored) ORIGINAL project and verify path.
+        open_tmpl = _load_jsx("revert_open.jsx")
+        open_jsx = open_tmpl.substitute(
+            aep_path=json.dumps(Path(project_path).as_posix(), ensure_ascii=False)
+        )
+        open_parsed = _try_json(await _backend().exec(code=open_jsx, timeout_sec=60.0))
+        if not (isinstance(open_parsed, dict) and open_parsed.get("ok")):
+            err = (open_parsed or {}).get("error") if isinstance(open_parsed, dict) else None
+            return {
+                "ok": False,
+                "reverted": True,  # file WAS restored on disk; only reopen failed
+                "error": f"checkpoint restored but reopen failed: {err or open_parsed}",
+                "branchedFromId": branched_from,
+            }
+
+        return {
+            "ok": True,
+            "reverted": True,
+            "openedPath": open_parsed.get("openedPath"),
+            "restoredTo": project_path,
+            "branchedFromId": branched_from,
+        }
 
     return await progress.run_with_timeout(
-        ctx, _call(), timeout_sec=80.0, start_msg="ae.revert..."
+        ctx, _call(), timeout_sec=200.0, start_msg="ae.revert..."
     )
+
+
+async def _branch_snapshot(project_path: str, checkpoint_id: str) -> Optional[str]:
+    """Best-effort 'before-revert' checkpoint. Never blocks revert on failure."""
+    try:
+        cid = _store.make_id()
+        dst = _store.aep_path(project_path, cid)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        tmpl = _load_jsx("checkpoint_create.jsx")
+        jsx = tmpl.substitute(dst_path=json.dumps(str(dst), ensure_ascii=False))
+        out = await _backend().exec(code=jsx, timeout_sec=60.0)
+        parsed = _try_json(out)
+        if isinstance(parsed, dict) and parsed.get("ok") and not parsed.get("skipped"):
+            _store.write_meta(
+                source_project_path=project_path, cid=cid,
+                label=f"before-revert-{checkpoint_id[:8]}",
+                active_comp_id=parsed.get("activeCompId"),
+                current_time=float(parsed.get("currentTime") or 0.0),
+                size_bytes=_ensure_checkpoint_file(project_path, dst, parsed) or 0,
+            )
+            return cid
+    except Exception as e:  # noqa: BLE001
+        log.warning("branch_before_revert failed: %s", e)
+    return None
 
 
 register("ae.revert", schemas.AeRevertArgs, _run_revert)
