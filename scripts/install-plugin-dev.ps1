@@ -22,6 +22,9 @@ if (Test-Path $cepDir) { Remove-Item -Recurse -Force $cepDir }
 Write-Host "  Done."
 
 Write-Host "[3/3] Copying plugin/ -> $cepDir ..."
+# Dev install intentionally KEEPS plugin/.debug so developers get the CEF
+# remote-debugging port. The packaged ZXP (scripts/package-zxp.ps1) strips it
+# so it never reaches end users.
 Copy-Item -Recurse -Force $pluginSrc $cepDir
 Write-Host "  Done."
 
