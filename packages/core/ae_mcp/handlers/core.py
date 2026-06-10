@@ -553,6 +553,32 @@ def _attach_preview_file_data(parsed: dict[str, Any], include_base64: bool) -> d
     return parsed
 
 
+def _downscale_png(path: Path, scale: float) -> Optional[tuple[int, int]]:
+    """Resample the PNG at `path` in place by `scale` (0<scale, !=1.0).
+
+    Returns the new (width, height), or None if no resize was applied (scale
+    ~1.0 or the result would be degenerate). Uses Pillow, a declared core
+    dependency. Never raises into the caller — on failure the original file is
+    left untouched and None is returned.
+    """
+    if scale <= 0 or abs(scale - 1.0) < 1e-9:
+        return None
+    try:
+        from PIL import Image
+
+        with Image.open(path) as im:
+            new_w = max(1, int(round(im.width * scale)))
+            new_h = max(1, int(round(im.height * scale)))
+            if (new_w, new_h) == (im.width, im.height):
+                return None
+            resized = im.resize((new_w, new_h), Image.LANCZOS)
+        resized.save(path, "PNG")
+        return (new_w, new_h)
+    except Exception:  # noqa: BLE001
+        log.debug("preview downscale failed for %s", path, exc_info=True)
+        return None
+
+
 async def _run_preview_frame(args: schemas.AePreviewFrameArgs, ctx: Any) -> Any:
     from ae_mcp.handlers.typed import _comp_expr  # type: ignore
     from ae_mcp.snapshot import discovery as _snap_discovery
@@ -597,12 +623,24 @@ async def _run_preview_frame(args: schemas.AePreviewFrameArgs, ctx: Any) -> Any:
 
             comp_id = str(prepared.get("compId"))
             comp_name = prepared.get("compName")
+            # Apply the requested output scale to the captured PNG (in place).
+            frame_w = snap.get("width")
+            frame_h = snap.get("height")
+            snap_path = snap.get("path")
+            if snap_path:
+                new_dims = _downscale_png(Path(str(snap_path)), args.scale)
+                if new_dims is not None:
+                    frame_w, frame_h = new_dims
             frame = {
                 "time": prepared.get("time"),
-                "path": snap.get("path"),
-                "width": snap.get("width"),
-                "height": snap.get("height"),
-                "sizeBytes": snap.get("bytes"),
+                "path": snap_path,
+                "width": frame_w,
+                "height": frame_h,
+                "sizeBytes": (
+                    Path(str(snap_path)).stat().st_size
+                    if snap_path and Path(str(snap_path)).exists()
+                    else snap.get("bytes")
+                ),
                 "source": "viewer",
                 "method": snap.get("method"),
                 "compId": comp_id,
