@@ -231,6 +231,100 @@ async def test_preview_frame_errors_without_snapshotter(monkeypatch, mock_backen
     assert "snapshotter" in result["error"]
 
 
+class _RealPngSnapshotter:
+    """Writes an actual decodable PNG so the scale/downscale path runs."""
+
+    def __init__(self, w=800, h=600):
+        self.w, self.h = w, h
+
+    async def capture(self, out_path, *, hwnd=None, main_window=False, method="auto"):
+        from PIL import Image
+
+        Image.new("RGB", (self.w, self.h), (10, 20, 30)).save(out_path, "PNG")
+        return {
+            "ok": True,
+            "path": str(out_path),
+            "bytes": out_path.stat().st_size,
+            "width": self.w,
+            "height": self.h,
+            "hwnd": hwnd,
+            "method": method,
+        }
+
+
+def test_downscale_png_halves_dimensions(tmp_path):
+    from PIL import Image
+
+    from ae_mcp.handlers.core import _downscale_png
+
+    p = tmp_path / "f.png"
+    Image.new("RGB", (800, 600), (1, 2, 3)).save(p, "PNG")
+    dims = _downscale_png(p, 0.5)
+    assert dims == (400, 300)
+    with Image.open(p) as im:
+        assert (im.width, im.height) == (400, 300)
+
+
+def test_downscale_png_noop_at_unit_scale(tmp_path):
+    from PIL import Image
+
+    from ae_mcp.handlers.core import _downscale_png
+
+    p = tmp_path / "f.png"
+    Image.new("RGB", (640, 480), (1, 2, 3)).save(p, "PNG")
+    assert _downscale_png(p, 1.0) is None
+    with Image.open(p) as im:
+        assert (im.width, im.height) == (640, 480)
+
+
+@pytest.mark.asyncio
+async def test_preview_frame_honors_scale(monkeypatch, mock_backend, tmp_path):
+    """scale=0.5 must return a frame whose reported and on-disk dimensions are
+    half the native capture size (Item 3: scale was previously ignored)."""
+    monkeypatch.setattr(
+        "ae_mcp.snapshot.discovery.select_snapshotter",
+        lambda: _RealPngSnapshotter(800, 600),
+    )
+    mock_backend.set_response(json.dumps({
+        "ok": True, "compId": "7", "compName": "Preview", "time": 0.0,
+    }))
+
+    _, run_fn = HANDLERS["ae.previewFrame"]
+    result = await run_fn(
+        S.AePreviewFrameArgs(comp_id="7", time=0.0, out_dir=str(tmp_path), scale=0.5),
+        None,
+    )
+
+    assert result["ok"] is True
+    frame = result["frames"][0]
+    assert frame["width"] == 400
+    assert frame["height"] == 300
+    from PIL import Image
+    with Image.open(frame["path"]) as im:
+        assert (im.width, im.height) == (400, 300)
+
+
+@pytest.mark.asyncio
+async def test_preview_frame_native_size_when_scale_default(monkeypatch, mock_backend, tmp_path):
+    monkeypatch.setattr(
+        "ae_mcp.snapshot.discovery.select_snapshotter",
+        lambda: _RealPngSnapshotter(800, 600),
+    )
+    mock_backend.set_response(json.dumps({
+        "ok": True, "compId": "7", "compName": "Preview", "time": 0.0,
+    }))
+
+    _, run_fn = HANDLERS["ae.previewFrame"]
+    result = await run_fn(
+        S.AePreviewFrameArgs(comp_id="7", time=0.0, out_dir=str(tmp_path)),
+        None,
+    )
+    frame = result["frames"][0]
+    assert frame["width"] == 800
+    assert frame["height"] == 600
+
+
+
 @pytest.mark.asyncio
 async def test_skill_crud_and_render(monkeypatch, tmp_path):
     monkeypatch.setenv("AE_MCP_SKILL_DIR", str(tmp_path))

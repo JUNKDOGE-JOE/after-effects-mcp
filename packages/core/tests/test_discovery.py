@@ -68,7 +68,23 @@ def test_env_var_unknown_raises_with_install_hint(monkeypatch):
             select_backend()
         msg = str(ei.value)
         assert "ghost" in msg
-        assert "pip install" in msg
+        # Unknown backend names have no known package, so we fall back to a
+        # generic (but accurate) hint rather than inventing a package name.
+        assert "ae-mcp-backend-ghost" not in msg
+        assert "plugin's docs" in msg
+
+
+def test_env_var_known_backend_hint_names_real_package(monkeypatch):
+    """The 'ae-mcp' backend lives in the 'ae-mcp-bridge' package; the hint
+    must name the real package, not the bogus 'ae-mcp-backend-ae-mcp'."""
+    monkeypatch.setenv("AE_MCP_BACKEND", "ae-mcp")
+    with _patch_installed({"a": FakeBackendA}):
+        with pytest.raises(BackendSelectionError) as ei:
+            select_backend()
+        msg = str(ei.value)
+        assert "pip install ae-mcp-bridge" in msg
+        assert "ae-mcp-backend-ae-mcp" not in msg
+
 
 
 def test_list_installed_backends_returns_dict():

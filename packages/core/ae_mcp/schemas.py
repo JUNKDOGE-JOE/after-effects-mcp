@@ -150,7 +150,12 @@ class AePreviewFrameArgs(_StrictModel):
         False, description="Attach base64 PNG bytes to each returned frame."
     )
     scale: float = Field(
-        1.0, gt=0, le=4, description="Requested preview scale. MVP renders native comp size."
+        1.0, gt=0, le=4,
+        description=(
+            "Output scale factor applied to the captured PNG (0<scale<=4). "
+            "1.0 = native size; e.g. 0.5 returns a half-size image. The frame "
+            "is captured at native size then resampled to scale before return."
+        ),
     )
     repaint_delay_ms: int = Field(
         300, ge=0, le=5000,

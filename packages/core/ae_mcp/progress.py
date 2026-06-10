@@ -4,7 +4,15 @@ Why: long-running AE ops (`ae.exec` with heavy JSX, 6 typed verbs that build
 JSX and round-trip through the file bridge) can take tens of seconds. Without
 periodic progress notifications the MCP client sees a silent stall and may
 time out the request. `with_heartbeat` pairs the real work with a background
-task that emits `ctx.report_progress` every `interval` seconds.
+task that emits a progress notification every `interval` seconds.
+
+The handlers receive the low-level ``mcp.shared.context.RequestContext`` (this
+server is built on ``mcp.server.Server``, not FastMCP). That object has NO
+``report_progress`` method — only FastMCP's ``Context`` does. The real
+out-of-band progress channel is ``ctx.session.send_progress_notification``,
+and it only does anything when the inbound request carried a
+``_meta.progressToken`` (exposed as ``ctx.meta.progressToken``). When no token
+is present there is nobody to notify, so we no-op cleanly.
 
 Usage:
     result = await with_heartbeat(ctx, do_work_coro, interval=2.0,
@@ -21,21 +29,55 @@ from typing import Any, Awaitable, Optional
 log = logging.getLogger("ae_mcp.progress")
 
 
+def _progress_token(ctx: Any) -> Any:
+    """Extract the inbound request's progressToken, or None if absent."""
+    meta = getattr(ctx, "meta", None)
+    if meta is None:
+        return None
+    return getattr(meta, "progressToken", None)
+
+
 async def _safe_report_progress(
     ctx: Any, progress: float, total: Optional[float], message: Optional[str]
 ) -> None:
     """Best-effort progress notification. Swallow errors — heartbeat must
     never break the actual work path.
 
-    Accepts ctx=None (useful for tests that drive handlers without FastMCP).
+    Resolution order:
+      1. Low-level path (the real server): emit a notifications/progress via
+         ``ctx.session.send_progress_notification`` when the request carried a
+         progressToken. No token -> nothing to notify -> clean no-op.
+      2. FastMCP path: if the ctx exposes ``report_progress`` (e.g. tests using
+         a FastMCP-style fake), use it.
+      3. Otherwise no-op.
+
+    Accepts ctx=None (useful for tests that drive handlers without a ctx).
+    Never raises into the caller.
     """
     if ctx is None:
         return
     try:
+        session = getattr(ctx, "session", None)
+        send = getattr(session, "send_progress_notification", None)
+        if send is not None:
+            token = _progress_token(ctx)
+            if token is None:
+                # No progressToken on the request: the client didn't ask for
+                # progress, so there's nothing to send. Clean no-op.
+                return
+            await send(
+                progress_token=token,
+                progress=progress,
+                total=total,
+                message=message,
+            )
+            return
         # FastMCP Context exposes async report_progress(progress, total, message).
-        await ctx.report_progress(progress=progress, total=total, message=message)
+        report = getattr(ctx, "report_progress", None)
+        if report is not None:
+            await report(progress=progress, total=total, message=message)
     except Exception:  # noqa: BLE001
-        log.debug("report_progress failed", exc_info=True)
+        log.debug("progress notification failed", exc_info=True)
 
 
 async def with_heartbeat(

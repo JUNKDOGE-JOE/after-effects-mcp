@@ -74,6 +74,17 @@ pip install ./packages/core ./packages/bridge ./packages/snapshot-mss
 - `ae-mcp` backend entry point
 - `ae.previewFrame` 需要的 snapshotter
 
+> **三个包必须一起安装。** `ae-mcp-bridge` 和 `ae-mcp-snapshot-mss` 在各自的
+> `pyproject.toml` 里按名字依赖 `ae-mcp>=0.2.0`，而这个名字在 PyPI 上并不存在
+> （仓库尚未发布到 PyPI）。所以不要单独跑 `pip install ./packages/bridge`，
+> 那会因为找不到 `ae-mcp` 而失败。请把三个路径放在同一条 `pip install` 命令里
+> （core 在最前，让 bridge/snapshot 的依赖在同一次解析中就地命中），或者用
+> `uv sync --all-packages`（见上方开发安装）。
+>
+> **供应链提示：** 一旦 `ae-mcp` 这个名字以后被发布到公共 PyPI，第三方就可能抢注
+> 同名包。在该名字由本项目正式发布前，请始终从本仓库的本地路径安装这三个包，
+> 不要让 pip 去公共索引拉取名为 `ae-mcp` 的包。
+
 2. 安装并打开 AE 面板：
 
 ```powershell
@@ -153,7 +164,7 @@ uv run pytest packages/core/tests/live -o addopts='' -vv
 - 面板红灯：查看面板里的 `Last error` 和日志区域。
 - `ae-mcp` 命令找不到：把 `command` 改成安装环境里的 launcher 绝对路径；Windows 通常是 `ae-mcp.exe`，macOS/Linux 通常是 `ae-mcp`。
 - 报 `AE_MCP_BACKEND='ae-mcp' but no such backend installed`：说明当前 Python 环境缺 `ae-mcp-bridge`。
-- 端口冲突：在面板中修改端口，并同步更新 `AE_MCP_PLUGIN_URL`。
+- 端口冲突：在面板中修改端口，并同步更新 `AE_MCP_PLUGIN_URL`。面板会把改过的端口记到 `localStorage`，重启后仍然保留（不会再被重置回 11488）。
 - `evalScript` 超时：先关闭 AE 模态弹窗；如果仍然卡住，重启 AE。
 - `ae.snapshot` 是诊断截图；`ae.previewFrame` 是快速 viewer capture，不是真实渲染。
 - macOS 试跑问题：请提 GitHub issue，并附上 AE 版本、macOS 版本、Python 版本和面板日志。
@@ -231,6 +242,21 @@ This provides:
 - the `ae-mcp` launcher
 - the `ae-mcp` backend entry point
 - the snapshotter required by `ae.previewFrame`
+
+> **The three packages must be installed together.** `ae-mcp-bridge` and
+> `ae-mcp-snapshot-mss` declare a by-name dependency on `ae-mcp>=0.2.0` in their
+> `pyproject.toml`, but that name is not published on PyPI (this repo is not on
+> PyPI yet). A standalone `pip install ./packages/bridge` therefore fails — pip
+> cannot resolve `ae-mcp`. Pass all three paths in a single `pip install`
+> command (core first, so the bridge/snapshot dependency resolves against the
+> local copy in the same run), or use `uv sync --all-packages` (see Developer
+> Install above).
+>
+> **Supply-chain note:** if the name `ae-mcp` is ever published to the public
+> PyPI by someone else, a third party could squat that name. Until this project
+> formally publishes the name, always install the three packages from this
+> repo's local paths and do not let pip pull an `ae-mcp` package from the public
+> index.
 
 2. Install and open the AE panel:
 
@@ -311,7 +337,7 @@ Current expected result: `24 passed`.
 - Panel red: read the panel `Last error` line and log area.
 - `ae-mcp` command not found: change `command` to the absolute path of the installed launcher; on Windows this is usually `ae-mcp.exe`, while on macOS/Linux it is usually `ae-mcp`.
 - `AE_MCP_BACKEND='ae-mcp' but no such backend installed`: the current Python environment is missing `ae-mcp-bridge`.
-- Port conflict: edit the port in the panel and update `AE_MCP_PLUGIN_URL`.
+- Port conflict: edit the port in the panel and update `AE_MCP_PLUGIN_URL`. The panel persists the changed port in `localStorage`, so it survives a restart (it no longer resets to 11488).
 - `evalScript` timeouts: close AE modal dialogs first; restart AE if calls still hang.
 - `ae.snapshot` is diagnostic capture. `ae.previewFrame` is fast viewer capture, not a true render.
 - macOS trial issues: please open a GitHub issue with your AE version, macOS version, Python version, and panel logs.

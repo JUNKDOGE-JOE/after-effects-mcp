@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,13 +12,40 @@ from ae_mcp import progress
 
 
 class FakeCtx:
-    """Records report_progress calls."""
+    """Records report_progress calls (FastMCP-style ctx)."""
 
     def __init__(self) -> None:
         self.reports: list = []
 
     async def report_progress(self, progress: float, total, message):
         self.reports.append((progress, total, message))
+
+
+class FakeSession:
+    """Records low-level send_progress_notification calls."""
+
+    def __init__(self) -> None:
+        self.notifications: list = []
+
+    async def send_progress_notification(
+        self, progress_token, progress, total=None, message=None
+    ):
+        self.notifications.append(
+            {
+                "progress_token": progress_token,
+                "progress": progress,
+                "total": total,
+                "message": message,
+            }
+        )
+
+
+def _lowlevel_ctx(token):
+    """Build a RequestContext-shaped fake: .session + .meta.progressToken."""
+    return SimpleNamespace(
+        session=FakeSession(),
+        meta=SimpleNamespace(progressToken=token),
+    )
 
 
 @pytest.mark.asyncio
@@ -102,3 +130,70 @@ async def test_heartbeat_safe_with_none_ctx():
 
     result = await progress.with_heartbeat(None, work(), interval=0.05)
     assert result == "ok"
+
+
+# --- low-level RequestContext path (mcp.server.Server, not FastMCP) ---------
+
+
+@pytest.mark.asyncio
+async def test_lowlevel_sends_notification_when_token_present():
+    """When the request carried a progressToken, a real
+    notifications/progress is emitted via session.send_progress_notification."""
+    ctx = _lowlevel_ctx(token="tok-123")
+
+    async def work():
+        return "done"
+
+    result = await progress.with_heartbeat(ctx, work(), interval=0.05)
+    assert result == "done"
+    # The initial 0-progress report should have been sent on the session.
+    assert len(ctx.session.notifications) >= 1
+    first = ctx.session.notifications[0]
+    assert first["progress_token"] == "tok-123"
+    assert first["progress"] == 0
+
+
+@pytest.mark.asyncio
+async def test_lowlevel_noop_when_token_absent():
+    """No progressToken -> nobody asked for progress -> no send, no raise."""
+    ctx = _lowlevel_ctx(token=None)
+
+    async def work():
+        await asyncio.sleep(0.15)
+        return "done"
+
+    result = await progress.with_heartbeat(ctx, work(), interval=0.05)
+    assert result == "done"
+    # Nothing should have been sent (clean no-op).
+    assert ctx.session.notifications == []
+
+
+@pytest.mark.asyncio
+async def test_lowlevel_swallows_send_errors():
+    """A raising send_progress_notification must not break the work path."""
+
+    class BoomSession:
+        async def send_progress_notification(self, **kw):
+            raise RuntimeError("network down")
+
+    ctx = SimpleNamespace(
+        session=BoomSession(),
+        meta=SimpleNamespace(progressToken="tok"),
+    )
+
+    async def work():
+        return "ok"
+
+    # Should not raise despite the failing send.
+    result = await progress.with_heartbeat(ctx, work(), interval=0.05)
+    assert result == "ok"
+
+
+@pytest.mark.asyncio
+async def test_safe_report_progress_no_meta_attr_no_raise():
+    """A ctx with a session but no .meta attribute must no-op, not raise."""
+    ctx = SimpleNamespace(session=FakeSession())  # no .meta
+
+    await progress._safe_report_progress(ctx, 0.0, None, "x")
+    assert ctx.session.notifications == []
+
