@@ -29,7 +29,9 @@ def test_runtime_file_exists():
 )
 def test_array_polyfill_present_and_guarded(src, method):
     assert f"if (!Array.prototype.{method})" in src
-    assert f"Array.prototype.{method} = function" in src
+    # Installed via the non-enumerable _definePoly helper (#12), no longer a
+    # bare `Array.prototype.X = function` assignment.
+    assert f"_definePoly(Array.prototype, '{method}', function" in src
 
 
 def test_array_isarray_guarded(src):
@@ -64,6 +66,39 @@ def test_aemcp_namespace_guarded_for_reinit(src):
 
 def test_json_polyfill_retained(src):
     assert "if (typeof JSON === 'undefined')" in src
+
+
+def test_json_stringify_guarded_by_function_check(src):
+    # stringify is now also defended for the "JSON exists but lacks stringify"
+    # case, not just "JSON undefined".
+    assert "typeof JSON.stringify !== 'function'" in src
+    assert "JSON.stringify = function" in src
+
+
+def test_json_parse_polyfill_present_and_guarded(src):
+    # #12: classic-engine ae.exec code calling JSON.parse must not throw.
+    assert "typeof JSON.parse !== 'function'" in src
+    assert "JSON.parse = function" in src
+    # eval-with-validation must include Crockford's security regex so it can
+    # never eval arbitrary code.
+    assert r"/^[\],:{}\s]*$/" in src
+    assert "throw new SyntaxError" in src
+
+
+def test_array_polyfills_are_non_enumerable(src):
+    # #12: prototype additions install via a non-enumerable defineProperty
+    # helper so `for (var k in arr)` doesn't surface polyfill names.
+    assert "function _definePoly(proto, name, fn)" in src
+    assert "Object.defineProperty(proto, name, {" in src
+    assert "enumerable: false" in src
+    # try/catch fallback to plain assignment on engines where defineProperty
+    # throws on native prototypes.
+    assert "proto[name] = fn;" in src
+    # Every Array.prototype method routes through the helper, not a bare assign.
+    for method in ["indexOf", "forEach", "map", "filter", "reduce",
+                   "some", "every", "includes"]:
+        assert f"_definePoly(Array.prototype, '{method}'," in src
+        assert f"Array.prototype.{method} = function" not in src
 
 
 def _strip_line_comments(src: str) -> str:

@@ -5,6 +5,12 @@
     var scope = ${scope_js};
     var limit = ${limit};
 
+    // Wall-clock budget so large projects return partial results instead of
+    // blowing the 30s evalScript timeout with zero output. #12
+    var BUDGET_MS = ${time_budget_ms};
+    var START_MS = new Date().getTime();
+    function overBudget() { return (new Date().getTime() - START_MS) >= BUDGET_MS; }
+
     var orGroups = query.toLowerCase().split("|");
     for (var oi = 0; oi < orGroups.length; oi++) {
         var raw = orGroups[oi].split(/\s+/);
@@ -34,6 +40,7 @@
 
     var hits = [];
     var truncated = false;
+    var budgetHit = false;
     function add(h) {
         if (truncated) return;
         if (hits.length >= limit) { truncated = true; return; }
@@ -43,6 +50,7 @@
     var n = app.project.numItems;
     for (var i = 1; i <= n; i++) {
         if (truncated) break;
+        if (overBudget()) { truncated = true; budgetHit = true; break; }
         var it = app.project.item(i);
         if (!it) continue;
 
@@ -54,6 +62,7 @@
             if (inScope("layers") || inScope("expressions") || inScope("effects")) {
                 for (var li = 1; li <= it.numLayers; li++) {
                     if (truncated) break;
+                    if (overBudget()) { truncated = true; budgetHit = true; break; }
                     var layer = it.layer(li);
                     if (inScope("layers") && matches(layer.name)) {
                         add({kind:"layer", compId:String(it.id), layerId:li,
@@ -101,5 +110,6 @@
     }
 
     hits.sort(function(a,b){return b.score - a.score;});
-    return JSON.stringify({ok:true, hits:hits, truncated:truncated});
+    return JSON.stringify({ok:true, hits:hits, truncated:truncated,
+        reason: budgetHit ? "time budget exceeded" : (truncated ? "limit reached" : null)});
 })()
