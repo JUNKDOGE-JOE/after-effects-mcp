@@ -206,6 +206,7 @@ if (!Object.entries) {
     };
 }
 
+// AEMCP-HELPERS-BEGIN — verbatim copy lives in packages/core/ae_mcp/jsx_templates/_aemcp_prelude.jsx; keep both in sync (enforced by test_jsx_prelude.py)
 // ---------------------------------------------------------------------------
 // AEMCP helper namespace.
 //
@@ -300,3 +301,4 @@ AEMCP.propByMatchPath = function (root, path) {
     }
     return cur;
 };
+// AEMCP-HELPERS-END

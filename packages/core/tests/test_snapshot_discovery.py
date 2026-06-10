@@ -46,3 +46,63 @@ def test_multiple_installed_picks_first_supported():
     with _patch_installed({"bados": FakeSnapBadOS, "fake": FakeSnap}):
         s = select_snapshotter()
         assert isinstance(s, FakeSnap)
+
+
+def test_entry_point_load_error_is_skipped(monkeypatch):
+    class _BrokenEP:
+        name = "broken"
+
+        def load(self):
+            raise ImportError("half-uninstalled")
+
+    class _GoodEP:
+        name = "good"
+
+        def load(self):
+            return FakeSnap
+
+    monkeypatch.setattr(
+        "ae_mcp.snapshot.discovery.importlib.metadata.entry_points",
+        lambda group: [_BrokenEP(), _GoodEP()],
+    )
+
+    installed = list_installed_snapshotters()
+    assert installed == {"good": FakeSnap}
+
+    selected = select_snapshotter()
+    assert isinstance(selected, FakeSnap)
+
+
+def test_snapshotter_init_error_is_skipped():
+    class BrokenInitSnap(Snapshotter):
+        name = "broken-init"
+
+        def __init__(self):
+            raise RuntimeError("ctor exploded")
+
+        async def capture(self, out_path, **kw):
+            return {"ok": True}
+
+        def supports_platform(self):
+            return True
+
+    with _patch_installed({"broken": BrokenInitSnap, "good": FakeSnap}):
+        selected = select_snapshotter()
+
+    assert isinstance(selected, FakeSnap)
+
+
+def test_snapshotter_supports_platform_error_is_skipped():
+    class BrokenSupportsSnap(Snapshotter):
+        name = "broken-supports"
+
+        async def capture(self, out_path, **kw):
+            return {"ok": True}
+
+        def supports_platform(self):
+            raise RuntimeError("platform probe exploded")
+
+    with _patch_installed({"broken": BrokenSupportsSnap, "good": FakeSnap}):
+        selected = select_snapshotter()
+
+    assert isinstance(selected, FakeSnap)

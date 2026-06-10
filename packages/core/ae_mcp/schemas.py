@@ -252,7 +252,7 @@ class AeGetTimeArgs(_StrictModel):
 class AeGetPropertiesArgs(_StrictModel):
     """ae.getProperties — search properties by name across selected layers."""
     comp_id: Optional[str] = Field(None, description="AE comp id. Omit for active.")
-    layer_ids: List[int] = Field(..., description="1-based layer indices to scan.")
+    layer_ids: List[Annotated[int, Field(ge=1)]] = Field(..., min_length=1, description="1-based layer indices to scan.")
     query: str = Field(..., description="Multi-word AND; '|' separates OR groups.")
     offset: int = Field(0, ge=0, description="Pagination offset.")
     limit: int = Field(50, ge=1, le=500, description="Pagination size.")
@@ -394,6 +394,11 @@ class AeCreateRigArgs(_StrictModel):
     options: Dict[str, Any] = Field(default_factory=dict, description="Rig-type-specific options.")
 
 
+class AeStatusArgs(_StrictModel):
+    """ae.status — diagnose the ae-mcp install: backend selection result (with install hints when missing), installed backends, snapshotter availability. Call this first when other AE tools are missing or failing."""
+    pass
+
+
 # ---------------------------------------------------------------------------
 # Registry of verb -> schema (handlers.core / handlers.typed reference this)
 # ---------------------------------------------------------------------------
@@ -411,6 +416,7 @@ SCHEMAS = {
     "ae.previewFrame": AePreviewFrameArgs,
     "ae.applyEffect": AeApplyEffectArgs,
     "ae.ping": AePingArgs,
+    "ae.status": AeStatusArgs,
     "ae.createLayer": AeCreateLayerArgs,
     "ae.setProperty": AeSetPropertyArgs,
     "ae.moveLayer": AeMoveLayerArgs,
@@ -432,4 +438,4 @@ SCHEMAS = {
     "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 30, f"expected 30 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 31, f"expected 31 verbs, got {len(SCHEMAS)}"

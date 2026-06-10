@@ -34,6 +34,7 @@
     }
 
     var hits = [];
+    var missing = [];
 
     function visit(prop, layerId, pathSegs, matchSegs, depth) {
         if (depth > 6) return;
@@ -73,7 +74,7 @@
 
     for (var li = 0; li < layerIds.length; li++) {
         var layer = AEMCP.layerById(comp, layerIds[li]);
-        if (!layer) continue;
+        if (!layer) { missing.push(layerIds[li]); continue; }
         for (var pi = 1; pi <= layer.numProperties; pi++) {
             var top = layer.property(pi);
             if (!top) continue;
@@ -81,10 +82,16 @@
         }
     }
 
+    // Silent partial results are indistinguishable from "this layer had no matches"
+    // unless missing layer ids are surfaced explicitly to the caller.
+    if (missing.length === layerIds.length) {
+        return JSON.stringify({ok:false, error:"no valid layers in layer_ids", missingLayerIds:missing});
+    }
+
     hits.sort(function(a, b) { return b._score - a._score; });
     var total = hits.length;
     var paged = hits.slice(offset, offset + limit);
     for (var pi2 = 0; pi2 < paged.length; pi2++) delete paged[pi2]._score;
 
-    return JSON.stringify({ok:true, total: total, results: paged});
+    return JSON.stringify({ok:true, total: total, results: paged, missingLayerIds:missing});
 })()

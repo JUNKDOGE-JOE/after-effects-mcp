@@ -9,6 +9,7 @@ from typing import Any
 from ae_mcp import progress, schemas
 from ae_mcp.backends import discovery as _discovery
 from ae_mcp.handlers import register
+from ae_mcp.jsx_prelude import with_prelude
 from ae_mcp.jsx_result import parse_jsx_result as _try_json
 
 
@@ -32,13 +33,13 @@ async def _run_create_rig(args: schemas.AeCreateRigArgs, ctx: Any) -> Any:
     if args.controls is not None:
         options["controls"] = [c.model_dump() for c in args.controls]
 
-    jsx = _load_jsx("create_rig.jsx").substitute(
+    jsx = with_prelude(_load_jsx("create_rig.jsx").substitute(
         comp_expr=_comp_expr(args.comp_id),
         target_layer_id=json.dumps(args.target_layer_id),
         rig_type=json.dumps(args.rig_type),
         name=json.dumps(args.name, ensure_ascii=False),
         options=json.dumps(options, ensure_ascii=False),
-    )
+    ))
 
     async def _call() -> Any:
         out = await _backend().exec(

@@ -140,7 +140,7 @@ async def test_apply_effect_builds_jsx(mock_backend):
     assert len(mock_backend.calls) >= 1
     jsx = mock_backend.calls[-1]["code"]
     assert "ADBE Gaussian Blur 2" in jsx
-    assert "comp.layer(3)" in jsx
+    assert "AEMCP.layerById(comp, 3)" in jsx
 
 
 @pytest.mark.asyncio
@@ -196,7 +196,7 @@ async def test_preview_frame_uses_viewer_snapshot_not_render(monkeypatch, mock_b
     jsx = mock_backend.calls[-1]["code"]
     assert "saveFrameToPng" not in jsx
     assert "openInViewer" in jsx
-    assert "itemByID(7)" in jsx
+    assert "AEMCP.compById(7)" in jsx
 
 
 @pytest.mark.asyncio
@@ -431,7 +431,7 @@ async def test_validate_expressions_builds_jsx_and_reports_invalid(mock_backend)
     assert result["valid"] is False
     assert result["errors"][0]["expressionError"] == "bad slider reference"
     jsx = mock_backend.calls[-1]["code"]
-    assert "itemByID(12)" in jsx
+    assert "AEMCP.compById(12)" in jsx
     assert "[0.0, 1.0]" in jsx
 
 
@@ -461,7 +461,7 @@ async def test_create_rig_builds_transform_controller_jsx(mock_backend):
     jsx = mock_backend.calls[-1]["code"]
     assert "Main CTRL" in jsx
     assert "transform_controller" in jsx
-    assert "itemByID(12)" in jsx
+    assert "AEMCP.compById(12)" in jsx
 
 
 @pytest.mark.asyncio
