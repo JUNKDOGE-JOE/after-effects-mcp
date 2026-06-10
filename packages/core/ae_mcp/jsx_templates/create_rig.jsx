@@ -206,7 +206,7 @@
     if (!comp || !(comp instanceof CompItem)) {
       return fail("No active comp, or comp_id did not resolve to a CompItem.");
     }
-    var target = comp.layer($target_layer_id);
+    var target = AEMCP.layerById(comp, $target_layer_id);
     if (!target) {
       return fail("target layer not found: " + $target_layer_id);
     }
