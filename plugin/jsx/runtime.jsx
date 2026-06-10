@@ -4,6 +4,8 @@
 // may run script in classic mode in some contexts.
 if (typeof JSON === 'undefined') {
     JSON = {};
+}
+if (typeof JSON === 'undefined' || typeof JSON.stringify !== 'function') {
     JSON.stringify = function (v) {
         if (v === null) return 'null';
         if (typeof v === 'undefined') return 'null';
@@ -31,6 +33,32 @@ if (typeof JSON === 'undefined') {
         return 'null';
     };
 }
+// JSON.parse polyfill for the classic engine. AE 2026's modern engine has a
+// native JSON.parse, so this is guarded to a no-op there. Agent ae.exec code
+// that calls JSON.parse would otherwise throw on the classic engine. #12
+//
+// eval-with-validation approach: the source is first vetted against the
+// security regex from Crockford's json2.js (which rejects anything that isn't
+// well-formed JSON) so eval can only ever produce a JSON value, never run
+// arbitrary code. ES3-safe: var/function only.
+if (typeof JSON === 'undefined' || typeof JSON.parse !== 'function') {
+    JSON.parse = function (text) {
+        var src = String(text);
+        // The four-stage check is the standard json2.js guard:
+        //   1. replace JSON escapes with '@'
+        //   2. replace literals/numbers with ']'
+        //   3. delete commas/brackets between those tokens
+        //   4. what remains must be empty for the text to be valid JSON
+        var cleaned = src
+            .replace(/\\(?:["\\\/bfnrt]|u[0-9a-fA-F]{4})/g, '@')
+            .replace(/"[^"\\\n\r]*"|true|false|null|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?/g, ']')
+            .replace(/(?:^|:|,)(?:\s*\[)+/g, '');
+        if (!(/^[\],:{}\s]*$/.test(cleaned))) {
+            throw new SyntaxError('JSON.parse: invalid JSON');
+        }
+        return eval('(' + src + ')');
+    };
+}
 
 // ---------------------------------------------------------------------------
 // ES3 Array / Object polyfills.
@@ -42,11 +70,33 @@ if (typeof JSON === 'undefined') {
 // engine and safe to re-run on panel re-init. Keep everything ES3: var only,
 // function keyword, no arrow/const/let.
 //
+// Additions are installed NON-ENUMERABLE via Object.defineProperty so that
+// third-party scripts doing `for (var k in arr)` don't suddenly see the
+// polyfilled method names as keys (prototype-pollution hazard). Some ancient
+// engines throw when defineProperty is used on native prototypes, so the
+// helper wraps it in try/catch and falls back to a plain (enumerable)
+// assignment only when defineProperty is unavailable or fails. #12
+//
 // This file loads ONCE into the persistent engine (manifest ScriptPath), so a
 // syntax error here breaks EVERY verb. Edit with care.
 // ---------------------------------------------------------------------------
+
+// Define `name` on `proto` non-enumerably when possible; plain-assign otherwise.
+function _definePoly(proto, name, fn) {
+    var defined = false;
+    if (typeof Object.defineProperty === 'function') {
+        try {
+            Object.defineProperty(proto, name, {
+                value: fn, enumerable: false, writable: true, configurable: true
+            });
+            defined = true;
+        } catch (e) { defined = false; }
+    }
+    if (!defined) { proto[name] = fn; }
+}
+
 if (!Array.prototype.indexOf) {
-    Array.prototype.indexOf = function (needle, from) {
+    _definePoly(Array.prototype, 'indexOf', function (needle, from) {
         var len = this.length >>> 0;
         var i = from ? Number(from) : 0;
         if (i < 0) i = Math.max(0, len + i);
@@ -54,38 +104,38 @@ if (!Array.prototype.indexOf) {
             if (i in this && this[i] === needle) return i;
         }
         return -1;
-    };
+    });
 }
 if (!Array.prototype.forEach) {
-    Array.prototype.forEach = function (fn, thisArg) {
+    _definePoly(Array.prototype, 'forEach', function (fn, thisArg) {
         var len = this.length >>> 0;
         for (var i = 0; i < len; i++) {
             if (i in this) fn.call(thisArg, this[i], i, this);
         }
-    };
+    });
 }
 if (!Array.prototype.map) {
-    Array.prototype.map = function (fn, thisArg) {
+    _definePoly(Array.prototype, 'map', function (fn, thisArg) {
         var len = this.length >>> 0;
         var out = new Array(len);
         for (var i = 0; i < len; i++) {
             if (i in this) out[i] = fn.call(thisArg, this[i], i, this);
         }
         return out;
-    };
+    });
 }
 if (!Array.prototype.filter) {
-    Array.prototype.filter = function (fn, thisArg) {
+    _definePoly(Array.prototype, 'filter', function (fn, thisArg) {
         var len = this.length >>> 0;
         var out = [];
         for (var i = 0; i < len; i++) {
             if (i in this && fn.call(thisArg, this[i], i, this)) out.push(this[i]);
         }
         return out;
-    };
+    });
 }
 if (!Array.prototype.reduce) {
-    Array.prototype.reduce = function (fn, init) {
+    _definePoly(Array.prototype, 'reduce', function (fn, init) {
         var len = this.length >>> 0;
         var i = 0, acc;
         if (arguments.length >= 2) {
@@ -98,30 +148,30 @@ if (!Array.prototype.reduce) {
             if (i in this) acc = fn(acc, this[i], i, this);
         }
         return acc;
-    };
+    });
 }
 if (!Array.prototype.some) {
-    Array.prototype.some = function (fn, thisArg) {
+    _definePoly(Array.prototype, 'some', function (fn, thisArg) {
         var len = this.length >>> 0;
         for (var i = 0; i < len; i++) {
             if (i in this && fn.call(thisArg, this[i], i, this)) return true;
         }
         return false;
-    };
+    });
 }
 if (!Array.prototype.every) {
-    Array.prototype.every = function (fn, thisArg) {
+    _definePoly(Array.prototype, 'every', function (fn, thisArg) {
         var len = this.length >>> 0;
         for (var i = 0; i < len; i++) {
             if (i in this && !fn.call(thisArg, this[i], i, this)) return false;
         }
         return true;
-    };
+    });
 }
 if (!Array.prototype.includes) {
-    Array.prototype.includes = function (needle) {
+    _definePoly(Array.prototype, 'includes', function (needle) {
         return this.indexOf(needle) !== -1;
-    };
+    });
 }
 if (!Array.isArray) {
     Array.isArray = function (o) {

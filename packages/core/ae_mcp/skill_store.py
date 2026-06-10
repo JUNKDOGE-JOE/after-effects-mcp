@@ -135,4 +135,8 @@ def render_skill(skill: Skill, provided_args: dict[str, Any]) -> str:
         name: _value_for_template(skill, values[name])
         for name in placeholders
     }
-    return Template(skill.template).substitute(rendered_values)
+    # safe_substitute (not substitute) so idiomatic ExtendScript `$` sequences
+    # like `$.writeln` / `$.global` pass through untouched instead of raising
+    # "Invalid placeholder in string". Declared ${name} placeholders are still
+    # substituted; only unknown bare-$ runs are left verbatim. #12
+    return Template(skill.template).safe_substitute(rendered_values)

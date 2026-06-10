@@ -9,6 +9,13 @@
     var includeValues = ${include_values};
     var truncated = null;
 
+    // Wall-clock budget so deep/wide trees return partial results instead of
+    // blowing the 30s evalScript timeout with zero output. #12
+    var BUDGET_MS = ${time_budget_ms};
+    var START_MS = new Date().getTime();
+    var budgetHit = false;
+    function overBudget() { return (new Date().getTime() - START_MS) >= BUDGET_MS; }
+
     function nodeFor(prop, depth) {
         var n = {
             name: prop.name,
@@ -33,6 +40,7 @@
                 return n;
             }
             for (var i = 1; i <= prop.numProperties; i++) {
+                if (budgetHit || overBudget()) { budgetHit = true; break; }
                 var child = prop.property(i);
                 if (!child) continue;
                 n.children.push(nodeFor(child, depth + 1));
@@ -43,6 +51,7 @@
 
     var rootChildren = [];
     for (var pi = 1; pi <= layer.numProperties; pi++) {
+        if (budgetHit || overBudget()) { budgetHit = true; break; }
         var top = layer.property(pi);
         if (!top) continue;
         rootChildren.push(nodeFor(top, 1));
@@ -55,6 +64,8 @@
         tree: { name: "(root)", matchName: "", kind: "PropertyGroup",
                 propType: null, value: null, hasExpression: false,
                 numKeyframes: 0, children: rootChildren },
-        truncatedAt: truncated
+        truncatedAt: truncated,
+        truncated: budgetHit,
+        reason: budgetHit ? "time budget exceeded" : null
     });
 })()
