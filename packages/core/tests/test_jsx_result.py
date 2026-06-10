@@ -73,3 +73,21 @@ def test_parsed_ok_false_is_preserved():
     # shape. parse_jsx_result must pass that through unchanged.
     payload = '{"ok":false,"error":"no layer"}'
     assert parse_jsx_result(payload) == {"ok": False, "error": "no layer"}
+
+
+def test_evalscript_error_sentinel_is_failure_not_silent_success():
+    # CSInterface surfaces an uncaught ExtendScript error as the literal
+    # "EvalScript error." (note the PERIOD). jsx-bridge.js should reject it,
+    # but this is the Python backstop: a result that begins with
+    # "EvalScript error" must flip to ok:false, not be wrapped as content.
+    result = parse_jsx_result("EvalScript error.")
+    assert result["ok"] is False
+    assert result["raw"] == "EvalScript error."
+    assert "EvalScript error" in result["error"]
+
+
+def test_evalscript_error_colon_variant_is_failure():
+    # Defensive: also catch a colon/trailing-detail variant.
+    result = parse_jsx_result("EvalScript error: ReferenceError foo is undefined")
+    assert result["ok"] is False
+    assert result["raw"] == "EvalScript error: ReferenceError foo is undefined"
