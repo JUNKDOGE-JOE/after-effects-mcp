@@ -75,7 +75,7 @@ pip install ./packages/core ./packages/bridge ./packages/snapshot-mss
 - `ae.previewFrame` 需要的 snapshotter
 
 > **三个包必须一起安装。** `ae-mcp-bridge` 和 `ae-mcp-snapshot-mss` 在各自的
-> `pyproject.toml` 里按名字依赖 `ae-mcp>=0.2.0`，而这个名字在 PyPI 上并不存在
+> `pyproject.toml` 里按名字依赖 `ae-mcp>=0.3.0`，而这个名字在 PyPI 上并不存在
 > （仓库尚未发布到 PyPI）。所以不要单独跑 `pip install ./packages/bridge`，
 > 那会因为找不到 `ae-mcp` 而失败。请把三个路径放在同一条 `pip install` 命令里
 > （core 在最前，让 bridge/snapshot 的依赖在同一次解析中就地命中），或者用
@@ -244,7 +244,7 @@ This provides:
 - the snapshotter required by `ae.previewFrame`
 
 > **The three packages must be installed together.** `ae-mcp-bridge` and
-> `ae-mcp-snapshot-mss` declare a by-name dependency on `ae-mcp>=0.2.0` in their
+> `ae-mcp-snapshot-mss` declare a by-name dependency on `ae-mcp>=0.3.0` in their
 > `pyproject.toml`, but that name is not published on PyPI (this repo is not on
 > PyPI yet). A standalone `pip install ./packages/bridge` therefore fails — pip
 > cannot resolve `ae-mcp`. Pass all three paths in a single `pip install`
