@@ -72,7 +72,7 @@
     }
 
     for (var li = 0; li < layerIds.length; li++) {
-        var layer = comp.layer(layerIds[li]);
+        var layer = AEMCP.layerById(comp, layerIds[li]);
         if (!layer) continue;
         for (var pi = 1; pi <= layer.numProperties; pi++) {
             var top = layer.property(pi);
