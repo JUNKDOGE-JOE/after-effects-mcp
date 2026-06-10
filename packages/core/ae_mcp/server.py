@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, List
 
 from mcp.server import Server
@@ -23,6 +24,11 @@ from ae_mcp.handlers import HANDLERS, load_all
 from ae_mcp.instructions import SERVER_INSTRUCTIONS
 
 log = logging.getLogger("ae_mcp.server")
+
+# Matches a leading dotted verb token at the very start of a docstring, e.g.
+# "ae.init — bootstrap …". Only the leading token is rewritten so the rest of
+# the description (which may legitimately mention dotted names) is untouched.
+_LEADING_VERB = re.compile(r"^(ae\.[A-Za-z][A-Za-z0-9]*)")
 
 
 def _filtered_tool_names() -> set:
@@ -68,15 +74,53 @@ def expose_tool_name(verb: str) -> str:
     return verb.replace(".", "_")
 
 
-def resolve_tool_name(name: str, handlers) -> "str | None":
+def build_reverse_map(handlers) -> "dict[str, str]":
+    """Build an ``exposed name -> canonical verb`` map for O(1) resolution.
+
+    ``resolve_tool_name`` otherwise falls back to a linear scan for the common
+    (underscore-name) call path. Precomputing this map once — after
+    ``load_all()`` has populated HANDLERS — keeps the hot path O(1) while
+    preserving identical fallback semantics.
+    """
+    return {expose_tool_name(verb): verb for verb in handlers}
+
+
+def tool_description(schema_cls, verb: str) -> str:
+    """Build a Tool description that LEADS with the exposed underscore name.
+
+    The description is sourced from the pydantic schema docstring, which opens
+    with the dotted verb ("ae.init — …"). Strict clients can only call the
+    advertised (underscore) name, so we rewrite *only* the leading dotted-verb
+    token to its exposed form; the remainder of the docstring is untouched.
+    """
+    doc = (schema_cls.__doc__ or "").strip()
+    exposed = expose_tool_name(verb)
+    if not doc:
+        return f"ae-mcp verb {exposed}"
+    m = _LEADING_VERB.match(doc)
+    if m and m.group(1) == verb:
+        return exposed + doc[m.end():]
+    # Docstring doesn't open with this verb token (defensive): prepend the
+    # exposed name so the description still leads with the callable name.
+    return f"{exposed} — {doc}"
+
+
+def resolve_tool_name(name: str, handlers, reverse_map=None) -> "str | None":
     """Map an exposed tool name back to its canonical verb.
 
     Accepts both the exposed dot-free name ("ae_ping") and, for backward
     compatibility, the original dotted verb ("ae.ping"). Returns ``None`` if
     the name matches no registered verb.
+
+    ``reverse_map`` (from :func:`build_reverse_map`) makes the underscore-name
+    path O(1); when omitted, a linear scan is used so direct/programmatic
+    callers still resolve correctly.
     """
+    # Dotted-name fast path (back-compat for direct callers).
     if name in handlers:
         return name
+    if reverse_map is not None:
+        return reverse_map.get(name)
     for verb in handlers:
         if expose_tool_name(verb) == name:
             return verb
@@ -84,8 +128,29 @@ def resolve_tool_name(name: str, handlers) -> "str | None":
 
 
 def build_server() -> Server:
-    """Construct the low-level MCP Server with all 15 verbs registered."""
+    """Construct the low-level MCP Server with all registered verbs."""
     load_all()
+
+    # Reverse map (exposed name -> canonical verb) for O(1) resolution on the
+    # common underscore-name call path. Built once, after load_all() has
+    # populated HANDLERS.
+    reverse_map = build_reverse_map(HANDLERS)
+
+    # Collision guard: expose_tool_name() is lossy (dots -> underscores), so a
+    # future verb could collapse onto another's exposed name and make
+    # _list_tools emit duplicate Tool names. Fail loudly if that ever happens.
+    if len(reverse_map) != len(HANDLERS):
+        seen: dict[str, str] = {}
+        collisions: list[str] = []
+        for verb in HANDLERS:
+            exposed = expose_tool_name(verb)
+            if exposed in seen:
+                collisions.append(f"{seen[exposed]!r} and {verb!r} -> {exposed!r}")
+            else:
+                seen[exposed] = verb
+        raise RuntimeError(
+            "exposed tool-name collision(s): " + "; ".join(collisions)
+        )
 
     server: Server = Server("ae", instructions=SERVER_INSTRUCTIONS)
 
@@ -102,12 +167,12 @@ def build_server() -> Server:
             except Exception as e:  # noqa: BLE001
                 log.warning("schema for %s failed: %s", verb_name, e)
                 input_schema = {"type": "object", "properties": {}}
-            # Description pulled from the pydantic class docstring.
-            desc = (schema_cls.__doc__ or f"ae-mcp verb {verb_name}").strip()
+            # Description leads with the EXPOSED (underscore) name so strict
+            # clients see the name they can actually call.
             tools.append(
                 Tool(
                     name=expose_tool_name(verb_name),
-                    description=desc,
+                    description=tool_description(schema_cls, verb_name),
                     inputSchema=input_schema,
                 )
             )
@@ -117,7 +182,7 @@ def build_server() -> Server:
     async def _call_tool(name: str, arguments: dict | None) -> List[TextContent]:
         # Tools are exposed with dots replaced by underscores; map the exposed
         # name back to the canonical verb (the dotted name is accepted too).
-        canonical = resolve_tool_name(name, HANDLERS)
+        canonical = resolve_tool_name(name, HANDLERS, reverse_map)
         if canonical is None:
             payload = _format_result({"ok": False, "error": f"unknown tool: {name}"})
             return [TextContent(type="text", text=payload)]
@@ -146,6 +211,14 @@ def build_server() -> Server:
             return [TextContent(type="text", text=payload)]
 
         return [TextContent(type="text", text=_format_result(result))]
+
+    # Expose the dispatch closures + reverse map for testing. The decorators
+    # above already registered them via the MCP request_handlers registry;
+    # these handles let tests drive dispatch directly without changing any
+    # runtime behaviour.
+    server._ae_list_tools = _list_tools  # type: ignore[attr-defined]
+    server._ae_call_tool = _call_tool  # type: ignore[attr-defined]
+    server._ae_reverse_map = reverse_map  # type: ignore[attr-defined]
 
     return server
 
