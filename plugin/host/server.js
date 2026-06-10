@@ -1,10 +1,14 @@
 // HTTP server for the ae-mcp CEP plugin. Exposes /health and /exec.
 const express = require('express');
 const jsxBridge = require('./jsx-bridge');
+const authToken = require('./auth-token');
 
 let app = null;
 let httpServer = null;
 let currentPort = null;
+// The shared secret /exec requires. Populated in start() so the file is read
+// (and generated if missing) exactly once per host lifetime.
+let execToken = null;
 
 // Wrap user JSX in app.beginUndoGroup / app.endUndoGroup.
 //
@@ -42,6 +46,14 @@ function buildApp() {
     });
 
     a.post('/exec', async (req, res) => {
+        // Require the shared-secret token. /exec runs arbitrary ExtendScript, so
+        // every caller must prove it can read ~/.ae-mcp/auth-token. Constant-time
+        // compare to avoid leaking the token via timing.
+        const provided = req.get(authToken.HEADER);
+        if (!authToken.tokenMatches(provided, execToken)) {
+            return res.status(401).json({ ok: false, error: 'unauthorized' });
+        }
+
         const { code, undoGroup, checkpointLabel, timeoutMs } = req.body || {};
         if (typeof code !== 'string' || code.length === 0) {
             return res.status(400).json({ ok: false, error: 'missing or empty `code`' });
@@ -67,6 +79,13 @@ function buildApp() {
 function start(port, callback) {
     if (httpServer) {
         return callback(new Error('already started; call restart() to change port'));
+    }
+    // Ensure the shared-secret token exists (generate on first run) before we
+    // accept any /exec request. The Python bridge reads the same file.
+    try {
+        execToken = authToken.ensureToken();
+    } catch (e) {
+        return callback(new Error('failed to initialize auth token: ' + e.message));
     }
     app = buildApp();
     httpServer = app.listen(port, '127.0.0.1', (err) => {
@@ -99,4 +118,8 @@ module.exports = {
     setCSInterface: jsxBridge.setCSInterface,
     // Exported for unit-testing the wrap shape without spinning up Express.
     wrapWithUndoGroup,
+    // Exported so tests can build the app and inject a known token without
+    // touching the real token file.
+    buildApp,
+    _setExecToken: function (t) { execToken = t; },
 };
