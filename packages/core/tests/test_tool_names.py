@@ -7,10 +7,18 @@ back on call.
 """
 from __future__ import annotations
 
+import json
 import re
 
+import pytest
+
 from ae_mcp.handlers import HANDLERS, load_all
-from ae_mcp.server import expose_tool_name, resolve_tool_name
+from ae_mcp.server import (
+    build_reverse_map,
+    build_server,
+    expose_tool_name,
+    resolve_tool_name,
+)
 
 _MCP_TOOL_NAME = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
@@ -44,3 +52,149 @@ def test_resolve_unknown_returns_none():
     load_all()
     assert resolve_tool_name("does_not_exist", HANDLERS) is None
     assert resolve_tool_name("ae.unknownVerb", HANDLERS) is None
+
+
+# ---------------------------------------------------------------------------
+# Issue #7 — reverse map (O(1) hot path) + collision guard / uniqueness.
+# ---------------------------------------------------------------------------
+
+
+def test_reverse_map_resolves_same_as_linear_scan():
+    """The reverse map must give identical results to the linear-scan fallback,
+    and still honour the dotted-name back-compat fast path."""
+    load_all()
+    rmap = build_reverse_map(HANDLERS)
+    for verb in HANDLERS:
+        exposed = expose_tool_name(verb)
+        # O(1) path matches the linear scan.
+        assert resolve_tool_name(exposed, HANDLERS, rmap) == verb
+        assert resolve_tool_name(exposed, HANDLERS, rmap) == resolve_tool_name(exposed, HANDLERS)
+        # Dotted name still resolves with a reverse map present.
+        assert resolve_tool_name(verb, HANDLERS, rmap) == verb
+    # Unknown names return None on both paths.
+    assert resolve_tool_name("nope", HANDLERS, rmap) is None
+
+
+def test_exposed_names_are_globally_unique():
+    """expose_tool_name() is lossy; a future collision would make _list_tools
+    emit duplicate Tool names. Assert the mapping is injective today."""
+    load_all()
+    exposed = [expose_tool_name(v) for v in HANDLERS]
+    assert len(exposed) == len(set(exposed)), "exposed tool names collide"
+    # The reverse map being the same length as HANDLERS is the guard's check.
+    assert len(build_reverse_map(HANDLERS)) == len(HANDLERS)
+
+
+def test_build_server_raises_on_exposed_name_collision(monkeypatch):
+    """The collision guard in build_server() must fail loudly if two verbs ever
+    collapse onto the same exposed name."""
+    from ae_mcp import server as srv
+
+    load_all()
+    # Two distinct dotted verbs that collapse to the same underscore name.
+    fake = {"ae.fo_o": ("schema_a", "run_a"), "ae.fo.o": ("schema_b", "run_b")}
+    monkeypatch.setattr(srv, "HANDLERS", fake)
+    with pytest.raises(RuntimeError, match="collision"):
+        build_server()
+
+
+# ---------------------------------------------------------------------------
+# Issue #5 — wire/dispatch-level regression tests.
+#
+# These exercise the integration points PR #3 changed: _list_tools must emit
+# underscore-form names, and _call_tool must reassign to the canonical verb
+# before dispatch. Both stayed green under the old helper-only tests even when
+# the regressions were reintroduced.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def _full_tool_listing(monkeypatch):
+    """build_server() with _filtered_tool_names stubbed to the full verb set so
+    _list_tools actually emits tools (it returns empty without a live backend)."""
+    from ae_mcp import server as srv
+
+    load_all()
+    monkeypatch.setattr(srv, "_filtered_tool_names", lambda: set(HANDLERS.keys()))
+    return build_server()
+
+
+async def test_list_tools_emits_only_mcp_compliant_names(_full_tool_listing):
+    """Drive the registered list_tools handler and assert every emitted
+    Tool.name is underscore-form (no dots). Fails if _list_tools reverts to
+    emitting dotted names."""
+    tools = await _full_tool_listing._ae_list_tools()
+    assert tools, "expected tools to be emitted with the full verb set stubbed"
+    assert len(tools) == len(HANDLERS)
+    for tool in tools:
+        assert _MCP_TOOL_NAME.fullmatch(tool.name), f"{tool.name!r} is not MCP-compliant"
+        assert "." not in tool.name
+
+
+async def test_list_tools_descriptions_lead_with_exposed_name(_full_tool_listing):
+    """Issue #4 at the wire level: each Tool.description must lead with the
+    EXPOSED (underscore) name, not the dotted verb."""
+    tools = await _full_tool_listing._ae_list_tools()
+    for tool in tools:
+        assert tool.description.startswith(tool.name), (
+            f"{tool.name!r} description should lead with the exposed name, "
+            f"got {tool.description[:40]!r}"
+        )
+        assert not tool.description.startswith("ae."), (
+            f"{tool.name!r} description still leads with a dotted verb"
+        )
+
+
+async def test_call_tool_dispatches_to_canonical_verb(monkeypatch):
+    """Drive the registered call_tool handler with the EXPOSED name and assert
+    dispatch reaches the canonical (dotted) verb. Fails if _call_tool drops the
+    canonical reassignment (which would KeyError on HANDLERS[name])."""
+    from ae_mcp import server as srv
+
+    load_all()
+    seen = {}
+
+    async def _fake_run(validated, ctx):
+        # If dispatch didn't reassign to the canonical verb, the handler keyed
+        # by "ae.ping" would never be reached.
+        seen["dispatched"] = True
+        return {"ok": True, "pong": validated.expect}
+
+    schema_cls, _ = HANDLERS["ae.ping"]
+    monkeypatch.setitem(HANDLERS, "ae.ping", (schema_cls, _fake_run))
+
+    server = build_server()
+    result = await server._ae_call_tool("ae_ping", {"expect": "hi"})
+
+    assert seen.get("dispatched") is True, "dispatch never reached the canonical ae.ping handler"
+    payload = json.loads(result[0].text)
+    assert payload == {"ok": True, "pong": "hi"}
+
+
+async def test_call_tool_accepts_dotted_name_for_backcompat(monkeypatch):
+    """Direct/programmatic callers using the dotted name must still dispatch."""
+    from ae_mcp import server as srv  # noqa: F401
+
+    load_all()
+
+    async def _fake_run(validated, ctx):
+        return {"ok": True, "pong": validated.expect}
+
+    schema_cls, _ = HANDLERS["ae.ping"]
+    monkeypatch.setitem(HANDLERS, "ae.ping", (schema_cls, _fake_run))
+
+    server = build_server()
+    result = await server._ae_call_tool("ae.ping", {"expect": "yo"})
+    payload = json.loads(result[0].text)
+    assert payload == {"ok": True, "pong": "yo"}
+
+
+async def test_call_tool_unknown_returns_structured_error():
+    """An unknown tool name must return the {ok:false, 'unknown tool'} payload
+    rather than raising."""
+    load_all()
+    server = build_server()
+    result = await server._ae_call_tool("totally_unknown", {})
+    payload = json.loads(result[0].text)
+    assert payload["ok"] is False
+    assert "unknown tool" in payload["error"]

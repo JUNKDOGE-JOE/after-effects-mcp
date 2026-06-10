@@ -14,15 +14,27 @@ def test_instructions_nonempty_and_substantial():
 
 def test_instructions_cover_key_discipline():
     text = SERVER_INSTRUCTIONS
-    # Phased workflow + the verbs an agent must know about.
-    assert "ae.init" in text
-    assert "ae.validateExpressions" in text
-    assert "ae.previewFrame" in text
+    # Phased workflow + the verbs an agent must know about. The instructions
+    # name verbs by their EXPOSED (underscore) form — strict clients can only
+    # call the advertised names (issue #4).
+    assert "ae_init" in text
+    assert "ae_validateExpressions" in text
+    assert "ae_previewFrame" in text
     # ES3 discipline + the runtime helpers we ship.
     assert "ECMAScript 3" in text
     assert "AEMCP.propByMatchPath" in text
     # Never-throw safety invariant.
     assert "NEVER let JSX throw" in text
+
+
+def test_instructions_use_underscore_verb_names_not_dotted():
+    """Issue #4: model-facing guidance must not feed the model dotted verb
+    names it can't call on strict clients. No dotted ``ae.<verb>`` token may
+    appear in the instructions (AEMCP.* helper calls are not verbs)."""
+    import re
+
+    dotted = re.findall(r"\bae\.[a-zA-Z]\w*", SERVER_INSTRUCTIONS)
+    assert dotted == [], f"instructions still name dotted verbs: {sorted(set(dotted))}"
 
 
 def test_build_server_advertises_instructions():
