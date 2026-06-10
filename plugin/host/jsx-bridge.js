@@ -6,29 +6,56 @@ function setCSInterface(cs) {
     csInterface = cs;
 }
 
-function evalScript(jsx, timeoutMs) {
+// There is a single persistent ExtendScript engine with shared globals behind
+// csInterface.evalScript. Two overlapping evalScript calls would interleave and
+// half-apply edits, so we serialize: each call chains off the previous one and
+// only runs once its predecessor has resolved/rejected/timed out. The tail of
+// the chain is `queue`; we deliberately swallow its rejection in the chain so a
+// failed call never poisons the queue for the next caller.
+let queue = Promise.resolve();
+
+function evalScriptInner(jsx, timeoutMs) {
     return new Promise((resolve, reject) => {
         if (!csInterface) {
             reject(new Error('CSInterface not initialized'));
             return;
         }
+        let settled = false;
+        const finish = (fn, arg) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            fn(arg);
+        };
         const timer = setTimeout(() => {
-            reject(new Error('JSX timeout after ' + timeoutMs + 'ms'));
+            finish(reject, new Error('JSX timeout after ' + timeoutMs + 'ms'));
         }, timeoutMs);
         try {
             csInterface.evalScript(jsx, (result) => {
-                clearTimeout(timer);
                 if (typeof result === 'string' && result.indexOf('EvalScript error') === 0) {
-                    reject(new Error(result));
+                    finish(reject, new Error(result));
                 } else {
-                    resolve(result);
+                    finish(resolve, result);
                 }
             });
         } catch (e) {
-            clearTimeout(timer);
-            reject(e);
+            finish(reject, e);
         }
     });
+}
+
+function evalScript(jsx, timeoutMs) {
+    // Chain this call after whatever is currently in flight. Whether the prior
+    // call resolved or rejected, we proceed (the `.catch` keeps the chain
+    // alive) so a timed-out/rejected call still releases the lock.
+    const run = queue.then(
+        () => evalScriptInner(jsx, timeoutMs),
+        () => evalScriptInner(jsx, timeoutMs)
+    );
+    // Advance the queue tail to this call's completion, swallowing its result so
+    // the next caller's `.then` always fires regardless of success/failure.
+    queue = run.then(function () {}, function () {});
+    return run;
 }
 
 module.exports = { setCSInterface, evalScript };
