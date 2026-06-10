@@ -11,10 +11,7 @@
     for (var i = 0; i < segs.length; i++) {
         try {
             prop = prop.property(segs[i]);
-            if (!prop) return JSON.stringify({
-                ok: true, exists: false,
-                error: "path segment not found: " + segs[i]
-            });
+            if (!prop) return JSON.stringify({ok:false, exists: false, error:"path segment not found: " + segs[i]});
         } catch (e) {
             return JSON.stringify({ok:false, exists: false,
                 error: "property() threw: " + String(e)});

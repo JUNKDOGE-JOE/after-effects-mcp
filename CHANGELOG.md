@@ -10,6 +10,18 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### [0.3.1] — 2026-06-11
+
+继 0.3.0 之后，这一批补齐了 issue #8(“失败伪装成功”)修复方案的剩余部分。全部为兼容的健壮性改进，**不影响已有调用方**。
+
+#### 🐛 修复
+- **针对已删除 / 失效 comp、越界图层 id 的操作返回明确的“找不到”**（#8）——此前在 AE 26.2+ 上会抛出不透明的 `EvalScript error.`；现在 comp / 图层查找统一走防御式 helper，稳定返回 `{ok:false}`。
+- **只升级 Python 端、面板没重启也不再整批失效**（#8）——脚本现在自带所需的 helper 定义，不再依赖面板那一侧是否已加载新版命名空间，消除升级时的版本错配。
+- **坏掉 / 半卸载的截图插件不再拖垮整个工具列表**——快照器发现过程逐个隔离，单个损坏的扩展只会被跳过并记一条警告。
+- **后端缺失时给出可操作的提示，而不是空白工具列表**——新增 `ae_status` 诊断工具：没有可用后端时返回带安装指引的说明；其它 AE 工具异常时可先调它排查。
+- **更多失败被如实上报**（#8）——属性路径写错、传入无效图层 id、脚本输出损坏 / 被截断，现在都返回明确错误，而不是一个具有欺骗性的“成功”。
+- **插件 `/health` 报告真实版本号**，不再硬编码为 `0.1.0`。
+
 ### [0.3.0] — 2026-06-10
 
 > ⚠️ **升级须知（破坏性变更）**：本次为插件的 `/exec` 接口加上了本地鉴权，**面板（CEP 插件）和 Python 端必须一起升级**。只升级一边会导致调用被拒（401）。请按文档重新安装 / 同步面板后再使用。
@@ -64,6 +76,18 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### [0.3.1] — 2026-06-11
+
+A follow-up to 0.3.0 that finishes the remaining half of the issue #8 ("failures masquerading as success") remediation. All changes are compatible robustness fixes; **existing callers are unaffected.**
+
+#### 🐛 Fixed
+- **Operations on a deleted/stale comp or an out-of-range layer id return a clear "not found"** (#8) — on AE 26.2+ these used to throw an opaque `EvalScript error.`; comp/layer lookups now go through defensive helpers that reliably return `{ok:false}`.
+- **Upgrading only the Python side no longer breaks every verb until the panel is reloaded** (#8) — scripts now carry their own helper definitions instead of depending on whether the panel loaded the newer namespace, eliminating upgrade-time version skew.
+- **A broken / half-uninstalled snapshot plugin no longer takes down the whole tool list** — snapshotter discovery isolates each entry point; one bad extension is skipped with a warning.
+- **A missing backend now gives an actionable hint instead of a blank tool list** — a new `ae_status` diagnostic verb returns the backend-selection result with install hints; call it first when other AE tools are missing or failing.
+- **More failures are reported honestly** (#8) — a mistyped property path, invalid layer ids, or corrupt/truncated script output now return an explicit error instead of a deceptive "success".
+- **The plugin's `/health` reports its real version** instead of a hardcoded `0.1.0`.
 
 ### [0.3.0] — 2026-06-10
 

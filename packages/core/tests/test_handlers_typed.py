@@ -47,7 +47,7 @@ def test_render_set_property_with_keyframe():
     # Single-layer resolution must route through AEMCP.layerById so a stale
     # /out-of-range id returns null (caught by the `if (!layer)` guard) instead
     # of throwing (issue #8).
-    assert "AEMCP.layerById(comp," in jsx
+    assert "AEMCP.layerById(comp, 2)" in jsx
     assert '"Transform/Position"' in jsx
     assert "[100, 200]" in jsx
     assert "1.5" in jsx
@@ -65,7 +65,7 @@ def test_render_move_layer_clamps_in_js_not_py():
     # The source layer is resolved via AEMCP.layerById (issue #8). The
     # destination `comp.layer(to)` stays as-is — `to` is clamped to a valid
     # 1-based index in JS, so it never throws.
-    assert "AEMCP.layerById(comp," in jsx
+    assert "AEMCP.layerById(comp, 3)" in jsx
     assert "var to = 10;" in jsx
 
 
@@ -88,12 +88,12 @@ def test_render_set_time():
 
 def test_render_get_time_uses_active_comp_by_default():
     jsx = T.render_get_time(S.AeGetTimeArgs())
-    assert "activeItem" in jsx
+    assert "AEMCP.activeComp()" in jsx
 
 
 def test_render_get_time_with_comp_id():
     jsx = T.render_get_time(S.AeGetTimeArgs(comp_id="42"))
-    assert "itemByID(42)" in jsx
+    assert "AEMCP.compById(42)" in jsx
 
 
 # -------- Dispatch round-trips (using mock_backend) --------
@@ -167,7 +167,7 @@ def test_render_get_properties_substitutes_query():
     assert '[1, 2]' in jsx or '[1,2]' in jsx
     # Per-layer resolution in the loop routes through AEMCP.layerById so a
     # stale id is skipped via `continue` instead of throwing (issue #8).
-    assert "AEMCP.layerById(comp," in jsx
+    assert "AEMCP.layerById(comp, layerIds[li])" in jsx
 
 
 @pytest.mark.asyncio
@@ -190,7 +190,7 @@ def test_render_scan_property_tree():
     from ae_mcp.handlers.typed import render_scan_property_tree
     args = schemas.AeScanPropertyTreeArgs(layer_id=3, max_depth=2, include_values=False)
     jsx = render_scan_property_tree(args)
-    assert "AEMCP.layerById(comp," in jsx  # issue #8
+    assert "AEMCP.layerById(comp, 3)" in jsx  # issue #8
     assert "var maxDepth = 2;" in jsx
     assert "var includeValues = false;" in jsx
 
@@ -212,7 +212,7 @@ def test_render_inspect_property_capabilities():
     args = schemas.AeInspectPropertyCapabilitiesArgs(layer_id=1, path="Transform/Position")
     jsx = render_inspect_property_capabilities(args)
     assert '"Transform/Position"' in jsx
-    assert "AEMCP.layerById(comp," in jsx  # issue #8
+    assert "AEMCP.layerById(comp, 1)" in jsx  # issue #8
 
 
 @pytest.mark.asyncio
@@ -251,7 +251,7 @@ def test_render_get_keyframes():
     args = schemas.AeGetKeyframesArgs(layer_id=1, path="Transform/Position")
     jsx = render_get_keyframes(args)
     assert '"Transform/Position"' in jsx
-    assert "AEMCP.layerById(comp," in jsx  # issue #8
+    assert "AEMCP.layerById(comp, 1)" in jsx  # issue #8
 
 
 @pytest.mark.asyncio

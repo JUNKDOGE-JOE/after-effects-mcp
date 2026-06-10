@@ -62,10 +62,12 @@ def test_non_json_text_returned_as_content_for_back_compat():
     assert result == {"ok": True, "content": "hello world"}
 
 
-def test_invalid_json_falls_back_to_content_wrap():
-    # JSX returned something that LOOKS JSON-ish but isn't parseable.
-    result = parse_jsx_result('{not really json')
-    assert result == {"ok": True, "content": "{not really json"}
+@pytest.mark.parametrize("payload", ['{"ok":false,"error":"x\x0b"}', '{"a":1'])
+def test_json_shaped_but_invalid_text_is_failure(payload: str):
+    result = parse_jsx_result(payload)
+    assert result["ok"] is False
+    assert "failed to parse" in result["error"]
+    assert result["raw"] == payload
 
 
 def test_parsed_ok_false_is_preserved():
