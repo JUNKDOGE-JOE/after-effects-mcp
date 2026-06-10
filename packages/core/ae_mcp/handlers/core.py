@@ -27,6 +27,7 @@ from typing import Any, Optional
 from ae_mcp import checkpoint_store, progress, render_text, schemas
 from ae_mcp.backends import discovery as _discovery
 from ae_mcp.handlers import register
+from ae_mcp.jsx_prelude import with_prelude
 from ae_mcp.jsx_result import parse_jsx_result as _try_json
 
 log = logging.getLogger("ae_mcp.handlers.core")
@@ -113,7 +114,9 @@ def _atomic_replace(src_aep: Path, dst_path: str) -> None:
 
 async def _run_init(args: schemas.AeInitArgs, ctx: Any) -> Any:
     tmpl = _load_jsx("init.jsx")
-    jsx = tmpl.substitute(refresh_only="true" if args.refresh_only else "false")
+    jsx = with_prelude(
+        tmpl.substitute(refresh_only="true" if args.refresh_only else "false")
+    )
 
     async def _call() -> Any:
         out = await _backend().exec(jsx, timeout_sec=20.0)
@@ -134,7 +137,7 @@ register("ae.init", schemas.AeInitArgs, _run_init)
 
 async def _run_overview(args: schemas.AeOverviewArgs, ctx: Any) -> Any:
     tmpl = _load_jsx("overview.jsx")
-    jsx = tmpl.substitute()
+    jsx = with_prelude(tmpl.substitute())
 
     async def _call() -> Any:
         out = await _backend().exec(jsx, timeout_sec=15.0)
@@ -156,11 +159,11 @@ register("ae.overview", schemas.AeOverviewArgs, _run_overview)
 async def _run_layers(args: schemas.AeLayersArgs, ctx: Any) -> Any:
     from ae_mcp.handlers.typed import _comp_expr  # type: ignore
     tmpl = _load_jsx("get_layers.jsx")
-    jsx = tmpl.substitute(
+    jsx = with_prelude(tmpl.substitute(
         comp_expr=_comp_expr(args.comp_id),
         offset=int(args.offset),
         limit=int(args.limit),
-    )
+    ))
 
     async def _call() -> Any:
         out = await _backend().exec(jsx, timeout_sec=15.0)
@@ -220,7 +223,9 @@ async def _run_exec(args: schemas.AeExecArgs, ctx: Any) -> Any:
                     dst = _store.aep_path(project_path, cid)
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     tmpl = _load_jsx("checkpoint_create.jsx")
-                    jsx_cp = tmpl.substitute(dst_path=json.dumps(str(dst), ensure_ascii=False))
+                    jsx_cp = with_prelude(
+                        tmpl.substitute(dst_path=json.dumps(str(dst), ensure_ascii=False))
+                    )
                     cp_out = await backend.exec(code=jsx_cp, timeout_sec=60.0)
                     cp_parsed = _try_json(cp_out)
                     if isinstance(cp_parsed, dict) and cp_parsed.get("ok"):
@@ -299,7 +304,9 @@ async def _run_checkpoint(args: schemas.AeCheckpointArgs, ctx: Any) -> Any:
         dst = _store.aep_path(project_path, cid)
         dst.parent.mkdir(parents=True, exist_ok=True)
         tmpl = _load_jsx("checkpoint_create.jsx")
-        jsx = tmpl.substitute(dst_path=json.dumps(str(dst), ensure_ascii=False))
+        jsx = with_prelude(
+            tmpl.substitute(dst_path=json.dumps(str(dst), ensure_ascii=False))
+        )
         out = await _backend().exec(
             code=jsx,
             undo_group=f"MCP checkpoint: {args.label or cid}",
@@ -452,7 +459,9 @@ async def _branch_snapshot(project_path: str, checkpoint_id: str) -> Optional[st
         dst = _store.aep_path(project_path, cid)
         dst.parent.mkdir(parents=True, exist_ok=True)
         tmpl = _load_jsx("checkpoint_create.jsx")
-        jsx = tmpl.substitute(dst_path=json.dumps(str(dst), ensure_ascii=False))
+        jsx = with_prelude(
+            tmpl.substitute(dst_path=json.dumps(str(dst), ensure_ascii=False))
+        )
         out = await _backend().exec(code=jsx, timeout_sec=60.0)
         parsed = _try_json(out)
         if isinstance(parsed, dict) and parsed.get("ok") and not parsed.get("skipped"):
@@ -598,10 +607,10 @@ async def _run_preview_frame(args: schemas.AePreviewFrameArgs, ctx: Any) -> Any:
         comp_name: str | None = None
 
         for frame_request in frame_requests:
-            jsx = tmpl.substitute(
+            jsx = with_prelude(tmpl.substitute(
                 comp_expr=_comp_expr(args.comp_id),
                 time=json.dumps(frame_request["time"]),
-            )
+            ))
             out = await _backend().exec(code=jsx, timeout_sec=15.0)
             prepared = _try_json(out)
             if not isinstance(prepared, dict) or not prepared.get("ok"):
@@ -679,17 +688,15 @@ def _apply_effect_jsx(comp_id: str | None, layer_id: int, match_name: str) -> st
     # JSON-escape the match name so embedded quotes are safe inside JSX.
     escaped_name = json.dumps(match_name)
     comp_expr = (
-        f"(function(){{ var it = app.project.itemByID({int(comp_id)}); "
-        f"return (it && it instanceof CompItem) ? it : null; }})()"
+        f"AEMCP.compById({int(comp_id)})"
         if comp_id else
-        "(function(){ var it = app.project.activeItem; "
-        "return (it && it instanceof CompItem) ? it : null; })()"
+        "AEMCP.activeComp()"
     )
-    return (
+    return with_prelude(
         "(function(){\n"
         f"  var comp = {comp_expr};\n"
         "  if (!comp) return JSON.stringify({ok:false,error:'no comp'});\n"
-        f"  var layer = comp.layer({int(layer_id)});\n"
+        f"  var layer = AEMCP.layerById(comp, {int(layer_id)});\n"
         "  if (!layer) return JSON.stringify({ok:false,error:'no layer'});\n"
         "  var effects = layer.property('ADBE Effect Parade');\n"
         "  if (!effects) return JSON.stringify({ok:false,error:'no effect parade'});\n"
@@ -728,7 +735,9 @@ def _ping_template() -> Template:
 
 
 async def _run_ping(args: schemas.AePingArgs, ctx: Any) -> Any:
-    jsx = _ping_template().substitute(expect=json.dumps(args.expect, ensure_ascii=False))
+    jsx = with_prelude(
+        _ping_template().substitute(expect=json.dumps(args.expect, ensure_ascii=False))
+    )
 
     async def _call() -> Any:
         out = await _backend().exec(code=jsx, timeout_sec=10.0)

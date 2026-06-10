@@ -24,6 +24,7 @@ from typing import Any, Optional
 from ae_mcp import progress, schemas
 from ae_mcp.backends import discovery as _discovery
 from ae_mcp.handlers import register
+from ae_mcp.jsx_prelude import with_prelude
 from ae_mcp.jsx_result import parse_jsx_result as _try_json_or_raw
 
 log = logging.getLogger("ae_mcp.handlers.typed")
@@ -58,15 +59,8 @@ def _load_template(name: str) -> Template:
 def _comp_expr(comp_id: Optional[str]) -> str:
     """Build a JSX expression that evaluates to a CompItem or null."""
     if comp_id:
-        return (
-            "(function(){ var it = app.project.itemByID("
-            + str(int(comp_id))
-            + "); return (it && it instanceof CompItem) ? it : null; })()"
-        )
-    return (
-        "(function(){ var it = app.project.activeItem; "
-        "return (it && it instanceof CompItem) ? it : null; })()"
-    )
+        return f"AEMCP.compById({int(comp_id)})"
+    return "AEMCP.activeComp()"
 
 
 def _json_literal(value: Any) -> str:
@@ -87,7 +81,7 @@ async def _run_create_layer(args: schemas.AeCreateLayerArgs, ctx: Any) -> Any:
     duration = float(args.duration) if args.duration is not None else -1.0
     position_js = _json_literal(list(args.position) if args.position else None)
 
-    jsx = tmpl.substitute(
+    jsx = with_prelude(tmpl.substitute(
         comp_expr=_comp_expr(args.comp_id),
         type=args.type,           # retained for parity; unused in template body
         type_str=_json_literal(args.type),
@@ -97,7 +91,7 @@ async def _run_create_layer(args: schemas.AeCreateLayerArgs, ctx: Any) -> Any:
         size_h=size_h,
         duration=duration,
         position=position_js,
-    )
+    ))
 
     async def _call() -> Any:
         out = await _backend().exec(
@@ -122,13 +116,13 @@ register("ae.createLayer", schemas.AeCreateLayerArgs, _run_create_layer)
 
 async def _run_set_property(args: schemas.AeSetPropertyArgs, ctx: Any) -> Any:
     tmpl = _load_template("set_property.jsx")
-    jsx = tmpl.substitute(
+    jsx = with_prelude(tmpl.substitute(
         comp_expr=_comp_expr(args.comp_id),
         layer_id=int(args.layer_id),
         path=_json_literal(args.path),
         value=_json_literal(args.value),
         at_time=float(args.at_time) if args.at_time is not None else -1.0,
-    )
+    ))
 
     async def _call() -> Any:
         out = await _backend().exec(
@@ -153,11 +147,11 @@ register("ae.setProperty", schemas.AeSetPropertyArgs, _run_set_property)
 
 async def _run_move_layer(args: schemas.AeMoveLayerArgs, ctx: Any) -> Any:
     tmpl = _load_template("move_layer.jsx")
-    jsx = tmpl.substitute(
+    jsx = with_prelude(tmpl.substitute(
         comp_expr=_comp_expr(args.comp_id),
         layer_id=int(args.layer_id),
         to_index=int(args.to_index),
-    )
+    ))
 
     async def _call() -> Any:
         out = await _backend().exec(
@@ -187,10 +181,10 @@ async def _run_select_layers(args: schemas.AeSelectLayersArgs, ctx: Any) -> Any:
     else:
         selector_js = _json_literal(sel)  # "all" | "none"
 
-    jsx = tmpl.substitute(
+    jsx = with_prelude(tmpl.substitute(
         comp_expr=_comp_expr(args.comp_id),
         selector_js=selector_js,
-    )
+    ))
 
     async def _call() -> Any:
         out = await _backend().exec(
@@ -213,10 +207,10 @@ register("ae.selectLayers", schemas.AeSelectLayersArgs, _run_select_layers)
 
 async def _run_set_time(args: schemas.AeSetTimeArgs, ctx: Any) -> Any:
     tmpl = _load_template("set_time.jsx")
-    jsx = tmpl.substitute(
+    jsx = with_prelude(tmpl.substitute(
         comp_expr=_comp_expr(args.comp_id),
         time=float(args.time),
-    )
+    ))
 
     async def _call() -> Any:
         out = await _backend().exec(
@@ -239,7 +233,7 @@ register("ae.setTime", schemas.AeSetTimeArgs, _run_set_time)
 
 async def _run_get_time(args: schemas.AeGetTimeArgs, ctx: Any) -> Any:
     tmpl = _load_template("get_time.jsx")
-    jsx = tmpl.substitute(comp_expr=_comp_expr(args.comp_id))
+    jsx = with_prelude(tmpl.substitute(comp_expr=_comp_expr(args.comp_id)))
 
     async def _call() -> Any:
         out = await _backend().exec(code=jsx, timeout_sec=20.0)
@@ -265,7 +259,7 @@ def render_create_layer(args: schemas.AeCreateLayerArgs) -> str:
     size_h = float(args.size[1]) if args.size else -1.0
     duration = float(args.duration) if args.duration is not None else -1.0
     position_js = _json_literal(list(args.position) if args.position else None)
-    return tmpl.substitute(
+    return with_prelude(tmpl.substitute(
         comp_expr=_comp_expr(args.comp_id),
         type=args.type,
         type_str=_json_literal(args.type),
@@ -275,27 +269,27 @@ def render_create_layer(args: schemas.AeCreateLayerArgs) -> str:
         size_h=size_h,
         duration=duration,
         position=position_js,
-    )
+    ))
 
 
 def render_set_property(args: schemas.AeSetPropertyArgs) -> str:
     tmpl = _load_template("set_property.jsx")
-    return tmpl.substitute(
+    return with_prelude(tmpl.substitute(
         comp_expr=_comp_expr(args.comp_id),
         layer_id=int(args.layer_id),
         path=_json_literal(args.path),
         value=_json_literal(args.value),
         at_time=float(args.at_time) if args.at_time is not None else -1.0,
-    )
+    ))
 
 
 def render_move_layer(args: schemas.AeMoveLayerArgs) -> str:
     tmpl = _load_template("move_layer.jsx")
-    return tmpl.substitute(
+    return with_prelude(tmpl.substitute(
         comp_expr=_comp_expr(args.comp_id),
         layer_id=int(args.layer_id),
         to_index=int(args.to_index),
-    )
+    ))
 
 
 def render_select_layers(args: schemas.AeSelectLayersArgs) -> str:
@@ -305,20 +299,22 @@ def render_select_layers(args: schemas.AeSelectLayersArgs) -> str:
         selector_js = _json_literal([int(i) for i in sel])
     else:
         selector_js = _json_literal(sel)
-    return tmpl.substitute(
+    return with_prelude(tmpl.substitute(
         comp_expr=_comp_expr(args.comp_id),
         selector_js=selector_js,
-    )
+    ))
 
 
 def render_set_time(args: schemas.AeSetTimeArgs) -> str:
     tmpl = _load_template("set_time.jsx")
-    return tmpl.substitute(comp_expr=_comp_expr(args.comp_id), time=float(args.time))
+    return with_prelude(
+        tmpl.substitute(comp_expr=_comp_expr(args.comp_id), time=float(args.time))
+    )
 
 
 def render_get_time(args: schemas.AeGetTimeArgs) -> str:
     tmpl = _load_template("get_time.jsx")
-    return tmpl.substitute(comp_expr=_comp_expr(args.comp_id))
+    return with_prelude(tmpl.substitute(comp_expr=_comp_expr(args.comp_id)))
 
 
 # ---------------------------------------------------------------------------
@@ -328,13 +324,13 @@ def render_get_time(args: schemas.AeGetTimeArgs) -> str:
 
 def render_get_properties(args: schemas.AeGetPropertiesArgs) -> str:
     tmpl = _load_template("get_properties.jsx")
-    return tmpl.substitute(
+    return with_prelude(tmpl.substitute(
         comp_expr=_comp_expr(args.comp_id),
         layer_ids_js=_json_literal([int(i) for i in args.layer_ids]),
         query_js=_json_literal(args.query),
         offset=int(args.offset),
         limit=int(args.limit),
-    )
+    ))
 
 
 async def _run_get_properties(args: schemas.AeGetPropertiesArgs, ctx: Any) -> Any:
@@ -359,13 +355,13 @@ register("ae.getProperties", schemas.AeGetPropertiesArgs, _run_get_properties)
 
 def render_scan_property_tree(args: schemas.AeScanPropertyTreeArgs) -> str:
     tmpl = _load_template("scan_property_tree.jsx")
-    return tmpl.substitute(
+    return with_prelude(tmpl.substitute(
         comp_expr=_comp_expr(args.comp_id),
         layer_id=int(args.layer_id),
         max_depth=int(args.max_depth),
         include_values="true" if args.include_values else "false",
         time_budget_ms=_TRAVERSAL_BUDGET_MS,
-    )
+    ))
 
 
 async def _run_scan_property_tree(args: schemas.AeScanPropertyTreeArgs, ctx: Any) -> Any:
@@ -390,11 +386,11 @@ register("ae.scanPropertyTree", schemas.AeScanPropertyTreeArgs, _run_scan_proper
 
 def render_inspect_property_capabilities(args: schemas.AeInspectPropertyCapabilitiesArgs) -> str:
     tmpl = _load_template("inspect_property_capabilities.jsx")
-    return tmpl.substitute(
+    return with_prelude(tmpl.substitute(
         comp_expr=_comp_expr(args.comp_id),
         layer_id=int(args.layer_id),
         path=_json_literal(args.path),
-    )
+    ))
 
 
 async def _run_inspect_property_capabilities(
@@ -423,12 +419,12 @@ register("ae.inspectPropertyCapabilities",
 
 def render_get_expressions(args: schemas.AeGetExpressionsArgs) -> str:
     tmpl = _load_template("get_expressions.jsx")
-    return tmpl.substitute(
+    return with_prelude(tmpl.substitute(
         comp_expr=_comp_expr(args.comp_id),
         layer_ids_js=_json_literal(list(args.layer_ids)) if args.layer_ids else "null",
         prop_filter_js=_json_literal(args.prop) if args.prop else "null",
         max_results=int(args.max_results),
-    )
+    ))
 
 
 async def _run_get_expressions(args: schemas.AeGetExpressionsArgs, ctx: Any) -> Any:
@@ -453,7 +449,7 @@ register("ae.getExpressions", schemas.AeGetExpressionsArgs, _run_get_expressions
 
 def render_validate_expressions(args: schemas.AeValidateExpressionsArgs) -> str:
     tmpl = _load_template("validate_expressions.jsx")
-    return tmpl.substitute(
+    return with_prelude(tmpl.substitute(
         comp_expr=_comp_expr(args.comp_id),
         layer_ids_js=_json_literal(list(args.layer_ids)) if args.layer_ids else "null",
         prop_filter_js=_json_literal(args.prop) if args.prop else "null",
@@ -462,7 +458,7 @@ def render_validate_expressions(args: schemas.AeValidateExpressionsArgs) -> str:
             if args.sample_times is not None else "null"
         ),
         max_results=int(args.max_results),
-    )
+    ))
 
 
 async def _run_validate_expressions(
@@ -489,11 +485,11 @@ register("ae.validateExpressions", schemas.AeValidateExpressionsArgs, _run_valid
 
 def render_get_keyframes(args: schemas.AeGetKeyframesArgs) -> str:
     tmpl = _load_template("get_keyframes.jsx")
-    return tmpl.substitute(
+    return with_prelude(tmpl.substitute(
         comp_expr=_comp_expr(args.comp_id),
         layer_id=int(args.layer_id),
         path=_json_literal(args.path),
-    )
+    ))
 
 
 async def _run_get_keyframes(args: schemas.AeGetKeyframesArgs, ctx: Any) -> Any:
@@ -518,12 +514,12 @@ register("ae.getKeyframes", schemas.AeGetKeyframesArgs, _run_get_keyframes)
 
 def render_search_project(args: schemas.AeSearchProjectArgs) -> str:
     tmpl = _load_template("search_project.jsx")
-    return tmpl.substitute(
+    return with_prelude(tmpl.substitute(
         query_js=_json_literal(args.query),
         scope_js=_json_literal(list(args.scope)),
         limit=int(args.limit),
         time_budget_ms=_TRAVERSAL_BUDGET_MS,
-    )
+    ))
 
 
 async def _run_search_project(args: schemas.AeSearchProjectArgs, ctx: Any) -> Any:
