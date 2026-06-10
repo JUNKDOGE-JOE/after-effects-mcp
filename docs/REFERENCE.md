@@ -18,6 +18,15 @@
 | 非 live 验证 | `203 passed, 24 deselected` |
 | live 验证 | AE 打开且面板绿灯时 `24 passed` |
 
+### 环境变量
+
+| 变量 | 作用 | 默认值 |
+|---|---|---|
+| `AE_MCP_BACKEND` | 选择后端 entry point 名称（bridge 注册为 `ae-mcp`） | 无（单后端时自动选用） |
+| `AE_MCP_PLUGIN_URL` | bridge 后端连接 AE 面板 HTTP RPC 的地址 | `http://127.0.0.1:11488` |
+| `AE_MCP_SKILL_DIR` | skill 存储目录（`ae.skill*` 读写的 `<name>.json`） | `~/.ae-mcp/skills` |
+| `AE_MCP_CHECKPOINT_KEEP` | 每个工程保留的 checkpoint 数量上限（旧的自动清理，最小 1） | `50` |
+
 ### 架构
 
 ```text
@@ -203,6 +212,15 @@ ae-mcp 是独立实现，参考了 Atom 风格 AE 操作面和 FX Console 风格
 | Checkpoint store | `%TEMP%/ae_mcp_checkpoints/<basename>/<id>.aep + .json` |
 | Current non-live verification | `203 passed, 24 deselected` |
 | Current live verification | `24 passed` with AE open and panel green |
+
+### Environment Variables
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `AE_MCP_BACKEND` | Selects the backend entry-point name (the bridge registers as `ae-mcp`) | unset (auto-selected when exactly one backend is installed) |
+| `AE_MCP_PLUGIN_URL` | Address the bridge backend uses to reach the AE panel's HTTP RPC | `http://127.0.0.1:11488` |
+| `AE_MCP_SKILL_DIR` | Directory where skills are stored (the `<name>.json` files read/written by `ae.skill*`) | `~/.ae-mcp/skills` |
+| `AE_MCP_CHECKPOINT_KEEP` | Max checkpoints retained per project (older ones are pruned; minimum 1) | `50` |
 
 ### Architecture
 

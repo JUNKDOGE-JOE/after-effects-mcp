@@ -10,6 +10,31 @@ from ae_mcp.backends.base import Backend
 
 ENTRY_POINT_GROUP = "ae_mcp.backends"
 
+# Known backend entry-point name -> the PyPI/distribution package that provides
+# it. The entry-point name and the package name differ (e.g. the "ae-mcp"
+# backend lives in the "ae-mcp-bridge" package), so a naive
+# "pip install ae-mcp-backend-<name>" hint points at a package that does not
+# exist. Keep this in sync with the entry_points declared by the backend
+# packages' pyprojects.
+_KNOWN_BACKEND_PACKAGES = {
+    "ae-mcp": "ae-mcp-bridge",
+}
+
+
+def _install_hint(requested: str) -> str:
+    """Return an accurate `pip install` hint for a requested backend name.
+
+    Uses the known entry-point -> package mapping when available; otherwise
+    falls back to advising the user to consult their plugin's docs (we cannot
+    guess an arbitrary third-party package name)."""
+    pkg = _KNOWN_BACKEND_PACKAGES.get(requested)
+    if pkg:
+        return f"Try: pip install {pkg}"
+    return (
+        "Install the backend package that provides this name "
+        "(see your AE plugin's docs for the package name)."
+    )
+
 
 class BackendSelectionError(RuntimeError):
     """Raised when no usable backend can be chosen."""
@@ -37,7 +62,7 @@ def select_backend() -> Backend:
             raise BackendSelectionError(
                 f"AE_MCP_BACKEND={requested!r} but no such backend installed.\n"
                 f"  Installed backends: {installed_names}\n"
-                f"  Try: pip install ae-mcp-backend-{requested}\n"
+                f"  {_install_hint(requested)}\n"
                 f"  Or fix AE_MCP_BACKEND to one of the installed names."
             )
         return installed[requested].from_env()
