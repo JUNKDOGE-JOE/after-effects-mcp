@@ -56,7 +56,8 @@ class Backend(ABC):
     @abstractmethod
     async def health_check(self, timeout_sec: float = 5.0) -> bool:
         """Quick handshake: is this backend reachable right now?
-        Called once at server startup; failure does NOT abort startup."""
+        Probed once in the background at server startup; failure is logged and
+        never aborts startup."""
 
     def supported_verbs(self) -> Set[str]:
         """Default = all known verbs. Subset return -> unsupported verbs hidden from tools/list."""

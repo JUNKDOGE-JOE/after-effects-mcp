@@ -11,6 +11,7 @@ object surfaced via the request_context; it owns report_progress.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -264,12 +265,26 @@ def build_server() -> Server:
 async def _run_async() -> None:
     """Async entry: stdio transport loop."""
     server = build_server()
+    asyncio.create_task(_startup_probe())
     async with stdio_server() as (read_stream, write_stream):
         await server.run(
             read_stream,
             write_stream,
             server.create_initialization_options(),
         )
+
+
+async def _startup_probe(get_backend=None) -> None:
+    """Best-effort startup backend health probe; never blocks server startup."""
+    if get_backend is None:
+        from ae_mcp.handlers.core import _backend as get_backend
+    try:
+        backend = get_backend()
+        ok = await backend.health_check(timeout_sec=5.0)
+        if not ok:
+            log.info("startup backend health_check returned false")
+    except Exception as e:  # noqa: BLE001
+        log.debug("startup backend health_check failed: %s", e)
 
 
 def run() -> None:
