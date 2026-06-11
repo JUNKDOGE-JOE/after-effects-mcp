@@ -7,6 +7,7 @@ from typing import Optional
 
 import httpx
 
+from ae_mcp import client_identity
 from ae_mcp.backends.base import Backend, BackendError
 
 # Header carrying the shared-secret token on /exec requests. Must match the
@@ -88,7 +89,10 @@ class HttpBridge(Backend):
             "checkpointLabel": checkpoint_label,
             "timeoutMs": int(timeout_sec * 1000),
         }
-        headers = {_TOKEN_HEADER: token}
+        headers = {
+            _TOKEN_HEADER: token,
+            client_identity.HEADER: client_identity.get_client(),
+        }
         try:
             async with httpx.AsyncClient(timeout=timeout_sec + 5.0) as http:
                 r = await http.post(

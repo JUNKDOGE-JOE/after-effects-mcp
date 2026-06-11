@@ -53,6 +53,8 @@ function startApp() {
     delete require.cache[require.resolve('./server')];
     delete require.cache[require.resolve('./jsx-bridge')];
     const server = require('./server');
+    server.activity._reset();
+    server.setPaused(false);
     // Inject a known token and a stub CSInterface so /exec can "run".
     server._setExecToken('known-secret-token');
     server.setCSInterface({
@@ -63,6 +65,24 @@ function startApp() {
         const srv = app.listen(0, '127.0.0.1', () => {
             resolve({ srv: srv, port: srv.address().port });
         });
+    });
+}
+
+function get(port, pathname, headers) {
+    return new Promise((resolve, reject) => {
+        const req = http.request({
+            host: '127.0.0.1',
+            port: port,
+            path: pathname,
+            method: 'GET',
+            headers: headers || {},
+        }, (res) => {
+            let chunks = '';
+            res.on('data', (c) => { chunks += c; });
+            res.on('end', () => resolve({ status: res.statusCode, body: JSON.parse(chunks || '{}') }));
+        });
+        req.on('error', reject);
+        req.end();
     });
 }
 
@@ -119,6 +139,103 @@ test('/exec returns 200 with the correct token', async () => {
         assert.strictEqual(r.status, 200);
         assert.strictEqual(r.body.ok, true);
         assert.strictEqual(r.body.result, 'stub-result');
+    } finally {
+        srv.close();
+    }
+});
+
+test('/exec returns 503 while paused and resumes after unpause', async () => {
+    const { srv, port } = await startApp();
+    const server = require('./server');
+    try {
+        server.setPaused(true);
+        const paused = await post(port, '/exec', { 'X-AE-MCP-Token': 'known-secret-token' }, { code: '1' });
+        assert.strictEqual(paused.status, 503);
+        assert.strictEqual(paused.body.ok, false);
+        assert.match(paused.body.error, /paused/);
+
+        server.setPaused(false);
+        const resumed = await post(port, '/exec', { 'X-AE-MCP-Token': 'known-secret-token' }, { code: '1' });
+        assert.strictEqual(resumed.status, 200);
+        assert.strictEqual(resumed.body.ok, true);
+    } finally {
+        server.setPaused(false);
+        srv.close();
+    }
+});
+
+test('/health is not affected by pause', async () => {
+    const { srv, port } = await startApp();
+    const server = require('./server');
+    try {
+        server.setPaused(true);
+        const r = await get(port, '/health', {});
+        assert.strictEqual(r.status, 200);
+        assert.strictEqual(r.body.ok, true);
+    } finally {
+        server.setPaused(false);
+        srv.close();
+    }
+});
+
+test('/activity requires token', async () => {
+    const { srv, port } = await startApp();
+    try {
+        const r = await get(port, '/activity', {});
+        assert.strictEqual(r.status, 401);
+        assert.strictEqual(r.body.ok, false);
+    } finally {
+        srv.close();
+    }
+});
+
+test('/exec success is recorded in /activity with client label', async () => {
+    const { srv, port } = await startApp();
+    try {
+        await post(
+            port,
+            '/exec',
+            { 'X-AE-MCP-Token': 'known-secret-token', 'x-ae-mcp-client': 'Claude Desktop/1.2' },
+            { code: '1', undoGroup: 'unit' }
+        );
+        const r = await get(port, '/activity', { 'X-AE-MCP-Token': 'known-secret-token' });
+        assert.strictEqual(r.status, 200);
+        assert.strictEqual(r.body.ok, true);
+        assert.strictEqual(r.body.events.length, 1);
+        assert.strictEqual(r.body.events[0].ok, true);
+        assert.strictEqual(r.body.events[0].client, 'Claude Desktop/1.2');
+        assert.strictEqual(r.body.events[0].undoGroup, 'unit');
+    } finally {
+        srv.close();
+    }
+});
+
+test('/exec paused denial is recorded in /activity', async () => {
+    const { srv, port } = await startApp();
+    const server = require('./server');
+    try {
+        server.setPaused(true);
+        await post(port, '/exec', { 'X-AE-MCP-Token': 'known-secret-token' }, { code: '1' });
+        const r = await get(port, '/activity', { 'X-AE-MCP-Token': 'known-secret-token' });
+        assert.strictEqual(r.body.events.length, 1);
+        assert.strictEqual(r.body.events[0].ok, false);
+        assert.strictEqual(r.body.events[0].denied, 'paused');
+        assert.strictEqual(r.body.events[0].client, 'unknown');
+    } finally {
+        server.setPaused(false);
+        srv.close();
+    }
+});
+
+test('/exec invalid request is recorded in /activity after auth', async () => {
+    const { srv, port } = await startApp();
+    try {
+        const denied = await post(port, '/exec', { 'X-AE-MCP-Token': 'known-secret-token' }, { code: '' });
+        assert.strictEqual(denied.status, 400);
+        const r = await get(port, '/activity', { 'X-AE-MCP-Token': 'known-secret-token' });
+        assert.strictEqual(r.body.events.length, 1);
+        assert.strictEqual(r.body.events[0].ok, false);
+        assert.strictEqual(r.body.events[0].denied, 'invalid_request');
     } finally {
         srv.close();
     }
