@@ -47,6 +47,20 @@ test('ensureToken generates a 64-char hex token and is idempotent', (t) => {
     fs.rmSync(tmp, { recursive: true, force: true });
 });
 
+test('regenerate writes a fresh 64-char hex token', (t) => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-regen-'));
+    t.mock.method(os, 'homedir', () => tmp);
+
+    const tok1 = authToken.ensureToken();
+    const tok2 = authToken.regenerate();
+
+    assert.match(tok2, /^[0-9a-f]{64}$/);
+    assert.notStrictEqual(tok2, tok1);
+    assert.strictEqual(fs.readFileSync(path.join(tmp, '.ae-mcp', 'auth-token'), 'utf8'), tok2);
+
+    fs.rmSync(tmp, { recursive: true, force: true });
+});
+
 // ---- /exec auth wiring via the real Express app ----
 
 function startApp() {
@@ -178,6 +192,36 @@ test('/health is not affected by pause', async () => {
     }
 });
 
+test('/health without python identity does not record a health probe time', async () => {
+    const { srv, port } = await startApp();
+    const server = require('./server');
+    try {
+        const r = await get(port, '/health', {});
+        assert.strictEqual(r.status, 200);
+        assert.strictEqual(r.body.ok, true);
+        assert.strictEqual(server.getConnectionInfo().lastHealthAt, null);
+    } finally {
+        srv.close();
+    }
+});
+
+test('/health with python identity records the last health probe time and version', async () => {
+    const { srv, port } = await startApp();
+    const server = require('./server');
+    try {
+        const before = Date.now();
+        const r = await get(port, '/health', { 'x-ae-mcp-python': '0.3.2-test' });
+        const after = Date.now();
+        assert.strictEqual(r.status, 200);
+        const info = server.getConnectionInfo();
+        assert.ok(info.lastHealthAt >= before);
+        assert.ok(info.lastHealthAt <= after);
+        assert.strictEqual(info.pythonVersion, '0.3.2-test');
+    } finally {
+        srv.close();
+    }
+});
+
 test('/activity requires token', async () => {
     const { srv, port } = await startApp();
     try {
@@ -210,6 +254,98 @@ test('/exec success is recorded in /activity with client label', async () => {
     }
 });
 
+test('/exec feeds client registry and python version into connection info', async () => {
+    const { srv, port } = await startApp();
+    const server = require('./server');
+    try {
+        const before = Date.now();
+        await post(
+            port,
+            '/exec',
+            {
+                'X-AE-MCP-Token': 'known-secret-token',
+                'x-ae-mcp-client': 'Cursor/0.45',
+                'x-ae-mcp-python': '0.3.2',
+            },
+            { code: '1' }
+        );
+        const clients = server.getClients();
+        assert.deepStrictEqual(clients.map((c) => c.label), ['Cursor/0.45']);
+        assert.strictEqual(clients[0].blocked, false);
+        assert.ok(clients[0].lastSeen >= before);
+
+        const info = server.getConnectionInfo();
+        assert.strictEqual(info.hostVersion, require('./package.json').version);
+        assert.strictEqual(info.pythonVersion, '0.3.2');
+        assert.ok(info.lastClientSeenAt >= before);
+        assert.ok(Object.prototype.hasOwnProperty.call(info, 'port'));
+    } finally {
+        srv.close();
+    }
+});
+
+test('/exec blocks a client, records denied activity, then resumes after unblock', async () => {
+    const { srv, port } = await startApp();
+    const server = require('./server');
+    try {
+        server.setClientBlocked('Claude Desktop/1.2', true);
+        const blocked = await post(
+            port,
+            '/exec',
+            { 'X-AE-MCP-Token': 'known-secret-token', 'x-ae-mcp-client': 'Claude Desktop/1.2' },
+            { code: '1' }
+        );
+        assert.strictEqual(blocked.status, 403);
+        assert.strictEqual(blocked.body.ok, false);
+        assert.match(blocked.body.error, /blocked/);
+
+        const activity = await get(port, '/activity', { 'X-AE-MCP-Token': 'known-secret-token' });
+        assert.strictEqual(activity.body.events.length, 1);
+        assert.strictEqual(activity.body.events[0].client, 'Claude Desktop/1.2');
+        assert.strictEqual(activity.body.events[0].denied, 'blocked');
+
+        assert.strictEqual(server.getClients()[0].blocked, true);
+        server.setClientBlocked('Claude Desktop/1.2', false);
+        const resumed = await post(
+            port,
+            '/exec',
+            { 'X-AE-MCP-Token': 'known-secret-token', 'x-ae-mcp-client': 'Claude Desktop/1.2' },
+            { code: '1' }
+        );
+        assert.strictEqual(resumed.status, 200);
+        assert.strictEqual(resumed.body.ok, true);
+        assert.strictEqual(server.getClients()[0].blocked, false);
+    } finally {
+        srv.close();
+    }
+});
+
+test('regenerateToken swaps the live /exec token', async (t) => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-live-regen-'));
+    t.mock.method(os, 'homedir', () => tmp);
+    const { srv, port } = await startApp();
+    const server = require('./server');
+    try {
+        let newToken = null;
+        server.regenerateToken((err, token) => {
+            assert.ifError(err);
+            newToken = token;
+        });
+        assert.match(newToken, /^[0-9a-f]{64}$/);
+        assert.notStrictEqual(newToken, 'known-secret-token');
+
+        const oldDenied = await post(port, '/exec', { 'X-AE-MCP-Token': 'known-secret-token' }, { code: '1' });
+        assert.strictEqual(oldDenied.status, 401);
+
+        const newAllowed = await post(port, '/exec', { 'X-AE-MCP-Token': newToken }, { code: '1' });
+        assert.strictEqual(newAllowed.status, 200);
+        assert.strictEqual(newAllowed.body.ok, true);
+    } finally {
+        srv.close();
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
 test('/exec paused denial is recorded in /activity', async () => {
     const { srv, port } = await startApp();
     const server = require('./server');
@@ -236,6 +372,22 @@ test('/exec invalid request is recorded in /activity after auth', async () => {
         assert.strictEqual(r.body.events.length, 1);
         assert.strictEqual(r.body.events[0].ok, false);
         assert.strictEqual(r.body.events[0].denied, 'invalid_request');
+    } finally {
+        srv.close();
+    }
+});
+
+test('panel-internal diagnostic probes stay out of the client registry', async () => {
+    const { srv, port } = await startApp();
+    const server = require('./server');
+    try {
+        const r = await post(port, '/exec', { 'X-AE-MCP-Token': 'known-secret-token', 'x-ae-mcp-client': 'panel-diagnostics/internal' }, { code: '1' });
+        assert.strictEqual(r.status, 200);
+        assert.strictEqual(server.getConnectionInfo().lastClientSeenAt, null);
+        assert.deepStrictEqual(server.getClients(), []);
+        const events = server.activity.list();
+        assert.strictEqual(events.length, 1);
+        assert.strictEqual(events[0].client, 'panel-diagnostics/internal');
     } finally {
         srv.close();
     }
