@@ -4,12 +4,12 @@ import { runDiagnostics } from '../src/cep/diagnostics.js';
 
 const TOKEN = 'a'.repeat(64);
 
-function makeDeps({ token = TOKEN, lastHealthAt = Date.now(), execResult = 'pong' } = {}) {
+function makeDeps({ token = TOKEN, lastHealthAt = Date.now(), lastClientSeenAt = null, execResult = 'pong' } = {}) {
   const calls = [];
   return {
     calls,
     getHost: () => ({
-      getConnectionInfo: () => ({ lastHealthAt }),
+      getConnectionInfo: () => ({ lastHealthAt, lastClientSeenAt }),
     }),
     fs: {
       existsSync: () => token !== null,
@@ -50,11 +50,28 @@ test('runDiagnostics reports a missing token file', async () => {
   assert.equal(typeof token.fixHint.en, 'string');
 });
 
-test('runDiagnostics reports python not seen recently', async () => {
+test('runDiagnostics accepts recent client seen as python activity', async () => {
   const stale = Date.now() - (11 * 60 * 1000);
-  const items = await runDiagnostics({ ...makeDeps({ lastHealthAt: stale }), port: 11488 });
+  const items = await runDiagnostics({ ...makeDeps({ lastHealthAt: stale, lastClientSeenAt: Date.now() }), port: 11488 });
+  const python = items.find((i) => i.id === 'python-seen');
+  assert.equal(python.ok, true);
+});
+
+test('runDiagnostics reports python not seen recently when both signals are stale', async () => {
+  const stale = Date.now() - (11 * 60 * 1000);
+  const items = await runDiagnostics({ ...makeDeps({ lastHealthAt: stale, lastClientSeenAt: stale }), port: 11488 });
   const python = items.find((i) => i.id === 'python-seen');
   assert.equal(python.ok, false);
   assert.match(python.fixHint.zh, /AI 客户端/);
   assert.match(python.fixHint.en, /AI client/);
+});
+
+test('runDiagnostics exec probes identify as panel-internal client', async () => {
+  const deps = makeDeps();
+  await runDiagnostics({ ...deps, port: 11488 });
+  const execCalls = deps.calls.filter((c) => c.url.endsWith('/exec'));
+  assert.equal(execCalls.length, 2);
+  for (const c of execCalls) {
+    assert.equal(c.options.headers['x-ae-mcp-client'], 'panel-diagnostics/internal');
+  }
 });

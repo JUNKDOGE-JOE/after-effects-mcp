@@ -16,6 +16,9 @@ let lastHealthAt = null;
 let lastPythonVersion = null;
 const clients = new Map();
 const blocked = new Set();
+// Self-reported label of the panel's own diagnostic /exec probes. Must match
+// the x-ae-mcp-client header in plugin/panel/src/cep/diagnostics.js.
+const INTERNAL_CLIENT = 'panel-diagnostics/internal';
 
 function setPaused(v) {
     paused = !!v;
@@ -99,7 +102,11 @@ function buildApp() {
     a.use(express.json({ limit: '5mb' }));
 
     a.get('/health', (req, res) => {
-        lastHealthAt = Date.now();
+        const pythonVersion = req.get('x-ae-mcp-python');
+        if (pythonVersion) {
+            lastHealthAt = Date.now();
+            lastPythonVersion = pythonVersion;
+        }
         // Presence of CSInterface (set up by the panel at startup) is the
         // readiness proxy. /exec is what actually probes AE.
         res.json({
@@ -131,7 +138,11 @@ function buildApp() {
         const client = req.get('x-ae-mcp-client') || 'unknown';
         const pythonVersion = req.get('x-ae-mcp-python');
         if (pythonVersion) lastPythonVersion = pythonVersion;
-        touchClient(client);
+        // Panel-origin diagnostic probes stay out of the client registry so
+        // they cannot bump lastClientSeenAt (wizard/diagnostics would
+        // self-greenlight) or show up as a phantom client in Settings.
+        // Must match the header constant in plugin/panel/src/cep/diagnostics.js.
+        if (client !== INTERNAL_CLIENT) touchClient(client);
         if (blocked.has(client)) {
             activity.record({ client, undoGroup: undoGroup || null, ok: false, denied: 'blocked' });
             return res.status(403).json({ ok: false, error: 'blocked: this client is blocked in the panel' });
