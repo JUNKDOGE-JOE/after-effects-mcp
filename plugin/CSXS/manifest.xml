@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ExtensionManifest Version="7.0" ExtensionBundleId="com.aemcp.panel"
-                   ExtensionBundleVersion="0.3.1"
+                   ExtensionBundleVersion="0.3.2"
                    ExtensionBundleName="ae-mcp Panel"
                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
     <ExtensionList>
-        <Extension Id="com.aemcp.panel" Version="0.3.1" />
+        <Extension Id="com.aemcp.panel" Version="0.3.2" />
     </ExtensionList>
     <ExecutionEnvironment>
         <HostList>
