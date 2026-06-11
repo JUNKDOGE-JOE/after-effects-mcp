@@ -11,7 +11,9 @@ const T = {
     connected: '服务运行中',
     starting: '正在启动...',
     error: '服务故障',
-    paused: '已暂停',
+    paused: '已暂停 — AI 操作已被拦截',
+    pauseAll: '暂停所有 AI 操作',
+    resume: '恢复',
     chat: '对话',
     activity: '活动',
     settings: '设置',
@@ -24,7 +26,9 @@ const T = {
     connected: 'Service running',
     starting: 'Starting...',
     error: 'Service error',
-    paused: 'Paused',
+    paused: 'Paused — AI actions are blocked',
+    pauseAll: 'Pause all AI actions',
+    resume: 'Resume',
     chat: 'Chat',
     activity: 'Activity',
     settings: 'Settings',
@@ -40,6 +44,7 @@ function Shell({ cs }) {
   const t = T[lang];
   const [tab, setTab] = React.useState('chat');
   const [status, setStatus] = React.useState({ state: 'starting', port: DEFAULT_PORT, error: null });
+  const [paused, setPaused] = React.useState(false);
   const [logs, setLogs] = React.useState([]);
   const ctrl = React.useRef(null);
 
@@ -74,7 +79,19 @@ function Shell({ cs }) {
     if (ctrl.current) ctrl.current.restart(port);
   };
 
-  const statusForBar = status.state === 'ok' ? 'connected' : status.state === 'starting' ? 'waiting' : 'error';
+  const togglePause = () => {
+    const host = ctrl.current && ctrl.current.getHost();
+    if (!host || typeof host.setPaused !== 'function') {
+      pushLog('Pause unavailable: host not running');
+      return;
+    }
+    const next = !paused;
+    host.setPaused(next);
+    setPaused(next);
+    pushLog(next ? 'Paused: /exec is blocked' : 'Resumed');
+  };
+
+  const statusForBar = paused ? 'paused' : status.state === 'ok' ? 'connected' : status.state === 'starting' ? 'waiting' : 'error';
   const tabs = [
     { id: 'chat', icon: 'message-square', label: t.chat },
     { id: 'activity', icon: 'list-checks', label: t.activity },
@@ -85,10 +102,11 @@ function Shell({ cs }) {
     <React.Fragment>
       <StatusBar
         status={statusForBar}
-        label={status.state === 'ok' ? `${t.connected} · 127.0.0.1:${status.port}` : status.state === 'error' ? `${t.error} · ${status.error || ''}` : t.starting}
-        onTogglePause={() => {}}
+        label={paused ? t.paused : status.state === 'ok' ? `${t.connected} · 127.0.0.1:${status.port}` : status.state === 'error' ? `${t.error} · ${status.error || ''}` : t.starting}
+        onTogglePause={togglePause}
         onSettings={() => setTab('settings')}
-        pauseTitle={t.paused}
+        pauseTitle={t.pauseAll}
+        resumeTitle={t.resume}
         settingsTitle={t.settings}
       />
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
