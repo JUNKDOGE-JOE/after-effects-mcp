@@ -219,7 +219,11 @@ class AeSetPropertyArgs(_StrictModel):
         description="Scalar or array. Numeric arrays are passed as-is to setValue.",
     )
     at_time: Optional[float] = Field(
-        None, description="If set, writes a keyframe at this time instead of the constant value."
+        None,
+        description=(
+            "If set, writes a keyframe at this time (seconds; negative times "
+            "are legal in AE). Omit to write the constant value."
+        ),
     )
 
 

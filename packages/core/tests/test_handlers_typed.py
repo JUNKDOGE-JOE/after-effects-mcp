@@ -56,7 +56,16 @@ def test_render_set_property_with_keyframe():
 def test_render_set_property_without_keyframe():
     args = S.AeSetPropertyArgs(layer_id=1, path="Opacity", value=50)
     jsx = T.render_set_property(args)
-    assert "-1.0" in jsx  # at_time sentinel
+    assert "var atTime = null;" in jsx
+
+
+@pytest.mark.parametrize("at_time", [-0.5, -1.0, 0.0, 1.5])
+def test_render_set_property_at_time_allows_negative_times(at_time):
+    args = S.AeSetPropertyArgs(
+        layer_id=1, path="Opacity", value=50, at_time=at_time,
+    )
+    jsx = T.render_set_property(args)
+    assert f"var atTime = {at_time};" in jsx
 
 
 def test_render_move_layer_clamps_in_js_not_py():

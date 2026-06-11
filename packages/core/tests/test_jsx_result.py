@@ -80,16 +80,22 @@ def test_parsed_ok_false_is_preserved():
 def test_evalscript_error_sentinel_is_failure_not_silent_success():
     # CSInterface surfaces an uncaught ExtendScript error as the literal
     # "EvalScript error." (note the PERIOD). jsx-bridge.js should reject it,
-    # but this is the Python backstop: a result that begins with
-    # "EvalScript error" must flip to ok:false, not be wrapped as content.
+    # but this is the Python backstop: that exact sentinel must flip to
+    # ok:false, not be wrapped as content.
     result = parse_jsx_result("EvalScript error.")
     assert result["ok"] is False
     assert result["raw"] == "EvalScript error."
     assert "EvalScript error" in result["error"]
 
 
-def test_evalscript_error_colon_variant_is_failure():
-    # Defensive: also catch a colon/trailing-detail variant.
-    result = parse_jsx_result("EvalScript error: ReferenceError foo is undefined")
-    assert result["ok"] is False
-    assert result["raw"] == "EvalScript error: ReferenceError foo is undefined"
+def test_evalscript_error_colon_variant_is_content():
+    # Exact matching is intentional: the colon variant is not CEP's sentinel.
+    # Issue #8 taught us that ':' vs '.' mismatch can miss the real sentinel;
+    # issue #23 taught us that a bare prefix check false-positives valid text.
+    content = "EvalScript error: ReferenceError foo is undefined"
+    assert parse_jsx_result(content) == {"ok": True, "content": content}
+
+
+def test_evalscript_errors_diagnostic_prefix_is_content():
+    content = "EvalScript errors found: 0"
+    assert parse_jsx_result(content) == {"ok": True, "content": content}

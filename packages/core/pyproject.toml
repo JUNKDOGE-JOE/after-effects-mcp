@@ -7,7 +7,9 @@ requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "ae-mcp contributors" }]
 dependencies = [
-    "mcp>=1.0.0",
+    # CallToolResult direct return needs >=1.19.0 (python-sdk #1459);
+    # older SDKs silently mangle it (pydantic models are iterable).
+    "mcp>=1.19.0",
     "pydantic>=2.5.0",
     "pillow>=10.0.0",
 ]

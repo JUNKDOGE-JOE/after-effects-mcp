@@ -30,6 +30,24 @@ test('"EvalScript error." sentinel (with period) rejects', async () => {
     );
 });
 
+test('legitimate string beginning with EvalScript errors resolves', async () => {
+    const bridge = freshBridge();
+    bridge.setCSInterface({
+        evalScript: function (jsx, cb) { cb('EvalScript errors found: 0'); },
+    });
+    const r = await bridge.evalScript('diagnostics', 1000);
+    assert.strictEqual(r, 'EvalScript errors found: 0');
+});
+
+test('EvalScript error colon variant resolves because only the exact sentinel rejects', async () => {
+    const bridge = freshBridge();
+    bridge.setCSInterface({
+        evalScript: function (jsx, cb) { cb('EvalScript error: ReferenceError x is undefined'); },
+    });
+    const r = await bridge.evalScript('diagnostics', 1000);
+    assert.strictEqual(r, 'EvalScript error: ReferenceError x is undefined');
+});
+
 test('missing CSInterface rejects', async () => {
     const bridge = freshBridge();
     await assert.rejects(
