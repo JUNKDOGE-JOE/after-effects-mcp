@@ -178,6 +178,25 @@ async def test_exec_sends_client_identity_header(token_file):
 
 
 @pytest.mark.asyncio
+async def test_exec_sends_python_version_header(token_file):
+    captured = {}
+
+    async def _resp(request):
+        captured["python"] = request.headers.get("x-ae-mcp-python")
+        return Response(200, json={"ok": True, "result": "ok"})
+
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/exec").mock(side_effect=_resp)
+        b = HttpBridge("http://127.0.0.1:11488")
+        try:
+            await b.exec("1")
+        finally:
+            await b.shutdown()
+
+    assert captured["python"]
+
+
+@pytest.mark.asyncio
 async def test_exec_missing_token_raises(tmp_path, monkeypatch):
     from ae_mcp.backends.base import BackendError
 

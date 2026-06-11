@@ -16,6 +16,28 @@ function tokenPath() {
     return path.join(tokenDir(), 'auth-token');
 }
 
+function generateToken() {
+    return crypto.randomBytes(32).toString('hex');
+}
+
+function writeToken(token) {
+    var dir = tokenDir();
+    var file = tokenPath();
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+    var tmp = path.join(dir, 'auth-token.' + process.pid + '.' + Date.now() + '.tmp');
+    fs.writeFileSync(tmp, token, 'utf8');
+    try {
+        // POSIX: restrict to owner read/write. No-op effect on Windows.
+        fs.chmodSync(tmp, 0o600);
+    } catch (e) {
+        // chmod can fail on some filesystems; the token is still written.
+    }
+    fs.renameSync(tmp, file);
+    return token;
+}
+
 // Ensure the token file exists, generating a fresh 32-byte hex secret if not.
 // Best-effort 0600 perms on POSIX; on Windows the chmod is a no-op so we just
 // write the file. Returns the token string.
@@ -32,15 +54,11 @@ function ensureToken() {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }
-    var token = crypto.randomBytes(32).toString('hex');
-    fs.writeFileSync(file, token, 'utf8');
-    try {
-        // POSIX: restrict to owner read/write. No-op effect on Windows.
-        fs.chmodSync(file, 0o600);
-    } catch (e) {
-        // chmod can fail on some filesystems; the token is still written.
-    }
-    return token;
+    return writeToken(generateToken());
+}
+
+function regenerate() {
+    return writeToken(generateToken());
 }
 
 // Constant-time comparison that first guards against length mismatch (which
@@ -62,5 +80,6 @@ module.exports = {
     tokenDir: tokenDir,
     tokenPath: tokenPath,
     ensureToken: ensureToken,
+    regenerate: regenerate,
     tokenMatches: tokenMatches,
 };
