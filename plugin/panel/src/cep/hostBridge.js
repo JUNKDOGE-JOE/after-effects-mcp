@@ -66,6 +66,11 @@ export function createHostController({ cs, onStatus, onLog }) {
       onLog('host: ' + hostPath);
       host = cepRequire(hostPath);
       host.setCSInterface(cs);
+      // Release the port when this JS context goes away (panel close or a
+      // devtools reload) — otherwise the orphaned listener keeps the port and
+      // the next context fails with EADDRINUSE while requests hang on the
+      // dead context's evalScript pipe.
+      window.addEventListener('beforeunload', () => { try { host.stop(); } catch (e) { /* best-effort */ } });
       host.start(port, (err) => err ? onStatus('error', port, err.message) : onStatus('ok', port));
     } catch (e) {
       onStatus('error', port, e.message);

@@ -9542,6 +9542,7 @@
     ] });
   }
   function ConnectionDrawer({ open = false, onClose, info = {}, onCopyConfig, onRestart, onDiagnose, diagnostics = [], lang = "zh" }) {
+    const diagList = Array.isArray(diagnostics) ? diagnostics : [];
     const t = D[lang] || D.zh;
     const panelVersion = info.panelVersion || package_default.version;
     return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(Drawer, { open, title: t.title, onClose, closeTitle: t.close, children: [
@@ -9556,7 +9557,7 @@
           onDiagnose
         }
       ),
-      diagnostics.length ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { marginTop: "var(--space-3)", paddingTop: "var(--space-2)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(DiagnosticsBody, { lang, diagnostics, onRerun: onDiagnose }) }) : null
+      diagList.length ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { marginTop: "var(--space-3)", paddingTop: "var(--space-2)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(DiagnosticsBody, { lang, diagnostics: diagList, onRerun: onDiagnose }) }) : null
     ] });
   }
 
@@ -9808,6 +9809,12 @@
         onLog("host: " + hostPath);
         host = cepRequire3(hostPath);
         host.setCSInterface(cs2);
+        window.addEventListener("beforeunload", () => {
+          try {
+            host.stop();
+          } catch (e) {
+          }
+        });
         host.start(port, (err) => err ? onStatus("error", port, err.message) : onStatus("ok", port));
       } catch (e) {
         onStatus("error", port, e.message);
@@ -10067,7 +10074,7 @@
           onClose: () => setDrawerOpen(false),
           lang,
           info: connInfo || {},
-          diagnostics,
+          diagnostics: Array.isArray(diagnostics) ? diagnostics : [],
           onDiagnose: runDiag,
           onCopyConfig: () => copyText(mcpConfigStr),
           onRestart: () => applyPort(status.port)

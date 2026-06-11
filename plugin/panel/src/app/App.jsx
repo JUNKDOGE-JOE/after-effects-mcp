@@ -270,7 +270,7 @@ function Shell({ cs }) {
         onClose={() => setDrawerOpen(false)}
         lang={lang}
         info={connInfo || {}}
-        diagnostics={diagnostics}
+        diagnostics={Array.isArray(diagnostics) ? diagnostics : []}
         onDiagnose={runDiag}
         onCopyConfig={() => copyText(mcpConfigStr)}
         onRestart={() => applyPort(status.port)}
