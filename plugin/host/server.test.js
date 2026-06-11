@@ -192,17 +192,31 @@ test('/health is not affected by pause', async () => {
     }
 });
 
-test('/health records the last health probe time', async () => {
+test('/health without python identity does not record a health probe time', async () => {
+    const { srv, port } = await startApp();
+    const server = require('./server');
+    try {
+        const r = await get(port, '/health', {});
+        assert.strictEqual(r.status, 200);
+        assert.strictEqual(r.body.ok, true);
+        assert.strictEqual(server.getConnectionInfo().lastHealthAt, null);
+    } finally {
+        srv.close();
+    }
+});
+
+test('/health with python identity records the last health probe time and version', async () => {
     const { srv, port } = await startApp();
     const server = require('./server');
     try {
         const before = Date.now();
-        const r = await get(port, '/health', {});
+        const r = await get(port, '/health', { 'x-ae-mcp-python': '0.3.2-test' });
         const after = Date.now();
         assert.strictEqual(r.status, 200);
         const info = server.getConnectionInfo();
         assert.ok(info.lastHealthAt >= before);
         assert.ok(info.lastHealthAt <= after);
+        assert.strictEqual(info.pythonVersion, '0.3.2-test');
     } finally {
         srv.close();
     }
@@ -358,6 +372,22 @@ test('/exec invalid request is recorded in /activity after auth', async () => {
         assert.strictEqual(r.body.events.length, 1);
         assert.strictEqual(r.body.events[0].ok, false);
         assert.strictEqual(r.body.events[0].denied, 'invalid_request');
+    } finally {
+        srv.close();
+    }
+});
+
+test('panel-internal diagnostic probes stay out of the client registry', async () => {
+    const { srv, port } = await startApp();
+    const server = require('./server');
+    try {
+        const r = await post(port, '/exec', { 'X-AE-MCP-Token': 'known-secret-token', 'x-ae-mcp-client': 'panel-diagnostics/internal' }, { code: '1' });
+        assert.strictEqual(r.status, 200);
+        assert.strictEqual(server.getConnectionInfo().lastClientSeenAt, null);
+        assert.deepStrictEqual(server.getClients(), []);
+        const events = server.activity.list();
+        assert.strictEqual(events.length, 1);
+        assert.strictEqual(events[0].client, 'panel-diagnostics/internal');
     } finally {
         srv.close();
     }

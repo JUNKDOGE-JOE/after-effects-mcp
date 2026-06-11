@@ -35,6 +35,11 @@ function tokenHeaders(token) {
   return {
     'content-type': 'application/json',
     'x-ae-mcp-token': token,
+    // Must match INTERNAL_CLIENT in plugin/host/server.js: panel-origin
+    // probes are kept out of the client registry (and therefore out of
+    // lastClientSeenAt) so running diagnostics can never green-light the
+    // python-seen check or list a phantom client in Settings.
+    'x-ae-mcp-client': 'panel-diagnostics/internal',
   };
 }
 
@@ -83,12 +88,13 @@ export async function runDiagnostics({ getHost, port, fs, os, fetchImpl }) {
   try {
     const host = getHost && getHost();
     const info = host && host.getConnectionInfo && host.getConnectionInfo();
-    const age = info && info.lastHealthAt ? Date.now() - info.lastHealthAt : Infinity;
+    const lastPythonSeenAt = info ? Math.max(info.lastHealthAt || 0, info.lastClientSeenAt || 0) : 0;
+    const age = lastPythonSeenAt ? Date.now() - lastPythonSeenAt : Infinity;
     const ok = age < 10 * 60 * 1000;
     items.push({
       id: 'python-seen',
       ok,
-      detail: ok ? 'Last /health probe ' + Math.round(age / 1000) + 's ago' : 'No recent /health probe from Python',
+      detail: ok ? 'Last Python signal ' + Math.round(age / 1000) + 's ago' : 'No recent Python signal',
       fixHint: HINTS['python-seen'],
     });
   } catch (e) {

@@ -13,6 +13,7 @@ from ae_mcp.backends.base import Backend, BackendError
 # Header carrying the shared-secret token on /exec requests. Must match the
 # header the Node host (plugin/host/server.js) checks.
 _TOKEN_HEADER = "X-AE-MCP-Token"
+_PY_VERSION_HEADER = "x-ae-mcp-python"
 
 try:
     from importlib.metadata import version as _pkg_version
@@ -75,7 +76,10 @@ class HttpBridge(Backend):
         # /health is unauthenticated (it executes no code), so no token needed.
         try:
             async with httpx.AsyncClient(timeout=timeout_sec) as http:
-                r = await http.get(f"{self.url}/health")
+                r = await http.get(
+                    f"{self.url}/health",
+                    headers={_PY_VERSION_HEADER: _PY_VERSION},
+                )
             return r.status_code == 200 and r.json().get("ok") is True
         except Exception:  # noqa: BLE001
             return False
@@ -99,7 +103,7 @@ class HttpBridge(Backend):
         headers = {
             _TOKEN_HEADER: token,
             client_identity.HEADER: client_identity.get_client(),
-            "x-ae-mcp-python": _PY_VERSION,
+            _PY_VERSION_HEADER: _PY_VERSION,
         }
         try:
             async with httpx.AsyncClient(timeout=timeout_sec + 5.0) as http:
