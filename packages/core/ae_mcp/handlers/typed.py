@@ -115,14 +115,7 @@ register("ae.createLayer", schemas.AeCreateLayerArgs, _run_create_layer)
 
 
 async def _run_set_property(args: schemas.AeSetPropertyArgs, ctx: Any) -> Any:
-    tmpl = _load_template("set_property.jsx")
-    jsx = with_prelude(tmpl.substitute(
-        comp_expr=_comp_expr(args.comp_id),
-        layer_id=int(args.layer_id),
-        path=_json_literal(args.path),
-        value=_json_literal(args.value),
-        at_time=float(args.at_time) if args.at_time is not None else -1.0,
-    ))
+    jsx = render_set_property(args)
 
     async def _call() -> Any:
         out = await _backend().exec(
@@ -279,7 +272,7 @@ def render_set_property(args: schemas.AeSetPropertyArgs) -> str:
         layer_id=int(args.layer_id),
         path=_json_literal(args.path),
         value=_json_literal(args.value),
-        at_time=float(args.at_time) if args.at_time is not None else -1.0,
+        at_time=_json_literal(float(args.at_time) if args.at_time is not None else None),
     ))
 
 
