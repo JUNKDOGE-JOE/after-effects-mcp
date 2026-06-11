@@ -9593,6 +9593,12 @@
 
   // src/cep/useHandshake.js
   var import_react29 = __toESM(require_react(), 1);
+  function handshakeReached(info, since) {
+    if (!info) return false;
+    if (info.lastHealthAt && info.lastHealthAt > since) return true;
+    if (info.lastClientSeenAt && info.lastClientSeenAt > since) return true;
+    return false;
+  }
   function useHandshake(getHost, active) {
     const [state, setState] = import_react29.default.useState("waiting");
     import_react29.default.useEffect(() => {
@@ -9603,7 +9609,7 @@
       const t = setInterval(() => {
         const host = getHost && getHost();
         const info = host && host.getConnectionInfo && host.getConnectionInfo();
-        if (info && info.lastHealthAt && info.lastHealthAt > since) {
+        if (handshakeReached(info, since)) {
           setState("success");
           clearInterval(t);
         } else if (Date.now() - started > 6e4) {
@@ -9666,7 +9672,12 @@
   function tokenHeaders(token) {
     return {
       "content-type": "application/json",
-      "x-ae-mcp-token": token
+      "x-ae-mcp-token": token,
+      // Must match INTERNAL_CLIENT in plugin/host/server.js: panel-origin
+      // probes are kept out of the client registry (and therefore out of
+      // lastClientSeenAt) so running diagnostics can never green-light the
+      // python-seen check or list a phantom client in Settings.
+      "x-ae-mcp-client": "panel-diagnostics/internal"
     };
   }
   async function execCode(fetchImpl, port, token, code) {
@@ -9710,12 +9721,13 @@
     try {
       const host = getHost && getHost();
       const info = host && host.getConnectionInfo && host.getConnectionInfo();
-      const age = info && info.lastHealthAt ? Date.now() - info.lastHealthAt : Infinity;
+      const lastPythonSeenAt = info ? Math.max(info.lastHealthAt || 0, info.lastClientSeenAt || 0) : 0;
+      const age = lastPythonSeenAt ? Date.now() - lastPythonSeenAt : Infinity;
       const ok = age < 10 * 60 * 1e3;
       items.push({
         id: "python-seen",
         ok,
-        detail: ok ? "Last /health probe " + Math.round(age / 1e3) + "s ago" : "No recent /health probe from Python",
+        detail: ok ? "Last Python signal " + Math.round(age / 1e3) + "s ago" : "No recent Python signal",
         fixHint: HINTS["python-seen"]
       });
     } catch (e) {
