@@ -1,0 +1,10 @@
+@import './tokens/colors.css';
+@import './tokens/typography.css';
+@import './tokens/spacing.css';
+@import './tokens/elevation.css';
+@import './tokens/motion.css';
+@import './tokens/base.css';
+
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg-panel); color: var(--text-primary); font: var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-ui); }
+#root { height: 100%; display: flex; flex-direction: column; }

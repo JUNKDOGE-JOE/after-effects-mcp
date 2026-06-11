@@ -1,0 +1,32 @@
+/* ae-mcp — spacing, radii, sizing tokens. 4px base grid, AE-panel density. */
+:root {
+  --space-05: 2px;
+  --space-1: 4px;
+  --space-15: 6px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Radii — AE is squarish; keep corners tight */
+  --radius-sm: 2px;    /* badges, keycaps, inline code */
+  --radius-md: 4px;    /* buttons, inputs, cards */
+  --radius-lg: 6px;    /* bubbles, drawers, dialogs */
+  --radius-full: 999px;
+
+  /* Control metrics — dense but every hit target ≥ 24px */
+  --control-h-sm: 20px;  /* visual height; pad to 24 hit area */
+  --control-h: 24px;
+  --control-h-lg: 28px;
+  --hit-min: 24px;
+
+  /* Panel chrome */
+  --statusbar-h: 36px;
+  --tabbar-h: 36px;
+  --panel-w: 320px;
+  --panel-w-min: 240px;
+  --panel-w-max: 480px;
+  --panel-h: 640px;
+}
