@@ -1,5 +1,12 @@
 // Bridge between Node.js (CEP host process) and AE ExtendScript via CSInterface.
 // CSInterface is loaded in the parent (panel) process; we accept it via setCSInterface.
+// Must equal EvalScript_ErrMessage in plugin/client/CSInterface.js:33 (vendored
+// Adobe constant). CEP returns it VERBATIM on uncaught ExtendScript errors -
+// no detail suffix - so exact equality is the correct check (a bare prefix
+// match false-positives legitimate strings like "EvalScript errors found: 0").
+// Python backstop with the same constant: packages/core/ae_mcp/jsx_result.py.
+const EVALSCRIPT_ERR_SENTINEL = 'EvalScript error.';
+
 let csInterface = null;
 
 function setCSInterface(cs) {
@@ -32,7 +39,7 @@ function evalScriptInner(jsx, timeoutMs) {
         }, timeoutMs);
         try {
             csInterface.evalScript(jsx, (result) => {
-                if (typeof result === 'string' && result.indexOf('EvalScript error') === 0) {
+                if (typeof result === 'string' && result === EVALSCRIPT_ERR_SENTINEL) {
                     finish(reject, new Error(result));
                 } else {
                     finish(resolve, result);
