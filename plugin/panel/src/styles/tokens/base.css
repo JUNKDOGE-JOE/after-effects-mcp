@@ -1,0 +1,38 @@
+/* ae-mcp — minimal base layer: page defaults, scrollbars, shared keyframes. */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--text-body);
+  line-height: var(--leading-normal);
+  color: var(--text-primary);
+  background: var(--bg-panel);
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--gray-7);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--gray-8); background-clip: padding-box; border: 2px solid transparent; }
+
+.ds-focusable:focus-visible {
+  outline: 1px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+@keyframes ds-spin { to { transform: rotate(360deg); } }
+@keyframes ds-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes ds-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes ds-fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes ds-fade-down { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes ds-fade { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
