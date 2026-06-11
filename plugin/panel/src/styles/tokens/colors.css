@@ -1,0 +1,65 @@
+/* ae-mcp — color tokens.
+   Matched to After Effects' dark skin (Brightness ≈ "Darker").
+   All UI color must come from these tokens — AE ships 4 brightness levels,
+   so consuming code must never hardcode hex values. */
+:root {
+  /* ---- Base neutral ramp ---- */
+  --gray-0: #161616;
+  --gray-1: #1d1d1d;   /* content wells, code blocks */
+  --gray-2: #232323;
+  --gray-3: #262626;   /* panel background (AE dock) */
+  --gray-4: #2d2d2d;   /* raised cards */
+  --gray-5: #333333;   /* overlays, menus */
+  --gray-6: #3a3a3a;   /* default border */
+  --gray-7: #4a4a4a;   /* strong border, scrollbar thumb */
+  --gray-8: #5c5c5c;   /* disabled text */
+  --gray-9: #8a8a8a;   /* tertiary text */
+  --gray-10: #b8b8b8;  /* secondary text */
+  --gray-11: #ececec;  /* primary text, solid CTA */
+
+  /* ---- Surfaces ---- */
+  --bg-panel: var(--gray-3);
+  --bg-well: var(--gray-1);            /* inset content: chat log, JSON, inputs */
+  --bg-raised: var(--gray-4);          /* cards, user bubbles */
+  --bg-overlay: var(--gray-5);         /* drawers, menus, dialogs, toasts */
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-active: rgba(255, 255, 255, 0.09);
+  --bg-selected: rgba(255, 255, 255, 0.07);
+  --scrim: rgba(0, 0, 0, 0.45);
+
+  /* ---- Borders ---- */
+  --border-subtle: #303030;
+  --border-default: var(--gray-6);
+  --border-strong: var(--gray-7);
+
+  /* ---- Text ---- */
+  --text-primary: var(--gray-11);
+  --text-secondary: var(--gray-10);
+  --text-tertiary: var(--gray-9);
+  --text-disabled: var(--gray-8);
+  --text-on-solid: #1d1d1d;            /* on light or lavender solid fills */
+
+  /* ---- Brand accent — AI identity ONLY ----
+     Reserved: AI avatar, tool-call card edge, send button, approval card edge.
+     Never for generic emphasis, links, tabs or focus. */
+  --accent: #b3a6ff;
+  --accent-hover: #c5bbff;
+  --accent-press: #a294f0;
+  --accent-bg: rgba(179, 166, 255, 0.12);
+  --accent-border: rgba(179, 166, 255, 0.35);
+
+  /* ---- Status ---- */
+  --ok: #3fb950;
+  --ok-bg: rgba(63, 185, 80, 0.12);
+  --ok-border: rgba(63, 185, 80, 0.35);
+  --warn: #d29922;
+  --warn-bg: rgba(210, 153, 34, 0.12);
+  --warn-border: rgba(210, 153, 34, 0.4);
+  --error: #f85149;
+  --error-bg: rgba(248, 81, 73, 0.12);
+  --error-border: rgba(248, 81, 73, 0.4);
+  --neutral-status: var(--gray-9);     /* waiting / skipped ⊘ / off */
+
+  /* ---- Focus ---- */
+  --focus-ring: rgba(236, 236, 236, 0.5);  /* neutral — accent is reserved for AI */
+}

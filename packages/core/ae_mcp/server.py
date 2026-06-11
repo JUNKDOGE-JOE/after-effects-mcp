@@ -20,6 +20,8 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import CallToolResult, TextContent, Tool
 
+from ae_mcp import client_identity
+from ae_mcp.annotations import VERB_ANNOTATIONS
 from ae_mcp.handlers import HANDLERS, load_all
 from ae_mcp.instructions import SERVER_INSTRUCTIONS
 
@@ -187,12 +189,20 @@ def build_server() -> Server:
                     name=expose_tool_name(verb_name),
                     description=tool_description(schema_cls, verb_name),
                     inputSchema=input_schema,
+                    annotations=VERB_ANNOTATIONS.get(verb_name),
                 )
             )
         return tools
 
     @server.call_tool()
     async def _call_tool(name: str, arguments: dict | None) -> CallToolResult:
+        try:
+            params = server.request_context.session.client_params  # type: ignore[union-attr]
+            ci = getattr(params, "clientInfo", None) or getattr(params, "client_info", None)
+            client_identity.set_client(ci.name, ci.version)
+        except Exception:  # noqa: BLE001
+            client_identity.set_client(None, None)
+
         # Return CallToolResult explicitly so MCP clients can branch on the
         # protocol-level isError flag. The JSON payload still carries ok:false
         # for human/model-readable details and remains byte-for-byte stable.
