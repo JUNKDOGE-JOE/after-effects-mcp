@@ -1,5 +1,7 @@
 // Template for ae.setProperty. Substitution: Python string.Template.
 // Placeholders: comp_expr, layer_id, path, value, at_time.
+// at_time null means write a constant value; any number, including negative AE
+// times, means write a keyframe with setValueAtTime.
 // Returns JSON: ok, previous, current (or ok:false + error).
 (function() {
     var comp = ${comp_expr};
@@ -25,7 +27,7 @@
     try { prev = prop.value; } catch (e) { /* may lack .value */ }
 
     try {
-        if (atTime >= 0) {
+        if (atTime !== null) {
             prop.setValueAtTime(atTime, value);
         } else {
             prop.setValue(value);
