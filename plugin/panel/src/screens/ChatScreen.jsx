@@ -137,6 +137,8 @@ export function ChatScreen({
   onApprove,
   onNewSession,
   promptCards,
+  noticeActionLabel,
+  onNoticeAction,
 }) {
   const t = C[lang] || C.zh;
   const [draft, setDraft] = React.useState('');
@@ -204,7 +206,7 @@ export function ChatScreen({
           streaming={streaming}
           disabled={composerDisabled}
           placeholder={t.placeholder}
-          notice={disabledHint ? <Notice text={disabledHint} actionLabel={t.noticeAction} onAction={onNewSession} /> : null}
+          notice={disabledHint ? <Notice text={disabledHint} actionLabel={noticeActionLabel || t.noticeAction} onAction={onNoticeAction || onNewSession} /> : null}
         />
       </div>
     </div>
