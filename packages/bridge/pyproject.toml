@@ -1,6 +1,6 @@
 [project]
 name = "ae-mcp-bridge"
-version = "0.3.1"
+version = "0.3.2"
 description = "HTTP bridge between ae-mcp MCP server and the ae-mcp CEP plugin"
 readme = "README.md"
 requires-python = ">=3.10"

@@ -10,6 +10,18 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### [0.3.2] — 2026-06-11
+
+收尾 v0.3.1 时有意留待讨论的最后 3 条 review 发现（#22/#23/#24），"静默成功"主题至此全部关闭。均为兼容修复，**唯一可见的行为变化就是修复本身**：失败现在会在 MCP 协议层被如实标记。
+
+#### 🐛 修复
+- **失败的工具调用现在在 MCP 协议层置 `isError`**（#22）——此前所有结果在协议层一律报成功，失败只藏在 payload 文本的 `{ok:false}` 里；按 `isError` 分支 / 统计的 MCP 客户端会把失败的 AE 操作记成成功。payload 格式不变：`isError` 供机器分支，`{ok:false, error}` 照旧供人和模型阅读。
+- **以 `EvalScript error` 开头的合法字符串不再被误判为失败**（#23）——错误哨兵改为与 CEP 常量 `"EvalScript error."` 精确比对（此前是裸前缀匹配），`ae.exec` 读出 `"EvalScript errors found: 0"` 这类文本不再被错误拒绝；三处哨兵副本已互链锁定，防止再次漂移（#8 的失配漏报、#23 的前缀误报，同根问题就此了结）。
+- **`ae_setProperty` 的 `at_time` 支持负时间**（#24）——AE 图层可早于 t=0，负时间关键帧合法；此前 `-1.0` 兼任内部哨兵，负 `at_time` 会被静默改写成常量值（不建关键帧）还报成功。内部哨兵改为 `null`，任意数字（含负数）都如实建关键帧。
+
+#### 📦 依赖
+- `mcp` Python SDK 下限 `>=1.0.0` → `>=1.19.0`——#22 需要 `CallToolResult` 直接返回（python-sdk v1.19.0 引入；更老版本会静默错误处理该返回值）。
+
 ### [0.3.1] — 2026-06-11
 
 继 0.3.0 之后，这一批补齐了 issue #8(“失败伪装成功”)修复方案的剩余部分。全部为兼容的健壮性改进，**不影响已有调用方**。
@@ -76,6 +88,18 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### [0.3.2] — 2026-06-11
+
+Closes out the last 3 review findings deliberately deferred from v0.3.1 (#22/#23/#24), finishing the "silent success" theme. All compatible fixes; **the only visible behavior change is the fix itself**: failures are now honestly flagged at the MCP protocol layer.
+
+#### 🐛 Fixed
+- **Failed tool calls now set `isError` at the MCP protocol layer** (#22) — previously every result reported protocol-level success and failures only lived inside the `{ok:false}` payload text, so MCP clients branching/counting on `isError` recorded failed AE operations as successes. The payload format is unchanged: `isError` serves machine branching while `{ok:false, error}` stays for humans and models.
+- **Legitimate strings starting with `EvalScript error` are no longer misreported as failures** (#23) — the error sentinel is now compared exactly against CEP's `"EvalScript error."` constant (previously a bare prefix match), so text like `"EvalScript errors found: 0"` from `ae.exec` is no longer wrongly rejected; the three sentinel copies are now cross-referenced to prevent drift (#8 was a mismatch missing real failures, #23 a prefix flagging valid text — same root cause, now closed).
+- **`ae_setProperty` accepts negative `at_time`** (#24) — AE layers can start before t=0, so negative keyframe times are legal; previously `-1.0` doubled as an internal sentinel and a negative `at_time` was silently rewritten into a constant-value write (no keyframe) while reporting success. The sentinel is now `null`, and any number (negatives included) honestly creates a keyframe.
+
+#### 📦 Dependencies
+- `mcp` Python SDK floor raised `>=1.0.0` → `>=1.19.0` — #22 needs the `CallToolResult` direct return introduced in python-sdk v1.19.0 (older SDKs silently mishandle that return value).
 
 ### [0.3.1] — 2026-06-11
 
