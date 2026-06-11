@@ -14,6 +14,13 @@ from ae_mcp.backends.base import Backend, BackendError
 # header the Node host (plugin/host/server.js) checks.
 _TOKEN_HEADER = "X-AE-MCP-Token"
 
+try:
+    from importlib.metadata import version as _pkg_version
+
+    _PY_VERSION = _pkg_version("ae-mcp")
+except Exception:  # noqa: BLE001
+    _PY_VERSION = "unknown"
+
 
 def _token_path() -> Path:
     """Per-user token file shared with the Node host. Must match the path the
@@ -92,6 +99,7 @@ class HttpBridge(Backend):
         headers = {
             _TOKEN_HEADER: token,
             client_identity.HEADER: client_identity.get_client(),
+            "x-ae-mcp-python": _PY_VERSION,
         }
         try:
             async with httpx.AsyncClient(timeout=timeout_sec + 5.0) as http:

@@ -12,6 +12,10 @@ let currentPort = null;
 // (and generated if missing) exactly once per host lifetime.
 let execToken = null;
 let paused = false;
+let lastHealthAt = null;
+let lastPythonVersion = null;
+const clients = new Map();
+const blocked = new Set();
 
 function setPaused(v) {
     paused = !!v;
@@ -19,6 +23,54 @@ function setPaused(v) {
 
 function isPaused() {
     return paused;
+}
+
+function touchClient(label) {
+    const key = String(label || 'unknown');
+    const lastSeen = Date.now();
+    clients.set(key, { lastSeen: lastSeen });
+    return { label: key, lastSeen: lastSeen, blocked: blocked.has(key) };
+}
+
+function getClients() {
+    const labels = new Set(Array.from(clients.keys()).concat(Array.from(blocked.keys())));
+    return Array.from(labels).map((label) => {
+        const item = clients.get(label) || {};
+        return { label: label, lastSeen: item.lastSeen || null, blocked: blocked.has(label) };
+    }).sort((a, b) => {
+        if ((b.lastSeen || 0) !== (a.lastSeen || 0)) return (b.lastSeen || 0) - (a.lastSeen || 0);
+        return a.label.localeCompare(b.label);
+    });
+}
+
+function setClientBlocked(label, v) {
+    const key = String(label || 'unknown');
+    if (v) blocked.add(key);
+    else blocked.delete(key);
+}
+
+function getConnectionInfo() {
+    const lastClientSeenAt = getClients().reduce((max, c) => Math.max(max, c.lastSeen || 0), 0) || null;
+    return {
+        port: currentPort,
+        hostVersion: PKG_VERSION,
+        pythonVersion: lastPythonVersion,
+        lastHealthAt: lastHealthAt,
+        lastClientSeenAt: lastClientSeenAt,
+    };
+}
+
+function regenerateToken(cb) {
+    try {
+        const token = authToken.regenerate();
+        execToken = token;
+        if (cb) cb(null, token);
+        return token;
+    } catch (e) {
+        if (cb) cb(e);
+        else throw e;
+        return null;
+    }
 }
 
 // Wrap user JSX in app.beginUndoGroup / app.endUndoGroup.
@@ -47,6 +99,7 @@ function buildApp() {
     a.use(express.json({ limit: '5mb' }));
 
     a.get('/health', (req, res) => {
+        lastHealthAt = Date.now();
         // Presence of CSInterface (set up by the panel at startup) is the
         // readiness proxy. /exec is what actually probes AE.
         res.json({
@@ -76,6 +129,13 @@ function buildApp() {
 
         const { code, undoGroup, checkpointLabel, timeoutMs } = req.body || {};
         const client = req.get('x-ae-mcp-client') || 'unknown';
+        const pythonVersion = req.get('x-ae-mcp-python');
+        if (pythonVersion) lastPythonVersion = pythonVersion;
+        touchClient(client);
+        if (blocked.has(client)) {
+            activity.record({ client, undoGroup: undoGroup || null, ok: false, denied: 'blocked' });
+            return res.status(403).json({ ok: false, error: 'blocked: this client is blocked in the panel' });
+        }
         if (paused) {
             activity.record({ client, undoGroup: undoGroup || null, ok: false, denied: 'paused' });
             return res.status(503).json({ ok: false, error: 'paused: AI actions are blocked by the panel kill switch' });
@@ -147,6 +207,10 @@ module.exports = {
     setPaused,
     isPaused,
     activity,
+    getConnectionInfo,
+    getClients,
+    setClientBlocked,
+    regenerateToken,
     setCSInterface: jsxBridge.setCSInterface,
     // Exported for unit-testing the wrap shape without spinning up Express.
     wrapWithUndoGroup,
