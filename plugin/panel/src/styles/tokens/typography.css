@@ -1,0 +1,32 @@
+/* ae-mcp — typography tokens.
+   System font stack ONLY (CEP panel must not load webfonts).
+   Body 12px / captions 11px — density matches AE native panels.
+   Every label must fit both zh-CN and en-US (design for the longer one). */
+:root {
+  /* System fonts only — no font files are ever shipped, so no @font-face
+     rules exist by design. -apple-system/BlinkMacSystemFont resolve to SF Pro
+     on macOS; CJK falls through to the OS default for zh-CN automatically
+     (PingFang SC on macOS, Microsoft YaHei on Windows); ui-monospace resolves
+     to Cascadia/SF Mono natively. */
+  --font-ui: "Segoe UI", -apple-system, BlinkMacSystemFont,
+    "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Consolas, Menlo,
+    "Courier New", monospace;
+
+  /* Type scale (px — CEP panels are fixed-DPI UI, not documents) */
+  --text-micro: 10px;     /* badges, keycaps */
+  --text-caption: 11px;   /* metadata, timestamps, hints */
+  --text-body: 12px;      /* default UI text */
+  --text-heading: 13px;   /* section headings, card titles */
+  --text-title: 15px;     /* drawer/dialog titles */
+  --text-display: 20px;   /* wizard step titles only */
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  --leading-tight: 1.35;  /* headings, single-line UI */
+  --leading-normal: 1.55; /* chat text, paragraphs (CJK needs the room) */
+
+  --tracking-caps: 0.06em; /* uppercase micro-labels (en only) */
+}
