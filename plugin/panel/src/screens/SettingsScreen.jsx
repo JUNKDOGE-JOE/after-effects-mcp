@@ -8,18 +8,25 @@ import { Segmented } from '../components/core/Segmented';
 import { Input } from '../components/forms/Input';
 import { Select } from '../components/forms/Select';
 import { Field } from '../components/forms/Field';
+import { Toast } from '../components/shell/Toast';
 import { copyText } from '../lib/clipboard';
 
 const S = {
   zh: {
     ai: 'AI 服务',
-    aiDisabled: 'P5 接通内嵌对话后启用。',
     conn: '连接',
     sec: '安全',
     gen: '通用',
     about: '关于',
     apiKey: 'API Key',
     apiKeyCap: '仅保存在本机，不会上传',
+    saveVerify: '保存并验证',
+    validating: '正在验证…',
+    saved: 'API Key 已保存并验证',
+    invalidKey: '无效 key',
+    verifyFailed: '验证失败，请稍后重试',
+    clear: '清除',
+    cleared: 'API Key 已清除',
     model: '模型',
     port: '端口',
     portHint: '默认 11488',
@@ -58,13 +65,19 @@ const S = {
   },
   en: {
     ai: 'AI service',
-    aiDisabled: 'Enabled in P5 when built-in chat is wired.',
     conn: 'Connection',
     sec: 'Security',
     gen: 'General',
     about: 'About',
     apiKey: 'API Key',
     apiKeyCap: 'Stored locally, never uploaded',
+    saveVerify: 'Save and verify',
+    validating: 'Validating…',
+    saved: 'API Key saved and verified',
+    invalidKey: 'Invalid key',
+    verifyFailed: 'Verification failed. Try again later.',
+    clear: 'Clear',
+    cleared: 'API Key cleared',
     model: 'Model',
     port: 'Port',
     portHint: 'Default 11488',
@@ -185,19 +198,28 @@ export function SettingsScreen({
   onRegenToken,
   hostVersion = '-',
   pythonVersion = '-',
+  apiKey = '',
+  onSaveApiKey,
+  onClearApiKey,
+  validateKey,
+  model = 'claude-sonnet-4-6',
+  onModelChange,
+  permissionMode = 'manual',
+  onPermissionMode,
 }) {
   const t = S[lang] || S.zh;
-  const [key, setKey] = React.useState('');
-  const [model, setModel] = React.useState('sonnet');
+  const [key, setKey] = React.useState(apiKey);
+  const [aiBusy, setAiBusy] = React.useState(false);
+  const [aiToast, setAiToast] = React.useState(null);
   const [draftPort, setDraftPort] = React.useState(String(port));
   const [tokenRaw, setTokenRaw] = React.useState('');
   const [autostart, setAutostart] = React.useState(true);
-  const [perm, setPerm] = React.useState('manual');
   const [logLevel, setLogLevel] = React.useState('info');
   const [copied, setCopied] = React.useState('');
 
   React.useEffect(() => setDraftPort(String(port)), [port]);
   React.useEffect(() => setTokenRaw(readTokenValue()), []);
+  React.useEffect(() => setKey(apiKey), [apiKey]);
 
   const copy = (label, text) => {
     copyText(text).then(() => {
@@ -205,8 +227,35 @@ export function SettingsScreen({
       setTimeout(() => setCopied(''), 1200);
     }).catch(() => {});
   };
-  const permCap = perm === 'manual' ? t.permCap1 : perm === 'auto' ? t.permCap2 : t.permCap3;
+  const permCap = permissionMode === 'manual' ? t.permCap1 : permissionMode === 'auto' ? t.permCap2 : t.permCap3;
   const tokenDisplay = tokenRaw ? maskToken(tokenRaw) : t.tokenMissing;
+  const saveApiKey = () => {
+    if (aiBusy) return;
+    setAiBusy(true);
+    setAiToast(null);
+    Promise.resolve(validateKey ? validateKey(key) : true).then((result) => {
+      const ok = result === true || (result && result.ok === true) || (result && result.status === 200);
+      const status = result && typeof result === 'object' ? result.status : null;
+      if (!ok) {
+        setAiToast({ type: 'error', message: status === 401 ? t.invalidKey : t.verifyFailed });
+        return null;
+      }
+      return Promise.resolve(onSaveApiKey ? onSaveApiKey(key) : null).then(() => {
+        setAiToast({ type: 'ok', message: t.saved });
+      });
+    }).catch((e) => {
+      const status = e && (e.status || (e.response && e.response.status));
+      setAiToast({ type: 'error', message: status === 401 ? t.invalidKey : t.verifyFailed });
+    }).finally(() => setAiBusy(false));
+  };
+  const clearApiKey = () => {
+    setKey('');
+    Promise.resolve(onClearApiKey ? onClearApiKey() : null).then(() => {
+      setAiToast({ type: 'info', message: t.cleared });
+    }).catch(() => {
+      setAiToast({ type: 'error', message: t.verifyFailed });
+    });
+  };
   const regenerate = () => {
     if (!onRegenToken) return;
     const result = onRegenToken();
@@ -219,16 +268,21 @@ export function SettingsScreen({
 
   return (
     <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
-      <Section title={t.ai} disabled caption={t.aiDisabled}>
+      <Section title={t.ai}>
         <Field label={t.apiKey} caption={t.apiKeyCap}>
-          <Input secret disabled value={key} onChange={setKey} placeholder="sk-ant-..." />
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Input secret value={key} onChange={setKey} placeholder="sk-ant-..." style={{ flex: 1 }} />
+            <Button variant="primary" disabled={aiBusy || !key.trim()} onClick={saveApiKey}>{aiBusy ? t.validating : t.saveVerify}</Button>
+            <Button variant="secondary" disabled={aiBusy} onClick={clearApiKey}>{t.clear}</Button>
+          </div>
         </Field>
         <Field label={t.model}>
-          <Select disabled value={model} onChange={setModel} options={[
-            { value: 'sonnet', label: 'Claude Sonnet' },
-            { value: 'haiku', label: 'Claude Haiku' },
+          <Select value={model} onChange={onModelChange} options={[
+            { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+            { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
           ]} />
         </Field>
+        {aiToast ? <Toast type={aiToast.type} message={aiToast.message} onClose={() => setAiToast(null)} /> : null}
       </Section>
 
       <Section title={t.conn}>
@@ -257,7 +311,7 @@ export function SettingsScreen({
 
       <Section title={t.sec}>
         <Field label={t.permTitle} caption={permCap}>
-          <Segmented full value={perm} onChange={setPerm} options={[
+          <Segmented full value={permissionMode} onChange={onPermissionMode} options={[
             { value: 'manual', label: t.perm1 },
             { value: 'auto', label: t.perm2 },
             { value: 'none', label: t.perm3 },
