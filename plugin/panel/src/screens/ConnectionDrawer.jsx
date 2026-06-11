@@ -133,6 +133,10 @@ export function DiagnosticsBody({ lang = 'zh', diagnostics = [], onRerun }) {
 }
 
 export function ConnectionDrawer({ open = false, onClose, info = {}, onCopyConfig, onRestart, onDiagnose, diagnostics = [], lang = 'zh' }) {
+  // Default params only cover undefined — a caller passing null or a
+  // non-array sentinel must not crash the panel (this component renders
+  // even while the drawer is closed).
+  const diagList = Array.isArray(diagnostics) ? diagnostics : [];
   const t = D[lang] || D.zh;
   const panelVersion = info.panelVersion || pkg.version;
   return (
@@ -145,9 +149,9 @@ export function ConnectionDrawer({ open = false, onClose, info = {}, onCopyConfi
         onRestart={onRestart}
         onDiagnose={onDiagnose}
       />
-      {diagnostics.length ? (
+      {diagList.length ? (
         <div style={{ marginTop: 'var(--space-3)', paddingTop: 'var(--space-2)', borderTop: '1px solid var(--border-subtle)' }}>
-          <DiagnosticsBody lang={lang} diagnostics={diagnostics} onRerun={onDiagnose} />
+          <DiagnosticsBody lang={lang} diagnostics={diagList} onRerun={onDiagnose} />
         </div>
       ) : null}
     </Drawer>
