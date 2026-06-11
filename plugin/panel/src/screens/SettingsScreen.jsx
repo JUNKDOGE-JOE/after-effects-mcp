@@ -165,17 +165,27 @@ function readTokenValue() {
   }
 }
 
-function copyText(text) {
-  if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
+function copyTextLegacy(text) {
   const ta = document.createElement('textarea');
   ta.value = text;
   ta.style.position = 'fixed';
   ta.style.left = '-9999px';
   document.body.appendChild(ta);
   ta.select();
-  document.execCommand('copy');
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
   document.body.removeChild(ta);
-  return Promise.resolve();
+  return ok ? Promise.resolve() : Promise.reject(new Error('execCommand copy failed'));
+}
+
+function copyText(text) {
+  // CEP's file:// origin rejects navigator.clipboard ("Write permission
+  // denied"), so the async API is only an attempt — execCommand is the
+  // path that actually works inside AE.
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text).catch(() => copyTextLegacy(text));
+  }
+  return copyTextLegacy(text);
 }
 
 export function SettingsScreen({ lang = 'zh', onLangChange, port = 11488, onApplyPort, mcpConfig, logs = [] }) {
