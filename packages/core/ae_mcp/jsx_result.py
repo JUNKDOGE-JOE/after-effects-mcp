@@ -7,9 +7,11 @@ weak JSON contract:
 - Empty string or the literal "undefined" / "null" — surfaces as
   `{ok:false, error, raw}`. This catches silent failure modes where the
   wrapping bug or a half-broken template produced no value at all.
-- A string beginning with "EvalScript error" (CSInterface's uncaught-error
+- A string exactly equal to "EvalScript error." (CSInterface's uncaught-error
   sentinel) — surfaces as `{ok:false, error, raw}`. Backstop for the
-  jsx-bridge.js sentinel check (see GitHub issue #8).
+  jsx-bridge.js sentinel check (see GitHub issues #8 and #23). A legitimate
+  string exactly equal to that in-band sentinel cannot be distinguished from
+  CEP's uncaught-error signal; CEP provides only that one in-band value.
 - JSON-shaped text that fails `json.loads` — surfaces as `{ok:false, error,
   raw}` rather than falling through to silent success.
 - Other non-JSON text — returned as `{ok:true, content:text}` because some
@@ -29,6 +31,10 @@ from typing import Any
 
 
 _NO_VALUE_SENTINELS = frozenset({"undefined", "null"})
+
+# Must equal EvalScript_ErrMessage in plugin/client/CSInterface.js:33 (vendored
+# Adobe constant) and EVALSCRIPT_ERR_SENTINEL in plugin/host/jsx-bridge.js.
+_EVALSCRIPT_ERR_SENTINEL = "EvalScript error."
 
 
 def _fail(error: str, raw: str) -> dict[str, str | bool]:
@@ -56,10 +62,11 @@ def parse_jsx_result(text: str) -> Any:
         )
 
     # CSInterface returns the literal "EvalScript error." (the constant
-    # EvalScript_ErrMessage) when ExtendScript threw uncaught. jsx-bridge.js
-    # rejects it, but this is the Python backstop: surface it as a failure
-    # rather than wrapping the error message as ok:true content.
-    if stripped.startswith("EvalScript error"):
+    # EvalScript_ErrMessage in plugin/client/CSInterface.js:33) when ExtendScript
+    # threw uncaught. plugin/host/jsx-bridge.js rejects EVALSCRIPT_ERR_SENTINEL,
+    # but this is the Python backstop: surface the exact sentinel as a failure
+    # rather than wrapping it as ok:true content.
+    if stripped == _EVALSCRIPT_ERR_SENTINEL:
         return _fail(stripped, text)
 
     if stripped[:1] in ("{", "["):
