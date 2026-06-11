@@ -8805,7 +8805,9 @@
       connected: "\u670D\u52A1\u8FD0\u884C\u4E2D",
       starting: "\u6B63\u5728\u542F\u52A8...",
       error: "\u670D\u52A1\u6545\u969C",
-      paused: "\u5DF2\u6682\u505C",
+      paused: "\u5DF2\u6682\u505C \u2014 AI \u64CD\u4F5C\u5DF2\u88AB\u62E6\u622A",
+      pauseAll: "\u6682\u505C\u6240\u6709 AI \u64CD\u4F5C",
+      resume: "\u6062\u590D",
       chat: "\u5BF9\u8BDD",
       activity: "\u6D3B\u52A8",
       settings: "\u8BBE\u7F6E",
@@ -8818,7 +8820,9 @@
       connected: "Service running",
       starting: "Starting...",
       error: "Service error",
-      paused: "Paused",
+      paused: "Paused \u2014 AI actions are blocked",
+      pauseAll: "Pause all AI actions",
+      resume: "Resume",
       chat: "Chat",
       activity: "Activity",
       settings: "Settings",
@@ -8833,6 +8837,7 @@
     const t = T[lang];
     const [tab, setTab] = import_react18.default.useState("chat");
     const [status, setStatus] = import_react18.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
+    const [paused, setPaused] = import_react18.default.useState(false);
     const [logs, setLogs] = import_react18.default.useState([]);
     const ctrl = import_react18.default.useRef(null);
     const pushLog = import_react18.default.useCallback((m) => {
@@ -8863,7 +8868,18 @@
       }
       if (ctrl.current) ctrl.current.restart(port);
     };
-    const statusForBar = status.state === "ok" ? "connected" : status.state === "starting" ? "waiting" : "error";
+    const togglePause = () => {
+      const host = ctrl.current && ctrl.current.getHost();
+      if (!host || typeof host.setPaused !== "function") {
+        pushLog("Pause unavailable: host not running");
+        return;
+      }
+      const next = !paused;
+      host.setPaused(next);
+      setPaused(next);
+      pushLog(next ? "Paused: /exec is blocked" : "Resumed");
+    };
+    const statusForBar = paused ? "paused" : status.state === "ok" ? "connected" : status.state === "starting" ? "waiting" : "error";
     const tabs = [
       { id: "chat", icon: "message-square", label: t.chat },
       { id: "activity", icon: "list-checks", label: t.activity },
@@ -8874,11 +8890,11 @@
         StatusBar,
         {
           status: statusForBar,
-          label: status.state === "ok" ? `${t.connected} \xB7 127.0.0.1:${status.port}` : status.state === "error" ? `${t.error} \xB7 ${status.error || ""}` : t.starting,
-          onTogglePause: () => {
-          },
+          label: paused ? t.paused : status.state === "ok" ? `${t.connected} \xB7 127.0.0.1:${status.port}` : status.state === "error" ? `${t.error} \xB7 ${status.error || ""}` : t.starting,
+          onTogglePause: togglePause,
           onSettings: () => setTab("settings"),
-          pauseTitle: t.paused,
+          pauseTitle: t.pauseAll,
+          resumeTitle: t.resume,
           settingsTitle: t.settings
         }
       ),
