@@ -2,6 +2,7 @@
 const express = require('express');
 const jsxBridge = require('./jsx-bridge');
 const authToken = require('./auth-token');
+const activity = require('./activity');
 const PKG_VERSION = require('./package.json').version;
 
 let app = null;
@@ -10,6 +11,15 @@ let currentPort = null;
 // The shared secret /exec requires. Populated in start() so the file is read
 // (and generated if missing) exactly once per host lifetime.
 let execToken = null;
+let paused = false;
+
+function setPaused(v) {
+    paused = !!v;
+}
+
+function isPaused() {
+    return paused;
+}
 
 // Wrap user JSX in app.beginUndoGroup / app.endUndoGroup.
 //
@@ -46,6 +56,15 @@ function buildApp() {
         });
     });
 
+    a.get('/activity', (req, res) => {
+        const provided = req.get(authToken.HEADER);
+        if (!authToken.tokenMatches(provided, execToken)) {
+            return res.status(401).json({ ok: false, error: 'unauthorized' });
+        }
+        const since = parseInt(req.query.since, 10);
+        res.json({ ok: true, events: activity.list(Number.isFinite(since) ? since : 0) });
+    });
+
     a.post('/exec', async (req, res) => {
         // Require the shared-secret token. /exec runs arbitrary ExtendScript, so
         // every caller must prove it can read ~/.ae-mcp/auth-token. Constant-time
@@ -56,7 +75,13 @@ function buildApp() {
         }
 
         const { code, undoGroup, checkpointLabel, timeoutMs } = req.body || {};
+        const client = req.get('x-ae-mcp-client') || 'unknown';
+        if (paused) {
+            activity.record({ client, undoGroup: undoGroup || null, ok: false, denied: 'paused' });
+            return res.status(503).json({ ok: false, error: 'paused: AI actions are blocked by the panel kill switch' });
+        }
         if (typeof code !== 'string' || code.length === 0) {
+            activity.record({ client, undoGroup: undoGroup || null, ok: false, denied: 'invalid_request' });
             return res.status(400).json({ ok: false, error: 'missing or empty `code`' });
         }
         const t = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 30000;
@@ -66,10 +91,13 @@ function buildApp() {
         // store.
         const wrapped = undoGroup ? wrapWithUndoGroup(code, undoGroup) : code;
 
+        const startedAt = Date.now();
         try {
             const result = await jsxBridge.evalScript(wrapped, t);
+            activity.record({ client, undoGroup: undoGroup || null, ok: true, durationMs: Date.now() - startedAt });
             res.json({ ok: true, result: result || '' });
         } catch (e) {
+            activity.record({ client, undoGroup: undoGroup || null, ok: false, error: e.message, durationMs: Date.now() - startedAt });
             res.json({ ok: false, error: e.message });
         }
     });
@@ -116,6 +144,9 @@ module.exports = {
     start,
     stop,
     restart,
+    setPaused,
+    isPaused,
+    activity,
     setCSInterface: jsxBridge.setCSInterface,
     // Exported for unit-testing the wrap shape without spinning up Express.
     wrapWithUndoGroup,
