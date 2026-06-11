@@ -41,7 +41,7 @@
       var x = Symbol.for("react.memo");
       var y = Symbol.for("react.lazy");
       var z = Symbol.iterator;
-      function A(a) {
+      function A2(a) {
         if (null === a || "object" !== typeof a) return null;
         a = z && a[z] || a["@@iterator"];
         return "function" === typeof a ? a : null;
@@ -53,11 +53,11 @@
       }, enqueueSetState: function() {
       } };
       var C = Object.assign;
-      var D = {};
+      var D2 = {};
       function E(a, b, e) {
         this.props = a;
         this.context = b;
-        this.refs = D;
+        this.refs = D2;
         this.updater = e || B;
       }
       E.prototype.isReactComponent = {};
@@ -74,7 +74,7 @@
       function G(a, b, e) {
         this.props = a;
         this.context = b;
-        this.refs = D;
+        this.refs = D2;
         this.updater = e || B;
       }
       var H = G.prototype = new F();
@@ -140,7 +140,7 @@
           var f = d + Q(k, g);
           h += R(k, b, e, f, c);
         }
-        else if (f = A(a), "function" === typeof f) for (a = f.call(a), g = 0; !(k = a.next()).done; ) k = k.value, f = d + Q(k, g++), h += R(k, b, e, f, c);
+        else if (f = A2(a), "function" === typeof f) for (a = f.call(a), g = 0; !(k = a.next()).done; ) k = k.value, f = d + Q(k, g++), h += R(k, b, e, f, c);
         else if ("object" === k) throw b = String(a), Error("Objects are not valid as a React child (found: " + ("[object Object]" === b ? "object with keys {" + Object.keys(a).join(", ") + "}" : b) + "). If you meant to render a collection of children, use an array instead.");
         return h;
       }
@@ -168,7 +168,7 @@
       }
       var U = { current: null };
       var V = { transition: null };
-      var W = { ReactCurrentDispatcher: U, ReactCurrentBatchConfig: V, ReactCurrentOwner: K };
+      var W2 = { ReactCurrentDispatcher: U, ReactCurrentBatchConfig: V, ReactCurrentOwner: K };
       function X2() {
         throw Error("act(...) is not supported in production builds of React.");
       }
@@ -196,7 +196,7 @@
       exports.PureComponent = G;
       exports.StrictMode = q;
       exports.Suspense = w;
-      exports.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = W;
+      exports.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = W2;
       exports.act = X2;
       exports.cloneElement = function(a, b, e) {
         if (null === a || void 0 === a) throw Error("React.cloneElement(...): The argument must be a React element, but you passed " + a + ".");
@@ -364,9 +364,9 @@
       var v = null;
       var y = 3;
       var z = false;
-      var A = false;
+      var A2 = false;
       var B = false;
-      var D = "function" === typeof setTimeout ? setTimeout : null;
+      var D2 = "function" === typeof setTimeout ? setTimeout : null;
       var E = "function" === typeof clearTimeout ? clearTimeout : null;
       var F = "undefined" !== typeof setImmediate ? setImmediate : null;
       "undefined" !== typeof navigator && void 0 !== navigator.scheduling && void 0 !== navigator.scheduling.isInputPending && navigator.scheduling.isInputPending.bind(navigator.scheduling);
@@ -381,14 +381,14 @@
       function H(a) {
         B = false;
         G(a);
-        if (!A) if (null !== h(r)) A = true, I(J);
+        if (!A2) if (null !== h(r)) A2 = true, I(J);
         else {
           var b = h(t);
           null !== b && K(H, b.startTime - a);
         }
       }
       function J(a, b) {
-        A = false;
+        A2 = false;
         B && (B = false, E(L), L = -1);
         z = true;
         var c = y;
@@ -448,7 +448,7 @@
           U.postMessage(null);
         };
       } else S2 = function() {
-        D(R, 0);
+        D2(R, 0);
       };
       var T2;
       var U;
@@ -457,7 +457,7 @@
         N || (N = true, S2());
       }
       function K(a, b) {
-        L = D(function() {
+        L = D2(function() {
           a(exports.unstable_now());
         }, b);
       }
@@ -471,7 +471,7 @@
         a.callback = null;
       };
       exports.unstable_continueExecution = function() {
-        A || z || (A = true, I(J));
+        A2 || z || (A2 = true, I(J));
       };
       exports.unstable_forceFrameRate = function(a) {
         0 > a || 125 < a ? console.error("forceFrameRate takes a positive int between 0 and 125, forcing frame rates higher than 125 fps is not supported") : P = 0 < a ? Math.floor(1e3 / a) : 5;
@@ -544,7 +544,7 @@
         }
         e = c + e;
         a = { id: u++, callback: b, priorityLevel: a, startTime: c, expirationTime: e, sortIndex: -1 };
-        c > d ? (a.sortIndex = c, f(t, a), null === h(r) && a === h(t) && (B ? (E(L), L = -1) : B = true, K(H, c - d))) : (a.sortIndex = e, f(r, a), A || z || (A = true, I(J)));
+        c > d ? (a.sortIndex = c, f(t, a), null === h(r) && a === h(t) && (B ? (E(L), L = -1) : B = true, K(H, c - d))) : (a.sortIndex = e, f(r, a), A2 || z || (A2 = true, I(J)));
         return a;
       };
       exports.unstable_shouldYield = M;
@@ -731,7 +731,7 @@
         a = Ja && a[Ja] || a["@@iterator"];
         return "function" === typeof a ? a : null;
       }
-      var A = Object.assign;
+      var A2 = Object.assign;
       var La;
       function Ma(a) {
         if (void 0 === La) try {
@@ -971,7 +971,7 @@
       }
       function Ya(a, b) {
         var c = b.checked;
-        return A({}, b, { defaultChecked: void 0, defaultValue: void 0, value: void 0, checked: null != c ? c : a._wrapperState.initialChecked });
+        return A2({}, b, { defaultChecked: void 0, defaultValue: void 0, value: void 0, checked: null != c ? c : a._wrapperState.initialChecked });
       }
       function Za(a, b) {
         var c = null == b.defaultValue ? "" : b.defaultValue, d = null != b.checked ? b.checked : b.defaultChecked;
@@ -1034,7 +1034,7 @@
       }
       function gb(a, b) {
         if (null != b.dangerouslySetInnerHTML) throw Error(p(91));
-        return A({}, b, { value: void 0, defaultValue: void 0, children: "" + a._wrapperState.initialValue });
+        return A2({}, b, { value: void 0, defaultValue: void 0, children: "" + a._wrapperState.initialValue });
       }
       function hb(a, b) {
         var c = b.value;
@@ -1165,7 +1165,7 @@
           d ? a.setProperty(c, e) : a[c] = e;
         }
       }
-      var tb = A({ menuitem: true }, { area: true, base: true, br: true, col: true, embed: true, hr: true, img: true, input: true, keygen: true, link: true, meta: true, param: true, source: true, track: true, wbr: true });
+      var tb = A2({ menuitem: true }, { area: true, base: true, br: true, col: true, embed: true, hr: true, img: true, input: true, keygen: true, link: true, meta: true, param: true, source: true, track: true, wbr: true });
       function ub(a, b) {
         if (b) {
           if (tb[a] && (null != b.children || null != b.dangerouslySetInnerHTML)) throw Error(p(137, a));
@@ -1916,7 +1916,7 @@
           this.isPropagationStopped = qd;
           return this;
         }
-        A(b.prototype, { preventDefault: function() {
+        A2(b.prototype, { preventDefault: function() {
           this.defaultPrevented = true;
           var a2 = this.nativeEvent;
           a2 && (a2.preventDefault ? a2.preventDefault() : "unknown" !== typeof a2.returnValue && (a2.returnValue = false), this.isDefaultPrevented = pd);
@@ -1931,12 +1931,12 @@
         return a.timeStamp || Date.now();
       }, defaultPrevented: 0, isTrusted: 0 };
       var td = rd(sd);
-      var ud = A({}, sd, { view: 0, detail: 0 });
+      var ud = A2({}, sd, { view: 0, detail: 0 });
       var vd = rd(ud);
       var wd;
       var xd;
       var yd;
-      var Ad = A({}, ud, { screenX: 0, screenY: 0, clientX: 0, clientY: 0, pageX: 0, pageY: 0, ctrlKey: 0, shiftKey: 0, altKey: 0, metaKey: 0, getModifierState: zd, button: 0, buttons: 0, relatedTarget: function(a) {
+      var Ad = A2({}, ud, { screenX: 0, screenY: 0, clientX: 0, clientY: 0, pageX: 0, pageY: 0, ctrlKey: 0, shiftKey: 0, altKey: 0, metaKey: 0, getModifierState: zd, button: 0, buttons: 0, relatedTarget: function(a) {
         return void 0 === a.relatedTarget ? a.fromElement === a.srcElement ? a.toElement : a.fromElement : a.relatedTarget;
       }, movementX: function(a) {
         if ("movementX" in a) return a.movementX;
@@ -1946,17 +1946,17 @@
         return "movementY" in a ? a.movementY : xd;
       } });
       var Bd = rd(Ad);
-      var Cd = A({}, Ad, { dataTransfer: 0 });
+      var Cd = A2({}, Ad, { dataTransfer: 0 });
       var Dd = rd(Cd);
-      var Ed = A({}, ud, { relatedTarget: 0 });
+      var Ed = A2({}, ud, { relatedTarget: 0 });
       var Fd = rd(Ed);
-      var Gd = A({}, sd, { animationName: 0, elapsedTime: 0, pseudoElement: 0 });
+      var Gd = A2({}, sd, { animationName: 0, elapsedTime: 0, pseudoElement: 0 });
       var Hd = rd(Gd);
-      var Id = A({}, sd, { clipboardData: function(a) {
+      var Id = A2({}, sd, { clipboardData: function(a) {
         return "clipboardData" in a ? a.clipboardData : window.clipboardData;
       } });
       var Jd = rd(Id);
-      var Kd = A({}, sd, { data: 0 });
+      var Kd = A2({}, sd, { data: 0 });
       var Ld = rd(Kd);
       var Md = {
         Esc: "Escape",
@@ -2018,7 +2018,7 @@
       function zd() {
         return Pd;
       }
-      var Qd = A({}, ud, { key: function(a) {
+      var Qd = A2({}, ud, { key: function(a) {
         if (a.key) {
           var b = Md[a.key] || a.key;
           if ("Unidentified" !== b) return b;
@@ -2032,13 +2032,13 @@
         return "keypress" === a.type ? od(a) : "keydown" === a.type || "keyup" === a.type ? a.keyCode : 0;
       } });
       var Rd = rd(Qd);
-      var Sd = A({}, Ad, { pointerId: 0, width: 0, height: 0, pressure: 0, tangentialPressure: 0, tiltX: 0, tiltY: 0, twist: 0, pointerType: 0, isPrimary: 0 });
+      var Sd = A2({}, Ad, { pointerId: 0, width: 0, height: 0, pressure: 0, tangentialPressure: 0, tiltX: 0, tiltY: 0, twist: 0, pointerType: 0, isPrimary: 0 });
       var Td = rd(Sd);
-      var Ud = A({}, ud, { touches: 0, targetTouches: 0, changedTouches: 0, altKey: 0, metaKey: 0, ctrlKey: 0, shiftKey: 0, getModifierState: zd });
+      var Ud = A2({}, ud, { touches: 0, targetTouches: 0, changedTouches: 0, altKey: 0, metaKey: 0, ctrlKey: 0, shiftKey: 0, getModifierState: zd });
       var Vd = rd(Ud);
-      var Wd = A({}, sd, { propertyName: 0, elapsedTime: 0, pseudoElement: 0 });
+      var Wd = A2({}, sd, { propertyName: 0, elapsedTime: 0, pseudoElement: 0 });
       var Xd = rd(Wd);
-      var Yd = A({}, Ad, {
+      var Yd = A2({}, Ad, {
         deltaX: function(a) {
           return "deltaX" in a ? a.deltaX : "wheelDeltaX" in a ? -a.wheelDeltaX : 0;
         },
@@ -2349,7 +2349,7 @@
         }
         if (Qb) throw a = Rb, Qb = false, Rb = null, a;
       }
-      function D(a, b) {
+      function D2(a, b) {
         var c = b[of];
         void 0 === c && (c = b[of] = /* @__PURE__ */ new Set());
         var d = a + "__bubble";
@@ -2795,7 +2795,7 @@
         if ("function" !== typeof d.getChildContext) return c;
         d = d.getChildContext();
         for (var e in d) if (!(e in b)) throw Error(p(108, Ra(a) || "Unknown", e));
-        return A({}, c, d);
+        return A2({}, c, d);
       }
       function cg(a) {
         a = (a = a.stateNode) && a.__reactInternalMemoizedMergedChildContext || Vf;
@@ -3416,7 +3416,7 @@
                     n = t.payload;
                     r = "function" === typeof n ? n.call(y, q, r) : n;
                     if (null === r || void 0 === r) break a;
-                    q = A({}, q, r);
+                    q = A2({}, q, r);
                     break a;
                   case 2:
                     jh = true;
@@ -3980,7 +3980,7 @@
       }, useMutableSource: Yh, useSyncExternalStore: Zh, useId: wi, unstable_isNewReconciler: false };
       function Ci(a, b) {
         if (a && a.defaultProps) {
-          b = A({}, b);
+          b = A2({}, b);
           a = a.defaultProps;
           for (var c in a) void 0 === b[c] && (b[c] = a[c]);
           return b;
@@ -3990,7 +3990,7 @@
       function Di(a, b, c, d) {
         b = a.memoizedState;
         c = c(d, b);
-        c = null === c || void 0 === c ? b : A({}, b, c);
+        c = null === c || void 0 === c ? b : A2({}, b, c);
         a.memoizedState = c;
         0 === a.lanes && (a.updateQueue.baseState = c);
       }
@@ -4599,8 +4599,8 @@
               f = [];
               break;
             case "select":
-              e = A({}, e, { value: void 0 });
-              d = A({}, d, { value: void 0 });
+              e = A2({}, e, { value: void 0 });
+              d = A2({}, d, { value: void 0 });
               f = [];
               break;
             case "textarea":
@@ -4628,7 +4628,7 @@
               l,
               c
             )), c = k;
-            else "dangerouslySetInnerHTML" === l ? (k = k ? k.__html : void 0, h = h ? h.__html : void 0, null != k && h !== k && (f = f || []).push(l, k)) : "children" === l ? "string" !== typeof k && "number" !== typeof k || (f = f || []).push(l, "" + k) : "suppressContentEditableWarning" !== l && "suppressHydrationWarning" !== l && (ea.hasOwnProperty(l) ? (null != k && "onScroll" === l && D("scroll", a), f || h === k || (f = [])) : (f = f || []).push(l, k));
+            else "dangerouslySetInnerHTML" === l ? (k = k ? k.__html : void 0, h = h ? h.__html : void 0, null != k && h !== k && (f = f || []).push(l, k)) : "children" === l ? "string" !== typeof k && "number" !== typeof k || (f = f || []).push(l, "" + k) : "suppressContentEditableWarning" !== l && "suppressHydrationWarning" !== l && (ea.hasOwnProperty(l) ? (null != k && "onScroll" === l && D2("scroll", a), f || h === k || (f = [])) : (f = f || []).push(l, k));
           }
           c && (f = f || []).push("style", c);
           var l = f;
@@ -4708,43 +4708,43 @@
                 a = 0 !== (b.mode & 1);
                 switch (c) {
                   case "dialog":
-                    D("cancel", d);
-                    D("close", d);
+                    D2("cancel", d);
+                    D2("close", d);
                     break;
                   case "iframe":
                   case "object":
                   case "embed":
-                    D("load", d);
+                    D2("load", d);
                     break;
                   case "video":
                   case "audio":
-                    for (e = 0; e < lf.length; e++) D(lf[e], d);
+                    for (e = 0; e < lf.length; e++) D2(lf[e], d);
                     break;
                   case "source":
-                    D("error", d);
+                    D2("error", d);
                     break;
                   case "img":
                   case "image":
                   case "link":
-                    D(
+                    D2(
                       "error",
                       d
                     );
-                    D("load", d);
+                    D2("load", d);
                     break;
                   case "details":
-                    D("toggle", d);
+                    D2("toggle", d);
                     break;
                   case "input":
                     Za(d, f);
-                    D("invalid", d);
+                    D2("invalid", d);
                     break;
                   case "select":
                     d._wrapperState = { wasMultiple: !!f.multiple };
-                    D("invalid", d);
+                    D2("invalid", d);
                     break;
                   case "textarea":
-                    hb(d, f), D("invalid", d);
+                    hb(d, f), D2("invalid", d);
                 }
                 ub(c, f);
                 e = null;
@@ -4754,7 +4754,7 @@
                     d.textContent,
                     h,
                     a
-                  ), e = ["children", "" + h]) : ea.hasOwnProperty(g) && null != h && "onScroll" === g && D("scroll", d);
+                  ), e = ["children", "" + h]) : ea.hasOwnProperty(g) && null != h && "onScroll" === g && D2("scroll", d);
                 }
                 switch (c) {
                   case "input":
@@ -4786,56 +4786,56 @@
                   g = vb(c, d);
                   switch (c) {
                     case "dialog":
-                      D("cancel", a);
-                      D("close", a);
+                      D2("cancel", a);
+                      D2("close", a);
                       e = d;
                       break;
                     case "iframe":
                     case "object":
                     case "embed":
-                      D("load", a);
+                      D2("load", a);
                       e = d;
                       break;
                     case "video":
                     case "audio":
-                      for (e = 0; e < lf.length; e++) D(lf[e], a);
+                      for (e = 0; e < lf.length; e++) D2(lf[e], a);
                       e = d;
                       break;
                     case "source":
-                      D("error", a);
+                      D2("error", a);
                       e = d;
                       break;
                     case "img":
                     case "image":
                     case "link":
-                      D(
+                      D2(
                         "error",
                         a
                       );
-                      D("load", a);
+                      D2("load", a);
                       e = d;
                       break;
                     case "details":
-                      D("toggle", a);
+                      D2("toggle", a);
                       e = d;
                       break;
                     case "input":
                       Za(a, d);
                       e = Ya(a, d);
-                      D("invalid", a);
+                      D2("invalid", a);
                       break;
                     case "option":
                       e = d;
                       break;
                     case "select":
                       a._wrapperState = { wasMultiple: !!d.multiple };
-                      e = A({}, d, { value: void 0 });
-                      D("invalid", a);
+                      e = A2({}, d, { value: void 0 });
+                      D2("invalid", a);
                       break;
                     case "textarea":
                       hb(a, d);
                       e = gb(a, d);
-                      D("invalid", a);
+                      D2("invalid", a);
                       break;
                     default:
                       e = d;
@@ -4844,7 +4844,7 @@
                   h = e;
                   for (f in h) if (h.hasOwnProperty(f)) {
                     var k = h[f];
-                    "style" === f ? sb(a, k) : "dangerouslySetInnerHTML" === f ? (k = k ? k.__html : void 0, null != k && nb(a, k)) : "children" === f ? "string" === typeof k ? ("textarea" !== c || "" !== k) && ob(a, k) : "number" === typeof k && ob(a, "" + k) : "suppressContentEditableWarning" !== f && "suppressHydrationWarning" !== f && "autoFocus" !== f && (ea.hasOwnProperty(f) ? null != k && "onScroll" === f && D("scroll", a) : null != k && ta(a, f, k, g));
+                    "style" === f ? sb(a, k) : "dangerouslySetInnerHTML" === f ? (k = k ? k.__html : void 0, null != k && nb(a, k)) : "children" === f ? "string" === typeof k ? ("textarea" !== c || "" !== k) && ob(a, k) : "number" === typeof k && ob(a, "" + k) : "suppressContentEditableWarning" !== f && "suppressHydrationWarning" !== f && "autoFocus" !== f && (ea.hasOwnProperty(f) ? null != k && "onScroll" === f && D2("scroll", a) : null != k && ta(a, f, k, g));
                   }
                   switch (c) {
                     case "input":
@@ -5031,7 +5031,7 @@
         if (null !== c) if ("function" === typeof c) try {
           c(null);
         } catch (d) {
-          W(a, b, d);
+          W2(a, b, d);
         }
         else c.current = null;
       }
@@ -5039,7 +5039,7 @@
         try {
           c();
         } catch (d) {
-          W(a, b, d);
+          W2(a, b, d);
         }
       }
       var Nj = false;
@@ -5117,7 +5117,7 @@
                 throw Error(p(163));
             }
           } catch (F) {
-            W(b, b.return, F);
+            W2(b, b.return, F);
           }
           a = b.sibling;
           if (null !== a) {
@@ -5270,7 +5270,7 @@
             if (!U && (Lj(c, b), d = c.stateNode, "function" === typeof d.componentWillUnmount)) try {
               d.props = c.memoizedProps, d.state = c.memoizedState, d.componentWillUnmount();
             } catch (h) {
-              W(c, b, h);
+              W2(c, b, h);
             }
             Yj(a, b, c);
             break;
@@ -5327,7 +5327,7 @@
             null !== k && (k.return = null);
             e.return = null;
           } catch (l) {
-            W(e, b, l);
+            W2(e, b, l);
           }
         }
         if (b.subtreeFlags & 12854) for (b = b.child; null !== b; ) dk(b, a), b = b.sibling;
@@ -5345,12 +5345,12 @@
               try {
                 Pj(3, a, a.return), Qj(3, a);
               } catch (t) {
-                W(a, a.return, t);
+                W2(a, a.return, t);
               }
               try {
                 Pj(5, a, a.return);
               } catch (t) {
-                W(a, a.return, t);
+                W2(a, a.return, t);
               }
             }
             break;
@@ -5368,7 +5368,7 @@
               try {
                 ob(e, "");
               } catch (t) {
-                W(a, a.return, t);
+                W2(a, a.return, t);
               }
             }
             if (d & 4 && (e = a.stateNode, null != e)) {
@@ -5402,7 +5402,7 @@
                 }
                 e[Pf] = f;
               } catch (t) {
-                W(a, a.return, t);
+                W2(a, a.return, t);
               }
             }
             break;
@@ -5416,7 +5416,7 @@
               try {
                 e.nodeValue = f;
               } catch (t) {
-                W(a, a.return, t);
+                W2(a, a.return, t);
               }
             }
             break;
@@ -5426,7 +5426,7 @@
             if (d & 4 && null !== c && c.memoizedState.isDehydrated) try {
               bd(b.containerInfo);
             } catch (t) {
-              W(a, a.return, t);
+              W2(a, a.return, t);
             }
             break;
           case 4:
@@ -5466,7 +5466,7 @@
                         try {
                           b = d, n.props = b.memoizedProps, n.state = b.memoizedState, n.componentWillUnmount();
                         } catch (t) {
-                          W(d, c, t);
+                          W2(d, c, t);
                         }
                       }
                       break;
@@ -5490,14 +5490,14 @@
                     try {
                       e = q.stateNode, l ? (f = e.style, "function" === typeof f.setProperty ? f.setProperty("display", "none", "important") : f.display = "none") : (h = q.stateNode, k = q.memoizedProps.style, g = void 0 !== k && null !== k && k.hasOwnProperty("display") ? k.display : null, h.style.display = rb("display", g));
                     } catch (t) {
-                      W(a, a.return, t);
+                      W2(a, a.return, t);
                     }
                   }
                 } else if (6 === q.tag) {
                   if (null === m) try {
                     q.stateNode.nodeValue = l ? "" : q.memoizedProps;
                   } catch (t) {
-                    W(a, a.return, t);
+                    W2(a, a.return, t);
                   }
                 } else if ((22 !== q.tag && 23 !== q.tag || null === q.memoizedState || q === a) && null !== q.child) {
                   q.child.return = q;
@@ -5560,7 +5560,7 @@
                 throw Error(p(161));
             }
           } catch (k) {
-            W(a, a.return, k);
+            W2(a, a.return, k);
           }
           a.flags &= -3;
         }
@@ -5673,7 +5673,7 @@
               }
               U || b.flags & 512 && Rj(b);
             } catch (r) {
-              W(b, b.return, r);
+              W2(b, b.return, r);
             }
           }
           if (b === a) {
@@ -5717,7 +5717,7 @@
                 try {
                   Qj(4, b);
                 } catch (k) {
-                  W(b, c, k);
+                  W2(b, c, k);
                 }
                 break;
               case 1:
@@ -5727,14 +5727,14 @@
                   try {
                     d.componentDidMount();
                   } catch (k) {
-                    W(b, e, k);
+                    W2(b, e, k);
                   }
                 }
                 var f = b.return;
                 try {
                   Rj(b);
                 } catch (k) {
-                  W(b, f, k);
+                  W2(b, f, k);
                 }
                 break;
               case 5:
@@ -5742,11 +5742,11 @@
                 try {
                   Rj(b);
                 } catch (k) {
-                  W(b, g, k);
+                  W2(b, g, k);
                 }
             }
           } catch (k) {
-            W(b, b.return, k);
+            W2(b, b.return, k);
           }
           if (b === a) {
             V = null;
@@ -6422,7 +6422,7 @@
                         Qj(9, h);
                     }
                   } catch (na) {
-                    W(h, h.return, na);
+                    W2(h, h.return, na);
                   }
                   if (h === g) {
                     V = null;
@@ -6459,7 +6459,7 @@
         b = R();
         null !== a && (Ac(a, 1, b), Dk(a, b));
       }
-      function W(a, b, c) {
+      function W2(a, b, c) {
         if (3 === a.tag) Xk(a, a, c);
         else for (; null !== b; ) {
           if (3 === b.tag) {
@@ -7280,11 +7280,11 @@
   });
 
   // src/main.jsx
-  var import_react19 = __toESM(require_react(), 1);
+  var import_react31 = __toESM(require_react(), 1);
   var import_client = __toESM(require_client(), 1);
 
   // src/app/App.jsx
-  var import_react18 = __toESM(require_react(), 1);
+  var import_react30 = __toESM(require_react(), 1);
 
   // src/app/i18n.jsx
   var import_react = __toESM(require_react(), 1);
@@ -8064,71 +8064,12 @@
     );
   }
 
-  // src/screens/SettingsScreen.jsx
-  var import_react17 = __toESM(require_react(), 1);
-
-  // package.json
-  var package_default = {
-    name: "ae-mcp-panel",
-    version: "0.3.2",
-    private: true,
-    type: "module",
-    scripts: {
-      build: "node build.mjs",
-      watch: "node build.mjs --watch",
-      test: "node --test test/*.test.js"
-    },
-    dependencies: {
-      "lucide-react": "0.453.0",
-      react: "18.3.1",
-      "react-dom": "18.3.1"
-    },
-    devDependencies: {
-      esbuild: "0.24.2"
-    }
-  };
-
-  // src/components/core/Badge.jsx
-  var import_react10 = __toESM(require_react(), 1);
-  var import_jsx_runtime8 = __toESM(require_jsx_runtime(), 1);
-  var BADGE_COLORS = {
-    ok: { color: "var(--ok)", background: "var(--ok-bg)", borderColor: "var(--ok-border)" },
-    warn: { color: "var(--warn)", background: "var(--warn-bg)", borderColor: "var(--warn-border)" },
-    error: { color: "var(--error)", background: "var(--error-bg)", borderColor: "var(--error-border)" },
-    accent: { color: "var(--accent)", background: "var(--accent-bg)", borderColor: "var(--accent-border)" },
-    neutral: { color: "var(--text-secondary)", background: "var(--bg-hover)", borderColor: "var(--border-strong)" }
-  };
-  function Badge({ status = "neutral", icon, dot = false, children, style }) {
-    const c = BADGE_COLORS[status] || BADGE_COLORS.neutral;
-    return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
-      "span",
-      {
-        style: {
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 4,
-          height: 16,
-          padding: "0 6px",
-          borderRadius: "var(--radius-sm)",
-          border: `1px solid ${c.borderColor}`,
-          background: c.background,
-          color: c.color,
-          font: `var(--weight-medium) var(--text-micro)/1 var(--font-ui)`,
-          whiteSpace: "nowrap",
-          ...style
-        },
-        children: [
-          dot ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { style: { width: 5, height: 5, borderRadius: "50%", background: "currentColor", flex: "none" } }) : null,
-          icon ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(Icon2, { name: icon, size: 10, strokeWidth: 2 }) : null,
-          children
-        ]
-      }
-    );
-  }
+  // src/components/shell/ConfirmDialog.jsx
+  var import_react11 = __toESM(require_react(), 1);
 
   // src/components/core/Button.jsx
-  var import_react11 = __toESM(require_react(), 1);
-  var import_jsx_runtime9 = __toESM(require_jsx_runtime(), 1);
+  var import_react10 = __toESM(require_react(), 1);
+  var import_jsx_runtime8 = __toESM(require_jsx_runtime(), 1);
   var BTN_H = { sm: 20, md: 24, lg: 28 };
   var BTN_PAD = { sm: 8, md: 10, lg: 12 };
   var VARIANTS = {
@@ -8169,11 +8110,11 @@
     title,
     style
   }) {
-    const [hover, setHover] = import_react11.default.useState(false);
-    const [press, setPress] = import_react11.default.useState(false);
+    const [hover, setHover] = import_react10.default.useState(false);
+    const [press, setPress] = import_react10.default.useState(false);
     const v = VARIANTS[variant] || VARIANTS.secondary;
     const state = disabled ? {} : press ? { ...v.hover, ...v.press } : hover ? v.hover : {};
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
       "button",
       {
         type: "button",
@@ -8208,7 +8149,121 @@
           ...style
         },
         children: [
-          icon ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(Icon2, { name: icon, size: size === "sm" ? 12 : 14 }) : null,
+          icon ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(Icon2, { name: icon, size: size === "sm" ? 12 : 14 }) : null,
+          children
+        ]
+      }
+    );
+  }
+
+  // src/components/shell/ConfirmDialog.jsx
+  var import_jsx_runtime9 = __toESM(require_jsx_runtime(), 1);
+  function ConfirmDialog({
+    open = false,
+    title,
+    body,
+    confirmLabel = "\u786E\u8BA4",
+    cancelLabel = "\u53D6\u6D88",
+    danger = false,
+    onConfirm,
+    onCancel,
+    style
+  }) {
+    if (!open) return null;
+    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { style: { position: "absolute", inset: 0, zIndex: 40, display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-4)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        "div",
+        {
+          onClick: onCancel,
+          style: { position: "absolute", inset: 0, background: "var(--scrim)", animation: "ds-fade var(--dur-slow) var(--ease-out)" }
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+        "div",
+        {
+          role: "alertdialog",
+          "aria-label": typeof title === "string" ? title : void 0,
+          style: {
+            position: "relative",
+            width: "100%",
+            maxWidth: 280,
+            padding: "var(--space-3)",
+            background: "var(--bg-overlay)",
+            border: "1px solid var(--border-strong)",
+            borderRadius: "var(--radius-lg)",
+            boxShadow: "var(--shadow-overlay)",
+            animation: "ds-fade-up var(--dur-slow) var(--ease-out)",
+            ...style
+          },
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { style: { font: `var(--weight-semibold) var(--text-heading)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
+            body ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { style: { marginTop: "var(--space-15)", font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: body }) : null,
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { style: { display: "flex", justifyContent: "flex-end", gap: "var(--space-15)", marginTop: "var(--space-3)" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(Button, { variant: "ghost", onClick: onCancel, children: cancelLabel }),
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(Button, { variant: danger ? "danger" : "primary", onClick: onConfirm, children: confirmLabel })
+            ] })
+          ]
+        }
+      )
+    ] });
+  }
+
+  // src/screens/SettingsScreen.jsx
+  var import_react18 = __toESM(require_react(), 1);
+
+  // package.json
+  var package_default = {
+    name: "ae-mcp-panel",
+    version: "0.3.2",
+    private: true,
+    type: "module",
+    scripts: {
+      build: "node build.mjs",
+      watch: "node build.mjs --watch",
+      test: "node --test test/*.test.js"
+    },
+    dependencies: {
+      "lucide-react": "0.453.0",
+      react: "18.3.1",
+      "react-dom": "18.3.1"
+    },
+    devDependencies: {
+      esbuild: "0.24.2"
+    }
+  };
+
+  // src/components/core/Badge.jsx
+  var import_react12 = __toESM(require_react(), 1);
+  var import_jsx_runtime10 = __toESM(require_jsx_runtime(), 1);
+  var BADGE_COLORS = {
+    ok: { color: "var(--ok)", background: "var(--ok-bg)", borderColor: "var(--ok-border)" },
+    warn: { color: "var(--warn)", background: "var(--warn-bg)", borderColor: "var(--warn-border)" },
+    error: { color: "var(--error)", background: "var(--error-bg)", borderColor: "var(--error-border)" },
+    accent: { color: "var(--accent)", background: "var(--accent-bg)", borderColor: "var(--accent-border)" },
+    neutral: { color: "var(--text-secondary)", background: "var(--bg-hover)", borderColor: "var(--border-strong)" }
+  };
+  function Badge({ status = "neutral", icon, dot = false, children, style }) {
+    const c = BADGE_COLORS[status] || BADGE_COLORS.neutral;
+    return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+      "span",
+      {
+        style: {
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 4,
+          height: 16,
+          padding: "0 6px",
+          borderRadius: "var(--radius-sm)",
+          border: `1px solid ${c.borderColor}`,
+          background: c.background,
+          color: c.color,
+          font: `var(--weight-medium) var(--text-micro)/1 var(--font-ui)`,
+          whiteSpace: "nowrap",
+          ...style
+        },
+        children: [
+          dot ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { width: 5, height: 5, borderRadius: "50%", background: "currentColor", flex: "none" } }) : null,
+          icon ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(Icon2, { name: icon, size: 10, strokeWidth: 2 }) : null,
           children
         ]
       }
@@ -8216,11 +8271,11 @@
   }
 
   // src/components/core/Switch.jsx
-  var import_react12 = __toESM(require_react(), 1);
-  var import_jsx_runtime10 = __toESM(require_jsx_runtime(), 1);
+  var import_react13 = __toESM(require_react(), 1);
+  var import_jsx_runtime11 = __toESM(require_jsx_runtime(), 1);
   function Switch({ checked = false, onChange, disabled = false, title, style }) {
-    const [hover, setHover] = import_react12.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+    const [hover, setHover] = import_react13.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
       "button",
       {
         type: "button",
@@ -8249,7 +8304,7 @@
           transition: "background var(--dur-fast) var(--ease-out)",
           ...style
         },
-        children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+        children: /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
           "span",
           {
             style: {
@@ -8267,10 +8322,10 @@
   }
 
   // src/components/core/Segmented.jsx
-  var import_react13 = __toESM(require_react(), 1);
-  var import_jsx_runtime11 = __toESM(require_jsx_runtime(), 1);
+  var import_react14 = __toESM(require_react(), 1);
+  var import_jsx_runtime12 = __toESM(require_jsx_runtime(), 1);
   function Segmented({ options = [], value, onChange, full = false, style }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
       "div",
       {
         role: "radiogroup",
@@ -8285,14 +8340,14 @@
         },
         children: options.map((opt) => {
           const selected = opt.value === value;
-          return /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(SegmentedOption, { opt, selected, full, onSelect: () => onChange && onChange(opt.value) }, opt.value);
+          return /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(SegmentedOption, { opt, selected, full, onSelect: () => onChange && onChange(opt.value) }, opt.value);
         })
       }
     );
   }
   function SegmentedOption({ opt, selected, full, onSelect }) {
-    const [hover, setHover] = import_react13.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
+    const [hover, setHover] = import_react14.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
       "button",
       {
         type: "button",
@@ -8320,7 +8375,7 @@
           transition: "background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out)"
         },
         children: [
-          opt.icon ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(Icon2, { name: opt.icon, size: 12 }) : null,
+          opt.icon ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(Icon2, { name: opt.icon, size: 12 }) : null,
           opt.label
         ]
       }
@@ -8328,8 +8383,8 @@
   }
 
   // src/components/forms/Input.jsx
-  var import_react14 = __toESM(require_react(), 1);
-  var import_jsx_runtime12 = __toESM(require_jsx_runtime(), 1);
+  var import_react15 = __toESM(require_react(), 1);
+  var import_jsx_runtime13 = __toESM(require_jsx_runtime(), 1);
   function Input({
     value,
     onChange,
@@ -8344,10 +8399,10 @@
     full = true,
     style
   }) {
-    const [focus, setFocus] = import_react14.default.useState(false);
-    const [revealed, setRevealed] = import_react14.default.useState(false);
+    const [focus, setFocus] = import_react15.default.useState(false);
+    const [revealed, setRevealed] = import_react15.default.useState(false);
     const h = size === "lg" ? 28 : 24;
-    return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
       "span",
       {
         style: {
@@ -8365,7 +8420,7 @@
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
             "input",
             {
               type: secret && !revealed ? "password" : type === "password" ? "text" : type,
@@ -8387,7 +8442,7 @@
               }
             }
           ),
-          secret ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+          secret ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
             IconButton,
             {
               icon: revealed ? "eye-off" : "eye",
@@ -8403,12 +8458,12 @@
   }
 
   // src/components/forms/Select.jsx
-  var import_react15 = __toESM(require_react(), 1);
-  var import_jsx_runtime13 = __toESM(require_jsx_runtime(), 1);
+  var import_react16 = __toESM(require_react(), 1);
+  var import_jsx_runtime14 = __toESM(require_jsx_runtime(), 1);
   function Select({ options = [], value, onChange, disabled = false, full = true, size = "md", style }) {
-    const [focus, setFocus] = import_react15.default.useState(false);
+    const [focus, setFocus] = import_react16.default.useState(false);
     const h = size === "lg" ? 28 : 24;
-    return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
       "span",
       {
         style: {
@@ -8425,7 +8480,7 @@
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
             "select",
             {
               value,
@@ -8447,10 +8502,10 @@
                 font: `var(--weight-regular) var(--text-body)/1 var(--font-ui)`,
                 cursor: disabled ? "default" : "pointer"
               },
-              children: options.map((opt) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: opt.value, style: { background: "var(--bg-overlay)", color: "var(--text-primary)" }, children: opt.label }, opt.value))
+              children: options.map((opt) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: opt.value, style: { background: "var(--bg-overlay)", color: "var(--text-primary)" }, children: opt.label }, opt.value))
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
             Icon2,
             {
               name: "chevron-down",
@@ -8465,30 +8520,54 @@
   }
 
   // src/components/forms/Field.jsx
-  var import_react16 = __toESM(require_react(), 1);
-  var import_jsx_runtime14 = __toESM(require_jsx_runtime(), 1);
+  var import_react17 = __toESM(require_react(), 1);
+  var import_jsx_runtime15 = __toESM(require_jsx_runtime(), 1);
   function Field({ label, hint, caption, layout = "stack", children, style }) {
     if (layout === "row") {
-      return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: "var(--hit-min)", ...style }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { style: { font: `var(--weight-regular) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: label }),
-          caption ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)", marginTop: 2 }, children: caption }) : null
+      return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: "var(--hit-min)", ...style }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { style: { font: `var(--weight-regular) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: label }),
+          caption ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)", marginTop: 2 }, children: caption }) : null
         ] }),
         children
       ] });
     }
-    return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-1)", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "var(--space-2)" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("label", { style: { font: `var(--weight-medium) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-secondary)" }, children: label }),
-        hint ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)" }, children: hint }) : null
+    return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-1)", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "var(--space-2)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("label", { style: { font: `var(--weight-medium) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-secondary)" }, children: label }),
+        hint ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)" }, children: hint }) : null
       ] }),
       children,
-      caption ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-tertiary)" }, children: caption }) : null
+      caption ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-tertiary)" }, children: caption }) : null
     ] });
   }
 
+  // src/lib/clipboard.js
+  function copyTextLegacy(text) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch (e) {
+      ok = false;
+    }
+    document.body.removeChild(ta);
+    return ok ? Promise.resolve() : Promise.reject(new Error("execCommand copy failed"));
+  }
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(() => copyTextLegacy(text));
+    }
+    return copyTextLegacy(text);
+  }
+
   // src/screens/SettingsScreen.jsx
-  var import_jsx_runtime15 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime16 = __toESM(require_jsx_runtime(), 1);
   var S = {
     zh: {
       ai: "AI \u670D\u52A1",
@@ -8505,7 +8584,7 @@
       apply: "\u5E94\u7528",
       token: "\u8BBF\u95EE Token",
       regen: "\u91CD\u65B0\u751F\u6210",
-      tokenCap: "\u5BA2\u6237\u7AEF\u51ED\u6B64\u8FDE\u63A5\u9762\u677F\uFF1B\u91CD\u65B0\u751F\u6210\u5C06\u5728 P2 \u63A5\u901A\u3002",
+      tokenCap: "\u91CD\u65B0\u751F\u6210\u540E\u9700\u91CD\u542F\u4F60\u7684 AI \u5BA2\u6237\u7AEF",
       tokenMissing: "\u672A\u627E\u5230 ~/.ae-mcp/auth-token",
       autostart: "\u968F AE \u542F\u52A8",
       autostartCap: "\u6253\u5F00\u5DE5\u7A0B\u65F6\u81EA\u52A8\u542F\u52A8\u670D\u52A1",
@@ -8550,7 +8629,7 @@
       apply: "Apply",
       token: "Access token",
       regen: "Regenerate",
-      tokenCap: "Clients use this to reach the panel; regeneration lands in P2.",
+      tokenCap: "Restart your AI client after regenerating.",
       tokenMissing: "~/.ae-mcp/auth-token not found",
       autostart: "Launch with AE",
       autostartCap: "Start the service when a project opens",
@@ -8582,27 +8661,27 @@
     }
   };
   function Section({ title, children, disabled, caption }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)", opacity: disabled ? 0.45 : 1 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { style: { font: "600 11px/1 var(--font-ui)", letterSpacing: "0.04em", color: "var(--text-tertiary)", textTransform: "uppercase", paddingBottom: 2, borderBottom: "1px solid var(--border-subtle)" }, children: title }),
-      caption ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { style: { font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: caption }) : null,
+    return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)", opacity: disabled ? 0.45 : 1 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { style: { font: "600 11px/1 var(--font-ui)", letterSpacing: "0.04em", color: "var(--text-tertiary)", textTransform: "uppercase", paddingBottom: 2, borderBottom: "1px solid var(--border-subtle)" }, children: title }),
+      caption ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { style: { font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: caption }) : null,
       children
     ] });
   }
   function ClientRow({ name, lastActive, blocked, onBlock, blockLabel }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 32, padding: "2px 8px", background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", opacity: blocked ? 0.55 : 1 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", textDecoration: blocked ? "line-through" : "none" }, children: name }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: lastActive })
+    return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 32, padding: "2px 8px", background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", opacity: blocked ? 0.55 : 1 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", textDecoration: blocked ? "line-through" : "none" }, children: name }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: lastActive })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { style: { font: "400 10px/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: blockLabel }),
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Switch, { checked: blocked, onChange: onBlock })
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { style: { font: "400 10px/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: blockLabel }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Switch, { checked: blocked, onChange: onBlock })
     ] });
   }
   function VersionRow({ label, value, badge }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { style: { flex: 1, font: "400 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: label }),
+    return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { style: { flex: 1, font: "400 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: label }),
       badge,
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { style: { font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: value })
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { style: { font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: value })
     ] });
   }
   function maskToken(value) {
@@ -8624,48 +8703,42 @@
       const fs = req("fs");
       const path = req("path");
       const os = req("os");
-      const tokenPath = path.join(os.homedir(), ".ae-mcp", "auth-token");
-      return fs.readFileSync(tokenPath, "utf8").trim();
+      const tokenPath2 = path.join(os.homedir(), ".ae-mcp", "auth-token");
+      return fs.readFileSync(tokenPath2, "utf8").trim();
     } catch (e) {
       return "";
     }
   }
-  function copyTextLegacy(text) {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.left = "-9999px";
-    document.body.appendChild(ta);
-    ta.select();
-    let ok = false;
-    try {
-      ok = document.execCommand("copy");
-    } catch (e) {
-      ok = false;
-    }
-    document.body.removeChild(ta);
-    return ok ? Promise.resolve() : Promise.reject(new Error("execCommand copy failed"));
+  function formatLastSeen(ts, t) {
+    if (!ts) return t.lastActive + " \xB7 -";
+    const mins = Math.max(0, Math.round((Date.now() - ts) / 6e4));
+    if (mins < 60) return `${t.lastActive} \xB7 ${t.mins(mins)}`;
+    return `${t.lastActive} \xB7 ${t.hours(Math.round(mins / 60))}`;
   }
-  function copyText(text) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      return navigator.clipboard.writeText(text).catch(() => copyTextLegacy(text));
-    }
-    return copyTextLegacy(text);
-  }
-  function SettingsScreen({ lang = "zh", onLangChange, port = 11488, onApplyPort, mcpConfig, logs = [] }) {
+  function SettingsScreen({
+    lang = "zh",
+    onLangChange,
+    port = 11488,
+    onApplyPort,
+    mcpConfig,
+    logs = [],
+    clients = [],
+    onBlockClient,
+    onRegenToken,
+    hostVersion = "-",
+    pythonVersion = "-"
+  }) {
     const t = S[lang] || S.zh;
-    const [key, setKey] = import_react17.default.useState("");
-    const [model, setModel] = import_react17.default.useState("sonnet");
-    const [draftPort, setDraftPort] = import_react17.default.useState(String(port));
-    const [tokenRaw, setTokenRaw] = import_react17.default.useState("");
-    const [autostart, setAutostart] = import_react17.default.useState(true);
-    const [perm, setPerm] = import_react17.default.useState("manual");
-    const [blockClaude, setBlockClaude] = import_react17.default.useState(false);
-    const [blockCursor, setBlockCursor] = import_react17.default.useState(true);
-    const [logLevel, setLogLevel] = import_react17.default.useState("info");
-    const [copied, setCopied] = import_react17.default.useState("");
-    import_react17.default.useEffect(() => setDraftPort(String(port)), [port]);
-    import_react17.default.useEffect(() => setTokenRaw(readTokenValue()), []);
+    const [key, setKey] = import_react18.default.useState("");
+    const [model, setModel] = import_react18.default.useState("sonnet");
+    const [draftPort, setDraftPort] = import_react18.default.useState(String(port));
+    const [tokenRaw, setTokenRaw] = import_react18.default.useState("");
+    const [autostart, setAutostart] = import_react18.default.useState(true);
+    const [perm, setPerm] = import_react18.default.useState("manual");
+    const [logLevel, setLogLevel] = import_react18.default.useState("info");
+    const [copied, setCopied] = import_react18.default.useState("");
+    import_react18.default.useEffect(() => setDraftPort(String(port)), [port]);
+    import_react18.default.useEffect(() => setTokenRaw(readTokenValue()), []);
     const copy = (label, text) => {
       copyText(text).then(() => {
         setCopied(label);
@@ -8675,64 +8748,1005 @@
     };
     const permCap = perm === "manual" ? t.permCap1 : perm === "auto" ? t.permCap2 : t.permCap3;
     const tokenDisplay = tokenRaw ? maskToken(tokenRaw) : t.tokenMissing;
-    return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-5)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(Section, { title: t.ai, disabled: true, caption: t.aiDisabled, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Field, { label: t.apiKey, caption: t.apiKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Input, { secret: true, disabled: true, value: key, onChange: setKey, placeholder: "sk-ant-..." }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Field, { label: t.model, children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Select, { disabled: true, value: model, onChange: setModel, options: [
+    const regenerate = () => {
+      if (!onRegenToken) return;
+      const result = onRegenToken();
+      if (result && typeof result.then === "function") {
+        result.then((token) => setTokenRaw(token || readTokenValue())).catch(() => {
+        });
+      } else {
+        setTokenRaw(result || readTokenValue());
+      }
+    };
+    return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-5)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(Section, { title: t.ai, disabled: true, caption: t.aiDisabled, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { label: t.apiKey, caption: t.apiKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Input, { secret: true, disabled: true, value: key, onChange: setKey, placeholder: "sk-ant-..." }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { label: t.model, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Select, { disabled: true, value: model, onChange: setModel, options: [
           { value: "sonnet", label: "Claude Sonnet" },
           { value: "haiku", label: "Claude Haiku" }
         ] }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(Section, { title: t.conn, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Field, { label: t.port, hint: t.portHint, children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Input, { mono: true, value: draftPort, onChange: setDraftPort, style: { flex: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Button, { variant: "secondary", onClick: () => onApplyPort && onApplyPort(draftPort), children: t.apply })
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(Section, { title: t.conn, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { label: t.port, hint: t.portHint, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Input, { mono: true, value: draftPort, onChange: setDraftPort, style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Button, { variant: "secondary", onClick: () => onApplyPort && onApplyPort(draftPort), children: t.apply })
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Field, { label: t.token, caption: t.tokenCap, children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Input, { mono: true, value: tokenDisplay, style: { flex: 1 }, suffix: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(IconButton, { icon: "copy", title: t.copy, disabled: !tokenRaw, onClick: () => copy("token", tokenRaw), style: { width: 20, height: 20 } }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: true, children: t.regen })
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { label: t.token, caption: t.tokenCap, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Input, { mono: true, value: tokenDisplay, style: { flex: 1 }, suffix: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(IconButton, { icon: "copy", title: t.copy, disabled: !tokenRaw, onClick: () => copy("token", tokenRaw), style: { width: 20, height: 20 } }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Button, { variant: "secondary", icon: "rotate-cw", onClick: regenerate, children: t.regen })
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Field, { layout: "row", label: t.autostart, caption: t.autostartCap, children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Switch, { checked: autostart, onChange: setAutostart }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Field, { label: t.mcp, caption: copied === "mcp" ? t.copied : null, children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("pre", { style: { margin: 0, maxHeight: 160, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-secondary)", font: "400 10px/1.4 var(--font-mono)" }, children: mcpConfig }),
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Button, { variant: "secondary", icon: "copy", onClick: () => copy("mcp", mcpConfig), children: t.copy })
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { layout: "row", label: t.autostart, caption: t.autostartCap, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Switch, { checked: autostart, onChange: setAutostart }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { label: t.mcp, caption: copied === "mcp" ? t.copied : null, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("pre", { style: { margin: 0, maxHeight: 160, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-secondary)", font: "400 10px/1.4 var(--font-mono)" }, children: mcpConfig }),
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Button, { variant: "secondary", icon: "copy", onClick: () => copy("mcp", mcpConfig), children: t.copy })
         ] }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(Section, { title: t.sec, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Field, { label: t.permTitle, caption: permCap, children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Segmented, { full: true, value: perm, onChange: setPerm, options: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(Section, { title: t.sec, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { label: t.permTitle, caption: permCap, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Segmented, { full: true, value: perm, onChange: setPerm, options: [
           { value: "manual", label: t.perm1 },
           { value: "auto", label: t.perm2 },
           { value: "none", label: t.perm3 }
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 2 }, children: t.clients }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(ClientRow, { name: "Claude Desktop", lastActive: `${t.lastActive} \xB7 ${t.mins(2)}`, blocked: blockClaude, onBlock: setBlockClaude, blockLabel: t.blocked }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(ClientRow, { name: "Cursor", lastActive: `${t.lastActive} \xB7 ${t.hours(1)}`, blocked: blockCursor, onBlock: setBlockCursor, blockLabel: t.blocked })
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 2 }, children: t.clients }),
+        clients.map((client) => /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+          ClientRow,
+          {
+            name: client.label,
+            lastActive: formatLastSeen(client.lastSeen, t),
+            blocked: !!client.blocked,
+            onBlock: (v) => onBlockClient && onBlockClient(client.label, v),
+            blockLabel: t.blocked
+          },
+          client.label
+        ))
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(Section, { title: t.gen, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Field, { label: t.language, children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Field, { label: t.logLevel, children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Select, { value: logLevel, onChange: setLogLevel, style: { flex: 1 }, options: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(Section, { title: t.gen, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { label: t.language, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { label: t.logLevel, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Select, { value: logLevel, onChange: setLogLevel, style: { flex: 1 }, options: [
             { value: "error", label: "Error" },
             { value: "info", label: "Info" },
             { value: "debug", label: "Debug" }
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Button, { variant: "secondary", icon: "download", disabled: true, children: t.exportLog })
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Button, { variant: "secondary", icon: "download", disabled: true, children: t.exportLog })
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Field, { label: t.logs, children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("details", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("summary", { style: { cursor: "pointer", color: "var(--text-secondary)", font: "500 11px/1.35 var(--font-ui)" }, children: t.logs }),
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("pre", { style: { margin: "6px 0 0", maxHeight: 128, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-tertiary)", font: "400 10px/1.4 var(--font-mono)" }, children: logs.join("\n") })
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { label: t.logs, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("details", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("summary", { style: { cursor: "pointer", color: "var(--text-secondary)", font: "500 11px/1.35 var(--font-ui)" }, children: t.logs }),
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("pre", { style: { margin: "6px 0 0", maxHeight: 128, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-tertiary)", font: "400 10px/1.4 var(--font-mono)" }, children: logs.join("\n") })
         ] }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(Section, { title: t.about, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(VersionRow, { label: t.verPanel, value: `v${package_default.version}` }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(VersionRow, { label: t.verHost, value: "-", badge: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Badge, { status: "neutral", children: t.pending }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(VersionRow, { label: t.verPy, value: "-", badge: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Badge, { status: "neutral", children: t.pending }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Button, { variant: "ghost", size: "sm", icon: "book-open", children: t.docs }),
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Button, { variant: "ghost", size: "sm", icon: "github", children: t.github })
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(Section, { title: t.about, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(VersionRow, { label: t.verPanel, value: `v${package_default.version}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(VersionRow, { label: t.verHost, value: hostVersion, badge: hostVersion === "-" ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Badge, { status: "neutral", children: t.pending }) : null }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(VersionRow, { label: t.verPy, value: pythonVersion, badge: pythonVersion === "-" ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Badge, { status: "neutral", children: t.pending }) : null }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Button, { variant: "ghost", size: "sm", icon: "book-open", children: t.docs }),
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Button, { variant: "ghost", size: "sm", icon: "github", children: t.github })
         ] })
       ] })
     ] });
+  }
+
+  // src/screens/ActivityScreen.jsx
+  var import_react21 = __toESM(require_react(), 1);
+
+  // src/components/activity/FilterBar.jsx
+  var import_react19 = __toESM(require_react(), 1);
+  var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
+  function FilterBar({
+    query = "",
+    onQuery,
+    searchPlaceholder = "\u641C\u7D22\u64CD\u4F5C\u2026",
+    filters = [],
+    style
+  }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", padding: "var(--space-2)", borderBottom: "1px solid var(--border-subtle)", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+        Input,
+        {
+          value: query,
+          onChange: onQuery,
+          placeholder: searchPlaceholder,
+          style: { flex: 1 },
+          suffix: null
+        }
+      ),
+      filters.map((f, i) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { full: false, value: f.value, onChange: f.onChange, options: f.options, style: { flex: "none", width: f.width || 96 } }, i))
+    ] });
+  }
+
+  // src/components/activity/ActivityRow.jsx
+  var import_react20 = __toESM(require_react(), 1);
+  var import_jsx_runtime18 = __toESM(require_jsx_runtime(), 1);
+  var RESULT = {
+    success: { icon: "check", color: "var(--ok)" },
+    error: { icon: "x", color: "var(--error)" },
+    denied: { icon: "circle-slash", color: "var(--text-tertiary)" }
+  };
+  function ActivityRow({
+    time,
+    source,
+    verb,
+    target,
+    result = "success",
+    params,
+    undoLabel = "\u64A4\u9500\u5230\u6B64\u524D",
+    onUndo,
+    expandable = true,
+    style
+  }) {
+    const [expanded, setExpanded] = import_react20.default.useState(false);
+    const [hover, setHover] = import_react20.default.useState(false);
+    const r = RESULT[result] || RESULT.success;
+    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { borderBottom: "1px solid var(--border-subtle)", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(
+        "div",
+        {
+          role: expandable ? "button" : void 0,
+          onClick: expandable ? () => setExpanded(!expanded) : void 0,
+          onMouseEnter: () => setHover(true),
+          onMouseLeave: () => setHover(false),
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-15)",
+            minHeight: "var(--hit-min)",
+            padding: "2px var(--space-2)",
+            cursor: expandable ? "pointer" : "default",
+            background: hover && expandable ? "var(--bg-hover)" : "transparent",
+            transition: "background var(--dur-fast) var(--ease-out)"
+          },
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Icon2, { name: r.icon, size: 12, strokeWidth: 2.5, color: r.color }),
+            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { flex: "none", font: `var(--weight-regular) var(--text-micro)/1 var(--font-mono)`, color: "var(--text-tertiary)" }, children: time }),
+            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Badge, { status: "neutral", style: { flex: "none", maxWidth: 84, overflow: "hidden" }, children: source }),
+            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { flex: "none", font: `var(--weight-medium) var(--text-caption)/1 var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "nowrap" }, children: verb }),
+            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+              "span",
+              {
+                style: {
+                  flex: 1,
+                  minWidth: 0,
+                  font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)`,
+                  color: "var(--text-tertiary)",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis"
+                },
+                children: target
+              }
+            ),
+            expandable ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+              Icon2,
+              {
+                name: "chevron-down",
+                size: 11,
+                color: "var(--text-tertiary)",
+                style: { transform: expanded ? "rotate(180deg)" : "none", transition: "transform var(--dur-base) var(--ease-out)" }
+              }
+            ) : null
+          ]
+        }
+      ),
+      expanded ? /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2) 26px", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
+        params != null ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+          "pre",
+          {
+            style: {
+              margin: 0,
+              padding: "var(--space-2)",
+              background: "var(--gray-0)",
+              border: "1px solid var(--border-subtle)",
+              borderRadius: "var(--radius-sm)",
+              font: `var(--weight-regular) var(--text-micro)/1.6 var(--font-mono)`,
+              color: "var(--text-secondary)",
+              maxHeight: 120,
+              overflow: "auto",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-all"
+            },
+            children: typeof params === "string" ? params : JSON.stringify(params, null, 2)
+          }
+        ) : null,
+        onUndo ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { size: "sm", variant: "secondary", icon: "undo-2", onClick: onUndo, style: { alignSelf: "flex-start" }, children: undoLabel }) : null
+      ] }) : null
+    ] });
+  }
+
+  // src/lib/activityModel.js
+  function eventTitle(evt, lang) {
+    const raw = evt.undoGroup || "";
+    const m = /^MCP\s+([^:]+):?\s*(.*)$/.exec(raw);
+    if (m) return m[2] ? `${m[1].trim()} \xB7 ${m[2].trim()}` : m[1].trim();
+    if (raw) return raw;
+    return lang === "zh" ? "\u539F\u59CB\u811A\u672C" : "Raw script";
+  }
+  function eventOutcome(evt) {
+    if (evt.denied === "paused") return "denied-paused";
+    if (evt.denied === "blocked") return "denied-blocked";
+    if (evt.denied) return "denied";
+    return evt.ok ? "ok" : "error";
+  }
+  function filterEvents(events, { mode, query }) {
+    let out = events;
+    if (mode === "failed") out = out.filter((e) => eventOutcome(e) !== "ok");
+    const q = (query || "").trim().toLowerCase();
+    if (q) {
+      out = out.filter((e) => [e.undoGroup, e.client, e.error].some((s) => s && String(s).toLowerCase().includes(q)));
+    }
+    return out;
+  }
+
+  // src/screens/ActivityScreen.jsx
+  var import_jsx_runtime19 = __toESM(require_jsx_runtime(), 1);
+  var A = {
+    zh: {
+      search: "\u641C\u7D22\u64CD\u4F5C\u2026",
+      allResults: "\u5168\u90E8",
+      errF: "\u5931\u8D25",
+      empty: "\u6682\u65E0\u6D3B\u52A8",
+      emptyCap: "\u6240\u6709\u5BA2\u6237\u7AEF\u5BF9\u5DE5\u7A0B\u7684\u6BCF\u4E00\u6B21\u64CD\u4F5C\u90FD\u4F1A\u8BB0\u5F55\u5728\u8FD9\u91CC\u3002",
+      clear: "\u6E05\u7A7A"
+    },
+    en: {
+      search: "Search actions\u2026",
+      allResults: "All",
+      errF: "Failed",
+      empty: "No activity yet",
+      emptyCap: "Every operation from every client is logged here.",
+      clear: "Clear"
+    }
+  };
+  function rowResult(evt) {
+    const outcome = eventOutcome(evt);
+    if (outcome === "ok") return "success";
+    if (outcome.indexOf("denied") === 0) return "denied";
+    return "error";
+  }
+  function eventDetails(evt) {
+    return {
+      client: evt.client,
+      undoGroup: evt.undoGroup,
+      durationMs: evt.durationMs,
+      error: evt.error
+    };
+  }
+  function ActivityScreen({
+    events = [],
+    lang = "zh",
+    onClear,
+    emptyTitle,
+    emptyCaption
+  }) {
+    const t = A[lang] || A.zh;
+    const [q, setQ] = import_react21.default.useState("");
+    const [res, setRes] = import_react21.default.useState("all");
+    const rows = filterEvents(events, { mode: res, query: q });
+    const empty = events.length === 0;
+    return /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: empty ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(EmptyState, { icon: "list", title: emptyTitle || t.empty, caption: emptyCaption || t.emptyCap, style: { flex: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(import_react21.default.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { display: "flex", borderBottom: "1px solid var(--border-subtle)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+          FilterBar,
+          {
+            query: q,
+            onQuery: setQ,
+            searchPlaceholder: t.search,
+            style: { flex: 1, borderBottom: 0 },
+            filters: [
+              {
+                value: res,
+                onChange: setRes,
+                width: 76,
+                options: [
+                  { value: "all", label: t.allResults },
+                  { value: "failed", label: t.errF }
+                ]
+              }
+            ]
+          }
+        ),
+        onClear ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { style: { display: "flex", alignItems: "center", padding: "var(--space-2) var(--space-2) var(--space-2) 0" }, children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Button, { size: "sm", variant: "ghost", icon: "trash-2", onClick: onClear, title: t.clear, children: t.clear }) }) : null
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { style: { flex: 1, minHeight: 0, overflow: "auto" }, children: rows.length ? rows.map((evt) => /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+        ActivityRow,
+        {
+          time: new Date(evt.ts).toLocaleTimeString(),
+          source: evt.client,
+          verb: eventTitle(evt, lang),
+          target: evt.error || "",
+          result: rowResult(evt),
+          params: eventDetails(evt)
+        },
+        evt.id
+      )) : /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(EmptyState, { icon: "list", title: emptyTitle || t.empty, caption: emptyCaption || t.emptyCap, style: { flex: 1 } }) })
+    ] }) });
+  }
+
+  // src/screens/WizardScreen.jsx
+  var import_react24 = __toESM(require_react(), 1);
+
+  // src/components/core/Spinner.jsx
+  var import_react22 = __toESM(require_react(), 1);
+  var import_jsx_runtime20 = __toESM(require_jsx_runtime(), 1);
+  function Spinner({ size = 12, style }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+      "span",
+      {
+        role: "progressbar",
+        "aria-label": "loading",
+        style: {
+          width: size,
+          height: size,
+          flex: "none",
+          display: "inline-block",
+          border: "1.5px solid var(--gray-7)",
+          borderTopColor: "var(--text-secondary)",
+          borderRadius: "50%",
+          animation: "ds-spin 0.8s linear infinite",
+          ...style
+        }
+      }
+    );
+  }
+
+  // src/components/chat/AIAvatar.jsx
+  var import_react23 = __toESM(require_react(), 1);
+  var import_jsx_runtime21 = __toESM(require_jsx_runtime(), 1);
+  function AIAvatar({ size = 20, style }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+      "span",
+      {
+        "aria-label": "AI",
+        style: {
+          width: size,
+          height: size,
+          flex: "none",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "var(--accent-bg)",
+          border: "1px solid var(--accent-border)",
+          borderRadius: "var(--radius-md)",
+          ...style
+        },
+        children: /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(Icon2, { name: "sparkles", size: Math.round(size * 0.6), color: "var(--accent)", strokeWidth: 2 })
+      }
+    );
+  }
+
+  // src/screens/WizardScreen.jsx
+  var import_jsx_runtime22 = __toESM(require_jsx_runtime(), 1);
+  var W = {
+    zh: {
+      stepOf: (n) => `\u7B2C ${n} \u6B65 / \u5171 4 \u6B65`,
+      back: "\u4E0A\u4E00\u6B65",
+      next: "\u4E0B\u4E00\u6B65",
+      start: "\u5F00\u59CB\u4F7F\u7528",
+      skip: "\u8DF3\u8FC7\u5411\u5BFC",
+      t1: "\u6B22\u8FCE\u4F7F\u7528 ae-mcp",
+      b1: "\u8BA9 AI \u52A9\u624B\u5B89\u5168\u5730\u64CD\u4F5C\u4F60\u7684 After Effects \u5DE5\u7A0B \u2014 \u6BCF\u4E00\u6B65\u53EF\u89C1\u3001\u53EF\u6279\u51C6\u3001\u53EF\u64A4\u9500\u3002",
+      langLabel: "\u754C\u9762\u8BED\u8A00 \xB7 Language",
+      t2: "\u5B89\u88C5\u672C\u5730\u670D\u52A1",
+      b2: "\u5728\u7EC8\u7AEF\u8FD0\u884C\u4EE5\u4E0B\u547D\u4EE4\uFF08\u9700\u8981 Python 3.10+\uFF09\u3002\u5B89\u88C5\u540E\u7531\u4F60\u7684 AI \u5BA2\u6237\u7AEF\u81EA\u52A8\u62C9\u8D77\uFF1A",
+      copy: "\u590D\u5236",
+      copied: "\u5DF2\u590D\u5236",
+      t3: "\u8FDE\u63A5 AI \u5BA2\u6237\u7AEF",
+      b3: "\u9009\u62E9\u4F60\u7684\u5BA2\u6237\u7AEF\uFF0C\u628A\u914D\u7F6E\u7C98\u8D34\u8FDB\u5B83\u7684 MCP \u8BBE\u7F6E\uFF1A",
+      builtin: "\u9762\u677F\u5185\u7F6E\u5BF9\u8BDD",
+      builtinNote: "\u65E0\u9700\u914D\u7F6E\uFF0C\u5F00\u7BB1\u5373\u7528",
+      t4w: "\u7B49\u5F85\u63E1\u624B\u2026",
+      b4w: "\u5728\u5BA2\u6237\u7AEF\u91CC\u53D1\u8D77\u4E00\u6B21\u5BF9\u8BDD\uFF0C\u9762\u677F\u4F1A\u81EA\u52A8\u5B8C\u6210\u63E1\u624B\u3002",
+      t4s: "\u8FDE\u63A5\u6210\u529F",
+      b4s: (c) => `${c} \u5DF2\u8FDE\u63A5\uFF0C\u53EF\u4EE5\u5F00\u59CB\u8BA9 AI \u64CD\u4F5C\u4F60\u7684\u5DE5\u7A0B\u4E86\u3002`,
+      t4t: "\u5C1A\u672A\u6536\u5230\u8FDE\u63A5",
+      b4t: "\u8D85\u8FC7 60 \u79D2\u6CA1\u6709\u5BA2\u6237\u7AEF\u63A5\u5165\u3002\u9010\u9879\u4F53\u68C0\u53EF\u4EE5\u627E\u51FA\u95EE\u9898\uFF1A",
+      diagnose: "\u8FD0\u884C\u8BCA\u65AD"
+    },
+    en: {
+      stepOf: (n) => `Step ${n} of 4`,
+      back: "Back",
+      next: "Next",
+      start: "Start using",
+      skip: "Skip setup",
+      t1: "Welcome to ae-mcp",
+      b1: "Let AI assistants operate your After Effects project safely \u2014 every step visible, approvable, undoable.",
+      langLabel: "\u754C\u9762\u8BED\u8A00 \xB7 Language",
+      t2: "Install the local service",
+      b2: "Run this in a terminal (Python 3.10+). Your AI client launches it automatically:",
+      copy: "Copy",
+      copied: "Copied",
+      t3: "Connect an AI client",
+      b3: "Pick your client and paste the config into its MCP settings:",
+      builtin: "Built-in chat",
+      builtinNote: "No config needed \u2014 works out of the box",
+      t4w: "Waiting for handshake\u2026",
+      b4w: "Start a conversation in your client; the panel completes the handshake automatically.",
+      t4s: "Connected",
+      b4s: (c) => `${c} is connected. You can start directing AI in your project.`,
+      t4t: "No connection yet",
+      b4t: "No client joined within 60 seconds. Run diagnostics to find the issue:",
+      diagnose: "Run diagnostics"
+    }
+  };
+  var CLIENTS = [
+    { id: "builtin", name: "builtin" },
+    { id: "claude-desktop", name: "Claude Desktop" },
+    { id: "claude-code", name: "Claude Code" },
+    { id: "cursor", name: "Cursor" }
+  ];
+  function CodeBlock({ code, copyLabel, onCopy, maxHeight }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { position: "relative", background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("pre", { style: { margin: 0, padding: "10px 36px 10px 12px", font: "400 11px/1.7 var(--font-mono)", color: "var(--text-primary)", overflow: "auto", maxHeight: maxHeight || 180, whiteSpace: "pre" }, children: code }),
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(IconButton, { icon: "copy", title: copyLabel, variant: "secondary", onClick: onCopy, style: { position: "absolute", top: 6, right: 6, background: "var(--bg-panel)" } })
+    ] });
+  }
+  function ClientRow2({ name, note, selected, onSelect }) {
+    const [hover, setHover] = import_react24.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
+      "button",
+      {
+        type: "button",
+        className: "ds-focusable",
+        onClick: onSelect,
+        onMouseEnter: () => setHover(true),
+        onMouseLeave: () => setHover(false),
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          width: "100%",
+          minHeight: 32,
+          padding: "0 10px",
+          textAlign: "left",
+          background: selected ? "var(--bg-selected)" : hover ? "var(--bg-hover)" : "transparent",
+          border: `1px solid ${selected ? "var(--border-strong)" : "var(--border-default)"}`,
+          borderRadius: "var(--radius-md)",
+          cursor: "pointer",
+          transition: "background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out)"
+        },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: name }),
+            note ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: note }) : null
+          ] }),
+          selected ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Icon2, { name: "check", size: 13, strokeWidth: 2.5, color: "var(--text-primary)" }) : null
+        ]
+      }
+    );
+  }
+  function WizardScreen({
+    step = 1,
+    lang = "zh",
+    onLangChange,
+    client = "claude-desktop",
+    onClient,
+    handshake = "waiting",
+    clientName = "Claude Desktop",
+    mcpConfig = "",
+    onNext,
+    onBack,
+    onCopy,
+    onDiagnose,
+    onDone,
+    onSkip
+  }) {
+    const t = W[lang] || W.zh;
+    return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "var(--space-6) var(--space-5) var(--space-5)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { display: "flex", gap: 5 }, children: [1, 2, 3, 4].map((n) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { width: n === step ? 14 : 5, height: 5, borderRadius: 3, background: n === step ? "var(--gray-11)" : n < step ? "var(--gray-9)" : "var(--gray-6)", transition: "width var(--dur-base) var(--ease-out)" } }, n)) }),
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { font: "400 10px/1 var(--font-mono)", color: "var(--text-tertiary)" }, children: t.stepOf(step) }),
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { flex: 1 } }),
+        onSkip && step < 4 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "ghost", size: "sm", onClick: onSkip, style: { color: "var(--text-tertiary)" }, children: t.skip }) : null
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", paddingTop: "var(--space-6)" }, children: [
+        step === 1 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(AIAvatar, { size: 44 }),
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t1 }),
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b1 }),
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { marginTop: "var(--space-2)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginBottom: 6 }, children: t.langLabel }),
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] })
+          ] })
+        ] }) : null,
+        step === 2 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t2 }),
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b2 }),
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(CodeBlock, { code: "pip install ae-mcp", copyLabel: t.copy, onCopy })
+        ] }) : null,
+        step === 3 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t3 }),
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b3 }),
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: CLIENTS.map((c) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+            ClientRow2,
+            {
+              name: c.id === "builtin" ? t.builtin : c.name,
+              note: c.id === "builtin" ? t.builtinNote : null,
+              selected: client === c.id,
+              onSelect: () => onClient && onClient(c.id)
+            },
+            c.id
+          )) }),
+          client !== "builtin" ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(CodeBlock, { code: mcpConfig, copyLabel: t.copy, onCopy, maxHeight: 150 }) : null
+        ] }) : null,
+        step === 4 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "var(--space-2)", textAlign: "center" }, children: [
+          handshake === "waiting" ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Spinner, { size: 28 }),
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "600 15px/1.35 var(--font-ui)", color: "var(--text-primary)", marginTop: 8 }, children: t.t4w }),
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 11px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 230 }, children: t.b4w })
+          ] }) : null,
+          handshake === "success" ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { width: 48, height: 48, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--ok-bg)", border: "1px solid var(--ok-border)", borderRadius: "50%" }, children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Icon2, { name: "check", size: 22, strokeWidth: 2.5, color: "var(--ok)" }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "600 15px/1.35 var(--font-ui)", color: "var(--text-primary)", marginTop: 8 }, children: t.t4s }),
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 11px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 230 }, children: t.b4s(clientName) })
+          ] }) : null,
+          handshake === "timeout" ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { width: 48, height: 48, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--warn-bg)", border: "1px solid var(--warn-border)", borderRadius: "50%" }, children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Icon2, { name: "triangle-alert", size: 20, strokeWidth: 2, color: "var(--warn)" }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "600 15px/1.35 var(--font-ui)", color: "var(--text-primary)", marginTop: 8 }, children: t.t4t }),
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 11px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 240 }, children: t.b4t }),
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "secondary", icon: "stethoscope", onClick: onDiagnose, style: { marginTop: 4 }, children: t.diagnose })
+          ] }) : null
+        ] }) : null
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", paddingTop: "var(--space-3)" }, children: [
+        step > 1 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "ghost", size: "lg", onClick: onBack, children: t.back }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { flex: 1 } }),
+        step < 4 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "primary", size: "lg", onClick: onNext, children: t.next }) : handshake === "success" ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "primary", size: "lg", onClick: onDone, children: t.start }) : null
+      ] })
+    ] });
+  }
+
+  // src/screens/ConnectionDrawer.jsx
+  var import_react27 = __toESM(require_react(), 1);
+
+  // src/components/shell/DiagnosticItem.jsx
+  var import_react25 = __toESM(require_react(), 1);
+  var import_jsx_runtime23 = __toESM(require_jsx_runtime(), 1);
+  var GLYPHS = {
+    pass: { icon: "check", color: "var(--ok)" },
+    fail: { icon: "x", color: "var(--error)" },
+    pending: { icon: "circle", color: "var(--text-disabled)" }
+  };
+  function DiagnosticItem({ label, status = "pending", detail, actionLabel, onAction, style }) {
+    const g = GLYPHS[status];
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { padding: "var(--space-1) 0", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: 22 }, children: [
+        status === "running" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Spinner, { size: 12 }) : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Icon2, { name: g.icon, size: 12, strokeWidth: 2.5, color: g.color }),
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
+          "span",
+          {
+            style: {
+              flex: 1,
+              minWidth: 0,
+              font: `var(--weight-regular) var(--text-body)/var(--leading-tight) var(--font-ui)`,
+              color: status === "pending" ? "var(--text-tertiary)" : "var(--text-primary)"
+            },
+            children: label
+          }
+        )
+      ] }),
+      status === "fail" && detail ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(
+        "div",
+        {
+          style: {
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "var(--space-2)",
+            margin: "2px 0 2px 20px",
+            padding: "var(--space-15) var(--space-2)",
+            background: "var(--error-bg)",
+            border: "1px solid var(--error-border)",
+            borderRadius: "var(--radius-sm)"
+          },
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: detail }),
+            actionLabel ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, style: { flex: "none" }, children: actionLabel }) : null
+          ]
+        }
+      ) : null
+    ] });
+  }
+
+  // src/components/shell/Drawer.jsx
+  var import_react26 = __toESM(require_react(), 1);
+  var import_jsx_runtime24 = __toESM(require_jsx_runtime(), 1);
+  function Drawer({ open = false, title, onClose, children, closeTitle = "\u5173\u95ED Close", style }) {
+    if (!open) return null;
+    return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { position: "absolute", inset: 0, zIndex: 30 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
+        "div",
+        {
+          onClick: onClose,
+          style: { position: "absolute", inset: 0, background: "var(--scrim)", animation: "ds-fade var(--dur-slow) var(--ease-out)" }
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
+        "div",
+        {
+          role: "dialog",
+          "aria-label": typeof title === "string" ? title : void 0,
+          style: {
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            maxHeight: "85%",
+            display: "flex",
+            flexDirection: "column",
+            background: "var(--bg-overlay)",
+            borderBottom: "1px solid var(--border-strong)",
+            borderRadius: "0 0 var(--radius-lg) var(--radius-lg)",
+            boxShadow: "var(--shadow-overlay)",
+            animation: "ds-fade-down var(--dur-slow) var(--ease-out)",
+            ...style
+          },
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
+              "div",
+              {
+                style: {
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "var(--space-2)",
+                  padding: "var(--space-2) var(--space-2) var(--space-2) var(--space-3)",
+                  borderBottom: "1px solid var(--border-subtle)"
+                },
+                children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-semibold) var(--text-heading)/1 var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
+                  /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(IconButton, { icon: "x", title: closeTitle, onClick: onClose })
+                ]
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { overflow: "auto", padding: "var(--space-3)" }, children })
+          ]
+        }
+      )
+    ] });
+  }
+
+  // src/screens/ConnectionDrawer.jsx
+  var import_jsx_runtime25 = __toESM(require_jsx_runtime(), 1);
+  var D = {
+    zh: {
+      title: "\u8FDE\u63A5",
+      status: "\u72B6\u6001",
+      connected: "\u5DF2\u8FDE\u63A5",
+      waiting: "\u7B49\u5F85\u5BA2\u6237\u7AEF",
+      port: "\u7AEF\u53E3",
+      token: "Token",
+      ver: "\u7248\u672C",
+      recent: "\u6700\u8FD1\u6D3B\u52A8",
+      copyConfig: "\u590D\u5236\u914D\u7F6E",
+      restart: "\u91CD\u542F\u670D\u52A1",
+      diagnose: "\u8FD0\u884C\u8BCA\u65AD",
+      regen: "\u91CD\u65B0\u751F\u6210 Token",
+      rerun: "\u91CD\u65B0\u8FD0\u884C",
+      close: "\u5173\u95ED",
+      copyReport: "\u590D\u5236\u8BCA\u65AD\u62A5\u544A",
+      mismatch: "\u7248\u672C\u4E0D\u4E00\u81F4",
+      tokenLocal: "\u672C\u673A\u6587\u4EF6",
+      noRecent: "\u6682\u65E0\u5BA2\u6237\u7AEF\u6D3B\u52A8",
+      checks: {
+        "host-listening": "Host \u76D1\u542C",
+        "token-file": "Token \u6587\u4EF6",
+        "python-seen": "Python \u63E1\u624B",
+        "ae-project": "AE \u5DE5\u7A0B",
+        "extendscript-ping": "ExtendScript Ping"
+      }
+    },
+    en: {
+      title: "Connection",
+      status: "Status",
+      connected: "Connected",
+      waiting: "Waiting for client",
+      port: "Port",
+      token: "Token",
+      ver: "Version",
+      recent: "Recent activity",
+      copyConfig: "Copy config",
+      restart: "Restart service",
+      diagnose: "Run diagnostics",
+      regen: "Regenerate token",
+      rerun: "Run again",
+      close: "Close",
+      copyReport: "Copy diagnostic report",
+      mismatch: "Version mismatch",
+      tokenLocal: "Local file",
+      noRecent: "No client activity yet",
+      checks: {
+        "host-listening": "Host listening",
+        "token-file": "Token file",
+        "python-seen": "Python handshake",
+        "ae-project": "AE project",
+        "extendscript-ping": "ExtendScript ping"
+      }
+    }
+  };
+  function KV({ k, children }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { width: 72, flex: "none", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: k }),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.35 var(--font-mono)", color: "var(--text-primary)" }, children })
+    ] });
+  }
+  function formatTime(ts) {
+    if (!ts) return "-";
+    const d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+  function callCopy(handler) {
+    if (!handler) return;
+    const value = handler();
+    if (typeof value === "string") copyText(value).catch(() => {
+    });
+    else if (value && typeof value.then === "function") value.then((text) => {
+      if (typeof text === "string") copyText(text).catch(() => {
+      });
+    }).catch(() => {
+    });
+  }
+  function ConnectionDrawerBody({ lang = "zh", info = {}, panelVersion = package_default.version, statusLabel, onCopyConfig, onRestart, onDiagnose }) {
+    const t = D[lang] || D.zh;
+    const connected = !!info.lastClientSeenAt || !!info.lastHealthAt;
+    const pythonVersion = info.pythonVersion || "-";
+    const hostVersion = info.hostVersion || "-";
+    const mismatch = info.pythonVersion && info.pythonVersion !== panelVersion;
+    const recent = info.lastClientSeenAt ? [{ time: formatTime(info.lastClientSeenAt), text: lang === "zh" ? "\u5916\u90E8 MCP \u5BA2\u6237\u7AEF" : "External MCP client" }] : [];
+    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(KV, { k: t.status, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(StatusDot, { status: connected ? "connected" : "waiting", size: 7 }),
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { fontFamily: "var(--font-ui)" }, children: statusLabel || (connected ? t.connected : t.waiting) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(KV, { k: t.port, children: [
+        info.port || "-",
+        " ",
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(IconButton, { icon: "copy", title: t.copyConfig, onClick: () => callCopy(onCopyConfig), style: { width: 20, height: 20 } })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(KV, { k: t.token, children: info.tokenLabel || t.tokenLocal }),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(KV, { k: t.ver, children: [
+        "v",
+        panelVersion,
+        " \xB7 host ",
+        hostVersion,
+        " \xB7 py ",
+        pythonVersion,
+        mismatch ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Badge, { status: "warn", children: t.mismatch }) : null
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 4 }, children: t.recent }),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", padding: "2px 8px" }, children: (recent.length ? recent : [{ time: "-", text: t.noRecent }]).map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", minHeight: 22, font: "400 10px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }, children: r.time }),
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: r.text })
+      ] }, i)) }),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => callCopy(onCopyConfig), children: t.copyConfig }),
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRestart, children: t.restart }),
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "stethoscope", onClick: onDiagnose, children: t.diagnose })
+      ] })
+    ] });
+  }
+  function DiagnosticsBody({ lang = "zh", diagnostics = [], onRerun }) {
+    const t = D[lang] || D.zh;
+    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", flexDirection: "column" }, children: [
+      diagnostics.map((c) => /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+        DiagnosticItem,
+        {
+          label: t.checks[c.id] || c.id,
+          status: c.ok ? "pass" : "fail",
+          detail: c.ok ? c.detail : [c.detail, c.fixHint && c.fixHint[lang]].filter(Boolean).join(" \xB7 ")
+        },
+        c.id
+      )),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", justifyContent: "flex-end", gap: 6, paddingTop: "var(--space-2)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => copyText(JSON.stringify(diagnostics, null, 2)).catch(() => {
+        }), children: t.copyReport }),
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRerun, children: t.rerun })
+      ] })
+    ] });
+  }
+  function ConnectionDrawer({ open = false, onClose, info = {}, onCopyConfig, onRestart, onDiagnose, diagnostics = [], lang = "zh" }) {
+    const t = D[lang] || D.zh;
+    const panelVersion = info.panelVersion || package_default.version;
+    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(Drawer, { open, title: t.title, onClose, closeTitle: t.close, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+        ConnectionDrawerBody,
+        {
+          lang,
+          info,
+          panelVersion,
+          onCopyConfig,
+          onRestart,
+          onDiagnose
+        }
+      ),
+      diagnostics.length ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { marginTop: "var(--space-3)", paddingTop: "var(--space-2)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(DiagnosticsBody, { lang, diagnostics, onRerun: onDiagnose }) }) : null
+    ] });
+  }
+
+  // src/cep/useActivity.js
+  var import_react28 = __toESM(require_react(), 1);
+  function useActivity(getHost) {
+    const [events, setEvents] = import_react28.default.useState([]);
+    import_react28.default.useEffect(() => {
+      let unsub = null;
+      let retry = null;
+      let disposed = false;
+      const attach = () => {
+        if (disposed) return;
+        const host = getHost && getHost();
+        const act = host && host.activity;
+        if (!act) {
+          retry = setTimeout(attach, 2e3);
+          return;
+        }
+        setEvents(act.list());
+        unsub = act.subscribe((e) => setEvents((xs) => [...xs.slice(-499), e]));
+      };
+      attach();
+      return () => {
+        disposed = true;
+        if (unsub) unsub();
+        if (retry) clearTimeout(retry);
+      };
+    }, [getHost]);
+    const clear = import_react28.default.useCallback(() => setEvents([]), []);
+    return { events, clear };
+  }
+
+  // src/cep/useHandshake.js
+  var import_react29 = __toESM(require_react(), 1);
+  function useHandshake(getHost, active) {
+    const [state, setState] = import_react29.default.useState("waiting");
+    import_react29.default.useEffect(() => {
+      if (!active) return void 0;
+      const since = Date.now();
+      setState("waiting");
+      const started = Date.now();
+      const t = setInterval(() => {
+        const host = getHost && getHost();
+        const info = host && host.getConnectionInfo && host.getConnectionInfo();
+        if (info && info.lastHealthAt && info.lastHealthAt > since) {
+          setState("success");
+          clearInterval(t);
+        } else if (Date.now() - started > 6e4) {
+          setState("timeout");
+          clearInterval(t);
+        }
+      }, 1500);
+      return () => clearInterval(t);
+    }, [getHost, active]);
+    return state;
+  }
+
+  // src/cep/firstRun.js
+  var WIZARD_DONE_KEY = "ae_mcp_wizard_done";
+  function isWizardDone(storage) {
+    try {
+      return storage.getItem(WIZARD_DONE_KEY) === "1";
+    } catch (e) {
+      return false;
+    }
+  }
+  function markWizardDone(storage) {
+    try {
+      storage.setItem(WIZARD_DONE_KEY, "1");
+    } catch (e) {
+    }
+  }
+
+  // src/cep/diagnostics.js
+  var HINTS = {
+    "host-listening": {
+      zh: "\u786E\u8BA4 ae-mcp \u9762\u677F\u5DF2\u6253\u5F00\uFF1B\u5982\u7AEF\u53E3\u88AB\u5360\u7528\uFF0C\u8BF7\u5728\u8BBE\u7F6E\u91CC\u6362\u4E00\u4E2A\u7AEF\u53E3\u5E76\u91CD\u542F\u670D\u52A1\u3002",
+      en: "Make sure the ae-mcp panel is open. If the port is busy, choose another port in Settings and restart the service."
+    },
+    "token-file": {
+      zh: "\u91CD\u542F After Effects \u9762\u677F\u4EE5\u91CD\u65B0\u751F\u6210 ~/.ae-mcp/auth-token\uFF0C\u7136\u540E\u91CD\u542F\u4F60\u7684 AI \u5BA2\u6237\u7AEF\u3002",
+      en: "Restart the After Effects panel to regenerate ~/.ae-mcp/auth-token, then restart your AI client."
+    },
+    "python-seen": {
+      zh: "\u8FD0\u884C\u4F60\u7684 AI \u5BA2\u6237\u7AEF\u53D1\u8D77\u4E00\u6B21\u5BF9\u8BDD\uFF0C\u6216\u68C0\u67E5\u5176 MCP \u914D\u7F6E\u3002",
+      en: "Start a conversation in your AI client, or check its MCP configuration."
+    },
+    "ae-project": {
+      zh: "\u786E\u8BA4 After Effects \u5141\u8BB8\u811A\u672C\u8BBF\u95EE\uFF0C\u5E76\u4FDD\u6301\u9762\u677F\u670D\u52A1\u8FD0\u884C\u3002",
+      en: "Confirm After Effects allows script access and keep the panel service running."
+    },
+    "extendscript-ping": {
+      zh: "\u91CD\u542F\u9762\u677F\u670D\u52A1\uFF1B\u5982\u679C\u4ECD\u5931\u8D25\uFF0C\u8BF7\u91CD\u542F After Effects \u540E\u518D\u8BD5\u3002",
+      en: "Restart the panel service. If it still fails, restart After Effects and try again."
+    }
+  };
+  function tokenPath(os) {
+    const home = os && os.homedir ? os.homedir() : "";
+    return home.replace(/[\\/]$/, "") + "/.ae-mcp/auth-token";
+  }
+  async function readJson(response) {
+    if (response && response.json) return response.json();
+    return {};
+  }
+  function tokenHeaders(token) {
+    return {
+      "content-type": "application/json",
+      "x-ae-mcp-token": token
+    };
+  }
+  async function execCode(fetchImpl, port, token, code) {
+    const response = await fetchImpl("http://127.0.0.1:" + port + "/exec", {
+      method: "POST",
+      headers: tokenHeaders(token),
+      body: JSON.stringify({ code })
+    });
+    return { response, body: await readJson(response) };
+  }
+  async function runDiagnostics({ getHost, port, fs, os, fetchImpl }) {
+    const fetcher = fetchImpl || globalThis.fetch;
+    const items = [];
+    let token = "";
+    try {
+      const response = await fetcher("http://127.0.0.1:" + port + "/health");
+      const body = await readJson(response);
+      const ok = response && response.ok !== false && body.ok === true;
+      items.push({
+        id: "host-listening",
+        ok,
+        detail: ok ? "Host v" + (body.pluginVersion || "unknown") + " on port " + (body.port || port) : "Host did not return ok",
+        fixHint: HINTS["host-listening"]
+      });
+    } catch (e) {
+      items.push({ id: "host-listening", ok: false, detail: e.message, fixHint: HINTS["host-listening"] });
+    }
+    try {
+      const file = tokenPath(os);
+      const exists = fs && fs.existsSync && fs.existsSync(file);
+      token = exists && fs.readFileSync ? String(fs.readFileSync(file, "utf8")).trim() : "";
+      items.push({
+        id: "token-file",
+        ok: exists && token.length === 64,
+        detail: exists ? "Token length " + token.length : "Token file missing",
+        fixHint: HINTS["token-file"]
+      });
+    } catch (e) {
+      items.push({ id: "token-file", ok: false, detail: e.message, fixHint: HINTS["token-file"] });
+    }
+    try {
+      const host = getHost && getHost();
+      const info = host && host.getConnectionInfo && host.getConnectionInfo();
+      const age = info && info.lastHealthAt ? Date.now() - info.lastHealthAt : Infinity;
+      const ok = age < 10 * 60 * 1e3;
+      items.push({
+        id: "python-seen",
+        ok,
+        detail: ok ? "Last /health probe " + Math.round(age / 1e3) + "s ago" : "No recent /health probe from Python",
+        fixHint: HINTS["python-seen"]
+      });
+    } catch (e) {
+      items.push({ id: "python-seen", ok: false, detail: e.message, fixHint: HINTS["python-seen"] });
+    }
+    try {
+      const code = 'app.project && app.project.file ? app.project.file.name : (app.project ? "unsaved" : "none")';
+      const { response, body } = await execCode(fetcher, port, token, code);
+      const ok = response && response.ok !== false && body.ok !== false;
+      const project = body.result || "none";
+      items.push({
+        id: "ae-project",
+        ok,
+        detail: project === "unsaved" ? "Project unsaved" : "Project " + project,
+        fixHint: HINTS["ae-project"]
+      });
+    } catch (e) {
+      items.push({ id: "ae-project", ok: false, detail: e.message, fixHint: HINTS["ae-project"] });
+    }
+    try {
+      const { response, body } = await execCode(fetcher, port, token, '"pong"');
+      const ok = response && response.ok !== false && body.ok !== false && body.result === "pong";
+      items.push({
+        id: "extendscript-ping",
+        ok,
+        detail: ok ? "pong" : "Unexpected result: " + String(body.result || body.error || ""),
+        fixHint: HINTS["extendscript-ping"]
+      });
+    } catch (e) {
+      items.push({ id: "extendscript-ping", ok: false, detail: e.message, fixHint: HINTS["extendscript-ping"] });
+    }
+    return items;
   }
 
   // src/cep/hostBridge.js
@@ -8787,12 +9801,12 @@
     function start(port) {
       onStatus("starting", port);
       try {
-        const cepRequire2 = getCepRequire();
-        const path = cepRequire2("path");
+        const cepRequire3 = getCepRequire();
+        const path = cepRequire3("path");
         const extRoot = normalizeCepPath(cs2.getSystemPath("extension"));
         const hostPath = path.join(extRoot, "host", "server.js");
         onLog("host: " + hostPath);
-        host = cepRequire2(hostPath);
+        host = cepRequire3(hostPath);
         host.setCSInterface(cs2);
         host.start(port, (err) => err ? onStatus("error", port, err.message) : onStatus("ok", port));
       } catch (e) {
@@ -8809,7 +9823,7 @@
   }
 
   // src/app/App.jsx
-  var import_jsx_runtime16 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime26 = __toESM(require_jsx_runtime(), 1);
   var T = {
     zh: {
       connected: "\u670D\u52A1\u8FD0\u884C\u4E2D",
@@ -8824,7 +9838,11 @@
       chatEmptyT: "\u5185\u5D4C\u5BF9\u8BDD\u5373\u5C06\u5F00\u653E",
       chatEmptyB: "P5 \u4E0A\u7EBF\u3002\u73B0\u5728\u53EF\u901A\u8FC7 Claude Desktop \u7B49\u5BA2\u6237\u7AEF\u8FDE\u63A5\u4F7F\u7528\u3002",
       actEmptyT: "\u8FD8\u6CA1\u6709\u64CD\u4F5C\u8BB0\u5F55",
-      actEmptyB: "AI \u5BA2\u6237\u7AEF\u6267\u884C\u7684\u6BCF\u4E2A AE \u64CD\u4F5C\u90FD\u4F1A\u51FA\u73B0\u5728\u8FD9\u91CC\u3002"
+      actEmptyB: "AI \u5BA2\u6237\u7AEF\u6267\u884C\u7684\u6BCF\u4E2A AE \u64CD\u4F5C\u90FD\u4F1A\u51FA\u73B0\u5728\u8FD9\u91CC\u3002",
+      regenTitle: "\u91CD\u65B0\u751F\u6210\u8BBF\u95EE Token\uFF1F",
+      regenBody: "\u6240\u6709\u5DF2\u8FDE\u63A5\u7684 AI \u5BA2\u6237\u7AEF\u4F1A\u7ACB\u5373\u5931\u53BB\u8BBF\u95EE\u6743\u9650\uFF0C\u9700\u8981\u91CD\u542F\u5B83\u4EEC\u624D\u80FD\u91CD\u65B0\u8FDE\u63A5\u3002",
+      regenConfirm: "\u91CD\u65B0\u751F\u6210",
+      cancel: "\u53D6\u6D88"
     },
     en: {
       connected: "Service running",
@@ -8839,21 +9857,48 @@
       chatEmptyT: "Built-in chat coming soon",
       chatEmptyB: "Lands in P5. Connect via Claude Desktop etc. for now.",
       actEmptyT: "No activity yet",
-      actEmptyB: "Every AE operation by an AI client will appear here."
+      actEmptyB: "Every AE operation by an AI client will appear here.",
+      regenTitle: "Regenerate access token?",
+      regenBody: "Every connected AI client loses access immediately and must be restarted to reconnect.",
+      regenConfirm: "Regenerate",
+      cancel: "Cancel"
     }
   };
+  var CLIENT_NAMES = {
+    builtin: { zh: "\u9762\u677F\u5185\u7F6E\u5BF9\u8BDD", en: "Built-in chat" },
+    "claude-desktop": { zh: "Claude Desktop", en: "Claude Desktop" },
+    "claude-code": { zh: "Claude Code", en: "Claude Code" },
+    cursor: { zh: "Cursor", en: "Cursor" }
+  };
+  function cepRequire2(mod) {
+    if (window.cep_node && window.cep_node.require) return window.cep_node.require(mod);
+    if (window.require) return window.require(mod);
+    return null;
+  }
   function Shell({ cs: cs2 }) {
     const { lang, setLang } = useLang();
     const t = T[lang];
-    const [tab, setTab] = import_react18.default.useState("chat");
-    const [status, setStatus] = import_react18.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
-    const [paused, setPaused] = import_react18.default.useState(false);
-    const [logs, setLogs] = import_react18.default.useState([]);
-    const ctrl = import_react18.default.useRef(null);
-    const pushLog = import_react18.default.useCallback((m) => {
+    const [tab, setTab] = import_react30.default.useState("chat");
+    const [status, setStatus] = import_react30.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
+    const [paused, setPaused] = import_react30.default.useState(false);
+    const [logs, setLogs] = import_react30.default.useState([]);
+    const ctrl = import_react30.default.useRef(null);
+    const getHost = import_react30.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
+    const [wizardDone, setWizardDone] = import_react30.default.useState(() => isWizardDone(window.localStorage));
+    const [wizStep, setWizStep] = import_react30.default.useState(1);
+    const [wizClient, setWizClient] = import_react30.default.useState("claude-desktop");
+    const handshake = useHandshake(getHost, !wizardDone && wizStep === 4);
+    const [drawerOpen, setDrawerOpen] = import_react30.default.useState(false);
+    const [connInfo, setConnInfo] = import_react30.default.useState(null);
+    const [diagnostics, setDiagnostics] = import_react30.default.useState(null);
+    const { events, clear } = useActivity(getHost);
+    const [clients, setClients] = import_react30.default.useState([]);
+    const [confirmRegen, setConfirmRegen] = import_react30.default.useState(false);
+    const [tokenEpoch, setTokenEpoch] = import_react30.default.useState(0);
+    const pushLog = import_react30.default.useCallback((m) => {
       setLogs((xs) => [...xs.slice(-199), `[${(/* @__PURE__ */ new Date()).toLocaleTimeString()}] ${m}`]);
     }, []);
-    import_react18.default.useEffect(() => {
+    import_react30.default.useEffect(() => {
       const port = loadSavedPort(window.localStorage) || DEFAULT_PORT;
       ctrl.current = createHostController({
         cs: cs2,
@@ -8869,17 +9914,44 @@
       });
       ctrl.current.start(port);
     }, [cs2, pushLog]);
-    const applyPort = (p) => {
-      const port = parseInt(p, 10);
-      if (!isValidPort(port)) {
-        setStatus((s) => ({ ...s, state: "error", error: "Invalid port" }));
-        pushLog("Invalid port");
-        return;
+    import_react30.default.useEffect(() => {
+      if (!drawerOpen) return void 0;
+      const update = () => {
+        const h = getHost();
+        if (h && h.getConnectionInfo) setConnInfo(h.getConnectionInfo());
+      };
+      update();
+      const i = setInterval(update, 3e3);
+      return () => clearInterval(i);
+    }, [drawerOpen, getHost]);
+    import_react30.default.useEffect(() => {
+      if (tab !== "settings") return void 0;
+      const update = () => {
+        const h = getHost();
+        if (h && h.getClients) setClients(h.getClients());
+        if (h && h.getConnectionInfo) setConnInfo(h.getConnectionInfo());
+      };
+      update();
+      const i = setInterval(update, 4e3);
+      return () => clearInterval(i);
+    }, [tab, getHost]);
+    const runDiag = import_react30.default.useCallback(async () => {
+      setDiagnostics("running");
+      try {
+        const items = await runDiagnostics({
+          getHost,
+          port: status.port,
+          fs: cepRequire2("fs"),
+          os: cepRequire2("os"),
+          fetchImpl: window.fetch.bind(window)
+        });
+        setDiagnostics(items);
+      } catch (e) {
+        setDiagnostics([{ id: "host-listening", ok: false, detail: String(e && e.message), fixHint: { zh: "\u8BCA\u65AD\u6267\u884C\u5931\u8D25\uFF0C\u91CD\u542F\u9762\u677F\u540E\u91CD\u8BD5\u3002", en: "Diagnostics failed to run; reload the panel and retry." } }]);
       }
-      if (ctrl.current) ctrl.current.restart(port);
-    };
+    }, [getHost, status.port]);
     const togglePause = () => {
-      const host = ctrl.current && ctrl.current.getHost();
+      const host = getHost();
       if (!host || typeof host.setPaused !== "function") {
         pushLog("Pause unavailable: host not running");
         return;
@@ -8889,18 +9961,60 @@
       setPaused(next);
       pushLog(next ? "Paused: /exec is blocked" : "Resumed");
     };
+    const applyPort = (p) => {
+      const port = parseInt(p, 10);
+      if (!isValidPort(port)) {
+        setStatus((s) => ({ ...s, state: "error", error: "Invalid port" }));
+        pushLog("Invalid port");
+        return;
+      }
+      if (ctrl.current) ctrl.current.restart(port);
+    };
+    const finishWizard = () => {
+      markWizardDone(window.localStorage);
+      setWizardDone(true);
+    };
+    const mcpConfigStr = JSON.stringify(buildMcpConfig(status.port), null, 2);
+    if (!wizardDone) {
+      return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+        WizardScreen,
+        {
+          step: wizStep,
+          lang,
+          onLangChange: setLang,
+          client: wizClient,
+          onClient: setWizClient,
+          handshake,
+          clientName: (CLIENT_NAMES[wizClient] || CLIENT_NAMES["claude-desktop"])[lang],
+          mcpConfig: mcpConfigStr,
+          onNext: () => setWizStep((s) => Math.min(4, s + 1)),
+          onBack: () => setWizStep((s) => Math.max(1, s - 1)),
+          onCopy: () => copyText(wizStep === 2 ? "pip install ae-mcp" : mcpConfigStr),
+          onDiagnose: () => {
+            finishWizard();
+            setDrawerOpen(true);
+            runDiag();
+          },
+          onDone: finishWizard,
+          onSkip: finishWizard
+        }
+      );
+    }
     const statusForBar = paused ? "paused" : status.state === "ok" ? "connected" : status.state === "starting" ? "waiting" : "error";
     const tabs = [
       { id: "chat", icon: "message-square", label: t.chat },
       { id: "activity", icon: "list-checks", label: t.activity },
       { id: "settings", icon: "settings", label: t.settings }
     ];
-    return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(import_react18.default.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(import_react30.default.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
         StatusBar,
         {
           status: statusForBar,
           label: paused ? t.paused : status.state === "ok" ? `${t.connected} \xB7 127.0.0.1:${status.port}` : status.state === "error" ? `${t.error} \xB7 ${status.error || ""}` : t.starting,
+          onStatusClick: () => {
+            setDrawerOpen(true);
+          },
           onTogglePause: togglePause,
           onSettings: () => setTab("settings"),
           pauseTitle: t.pauseAll,
@@ -8908,32 +10022,89 @@
           settingsTitle: t.settings
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
-        tab === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(EmptyState, { icon: "message-square", title: t.chatEmptyT, caption: t.chatEmptyB }) : null,
-        tab === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(EmptyState, { icon: "list-checks", title: t.actEmptyT, caption: t.actEmptyB }) : null,
-        tab === "settings" ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }, children: [
+        tab === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(EmptyState, { icon: "message-square", title: t.chatEmptyT, caption: t.chatEmptyB }) : null,
+        tab === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+          ActivityScreen,
+          {
+            events,
+            lang,
+            onClear: clear,
+            emptyTitle: t.actEmptyT,
+            emptyCaption: t.actEmptyB
+          }
+        ) : null,
+        tab === "settings" ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
           SettingsScreen,
           {
             lang,
             onLangChange: setLang,
             port: status.port,
             onApplyPort: applyPort,
-            mcpConfig: JSON.stringify(buildMcpConfig(status.port), null, 2),
-            logs
-          }
+            mcpConfig: mcpConfigStr,
+            logs,
+            clients,
+            onBlockClient: (label, v) => {
+              const h = getHost();
+              if (h && h.setClientBlocked) {
+                h.setClientBlocked(label, v);
+                if (h.getClients) setClients(h.getClients());
+                pushLog((v ? "Blocked client: " : "Unblocked client: ") + label);
+              }
+            },
+            onRegenToken: () => setConfirmRegen(true),
+            hostVersion: connInfo && connInfo.hostVersion || "-",
+            pythonVersion: connInfo && connInfo.pythonVersion || "-"
+          },
+          tokenEpoch
         ) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(TabBar, { tabs, active: tab, onChange: setTab })
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(TabBar, { tabs, active: tab, onChange: setTab }),
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+        ConnectionDrawer,
+        {
+          open: drawerOpen,
+          onClose: () => setDrawerOpen(false),
+          lang,
+          info: connInfo || {},
+          diagnostics,
+          onDiagnose: runDiag,
+          onCopyConfig: () => copyText(mcpConfigStr),
+          onRestart: () => applyPort(status.port)
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+        ConfirmDialog,
+        {
+          open: confirmRegen,
+          danger: true,
+          title: t.regenTitle,
+          body: t.regenBody,
+          confirmLabel: t.regenConfirm,
+          cancelLabel: t.cancel,
+          onCancel: () => setConfirmRegen(false),
+          onConfirm: () => {
+            const h = getHost();
+            if (h && h.regenerateToken) {
+              h.regenerateToken((err) => {
+                pushLog(err ? "Token regeneration failed: " + err.message : "Token regenerated");
+              });
+            }
+            setConfirmRegen(false);
+            setTokenEpoch((n) => n + 1);
+          }
+        }
+      )
     ] });
   }
   function App({ cs: cs2 }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(LangProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Shell, { cs: cs2 }) });
+    return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(LangProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Shell, { cs: cs2 }) });
   }
 
   // src/main.jsx
-  var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime27 = __toESM(require_jsx_runtime(), 1);
   var cs = new window.CSInterface();
-  (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime17.jsx)(App, { cs }));
+  (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime27.jsx)(App, { cs }));
 })();
 /*! Bundled license information:
 
