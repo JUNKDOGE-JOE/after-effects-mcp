@@ -8,6 +8,7 @@ import { Segmented } from '../components/core/Segmented';
 import { Input } from '../components/forms/Input';
 import { Select } from '../components/forms/Select';
 import { Field } from '../components/forms/Field';
+import { copyText } from '../lib/clipboard';
 
 const S = {
   zh: {
@@ -25,7 +26,7 @@ const S = {
     apply: '应用',
     token: '访问 Token',
     regen: '重新生成',
-    tokenCap: '客户端凭此连接面板；重新生成将在 P2 接通。',
+    tokenCap: '重新生成后需重启你的 AI 客户端',
     tokenMissing: '未找到 ~/.ae-mcp/auth-token',
     autostart: '随 AE 启动',
     autostartCap: '打开工程时自动启动服务',
@@ -70,7 +71,7 @@ const S = {
     apply: 'Apply',
     token: 'Access token',
     regen: 'Regenerate',
-    tokenCap: 'Clients use this to reach the panel; regeneration lands in P2.',
+    tokenCap: 'Restart your AI client after regenerating.',
     tokenMissing: '~/.ae-mcp/auth-token not found',
     autostart: 'Launch with AE',
     autostartCap: 'Start the service when a project opens',
@@ -165,30 +166,26 @@ function readTokenValue() {
   }
 }
 
-function copyTextLegacy(text) {
-  const ta = document.createElement('textarea');
-  ta.value = text;
-  ta.style.position = 'fixed';
-  ta.style.left = '-9999px';
-  document.body.appendChild(ta);
-  ta.select();
-  let ok = false;
-  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
-  document.body.removeChild(ta);
-  return ok ? Promise.resolve() : Promise.reject(new Error('execCommand copy failed'));
+function formatLastSeen(ts, t) {
+  if (!ts) return t.lastActive + ' · -';
+  const mins = Math.max(0, Math.round((Date.now() - ts) / 60000));
+  if (mins < 60) return `${t.lastActive} · ${t.mins(mins)}`;
+  return `${t.lastActive} · ${t.hours(Math.round(mins / 60))}`;
 }
 
-function copyText(text) {
-  // CEP's file:// origin rejects navigator.clipboard ("Write permission
-  // denied"), so the async API is only an attempt — execCommand is the
-  // path that actually works inside AE.
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    return navigator.clipboard.writeText(text).catch(() => copyTextLegacy(text));
-  }
-  return copyTextLegacy(text);
-}
-
-export function SettingsScreen({ lang = 'zh', onLangChange, port = 11488, onApplyPort, mcpConfig, logs = [] }) {
+export function SettingsScreen({
+  lang = 'zh',
+  onLangChange,
+  port = 11488,
+  onApplyPort,
+  mcpConfig,
+  logs = [],
+  clients = [],
+  onBlockClient,
+  onRegenToken,
+  hostVersion = '-',
+  pythonVersion = '-',
+}) {
   const t = S[lang] || S.zh;
   const [key, setKey] = React.useState('');
   const [model, setModel] = React.useState('sonnet');
@@ -196,8 +193,6 @@ export function SettingsScreen({ lang = 'zh', onLangChange, port = 11488, onAppl
   const [tokenRaw, setTokenRaw] = React.useState('');
   const [autostart, setAutostart] = React.useState(true);
   const [perm, setPerm] = React.useState('manual');
-  const [blockClaude, setBlockClaude] = React.useState(false);
-  const [blockCursor, setBlockCursor] = React.useState(true);
   const [logLevel, setLogLevel] = React.useState('info');
   const [copied, setCopied] = React.useState('');
 
@@ -212,6 +207,15 @@ export function SettingsScreen({ lang = 'zh', onLangChange, port = 11488, onAppl
   };
   const permCap = perm === 'manual' ? t.permCap1 : perm === 'auto' ? t.permCap2 : t.permCap3;
   const tokenDisplay = tokenRaw ? maskToken(tokenRaw) : t.tokenMissing;
+  const regenerate = () => {
+    if (!onRegenToken) return;
+    const result = onRegenToken();
+    if (result && typeof result.then === 'function') {
+      result.then((token) => setTokenRaw(token || readTokenValue())).catch(() => {});
+    } else {
+      setTokenRaw(result || readTokenValue());
+    }
+  };
 
   return (
     <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
@@ -237,7 +241,7 @@ export function SettingsScreen({ lang = 'zh', onLangChange, port = 11488, onAppl
         <Field label={t.token} caption={t.tokenCap}>
           <div style={{ display: 'flex', gap: 6 }}>
             <Input mono value={tokenDisplay} style={{ flex: 1 }} suffix={<IconButton icon="copy" title={t.copy} disabled={!tokenRaw} onClick={() => copy('token', tokenRaw)} style={{ width: 20, height: 20 }} />} />
-            <Button variant="secondary" icon="rotate-cw" disabled>{t.regen}</Button>
+            <Button variant="secondary" icon="rotate-cw" onClick={regenerate}>{t.regen}</Button>
           </div>
         </Field>
         <Field layout="row" label={t.autostart} caption={t.autostartCap}>
@@ -260,8 +264,16 @@ export function SettingsScreen({ lang = 'zh', onLangChange, port = 11488, onAppl
           ]} />
         </Field>
         <div style={{ font: '500 11px/1.35 var(--font-ui)', color: 'var(--text-secondary)', marginTop: 2 }}>{t.clients}</div>
-        <ClientRow name="Claude Desktop" lastActive={`${t.lastActive} · ${t.mins(2)}`} blocked={blockClaude} onBlock={setBlockClaude} blockLabel={t.blocked} />
-        <ClientRow name="Cursor" lastActive={`${t.lastActive} · ${t.hours(1)}`} blocked={blockCursor} onBlock={setBlockCursor} blockLabel={t.blocked} />
+        {clients.map((client) => (
+          <ClientRow
+            key={client.label}
+            name={client.label}
+            lastActive={formatLastSeen(client.lastSeen, t)}
+            blocked={!!client.blocked}
+            onBlock={(v) => onBlockClient && onBlockClient(client.label, v)}
+            blockLabel={t.blocked}
+          />
+        ))}
       </Section>
 
       <Section title={t.gen}>
@@ -288,8 +300,8 @@ export function SettingsScreen({ lang = 'zh', onLangChange, port = 11488, onAppl
 
       <Section title={t.about}>
         <VersionRow label={t.verPanel} value={`v${pkg.version}`} />
-        <VersionRow label={t.verHost} value="-" badge={<Badge status="neutral">{t.pending}</Badge>} />
-        <VersionRow label={t.verPy} value="-" badge={<Badge status="neutral">{t.pending}</Badge>} />
+        <VersionRow label={t.verHost} value={hostVersion} badge={hostVersion === '-' ? <Badge status="neutral">{t.pending}</Badge> : null} />
+        <VersionRow label={t.verPy} value={pythonVersion} badge={pythonVersion === '-' ? <Badge status="neutral">{t.pending}</Badge> : null} />
         <div style={{ display: 'flex', gap: 6 }}>
           <Button variant="ghost" size="sm" icon="book-open">{t.docs}</Button>
           <Button variant="ghost" size="sm" icon="github">{t.github}</Button>
