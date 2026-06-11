@@ -45,13 +45,21 @@ def test_name():
 
 @pytest.mark.asyncio
 async def test_health_check_ok():
+    captured = {}
+
+    async def _resp(request):
+        captured["python"] = request.headers.get("x-ae-mcp-python")
+        return Response(200, json={"ok": True})
+
     async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.get("/health").mock(return_value=Response(200, json={"ok": True}))
+        mock.get("/health").mock(side_effect=_resp)
         b = HttpBridge("http://127.0.0.1:11488")
         try:
             assert await b.health_check() is True
         finally:
             await b.shutdown()
+
+    assert captured["python"]
 
 
 @pytest.mark.asyncio
@@ -175,6 +183,25 @@ async def test_exec_sends_client_identity_header(token_file):
             await b.shutdown()
 
     assert captured["client"] == "Claude Desktop/1.2"
+
+
+@pytest.mark.asyncio
+async def test_exec_sends_python_version_header(token_file):
+    captured = {}
+
+    async def _resp(request):
+        captured["python"] = request.headers.get("x-ae-mcp-python")
+        return Response(200, json={"ok": True, "result": "ok"})
+
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/exec").mock(side_effect=_resp)
+        b = HttpBridge("http://127.0.0.1:11488")
+        try:
+            await b.exec("1")
+        finally:
+            await b.shutdown()
+
+    assert captured["python"]
 
 
 @pytest.mark.asyncio
