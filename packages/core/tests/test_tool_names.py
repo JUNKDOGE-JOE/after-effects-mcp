@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 
+import mcp.types as types
 import pytest
 
 from ae_mcp.handlers import HANDLERS, load_all
@@ -167,7 +168,8 @@ async def test_call_tool_dispatches_to_canonical_verb(monkeypatch):
     result = await server._ae_call_tool("ae_ping", {"expect": "hi"})
 
     assert seen.get("dispatched") is True, "dispatch never reached the canonical ae.ping handler"
-    payload = json.loads(result[0].text)
+    assert result.isError is False
+    payload = json.loads(result.content[0].text)
     assert payload == {"ok": True, "pong": "hi"}
 
 
@@ -185,7 +187,8 @@ async def test_call_tool_accepts_dotted_name_for_backcompat(monkeypatch):
 
     server = build_server()
     result = await server._ae_call_tool("ae.ping", {"expect": "yo"})
-    payload = json.loads(result[0].text)
+    assert result.isError is False
+    payload = json.loads(result.content[0].text)
     assert payload == {"ok": True, "pong": "yo"}
 
 
@@ -195,6 +198,120 @@ async def test_call_tool_unknown_returns_structured_error():
     load_all()
     server = build_server()
     result = await server._ae_call_tool("totally_unknown", {})
-    payload = json.loads(result[0].text)
+    assert result.isError is True
+    payload = json.loads(result.content[0].text)
     assert payload["ok"] is False
     assert "unknown tool" in payload["error"]
+
+
+async def test_call_tool_schema_error_sets_iserror_true():
+    """The direct dispatch path still marks pydantic validation failures."""
+    load_all()
+    server = build_server()
+    result = await server._ae_call_tool("ae_ping", {"junk": 1})
+    assert result.isError is True
+    payload = json.loads(result.content[0].text)
+    assert payload["ok"] is False
+    assert payload["error"].startswith("schema:")
+
+
+async def test_call_tool_handler_raise_sets_iserror_true(monkeypatch):
+    """Handler exceptions keep the structured JSON payload and set isError."""
+    load_all()
+
+    async def _fake_run(validated, ctx):
+        raise RuntimeError("boom")
+
+    schema_cls, _ = HANDLERS["ae.ping"]
+    monkeypatch.setitem(HANDLERS, "ae.ping", (schema_cls, _fake_run))
+
+    server = build_server()
+    result = await server._ae_call_tool("ae_ping", {"expect": "hi"})
+    assert result.isError is True
+    payload = json.loads(result.content[0].text)
+    assert payload == {"ok": False, "error": "boom"}
+
+
+async def test_call_tool_ok_false_payload_sets_iserror_true(monkeypatch):
+    """A non-raising handler can still report a semantic failure via ok:false."""
+    load_all()
+    expected = {"ok": False, "error": "AE rejected operation", "code": "AE_FAIL"}
+
+    async def _fake_run(validated, ctx):
+        return expected
+
+    schema_cls, _ = HANDLERS["ae.ping"]
+    monkeypatch.setitem(HANDLERS, "ae.ping", (schema_cls, _fake_run))
+
+    server = build_server()
+    result = await server._ae_call_tool("ae_ping", {"expect": "hi"})
+    assert result.isError is True
+    assert json.loads(result.content[0].text) == expected
+
+
+@pytest.mark.parametrize("handler_result", [{"pong": "hi"}, "plain text"])
+async def test_call_tool_without_ok_false_sets_iserror_false(monkeypatch, handler_result):
+    """Only a top-level dict with ok:false is treated as a protocol error."""
+    load_all()
+
+    async def _fake_run(validated, ctx):
+        return handler_result
+
+    schema_cls, _ = HANDLERS["ae.ping"]
+    monkeypatch.setitem(HANDLERS, "ae.ping", (schema_cls, _fake_run))
+
+    server = build_server()
+    result = await server._ae_call_tool("ae_ping", {"expect": "hi"})
+    assert result.isError is False
+    assert result.content[0].text == (
+        json.dumps(handler_result, ensure_ascii=False)
+        if isinstance(handler_result, dict)
+        else handler_result
+    )
+
+
+async def test_sdk_call_tool_handler_preserves_call_tool_result_iserror(monkeypatch):
+    """Drive the SDK request handler to prove CallToolResult is passed through."""
+    from ae_mcp import server as srv
+
+    load_all()
+    monkeypatch.setattr(srv, "_filtered_tool_names", lambda: set(HANDLERS.keys()))
+    attempts = 0
+
+    async def _fake_run(validated, ctx):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            return {"ok": True, "pong": validated.expect}
+        return {"ok": False, "error": "semantic failure"}
+
+    schema_cls, _ = HANDLERS["ae.ping"]
+    monkeypatch.setitem(HANDLERS, "ae.ping", (schema_cls, _fake_run))
+
+    server = build_server()
+    request_handler = server.request_handlers[types.CallToolRequest]
+
+    ok_response = await request_handler(
+        types.CallToolRequest(
+            params=types.CallToolRequestParams(
+                name="ae_ping",
+                arguments={"expect": "hi"},
+            )
+        )
+    )
+    assert ok_response.root.isError is False
+    assert json.loads(ok_response.root.content[0].text) == {"ok": True, "pong": "hi"}
+
+    error_response = await request_handler(
+        types.CallToolRequest(
+            params=types.CallToolRequestParams(
+                name="ae_ping",
+                arguments={"expect": "hi"},
+            )
+        )
+    )
+    assert error_response.root.isError is True
+    assert json.loads(error_response.root.content[0].text) == {
+        "ok": False,
+        "error": "semantic failure",
+    }

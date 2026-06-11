@@ -18,7 +18,7 @@ from typing import Any, List
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+from mcp.types import CallToolResult, TextContent, Tool
 
 from ae_mcp.handlers import HANDLERS, load_all
 from ae_mcp.instructions import SERVER_INSTRUCTIONS
@@ -192,13 +192,19 @@ def build_server() -> Server:
         return tools
 
     @server.call_tool()
-    async def _call_tool(name: str, arguments: dict | None) -> List[TextContent]:
+    async def _call_tool(name: str, arguments: dict | None) -> CallToolResult:
+        # Return CallToolResult explicitly so MCP clients can branch on the
+        # protocol-level isError flag. The JSON payload still carries ok:false
+        # for human/model-readable details and remains byte-for-byte stable.
         # Tools are exposed with dots replaced by underscores; map the exposed
         # name back to the canonical verb (the dotted name is accepted too).
         canonical = resolve_tool_name(name, HANDLERS, reverse_map)
         if canonical is None:
             payload = _format_result({"ok": False, "error": f"unknown tool: {name}"})
-            return [TextContent(type="text", text=payload)]
+            return CallToolResult(
+                content=[TextContent(type="text", text=payload)],
+                isError=True,
+            )
         name = canonical
 
         schema_cls, run_fn = HANDLERS[name]
@@ -207,7 +213,10 @@ def build_server() -> Server:
             validated = schema_cls(**(arguments or {}))
         except Exception as e:  # noqa: BLE001
             payload = _format_result({"ok": False, "error": f"schema: {e}"})
-            return [TextContent(type="text", text=payload)]
+            return CallToolResult(
+                content=[TextContent(type="text", text=payload)],
+                isError=True,
+            )
 
         # Pull ctx from request context so handlers can emit progress.
         ctx = None
@@ -221,9 +230,15 @@ def build_server() -> Server:
         except Exception as e:  # noqa: BLE001
             log.exception("handler %s raised", name)
             payload = _format_result({"ok": False, "error": str(e)})
-            return [TextContent(type="text", text=payload)]
+            return CallToolResult(
+                content=[TextContent(type="text", text=payload)],
+                isError=True,
+            )
 
-        return [TextContent(type="text", text=_format_result(result))]
+        return CallToolResult(
+            content=[TextContent(type="text", text=_format_result(result))],
+            isError=isinstance(result, dict) and result.get("ok") is False,
+        )
 
     # Expose the dispatch closures + reverse map for testing. The decorators
     # above already registered them via the MCP request_handlers registry;
