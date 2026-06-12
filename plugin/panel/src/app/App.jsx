@@ -171,7 +171,7 @@ function Shell({ cs }) {
   prefsRef.current = { apiKey, model, permissionMode };
   const extRoot = cs && cs.getSystemPath ? cs.getSystemPath('extension') : '';
   const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
-  const mcp = React.useMemo(() => createMcpClient({}), []);
+  const mcp = React.useMemo(() => createMcpClient({ extRoot }), [extRoot]);
   const handleChatEvent = React.useCallback((evt) => {
     if (evt.type === 'turn-start') setChatStreaming(true);
     if (evt.type === 'turn-end' || evt.type === 'error') setChatStreaming(false);
