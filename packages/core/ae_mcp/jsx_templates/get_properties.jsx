@@ -1,6 +1,19 @@
 // ae.getProperties — search property names across selected layers.
 // Placeholders: comp_expr, layer_ids_js, query_js, offset, limit.
 (function() {
+    var ALIAS = {
+        "ADBE Text Document": "source text",
+        "ADBE Rotate X": "x rotation",
+        "ADBE Rotate Y": "y rotation",
+        "ADBE Rotate Z": "rotation",
+        "ADBE Position_0": "x position",
+        "ADBE Position_1": "y position",
+        "ADBE Position_2": "z position",
+        "ADBE Mask Shape": "mask path",
+        "ADBE Mask Offset": "mask expansion",
+        "ADBE Vector Shape": "path"
+    };
+
     var comp = ${comp_expr};
     if (!comp) return JSON.stringify({ok:false,error:"no comp"});
     var layerIds = ${layer_ids_js};
@@ -20,7 +33,7 @@
     }
 
     function matches(name, matchName) {
-        var hay = (name + " " + matchName).toLowerCase();
+        var hay = (name + " " + matchName + " " + (ALIAS[matchName] || "")).toLowerCase();
         for (var gi = 0; gi < orGroups.length; gi++) {
             var grp = orGroups[gi];
             if (grp.length === 0) continue;
@@ -44,7 +57,7 @@
                 try { val = AEMCP.safeValue(prop.value); } catch (e) { }
                 var score = 0;
                 if (matchSegs[0] === "ADBE Transform Group") score += 10;
-                if (prop.name.toLowerCase().indexOf(orGroups[0][0] || "") !== -1) score += 5;
+                if ((prop.name + " " + (ALIAS[prop.matchName] || "")).toLowerCase().indexOf(orGroups[0][0] || "") !== -1) score += 5;
                 hits.push({
                     layerId: layerId,
                     propName: prop.name,
@@ -93,5 +106,18 @@
     var paged = hits.slice(offset, offset + limit);
     for (var pi2 = 0; pi2 < paged.length; pi2++) delete paged[pi2]._score;
 
-    return JSON.stringify({ok:true, total: total, results: paged, missingLayerIds:missing});
+    var hint = null;
+    if (total === 0) {
+        var lang = "";
+        try { lang = String(app.isoLanguage || ""); } catch (eLang) { }
+        if (lang && lang.indexOf("en") !== 0 && /[a-z]/.test(query.toLowerCase())) {
+            hint = "No matches. AE UI language is " + lang + ": property display names are localized, " +
+                "so English display-name words may miss. Query matchName terms instead (e.g. " +
+                "'text document' for Source Text, 'rotate' for Rotation) or run ae_scanPropertyTree " +
+                "to list matchName paths.";
+        }
+    }
+    var out = {ok:true, total: total, results: paged, missingLayerIds:missing};
+    if (hint) out.hint = hint;
+    return JSON.stringify(out);
 })()

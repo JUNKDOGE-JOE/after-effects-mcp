@@ -57,6 +57,10 @@ PROPERTY PATHS:
 LOCALIZATION:
   On localized AE, name-based effect references can fail. Prefer index form,
   e.g. effect("Value")(1) instead of effect("Value")("Slider").
+  ae_getProperties matches localized display names, matchNames, and English
+  aliases for common transform/text/mask properties. If an English query
+  returns 0 on localized AE, retry with matchName words ("text document",
+  "rotate") or discover paths via ae_scanPropertyTree.
 
 SAFETY & RECOVERY:
   ae_checkpoint snapshots the whole .aep; ae_revert restores a whole-project
