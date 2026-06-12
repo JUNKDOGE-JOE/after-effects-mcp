@@ -10,8 +10,11 @@ import { WizardScreen } from '../screens/WizardScreen';
 import { ConnectionDrawer } from '../screens/ConnectionDrawer';
 import { ChatScreen } from '../screens/ChatScreen';
 import { createAgentLoop } from '../lib/agentLoop';
-import { createMcpClient } from '../cep/mcpClient';
+import { pickBackend, deriveToolMeta, shouldResetOnBackendChange } from '../lib/backendSelect';
+import { createMcpClient, resolveMcpCommand } from '../cep/mcpClient';
 import { createApiKeyStore } from '../cep/apiKey';
+import { probeClaudeLogin, resolveSidecarPath } from '../cep/claudeAuth';
+import { createClaudeAgentBackend, resolveSystemNode } from '../cep/claudeAgentBackend';
 import { reduceEvent } from '../lib/chatEntries';
 import { DEFAULT_MODEL, FALLBACK_MODEL } from '../lib/anthropic';
 import { useActivity } from '../cep/useActivity';
@@ -41,6 +44,9 @@ const T = {
     regenConfirm: '重新生成',
     cancel: '取消',
     noKeyHint: '先在设置里配置 Anthropic API Key',
+    probingHint: '正在检测 Claude 登录态…',
+    notLoggedInHint: '订阅未登录：在终端运行 claude /login，再到设置里重新检测',
+    noNodeHint: '内嵌对话需要系统 Node 18+',
     pausedHint: '已暂停 — 恢复后才能发送',
     goSettings: '去设置',
   },
@@ -63,6 +69,9 @@ const T = {
     regenConfirm: 'Regenerate',
     cancel: 'Cancel',
     noKeyHint: 'Set your Anthropic API key in Settings first',
+    probingHint: 'Checking Claude login…',
+    notLoggedInHint: 'Not logged in: run claude /login in a terminal, then re-check in Settings',
+    noNodeHint: 'Embedded chat needs system Node 18+',
     pausedHint: 'Paused — resume to send',
     goSettings: 'Open Settings',
   },
@@ -154,40 +163,91 @@ function Shell({ cs }) {
   });
   const [model, setModel] = React.useState(() => readPref('ae_mcp_model', DEFAULT_MODEL));
   const [permissionMode, setPermissionMode] = React.useState(() => readPref('ae_mcp_perm_mode', 'manual'));
+  const [backendPref, setBackendPref] = React.useState(() => readPref('ae_mcp_backend', 'subscription'));
+  const [probe, setProbe] = React.useState(null);
   const [chatEntries, setChatEntries] = React.useState([]);
   const [chatStreaming, setChatStreaming] = React.useState(false);
   const prefsRef = React.useRef({ apiKey, model, permissionMode });
   prefsRef.current = { apiKey, model, permissionMode };
+  const extRoot = cs && cs.getSystemPath ? cs.getSystemPath('extension') : '';
+  const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
+  const mcp = React.useMemo(() => createMcpClient({}), []);
+  const handleChatEvent = React.useCallback((evt) => {
+    if (evt.type === 'turn-start') setChatStreaming(true);
+    if (evt.type === 'turn-end' || evt.type === 'error') setChatStreaming(false);
+    setChatEntries((entries) => reduceEvent(entries, evt));
+  }, []);
 
-  const chatLoop = React.useMemo(() => {
-    const mcp = createMcpClient({});
+  const byokLoop = React.useMemo(() => {
     return createAgentLoop({
       getApiKey: () => prefsRef.current.apiKey,
       getModel: () => prefsRef.current.model,
       getPermissionMode: () => prefsRef.current.permissionMode,
       mcp,
       lang,
-      onEvent: (evt) => {
-        if (evt.type === 'turn-start') setChatStreaming(true);
-        if (evt.type === 'turn-end' || evt.type === 'error') setChatStreaming(false);
-        setChatEntries((entries) => reduceEvent(entries, evt));
-      },
+      onEvent: handleChatEvent,
     });
     // lang only affects the system prompt of FUTURE turns; recreating the loop
     // on language switch would drop the conversation, so we intentionally bind
     // the initial value.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mcp, handleChatEvent]);
+
+  // Same as the BYOK loop: lang only affects future system prompts, so avoid
+  // recreating the backend and silently dropping its conversation on language switch.
+  const claudeBackend = React.useMemo(() => createClaudeAgentBackend({
+    resolveNode: resolveSystemNode,
+    sidecarPath,
+    getMcpSpec: () => resolveMcpCommand({ extRoot }),
+    getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
+    getModel: () => prefsRef.current.model,
+    getPermissionMode: () => prefsRef.current.permissionMode,
+    lang,
+    onEvent: handleChatEvent,
+  }), [extRoot, sidecarPath, mcp, handleChatEvent]);
+
+  const effective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey });
+  const activeBackend = effective.backend === 'subscription' ? claudeBackend : byokLoop;
+  const activeBackendRef = React.useRef(null);
+
+  const runClaudeProbe = React.useCallback(() => {
+    let alive = true;
+    setProbe(null);
+    probeClaudeLogin({
+      resolveNode: resolveSystemNode,
+      sidecarPath,
+    }).then((result) => {
+      if (alive) setProbe(result);
+    }).catch((e) => {
+      if (alive) setProbe({ loggedIn: false, nodeOk: false, detail: e && e.message ? e.message : String(e) });
+    });
+    return () => { alive = false; };
+  }, [sidecarPath]);
+
+  React.useEffect(() => {
+    if (backendPref !== 'subscription') return undefined;
+    return runClaudeProbe();
+  }, [backendPref, runClaudeProbe]);
+
+  React.useEffect(() => {
+    const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
+    activeBackendRef.current = decision.nextReal;
+    if (!decision.reset) return;
+    byokLoop.reset();
+    claudeBackend.reset();
+    setChatEntries([]);
+    setChatStreaming(false);
+  }, [effective.backend, byokLoop, claudeBackend]);
 
   const sendChat = (text) => {
     const trimmed = String(text || '').trim();
     if (!trimmed) return;
     setChatEntries((entries) => entries.concat({ id: `user-${Date.now()}`, type: 'user-text', text: trimmed }));
-    chatLoop.sendUser(trimmed);
+    activeBackend.sendUser(trimmed);
   };
 
   const newChatSession = () => {
-    chatLoop.reset();
+    activeBackend.reset();
     setChatStreaming(false);
     setChatEntries([]);
   };
@@ -310,6 +370,16 @@ function Shell({ cs }) {
     { id: 'activity', icon: 'list-checks', label: t.activity },
     { id: 'settings', icon: 'settings', label: t.settings },
   ];
+  const backendDisabledHint = effective.reason === 'probing' ? t.probingHint
+    : effective.reason === 'not-logged-in' ? t.notLoggedInHint
+    : effective.reason === 'no-node' ? t.noNodeHint
+    : effective.reason === 'no-key' ? t.noKeyHint
+    : '';
+  const composerDisabled = paused || effective.backend === 'none';
+  const claudeStatus = probe === null ? { state: 'checking' }
+    : probe.nodeOk === false ? { state: 'no-node', detail: probe.detail }
+    : probe.loggedIn === false ? { state: 'not-logged-in', detail: probe.detail }
+    : { state: 'ready', nodeVersion: probe.nodeVersion };
 
   return (
     <React.Fragment>
@@ -329,13 +399,13 @@ function Shell({ cs }) {
             lang={lang}
             entries={chatEntries}
             streaming={chatStreaming}
-            composerDisabled={paused || !apiKey}
-            disabledHint={paused ? t.pausedHint : !apiKey ? t.noKeyHint : ''}
+            composerDisabled={composerDisabled}
+            disabledHint={paused ? t.pausedHint : composerDisabled ? backendDisabledHint : ''}
             noticeActionLabel={paused ? t.resume : t.goSettings}
             onNoticeAction={() => (paused ? togglePause() : setTab('settings'))}
             onSend={sendChat}
-            onStop={() => chatLoop.stop()}
-            onApprove={(id, decision) => chatLoop.approve(id, decision)}
+            onStop={() => activeBackend.stop()}
+            onApprove={(id, decision) => activeBackend.approve(id, decision)}
             onNewSession={newChatSession}
           />
         ) : null}
@@ -375,6 +445,10 @@ function Shell({ cs }) {
             validateKey={validateAnthropicKey}
             model={model}
             onModelChange={(m) => { setModel(m); writePref('ae_mcp_model', m); }}
+            backend={backendPref}
+            onBackendChange={(m) => { setBackendPref(m); writePref('ae_mcp_backend', m); }}
+            claudeStatus={claudeStatus}
+            onRecheckClaude={runClaudeProbe}
             permissionMode={permissionMode}
             onPermissionMode={(m) => { setPermissionMode(m); writePref('ae_mcp_perm_mode', m); }}
           />
