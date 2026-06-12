@@ -12197,7 +12197,7 @@
       entry.reject(error);
     }
     function handleMessage(message) {
-      if (!message || message.jsonrpc !== "2.0") return;
+      if (!message || typeof message !== "object") return;
       const hasId = message.id !== void 0 && message.id !== null;
       if (hasId && !message.method) {
         const entry = pending.get(message.id);

@@ -82,7 +82,10 @@ function createRpc({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEO
   }
 
   function handleMessage(message) {
-    if (!message || message.jsonrpc !== '2.0') return;
+    // codex app-server omits the jsonrpc field on its messages (verified
+    // live: {"id":1,"result":{...}} with no envelope) - accept any parsed
+    // object instead of gating on jsonrpc === '2.0'.
+    if (!message || typeof message !== 'object') return;
     const hasId = message.id !== undefined && message.id !== null;
 
     if (hasId && !message.method) {
