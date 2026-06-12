@@ -21,12 +21,19 @@ const S = {
     backend: '后端',
     backendSub: '订阅',
     backendByok: 'BYOK',
+    backendCodex: 'Codex',
     claudeReady: '已登录 ✓',
     claudeNotLoggedIn: '未登录',
     claudeChecking: '检测中…',
     claudeNoNode: '需要 Node 18+',
     claudeLoginCap: '在终端运行 claude /login 完成登录，然后点「重新检测」',
     recheckClaude: '重新检测',
+    codexSub: 'Codex 订阅',
+    codexReady: '已登录 ✓',
+    codexNotLoggedIn: '未登录 codex',
+    codexChecking: '检测中…',
+    codexLoginCap: '在终端完成 codex 登录，然后点「重新检测」',
+    recheckCodex: '重新检测',
     apiKey: 'API Key',
     apiKeyCap: '仅保存在本机，不会上传',
     saveVerify: '保存并验证',
@@ -74,12 +81,19 @@ const S = {
     backend: 'Backend',
     backendSub: 'Subscription',
     backendByok: 'BYOK',
+    backendCodex: 'Codex',
     claudeReady: 'Logged in ✓',
     claudeNotLoggedIn: 'Not logged in',
     claudeChecking: 'Checking…',
     claudeNoNode: 'Needs Node 18+',
     claudeLoginCap: 'Run claude /login in a terminal, then click Re-check',
     recheckClaude: 'Re-check',
+    codexSub: 'Codex subscription',
+    codexReady: 'Logged in ✓',
+    codexNotLoggedIn: 'Not logged in to codex',
+    codexChecking: 'Checking…',
+    codexLoginCap: 'Sign in with codex in a terminal, then click Re-check',
+    recheckCodex: 'Re-check',
     apiKey: 'API Key',
     apiKeyCap: 'Stored locally, never uploaded',
     saveVerify: 'Save and verify',
@@ -213,6 +227,8 @@ export function SettingsScreen({
   onBackendChange,
   claudeStatus = { state: 'checking' },
   onRecheckClaude,
+  codexStatus = { state: 'checking' },
+  onRecheckCodex,
 }) {
   const t = S[lang] || S.zh;
   const [key, setKey] = React.useState(apiKey);
@@ -238,6 +254,9 @@ export function SettingsScreen({
   const claudeState = (claudeStatus && claudeStatus.state) || 'checking';
   const claudeBadgeStatus = claudeState === 'ready' ? 'ok' : claudeState === 'not-logged-in' ? 'warn' : claudeState === 'no-node' ? 'error' : 'neutral';
   const claudeBadgeText = claudeState === 'ready' ? t.claudeReady : claudeState === 'not-logged-in' ? t.claudeNotLoggedIn : claudeState === 'no-node' ? t.claudeNoNode : t.claudeChecking;
+  const codexState = (codexStatus && codexStatus.state) || 'checking';
+  const codexBadgeStatus = codexState === 'ready' ? 'ok' : codexState === 'not-logged-in' ? 'warn' : 'neutral';
+  const codexBadgeText = codexState === 'ready' ? t.codexReady : codexState === 'not-logged-in' ? t.codexNotLoggedIn : t.codexChecking;
   const saveApiKey = () => {
     if (aiBusy) return;
     setAiBusy(true);
@@ -281,6 +300,7 @@ export function SettingsScreen({
         <Field label={t.backend}>
           <Segmented full value={backend} onChange={onBackendChange} options={[
             { value: 'subscription', label: t.backendSub },
+            { value: 'codex', label: t.backendCodex },
             { value: 'byok', label: t.backendByok },
           ]} />
         </Field>
@@ -290,6 +310,14 @@ export function SettingsScreen({
               <Badge status={claudeBadgeStatus}>{claudeBadgeText}</Badge>
               {claudeState === 'ready' && claudeStatus.nodeVersion ? <span style={{ flex: 1, font: '400 11px/1 var(--font-mono)', color: 'var(--text-secondary)' }}>Node {String(claudeStatus.nodeVersion).replace(/^v?/, 'v')}</span> : <span style={{ flex: 1 }} />}
               <Button variant="secondary" icon="rotate-cw" disabled={claudeState === 'checking'} onClick={onRecheckClaude}>{t.recheckClaude}</Button>
+            </div>
+          </Field>
+        ) : backend === 'codex' ? (
+          <Field label={t.codexSub} caption={codexState === 'not-logged-in' ? t.codexLoginCap : (codexStatus && codexStatus.detail) || null}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Badge status={codexBadgeStatus}>{codexBadgeText}</Badge>
+              {codexState === 'ready' && (codexStatus.email || codexStatus.planType) ? <span style={{ flex: 1, font: '400 11px/1 var(--font-mono)', color: 'var(--text-secondary)' }}>{[codexStatus.email, codexStatus.planType].filter(Boolean).join(' · ')}</span> : <span style={{ flex: 1 }} />}
+              <Button variant="secondary" icon="rotate-cw" disabled={codexState === 'checking'} onClick={onRecheckCodex}>{t.recheckCodex}</Button>
             </div>
           </Field>
         ) : (
