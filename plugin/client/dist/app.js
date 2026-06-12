@@ -10361,7 +10361,7 @@
               }
             ),
             options ? /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 2, minWidth: 0 }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 2, overflow: "hidden" }, children: options }),
+              /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 2 }, children: options }),
               streaming ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
             ] }) : streaming ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
           ]
