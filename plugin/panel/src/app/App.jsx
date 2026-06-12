@@ -23,6 +23,7 @@ import { costBadge } from '../lib/composerOptions';
 import { useActivity } from '../cep/useActivity';
 import { useHandshake } from '../cep/useHandshake';
 import { isWizardDone, markWizardDone } from '../cep/firstRun';
+import { useWizardWiring } from './wizardWiring';
 import { runDiagnostics } from '../cep/diagnostics';
 import { copyText } from '../lib/clipboard';
 import { createHostController, loadSavedPort, savePort, DEFAULT_PORT, buildMcpConfig, isValidPort } from '../cep/hostBridge';
@@ -378,6 +379,11 @@ function Shell({ cs }) {
   };
 
   const mcpConfigStr = JSON.stringify(buildMcpConfig(status.port), null, 2);
+  const claudeStatus = probe === null ? { state: 'checking' }
+    : probe.nodeOk === false ? { state: 'no-node', detail: probe.detail }
+    : probe.loggedIn === false ? { state: 'not-logged-in', detail: probe.detail }
+    : { state: 'ready', nodeVersion: probe.nodeVersion };
+  const wizard = useWizardWiring({ extRoot, lang, claudeStatus });
 
   if (!wizardDone) {
     return (
@@ -392,10 +398,11 @@ function Shell({ cs }) {
         mcpConfig={mcpConfigStr}
         onNext={() => setWizStep((s) => Math.min(4, s + 1))}
         onBack={() => setWizStep((s) => Math.max(1, s - 1))}
-        onCopy={() => copyText(wizStep === 2 ? 'pip install ae-mcp' : mcpConfigStr)}
+        onCopy={() => copyText(mcpConfigStr)}
         onDiagnose={() => { finishWizard(); setDrawerOpen(true); runDiag(); }}
         onDone={finishWizard}
         onSkip={finishWizard}
+        {...wizard.props}
       />
     );
   }
@@ -413,10 +420,6 @@ function Shell({ cs }) {
     : '';
   const composerDisabled = paused || effective.backend === 'none';
   const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
-  const claudeStatus = probe === null ? { state: 'checking' }
-    : probe.nodeOk === false ? { state: 'no-node', detail: probe.detail }
-    : probe.loggedIn === false ? { state: 'not-logged-in', detail: probe.detail }
-    : { state: 'ready', nodeVersion: probe.nodeVersion };
 
   return (
     <React.Fragment>
