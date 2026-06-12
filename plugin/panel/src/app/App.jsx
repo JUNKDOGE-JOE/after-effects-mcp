@@ -50,7 +50,7 @@ const T = {
     cancel: '取消',
     noKeyHint: '先在设置里配置 Anthropic API Key',
     probingHint: '正在检测 Claude 登录态…',
-    notLoggedInHint: '订阅未登录：在终端运行 claude /login，再到设置里重新检测',
+    notLoggedInHint: 'Claude 未登录：在终端运行 claude /login，再到设置里重新检测',
     codexProbingHint: '正在检测 Codex 登录态…',
     codexNotLoggedInHint: 'Codex 未登录：在终端运行 codex 登录后重新检测',
     noNodeHint: '内嵌对话需要系统 Node 18+',
@@ -205,6 +205,7 @@ function Shell({ cs }) {
   const [codexModels, setCodexModels] = React.useState(() => readCachedCodexModels(window.localStorage));
   const [chatEntries, setChatEntries] = React.useState([]);
   const [chatStreaming, setChatStreaming] = React.useState(false);
+  const [thinkingActive, setThinkingActive] = React.useState(false);
   const baseDescriptor = React.useMemo(() => {
     if (backendPref === 'byok') return byokStaticDescriptor();
     if (backendPref === 'codex') return codexStaticDescriptor();
@@ -243,16 +244,14 @@ function Shell({ cs }) {
   };
   const extRoot = cs && cs.getSystemPath ? cs.getSystemPath('extension') : '';
   const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
-  const tierFilePath = React.useMemo(() => {
-    const os = cepRequire('os');
-    const path = cepRequire('path');
-    if (os && path) return path.join(os.tmpdir(), 'ae-mcp-approval-tier.txt');
-    return 'ae-mcp-approval-tier.txt';
-  }, []);
   const mcp = React.useMemo(() => createMcpClient({ extRoot }), [extRoot]);
   const handleChatEvent = React.useCallback((evt) => {
     if (evt.type === 'turn-start') setChatStreaming(true);
-    if (evt.type === 'turn-end' || evt.type === 'error') setChatStreaming(false);
+    if (evt.type === 'thinking') setThinkingActive(!!evt.active);
+    if (evt.type === 'turn-end' || evt.type === 'error') {
+      setChatStreaming(false);
+      setThinkingActive(false);
+    }
     setChatEntries((entries) => reduceEvent(entries, evt));
   }, []);
 
@@ -294,11 +293,11 @@ function Shell({ cs }) {
     getPermissionMode: () => runtimeRef.current.permissionMode,
     getEffort: () => runtimeRef.current.effort,
     getFast: () => runtimeRef.current.fast,
+    getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
     lang,
-    tierFilePath,
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
-  }), [extRoot, tierFilePath, handleChatEvent]);
+  }), [extRoot, mcp, handleChatEvent]);
 
   const effective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey, codexProbe });
   const activeBackend = effective.backend === 'subscription' ? claudeBackend : effective.backend === 'codex' ? codexBackend : byokLoop;
@@ -526,6 +525,7 @@ function Shell({ cs }) {
             lang={lang}
             entries={chatEntries}
             streaming={chatStreaming}
+            thinking={thinkingActive}
             composerDisabled={composerDisabled}
             disabledHint={paused ? t.pausedHint : composerDisabled ? backendDisabledHint : ''}
             noticeActionLabel={paused ? t.resume : t.goSettings}

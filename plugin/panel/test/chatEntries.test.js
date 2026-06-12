@@ -39,6 +39,14 @@ test('tool-denied marks a pending tool as denied', () => {
   assert.equal(entries[0].risk, 'destructive');
 });
 
+test('tool-allowed marks a pending approval as running', () => {
+  let entries = [];
+  entries = reduceEvent(entries, { type: 'approval-required', toolUseId: 'u4', name: 'ae.exec', input: {}, risk: 'destructive' });
+  entries = reduceEvent(entries, { type: 'tool-allowed', toolUseId: 'u4' });
+  assert.equal(entries[0].state, 'running');
+  assert.equal(entries[0].risk, 'destructive');
+});
+
 test('failed tool-result marks a tool as error with returned text', () => {
   let entries = [];
   entries = reduceEvent(entries, { type: 'tool-start', toolUseId: 'u3', name: 'ae.rename', input: {} });

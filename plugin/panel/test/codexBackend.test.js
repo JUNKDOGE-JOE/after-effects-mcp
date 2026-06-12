@@ -74,18 +74,65 @@ async function flush() {
 }
 
 function respond(proc, request, result = {}) {
-  // Real app-server responses omit the jsonrpc envelope (verified live) -
-  // fixtures match reality; notification fixtures keep the envelope so the
-  // tolerant parser stays covered for both shapes.
   proc.pushStdout({ id: request.id, result });
 }
 
-async function startTurn(backend, proc, text = 'hello') {
+const TOOL_META = {
+  allowedTools: [],
+  annotations: {
+    mcp__ae__ae_overview: { readOnly: true, destructive: false },
+    mcp__ae__ae_setProperty: { readOnly: false, destructive: false },
+    mcp__ae__ae_exec: { readOnly: false, destructive: true },
+  },
+};
+
+function realElicitation(tool, params = {}) {
+  return {
+    threadId: 'thread_1',
+    turnId: 'turn_1',
+    serverName: 'ae',
+    mode: 'form',
+    _meta: {
+      codex_approval_kind: 'mcp_tool_call',
+      persist: ['session', 'always'],
+      tool_description: `${tool} — run JSX under an undo group, return the last expression value.`,
+      tool_params: params,
+      tool_params_display: Object.entries(params).map(([name, value]) => ({ name, value, display_name: name })),
+    },
+    message: `Allow the ae MCP server to run tool "${tool}"?`,
+    requestedSchema: { type: 'object', properties: {} },
+  };
+}
+
+function makeBackend(options = {}) {
+  const events = [];
+  const spawned = makeSpawn();
+  const backend = createCodexBackend({
+    spawnImpl: spawned.spawn,
+    getModel: () => 'gpt-5.5',
+    getEffort: () => 'high',
+    getFast: () => true,
+    getPermissionMode: () => 'manual',
+    getMcpSpec: async () => ({ command: 'ae-mcp', args: ['--stdio'], env: { A: 'B' } }),
+    getToolMeta: async () => TOOL_META,
+    onEvent: (evt) => events.push(evt),
+    lang: 'en',
+    env: {
+      PATH: 'C:\\Node',
+      TEMP: 'C:\\tmp',
+      AE_MCP_PANEL_EXT_ROOT: 'C:\\Repo\\plugin\\panel',
+    },
+    ...options,
+  });
+  return { backend, events, spawned };
+}
+
+async function startTurn(backend, spawned, text = 'hello') {
   const pending = backend.sendUser(text);
   await flush();
+  const proc = spawned.procs[0];
   const init = parseWrites(proc)[0];
   assert.equal(init.method, 'initialize');
-  // granular askForApproval is rejected without this opt-in (live error)
   assert.equal(init.params.capabilities.experimentalApi, true);
   respond(proc, init, {});
   await flush();
@@ -95,41 +142,22 @@ async function startTurn(backend, proc, text = 'hello') {
   await flush();
   const turnStart = parseWrites(proc)[2];
   assert.equal(turnStart.method, 'turn/start');
-  return { pending, init, threadStart, turnStart };
+  respond(proc, turnStart, {});
+  await flush();
+  return { pending, proc, init, threadStart, turnStart };
 }
 
-function makeBackend(options = {}) {
-  const events = [];
-  const spawned = makeSpawn();
-  const fsWrites = [];
-  const backend = createCodexBackend({
-    spawnImpl: spawned.spawn,
-    getModel: () => 'gpt-5.5',
-    getEffort: () => 'high',
-    getFast: () => true,
-    getPermissionMode: () => 'manual',
-    getMcpSpec: async () => ({ command: 'ae-mcp', args: ['--stdio'], env: { A: 'B' } }),
-    onEvent: (evt) => events.push(evt),
-    lang: 'en',
-    tierFilePath: 'C:\\tmp\\ae-mcp-approval-tier.txt',
-    fsImpl: {
-      writeFileSync(file, text) {
-        fsWrites.push({ file, text });
-      },
-    },
-    env: {
-      PATH: 'C:\\Node',
-      TEMP: 'C:\\tmp',
-      AE_MCP_PANEL_EXT_ROOT: 'C:\\Repo\\plugin\\panel',
-    },
-    ...options,
+function pushElicitation(proc, id, params) {
+  proc.pushStdout({
+    jsonrpc: '2.0',
+    id,
+    method: 'mcpServer/elicitation/request',
+    params,
   });
-  return { backend, events, spawned, fsWrites };
 }
 
 test('createCodexBackend starts codex app-server and sends thread/start with AE MCP config', async () => {
-  const { backend, spawned, fsWrites } = makeBackend();
-
+  const { backend, spawned } = makeBackend();
   const pending = backend.sendUser('hello');
   await flush();
 
@@ -139,7 +167,6 @@ test('createCodexBackend starts codex app-server and sends thread/start with AE 
   assert.equal(spawned.calls[0].options.shell, true);
   assert.equal(spawned.calls[0].options.stdio, 'pipe');
   assert.equal(spawned.calls[0].options.windowsHide, true);
-  assert.deepEqual(fsWrites, [{ file: 'C:\\tmp\\ae-mcp-approval-tier.txt', text: 'manual' }]);
 
   const proc = spawned.procs[0];
   const init = parseWrites(proc)[0];
@@ -149,13 +176,12 @@ test('createCodexBackend starts codex app-server and sends thread/start with AE 
   await flush();
 
   const threadStart = parseWrites(proc)[1];
-  assert.equal(threadStart.method, 'thread/start');
   assert.equal(threadStart.params.ephemeral, true);
   assert.equal(threadStart.params.cwd, 'C:\\Repo\\plugin');
   assert.equal(threadStart.params.model, 'gpt-5.5');
   assert.equal(threadStart.params.approvalsReviewer, 'user');
   assert.deepEqual(threadStart.params.approvalPolicy, {
-    granular: { mcp_elicitations: true, rules: true, sandbox_approval: true },
+    granular: { mcp_elicitations: true, rules: false, sandbox_approval: false },
   });
   assert.deepEqual(threadStart.params.sandboxPolicy, { type: 'readOnly' });
   assert.deepEqual(threadStart.params.config.mcp_servers.ae, {
@@ -164,14 +190,13 @@ test('createCodexBackend starts codex app-server and sends thread/start with AE 
     env: {
       A: 'B',
       AE_MCP_BACKEND: 'ae-mcp',
-      AE_MCP_APPROVAL_TIER_FILE: 'C:\\tmp\\ae-mcp-approval-tier.txt',
     },
   });
+  assert.equal(Object.hasOwn(threadStart.params.config.mcp_servers.ae.env, 'AE_MCP_APPROVAL_TIER_FILE'), false);
   respond(proc, threadStart, { threadId: 'thread_1' });
   await flush();
 
   const turnStart = parseWrites(proc)[2];
-  assert.equal(turnStart.method, 'turn/start');
   assert.deepEqual(turnStart.params, {
     threadId: 'thread_1',
     input: [{ type: 'text', text: 'hello' }],
@@ -179,54 +204,44 @@ test('createCodexBackend starts codex app-server and sends thread/start with AE 
     effort: 'high',
     serviceTier: 'priority',
     approvalPolicy: {
-      granular: { mcp_elicitations: true, rules: true, sandbox_approval: true },
+      granular: { mcp_elicitations: true, rules: false, sandbox_approval: false },
     },
     sandboxPolicy: { type: 'readOnly' },
   });
+  respond(proc, turnStart, {});
+  await flush();
 
   proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
   await pending;
 });
 
 test('createCodexBackend reuses threadId on subsequent turns', async () => {
-  const { backend, spawned, fsWrites } = makeBackend({
+  const { backend, spawned } = makeBackend({
     getFast: () => false,
     getPermissionMode: () => 'auto',
   });
-  const firstPending = backend.sendUser('one');
-  await flush();
-  const proc = spawned.procs[0];
-  respond(proc, parseWrites(proc)[0], {});
-  await flush();
-  respond(proc, parseWrites(proc)[1], { threadId: 'thread_1' });
-  await flush();
-  const first = { pending: firstPending };
+  const { pending, proc } = await startTurn(backend, spawned, 'one');
   proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
-  await first.pending;
+  await pending;
 
   const second = backend.sendUser('two');
   await flush();
   const writes = parseWrites(proc);
   assert.equal(writes.filter((w) => w.method === 'thread/start').length, 1);
-  const secondTurn = writes[writes.length - 1];
+  const secondTurn = writes.at(-1);
   assert.equal(secondTurn.method, 'turn/start');
   assert.equal(secondTurn.params.threadId, 'thread_1');
   assert.equal(secondTurn.params.input[0].text, 'two');
   assert.equal(Object.hasOwn(secondTurn.params, 'serviceTier'), false);
-  assert.deepEqual(fsWrites.map((w) => w.text), ['auto', 'auto']);
+  respond(proc, secondTurn, {});
+  await flush();
   proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
   await second;
 });
 
 test('createCodexBackend maps app-server turn and tool notifications to panel events', async () => {
   const { backend, events, spawned } = makeBackend();
-  const pending = backend.sendUser('events');
-  await flush();
-  const proc = spawned.procs[0];
-  respond(proc, parseWrites(proc)[0], {});
-  await flush();
-  respond(proc, parseWrites(proc)[1], { threadId: 'thread_1' });
-  await flush();
+  const { pending, proc } = await startTurn(backend, spawned, 'events');
 
   proc.pushStdout({ jsonrpc: '2.0', method: 'turn/started', params: { threadId: 'thread_1' } });
   proc.pushStdout({ jsonrpc: '2.0', method: 'item/agentMessage/delta', params: { phase: 'final_answer', delta: 'hi' } });
@@ -257,6 +272,7 @@ test('createCodexBackend maps app-server turn and tool notifications to panel ev
 
   assert.deepEqual(events, [
     { type: 'turn-start' },
+    { type: 'thinking', active: false },
     { type: 'text-delta', text: 'hi', phase: 'final_answer' },
     { type: 'tool-start', toolUseId: 'call_x', name: 'mcp__ae__ae_ping', input: {} },
     { type: 'tool-result', toolUseId: 'call_x', name: 'mcp__ae__ae_ping', ok: true, text: '{"ok": true}', durationMs: 53 },
@@ -264,39 +280,60 @@ test('createCodexBackend maps app-server turn and tool notifications to panel ev
   ]);
 });
 
-test('createCodexBackend routes elicitation requests through approval-required and approve responses', async () => {
-  const { backend, events, spawned } = makeBackend();
-  const pending = backend.sendUser('approve');
-  await flush();
-  const proc = spawned.procs[0];
-  respond(proc, parseWrites(proc)[0], {});
-  await flush();
-  respond(proc, parseWrites(proc)[1], { threadId: 'thread_1' });
-  await flush();
+test('codex approval adapter applies four tiers and annotations', async () => {
+  const cases = [
+    { mode: 'none', tool: 'ae_exec', params: { code: 'app.project' }, response: 'accept', event: null },
+    { mode: 'readonly', tool: 'ae_setProperty', params: { value: 1 }, response: 'decline', event: { type: 'tool-denied', toolUseId: 'ask_readonly' }, id: 'ask_readonly' },
+    { mode: 'auto', tool: 'ae_setProperty', params: { value: 2 }, response: 'accept', event: null },
+    { mode: 'auto', tool: 'ae_exec', params: { code: 'app.project' }, response: null, event: { type: 'approval-required', toolUseId: 'ask_auto', name: 'mcp__ae__ae_exec', input: { code: 'app.project' }, risk: 'destructive' }, id: 'ask_auto' },
+    { mode: 'manual', tool: 'ae_overview', params: {}, response: 'accept', event: null },
+  ];
 
-  proc.pushStdout({
-    jsonrpc: '2.0',
-    id: 'ask_1',
-    method: 'mcpServer/elicitation/request',
-    params: { server: 'ae', tool: 'ae_exec', name: 'ae_exec', arguments: { code: 'app.project' } },
-  });
+  for (const item of cases) {
+    const { backend, events, spawned } = makeBackend({ getPermissionMode: () => item.mode });
+    const { pending, proc } = await startTurn(backend, spawned, item.mode);
+    const id = item.id || `ask_${item.mode}`;
+    pushElicitation(proc, id, realElicitation(item.tool, item.params));
+
+    if (item.response) {
+      assert.deepEqual(parseWrites(proc).at(-1), { jsonrpc: '2.0', id, result: { action: item.response, content: {} } });
+      assert.equal(events.some((evt) => evt.type === 'approval-required'), false);
+    } else {
+      assert.deepEqual(events.at(-1), item.event);
+    }
+    if (item.event && item.event.type === 'tool-denied') assert.deepEqual(events.at(-1), item.event);
+    proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+    await pending;
+  }
+});
+
+test('manual approval allow, allow-session, and deny write elicitation responses', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { pending, proc } = await startTurn(backend, spawned, 'approve');
+
+  pushElicitation(proc, 'ask_1', realElicitation('ae_exec', { code: 'app.project' }));
   assert.deepEqual(events.at(-1), {
     type: 'approval-required',
     toolUseId: 'ask_1',
     name: 'mcp__ae__ae_exec',
     input: { code: 'app.project' },
+    risk: 'destructive',
   });
+  backend.approve('ask_1', 'allow');
+  assert.deepEqual(parseWrites(proc).at(-1), { jsonrpc: '2.0', id: 'ask_1', result: { action: 'accept', content: {} } });
+  assert.deepEqual(events.at(-1), { type: 'tool-allowed', toolUseId: 'ask_1' });
 
-  backend.approve('ask_1', 'allow-session');
-  const accept = parseWrites(proc).at(-1);
-  assert.deepEqual(accept, { jsonrpc: '2.0', id: 'ask_1', result: { action: 'accept', content: {} } });
+  pushElicitation(proc, 'ask_2', realElicitation('ae_exec', { code: 'app.project.item(1).remove()' }));
+  backend.approve('ask_2', 'allow-session');
+  assert.deepEqual(parseWrites(proc).at(-1), { jsonrpc: '2.0', id: 'ask_2', result: { action: 'accept', content: {} } });
+  assert.deepEqual(events.at(-1), { type: 'tool-allowed', toolUseId: 'ask_2' });
 
-  proc.pushStdout({
-    jsonrpc: '2.0',
-    id: 22,
-    method: 'mcpServer/elicitation/request',
-    params: { server: 'ae', tool: 'ae_delete', arguments: { id: 1 } },
-  });
+  const eventCount = events.length;
+  pushElicitation(proc, 'ask_3', realElicitation('ae_exec', { code: 'app.project' }));
+  assert.deepEqual(parseWrites(proc).at(-1), { jsonrpc: '2.0', id: 'ask_3', result: { action: 'accept', content: {} } });
+  assert.equal(events.length, eventCount);
+
+  pushElicitation(proc, 22, realElicitation('ae_setProperty', { value: 3 }));
   backend.approve('22', 'deny');
   assert.deepEqual(events.at(-1), { type: 'tool-denied', toolUseId: '22' });
   assert.deepEqual(parseWrites(proc).at(-1), { jsonrpc: '2.0', id: 22, result: { action: 'decline', content: {} } });
@@ -305,23 +342,66 @@ test('createCodexBackend routes elicitation requests through approval-required a
   await pending;
 });
 
+test('elicitation tool name parsing supports message regex and tool_description fallback', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { pending, proc } = await startTurn(backend, spawned, 'parse');
+
+  pushElicitation(proc, 'ask_msg', realElicitation('ae_setProperty', { value: 4 }));
+  assert.deepEqual(events.at(-1), {
+    type: 'approval-required',
+    toolUseId: 'ask_msg',
+    name: 'mcp__ae__ae_setProperty',
+    input: { value: 4 },
+    risk: 'write',
+  });
+  backend.approve('ask_msg', 'deny');
+
+  const fallback = realElicitation('ae_exec', { code: 'app.project' });
+  delete fallback.message;
+  pushElicitation(proc, 'ask_desc', fallback);
+  assert.deepEqual(events.at(-1), {
+    type: 'approval-required',
+    toolUseId: 'ask_desc',
+    name: 'mcp__ae__ae_exec',
+    input: { code: 'app.project' },
+    risk: 'destructive',
+  });
+
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+});
+
+test('thinking events track reasoning start, completion, and answer delta', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { pending, proc } = await startTurn(backend, spawned, 'think');
+
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/started', params: { threadId: 'thread_1' } });
+  proc.pushStdout({ jsonrpc: '2.0', method: 'item/started', params: { item: { type: 'reasoning', id: 'r1' } } });
+  proc.pushStdout({ jsonrpc: '2.0', method: 'item/completed', params: { item: { type: 'reasoning', id: 'r1' } } });
+  proc.pushStdout({ jsonrpc: '2.0', method: 'item/started', params: { item: { type: 'reasoning', id: 'r2' } } });
+  proc.pushStdout({ jsonrpc: '2.0', method: 'item/agentMessage/delta', params: { delta: 'done' } });
+
+  assert.deepEqual(events.filter((evt) => evt.type === 'thinking'), [
+    { type: 'thinking', active: true },
+    { type: 'thinking', active: false },
+    { type: 'thinking', active: true },
+    { type: 'thinking', active: false },
+  ]);
+
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+});
+
 test('createCodexBackend stop interrupts the turn, drains pending approvals, and emits aborted error', async () => {
   const { backend, events, spawned } = makeBackend();
-  const pending = backend.sendUser('stop');
-  await flush();
-  const proc = spawned.procs[0];
-  respond(proc, parseWrites(proc)[0], {});
-  await flush();
-  respond(proc, parseWrites(proc)[1], { threadId: 'thread_1' });
-  await flush();
+  const { pending, proc } = await startTurn(backend, spawned, 'stop');
 
   proc.pushStdout({ method: 'turn/started', params: { threadId: 'thread_1', turn: { id: 'turn_1' } } });
-  proc.pushStdout({ jsonrpc: '2.0', id: 'ask_stop', method: 'mcpServer/elicitation/request', params: { tool: 'ae_exec', arguments: {} } });
+  pushElicitation(proc, 'ask_stop', realElicitation('ae_exec', {}));
   backend.stop();
   const writes = parseWrites(proc);
 
   assert.equal(writes.at(-2).method, 'turn/interrupt');
-  // TurnInterruptParams requires BOTH ids (schema-verified)
   assert.deepEqual(writes.at(-2).params, { threadId: 'thread_1', turnId: 'turn_1' });
   assert.deepEqual(writes.at(-1), { jsonrpc: '2.0', id: 'ask_stop', result: { action: 'decline', content: {} } });
   assert.deepEqual(events.slice(-2), [
@@ -333,13 +413,7 @@ test('createCodexBackend stop interrupts the turn, drains pending approvals, and
 
 test('createCodexBackend reset kills the app-server process and clears thread state', async () => {
   const { backend, spawned } = makeBackend();
-  const first = backend.sendUser('one');
-  await flush();
-  const proc = spawned.procs[0];
-  respond(proc, parseWrites(proc)[0], {});
-  await flush();
-  respond(proc, parseWrites(proc)[1], { threadId: 'thread_1' });
-  await flush();
+  const { pending: first, proc } = await startTurn(backend, spawned, 'one');
 
   backend.reset();
   assert.equal(proc.killed, true);
@@ -352,6 +426,8 @@ test('createCodexBackend reset kills the app-server process and clears thread st
   respond(proc2, parseWrites(proc2)[0], {});
   await flush();
   respond(proc2, parseWrites(proc2)[1], { threadId: 'thread_2' });
+  await flush();
+  respond(proc2, parseWrites(proc2)[2], {});
   proc2.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
   await second;
 });

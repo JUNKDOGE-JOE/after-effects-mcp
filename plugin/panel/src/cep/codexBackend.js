@@ -4,7 +4,7 @@ import { PANEL_VERSION } from './mcpClient.js';
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
 const APPROVAL_POLICY = {
-  granular: { mcp_elicitations: true, rules: true, sandbox_approval: true },
+  granular: { mcp_elicitations: true, rules: false, sandbox_approval: false },
 };
 // Tagged union per the protocol schema: ReadOnlySandboxPolicy.
 const SANDBOX_POLICY = { type: 'readOnly' };
@@ -20,10 +20,6 @@ function getCepRequire() {
 
 function getCepEnv() {
   return (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env) || {};
-}
-
-function defaultFs() {
-  return getCepRequire()('fs');
 }
 
 function appendTail(tail, chunk) {
@@ -150,14 +146,24 @@ function createRpc({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEO
 }
 
 function prefixedToolName(params) {
-  const raw = params && (params.name || params.tool || params.toolName || (params.request && params.request.tool));
+  const raw = elicitationToolName(params);
   if (!raw) return '';
   const text = String(raw);
   return text.startsWith('mcp__') ? text : 'mcp__ae__' + text;
 }
 
+function elicitationToolName(params) {
+  if (!params || typeof params !== 'object') return '';
+  const match = String(params.message || '').match(/run tool "([^"]+)"/);
+  if (match) return match[1];
+  const description = params._meta && params._meta.tool_description;
+  if (description) return String(description).split('—')[0].trim();
+  return params.name || params.tool || params.toolName || (params.request && params.request.tool) || '';
+}
+
 function elicitationInput(params) {
   if (!params || typeof params !== 'object') return params;
+  if (params._meta && params._meta.tool_params !== undefined) return params._meta.tool_params;
   if (params.arguments !== undefined) return params.arguments;
   if (params.input !== undefined) return params.input;
   if (params.request && params.request.arguments !== undefined) return params.request.arguments;
@@ -189,10 +195,9 @@ export function createCodexBackend({
   getFast,
   getPermissionMode,
   getMcpSpec,
+  getToolMeta,
   onEvent,
   lang = 'zh',
-  tierFilePath,
-  fsImpl,
   env,
 }) {
   let proc = null;
@@ -208,7 +213,9 @@ export function createCodexBackend({
   let activeRun = null;
   let activeResolve = null;
   let activeAssistantText = '';
+  let toolMeta = { allowedTools: [], annotations: {} };
   const pendingApprovals = new Map();
+  const sessionAllowedTools = new Set();
 
   function emit(evt) {
     if (onEvent) onEvent(evt);
@@ -217,15 +224,6 @@ export function createCodexBackend({
   function getSpawn() {
     if (spawnImpl) return spawnImpl;
     return getCepRequire()('child_process').spawn;
-  }
-
-  function getFs() {
-    return fsImpl || defaultFs();
-  }
-
-  function writeTierFile() {
-    if (!tierFilePath) return;
-    getFs().writeFileSync(tierFilePath, String(getPermissionMode ? getPermissionMode() : 'manual'));
   }
 
   function currentEnv() {
@@ -261,6 +259,7 @@ export function createCodexBackend({
       return;
     }
     if (message.method === 'item/agentMessage/delta') {
+      emit({ type: 'thinking', active: false });
       const text = params.delta !== undefined ? params.delta : params.text;
       if (text) {
         activeAssistantText += String(text);
@@ -270,6 +269,10 @@ export function createCodexBackend({
     }
     if (message.method === 'item/started') {
       const item = itemFromParams(params);
+      if (item.type === 'reasoning') {
+        emit({ type: 'thinking', active: true });
+        return;
+      }
       if (item.type !== 'mcpToolCall') return;
       emit({
         type: 'tool-start',
@@ -281,6 +284,10 @@ export function createCodexBackend({
     }
     if (message.method === 'item/completed') {
       const item = itemFromParams(params);
+      if (item.type === 'reasoning') {
+        emit({ type: 'thinking', active: false });
+        return;
+      }
       if (item.type !== 'mcpToolCall') return;
       emit({
         type: 'tool-result',
@@ -307,6 +314,15 @@ export function createCodexBackend({
     }
   }
 
+  function acceptElicitation(rpcId) {
+    if (rpc) rpc.respond(rpcId, { action: 'accept', content: {} });
+  }
+
+  function declineElicitation(rpcId, toolUseId) {
+    if (rpc) rpc.respond(rpcId, { action: 'decline', content: {} });
+    emit({ type: 'tool-denied', toolUseId });
+  }
+
   function handleRequest(message) {
     if (message.method !== 'mcpServer/elicitation/request') {
       if (rpc) rpc.respondError(message.id, -32601, 'Method not found');
@@ -314,10 +330,26 @@ export function createCodexBackend({
     }
     const toolUseId = String(message.id);
     const params = message.params || {};
+    const name = prefixedToolName(params);
+    const input = elicitationInput(params) || {};
+    const annotations = (toolMeta && toolMeta.annotations) || {};
+    const ann = annotations[name] || {};
+    const tier = getPermissionMode ? getPermissionMode() : 'manual';
+
+    if (sessionAllowedTools.has(name) || ann.readOnly || tier === 'none' || (tier === 'auto' && !ann.destructive)) {
+      acceptElicitation(message.id);
+      return;
+    }
+
+    if (tier === 'readonly') {
+      declineElicitation(message.id, toolUseId);
+      return;
+    }
+
     const approval = {
       rpcId: message.id,
-      name: prefixedToolName(params),
-      input: elicitationInput(params),
+      name,
+      input,
     };
     pendingApprovals.set(toolUseId, approval);
     emit({
@@ -325,6 +357,7 @@ export function createCodexBackend({
       toolUseId,
       name: approval.name,
       input: approval.input,
+      risk: ann.destructive ? 'destructive' : 'write',
     });
   }
 
@@ -420,6 +453,7 @@ export function createCodexBackend({
     if (threadId) return threadId;
     await initialize();
     const mcpSpec = await getMcpSpec();
+    toolMeta = getToolMeta ? await getToolMeta() : { allowedTools: [], annotations: {} };
     const spawnEnv = currentEnv();
     const result = await rpc.request('thread/start', {
       ephemeral: true,
@@ -435,7 +469,6 @@ export function createCodexBackend({
             args: mcpSpec.args || [],
             env: Object.assign({}, mcpSpec.env || {}, {
               AE_MCP_BACKEND: 'ae-mcp',
-              AE_MCP_APPROVAL_TIER_FILE: tierFilePath,
             }),
           },
         },
@@ -467,7 +500,6 @@ export function createCodexBackend({
     });
 
     try {
-      writeTierFile();
       await ensureThread();
       const userText = String(text || '');
       transcript.push({ role: 'user', text: userText });
@@ -493,8 +525,10 @@ export function createCodexBackend({
     if (!approval || !rpc) return;
     pendingApprovals.delete(id);
     const action = decision === 'deny' ? 'decline' : 'accept';
+    if (action === 'accept' && decision === 'allow-session') sessionAllowedTools.add(approval.name);
     rpc.respond(approval.rpcId, { action, content: {} });
     if (action === 'decline') emit({ type: 'tool-denied', toolUseId: id });
+    else emit({ type: 'tool-allowed', toolUseId: id });
   }
 
   function stop() {
@@ -526,6 +560,8 @@ export function createCodexBackend({
     currentTurnId = null;
     transcript = [];
     pendingApprovals.clear();
+    sessionAllowedTools.clear();
+    toolMeta = { allowedTools: [], annotations: {} };
     finishActive();
     stderrTail = '';
     stopping = false;

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Icon } from '../components/core/Icon';
 import { Button } from '../components/core/Button';
+import { Spinner } from '../components/core/Spinner';
 import { ChatBubble } from '../components/chat/ChatBubble';
 import { ToolCallCard } from '../components/chat/ToolCallCard';
 import { ApprovalCard } from '../components/chat/ApprovalCard';
@@ -30,6 +31,7 @@ const C = {
     ok: '完成',
     failed: '失败',
     awaiting: '等待批准',
+    thinking: '思考中…',
   },
   en: {
     hello: 'Hi! I can operate the open AE project directly. Try one of these:',
@@ -49,6 +51,7 @@ const C = {
     ok: 'Done',
     failed: 'Failed',
     awaiting: 'Awaiting approval',
+    thinking: 'Thinking…',
   },
 };
 
@@ -151,6 +154,7 @@ export function ChatScreen({
   lang = 'zh',
   entries = [],
   streaming = false,
+  thinking = false,
   composerDisabled = false,
   disabledHint = '',
   onSend,
@@ -212,7 +216,7 @@ export function ChatScreen({
   React.useEffect(() => {
     const el = logRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [entries, streaming]);
+  }, [entries, streaming, thinking]);
 
   const send = () => {
     const text = draft.trim();
@@ -258,6 +262,13 @@ export function ChatScreen({
         {entries.map((entry) => (
           <Entry key={entry.id} entry={entry} lang={lang} onApprove={onApprove} />
         ))}
+
+        {streaming && thinking ? (
+          <div style={{ paddingLeft: 28, display: 'flex', alignItems: 'center', gap: 6, font: '400 11px/1.4 var(--font-ui)', color: 'var(--text-tertiary)' }}>
+            <Spinner size={12} />
+            <span>{t.thinking}</span>
+          </div>
+        ) : null}
       </div>
 
       <div style={{ flex: 'none', padding: 'var(--space-2) var(--space-3) var(--space-3)', borderTop: '1px solid var(--border-subtle)' }}>
