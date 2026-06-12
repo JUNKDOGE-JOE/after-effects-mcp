@@ -257,7 +257,7 @@ class AeGetPropertiesArgs(_StrictModel):
     """ae.getProperties — search properties by name across selected layers."""
     comp_id: Optional[str] = Field(None, description="AE comp id. Omit for active.")
     layer_ids: List[Annotated[int, Field(ge=1)]] = Field(..., min_length=1, description="1-based layer indices to scan.")
-    query: str = Field(..., description="Multi-word AND; '|' separates OR groups.")
+    query: str = Field(..., description="Multi-word AND; '|' separates OR groups. Terms match display name + matchName + English aliases for common transform/text/mask props. On localized (non-English) AE prefer matchName words, e.g. 'text document'.")
     offset: int = Field(0, ge=0, description="Pagination offset.")
     limit: int = Field(50, ge=1, le=500, description="Pagination size.")
 
