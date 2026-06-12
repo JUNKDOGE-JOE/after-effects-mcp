@@ -21,7 +21,7 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import CallToolResult, TextContent, Tool
 
-from ae_mcp import client_identity
+from ae_mcp import approval_gate, client_identity
 from ae_mcp.annotations import VERB_ANNOTATIONS
 from ae_mcp.error_hints import append_hint
 from ae_mcp.handlers import HANDLERS, load_all
@@ -236,6 +236,14 @@ def build_server() -> Server:
             ctx = server.request_context  # type: ignore[attr-defined]
         except LookupError:
             ctx = None
+
+        gated = await approval_gate.enforce(canonical, ctx)
+        if gated is not None:
+            payload = _format_result(gated)
+            return CallToolResult(
+                content=[TextContent(type="text", text=payload)],
+                isError=True,
+            )
 
         try:
             result = await run_fn(validated, ctx)
