@@ -304,7 +304,7 @@ export function SettingsScreen({
           <Field label={t.backendSub} caption={claudeState === 'not-logged-in' ? t.claudeLoginCap : (claudeStatus && claudeStatus.detail) || null}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Badge status={claudeBadgeStatus}>{claudeBadgeText}</Badge>
-              {claudeState === 'ready' && claudeStatus.nodeVersion ? <span style={{ flex: 1, font: '400 11px/1 var(--font-mono)', color: 'var(--text-secondary)' }}>Node v{claudeStatus.nodeVersion}</span> : <span style={{ flex: 1 }} />}
+              {claudeState === 'ready' && claudeStatus.nodeVersion ? <span style={{ flex: 1, font: '400 11px/1 var(--font-mono)', color: 'var(--text-secondary)' }}>Node {String(claudeStatus.nodeVersion).replace(/^v?/, 'v')}</span> : <span style={{ flex: 1 }} />}
               <Button variant="secondary" icon="rotate-cw" disabled={claudeState === 'checking'} onClick={onRecheckClaude}>{t.recheckClaude}</Button>
             </div>
           </Field>

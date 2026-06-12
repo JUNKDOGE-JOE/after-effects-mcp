@@ -8650,6 +8650,15 @@
       sec: "\u5B89\u5168",
       gen: "\u901A\u7528",
       about: "\u5173\u4E8E",
+      backend: "\u540E\u7AEF",
+      backendSub: "\u8BA2\u9605",
+      backendByok: "BYOK",
+      claudeReady: "\u5DF2\u767B\u5F55 \u2713",
+      claudeNotLoggedIn: "\u672A\u767B\u5F55",
+      claudeChecking: "\u68C0\u6D4B\u4E2D\u2026",
+      claudeNoNode: "\u9700\u8981 Node 18+",
+      claudeLoginCap: "\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login \u5B8C\u6210\u767B\u5F55\uFF0C\u7136\u540E\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D",
+      recheckClaude: "\u91CD\u65B0\u68C0\u6D4B",
       apiKey: "API Key",
       apiKeyCap: "\u4EC5\u4FDD\u5B58\u5728\u672C\u673A\uFF0C\u4E0D\u4F1A\u4E0A\u4F20",
       saveVerify: "\u4FDD\u5B58\u5E76\u9A8C\u8BC1",
@@ -8701,6 +8710,15 @@
       sec: "Security",
       gen: "General",
       about: "About",
+      backend: "Backend",
+      backendSub: "Subscription",
+      backendByok: "BYOK",
+      claudeReady: "Logged in \u2713",
+      claudeNotLoggedIn: "Not logged in",
+      claudeChecking: "Checking\u2026",
+      claudeNoNode: "Needs Node 18+",
+      claudeLoginCap: "Run claude /login in a terminal, then click Re-check",
+      recheckClaude: "Re-check",
       apiKey: "API Key",
       apiKeyCap: "Stored locally, never uploaded",
       saveVerify: "Save and verify",
@@ -8820,6 +8838,10 @@
     validateKey,
     model = "claude-sonnet-4-6",
     onModelChange,
+    backend = "subscription",
+    onBackendChange,
+    claudeStatus = { state: "checking" },
+    onRecheckClaude,
     permissionMode = "manual",
     onPermissionMode
   }) {
@@ -8844,6 +8866,9 @@
     };
     const permCap = permissionMode === "manual" ? t.permCap1 : permissionMode === "auto" ? t.permCap2 : t.permCap3;
     const tokenDisplay = tokenRaw ? maskToken(tokenRaw) : t.tokenMissing;
+    const claudeState = claudeStatus && claudeStatus.state || "checking";
+    const claudeBadgeStatus = claudeState === "ready" ? "ok" : claudeState === "not-logged-in" ? "warn" : claudeState === "no-node" ? "error" : "neutral";
+    const claudeBadgeText = claudeState === "ready" ? t.claudeReady : claudeState === "not-logged-in" ? t.claudeNotLoggedIn : claudeState === "no-node" ? t.claudeNoNode : t.claudeChecking;
     const saveApiKey = () => {
       if (aiBusy) return;
       setAiBusy(true);
@@ -8883,7 +8908,18 @@
     };
     return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-5)" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { title: t.ai, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.apiKey, caption: t.apiKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.backend, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Segmented, { full: true, value: backend, onChange: onBackendChange, options: [
+          { value: "subscription", label: t.backendSub },
+          { value: "byok", label: t.backendByok }
+        ] }) }),
+        backend === "subscription" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.backendSub, caption: claudeState === "not-logged-in" ? t.claudeLoginCap : claudeStatus && claudeStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: claudeBadgeStatus, children: claudeBadgeText }),
+          claudeState === "ready" && claudeStatus.nodeVersion ? /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { flex: 1, font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: [
+            "Node ",
+            String(claudeStatus.nodeVersion).replace(/^v?/, "v")
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: claudeState === "checking", onClick: onRecheckClaude, children: t.recheckClaude })
+        ] }) }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.apiKey, caption: t.apiKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { secret: true, value: key, onChange: setKey, placeholder: "sk-ant-...", style: { flex: 1 } }),
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "primary", disabled: aiBusy || !key.trim(), onClick: saveApiKey, children: aiBusy ? t.validating : t.saveVerify }),
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", disabled: aiBusy, onClick: clearApiKey, children: t.clear })
@@ -10745,6 +10781,62 @@
     };
   }
 
+  // src/lib/backendSelect.js
+  function pickBackend({ pref, probe, hasApiKey }) {
+    if (pref === "byok") {
+      return hasApiKey ? { backend: "byok", reason: "ok" } : { backend: "none", reason: "no-key" };
+    }
+    if (probe === null) return { backend: "none", reason: "probing" };
+    if (!probe.nodeOk) return hasApiKey ? { backend: "byok", reason: "no-node" } : { backend: "none", reason: "no-node" };
+    if (!probe.loggedIn) return hasApiKey ? { backend: "byok", reason: "not-logged-in" } : { backend: "none", reason: "not-logged-in" };
+    return { backend: "subscription", reason: "ok" };
+  }
+  function deriveToolMeta(tools) {
+    const allowedTools = [];
+    const annotations = {};
+    for (const tool of tools || []) {
+      const name = "mcp__ae__" + tool.name;
+      const ann = tool && tool.annotations || {};
+      const readOnly = ann.readOnlyHint === true;
+      const destructive = ann.destructiveHint === true;
+      if (readOnly) allowedTools.push(name);
+      annotations[name] = { readOnly, destructive };
+    }
+    return { allowedTools, annotations };
+  }
+  function shouldResetOnBackendChange(prevReal, next) {
+    if (next !== "subscription" && next !== "byok") return { reset: false, nextReal: prevReal || null };
+    if (!prevReal) return { reset: false, nextReal: next };
+    if (prevReal === next) return { reset: false, nextReal: prevReal };
+    return { reset: true, nextReal: next };
+  }
+
+  // src/lib/ndjson.js
+  function createLineSplitter(onLine) {
+    let buffer = "";
+    return function push(chunk) {
+      buffer += String(chunk || "");
+      let index = buffer.indexOf("\n");
+      while (index !== -1) {
+        const line = buffer.slice(0, index).trim();
+        buffer = buffer.slice(index + 1);
+        if (line) onLine(line);
+        index = buffer.indexOf("\n");
+      }
+    };
+  }
+  function createNdjsonReader(onMessage) {
+    return createLineSplitter((line) => {
+      let message;
+      try {
+        message = JSON.parse(line);
+      } catch (e) {
+        return;
+      }
+      onMessage(message);
+    });
+  }
+
   // src/cep/mcpClient.js
   var DEFAULT_TIMEOUT_MS = 3e4;
   var MCP_PROTOCOL_VERSION = "2025-06-18";
@@ -10820,7 +10912,6 @@
   function _createRpc(stdinWrite, onLine, options = {}) {
     const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
     let nextId2 = 1;
-    let buffer = "";
     const pending = /* @__PURE__ */ new Map();
     function rejectPending(id, error) {
       const entry = pending.get(id);
@@ -10844,21 +10935,7 @@
         entry.resolve(message.result);
       }
     }
-    function handleChunk(chunk) {
-      buffer += String(chunk || "");
-      let index = buffer.indexOf("\n");
-      while (index !== -1) {
-        const line = buffer.slice(0, index).trim();
-        buffer = buffer.slice(index + 1);
-        if (line) {
-          try {
-            handleMessage(JSON.parse(line));
-          } catch (e) {
-          }
-        }
-        index = buffer.indexOf("\n");
-      }
-    }
+    const handleChunk = createNdjsonReader(handleMessage);
     if (onLine) onLine(handleChunk);
     function writeMessage(message) {
       stdinWrite(JSON.stringify(message) + "\n");
@@ -11073,6 +11150,410 @@
       }
     }
     return { keyDir, keyPath, readKey, writeKey, clearKey };
+  }
+
+  // src/cep/claudeAuth.js
+  function getCepRequire2() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
+      return globalThis.window.cep_node.require;
+    }
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function getCepEnv2() {
+    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
+  }
+  function normalizeFsPath2(value) {
+    let text = String(value || "").replace(/\//g, "\\");
+    text = text.replace(/\\+$/, "");
+    return text;
+  }
+  function defaultFs2() {
+    return getCepRequire2()("fs");
+  }
+  function defaultSpawn() {
+    return getCepRequire2()("child_process").spawn;
+  }
+  function joinPath2(base, leaf) {
+    return normalizeFsPath2(base) + "\\" + leaf;
+  }
+  function resolveSidecarPath({ extRoot, fsImpl } = {}) {
+    const root = normalizeFsPath2(extRoot || "");
+    const deployed = joinPath2(root, "sidecar\\agent-sidecar.mjs");
+    const repo = joinPath2(root, "..\\sidecar\\agent-sidecar.mjs");
+    const fs = fsImpl || defaultFs2();
+    if (fs.existsSync(deployed)) return deployed;
+    if (fs.existsSync(repo)) return repo;
+    return deployed;
+  }
+  async function probeClaudeLogin({
+    resolveNode,
+    sidecarPath,
+    spawnImpl,
+    env,
+    timeoutMs = 3e4
+  } = {}) {
+    const resolved = await resolveNode();
+    if (!resolved || resolved.ok === false) {
+      return { loggedIn: false, nodeOk: false, detail: resolved && resolved.detail || "node unavailable" };
+    }
+    return await new Promise((resolve) => {
+      let settled = false;
+      let stderr = "";
+      let proc = null;
+      const spawn = spawnImpl || defaultSpawn();
+      const spawnEnv = Object.assign({}, getCepEnv2(), env || {});
+      delete spawnEnv.ANTHROPIC_API_KEY;
+      function finish(result) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(result);
+      }
+      const timer = setTimeout(() => {
+        if (proc && proc.kill) {
+          try {
+            proc.kill();
+          } catch (e) {
+          }
+        }
+        finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: "probe timeout" });
+      }, timeoutMs);
+      try {
+        proc = spawn(resolved.nodePath, [sidecarPath, "--probe"], {
+          stdio: "pipe",
+          windowsHide: true,
+          env: spawnEnv
+        });
+      } catch (e) {
+        finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: e && e.message ? e.message : String(e) });
+        return;
+      }
+      const onMessage = createNdjsonReader((message) => {
+        if (!message || message.t !== "probe-result") return;
+        finish({
+          loggedIn: !!message.loggedIn,
+          nodeOk: true,
+          nodeVersion: resolved.version,
+          detail: message.detail || message.reason || ""
+        });
+      });
+      if (proc.stdout && proc.stdout.on) proc.stdout.on("data", onMessage);
+      if (proc.stderr && proc.stderr.on) {
+        proc.stderr.on("data", (chunk) => {
+          stderr += String(chunk || "");
+          if (stderr.length > 4e3) stderr = stderr.slice(-4e3);
+        });
+      }
+      if (proc.on) {
+        proc.on("error", (err) => {
+          finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: err && err.message ? err.message : String(err) });
+        });
+        proc.on("exit", () => {
+          finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: stderr.trim() || "probe exited without result" });
+        });
+      }
+    });
+  }
+
+  // src/cep/claudeAgentBackend.js
+  var READY_TIMEOUT_MS = 15e3;
+  var STDERR_TAIL_LIMIT = 4096;
+  var FIXED_NODE_CANDIDATE = "C:\\Program Files\\nodejs\\node.exe";
+  function getCepRequire3() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
+      return globalThis.window.cep_node.require;
+    }
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function getCepEnv3() {
+    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
+  }
+  function execFileAsync(execFileImpl, file, args, env) {
+    return new Promise((resolve) => {
+      execFileImpl(file, args, { windowsHide: true, env }, (err, stdout, stderr) => {
+        resolve({ err, stdout: String(stdout || ""), stderr: String(stderr || "") });
+      });
+    });
+  }
+  function nodeCandidates(stdout) {
+    const seen = /* @__PURE__ */ new Set();
+    const candidates = String(stdout || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    candidates.push(FIXED_NODE_CANDIDATE);
+    return candidates.filter((candidate) => {
+      if (seen.has(candidate)) return false;
+      seen.add(candidate);
+      return true;
+    });
+  }
+  function parseMajor(version) {
+    const match = String(version || "").trim().match(/^v(\d+)/);
+    return match ? Number(match[1]) : 0;
+  }
+  async function resolveSystemNode({ execFileImpl, env } = {}) {
+    const execFile = execFileImpl || getCepRequire3()("child_process").execFile;
+    const processEnv = env || getCepEnv3();
+    const where = await execFileAsync(execFile, "where", ["node"], processEnv);
+    const candidates = nodeCandidates(where.err ? "" : where.stdout);
+    for (const candidate of candidates) {
+      const checked = await execFileAsync(execFile, candidate, ["--version"], processEnv);
+      if (checked.err) continue;
+      const version = String(checked.stdout || checked.stderr || "").trim();
+      if (parseMajor(version) >= 18) return { ok: true, nodePath: candidate, version };
+    }
+    return { ok: false, detail: "No system Node 18+ found." };
+  }
+  function clone2(value) {
+    return value == null ? value : JSON.parse(JSON.stringify(value));
+  }
+  function nodeMissingMessage(lang) {
+    if (lang === "zh") return "\u5185\u5D4C\u5BF9\u8BDD\u9700\u8981\u7CFB\u7EDF Node 18+\uFF08\u672A\u68C0\u6D4B\u5230\uFF09\u3002\u5B89\u88C5 Node.js LTS \u540E\u91CD\u8BD5\u3002";
+    return "Embedded chat needs system Node 18+. Install Node.js LTS and retry.";
+  }
+  function sanitizeEnv(env) {
+    const copy = Object.assign({}, env || {});
+    delete copy.ANTHROPIC_API_KEY;
+    return copy;
+  }
+  function appendTail(tail, chunk) {
+    const next = tail + String(chunk || "");
+    return next.length > STDERR_TAIL_LIMIT ? next.slice(next.length - STDERR_TAIL_LIMIT) : next;
+  }
+  function createClaudeAgentBackend({
+    resolveNode = resolveSystemNode,
+    sidecarPath,
+    getMcpSpec,
+    getToolMeta,
+    getModel,
+    getPermissionMode,
+    onEvent,
+    lang = "zh",
+    spawnImpl,
+    env
+  }) {
+    let proc = null;
+    let startPromise = null;
+    let pendingReadyReject = null;
+    let pendingReadyTimer = null;
+    let ready = false;
+    let stopping = false;
+    let stderrTail = "";
+    let transcript = [];
+    let activeRun = null;
+    let activeResolve = null;
+    let activeAssistantText = "";
+    function emit(evt) {
+      if (onEvent) onEvent(evt);
+    }
+    function getSpawn() {
+      if (spawnImpl) return spawnImpl;
+      return getCepRequire3()("child_process").spawn;
+    }
+    function writeMessage(message) {
+      if (!proc || !proc.stdin || !proc.stdin.write) return;
+      proc.stdin.write(JSON.stringify(message) + "\n");
+    }
+    function finishActive() {
+      if (!activeResolve) {
+        activeRun = null;
+        activeAssistantText = "";
+        return;
+      }
+      const resolve = activeResolve;
+      activeResolve = null;
+      activeRun = null;
+      activeAssistantText = "";
+      resolve();
+    }
+    function handleSidecarMessage(message) {
+      if (!message || message.t === "ready") return;
+      if (message.t !== "event") return;
+      const event = message.event;
+      if (!event) return;
+      if (event.type === "text-delta") activeAssistantText += String(event.text || "");
+      emit(event);
+      if (event.type === "turn-end") {
+        transcript.push({ role: "assistant", text: activeAssistantText });
+        finishActive();
+      }
+      if (event.type === "error") finishActive();
+    }
+    function exitDetail(code, signal) {
+      const suffix = signal ? String(code) + " " + signal : String(code);
+      return stderrTail ? suffix + " " + stderrTail : suffix;
+    }
+    function clearReadyWait() {
+      if (pendingReadyTimer) clearTimeout(pendingReadyTimer);
+      pendingReadyTimer = null;
+      pendingReadyReject = null;
+    }
+    function handleExit(code, signal) {
+      const wasStopping = stopping;
+      const wasReady = ready;
+      const detail = exitDetail(code, signal);
+      const rejectReady = pendingReadyReject;
+      proc = null;
+      ready = false;
+      startPromise = null;
+      stopping = false;
+      if (wasStopping) return;
+      if (!wasReady && rejectReady) {
+        clearReadyWait();
+        rejectReady(new Error("sidecar exited: " + detail));
+        return;
+      }
+      if (activeRun) {
+        emit({ type: "error", kind: "mcp", message: "sidecar exited: " + detail });
+        finishActive();
+      }
+    }
+    function handleProcError(error) {
+      const rejectReady = pendingReadyReject;
+      proc = null;
+      ready = false;
+      startPromise = null;
+      if (rejectReady) {
+        clearReadyWait();
+        rejectReady(error instanceof Error ? error : new Error("sidecar error"));
+        return;
+      }
+      if (activeRun) {
+        emit({ type: "error", kind: "mcp", message: error && error.message ? error.message : "sidecar error" });
+        finishActive();
+      }
+    }
+    async function startSidecar() {
+      if (proc && ready) return true;
+      if (startPromise) return startPromise;
+      startPromise = (async () => {
+        const node = await resolveNode();
+        if (!node || !node.ok) {
+          emit({ type: "error", kind: "mcp", message: nodeMissingMessage(lang) });
+          return false;
+        }
+        const mcpSpec = await getMcpSpec();
+        const meta = await getToolMeta();
+        const spawn = getSpawn();
+        const spawnEnv = sanitizeEnv(env || getCepEnv3());
+        stderrTail = "";
+        stopping = false;
+        ready = false;
+        let readyResolve;
+        let readyReject;
+        const readyPromise = new Promise((resolve, reject) => {
+          readyResolve = resolve;
+          readyReject = reject;
+        });
+        pendingReadyReject = readyReject;
+        pendingReadyTimer = setTimeout(() => {
+          pendingReadyTimer = null;
+          pendingReadyReject = null;
+          try {
+            stopping = true;
+            if (proc) proc.kill();
+          } catch (e) {
+          }
+          readyReject(new Error("sidecar ready timed out"));
+        }, READY_TIMEOUT_MS);
+        try {
+          proc = spawn(node.nodePath, [
+            sidecarPath,
+            "--mcp",
+            JSON.stringify(mcpSpec),
+            "--allowed-tools",
+            JSON.stringify(meta.allowedTools),
+            "--annotations",
+            JSON.stringify(meta.annotations),
+            "--model",
+            getModel(),
+            "--lang",
+            lang
+          ], {
+            stdio: "pipe",
+            windowsHide: true,
+            env: spawnEnv
+          });
+        } catch (e) {
+          clearReadyWait();
+          throw e;
+        }
+        const reader = createNdjsonReader((message) => {
+          if (message && message.t === "ready") {
+            ready = true;
+            clearReadyWait();
+            readyResolve(true);
+            return;
+          }
+          handleSidecarMessage(message);
+        });
+        if (proc.stdout && proc.stdout.on) proc.stdout.on("data", reader);
+        if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
+          stderrTail = appendTail(stderrTail, chunk);
+        });
+        proc.on("exit", (code, signal) => handleExit(code, signal));
+        proc.on("error", (error) => {
+          handleProcError(error);
+        });
+        await readyPromise;
+        return true;
+      })();
+      try {
+        return await startPromise;
+      } catch (e) {
+        emit({ type: "error", kind: "mcp", message: e && e.message ? e.message : "Failed to start sidecar." });
+        return false;
+      } finally {
+        startPromise = null;
+      }
+    }
+    async function sendUser(text) {
+      if (activeRun) return activeRun;
+      activeAssistantText = "";
+      activeRun = new Promise((resolve) => {
+        activeResolve = resolve;
+      });
+      const ok = await startSidecar();
+      if (!ok) {
+        finishActive();
+        return activeRun;
+      }
+      const userText = String(text || "");
+      transcript.push({ role: "user", text: userText });
+      writeMessage({ t: "user", text: userText, permissionMode: getPermissionMode(), model: getModel() });
+      return activeRun;
+    }
+    function approve(toolUseId, decision) {
+      writeMessage({ t: "approve", id: toolUseId, decision });
+    }
+    function stop() {
+      writeMessage({ t: "stop" });
+    }
+    function reset() {
+      stopping = true;
+      if (proc) {
+        try {
+          proc.kill();
+        } catch (e) {
+        }
+      }
+      proc = null;
+      ready = false;
+      startPromise = null;
+      transcript = [];
+      finishActive();
+      stderrTail = "";
+      stopping = false;
+    }
+    return {
+      sendUser,
+      approve,
+      stop,
+      reset,
+      getMessages: () => clone2(transcript)
+    };
   }
 
   // src/lib/chatEntries.js
@@ -11407,7 +11888,7 @@
       }
     };
   }
-  function getCepRequire2() {
+  function getCepRequire4() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -11420,7 +11901,7 @@
     function start(port) {
       onStatus("starting", port);
       try {
-        const cepRequire4 = getCepRequire2();
+        const cepRequire4 = getCepRequire4();
         const path = cepRequire4("path");
         const extRoot = normalizeCepPath(cs2.getSystemPath("extension"));
         const hostPath = path.join(extRoot, "host", "server.js");
@@ -11469,6 +11950,9 @@
       regenConfirm: "\u91CD\u65B0\u751F\u6210",
       cancel: "\u53D6\u6D88",
       noKeyHint: "\u5148\u5728\u8BBE\u7F6E\u91CC\u914D\u7F6E Anthropic API Key",
+      probingHint: "\u6B63\u5728\u68C0\u6D4B Claude \u767B\u5F55\u6001\u2026",
+      notLoggedInHint: "\u8BA2\u9605\u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login\uFF0C\u518D\u5230\u8BBE\u7F6E\u91CC\u91CD\u65B0\u68C0\u6D4B",
+      noNodeHint: "\u5185\u5D4C\u5BF9\u8BDD\u9700\u8981\u7CFB\u7EDF Node 18+",
       pausedHint: "\u5DF2\u6682\u505C \u2014 \u6062\u590D\u540E\u624D\u80FD\u53D1\u9001",
       goSettings: "\u53BB\u8BBE\u7F6E"
     },
@@ -11491,6 +11975,9 @@
       regenConfirm: "Regenerate",
       cancel: "Cancel",
       noKeyHint: "Set your Anthropic API key in Settings first",
+      probingHint: "Checking Claude login\u2026",
+      notLoggedInHint: "Not logged in: run claude /login in a terminal, then re-check in Settings",
+      noNodeHint: "Embedded chat needs system Node 18+",
       pausedHint: "Paused \u2014 resume to send",
       goSettings: "Open Settings"
     }
@@ -11574,33 +12061,79 @@
     });
     const [model, setModel] = import_react37.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
     const [permissionMode, setPermissionMode] = import_react37.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
+    const [backendPref, setBackendPref] = import_react37.default.useState(() => readPref("ae_mcp_backend", "subscription"));
+    const [probe, setProbe] = import_react37.default.useState(null);
     const [chatEntries, setChatEntries] = import_react37.default.useState([]);
     const [chatStreaming, setChatStreaming] = import_react37.default.useState(false);
     const prefsRef = import_react37.default.useRef({ apiKey, model, permissionMode });
     prefsRef.current = { apiKey, model, permissionMode };
-    const chatLoop = import_react37.default.useMemo(() => {
-      const mcp = createMcpClient({});
+    const extRoot = cs2 && cs2.getSystemPath ? cs2.getSystemPath("extension") : "";
+    const sidecarPath = import_react37.default.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
+    const mcp = import_react37.default.useMemo(() => createMcpClient({}), []);
+    const handleChatEvent = import_react37.default.useCallback((evt) => {
+      if (evt.type === "turn-start") setChatStreaming(true);
+      if (evt.type === "turn-end" || evt.type === "error") setChatStreaming(false);
+      setChatEntries((entries) => reduceEvent(entries, evt));
+    }, []);
+    const byokLoop = import_react37.default.useMemo(() => {
       return createAgentLoop({
         getApiKey: () => prefsRef.current.apiKey,
         getModel: () => prefsRef.current.model,
         getPermissionMode: () => prefsRef.current.permissionMode,
         mcp,
         lang,
-        onEvent: (evt) => {
-          if (evt.type === "turn-start") setChatStreaming(true);
-          if (evt.type === "turn-end" || evt.type === "error") setChatStreaming(false);
-          setChatEntries((entries) => reduceEvent(entries, evt));
-        }
+        onEvent: handleChatEvent
       });
-    }, []);
+    }, [mcp, handleChatEvent]);
+    const claudeBackend = import_react37.default.useMemo(() => createClaudeAgentBackend({
+      resolveNode: resolveSystemNode,
+      sidecarPath,
+      getMcpSpec: () => resolveMcpCommand({ extRoot }),
+      getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
+      getModel: () => prefsRef.current.model,
+      getPermissionMode: () => prefsRef.current.permissionMode,
+      lang,
+      onEvent: handleChatEvent
+    }), [extRoot, sidecarPath, mcp, handleChatEvent]);
+    const effective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey });
+    const activeBackend = effective.backend === "subscription" ? claudeBackend : byokLoop;
+    const activeBackendRef = import_react37.default.useRef(null);
+    const runClaudeProbe = import_react37.default.useCallback(() => {
+      let alive = true;
+      setProbe(null);
+      probeClaudeLogin({
+        resolveNode: resolveSystemNode,
+        sidecarPath
+      }).then((result) => {
+        if (alive) setProbe(result);
+      }).catch((e) => {
+        if (alive) setProbe({ loggedIn: false, nodeOk: false, detail: e && e.message ? e.message : String(e) });
+      });
+      return () => {
+        alive = false;
+      };
+    }, [sidecarPath]);
+    import_react37.default.useEffect(() => {
+      if (backendPref !== "subscription") return void 0;
+      return runClaudeProbe();
+    }, [backendPref, runClaudeProbe]);
+    import_react37.default.useEffect(() => {
+      const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
+      activeBackendRef.current = decision.nextReal;
+      if (!decision.reset) return;
+      byokLoop.reset();
+      claudeBackend.reset();
+      setChatEntries([]);
+      setChatStreaming(false);
+    }, [effective.backend, byokLoop, claudeBackend]);
     const sendChat = (text) => {
       const trimmed = String(text || "").trim();
       if (!trimmed) return;
       setChatEntries((entries) => entries.concat({ id: `user-${Date.now()}`, type: "user-text", text: trimmed }));
-      chatLoop.sendUser(trimmed);
+      activeBackend.sendUser(trimmed);
     };
     const newChatSession = () => {
-      chatLoop.reset();
+      activeBackend.reset();
       setChatStreaming(false);
       setChatEntries([]);
     };
@@ -11715,6 +12248,9 @@
       { id: "activity", icon: "list-checks", label: t.activity },
       { id: "settings", icon: "settings", label: t.settings }
     ];
+    const backendDisabledHint = effective.reason === "probing" ? t.probingHint : effective.reason === "not-logged-in" ? t.notLoggedInHint : effective.reason === "no-node" ? t.noNodeHint : effective.reason === "no-key" ? t.noKeyHint : "";
+    const composerDisabled = paused || effective.backend === "none";
+    const claudeStatus = probe === null ? { state: "checking" } : probe.nodeOk === false ? { state: "no-node", detail: probe.detail } : probe.loggedIn === false ? { state: "not-logged-in", detail: probe.detail } : { state: "ready", nodeVersion: probe.nodeVersion };
     return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(import_react37.default.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
         StatusBar,
@@ -11738,13 +12274,13 @@
             lang,
             entries: chatEntries,
             streaming: chatStreaming,
-            composerDisabled: paused || !apiKey,
-            disabledHint: paused ? t.pausedHint : !apiKey ? t.noKeyHint : "",
+            composerDisabled,
+            disabledHint: paused ? t.pausedHint : composerDisabled ? backendDisabledHint : "",
             noticeActionLabel: paused ? t.resume : t.goSettings,
             onNoticeAction: () => paused ? togglePause() : setTab("settings"),
             onSend: sendChat,
-            onStop: () => chatLoop.stop(),
-            onApprove: (id, decision) => chatLoop.approve(id, decision),
+            onStop: () => activeBackend.stop(),
+            onApprove: (id, decision) => activeBackend.approve(id, decision),
             onNewSession: newChatSession
           }
         ) : null,
@@ -11794,6 +12330,13 @@
               setModel(m);
               writePref("ae_mcp_model", m);
             },
+            backend: backendPref,
+            onBackendChange: (m) => {
+              setBackendPref(m);
+              writePref("ae_mcp_backend", m);
+            },
+            claudeStatus,
+            onRecheckClaude: runClaudeProbe,
             permissionMode,
             onPermissionMode: (m) => {
               setPermissionMode(m);
