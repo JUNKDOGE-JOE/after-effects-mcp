@@ -143,18 +143,30 @@ function wrapForEvalScriptTransport(code) {
         '}' +
         'return out+"\\"";' +
         '}' +
+        'try{' +
         'var __aemcp_value=eval(' + quoteAsciiJsString(code) + ');' +
         'return "{\\"ok\\":true,\\"result\\":"+__aemcp_quote(__aemcp_value)+"}";' +
+        '}catch(e){' +
+        'var __aemcp_detail=String(e);' +
+        'if(e&&e.line){__aemcp_detail+=" (line "+e.line+")";}' +
+        'return "{\\"ok\\":false,\\"error\\":"+__aemcp_quote(__aemcp_detail)+"}";' +
+        '}' +
         '})()'
     );
 }
 
 function decodeEvalScriptTransportResult(text) {
     let payload = null;
+    if (String(text || '').trim() === '') {
+        throw new Error('evalScript returned no output (ExtendScript engine did not run the transport envelope)');
+    }
     try {
-        payload = JSON.parse(String(text || ''));
+        payload = JSON.parse(String(text));
     } catch (e) {
         throw new Error('invalid evalScript transport envelope: ' + String(text || '').slice(0, 120));
+    }
+    if (payload && payload.ok === false && typeof payload.error === 'string') {
+        throw new Error('ExtendScript error: ' + payload.error);
     }
     if (!payload || payload.ok !== true || typeof payload.result !== 'string') {
         throw new Error('invalid evalScript transport envelope shape');
