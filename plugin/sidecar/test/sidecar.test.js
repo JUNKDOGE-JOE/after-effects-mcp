@@ -353,6 +353,70 @@ test('stop aborts active turn and emits aborted error', async () => {
   ])
 })
 
+test('stop drains pending approval and stale allow-session does not affect later turns', async () => {
+  const writes = []
+  const decisions = []
+  let callCount = 0
+  const sidecar = createSidecar({
+    queryFn: async function * ({ options }) {
+      callCount += 1
+      const id = callCount === 1 ? 'tool-1' : 'tool-2'
+      yield {
+        type: 'assistant',
+        message: { content: [{ type: 'tool_use', id, name: 'mcp__ae__write', input: {} }] }
+      }
+      decisions.push(await options.canUseTool('mcp__ae__write', {}))
+      yield { type: 'result', subtype: 'success', is_error: false, session_id: 'sess-1' }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'first', permissionMode: 'manual' }))
+  await waitFor(() => eventCount(writes, 'approval-required') === 1)
+  sidecar.handleLine(JSON.stringify({ t: 'stop' }))
+  await waitFor(() => eventCount(writes, 'tool-denied') === 1 && decisions.length === 1)
+  sidecar.handleLine(JSON.stringify({ t: 'approve', id: 'tool-1', decision: 'allow-session' }))
+  await waitFor(() => eventCount(writes, 'error') === 1)
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'second', permissionMode: 'manual' }))
+  await waitFor(() => eventCount(writes, 'approval-required') === 2)
+
+  assert.deepEqual(decisions[0], { behavior: 'deny', message: 'Turn was stopped.' })
+  assert.deepEqual(events(writes).filter((event) => event.type === 'tool-denied'), [
+    { type: 'tool-denied', toolUseId: 'tool-1' }
+  ])
+  assert.deepEqual(events(writes).filter((event) => event.type === 'approval-required').map((event) => event.toolUseId), [
+    'tool-1',
+    'tool-2'
+  ])
+})
+
+test('query failure drains pending approval', async () => {
+  const writes = []
+  const sidecar = createSidecar({
+    queryFn: async function * ({ options }) {
+      yield {
+        type: 'assistant',
+        message: { content: [{ type: 'tool_use', id: 'tool-1', name: 'mcp__ae__write', input: {} }] }
+      }
+      options.canUseTool('mcp__ae__write', {})
+      throw new Error('sdk failed')
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'fail', permissionMode: 'manual' }))
+  await waitFor(() => eventCount(writes, 'tool-denied') === 1)
+
+  assert.deepEqual(events(writes).filter((event) => event.type === 'tool-denied'), [
+    { type: 'tool-denied', toolUseId: 'tool-1' }
+  ])
+})
+
 test('query login failures map to auth errors', async () => {
   const writes = []
   const sidecar = createSidecar({

@@ -112,6 +112,7 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
     emitEvent({ type: 'turn-start' })
 
     runTurn(message, turn).finally(() => {
+      drainApprovals('Turn ended.')
       if (activeTurn === turn) {
         activeTurn = null
       }
@@ -339,7 +340,16 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
 
     activeTurn.stopRequested = true
     activeTurn.controller.abort()
+    drainApprovals('Turn was stopped.')
     emitAbortedOnce(activeTurn)
+  }
+
+  function drainApprovals(message) {
+    for (const [id, pending] of approvals) {
+      approvals.delete(id)
+      emitEvent({ type: 'tool-denied', toolUseId: id })
+      pending.resolve({ behavior: 'deny', message })
+    }
   }
 
   function emitAbortedOnce(turn) {
