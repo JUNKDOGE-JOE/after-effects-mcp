@@ -67,8 +67,9 @@ export function createAgentLoop({
 
   function resetPendingApprovals() {
     for (const [id, pending] of pendingApprovals) {
-      pending.resolve({ decision: 'abort' });
       pendingApprovals.delete(id);
+      emit({ type: 'tool-denied', toolUseId: id });
+      pending.resolve({ decision: 'abort' });
     }
   }
 

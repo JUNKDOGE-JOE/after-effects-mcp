@@ -233,6 +233,10 @@ test('createAgentLoop repairs dangling tool_use when stopped during approval', a
   loop.stop();
   await run;
 
+  assert.deepEqual(events.filter((evt) => evt.type === 'tool-denied'), [
+    { type: 'tool-denied', toolUseId: 'tu_stop' },
+  ]);
+
   // History must stay continuable: the recorded assistant tool_use needs a
   // matching tool_result before the next user message.
   const messages = loop.getMessages();
