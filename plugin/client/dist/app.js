@@ -12176,10 +12176,10 @@
     "claude-haiku-4-5-20251001": { input: 1, output: 5 }
   };
   var CLAUDE_MODELS = [
-    { id: "claude-fable-5", label: "Fable 5", effortLevels: ["low", "medium", "high", "xhigh", "max"] },
-    { id: "claude-opus-4-8", label: "Opus 4.8", effortLevels: ["low", "medium", "high", "xhigh", "max"] },
-    { id: "claude-sonnet-4-6", label: "Sonnet 4.6", effortLevels: ["low", "medium", "high", "max"] },
-    { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5", effortLevels: [] }
+    { id: "claude-fable-5", label: "Fable 5", effortLevels: ["low", "medium", "high", "xhigh", "max"], adaptive: true },
+    { id: "claude-opus-4-8", label: "Opus 4.8", effortLevels: ["low", "medium", "high", "xhigh", "max"], adaptive: true },
+    { id: "claude-sonnet-4-6", label: "Sonnet 4.6", effortLevels: ["low", "medium", "high", "max"], adaptive: true },
+    { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5", effortLevels: ["low", "medium", "high"], adaptive: false }
   ];
   var APPROVAL_MODES = [
     { id: "readonly", zh: "\u53EA\u8BFB", en: "Read-only", anchorZh: "\u4EC5\u653E\u884C\u53EA\u8BFB\u5DE5\u5177 \xB7 dontAsk", anchorEn: "read-only allowlist \xB7 dontAsk" },
@@ -12481,7 +12481,7 @@
     const text = String(output || "").toLowerCase();
     return text.includes("winget") && (text.includes("not recognized") || text.includes("not found") || text.includes("enoent") || text.includes("cannot find"));
   }
-  function useWizardWiring({ extRoot, lang, claudeStatus } = {}) {
+  function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin } = {}) {
     const [stepStates, dispatch] = import_react39.default.useReducer(stepReducer, null, initialStepStates);
     const [useUvFallback, setUseUvFallback] = import_react39.default.useState(false);
     const repoRoot = import_react39.default.useMemo(() => {
@@ -12509,6 +12509,10 @@
     const detect = import_react39.default.useCallback(async (id) => {
       dispatch({ type: "detect-start", id });
       if (id === "login") {
+        if (recheckLogin) {
+          recheckLogin();
+          return { ok: false, pending: true };
+        }
         const ok = isLoginOk(claudeStatus);
         dispatch({ type: "detect-result", id, ok, version: ok ? versionFrom(claudeStatus) : "" });
         return { ok, version: versionFrom(claudeStatus) };
@@ -12516,7 +12520,7 @@
       const result = await detectTool(id);
       dispatch({ type: "detect-result", id, ok: result.ok, version: result.version || "" });
       return result;
-    }, [claudeStatus]);
+    }, [claudeStatus, recheckLogin]);
     const install = import_react39.default.useCallback(async (id) => {
       const cmd = activeCmds[id];
       if (!cmd) return { ok: false, output: "No command configured for " + id };
@@ -12558,10 +12562,13 @@
       });
     }, [detect]);
     import_react39.default.useEffect(() => {
-      if (claudeStatus) {
-        const ok = isLoginOk(claudeStatus);
-        dispatch({ type: "detect-result", id: "login", ok, version: ok ? versionFrom(claudeStatus) : "" });
+      if (!claudeStatus) return;
+      if (claudeStatus.state === "checking") {
+        dispatch({ type: "detect-start", id: "login" });
+        return;
       }
+      const ok = isLoginOk(claudeStatus);
+      dispatch({ type: "detect-result", id: "login", ok, version: ok ? versionFrom(claudeStatus) : "" });
     }, [claudeStatus]);
     return {
       stepStates,
@@ -12964,7 +12971,7 @@
       model: effectiveModel,
       permissionMode,
       effort: effectiveEffort,
-      thinking: modelMeta.effortLevels && modelMeta.effortLevels.length ? "adaptive" : null,
+      thinking: modelMeta.adaptive === true ? "adaptive" : null,
       fast: effectiveFast
     };
     const extRoot = cs2 && cs2.getSystemPath ? cs2.getSystemPath("extension") : "";
@@ -13125,7 +13132,7 @@
     };
     const mcpConfigStr = JSON.stringify(buildMcpConfig(status.port), null, 2);
     const claudeStatus = probe === null ? { state: "checking" } : probe.nodeOk === false ? { state: "no-node", detail: probe.detail } : probe.loggedIn === false ? { state: "not-logged-in", detail: probe.detail } : { state: "ready", nodeVersion: probe.nodeVersion };
-    const wizard = useWizardWiring({ extRoot, lang, claudeStatus });
+    const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
     if (!wizardDone) {
       return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
         WizardScreen,

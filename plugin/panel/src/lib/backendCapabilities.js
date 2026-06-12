@@ -14,11 +14,14 @@ export const CLAUDE_PRICE_USD_PER_MTOK = {
   'claude-haiku-4-5-20251001': { input: 1, output: 5 },
 };
 
+// adaptive: whether the model takes thinking {type:'adaptive'}. Haiku accepts
+// effort (live-probed 2026-06-12, effort:'high' turns succeed) but its
+// adaptive-thinking support is unverified, so effort and adaptive decouple.
 export const CLAUDE_MODELS = [
-  { id: 'claude-fable-5', label: 'Fable 5', effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
-  { id: 'claude-opus-4-8', label: 'Opus 4.8', effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
-  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', effortLevels: ['low', 'medium', 'high', 'max'] },
-  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', effortLevels: [] },
+  { id: 'claude-fable-5', label: 'Fable 5', effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'], adaptive: true },
+  { id: 'claude-opus-4-8', label: 'Opus 4.8', effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'], adaptive: true },
+  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', effortLevels: ['low', 'medium', 'high', 'max'], adaptive: true },
+  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', effortLevels: ['low', 'medium', 'high'], adaptive: false },
 ];
 
 export const APPROVAL_MODES = [

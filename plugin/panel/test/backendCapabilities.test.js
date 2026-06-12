@@ -17,7 +17,10 @@ test('claude-sub descriptor lists the full family with effort levels', () => {
   const fable = d.models.find((m) => m.id === 'claude-fable-5');
   assert.deepEqual(fable.effortLevels, ['low', 'medium', 'high', 'xhigh', 'max']);
   const haiku = d.models.find((m) => m.id === 'claude-haiku-4-5-20251001');
-  assert.deepEqual(haiku.effortLevels, []);
+  // effort 真机已证可用（2026-06-12 探针），adaptive thinking 未验证 → 解耦
+  assert.deepEqual(haiku.effortLevels, ['low', 'medium', 'high']);
+  assert.equal(haiku.adaptive, false);
+  assert.equal(fable.adaptive, true);
   assert.equal(d.defaultModelId, 'claude-sonnet-4-6');
   assert.equal(d.defaultEffort, 'high');
   assert.equal(d.supportsFast('claude-opus-4-8'), false);

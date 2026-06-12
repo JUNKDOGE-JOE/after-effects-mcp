@@ -35,7 +35,7 @@ function wingetMissing(output) {
 // App.jsx接线（orchestrator合并时加）：
 //   const wizard = useWizardWiring({ extRoot, lang }); // 内部 useReducer(stepReducer)
 //   <WizardScreen {...现有props} {...wizard.props} />
-export function useWizardWiring({ extRoot, lang, claudeStatus } = {}) {
+export function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin } = {}) {
   const [stepStates, dispatch] = React.useReducer(stepReducer, null, initialStepStates);
   const [useUvFallback, setUseUvFallback] = React.useState(false);
 
@@ -68,6 +68,12 @@ export function useWizardWiring({ extRoot, lang, claudeStatus } = {}) {
   const detect = React.useCallback(async (id) => {
     dispatch({ type: 'detect-start', id });
     if (id === 'login') {
+      // 复检必须真正重跑登录探针——挂载时的探针可能瞬时失败，而设置页的
+      // "重新检测"按钮在向导期间不可达；结果经 claudeStatus effect 回流。
+      if (recheckLogin) {
+        recheckLogin();
+        return { ok: false, pending: true };
+      }
       const ok = isLoginOk(claudeStatus);
       dispatch({ type: 'detect-result', id, ok, version: ok ? versionFrom(claudeStatus) : '' });
       return { ok, version: versionFrom(claudeStatus) };
@@ -75,7 +81,7 @@ export function useWizardWiring({ extRoot, lang, claudeStatus } = {}) {
     const result = await detectTool(id);
     dispatch({ type: 'detect-result', id, ok: result.ok, version: result.version || '' });
     return result;
-  }, [claudeStatus]);
+  }, [claudeStatus, recheckLogin]);
 
   const install = React.useCallback(async (id) => {
     const cmd = activeCmds[id];
@@ -123,10 +129,13 @@ export function useWizardWiring({ extRoot, lang, claudeStatus } = {}) {
   }, [detect]);
 
   React.useEffect(() => {
-    if (claudeStatus) {
-      const ok = isLoginOk(claudeStatus);
-      dispatch({ type: 'detect-result', id: 'login', ok, version: ok ? versionFrom(claudeStatus) : '' });
+    if (!claudeStatus) return;
+    if (claudeStatus.state === 'checking') {
+      dispatch({ type: 'detect-start', id: 'login' });
+      return;
     }
+    const ok = isLoginOk(claudeStatus);
+    dispatch({ type: 'detect-result', id: 'login', ok, version: ok ? versionFrom(claudeStatus) : '' });
   }, [claudeStatus]);
 
   return {
