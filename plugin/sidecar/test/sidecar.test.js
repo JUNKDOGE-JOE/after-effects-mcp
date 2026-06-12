@@ -77,7 +77,8 @@ test('passes session resume on the second user turn', async () => {
     },
     writeLine: (obj) => writes.push(obj),
     argvOptions: defaultOptions,
-    env: {}
+    env: {},
+    now: () => 10
   })
 
   sidecar.handleLine(JSON.stringify({ t: 'user', text: 'one', permissionMode: 'none' }))
@@ -87,6 +88,93 @@ test('passes session resume on the second user turn', async () => {
 
   assert.equal(seenOptions[0].resume, undefined)
   assert.equal(seenOptions[1].resume, 'sess-1')
+})
+
+test('pins turn options to ae agent with annotations and allowed tools whitelist', async () => {
+  const writes = []
+  let seenOptions
+  const sidecar = createSidecar({
+    queryFn: async function * ({ options }) {
+      seenOptions = options
+      yield { type: 'result', subtype: 'success', is_error: false, session_id: 'sess-1' }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: {
+      ...defaultOptions,
+      allowedTools: ['mcp__ae__ae_ping', 'mcp__ae__ae_overview'],
+      annotations: {
+        mcp__ae__ae_ping: { readOnly: true, destructive: false },
+        mcp__ae__ae_write: { readOnly: false, destructive: true }
+      }
+    },
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'options', permissionMode: 'none' }))
+  await waitFor(() => eventCount(writes, 'turn-end') === 1)
+
+  assert.equal(seenOptions.agent, 'ae')
+  assert.deepEqual(seenOptions.agents.ae.tools, [
+    'mcp__ae__ae_ping',
+    'mcp__ae__ae_write',
+    'mcp__ae__ae_overview'
+  ])
+  assert.equal(typeof seenOptions.agents.ae.prompt, 'string')
+  assert.notEqual(seenOptions.agents.ae.prompt.length, 0)
+  assert.equal(Object.hasOwn(seenOptions, 'systemPrompt'), false)
+})
+
+test('filters non ae tool_use and tool_result events while preserving ae tools', async () => {
+  const writes = []
+  const sidecar = createSidecar({
+    queryFn: async function * () {
+      yield {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', id: 'tool-search-1', name: 'ToolSearch', input: { query: 'ae' } },
+            { type: 'tool_use', id: 'tool-ae-1', name: 'mcp__ae__ae_ping', input: { ok: true } }
+          ]
+        }
+      }
+      yield {
+        type: 'user',
+        message: {
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'tool-search-1',
+              content: [{ type: 'text', text: 'search result' }],
+              is_error: false
+            },
+            {
+              type: 'tool_result',
+              tool_use_id: 'tool-ae-1',
+              content: [{ type: 'text', text: 'pong' }],
+              is_error: false
+            }
+          ]
+        }
+      }
+      yield { type: 'result', subtype: 'success', is_error: false, session_id: 'sess-1' }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {},
+    now: () => 10
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'filter', permissionMode: 'none' }))
+  await waitFor(() => eventCount(writes, 'turn-end') === 1)
+
+  assert.equal(events(writes).some((event) => event.name === 'ToolSearch'), false)
+  assert.equal(events(writes).some((event) => event.toolUseId === 'tool-search-1'), false)
+  assert.deepEqual(events(writes).filter((event) => event.type === 'tool-start'), [
+    { type: 'tool-start', toolUseId: 'tool-ae-1', name: 'mcp__ae__ae_ping', input: { ok: true } }
+  ])
+  assert.deepEqual(events(writes).filter((event) => event.type === 'tool-result'), [
+    { type: 'tool-result', toolUseId: 'tool-ae-1', ok: true, text: 'pong', durationMs: 0 }
+  ])
 })
 
 test('manual approval allow and deny resolve canUseTool correctly', async () => {
@@ -229,7 +317,9 @@ test('non ae tool is denied without panel approval events', async () => {
   sidecar.handleLine(JSON.stringify({ t: 'user', text: 'bad', permissionMode: 'manual' }))
   await waitFor(() => eventCount(writes, 'turn-end') === 1)
 
-  assert.deepEqual(decisions, [{ behavior: 'deny', message: 'panel denied non-ae tool' }])
+  assert.deepEqual(decisions, [
+    { behavior: 'deny', message: 'Only After Effects (mcp__ae__*) tools are available in this panel.' }
+  ])
   assert.equal(eventCount(writes, 'approval-required'), 0)
   assert.equal(eventCount(writes, 'tool-denied'), 0)
 })
