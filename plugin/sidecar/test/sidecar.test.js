@@ -490,6 +490,149 @@ test('query options env removes ANTHROPIC_API_KEY', async () => {
   assert.equal(queryEnv.KEEP_ME, 'yes')
 })
 
+test('turn options always carry explicit effort and adaptive thinking when provided', async () => {
+  const writes = []
+  const seen = []
+  const sidecar = createSidecar({
+    queryFn: async function * ({ options }) {
+      seen.push(options)
+      yield { type: 'result', subtype: 'success', is_error: false }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'hi', permissionMode: 'manual', effort: 'xhigh', thinking: 'adaptive' }))
+  await waitFor(() => eventCount(writes, 'turn-end') === 1)
+
+  assert.equal(seen[0].effort, 'xhigh')
+  assert.deepEqual(seen[0].thinking, { type: 'adaptive' })
+})
+
+test('effort omitted defaults to high', async () => {
+  const writes = []
+  const seen = []
+  const sidecar = createSidecar({
+    queryFn: async function * ({ options }) {
+      seen.push(options)
+      yield { type: 'result', subtype: 'success', is_error: false }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'hi', permissionMode: 'manual' }))
+  await waitFor(() => eventCount(writes, 'turn-end') === 1)
+
+  assert.equal(seen[0].effort, 'high')
+  assert.equal(seen[0].thinking, undefined)
+})
+
+test('readonly tier maps to dontAsk with read-only allowlist', async () => {
+  const writes = []
+  const seen = []
+  const sidecar = createSidecar({
+    queryFn: async function * ({ options }) {
+      seen.push(options)
+      yield { type: 'result', subtype: 'success', is_error: false }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: {
+      ...defaultOptions,
+      annotations: {
+        mcp__ae__r: { readOnly: true, destructive: false },
+        mcp__ae__w: { readOnly: false, destructive: false },
+        mcp__ae__x: { readOnly: false, destructive: true }
+      }
+    },
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'hi', permissionMode: 'readonly' }))
+  await waitFor(() => eventCount(writes, 'turn-end') === 1)
+
+  assert.equal(seen[0].permissionMode, 'dontAsk')
+  assert.deepEqual(seen[0].allowedTools, ['mcp__ae__r'])
+})
+
+test('none tier maps to dontAsk with full ae allowlist', async () => {
+  const writes = []
+  const seen = []
+  const sidecar = createSidecar({
+    queryFn: async function * ({ options }) {
+      seen.push(options)
+      yield { type: 'result', subtype: 'success', is_error: false }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: {
+      ...defaultOptions,
+      annotations: {
+        mcp__ae__r: { readOnly: true, destructive: false },
+        mcp__ae__w: { readOnly: false, destructive: false },
+        mcp__ae__x: { readOnly: false, destructive: true }
+      }
+    },
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'hi', permissionMode: 'none' }))
+  await waitFor(() => eventCount(writes, 'turn-end') === 1)
+
+  assert.equal(seen[0].permissionMode, 'dontAsk')
+  assert.deepEqual(seen[0].allowedTools.sort(), ['mcp__ae__r', 'mcp__ae__w', 'mcp__ae__x'])
+})
+
+test('auto tier pre-allows non-destructive and keeps callback for destructive', async () => {
+  const writes = []
+  const seen = []
+  const sidecar = createSidecar({
+    queryFn: async function * ({ options }) {
+      seen.push(options)
+      const approval = options.canUseTool('mcp__ae__x', {})
+      await waitFor(() => eventCount(writes, 'approval-required') === 1)
+      sidecar.handleLine(JSON.stringify({ t: 'approve', id: 'appr-1', decision: 'allow' }))
+      await approval
+      yield { type: 'result', subtype: 'success', is_error: false }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: {
+      ...defaultOptions,
+      annotations: {
+        mcp__ae__r: { readOnly: true, destructive: false },
+        mcp__ae__w: { readOnly: false, destructive: false },
+        mcp__ae__x: { readOnly: false, destructive: true }
+      }
+    },
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'hi', permissionMode: 'auto' }))
+  await waitFor(() => eventCount(writes, 'turn-end') === 1)
+
+  assert.equal(seen[0].permissionMode, undefined)
+  assert.deepEqual(seen[0].allowedTools.sort(), ['mcp__ae__r', 'mcp__ae__w'])
+  assert.equal(eventCount(writes, 'approval-required'), 1)
+})
+
+test('query model failures map to model errors', async () => {
+  const writes = []
+  const sidecar = createSidecar({
+    queryFn: async function * () {
+      throw new Error('model claude-fable-5 not_found_error')
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'model', permissionMode: 'none' }))
+  await waitFor(() => eventCount(writes, 'error') === 1)
+
+  assert.equal(events(writes).find((event) => event.type === 'error').kind, 'model')
+})
+
 function events(writes) {
   return writes.filter((item) => item.t === 'event').map((item) => item.event)
 }

@@ -36,7 +36,7 @@ const S = {
     verifyFailed: '验证失败，请稍后重试',
     clear: '清除',
     cleared: 'API Key 已清除',
-    model: '模型',
+    modelDefault: '默认模型（打开面板时使用）',
     port: '端口',
     portHint: '默认 11488',
     apply: '应用',
@@ -46,13 +46,6 @@ const S = {
     tokenMissing: '未找到 ~/.ae-mcp/auth-token',
     autostart: '随 AE 启动',
     autostartCap: '打开工程时自动启动服务',
-    permTitle: '内嵌对话权限',
-    perm1: '手动批准',
-    perm2: '自动审核',
-    perm3: '无需批准',
-    permCap1: '每个写操作都需要你确认',
-    permCap2: '低风险自动放行，高风险仍需确认',
-    permCap3: '全部放行 - 仅在信任的工程中使用',
     clients: '已连接客户端',
     lastActive: '最后活跃',
     blocked: '屏蔽',
@@ -96,7 +89,7 @@ const S = {
     verifyFailed: 'Verification failed. Try again later.',
     clear: 'Clear',
     cleared: 'API Key cleared',
-    model: 'Model',
+    modelDefault: 'Default model (used when the panel opens)',
     port: 'Port',
     portHint: 'Default 11488',
     apply: 'Apply',
@@ -106,13 +99,6 @@ const S = {
     tokenMissing: '~/.ae-mcp/auth-token not found',
     autostart: 'Launch with AE',
     autostartCap: 'Start the service when a project opens',
-    permTitle: 'Built-in chat permissions',
-    perm1: 'Approve each',
-    perm2: 'Auto-review',
-    perm3: 'Allow all',
-    permCap1: 'Every write operation asks for confirmation',
-    permCap2: 'Low-risk auto-allowed; high-risk still asks',
-    permCap3: 'Everything allowed - trusted projects only',
     clients: 'Connected clients',
     lastActive: 'Last active',
     blocked: 'Block',
@@ -221,13 +207,12 @@ export function SettingsScreen({
   onClearApiKey,
   validateKey,
   model = 'claude-sonnet-4-6',
+  modelOptions,
   onModelChange,
   backend = 'subscription',
   onBackendChange,
   claudeStatus = { state: 'checking' },
   onRecheckClaude,
-  permissionMode = 'manual',
-  onPermissionMode,
 }) {
   const t = S[lang] || S.zh;
   const [key, setKey] = React.useState(apiKey);
@@ -249,7 +234,6 @@ export function SettingsScreen({
       setTimeout(() => setCopied(''), 1200);
     }).catch(() => {});
   };
-  const permCap = permissionMode === 'manual' ? t.permCap1 : permissionMode === 'auto' ? t.permCap2 : t.permCap3;
   const tokenDisplay = tokenRaw ? maskToken(tokenRaw) : t.tokenMissing;
   const claudeState = (claudeStatus && claudeStatus.state) || 'checking';
   const claudeBadgeStatus = claudeState === 'ready' ? 'ok' : claudeState === 'not-logged-in' ? 'warn' : claudeState === 'no-node' ? 'error' : 'neutral';
@@ -317,8 +301,8 @@ export function SettingsScreen({
             </div>
           </Field>
         )}
-        <Field label={t.model}>
-          <Select value={model} onChange={onModelChange} options={[
+        <Field label={t.modelDefault}>
+          <Select value={model} onChange={onModelChange} options={modelOptions || [
             { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
             { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
           ]} />
@@ -351,13 +335,6 @@ export function SettingsScreen({
       </Section>
 
       <Section title={t.sec}>
-        <Field label={t.permTitle} caption={permCap}>
-          <Segmented full value={permissionMode} onChange={onPermissionMode} options={[
-            { value: 'manual', label: t.perm1 },
-            { value: 'auto', label: t.perm2 },
-            { value: 'none', label: t.perm3 },
-          ]} />
-        </Field>
         <div style={{ font: '500 11px/1.35 var(--font-ui)', color: 'var(--text-secondary)', marginTop: 2 }}>{t.clients}</div>
         {clients.map((client) => (
           <ClientRow

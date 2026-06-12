@@ -103,6 +103,8 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
     const controller = new AbortController()
     const turn = {
       permissionMode: normalizePermissionMode(message.permissionMode),
+      effort: typeof message.effort === 'string' && message.effort ? message.effort : 'high',
+      thinking: message.thinking === 'adaptive' ? { type: 'adaptive' } : null,
       controller,
       stopRequested: false,
       abortedEventSent: false
@@ -143,24 +145,42 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
   }
 
   function buildTurnOptions({ model, turn }) {
+    const tiered = tierTools(turn.permissionMode)
     const queryOptions = {
       model,
       mcpServers: buildMcpServers(),
-      allowedTools: options.allowedTools,
+      allowedTools: tiered.allowedTools,
       disallowedTools: DISALLOWED_TOOLS,
       settingSources: [],
       agents: buildAgents(),
       agent: 'ae',
       canUseTool: async (toolName, input) => canUseTool(toolName, input, turn),
       env: baseEnv,
-      abortController: turn.controller
+      abortController: turn.controller,
+      effort: turn.effort
     }
 
+    if (tiered.permissionMode) {
+      queryOptions.permissionMode = tiered.permissionMode
+    }
+    if (turn.thinking) {
+      queryOptions.thinking = turn.thinking
+    }
     if (sessionId) {
       queryOptions.resume = sessionId
     }
 
     return queryOptions
+  }
+
+  function tierTools(tier) {
+    const names = Object.keys(options.annotations)
+    const readOnly = names.filter((name) => options.annotations[name].readOnly === true)
+    const nonDestructive = names.filter((name) => options.annotations[name].destructive !== true)
+    if (tier === 'readonly') return { allowedTools: readOnly, permissionMode: 'dontAsk' }
+    if (tier === 'none') return { allowedTools: names, permissionMode: 'dontAsk' }
+    if (tier === 'auto') return { allowedTools: uniqueToolList([...readOnly, ...nonDestructive]) }
+    return { allowedTools: options.allowedTools }
   }
 
   function buildMcpServers() {
@@ -449,7 +469,7 @@ function cleanEnv(inputEnv) {
 }
 
 function normalizePermissionMode(mode) {
-  if (mode === 'manual' || mode === 'auto' || mode === 'none') {
+  if (mode === 'manual' || mode === 'auto' || mode === 'none' || mode === 'readonly') {
     return mode
   }
   return 'manual'
@@ -491,7 +511,11 @@ function normalizeInput(input) {
 }
 
 function classifyError(error) {
-  return AUTH_RE.test(truncateDetail(error)) ? 'auth' : 'network'
+  const detail = truncateDetail(error)
+  const MODEL_RE = /not_found|model.*(unavailable|not available|does not exist)/i
+  if (AUTH_RE.test(detail)) return 'auth'
+  if (MODEL_RE.test(detail)) return 'model'
+  return 'network'
 }
 
 function truncateDetail(error) {
