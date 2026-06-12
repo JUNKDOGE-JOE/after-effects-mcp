@@ -26,6 +26,20 @@ test('detectTool parses versions and reports missing', async () => {
   assert.equal((await detectTool('claude', { execFileImpl: execFile })).ok, false);
 });
 
+test('detectTool probes claude through a shell (npm .cmd shim needs one)', async () => {
+  const seen = [];
+  const execFile = (file, args, opts, cb) => {
+    seen.push({ file, shell: opts.shell });
+    setImmediate(() => cb(null, '2.1.174 (Claude Code)', ''));
+  };
+  const result = await detectTool('claude', { execFileImpl: execFile });
+  assert.deepEqual(result, { ok: true, version: '2.1.174 (Claude Code)' });
+  assert.deepEqual(seen, [{ file: 'claude', shell: true }]);
+  // uv 是真 .exe：不走 shell
+  await detectTool('uv', { execFileImpl: (f, a, o, cb) => { seen.push({ file: f, shell: o.shell }); setImmediate(() => cb(null, 'uv 0.7.2', '')); } });
+  assert.equal(seen[1].shell, false);
+});
+
 test('detectTool checks ae-mcp presence without executing it (stdio server hangs on any argv)', async () => {
   const shim = 'C:\\Users\\X\\.local\\bin\\ae-mcp.exe';
   // where 命中：直接 ok，version=命中路径
