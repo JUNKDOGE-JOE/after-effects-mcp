@@ -2,7 +2,7 @@ import { createNdjsonReader } from '../lib/ndjson.js';
 
 const DEFAULT_TIMEOUT_MS = 30000;
 const MCP_PROTOCOL_VERSION = '2025-06-18';
-const PANEL_VERSION = '0.4.0';
+export const PANEL_VERSION = '0.5.0';
 
 function getCepRequire() {
   if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
@@ -51,7 +51,7 @@ function defaultFs() {
   return getCepRequire()('fs');
 }
 
-function findProjectRoot({ extRoot, repoRoot, fsImpl }) {
+export function findProjectRoot({ extRoot, repoRoot, fsImpl }) {
   if (repoRoot && fsImpl.existsSync(joinPath(repoRoot, 'pyproject.toml'))) return normalizeFsPath(repoRoot);
 
   let current = normalizeFsPath(extRoot);
@@ -68,6 +68,7 @@ export async function resolveMcpCommand({
   explicitPath,
   whereImpl = defaultWhereImpl,
   fsImpl,
+  envImpl = null,
   extRoot = '',
   repoRoot = '',
 } = {}) {
@@ -78,6 +79,12 @@ export async function resolveMcpCommand({
   if (found) return { command: found, args: [], source: 'where' };
 
   const fs = fsImpl || defaultFs();
+  const profile = (envImpl || getCepEnv()).USERPROFILE || '';
+  if (profile) {
+    const shim = joinPath(joinPath(joinPath(normalizeFsPath(profile), '.local'), 'bin'), 'ae-mcp.exe');
+    if (fs.existsSync(shim)) return { command: shim, args: [], source: 'uv-tool' };
+  }
+
   const projectRoot = findProjectRoot({ extRoot, repoRoot, fsImpl: fs });
   if (projectRoot) {
     return { command: 'uv', args: ['run', '--project', projectRoot, 'ae-mcp'], source: 'uv' };

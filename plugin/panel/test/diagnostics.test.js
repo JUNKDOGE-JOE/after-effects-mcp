@@ -29,14 +29,15 @@ function makeDeps({ token = TOKEN, lastHealthAt = Date.now(), lastClientSeenAt =
       }
       return { ok: true, json: async () => ({ ok: true, result: 'unsaved' }) };
     },
+    execFileImpl: (file, args, opts, cb) => cb(null, file + ' version', ''),
   };
 }
 
 test('runDiagnostics returns all green checks with injected dependencies', async () => {
   const deps = makeDeps();
   const items = await runDiagnostics({ ...deps, port: 11488 });
-  assert.deepEqual(items.map((i) => i.id), ['host-listening', 'token-file', 'python-seen', 'ae-project', 'extendscript-ping']);
-  assert.deepEqual(items.map((i) => i.ok), [true, true, true, true, true]);
+  assert.deepEqual(items.map((i) => i.id), ['host-listening', 'token-file', 'python-seen', 'ae-project', 'extendscript-ping', 'uv', 'node', 'claude']);
+  assert.deepEqual(items.map((i) => i.ok), [true, true, true, true, true, true, true, true]);
   assert.match(items[0].detail, /0\.3\.2/);
   assert.match(items[3].detail, /unsaved/);
   assert.equal(deps.calls[1].options.headers['x-ae-mcp-token'], TOKEN);
@@ -74,4 +75,27 @@ test('runDiagnostics exec probes identify as panel-internal client', async () =>
   for (const c of execCalls) {
     assert.equal(c.options.headers['x-ae-mcp-client'], 'panel-diagnostics/internal');
   }
+});
+
+test('runDiagnostics appends uv node and claude presence checks', async () => {
+  const execFileImpl = (file, args, opts, cb) => {
+    if (file === 'uv') return cb(null, 'uv 0.7.2', '');
+    if (file === 'node') return cb(null, 'v24.14.0', '');
+    return cb(new Error('not found'), '', '');
+  };
+  const items = await runDiagnostics({ ...makeDeps(), port: 11488, execFileImpl });
+  assert.deepEqual(items.map((i) => i.id), [
+    'host-listening',
+    'token-file',
+    'python-seen',
+    'ae-project',
+    'extendscript-ping',
+    'uv',
+    'node',
+    'claude',
+  ]);
+  assert.deepEqual(items.slice(-3).map((i) => i.ok), [true, true, false]);
+  assert.equal(items.find((i) => i.id === 'uv').detail, 'uv 0.7.2');
+  assert.equal(items.find((i) => i.id === 'node').detail, 'v24.14.0');
+  assert.match(items.find((i) => i.id === 'claude').detail, /Install Claude Code/);
 });

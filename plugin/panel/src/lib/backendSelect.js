@@ -1,6 +1,12 @@
-export function pickBackend({ pref, probe, hasApiKey }) {
+export function pickBackend({ pref, probe, hasApiKey, codexProbe }) {
   if (pref === 'byok') {
     return hasApiKey ? { backend: 'byok', reason: 'ok' } : { backend: 'none', reason: 'no-key' };
+  }
+
+  if (pref === 'codex') {
+    if (codexProbe === null) return { backend: 'none', reason: 'codex-probing' };
+    if (!codexProbe || !codexProbe.loggedIn) return { backend: 'none', reason: 'codex-not-logged-in' };
+    return { backend: 'codex', reason: 'ok' };
   }
 
   if (probe === null) return { backend: 'none', reason: 'probing' };
@@ -26,7 +32,7 @@ export function deriveToolMeta(tools) {
 }
 
 export function shouldResetOnBackendChange(prevReal, next) {
-  if (next !== 'subscription' && next !== 'byok') return { reset: false, nextReal: prevReal || null };
+  if (next !== 'subscription' && next !== 'byok' && next !== 'codex') return { reset: false, nextReal: prevReal || null };
   if (!prevReal) return { reset: false, nextReal: next };
   if (prevReal === next) return { reset: false, nextReal: prevReal };
   return { reset: true, nextReal: next };

@@ -13,6 +13,9 @@ test('pickBackend follows subscription and BYOK selection rules', () => {
     [{ pref: 'subscription', probe: { nodeOk: true, loggedIn: false }, hasApiKey: true }, { backend: 'byok', reason: 'not-logged-in' }],
     [{ pref: 'subscription', probe: { nodeOk: true, loggedIn: false }, hasApiKey: false }, { backend: 'none', reason: 'not-logged-in' }],
     [{ pref: 'subscription', probe: { nodeOk: true, loggedIn: true }, hasApiKey: false }, { backend: 'subscription', reason: 'ok' }],
+    [{ pref: 'codex', probe: { nodeOk: true, loggedIn: true }, codexProbe: null, hasApiKey: true }, { backend: 'none', reason: 'codex-probing' }],
+    [{ pref: 'codex', probe: { nodeOk: true, loggedIn: true }, codexProbe: { loggedIn: false }, hasApiKey: true }, { backend: 'none', reason: 'codex-not-logged-in' }],
+    [{ pref: 'codex', probe: { nodeOk: true, loggedIn: true }, codexProbe: { loggedIn: true }, hasApiKey: false }, { backend: 'codex', reason: 'ok' }],
   ];
 
   for (const [input, expected] of cases) {
@@ -49,6 +52,9 @@ test('shouldResetOnBackendChange ignores none and resets only on real backend ch
 
   assert.deepEqual(run(['subscription', 'none', 'subscription']), []);
   assert.deepEqual(run(['subscription', 'none', 'byok']), ['byok']);
+  assert.deepEqual(run(['subscription', 'none', 'codex']), ['codex']);
+  assert.deepEqual(run(['codex', 'none', 'codex']), []);
+  assert.deepEqual(run(['codex', 'byok']), ['byok']);
   assert.deepEqual(run(['none', 'subscription']), []);
   assert.deepEqual(run(['none', 'byok', 'subscription']), ['subscription']);
 });

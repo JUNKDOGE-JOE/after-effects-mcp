@@ -19,14 +19,21 @@ const S = {
     gen: '通用',
     about: '关于',
     backend: '后端',
-    backendSub: '订阅',
+    backendSub: 'Claude',
     backendByok: 'BYOK',
+    backendCodex: 'Codex',
     claudeReady: '已登录 ✓',
     claudeNotLoggedIn: '未登录',
     claudeChecking: '检测中…',
     claudeNoNode: '需要 Node 18+',
     claudeLoginCap: '在终端运行 claude /login 完成登录，然后点「重新检测」',
     recheckClaude: '重新检测',
+    codexSub: 'Codex',
+    codexReady: '已登录 ✓',
+    codexNotLoggedIn: '未登录 codex',
+    codexChecking: '检测中…',
+    codexLoginCap: '在终端完成 codex 登录，然后点「重新检测」',
+    recheckCodex: '重新检测',
     apiKey: 'API Key',
     apiKeyCap: '仅保存在本机，不会上传',
     saveVerify: '保存并验证',
@@ -36,7 +43,7 @@ const S = {
     verifyFailed: '验证失败，请稍后重试',
     clear: '清除',
     cleared: 'API Key 已清除',
-    model: '模型',
+    modelDefault: '默认模型（打开面板时使用）',
     port: '端口',
     portHint: '默认 11488',
     apply: '应用',
@@ -46,13 +53,6 @@ const S = {
     tokenMissing: '未找到 ~/.ae-mcp/auth-token',
     autostart: '随 AE 启动',
     autostartCap: '打开工程时自动启动服务',
-    permTitle: '内嵌对话权限',
-    perm1: '手动批准',
-    perm2: '自动审核',
-    perm3: '无需批准',
-    permCap1: '每个写操作都需要你确认',
-    permCap2: '低风险自动放行，高风险仍需确认',
-    permCap3: '全部放行 - 仅在信任的工程中使用',
     clients: '已连接客户端',
     lastActive: '最后活跃',
     blocked: '屏蔽',
@@ -79,14 +79,21 @@ const S = {
     gen: 'General',
     about: 'About',
     backend: 'Backend',
-    backendSub: 'Subscription',
+    backendSub: 'Claude',
     backendByok: 'BYOK',
+    backendCodex: 'Codex',
     claudeReady: 'Logged in ✓',
     claudeNotLoggedIn: 'Not logged in',
     claudeChecking: 'Checking…',
     claudeNoNode: 'Needs Node 18+',
     claudeLoginCap: 'Run claude /login in a terminal, then click Re-check',
     recheckClaude: 'Re-check',
+    codexSub: 'Codex',
+    codexReady: 'Logged in ✓',
+    codexNotLoggedIn: 'Not logged in to codex',
+    codexChecking: 'Checking…',
+    codexLoginCap: 'Sign in with codex in a terminal, then click Re-check',
+    recheckCodex: 'Re-check',
     apiKey: 'API Key',
     apiKeyCap: 'Stored locally, never uploaded',
     saveVerify: 'Save and verify',
@@ -96,7 +103,7 @@ const S = {
     verifyFailed: 'Verification failed. Try again later.',
     clear: 'Clear',
     cleared: 'API Key cleared',
-    model: 'Model',
+    modelDefault: 'Default model (used when the panel opens)',
     port: 'Port',
     portHint: 'Default 11488',
     apply: 'Apply',
@@ -106,13 +113,6 @@ const S = {
     tokenMissing: '~/.ae-mcp/auth-token not found',
     autostart: 'Launch with AE',
     autostartCap: 'Start the service when a project opens',
-    permTitle: 'Built-in chat permissions',
-    perm1: 'Approve each',
-    perm2: 'Auto-review',
-    perm3: 'Allow all',
-    permCap1: 'Every write operation asks for confirmation',
-    permCap2: 'Low-risk auto-allowed; high-risk still asks',
-    permCap3: 'Everything allowed - trusted projects only',
     clients: 'Connected clients',
     lastActive: 'Last active',
     blocked: 'Block',
@@ -221,13 +221,14 @@ export function SettingsScreen({
   onClearApiKey,
   validateKey,
   model = 'claude-sonnet-4-6',
+  modelOptions,
   onModelChange,
   backend = 'subscription',
   onBackendChange,
   claudeStatus = { state: 'checking' },
   onRecheckClaude,
-  permissionMode = 'manual',
-  onPermissionMode,
+  codexStatus = { state: 'checking' },
+  onRecheckCodex,
 }) {
   const t = S[lang] || S.zh;
   const [key, setKey] = React.useState(apiKey);
@@ -249,11 +250,13 @@ export function SettingsScreen({
       setTimeout(() => setCopied(''), 1200);
     }).catch(() => {});
   };
-  const permCap = permissionMode === 'manual' ? t.permCap1 : permissionMode === 'auto' ? t.permCap2 : t.permCap3;
   const tokenDisplay = tokenRaw ? maskToken(tokenRaw) : t.tokenMissing;
   const claudeState = (claudeStatus && claudeStatus.state) || 'checking';
   const claudeBadgeStatus = claudeState === 'ready' ? 'ok' : claudeState === 'not-logged-in' ? 'warn' : claudeState === 'no-node' ? 'error' : 'neutral';
   const claudeBadgeText = claudeState === 'ready' ? t.claudeReady : claudeState === 'not-logged-in' ? t.claudeNotLoggedIn : claudeState === 'no-node' ? t.claudeNoNode : t.claudeChecking;
+  const codexState = (codexStatus && codexStatus.state) || 'checking';
+  const codexBadgeStatus = codexState === 'ready' ? 'ok' : codexState === 'not-logged-in' ? 'warn' : 'neutral';
+  const codexBadgeText = codexState === 'ready' ? t.codexReady : codexState === 'not-logged-in' ? t.codexNotLoggedIn : t.codexChecking;
   const saveApiKey = () => {
     if (aiBusy) return;
     setAiBusy(true);
@@ -297,6 +300,7 @@ export function SettingsScreen({
         <Field label={t.backend}>
           <Segmented full value={backend} onChange={onBackendChange} options={[
             { value: 'subscription', label: t.backendSub },
+            { value: 'codex', label: t.backendCodex },
             { value: 'byok', label: t.backendByok },
           ]} />
         </Field>
@@ -308,6 +312,14 @@ export function SettingsScreen({
               <Button variant="secondary" icon="rotate-cw" disabled={claudeState === 'checking'} onClick={onRecheckClaude}>{t.recheckClaude}</Button>
             </div>
           </Field>
+        ) : backend === 'codex' ? (
+          <Field label={t.codexSub} caption={codexState === 'not-logged-in' ? t.codexLoginCap : (codexStatus && codexStatus.detail) || null}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Badge status={codexBadgeStatus}>{codexBadgeText}</Badge>
+              {codexState === 'ready' && (codexStatus.email || codexStatus.planType) ? <span style={{ flex: 1, font: '400 11px/1 var(--font-mono)', color: 'var(--text-secondary)' }}>{[codexStatus.email, codexStatus.planType].filter(Boolean).join(' · ')}</span> : <span style={{ flex: 1 }} />}
+              <Button variant="secondary" icon="rotate-cw" disabled={codexState === 'checking'} onClick={onRecheckCodex}>{t.recheckCodex}</Button>
+            </div>
+          </Field>
         ) : (
           <Field label={t.apiKey} caption={t.apiKeyCap}>
             <div style={{ display: 'flex', gap: 6 }}>
@@ -317,8 +329,8 @@ export function SettingsScreen({
             </div>
           </Field>
         )}
-        <Field label={t.model}>
-          <Select value={model} onChange={onModelChange} options={[
+        <Field label={t.modelDefault}>
+          <Select value={model} onChange={onModelChange} options={modelOptions || [
             { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
             { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
           ]} />
@@ -351,13 +363,6 @@ export function SettingsScreen({
       </Section>
 
       <Section title={t.sec}>
-        <Field label={t.permTitle} caption={permCap}>
-          <Segmented full value={permissionMode} onChange={onPermissionMode} options={[
-            { value: 'manual', label: t.perm1 },
-            { value: 'auto', label: t.perm2 },
-            { value: 'none', label: t.perm3 },
-          ]} />
-        </Field>
         <div style={{ font: '500 11px/1.35 var(--font-ui)', color: 'var(--text-secondary)', marginTop: 2 }}>{t.clients}</div>
         {clients.map((client) => (
           <ClientRow

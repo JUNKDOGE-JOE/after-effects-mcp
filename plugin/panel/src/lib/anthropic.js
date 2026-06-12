@@ -11,6 +11,18 @@ export function buildSystemPrompt(lang = 'zh') {
       'Name target comps, layers, properties, or files in quotes before changing them.',
       'Prefer read-only inspection before edits when context is missing.',
       'Summarize tool results plainly and ask only when a required detail is missing.',
+      '',
+      'Working mode:',
+      '- Prefer typed tools (ae_createLayer / ae_setProperty / ae_readProps, etc.); use ae_exec scripts only when no typed tool fits.',
+      '- Before scripting, inspect with read tools (ae_overview / ae_layers / ae_readProps) to confirm structure instead of guessing project contents.',
+      '- ae_exec accepts only code and undoGroup; it has no comp_id or other targeting parameters. Put target lookup inside the script.',
+      '',
+      'ExtendScript scripting pitfalls (must follow):',
+      '- setTemporalEaseAtKey ease arrays must match the property dimension (1D like Opacity=1; Scale 3D=3; spatial properties like Position=1). Use AEMCP.easeKeys(prop) to size them automatically.',
+      '- Any byName / index lookup may return null; check before use, or call AEMCP.mustFind(value, "name") so the error names the missing target.',
+      '- Do not invent APIs that do not exist (for example items.byName); if unsure, use read tools or iterate.',
+      '- AE may be localized (Chinese): display names are translated, so prefer matchName for property matching.',
+      '- AEMCP helpers (safeValue / easeKeys / mustFind / compById / layerById) are injected and available; layerById and similar helpers expect numeric ids.',
     ].join(' ');
   }
   return [
@@ -19,6 +31,18 @@ export function buildSystemPrompt(lang = 'zh') {
     '修改前用引号明示目标合成、图层、属性或文件。',
     '缺少上下文时优先用只读工具检查。',
     '用简明语言总结工具结果，只在缺少必要信息时追问。',
+    '',
+    '工作方式：',
+    '- 优先使用 typed 工具（ae_createLayer / ae_setProperty / ae_readProps 等）；只有没有对应工具时才用 ae_exec 写脚本。',
+    '- 写脚本前先用读工具（ae_overview / ae_layers / ae_readProps）确认结构，不要凭记忆猜测工程内容。',
+    '- ae_exec 只接受 code 与 undoGroup 两个参数，没有 comp_id 等定位参数——目标定位写在脚本里。',
+    '',
+    'ExtendScript 高频陷阱（务必遵守）：',
+    '- setTemporalEaseAtKey 的缓动数组长度必须等于属性维度（一维如 Opacity=1；Scale 三维=3；空间属性如 Position=1）。直接用 AEMCP.easeKeys(prop) 自动处理。',
+    '- 任何 byName / 索引查找都可能返回 null，使用前必须判空；或用 AEMCP.mustFind(value, "名字") 让错误自带名字。',
+    '- 不存在的 API 不要臆造（如 items.byName 不存在）；不确定就先用读工具或遍历。',
+    '- 本机可能是本地化（中文）AE：显示名是翻译过的，匹配属性优先用 matchName。',
+    '- AEMCP 助手（safeValue / easeKeys / mustFind / compById / layerById）已注入，可直接调用；layerById 等用数字 id。',
   ].join(' ');
 }
 
@@ -32,6 +56,7 @@ export function mapMcpToolsToAnthropic(tools = []) {
 
 function classifyHttpError(status, fallbackMessage) {
   if (status === 401 || status === 403) return { kind: 'auth', message: 'Anthropic authentication failed.' };
+  if (status === 404) return { kind: 'model', message: 'Model unavailable for this API key.' };
   if (status === 429) return { kind: 'rate_limit', message: 'Anthropic rate limit reached.' };
   if (status === 529 || status >= 500) return { kind: 'overloaded', message: 'Anthropic service is overloaded.' };
   return { kind: 'network', message: fallbackMessage || 'Anthropic request failed.' };
@@ -90,6 +115,8 @@ export async function sendAnthropicMessage({
   messages,
   tools,
   signal,
+  effort = null,
+  fast = false,
   fetchImpl = globalThis.fetch,
   onTextDelta = () => {},
 } = {}) {
@@ -98,23 +125,28 @@ export async function sendAnthropicMessage({
 
   let response;
   try {
+    const headers = {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+      'content-type': 'application/json',
+    };
+    if (fast) headers['anthropic-beta'] = 'fast-mode-2026-02-01';
+    const body = {
+      model,
+      max_tokens: 8192,
+      system,
+      messages,
+      tools: mapMcpToolsToAnthropic(tools),
+      stream: true,
+    };
+    if (effort) body.output_config = { effort };
+    if (fast) body.speed = 'fast';
     response = await fetchImpl('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       signal,
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 8192,
-        system,
-        messages,
-        tools: mapMcpToolsToAnthropic(tools),
-        stream: true,
-      }),
+      headers,
+      body: JSON.stringify(body),
     });
   } catch (e) {
     if (e && e.name === 'AbortError') throw e;

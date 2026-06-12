@@ -5,6 +5,7 @@ import {
   RotateCw, TriangleAlert, Search, Send, Square, Plus, Eye, EyeOff,
   ExternalLink, FileText, Trash2, History, MessageSquare, ListChecks, Globe,
   List, Download, BookOpen, Github, ArrowUp, CircleAlert, Info, Circle,
+  Box, Brain, Zap,
 } from 'lucide-react';
 
 const MAP = {
@@ -19,6 +20,7 @@ const MAP = {
   'message-square': MessageSquare, 'list-checks': ListChecks, globe: Globe,
   list: List, download: Download, 'book-open': BookOpen, github: Github,
   'arrow-up': ArrowUp, 'circle-alert': CircleAlert, info: Info, circle: Circle,
+  box: Box, brain: Brain, zap: Zap,
 };
 
 export function Icon({ name, size = 14, strokeWidth = 1.75, color = 'currentColor', style }) {
