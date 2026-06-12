@@ -5,6 +5,7 @@ import { IconButton } from '../components/core/IconButton';
 import { Segmented } from '../components/core/Segmented';
 import { Spinner } from '../components/core/Spinner';
 import { AIAvatar } from '../components/chat/AIAvatar';
+import { initialStepStates, LOCAL_STEPS, SUBSCRIPTION_STEPS } from '../lib/wizardSteps';
 
 const W = {
   zh: {
@@ -14,8 +15,10 @@ const W = {
     b1: '让 AI 助手安全地操作你的 After Effects 工程 — 每一步可见、可批准、可撤销。',
     langLabel: '界面语言 · Language',
     t2: '安装本地服务',
-    b2: '在终端运行以下命令（需要 Python 3.10+）。安装后由你的 AI 客户端自动拉起：',
-    copy: '复制', copied: '已复制',
+    b2: '面板可以替你完成安装——逐项检测，缺什么装什么：',
+    copy: '复制', copied: '已复制', install: '一键安装', recheck: '复检',
+    openLogin: '打开登录窗口', loginHint: '登录完成后回来点复检', copyLog: '复制日志',
+    uacNote: 'Node 安装会弹一次系统授权（UAC）',
     t3: '连接 AI 客户端',
     b3: '选择你的客户端，把配置粘贴进它的 MCP 设置：',
     builtin: '面板内置对话', builtinNote: '无需配置，开箱即用',
@@ -34,8 +37,10 @@ const W = {
     b1: 'Let AI assistants operate your After Effects project safely — every step visible, approvable, undoable.',
     langLabel: '界面语言 · Language',
     t2: 'Install the local service',
-    b2: 'Run this in a terminal (Python 3.10+). Your AI client launches it automatically:',
-    copy: 'Copy', copied: 'Copied',
+    b2: "The panel installs these for you — detect each item, install what's missing:",
+    copy: 'Copy', copied: 'Copied', install: 'Install', recheck: 'Re-check',
+    openLogin: 'Open login window', loginHint: 'After login, return here and re-check', copyLog: 'Copy log',
+    uacNote: 'Node install triggers one UAC prompt',
     t3: 'Connect an AI client',
     b3: 'Pick your client and paste the config into its MCP settings:',
     builtin: 'Built-in chat', builtinNote: 'No config needed — works out of the box',
@@ -55,6 +60,22 @@ const CLIENTS = [
   { id: 'claude-code', name: 'Claude Code' },
   { id: 'cursor', name: 'Cursor' },
 ];
+
+const EMPTY_STEPS = initialStepStates();
+
+const STEP_LABELS = {
+  uv: 'uv',
+  aeMcp: 'ae-mcp',
+  node: 'Node.js LTS',
+  claude: 'Claude Code',
+  login: 'Claude login',
+};
+
+function copyText(text) {
+  if (globalThis.navigator && globalThis.navigator.clipboard && globalThis.navigator.clipboard.writeText) {
+    globalThis.navigator.clipboard.writeText(text || '').catch(() => {});
+  }
+}
 
 function CodeBlock({ code, copyLabel, onCopy, maxHeight }) {
   return (
@@ -91,6 +112,41 @@ function ClientRow({ name, note, selected, onSelect }) {
   );
 }
 
+function InstallStepRow({ label, state, commandPreview, t, onDetect, onInstall, login = false, hint }) {
+  const status = state && state.status ? state.status : 'idle';
+  const isBusy = status === 'checking' || status === 'running';
+  const isProblem = status === 'missing' || status === 'fail';
+  const icon = status === 'ok' ? 'check' : isProblem ? 'triangle-alert' : status === 'idle' ? 'circle' : null;
+  const tail = String((state && state.logTail) || '').split(/\r?\n/).slice(-6).join('\n');
+  return (
+    <div style={{ display: 'flex', gap: 8, padding: '9px 10px', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--bg-panel)' }}>
+      <span style={{ width: 18, height: 18, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flex: 'none', color: status === 'ok' ? 'var(--ok)' : isProblem ? 'var(--warn)' : 'var(--text-tertiary)' }}>
+        {isBusy ? <Spinner size={14} /> : <Icon name={icon} size={15} strokeWidth={2} />}
+      </span>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 18 }}>
+          <span style={{ font: '500 12px/1.35 var(--font-ui)', color: 'var(--text-primary)' }}>{label}</span>
+          {status === 'ok' && state.version ? <span style={{ font: '400 10px/1.35 var(--font-mono)', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{state.version}</span> : null}
+          <span style={{ flex: 1 }}></span>
+          <IconButton icon="rotate-cw" title={t.recheck} variant="secondary" size="sm" disabled={isBusy} onClick={onDetect} />
+        </div>
+        {hint ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>{hint}</div> : null}
+        {isProblem ? (
+          <React.Fragment>
+            <code style={{ display: 'block', padding: '6px 8px', background: 'var(--gray-0)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', font: '400 10px/1.55 var(--font-mono)', color: 'var(--text-primary)', overflow: 'auto', whiteSpace: 'pre' }}>{commandPreview}</code>
+            {login ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>{t.loginHint}</div> : null}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <Button variant="secondary" size="sm" onClick={onInstall}>{login ? t.openLogin : t.install}</Button>
+              {status === 'fail' ? <Button variant="ghost" size="sm" onClick={() => copyText(state.logTail)}>{t.copyLog}</Button> : null}
+            </div>
+          </React.Fragment>
+        ) : null}
+        {status === 'running' ? <pre style={{ margin: 0, maxHeight: 96, overflow: 'auto', padding: 8, background: 'var(--gray-0)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', font: '400 10px/1.45 var(--font-mono)', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>{tail}</pre> : null}
+      </div>
+    </div>
+  );
+}
+
 /* Full-screen 4-step first-run wizard. Render inside PanelFrame chrome={false}. */
 export function WizardScreen({
   step = 1,
@@ -107,6 +163,11 @@ export function WizardScreen({
   onDiagnose,
   onDone,
   onSkip,
+  stepStates = EMPTY_STEPS,
+  onDetect,
+  onInstall,
+  onOpenLogin,
+  commandPreviews = {},
 }) {
   const t = W[lang] || W.zh;
   return (
@@ -141,7 +202,19 @@ export function WizardScreen({
           <React.Fragment>
             <div style={{ font: '600 20px/1.35 var(--font-ui)', color: 'var(--text-primary)' }}>{t.t2}</div>
             <div style={{ font: '400 12px/1.55 var(--font-ui)', color: 'var(--text-secondary)' }}>{t.b2}</div>
-            <CodeBlock code="pip install ae-mcp" copyLabel={t.copy} onCopy={onCopy} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {LOCAL_STEPS.map((id) => (
+                <InstallStepRow
+                  key={id}
+                  label={STEP_LABELS[id]}
+                  state={stepStates[id] || EMPTY_STEPS[id]}
+                  commandPreview={commandPreviews[id] || ''}
+                  t={t}
+                  onDetect={() => onDetect && onDetect(id)}
+                  onInstall={() => onInstall && onInstall(id)}
+                />
+              ))}
+            </div>
           </React.Fragment>
         ) : null}
 
@@ -161,6 +234,23 @@ export function WizardScreen({
               ))}
             </div>
             {client !== 'builtin' ? <CodeBlock code={mcpConfig} copyLabel={t.copy} onCopy={onCopy} maxHeight={150} /> : null}
+            {client === 'builtin' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {SUBSCRIPTION_STEPS.map((id) => (
+                  <InstallStepRow
+                    key={id}
+                    label={STEP_LABELS[id]}
+                    state={stepStates[id] || EMPTY_STEPS[id]}
+                    commandPreview={commandPreviews[id] || (id === 'login' ? 'claude' : '')}
+                    t={t}
+                    login={id === 'login'}
+                    hint={id === 'node' ? t.uacNote : null}
+                    onDetect={() => onDetect && onDetect(id)}
+                    onInstall={() => (id === 'login' ? onOpenLogin && onOpenLogin() : onInstall && onInstall(id))}
+                  />
+                ))}
+              </div>
+            ) : null}
           </React.Fragment>
         ) : null}
 
