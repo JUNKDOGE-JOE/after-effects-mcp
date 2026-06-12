@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createCodexBackend } from '../src/cep/codexBackend.js';
+import { PANEL_VERSION } from '../src/cep/mcpClient.js';
 
 function makeProc() {
   const stdoutHandlers = [];
@@ -171,7 +172,7 @@ test('createCodexBackend starts codex app-server and sends thread/start with AE 
   const proc = spawned.procs[0];
   const init = parseWrites(proc)[0];
   assert.equal(init.method, 'initialize');
-  assert.deepEqual(init.params.clientInfo, { name: 'ae-mcp-panel', version: '0.5.0' });
+  assert.deepEqual(init.params.clientInfo, { name: 'ae-mcp-panel', version: PANEL_VERSION });
   respond(proc, init, {});
   await flush();
 
