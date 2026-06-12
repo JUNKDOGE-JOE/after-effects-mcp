@@ -1,0 +1,127 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  detectRepoRoot,
+  detectTool,
+  buildInstallCommands,
+  openLoginTerminal,
+  runAction,
+} from '../src/cep/wizardActions.js';
+
+function fakeExecFile(results) {
+  return (file, args, opts, cb) => {
+    const key = [file, ...(args || [])].join(' ');
+    const r = results[key] || { err: new Error('not found'), stdout: '', stderr: '' };
+    setImmediate(() => cb(r.err || null, r.stdout || '', r.stderr || ''));
+  };
+}
+
+test('detectTool parses versions and reports missing', async () => {
+  const execFile = fakeExecFile({
+    'uv --version': { stdout: 'uv 0.7.2' },
+    'node --version': { stdout: 'v24.14.0' },
+  });
+  assert.deepEqual(await detectTool('uv', { execFileImpl: execFile }), { ok: true, version: 'uv 0.7.2' });
+  assert.deepEqual(await detectTool('node', { execFileImpl: execFile }), { ok: true, version: 'v24.14.0' });
+  assert.equal((await detectTool('claude', { execFileImpl: execFile })).ok, false);
+});
+
+test('detectTool probes claude through a shell (npm .cmd shim needs one)', async () => {
+  const seen = [];
+  const execFile = (file, args, opts, cb) => {
+    seen.push({ file, shell: opts.shell });
+    setImmediate(() => cb(null, '2.1.174 (Claude Code)', ''));
+  };
+  const result = await detectTool('claude', { execFileImpl: execFile });
+  assert.deepEqual(result, { ok: true, version: '2.1.174 (Claude Code)' });
+  assert.deepEqual(seen, [{ file: 'claude', shell: true }]);
+  // uv 是真 .exe：不走 shell
+  await detectTool('uv', { execFileImpl: (f, a, o, cb) => { seen.push({ file: f, shell: o.shell }); setImmediate(() => cb(null, 'uv 0.7.2', '')); } });
+  assert.equal(seen[1].shell, false);
+});
+
+test('detectTool checks ae-mcp presence without executing it (stdio server hangs on any argv)', async () => {
+  const shim = 'C:\\Users\\X\\.local\\bin\\ae-mcp.exe';
+  // where 命中：直接 ok，version=命中路径
+  const viaWhere = await detectTool('aeMcp', {
+    execFileImpl: fakeExecFile({ 'where ae-mcp': { stdout: 'C:\\bin\\ae-mcp.exe\r\n' } }),
+    env: { USERPROFILE: 'C:\\Users\\X' },
+    fsImpl: { existsSync: () => false },
+  });
+  assert.deepEqual(viaWhere, { ok: true, version: 'C:\\bin\\ae-mcp.exe' });
+  // where 落空但 shim 文件存在：ok，version=shim 路径，且绝不执行 ae-mcp
+  const viaShim = await detectTool('aeMcp', {
+    execFileImpl: fakeExecFile({}),
+    env: { USERPROFILE: 'C:\\Users\\X' },
+    fsImpl: { existsSync: (p) => p === shim },
+  });
+  assert.deepEqual(viaShim, { ok: true, version: shim });
+  // 两者皆无：missing
+  const missing = await detectTool('aeMcp', {
+    execFileImpl: fakeExecFile({}),
+    env: { USERPROFILE: 'C:\\Users\\Y' },
+    fsImpl: { existsSync: () => false },
+  });
+  assert.equal(missing.ok, false);
+});
+
+test('ae-mcp install command pins the release tag for end users', () => {
+  const cmds = buildInstallCommands({ panelVersion: '0.5.0', repoRoot: '' });
+  const aeMcp = cmds.aeMcp;
+  assert.equal(aeMcp.file, 'uv');
+  const joined = aeMcp.args.join(' ');
+  assert.ok(joined.includes('git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.5.0#subdirectory=packages/core'));
+  assert.ok(joined.includes('#subdirectory=packages/bridge'));
+  assert.ok(joined.includes('#subdirectory=packages/snapshot-mss'));
+});
+
+test('ae-mcp install command uses local paths on a dev checkout', () => {
+  const cmds = buildInstallCommands({ panelVersion: '0.5.0', repoRoot: 'E:\\repo' });
+  const joined = cmds.aeMcp.args.join(' ');
+  assert.ok(joined.includes('E:\\repo\\packages\\core'));
+  assert.ok(!joined.includes('git+https'));
+});
+
+test('runAction streams chunks and resolves ok by exit code', async () => {
+  const events = [];
+  const fakeSpawn = () => {
+    const handlers = {};
+    const child = {
+      stdout: { on: (e, cb) => { if (e === 'data') handlers.out = cb; } },
+      stderr: { on: (e, cb) => { if (e === 'data') handlers.errout = cb; } },
+      on: (e, cb) => { if (e === 'exit') handlers.exit = cb; },
+    };
+    setImmediate(() => { handlers.out('hello '); handlers.out('world'); handlers.exit(0); });
+    return child;
+  };
+  const result = await runAction({ file: 'x', args: [], spawnImpl: fakeSpawn, onChunk: (c) => events.push(c) });
+  assert.equal(result.ok, true);
+  assert.deepEqual(events, ['hello ', 'world']);
+  assert.ok(result.output.includes('hello world'));
+});
+
+test('openLoginTerminal launches a visible terminal for claude and codex login', () => {
+  const calls = [];
+  const spawnImpl = (file, args, opts) => {
+    calls.push({ file, args, opts });
+    return { unref: () => {} };
+  };
+
+  assert.equal(openLoginTerminal({ tool: 'claude', spawnImpl }), true);
+  assert.equal(openLoginTerminal({ tool: 'codex', spawnImpl }), true);
+
+  assert.equal(calls[0].file, 'cmd');
+  assert.deepEqual(calls[0].args, ['/c', 'start', 'ae-mcp login', 'pwsh', '-NoExit', '-Command', 'claude']);
+  assert.equal(calls[0].opts.detached, true);
+  assert.equal(calls[0].opts.windowsHide, false);
+  assert.deepEqual(calls[1].args, ['/c', 'start', 'ae-mcp login', 'pwsh', '-NoExit', '-Command', 'codex login']);
+});
+
+test('detectRepoRoot reuses the mcpClient project root probe', () => {
+  const root = detectRepoRoot({
+    extRoot: 'E:/repo/plugin/panel',
+    fsImpl: { existsSync: (p) => p === 'E:\\repo\\pyproject.toml' },
+  });
+
+  assert.equal(root, 'E:\\repo');
+});

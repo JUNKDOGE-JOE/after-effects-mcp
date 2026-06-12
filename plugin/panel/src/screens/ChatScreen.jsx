@@ -1,13 +1,16 @@
 import React from 'react';
 import { Icon } from '../components/core/Icon';
 import { Button } from '../components/core/Button';
+import { Spinner } from '../components/core/Spinner';
 import { ChatBubble } from '../components/chat/ChatBubble';
 import { ToolCallCard } from '../components/chat/ToolCallCard';
 import { ApprovalCard } from '../components/chat/ApprovalCard';
 import { PromptCard } from '../components/chat/PromptCard';
 import { Composer } from '../components/chat/Composer';
+import { ComposerChip } from '../components/chat/ComposerChip';
 import { AIAvatar } from '../components/chat/AIAvatar';
 import { eventTitle } from '../lib/activityModel';
+import { buildComposerChips } from '../lib/composerOptions';
 
 const C = {
   zh: {
@@ -17,12 +20,18 @@ const C = {
     newSession: '新会话',
     placeholder: '描述你想在 AE 里做什么…',
     noticeAction: '新会话',
+    modelChip: '模型',
+    effortChip: '思考',
+    fastChip: '快速',
+    approvalChip: '权限',
     errorTitle: '对话出错',
+    modelErrorTitle: '模型不可用——换一个试试',
     denied: '已拒绝',
     running: '执行中',
     ok: '完成',
     failed: '失败',
     awaiting: '等待批准',
+    thinking: '思考中…',
   },
   en: {
     hello: 'Hi! I can operate the open AE project directly. Try one of these:',
@@ -31,12 +40,18 @@ const C = {
     newSession: 'New session',
     placeholder: 'Describe what to do in AE…',
     noticeAction: 'New session',
+    modelChip: 'Model',
+    effortChip: 'Effort',
+    fastChip: 'Fast',
+    approvalChip: 'Approval',
     errorTitle: 'Chat error',
+    modelErrorTitle: 'Model unavailable — pick another',
     denied: 'Denied',
     running: 'Running',
     ok: 'Done',
     failed: 'Failed',
     awaiting: 'Awaiting approval',
+    thinking: 'Thinking…',
   },
 };
 
@@ -118,11 +133,20 @@ function Entry({ entry, lang, onApprove }) {
   if (entry.type === 'error') {
     return (
       <div style={{ paddingLeft: 28 }}>
-        <ToolCallCard verb={t.errorTitle} target={entry.kind} status="error" errorMessage={entry.message} />
+        <ToolCallCard verb={entry.kind === 'model' ? t.modelErrorTitle : t.errorTitle} target={entry.kind} status="error" errorMessage={entry.message} />
       </div>
     );
   }
   return null;
+}
+
+function menuItems(items, currentId, onSelect) {
+  return (items || []).map((item) => ({
+    label: item.label,
+    hint: item.caption,
+    checked: item.id === currentId,
+    onSelect: () => onSelect && onSelect(item.id),
+  }));
 }
 
 /* Chat tab. entries are folded from agentLoop events by lib/chatEntries.js. */
@@ -130,6 +154,7 @@ export function ChatScreen({
   lang = 'zh',
   entries = [],
   streaming = false,
+  thinking = false,
   composerDisabled = false,
   disabledHint = '',
   onSend,
@@ -139,17 +164,59 @@ export function ChatScreen({
   promptCards,
   noticeActionLabel,
   onNoticeAction,
+  chipState,
+  onChipModel,
+  onChipEffort,
+  onChipFast,
+  onChipApproval,
 }) {
   const t = C[lang] || C.zh;
   const [draft, setDraft] = React.useState('');
   const logRef = React.useRef(null);
   const hasEntries = entries.length > 0;
   const prompts = promptCards || DEFAULT_PROMPTS[lang] || DEFAULT_PROMPTS.zh;
+  const chips = chipState && chipState.descriptor ? buildComposerChips({ ...chipState, lang }) : null;
+  const composerOptions = chips ? (
+    <React.Fragment>
+      <ComposerChip
+        icon="box"
+        label={chips.model.current}
+        title={t.modelChip}
+        menuHeader={{ label: t.modelChip }}
+        items={menuItems(chips.model.items, chipState.modelId, onChipModel)}
+      />
+      {chips.effort ? (
+        <ComposerChip
+          icon="brain"
+          label={chips.effort.current}
+          title={t.effortChip}
+          menuHeader={{ label: t.effortChip }}
+          items={menuItems(chips.effort.items, chipState.effort, onChipEffort)}
+        />
+      ) : null}
+      {chips.fast ? (
+        <ComposerChip
+          icon="zap"
+          label={t.fastChip}
+          title={t.fastChip}
+          active={chips.fast.active}
+          onToggle={(next) => onChipFast && onChipFast(next)}
+        />
+      ) : null}
+      <ComposerChip
+        icon="shield"
+        label={chips.approval.current}
+        title={t.approvalChip}
+        menuHeader={{ label: t.approvalChip }}
+        items={menuItems(chips.approval.items, chipState.permissionMode, onChipApproval)}
+      />
+    </React.Fragment>
+  ) : null;
 
   React.useEffect(() => {
     const el = logRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [entries, streaming]);
+  }, [entries, streaming, thinking]);
 
   const send = () => {
     const text = draft.trim();
@@ -195,6 +262,13 @@ export function ChatScreen({
         {entries.map((entry) => (
           <Entry key={entry.id} entry={entry} lang={lang} onApprove={onApprove} />
         ))}
+
+        {streaming && thinking ? (
+          <div style={{ paddingLeft: 28, display: 'flex', alignItems: 'center', gap: 6, font: '400 11px/1.4 var(--font-ui)', color: 'var(--text-tertiary)' }}>
+            <Spinner size={12} />
+            <span>{t.thinking}</span>
+          </div>
+        ) : null}
       </div>
 
       <div style={{ flex: 'none', padding: 'var(--space-2) var(--space-3) var(--space-3)', borderTop: '1px solid var(--border-subtle)' }}>
@@ -206,6 +280,7 @@ export function ChatScreen({
           streaming={streaming}
           disabled={composerDisabled}
           placeholder={t.placeholder}
+          options={composerOptions}
           notice={disabledHint ? <Notice text={disabledHint} actionLabel={noticeActionLabel || t.noticeAction} onAction={onNoticeAction || onNewSession} /> : null}
         />
       </div>

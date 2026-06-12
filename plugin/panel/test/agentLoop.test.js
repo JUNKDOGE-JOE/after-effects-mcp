@@ -33,7 +33,7 @@ function toolTurn({ id = 'tu_1', name = 'ae.newText', input = { text: 'Hi' } } =
 
 function anthropicFromSse(turns, calls = []) {
   return async function fakeAnthropic(options) {
-    calls.push({ messages: structuredClone(options.messages), tools: options.tools });
+    calls.push({ ...options, messages: structuredClone(options.messages), tools: options.tools });
     const sse = turns.shift();
     if (!sse) throw new Error('No fake Anthropic turn queued');
 
@@ -83,11 +83,13 @@ function makeMcp({ tools, resultText = 'ok', isError = false } = {}) {
   };
 }
 
-function makeLoop({ anthropic, mcp = makeMcp(), mode = 'none', events = [] }) {
+function makeLoop({ anthropic, mcp = makeMcp(), mode = 'none', events = [], getEffort, getFast }) {
   return createAgentLoop({
     getApiKey: () => 'sk-test',
     getModel: () => 'claude-sonnet-4-6',
     getPermissionMode: () => mode,
+    getEffort,
+    getFast,
     mcp,
     anthropic,
     onEvent: (evt) => events.push(evt),
@@ -252,4 +254,48 @@ test('createAgentLoop repairs dangling tool_use when stopped during approval', a
   await loop.sendUser('never mind, just say hi');
   const sent = calls[calls.length - 1].messages;
   assert.equal(sent[sent.length - 1].content, 'never mind, just say hi');
+});
+
+test('createAgentLoop readonly denies writes without approval and allows read tools', async () => {
+  const events = [];
+  const calls = [];
+  const mcp = makeMcp();
+  const loop = makeLoop({
+    anthropic: anthropicFromSse([
+      toolTurn({ id: 'tu_write', name: 'ae.newText' }),
+      textTurn('Denied noted'),
+      toolTurn({ id: 'tu_read', name: 'ae.overview' }),
+      textTurn('Read done'),
+    ], calls),
+    mcp,
+    mode: 'readonly',
+    events,
+  });
+
+  await loop.sendUser('try write');
+  await loop.sendUser('read');
+
+  assert.deepEqual(mcp.calls, [{ name: 'ae.overview', args: { text: 'Hi' } }]);
+  assert.equal(events.some((evt) => evt.type === 'approval-required'), false);
+  assert.deepEqual(events.filter((evt) => evt.type === 'tool-denied'), [
+    { type: 'tool-denied', toolUseId: 'tu_write' },
+  ]);
+  const deniedResult = calls[1].messages.at(-1).content[0];
+  assert.equal(deniedResult.type, 'tool_result');
+  assert.equal(deniedResult.is_error, true);
+  assert.match(deniedResult.content, /read-only/);
+});
+
+test('createAgentLoop passes effort and fast options to Anthropic', async () => {
+  const calls = [];
+  const loop = makeLoop({
+    anthropic: anthropicFromSse([textTurn('ok')], calls),
+    getEffort: () => 'low',
+    getFast: () => true,
+  });
+
+  await loop.sendUser('hi');
+
+  assert.equal(calls[0].effort, 'low');
+  assert.equal(calls[0].fast, true);
 });

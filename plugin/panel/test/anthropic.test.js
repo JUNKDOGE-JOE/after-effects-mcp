@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sendAnthropicMessage } from '../src/lib/anthropic.js';
+import { buildSystemPrompt, sendAnthropicMessage } from '../src/lib/anthropic.js';
 
 function sseFrame(event, data) {
   return 'event: ' + event + '\n' + 'data: ' + JSON.stringify(data) + '\n\n';
@@ -47,4 +47,67 @@ test('sendAnthropicMessage parses tool input from input_json_delta after empty s
     },
     stopReason: 'tool_use',
   });
+});
+
+test('buildSystemPrompt includes ExtendScript pitfall anchors in both languages', () => {
+  for (const prompt of [buildSystemPrompt('zh'), buildSystemPrompt('en')]) {
+    assert.match(prompt, /AEMCP\.easeKeys/);
+    assert.match(prompt, /mustFind/);
+    assert.match(prompt, /matchName/);
+  }
+});
+
+test('sendAnthropicMessage sends effort and fast-mode parameters when requested', async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init });
+    return { ok: true, body: streamFromText(sseFrame('message_stop', { type: 'message_stop' })) };
+  };
+
+  await sendAnthropicMessage({
+    apiKey: 'sk-test',
+    model: 'claude-opus-4-8',
+    messages: [{ role: 'user', content: 'hi' }],
+    tools: [],
+    effort: 'high',
+    fast: true,
+    fetchImpl,
+  });
+
+  const body = JSON.parse(calls[0].init.body);
+  assert.equal(body.output_config.effort, 'high');
+  assert.equal(body.speed, 'fast');
+  assert.equal(calls[0].init.headers['anthropic-beta'], 'fast-mode-2026-02-01');
+});
+
+test('sendAnthropicMessage omits effort and fast fields by default', async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init });
+    return { ok: true, body: streamFromText(sseFrame('message_stop', { type: 'message_stop' })) };
+  };
+
+  await sendAnthropicMessage({
+    apiKey: 'sk-test',
+    messages: [{ role: 'user', content: 'hi' }],
+    tools: [],
+    fetchImpl,
+  });
+
+  const body = JSON.parse(calls[0].init.body);
+  assert.equal(Object.hasOwn(body, 'output_config'), false);
+  assert.equal(Object.hasOwn(body, 'speed'), false);
+  assert.equal(Object.hasOwn(calls[0].init.headers, 'anthropic-beta'), false);
+});
+
+test('sendAnthropicMessage maps 404 to model errors', async () => {
+  await assert.rejects(
+    sendAnthropicMessage({
+      apiKey: 'sk-test',
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: [],
+      fetchImpl: async () => ({ ok: false, status: 404, text: async () => 'not_found_error' }),
+    }),
+    (error) => error.kind === 'model'
+  );
 });

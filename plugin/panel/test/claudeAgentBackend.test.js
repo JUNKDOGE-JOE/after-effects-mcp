@@ -111,6 +111,41 @@ test('createClaudeAgentBackend writes user only after ready handshake', async ()
   await pending;
 });
 
+test('createClaudeAgentBackend passes effort and thinking when getters are provided', async () => {
+  const { backend, spawned } = makeBackend({
+    getEffort: () => 'low',
+    getThinking: () => 'adaptive',
+  });
+
+  const pending = backend.sendUser('hello');
+  await flush();
+  spawned.procs[0].pushStdout({ t: 'ready' });
+  await flush();
+
+  assert.deepEqual(parseWrites(spawned.procs[0]), [
+    { t: 'user', text: 'hello', permissionMode: 'manual', model: 'claude-test', effort: 'low', thinking: 'adaptive' },
+  ]);
+
+  spawned.procs[0].pushStdout({ t: 'event', event: { type: 'turn-end', stopReason: 'end_turn' } });
+  await pending;
+});
+
+test('createClaudeAgentBackend omits effort and thinking without getters', async () => {
+  const { backend, spawned } = makeBackend();
+
+  const pending = backend.sendUser('hello');
+  await flush();
+  spawned.procs[0].pushStdout({ t: 'ready' });
+  await flush();
+
+  const message = parseWrites(spawned.procs[0])[0];
+  assert.equal(Object.hasOwn(message, 'effort'), false);
+  assert.equal(Object.hasOwn(message, 'thinking'), false);
+
+  spawned.procs[0].pushStdout({ t: 'event', event: { type: 'turn-end', stopReason: 'end_turn' } });
+  await pending;
+});
+
 test('createClaudeAgentBackend strips Anthropic key and passes sidecar args', async () => {
   const mcpSpec = { command: 'ae-mcp', args: ['--stdio'], env: { X: 'Y' } };
   const meta = { allowedTools: ['ae.one', 'ae.two'], annotations: { 'ae.two': { destructiveHint: true } } };

@@ -7280,11 +7280,11 @@
   });
 
   // src/main.jsx
-  var import_react38 = __toESM(require_react(), 1);
+  var import_react41 = __toESM(require_react(), 1);
   var import_client = __toESM(require_client(), 1);
 
   // src/app/App.jsx
-  var import_react37 = __toESM(require_react(), 1);
+  var import_react40 = __toESM(require_react(), 1);
 
   // src/app/i18n.jsx
   var import_react = __toESM(require_react(), 1);
@@ -7405,6 +7405,44 @@
         key: "ruj8y"
       }
     ]
+  ]);
+
+  // node_modules/lucide-react/dist/esm/icons/box.js
+  var Box = createLucideIcon("Box", [
+    [
+      "path",
+      {
+        d: "M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z",
+        key: "hh9hay"
+      }
+    ],
+    ["path", { d: "m3.3 7 8.7 5 8.7-5", key: "g66t2b" }],
+    ["path", { d: "M12 22V12", key: "d0xqtd" }]
+  ]);
+
+  // node_modules/lucide-react/dist/esm/icons/brain.js
+  var Brain = createLucideIcon("Brain", [
+    [
+      "path",
+      {
+        d: "M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z",
+        key: "l5xja"
+      }
+    ],
+    [
+      "path",
+      {
+        d: "M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z",
+        key: "ep3f8r"
+      }
+    ],
+    ["path", { d: "M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4", key: "1p4c4q" }],
+    ["path", { d: "M17.599 6.5a3 3 0 0 0 .399-1.375", key: "tmeiqw" }],
+    ["path", { d: "M6.003 5.125A3 3 0 0 0 6.401 6.5", key: "105sqy" }],
+    ["path", { d: "M3.477 10.896a4 4 0 0 1 .585-.396", key: "ql3yin" }],
+    ["path", { d: "M19.938 10.5a4 4 0 0 1 .585.396", key: "1qfode" }],
+    ["path", { d: "M6 18a4 4 0 0 1-1.967-.516", key: "2e4loj" }],
+    ["path", { d: "M19.967 17.484A4 4 0 0 1 18 18", key: "159ez6" }]
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/check.js
@@ -7704,6 +7742,17 @@
     ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
   ]);
 
+  // node_modules/lucide-react/dist/esm/icons/zap.js
+  var Zap = createLucideIcon("Zap", [
+    [
+      "path",
+      {
+        d: "M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z",
+        key: "1xq2db"
+      }
+    ]
+  ]);
+
   // src/components/core/Icon.jsx
   var import_jsx_runtime2 = __toESM(require_jsx_runtime(), 1);
   var MAP = {
@@ -7744,7 +7793,10 @@
     "arrow-up": ArrowUp,
     "circle-alert": CircleAlert,
     info: Info,
-    circle: Circle
+    circle: Circle,
+    box: Box,
+    brain: Brain,
+    zap: Zap
   };
   function Icon2({ name, size = 14, strokeWidth = 1.75, color = "currentColor", style }) {
     const C2 = MAP[name];
@@ -8651,14 +8703,21 @@
       gen: "\u901A\u7528",
       about: "\u5173\u4E8E",
       backend: "\u540E\u7AEF",
-      backendSub: "\u8BA2\u9605",
+      backendSub: "Claude",
       backendByok: "BYOK",
+      backendCodex: "Codex",
       claudeReady: "\u5DF2\u767B\u5F55 \u2713",
       claudeNotLoggedIn: "\u672A\u767B\u5F55",
       claudeChecking: "\u68C0\u6D4B\u4E2D\u2026",
       claudeNoNode: "\u9700\u8981 Node 18+",
       claudeLoginCap: "\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login \u5B8C\u6210\u767B\u5F55\uFF0C\u7136\u540E\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D",
       recheckClaude: "\u91CD\u65B0\u68C0\u6D4B",
+      codexSub: "Codex",
+      codexReady: "\u5DF2\u767B\u5F55 \u2713",
+      codexNotLoggedIn: "\u672A\u767B\u5F55 codex",
+      codexChecking: "\u68C0\u6D4B\u4E2D\u2026",
+      codexLoginCap: "\u5728\u7EC8\u7AEF\u5B8C\u6210 codex \u767B\u5F55\uFF0C\u7136\u540E\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D",
+      recheckCodex: "\u91CD\u65B0\u68C0\u6D4B",
       apiKey: "API Key",
       apiKeyCap: "\u4EC5\u4FDD\u5B58\u5728\u672C\u673A\uFF0C\u4E0D\u4F1A\u4E0A\u4F20",
       saveVerify: "\u4FDD\u5B58\u5E76\u9A8C\u8BC1",
@@ -8668,7 +8727,7 @@
       verifyFailed: "\u9A8C\u8BC1\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5",
       clear: "\u6E05\u9664",
       cleared: "API Key \u5DF2\u6E05\u9664",
-      model: "\u6A21\u578B",
+      modelDefault: "\u9ED8\u8BA4\u6A21\u578B\uFF08\u6253\u5F00\u9762\u677F\u65F6\u4F7F\u7528\uFF09",
       port: "\u7AEF\u53E3",
       portHint: "\u9ED8\u8BA4 11488",
       apply: "\u5E94\u7528",
@@ -8678,13 +8737,6 @@
       tokenMissing: "\u672A\u627E\u5230 ~/.ae-mcp/auth-token",
       autostart: "\u968F AE \u542F\u52A8",
       autostartCap: "\u6253\u5F00\u5DE5\u7A0B\u65F6\u81EA\u52A8\u542F\u52A8\u670D\u52A1",
-      permTitle: "\u5185\u5D4C\u5BF9\u8BDD\u6743\u9650",
-      perm1: "\u624B\u52A8\u6279\u51C6",
-      perm2: "\u81EA\u52A8\u5BA1\u6838",
-      perm3: "\u65E0\u9700\u6279\u51C6",
-      permCap1: "\u6BCF\u4E2A\u5199\u64CD\u4F5C\u90FD\u9700\u8981\u4F60\u786E\u8BA4",
-      permCap2: "\u4F4E\u98CE\u9669\u81EA\u52A8\u653E\u884C\uFF0C\u9AD8\u98CE\u9669\u4ECD\u9700\u786E\u8BA4",
-      permCap3: "\u5168\u90E8\u653E\u884C - \u4EC5\u5728\u4FE1\u4EFB\u7684\u5DE5\u7A0B\u4E2D\u4F7F\u7528",
       clients: "\u5DF2\u8FDE\u63A5\u5BA2\u6237\u7AEF",
       lastActive: "\u6700\u540E\u6D3B\u8DC3",
       blocked: "\u5C4F\u853D",
@@ -8711,14 +8763,21 @@
       gen: "General",
       about: "About",
       backend: "Backend",
-      backendSub: "Subscription",
+      backendSub: "Claude",
       backendByok: "BYOK",
+      backendCodex: "Codex",
       claudeReady: "Logged in \u2713",
       claudeNotLoggedIn: "Not logged in",
       claudeChecking: "Checking\u2026",
       claudeNoNode: "Needs Node 18+",
       claudeLoginCap: "Run claude /login in a terminal, then click Re-check",
       recheckClaude: "Re-check",
+      codexSub: "Codex",
+      codexReady: "Logged in \u2713",
+      codexNotLoggedIn: "Not logged in to codex",
+      codexChecking: "Checking\u2026",
+      codexLoginCap: "Sign in with codex in a terminal, then click Re-check",
+      recheckCodex: "Re-check",
       apiKey: "API Key",
       apiKeyCap: "Stored locally, never uploaded",
       saveVerify: "Save and verify",
@@ -8728,7 +8787,7 @@
       verifyFailed: "Verification failed. Try again later.",
       clear: "Clear",
       cleared: "API Key cleared",
-      model: "Model",
+      modelDefault: "Default model (used when the panel opens)",
       port: "Port",
       portHint: "Default 11488",
       apply: "Apply",
@@ -8738,13 +8797,6 @@
       tokenMissing: "~/.ae-mcp/auth-token not found",
       autostart: "Launch with AE",
       autostartCap: "Start the service when a project opens",
-      permTitle: "Built-in chat permissions",
-      perm1: "Approve each",
-      perm2: "Auto-review",
-      perm3: "Allow all",
-      permCap1: "Every write operation asks for confirmation",
-      permCap2: "Low-risk auto-allowed; high-risk still asks",
-      permCap3: "Everything allowed - trusted projects only",
       clients: "Connected clients",
       lastActive: "Last active",
       blocked: "Block",
@@ -8837,13 +8889,14 @@
     onClearApiKey,
     validateKey,
     model = "claude-sonnet-4-6",
+    modelOptions,
     onModelChange,
     backend = "subscription",
     onBackendChange,
     claudeStatus = { state: "checking" },
     onRecheckClaude,
-    permissionMode = "manual",
-    onPermissionMode
+    codexStatus = { state: "checking" },
+    onRecheckCodex
   }) {
     const t = S[lang] || S.zh;
     const [key, setKey] = import_react19.default.useState(apiKey);
@@ -8864,11 +8917,13 @@
       }).catch(() => {
       });
     };
-    const permCap = permissionMode === "manual" ? t.permCap1 : permissionMode === "auto" ? t.permCap2 : t.permCap3;
     const tokenDisplay = tokenRaw ? maskToken(tokenRaw) : t.tokenMissing;
     const claudeState = claudeStatus && claudeStatus.state || "checking";
     const claudeBadgeStatus = claudeState === "ready" ? "ok" : claudeState === "not-logged-in" ? "warn" : claudeState === "no-node" ? "error" : "neutral";
     const claudeBadgeText = claudeState === "ready" ? t.claudeReady : claudeState === "not-logged-in" ? t.claudeNotLoggedIn : claudeState === "no-node" ? t.claudeNoNode : t.claudeChecking;
+    const codexState = codexStatus && codexStatus.state || "checking";
+    const codexBadgeStatus = codexState === "ready" ? "ok" : codexState === "not-logged-in" ? "warn" : "neutral";
+    const codexBadgeText = codexState === "ready" ? t.codexReady : codexState === "not-logged-in" ? t.codexNotLoggedIn : t.codexChecking;
     const saveApiKey = () => {
       if (aiBusy) return;
       setAiBusy(true);
@@ -8910,6 +8965,7 @@
       /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { title: t.ai, children: [
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.backend, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Segmented, { full: true, value: backend, onChange: onBackendChange, options: [
           { value: "subscription", label: t.backendSub },
+          { value: "codex", label: t.backendCodex },
           { value: "byok", label: t.backendByok }
         ] }) }),
         backend === "subscription" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.backendSub, caption: claudeState === "not-logged-in" ? t.claudeLoginCap : claudeStatus && claudeStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
@@ -8919,12 +8975,16 @@
             String(claudeStatus.nodeVersion).replace(/^v?/, "v")
           ] }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1 } }),
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: claudeState === "checking", onClick: onRecheckClaude, children: t.recheckClaude })
+        ] }) }) : backend === "codex" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.codexSub, caption: codexState === "not-logged-in" ? t.codexLoginCap : codexStatus && codexStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: codexBadgeStatus, children: codexBadgeText }),
+          codexState === "ready" && (codexStatus.email || codexStatus.planType) ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1, font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: [codexStatus.email, codexStatus.planType].filter(Boolean).join(" \xB7 ") }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: codexState === "checking", onClick: onRecheckCodex, children: t.recheckCodex })
         ] }) }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.apiKey, caption: t.apiKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { secret: true, value: key, onChange: setKey, placeholder: "sk-ant-...", style: { flex: 1 } }),
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "primary", disabled: aiBusy || !key.trim(), onClick: saveApiKey, children: aiBusy ? t.validating : t.saveVerify }),
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", disabled: aiBusy, onClick: clearApiKey, children: t.clear })
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.model, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: model, onChange: onModelChange, options: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.modelDefault, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || [
           { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
           { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" }
         ] }) }),
@@ -8946,11 +9006,6 @@
         ] }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { title: t.sec, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.permTitle, caption: permCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Segmented, { full: true, value: permissionMode, onChange: onPermissionMode, options: [
-          { value: "manual", label: t.perm1 },
-          { value: "auto", label: t.perm2 },
-          { value: "none", label: t.perm3 }
-        ] }) }),
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 2 }, children: t.clients }),
         clients.map((client) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
           ClientRow,
@@ -9278,6 +9333,57 @@
     );
   }
 
+  // src/lib/wizardSteps.js
+  var LOCAL_STEPS = ["uv", "aeMcp"];
+  var SUBSCRIPTION_STEPS = ["node", "claude", "login"];
+  var LOG_TAIL = 4096;
+  var ALL_STEPS = [...LOCAL_STEPS, ...SUBSCRIPTION_STEPS];
+  function emptyState() {
+    return { status: "idle", version: "", logTail: "" };
+  }
+  function initialStepStates() {
+    return ALL_STEPS.reduce((acc, id) => {
+      acc[id] = emptyState();
+      return acc;
+    }, {});
+  }
+  function appendTail(current, text) {
+    return (String(current || "") + String(text || "")).slice(-LOG_TAIL);
+  }
+  function patchStep(state, id, patch) {
+    return {
+      ...state,
+      [id]: {
+        ...state[id] || emptyState(),
+        ...patch
+      }
+    };
+  }
+  function stepReducer(state, action) {
+    if (!action || !action.id) return state;
+    const current = state[action.id] || emptyState();
+    switch (action.type) {
+      case "detect-start":
+        return patchStep(state, action.id, { status: "checking" });
+      case "detect-result":
+        return patchStep(state, action.id, {
+          status: action.ok ? "ok" : "missing",
+          version: action.ok ? action.version || "" : ""
+        });
+      case "run-start":
+        return patchStep(state, action.id, { status: "running", logTail: "" });
+      case "run-chunk":
+        return patchStep(state, action.id, { logTail: appendTail(current.logTail, action.text) });
+      case "run-done":
+        return patchStep(state, action.id, {
+          status: action.ok ? "checking" : "fail",
+          logTail: appendTail(current.logTail, action.output)
+        });
+      default:
+        return state;
+    }
+  }
+
   // src/screens/WizardScreen.jsx
   var import_jsx_runtime23 = __toESM(require_jsx_runtime(), 1);
   var W = {
@@ -9291,9 +9397,15 @@
       b1: "\u8BA9 AI \u52A9\u624B\u5B89\u5168\u5730\u64CD\u4F5C\u4F60\u7684 After Effects \u5DE5\u7A0B \u2014 \u6BCF\u4E00\u6B65\u53EF\u89C1\u3001\u53EF\u6279\u51C6\u3001\u53EF\u64A4\u9500\u3002",
       langLabel: "\u754C\u9762\u8BED\u8A00 \xB7 Language",
       t2: "\u5B89\u88C5\u672C\u5730\u670D\u52A1",
-      b2: "\u5728\u7EC8\u7AEF\u8FD0\u884C\u4EE5\u4E0B\u547D\u4EE4\uFF08\u9700\u8981 Python 3.10+\uFF09\u3002\u5B89\u88C5\u540E\u7531\u4F60\u7684 AI \u5BA2\u6237\u7AEF\u81EA\u52A8\u62C9\u8D77\uFF1A",
+      b2: "\u9762\u677F\u53EF\u4EE5\u66FF\u4F60\u5B8C\u6210\u5B89\u88C5\u2014\u2014\u9010\u9879\u68C0\u6D4B\uFF0C\u7F3A\u4EC0\u4E48\u88C5\u4EC0\u4E48\uFF1A",
       copy: "\u590D\u5236",
       copied: "\u5DF2\u590D\u5236",
+      install: "\u4E00\u952E\u5B89\u88C5",
+      recheck: "\u590D\u68C0",
+      openLogin: "\u6253\u5F00\u767B\u5F55\u7A97\u53E3",
+      loginHint: "\u767B\u5F55\u5B8C\u6210\u540E\u56DE\u6765\u70B9\u590D\u68C0",
+      copyLog: "\u590D\u5236\u65E5\u5FD7",
+      uacNote: "Node \u5B89\u88C5\u4F1A\u5F39\u4E00\u6B21\u7CFB\u7EDF\u6388\u6743\uFF08UAC\uFF09",
       t3: "\u8FDE\u63A5 AI \u5BA2\u6237\u7AEF",
       b3: "\u9009\u62E9\u4F60\u7684\u5BA2\u6237\u7AEF\uFF0C\u628A\u914D\u7F6E\u7C98\u8D34\u8FDB\u5B83\u7684 MCP \u8BBE\u7F6E\uFF1A",
       builtin: "\u9762\u677F\u5185\u7F6E\u5BF9\u8BDD",
@@ -9316,9 +9428,15 @@
       b1: "Let AI assistants operate your After Effects project safely \u2014 every step visible, approvable, undoable.",
       langLabel: "\u754C\u9762\u8BED\u8A00 \xB7 Language",
       t2: "Install the local service",
-      b2: "Run this in a terminal (Python 3.10+). Your AI client launches it automatically:",
+      b2: "The panel installs these for you \u2014 detect each item, install what's missing:",
       copy: "Copy",
       copied: "Copied",
+      install: "Install",
+      recheck: "Re-check",
+      openLogin: "Open login window",
+      loginHint: "After login, return here and re-check",
+      copyLog: "Copy log",
+      uacNote: "Node install triggers one UAC prompt",
       t3: "Connect an AI client",
       b3: "Pick your client and paste the config into its MCP settings:",
       builtin: "Built-in chat",
@@ -9338,6 +9456,20 @@
     { id: "claude-code", name: "Claude Code" },
     { id: "cursor", name: "Cursor" }
   ];
+  var EMPTY_STEPS = initialStepStates();
+  var STEP_LABELS = {
+    uv: "uv",
+    aeMcp: "ae-mcp",
+    node: "Node.js LTS",
+    claude: "Claude Code",
+    login: "Claude login"
+  };
+  function copyText2(text) {
+    if (globalThis.navigator && globalThis.navigator.clipboard && globalThis.navigator.clipboard.writeText) {
+      globalThis.navigator.clipboard.writeText(text || "").catch(() => {
+      });
+    }
+  }
   function CodeBlock({ code, copyLabel, onCopy, maxHeight }) {
     return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { position: "relative", background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("pre", { style: { margin: 0, padding: "10px 36px 10px 12px", font: "400 11px/1.7 var(--font-mono)", color: "var(--text-primary)", overflow: "auto", maxHeight: maxHeight || 180, whiteSpace: "pre" }, children: code }),
@@ -9378,6 +9510,34 @@
       }
     );
   }
+  function InstallStepRow({ label, state, commandPreview: commandPreview2, t, onDetect, onInstall, login = false, hint }) {
+    const status = state && state.status ? state.status : "idle";
+    const isBusy = status === "checking" || status === "running";
+    const isProblem = status === "missing" || status === "fail";
+    const icon = status === "ok" ? "check" : isProblem ? "triangle-alert" : status === "idle" ? "circle" : null;
+    const tail = String(state && state.logTail || "").split(/\r?\n/).slice(-6).join("\n");
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", gap: 8, padding: "9px 10px", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-panel)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { width: 18, height: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none", color: status === "ok" ? "var(--ok)" : isProblem ? "var(--warn)" : "var(--text-tertiary)" }, children: isBusy ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Spinner, { size: 14 }) : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Icon2, { name: icon, size: 15, strokeWidth: 2 }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, minHeight: 18 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: label }),
+          status === "ok" && state.version ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: state.version }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(IconButton, { icon: "rotate-cw", title: t.recheck, variant: "secondary", size: "sm", disabled: isBusy, onClick: onDetect })
+        ] }),
+        hint ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: hint }) : null,
+        isProblem ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("code", { style: { display: "block", padding: "6px 8px", background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", font: "400 10px/1.55 var(--font-mono)", color: "var(--text-primary)", overflow: "auto", whiteSpace: "pre" }, children: commandPreview2 }),
+          login ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.loginHint }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "secondary", size: "sm", onClick: onInstall, children: login ? t.openLogin : t.install }),
+            status === "fail" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => copyText2(state.logTail), children: t.copyLog }) : null
+          ] })
+        ] }) : null,
+        status === "running" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("pre", { style: { margin: 0, maxHeight: 96, overflow: "auto", padding: 8, background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", font: "400 10px/1.45 var(--font-mono)", color: "var(--text-secondary)", whiteSpace: "pre-wrap" }, children: tail }) : null
+      ] })
+    ] });
+  }
   function WizardScreen({
     step = 1,
     lang = "zh",
@@ -9392,7 +9552,12 @@
     onCopy,
     onDiagnose,
     onDone,
-    onSkip
+    onSkip,
+    stepStates = EMPTY_STEPS,
+    onDetect,
+    onInstall,
+    onOpenLogin,
+    commandPreviews = {}
   }) {
     const t = W[lang] || W.zh;
     return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "var(--space-6) var(--space-5) var(--space-5)" }, children: [
@@ -9415,7 +9580,18 @@
         step === 2 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
           /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t2 }),
           /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b2 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(CodeBlock, { code: "pip install ae-mcp", copyLabel: t.copy, onCopy })
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: LOCAL_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
+            InstallStepRow,
+            {
+              label: STEP_LABELS[id],
+              state: stepStates[id] || EMPTY_STEPS[id],
+              commandPreview: commandPreviews[id] || "",
+              t,
+              onDetect: () => onDetect && onDetect(id),
+              onInstall: () => onInstall && onInstall(id)
+            },
+            id
+          )) })
         ] }) : null,
         step === 3 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
           /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t3 }),
@@ -9430,7 +9606,21 @@
             },
             c.id
           )) }),
-          client !== "builtin" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(CodeBlock, { code: mcpConfig, copyLabel: t.copy, onCopy, maxHeight: 150 }) : null
+          client !== "builtin" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(CodeBlock, { code: mcpConfig, copyLabel: t.copy, onCopy, maxHeight: 150 }) : null,
+          client === "builtin" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: SUBSCRIPTION_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
+            InstallStepRow,
+            {
+              label: STEP_LABELS[id],
+              state: stepStates[id] || EMPTY_STEPS[id],
+              commandPreview: commandPreviews[id] || (id === "login" ? "claude" : ""),
+              t,
+              login: id === "login",
+              hint: id === "node" ? t.uacNote : null,
+              onDetect: () => onDetect && onDetect(id),
+              onInstall: () => id === "login" ? onOpenLogin && onOpenLogin() : onInstall && onInstall(id)
+            },
+            id
+          )) }) : null
         ] }) : null,
         step === 4 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "var(--space-2)", textAlign: "center" }, children: [
           handshake === "waiting" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
@@ -9726,7 +9916,7 @@
   }
 
   // src/screens/ChatScreen.jsx
-  var import_react34 = __toESM(require_react(), 1);
+  var import_react36 = __toESM(require_react(), 1);
 
   // src/components/chat/ChatBubble.jsx
   var import_react29 = __toESM(require_react(), 1);
@@ -9869,7 +10059,7 @@
     target,
     status = "success",
     params,
-    errorMessage,
+    errorMessage: errorMessage2,
     onRetry,
     steps,
     groupLabel,
@@ -9930,7 +10120,7 @@
             i
           )) }) : null,
           expanded && !isGroup && params != null ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(ParamsBlock, { params }) : null,
-          status === "error" && errorMessage ? /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
+          status === "error" && errorMessage2 ? /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
             "div",
             {
               style: {
@@ -9942,7 +10132,7 @@
                 background: "var(--error-bg)"
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--error)" }, children: errorMessage }),
+                /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--error)" }, children: errorMessage2 }),
                 onRetry ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Button, { size: "sm", variant: "secondary", icon: "rotate-cw", onClick: onRetry, children: retryLabel }) : null
               ]
             }
@@ -10195,7 +10385,7 @@
               }
             ),
             options ? /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 2, minWidth: 0 }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 2, overflow: "hidden" }, children: options }),
+              /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 2 }, children: options }),
               streaming ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
             ] }) : streaming ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
           ]
@@ -10237,8 +10427,262 @@
     );
   }
 
-  // src/screens/ChatScreen.jsx
+  // src/components/chat/ComposerChip.jsx
+  var import_react35 = __toESM(require_react(), 1);
+
+  // src/components/core/Menu.jsx
+  var import_react34 = __toESM(require_react(), 1);
   var import_jsx_runtime32 = __toESM(require_jsx_runtime(), 1);
+  function Keycap({ children }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+      "span",
+      {
+        style: {
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minWidth: 16,
+          height: 16,
+          padding: "0 3px",
+          background: "var(--bg-raised)",
+          border: "1px solid var(--border-default)",
+          borderRadius: "var(--radius-sm)",
+          font: "400 var(--text-micro)/1 var(--font-ui)",
+          color: "var(--text-tertiary)"
+        },
+        children
+      }
+    );
+  }
+  function MenuRow({ item, onClose }) {
+    const [hover, setHover] = import_react34.default.useState(false);
+    const disabled = !!item.disabled;
+    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
+      "button",
+      {
+        type: "button",
+        className: "ds-focusable",
+        disabled,
+        onClick: () => {
+          if (item.onSelect) item.onSelect();
+          if (onClose) onClose();
+        },
+        onMouseEnter: () => setHover(true),
+        onMouseLeave: () => setHover(false),
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--space-2)",
+          width: "100%",
+          minHeight: "var(--hit-min)",
+          padding: "2px var(--space-2)",
+          background: hover && !disabled ? "var(--bg-hover)" : "transparent",
+          border: "none",
+          borderRadius: "var(--radius-sm)",
+          font: "400 var(--text-body)/var(--leading-tight) var(--font-ui)",
+          color: disabled ? "var(--text-disabled)" : item.danger ? "var(--error)" : "var(--text-primary)",
+          textAlign: "left",
+          cursor: disabled ? "default" : "pointer",
+          transition: "background var(--dur-fast) var(--ease-out)"
+        },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: item.label }),
+          item.checked ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.25, color: "var(--text-primary)" }) : null,
+          item.hint ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { flex: "none", font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: item.hint }) : null
+        ]
+      }
+    );
+  }
+  function Menu({ header, items = [], footer, onClose, minWidth = 184, style }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
+      "div",
+      {
+        role: "menu",
+        style: {
+          minWidth,
+          padding: "var(--space-1)",
+          background: "var(--bg-overlay)",
+          border: "1px solid var(--border-default)",
+          borderRadius: "var(--radius-lg)",
+          boxShadow: "var(--shadow-overlay)",
+          ...style
+        },
+        children: [
+          header ? /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
+            "div",
+            {
+              style: {
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "var(--space-2)",
+                padding: "4px var(--space-2) 6px",
+                borderBottom: "1px solid var(--border-subtle)",
+                marginBottom: "var(--space-1)"
+              },
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: header.label }),
+                header.keys && header.keys.length ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { display: "inline-flex", gap: 3 }, children: header.keys.map((k, i) => /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Keycap, { children: k }, i)) }) : null
+              ]
+            }
+          ) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { display: "flex", flexDirection: "column" }, children: items.map(
+            (item, i) => item.divider ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { height: 1, background: "var(--border-subtle)", margin: "4px 0" } }, i) : /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(MenuRow, { item, onClose }, i)
+          ) }),
+          footer ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+            "div",
+            {
+              style: {
+                padding: "6px var(--space-2) 4px",
+                borderTop: "1px solid var(--border-subtle)",
+                marginTop: "var(--space-1)",
+                font: "400 var(--text-caption)/var(--leading-tight) var(--font-ui)",
+                color: "var(--text-tertiary)"
+              },
+              children: footer
+            }
+          ) : null
+        ]
+      }
+    );
+  }
+
+  // src/components/chat/ComposerChip.jsx
+  var import_jsx_runtime33 = __toESM(require_jsx_runtime(), 1);
+  function ComposerChip({
+    icon,
+    label,
+    active = false,
+    disabled = false,
+    items,
+    menuHeader,
+    menuFooter,
+    menuAlign = "left",
+    onToggle,
+    title,
+    style
+  }) {
+    const [hover, setHover] = import_react35.default.useState(false);
+    const [open, setOpen] = import_react35.default.useState(false);
+    const rootRef = import_react35.default.useRef(null);
+    const isMenu = Array.isArray(items) && items.length > 0;
+    import_react35.default.useEffect(() => {
+      if (!open) return void 0;
+      const onDoc = (e) => {
+        if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
+      };
+      const onKey = (e) => {
+        if (e.key === "Escape") setOpen(false);
+      };
+      document.addEventListener("mousedown", onDoc);
+      document.addEventListener("keydown", onKey);
+      return () => {
+        document.removeEventListener("mousedown", onDoc);
+        document.removeEventListener("keydown", onKey);
+      };
+    }, [open]);
+    const lit = active || open;
+    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { ref: rootRef, style: { position: "relative", flex: "none", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
+        "button",
+        {
+          type: "button",
+          className: "ds-focusable",
+          disabled,
+          title,
+          "aria-haspopup": isMenu ? "menu" : void 0,
+          "aria-expanded": isMenu ? open : void 0,
+          "aria-pressed": !isMenu && onToggle ? active : void 0,
+          onClick: () => {
+            if (disabled) return;
+            if (isMenu) setOpen((v) => !v);
+            else if (onToggle) onToggle(!active);
+          },
+          onMouseEnter: () => setHover(true),
+          onMouseLeave: () => setHover(false),
+          style: {
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            height: "var(--hit-min)",
+            padding: "0 var(--space-15)",
+            background: lit ? "var(--bg-selected)" : hover && !disabled ? "var(--bg-hover)" : "transparent",
+            border: "none",
+            borderRadius: "var(--radius-md)",
+            font: "400 var(--text-caption)/1 var(--font-ui)",
+            color: disabled ? "var(--text-disabled)" : lit ? "var(--text-primary)" : "var(--text-tertiary)",
+            cursor: disabled ? "default" : "pointer",
+            transition: "background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out)",
+            whiteSpace: "nowrap"
+          },
+          children: [
+            icon ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Icon2, { name: icon, size: 12 }) : null,
+            label ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { style: { overflow: "hidden", textOverflow: "ellipsis", maxWidth: 96 }, children: label }) : null,
+            !isMenu && onToggle && active ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Icon2, { name: "check", size: 10, strokeWidth: 2.5 }) : null,
+            isMenu ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Icon2, { name: "chevron-down", size: 10, strokeWidth: 2, style: { opacity: 0.7 } }) : null
+          ]
+        }
+      ),
+      isMenu && open ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+        "div",
+        {
+          style: {
+            position: "absolute",
+            bottom: "calc(100% + 4px)",
+            [menuAlign === "right" ? "right" : "left"]: 0,
+            zIndex: 30,
+            animation: "ds-fade-up var(--dur-base) var(--ease-out)"
+          },
+          children: /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Menu, { header: menuHeader, items, footer: menuFooter, onClose: () => setOpen(false) })
+        }
+      ) : null
+    ] });
+  }
+
+  // src/lib/composerOptions.js
+  function costBadge(tier) {
+    const n = Math.max(1, Math.min(4, Number(tier) || 2));
+    return "$".repeat(n);
+  }
+  function byLang(item, lang, zhKey, enKey) {
+    return lang === "en" ? item[enKey] : item[zhKey];
+  }
+  function buildComposerChips({
+    descriptor,
+    modelId,
+    effort,
+    fast,
+    permissionMode,
+    lang = "zh"
+  }) {
+    const models = descriptor.models || [];
+    const currentModel = models.find((m) => m.id === modelId) || models[0] || {};
+    const effortLevels = Array.isArray(currentModel.effortLevels) ? currentModel.effortLevels : [];
+    const approvals = descriptor.approvalModes || [];
+    const currentApproval = approvals.find((m) => m.id === permissionMode) || approvals[0] || {};
+    return {
+      model: {
+        current: currentModel.label || currentModel.id || "",
+        items: models.map((m) => ({ id: m.id, label: m.label || m.id, caption: costBadge(m.cost) }))
+      },
+      effort: effortLevels.length ? {
+        current: effort,
+        items: effortLevels.map((id) => ({ id, label: id, caption: "" }))
+      } : null,
+      fast: descriptor.supportsFast && descriptor.supportsFast(currentModel.id) ? { active: Boolean(fast) } : null,
+      approval: {
+        current: byLang(currentApproval, lang, "zh", "en") || currentApproval.id || "",
+        items: approvals.map((m) => ({
+          id: m.id,
+          label: byLang(m, lang, "zh", "en") || m.id,
+          caption: byLang(m, lang, "anchorZh", "anchorEn") || ""
+        }))
+      }
+    };
+  }
+
+  // src/screens/ChatScreen.jsx
+  var import_jsx_runtime34 = __toESM(require_jsx_runtime(), 1);
   var C = {
     zh: {
       hello: "\u4F60\u597D\uFF01\u6211\u53EF\u4EE5\u76F4\u63A5\u64CD\u4F5C\u5F53\u524D\u6253\u5F00\u7684 AE \u5DE5\u7A0B\u3002\u8BD5\u8BD5\u8FD9\u4E9B\uFF1A",
@@ -10247,12 +10691,18 @@
       newSession: "\u65B0\u4F1A\u8BDD",
       placeholder: "\u63CF\u8FF0\u4F60\u60F3\u5728 AE \u91CC\u505A\u4EC0\u4E48\u2026",
       noticeAction: "\u65B0\u4F1A\u8BDD",
+      modelChip: "\u6A21\u578B",
+      effortChip: "\u601D\u8003",
+      fastChip: "\u5FEB\u901F",
+      approvalChip: "\u6743\u9650",
       errorTitle: "\u5BF9\u8BDD\u51FA\u9519",
+      modelErrorTitle: "\u6A21\u578B\u4E0D\u53EF\u7528\u2014\u2014\u6362\u4E00\u4E2A\u8BD5\u8BD5",
       denied: "\u5DF2\u62D2\u7EDD",
       running: "\u6267\u884C\u4E2D",
       ok: "\u5B8C\u6210",
       failed: "\u5931\u8D25",
-      awaiting: "\u7B49\u5F85\u6279\u51C6"
+      awaiting: "\u7B49\u5F85\u6279\u51C6",
+      thinking: "\u601D\u8003\u4E2D\u2026"
     },
     en: {
       hello: "Hi! I can operate the open AE project directly. Try one of these:",
@@ -10261,12 +10711,18 @@
       newSession: "New session",
       placeholder: "Describe what to do in AE\u2026",
       noticeAction: "New session",
+      modelChip: "Model",
+      effortChip: "Effort",
+      fastChip: "Fast",
+      approvalChip: "Approval",
       errorTitle: "Chat error",
+      modelErrorTitle: "Model unavailable \u2014 pick another",
       denied: "Denied",
       running: "Running",
       ok: "Done",
       failed: "Failed",
-      awaiting: "Awaiting approval"
+      awaiting: "Awaiting approval",
+      thinking: "Thinking\u2026"
     }
   };
   var DEFAULT_PROMPTS = {
@@ -10282,10 +10738,10 @@
     ]
   };
   function Notice({ text, actionLabel, onAction }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "var(--bg-well)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Icon2, { name: "plug", size: 12, color: "var(--text-tertiary)" }),
-      /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { flex: 1, minWidth: 0, font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: text }),
-      onAction ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, children: actionLabel }) : null
+    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "var(--bg-well)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Icon2, { name: "plug", size: 12, color: "var(--text-tertiary)" }),
+      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { style: { flex: 1, minWidth: 0, font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: text }),
+      onAction ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, children: actionLabel }) : null
     ] });
   }
   function statusForTool(state) {
@@ -10306,15 +10762,15 @@
   function Entry({ entry, lang, onApprove }) {
     const t = C[lang] || C.zh;
     if (entry.type === "user-text") {
-      return /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(ChatBubble, { role: "user", children: entry.text });
+      return /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(ChatBubble, { role: "user", children: entry.text });
     }
     if (entry.type === "ai-text") {
-      return /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(ChatBubble, { role: "ai", children: entry.text });
+      return /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(ChatBubble, { role: "ai", children: entry.text });
     }
     if (entry.type === "tool-call") {
       const highRisk = entry.risk === "destructive";
-      return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { paddingLeft: 28, display: "flex", flexDirection: "column", gap: 6 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { paddingLeft: 28, display: "flex", flexDirection: "column", gap: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
           ToolCallCard,
           {
             verb: titleForTool(entry, lang),
@@ -10324,7 +10780,7 @@
             errorMessage: entry.state === "error" ? entry.text : null
           }
         ),
-        entry.state === "awaiting-approval" ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+        entry.state === "awaiting-approval" ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
           ApprovalCard,
           {
             risk: highRisk ? "high" : "normal",
@@ -10340,14 +10796,23 @@
       ] });
     }
     if (entry.type === "error") {
-      return /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(ToolCallCard, { verb: t.errorTitle, target: entry.kind, status: "error", errorMessage: entry.message }) });
+      return /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(ToolCallCard, { verb: entry.kind === "model" ? t.modelErrorTitle : t.errorTitle, target: entry.kind, status: "error", errorMessage: entry.message }) });
     }
     return null;
+  }
+  function menuItems(items, currentId, onSelect) {
+    return (items || []).map((item) => ({
+      label: item.label,
+      hint: item.caption,
+      checked: item.id === currentId,
+      onSelect: () => onSelect && onSelect(item.id)
+    }));
   }
   function ChatScreen({
     lang = "zh",
     entries = [],
     streaming = false,
+    thinking = false,
     composerDisabled = false,
     disabledHint = "",
     onSend,
@@ -10356,36 +10821,84 @@
     onNewSession,
     promptCards,
     noticeActionLabel,
-    onNoticeAction
+    onNoticeAction,
+    chipState,
+    onChipModel,
+    onChipEffort,
+    onChipFast,
+    onChipApproval
   }) {
     const t = C[lang] || C.zh;
-    const [draft, setDraft] = import_react34.default.useState("");
-    const logRef = import_react34.default.useRef(null);
+    const [draft, setDraft] = import_react36.default.useState("");
+    const logRef = import_react36.default.useRef(null);
     const hasEntries = entries.length > 0;
     const prompts = promptCards || DEFAULT_PROMPTS[lang] || DEFAULT_PROMPTS.zh;
-    import_react34.default.useEffect(() => {
+    const chips = chipState && chipState.descriptor ? buildComposerChips({ ...chipState, lang }) : null;
+    const composerOptions = chips ? /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(import_react36.default.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+        ComposerChip,
+        {
+          icon: "box",
+          label: chips.model.current,
+          title: t.modelChip,
+          menuHeader: { label: t.modelChip },
+          items: menuItems(chips.model.items, chipState.modelId, onChipModel)
+        }
+      ),
+      chips.effort ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+        ComposerChip,
+        {
+          icon: "brain",
+          label: chips.effort.current,
+          title: t.effortChip,
+          menuHeader: { label: t.effortChip },
+          items: menuItems(chips.effort.items, chipState.effort, onChipEffort)
+        }
+      ) : null,
+      chips.fast ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+        ComposerChip,
+        {
+          icon: "zap",
+          label: t.fastChip,
+          title: t.fastChip,
+          active: chips.fast.active,
+          onToggle: (next) => onChipFast && onChipFast(next)
+        }
+      ) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+        ComposerChip,
+        {
+          icon: "shield",
+          label: chips.approval.current,
+          title: t.approvalChip,
+          menuHeader: { label: t.approvalChip },
+          items: menuItems(chips.approval.items, chipState.permissionMode, onChipApproval)
+        }
+      )
+    ] }) : null;
+    import_react36.default.useEffect(() => {
       const el = logRef.current;
       if (el) el.scrollTop = el.scrollHeight;
-    }, [entries, streaming]);
+    }, [entries, streaming, thinking]);
     const send = () => {
       const text = draft.trim();
       if (!text || composerDisabled || streaming) return;
       if (onSend) onSend(text);
       setDraft("");
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { ref: logRef, style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }, children: [
-        !hasEntries && composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(import_react34.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(AIAvatar, { size: 32 }),
-          /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { font: "600 12px/1.35 var(--font-ui)", color: "var(--text-primary)", maxWidth: 240 }, children: disabledHint || t.keyTitle }),
-          /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { font: "400 11px/1.45 var(--font-ui)", color: "var(--text-tertiary)", maxWidth: 250 }, children: t.keyCaption })
+    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { ref: logRef, style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }, children: [
+        !hasEntries && composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(import_react36.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(AIAvatar, { size: 32 }),
+          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { font: "600 12px/1.35 var(--font-ui)", color: "var(--text-primary)", maxWidth: 240 }, children: disabledHint || t.keyTitle }),
+          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { font: "400 11px/1.45 var(--font-ui)", color: "var(--text-tertiary)", maxWidth: 250 }, children: t.keyCaption })
         ] }) }) : null,
-        !hasEntries && !composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(import_react34.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(AIAvatar, { size: 32 }),
-            /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 240 }, children: t.hello })
+        !hasEntries && !composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(import_react36.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(AIAvatar, { size: 32 }),
+            /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 240 }, children: t.hello })
           ] }),
-          prompts.map((card) => /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+          prompts.map((card) => /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
             PromptCard,
             {
               icon: card.icon,
@@ -10399,9 +10912,13 @@
             card.id || card.title
           ))
         ] }) : null,
-        entries.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Entry, { entry, lang, onApprove }, entry.id))
+        entries.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Entry, { entry, lang, onApprove }, entry.id)),
+        streaming && thinking ? /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { paddingLeft: 28, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Spinner, { size: 12 }),
+          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { children: t.thinking })
+        ] }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
         Composer,
         {
           value: draft,
@@ -10411,7 +10928,8 @@
           streaming,
           disabled: composerDisabled,
           placeholder: t.placeholder,
-          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : null
+          options: composerOptions,
+          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : null
         }
       ) })
     ] });
@@ -10462,7 +10980,19 @@
         "Understand the user goal, then choose appropriate MCP tools before operating.",
         "Name target comps, layers, properties, or files in quotes before changing them.",
         "Prefer read-only inspection before edits when context is missing.",
-        "Summarize tool results plainly and ask only when a required detail is missing."
+        "Summarize tool results plainly and ask only when a required detail is missing.",
+        "",
+        "Working mode:",
+        "- Prefer typed tools (ae_createLayer / ae_setProperty / ae_readProps, etc.); use ae_exec scripts only when no typed tool fits.",
+        "- Before scripting, inspect with read tools (ae_overview / ae_layers / ae_readProps) to confirm structure instead of guessing project contents.",
+        "- ae_exec accepts only code and undoGroup; it has no comp_id or other targeting parameters. Put target lookup inside the script.",
+        "",
+        "ExtendScript scripting pitfalls (must follow):",
+        "- setTemporalEaseAtKey ease arrays must match the property dimension (1D like Opacity=1; Scale 3D=3; spatial properties like Position=1). Use AEMCP.easeKeys(prop) to size them automatically.",
+        '- Any byName / index lookup may return null; check before use, or call AEMCP.mustFind(value, "name") so the error names the missing target.',
+        "- Do not invent APIs that do not exist (for example items.byName); if unsure, use read tools or iterate.",
+        "- AE may be localized (Chinese): display names are translated, so prefer matchName for property matching.",
+        "- AEMCP helpers (safeValue / easeKeys / mustFind / compById / layerById) are injected and available; layerById and similar helpers expect numeric ids."
       ].join(" ");
     }
     return [
@@ -10470,7 +11000,19 @@
       "\u5148\u7406\u89E3\u7528\u6237\u76EE\u6807\uFF0C\u518D\u9009\u62E9\u5408\u9002\u7684 MCP \u5DE5\u5177\u64CD\u4F5C AE\u3002",
       "\u4FEE\u6539\u524D\u7528\u5F15\u53F7\u660E\u793A\u76EE\u6807\u5408\u6210\u3001\u56FE\u5C42\u3001\u5C5E\u6027\u6216\u6587\u4EF6\u3002",
       "\u7F3A\u5C11\u4E0A\u4E0B\u6587\u65F6\u4F18\u5148\u7528\u53EA\u8BFB\u5DE5\u5177\u68C0\u67E5\u3002",
-      "\u7528\u7B80\u660E\u8BED\u8A00\u603B\u7ED3\u5DE5\u5177\u7ED3\u679C\uFF0C\u53EA\u5728\u7F3A\u5C11\u5FC5\u8981\u4FE1\u606F\u65F6\u8FFD\u95EE\u3002"
+      "\u7528\u7B80\u660E\u8BED\u8A00\u603B\u7ED3\u5DE5\u5177\u7ED3\u679C\uFF0C\u53EA\u5728\u7F3A\u5C11\u5FC5\u8981\u4FE1\u606F\u65F6\u8FFD\u95EE\u3002",
+      "",
+      "\u5DE5\u4F5C\u65B9\u5F0F\uFF1A",
+      "- \u4F18\u5148\u4F7F\u7528 typed \u5DE5\u5177\uFF08ae_createLayer / ae_setProperty / ae_readProps \u7B49\uFF09\uFF1B\u53EA\u6709\u6CA1\u6709\u5BF9\u5E94\u5DE5\u5177\u65F6\u624D\u7528 ae_exec \u5199\u811A\u672C\u3002",
+      "- \u5199\u811A\u672C\u524D\u5148\u7528\u8BFB\u5DE5\u5177\uFF08ae_overview / ae_layers / ae_readProps\uFF09\u786E\u8BA4\u7ED3\u6784\uFF0C\u4E0D\u8981\u51ED\u8BB0\u5FC6\u731C\u6D4B\u5DE5\u7A0B\u5185\u5BB9\u3002",
+      "- ae_exec \u53EA\u63A5\u53D7 code \u4E0E undoGroup \u4E24\u4E2A\u53C2\u6570\uFF0C\u6CA1\u6709 comp_id \u7B49\u5B9A\u4F4D\u53C2\u6570\u2014\u2014\u76EE\u6807\u5B9A\u4F4D\u5199\u5728\u811A\u672C\u91CC\u3002",
+      "",
+      "ExtendScript \u9AD8\u9891\u9677\u9631\uFF08\u52A1\u5FC5\u9075\u5B88\uFF09\uFF1A",
+      "- setTemporalEaseAtKey \u7684\u7F13\u52A8\u6570\u7EC4\u957F\u5EA6\u5FC5\u987B\u7B49\u4E8E\u5C5E\u6027\u7EF4\u5EA6\uFF08\u4E00\u7EF4\u5982 Opacity=1\uFF1BScale \u4E09\u7EF4=3\uFF1B\u7A7A\u95F4\u5C5E\u6027\u5982 Position=1\uFF09\u3002\u76F4\u63A5\u7528 AEMCP.easeKeys(prop) \u81EA\u52A8\u5904\u7406\u3002",
+      '- \u4EFB\u4F55 byName / \u7D22\u5F15\u67E5\u627E\u90FD\u53EF\u80FD\u8FD4\u56DE null\uFF0C\u4F7F\u7528\u524D\u5FC5\u987B\u5224\u7A7A\uFF1B\u6216\u7528 AEMCP.mustFind(value, "\u540D\u5B57") \u8BA9\u9519\u8BEF\u81EA\u5E26\u540D\u5B57\u3002',
+      "- \u4E0D\u5B58\u5728\u7684 API \u4E0D\u8981\u81C6\u9020\uFF08\u5982 items.byName \u4E0D\u5B58\u5728\uFF09\uFF1B\u4E0D\u786E\u5B9A\u5C31\u5148\u7528\u8BFB\u5DE5\u5177\u6216\u904D\u5386\u3002",
+      "- \u672C\u673A\u53EF\u80FD\u662F\u672C\u5730\u5316\uFF08\u4E2D\u6587\uFF09AE\uFF1A\u663E\u793A\u540D\u662F\u7FFB\u8BD1\u8FC7\u7684\uFF0C\u5339\u914D\u5C5E\u6027\u4F18\u5148\u7528 matchName\u3002",
+      "- AEMCP \u52A9\u624B\uFF08safeValue / easeKeys / mustFind / compById / layerById\uFF09\u5DF2\u6CE8\u5165\uFF0C\u53EF\u76F4\u63A5\u8C03\u7528\uFF1BlayerById \u7B49\u7528\u6570\u5B57 id\u3002"
     ].join(" ");
   }
   function mapMcpToolsToAnthropic(tools = []) {
@@ -10482,6 +11024,7 @@
   }
   function classifyHttpError(status, fallbackMessage) {
     if (status === 401 || status === 403) return { kind: "auth", message: "Anthropic authentication failed." };
+    if (status === 404) return { kind: "model", message: "Model unavailable for this API key." };
     if (status === 429) return { kind: "rate_limit", message: "Anthropic rate limit reached." };
     if (status === 529 || status >= 500) return { kind: "overloaded", message: "Anthropic service is overloaded." };
     return { kind: "network", message: fallbackMessage || "Anthropic request failed." };
@@ -10536,6 +11079,8 @@
     messages,
     tools,
     signal,
+    effort = null,
+    fast = false,
     fetchImpl = globalThis.fetch,
     onTextDelta = () => {
     }
@@ -10544,23 +11089,28 @@
     if (!fetchImpl) throw toError("network", "fetch is unavailable in this runtime.");
     let response;
     try {
+      const headers = {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+        "content-type": "application/json"
+      };
+      if (fast) headers["anthropic-beta"] = "fast-mode-2026-02-01";
+      const body = {
+        model,
+        max_tokens: 8192,
+        system,
+        messages,
+        tools: mapMcpToolsToAnthropic(tools),
+        stream: true
+      };
+      if (effort) body.output_config = { effort };
+      if (fast) body.speed = "fast";
       response = await fetchImpl("https://api.anthropic.com/v1/messages", {
         method: "POST",
         signal,
-        headers: {
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-          "content-type": "application/json"
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: 8192,
-          system,
-          messages,
-          tools: mapMcpToolsToAnthropic(tools),
-          stream: true
-        })
+        headers,
+        body: JSON.stringify(body)
       });
     } catch (e) {
       if (e && e.name === "AbortError") throw e;
@@ -10616,6 +11166,7 @@
     if (sessionAllowed) return true;
     if (mode === "none") return true;
     const annotations = tool && tool.annotations || {};
+    if (mode === "readonly") return annotations.readOnlyHint === true;
     if (mode === "manual") return annotations.readOnlyHint === true;
     if (mode === "auto") return annotations.destructiveHint !== true;
     return false;
@@ -10635,6 +11186,8 @@
     getModel,
     mcp,
     getPermissionMode,
+    getEffort,
+    getFast,
     onEvent,
     anthropic = sendAnthropicMessage,
     maxToolRounds = MAX_TOOL_ROUNDS,
@@ -10678,6 +11231,10 @@
       emit({ type: "tool-start", toolUseId: toolUse.id, name: toolUse.name, input: clone(toolUse.input || {}) });
       const tool = toolByName.get(toolUse.name) || {};
       const mode = getPermissionMode && getPermissionMode() || "manual";
+      if (mode === "readonly" && !(tool.annotations && tool.annotations.readOnlyHint === true)) {
+        emit({ type: "tool-denied", toolUseId: toolUse.id });
+        return makeToolResult(toolUse.id, "Blocked: read-only mode allows only read tools.", true);
+      }
       const sessionAllowed = sessionAllowedTools.has(toolUse.name);
       if (!shouldBypassApproval({ mode, tool, sessionAllowed })) {
         emit({
@@ -10722,6 +11279,8 @@
               messages: clone(messages),
               tools,
               signal: controller.signal,
+              effort: getEffort && getEffort() || null,
+              fast: Boolean(getFast && getFast()),
               onTextDelta: (delta) => emit({ type: "text-delta", text: delta })
             });
             const assistantMessage = result.assistantMessage || { role: "assistant", content: [] };
@@ -10783,9 +11342,14 @@
   }
 
   // src/lib/backendSelect.js
-  function pickBackend({ pref, probe, hasApiKey }) {
+  function pickBackend({ pref, probe, hasApiKey, codexProbe }) {
     if (pref === "byok") {
       return hasApiKey ? { backend: "byok", reason: "ok" } : { backend: "none", reason: "no-key" };
+    }
+    if (pref === "codex") {
+      if (codexProbe === null) return { backend: "none", reason: "codex-probing" };
+      if (!codexProbe || !codexProbe.loggedIn) return { backend: "none", reason: "codex-not-logged-in" };
+      return { backend: "codex", reason: "ok" };
     }
     if (probe === null) return { backend: "none", reason: "probing" };
     if (!probe.nodeOk) return hasApiKey ? { backend: "byok", reason: "no-node" } : { backend: "none", reason: "no-node" };
@@ -10806,7 +11370,7 @@
     return { allowedTools, annotations };
   }
   function shouldResetOnBackendChange(prevReal, next) {
-    if (next !== "subscription" && next !== "byok") return { reset: false, nextReal: prevReal || null };
+    if (next !== "subscription" && next !== "byok" && next !== "codex") return { reset: false, nextReal: prevReal || null };
     if (!prevReal) return { reset: false, nextReal: next };
     if (prevReal === next) return { reset: false, nextReal: prevReal };
     return { reset: true, nextReal: next };
@@ -10841,7 +11405,7 @@
   // src/cep/mcpClient.js
   var DEFAULT_TIMEOUT_MS = 3e4;
   var MCP_PROTOCOL_VERSION = "2025-06-18";
-  var PANEL_VERSION = "0.4.0";
+  var PANEL_VERSION = "0.5.0";
   function getCepRequire() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
@@ -10896,6 +11460,7 @@
     explicitPath,
     whereImpl = defaultWhereImpl,
     fsImpl,
+    envImpl = null,
     extRoot = "",
     repoRoot = ""
   } = {}) {
@@ -10904,6 +11469,11 @@
     const found = firstWhereHit(await whereImpl("ae-mcp"));
     if (found) return { command: found, args: [], source: "where" };
     const fs = fsImpl || defaultFs();
+    const profile = (envImpl || getCepEnv()).USERPROFILE || "";
+    if (profile) {
+      const shim = joinPath(joinPath(joinPath(normalizeFsPath(profile), ".local"), "bin"), "ae-mcp.exe");
+      if (fs.existsSync(shim)) return { command: shim, args: [], source: "uv-tool" };
+    }
     const projectRoot = findProjectRoot({ extRoot, repoRoot, fsImpl: fs });
     if (projectRoot) {
       return { command: "uv", args: ["run", "--project", projectRoot, "ae-mcp"], source: "uv" };
@@ -11319,7 +11889,7 @@
     delete copy.ANTHROPIC_API_KEY;
     return copy;
   }
-  function appendTail(tail, chunk) {
+  function appendTail2(tail, chunk) {
     const next = tail + String(chunk || "");
     return next.length > STDERR_TAIL_LIMIT ? next.slice(next.length - STDERR_TAIL_LIMIT) : next;
   }
@@ -11330,6 +11900,8 @@
     getToolMeta,
     getModel,
     getPermissionMode,
+    getEffort,
+    getThinking,
     onEvent,
     lang = "zh",
     spawnImpl,
@@ -11492,7 +12064,7 @@
         });
         if (proc.stdout && proc.stdout.on) proc.stdout.on("data", reader);
         if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
-          stderrTail = appendTail(stderrTail, chunk);
+          stderrTail = appendTail2(stderrTail, chunk);
         });
         proc.on("exit", (code, signal) => handleExit(code, signal));
         proc.on("error", (error) => {
@@ -11523,7 +12095,14 @@
       }
       const userText = String(text || "");
       transcript.push({ role: "user", text: userText });
-      writeMessage({ t: "user", text: userText, permissionMode: getPermissionMode(), model: getModel() });
+      writeMessage({
+        t: "user",
+        text: userText,
+        permissionMode: getPermissionMode(),
+        model: getModel(),
+        effort: getEffort ? getEffort() : void 0,
+        thinking: getThinking ? getThinking() : void 0
+      });
       return activeRun;
     }
     function approve(toolUseId, decision) {
@@ -11554,6 +12133,545 @@
       stop,
       reset,
       getMessages: () => clone2(transcript)
+    };
+  }
+
+  // src/cep/codexBackend.js
+  var RPC_TIMEOUT_MS = 3e4;
+  var STDERR_TAIL_LIMIT2 = 4096;
+  var APPROVAL_POLICY = {
+    granular: { mcp_elicitations: true, rules: false, sandbox_approval: false }
+  };
+  var SANDBOX_POLICY = { type: "readOnly" };
+  function getCepRequire4() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
+      return globalThis.window.cep_node.require;
+    }
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function getCepEnv4() {
+    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
+  }
+  function appendTail3(tail, chunk) {
+    const next = tail + String(chunk || "");
+    return next.length > STDERR_TAIL_LIMIT2 ? next.slice(next.length - STDERR_TAIL_LIMIT2) : next;
+  }
+  function clone3(value) {
+    return value == null ? value : JSON.parse(JSON.stringify(value));
+  }
+  function normalizeFsPath3(value) {
+    return String(value || "").replace(/\//g, "\\").replace(/\\+$/, "");
+  }
+  function dirname2(value) {
+    const normalized = normalizeFsPath3(value);
+    const index = normalized.lastIndexOf("\\");
+    if (index <= 0) return "";
+    return normalized.slice(0, index);
+  }
+  function defaultCwd(env) {
+    const extRoot = env && (env.AE_MCP_PANEL_EXT_ROOT || env.EXTENSION_ROOT);
+    const parent = extRoot ? dirname2(extRoot) : "";
+    if (parent) return parent;
+    if (env && (env.TEMP || env.TMP)) return env.TEMP || env.TMP;
+    try {
+      return getCepRequire4()("os").tmpdir();
+    } catch (e) {
+      return ".";
+    }
+  }
+  function responseMessage(id, result) {
+    return { jsonrpc: "2.0", id, result };
+  }
+  function errorMessage(id, code, message) {
+    return { jsonrpc: "2.0", id, error: { code, message } };
+  }
+  function createRpc({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEOUT_MS }) {
+    let nextId2 = 1;
+    const pending = /* @__PURE__ */ new Map();
+    function writeMessage(message) {
+      writeLine(JSON.stringify(message) + "\n");
+    }
+    function rejectPending(id, error) {
+      const entry = pending.get(id);
+      if (!entry) return;
+      pending.delete(id);
+      clearTimeout(entry.timer);
+      entry.reject(error);
+    }
+    function handleMessage(message) {
+      if (!message || typeof message !== "object") return;
+      const hasId = message.id !== void 0 && message.id !== null;
+      if (hasId && !message.method) {
+        const entry = pending.get(message.id);
+        if (!entry) return;
+        pending.delete(message.id);
+        clearTimeout(entry.timer);
+        if (message.error) {
+          const error = new Error(message.error.message || "JSON-RPC request failed");
+          error.code = message.error.code;
+          error.data = message.error.data;
+          entry.reject(error);
+        } else {
+          entry.resolve(message.result);
+        }
+        return;
+      }
+      if (message.method && hasId) {
+        if (onRequest) onRequest(message);
+        return;
+      }
+      if (message.method && onNotification) onNotification(message);
+    }
+    function request(method, params, timeoutOverrideMs) {
+      const id = nextId2++;
+      const message = { jsonrpc: "2.0", id, method };
+      if (params !== void 0) message.params = params;
+      const limit = timeoutOverrideMs || timeoutMs;
+      const promise = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => rejectPending(id, new Error(method + " timed out after " + limit + "ms")), limit);
+        pending.set(id, { resolve, reject, timer });
+      });
+      writeMessage(message);
+      return promise;
+    }
+    function fireRequest(method, params) {
+      const id = nextId2++;
+      const message = { jsonrpc: "2.0", id, method };
+      if (params !== void 0) message.params = params;
+      writeMessage(message);
+      return id;
+    }
+    function respond(id, result) {
+      writeMessage(responseMessage(id, result));
+    }
+    function respondError(id, code, message) {
+      writeMessage(errorMessage(id, code, message));
+    }
+    function close(reason = new Error("Codex app-server closed")) {
+      for (const id of Array.from(pending.keys())) rejectPending(id, reason);
+    }
+    return { request, fireRequest, respond, respondError, close, handleMessage };
+  }
+  function prefixedToolName(params) {
+    const raw = elicitationToolName(params);
+    if (!raw) return "";
+    const text = String(raw);
+    return text.startsWith("mcp__") ? text : "mcp__ae__" + text;
+  }
+  function elicitationToolName(params) {
+    if (!params || typeof params !== "object") return "";
+    const match = String(params.message || "").match(/run tool "([^"]+)"/);
+    if (match) return match[1];
+    const description = params._meta && params._meta.tool_description;
+    if (description) return String(description).split("\u2014")[0].trim();
+    return params.name || params.tool || params.toolName || params.request && params.request.tool || "";
+  }
+  function elicitationInput(params) {
+    if (!params || typeof params !== "object") return params;
+    if (params._meta && params._meta.tool_params !== void 0) return params._meta.tool_params;
+    if (params.arguments !== void 0) return params.arguments;
+    if (params.input !== void 0) return params.input;
+    if (params.request && params.request.arguments !== void 0) return params.request.arguments;
+    return params;
+  }
+  function itemFromParams(params) {
+    return params && params.item || params || {};
+  }
+  function mcpToolName(item) {
+    const tool = item && (item.tool || item.name);
+    return tool ? "mcp__ae__" + String(tool).replace(/^mcp__ae__/, "") : "";
+  }
+  function toolResultText(result) {
+    const content = result && Array.isArray(result.content) ? result.content : [];
+    return content.filter((part) => part && part.type === "text").map((part) => String(part.text || "")).join("");
+  }
+  function threadIdFromResult(result) {
+    return result && (result.threadId || result.id || result.thread && result.thread.id) || null;
+  }
+  function createCodexBackend({
+    spawnImpl,
+    getModel,
+    getEffort,
+    getFast,
+    getPermissionMode,
+    getMcpSpec,
+    getToolMeta,
+    onEvent,
+    lang = "zh",
+    env
+  }) {
+    let proc = null;
+    let rpc = null;
+    let startPromise = null;
+    let initializePromise = null;
+    let initialized = false;
+    let threadId = null;
+    let currentTurnId = null;
+    let stopping = false;
+    let stderrTail = "";
+    let transcript = [];
+    let activeRun = null;
+    let activeResolve = null;
+    let activeAssistantText = "";
+    let toolMeta = { allowedTools: [], annotations: {} };
+    const pendingApprovals = /* @__PURE__ */ new Map();
+    const sessionAllowedTools = /* @__PURE__ */ new Set();
+    function emit(evt) {
+      if (onEvent) onEvent(evt);
+    }
+    function getSpawn() {
+      if (spawnImpl) return spawnImpl;
+      return getCepRequire4()("child_process").spawn;
+    }
+    function currentEnv() {
+      return Object.assign({}, getCepEnv4(), env || {});
+    }
+    function finishActive() {
+      if (!activeResolve) {
+        activeRun = null;
+        activeAssistantText = "";
+        return;
+      }
+      const resolve = activeResolve;
+      activeResolve = null;
+      activeRun = null;
+      activeAssistantText = "";
+      resolve();
+    }
+    function drainApprovals() {
+      for (const [toolUseId, approval] of Array.from(pendingApprovals.entries())) {
+        if (rpc) rpc.respond(approval.rpcId, { action: "decline", content: {} });
+        pendingApprovals.delete(toolUseId);
+        emit({ type: "tool-denied", toolUseId });
+      }
+    }
+    function handleNotification(message) {
+      const params = message.params || {};
+      if (message.method === "turn/started") {
+        currentTurnId = params.turn && params.turn.id || params.turnId || null;
+        emit({ type: "turn-start" });
+        return;
+      }
+      if (message.method === "item/agentMessage/delta") {
+        emit({ type: "thinking", active: false });
+        const text = params.delta !== void 0 ? params.delta : params.text;
+        if (text) {
+          activeAssistantText += String(text);
+          emit({ type: "text-delta", text: String(text), phase: params.phase });
+        }
+        return;
+      }
+      if (message.method === "item/started") {
+        const item = itemFromParams(params);
+        if (item.type === "reasoning") {
+          emit({ type: "thinking", active: true });
+          return;
+        }
+        if (item.type !== "mcpToolCall") return;
+        emit({
+          type: "tool-start",
+          toolUseId: String(item.id || ""),
+          name: mcpToolName(item),
+          input: item.arguments
+        });
+        return;
+      }
+      if (message.method === "item/completed") {
+        const item = itemFromParams(params);
+        if (item.type === "reasoning") {
+          emit({ type: "thinking", active: false });
+          return;
+        }
+        if (item.type !== "mcpToolCall") return;
+        emit({
+          type: "tool-result",
+          toolUseId: String(item.id || ""),
+          name: mcpToolName(item),
+          ok: !item.error && item.status === "completed",
+          text: toolResultText(item.result),
+          durationMs: item.durationMs
+        });
+        return;
+      }
+      if (message.method === "turn/completed") {
+        currentTurnId = null;
+        drainApprovals();
+        emit({ type: "turn-end", stopReason: "end_turn" });
+        transcript.push({ role: "assistant", text: activeAssistantText });
+        finishActive();
+        return;
+      }
+      if (message.method === "error") {
+        const error = params.error || params;
+        emit({ type: "error", kind: error.kind || "mcp", message: error.message || String(error || "Codex app-server error") });
+        finishActive();
+      }
+    }
+    function acceptElicitation(rpcId) {
+      if (rpc) rpc.respond(rpcId, { action: "accept", content: {} });
+    }
+    function declineElicitation(rpcId, toolUseId) {
+      if (rpc) rpc.respond(rpcId, { action: "decline", content: {} });
+      emit({ type: "tool-denied", toolUseId });
+    }
+    function handleRequest(message) {
+      if (message.method !== "mcpServer/elicitation/request") {
+        if (rpc) rpc.respondError(message.id, -32601, "Method not found");
+        return;
+      }
+      const toolUseId = String(message.id);
+      const params = message.params || {};
+      const name = prefixedToolName(params);
+      const input = elicitationInput(params) || {};
+      const annotations = toolMeta && toolMeta.annotations || {};
+      const ann = annotations[name] || {};
+      const tier = getPermissionMode ? getPermissionMode() : "manual";
+      if (sessionAllowedTools.has(name) || ann.readOnly || tier === "none" || tier === "auto" && !ann.destructive) {
+        acceptElicitation(message.id);
+        return;
+      }
+      if (tier === "readonly") {
+        declineElicitation(message.id, toolUseId);
+        return;
+      }
+      const approval = {
+        rpcId: message.id,
+        name,
+        input
+      };
+      pendingApprovals.set(toolUseId, approval);
+      emit({
+        type: "approval-required",
+        toolUseId,
+        name: approval.name,
+        input: approval.input,
+        risk: ann.destructive ? "destructive" : "write"
+      });
+    }
+    function handleExit(code, signal) {
+      const wasStopping = stopping;
+      const detail = stderrTail ? String(code) + (signal ? " " + signal : "") + " " + stderrTail : String(code) + (signal ? " " + signal : "");
+      if (rpc) rpc.close(new Error("codex app-server exited: " + detail));
+      proc = null;
+      rpc = null;
+      startPromise = null;
+      initializePromise = null;
+      initialized = false;
+      threadId = null;
+      if (wasStopping) return;
+      if (activeRun) {
+        emit({ type: "error", kind: "mcp", message: "codex app-server exited: " + detail });
+        finishActive();
+      }
+    }
+    function handleError(error) {
+      const err = error instanceof Error ? error : new Error("codex app-server error");
+      if (rpc) rpc.close(err);
+      proc = null;
+      rpc = null;
+      startPromise = null;
+      initializePromise = null;
+      initialized = false;
+      threadId = null;
+      if (activeRun) {
+        emit({ type: "error", kind: "mcp", message: err.message });
+        finishActive();
+      }
+    }
+    async function startProcess() {
+      if (proc && rpc) return true;
+      if (startPromise) return startPromise;
+      startPromise = (async () => {
+        const spawn = getSpawn();
+        const spawnEnv = currentEnv();
+        stderrTail = "";
+        stopping = false;
+        proc = spawn("codex", ["app-server"], {
+          stdio: "pipe",
+          windowsHide: true,
+          shell: true,
+          env: spawnEnv
+        });
+        rpc = createRpc({
+          writeLine: (line) => proc.stdin.write(line),
+          onNotification: handleNotification,
+          onRequest: handleRequest
+        });
+        const reader = createNdjsonReader((message) => rpc && rpc.handleMessage(message));
+        if (proc.stdout && proc.stdout.on) proc.stdout.on("data", reader);
+        if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
+          stderrTail = appendTail3(stderrTail, chunk);
+        });
+        proc.on("exit", (code, signal) => handleExit(code, signal));
+        proc.on("error", (error) => handleError(error));
+        return true;
+      })();
+      try {
+        return await startPromise;
+      } finally {
+        startPromise = null;
+      }
+    }
+    async function initialize() {
+      if (initialized) return true;
+      if (initializePromise) return initializePromise;
+      initializePromise = (async () => {
+        await startProcess();
+        await rpc.request("initialize", {
+          clientInfo: { name: "ae-mcp-panel", version: PANEL_VERSION },
+          // granular askForApproval (our four-tier mapping) is gated behind
+          // the experimental API surface (live error without it).
+          capabilities: { experimentalApi: true }
+        });
+        initialized = true;
+        return true;
+      })();
+      try {
+        return await initializePromise;
+      } finally {
+        initializePromise = null;
+      }
+    }
+    async function ensureThread() {
+      if (threadId) return threadId;
+      await initialize();
+      const mcpSpec = await getMcpSpec();
+      toolMeta = getToolMeta ? await getToolMeta() : { allowedTools: [], annotations: {} };
+      const spawnEnv = currentEnv();
+      const result = await rpc.request("thread/start", {
+        ephemeral: true,
+        cwd: defaultCwd(spawnEnv),
+        model: getModel(),
+        approvalPolicy: APPROVAL_POLICY,
+        approvalsReviewer: "user",
+        sandboxPolicy: SANDBOX_POLICY,
+        config: {
+          mcp_servers: {
+            ae: {
+              command: mcpSpec.command,
+              args: mcpSpec.args || [],
+              env: Object.assign({}, mcpSpec.env || {}, {
+                AE_MCP_BACKEND: "ae-mcp"
+              })
+            }
+          }
+        }
+      });
+      threadId = threadIdFromResult(result);
+      return threadId;
+    }
+    function turnParams(text) {
+      const params = {
+        threadId,
+        input: [{ type: "text", text }],
+        model: getModel(),
+        effort: getEffort ? getEffort() : void 0,
+        approvalPolicy: APPROVAL_POLICY,
+        sandboxPolicy: SANDBOX_POLICY
+      };
+      if (getFast && getFast()) params.serviceTier = "priority";
+      if (params.effort === void 0 || params.effort === null) delete params.effort;
+      return params;
+    }
+    async function sendUser(text) {
+      if (activeRun) return activeRun;
+      activeAssistantText = "";
+      activeRun = new Promise((resolve) => {
+        activeResolve = resolve;
+      });
+      try {
+        await ensureThread();
+        const userText = String(text || "");
+        transcript.push({ role: "user", text: userText });
+        rpc.request("turn/start", turnParams(userText), 18e4).catch((e) => {
+          const message = e && e.message ? e.message : "Failed to start Codex turn.";
+          emit({ type: "error", kind: /model/i.test(message) ? "model" : "mcp", message });
+          finishActive();
+        });
+      } catch (e) {
+        emit({ type: "error", kind: "mcp", message: e && e.message ? e.message : "Failed to start Codex turn." });
+        finishActive();
+      }
+      return activeRun;
+    }
+    function approve(toolUseId, decision) {
+      const id = String(toolUseId);
+      const approval = pendingApprovals.get(id);
+      if (!approval || !rpc) return;
+      pendingApprovals.delete(id);
+      const action = decision === "deny" ? "decline" : "accept";
+      if (action === "accept" && decision === "allow-session") sessionAllowedTools.add(approval.name);
+      rpc.respond(approval.rpcId, { action, content: {} });
+      if (action === "decline") emit({ type: "tool-denied", toolUseId: id });
+      else emit({ type: "tool-allowed", toolUseId: id });
+    }
+    function stop() {
+      if (rpc && threadId && currentTurnId) {
+        rpc.fireRequest("turn/interrupt", { threadId, turnId: currentTurnId });
+      }
+      drainApprovals();
+      if (activeRun) {
+        emit({ type: "error", kind: "aborted", message: "Turn aborted." });
+        finishActive();
+      }
+    }
+    function reset() {
+      stopping = true;
+      drainApprovals();
+      if (rpc) rpc.close(new Error("Codex backend reset"));
+      if (proc) {
+        try {
+          proc.kill();
+        } catch (e) {
+        }
+      }
+      proc = null;
+      rpc = null;
+      startPromise = null;
+      initializePromise = null;
+      initialized = false;
+      threadId = null;
+      currentTurnId = null;
+      transcript = [];
+      pendingApprovals.clear();
+      sessionAllowedTools.clear();
+      toolMeta = { allowedTools: [], annotations: {} };
+      finishActive();
+      stderrTail = "";
+      stopping = false;
+    }
+    async function probeAccount() {
+      try {
+        await initialize();
+        const accountResult = await rpc.request("account/read", {});
+        let models = null;
+        try {
+          const listed = await rpc.request("model/list", {});
+          models = Array.isArray(listed) ? listed : listed && listed.models;
+        } catch (e) {
+          models = null;
+        }
+        const account = accountResult && accountResult.account;
+        if (!account) return { loggedIn: false, detail: accountResult && accountResult.requiresOpenaiAuth ? "OpenAI auth required" : void 0, models };
+        return {
+          loggedIn: true,
+          email: account.email,
+          planType: account.planType,
+          models
+        };
+      } catch (e) {
+        return { loggedIn: false, detail: e && e.message ? e.message : String(e) };
+      }
+    }
+    return {
+      sendUser,
+      approve,
+      stop,
+      reset,
+      getMessages: () => clone3(transcript),
+      probeAccount
     };
   }
 
@@ -11635,6 +12753,11 @@
           ...entry,
           state: "denied"
         }));
+      case "tool-allowed":
+        return updateTool(current, evt.toolUseId, (entry) => ({
+          ...entry,
+          state: "running"
+        }));
       case "turn-end":
         return current;
       case "error":
@@ -11649,11 +12772,185 @@
     }
   }
 
+  // src/lib/backendCapabilities.js
+  var CLAUDE_PRICE_USD_PER_MTOK = {
+    "claude-fable-5": { input: 10, output: 50 },
+    "claude-opus-4-8": { input: 5, output: 25 },
+    "claude-sonnet-4-6": { input: 3, output: 15 },
+    "claude-haiku-4-5-20251001": { input: 1, output: 5 }
+  };
+  var CLAUDE_MODELS = [
+    { id: "claude-fable-5", label: "Fable 5", effortLevels: ["low", "medium", "high", "xhigh", "max"], adaptive: true },
+    { id: "claude-opus-4-8", label: "Opus 4.8", effortLevels: ["low", "medium", "high", "xhigh", "max"], adaptive: true },
+    { id: "claude-sonnet-4-6", label: "Sonnet 4.6", effortLevels: ["low", "medium", "high", "max"], adaptive: true },
+    { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5", effortLevels: ["low", "medium", "high"], adaptive: false }
+  ];
+  var APPROVAL_MODES = [
+    { id: "readonly", zh: "\u53EA\u8BFB", en: "Read-only", anchorZh: "\u4EC5\u653E\u884C\u53EA\u8BFB\u5DE5\u5177 \xB7 dontAsk", anchorEn: "read-only allowlist \xB7 dontAsk" },
+    { id: "manual", zh: "\u624B\u52A8", en: "Manual", anchorZh: "\u6BCF\u4E2A\u5199\u64CD\u4F5C\u5F39\u5361 \xB7 canUseTool", anchorEn: "every write asks \xB7 canUseTool" },
+    { id: "auto", zh: "\u81EA\u52A8", en: "Auto", anchorZh: "\u4EC5\u7834\u574F\u6027\u5F39\u5361 \xB7 \u6CE8\u89E3\u5206\u7EA7", anchorEn: "destructive asks \xB7 annotations" },
+    { id: "none", zh: "\u514D\u5BA1", en: "Bypass", anchorZh: "\u5168\u653E\uFF08\u4EC5 ae \u5DE5\u5177\uFF09\xB7 dontAsk", anchorEn: "allow all ae tools \xB7 dontAsk" }
+  ];
+  var TIER_ORDER = [1, 3, 5, 10];
+  function costTier(modelId) {
+    const price = CLAUDE_PRICE_USD_PER_MTOK[modelId];
+    if (!price) return 2;
+    const idx = TIER_ORDER.indexOf(price.input);
+    return idx === -1 ? 2 : idx + 1;
+  }
+  function withCost(models) {
+    return models.map((m) => ({ ...m, cost: costTier(m.id) }));
+  }
+  function claudeSubDescriptor() {
+    return {
+      id: "claude-sub",
+      label: "\u8BA2\u9605",
+      models: withCost(CLAUDE_MODELS),
+      defaultModelId: "claude-sonnet-4-6",
+      defaultEffort: "high",
+      supportsFast: () => false,
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
+  function byokStaticDescriptor() {
+    return {
+      ...claudeSubDescriptor(),
+      id: "byok",
+      label: "BYOK",
+      supportsFast: (modelId) => /claude-opus-4-(6|7|8)/.test(String(modelId || ""))
+    };
+  }
+  function mergeByokModels(descriptor, apiModels) {
+    if (!apiModels) return descriptor;
+    const curated = new Map(descriptor.models.map((m) => [m.id, m]));
+    const models = apiModels.map((m) => {
+      const known = curated.get(m.id);
+      if (known) return known;
+      return { id: m.id, label: m.display_name || m.id, effortLevels: [], cost: costTier(m.id) };
+    });
+    return { ...descriptor, models };
+  }
+  function codexStaticDescriptor() {
+    const models = [
+      { id: "gpt-5.5", label: "GPT-5.5", effortLevels: ["low", "medium", "high", "xhigh"], cost: 2, adaptive: false },
+      { id: "gpt-5.4", label: "GPT-5.4", effortLevels: ["low", "medium", "high", "xhigh"], cost: 2, adaptive: false }
+    ];
+    return {
+      id: "codex",
+      label: "Codex",
+      models,
+      defaultModelId: "gpt-5.5",
+      defaultEffort: "medium",
+      supportsFast: (modelId) => modelId === "gpt-5.5",
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
+  function modelListArray(modelListResult) {
+    if (Array.isArray(modelListResult)) return modelListResult;
+    if (modelListResult && Array.isArray(modelListResult.models)) return modelListResult.models;
+    return [];
+  }
+  function codexDescriptorFromModels(modelListResult) {
+    var _a;
+    const rawModels = modelListArray(modelListResult).filter((m) => m && m.hidden !== true);
+    if (!rawModels.length) return codexStaticDescriptor();
+    const fastModels = /* @__PURE__ */ new Set();
+    const models = rawModels.map((m) => {
+      const id = String(m.id || "");
+      if (Array.isArray(m.additionalSpeedTiers) && m.additionalSpeedTiers.includes("fast")) fastModels.add(id);
+      return {
+        id,
+        label: m.displayName || m.display_name || id,
+        effortLevels: Array.isArray(m.supportedReasoningEfforts) ? m.supportedReasoningEfforts.map((e) => e && e.reasoningEffort).filter(Boolean) : [],
+        cost: 2,
+        adaptive: false
+      };
+    }).filter((m) => m.id);
+    if (!models.length) return codexStaticDescriptor();
+    const defaultRaw = rawModels.find((m) => m && m.hidden !== true && m.isDefault === true) || rawModels[0];
+    const defaultModelId = defaultRaw && defaultRaw.id ? String(defaultRaw.id) : models[0].id;
+    const defaultEffort = defaultRaw && defaultRaw.defaultReasoningEffort ? defaultRaw.defaultReasoningEffort : ((_a = models.find((m) => m.id === defaultModelId)) == null ? void 0 : _a.effortLevels[0]) || "medium";
+    return {
+      id: "codex",
+      label: "Codex",
+      models,
+      defaultModelId,
+      defaultEffort,
+      supportsFast: (modelId) => fastModels.has(String(modelId || "")),
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
+
+  // src/cep/modelsApi.js
+  var CACHE_KEY = "ae_mcp_byok_models";
+  var TTL_MS = 24 * 60 * 60 * 1e3;
+  function getCepRequire5() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
+      return globalThis.window.cep_node.require;
+    }
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function fetchAnthropicModels({ apiKey, httpsImpl, timeoutMs = 8e3 } = {}) {
+    const https = httpsImpl || getCepRequire5()("https");
+    return new Promise((resolve) => {
+      const req = https.request({
+        hostname: "api.anthropic.com",
+        path: "/v1/models?limit=100",
+        method: "GET",
+        headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" }
+      }, (res) => {
+        let body = "";
+        res.on("data", (chunk) => {
+          body += chunk;
+        });
+        res.on("end", () => {
+          if (res.statusCode !== 200) return resolve(null);
+          try {
+            const parsed = JSON.parse(body);
+            const list = Array.isArray(parsed.data) ? parsed.data : [];
+            resolve(list.filter((m) => String(m.id || "").startsWith("claude-")));
+          } catch (e) {
+            resolve(null);
+          }
+        });
+      });
+      req.on("error", () => resolve(null));
+      if (req.setTimeout) req.setTimeout(timeoutMs, () => resolve(null));
+      req.end();
+    });
+  }
+  async function cachedByokModels({ apiKey, fetcher, storage, now = Date.now } = {}) {
+    const store = storage || globalThis.localStorage;
+    const keyTag = String(apiKey || "").slice(-6);
+    try {
+      const raw = store.getItem(CACHE_KEY);
+      if (raw) {
+        const cached = JSON.parse(raw);
+        if (cached.keyTag === keyTag && now() - cached.at < TTL_MS) return cached.models;
+      }
+    } catch (e) {
+    }
+    const run = fetcher || (() => fetchAnthropicModels({ apiKey }));
+    const models = await run();
+    if (models) {
+      try {
+        store.setItem(CACHE_KEY, JSON.stringify({ keyTag, at: now(), models }));
+      } catch (e) {
+      }
+    }
+    return models;
+  }
+
   // src/cep/useActivity.js
-  var import_react35 = __toESM(require_react(), 1);
+  var import_react37 = __toESM(require_react(), 1);
   function useActivity(getHost) {
-    const [events, setEvents] = import_react35.default.useState([]);
-    import_react35.default.useEffect(() => {
+    const [events, setEvents] = import_react37.default.useState([]);
+    import_react37.default.useEffect(() => {
       let unsub = null;
       let retry = null;
       let disposed = false;
@@ -11675,12 +12972,12 @@
         if (retry) clearTimeout(retry);
       };
     }, [getHost]);
-    const clear = import_react35.default.useCallback(() => setEvents([]), []);
+    const clear = import_react37.default.useCallback(() => setEvents([]), []);
     return { events, clear };
   }
 
   // src/cep/useHandshake.js
-  var import_react36 = __toESM(require_react(), 1);
+  var import_react38 = __toESM(require_react(), 1);
   function handshakeReached(info, since) {
     if (!info) return false;
     if (info.lastHealthAt && info.lastHealthAt > since) return true;
@@ -11688,8 +12985,8 @@
     return false;
   }
   function useHandshake(getHost, active) {
-    const [state, setState] = import_react36.default.useState("waiting");
-    import_react36.default.useEffect(() => {
+    const [state, setState] = import_react38.default.useState("waiting");
+    import_react38.default.useEffect(() => {
       if (!active) return void 0;
       const since = Date.now();
       setState("waiting");
@@ -11726,6 +13023,221 @@
     }
   }
 
+  // src/app/wizardWiring.js
+  var import_react39 = __toESM(require_react(), 1);
+
+  // src/cep/wizardActions.js
+  var OUTPUT_TAIL = 8192;
+  function getCepRequire6() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
+      return globalThis.window.cep_node.require;
+    }
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  var DETECT = {
+    uv: { file: "uv", args: ["--version"] },
+    node: { file: "node", args: ["--version"] },
+    claude: { file: "claude", args: ["--version"], shell: true }
+  };
+  function execVersion(execFile, file, args, env, shell) {
+    return new Promise((resolve) => {
+      execFile(file, args, { windowsHide: true, env, shell: shell === true }, (err, stdout, stderr) => {
+        if (err) return resolve({ ok: false });
+        resolve({ ok: true, version: String(stdout || stderr || "").trim() });
+      });
+    });
+  }
+  function getCepEnvSafe() {
+    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
+  }
+  async function detectAeMcp({ execFileImpl, env, fsImpl }) {
+    const execFile = execFileImpl || getCepRequire6()("child_process").execFile;
+    const whereHit = await new Promise((resolve) => {
+      execFile("where", ["ae-mcp"], { windowsHide: true, env }, (err, stdout) => {
+        resolve(err ? "" : String(stdout || "").split(/\r?\n/).map((l) => l.trim()).find(Boolean) || "");
+      });
+    });
+    if (whereHit) return { ok: true, version: whereHit };
+    const profile = (env || getCepEnvSafe()).USERPROFILE || "";
+    if (profile) {
+      const shim = profile.replace(/[\\/]+$/, "") + "\\.local\\bin\\ae-mcp.exe";
+      const fs = fsImpl || getCepRequire6()("fs");
+      if (fs.existsSync(shim)) return { ok: true, version: shim };
+    }
+    return { ok: false };
+  }
+  async function detectTool(id, { execFileImpl, env, fsImpl } = {}) {
+    if (id === "aeMcp") return detectAeMcp({ execFileImpl, env, fsImpl });
+    const spec = DETECT[id];
+    const execFile = execFileImpl || getCepRequire6()("child_process").execFile;
+    return execVersion(execFile, spec.file, spec.args, env, spec.shell);
+  }
+  var REPO = "https://github.com/JUNKDOGE-JOE/after-effects-mcp";
+  function buildInstallCommands({ panelVersion, repoRoot }) {
+    const src = (sub) => repoRoot ? `${repoRoot}\\packages\\${sub}` : `git+${REPO}@v${panelVersion}#subdirectory=packages/${sub}`;
+    return {
+      uv: { file: "winget", args: ["install", "--id", "astral-sh.uv", "-e", "--accept-source-agreements", "--accept-package-agreements"] },
+      uvFallback: { file: "powershell", args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "irm https://astral.sh/uv/install.ps1 | iex"] },
+      node: { file: "winget", args: ["install", "--id", "OpenJS.NodeJS.LTS", "-e", "--accept-source-agreements", "--accept-package-agreements"] },
+      claude: { file: "npm", args: ["install", "-g", "@anthropic-ai/claude-code"] },
+      aeMcp: { file: "uv", args: ["tool", "install", "--force", "--from", src("core"), "ae-mcp", "--with", src("bridge"), "--with", src("snapshot-mss")] }
+    };
+  }
+  function runAction({ file, args, spawnImpl, env, onChunk }) {
+    const spawn = spawnImpl || getCepRequire6()("child_process").spawn;
+    return new Promise((resolve) => {
+      let output = "";
+      const push = (chunk) => {
+        const text = String(chunk || "");
+        output = (output + text).slice(-OUTPUT_TAIL);
+        if (onChunk) onChunk(text);
+      };
+      let child;
+      try {
+        child = spawn(file, args, { windowsHide: true, env, shell: false });
+      } catch (e) {
+        return resolve({ ok: false, code: -1, output: String(e && e.message || e) });
+      }
+      if (child.stdout && child.stdout.on) child.stdout.on("data", push);
+      if (child.stderr && child.stderr.on) child.stderr.on("data", push);
+      child.on("error", (e) => resolve({ ok: false, code: -1, output: output + String(e && e.message || e) }));
+      child.on("exit", (code) => resolve({ ok: code === 0, code, output }));
+    });
+  }
+  function commandPreview({ file, args }) {
+    return [file, ...args.map((a) => /\s/.test(a) ? `"${a}"` : a)].join(" ");
+  }
+  function detectRepoRoot({ extRoot, fsImpl }) {
+    return findProjectRoot({ extRoot, repoRoot: "", fsImpl: fsImpl || getCepRequire6()("fs") });
+  }
+  var LOGIN_COMMANDS = { claude: "claude", codex: "codex login" };
+  function openLoginTerminal({ tool, spawnImpl } = {}) {
+    const spawn = spawnImpl || getCepRequire6()("child_process").spawn;
+    const command = LOGIN_COMMANDS[tool] || LOGIN_COMMANDS.claude;
+    const child = spawn("cmd", ["/c", "start", "ae-mcp login", "pwsh", "-NoExit", "-Command", command], {
+      detached: true,
+      windowsHide: false
+    });
+    if (child && child.unref) child.unref();
+    return true;
+  }
+
+  // src/app/wizardWiring.js
+  function isLoginOk(claudeStatus) {
+    return Boolean(claudeStatus && claudeStatus.state === "ready");
+  }
+  function versionFrom(status) {
+    if (!status) return "";
+    if (status.nodeVersion) return "Node " + String(status.nodeVersion).replace(/^v?/, "v");
+    return String(status.detail || "").trim();
+  }
+  function wingetMissing(output) {
+    const text = String(output || "").toLowerCase();
+    return text.includes("winget") && (text.includes("not recognized") || text.includes("not found") || text.includes("enoent") || text.includes("cannot find"));
+  }
+  function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin } = {}) {
+    const [stepStates, dispatch] = import_react39.default.useReducer(stepReducer, null, initialStepStates);
+    const [useUvFallback, setUseUvFallback] = import_react39.default.useState(false);
+    const repoRoot = import_react39.default.useMemo(() => {
+      try {
+        return detectRepoRoot({ extRoot });
+      } catch (e) {
+        return "";
+      }
+    }, [extRoot]);
+    const cmds = import_react39.default.useMemo(() => buildInstallCommands({
+      panelVersion: PANEL_VERSION,
+      repoRoot
+    }), [repoRoot]);
+    const activeCmds = import_react39.default.useMemo(() => ({
+      ...cmds,
+      uv: useUvFallback ? cmds.uvFallback : cmds.uv
+    }), [cmds, useUvFallback]);
+    const commandPreviews = import_react39.default.useMemo(() => ({
+      uv: commandPreview(activeCmds.uv),
+      aeMcp: commandPreview(activeCmds.aeMcp),
+      node: commandPreview(activeCmds.node),
+      claude: commandPreview(activeCmds.claude),
+      login: "claude"
+    }), [activeCmds]);
+    const detect = import_react39.default.useCallback(async (id) => {
+      dispatch({ type: "detect-start", id });
+      if (id === "login") {
+        if (recheckLogin) {
+          recheckLogin();
+          return { ok: false, pending: true };
+        }
+        const ok = isLoginOk(claudeStatus);
+        dispatch({ type: "detect-result", id, ok, version: ok ? versionFrom(claudeStatus) : "" });
+        return { ok, version: versionFrom(claudeStatus) };
+      }
+      const result = await detectTool(id);
+      dispatch({ type: "detect-result", id, ok: result.ok, version: result.version || "" });
+      return result;
+    }, [claudeStatus, recheckLogin]);
+    const install = import_react39.default.useCallback(async (id) => {
+      const cmd = activeCmds[id];
+      if (!cmd) return { ok: false, output: "No command configured for " + id };
+      if (id === "uv" && useUvFallback) {
+        const msg = lang === "zh" ? "winget \u4E0D\u53EF\u7528\u3002\u662F\u5426\u6539\u7528 astral \u5B98\u65B9 PowerShell \u5B89\u88C5\u811A\u672C\uFF1F" : "winget is unavailable. Use the official astral PowerShell installer instead?";
+        if (globalThis.window && globalThis.window.confirm && !globalThis.window.confirm(msg)) {
+          return { ok: false, output: "uv fallback cancelled" };
+        }
+      }
+      dispatch({ type: "run-start", id });
+      const result = await runAction({
+        ...cmd,
+        onChunk: (text) => dispatch({ type: "run-chunk", id, text })
+      });
+      if (id === "uv" && !result.ok && !useUvFallback && wingetMissing(result.output)) {
+        setUseUvFallback(true);
+        dispatch({
+          type: "run-done",
+          id,
+          ok: false,
+          output: result.output + "\nwinget was not found. Re-run Install to use the official astral PowerShell installer."
+        });
+        return result;
+      }
+      dispatch({ type: "run-done", id, ok: result.ok, output: result.output });
+      await detect(id);
+      return result;
+    }, [activeCmds, detect, lang, useUvFallback]);
+    const openLogin = import_react39.default.useCallback(() => {
+      openLoginTerminal({ tool: "claude" });
+      dispatch({ type: "detect-result", id: "login", ok: false });
+    }, []);
+    const bootDetectRef = import_react39.default.useRef(false);
+    import_react39.default.useEffect(() => {
+      if (bootDetectRef.current) return;
+      bootDetectRef.current = true;
+      ["uv", "aeMcp", "node", "claude"].forEach((id) => {
+        detect(id);
+      });
+    }, [detect]);
+    import_react39.default.useEffect(() => {
+      if (!claudeStatus) return;
+      if (claudeStatus.state === "checking") {
+        dispatch({ type: "detect-start", id: "login" });
+        return;
+      }
+      const ok = isLoginOk(claudeStatus);
+      dispatch({ type: "detect-result", id: "login", ok, version: ok ? versionFrom(claudeStatus) : "" });
+    }, [claudeStatus]);
+    return {
+      stepStates,
+      props: {
+        stepStates,
+        commandPreviews,
+        onDetect: detect,
+        onInstall: install,
+        onOpenLogin: openLogin
+      }
+    };
+  }
+
   // src/cep/diagnostics.js
   var HINTS = {
     "host-listening": {
@@ -11747,6 +13259,18 @@
     "extendscript-ping": {
       zh: "\u91CD\u542F\u9762\u677F\u670D\u52A1\uFF1B\u5982\u679C\u4ECD\u5931\u8D25\uFF0C\u8BF7\u91CD\u542F After Effects \u540E\u518D\u8BD5\u3002",
       en: "Restart the panel service. If it still fails, restart After Effects and try again."
+    },
+    uv: {
+      zh: "\u5B89\u88C5 uv\uFF1A\u4F18\u5148\u4F7F\u7528 winget install --id astral-sh.uv -e\u3002",
+      en: "Install uv: prefer winget install --id astral-sh.uv -e."
+    },
+    node: {
+      zh: "\u5B89\u88C5 Node.js LTS\uFF1Awinget install --id OpenJS.NodeJS.LTS -e\u3002",
+      en: "Install Node.js LTS: winget install --id OpenJS.NodeJS.LTS -e."
+    },
+    claude: {
+      zh: "\u5B89\u88C5 Claude Code\uFF1Anpm install -g @anthropic-ai/claude-code\u3002",
+      en: "Install Claude Code: npm install -g @anthropic-ai/claude-code."
     }
   };
   function tokenPath(os) {
@@ -11776,7 +13300,7 @@
     });
     return { response, body: await readJson(response) };
   }
-  async function runDiagnostics({ getHost, port, fs, os, fetchImpl }) {
+  async function runDiagnostics({ getHost, port, fs, os, fetchImpl, execFileImpl }) {
     const fetcher = fetchImpl || globalThis.fetch;
     const items = [];
     let token = "";
@@ -11847,6 +13371,15 @@
     } catch (e) {
       items.push({ id: "extendscript-ping", ok: false, detail: e.message, fixHint: HINTS["extendscript-ping"] });
     }
+    for (const id of ["uv", "node", "claude"]) {
+      const result = await detectTool(id, { execFileImpl });
+      items.push({
+        id,
+        ok: result.ok,
+        detail: result.ok ? result.version : HINTS[id].en,
+        fixHint: HINTS[id]
+      });
+    }
     return items;
   }
 
@@ -11889,7 +13422,7 @@
       }
     };
   }
-  function getCepRequire4() {
+  function getCepRequire7() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -11902,7 +13435,7 @@
     function start(port) {
       onStatus("starting", port);
       try {
-        const cepRequire4 = getCepRequire4();
+        const cepRequire4 = getCepRequire7();
         const path = cepRequire4("path");
         const extRoot = normalizeCepPath(cs2.getSystemPath("extension"));
         const hostPath = path.join(extRoot, "host", "server.js");
@@ -11930,7 +13463,7 @@
   }
 
   // src/app/App.jsx
-  var import_jsx_runtime33 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime35 = __toESM(require_jsx_runtime(), 1);
   var T = {
     zh: {
       connected: "\u670D\u52A1\u8FD0\u884C\u4E2D",
@@ -11952,7 +13485,9 @@
       cancel: "\u53D6\u6D88",
       noKeyHint: "\u5148\u5728\u8BBE\u7F6E\u91CC\u914D\u7F6E Anthropic API Key",
       probingHint: "\u6B63\u5728\u68C0\u6D4B Claude \u767B\u5F55\u6001\u2026",
-      notLoggedInHint: "\u8BA2\u9605\u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login\uFF0C\u518D\u5230\u8BBE\u7F6E\u91CC\u91CD\u65B0\u68C0\u6D4B",
+      notLoggedInHint: "Claude \u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login\uFF0C\u518D\u5230\u8BBE\u7F6E\u91CC\u91CD\u65B0\u68C0\u6D4B",
+      codexProbingHint: "\u6B63\u5728\u68C0\u6D4B Codex \u767B\u5F55\u6001\u2026",
+      codexNotLoggedInHint: "Codex \u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C codex \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B",
       noNodeHint: "\u5185\u5D4C\u5BF9\u8BDD\u9700\u8981\u7CFB\u7EDF Node 18+",
       pausedHint: "\u5DF2\u6682\u505C \u2014 \u6062\u590D\u540E\u624D\u80FD\u53D1\u9001",
       goSettings: "\u53BB\u8BBE\u7F6E"
@@ -11978,6 +13513,8 @@
       noKeyHint: "Set your Anthropic API key in Settings first",
       probingHint: "Checking Claude login\u2026",
       notLoggedInHint: "Not logged in: run claude /login in a terminal, then re-check in Settings",
+      codexProbingHint: "Checking Codex login\u2026",
+      codexNotLoggedInHint: "Codex is not logged in: log in with codex, then re-check",
       noNodeHint: "Embedded chat needs system Node 18+",
       pausedHint: "Paused \u2014 resume to send",
       goSettings: "Open Settings"
@@ -11994,6 +13531,26 @@
   function writePref(key, value) {
     try {
       window.localStorage.setItem(key, value);
+    } catch (e) {
+    }
+  }
+  var CODEX_MODELS_CACHE_KEY = "ae_mcp_codex_models";
+  var CODEX_MODELS_CACHE_MS = 24 * 60 * 60 * 1e3;
+  function readCachedCodexModels(storage) {
+    try {
+      const raw = storage.getItem(CODEX_MODELS_CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !Array.isArray(parsed.models)) return null;
+      if (Date.now() - Number(parsed.ts || 0) > CODEX_MODELS_CACHE_MS) return null;
+      return parsed.models;
+    } catch (e) {
+      return null;
+    }
+  }
+  function writeCachedCodexModels(storage, models) {
+    try {
+      storage.setItem(CODEX_MODELS_CACHE_KEY, JSON.stringify({ ts: Date.now(), models }));
     } catch (e) {
     }
   }
@@ -12029,77 +13586,137 @@
   function Shell({ cs: cs2 }) {
     const { lang, setLang } = useLang();
     const t = T[lang];
-    const [tab, setTab] = import_react37.default.useState("chat");
-    const [status, setStatus] = import_react37.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
-    const [paused, setPaused] = import_react37.default.useState(false);
-    const [logs, setLogs] = import_react37.default.useState([]);
-    const ctrl = import_react37.default.useRef(null);
-    const getHost = import_react37.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
-    const [wizardDone, setWizardDone] = import_react37.default.useState(() => isWizardDone(window.localStorage));
-    const [wizStep, setWizStep] = import_react37.default.useState(1);
-    const [wizClient, setWizClient] = import_react37.default.useState("claude-desktop");
+    const [tab, setTab] = import_react40.default.useState("chat");
+    const [status, setStatus] = import_react40.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
+    const [paused, setPaused] = import_react40.default.useState(false);
+    const [logs, setLogs] = import_react40.default.useState([]);
+    const ctrl = import_react40.default.useRef(null);
+    const getHost = import_react40.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
+    const [wizardDone, setWizardDone] = import_react40.default.useState(() => isWizardDone(window.localStorage));
+    const [wizStep, setWizStep] = import_react40.default.useState(1);
+    const [wizClient, setWizClient] = import_react40.default.useState("claude-desktop");
     const handshake = useHandshake(getHost, !wizardDone && wizStep === 4);
-    const [drawerOpen, setDrawerOpen] = import_react37.default.useState(false);
-    const [connInfo, setConnInfo] = import_react37.default.useState(null);
-    const [diagnostics, setDiagnostics] = import_react37.default.useState(null);
+    const [drawerOpen, setDrawerOpen] = import_react40.default.useState(false);
+    const [connInfo, setConnInfo] = import_react40.default.useState(null);
+    const [diagnostics, setDiagnostics] = import_react40.default.useState(null);
     const { events, clear } = useActivity(getHost);
-    const [clients, setClients] = import_react37.default.useState([]);
-    const [confirmRegen, setConfirmRegen] = import_react37.default.useState(false);
-    const [tokenEpoch, setTokenEpoch] = import_react37.default.useState(0);
-    const keyStore = import_react37.default.useMemo(() => {
+    const [clients, setClients] = import_react40.default.useState([]);
+    const [confirmRegen, setConfirmRegen] = import_react40.default.useState(false);
+    const [tokenEpoch, setTokenEpoch] = import_react40.default.useState(0);
+    const keyStore = import_react40.default.useMemo(() => {
       try {
         return createApiKeyStore();
       } catch (e) {
         return null;
       }
     }, []);
-    const [apiKey, setApiKey] = import_react37.default.useState(() => {
+    const [apiKey, setApiKey] = import_react40.default.useState(() => {
       try {
         return keyStore ? keyStore.readKey() : "";
       } catch (e) {
         return "";
       }
     });
-    const [model, setModel] = import_react37.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
-    const [permissionMode, setPermissionMode] = import_react37.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
-    const [backendPref, setBackendPref] = import_react37.default.useState(() => readPref("ae_mcp_backend", "subscription"));
-    const [probe, setProbe] = import_react37.default.useState(null);
-    const [chatEntries, setChatEntries] = import_react37.default.useState([]);
-    const [chatStreaming, setChatStreaming] = import_react37.default.useState(false);
-    const prefsRef = import_react37.default.useRef({ apiKey, model, permissionMode });
-    prefsRef.current = { apiKey, model, permissionMode };
+    const [model, setModel] = import_react40.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
+    const [sessionModel, setSessionModel] = import_react40.default.useState(null);
+    const [sessionEffort, setSessionEffort] = import_react40.default.useState(null);
+    const [sessionFast, setSessionFast] = import_react40.default.useState(null);
+    const [permissionMode, setPermissionMode] = import_react40.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
+    const [backendPref, setBackendPref] = import_react40.default.useState(() => readPref("ae_mcp_backend", "subscription"));
+    const [probe, setProbe] = import_react40.default.useState(null);
+    const [codexProbe, setCodexProbe] = import_react40.default.useState(null);
+    const [codexModels, setCodexModels] = import_react40.default.useState(() => readCachedCodexModels(window.localStorage));
+    const [chatEntries, setChatEntries] = import_react40.default.useState([]);
+    const [chatStreaming, setChatStreaming] = import_react40.default.useState(false);
+    const [thinkingActive, setThinkingActive] = import_react40.default.useState(false);
+    const baseDescriptor = import_react40.default.useMemo(() => {
+      if (backendPref === "byok") return byokStaticDescriptor();
+      if (backendPref === "codex") return codexStaticDescriptor();
+      return claudeSubDescriptor();
+    }, [backendPref]);
+    const [descriptor, setDescriptor] = import_react40.default.useState(() => baseDescriptor);
+    import_react40.default.useEffect(() => {
+      let alive = true;
+      setDescriptor(baseDescriptor);
+      if (backendPref === "byok" && apiKey) {
+        cachedByokModels({ apiKey }).then((list) => {
+          if (alive) setDescriptor(mergeByokModels(byokStaticDescriptor(), list));
+        }).catch(() => {
+        });
+      }
+      if (backendPref === "codex") {
+        const cached = codexModels || readCachedCodexModels(window.localStorage);
+        if (cached) setDescriptor(codexDescriptorFromModels({ models: cached }));
+      }
+      return () => {
+        alive = false;
+      };
+    }, [apiKey, backendPref, baseDescriptor, codexModels]);
+    const requestedModel = sessionModel || model;
+    const effectiveModel = descriptor.models.some((m) => m.id === requestedModel) ? requestedModel : descriptor.defaultModelId || descriptor.models[0] && descriptor.models[0].id || requestedModel;
+    const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
+    const effectiveEffort = sessionEffort || (modelMeta.effortLevels && modelMeta.effortLevels.length ? descriptor.defaultEffort : null);
+    const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
+    const runtimeRef = import_react40.default.useRef({ apiKey, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast });
+    runtimeRef.current = {
+      apiKey,
+      model: effectiveModel,
+      permissionMode,
+      effort: effectiveEffort,
+      thinking: modelMeta.adaptive === true ? "adaptive" : null,
+      fast: effectiveFast
+    };
     const extRoot = cs2 && cs2.getSystemPath ? cs2.getSystemPath("extension") : "";
-    const sidecarPath = import_react37.default.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
-    const mcp = import_react37.default.useMemo(() => createMcpClient({ extRoot }), [extRoot]);
-    const handleChatEvent = import_react37.default.useCallback((evt) => {
+    const sidecarPath = import_react40.default.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
+    const mcp = import_react40.default.useMemo(() => createMcpClient({ extRoot }), [extRoot]);
+    const handleChatEvent = import_react40.default.useCallback((evt) => {
       if (evt.type === "turn-start") setChatStreaming(true);
-      if (evt.type === "turn-end" || evt.type === "error") setChatStreaming(false);
+      if (evt.type === "thinking") setThinkingActive(!!evt.active);
+      if (evt.type === "turn-end" || evt.type === "error") {
+        setChatStreaming(false);
+        setThinkingActive(false);
+      }
       setChatEntries((entries) => reduceEvent(entries, evt));
     }, []);
-    const byokLoop = import_react37.default.useMemo(() => {
+    const byokLoop = import_react40.default.useMemo(() => {
       return createAgentLoop({
-        getApiKey: () => prefsRef.current.apiKey,
-        getModel: () => prefsRef.current.model,
-        getPermissionMode: () => prefsRef.current.permissionMode,
+        getApiKey: () => runtimeRef.current.apiKey,
+        getModel: () => runtimeRef.current.model,
+        getPermissionMode: () => runtimeRef.current.permissionMode,
+        getEffort: () => runtimeRef.current.effort,
+        getFast: () => runtimeRef.current.fast,
         mcp,
         lang,
         onEvent: handleChatEvent
       });
     }, [mcp, handleChatEvent]);
-    const claudeBackend = import_react37.default.useMemo(() => createClaudeAgentBackend({
+    const claudeBackend = import_react40.default.useMemo(() => createClaudeAgentBackend({
       resolveNode: resolveSystemNode,
       sidecarPath,
       getMcpSpec: () => resolveMcpCommand({ extRoot }),
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
-      getModel: () => prefsRef.current.model,
-      getPermissionMode: () => prefsRef.current.permissionMode,
+      getModel: () => runtimeRef.current.model,
+      getPermissionMode: () => runtimeRef.current.permissionMode,
+      getEffort: () => runtimeRef.current.effort,
+      getThinking: () => runtimeRef.current.thinking,
       lang,
       onEvent: handleChatEvent
     }), [extRoot, sidecarPath, mcp, handleChatEvent]);
-    const effective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey });
-    const activeBackend = effective.backend === "subscription" ? claudeBackend : byokLoop;
-    const activeBackendRef = import_react37.default.useRef(null);
-    const runClaudeProbe = import_react37.default.useCallback(() => {
+    const codexBackend = import_react40.default.useMemo(() => createCodexBackend({
+      getMcpSpec: () => resolveMcpCommand({ extRoot }),
+      getModel: () => runtimeRef.current.model,
+      getPermissionMode: () => runtimeRef.current.permissionMode,
+      getEffort: () => runtimeRef.current.effort,
+      getFast: () => runtimeRef.current.fast,
+      getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
+      lang,
+      env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
+      onEvent: handleChatEvent
+    }), [extRoot, mcp, handleChatEvent]);
+    const effective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey, codexProbe });
+    const activeBackend = effective.backend === "subscription" ? claudeBackend : effective.backend === "codex" ? codexBackend : byokLoop;
+    const activeBackendRef = import_react40.default.useRef(null);
+    const runClaudeProbe = import_react40.default.useCallback(() => {
       let alive = true;
       setProbe(null);
       probeClaudeLogin({
@@ -12114,19 +13731,44 @@
         alive = false;
       };
     }, [sidecarPath]);
-    import_react37.default.useEffect(() => {
+    import_react40.default.useEffect(() => {
       if (backendPref !== "subscription") return void 0;
       return runClaudeProbe();
     }, [backendPref, runClaudeProbe]);
-    import_react37.default.useEffect(() => {
+    const runCodexProbe = import_react40.default.useCallback(() => {
+      let alive = true;
+      setCodexProbe(null);
+      codexBackend.probeAccount().then((result) => {
+        if (!alive) return;
+        setCodexProbe(result);
+        if (result && Array.isArray(result.models)) {
+          setCodexModels(result.models);
+          writeCachedCodexModels(window.localStorage, result.models);
+        }
+      }).catch((e) => {
+        if (alive) setCodexProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
+      });
+      return () => {
+        alive = false;
+      };
+    }, [codexBackend]);
+    import_react40.default.useEffect(() => {
+      if (backendPref !== "codex") return void 0;
+      return runCodexProbe();
+    }, [backendPref, runCodexProbe]);
+    import_react40.default.useEffect(() => {
       const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
       activeBackendRef.current = decision.nextReal;
       if (!decision.reset) return;
       byokLoop.reset();
       claudeBackend.reset();
+      codexBackend.reset();
       setChatEntries([]);
       setChatStreaming(false);
-    }, [effective.backend, byokLoop, claudeBackend]);
+      setSessionModel(null);
+      setSessionEffort(null);
+      setSessionFast(null);
+    }, [effective.backend, byokLoop, claudeBackend, codexBackend]);
     const sendChat = (text) => {
       const trimmed = String(text || "").trim();
       if (!trimmed) return;
@@ -12138,10 +13780,10 @@
       setChatStreaming(false);
       setChatEntries([]);
     };
-    const pushLog = import_react37.default.useCallback((m) => {
+    const pushLog = import_react40.default.useCallback((m) => {
       setLogs((xs) => [...xs.slice(-199), `[${(/* @__PURE__ */ new Date()).toLocaleTimeString()}] ${m}`]);
     }, []);
-    import_react37.default.useEffect(() => {
+    import_react40.default.useEffect(() => {
       const port = loadSavedPort(window.localStorage) || DEFAULT_PORT;
       ctrl.current = createHostController({
         cs: cs2,
@@ -12157,7 +13799,7 @@
       });
       ctrl.current.start(port);
     }, [cs2, pushLog]);
-    import_react37.default.useEffect(() => {
+    import_react40.default.useEffect(() => {
       if (!drawerOpen) return void 0;
       const update = () => {
         const h = getHost();
@@ -12167,7 +13809,7 @@
       const i = setInterval(update, 3e3);
       return () => clearInterval(i);
     }, [drawerOpen, getHost]);
-    import_react37.default.useEffect(() => {
+    import_react40.default.useEffect(() => {
       if (tab !== "settings") return void 0;
       const update = () => {
         const h = getHost();
@@ -12178,7 +13820,7 @@
       const i = setInterval(update, 4e3);
       return () => clearInterval(i);
     }, [tab, getHost]);
-    const runDiag = import_react37.default.useCallback(async () => {
+    const runDiag = import_react40.default.useCallback(async () => {
       setDiagnostics("running");
       try {
         const items = await runDiagnostics({
@@ -12218,8 +13860,11 @@
       setWizardDone(true);
     };
     const mcpConfigStr = JSON.stringify(buildMcpConfig(status.port), null, 2);
+    const claudeStatus = probe === null ? { state: "checking" } : probe.nodeOk === false ? { state: "no-node", detail: probe.detail } : probe.loggedIn === false ? { state: "not-logged-in", detail: probe.detail } : { state: "ready", nodeVersion: probe.nodeVersion };
+    const codexStatus = codexProbe === null ? { state: "checking" } : codexProbe.loggedIn === false ? { state: "not-logged-in", detail: codexProbe.detail } : { state: "ready", email: codexProbe.email, planType: codexProbe.planType };
+    const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
     if (!wizardDone) {
-      return /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
         WizardScreen,
         {
           step: wizStep,
@@ -12232,14 +13877,15 @@
           mcpConfig: mcpConfigStr,
           onNext: () => setWizStep((s) => Math.min(4, s + 1)),
           onBack: () => setWizStep((s) => Math.max(1, s - 1)),
-          onCopy: () => copyText(wizStep === 2 ? "pip install ae-mcp" : mcpConfigStr),
+          onCopy: () => copyText(mcpConfigStr),
           onDiagnose: () => {
             finishWizard();
             setDrawerOpen(true);
             runDiag();
           },
           onDone: finishWizard,
-          onSkip: finishWizard
+          onSkip: finishWizard,
+          ...wizard.props
         }
       );
     }
@@ -12249,11 +13895,11 @@
       { id: "activity", icon: "list-checks", label: t.activity },
       { id: "settings", icon: "settings", label: t.settings }
     ];
-    const backendDisabledHint = effective.reason === "probing" ? t.probingHint : effective.reason === "not-logged-in" ? t.notLoggedInHint : effective.reason === "no-node" ? t.noNodeHint : effective.reason === "no-key" ? t.noKeyHint : "";
+    const backendDisabledHint = effective.reason === "probing" ? t.probingHint : effective.reason === "not-logged-in" ? t.notLoggedInHint : effective.reason === "codex-probing" ? t.codexProbingHint : effective.reason === "codex-not-logged-in" ? t.codexNotLoggedInHint : effective.reason === "no-node" ? t.noNodeHint : effective.reason === "no-key" ? t.noKeyHint : "";
     const composerDisabled = paused || effective.backend === "none";
-    const claudeStatus = probe === null ? { state: "checking" } : probe.nodeOk === false ? { state: "no-node", detail: probe.detail } : probe.loggedIn === false ? { state: "not-logged-in", detail: probe.detail } : { state: "ready", nodeVersion: probe.nodeVersion };
-    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(import_react37.default.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+    const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
+    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(import_react40.default.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
         StatusBar,
         {
           status: statusForBar,
@@ -12268,13 +13914,14 @@
           settingsTitle: t.settings
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }, children: [
-        tab === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }, children: [
+        tab === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
           ChatScreen,
           {
             lang,
             entries: chatEntries,
             streaming: chatStreaming,
+            thinking: thinkingActive,
             composerDisabled,
             disabledHint: paused ? t.pausedHint : composerDisabled ? backendDisabledHint : "",
             noticeActionLabel: paused ? t.resume : t.goSettings,
@@ -12282,10 +13929,24 @@
             onSend: sendChat,
             onStop: () => activeBackend.stop(),
             onApprove: (id, decision) => activeBackend.approve(id, decision),
-            onNewSession: newChatSession
+            onNewSession: newChatSession,
+            chipState: {
+              descriptor,
+              modelId: effectiveModel,
+              effort: effectiveEffort,
+              fast: effectiveFast,
+              permissionMode
+            },
+            onChipModel: setSessionModel,
+            onChipEffort: setSessionEffort,
+            onChipFast: (v) => setSessionFast(Boolean(v)),
+            onChipApproval: (m) => {
+              setPermissionMode(m);
+              writePref("ae_mcp_perm_mode", m);
+            }
           }
         ) : null,
-        tab === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+        tab === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
           ActivityScreen,
           {
             events,
@@ -12295,7 +13956,7 @@
             emptyCaption: t.actEmptyB
           }
         ) : null,
-        tab === "settings" ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+        tab === "settings" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
           SettingsScreen,
           {
             lang,
@@ -12326,7 +13987,8 @@
               setApiKey("");
             },
             validateKey: validateAnthropicKey,
-            model,
+            model: effectiveModel,
+            modelOptions,
             onModelChange: (m) => {
               setModel(m);
               writePref("ae_mcp_model", m);
@@ -12338,17 +14000,14 @@
             },
             claudeStatus,
             onRecheckClaude: runClaudeProbe,
-            permissionMode,
-            onPermissionMode: (m) => {
-              setPermissionMode(m);
-              writePref("ae_mcp_perm_mode", m);
-            }
+            codexStatus,
+            onRecheckCodex: runCodexProbe
           },
           tokenEpoch
         ) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(TabBar, { tabs, active: tab, onChange: setTab }),
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(TabBar, { tabs, active: tab, onChange: setTab }),
+      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
         ConnectionDrawer,
         {
           open: drawerOpen,
@@ -12361,7 +14020,7 @@
           onRestart: () => applyPort(status.port)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
         ConfirmDialog,
         {
           open: confirmRegen,
@@ -12386,13 +14045,13 @@
     ] });
   }
   function App({ cs: cs2 }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(LangProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Shell, { cs: cs2 }) });
+    return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(LangProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Shell, { cs: cs2 }) });
   }
 
   // src/main.jsx
-  var import_jsx_runtime34 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime36 = __toESM(require_jsx_runtime(), 1);
   var cs = new window.CSInterface();
-  (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime34.jsx)(App, { cs }));
+  (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime36.jsx)(App, { cs }));
 })();
 /*! Bundled license information:
 
@@ -12481,6 +14140,22 @@ lucide-react/dist/esm/icons/arrow-up.js:
    *)
 
 lucide-react/dist/esm/icons/book-open.js:
+  (**
+   * @license lucide-react v0.453.0 - ISC
+   *
+   * This source code is licensed under the ISC license.
+   * See the LICENSE file in the root directory of this source tree.
+   *)
+
+lucide-react/dist/esm/icons/box.js:
+  (**
+   * @license lucide-react v0.453.0 - ISC
+   *
+   * This source code is licensed under the ISC license.
+   * See the LICENSE file in the root directory of this source tree.
+   *)
+
+lucide-react/dist/esm/icons/brain.js:
   (**
    * @license lucide-react v0.453.0 - ISC
    *
@@ -12769,6 +14444,14 @@ lucide-react/dist/esm/icons/undo-2.js:
    *)
 
 lucide-react/dist/esm/icons/x.js:
+  (**
+   * @license lucide-react v0.453.0 - ISC
+   *
+   * This source code is licensed under the ISC license.
+   * See the LICENSE file in the root directory of this source tree.
+   *)
+
+lucide-react/dist/esm/icons/zap.js:
   (**
    * @license lucide-react v0.453.0 - ISC
    *
