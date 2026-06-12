@@ -6,7 +6,8 @@ const STDERR_TAIL_LIMIT = 4096;
 const APPROVAL_POLICY = {
   granular: { mcp_elicitations: true, rules: true, sandbox_approval: true },
 };
-const SANDBOX_POLICY = { mode: 'read-only' };
+// Tagged union per the protocol schema: ReadOnlySandboxPolicy.
+const SANDBOX_POLICY = { type: 'readOnly' };
 
 function getCepRequire() {
   if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
@@ -200,6 +201,7 @@ export function createCodexBackend({
   let initializePromise = null;
   let initialized = false;
   let threadId = null;
+  let currentTurnId = null;
   let stopping = false;
   let stderrTail = '';
   let transcript = [];
@@ -254,6 +256,7 @@ export function createCodexBackend({
   function handleNotification(message) {
     const params = message.params || {};
     if (message.method === 'turn/started') {
+      currentTurnId = (params.turn && params.turn.id) || params.turnId || null;
       emit({ type: 'turn-start' });
       return;
     }
@@ -290,6 +293,7 @@ export function createCodexBackend({
       return;
     }
     if (message.method === 'turn/completed') {
+      currentTurnId = null;
       drainApprovals();
       emit({ type: 'turn-end', stopReason: 'end_turn' });
       transcript.push({ role: 'assistant', text: activeAssistantText });
@@ -494,7 +498,11 @@ export function createCodexBackend({
   }
 
   function stop() {
-    if (rpc && threadId) rpc.fireRequest('turn/interrupt', { threadId });
+    // turn/interrupt requires BOTH ids (schema: TurnInterruptParams);
+    // without an active turn there is nothing to interrupt server-side.
+    if (rpc && threadId && currentTurnId) {
+      rpc.fireRequest('turn/interrupt', { threadId, turnId: currentTurnId });
+    }
     drainApprovals();
     if (activeRun) {
       emit({ type: 'error', kind: 'aborted', message: 'Turn aborted.' });
@@ -515,6 +523,7 @@ export function createCodexBackend({
     initializePromise = null;
     initialized = false;
     threadId = null;
+    currentTurnId = null;
     transcript = [];
     pendingApprovals.clear();
     finishActive();

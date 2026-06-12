@@ -12135,7 +12135,7 @@
   var APPROVAL_POLICY = {
     granular: { mcp_elicitations: true, rules: true, sandbox_approval: true }
   };
-  var SANDBOX_POLICY = { mode: "read-only" };
+  var SANDBOX_POLICY = { type: "readOnly" };
   function getCepRequire4() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
@@ -12296,6 +12296,7 @@
     let initializePromise = null;
     let initialized = false;
     let threadId = null;
+    let currentTurnId = null;
     let stopping = false;
     let stderrTail = "";
     let transcript = [];
@@ -12342,6 +12343,7 @@
     function handleNotification(message) {
       const params = message.params || {};
       if (message.method === "turn/started") {
+        currentTurnId = params.turn && params.turn.id || params.turnId || null;
         emit({ type: "turn-start" });
         return;
       }
@@ -12378,6 +12380,7 @@
         return;
       }
       if (message.method === "turn/completed") {
+        currentTurnId = null;
         drainApprovals();
         emit({ type: "turn-end", stopReason: "end_turn" });
         transcript.push({ role: "assistant", text: activeAssistantText });
@@ -12567,7 +12570,9 @@
       if (action === "decline") emit({ type: "tool-denied", toolUseId: id });
     }
     function stop() {
-      if (rpc && threadId) rpc.fireRequest("turn/interrupt", { threadId });
+      if (rpc && threadId && currentTurnId) {
+        rpc.fireRequest("turn/interrupt", { threadId, turnId: currentTurnId });
+      }
       drainApprovals();
       if (activeRun) {
         emit({ type: "error", kind: "aborted", message: "Turn aborted." });
@@ -12590,6 +12595,7 @@
       initializePromise = null;
       initialized = false;
       threadId = null;
+      currentTurnId = null;
       transcript = [];
       pendingApprovals.clear();
       finishActive();
