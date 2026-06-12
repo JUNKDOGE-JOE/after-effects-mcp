@@ -184,6 +184,16 @@ def test_render_get_properties_substitutes_query():
     assert "AEMCP.safeValue(" in jsx
 
 
+def test_render_get_properties_includes_localized_alias_support():
+    from ae_mcp.handlers.typed import render_get_properties
+    args = schemas.AeGetPropertiesArgs(layer_ids=[1], query="source text")
+    jsx = render_get_properties(args)
+    assert '"ADBE Text Document"' in jsx
+    assert '"source text"' in jsx
+    assert "isoLanguage" in jsx
+    assert "ALIAS[matchName]" in jsx
+
+
 @pytest.mark.asyncio
 async def test_run_get_properties(mock_backend):
     mock_backend.set_response(
