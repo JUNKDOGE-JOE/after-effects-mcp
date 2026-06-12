@@ -12480,7 +12480,10 @@
       initializePromise = (async () => {
         await startProcess();
         await rpc.request("initialize", {
-          clientInfo: { name: "ae-mcp-panel", version: PANEL_VERSION }
+          clientInfo: { name: "ae-mcp-panel", version: PANEL_VERSION },
+          // granular askForApproval (our four-tier mapping) is gated behind
+          // the experimental API surface (live error without it).
+          capabilities: { experimentalApi: true }
         });
         initialized = true;
         return true;
