@@ -33,3 +33,32 @@ jobs:
         env:
           UV_LINK_MODE: copy
         run: python -m uv run pytest -v
+
+  js-tests:
+    name: JS tests (panel / sidecar / host)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run host tests
+        working-directory: plugin/host
+        run: |
+          npm ci
+          npm test
+
+      - name: Run panel tests
+        working-directory: plugin/panel
+        run: |
+          npm ci
+          npm test
+
+      - name: Run sidecar tests
+        working-directory: plugin/sidecar
+        run: |
+          npm ci
+          npm test
