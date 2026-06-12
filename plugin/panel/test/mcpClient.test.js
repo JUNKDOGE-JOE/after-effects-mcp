@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { _createRpc, resolveMcpCommand } from '../src/cep/mcpClient.js';
+import { _createRpc, findProjectRoot, resolveMcpCommand } from '../src/cep/mcpClient.js';
 
 function makeRpc(timeoutMs = 50) {
   const writes = [];
@@ -83,6 +83,37 @@ test('resolveMcpCommand falls back to uv project command in development mode', a
   assert.deepEqual(result.args.slice(0, 3), ['run', '--project', 'E:\\Code\\ae-mcp-codex-p5a']);
   assert.equal(result.args[3], 'ae-mcp');
   assert.equal(result.source, 'uv');
+});
+
+test('resolveMcpCommand uses the uv tool shim without an AE restart', async () => {
+  const result = await resolveMcpCommand({
+    whereImpl: async () => '',
+    envImpl: { USERPROFILE: 'C:\\Users\\X' },
+    fsImpl: { existsSync: (p) => p === 'C:\\Users\\X\\.local\\bin\\ae-mcp.exe' },
+  });
+
+  assert.deepEqual(result, { command: 'C:\\Users\\X\\.local\\bin\\ae-mcp.exe', args: [], source: 'uv-tool' });
+});
+
+test('resolveMcpCommand falls through to checkout when uv tool shim is absent', async () => {
+  const result = await resolveMcpCommand({
+    whereImpl: async () => '',
+    envImpl: {},
+    extRoot: 'E:/repo/plugin/panel',
+    fsImpl: { existsSync: (p) => p === 'E:\\repo\\pyproject.toml' },
+  });
+
+  assert.deepEqual(result, { command: 'uv', args: ['run', '--project', 'E:\\repo', 'ae-mcp'], source: 'uv' });
+});
+
+test('findProjectRoot is exported for wizard repo probing', () => {
+  const root = findProjectRoot({
+    extRoot: 'E:/repo/plugin/panel',
+    repoRoot: '',
+    fsImpl: { existsSync: (p) => p === 'E:\\repo\\pyproject.toml' },
+  });
+
+  assert.equal(root, 'E:\\repo');
 });
 
 test('resolveMcpCommand reports a repair hint when no executable can be found', async () => {
