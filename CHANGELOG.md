@@ -10,6 +10,28 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### [0.6.0] — 2026-06-13
+
+内嵌对话成为**多 agent 框架**产品：新增 **Codex 后端**（OpenAI 订阅直连），加上模型/思考/快速/审批四枚 composer 便捷选择、向导全包一键化与一轮显著的降错工程。本版包含原计划 v0.5.0 的全部内容。升级后请重新安装/同步面板并重载；Python 端建议一起升。
+
+#### ✨ 新增
+- **Codex 对话后端**——面板直连 `codex app-server`（实验协议，已按官方 schema 与真机转录逐项适配）：复用你的 Codex 订阅登录态（设置页直读邮箱与计划），模型列表由 `model/list` 动态生成（含每模型思考档位与快速档），线程跨轮保活（注入的 ae-mcp 只冷启一次）。
+- **审批四档（只读 / 手动 / 自动 / 免审）**——语义由工具注解驱动，跨后端一致：Claude 侧经 SDK `allowedTools`/`dontAsk` 与回调；Codex 侧消费其原生逐调用审批（毫秒级静默放行只读/免审/自动档非破坏操作，该弹卡的带真实工具名与参数，支持"本会话此类操作免批"）。
+- **Composer 便捷选择条**——模型（含 $ 成本标识，会话内切换不清空对话）、思考深度（框架原生档位：Claude effort 五档 / Codex 四档，按模型裁剪）、快速模式（Codex 原生 1.5×；BYOK+Opus 3×）、审批档。设置页模型项改为「默认模型」。
+- **向导全包一键化**——uv / Node / Claude CLI / ae-mcp 全部检测+一键安装（命令原文先行展示，官方源），登录拉起可见终端零打字；装完免重启 AE。替换了失效的 `pip install ae-mcp` 指引（改走按发布 tag 的 git 源）。
+- **思考中指示**——模型推理阶段对话流尾部显示脉冲提示，不再"看似卡死"。
+- **降错工程**——两个 agent 系统提示注入 AE 脚本陷阱速查；常见 ExtendScript 错误自动附加修复提示（`[hint]`）；prelude 新增 `AEMCP.easeKeys()`（缓动数组按属性维度自动构造）与 `AEMCP.mustFind()`。实测同任务错误轮次从 4 降到 0。
+- **全模型矩阵冒烟脚本**（`scripts/live-model-matrix.mjs`）——两后端 × 8 模型一键体检，本版发布前 8/8 通过。
+
+#### 🐛 修复
+- 审批卡不再无差别弹出/无法落定/只显示「MCP」（Codex 路径审批架构重做）。
+- chips 下拉菜单被容器剪裁不可见；向导工具行不自动检测；claude 命令探测在 Windows 误报缺失（npm .cmd 需 shell）；`ae-mcp --version` 探测挂起 stdio 服务器（改存在性探测）；向导登录复检不重跑探针。
+- 「订阅」后端更名「Claude」，多后端语境不再歧义。
+
+#### 📦 说明
+- Codex 后端需本机安装并登录 Codex CLI（≥0.139）；Claude 后端要求不变（Node ≥18 + `claude` 登录）。
+- `codex app-server` 为实验接口，协议变动可能需要跟进适配。
+
 ### [0.4.0] — 2026-06-12
 
 面板从"连接配置器"长成完整产品：**对话、审批、活动流、向导、诊断全部内置**。本版合并 #26（外壳 + 后端使能）、#27（向导 + 活动界面）、#28（内嵌 AI 对话）。升级后请重新安装 / 同步面板并重载一次；Python 端与面板建议一起升。
@@ -111,6 +133,28 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### [0.6.0] — 2026-06-13
+
+The embedded chat becomes a **multi-agent-framework** product: a new **Codex backend** (direct OpenAI subscription), four composer quick-pick chips (model / thinking / fast / approvals), a fully one-click wizard, and a substantial error-reduction pass. This release includes everything originally planned for v0.5.0. Reinstall/sync the panel and reload after upgrading; updating the Python side together is recommended.
+
+#### ✨ Added
+- **Codex chat backend** — the panel drives `codex app-server` directly (experimental protocol, adapted against the official schema plus live transcripts): reuses your Codex subscription login (Settings shows the account email and plan), builds the model list dynamically from `model/list` (per-model reasoning levels and the fast tier), and keeps one thread alive across turns so the injected ae-mcp cold-starts once.
+- **Four approval tiers (read-only / manual / auto / bypass)** — annotation-driven and consistent across backends: the Claude side rides SDK `allowedTools`/`dontAsk` plus the approval callback; the Codex side consumes its native per-call approvals (read-only tools, the bypass tier, and non-destructive writes under auto pass silently in milliseconds; cards that do appear carry the real tool name and params, with "allow for this session" support).
+- **Composer quick-pick chips** — model (with $ cost badges; switching mid-conversation keeps the transcript), thinking depth (framework-native ladders: five Claude effort levels / four Codex levels, trimmed per model), fast mode (Codex native 1.5×; BYOK+Opus 3×), and the approval tier. The Settings model field becomes "Default model".
+- **Fully one-click wizard** — uv / Node / Claude CLI / ae-mcp all detect and install with one click (exact commands shown first, official sources only), login opens a visible terminal with zero typing, and installs work without restarting AE. Replaces the dead `pip install ae-mcp` instruction with release-tag-pinned git sources.
+- **Thinking indicator** — a pulse line shows while the model reasons, so long gaps no longer look like a hang.
+- **Error-reduction engineering** — both agent system prompts carry an ExtendScript pitfall table; common ExtendScript errors gain actionable `[hint]` suffixes; the AEMCP prelude adds `easeKeys()` (dimension-aware ease arrays) and `mustFind()`. Measured on the same task: error rounds went from 4 to 0.
+- **Model-matrix smoke script** (`scripts/live-model-matrix.mjs`) — one command checks both backends across 8 models; 8/8 passed before this release.
+
+#### 🐛 Fixed
+- Approval cards no longer fire indiscriminately, stick forever, or read just "MCP" (the Codex approval architecture was redone).
+- Chip drop-up menus clipped invisible; wizard rows not auto-detecting; the claude probe false-negative on Windows (npm .cmd shims need a shell); `ae-mcp --version` probing hanging the stdio server (now presence-based); the wizard login re-check not re-running the probe.
+- The "Subscription" backend is now labeled "Claude" — unambiguous in a multi-backend world.
+
+#### 📦 Notes
+- The Codex backend needs the Codex CLI (≥0.139) installed and logged in; Claude backend requirements are unchanged (Node ≥18 + a logged-in `claude`).
+- `codex app-server` is an experimental interface; future protocol changes may require adapter updates.
 
 ### [0.4.0] — 2026-06-12
 
