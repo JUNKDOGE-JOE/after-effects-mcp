@@ -109,6 +109,9 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
     }
     activeTurn = turn
 
+    toolUses.length = 0
+    ignoredToolUseIds.clear()
+
     emitEvent({ type: 'turn-start' })
 
     runTurn(message, turn).finally(() => {
