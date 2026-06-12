@@ -51,6 +51,10 @@ def test_render_set_property_with_keyframe():
     assert '"Transform/Position"' in jsx
     assert "[100, 200]" in jsx
     assert "1.5" in jsx
+    assert "AEMCP.safeValue(prop.value)" in jsx
+    assert "prev = prop.value" not in jsx
+    assert "cur = prop.value" not in jsx
+    assert "value set; previous/current not serializable" in jsx
 
 
 def test_render_set_property_without_keyframe():
@@ -177,6 +181,7 @@ def test_render_get_properties_substitutes_query():
     # Per-layer resolution in the loop routes through AEMCP.layerById so a
     # stale id is skipped via `continue` instead of throwing (issue #8).
     assert "AEMCP.layerById(comp, layerIds[li])" in jsx
+    assert "AEMCP.safeValue(" in jsx
 
 
 @pytest.mark.asyncio
@@ -202,6 +207,7 @@ def test_render_scan_property_tree():
     assert "AEMCP.layerById(comp, 3)" in jsx  # issue #8
     assert "var maxDepth = 2;" in jsx
     assert "var includeValues = false;" in jsx
+    assert "AEMCP.safeValue(" in jsx
 
 
 @pytest.mark.asyncio
@@ -261,6 +267,7 @@ def test_render_get_keyframes():
     jsx = render_get_keyframes(args)
     assert '"Transform/Position"' in jsx
     assert "AEMCP.layerById(comp, 1)" in jsx  # issue #8
+    assert "AEMCP.safeValue(" in jsx
 
 
 @pytest.mark.asyncio

@@ -41,7 +41,7 @@
         if (prop.propertyType === PropertyType.PROPERTY) {
             if (matches(prop.name, prop.matchName)) {
                 var val = null;
-                try { val = prop.value; } catch (e) { }
+                try { val = AEMCP.safeValue(prop.value); } catch (e) { }
                 var score = 0;
                 if (matchSegs[0] === "ADBE Transform Group") score += 10;
                 if (prop.name.toLowerCase().indexOf(orGroups[0][0] || "") !== -1) score += 5;

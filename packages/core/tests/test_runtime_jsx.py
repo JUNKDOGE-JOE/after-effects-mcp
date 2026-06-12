@@ -53,6 +53,7 @@ def test_object_polyfill_present_and_guarded(src, fn):
         "AEMCP.layerById",
         "AEMCP.propByPath",
         "AEMCP.propByMatchPath",
+        "AEMCP.safeValue",
     ],
 )
 def test_aemcp_namespace_helpers_present(src, helper):
