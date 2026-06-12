@@ -18,6 +18,15 @@ const S = {
     sec: '安全',
     gen: '通用',
     about: '关于',
+    backend: '后端',
+    backendSub: '订阅',
+    backendByok: 'BYOK',
+    claudeReady: '已登录 ✓',
+    claudeNotLoggedIn: '未登录',
+    claudeChecking: '检测中…',
+    claudeNoNode: '需要 Node 18+',
+    claudeLoginCap: '在终端运行 claude /login 完成登录，然后点「重新检测」',
+    recheckClaude: '重新检测',
     apiKey: 'API Key',
     apiKeyCap: '仅保存在本机，不会上传',
     saveVerify: '保存并验证',
@@ -69,6 +78,15 @@ const S = {
     sec: 'Security',
     gen: 'General',
     about: 'About',
+    backend: 'Backend',
+    backendSub: 'Subscription',
+    backendByok: 'BYOK',
+    claudeReady: 'Logged in ✓',
+    claudeNotLoggedIn: 'Not logged in',
+    claudeChecking: 'Checking…',
+    claudeNoNode: 'Needs Node 18+',
+    claudeLoginCap: 'Run claude /login in a terminal, then click Re-check',
+    recheckClaude: 'Re-check',
     apiKey: 'API Key',
     apiKeyCap: 'Stored locally, never uploaded',
     saveVerify: 'Save and verify',
@@ -204,6 +222,10 @@ export function SettingsScreen({
   validateKey,
   model = 'claude-sonnet-4-6',
   onModelChange,
+  backend = 'subscription',
+  onBackendChange,
+  claudeStatus = { state: 'checking' },
+  onRecheckClaude,
   permissionMode = 'manual',
   onPermissionMode,
 }) {
@@ -229,6 +251,9 @@ export function SettingsScreen({
   };
   const permCap = permissionMode === 'manual' ? t.permCap1 : permissionMode === 'auto' ? t.permCap2 : t.permCap3;
   const tokenDisplay = tokenRaw ? maskToken(tokenRaw) : t.tokenMissing;
+  const claudeState = (claudeStatus && claudeStatus.state) || 'checking';
+  const claudeBadgeStatus = claudeState === 'ready' ? 'ok' : claudeState === 'not-logged-in' ? 'warn' : claudeState === 'no-node' ? 'error' : 'neutral';
+  const claudeBadgeText = claudeState === 'ready' ? t.claudeReady : claudeState === 'not-logged-in' ? t.claudeNotLoggedIn : claudeState === 'no-node' ? t.claudeNoNode : t.claudeChecking;
   const saveApiKey = () => {
     if (aiBusy) return;
     setAiBusy(true);
@@ -269,13 +294,29 @@ export function SettingsScreen({
   return (
     <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
       <Section title={t.ai}>
-        <Field label={t.apiKey} caption={t.apiKeyCap}>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <Input secret value={key} onChange={setKey} placeholder="sk-ant-..." style={{ flex: 1 }} />
-            <Button variant="primary" disabled={aiBusy || !key.trim()} onClick={saveApiKey}>{aiBusy ? t.validating : t.saveVerify}</Button>
-            <Button variant="secondary" disabled={aiBusy} onClick={clearApiKey}>{t.clear}</Button>
-          </div>
+        <Field label={t.backend}>
+          <Segmented full value={backend} onChange={onBackendChange} options={[
+            { value: 'subscription', label: t.backendSub },
+            { value: 'byok', label: t.backendByok },
+          ]} />
         </Field>
+        {backend === 'subscription' ? (
+          <Field label={t.backendSub} caption={claudeState === 'not-logged-in' ? t.claudeLoginCap : (claudeStatus && claudeStatus.detail) || null}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Badge status={claudeBadgeStatus}>{claudeBadgeText}</Badge>
+              {claudeState === 'ready' && claudeStatus.nodeVersion ? <span style={{ flex: 1, font: '400 11px/1 var(--font-mono)', color: 'var(--text-secondary)' }}>Node v{claudeStatus.nodeVersion}</span> : <span style={{ flex: 1 }} />}
+              <Button variant="secondary" icon="rotate-cw" disabled={claudeState === 'checking'} onClick={onRecheckClaude}>{t.recheckClaude}</Button>
+            </div>
+          </Field>
+        ) : (
+          <Field label={t.apiKey} caption={t.apiKeyCap}>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <Input secret value={key} onChange={setKey} placeholder="sk-ant-..." style={{ flex: 1 }} />
+              <Button variant="primary" disabled={aiBusy || !key.trim()} onClick={saveApiKey}>{aiBusy ? t.validating : t.saveVerify}</Button>
+              <Button variant="secondary" disabled={aiBusy} onClick={clearApiKey}>{t.clear}</Button>
+            </div>
+          </Field>
+        )}
         <Field label={t.model}>
           <Select value={model} onChange={onModelChange} options={[
             { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
