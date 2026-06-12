@@ -196,7 +196,7 @@ function Shell({ cs }) {
     model: effectiveModel,
     permissionMode,
     effort: effectiveEffort,
-    thinking: modelMeta.effortLevels && modelMeta.effortLevels.length ? 'adaptive' : null,
+    thinking: modelMeta.adaptive === true ? 'adaptive' : null,
     fast: effectiveFast,
   };
   const extRoot = cs && cs.getSystemPath ? cs.getSystemPath('extension') : '';
@@ -383,7 +383,7 @@ function Shell({ cs }) {
     : probe.nodeOk === false ? { state: 'no-node', detail: probe.detail }
     : probe.loggedIn === false ? { state: 'not-logged-in', detail: probe.detail }
     : { state: 'ready', nodeVersion: probe.nodeVersion };
-  const wizard = useWizardWiring({ extRoot, lang, claudeStatus });
+  const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
 
   if (!wizardDone) {
     return (
