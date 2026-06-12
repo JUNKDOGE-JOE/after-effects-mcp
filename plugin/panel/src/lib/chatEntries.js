@@ -84,6 +84,12 @@ export function reduceEvent(entries, evt) {
         state: 'denied',
       }));
 
+    case 'tool-allowed':
+      return updateTool(current, evt.toolUseId, (entry) => ({
+        ...entry,
+        state: 'running',
+      }));
+
     case 'turn-end':
       return current;
 
