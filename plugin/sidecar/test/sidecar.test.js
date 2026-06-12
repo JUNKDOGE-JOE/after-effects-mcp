@@ -417,6 +417,39 @@ test('query failure drains pending approval', async () => {
   ])
 })
 
+test('approval ids stay scoped to the current turn', async () => {
+  const writes = []
+  let callCount = 0
+  const sidecar = createSidecar({
+    queryFn: async function * ({ options }) {
+      callCount += 1
+      const id = callCount === 1 ? 'tool-1' : 'tool-2'
+      yield {
+        type: 'assistant',
+        message: { content: [{ type: 'tool_use', id, name: 'mcp__ae__write', input: {} }] }
+      }
+      await options.canUseTool('mcp__ae__write', {})
+      yield { type: 'result', subtype: 'success', is_error: false, session_id: 'sess-1' }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'first', permissionMode: 'none' }))
+  await waitFor(() => eventCount(writes, 'turn-end') === 1)
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'second', permissionMode: 'manual' }))
+  await waitFor(() => eventCount(writes, 'approval-required') === 1)
+
+  assert.deepEqual(events(writes).filter((event) => event.type === 'approval-required').map((event) => event.toolUseId), [
+    'tool-2'
+  ])
+
+  sidecar.handleLine(JSON.stringify({ t: 'approve', id: 'tool-2', decision: 'allow' }))
+  await waitFor(() => eventCount(writes, 'turn-end') === 2)
+})
+
 test('query login failures map to auth errors', async () => {
   const writes = []
   const sidecar = createSidecar({
