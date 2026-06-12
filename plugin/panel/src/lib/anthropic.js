@@ -32,6 +32,7 @@ export function mapMcpToolsToAnthropic(tools = []) {
 
 function classifyHttpError(status, fallbackMessage) {
   if (status === 401 || status === 403) return { kind: 'auth', message: 'Anthropic authentication failed.' };
+  if (status === 404) return { kind: 'model', message: 'Model unavailable for this API key.' };
   if (status === 429) return { kind: 'rate_limit', message: 'Anthropic rate limit reached.' };
   if (status === 529 || status >= 500) return { kind: 'overloaded', message: 'Anthropic service is overloaded.' };
   return { kind: 'network', message: fallbackMessage || 'Anthropic request failed.' };
@@ -90,6 +91,8 @@ export async function sendAnthropicMessage({
   messages,
   tools,
   signal,
+  effort = null,
+  fast = false,
   fetchImpl = globalThis.fetch,
   onTextDelta = () => {},
 } = {}) {
@@ -98,23 +101,28 @@ export async function sendAnthropicMessage({
 
   let response;
   try {
+    const headers = {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+      'content-type': 'application/json',
+    };
+    if (fast) headers['anthropic-beta'] = 'fast-mode-2026-02-01';
+    const body = {
+      model,
+      max_tokens: 8192,
+      system,
+      messages,
+      tools: mapMcpToolsToAnthropic(tools),
+      stream: true,
+    };
+    if (effort) body.output_config = { effort };
+    if (fast) body.speed = 'fast';
     response = await fetchImpl('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       signal,
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 8192,
-        system,
-        messages,
-        tools: mapMcpToolsToAnthropic(tools),
-        stream: true,
-      }),
+      headers,
+      body: JSON.stringify(body),
     });
   } catch (e) {
     if (e && e.name === 'AbortError') throw e;

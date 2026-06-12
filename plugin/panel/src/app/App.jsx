@@ -17,6 +17,9 @@ import { probeClaudeLogin, resolveSidecarPath } from '../cep/claudeAuth';
 import { createClaudeAgentBackend, resolveSystemNode } from '../cep/claudeAgentBackend';
 import { reduceEvent } from '../lib/chatEntries';
 import { DEFAULT_MODEL, FALLBACK_MODEL } from '../lib/anthropic';
+import { claudeSubDescriptor, byokStaticDescriptor, mergeByokModels } from '../lib/backendCapabilities';
+import { cachedByokModels } from '../cep/modelsApi';
+import { costBadge } from '../lib/composerOptions';
 import { useActivity } from '../cep/useActivity';
 import { useHandshake } from '../cep/useHandshake';
 import { isWizardDone, markWizardDone } from '../cep/firstRun';
@@ -162,13 +165,39 @@ function Shell({ cs }) {
     try { return keyStore ? keyStore.readKey() : ''; } catch (e) { return ''; }
   });
   const [model, setModel] = React.useState(() => readPref('ae_mcp_model', DEFAULT_MODEL));
+  const [sessionModel, setSessionModel] = React.useState(null);
+  const [sessionEffort, setSessionEffort] = React.useState(null);
+  const [sessionFast, setSessionFast] = React.useState(null);
   const [permissionMode, setPermissionMode] = React.useState(() => readPref('ae_mcp_perm_mode', 'manual'));
   const [backendPref, setBackendPref] = React.useState(() => readPref('ae_mcp_backend', 'subscription'));
   const [probe, setProbe] = React.useState(null);
   const [chatEntries, setChatEntries] = React.useState([]);
   const [chatStreaming, setChatStreaming] = React.useState(false);
-  const prefsRef = React.useRef({ apiKey, model, permissionMode });
-  prefsRef.current = { apiKey, model, permissionMode };
+  const baseDescriptor = React.useMemo(() => backendPref === 'byok' ? byokStaticDescriptor() : claudeSubDescriptor(), [backendPref]);
+  const [descriptor, setDescriptor] = React.useState(() => baseDescriptor);
+  React.useEffect(() => {
+    let alive = true;
+    setDescriptor(baseDescriptor);
+    if (backendPref === 'byok' && apiKey) {
+      cachedByokModels({ apiKey }).then((list) => {
+        if (alive) setDescriptor(mergeByokModels(byokStaticDescriptor(), list));
+      }).catch(() => {});
+    }
+    return () => { alive = false; };
+  }, [apiKey, backendPref, baseDescriptor]);
+  const effectiveModel = sessionModel || model;
+  const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
+  const effectiveEffort = sessionEffort || (modelMeta.effortLevels && modelMeta.effortLevels.length ? descriptor.defaultEffort : null);
+  const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
+  const runtimeRef = React.useRef({ apiKey, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast });
+  runtimeRef.current = {
+    apiKey,
+    model: effectiveModel,
+    permissionMode,
+    effort: effectiveEffort,
+    thinking: modelMeta.effortLevels && modelMeta.effortLevels.length ? 'adaptive' : null,
+    fast: effectiveFast,
+  };
   const extRoot = cs && cs.getSystemPath ? cs.getSystemPath('extension') : '';
   const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
   const mcp = React.useMemo(() => createMcpClient({ extRoot }), [extRoot]);
@@ -180,9 +209,11 @@ function Shell({ cs }) {
 
   const byokLoop = React.useMemo(() => {
     return createAgentLoop({
-      getApiKey: () => prefsRef.current.apiKey,
-      getModel: () => prefsRef.current.model,
-      getPermissionMode: () => prefsRef.current.permissionMode,
+      getApiKey: () => runtimeRef.current.apiKey,
+      getModel: () => runtimeRef.current.model,
+      getPermissionMode: () => runtimeRef.current.permissionMode,
+      getEffort: () => runtimeRef.current.effort,
+      getFast: () => runtimeRef.current.fast,
       mcp,
       lang,
       onEvent: handleChatEvent,
@@ -200,8 +231,10 @@ function Shell({ cs }) {
     sidecarPath,
     getMcpSpec: () => resolveMcpCommand({ extRoot }),
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
-    getModel: () => prefsRef.current.model,
-    getPermissionMode: () => prefsRef.current.permissionMode,
+    getModel: () => runtimeRef.current.model,
+    getPermissionMode: () => runtimeRef.current.permissionMode,
+    getEffort: () => runtimeRef.current.effort,
+    getThinking: () => runtimeRef.current.thinking,
     lang,
     onEvent: handleChatEvent,
   }), [extRoot, sidecarPath, mcp, handleChatEvent]);
@@ -237,6 +270,9 @@ function Shell({ cs }) {
     claudeBackend.reset();
     setChatEntries([]);
     setChatStreaming(false);
+    setSessionModel(null);
+    setSessionEffort(null);
+    setSessionFast(null);
   }, [effective.backend, byokLoop, claudeBackend]);
 
   const sendChat = (text) => {
@@ -376,6 +412,7 @@ function Shell({ cs }) {
     : effective.reason === 'no-key' ? t.noKeyHint
     : '';
   const composerDisabled = paused || effective.backend === 'none';
+  const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
   const claudeStatus = probe === null ? { state: 'checking' }
     : probe.nodeOk === false ? { state: 'no-node', detail: probe.detail }
     : probe.loggedIn === false ? { state: 'not-logged-in', detail: probe.detail }
@@ -407,6 +444,17 @@ function Shell({ cs }) {
             onStop={() => activeBackend.stop()}
             onApprove={(id, decision) => activeBackend.approve(id, decision)}
             onNewSession={newChatSession}
+            chipState={{
+              descriptor,
+              modelId: effectiveModel,
+              effort: effectiveEffort,
+              fast: effectiveFast,
+              permissionMode,
+            }}
+            onChipModel={setSessionModel}
+            onChipEffort={setSessionEffort}
+            onChipFast={(v) => setSessionFast(Boolean(v))}
+            onChipApproval={(m) => { setPermissionMode(m); writePref('ae_mcp_perm_mode', m); }}
           />
         ) : null}
         {tab === 'activity' ? (
@@ -444,13 +492,12 @@ function Shell({ cs }) {
             onClearApiKey={() => { if (keyStore) keyStore.clearKey(); setApiKey(''); }}
             validateKey={validateAnthropicKey}
             model={model}
+            modelOptions={modelOptions}
             onModelChange={(m) => { setModel(m); writePref('ae_mcp_model', m); }}
             backend={backendPref}
             onBackendChange={(m) => { setBackendPref(m); writePref('ae_mcp_backend', m); }}
             claudeStatus={claudeStatus}
             onRecheckClaude={runClaudeProbe}
-            permissionMode={permissionMode}
-            onPermissionMode={(m) => { setPermissionMode(m); writePref('ae_mcp_perm_mode', m); }}
           />
         ) : null}
       </div>

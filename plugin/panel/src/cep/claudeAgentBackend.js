@@ -84,6 +84,8 @@ export function createClaudeAgentBackend({
   getToolMeta,
   getModel,
   getPermissionMode,
+  getEffort,
+  getThinking,
   onEvent,
   lang = 'zh',
   spawnImpl,
@@ -295,7 +297,14 @@ export function createClaudeAgentBackend({
 
     const userText = String(text || '');
     transcript.push({ role: 'user', text: userText });
-    writeMessage({ t: 'user', text: userText, permissionMode: getPermissionMode(), model: getModel() });
+    writeMessage({
+      t: 'user',
+      text: userText,
+      permissionMode: getPermissionMode(),
+      model: getModel(),
+      effort: getEffort ? getEffort() : undefined,
+      thinking: getThinking ? getThinking() : undefined,
+    });
     return activeRun;
   }
 

@@ -27,6 +27,9 @@ function shouldBypassApproval({ mode, tool, sessionAllowed }) {
   if (sessionAllowed) return true;
   if (mode === 'none') return true;
   const annotations = (tool && tool.annotations) || {};
+  // readonly: non-read tools never reach this gate (denied earlier in
+  // handleToolUse); reads pass silently instead of raising an approval card.
+  if (mode === 'readonly') return annotations.readOnlyHint === true;
   if (mode === 'manual') return annotations.readOnlyHint === true;
   if (mode === 'auto') return annotations.destructiveHint !== true;
   return false;
@@ -50,6 +53,8 @@ export function createAgentLoop({
   getModel,
   mcp,
   getPermissionMode,
+  getEffort,
+  getFast,
   onEvent,
   anthropic = sendAnthropicMessage,
   maxToolRounds = MAX_TOOL_ROUNDS,
@@ -99,6 +104,10 @@ export function createAgentLoop({
 
     const tool = toolByName.get(toolUse.name) || {};
     const mode = (getPermissionMode && getPermissionMode()) || 'manual';
+    if (mode === 'readonly' && !(tool.annotations && tool.annotations.readOnlyHint === true)) {
+      emit({ type: 'tool-denied', toolUseId: toolUse.id });
+      return makeToolResult(toolUse.id, 'Blocked: read-only mode allows only read tools.', true);
+    }
     const sessionAllowed = sessionAllowedTools.has(toolUse.name);
     if (!shouldBypassApproval({ mode, tool, sessionAllowed })) {
       emit({
@@ -150,6 +159,8 @@ export function createAgentLoop({
             messages: clone(messages),
             tools,
             signal: controller.signal,
+            effort: (getEffort && getEffort()) || null,
+            fast: Boolean(getFast && getFast()),
             onTextDelta: (delta) => emit({ type: 'text-delta', text: delta }),
           });
 
