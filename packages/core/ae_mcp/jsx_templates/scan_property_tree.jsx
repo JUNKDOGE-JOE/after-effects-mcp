@@ -32,7 +32,7 @@
             n.numKeyframes = prop.numKeys || 0;
             n.hasExpression = prop.canSetExpression && (prop.expression !== "");
             if (includeValues) {
-                try { n.value = prop.value; } catch (e) { }
+                try { n.value = AEMCP.safeValue(prop.value); } catch (e) { }
             }
         } else {
             if (depth >= maxDepth) {
