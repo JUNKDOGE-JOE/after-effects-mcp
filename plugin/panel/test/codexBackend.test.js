@@ -85,6 +85,8 @@ async function startTurn(backend, proc, text = 'hello') {
   await flush();
   const init = parseWrites(proc)[0];
   assert.equal(init.method, 'initialize');
+  // granular askForApproval is rejected without this opt-in (live error)
+  assert.equal(init.params.capabilities.experimentalApi, true);
   respond(proc, init, {});
   await flush();
   const threadStart = parseWrites(proc)[1];
