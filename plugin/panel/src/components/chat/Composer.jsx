@@ -63,7 +63,9 @@ export function Composer({
         ></textarea>
         {options ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 2, overflow: 'hidden' }}>{options}</div>
+            {/* overflow must stay visible: ComposerChip drop-up menus render
+                inside this row and get clipped to its 24px strip otherwise. */}
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 2 }}>{options}</div>
             {streaming ? (
               <SendButton icon="square" title="停止 Stop" kind="stop" onClick={onStop} />
             ) : (
