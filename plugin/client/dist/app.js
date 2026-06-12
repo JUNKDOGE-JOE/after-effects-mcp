@@ -12383,8 +12383,7 @@
   var DETECT = {
     uv: { file: "uv", args: ["--version"] },
     node: { file: "node", args: ["--version"] },
-    claude: { file: "claude", args: ["--version"] },
-    aeMcp: { file: "ae-mcp", args: ["--version"] }
+    claude: { file: "claude", args: ["--version"] }
   };
   function execVersion(execFile, file, args, env) {
     return new Promise((resolve) => {
@@ -12397,15 +12396,27 @@
   function getCepEnvSafe() {
     return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
   }
-  async function detectTool(id, { execFileImpl, env } = {}) {
+  async function detectAeMcp({ execFileImpl, env, fsImpl }) {
+    const execFile = execFileImpl || getCepRequire5()("child_process").execFile;
+    const whereHit = await new Promise((resolve) => {
+      execFile("where", ["ae-mcp"], { windowsHide: true, env }, (err, stdout) => {
+        resolve(err ? "" : String(stdout || "").split(/\r?\n/).map((l) => l.trim()).find(Boolean) || "");
+      });
+    });
+    if (whereHit) return { ok: true, version: whereHit };
+    const profile = (env || getCepEnvSafe()).USERPROFILE || "";
+    if (profile) {
+      const shim = profile.replace(/[\\/]+$/, "") + "\\.local\\bin\\ae-mcp.exe";
+      const fs = fsImpl || getCepRequire5()("fs");
+      if (fs.existsSync(shim)) return { ok: true, version: shim };
+    }
+    return { ok: false };
+  }
+  async function detectTool(id, { execFileImpl, env, fsImpl } = {}) {
+    if (id === "aeMcp") return detectAeMcp({ execFileImpl, env, fsImpl });
     const spec = DETECT[id];
     const execFile = execFileImpl || getCepRequire5()("child_process").execFile;
-    const primary = await execVersion(execFile, spec.file, spec.args, env);
-    if (primary.ok || id !== "aeMcp") return primary;
-    const profile = (env || getCepEnvSafe()).USERPROFILE || "";
-    if (!profile) return primary;
-    const shim = profile.replace(/[\\/]+$/, "") + "\\.local\\bin\\ae-mcp.exe";
-    return execVersion(execFile, shim, spec.args, env);
+    return execVersion(execFile, spec.file, spec.args, env);
   }
   var REPO = "https://github.com/JUNKDOGE-JOE/after-effects-mcp";
   function buildInstallCommands({ panelVersion, repoRoot }) {

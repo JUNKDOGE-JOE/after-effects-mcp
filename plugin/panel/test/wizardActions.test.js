@@ -26,13 +26,28 @@ test('detectTool parses versions and reports missing', async () => {
   assert.equal((await detectTool('claude', { execFileImpl: execFile })).ok, false);
 });
 
-test('detectTool falls back to the uv tool shim for ae-mcp before PATH refresh', async () => {
-  const execFile = fakeExecFile({
-    'C:\\Users\\X\\.local\\bin\\ae-mcp.exe --version': { stdout: 'ae-mcp 0.5.0' },
+test('detectTool checks ae-mcp presence without executing it (stdio server hangs on any argv)', async () => {
+  const shim = 'C:\\Users\\X\\.local\\bin\\ae-mcp.exe';
+  // where 命中：直接 ok，version=命中路径
+  const viaWhere = await detectTool('aeMcp', {
+    execFileImpl: fakeExecFile({ 'where ae-mcp': { stdout: 'C:\\bin\\ae-mcp.exe\r\n' } }),
+    env: { USERPROFILE: 'C:\\Users\\X' },
+    fsImpl: { existsSync: () => false },
   });
-  const result = await detectTool('aeMcp', { execFileImpl: execFile, env: { USERPROFILE: 'C:\\Users\\X' } });
-  assert.deepEqual(result, { ok: true, version: 'ae-mcp 0.5.0' });
-  const missing = await detectTool('aeMcp', { execFileImpl: execFile, env: { USERPROFILE: 'C:\\Users\\Y' } });
+  assert.deepEqual(viaWhere, { ok: true, version: 'C:\\bin\\ae-mcp.exe' });
+  // where 落空但 shim 文件存在：ok，version=shim 路径，且绝不执行 ae-mcp
+  const viaShim = await detectTool('aeMcp', {
+    execFileImpl: fakeExecFile({}),
+    env: { USERPROFILE: 'C:\\Users\\X' },
+    fsImpl: { existsSync: (p) => p === shim },
+  });
+  assert.deepEqual(viaShim, { ok: true, version: shim });
+  // 两者皆无：missing
+  const missing = await detectTool('aeMcp', {
+    execFileImpl: fakeExecFile({}),
+    env: { USERPROFILE: 'C:\\Users\\Y' },
+    fsImpl: { existsSync: () => false },
+  });
   assert.equal(missing.ok, false);
 });
 
