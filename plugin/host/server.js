@@ -97,6 +97,83 @@ function wrapWithUndoGroup(code, undoGroup) {
     );
 }
 
+function quoteAsciiJsString(value) {
+    const s = String(value);
+    let out = '"';
+    for (let i = 0; i < s.length; i++) {
+        const c = s.charCodeAt(i);
+        switch (c) {
+            case 8: out += '\\b'; break;
+            case 9: out += '\\t'; break;
+            case 10: out += '\\n'; break;
+            case 12: out += '\\f'; break;
+            case 13: out += '\\r'; break;
+            case 34: out += '\\"'; break;
+            case 92: out += '\\\\'; break;
+            default:
+                if (c < 32 || c > 126) {
+                    out += '\\u' + ('0000' + c.toString(16)).slice(-4);
+                } else {
+                    out += s.charAt(i);
+                }
+        }
+    }
+    return out + '"';
+}
+
+// CEP can corrupt non-ASCII result text when CSInterface.evalScript crosses
+// the ExtendScript -> panel boundary on localized Windows installs. Return an
+// ASCII-only JSON envelope from JSX, then decode it in Node before HTTP JSON.
+function wrapForEvalScriptTransport(code) {
+    return (
+        '(function(){' +
+        'function __aemcp_quote(v){' +
+        'var s=String(v),out="\\"";' +
+        'for(var i=0;i<s.length;i++){' +
+        'var c=s.charCodeAt(i);' +
+        'if(c===8){out+="\\\\b";}' +
+        'else if(c===9){out+="\\\\t";}' +
+        'else if(c===10){out+="\\\\n";}' +
+        'else if(c===12){out+="\\\\f";}' +
+        'else if(c===13){out+="\\\\r";}' +
+        'else if(c===34){out+="\\\\\\"";}' +
+        'else if(c===92){out+="\\\\\\\\";}' +
+        'else if(c<32||c>126){out+="\\\\u"+("0000"+c.toString(16)).slice(-4);}' +
+        'else{out+=s.charAt(i);}' +
+        '}' +
+        'return out+"\\"";' +
+        '}' +
+        'try{' +
+        'var __aemcp_value=eval(' + quoteAsciiJsString(code) + ');' +
+        'return "{\\"ok\\":true,\\"result\\":"+__aemcp_quote(__aemcp_value)+"}";' +
+        '}catch(e){' +
+        'var __aemcp_detail=String(e);' +
+        'if(e&&e.line){__aemcp_detail+=" (line "+e.line+")";}' +
+        'return "{\\"ok\\":false,\\"error\\":"+__aemcp_quote(__aemcp_detail)+"}";' +
+        '}' +
+        '})()'
+    );
+}
+
+function decodeEvalScriptTransportResult(text) {
+    let payload = null;
+    if (String(text || '').trim() === '') {
+        throw new Error('evalScript returned no output (ExtendScript engine did not run the transport envelope)');
+    }
+    try {
+        payload = JSON.parse(String(text));
+    } catch (e) {
+        throw new Error('invalid evalScript transport envelope: ' + String(text || '').slice(0, 120));
+    }
+    if (payload && payload.ok === false && typeof payload.error === 'string') {
+        throw new Error('ExtendScript error: ' + payload.error);
+    }
+    if (!payload || payload.ok !== true || typeof payload.result !== 'string') {
+        throw new Error('invalid evalScript transport envelope shape');
+    }
+    return payload.result;
+}
+
 function buildApp() {
     const a = express();
     a.use(express.json({ limit: '5mb' }));
@@ -161,10 +238,12 @@ function buildApp() {
         // forwarded but unused; later sub-specs will wire it to the checkpoint
         // store.
         const wrapped = undoGroup ? wrapWithUndoGroup(code, undoGroup) : code;
+        const transported = wrapForEvalScriptTransport(wrapped);
 
         const startedAt = Date.now();
         try {
-            const result = await jsxBridge.evalScript(wrapped, t);
+            const encoded = await jsxBridge.evalScript(transported, t);
+            const result = decodeEvalScriptTransportResult(encoded);
             activity.record({ client, undoGroup: undoGroup || null, ok: true, durationMs: Date.now() - startedAt });
             res.json({ ok: true, result: result || '' });
         } catch (e) {
@@ -225,6 +304,8 @@ module.exports = {
     setCSInterface: jsxBridge.setCSInterface,
     // Exported for unit-testing the wrap shape without spinning up Express.
     wrapWithUndoGroup,
+    wrapForEvalScriptTransport,
+    decodeEvalScriptTransportResult,
     // Exported so tests can build the app and inject a known token without
     // touching the real token file.
     buildApp,

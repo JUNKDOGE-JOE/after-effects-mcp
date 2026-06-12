@@ -10,7 +10,41 @@
 // ---------------------------------------------------------------------------
 if (typeof AEMCP === 'undefined') { AEMCP = {}; }
 
-AEMCP.version = '0.1.0';
+AEMCP.version = '0.2.0';
+
+// Map a property value to something JSON.stringify can serialize, never
+// throwing. TextDocument flattens to its .text string BEFORE the generic
+// object path (stringifying a TextDocument touches box-text-only getters that
+// throw on point text, and point/box text should yield the same shape).
+// Primitives pass through; arrays recurse; other host objects (Shape,
+// KeyframeEase, ...) are kept as-is when a stringify probe succeeds, else
+// degrade to String(v), else null. Uncaught throws must never escape a
+// template: AE 2026 surfaces them as EMPTY evalScript output (not the
+// "EvalScript error." sentinel), which callers see as "returned no value".
+AEMCP.safeValue = function (v) {
+    if (v === null || typeof v === 'undefined') return null;
+    var t = typeof v;
+    if (t === 'number' || t === 'boolean' || t === 'string') return v;
+    try {
+        if (typeof TextDocument !== 'undefined' && v instanceof TextDocument) {
+            return String(v.text);
+        }
+    } catch (eTd) {}
+    if (v instanceof Array) {
+        var out = [];
+        for (var i = 0; i < v.length; i++) {
+            try { out.push(AEMCP.safeValue(v[i])); } catch (eEl) { out.push(null); }
+        }
+        return out;
+    }
+    if (t === 'object') {
+        try { JSON.stringify(v); return v; } catch (eProbe) {}
+        try { return String(v); } catch (eStr) {}
+        return null;
+    }
+    try { return String(v); } catch (eOther) {}
+    return null;
+};
 
 // Count of a node's child properties, or -1 when `node` is a leaf Property /
 // not a group. try/catch shields against leaf nodes that lack numProperties.

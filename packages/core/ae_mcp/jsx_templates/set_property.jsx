@@ -24,7 +24,7 @@
     var value = ${value};
     var atTime = ${at_time};
     var prev = null;
-    try { prev = prop.value; } catch (e) { /* may lack .value */ }
+    try { prev = AEMCP.safeValue(prop.value); } catch (e) { /* may lack .value */ }
 
     try {
         if (atTime !== null) {
@@ -37,7 +37,11 @@
     }
 
     var cur = null;
-    try { cur = prop.value; } catch (e) { }
+    try { cur = AEMCP.safeValue(prop.value); } catch (e) { }
 
-    return JSON.stringify({ok:true, previous:prev, current:cur});
+    try {
+        return JSON.stringify({ok:true, previous:prev, current:cur});
+    } catch (e) {
+        return '{"ok":true,"previous":null,"current":null,"note":"value set; previous/current not serializable"}';
+    }
 })()

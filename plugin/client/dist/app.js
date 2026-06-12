@@ -52,7 +52,7 @@
       }, enqueueReplaceState: function() {
       }, enqueueSetState: function() {
       } };
-      var C = Object.assign;
+      var C2 = Object.assign;
       var D2 = {};
       function E(a, b, e) {
         this.props = a;
@@ -79,15 +79,15 @@
       }
       var H = G.prototype = new F();
       H.constructor = G;
-      C(H, E.prototype);
+      C2(H, E.prototype);
       H.isPureReactComponent = true;
       var I = Array.isArray;
       var J = Object.prototype.hasOwnProperty;
       var K = { current: null };
-      var L = { key: true, ref: true, __self: true, __source: true };
+      var L2 = { key: true, ref: true, __self: true, __source: true };
       function M(a, b, e) {
         var d, c = {}, k = null, h = null;
-        if (null != b) for (d in void 0 !== b.ref && (h = b.ref), void 0 !== b.key && (k = "" + b.key), b) J.call(b, d) && !L.hasOwnProperty(d) && (c[d] = b[d]);
+        if (null != b) for (d in void 0 !== b.ref && (h = b.ref), void 0 !== b.key && (k = "" + b.key), b) J.call(b, d) && !L2.hasOwnProperty(d) && (c[d] = b[d]);
         var g = arguments.length - 2;
         if (1 === g) c.children = e;
         else if (1 < g) {
@@ -200,12 +200,12 @@
       exports.act = X2;
       exports.cloneElement = function(a, b, e) {
         if (null === a || void 0 === a) throw Error("React.cloneElement(...): The argument must be a React element, but you passed " + a + ".");
-        var d = C({}, a.props), c = a.key, k = a.ref, h = a._owner;
+        var d = C2({}, a.props), c = a.key, k = a.ref, h = a._owner;
         if (null != b) {
           void 0 !== b.ref && (k = b.ref, h = K.current);
           void 0 !== b.key && (c = "" + b.key);
           if (a.type && a.type.defaultProps) var g = a.type.defaultProps;
-          for (f in b) J.call(b, f) && !L.hasOwnProperty(f) && (d[f] = void 0 === b[f] && void 0 !== g ? g[f] : b[f]);
+          for (f in b) J.call(b, f) && !L2.hasOwnProperty(f) && (d[f] = void 0 === b[f] && void 0 !== g ? g[f] : b[f]);
         }
         var f = arguments.length - 2;
         if (1 === f) d.children = e;
@@ -332,8 +332,8 @@
         if (c !== b) {
           a[0] = c;
           a: for (var d = 0, e = a.length, w = e >>> 1; d < w; ) {
-            var m = 2 * (d + 1) - 1, C = a[m], n = m + 1, x = a[n];
-            if (0 > g(C, c)) n < e && 0 > g(x, C) ? (a[d] = x, a[n] = c, d = n) : (a[d] = C, a[m] = c, d = m);
+            var m = 2 * (d + 1) - 1, C2 = a[m], n = m + 1, x = a[n];
+            if (0 > g(C2, c)) n < e && 0 > g(x, C2) ? (a[d] = x, a[n] = c, d = n) : (a[d] = C2, a[m] = c, d = m);
             else if (n < e && 0 > g(x, c)) a[d] = x, a[n] = c, d = n;
             else break a;
           }
@@ -389,7 +389,7 @@
       }
       function J(a, b) {
         A2 = false;
-        B && (B = false, E(L), L = -1);
+        B && (B = false, E(L2), L2 = -1);
         z = true;
         var c = y;
         try {
@@ -419,7 +419,7 @@
       }
       var N = false;
       var O = null;
-      var L = -1;
+      var L2 = -1;
       var P = 5;
       var Q = -1;
       function M() {
@@ -457,7 +457,7 @@
         N || (N = true, S2());
       }
       function K(a, b) {
-        L = D2(function() {
+        L2 = D2(function() {
           a(exports.unstable_now());
         }, b);
       }
@@ -544,7 +544,7 @@
         }
         e = c + e;
         a = { id: u++, callback: b, priorityLevel: a, startTime: c, expirationTime: e, sortIndex: -1 };
-        c > d ? (a.sortIndex = c, f(t, a), null === h(r) && a === h(t) && (B ? (E(L), L = -1) : B = true, K(H, c - d))) : (a.sortIndex = e, f(r, a), A2 || z || (A2 = true, I(J)));
+        c > d ? (a.sortIndex = c, f(t, a), null === h(r) && a === h(t) && (B ? (E(L2), L2 = -1) : B = true, K(H, c - d))) : (a.sortIndex = e, f(r, a), A2 || z || (A2 = true, I(J)));
         return a;
       };
       exports.unstable_shouldYield = M;
@@ -1598,7 +1598,7 @@
           c &= ~e;
         }
       }
-      var C = 0;
+      var C2 = 0;
       function Dc(a) {
         a &= -a;
         return 1 < a ? 4 < a ? 0 !== (a & 268435455) ? 16 : 536870912 : 4 : 1;
@@ -1736,21 +1736,21 @@
       var cd = ua.ReactCurrentBatchConfig;
       var dd = true;
       function ed(a, b, c, d) {
-        var e = C, f = cd.transition;
+        var e = C2, f = cd.transition;
         cd.transition = null;
         try {
-          C = 1, fd(a, b, c, d);
+          C2 = 1, fd(a, b, c, d);
         } finally {
-          C = e, cd.transition = f;
+          C2 = e, cd.transition = f;
         }
       }
       function gd(a, b, c, d) {
-        var e = C, f = cd.transition;
+        var e = C2, f = cd.transition;
         cd.transition = null;
         try {
-          C = 4, fd(a, b, c, d);
+          C2 = 4, fd(a, b, c, d);
         } finally {
-          C = e, cd.transition = f;
+          C2 = e, cd.transition = f;
         }
       }
       function fd(a, b, c, d) {
@@ -2823,10 +2823,10 @@
       function jg() {
         if (!gg && null !== eg) {
           gg = true;
-          var a = 0, b = C;
+          var a = 0, b = C2;
           try {
             var c = eg;
-            for (C = 1; a < c.length; a++) {
+            for (C2 = 1; a < c.length; a++) {
               var d = c[a];
               do
                 d = d(true);
@@ -2837,7 +2837,7 @@
           } catch (e) {
             throw null !== eg && (eg = eg.slice(a + 1)), ac(fc, jg), e;
           } finally {
-            C = b, gg = false;
+            C2 = b, gg = false;
           }
         }
         return null;
@@ -3495,7 +3495,7 @@
       function Bh(a) {
         vh.current === a && (E(uh), E(vh));
       }
-      var L = Uf(0);
+      var L2 = Uf(0);
       function Ch(a) {
         for (var b = a; null !== b; ) {
           if (13 === b.tag) {
@@ -3799,15 +3799,15 @@
         return b;
       }
       function vi(a, b) {
-        var c = C;
-        C = 0 !== c && 4 > c ? c : 4;
+        var c = C2;
+        C2 = 0 !== c && 4 > c ? c : 4;
         a(true);
         var d = Gh.transition;
         Gh.transition = {};
         try {
           a(false), b();
         } finally {
-          C = c, Gh.transition = d;
+          C2 = c, Gh.transition = d;
         }
       }
       function wi() {
@@ -4285,11 +4285,11 @@
         return { baseLanes: a, cachePool: null, transitions: null };
       }
       function oj(a, b, c) {
-        var d = b.pendingProps, e = L.current, f = false, g = 0 !== (b.flags & 128), h;
+        var d = b.pendingProps, e = L2.current, f = false, g = 0 !== (b.flags & 128), h;
         (h = g) || (h = null !== a && null === a.memoizedState ? false : 0 !== (e & 2));
         if (h) f = true, b.flags &= -129;
         else if (null === a || null !== a.memoizedState) e |= 1;
-        G(L, e & 1);
+        G(L2, e & 1);
         if (null === a) {
           Eg(b);
           a = b.memoizedState;
@@ -4443,7 +4443,7 @@
       function xj(a, b, c) {
         var d = b.pendingProps, e = d.revealOrder, f = d.tail;
         Xi(a, b, d.children, c);
-        d = L.current;
+        d = L2.current;
         if (0 !== (d & 2)) d = d & 1 | 2, b.flags |= 128;
         else {
           if (null !== a && 0 !== (a.flags & 128)) a: for (a = b.child; null !== a; ) {
@@ -4464,7 +4464,7 @@
           }
           d &= 1;
         }
-        G(L, d);
+        G(L2, d);
         if (0 === (b.mode & 1)) b.memoizedState = null;
         else switch (e) {
           case "forwards":
@@ -4538,13 +4538,13 @@
           case 13:
             d = b.memoizedState;
             if (null !== d) {
-              if (null !== d.dehydrated) return G(L, L.current & 1), b.flags |= 128, null;
+              if (null !== d.dehydrated) return G(L2, L2.current & 1), b.flags |= 128, null;
               if (0 !== (c & b.child.childLanes)) return oj(a, b, c);
-              G(L, L.current & 1);
+              G(L2, L2.current & 1);
               a = Zi(a, b, c);
               return null !== a ? a.sibling : null;
             }
-            G(L, L.current & 1);
+            G(L2, L2.current & 1);
             break;
           case 19:
             d = 0 !== (c & b.childLanes);
@@ -4554,7 +4554,7 @@
             }
             e = b.memoizedState;
             null !== e && (e.rendering = null, e.tail = null, e.lastEffect = null);
-            G(L, L.current);
+            G(L2, L2.current);
             if (d) break;
             else return null;
           case 22:
@@ -4916,7 +4916,7 @@
             S2(b);
             return null;
           case 13:
-            E(L);
+            E(L2);
             d = b.memoizedState;
             if (null === a || null !== a.memoizedState && null !== a.memoizedState.dehydrated) {
               if (I && null !== yg && 0 !== (b.mode & 1) && 0 === (b.flags & 128)) Hg(), Ig(), b.flags |= 98560, f = false;
@@ -4935,7 +4935,7 @@
             }
             if (0 !== (b.flags & 128)) return b.lanes = c, b;
             d = null !== d;
-            d !== (null !== a && null !== a.memoizedState) && d && (b.child.flags |= 8192, 0 !== (b.mode & 1) && (null === a || 0 !== (L.current & 1) ? 0 === T2 && (T2 = 3) : tj()));
+            d !== (null !== a && null !== a.memoizedState) && d && (b.child.flags |= 8192, 0 !== (b.mode & 1) && (null === a || 0 !== (L2.current & 1) ? 0 === T2 && (T2 = 3) : tj()));
             null !== b.updateQueue && (b.flags |= 4);
             S2(b);
             return null;
@@ -4946,7 +4946,7 @@
           case 17:
             return Zf(b.type) && $f(), S2(b), null;
           case 19:
-            E(L);
+            E(L2);
             f = b.memoizedState;
             if (null === f) return S2(b), null;
             d = 0 !== (b.flags & 128);
@@ -4963,7 +4963,7 @@
                   b.subtreeFlags = 0;
                   d = c;
                   for (c = b.child; null !== c; ) f = c, a = d, f.flags &= 14680066, g = f.alternate, null === g ? (f.childLanes = 0, f.lanes = a, f.child = null, f.subtreeFlags = 0, f.memoizedProps = null, f.memoizedState = null, f.updateQueue = null, f.dependencies = null, f.stateNode = null) : (f.childLanes = g.childLanes, f.lanes = g.lanes, f.child = g.child, f.subtreeFlags = 0, f.deletions = null, f.memoizedProps = g.memoizedProps, f.memoizedState = g.memoizedState, f.updateQueue = g.updateQueue, f.type = g.type, a = g.dependencies, f.dependencies = null === a ? null : { lanes: a.lanes, firstContext: a.firstContext }), c = c.sibling;
-                  G(L, L.current & 1 | 2);
+                  G(L2, L2.current & 1 | 2);
                   return b.child;
                 }
                 a = a.sibling;
@@ -4976,7 +4976,7 @@
               } else 2 * B() - f.renderingStartTime > Gj && 1073741824 !== c && (b.flags |= 128, d = true, Dj(f, false), b.lanes = 4194304);
               f.isBackwards ? (g.sibling = b.child, b.child = g) : (c = f.last, null !== c ? c.sibling = g : b.child = g, f.last = g);
             }
-            if (null !== f.tail) return b = f.tail, f.rendering = b, f.tail = b.sibling, f.renderingStartTime = B(), b.sibling = null, c = L.current, G(L, d ? c & 1 | 2 : c & 1), b;
+            if (null !== f.tail) return b = f.tail, f.rendering = b, f.tail = b.sibling, f.renderingStartTime = B(), b.sibling = null, c = L2.current, G(L2, d ? c & 1 | 2 : c & 1), b;
             S2(b);
             return null;
           case 22:
@@ -4999,7 +4999,7 @@
           case 5:
             return Bh(b), null;
           case 13:
-            E(L);
+            E(L2);
             a = b.memoizedState;
             if (null !== a && null !== a.dehydrated) {
               if (null === b.alternate) throw Error(p(340));
@@ -5008,7 +5008,7 @@
             a = b.flags;
             return a & 65536 ? (b.flags = a & -65537 | 128, b) : null;
           case 19:
-            return E(L), null;
+            return E(L2), null;
           case 4:
             return zh(), null;
           case 10:
@@ -5798,7 +5798,7 @@
         if (0 === (a.mode & 1)) return 1;
         if (0 !== (K & 2) && 0 !== Z) return Z & -Z;
         if (null !== Kg.transition) return 0 === Bk && (Bk = yc()), Bk;
-        a = C;
+        a = C2;
         if (0 !== a) return a;
         a = window.event;
         a = void 0 === a ? 16 : jd(a.type);
@@ -6012,11 +6012,11 @@
         null !== wk && 0 === wk.tag && 0 === (K & 6) && Hk();
         var b = K;
         K |= 1;
-        var c = ok.transition, d = C;
+        var c = ok.transition, d = C2;
         try {
-          if (ok.transition = null, C = 1, a) return a();
+          if (ok.transition = null, C2 = 1, a) return a();
         } finally {
-          C = d, ok.transition = c, K = b, 0 === (K & 6) && jg();
+          C2 = d, ok.transition = c, K = b, 0 === (K & 6) && jg();
         }
       }
       function Hj() {
@@ -6049,10 +6049,10 @@
               zh();
               break;
             case 13:
-              E(L);
+              E(L2);
               break;
             case 19:
-              E(L);
+              E(L2);
               break;
             case 10:
               ah(d.type._context);
@@ -6264,11 +6264,11 @@
         0 === T2 && (T2 = 5);
       }
       function Pk(a, b, c) {
-        var d = C, e = ok.transition;
+        var d = C2, e = ok.transition;
         try {
-          ok.transition = null, C = 1, Wk(a, b, c, d);
+          ok.transition = null, C2 = 1, Wk(a, b, c, d);
         } finally {
-          ok.transition = e, C = d;
+          ok.transition = e, C2 = d;
         }
         return null;
       }
@@ -6296,8 +6296,8 @@
         if (0 !== (c.subtreeFlags & 15990) || f) {
           f = ok.transition;
           ok.transition = null;
-          var g = C;
-          C = 1;
+          var g = C2;
+          C2 = 1;
           var h = K;
           K |= 4;
           nk.current = null;
@@ -6310,7 +6310,7 @@
           hk(c, a, e);
           dc();
           K = h;
-          C = g;
+          C2 = g;
           ok.transition = f;
         } else a.current = c;
         vk && (vk = false, wk = a, xk = e);
@@ -6328,10 +6328,10 @@
       }
       function Hk() {
         if (null !== wk) {
-          var a = Dc(xk), b = ok.transition, c = C;
+          var a = Dc(xk), b = ok.transition, c = C2;
           try {
             ok.transition = null;
-            C = 16 > a ? 16 : a;
+            C2 = 16 > a ? 16 : a;
             if (null === wk) var d = false;
             else {
               a = wk;
@@ -6447,7 +6447,7 @@
             }
             return d;
           } finally {
-            C = c, ok.transition = b;
+            C2 = c, ok.transition = b;
           }
         }
         return false;
@@ -7062,14 +7062,14 @@
         }
       };
       Hc = function() {
-        return C;
+        return C2;
       };
       Ic = function(a, b) {
-        var c = C;
+        var c = C2;
         try {
-          return C = a, b();
+          return C2 = a, b();
         } finally {
-          C = c;
+          C2 = c;
         }
       };
       yb = function(a, b, c) {
@@ -7280,11 +7280,11 @@
   });
 
   // src/main.jsx
-  var import_react31 = __toESM(require_react(), 1);
+  var import_react38 = __toESM(require_react(), 1);
   var import_client = __toESM(require_client(), 1);
 
   // src/app/App.jsx
-  var import_react30 = __toESM(require_react(), 1);
+  var import_react37 = __toESM(require_react(), 1);
 
   // src/app/i18n.jsx
   var import_react = __toESM(require_react(), 1);
@@ -7747,9 +7747,9 @@
     circle: Circle
   };
   function Icon2({ name, size = 14, strokeWidth = 1.75, color = "currentColor", style }) {
-    const C = MAP[name];
-    if (!C) return null;
-    return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(C, { size, strokeWidth, color, style, "aria-hidden": "true" });
+    const C2 = MAP[name];
+    if (!C2) return null;
+    return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(C2, { size, strokeWidth, color, style, "aria-hidden": "true" });
   }
 
   // src/components/core/StatusDot.jsx
@@ -8209,7 +8209,7 @@
   }
 
   // src/screens/SettingsScreen.jsx
-  var import_react18 = __toESM(require_react(), 1);
+  var import_react19 = __toESM(require_react(), 1);
 
   // package.json
   var package_default = {
@@ -8542,6 +8542,81 @@
     ] });
   }
 
+  // src/components/shell/Toast.jsx
+  var import_react18 = __toESM(require_react(), 1);
+  var import_jsx_runtime16 = __toESM(require_jsx_runtime(), 1);
+  var TOAST_ICONS = {
+    ok: { icon: "check", color: "var(--ok)" },
+    error: { icon: "circle-alert", color: "var(--error)" },
+    warn: { icon: "triangle-alert", color: "var(--warn)" },
+    info: { icon: "info", color: "var(--text-secondary)" }
+  };
+  function Toast({ type = "info", message, actionLabel, onAction, onClose, style }) {
+    const t = TOAST_ICONS[type] || TOAST_ICONS.info;
+    return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
+      "div",
+      {
+        role: "status",
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--space-2)",
+          maxWidth: "100%",
+          padding: "5px 6px 5px 10px",
+          background: "var(--bg-overlay)",
+          border: "1px solid var(--border-strong)",
+          borderRadius: "var(--radius-md)",
+          boxShadow: "var(--shadow-toast)",
+          animation: "ds-fade-up var(--dur-slow) var(--ease-out)",
+          ...style
+        },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Icon2, { name: t.icon, size: 13, strokeWidth: 2.25, color: t.color }),
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+            "span",
+            {
+              style: {
+                flex: 1,
+                minWidth: 0,
+                font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`,
+                color: "var(--text-primary)"
+              },
+              children: message
+            }
+          ),
+          actionLabel ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(ToastAction, { label: actionLabel, onClick: onAction }) : null,
+          onClose ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(IconButton, { icon: "x", title: "\u5173\u95ED Dismiss", onClick: onClose, style: { width: 20, height: 20 } }) : null
+        ]
+      }
+    );
+  }
+  function ToastAction({ label, onClick }) {
+    const [hover, setHover] = import_react18.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+      "button",
+      {
+        type: "button",
+        className: "ds-focusable",
+        onClick,
+        onMouseEnter: () => setHover(true),
+        onMouseLeave: () => setHover(false),
+        style: {
+          flex: "none",
+          height: 20,
+          padding: "0 6px",
+          background: hover ? "var(--bg-active)" : "var(--bg-hover)",
+          border: "1px solid var(--border-strong)",
+          borderRadius: "var(--radius-sm)",
+          color: "var(--text-primary)",
+          font: `var(--weight-medium) var(--text-caption)/1 var(--font-ui)`,
+          cursor: "pointer",
+          whiteSpace: "nowrap"
+        },
+        children: label
+      }
+    );
+  }
+
   // src/lib/clipboard.js
   function copyTextLegacy(text) {
     const ta = document.createElement("textarea");
@@ -8567,17 +8642,32 @@
   }
 
   // src/screens/SettingsScreen.jsx
-  var import_jsx_runtime16 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
   var S = {
     zh: {
       ai: "AI \u670D\u52A1",
-      aiDisabled: "P5 \u63A5\u901A\u5185\u5D4C\u5BF9\u8BDD\u540E\u542F\u7528\u3002",
       conn: "\u8FDE\u63A5",
       sec: "\u5B89\u5168",
       gen: "\u901A\u7528",
       about: "\u5173\u4E8E",
+      backend: "\u540E\u7AEF",
+      backendSub: "\u8BA2\u9605",
+      backendByok: "BYOK",
+      claudeReady: "\u5DF2\u767B\u5F55 \u2713",
+      claudeNotLoggedIn: "\u672A\u767B\u5F55",
+      claudeChecking: "\u68C0\u6D4B\u4E2D\u2026",
+      claudeNoNode: "\u9700\u8981 Node 18+",
+      claudeLoginCap: "\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login \u5B8C\u6210\u767B\u5F55\uFF0C\u7136\u540E\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D",
+      recheckClaude: "\u91CD\u65B0\u68C0\u6D4B",
       apiKey: "API Key",
       apiKeyCap: "\u4EC5\u4FDD\u5B58\u5728\u672C\u673A\uFF0C\u4E0D\u4F1A\u4E0A\u4F20",
+      saveVerify: "\u4FDD\u5B58\u5E76\u9A8C\u8BC1",
+      validating: "\u6B63\u5728\u9A8C\u8BC1\u2026",
+      saved: "API Key \u5DF2\u4FDD\u5B58\u5E76\u9A8C\u8BC1",
+      invalidKey: "\u65E0\u6548 key",
+      verifyFailed: "\u9A8C\u8BC1\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5",
+      clear: "\u6E05\u9664",
+      cleared: "API Key \u5DF2\u6E05\u9664",
       model: "\u6A21\u578B",
       port: "\u7AEF\u53E3",
       portHint: "\u9ED8\u8BA4 11488",
@@ -8616,13 +8706,28 @@
     },
     en: {
       ai: "AI service",
-      aiDisabled: "Enabled in P5 when built-in chat is wired.",
       conn: "Connection",
       sec: "Security",
       gen: "General",
       about: "About",
+      backend: "Backend",
+      backendSub: "Subscription",
+      backendByok: "BYOK",
+      claudeReady: "Logged in \u2713",
+      claudeNotLoggedIn: "Not logged in",
+      claudeChecking: "Checking\u2026",
+      claudeNoNode: "Needs Node 18+",
+      claudeLoginCap: "Run claude /login in a terminal, then click Re-check",
+      recheckClaude: "Re-check",
       apiKey: "API Key",
       apiKeyCap: "Stored locally, never uploaded",
+      saveVerify: "Save and verify",
+      validating: "Validating\u2026",
+      saved: "API Key saved and verified",
+      invalidKey: "Invalid key",
+      verifyFailed: "Verification failed. Try again later.",
+      clear: "Clear",
+      cleared: "API Key cleared",
       model: "Model",
       port: "Port",
       portHint: "Default 11488",
@@ -8661,27 +8766,27 @@
     }
   };
   function Section({ title, children, disabled, caption }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)", opacity: disabled ? 0.45 : 1 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { style: { font: "600 11px/1 var(--font-ui)", letterSpacing: "0.04em", color: "var(--text-tertiary)", textTransform: "uppercase", paddingBottom: 2, borderBottom: "1px solid var(--border-subtle)" }, children: title }),
-      caption ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { style: { font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: caption }) : null,
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)", opacity: disabled ? 0.45 : 1 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "600 11px/1 var(--font-ui)", letterSpacing: "0.04em", color: "var(--text-tertiary)", textTransform: "uppercase", paddingBottom: 2, borderBottom: "1px solid var(--border-subtle)" }, children: title }),
+      caption ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: caption }) : null,
       children
     ] });
   }
   function ClientRow({ name, lastActive, blocked, onBlock, blockLabel }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 32, padding: "2px 8px", background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", opacity: blocked ? 0.55 : 1 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", textDecoration: blocked ? "line-through" : "none" }, children: name }),
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: lastActive })
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 32, padding: "2px 8px", background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", opacity: blocked ? 0.55 : 1 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", textDecoration: blocked ? "line-through" : "none" }, children: name }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: lastActive })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { style: { font: "400 10px/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: blockLabel }),
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Switch, { checked: blocked, onChange: onBlock })
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { font: "400 10px/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: blockLabel }),
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Switch, { checked: blocked, onChange: onBlock })
     ] });
   }
   function VersionRow({ label, value, badge }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { style: { flex: 1, font: "400 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: label }),
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1, font: "400 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: label }),
       badge,
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { style: { font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: value })
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: value })
     ] });
   }
   function maskToken(value) {
@@ -8726,19 +8831,32 @@
     onBlockClient,
     onRegenToken,
     hostVersion = "-",
-    pythonVersion = "-"
+    pythonVersion = "-",
+    apiKey = "",
+    onSaveApiKey,
+    onClearApiKey,
+    validateKey,
+    model = "claude-sonnet-4-6",
+    onModelChange,
+    backend = "subscription",
+    onBackendChange,
+    claudeStatus = { state: "checking" },
+    onRecheckClaude,
+    permissionMode = "manual",
+    onPermissionMode
   }) {
     const t = S[lang] || S.zh;
-    const [key, setKey] = import_react18.default.useState("");
-    const [model, setModel] = import_react18.default.useState("sonnet");
-    const [draftPort, setDraftPort] = import_react18.default.useState(String(port));
-    const [tokenRaw, setTokenRaw] = import_react18.default.useState("");
-    const [autostart, setAutostart] = import_react18.default.useState(true);
-    const [perm, setPerm] = import_react18.default.useState("manual");
-    const [logLevel, setLogLevel] = import_react18.default.useState("info");
-    const [copied, setCopied] = import_react18.default.useState("");
-    import_react18.default.useEffect(() => setDraftPort(String(port)), [port]);
-    import_react18.default.useEffect(() => setTokenRaw(readTokenValue()), []);
+    const [key, setKey] = import_react19.default.useState(apiKey);
+    const [aiBusy, setAiBusy] = import_react19.default.useState(false);
+    const [aiToast, setAiToast] = import_react19.default.useState(null);
+    const [draftPort, setDraftPort] = import_react19.default.useState(String(port));
+    const [tokenRaw, setTokenRaw] = import_react19.default.useState("");
+    const [autostart, setAutostart] = import_react19.default.useState(true);
+    const [logLevel, setLogLevel] = import_react19.default.useState("info");
+    const [copied, setCopied] = import_react19.default.useState("");
+    import_react19.default.useEffect(() => setDraftPort(String(port)), [port]);
+    import_react19.default.useEffect(() => setTokenRaw(readTokenValue()), []);
+    import_react19.default.useEffect(() => setKey(apiKey), [apiKey]);
     const copy = (label, text) => {
       copyText(text).then(() => {
         setCopied(label);
@@ -8746,8 +8864,38 @@
       }).catch(() => {
       });
     };
-    const permCap = perm === "manual" ? t.permCap1 : perm === "auto" ? t.permCap2 : t.permCap3;
+    const permCap = permissionMode === "manual" ? t.permCap1 : permissionMode === "auto" ? t.permCap2 : t.permCap3;
     const tokenDisplay = tokenRaw ? maskToken(tokenRaw) : t.tokenMissing;
+    const claudeState = claudeStatus && claudeStatus.state || "checking";
+    const claudeBadgeStatus = claudeState === "ready" ? "ok" : claudeState === "not-logged-in" ? "warn" : claudeState === "no-node" ? "error" : "neutral";
+    const claudeBadgeText = claudeState === "ready" ? t.claudeReady : claudeState === "not-logged-in" ? t.claudeNotLoggedIn : claudeState === "no-node" ? t.claudeNoNode : t.claudeChecking;
+    const saveApiKey = () => {
+      if (aiBusy) return;
+      setAiBusy(true);
+      setAiToast(null);
+      Promise.resolve(validateKey ? validateKey(key) : true).then((result) => {
+        const ok = result === true || result && result.ok === true || result && result.status === 200;
+        const status = result && typeof result === "object" ? result.status : null;
+        if (!ok) {
+          setAiToast({ type: "error", message: status === 401 ? t.invalidKey : t.verifyFailed });
+          return null;
+        }
+        return Promise.resolve(onSaveApiKey ? onSaveApiKey(key) : null).then(() => {
+          setAiToast({ type: "ok", message: t.saved });
+        });
+      }).catch((e) => {
+        const status = e && (e.status || e.response && e.response.status);
+        setAiToast({ type: "error", message: status === 401 ? t.invalidKey : t.verifyFailed });
+      }).finally(() => setAiBusy(false));
+    };
+    const clearApiKey = () => {
+      setKey("");
+      Promise.resolve(onClearApiKey ? onClearApiKey() : null).then(() => {
+        setAiToast({ type: "info", message: t.cleared });
+      }).catch(() => {
+        setAiToast({ type: "error", message: t.verifyFailed });
+      });
+    };
     const regenerate = () => {
       if (!onRegenToken) return;
       const result = onRegenToken();
@@ -8758,37 +8906,53 @@
         setTokenRaw(result || readTokenValue());
       }
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-5)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(Section, { title: t.ai, disabled: true, caption: t.aiDisabled, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { label: t.apiKey, caption: t.apiKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Input, { secret: true, disabled: true, value: key, onChange: setKey, placeholder: "sk-ant-..." }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { label: t.model, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Select, { disabled: true, value: model, onChange: setModel, options: [
-          { value: "sonnet", label: "Claude Sonnet" },
-          { value: "haiku", label: "Claude Haiku" }
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-5)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { title: t.ai, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.backend, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Segmented, { full: true, value: backend, onChange: onBackendChange, options: [
+          { value: "subscription", label: t.backendSub },
+          { value: "byok", label: t.backendByok }
+        ] }) }),
+        backend === "subscription" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.backendSub, caption: claudeState === "not-logged-in" ? t.claudeLoginCap : claudeStatus && claudeStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: claudeBadgeStatus, children: claudeBadgeText }),
+          claudeState === "ready" && claudeStatus.nodeVersion ? /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { flex: 1, font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: [
+            "Node ",
+            String(claudeStatus.nodeVersion).replace(/^v?/, "v")
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: claudeState === "checking", onClick: onRecheckClaude, children: t.recheckClaude })
+        ] }) }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.apiKey, caption: t.apiKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { secret: true, value: key, onChange: setKey, placeholder: "sk-ant-...", style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "primary", disabled: aiBusy || !key.trim(), onClick: saveApiKey, children: aiBusy ? t.validating : t.saveVerify }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", disabled: aiBusy, onClick: clearApiKey, children: t.clear })
+        ] }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.model, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: model, onChange: onModelChange, options: [
+          { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
+          { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" }
+        ] }) }),
+        aiToast ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Toast, { type: aiToast.type, message: aiToast.message, onClose: () => setAiToast(null) }) : null
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { title: t.conn, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.port, hint: t.portHint, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { mono: true, value: draftPort, onChange: setDraftPort, style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", onClick: () => onApplyPort && onApplyPort(draftPort), children: t.apply })
+        ] }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.token, caption: t.tokenCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { mono: true, value: tokenDisplay, style: { flex: 1 }, suffix: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(IconButton, { icon: "copy", title: t.copy, disabled: !tokenRaw, onClick: () => copy("token", tokenRaw), style: { width: 20, height: 20 } }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", onClick: regenerate, children: t.regen })
+        ] }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { layout: "row", label: t.autostart, caption: t.autostartCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Switch, { checked: autostart, onChange: setAutostart }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.mcp, caption: copied === "mcp" ? t.copied : null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("pre", { style: { margin: 0, maxHeight: 160, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-secondary)", font: "400 10px/1.4 var(--font-mono)" }, children: mcpConfig }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "copy", onClick: () => copy("mcp", mcpConfig), children: t.copy })
         ] }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(Section, { title: t.conn, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { label: t.port, hint: t.portHint, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Input, { mono: true, value: draftPort, onChange: setDraftPort, style: { flex: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Button, { variant: "secondary", onClick: () => onApplyPort && onApplyPort(draftPort), children: t.apply })
-        ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { label: t.token, caption: t.tokenCap, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Input, { mono: true, value: tokenDisplay, style: { flex: 1 }, suffix: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(IconButton, { icon: "copy", title: t.copy, disabled: !tokenRaw, onClick: () => copy("token", tokenRaw), style: { width: 20, height: 20 } }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Button, { variant: "secondary", icon: "rotate-cw", onClick: regenerate, children: t.regen })
-        ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { layout: "row", label: t.autostart, caption: t.autostartCap, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Switch, { checked: autostart, onChange: setAutostart }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { label: t.mcp, caption: copied === "mcp" ? t.copied : null, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("pre", { style: { margin: 0, maxHeight: 160, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-secondary)", font: "400 10px/1.4 var(--font-mono)" }, children: mcpConfig }),
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Button, { variant: "secondary", icon: "copy", onClick: () => copy("mcp", mcpConfig), children: t.copy })
-        ] }) })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(Section, { title: t.sec, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { label: t.permTitle, caption: permCap, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Segmented, { full: true, value: perm, onChange: setPerm, options: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { title: t.sec, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.permTitle, caption: permCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Segmented, { full: true, value: permissionMode, onChange: onPermissionMode, options: [
           { value: "manual", label: t.perm1 },
           { value: "auto", label: t.perm2 },
           { value: "none", label: t.perm3 }
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 2 }, children: t.clients }),
-        clients.map((client) => /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 2 }, children: t.clients }),
+        clients.map((client) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
           ClientRow,
           {
             name: client.label,
@@ -8800,39 +8964,39 @@
           client.label
         ))
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(Section, { title: t.gen, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { label: t.language, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { label: t.logLevel, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Select, { value: logLevel, onChange: setLogLevel, style: { flex: 1 }, options: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { title: t.gen, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.language, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.logLevel, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: logLevel, onChange: setLogLevel, style: { flex: 1 }, options: [
             { value: "error", label: "Error" },
             { value: "info", label: "Info" },
             { value: "debug", label: "Debug" }
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Button, { variant: "secondary", icon: "download", disabled: true, children: t.exportLog })
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "download", disabled: true, children: t.exportLog })
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Field, { label: t.logs, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("details", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("summary", { style: { cursor: "pointer", color: "var(--text-secondary)", font: "500 11px/1.35 var(--font-ui)" }, children: t.logs }),
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("pre", { style: { margin: "6px 0 0", maxHeight: 128, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-tertiary)", font: "400 10px/1.4 var(--font-mono)" }, children: logs.join("\n") })
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.logs, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("details", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("summary", { style: { cursor: "pointer", color: "var(--text-secondary)", font: "500 11px/1.35 var(--font-ui)" }, children: t.logs }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("pre", { style: { margin: "6px 0 0", maxHeight: 128, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-tertiary)", font: "400 10px/1.4 var(--font-mono)" }, children: logs.join("\n") })
         ] }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(Section, { title: t.about, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(VersionRow, { label: t.verPanel, value: `v${package_default.version}` }),
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(VersionRow, { label: t.verHost, value: hostVersion, badge: hostVersion === "-" ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Badge, { status: "neutral", children: t.pending }) : null }),
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(VersionRow, { label: t.verPy, value: pythonVersion, badge: pythonVersion === "-" ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Badge, { status: "neutral", children: t.pending }) : null }),
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Button, { variant: "ghost", size: "sm", icon: "book-open", children: t.docs }),
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Button, { variant: "ghost", size: "sm", icon: "github", children: t.github })
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { title: t.about, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(VersionRow, { label: t.verPanel, value: `v${package_default.version}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(VersionRow, { label: t.verHost, value: hostVersion, badge: hostVersion === "-" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: "neutral", children: t.pending }) : null }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(VersionRow, { label: t.verPy, value: pythonVersion, badge: pythonVersion === "-" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: "neutral", children: t.pending }) : null }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "ghost", size: "sm", icon: "book-open", children: t.docs }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "ghost", size: "sm", icon: "github", children: t.github })
         ] })
       ] })
     ] });
   }
 
   // src/screens/ActivityScreen.jsx
-  var import_react21 = __toESM(require_react(), 1);
+  var import_react22 = __toESM(require_react(), 1);
 
   // src/components/activity/FilterBar.jsx
-  var import_react19 = __toESM(require_react(), 1);
-  var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
+  var import_react20 = __toESM(require_react(), 1);
+  var import_jsx_runtime18 = __toESM(require_jsx_runtime(), 1);
   function FilterBar({
     query = "",
     onQuery,
@@ -8840,8 +9004,8 @@
     filters = [],
     style
   }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", padding: "var(--space-2)", borderBottom: "1px solid var(--border-subtle)", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", padding: "var(--space-2)", borderBottom: "1px solid var(--border-subtle)", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
         Input,
         {
           value: query,
@@ -8851,13 +9015,13 @@
           suffix: null
         }
       ),
-      filters.map((f, i) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { full: false, value: f.value, onChange: f.onChange, options: f.options, style: { flex: "none", width: f.width || 96 } }, i))
+      filters.map((f, i) => /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Select, { full: false, value: f.value, onChange: f.onChange, options: f.options, style: { flex: "none", width: f.width || 96 } }, i))
     ] });
   }
 
   // src/components/activity/ActivityRow.jsx
-  var import_react20 = __toESM(require_react(), 1);
-  var import_jsx_runtime18 = __toESM(require_jsx_runtime(), 1);
+  var import_react21 = __toESM(require_react(), 1);
+  var import_jsx_runtime19 = __toESM(require_jsx_runtime(), 1);
   var RESULT = {
     success: { icon: "check", color: "var(--ok)" },
     error: { icon: "x", color: "var(--error)" },
@@ -8875,11 +9039,11 @@
     expandable = true,
     style
   }) {
-    const [expanded, setExpanded] = import_react20.default.useState(false);
-    const [hover, setHover] = import_react20.default.useState(false);
+    const [expanded, setExpanded] = import_react21.default.useState(false);
+    const [hover, setHover] = import_react21.default.useState(false);
     const r = RESULT[result] || RESULT.success;
-    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { borderBottom: "1px solid var(--border-subtle)", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { borderBottom: "1px solid var(--border-subtle)", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(
         "div",
         {
           role: expandable ? "button" : void 0,
@@ -8897,11 +9061,11 @@
             transition: "background var(--dur-fast) var(--ease-out)"
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Icon2, { name: r.icon, size: 12, strokeWidth: 2.5, color: r.color }),
-            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { flex: "none", font: `var(--weight-regular) var(--text-micro)/1 var(--font-mono)`, color: "var(--text-tertiary)" }, children: time }),
-            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Badge, { status: "neutral", style: { flex: "none", maxWidth: 84, overflow: "hidden" }, children: source }),
-            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { flex: "none", font: `var(--weight-medium) var(--text-caption)/1 var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "nowrap" }, children: verb }),
-            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Icon2, { name: r.icon, size: 12, strokeWidth: 2.5, color: r.color }),
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { style: { flex: "none", font: `var(--weight-regular) var(--text-micro)/1 var(--font-mono)`, color: "var(--text-tertiary)" }, children: time }),
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Badge, { status: "neutral", style: { flex: "none", maxWidth: 84, overflow: "hidden" }, children: source }),
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { style: { flex: "none", font: `var(--weight-medium) var(--text-caption)/1 var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "nowrap" }, children: verb }),
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
               "span",
               {
                 style: {
@@ -8916,7 +9080,7 @@
                 children: target
               }
             ),
-            expandable ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+            expandable ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
               Icon2,
               {
                 name: "chevron-down",
@@ -8928,8 +9092,8 @@
           ]
         }
       ),
-      expanded ? /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2) 26px", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
-        params != null ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+      expanded ? /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2) 26px", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
+        params != null ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
           "pre",
           {
             style: {
@@ -8948,7 +9112,7 @@
             children: typeof params === "string" ? params : JSON.stringify(params, null, 2)
           }
         ) : null,
-        onUndo ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { size: "sm", variant: "secondary", icon: "undo-2", onClick: onUndo, style: { alignSelf: "flex-start" }, children: undoLabel }) : null
+        onUndo ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Button, { size: "sm", variant: "secondary", icon: "undo-2", onClick: onUndo, style: { alignSelf: "flex-start" }, children: undoLabel }) : null
       ] }) : null
     ] });
   }
@@ -8978,7 +9142,7 @@
   }
 
   // src/screens/ActivityScreen.jsx
-  var import_jsx_runtime19 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime20 = __toESM(require_jsx_runtime(), 1);
   var A = {
     zh: {
       search: "\u641C\u7D22\u64CD\u4F5C\u2026",
@@ -9019,13 +9183,13 @@
     emptyCaption
   }) {
     const t = A[lang] || A.zh;
-    const [q, setQ] = import_react21.default.useState("");
-    const [res, setRes] = import_react21.default.useState("all");
+    const [q, setQ] = import_react22.default.useState("");
+    const [res, setRes] = import_react22.default.useState("all");
     const rows = filterEvents(events, { mode: res, query: q });
     const empty = events.length === 0;
-    return /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: empty ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(EmptyState, { icon: "list", title: emptyTitle || t.empty, caption: emptyCaption || t.emptyCap, style: { flex: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(import_react21.default.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { display: "flex", borderBottom: "1px solid var(--border-subtle)" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: empty ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(EmptyState, { icon: "list", title: emptyTitle || t.empty, caption: emptyCaption || t.emptyCap, style: { flex: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(import_react22.default.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", borderBottom: "1px solid var(--border-subtle)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
           FilterBar,
           {
             query: q,
@@ -9045,9 +9209,9 @@
             ]
           }
         ),
-        onClear ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { style: { display: "flex", alignItems: "center", padding: "var(--space-2) var(--space-2) var(--space-2) 0" }, children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Button, { size: "sm", variant: "ghost", icon: "trash-2", onClick: onClear, title: t.clear, children: t.clear }) }) : null
+        onClear ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { display: "flex", alignItems: "center", padding: "var(--space-2) var(--space-2) var(--space-2) 0" }, children: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Button, { size: "sm", variant: "ghost", icon: "trash-2", onClick: onClear, title: t.clear, children: t.clear }) }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { style: { flex: 1, minHeight: 0, overflow: "auto" }, children: rows.length ? rows.map((evt) => /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { flex: 1, minHeight: 0, overflow: "auto" }, children: rows.length ? rows.map((evt) => /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
         ActivityRow,
         {
           time: new Date(evt.ts).toLocaleTimeString(),
@@ -9058,18 +9222,18 @@
           params: eventDetails(evt)
         },
         evt.id
-      )) : /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(EmptyState, { icon: "list", title: emptyTitle || t.empty, caption: emptyCaption || t.emptyCap, style: { flex: 1 } }) })
+      )) : /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(EmptyState, { icon: "list", title: emptyTitle || t.empty, caption: emptyCaption || t.emptyCap, style: { flex: 1 } }) })
     ] }) });
   }
 
   // src/screens/WizardScreen.jsx
-  var import_react24 = __toESM(require_react(), 1);
+  var import_react25 = __toESM(require_react(), 1);
 
   // src/components/core/Spinner.jsx
-  var import_react22 = __toESM(require_react(), 1);
-  var import_jsx_runtime20 = __toESM(require_jsx_runtime(), 1);
+  var import_react23 = __toESM(require_react(), 1);
+  var import_jsx_runtime21 = __toESM(require_jsx_runtime(), 1);
   function Spinner({ size = 12, style }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
       "span",
       {
         role: "progressbar",
@@ -9090,10 +9254,10 @@
   }
 
   // src/components/chat/AIAvatar.jsx
-  var import_react23 = __toESM(require_react(), 1);
-  var import_jsx_runtime21 = __toESM(require_jsx_runtime(), 1);
+  var import_react24 = __toESM(require_react(), 1);
+  var import_jsx_runtime22 = __toESM(require_jsx_runtime(), 1);
   function AIAvatar({ size = 20, style }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
       "span",
       {
         "aria-label": "AI",
@@ -9109,13 +9273,13 @@
           borderRadius: "var(--radius-md)",
           ...style
         },
-        children: /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(Icon2, { name: "sparkles", size: Math.round(size * 0.6), color: "var(--accent)", strokeWidth: 2 })
+        children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Icon2, { name: "sparkles", size: Math.round(size * 0.6), color: "var(--accent)", strokeWidth: 2 })
       }
     );
   }
 
   // src/screens/WizardScreen.jsx
-  var import_jsx_runtime22 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime23 = __toESM(require_jsx_runtime(), 1);
   var W = {
     zh: {
       stepOf: (n) => `\u7B2C ${n} \u6B65 / \u5171 4 \u6B65`,
@@ -9175,14 +9339,14 @@
     { id: "cursor", name: "Cursor" }
   ];
   function CodeBlock({ code, copyLabel, onCopy, maxHeight }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { position: "relative", background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("pre", { style: { margin: 0, padding: "10px 36px 10px 12px", font: "400 11px/1.7 var(--font-mono)", color: "var(--text-primary)", overflow: "auto", maxHeight: maxHeight || 180, whiteSpace: "pre" }, children: code }),
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(IconButton, { icon: "copy", title: copyLabel, variant: "secondary", onClick: onCopy, style: { position: "absolute", top: 6, right: 6, background: "var(--bg-panel)" } })
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { position: "relative", background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("pre", { style: { margin: 0, padding: "10px 36px 10px 12px", font: "400 11px/1.7 var(--font-mono)", color: "var(--text-primary)", overflow: "auto", maxHeight: maxHeight || 180, whiteSpace: "pre" }, children: code }),
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(IconButton, { icon: "copy", title: copyLabel, variant: "secondary", onClick: onCopy, style: { position: "absolute", top: 6, right: 6, background: "var(--bg-panel)" } })
     ] });
   }
   function ClientRow2({ name, note, selected, onSelect }) {
-    const [hover, setHover] = import_react24.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
+    const [hover, setHover] = import_react25.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(
       "button",
       {
         type: "button",
@@ -9205,11 +9369,11 @@
           transition: "background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out)"
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: name }),
-            note ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: note }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: name }),
+            note ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: note }) : null
           ] }),
-          selected ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Icon2, { name: "check", size: 13, strokeWidth: 2.5, color: "var(--text-primary)" }) : null
+          selected ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Icon2, { name: "check", size: 13, strokeWidth: 2.5, color: "var(--text-primary)" }) : null
         ]
       }
     );
@@ -9231,32 +9395,32 @@
     onSkip
   }) {
     const t = W[lang] || W.zh;
-    return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "var(--space-6) var(--space-5) var(--space-5)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { display: "flex", gap: 5 }, children: [1, 2, 3, 4].map((n) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { width: n === step ? 14 : 5, height: 5, borderRadius: 3, background: n === step ? "var(--gray-11)" : n < step ? "var(--gray-9)" : "var(--gray-6)", transition: "width var(--dur-base) var(--ease-out)" } }, n)) }),
-        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { font: "400 10px/1 var(--font-mono)", color: "var(--text-tertiary)" }, children: t.stepOf(step) }),
-        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { flex: 1 } }),
-        onSkip && step < 4 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "ghost", size: "sm", onClick: onSkip, style: { color: "var(--text-tertiary)" }, children: t.skip }) : null
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "var(--space-6) var(--space-5) var(--space-5)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", gap: 5 }, children: [1, 2, 3, 4].map((n) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { width: n === step ? 14 : 5, height: 5, borderRadius: 3, background: n === step ? "var(--gray-11)" : n < step ? "var(--gray-9)" : "var(--gray-6)", transition: "width var(--dur-base) var(--ease-out)" } }, n)) }),
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { font: "400 10px/1 var(--font-mono)", color: "var(--text-tertiary)" }, children: t.stepOf(step) }),
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1 } }),
+        onSkip && step < 4 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "ghost", size: "sm", onClick: onSkip, style: { color: "var(--text-tertiary)" }, children: t.skip }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", paddingTop: "var(--space-6)" }, children: [
-        step === 1 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(AIAvatar, { size: 44 }),
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t1 }),
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b1 }),
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { marginTop: "var(--space-2)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginBottom: 6 }, children: t.langLabel }),
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] })
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", paddingTop: "var(--space-6)" }, children: [
+        step === 1 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(AIAvatar, { size: 44 }),
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t1 }),
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b1 }),
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { marginTop: "var(--space-2)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginBottom: 6 }, children: t.langLabel }),
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] })
           ] })
         ] }) : null,
-        step === 2 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t2 }),
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b2 }),
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(CodeBlock, { code: "pip install ae-mcp", copyLabel: t.copy, onCopy })
+        step === 2 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t2 }),
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b2 }),
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(CodeBlock, { code: "pip install ae-mcp", copyLabel: t.copy, onCopy })
         ] }) : null,
-        step === 3 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t3 }),
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b3 }),
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: CLIENTS.map((c) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+        step === 3 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t3 }),
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b3 }),
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: CLIENTS.map((c) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
             ClientRow2,
             {
               name: c.id === "builtin" ? t.builtin : c.name,
@@ -9266,41 +9430,41 @@
             },
             c.id
           )) }),
-          client !== "builtin" ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(CodeBlock, { code: mcpConfig, copyLabel: t.copy, onCopy, maxHeight: 150 }) : null
+          client !== "builtin" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(CodeBlock, { code: mcpConfig, copyLabel: t.copy, onCopy, maxHeight: 150 }) : null
         ] }) : null,
-        step === 4 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "var(--space-2)", textAlign: "center" }, children: [
-          handshake === "waiting" ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Spinner, { size: 28 }),
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "600 15px/1.35 var(--font-ui)", color: "var(--text-primary)", marginTop: 8 }, children: t.t4w }),
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 11px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 230 }, children: t.b4w })
+        step === 4 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "var(--space-2)", textAlign: "center" }, children: [
+          handshake === "waiting" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Spinner, { size: 28 }),
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 15px/1.35 var(--font-ui)", color: "var(--text-primary)", marginTop: 8 }, children: t.t4w }),
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 11px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 230 }, children: t.b4w })
           ] }) : null,
-          handshake === "success" ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { width: 48, height: 48, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--ok-bg)", border: "1px solid var(--ok-border)", borderRadius: "50%" }, children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Icon2, { name: "check", size: 22, strokeWidth: 2.5, color: "var(--ok)" }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "600 15px/1.35 var(--font-ui)", color: "var(--text-primary)", marginTop: 8 }, children: t.t4s }),
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 11px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 230 }, children: t.b4s(clientName) })
+          handshake === "success" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { width: 48, height: 48, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--ok-bg)", border: "1px solid var(--ok-border)", borderRadius: "50%" }, children: /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Icon2, { name: "check", size: 22, strokeWidth: 2.5, color: "var(--ok)" }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 15px/1.35 var(--font-ui)", color: "var(--text-primary)", marginTop: 8 }, children: t.t4s }),
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 11px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 230 }, children: t.b4s(clientName) })
           ] }) : null,
-          handshake === "timeout" ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { width: 48, height: 48, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--warn-bg)", border: "1px solid var(--warn-border)", borderRadius: "50%" }, children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Icon2, { name: "triangle-alert", size: 20, strokeWidth: 2, color: "var(--warn)" }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "600 15px/1.35 var(--font-ui)", color: "var(--text-primary)", marginTop: 8 }, children: t.t4t }),
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 11px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 240 }, children: t.b4t }),
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "secondary", icon: "stethoscope", onClick: onDiagnose, style: { marginTop: 4 }, children: t.diagnose })
+          handshake === "timeout" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { width: 48, height: 48, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--warn-bg)", border: "1px solid var(--warn-border)", borderRadius: "50%" }, children: /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Icon2, { name: "triangle-alert", size: 20, strokeWidth: 2, color: "var(--warn)" }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 15px/1.35 var(--font-ui)", color: "var(--text-primary)", marginTop: 8 }, children: t.t4t }),
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 11px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 240 }, children: t.b4t }),
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "secondary", icon: "stethoscope", onClick: onDiagnose, style: { marginTop: 4 }, children: t.diagnose })
           ] }) : null
         ] }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", paddingTop: "var(--space-3)" }, children: [
-        step > 1 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "ghost", size: "lg", onClick: onBack, children: t.back }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { flex: 1 } }),
-        step < 4 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "primary", size: "lg", onClick: onNext, children: t.next }) : handshake === "success" ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "primary", size: "lg", onClick: onDone, children: t.start }) : null
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", paddingTop: "var(--space-3)" }, children: [
+        step > 1 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "ghost", size: "lg", onClick: onBack, children: t.back }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1 } }),
+        step < 4 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "primary", size: "lg", onClick: onNext, children: t.next }) : handshake === "success" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "primary", size: "lg", onClick: onDone, children: t.start }) : null
       ] })
     ] });
   }
 
   // src/screens/ConnectionDrawer.jsx
-  var import_react27 = __toESM(require_react(), 1);
+  var import_react28 = __toESM(require_react(), 1);
 
   // src/components/shell/DiagnosticItem.jsx
-  var import_react25 = __toESM(require_react(), 1);
-  var import_jsx_runtime23 = __toESM(require_jsx_runtime(), 1);
+  var import_react26 = __toESM(require_react(), 1);
+  var import_jsx_runtime24 = __toESM(require_jsx_runtime(), 1);
   var GLYPHS = {
     pass: { icon: "check", color: "var(--ok)" },
     fail: { icon: "x", color: "var(--error)" },
@@ -9308,10 +9472,10 @@
   };
   function DiagnosticItem({ label, status = "pending", detail, actionLabel, onAction, style }) {
     const g = GLYPHS[status];
-    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { padding: "var(--space-1) 0", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: 22 }, children: [
-        status === "running" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Spinner, { size: 12 }) : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Icon2, { name: g.icon, size: 12, strokeWidth: 2.5, color: g.color }),
-        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { padding: "var(--space-1) 0", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: 22 }, children: [
+        status === "running" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Spinner, { size: 12 }) : /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Icon2, { name: g.icon, size: 12, strokeWidth: 2.5, color: g.color }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
           "span",
           {
             style: {
@@ -9324,7 +9488,7 @@
           }
         )
       ] }),
-      status === "fail" && detail ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(
+      status === "fail" && detail ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
         "div",
         {
           style: {
@@ -9338,8 +9502,8 @@
             borderRadius: "var(--radius-sm)"
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: detail }),
-            actionLabel ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, style: { flex: "none" }, children: actionLabel }) : null
+            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: detail }),
+            actionLabel ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, style: { flex: "none" }, children: actionLabel }) : null
           ]
         }
       ) : null
@@ -9347,19 +9511,19 @@
   }
 
   // src/components/shell/Drawer.jsx
-  var import_react26 = __toESM(require_react(), 1);
-  var import_jsx_runtime24 = __toESM(require_jsx_runtime(), 1);
+  var import_react27 = __toESM(require_react(), 1);
+  var import_jsx_runtime25 = __toESM(require_jsx_runtime(), 1);
   function Drawer({ open = false, title, onClose, children, closeTitle = "\u5173\u95ED Close", style }) {
     if (!open) return null;
-    return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { position: "absolute", inset: 0, zIndex: 30 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { position: "absolute", inset: 0, zIndex: 30 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
         "div",
         {
           onClick: onClose,
           style: { position: "absolute", inset: 0, background: "var(--scrim)", animation: "ds-fade var(--dur-slow) var(--ease-out)" }
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
         "div",
         {
           role: "dialog",
@@ -9380,7 +9544,7 @@
             ...style
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
+            /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
               "div",
               {
                 style: {
@@ -9391,12 +9555,12 @@
                   borderBottom: "1px solid var(--border-subtle)"
                 },
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-semibold) var(--text-heading)/1 var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
-                  /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(IconButton, { icon: "x", title: closeTitle, onClick: onClose })
+                  /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-semibold) var(--text-heading)/1 var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
+                  /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(IconButton, { icon: "x", title: closeTitle, onClick: onClose })
                 ]
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { overflow: "auto", padding: "var(--space-3)" }, children })
+            /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { overflow: "auto", padding: "var(--space-3)" }, children })
           ]
         }
       )
@@ -9404,7 +9568,7 @@
   }
 
   // src/screens/ConnectionDrawer.jsx
-  var import_jsx_runtime25 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime26 = __toESM(require_jsx_runtime(), 1);
   var D = {
     zh: {
       title: "\u8FDE\u63A5",
@@ -9462,9 +9626,9 @@
     }
   };
   function KV({ k, children }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { width: 72, flex: "none", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: k }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.35 var(--font-mono)", color: "var(--text-primary)" }, children })
+    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { width: 72, flex: "none", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: k }),
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.35 var(--font-mono)", color: "var(--text-primary)" }, children })
     ] });
   }
   function formatTime(ts) {
@@ -9490,42 +9654,42 @@
     const hostVersion = info.hostVersion || "-";
     const mismatch = info.pythonVersion && info.pythonVersion !== panelVersion;
     const recent = info.lastClientSeenAt ? [{ time: formatTime(info.lastClientSeenAt), text: lang === "zh" ? "\u5916\u90E8 MCP \u5BA2\u6237\u7AEF" : "External MCP client" }] : [];
-    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(KV, { k: t.status, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(StatusDot, { status: connected ? "connected" : "waiting", size: 7 }),
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { fontFamily: "var(--font-ui)" }, children: statusLabel || (connected ? t.connected : t.waiting) })
+    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(KV, { k: t.status, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(StatusDot, { status: connected ? "connected" : "waiting", size: 7 }),
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { fontFamily: "var(--font-ui)" }, children: statusLabel || (connected ? t.connected : t.waiting) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(KV, { k: t.port, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(KV, { k: t.port, children: [
         info.port || "-",
         " ",
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(IconButton, { icon: "copy", title: t.copyConfig, onClick: () => callCopy(onCopyConfig), style: { width: 20, height: 20 } })
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(IconButton, { icon: "copy", title: t.copyConfig, onClick: () => callCopy(onCopyConfig), style: { width: 20, height: 20 } })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(KV, { k: t.token, children: info.tokenLabel || t.tokenLocal }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(KV, { k: t.ver, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(KV, { k: t.token, children: info.tokenLabel || t.tokenLocal }),
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(KV, { k: t.ver, children: [
         "v",
         panelVersion,
         " \xB7 host ",
         hostVersion,
         " \xB7 py ",
         pythonVersion,
-        mismatch ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Badge, { status: "warn", children: t.mismatch }) : null
+        mismatch ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Badge, { status: "warn", children: t.mismatch }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 4 }, children: t.recent }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", padding: "2px 8px" }, children: (recent.length ? recent : [{ time: "-", text: t.noRecent }]).map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", minHeight: 22, font: "400 10px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }, children: r.time }),
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: r.text })
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 4 }, children: t.recent }),
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", padding: "2px 8px" }, children: (recent.length ? recent : [{ time: "-", text: t.noRecent }]).map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", minHeight: 22, font: "400 10px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }, children: r.time }),
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: r.text })
       ] }, i)) }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => callCopy(onCopyConfig), children: t.copyConfig }),
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRestart, children: t.restart }),
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "stethoscope", onClick: onDiagnose, children: t.diagnose })
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => callCopy(onCopyConfig), children: t.copyConfig }),
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRestart, children: t.restart }),
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "stethoscope", onClick: onDiagnose, children: t.diagnose })
       ] })
     ] });
   }
   function DiagnosticsBody({ lang = "zh", diagnostics = [], onRerun }) {
     const t = D[lang] || D.zh;
-    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", flexDirection: "column" }, children: [
-      diagnostics.map((c) => /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", flexDirection: "column" }, children: [
+      diagnostics.map((c) => /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
         DiagnosticItem,
         {
           label: t.checks[c.id] || c.id,
@@ -9534,10 +9698,10 @@
         },
         c.id
       )),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", justifyContent: "flex-end", gap: 6, paddingTop: "var(--space-2)" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => copyText(JSON.stringify(diagnostics, null, 2)).catch(() => {
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", justifyContent: "flex-end", gap: 6, paddingTop: "var(--space-2)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => copyText(JSON.stringify(diagnostics, null, 2)).catch(() => {
         }), children: t.copyReport }),
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRerun, children: t.rerun })
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRerun, children: t.rerun })
       ] })
     ] });
   }
@@ -9545,8 +9709,8 @@
     const diagList = Array.isArray(diagnostics) ? diagnostics : [];
     const t = D[lang] || D.zh;
     const panelVersion = info.panelVersion || package_default.version;
-    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(Drawer, { open, title: t.title, onClose, closeTitle: t.close, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(Drawer, { open, title: t.title, onClose, closeTitle: t.close, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
         ConnectionDrawerBody,
         {
           lang,
@@ -9557,15 +9721,1938 @@
           onDiagnose
         }
       ),
-      diagList.length ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { marginTop: "var(--space-3)", paddingTop: "var(--space-2)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(DiagnosticsBody, { lang, diagnostics: diagList, onRerun: onDiagnose }) }) : null
+      diagList.length ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { marginTop: "var(--space-3)", paddingTop: "var(--space-2)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(DiagnosticsBody, { lang, diagnostics: diagList, onRerun: onDiagnose }) }) : null
     ] });
   }
 
+  // src/screens/ChatScreen.jsx
+  var import_react34 = __toESM(require_react(), 1);
+
+  // src/components/chat/ChatBubble.jsx
+  var import_react29 = __toESM(require_react(), 1);
+  var import_jsx_runtime27 = __toESM(require_jsx_runtime(), 1);
+  function ChatBubble({ role = "ai", children, streaming = false, avatar = true, style }) {
+    if (role === "user") {
+      return /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { display: "flex", justifyContent: "flex-end", ...style }, children: /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
+        "div",
+        {
+          style: {
+            maxWidth: "85%",
+            padding: "5px 10px",
+            background: "var(--bg-raised)",
+            border: "1px solid var(--border-subtle)",
+            borderRadius: "var(--radius-lg)",
+            borderBottomRightRadius: "var(--radius-sm)",
+            font: `var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-ui)`,
+            color: "var(--text-primary)",
+            overflowWrap: "break-word"
+          },
+          children
+        }
+      ) });
+    }
+    return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "flex-start", ...style }, children: [
+      avatar ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(AIAvatar, { style: { marginTop: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { width: 20, flex: "none" } }),
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(
+        "div",
+        {
+          style: {
+            flex: 1,
+            minWidth: 0,
+            font: `var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-ui)`,
+            color: "var(--text-primary)",
+            overflowWrap: "break-word"
+          },
+          children: [
+            children,
+            streaming ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
+              "span",
+              {
+                style: {
+                  display: "inline-block",
+                  width: 6,
+                  height: 12,
+                  marginLeft: 3,
+                  verticalAlign: "-1px",
+                  background: "var(--accent)",
+                  borderRadius: 1,
+                  animation: "ds-pulse 1s var(--ease-in-out) infinite"
+                }
+              }
+            ) : null
+          ]
+        }
+      )
+    ] });
+  }
+
+  // src/components/chat/ToolCallCard.jsx
+  var import_react30 = __toESM(require_react(), 1);
+  var import_jsx_runtime28 = __toESM(require_jsx_runtime(), 1);
+  function StatusGlyph({ status }) {
+    if (status === "running") return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Spinner, { size: 12 });
+    if (status === "error") return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Icon2, { name: "x", size: 12, strokeWidth: 2.5, color: "var(--error)" });
+    return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.5, color: "var(--ok)" });
+  }
+  function ParamsBlock({ params }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+      "pre",
+      {
+        style: {
+          margin: 0,
+          padding: "var(--space-2)",
+          background: "var(--gray-0)",
+          borderTop: "1px solid var(--border-subtle)",
+          font: `var(--weight-regular) var(--text-micro)/1.6 var(--font-mono)`,
+          color: "var(--text-secondary)",
+          maxHeight: 140,
+          overflow: "auto",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-all"
+        },
+        children: typeof params === "string" ? params : JSON.stringify(params, null, 2)
+      }
+    );
+  }
+  function HeaderRow({ status, verb, target, expandable, expanded, onToggle }) {
+    const [hover, setHover] = import_react30.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
+      "div",
+      {
+        role: expandable ? "button" : void 0,
+        onClick: expandable ? onToggle : void 0,
+        onMouseEnter: () => setHover(true),
+        onMouseLeave: () => setHover(false),
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--space-15)",
+          minHeight: "var(--hit-min)",
+          padding: "0 var(--space-2)",
+          cursor: expandable ? "pointer" : "default",
+          background: expandable && hover ? "var(--bg-hover)" : "transparent",
+          transition: "background var(--dur-fast) var(--ease-out)"
+        },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(StatusGlyph, { status }),
+          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { font: `var(--weight-medium) var(--text-body)/1 var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "nowrap" }, children: verb }),
+          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+            "span",
+            {
+              style: {
+                flex: 1,
+                minWidth: 0,
+                font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)`,
+                color: "var(--text-tertiary)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis"
+              },
+              children: target
+            }
+          ),
+          expandable ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+            Icon2,
+            {
+              name: "chevron-down",
+              size: 12,
+              color: "var(--text-tertiary)",
+              style: { transform: expanded ? "rotate(180deg)" : "none", transition: "transform var(--dur-base) var(--ease-out)" }
+            }
+          ) : null
+        ]
+      }
+    );
+  }
+  function ToolCallCard({
+    verb,
+    target,
+    status = "success",
+    params,
+    errorMessage,
+    onRetry,
+    steps,
+    groupLabel,
+    defaultExpanded = false,
+    retryLabel = "\u91CD\u8BD5",
+    style
+  }) {
+    const [expanded, setExpanded] = import_react30.default.useState(defaultExpanded);
+    const isGroup = Array.isArray(steps) && steps.length > 0;
+    const expandable = isGroup || params != null;
+    return /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
+      "div",
+      {
+        style: {
+          background: "var(--bg-well)",
+          border: "1px solid var(--border-default)",
+          borderLeft: "2px solid var(--accent)",
+          borderRadius: "var(--radius-md)",
+          overflow: "hidden",
+          ...style
+        },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+            HeaderRow,
+            {
+              status,
+              verb,
+              target: isGroup ? groupLabel || `${steps.length} steps` : target,
+              expandable,
+              expanded,
+              onToggle: () => setExpanded(!expanded)
+            }
+          ),
+          expanded && isGroup ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("div", { style: { borderTop: "1px solid var(--border-subtle)", padding: "var(--space-1) 0" }, children: steps.map((s, i) => /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
+            "div",
+            {
+              style: { display: "flex", alignItems: "center", gap: "var(--space-15)", minHeight: 22, padding: "0 var(--space-2) 0 var(--space-5)" },
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(StatusGlyph, { status: s.status || "success" }),
+                /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)`, color: "var(--text-secondary)", whiteSpace: "nowrap" }, children: s.verb }),
+                /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+                  "span",
+                  {
+                    style: {
+                      flex: 1,
+                      minWidth: 0,
+                      font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)`,
+                      color: "var(--text-tertiary)",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis"
+                    },
+                    children: s.target
+                  }
+                )
+              ]
+            },
+            i
+          )) }) : null,
+          expanded && !isGroup && params != null ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(ParamsBlock, { params }) : null,
+          status === "error" && errorMessage ? /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
+            "div",
+            {
+              style: {
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-2)",
+                padding: "var(--space-15) var(--space-2)",
+                borderTop: "1px solid var(--border-subtle)",
+                background: "var(--error-bg)"
+              },
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--error)" }, children: errorMessage }),
+                onRetry ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Button, { size: "sm", variant: "secondary", icon: "rotate-cw", onClick: onRetry, children: retryLabel }) : null
+              ]
+            }
+          ) : null
+        ]
+      }
+    );
+  }
+
+  // src/components/chat/ApprovalCard.jsx
+  var import_react31 = __toESM(require_react(), 1);
+  var import_jsx_runtime29 = __toESM(require_jsx_runtime(), 1);
+  var L = {
+    zh: {
+      needs: "\u9700\u8981\u6279\u51C6",
+      high: "\u9AD8\u98CE\u9669",
+      params: "\u67E5\u770B\u53C2\u6570",
+      allow: "\u5141\u8BB8",
+      deny: "\u62D2\u7EDD",
+      session: "\u672C\u4F1A\u8BDD\u6B64\u7C7B\u64CD\u4F5C\u514D\u6279",
+      allowed: "\u5DF2\u5141\u8BB8",
+      denied: "\u5DF2\u62D2\u7EDD"
+    },
+    en: {
+      needs: "Approval required",
+      high: "High risk",
+      params: "View parameters",
+      allow: "Allow",
+      deny: "Deny",
+      session: "Don't ask again this session",
+      allowed: "Allowed",
+      denied: "Denied"
+    }
+  };
+  function ApprovalCard({
+    risk = "normal",
+    title,
+    description,
+    params,
+    lang = "zh",
+    state = "pending",
+    onAllow,
+    onDeny,
+    onAllowSession,
+    style
+  }) {
+    const [expanded, setExpanded] = import_react31.default.useState(false);
+    const t = L[lang] || L.zh;
+    const high = risk === "high";
+    return /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
+      "div",
+      {
+        style: {
+          background: "var(--bg-raised)",
+          border: `1px solid ${high ? "var(--error-border)" : "var(--border-strong)"}`,
+          borderLeft: `2px solid ${high ? "var(--error)" : "var(--accent)"}`,
+          borderRadius: "var(--radius-md)",
+          overflow: "hidden",
+          ...style
+        },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { style: { padding: "var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-15)" }, children: high ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Badge, { status: "error", icon: "shield-alert", children: t.high }) : /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Badge, { status: "warn", icon: "shield", children: t.needs }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { style: { font: `var(--weight-semibold) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
+            description ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: description }) : null,
+            params != null ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(ApprovalParams, { t, expanded, onToggle: () => setExpanded(!expanded), params }) : null
+          ] }),
+          state === "pending" ? /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Button, { variant: high ? "danger" : "primary", full: true, onClick: onAllow, children: t.allow }),
+              /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Button, { variant: "secondary", full: true, onClick: onDeny, children: t.deny })
+            ] }),
+            onAllowSession && !high ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Button, { variant: "ghost", size: "sm", onClick: onAllowSession, style: { alignSelf: "flex-start", color: "var(--text-tertiary)" }, children: t.session }) : null
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
+            "div",
+            {
+              style: {
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-15)",
+                padding: "var(--space-15) var(--space-2)",
+                borderTop: "1px solid var(--border-subtle)",
+                font: `var(--weight-medium) var(--text-caption)/1 var(--font-ui)`,
+                color: state === "allowed" ? "var(--ok)" : "var(--text-tertiary)"
+              },
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Icon2, { name: state === "allowed" ? "check" : "x", size: 12, strokeWidth: 2.5 }),
+                state === "allowed" ? t.allowed : t.denied
+              ]
+            }
+          )
+        ]
+      }
+    );
+  }
+  function ApprovalParams({ t, expanded, onToggle, params }) {
+    const [hover, setHover] = import_react31.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
+        "button",
+        {
+          type: "button",
+          className: "ds-focusable",
+          onClick: onToggle,
+          onMouseEnter: () => setHover(true),
+          onMouseLeave: () => setHover(false),
+          style: {
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            minHeight: 20,
+            padding: 0,
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)`,
+            color: hover ? "var(--text-secondary)" : "var(--text-tertiary)"
+          },
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Icon2, { name: "chevron-right", size: 11, style: { transform: expanded ? "rotate(90deg)" : "none", transition: "transform var(--dur-base) var(--ease-out)" } }),
+            t.params
+          ]
+        }
+      ),
+      expanded ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
+        "pre",
+        {
+          style: {
+            margin: "4px 0 0",
+            padding: "var(--space-2)",
+            background: "var(--gray-0)",
+            border: "1px solid var(--border-subtle)",
+            borderRadius: "var(--radius-sm)",
+            font: `var(--weight-regular) var(--text-micro)/1.6 var(--font-mono)`,
+            color: "var(--text-secondary)",
+            maxHeight: 120,
+            overflow: "auto",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-all"
+          },
+          children: typeof params === "string" ? params : JSON.stringify(params, null, 2)
+        }
+      ) : null
+    ] });
+  }
+
+  // src/components/chat/PromptCard.jsx
+  var import_react32 = __toESM(require_react(), 1);
+  var import_jsx_runtime30 = __toESM(require_jsx_runtime(), 1);
+  function PromptCard({ icon = "wand-2", title, caption, onClick, style }) {
+    const [hover, setHover] = import_react32.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
+      "button",
+      {
+        type: "button",
+        className: "ds-focusable",
+        onClick,
+        onMouseEnter: () => setHover(true),
+        onMouseLeave: () => setHover(false),
+        style: {
+          display: "flex",
+          alignItems: "flex-start",
+          gap: "var(--space-2)",
+          width: "100%",
+          textAlign: "left",
+          padding: "var(--space-2)",
+          background: hover ? "var(--bg-hover)" : "var(--bg-raised)",
+          border: `1px solid ${hover ? "var(--border-strong)" : "var(--border-default)"}`,
+          borderRadius: "var(--radius-md)",
+          cursor: "pointer",
+          transition: "background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out)",
+          ...style
+        },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Icon2, { name: icon, size: 14, color: "var(--text-tertiary)", style: { marginTop: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { style: { display: "block", font: `var(--weight-medium) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
+            caption ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { style: { display: "block", marginTop: 2, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)" }, children: caption }) : null
+          ] })
+        ]
+      }
+    );
+  }
+
+  // src/components/chat/Composer.jsx
+  var import_react33 = __toESM(require_react(), 1);
+  var import_jsx_runtime31 = __toESM(require_jsx_runtime(), 1);
+  function Composer({
+    value = "",
+    onChange,
+    onSend,
+    onStop,
+    streaming = false,
+    disabled = false,
+    notice,
+    options,
+    placeholder,
+    style
+  }) {
+    const [focus, setFocus] = import_react33.default.useState(false);
+    const canSend = !disabled && !streaming && value.trim().length > 0;
+    const handleKey = (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        if (canSend && onSend) onSend();
+      }
+    };
+    return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-15)", ...style }, children: [
+      notice,
+      /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
+        "div",
+        {
+          style: {
+            display: "flex",
+            flexDirection: options ? "column" : "row",
+            alignItems: options ? "stretch" : "flex-end",
+            gap: options ? 2 : "var(--space-15)",
+            padding: "var(--space-15)",
+            background: "var(--bg-well)",
+            border: `1px solid ${focus && !disabled ? "var(--border-strong)" : "var(--border-default)"}`,
+            boxShadow: focus && !disabled ? "0 0 0 1px var(--focus-ring)" : "none",
+            borderRadius: "var(--radius-lg)",
+            opacity: disabled ? 0.5 : 1,
+            transition: "border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out)"
+          },
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+              "textarea",
+              {
+                rows: 1,
+                value,
+                placeholder,
+                disabled,
+                onChange: (e) => onChange && onChange(e.target.value),
+                onFocus: () => setFocus(true),
+                onBlur: () => setFocus(false),
+                onKeyDown: handleKey,
+                style: {
+                  flex: 1,
+                  minWidth: 0,
+                  maxHeight: 72,
+                  resize: "none",
+                  background: "transparent",
+                  border: "none",
+                  outline: "none",
+                  padding: "4px 2px 4px 4px",
+                  color: "var(--text-primary)",
+                  font: `var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-ui)`
+                }
+              }
+            ),
+            options ? /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 2, minWidth: 0 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 2, overflow: "hidden" }, children: options }),
+              streaming ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
+            ] }) : streaming ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
+          ]
+        }
+      )
+    ] });
+  }
+  function SendButton({ icon, title, kind, disabled = false, onClick }) {
+    const [hover, setHover] = import_react33.default.useState(false);
+    const active = kind === "send" && !disabled;
+    return /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+      "button",
+      {
+        type: "button",
+        className: "ds-focusable",
+        title,
+        "aria-label": title,
+        disabled,
+        onClick,
+        onMouseEnter: () => setHover(true),
+        onMouseLeave: () => setHover(false),
+        style: {
+          width: 24,
+          height: 24,
+          flex: "none",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 0,
+          background: active ? hover ? "var(--accent-hover)" : "var(--accent)" : kind === "stop" ? hover ? "#ffffff" : "var(--gray-11)" : "var(--gray-6)",
+          color: active || kind === "stop" ? "var(--text-on-solid)" : "var(--gray-8)",
+          border: "none",
+          borderRadius: "var(--radius-md)",
+          cursor: disabled ? "default" : "pointer",
+          transition: "background var(--dur-fast) var(--ease-out)"
+        },
+        children: /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Icon2, { name: icon, size: 13, strokeWidth: 2.25 })
+      }
+    );
+  }
+
+  // src/screens/ChatScreen.jsx
+  var import_jsx_runtime32 = __toESM(require_jsx_runtime(), 1);
+  var C = {
+    zh: {
+      hello: "\u4F60\u597D\uFF01\u6211\u53EF\u4EE5\u76F4\u63A5\u64CD\u4F5C\u5F53\u524D\u6253\u5F00\u7684 AE \u5DE5\u7A0B\u3002\u8BD5\u8BD5\u8FD9\u4E9B\uFF1A",
+      keyTitle: "\u5728\u8BBE\u7F6E\u91CC\u7C98\u8D34 Anthropic API Key",
+      keyCaption: "\u4FDD\u5B58\u5E76\u9A8C\u8BC1\u540E\uFF0C\u5C31\u53EF\u4EE5\u5728\u8FD9\u91CC\u8BA9 AI \u64CD\u4F5C\u4F60\u7684\u5DE5\u7A0B\u3002",
+      newSession: "\u65B0\u4F1A\u8BDD",
+      placeholder: "\u63CF\u8FF0\u4F60\u60F3\u5728 AE \u91CC\u505A\u4EC0\u4E48\u2026",
+      noticeAction: "\u65B0\u4F1A\u8BDD",
+      errorTitle: "\u5BF9\u8BDD\u51FA\u9519",
+      denied: "\u5DF2\u62D2\u7EDD",
+      running: "\u6267\u884C\u4E2D",
+      ok: "\u5B8C\u6210",
+      failed: "\u5931\u8D25",
+      awaiting: "\u7B49\u5F85\u6279\u51C6"
+    },
+    en: {
+      hello: "Hi! I can operate the open AE project directly. Try one of these:",
+      keyTitle: "Paste an Anthropic API Key in Settings",
+      keyCaption: "After saving and validating it, AI can operate your project here.",
+      newSession: "New session",
+      placeholder: "Describe what to do in AE\u2026",
+      noticeAction: "New session",
+      errorTitle: "Chat error",
+      denied: "Denied",
+      running: "Running",
+      ok: "Done",
+      failed: "Failed",
+      awaiting: "Awaiting approval"
+    }
+  };
+  var DEFAULT_PROMPTS = {
+    zh: [
+      { icon: "type", title: "\u521B\u5EFA\u4E00\u4E2A\u6807\u9898\u52A8\u753B", caption: "\u65B0\u5EFA\u6587\u672C\u56FE\u5C42\u5E76\u52A0\u5165\u4F4D\u7F6E\u5173\u952E\u5E27" },
+      { icon: "layers", title: "\u6574\u7406\u5DE5\u7A0B\u7D20\u6750", caption: "\u6309\u7C7B\u578B\u628A\u7D20\u6750\u5F52\u8FDB\u6587\u4EF6\u5939" },
+      { icon: "clapperboard", title: "\u7ED9\u753B\u9762\u52A0\u7535\u5F71\u611F\u8C03\u8272", caption: "\u6DFB\u52A0\u8C03\u6574\u56FE\u5C42\u4E0E Lumetri \u9884\u8BBE" }
+    ],
+    en: [
+      { icon: "type", title: "Create a title animation", caption: "New text layer with position keyframes" },
+      { icon: "layers", title: "Organize project assets", caption: "Sort footage into folders by type" },
+      { icon: "clapperboard", title: "Cinematic color grade", caption: "Adjustment layer + Lumetri preset" }
+    ]
+  };
+  function Notice({ text, actionLabel, onAction }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "var(--bg-well)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Icon2, { name: "plug", size: 12, color: "var(--text-tertiary)" }),
+      /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { flex: 1, minWidth: 0, font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: text }),
+      onAction ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, children: actionLabel }) : null
+    ] });
+  }
+  function statusForTool(state) {
+    if (state === "running" || state === "awaiting-approval") return "running";
+    if (state === "error" || state === "denied") return "error";
+    return "success";
+  }
+  function toolTarget(entry, t) {
+    if (entry.state === "awaiting-approval") return t.awaiting;
+    if (entry.state === "running") return t.running;
+    if (entry.state === "denied") return t.denied;
+    if (entry.state === "error") return t.failed;
+    return t.ok;
+  }
+  function titleForTool(entry, lang) {
+    return eventTitle({ undoGroup: `MCP ${entry.name || ""}` }, lang);
+  }
+  function Entry({ entry, lang, onApprove }) {
+    const t = C[lang] || C.zh;
+    if (entry.type === "user-text") {
+      return /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(ChatBubble, { role: "user", children: entry.text });
+    }
+    if (entry.type === "ai-text") {
+      return /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(ChatBubble, { role: "ai", children: entry.text });
+    }
+    if (entry.type === "tool-call") {
+      const highRisk = entry.risk === "destructive";
+      return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { paddingLeft: 28, display: "flex", flexDirection: "column", gap: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+          ToolCallCard,
+          {
+            verb: titleForTool(entry, lang),
+            target: toolTarget(entry, t),
+            status: statusForTool(entry.state),
+            params: entry.input,
+            errorMessage: entry.state === "error" ? entry.text : null
+          }
+        ),
+        entry.state === "awaiting-approval" ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+          ApprovalCard,
+          {
+            risk: highRisk ? "high" : "normal",
+            lang,
+            title: titleForTool(entry, lang),
+            description: entry.name,
+            params: entry.input,
+            onAllow: () => onApprove && onApprove(entry.toolUseId, "allow"),
+            onDeny: () => onApprove && onApprove(entry.toolUseId, "deny"),
+            onAllowSession: highRisk ? null : () => onApprove && onApprove(entry.toolUseId, "allow-session")
+          }
+        ) : null
+      ] });
+    }
+    if (entry.type === "error") {
+      return /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(ToolCallCard, { verb: t.errorTitle, target: entry.kind, status: "error", errorMessage: entry.message }) });
+    }
+    return null;
+  }
+  function ChatScreen({
+    lang = "zh",
+    entries = [],
+    streaming = false,
+    composerDisabled = false,
+    disabledHint = "",
+    onSend,
+    onStop,
+    onApprove,
+    onNewSession,
+    promptCards,
+    noticeActionLabel,
+    onNoticeAction
+  }) {
+    const t = C[lang] || C.zh;
+    const [draft, setDraft] = import_react34.default.useState("");
+    const logRef = import_react34.default.useRef(null);
+    const hasEntries = entries.length > 0;
+    const prompts = promptCards || DEFAULT_PROMPTS[lang] || DEFAULT_PROMPTS.zh;
+    import_react34.default.useEffect(() => {
+      const el = logRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    }, [entries, streaming]);
+    const send = () => {
+      const text = draft.trim();
+      if (!text || composerDisabled || streaming) return;
+      if (onSend) onSend(text);
+      setDraft("");
+    };
+    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { ref: logRef, style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }, children: [
+        !hasEntries && composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(import_react34.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(AIAvatar, { size: 32 }),
+          /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { font: "600 12px/1.35 var(--font-ui)", color: "var(--text-primary)", maxWidth: 240 }, children: disabledHint || t.keyTitle }),
+          /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { font: "400 11px/1.45 var(--font-ui)", color: "var(--text-tertiary)", maxWidth: 250 }, children: t.keyCaption })
+        ] }) }) : null,
+        !hasEntries && !composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(import_react34.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(AIAvatar, { size: 32 }),
+            /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 240 }, children: t.hello })
+          ] }),
+          prompts.map((card) => /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+            PromptCard,
+            {
+              icon: card.icon,
+              title: card.title,
+              caption: card.caption,
+              onClick: () => {
+                if (card.onClick) card.onClick(card);
+                else if (onSend) onSend(card.prompt || card.title);
+              }
+            },
+            card.id || card.title
+          ))
+        ] }) : null,
+        entries.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Entry, { entry, lang, onApprove }, entry.id))
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+        Composer,
+        {
+          value: draft,
+          onChange: setDraft,
+          onSend: send,
+          onStop,
+          streaming,
+          disabled: composerDisabled,
+          placeholder: t.placeholder,
+          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : null
+        }
+      ) })
+    ] });
+  }
+
+  // src/lib/sse.js
+  function createSseParser(onEvent) {
+    let buffer = "";
+    function parseFrame(frame) {
+      let event = "";
+      let data = "";
+      const lines = frame.replace(/\r\n/g, "\n").split("\n");
+      for (const line of lines) {
+        if (line.startsWith("event:")) {
+          event = line.slice(6).trim();
+        } else if (line.startsWith("data:")) {
+          data += line.slice(5).trimStart();
+        }
+      }
+      const trimmed = data.trim();
+      if (!trimmed || trimmed === "[DONE]") return;
+      try {
+        onEvent({ event, data: JSON.parse(trimmed) });
+      } catch (e) {
+      }
+    }
+    function feed(chunkText) {
+      buffer += String(chunkText || "");
+      buffer = buffer.replace(/\r\n/g, "\n");
+      let splitAt = buffer.indexOf("\n\n");
+      while (splitAt !== -1) {
+        const frame = buffer.slice(0, splitAt);
+        buffer = buffer.slice(splitAt + 2);
+        parseFrame(frame);
+        splitAt = buffer.indexOf("\n\n");
+      }
+    }
+    return { feed };
+  }
+
+  // src/lib/anthropic.js
+  var DEFAULT_MODEL = "claude-sonnet-4-6";
+  var FALLBACK_MODEL = "claude-haiku-4-5-20251001";
+  function buildSystemPrompt(lang = "zh") {
+    if (lang === "en") {
+      return [
+        "You are a concise After Effects assistant inside the AE MCP panel.",
+        "Understand the user goal, then choose appropriate MCP tools before operating.",
+        "Name target comps, layers, properties, or files in quotes before changing them.",
+        "Prefer read-only inspection before edits when context is missing.",
+        "Summarize tool results plainly and ask only when a required detail is missing."
+      ].join(" ");
+    }
+    return [
+      "\u4F60\u662F AE MCP \u9762\u677F\u5185\u7684\u7B80\u6D01 After Effects \u52A9\u624B\u3002",
+      "\u5148\u7406\u89E3\u7528\u6237\u76EE\u6807\uFF0C\u518D\u9009\u62E9\u5408\u9002\u7684 MCP \u5DE5\u5177\u64CD\u4F5C AE\u3002",
+      "\u4FEE\u6539\u524D\u7528\u5F15\u53F7\u660E\u793A\u76EE\u6807\u5408\u6210\u3001\u56FE\u5C42\u3001\u5C5E\u6027\u6216\u6587\u4EF6\u3002",
+      "\u7F3A\u5C11\u4E0A\u4E0B\u6587\u65F6\u4F18\u5148\u7528\u53EA\u8BFB\u5DE5\u5177\u68C0\u67E5\u3002",
+      "\u7528\u7B80\u660E\u8BED\u8A00\u603B\u7ED3\u5DE5\u5177\u7ED3\u679C\uFF0C\u53EA\u5728\u7F3A\u5C11\u5FC5\u8981\u4FE1\u606F\u65F6\u8FFD\u95EE\u3002"
+    ].join(" ");
+  }
+  function mapMcpToolsToAnthropic(tools = []) {
+    return tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description || "",
+      input_schema: tool.inputSchema || tool.input_schema || {}
+    }));
+  }
+  function classifyHttpError(status, fallbackMessage) {
+    if (status === 401 || status === 403) return { kind: "auth", message: "Anthropic authentication failed." };
+    if (status === 429) return { kind: "rate_limit", message: "Anthropic rate limit reached." };
+    if (status === 529 || status >= 500) return { kind: "overloaded", message: "Anthropic service is overloaded." };
+    return { kind: "network", message: fallbackMessage || "Anthropic request failed." };
+  }
+  function toError(kind, message) {
+    const error = new Error(message);
+    error.kind = kind;
+    return error;
+  }
+  function parseAnthropicEvent(data, state, onTextDelta) {
+    if (data.type === "content_block_start") {
+      const block = data.content_block || {};
+      if (block.type === "text") {
+        state.blocks.set(data.index, { type: "text", text: block.text || "" });
+      } else if (block.type === "tool_use") {
+        state.blocks.set(data.index, {
+          type: "tool_use",
+          id: block.id,
+          name: block.name,
+          inputJson: "",
+          startInput: block.input || {}
+        });
+      }
+    } else if (data.type === "content_block_delta") {
+      const block = state.blocks.get(data.index);
+      if (!block || !data.delta) return;
+      if (data.delta.type === "text_delta") {
+        const text = data.delta.text || "";
+        block.text += text;
+        if (text) onTextDelta(text);
+      } else if (data.delta.type === "input_json_delta") {
+        block.inputJson += data.delta.partial_json || "";
+      }
+    } else if (data.type === "message_delta" && data.delta) {
+      state.stopReason = data.delta.stop_reason || state.stopReason;
+    }
+  }
+  function finishBlocks(blocks) {
+    return Array.from(blocks.values()).map((block) => {
+      if (block.type === "tool_use") {
+        let input = block.startInput || {};
+        if (block.inputJson) input = JSON.parse(block.inputJson);
+        return { type: "tool_use", id: block.id, name: block.name, input };
+      }
+      return block;
+    });
+  }
+  async function sendAnthropicMessage({
+    apiKey,
+    model = DEFAULT_MODEL,
+    system = buildSystemPrompt("zh"),
+    messages,
+    tools,
+    signal,
+    fetchImpl = globalThis.fetch,
+    onTextDelta = () => {
+    }
+  } = {}) {
+    if (!apiKey) throw toError("auth", "Anthropic API key is missing.");
+    if (!fetchImpl) throw toError("network", "fetch is unavailable in this runtime.");
+    let response;
+    try {
+      response = await fetchImpl("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        signal,
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 8192,
+          system,
+          messages,
+          tools: mapMcpToolsToAnthropic(tools),
+          stream: true
+        })
+      });
+    } catch (e) {
+      if (e && e.name === "AbortError") throw e;
+      throw toError("network", e && e.message ? e.message : "Anthropic network request failed.");
+    }
+    if (!response.ok) {
+      let detail = "";
+      try {
+        detail = await response.text();
+      } catch (e) {
+      }
+      const classified = classifyHttpError(response.status, detail);
+      throw toError(classified.kind, classified.message);
+    }
+    const reader = response.body && response.body.getReader ? response.body.getReader() : null;
+    if (!reader) throw toError("network", "Anthropic response body is not streamable.");
+    const decoder = new TextDecoder();
+    const state = { blocks: /* @__PURE__ */ new Map(), stopReason: "end_turn" };
+    const parser = createSseParser(({ data }) => parseAnthropicEvent(data, state, onTextDelta));
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      parser.feed(decoder.decode(chunk.value, { stream: true }));
+    }
+    parser.feed(decoder.decode());
+    return {
+      assistantMessage: { role: "assistant", content: finishBlocks(state.blocks) },
+      stopReason: state.stopReason
+    };
+  }
+
+  // src/lib/agentLoop.js
+  var MAX_TOOL_ROUNDS = 25;
+  function clone(value) {
+    return value == null ? value : JSON.parse(JSON.stringify(value));
+  }
+  function toolText(result) {
+    const content = result && Array.isArray(result.content) ? result.content : [];
+    const text = content.filter((item) => item && item.type === "text").map((item) => item.text || "").join("\n");
+    if (text) return text;
+    if (result === void 0) return "";
+    try {
+      return JSON.stringify(result);
+    } catch (e) {
+      return String(result);
+    }
+  }
+  function normalizeErrorKind(error) {
+    if (error && error.name === "AbortError") return "aborted";
+    return error && error.kind || "network";
+  }
+  function shouldBypassApproval({ mode, tool, sessionAllowed }) {
+    if (sessionAllowed) return true;
+    if (mode === "none") return true;
+    const annotations = tool && tool.annotations || {};
+    if (mode === "manual") return annotations.readOnlyHint === true;
+    if (mode === "auto") return annotations.destructiveHint !== true;
+    return false;
+  }
+  function approvalRisk(tool) {
+    const annotations = tool && tool.annotations || {};
+    return annotations.destructiveHint === true ? "destructive" : "write";
+  }
+  function getToolUses(message) {
+    return (message && message.content || []).filter((block) => block && block.type === "tool_use");
+  }
+  function makeToolResult(toolUseId, text, isError) {
+    return { type: "tool_result", tool_use_id: toolUseId, content: text, is_error: Boolean(isError) };
+  }
+  function createAgentLoop({
+    getApiKey,
+    getModel,
+    mcp,
+    getPermissionMode,
+    onEvent,
+    anthropic = sendAnthropicMessage,
+    maxToolRounds = MAX_TOOL_ROUNDS,
+    lang = "zh"
+  }) {
+    let messages = [];
+    let activeController = null;
+    let activeRun = null;
+    const pendingApprovals = /* @__PURE__ */ new Map();
+    const sessionAllowedTools = /* @__PURE__ */ new Set();
+    function emit(evt) {
+      if (onEvent) onEvent(evt);
+    }
+    function resetPendingApprovals() {
+      for (const [id, pending] of pendingApprovals) {
+        pending.resolve({ decision: "abort" });
+        pendingApprovals.delete(id);
+      }
+    }
+    async function waitForApproval(toolUse) {
+      return await new Promise((resolve) => {
+        pendingApprovals.set(toolUse.id, { name: toolUse.name, resolve });
+      });
+    }
+    async function executeTool(toolUse) {
+      const start = Date.now();
+      try {
+        const result = await mcp.callTool(toolUse.name, toolUse.input || {});
+        const text = toolText(result);
+        const isError = Boolean(result && result.isError);
+        emit({ type: "tool-result", toolUseId: toolUse.id, ok: !isError, text, durationMs: Date.now() - start });
+        return makeToolResult(toolUse.id, text, isError);
+      } catch (e) {
+        const text = e && e.message ? e.message : "MCP tool call failed.";
+        emit({ type: "tool-result", toolUseId: toolUse.id, ok: false, text, durationMs: Date.now() - start });
+        return makeToolResult(toolUse.id, text, true);
+      }
+    }
+    async function handleToolUse(toolUse, toolByName) {
+      emit({ type: "tool-start", toolUseId: toolUse.id, name: toolUse.name, input: clone(toolUse.input || {}) });
+      const tool = toolByName.get(toolUse.name) || {};
+      const mode = getPermissionMode && getPermissionMode() || "manual";
+      const sessionAllowed = sessionAllowedTools.has(toolUse.name);
+      if (!shouldBypassApproval({ mode, tool, sessionAllowed })) {
+        emit({
+          type: "approval-required",
+          toolUseId: toolUse.id,
+          name: toolUse.name,
+          input: clone(toolUse.input || {}),
+          risk: approvalRisk(tool)
+        });
+        const approved = await waitForApproval(toolUse);
+        pendingApprovals.delete(toolUse.id);
+        if (approved.decision === "abort") throw Object.assign(new Error("aborted"), { name: "AbortError" });
+        if (approved.decision === "deny") {
+          emit({ type: "tool-denied", toolUseId: toolUse.id });
+          return makeToolResult(toolUse.id, "User denied this action.", true);
+        }
+        if (approved.decision === "allow-session") sessionAllowedTools.add(toolUse.name);
+      }
+      return await executeTool(toolUse);
+    }
+    async function sendUser(text) {
+      if (activeRun) return activeRun;
+      const userMessage = { role: "user", content: String(text || "") };
+      messages.push(userMessage);
+      emit({ type: "turn-start" });
+      const controller = new AbortController();
+      activeController = controller;
+      activeRun = (async () => {
+        try {
+          const tools = await mcp.listTools();
+          const toolByName = new Map((tools || []).map((tool) => [tool.name, tool]));
+          let toolRounds = 0;
+          while (true) {
+            if (toolRounds >= maxToolRounds) {
+              emit({ type: "error", kind: "mcp", message: "Stopped after 25 consecutive tool rounds." });
+              return;
+            }
+            const result = await anthropic({
+              apiKey: getApiKey && getApiKey(),
+              model: getModel && getModel() || DEFAULT_MODEL,
+              system: buildSystemPrompt(lang),
+              messages: clone(messages),
+              tools,
+              signal: controller.signal,
+              onTextDelta: (delta) => emit({ type: "text-delta", text: delta })
+            });
+            const assistantMessage = result.assistantMessage || { role: "assistant", content: [] };
+            messages.push(assistantMessage);
+            const toolUses = getToolUses(assistantMessage);
+            if (result.stopReason !== "tool_use" || toolUses.length === 0) {
+              emit({ type: "turn-end", stopReason: result.stopReason || "end_turn" });
+              return;
+            }
+            toolRounds += 1;
+            const toolResults = [];
+            for (const toolUse of toolUses) {
+              toolResults.push(await handleToolUse(toolUse, toolByName));
+            }
+            messages.push({ role: "user", content: toolResults });
+          }
+        } catch (e) {
+          const kind = normalizeErrorKind(e);
+          repairDanglingToolUses();
+          emit({ type: "error", kind, message: e && e.message ? e.message : "Agent loop failed." });
+        } finally {
+          activeController = null;
+          activeRun = null;
+        }
+      })();
+      return await activeRun;
+    }
+    function repairDanglingToolUses() {
+      const last = messages[messages.length - 1];
+      if (!last || last.role !== "assistant") return;
+      const uses = getToolUses(last);
+      if (!uses.length) return;
+      messages.push({
+        role: "user",
+        content: uses.map((use) => makeToolResult(use.id, "Cancelled by user.", true))
+      });
+    }
+    function approve(toolUseId, decision) {
+      const pending = pendingApprovals.get(toolUseId);
+      if (!pending) return;
+      pending.resolve({ decision });
+    }
+    function stop() {
+      if (activeController) activeController.abort();
+      resetPendingApprovals();
+    }
+    function reset() {
+      stop();
+      messages = [];
+      sessionAllowedTools.clear();
+    }
+    return {
+      sendUser,
+      approve,
+      stop,
+      reset,
+      getMessages: () => clone(messages)
+    };
+  }
+
+  // src/lib/backendSelect.js
+  function pickBackend({ pref, probe, hasApiKey }) {
+    if (pref === "byok") {
+      return hasApiKey ? { backend: "byok", reason: "ok" } : { backend: "none", reason: "no-key" };
+    }
+    if (probe === null) return { backend: "none", reason: "probing" };
+    if (!probe.nodeOk) return hasApiKey ? { backend: "byok", reason: "no-node" } : { backend: "none", reason: "no-node" };
+    if (!probe.loggedIn) return hasApiKey ? { backend: "byok", reason: "not-logged-in" } : { backend: "none", reason: "not-logged-in" };
+    return { backend: "subscription", reason: "ok" };
+  }
+  function deriveToolMeta(tools) {
+    const allowedTools = [];
+    const annotations = {};
+    for (const tool of tools || []) {
+      const name = "mcp__ae__" + tool.name;
+      const ann = tool && tool.annotations || {};
+      const readOnly = ann.readOnlyHint === true;
+      const destructive = ann.destructiveHint === true;
+      if (readOnly) allowedTools.push(name);
+      annotations[name] = { readOnly, destructive };
+    }
+    return { allowedTools, annotations };
+  }
+  function shouldResetOnBackendChange(prevReal, next) {
+    if (next !== "subscription" && next !== "byok") return { reset: false, nextReal: prevReal || null };
+    if (!prevReal) return { reset: false, nextReal: next };
+    if (prevReal === next) return { reset: false, nextReal: prevReal };
+    return { reset: true, nextReal: next };
+  }
+
+  // src/lib/ndjson.js
+  function createLineSplitter(onLine) {
+    let buffer = "";
+    return function push(chunk) {
+      buffer += String(chunk || "");
+      let index = buffer.indexOf("\n");
+      while (index !== -1) {
+        const line = buffer.slice(0, index).trim();
+        buffer = buffer.slice(index + 1);
+        if (line) onLine(line);
+        index = buffer.indexOf("\n");
+      }
+    };
+  }
+  function createNdjsonReader(onMessage) {
+    return createLineSplitter((line) => {
+      let message;
+      try {
+        message = JSON.parse(line);
+      } catch (e) {
+        return;
+      }
+      onMessage(message);
+    });
+  }
+
+  // src/cep/mcpClient.js
+  var DEFAULT_TIMEOUT_MS = 3e4;
+  var MCP_PROTOCOL_VERSION = "2025-06-18";
+  var PANEL_VERSION = "0.3.2";
+  function getCepRequire() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
+      return globalThis.window.cep_node.require;
+    }
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function getCepEnv() {
+    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
+  }
+  function normalizeFsPath(value) {
+    let text = String(value || "").replace(/\//g, "\\");
+    text = text.replace(/\\+$/, "");
+    return text;
+  }
+  function dirname(value) {
+    const normalized = normalizeFsPath(value);
+    const index = normalized.lastIndexOf("\\");
+    if (index <= 0) return "";
+    return normalized.slice(0, index);
+  }
+  function joinPath(base, leaf) {
+    return normalizeFsPath(base) + "\\" + leaf;
+  }
+  function firstWhereHit(stdout) {
+    return String(stdout || "").split(/\r?\n/).map((line) => line.trim()).find(Boolean) || "";
+  }
+  function defaultWhereImpl() {
+    const childProcess = getCepRequire()("child_process");
+    return new Promise((resolve) => {
+      childProcess.execFile("where", ["ae-mcp"], { windowsHide: true }, (err, stdout) => {
+        resolve(err ? "" : stdout);
+      });
+    });
+  }
+  function defaultFs() {
+    return getCepRequire()("fs");
+  }
+  function findProjectRoot({ extRoot, repoRoot, fsImpl }) {
+    if (repoRoot && fsImpl.existsSync(joinPath(repoRoot, "pyproject.toml"))) return normalizeFsPath(repoRoot);
+    let current = normalizeFsPath(extRoot);
+    while (current) {
+      if (fsImpl.existsSync(joinPath(current, "pyproject.toml"))) return current;
+      const parent = dirname(current);
+      if (!parent || parent === current) break;
+      current = parent;
+    }
+    return "";
+  }
+  async function resolveMcpCommand({
+    explicitPath,
+    whereImpl = defaultWhereImpl,
+    fsImpl,
+    extRoot = "",
+    repoRoot = ""
+  } = {}) {
+    const configured = String(explicitPath || "").trim();
+    if (configured) return { command: configured, args: [], source: "explicit" };
+    const found = firstWhereHit(await whereImpl("ae-mcp"));
+    if (found) return { command: found, args: [], source: "where" };
+    const fs = fsImpl || defaultFs();
+    const projectRoot = findProjectRoot({ extRoot, repoRoot, fsImpl: fs });
+    if (projectRoot) {
+      return { command: "uv", args: ["run", "--project", projectRoot, "ae-mcp"], source: "uv" };
+    }
+    throw new Error("Unable to find ae-mcp. Configure the ae-mcp executable path, add ae-mcp to PATH, or run from a checkout containing pyproject.toml for uv run --project.");
+  }
+  function _createRpc(stdinWrite, onLine, options = {}) {
+    const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
+    let nextId2 = 1;
+    const pending = /* @__PURE__ */ new Map();
+    function rejectPending(id, error) {
+      const entry = pending.get(id);
+      if (!entry) return;
+      pending.delete(id);
+      clearTimeout(entry.timer);
+      entry.reject(error);
+    }
+    function handleMessage(message) {
+      if (!message || message.id === void 0 || message.id === null) return;
+      const entry = pending.get(message.id);
+      if (!entry) return;
+      pending.delete(message.id);
+      clearTimeout(entry.timer);
+      if (message.error) {
+        const error = new Error(message.error.message || "JSON-RPC request failed");
+        error.code = message.error.code;
+        error.data = message.error.data;
+        entry.reject(error);
+      } else {
+        entry.resolve(message.result);
+      }
+    }
+    const handleChunk = createNdjsonReader(handleMessage);
+    if (onLine) onLine(handleChunk);
+    function writeMessage(message) {
+      stdinWrite(JSON.stringify(message) + "\n");
+    }
+    function request(method, params) {
+      const id = nextId2++;
+      const message = { jsonrpc: "2.0", id, method };
+      if (params !== void 0) message.params = params;
+      const promise = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => rejectPending(id, new Error(method + " timed out after " + timeoutMs + "ms")), timeoutMs);
+        pending.set(id, { resolve, reject, timer });
+      });
+      writeMessage(message);
+      return promise;
+    }
+    function notify(method, params) {
+      const message = { jsonrpc: "2.0", method };
+      if (params !== void 0) message.params = params;
+      writeMessage(message);
+    }
+    function close(reason = new Error("MCP process closed")) {
+      for (const id of Array.from(pending.keys())) rejectPending(id, reason);
+    }
+    return { request, notify, handleChunk, close };
+  }
+  function createMcpClient({
+    spawnImpl,
+    resolveCommand = resolveMcpCommand,
+    env,
+    onCrash,
+    extRoot,
+    repoRoot,
+    packageVersion = PANEL_VERSION,
+    retryDelays = [1e3, 2e3, 4e3]
+  } = {}) {
+    let proc = null;
+    let rpc = null;
+    let tools = null;
+    let status = "idle";
+    let startPromise = null;
+    let retryCount = 0;
+    let lastError = null;
+    let stopped = false;
+    let restartTimer = null;
+    function currentState() {
+      return { status, retryCount, error: lastError, tools };
+    }
+    function getSpawn() {
+      if (spawnImpl) return spawnImpl;
+      return getCepRequire()("child_process").spawn;
+    }
+    function attachBeforeUnload() {
+      if (globalThis.window && globalThis.window.addEventListener) {
+        globalThis.window.addEventListener("beforeunload", () => stop());
+      }
+    }
+    async function start() {
+      if (status === "ready") return currentState();
+      if (startPromise) return startPromise;
+      stopped = false;
+      status = "starting";
+      startPromise = (async () => {
+        const commandSpec = await resolveCommand({ extRoot, repoRoot });
+        const spawn = getSpawn();
+        const spawnEnv = Object.assign({}, getCepEnv(), env || {}, { AE_MCP_BACKEND: "ae-mcp" });
+        proc = spawn(commandSpec.command, commandSpec.args || [], {
+          stdio: "pipe",
+          windowsHide: true,
+          env: spawnEnv
+        });
+        rpc = _createRpc(
+          (line) => proc.stdin.write(line),
+          (handler) => proc.stdout.on("data", handler)
+        );
+        proc.on("exit", (code, signal) => handleExit(code, signal));
+        proc.on("error", (err) => handleCrash(err));
+        if (proc.stderr && proc.stderr.on) proc.stderr.on("data", () => {
+        });
+        await rpc.request("initialize", {
+          protocolVersion: MCP_PROTOCOL_VERSION,
+          clientInfo: { name: "panel-chat", version: packageVersion },
+          capabilities: {}
+        });
+        rpc.notify("notifications/initialized");
+        const listed = await rpc.request("tools/list", {});
+        tools = listed && Array.isArray(listed.tools) ? listed.tools : [];
+        status = "ready";
+        retryCount = 0;
+        lastError = null;
+        attachBeforeUnload();
+        return currentState();
+      })();
+      try {
+        return await startPromise;
+      } catch (e) {
+        status = "error";
+        lastError = e;
+        throw e;
+      } finally {
+        startPromise = null;
+      }
+    }
+    function handleCrash(error) {
+      if (stopped) return;
+      status = "crashed";
+      lastError = error;
+      if (rpc) rpc.close(error instanceof Error ? error : new Error("MCP process crashed"));
+      if (onCrash) onCrash(error);
+      scheduleRestart();
+    }
+    function handleExit(code, signal) {
+      if (stopped) return;
+      handleCrash(new Error("MCP process exited: " + code + (signal ? " " + signal : "")));
+    }
+    function scheduleRestart() {
+      if (retryCount >= retryDelays.length) {
+        status = "error";
+        return;
+      }
+      const delay = retryDelays[retryCount++];
+      clearTimeout(restartTimer);
+      restartTimer = setTimeout(() => {
+        start().catch((err) => {
+          lastError = err;
+          scheduleRestart();
+        });
+      }, delay);
+    }
+    async function listTools() {
+      await start();
+      return tools || [];
+    }
+    async function callTool(name, args = {}) {
+      await start();
+      return rpc.request("tools/call", { name, arguments: args });
+    }
+    function stop() {
+      stopped = true;
+      clearTimeout(restartTimer);
+      restartTimer = null;
+      status = "stopped";
+      if (rpc) rpc.close(new Error("MCP client stopped"));
+      if (proc) {
+        try {
+          proc.kill();
+        } catch (e) {
+        }
+      }
+      proc = null;
+      rpc = null;
+      startPromise = null;
+    }
+    return { start, listTools, callTool, stop, state: currentState };
+  }
+
+  // src/cep/apiKey.js
+  var KEY_FILE = "anthropic-key";
+  function cepRequire2() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) return globalThis.window.cep_node.require;
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    return null;
+  }
+  function defaultDeps() {
+    const req = cepRequire2();
+    if (!req) throw new Error("CEP Node require is unavailable");
+    return {
+      fs: req("fs"),
+      os: req("os"),
+      path: req("path"),
+      pid: req("process") && req("process").pid
+    };
+  }
+  function createApiKeyStore(deps = defaultDeps()) {
+    const fs = deps.fs;
+    const os = deps.os;
+    const path = deps.path;
+    function keyDir() {
+      return path.join(os.homedir(), ".ae-mcp");
+    }
+    function keyPath() {
+      return path.join(keyDir(), KEY_FILE);
+    }
+    function readKey() {
+      try {
+        return fs.readFileSync(keyPath(), "utf8").trim();
+      } catch (e) {
+        if (e && e.code === "ENOENT") return "";
+        throw e;
+      }
+    }
+    function writeKey(key) {
+      const value = String(key || "").trim();
+      const dir = keyDir();
+      const file = keyPath();
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const pid = deps.pid || 0;
+      const tmp = path.join(dir, `${KEY_FILE}.${pid}.${Date.now()}.tmp`);
+      fs.writeFileSync(tmp, value, "utf8");
+      try {
+        fs.chmodSync(tmp, 384);
+      } catch (e) {
+      }
+      fs.renameSync(tmp, file);
+      return value;
+    }
+    function clearKey() {
+      try {
+        fs.unlinkSync(keyPath());
+      } catch (e) {
+        if (!e || e.code !== "ENOENT") throw e;
+      }
+    }
+    return { keyDir, keyPath, readKey, writeKey, clearKey };
+  }
+
+  // src/cep/claudeAuth.js
+  function getCepRequire2() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
+      return globalThis.window.cep_node.require;
+    }
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function getCepEnv2() {
+    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
+  }
+  function normalizeFsPath2(value) {
+    let text = String(value || "").replace(/\//g, "\\");
+    text = text.replace(/\\+$/, "");
+    return text;
+  }
+  function defaultFs2() {
+    return getCepRequire2()("fs");
+  }
+  function defaultSpawn() {
+    return getCepRequire2()("child_process").spawn;
+  }
+  function joinPath2(base, leaf) {
+    return normalizeFsPath2(base) + "\\" + leaf;
+  }
+  function resolveSidecarPath({ extRoot, fsImpl } = {}) {
+    const root = normalizeFsPath2(extRoot || "");
+    const deployed = joinPath2(root, "sidecar\\agent-sidecar.mjs");
+    const repo = joinPath2(root, "..\\sidecar\\agent-sidecar.mjs");
+    const fs = fsImpl || defaultFs2();
+    if (fs.existsSync(deployed)) return deployed;
+    if (fs.existsSync(repo)) return repo;
+    return deployed;
+  }
+  async function probeClaudeLogin({
+    resolveNode,
+    sidecarPath,
+    spawnImpl,
+    env,
+    timeoutMs = 3e4
+  } = {}) {
+    const resolved = await resolveNode();
+    if (!resolved || resolved.ok === false) {
+      return { loggedIn: false, nodeOk: false, detail: resolved && resolved.detail || "node unavailable" };
+    }
+    return await new Promise((resolve) => {
+      let settled = false;
+      let stderr = "";
+      let proc = null;
+      const spawn = spawnImpl || defaultSpawn();
+      const spawnEnv = Object.assign({}, getCepEnv2(), env || {});
+      delete spawnEnv.ANTHROPIC_API_KEY;
+      function finish(result) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(result);
+      }
+      const timer = setTimeout(() => {
+        if (proc && proc.kill) {
+          try {
+            proc.kill();
+          } catch (e) {
+          }
+        }
+        finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: "probe timeout" });
+      }, timeoutMs);
+      try {
+        proc = spawn(resolved.nodePath, [sidecarPath, "--probe"], {
+          stdio: "pipe",
+          windowsHide: true,
+          env: spawnEnv
+        });
+      } catch (e) {
+        finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: e && e.message ? e.message : String(e) });
+        return;
+      }
+      const onMessage = createNdjsonReader((message) => {
+        if (!message || message.t !== "probe-result") return;
+        finish({
+          loggedIn: !!message.loggedIn,
+          nodeOk: true,
+          nodeVersion: resolved.version,
+          detail: message.detail || message.reason || ""
+        });
+      });
+      if (proc.stdout && proc.stdout.on) proc.stdout.on("data", onMessage);
+      if (proc.stderr && proc.stderr.on) {
+        proc.stderr.on("data", (chunk) => {
+          stderr += String(chunk || "");
+          if (stderr.length > 4e3) stderr = stderr.slice(-4e3);
+        });
+      }
+      if (proc.on) {
+        proc.on("error", (err) => {
+          finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: err && err.message ? err.message : String(err) });
+        });
+        proc.on("exit", () => {
+          finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: stderr.trim() || "probe exited without result" });
+        });
+      }
+    });
+  }
+
+  // src/cep/claudeAgentBackend.js
+  var READY_TIMEOUT_MS = 15e3;
+  var STDERR_TAIL_LIMIT = 4096;
+  var FIXED_NODE_CANDIDATE = "C:\\Program Files\\nodejs\\node.exe";
+  function getCepRequire3() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
+      return globalThis.window.cep_node.require;
+    }
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function getCepEnv3() {
+    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
+  }
+  function execFileAsync(execFileImpl, file, args, env) {
+    return new Promise((resolve) => {
+      execFileImpl(file, args, { windowsHide: true, env }, (err, stdout, stderr) => {
+        resolve({ err, stdout: String(stdout || ""), stderr: String(stderr || "") });
+      });
+    });
+  }
+  function nodeCandidates(stdout) {
+    const seen = /* @__PURE__ */ new Set();
+    const candidates = String(stdout || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    candidates.push(FIXED_NODE_CANDIDATE);
+    return candidates.filter((candidate) => {
+      if (seen.has(candidate)) return false;
+      seen.add(candidate);
+      return true;
+    });
+  }
+  function parseMajor(version) {
+    const match = String(version || "").trim().match(/^v(\d+)/);
+    return match ? Number(match[1]) : 0;
+  }
+  async function resolveSystemNode({ execFileImpl, env } = {}) {
+    const execFile = execFileImpl || getCepRequire3()("child_process").execFile;
+    const processEnv = env || getCepEnv3();
+    const where = await execFileAsync(execFile, "where", ["node"], processEnv);
+    const candidates = nodeCandidates(where.err ? "" : where.stdout);
+    for (const candidate of candidates) {
+      const checked = await execFileAsync(execFile, candidate, ["--version"], processEnv);
+      if (checked.err) continue;
+      const version = String(checked.stdout || checked.stderr || "").trim();
+      if (parseMajor(version) >= 18) return { ok: true, nodePath: candidate, version };
+    }
+    return { ok: false, detail: "No system Node 18+ found." };
+  }
+  function clone2(value) {
+    return value == null ? value : JSON.parse(JSON.stringify(value));
+  }
+  function nodeMissingMessage(lang) {
+    if (lang === "zh") return "\u5185\u5D4C\u5BF9\u8BDD\u9700\u8981\u7CFB\u7EDF Node 18+\uFF08\u672A\u68C0\u6D4B\u5230\uFF09\u3002\u5B89\u88C5 Node.js LTS \u540E\u91CD\u8BD5\u3002";
+    return "Embedded chat needs system Node 18+. Install Node.js LTS and retry.";
+  }
+  function sanitizeEnv(env) {
+    const copy = Object.assign({}, env || {});
+    delete copy.ANTHROPIC_API_KEY;
+    return copy;
+  }
+  function appendTail(tail, chunk) {
+    const next = tail + String(chunk || "");
+    return next.length > STDERR_TAIL_LIMIT ? next.slice(next.length - STDERR_TAIL_LIMIT) : next;
+  }
+  function createClaudeAgentBackend({
+    resolveNode = resolveSystemNode,
+    sidecarPath,
+    getMcpSpec,
+    getToolMeta,
+    getModel,
+    getPermissionMode,
+    onEvent,
+    lang = "zh",
+    spawnImpl,
+    env
+  }) {
+    let proc = null;
+    let startPromise = null;
+    let pendingReadyReject = null;
+    let pendingReadyTimer = null;
+    let ready = false;
+    let stopping = false;
+    let stderrTail = "";
+    let transcript = [];
+    let activeRun = null;
+    let activeResolve = null;
+    let activeAssistantText = "";
+    function emit(evt) {
+      if (onEvent) onEvent(evt);
+    }
+    function getSpawn() {
+      if (spawnImpl) return spawnImpl;
+      return getCepRequire3()("child_process").spawn;
+    }
+    function writeMessage(message) {
+      if (!proc || !proc.stdin || !proc.stdin.write) return;
+      proc.stdin.write(JSON.stringify(message) + "\n");
+    }
+    function finishActive() {
+      if (!activeResolve) {
+        activeRun = null;
+        activeAssistantText = "";
+        return;
+      }
+      const resolve = activeResolve;
+      activeResolve = null;
+      activeRun = null;
+      activeAssistantText = "";
+      resolve();
+    }
+    function handleSidecarMessage(message) {
+      if (!message || message.t === "ready") return;
+      if (message.t !== "event") return;
+      const event = message.event;
+      if (!event) return;
+      if (event.type === "text-delta") activeAssistantText += String(event.text || "");
+      emit(event);
+      if (event.type === "turn-end") {
+        transcript.push({ role: "assistant", text: activeAssistantText });
+        finishActive();
+      }
+      if (event.type === "error") finishActive();
+    }
+    function exitDetail(code, signal) {
+      const suffix = signal ? String(code) + " " + signal : String(code);
+      return stderrTail ? suffix + " " + stderrTail : suffix;
+    }
+    function clearReadyWait() {
+      if (pendingReadyTimer) clearTimeout(pendingReadyTimer);
+      pendingReadyTimer = null;
+      pendingReadyReject = null;
+    }
+    function handleExit(code, signal) {
+      const wasStopping = stopping;
+      const wasReady = ready;
+      const detail = exitDetail(code, signal);
+      const rejectReady = pendingReadyReject;
+      proc = null;
+      ready = false;
+      startPromise = null;
+      stopping = false;
+      if (wasStopping) return;
+      if (!wasReady && rejectReady) {
+        clearReadyWait();
+        rejectReady(new Error("sidecar exited: " + detail));
+        return;
+      }
+      if (activeRun) {
+        emit({ type: "error", kind: "mcp", message: "sidecar exited: " + detail });
+        finishActive();
+      }
+    }
+    function handleProcError(error) {
+      const rejectReady = pendingReadyReject;
+      proc = null;
+      ready = false;
+      startPromise = null;
+      if (rejectReady) {
+        clearReadyWait();
+        rejectReady(error instanceof Error ? error : new Error("sidecar error"));
+        return;
+      }
+      if (activeRun) {
+        emit({ type: "error", kind: "mcp", message: error && error.message ? error.message : "sidecar error" });
+        finishActive();
+      }
+    }
+    async function startSidecar() {
+      if (proc && ready) return true;
+      if (startPromise) return startPromise;
+      startPromise = (async () => {
+        const node = await resolveNode();
+        if (!node || !node.ok) {
+          emit({ type: "error", kind: "mcp", message: nodeMissingMessage(lang) });
+          return false;
+        }
+        const mcpSpec = await getMcpSpec();
+        const meta = await getToolMeta();
+        const spawn = getSpawn();
+        const spawnEnv = sanitizeEnv(env || getCepEnv3());
+        stderrTail = "";
+        stopping = false;
+        ready = false;
+        let readyResolve;
+        let readyReject;
+        const readyPromise = new Promise((resolve, reject) => {
+          readyResolve = resolve;
+          readyReject = reject;
+        });
+        pendingReadyReject = readyReject;
+        pendingReadyTimer = setTimeout(() => {
+          pendingReadyTimer = null;
+          pendingReadyReject = null;
+          try {
+            stopping = true;
+            if (proc) proc.kill();
+          } catch (e) {
+          }
+          readyReject(new Error("sidecar ready timed out"));
+        }, READY_TIMEOUT_MS);
+        try {
+          proc = spawn(node.nodePath, [
+            sidecarPath,
+            "--mcp",
+            JSON.stringify(mcpSpec),
+            "--allowed-tools",
+            JSON.stringify(meta.allowedTools),
+            "--annotations",
+            JSON.stringify(meta.annotations),
+            "--model",
+            getModel(),
+            "--lang",
+            lang
+          ], {
+            stdio: "pipe",
+            windowsHide: true,
+            env: spawnEnv
+          });
+        } catch (e) {
+          clearReadyWait();
+          throw e;
+        }
+        const reader = createNdjsonReader((message) => {
+          if (message && message.t === "ready") {
+            ready = true;
+            clearReadyWait();
+            readyResolve(true);
+            return;
+          }
+          handleSidecarMessage(message);
+        });
+        if (proc.stdout && proc.stdout.on) proc.stdout.on("data", reader);
+        if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
+          stderrTail = appendTail(stderrTail, chunk);
+        });
+        proc.on("exit", (code, signal) => handleExit(code, signal));
+        proc.on("error", (error) => {
+          handleProcError(error);
+        });
+        await readyPromise;
+        return true;
+      })();
+      try {
+        return await startPromise;
+      } catch (e) {
+        emit({ type: "error", kind: "mcp", message: e && e.message ? e.message : "Failed to start sidecar." });
+        return false;
+      } finally {
+        startPromise = null;
+      }
+    }
+    async function sendUser(text) {
+      if (activeRun) return activeRun;
+      activeAssistantText = "";
+      activeRun = new Promise((resolve) => {
+        activeResolve = resolve;
+      });
+      const ok = await startSidecar();
+      if (!ok) {
+        finishActive();
+        return activeRun;
+      }
+      const userText = String(text || "");
+      transcript.push({ role: "user", text: userText });
+      writeMessage({ t: "user", text: userText, permissionMode: getPermissionMode(), model: getModel() });
+      return activeRun;
+    }
+    function approve(toolUseId, decision) {
+      writeMessage({ t: "approve", id: toolUseId, decision });
+    }
+    function stop() {
+      writeMessage({ t: "stop" });
+    }
+    function reset() {
+      stopping = true;
+      if (proc) {
+        try {
+          proc.kill();
+        } catch (e) {
+        }
+      }
+      proc = null;
+      ready = false;
+      startPromise = null;
+      transcript = [];
+      finishActive();
+      stderrTail = "";
+      stopping = false;
+    }
+    return {
+      sendUser,
+      approve,
+      stop,
+      reset,
+      getMessages: () => clone2(transcript)
+    };
+  }
+
+  // src/lib/chatEntries.js
+  function nextId(entries, prefix) {
+    return `${prefix}-${entries.length + 1}`;
+  }
+  function updateTool(entries, toolUseId, updater) {
+    return entries.map((entry) => {
+      if (entry.type !== "tool-call" || entry.toolUseId !== toolUseId) return entry;
+      return updater(entry);
+    });
+  }
+  function reduceEvent(entries, evt) {
+    const current = Array.isArray(entries) ? entries : [];
+    if (!evt || !evt.type) return current;
+    switch (evt.type) {
+      case "turn-start":
+        return current;
+      case "text-delta": {
+        const text = String(evt.text || "");
+        if (!text) return current;
+        const last = current[current.length - 1];
+        if (last && last.type === "ai-text") {
+          return current.slice(0, -1).concat({ ...last, text: `${last.text || ""}${text}` });
+        }
+        return current.concat({ id: nextId(current, "ai"), type: "ai-text", text });
+      }
+      case "tool-start":
+        return current.concat({
+          id: evt.toolUseId || nextId(current, "tool"),
+          type: "tool-call",
+          toolUseId: evt.toolUseId,
+          name: evt.name || "",
+          input: evt.input,
+          state: "running"
+        });
+      case "approval-required":
+        if (!current.some((entry) => entry.type === "tool-call" && entry.toolUseId === evt.toolUseId)) {
+          return current.concat({
+            id: evt.toolUseId || nextId(current, "tool"),
+            type: "tool-call",
+            toolUseId: evt.toolUseId,
+            name: evt.name || "",
+            input: evt.input,
+            risk: evt.risk,
+            state: "awaiting-approval"
+          });
+        }
+        return updateTool(current, evt.toolUseId, (entry) => ({
+          ...entry,
+          name: evt.name || entry.name,
+          input: evt.input === void 0 ? entry.input : evt.input,
+          risk: evt.risk,
+          state: "awaiting-approval"
+        }));
+      case "tool-result":
+        if (!current.some((entry) => entry.type === "tool-call" && entry.toolUseId === evt.toolUseId)) {
+          return current.concat({
+            id: evt.toolUseId || nextId(current, "tool"),
+            type: "tool-call",
+            toolUseId: evt.toolUseId,
+            name: evt.name || "",
+            state: evt.ok ? "ok" : "error",
+            ok: !!evt.ok,
+            text: evt.text || "",
+            durationMs: evt.durationMs
+          });
+        }
+        return updateTool(current, evt.toolUseId, (entry) => ({
+          ...entry,
+          state: evt.ok ? "ok" : "error",
+          ok: !!evt.ok,
+          text: evt.text || "",
+          durationMs: evt.durationMs
+        }));
+      case "tool-denied":
+        return updateTool(current, evt.toolUseId, (entry) => ({
+          ...entry,
+          state: "denied"
+        }));
+      case "turn-end":
+        return current;
+      case "error":
+        return current.concat({
+          id: nextId(current, "error"),
+          type: "error",
+          kind: evt.kind,
+          message: evt.message || ""
+        });
+      default:
+        return current;
+    }
+  }
+
   // src/cep/useActivity.js
-  var import_react28 = __toESM(require_react(), 1);
+  var import_react35 = __toESM(require_react(), 1);
   function useActivity(getHost) {
-    const [events, setEvents] = import_react28.default.useState([]);
-    import_react28.default.useEffect(() => {
+    const [events, setEvents] = import_react35.default.useState([]);
+    import_react35.default.useEffect(() => {
       let unsub = null;
       let retry = null;
       let disposed = false;
@@ -9587,12 +11674,12 @@
         if (retry) clearTimeout(retry);
       };
     }, [getHost]);
-    const clear = import_react28.default.useCallback(() => setEvents([]), []);
+    const clear = import_react35.default.useCallback(() => setEvents([]), []);
     return { events, clear };
   }
 
   // src/cep/useHandshake.js
-  var import_react29 = __toESM(require_react(), 1);
+  var import_react36 = __toESM(require_react(), 1);
   function handshakeReached(info, since) {
     if (!info) return false;
     if (info.lastHealthAt && info.lastHealthAt > since) return true;
@@ -9600,8 +11687,8 @@
     return false;
   }
   function useHandshake(getHost, active) {
-    const [state, setState] = import_react29.default.useState("waiting");
-    import_react29.default.useEffect(() => {
+    const [state, setState] = import_react36.default.useState("waiting");
+    import_react36.default.useEffect(() => {
       if (!active) return void 0;
       const since = Date.now();
       setState("waiting");
@@ -9801,7 +11888,7 @@
       }
     };
   }
-  function getCepRequire() {
+  function getCepRequire4() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -9814,12 +11901,12 @@
     function start(port) {
       onStatus("starting", port);
       try {
-        const cepRequire3 = getCepRequire();
-        const path = cepRequire3("path");
+        const cepRequire4 = getCepRequire4();
+        const path = cepRequire4("path");
         const extRoot = normalizeCepPath(cs2.getSystemPath("extension"));
         const hostPath = path.join(extRoot, "host", "server.js");
         onLog("host: " + hostPath);
-        host = cepRequire3(hostPath);
+        host = cepRequire4(hostPath);
         host.setCSInterface(cs2);
         window.addEventListener("beforeunload", () => {
           try {
@@ -9842,7 +11929,7 @@
   }
 
   // src/app/App.jsx
-  var import_jsx_runtime26 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime33 = __toESM(require_jsx_runtime(), 1);
   var T = {
     zh: {
       connected: "\u670D\u52A1\u8FD0\u884C\u4E2D",
@@ -9861,7 +11948,13 @@
       regenTitle: "\u91CD\u65B0\u751F\u6210\u8BBF\u95EE Token\uFF1F",
       regenBody: "\u6240\u6709\u5DF2\u8FDE\u63A5\u7684 AI \u5BA2\u6237\u7AEF\u4F1A\u7ACB\u5373\u5931\u53BB\u8BBF\u95EE\u6743\u9650\uFF0C\u9700\u8981\u91CD\u542F\u5B83\u4EEC\u624D\u80FD\u91CD\u65B0\u8FDE\u63A5\u3002",
       regenConfirm: "\u91CD\u65B0\u751F\u6210",
-      cancel: "\u53D6\u6D88"
+      cancel: "\u53D6\u6D88",
+      noKeyHint: "\u5148\u5728\u8BBE\u7F6E\u91CC\u914D\u7F6E Anthropic API Key",
+      probingHint: "\u6B63\u5728\u68C0\u6D4B Claude \u767B\u5F55\u6001\u2026",
+      notLoggedInHint: "\u8BA2\u9605\u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login\uFF0C\u518D\u5230\u8BBE\u7F6E\u91CC\u91CD\u65B0\u68C0\u6D4B",
+      noNodeHint: "\u5185\u5D4C\u5BF9\u8BDD\u9700\u8981\u7CFB\u7EDF Node 18+",
+      pausedHint: "\u5DF2\u6682\u505C \u2014 \u6062\u590D\u540E\u624D\u80FD\u53D1\u9001",
+      goSettings: "\u53BB\u8BBE\u7F6E"
     },
     en: {
       connected: "Service running",
@@ -9880,16 +11973,54 @@
       regenTitle: "Regenerate access token?",
       regenBody: "Every connected AI client loses access immediately and must be restarted to reconnect.",
       regenConfirm: "Regenerate",
-      cancel: "Cancel"
+      cancel: "Cancel",
+      noKeyHint: "Set your Anthropic API key in Settings first",
+      probingHint: "Checking Claude login\u2026",
+      notLoggedInHint: "Not logged in: run claude /login in a terminal, then re-check in Settings",
+      noNodeHint: "Embedded chat needs system Node 18+",
+      pausedHint: "Paused \u2014 resume to send",
+      goSettings: "Open Settings"
     }
   };
+  function readPref(key, fallback) {
+    try {
+      const v = window.localStorage.getItem(key);
+      return v || fallback;
+    } catch (e) {
+      return fallback;
+    }
+  }
+  function writePref(key, value) {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch (e) {
+    }
+  }
+  async function validateAnthropicKey(key) {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        model: FALLBACK_MODEL,
+        max_tokens: 1,
+        messages: [{ role: "user", content: "ping" }]
+      })
+    });
+    const ok = r.ok;
+    return { ok, status: ok ? 200 : r.status === 403 ? 401 : r.status };
+  }
   var CLIENT_NAMES = {
     builtin: { zh: "\u9762\u677F\u5185\u7F6E\u5BF9\u8BDD", en: "Built-in chat" },
     "claude-desktop": { zh: "Claude Desktop", en: "Claude Desktop" },
     "claude-code": { zh: "Claude Code", en: "Claude Code" },
     cursor: { zh: "Cursor", en: "Cursor" }
   };
-  function cepRequire2(mod) {
+  function cepRequire3(mod) {
     if (window.cep_node && window.cep_node.require) return window.cep_node.require(mod);
     if (window.require) return window.require(mod);
     return null;
@@ -9897,27 +12028,119 @@
   function Shell({ cs: cs2 }) {
     const { lang, setLang } = useLang();
     const t = T[lang];
-    const [tab, setTab] = import_react30.default.useState("chat");
-    const [status, setStatus] = import_react30.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
-    const [paused, setPaused] = import_react30.default.useState(false);
-    const [logs, setLogs] = import_react30.default.useState([]);
-    const ctrl = import_react30.default.useRef(null);
-    const getHost = import_react30.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
-    const [wizardDone, setWizardDone] = import_react30.default.useState(() => isWizardDone(window.localStorage));
-    const [wizStep, setWizStep] = import_react30.default.useState(1);
-    const [wizClient, setWizClient] = import_react30.default.useState("claude-desktop");
+    const [tab, setTab] = import_react37.default.useState("chat");
+    const [status, setStatus] = import_react37.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
+    const [paused, setPaused] = import_react37.default.useState(false);
+    const [logs, setLogs] = import_react37.default.useState([]);
+    const ctrl = import_react37.default.useRef(null);
+    const getHost = import_react37.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
+    const [wizardDone, setWizardDone] = import_react37.default.useState(() => isWizardDone(window.localStorage));
+    const [wizStep, setWizStep] = import_react37.default.useState(1);
+    const [wizClient, setWizClient] = import_react37.default.useState("claude-desktop");
     const handshake = useHandshake(getHost, !wizardDone && wizStep === 4);
-    const [drawerOpen, setDrawerOpen] = import_react30.default.useState(false);
-    const [connInfo, setConnInfo] = import_react30.default.useState(null);
-    const [diagnostics, setDiagnostics] = import_react30.default.useState(null);
+    const [drawerOpen, setDrawerOpen] = import_react37.default.useState(false);
+    const [connInfo, setConnInfo] = import_react37.default.useState(null);
+    const [diagnostics, setDiagnostics] = import_react37.default.useState(null);
     const { events, clear } = useActivity(getHost);
-    const [clients, setClients] = import_react30.default.useState([]);
-    const [confirmRegen, setConfirmRegen] = import_react30.default.useState(false);
-    const [tokenEpoch, setTokenEpoch] = import_react30.default.useState(0);
-    const pushLog = import_react30.default.useCallback((m) => {
+    const [clients, setClients] = import_react37.default.useState([]);
+    const [confirmRegen, setConfirmRegen] = import_react37.default.useState(false);
+    const [tokenEpoch, setTokenEpoch] = import_react37.default.useState(0);
+    const keyStore = import_react37.default.useMemo(() => {
+      try {
+        return createApiKeyStore();
+      } catch (e) {
+        return null;
+      }
+    }, []);
+    const [apiKey, setApiKey] = import_react37.default.useState(() => {
+      try {
+        return keyStore ? keyStore.readKey() : "";
+      } catch (e) {
+        return "";
+      }
+    });
+    const [model, setModel] = import_react37.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
+    const [permissionMode, setPermissionMode] = import_react37.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
+    const [backendPref, setBackendPref] = import_react37.default.useState(() => readPref("ae_mcp_backend", "subscription"));
+    const [probe, setProbe] = import_react37.default.useState(null);
+    const [chatEntries, setChatEntries] = import_react37.default.useState([]);
+    const [chatStreaming, setChatStreaming] = import_react37.default.useState(false);
+    const prefsRef = import_react37.default.useRef({ apiKey, model, permissionMode });
+    prefsRef.current = { apiKey, model, permissionMode };
+    const extRoot = cs2 && cs2.getSystemPath ? cs2.getSystemPath("extension") : "";
+    const sidecarPath = import_react37.default.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
+    const mcp = import_react37.default.useMemo(() => createMcpClient({}), []);
+    const handleChatEvent = import_react37.default.useCallback((evt) => {
+      if (evt.type === "turn-start") setChatStreaming(true);
+      if (evt.type === "turn-end" || evt.type === "error") setChatStreaming(false);
+      setChatEntries((entries) => reduceEvent(entries, evt));
+    }, []);
+    const byokLoop = import_react37.default.useMemo(() => {
+      return createAgentLoop({
+        getApiKey: () => prefsRef.current.apiKey,
+        getModel: () => prefsRef.current.model,
+        getPermissionMode: () => prefsRef.current.permissionMode,
+        mcp,
+        lang,
+        onEvent: handleChatEvent
+      });
+    }, [mcp, handleChatEvent]);
+    const claudeBackend = import_react37.default.useMemo(() => createClaudeAgentBackend({
+      resolveNode: resolveSystemNode,
+      sidecarPath,
+      getMcpSpec: () => resolveMcpCommand({ extRoot }),
+      getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
+      getModel: () => prefsRef.current.model,
+      getPermissionMode: () => prefsRef.current.permissionMode,
+      lang,
+      onEvent: handleChatEvent
+    }), [extRoot, sidecarPath, mcp, handleChatEvent]);
+    const effective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey });
+    const activeBackend = effective.backend === "subscription" ? claudeBackend : byokLoop;
+    const activeBackendRef = import_react37.default.useRef(null);
+    const runClaudeProbe = import_react37.default.useCallback(() => {
+      let alive = true;
+      setProbe(null);
+      probeClaudeLogin({
+        resolveNode: resolveSystemNode,
+        sidecarPath
+      }).then((result) => {
+        if (alive) setProbe(result);
+      }).catch((e) => {
+        if (alive) setProbe({ loggedIn: false, nodeOk: false, detail: e && e.message ? e.message : String(e) });
+      });
+      return () => {
+        alive = false;
+      };
+    }, [sidecarPath]);
+    import_react37.default.useEffect(() => {
+      if (backendPref !== "subscription") return void 0;
+      return runClaudeProbe();
+    }, [backendPref, runClaudeProbe]);
+    import_react37.default.useEffect(() => {
+      const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
+      activeBackendRef.current = decision.nextReal;
+      if (!decision.reset) return;
+      byokLoop.reset();
+      claudeBackend.reset();
+      setChatEntries([]);
+      setChatStreaming(false);
+    }, [effective.backend, byokLoop, claudeBackend]);
+    const sendChat = (text) => {
+      const trimmed = String(text || "").trim();
+      if (!trimmed) return;
+      setChatEntries((entries) => entries.concat({ id: `user-${Date.now()}`, type: "user-text", text: trimmed }));
+      activeBackend.sendUser(trimmed);
+    };
+    const newChatSession = () => {
+      activeBackend.reset();
+      setChatStreaming(false);
+      setChatEntries([]);
+    };
+    const pushLog = import_react37.default.useCallback((m) => {
       setLogs((xs) => [...xs.slice(-199), `[${(/* @__PURE__ */ new Date()).toLocaleTimeString()}] ${m}`]);
     }, []);
-    import_react30.default.useEffect(() => {
+    import_react37.default.useEffect(() => {
       const port = loadSavedPort(window.localStorage) || DEFAULT_PORT;
       ctrl.current = createHostController({
         cs: cs2,
@@ -9933,7 +12156,7 @@
       });
       ctrl.current.start(port);
     }, [cs2, pushLog]);
-    import_react30.default.useEffect(() => {
+    import_react37.default.useEffect(() => {
       if (!drawerOpen) return void 0;
       const update = () => {
         const h = getHost();
@@ -9943,7 +12166,7 @@
       const i = setInterval(update, 3e3);
       return () => clearInterval(i);
     }, [drawerOpen, getHost]);
-    import_react30.default.useEffect(() => {
+    import_react37.default.useEffect(() => {
       if (tab !== "settings") return void 0;
       const update = () => {
         const h = getHost();
@@ -9954,14 +12177,14 @@
       const i = setInterval(update, 4e3);
       return () => clearInterval(i);
     }, [tab, getHost]);
-    const runDiag = import_react30.default.useCallback(async () => {
+    const runDiag = import_react37.default.useCallback(async () => {
       setDiagnostics("running");
       try {
         const items = await runDiagnostics({
           getHost,
           port: status.port,
-          fs: cepRequire2("fs"),
-          os: cepRequire2("os"),
+          fs: cepRequire3("fs"),
+          os: cepRequire3("os"),
           fetchImpl: window.fetch.bind(window)
         });
         setDiagnostics(items);
@@ -9995,7 +12218,7 @@
     };
     const mcpConfigStr = JSON.stringify(buildMcpConfig(status.port), null, 2);
     if (!wizardDone) {
-      return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
         WizardScreen,
         {
           step: wizStep,
@@ -10025,8 +12248,11 @@
       { id: "activity", icon: "list-checks", label: t.activity },
       { id: "settings", icon: "settings", label: t.settings }
     ];
-    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(import_react30.default.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+    const backendDisabledHint = effective.reason === "probing" ? t.probingHint : effective.reason === "not-logged-in" ? t.notLoggedInHint : effective.reason === "no-node" ? t.noNodeHint : effective.reason === "no-key" ? t.noKeyHint : "";
+    const composerDisabled = paused || effective.backend === "none";
+    const claudeStatus = probe === null ? { state: "checking" } : probe.nodeOk === false ? { state: "no-node", detail: probe.detail } : probe.loggedIn === false ? { state: "not-logged-in", detail: probe.detail } : { state: "ready", nodeVersion: probe.nodeVersion };
+    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(import_react37.default.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
         StatusBar,
         {
           status: statusForBar,
@@ -10041,9 +12267,24 @@
           settingsTitle: t.settings
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }, children: [
-        tab === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(EmptyState, { icon: "message-square", title: t.chatEmptyT, caption: t.chatEmptyB }) : null,
-        tab === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }, children: [
+        tab === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+          ChatScreen,
+          {
+            lang,
+            entries: chatEntries,
+            streaming: chatStreaming,
+            composerDisabled,
+            disabledHint: paused ? t.pausedHint : composerDisabled ? backendDisabledHint : "",
+            noticeActionLabel: paused ? t.resume : t.goSettings,
+            onNoticeAction: () => paused ? togglePause() : setTab("settings"),
+            onSend: sendChat,
+            onStop: () => activeBackend.stop(),
+            onApprove: (id, decision) => activeBackend.approve(id, decision),
+            onNewSession: newChatSession
+          }
+        ) : null,
+        tab === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
           ActivityScreen,
           {
             events,
@@ -10053,7 +12294,7 @@
             emptyCaption: t.actEmptyB
           }
         ) : null,
-        tab === "settings" ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+        tab === "settings" ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
           SettingsScreen,
           {
             lang,
@@ -10073,13 +12314,40 @@
             },
             onRegenToken: () => setConfirmRegen(true),
             hostVersion: connInfo && connInfo.hostVersion || "-",
-            pythonVersion: connInfo && connInfo.pythonVersion || "-"
+            pythonVersion: connInfo && connInfo.pythonVersion || "-",
+            apiKey,
+            onSaveApiKey: (k) => {
+              if (keyStore) keyStore.writeKey(k);
+              setApiKey(k);
+            },
+            onClearApiKey: () => {
+              if (keyStore) keyStore.clearKey();
+              setApiKey("");
+            },
+            validateKey: validateAnthropicKey,
+            model,
+            onModelChange: (m) => {
+              setModel(m);
+              writePref("ae_mcp_model", m);
+            },
+            backend: backendPref,
+            onBackendChange: (m) => {
+              setBackendPref(m);
+              writePref("ae_mcp_backend", m);
+            },
+            claudeStatus,
+            onRecheckClaude: runClaudeProbe,
+            permissionMode,
+            onPermissionMode: (m) => {
+              setPermissionMode(m);
+              writePref("ae_mcp_perm_mode", m);
+            }
           },
           tokenEpoch
         ) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(TabBar, { tabs, active: tab, onChange: setTab }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(TabBar, { tabs, active: tab, onChange: setTab }),
+      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
         ConnectionDrawer,
         {
           open: drawerOpen,
@@ -10092,7 +12360,7 @@
           onRestart: () => applyPort(status.port)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
         ConfirmDialog,
         {
           open: confirmRegen,
@@ -10117,13 +12385,13 @@
     ] });
   }
   function App({ cs: cs2 }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(LangProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Shell, { cs: cs2 }) });
+    return /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(LangProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Shell, { cs: cs2 }) });
   }
 
   // src/main.jsx
-  var import_jsx_runtime27 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime34 = __toESM(require_jsx_runtime(), 1);
   var cs = new window.CSInterface();
-  (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime27.jsx)(App, { cs }));
+  (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime34.jsx)(App, { cs }));
 })();
 /*! Bundled license information:
 

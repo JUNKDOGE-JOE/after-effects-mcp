@@ -63,6 +63,22 @@ def test_rendered_templates_are_prefixed_with_aemcp_prelude():
     assert "AEMCP.layerById(comp, 3)" in _body_after_prelude(apply_effect)
 
 
+def test_aemcp_prelude_defines_safe_value():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    prelude = (
+        root
+        / "packages"
+        / "core"
+        / "ae_mcp"
+        / "jsx_templates"
+        / "_aemcp_prelude.jsx"
+    )
+
+    assert "AEMCP.safeValue = function" in _helper_body(prelude)
+
+
 @pytest.mark.asyncio
 async def test_create_rig_and_init_are_prefixed_with_aemcp_prelude(mock_backend):
     load_all()
