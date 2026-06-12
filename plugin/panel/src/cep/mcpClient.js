@@ -1,3 +1,5 @@
+import { createNdjsonReader } from '../lib/ndjson.js';
+
 const DEFAULT_TIMEOUT_MS = 30000;
 const MCP_PROTOCOL_VERSION = '2025-06-18';
 const PANEL_VERSION = '0.3.2';
@@ -87,7 +89,6 @@ export async function resolveMcpCommand({
 export function _createRpc(stdinWrite, onLine, options = {}) {
   const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
   let nextId = 1;
-  let buffer = '';
   const pending = new Map();
 
   function rejectPending(id, error) {
@@ -114,22 +115,7 @@ export function _createRpc(stdinWrite, onLine, options = {}) {
     }
   }
 
-  function handleChunk(chunk) {
-    buffer += String(chunk || '');
-    let index = buffer.indexOf('\n');
-    while (index !== -1) {
-      const line = buffer.slice(0, index).trim();
-      buffer = buffer.slice(index + 1);
-      if (line) {
-        try {
-          handleMessage(JSON.parse(line));
-        } catch (e) {
-          // Ignore stderr-style contamination defensively; valid MCP stdout is JSON lines.
-        }
-      }
-      index = buffer.indexOf('\n');
-    }
-  }
+  const handleChunk = createNdjsonReader(handleMessage);
 
   if (onLine) onLine(handleChunk);
 
