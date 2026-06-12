@@ -63,6 +63,7 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
   const approvals = new Map()
   const sessionAllowedTools = new Set()
   const toolUses = []
+  const ignoredToolUseIds = new Set()
   let sessionId = null
   let approvalSeq = 0
   let activeTurn = null
@@ -144,7 +145,8 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
       allowedTools: options.allowedTools,
       disallowedTools: DISALLOWED_TOOLS,
       settingSources: [],
-      systemPrompt: SYSTEM_PROMPTS[options.lang],
+      agents: buildAgents(),
+      agent: 'ae',
       canUseTool: async (toolName, input) => canUseTool(toolName, input, turn),
       env: baseEnv,
       abortController: turn.controller
@@ -175,6 +177,19 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
     }
   }
 
+  function buildAgents() {
+    return {
+      ae: {
+        description: 'After Effects panel assistant',
+        prompt: SYSTEM_PROMPTS[options.lang],
+        tools: uniqueToolList([
+          ...Object.keys(options.annotations),
+          ...options.allowedTools
+        ])
+      }
+    }
+  }
+
   function handleSdkMessage(message, turn) {
     if (!message || typeof message !== 'object') {
       return
@@ -186,16 +201,24 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
           emitEvent({ type: 'text-delta', text: String(block.text || '') })
         } else if (block && block.type === 'tool_use') {
           const toolUseId = String(block.id || '')
+          const name = String(block.name || '')
+          if (!name.startsWith('mcp__ae__')) {
+            if (toolUseId) {
+              ignoredToolUseIds.add(toolUseId)
+            }
+            continue
+          }
+
           toolUses.push({
             id: toolUseId,
-            name: String(block.name || ''),
+            name,
             startedAt: now(),
             claimed: false
           })
           emitEvent({
             type: 'tool-start',
             toolUseId,
-            name: String(block.name || ''),
+            name,
             input: normalizeInput(block.input)
           })
         }
@@ -204,6 +227,10 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
       for (const block of getContentBlocks(message)) {
         if (block && block.type === 'tool_result') {
           const toolUseId = String(block.tool_use_id || '')
+          if (ignoredToolUseIds.has(toolUseId)) {
+            continue
+          }
+
           const toolUse = toolUses.find((item) => item.id === toolUseId)
           emitEvent({
             type: 'tool-result',
@@ -239,7 +266,10 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
   async function canUseTool(toolName, input, turn) {
     const name = String(toolName || '')
     if (!name.startsWith('mcp__ae__')) {
-      return { behavior: 'deny', message: 'panel denied non-ae tool' }
+      return {
+        behavior: 'deny',
+        message: 'Only After Effects (mcp__ae__*) tools are available in this panel.'
+      }
     }
 
     if (sessionAllowedTools.has(name)) {
@@ -428,6 +458,19 @@ function toolResultText(content) {
       .join('')
   }
   return ''
+}
+
+function uniqueToolList(items) {
+  const seen = new Set()
+  const result = []
+  for (const item of items) {
+    if (typeof item !== 'string' || seen.has(item)) {
+      continue
+    }
+    seen.add(item)
+    result.push(item)
+  }
+  return result
 }
 
 function normalizeInput(input) {
