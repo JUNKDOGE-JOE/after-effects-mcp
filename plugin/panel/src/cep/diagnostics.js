@@ -1,3 +1,5 @@
+import { detectTool } from './wizardActions.js';
+
 const HINTS = {
   'host-listening': {
     zh: '确认 ae-mcp 面板已打开；如端口被占用，请在设置里换一个端口并重启服务。',
@@ -18,6 +20,18 @@ const HINTS = {
   'extendscript-ping': {
     zh: '重启面板服务；如果仍失败，请重启 After Effects 后再试。',
     en: 'Restart the panel service. If it still fails, restart After Effects and try again.',
+  },
+  uv: {
+    zh: '安装 uv：优先使用 winget install --id astral-sh.uv -e。',
+    en: 'Install uv: prefer winget install --id astral-sh.uv -e.',
+  },
+  node: {
+    zh: '安装 Node.js LTS：winget install --id OpenJS.NodeJS.LTS -e。',
+    en: 'Install Node.js LTS: winget install --id OpenJS.NodeJS.LTS -e.',
+  },
+  claude: {
+    zh: '安装 Claude Code：npm install -g @anthropic-ai/claude-code。',
+    en: 'Install Claude Code: npm install -g @anthropic-ai/claude-code.',
   },
 };
 
@@ -52,7 +66,7 @@ async function execCode(fetchImpl, port, token, code) {
   return { response, body: await readJson(response) };
 }
 
-export async function runDiagnostics({ getHost, port, fs, os, fetchImpl }) {
+export async function runDiagnostics({ getHost, port, fs, os, fetchImpl, execFileImpl }) {
   const fetcher = fetchImpl || globalThis.fetch;
   const items = [];
   let token = '';
@@ -127,6 +141,16 @@ export async function runDiagnostics({ getHost, port, fs, os, fetchImpl }) {
     });
   } catch (e) {
     items.push({ id: 'extendscript-ping', ok: false, detail: e.message, fixHint: HINTS['extendscript-ping'] });
+  }
+
+  for (const id of ['uv', 'node', 'claude']) {
+    const result = await detectTool(id, { execFileImpl });
+    items.push({
+      id,
+      ok: result.ok,
+      detail: result.ok ? result.version : HINTS[id].en,
+      fixHint: HINTS[id],
+    });
   }
 
   return items;
