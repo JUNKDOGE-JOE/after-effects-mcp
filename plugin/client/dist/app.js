@@ -8214,13 +8214,13 @@
   // package.json
   var package_default = {
     name: "ae-mcp-panel",
-    version: "0.3.2",
+    version: "0.4.0",
     private: true,
     type: "module",
     scripts: {
       build: "node build.mjs",
       watch: "node build.mjs --watch",
-      test: "node --test test/*.test.js"
+      test: "node --test"
     },
     dependencies: {
       "lucide-react": "0.453.0",
@@ -10650,8 +10650,9 @@
     }
     function resetPendingApprovals() {
       for (const [id, pending] of pendingApprovals) {
-        pending.resolve({ decision: "abort" });
         pendingApprovals.delete(id);
+        emit({ type: "tool-denied", toolUseId: id });
+        pending.resolve({ decision: "abort" });
       }
     }
     async function waitForApproval(toolUse) {
@@ -10840,7 +10841,7 @@
   // src/cep/mcpClient.js
   var DEFAULT_TIMEOUT_MS = 3e4;
   var MCP_PROTOCOL_VERSION = "2025-06-18";
-  var PANEL_VERSION = "0.3.2";
+  var PANEL_VERSION = "0.4.0";
   function getCepRequire() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
@@ -12069,7 +12070,7 @@
     prefsRef.current = { apiKey, model, permissionMode };
     const extRoot = cs2 && cs2.getSystemPath ? cs2.getSystemPath("extension") : "";
     const sidecarPath = import_react37.default.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
-    const mcp = import_react37.default.useMemo(() => createMcpClient({}), []);
+    const mcp = import_react37.default.useMemo(() => createMcpClient({ extRoot }), [extRoot]);
     const handleChatEvent = import_react37.default.useCallback((evt) => {
       if (evt.type === "turn-start") setChatStreaming(true);
       if (evt.type === "turn-end" || evt.type === "error") setChatStreaming(false);

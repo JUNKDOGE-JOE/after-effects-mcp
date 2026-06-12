@@ -2,7 +2,7 @@ import { createNdjsonReader } from '../lib/ndjson.js';
 
 const DEFAULT_TIMEOUT_MS = 30000;
 const MCP_PROTOCOL_VERSION = '2025-06-18';
-const PANEL_VERSION = '0.3.2';
+const PANEL_VERSION = '0.4.0';
 
 function getCepRequire() {
   if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {

@@ -10,6 +10,29 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### [0.4.0] — 2026-06-12
+
+面板从"连接配置器"长成完整产品：**对话、审批、活动流、向导、诊断全部内置**。本版合并 #26（外壳 + 后端使能）、#27（向导 + 活动界面）、#28（内嵌 AI 对话）。升级后请重新安装 / 同步面板并重载一次；Python 端与面板建议一起升。
+
+#### ✨ 新增
+- **面板内嵌 AI 对话**（#28）——不开任何外部客户端，直接在 AE 面板里让 AI 操作工程。双后端：**Claude 订阅**（默认）——面板用系统 Node 拉起 Agent SDK sidecar，复用 `claude /login` 登录态，零 API key、零 token 落盘，模型工具面锁死为 ae_ 工具；**BYOK** 兜底——自带 Anthropic API key 的内置 agent 循环。仅在真实后端切换时清空会话。
+- **操作审批**（#28）——手动 / 自动 / 免审三档权限；破坏性动作（exec、revert 等）弹卡确认，拒绝会回传给模型让它改道；停止回合会作废全部悬挂审批，不会污染后续回合的免审白名单。
+- **首跑向导与连接诊断**（#27）——四步引导 + 五项自检定位断点；按客户端信任管理（拉黑 / 解封）。
+- **活动流**（#26/#27）——每次 AE 操作实时上屏：调用方、undo 组、结果、耗时；kill switch 一键熔断所有 AI 操作。
+- **面板外壳与设计系统**（#26）——React 18 单文件 bundle，AE 原生暗色视觉，中英双语。
+- **CI 覆盖 JS 测试**——panel / sidecar / host 三套 node:test 纳入 CI（此前仅 Python）。
+
+#### 🐛 修复
+- **本地化（如中文版）AE 的 `/exec` 非 ASCII 返回不再乱码**——ExtendScript→CEP 边界按系统码页回传字节；现在全部 /exec 流量走 ASCII 安全信封双向转义。
+- **未捕获的 ExtendScript 异常不再静默丢失**——AE 2026 上 evalScript 对未捕获异常返回空串（官方哨兵已失效）；信封在 JSX 侧捕获并带回真实错误文本与行号（`ExtendScript error: …`），空输出与传输故障可区分。
+- **`ae_setProperty` 写文本图层 Source Text 不再误报失败**——TextDocument 等宿主对象统一经 `AEMCP.safeValue` 序列化兜底，写入成功不再因回包序列化崩溃而报 "jsx returned no value"。
+- **ZXP 打包补齐 sidecar 生产依赖、剔除开发目录**——干净安装的订阅后端此前会因缺依赖无法启动。
+- **审批卡不再挂到上一回合的旧调用**——sidecar 工具簿记按回合清零。
+
+#### 📦 说明
+- 订阅模式需要本机 Node ≥ 18 和已登录的 Claude Code（`claude /login`）；BYOK 模式无此要求。
+- CI runner Node 20 → 24。
+
 ### [0.3.2] — 2026-06-11
 
 收尾 v0.3.1 时有意留待讨论的最后 3 条 review 发现（#22/#23/#24），"静默成功"主题至此全部关闭。均为兼容修复，**唯一可见的行为变化就是修复本身**：失败现在会在 MCP 协议层被如实标记。
@@ -88,6 +111,29 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### [0.4.0] — 2026-06-12
+
+The panel grows from a connection configurator into a full product: **chat, approvals, activity feed, wizard, and diagnostics are all built in**. Merges #26 (shell + backend enablement), #27 (wizard + activity UI), #28 (embedded AI chat). After upgrading, reinstall/sync the panel and reload it once; upgrading the Python side together is recommended.
+
+#### ✨ Added
+- **Embedded AI chat in the panel** (#28) — drive After Effects without any external client. Dual backend: **Claude subscription** (default) — the panel spawns an Agent SDK sidecar on system Node, reusing your `claude /login` session: no API key, no token stored, and the model's tool surface is locked to ae_ tools only; **BYOK** fallback — the built-in agent loop with your own Anthropic API key. The conversation resets only on a real backend switch.
+- **Action approvals** (#28) — manual / auto / none permission tiers; destructive actions (exec, revert, …) raise an approval card, denials are fed back to the model so it can adapt; stopping a turn voids every pending approval so it can never poison later turns' session allowlist.
+- **First-run wizard & connection diagnostics** (#27) — 4-step setup plus 5 self-checks that pinpoint where the chain breaks; per-client trust management (block / unblock).
+- **Activity feed** (#26/#27) — every AE operation streams live: caller, undo group, result, duration; a kill switch instantly blocks all AI actions.
+- **Panel shell & design system** (#26) — React 18 single-file bundle, AE-native dark visuals, bilingual CN/EN.
+- **CI now runs the JS suites** — panel / sidecar / host node:test suites join the Python tests.
+
+#### 🐛 Fixed
+- **No more mojibake from `/exec` on localized (e.g. Chinese) AE** — the ExtendScript→CEP boundary returns system-codepage bytes; all /exec traffic now crosses in an ASCII-safe envelope, escaped both ways.
+- **Uncaught ExtendScript exceptions are no longer lost** — on AE 2026 evalScript returns an empty string for uncaught throws (the documented sentinel never fires); the envelope now catches in JSX and carries the real error text and line (`ExtendScript error: …`), and truly empty output is reported distinctly.
+- **`ae_setProperty` on a text layer's Source Text no longer reports failure after succeeding** — host objects like TextDocument are serialized through `AEMCP.safeValue`, so a successful write can't come back as "jsx returned no value" anymore.
+- **ZXP packaging ships sidecar production deps and drops dev trees** — clean installs previously left the subscription backend unable to start.
+- **Approval cards can no longer attach to a previous turn's tool call** — sidecar tool bookkeeping is scoped per turn.
+
+#### 📦 Notes
+- Subscription mode needs local Node ≥ 18 and a logged-in Claude Code (`claude /login`); BYOK has no such requirement.
+- CI runner moved from Node 20 to 24.
 
 ### [0.3.2] — 2026-06-11
 
