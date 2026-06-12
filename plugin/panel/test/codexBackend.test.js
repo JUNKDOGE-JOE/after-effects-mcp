@@ -157,7 +157,7 @@ test('createCodexBackend starts codex app-server and sends thread/start with AE 
   assert.deepEqual(threadStart.params.approvalPolicy, {
     granular: { mcp_elicitations: true, rules: true, sandbox_approval: true },
   });
-  assert.deepEqual(threadStart.params.sandboxPolicy, { mode: 'read-only' });
+  assert.deepEqual(threadStart.params.sandboxPolicy, { type: 'readOnly' });
   assert.deepEqual(threadStart.params.config.mcp_servers.ae, {
     command: 'ae-mcp',
     args: ['--stdio'],
@@ -181,7 +181,7 @@ test('createCodexBackend starts codex app-server and sends thread/start with AE 
     approvalPolicy: {
       granular: { mcp_elicitations: true, rules: true, sandbox_approval: true },
     },
-    sandboxPolicy: { mode: 'read-only' },
+    sandboxPolicy: { type: 'readOnly' },
   });
 
   proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
@@ -315,12 +315,14 @@ test('createCodexBackend stop interrupts the turn, drains pending approvals, and
   respond(proc, parseWrites(proc)[1], { threadId: 'thread_1' });
   await flush();
 
+  proc.pushStdout({ method: 'turn/started', params: { threadId: 'thread_1', turn: { id: 'turn_1' } } });
   proc.pushStdout({ jsonrpc: '2.0', id: 'ask_stop', method: 'mcpServer/elicitation/request', params: { tool: 'ae_exec', arguments: {} } });
   backend.stop();
   const writes = parseWrites(proc);
 
   assert.equal(writes.at(-2).method, 'turn/interrupt');
-  assert.deepEqual(writes.at(-2).params, { threadId: 'thread_1' });
+  // TurnInterruptParams requires BOTH ids (schema-verified)
+  assert.deepEqual(writes.at(-2).params, { threadId: 'thread_1', turnId: 'turn_1' });
   assert.deepEqual(writes.at(-1), { jsonrpc: '2.0', id: 'ask_stop', result: { action: 'decline', content: {} } });
   assert.deepEqual(events.slice(-2), [
     { type: 'tool-denied', toolUseId: 'ask_stop' },
