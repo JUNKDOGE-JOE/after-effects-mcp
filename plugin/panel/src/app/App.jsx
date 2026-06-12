@@ -15,9 +15,10 @@ import { createMcpClient, resolveMcpCommand } from '../cep/mcpClient';
 import { createApiKeyStore } from '../cep/apiKey';
 import { probeClaudeLogin, resolveSidecarPath } from '../cep/claudeAuth';
 import { createClaudeAgentBackend, resolveSystemNode } from '../cep/claudeAgentBackend';
+import { createCodexBackend } from '../cep/codexBackend';
 import { reduceEvent } from '../lib/chatEntries';
 import { DEFAULT_MODEL, FALLBACK_MODEL } from '../lib/anthropic';
-import { claudeSubDescriptor, byokStaticDescriptor, mergeByokModels } from '../lib/backendCapabilities';
+import { claudeSubDescriptor, byokStaticDescriptor, mergeByokModels, codexStaticDescriptor, codexDescriptorFromModels } from '../lib/backendCapabilities';
 import { cachedByokModels } from '../cep/modelsApi';
 import { costBadge } from '../lib/composerOptions';
 import { useActivity } from '../cep/useActivity';
@@ -50,6 +51,8 @@ const T = {
     noKeyHint: '先在设置里配置 Anthropic API Key',
     probingHint: '正在检测 Claude 登录态…',
     notLoggedInHint: '订阅未登录：在终端运行 claude /login，再到设置里重新检测',
+    codexProbingHint: '正在检测 Codex 登录态…',
+    codexNotLoggedInHint: 'Codex 未登录：在终端运行 codex 登录后重新检测',
     noNodeHint: '内嵌对话需要系统 Node 18+',
     pausedHint: '已暂停 — 恢复后才能发送',
     goSettings: '去设置',
@@ -75,6 +78,8 @@ const T = {
     noKeyHint: 'Set your Anthropic API key in Settings first',
     probingHint: 'Checking Claude login…',
     notLoggedInHint: 'Not logged in: run claude /login in a terminal, then re-check in Settings',
+    codexProbingHint: 'Checking Codex login…',
+    codexNotLoggedInHint: 'Codex is not logged in: log in with codex, then re-check',
     noNodeHint: 'Embedded chat needs system Node 18+',
     pausedHint: 'Paused — resume to send',
     goSettings: 'Open Settings',
@@ -89,6 +94,30 @@ function readPref(key, fallback) {
 }
 function writePref(key, value) {
   try { window.localStorage.setItem(key, value); } catch (e) { /* best-effort */ }
+}
+
+const CODEX_MODELS_CACHE_KEY = 'ae_mcp_codex_models';
+const CODEX_MODELS_CACHE_MS = 24 * 60 * 60 * 1000;
+
+function readCachedCodexModels(storage) {
+  try {
+    const raw = storage.getItem(CODEX_MODELS_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.models)) return null;
+    if (Date.now() - Number(parsed.ts || 0) > CODEX_MODELS_CACHE_MS) return null;
+    return parsed.models;
+  } catch (e) {
+    return null;
+  }
+}
+
+function writeCachedCodexModels(storage, models) {
+  try {
+    storage.setItem(CODEX_MODELS_CACHE_KEY, JSON.stringify({ ts: Date.now(), models }));
+  } catch (e) {
+    // best-effort
+  }
 }
 
 async function validateAnthropicKey(key) {
@@ -172,9 +201,15 @@ function Shell({ cs }) {
   const [permissionMode, setPermissionMode] = React.useState(() => readPref('ae_mcp_perm_mode', 'manual'));
   const [backendPref, setBackendPref] = React.useState(() => readPref('ae_mcp_backend', 'subscription'));
   const [probe, setProbe] = React.useState(null);
+  const [codexProbe, setCodexProbe] = React.useState(null);
+  const [codexModels, setCodexModels] = React.useState(() => readCachedCodexModels(window.localStorage));
   const [chatEntries, setChatEntries] = React.useState([]);
   const [chatStreaming, setChatStreaming] = React.useState(false);
-  const baseDescriptor = React.useMemo(() => backendPref === 'byok' ? byokStaticDescriptor() : claudeSubDescriptor(), [backendPref]);
+  const baseDescriptor = React.useMemo(() => {
+    if (backendPref === 'byok') return byokStaticDescriptor();
+    if (backendPref === 'codex') return codexStaticDescriptor();
+    return claudeSubDescriptor();
+  }, [backendPref]);
   const [descriptor, setDescriptor] = React.useState(() => baseDescriptor);
   React.useEffect(() => {
     let alive = true;
@@ -184,9 +219,16 @@ function Shell({ cs }) {
         if (alive) setDescriptor(mergeByokModels(byokStaticDescriptor(), list));
       }).catch(() => {});
     }
+    if (backendPref === 'codex') {
+      const cached = codexModels || readCachedCodexModels(window.localStorage);
+      if (cached) setDescriptor(codexDescriptorFromModels({ models: cached }));
+    }
     return () => { alive = false; };
-  }, [apiKey, backendPref, baseDescriptor]);
-  const effectiveModel = sessionModel || model;
+  }, [apiKey, backendPref, baseDescriptor, codexModels]);
+  const requestedModel = sessionModel || model;
+  const effectiveModel = descriptor.models.some((m) => m.id === requestedModel)
+    ? requestedModel
+    : (descriptor.defaultModelId || (descriptor.models[0] && descriptor.models[0].id) || requestedModel);
   const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
   const effectiveEffort = sessionEffort || (modelMeta.effortLevels && modelMeta.effortLevels.length ? descriptor.defaultEffort : null);
   const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
@@ -201,6 +243,12 @@ function Shell({ cs }) {
   };
   const extRoot = cs && cs.getSystemPath ? cs.getSystemPath('extension') : '';
   const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
+  const tierFilePath = React.useMemo(() => {
+    const os = cepRequire('os');
+    const path = cepRequire('path');
+    if (os && path) return path.join(os.tmpdir(), 'ae-mcp-approval-tier.txt');
+    return 'ae-mcp-approval-tier.txt';
+  }, []);
   const mcp = React.useMemo(() => createMcpClient({ extRoot }), [extRoot]);
   const handleChatEvent = React.useCallback((evt) => {
     if (evt.type === 'turn-start') setChatStreaming(true);
@@ -240,8 +288,20 @@ function Shell({ cs }) {
     onEvent: handleChatEvent,
   }), [extRoot, sidecarPath, mcp, handleChatEvent]);
 
-  const effective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey });
-  const activeBackend = effective.backend === 'subscription' ? claudeBackend : byokLoop;
+  const codexBackend = React.useMemo(() => createCodexBackend({
+    getMcpSpec: () => resolveMcpCommand({ extRoot }),
+    getModel: () => runtimeRef.current.model,
+    getPermissionMode: () => runtimeRef.current.permissionMode,
+    getEffort: () => runtimeRef.current.effort,
+    getFast: () => runtimeRef.current.fast,
+    lang,
+    tierFilePath,
+    env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
+    onEvent: handleChatEvent,
+  }), [extRoot, tierFilePath, handleChatEvent]);
+
+  const effective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey, codexProbe });
+  const activeBackend = effective.backend === 'subscription' ? claudeBackend : effective.backend === 'codex' ? codexBackend : byokLoop;
   const activeBackendRef = React.useRef(null);
 
   const runClaudeProbe = React.useCallback(() => {
@@ -263,18 +323,40 @@ function Shell({ cs }) {
     return runClaudeProbe();
   }, [backendPref, runClaudeProbe]);
 
+  const runCodexProbe = React.useCallback(() => {
+    let alive = true;
+    setCodexProbe(null);
+    codexBackend.probeAccount().then((result) => {
+      if (!alive) return;
+      setCodexProbe(result);
+      if (result && Array.isArray(result.models)) {
+        setCodexModels(result.models);
+        writeCachedCodexModels(window.localStorage, result.models);
+      }
+    }).catch((e) => {
+      if (alive) setCodexProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
+    });
+    return () => { alive = false; };
+  }, [codexBackend]);
+
+  React.useEffect(() => {
+    if (backendPref !== 'codex') return undefined;
+    return runCodexProbe();
+  }, [backendPref, runCodexProbe]);
+
   React.useEffect(() => {
     const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
     activeBackendRef.current = decision.nextReal;
     if (!decision.reset) return;
     byokLoop.reset();
     claudeBackend.reset();
+    codexBackend.reset();
     setChatEntries([]);
     setChatStreaming(false);
     setSessionModel(null);
     setSessionEffort(null);
     setSessionFast(null);
-  }, [effective.backend, byokLoop, claudeBackend]);
+  }, [effective.backend, byokLoop, claudeBackend, codexBackend]);
 
   const sendChat = (text) => {
     const trimmed = String(text || '').trim();
@@ -383,6 +465,9 @@ function Shell({ cs }) {
     : probe.nodeOk === false ? { state: 'no-node', detail: probe.detail }
     : probe.loggedIn === false ? { state: 'not-logged-in', detail: probe.detail }
     : { state: 'ready', nodeVersion: probe.nodeVersion };
+  const codexStatus = codexProbe === null ? { state: 'checking' }
+    : codexProbe.loggedIn === false ? { state: 'not-logged-in', detail: codexProbe.detail }
+    : { state: 'ready', email: codexProbe.email, planType: codexProbe.planType };
   const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
 
   if (!wizardDone) {
@@ -415,6 +500,8 @@ function Shell({ cs }) {
   ];
   const backendDisabledHint = effective.reason === 'probing' ? t.probingHint
     : effective.reason === 'not-logged-in' ? t.notLoggedInHint
+    : effective.reason === 'codex-probing' ? t.codexProbingHint
+    : effective.reason === 'codex-not-logged-in' ? t.codexNotLoggedInHint
     : effective.reason === 'no-node' ? t.noNodeHint
     : effective.reason === 'no-key' ? t.noKeyHint
     : '';
@@ -494,13 +581,15 @@ function Shell({ cs }) {
             onSaveApiKey={(k) => { if (keyStore) keyStore.writeKey(k); setApiKey(k); }}
             onClearApiKey={() => { if (keyStore) keyStore.clearKey(); setApiKey(''); }}
             validateKey={validateAnthropicKey}
-            model={model}
+            model={effectiveModel}
             modelOptions={modelOptions}
             onModelChange={(m) => { setModel(m); writePref('ae_mcp_model', m); }}
             backend={backendPref}
             onBackendChange={(m) => { setBackendPref(m); writePref('ae_mcp_backend', m); }}
             claudeStatus={claudeStatus}
             onRecheckClaude={runClaudeProbe}
+            codexStatus={codexStatus}
+            onRecheckCodex={runCodexProbe}
           />
         ) : null}
       </div>

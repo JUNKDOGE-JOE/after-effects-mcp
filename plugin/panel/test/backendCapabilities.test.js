@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   CLAUDE_MODELS, APPROVAL_MODES, costTier,
   claudeSubDescriptor, byokStaticDescriptor, mergeByokModels,
+  codexStaticDescriptor, codexDescriptorFromModels,
 } from '../src/lib/backendCapabilities.js';
 
 test('claude-sub descriptor lists the full family with effort levels', () => {
@@ -58,4 +59,62 @@ test('mergeByokModels keeps curated metadata and admits unknown claude models', 
 test('mergeByokModels with null list returns the static descriptor unchanged', () => {
   const d = byokStaticDescriptor();
   assert.equal(mergeByokModels(d, null), d);
+});
+
+test('codexDescriptorFromModels maps live model/list metadata', () => {
+  const descriptor = codexDescriptorFromModels({
+    models: [
+      {
+        id: 'gpt-5.5',
+        displayName: 'GPT-5.5',
+        supportedReasoningEfforts: [
+          { reasoningEffort: 'low' },
+          { reasoningEffort: 'medium' },
+          { reasoningEffort: 'high' },
+          { reasoningEffort: 'xhigh' },
+        ],
+        defaultReasoningEffort: 'medium',
+        additionalSpeedTiers: ['fast'],
+        serviceTiers: [{ id: 'priority', name: 'Fast' }],
+        isDefault: true,
+        hidden: false,
+      },
+      {
+        id: 'hidden-model',
+        displayName: 'Hidden',
+        supportedReasoningEfforts: [{ reasoningEffort: 'low' }],
+        hidden: true,
+      },
+      {
+        id: 'gpt-5.4',
+        displayName: 'GPT-5.4',
+        supportedReasoningEfforts: [{ reasoningEffort: 'low' }],
+        defaultReasoningEffort: 'low',
+        hidden: false,
+      },
+    ],
+  });
+
+  assert.equal(descriptor.id, 'codex');
+  assert.equal(descriptor.label, 'Codex');
+  assert.deepEqual(descriptor.models, [
+    { id: 'gpt-5.5', label: 'GPT-5.5', effortLevels: ['low', 'medium', 'high', 'xhigh'], cost: 2, adaptive: false },
+    { id: 'gpt-5.4', label: 'GPT-5.4', effortLevels: ['low'], cost: 2, adaptive: false },
+  ]);
+  assert.equal(descriptor.defaultModelId, 'gpt-5.5');
+  assert.equal(descriptor.defaultEffort, 'medium');
+  assert.equal(descriptor.supportsFast('gpt-5.5'), true);
+  assert.equal(descriptor.supportsFast('gpt-5.4'), false);
+  assert.equal(descriptor.approvalModes, APPROVAL_MODES);
+  assert.equal(descriptor.perTurnModelSwitch, true);
+});
+
+test('codexDescriptorFromModels falls back to static descriptor for empty input', () => {
+  const fallback = codexDescriptorFromModels(null);
+  const staticDescriptor = codexStaticDescriptor();
+  assert.equal(fallback.id, staticDescriptor.id);
+  assert.equal(fallback.label, staticDescriptor.label);
+  assert.deepEqual(fallback.models.map((m) => m.id), ['gpt-5.5', 'gpt-5.4']);
+  assert.equal(fallback.defaultEffort, 'medium');
+  assert.equal(fallback.supportsFast('gpt-5.5'), true);
 });
