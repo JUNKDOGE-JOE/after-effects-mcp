@@ -29,6 +29,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from ae_mcp.error_hints import append_hint
+
 
 _NO_VALUE_SENTINELS = frozenset({"undefined", "null"})
 
@@ -38,6 +40,7 @@ _EVALSCRIPT_ERR_SENTINEL = "EvalScript error."
 
 
 def _fail(error: str, raw: str) -> dict[str, str | bool]:
+    error = append_hint(error)
     return {"ok": False, "error": error, "raw": raw}
 
 

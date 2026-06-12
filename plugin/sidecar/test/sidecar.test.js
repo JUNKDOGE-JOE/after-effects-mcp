@@ -124,6 +124,17 @@ test('pins turn options to ae agent with annotations and allowed tools whitelist
   assert.equal(Object.hasOwn(seenOptions, 'systemPrompt'), false)
 })
 
+test('agent prompts include ExtendScript pitfall anchors in both languages', async () => {
+  const zhPrompt = await captureAgentPrompt('zh')
+  const enPrompt = await captureAgentPrompt('en')
+
+  for (const prompt of [zhPrompt, enPrompt]) {
+    assert.match(prompt, /AEMCP\.easeKeys/)
+    assert.match(prompt, /mustFind/)
+    assert.match(prompt, /matchName/)
+  }
+})
+
 test('filters non ae tool_use and tool_result events while preserving ae tools', async () => {
   const writes = []
   const sidecar = createSidecar({
@@ -654,4 +665,22 @@ async function waitFor(predicate) {
     }
     await new Promise((resolve) => setTimeout(resolve, 5))
   }
+}
+
+async function captureAgentPrompt(lang) {
+  const writes = []
+  let seenOptions
+  const sidecar = createSidecar({
+    queryFn: async function * ({ options }) {
+      seenOptions = options
+      yield { type: 'result', subtype: 'success', is_error: false }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: { ...defaultOptions, lang },
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'prompt', permissionMode: 'none' }))
+  await waitFor(() => eventCount(writes, 'turn-end') === 1)
+  return seenOptions.agents.ae.prompt
 }

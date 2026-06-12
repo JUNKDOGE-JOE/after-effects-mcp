@@ -62,6 +62,15 @@ LOCALIZATION:
   returns 0 on localized AE, retry with matchName words ("text document",
   "rotate") or discover paths via ae_scanPropertyTree.
 
+SCRIPTING PITFALLS:
+  setTemporalEaseAtKey ease arrays must match property dimensions; spatial
+  properties take one ease element. Use AEMCP.easeKeys(prop).
+  Any byName or index lookup may return null; check before use or wrap with
+  AEMCP.mustFind(value, "name") for a named failure.
+  Do not invent APIs such as items.byName. If unsure, read first or iterate.
+  ae_exec accepts only code and undoGroup; put comp/layer targeting in script.
+  Read before writing: ae_overview / ae_layers / ae_readProps prevent guesses.
+
 SAFETY & RECOVERY:
   ae_checkpoint snapshots the whole .aep; ae_revert restores a whole-project
   snapshot (a full file swap — it cannot partially delete layers). Auto-

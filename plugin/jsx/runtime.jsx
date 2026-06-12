@@ -213,12 +213,45 @@ if (!Object.entries) {
 // A single source of truth for the targeting + property-resolution idioms
 // every JSX template would otherwise re-implement. Loaded once into the
 // persistent engine, so agent-authored ae.exec / ae.readProps scripts can
-// call these directly. All helpers are defensive: they return null (never
-// throw) on bad input, honouring the "JSX must never throw" invariant.
+// call these directly. Most helpers are defensive and return null on bad
+// input; mustFind intentionally throws a named error when the caller wants a
+// lookup failure to be explicit.
 // ---------------------------------------------------------------------------
 if (typeof AEMCP === 'undefined') { AEMCP = {}; }
 
-AEMCP.version = '0.2.0';
+AEMCP.version = '0.3.0';
+
+AEMCP.mustFind = function (value, what) {
+    if (value === null || typeof value === 'undefined') {
+        throw new Error('Not found: ' + (what || 'value'));
+    }
+    return value;
+};
+
+// Apply easy-ease to keyframes with correctly-sized KeyframeEase arrays.
+// AE rule: spatial properties take ONE ease element; others take one per
+// value dimension. keyIndices omitted = all keys on the property.
+AEMCP.easeKeys = function (prop, keyIndices, influence) {
+    var inf = typeof influence === 'number' && influence > 0 ? influence : 33.33;
+    var dims;
+    if (prop.isSpatial) {
+        dims = 1;
+    } else {
+        var v = prop.value;
+        dims = (v && v.length && typeof v !== 'string') ? v.length : 1;
+    }
+    var eases = [];
+    for (var d = 0; d < dims; d++) eases.push(new KeyframeEase(0, inf));
+    var idx = keyIndices;
+    if (!idx) {
+        idx = [];
+        for (var k = 1; k <= prop.numKeys; k++) idx.push(k);
+    }
+    for (var i = 0; i < idx.length; i++) {
+        prop.setTemporalEaseAtKey(idx[i], eases, eases);
+    }
+    return idx.length;
+};
 
 // Map a property value to something JSON.stringify can serialize, never
 // throwing. TextDocument flattens to its .text string BEFORE the generic
