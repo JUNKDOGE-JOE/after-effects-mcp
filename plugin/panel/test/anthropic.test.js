@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sendAnthropicMessage } from '../src/lib/anthropic.js';
+import { buildSystemPrompt, sendAnthropicMessage } from '../src/lib/anthropic.js';
 
 function sseFrame(event, data) {
   return 'event: ' + event + '\n' + 'data: ' + JSON.stringify(data) + '\n\n';
@@ -47,6 +47,14 @@ test('sendAnthropicMessage parses tool input from input_json_delta after empty s
     },
     stopReason: 'tool_use',
   });
+});
+
+test('buildSystemPrompt includes ExtendScript pitfall anchors in both languages', () => {
+  for (const prompt of [buildSystemPrompt('zh'), buildSystemPrompt('en')]) {
+    assert.match(prompt, /AEMCP\.easeKeys/);
+    assert.match(prompt, /mustFind/);
+    assert.match(prompt, /matchName/);
+  }
 });
 
 test('sendAnthropicMessage sends effort and fast-mode parameters when requested', async () => {

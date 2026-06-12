@@ -10949,7 +10949,19 @@
         "Understand the user goal, then choose appropriate MCP tools before operating.",
         "Name target comps, layers, properties, or files in quotes before changing them.",
         "Prefer read-only inspection before edits when context is missing.",
-        "Summarize tool results plainly and ask only when a required detail is missing."
+        "Summarize tool results plainly and ask only when a required detail is missing.",
+        "",
+        "Working mode:",
+        "- Prefer typed tools (ae_createLayer / ae_setProperty / ae_readProps, etc.); use ae_exec scripts only when no typed tool fits.",
+        "- Before scripting, inspect with read tools (ae_overview / ae_layers / ae_readProps) to confirm structure instead of guessing project contents.",
+        "- ae_exec accepts only code and undoGroup; it has no comp_id or other targeting parameters. Put target lookup inside the script.",
+        "",
+        "ExtendScript scripting pitfalls (must follow):",
+        "- setTemporalEaseAtKey ease arrays must match the property dimension (1D like Opacity=1; Scale 3D=3; spatial properties like Position=1). Use AEMCP.easeKeys(prop) to size them automatically.",
+        '- Any byName / index lookup may return null; check before use, or call AEMCP.mustFind(value, "name") so the error names the missing target.',
+        "- Do not invent APIs that do not exist (for example items.byName); if unsure, use read tools or iterate.",
+        "- AE may be localized (Chinese): display names are translated, so prefer matchName for property matching.",
+        "- AEMCP helpers (safeValue / easeKeys / mustFind / compById / layerById) are injected and available; layerById and similar helpers expect numeric ids."
       ].join(" ");
     }
     return [
@@ -10957,7 +10969,19 @@
       "\u5148\u7406\u89E3\u7528\u6237\u76EE\u6807\uFF0C\u518D\u9009\u62E9\u5408\u9002\u7684 MCP \u5DE5\u5177\u64CD\u4F5C AE\u3002",
       "\u4FEE\u6539\u524D\u7528\u5F15\u53F7\u660E\u793A\u76EE\u6807\u5408\u6210\u3001\u56FE\u5C42\u3001\u5C5E\u6027\u6216\u6587\u4EF6\u3002",
       "\u7F3A\u5C11\u4E0A\u4E0B\u6587\u65F6\u4F18\u5148\u7528\u53EA\u8BFB\u5DE5\u5177\u68C0\u67E5\u3002",
-      "\u7528\u7B80\u660E\u8BED\u8A00\u603B\u7ED3\u5DE5\u5177\u7ED3\u679C\uFF0C\u53EA\u5728\u7F3A\u5C11\u5FC5\u8981\u4FE1\u606F\u65F6\u8FFD\u95EE\u3002"
+      "\u7528\u7B80\u660E\u8BED\u8A00\u603B\u7ED3\u5DE5\u5177\u7ED3\u679C\uFF0C\u53EA\u5728\u7F3A\u5C11\u5FC5\u8981\u4FE1\u606F\u65F6\u8FFD\u95EE\u3002",
+      "",
+      "\u5DE5\u4F5C\u65B9\u5F0F\uFF1A",
+      "- \u4F18\u5148\u4F7F\u7528 typed \u5DE5\u5177\uFF08ae_createLayer / ae_setProperty / ae_readProps \u7B49\uFF09\uFF1B\u53EA\u6709\u6CA1\u6709\u5BF9\u5E94\u5DE5\u5177\u65F6\u624D\u7528 ae_exec \u5199\u811A\u672C\u3002",
+      "- \u5199\u811A\u672C\u524D\u5148\u7528\u8BFB\u5DE5\u5177\uFF08ae_overview / ae_layers / ae_readProps\uFF09\u786E\u8BA4\u7ED3\u6784\uFF0C\u4E0D\u8981\u51ED\u8BB0\u5FC6\u731C\u6D4B\u5DE5\u7A0B\u5185\u5BB9\u3002",
+      "- ae_exec \u53EA\u63A5\u53D7 code \u4E0E undoGroup \u4E24\u4E2A\u53C2\u6570\uFF0C\u6CA1\u6709 comp_id \u7B49\u5B9A\u4F4D\u53C2\u6570\u2014\u2014\u76EE\u6807\u5B9A\u4F4D\u5199\u5728\u811A\u672C\u91CC\u3002",
+      "",
+      "ExtendScript \u9AD8\u9891\u9677\u9631\uFF08\u52A1\u5FC5\u9075\u5B88\uFF09\uFF1A",
+      "- setTemporalEaseAtKey \u7684\u7F13\u52A8\u6570\u7EC4\u957F\u5EA6\u5FC5\u987B\u7B49\u4E8E\u5C5E\u6027\u7EF4\u5EA6\uFF08\u4E00\u7EF4\u5982 Opacity=1\uFF1BScale \u4E09\u7EF4=3\uFF1B\u7A7A\u95F4\u5C5E\u6027\u5982 Position=1\uFF09\u3002\u76F4\u63A5\u7528 AEMCP.easeKeys(prop) \u81EA\u52A8\u5904\u7406\u3002",
+      '- \u4EFB\u4F55 byName / \u7D22\u5F15\u67E5\u627E\u90FD\u53EF\u80FD\u8FD4\u56DE null\uFF0C\u4F7F\u7528\u524D\u5FC5\u987B\u5224\u7A7A\uFF1B\u6216\u7528 AEMCP.mustFind(value, "\u540D\u5B57") \u8BA9\u9519\u8BEF\u81EA\u5E26\u540D\u5B57\u3002',
+      "- \u4E0D\u5B58\u5728\u7684 API \u4E0D\u8981\u81C6\u9020\uFF08\u5982 items.byName \u4E0D\u5B58\u5728\uFF09\uFF1B\u4E0D\u786E\u5B9A\u5C31\u5148\u7528\u8BFB\u5DE5\u5177\u6216\u904D\u5386\u3002",
+      "- \u672C\u673A\u53EF\u80FD\u662F\u672C\u5730\u5316\uFF08\u4E2D\u6587\uFF09AE\uFF1A\u663E\u793A\u540D\u662F\u7FFB\u8BD1\u8FC7\u7684\uFF0C\u5339\u914D\u5C5E\u6027\u4F18\u5148\u7528 matchName\u3002",
+      "- AEMCP \u52A9\u624B\uFF08safeValue / easeKeys / mustFind / compById / layerById\uFF09\u5DF2\u6CE8\u5165\uFF0C\u53EF\u76F4\u63A5\u8C03\u7528\uFF1BlayerById \u7B49\u7528\u6570\u5B57 id\u3002"
     ].join(" ");
   }
   function mapMcpToolsToAnthropic(tools = []) {

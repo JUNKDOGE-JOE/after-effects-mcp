@@ -23,6 +23,7 @@ from mcp.types import CallToolResult, TextContent, Tool
 
 from ae_mcp import client_identity
 from ae_mcp.annotations import VERB_ANNOTATIONS
+from ae_mcp.error_hints import append_hint
 from ae_mcp.handlers import HANDLERS, load_all
 from ae_mcp.instructions import SERVER_INSTRUCTIONS
 
@@ -240,11 +241,14 @@ def build_server() -> Server:
             result = await run_fn(validated, ctx)
         except Exception as e:  # noqa: BLE001
             log.exception("handler %s raised", name)
-            payload = _format_result({"ok": False, "error": str(e)})
+            payload = _format_result({"ok": False, "error": append_hint(str(e))})
             return CallToolResult(
                 content=[TextContent(type="text", text=payload)],
                 isError=True,
             )
+
+        if isinstance(result, dict) and result.get("ok") is False and "error" in result:
+            result = {**result, "error": append_hint(str(result["error"]))}
 
         return CallToolResult(
             content=[TextContent(type="text", text=_format_result(result))],
