@@ -45,17 +45,26 @@ if (Test-Path $stageDir) {
     Remove-Item -Recurse -Force $stageDir
 }
 
-Write-Host "[1/4] Staging plugin files..."
+Write-Host "[1/5] Staging plugin files..."
 Copy-Item -Recurse -Force $pluginSrc $stageDir
 if (Test-Path (Join-Path $stageDir 'host\node_modules')) {
     Remove-Item -Recurse -Force (Join-Path $stageDir 'host\node_modules')
+}
+if (Test-Path (Join-Path $stageDir 'panel')) {
+    Remove-Item -Recurse -Force (Join-Path $stageDir 'panel')
+}
+if (Test-Path (Join-Path $stageDir 'sidecar\node_modules')) {
+    Remove-Item -Recurse -Force (Join-Path $stageDir 'sidecar\node_modules')
+}
+if (Test-Path (Join-Path $stageDir 'sidecar\test')) {
+    Remove-Item -Recurse -Force (Join-Path $stageDir 'sidecar\test')
 }
 # Never ship the CEF remote-debug port file to end users: it opens a
 # remote-debugging port (the CEF context runs with node enabled), letting any
 # local process attach a DevTools/Node client. Strip it before signing.
 Remove-Item -Force (Join-Path $stageDir '.debug') -ErrorAction SilentlyContinue
 
-Write-Host "[2/4] Installing host production dependencies..."
+Write-Host "[2/5] Installing host production dependencies..."
 Push-Location (Join-Path $stageDir 'host')
 try {
     npm ci --omit=dev
@@ -63,14 +72,22 @@ try {
     Pop-Location
 }
 
-if (-not (Test-Path $CertPath)) {
-    Write-Host "[3/4] Creating self-signed ZXP certificate..."
-    & $ZxpSignCmd -selfSignedCert US CA ae-mcp ae-mcp $CertPassword $CertPath
-} else {
-    Write-Host "[3/4] Using existing certificate $CertPath"
+Write-Host "[3/5] Installing sidecar production dependencies..."
+Push-Location (Join-Path $stageDir 'sidecar')
+try {
+    npm ci --omit=dev
+} finally {
+    Pop-Location
 }
 
-Write-Host "[4/4] Signing package..."
+if (-not (Test-Path $CertPath)) {
+    Write-Host "[4/5] Creating self-signed ZXP certificate..."
+    & $ZxpSignCmd -selfSignedCert US CA ae-mcp ae-mcp $CertPassword $CertPath
+} else {
+    Write-Host "[4/5] Using existing certificate $CertPath"
+}
+
+Write-Host "[5/5] Signing package..."
 if (Test-Path $OutputPath) {
     Remove-Item -Force $OutputPath
 }

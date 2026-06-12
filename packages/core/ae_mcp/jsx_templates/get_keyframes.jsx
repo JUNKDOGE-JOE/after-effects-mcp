@@ -31,14 +31,14 @@
         var entry = {
             index: k,
             time: prop.keyTime(k),
-            value: prop.keyValue(k),
             interpIn: interpName(prop.keyInInterpolationType(k)),
             interpOut: interpName(prop.keyOutInterpolationType(k))
         };
-        try { entry.easeIn = prop.keyInTemporalEase(k); } catch (e) { entry.easeIn = null; }
-        try { entry.easeOut = prop.keyOutTemporalEase(k); } catch (e) { entry.easeOut = null; }
-        try { entry.spatialIn = prop.keyInSpatialTangent(k); } catch (e) { entry.spatialIn = null; }
-        try { entry.spatialOut = prop.keyOutSpatialTangent(k); } catch (e) { entry.spatialOut = null; }
+        try { entry.value = AEMCP.safeValue(prop.keyValue(k)); } catch (e) { entry.value = null; }
+        try { entry.easeIn = AEMCP.safeValue(prop.keyInTemporalEase(k)); } catch (e) { entry.easeIn = null; }
+        try { entry.easeOut = AEMCP.safeValue(prop.keyOutTemporalEase(k)); } catch (e) { entry.easeOut = null; }
+        try { entry.spatialIn = AEMCP.safeValue(prop.keyInSpatialTangent(k)); } catch (e) { entry.spatialIn = null; }
+        try { entry.spatialOut = AEMCP.safeValue(prop.keyOutSpatialTangent(k)); } catch (e) { entry.spatialOut = null; }
         keyframes.push(entry);
     }
     return JSON.stringify({ok:true, numKeyframes:n, keyframes:keyframes});

@@ -8,6 +8,15 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { ActivityScreen } from '../screens/ActivityScreen';
 import { WizardScreen } from '../screens/WizardScreen';
 import { ConnectionDrawer } from '../screens/ConnectionDrawer';
+import { ChatScreen } from '../screens/ChatScreen';
+import { createAgentLoop } from '../lib/agentLoop';
+import { pickBackend, deriveToolMeta, shouldResetOnBackendChange } from '../lib/backendSelect';
+import { createMcpClient, resolveMcpCommand } from '../cep/mcpClient';
+import { createApiKeyStore } from '../cep/apiKey';
+import { probeClaudeLogin, resolveSidecarPath } from '../cep/claudeAuth';
+import { createClaudeAgentBackend, resolveSystemNode } from '../cep/claudeAgentBackend';
+import { reduceEvent } from '../lib/chatEntries';
+import { DEFAULT_MODEL, FALLBACK_MODEL } from '../lib/anthropic';
 import { useActivity } from '../cep/useActivity';
 import { useHandshake } from '../cep/useHandshake';
 import { isWizardDone, markWizardDone } from '../cep/firstRun';
@@ -34,6 +43,12 @@ const T = {
     regenBody: '所有已连接的 AI 客户端会立即失去访问权限，需要重启它们才能重新连接。',
     regenConfirm: '重新生成',
     cancel: '取消',
+    noKeyHint: '先在设置里配置 Anthropic API Key',
+    probingHint: '正在检测 Claude 登录态…',
+    notLoggedInHint: '订阅未登录：在终端运行 claude /login，再到设置里重新检测',
+    noNodeHint: '内嵌对话需要系统 Node 18+',
+    pausedHint: '已暂停 — 恢复后才能发送',
+    goSettings: '去设置',
   },
   en: {
     connected: 'Service running',
@@ -53,8 +68,49 @@ const T = {
     regenBody: 'Every connected AI client loses access immediately and must be restarted to reconnect.',
     regenConfirm: 'Regenerate',
     cancel: 'Cancel',
+    noKeyHint: 'Set your Anthropic API key in Settings first',
+    probingHint: 'Checking Claude login…',
+    notLoggedInHint: 'Not logged in: run claude /login in a terminal, then re-check in Settings',
+    noNodeHint: 'Embedded chat needs system Node 18+',
+    pausedHint: 'Paused — resume to send',
+    goSettings: 'Open Settings',
   },
 };
+
+function readPref(key, fallback) {
+  try {
+    const v = window.localStorage.getItem(key);
+    return v || fallback;
+  } catch (e) { return fallback; }
+}
+function writePref(key, value) {
+  try { window.localStorage.setItem(key, value); } catch (e) { /* best-effort */ }
+}
+
+async function validateAnthropicKey(key) {
+  // /v1/models is not CORS-enabled for direct browser access (verified in AE:
+  // the preflight fails), so validate against /v1/messages — the endpoint the
+  // chat actually uses — with a 1-token haiku ping. 401/403 = invalid key.
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: FALLBACK_MODEL,
+      max_tokens: 1,
+      messages: [{ role: 'user', content: 'ping' }],
+    }),
+  });
+  // Return {ok,status} (not a bare bool) so Settings can tell a rejected key
+  // (401→"invalid key") from a transient failure (network throw→"try again").
+  // A 401 is auth-normalized to status 401 regardless of the real code.
+  const ok = r.ok;
+  return { ok, status: ok ? 200 : (r.status === 403 ? 401 : r.status) };
+}
 
 const CLIENT_NAMES = {
   builtin: { zh: '面板内置对话', en: 'Built-in chat' },
@@ -97,6 +153,104 @@ function Shell({ cs }) {
   const [clients, setClients] = React.useState([]);
   const [confirmRegen, setConfirmRegen] = React.useState(false);
   const [tokenEpoch, setTokenEpoch] = React.useState(0);
+
+  // Embedded chat: API key, model/permission prefs, entry feed, agent loop
+  const keyStore = React.useMemo(() => {
+    try { return createApiKeyStore(); } catch (e) { return null; }
+  }, []);
+  const [apiKey, setApiKey] = React.useState(() => {
+    try { return keyStore ? keyStore.readKey() : ''; } catch (e) { return ''; }
+  });
+  const [model, setModel] = React.useState(() => readPref('ae_mcp_model', DEFAULT_MODEL));
+  const [permissionMode, setPermissionMode] = React.useState(() => readPref('ae_mcp_perm_mode', 'manual'));
+  const [backendPref, setBackendPref] = React.useState(() => readPref('ae_mcp_backend', 'subscription'));
+  const [probe, setProbe] = React.useState(null);
+  const [chatEntries, setChatEntries] = React.useState([]);
+  const [chatStreaming, setChatStreaming] = React.useState(false);
+  const prefsRef = React.useRef({ apiKey, model, permissionMode });
+  prefsRef.current = { apiKey, model, permissionMode };
+  const extRoot = cs && cs.getSystemPath ? cs.getSystemPath('extension') : '';
+  const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
+  const mcp = React.useMemo(() => createMcpClient({ extRoot }), [extRoot]);
+  const handleChatEvent = React.useCallback((evt) => {
+    if (evt.type === 'turn-start') setChatStreaming(true);
+    if (evt.type === 'turn-end' || evt.type === 'error') setChatStreaming(false);
+    setChatEntries((entries) => reduceEvent(entries, evt));
+  }, []);
+
+  const byokLoop = React.useMemo(() => {
+    return createAgentLoop({
+      getApiKey: () => prefsRef.current.apiKey,
+      getModel: () => prefsRef.current.model,
+      getPermissionMode: () => prefsRef.current.permissionMode,
+      mcp,
+      lang,
+      onEvent: handleChatEvent,
+    });
+    // lang only affects the system prompt of FUTURE turns; recreating the loop
+    // on language switch would drop the conversation, so we intentionally bind
+    // the initial value.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mcp, handleChatEvent]);
+
+  // Same as the BYOK loop: lang only affects future system prompts, so avoid
+  // recreating the backend and silently dropping its conversation on language switch.
+  const claudeBackend = React.useMemo(() => createClaudeAgentBackend({
+    resolveNode: resolveSystemNode,
+    sidecarPath,
+    getMcpSpec: () => resolveMcpCommand({ extRoot }),
+    getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
+    getModel: () => prefsRef.current.model,
+    getPermissionMode: () => prefsRef.current.permissionMode,
+    lang,
+    onEvent: handleChatEvent,
+  }), [extRoot, sidecarPath, mcp, handleChatEvent]);
+
+  const effective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey });
+  const activeBackend = effective.backend === 'subscription' ? claudeBackend : byokLoop;
+  const activeBackendRef = React.useRef(null);
+
+  const runClaudeProbe = React.useCallback(() => {
+    let alive = true;
+    setProbe(null);
+    probeClaudeLogin({
+      resolveNode: resolveSystemNode,
+      sidecarPath,
+    }).then((result) => {
+      if (alive) setProbe(result);
+    }).catch((e) => {
+      if (alive) setProbe({ loggedIn: false, nodeOk: false, detail: e && e.message ? e.message : String(e) });
+    });
+    return () => { alive = false; };
+  }, [sidecarPath]);
+
+  React.useEffect(() => {
+    if (backendPref !== 'subscription') return undefined;
+    return runClaudeProbe();
+  }, [backendPref, runClaudeProbe]);
+
+  React.useEffect(() => {
+    const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
+    activeBackendRef.current = decision.nextReal;
+    if (!decision.reset) return;
+    byokLoop.reset();
+    claudeBackend.reset();
+    setChatEntries([]);
+    setChatStreaming(false);
+  }, [effective.backend, byokLoop, claudeBackend]);
+
+  const sendChat = (text) => {
+    const trimmed = String(text || '').trim();
+    if (!trimmed) return;
+    setChatEntries((entries) => entries.concat({ id: `user-${Date.now()}`, type: 'user-text', text: trimmed }));
+    activeBackend.sendUser(trimmed);
+  };
+
+  const newChatSession = () => {
+    activeBackend.reset();
+    setChatStreaming(false);
+    setChatEntries([]);
+  };
 
   const pushLog = React.useCallback((m) => {
     setLogs((xs) => [...xs.slice(-199), `[${new Date().toLocaleTimeString()}] ${m}`]);
@@ -216,6 +370,16 @@ function Shell({ cs }) {
     { id: 'activity', icon: 'list-checks', label: t.activity },
     { id: 'settings', icon: 'settings', label: t.settings },
   ];
+  const backendDisabledHint = effective.reason === 'probing' ? t.probingHint
+    : effective.reason === 'not-logged-in' ? t.notLoggedInHint
+    : effective.reason === 'no-node' ? t.noNodeHint
+    : effective.reason === 'no-key' ? t.noKeyHint
+    : '';
+  const composerDisabled = paused || effective.backend === 'none';
+  const claudeStatus = probe === null ? { state: 'checking' }
+    : probe.nodeOk === false ? { state: 'no-node', detail: probe.detail }
+    : probe.loggedIn === false ? { state: 'not-logged-in', detail: probe.detail }
+    : { state: 'ready', nodeVersion: probe.nodeVersion };
 
   return (
     <React.Fragment>
@@ -230,7 +394,21 @@ function Shell({ cs }) {
         settingsTitle={t.settings}
       />
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
-        {tab === 'chat' ? <EmptyState icon="message-square" title={t.chatEmptyT} caption={t.chatEmptyB} /> : null}
+        {tab === 'chat' ? (
+          <ChatScreen
+            lang={lang}
+            entries={chatEntries}
+            streaming={chatStreaming}
+            composerDisabled={composerDisabled}
+            disabledHint={paused ? t.pausedHint : composerDisabled ? backendDisabledHint : ''}
+            noticeActionLabel={paused ? t.resume : t.goSettings}
+            onNoticeAction={() => (paused ? togglePause() : setTab('settings'))}
+            onSend={sendChat}
+            onStop={() => activeBackend.stop()}
+            onApprove={(id, decision) => activeBackend.approve(id, decision)}
+            onNewSession={newChatSession}
+          />
+        ) : null}
         {tab === 'activity' ? (
           <ActivityScreen
             events={events}
@@ -261,6 +439,18 @@ function Shell({ cs }) {
             onRegenToken={() => setConfirmRegen(true)}
             hostVersion={(connInfo && connInfo.hostVersion) || '-'}
             pythonVersion={(connInfo && connInfo.pythonVersion) || '-'}
+            apiKey={apiKey}
+            onSaveApiKey={(k) => { if (keyStore) keyStore.writeKey(k); setApiKey(k); }}
+            onClearApiKey={() => { if (keyStore) keyStore.clearKey(); setApiKey(''); }}
+            validateKey={validateAnthropicKey}
+            model={model}
+            onModelChange={(m) => { setModel(m); writePref('ae_mcp_model', m); }}
+            backend={backendPref}
+            onBackendChange={(m) => { setBackendPref(m); writePref('ae_mcp_backend', m); }}
+            claudeStatus={claudeStatus}
+            onRecheckClaude={runClaudeProbe}
+            permissionMode={permissionMode}
+            onPermissionMode={(m) => { setPermissionMode(m); writePref('ae_mcp_perm_mode', m); }}
           />
         ) : null}
       </div>

@@ -72,7 +72,7 @@ function startApp() {
     // Inject a known token and a stub CSInterface so /exec can "run".
     server._setExecToken('known-secret-token');
     server.setCSInterface({
-        evalScript: function (jsx, cb) { cb('stub-result'); },
+        evalScript: function (jsx, cb) { cb('{"ok":true,"result":"stub-result"}'); },
     });
     const app = server.buildApp();
     return new Promise((resolve) => {
@@ -80,6 +80,10 @@ function startApp() {
             resolve({ srv: srv, port: srv.address().port });
         });
     });
+}
+
+function decodeTransportEnvelope(result) {
+    return JSON.parse(result).result;
 }
 
 function get(port, pathname, headers) {
@@ -153,6 +157,123 @@ test('/exec returns 200 with the correct token', async () => {
         assert.strictEqual(r.status, 200);
         assert.strictEqual(r.body.ok, true);
         assert.strictEqual(r.body.result, 'stub-result');
+    } finally {
+        srv.close();
+    }
+});
+
+test('/exec decodes the evalScript transport envelope before responding', async () => {
+    delete require.cache[require.resolve('./server')];
+    delete require.cache[require.resolve('./jsx-bridge')];
+    const server = require('./server');
+    server.activity._reset();
+    server.setPaused(false);
+    server._setExecToken('known-secret-token');
+    server.setCSInterface({
+        evalScript: function (jsx, cb) {
+            assert.ok(/^[\x00-\x7f]*$/.test(jsx), 'transport wrapper must be ASCII-only');
+            cb('{"ok":true,"result":"\\u6e90\\u6587\\u672c"}');
+        },
+    });
+    const app = server.buildApp();
+    const srv = await new Promise((resolve) => {
+        const s = app.listen(0, '127.0.0.1', () => resolve(s));
+    });
+    try {
+        const r = await post(
+            srv.address().port,
+            '/exec',
+            { 'X-AE-MCP-Token': 'known-secret-token' },
+            { code: '"源文本"' }
+        );
+        assert.strictEqual(r.status, 200);
+        assert.strictEqual(r.body.ok, true);
+        assert.strictEqual(r.body.result, '源文本');
+    } finally {
+        srv.close();
+    }
+});
+
+test('wrapForEvalScriptTransport returns an ASCII-only envelope for localized results', () => {
+    delete require.cache[require.resolve('./server')];
+    const server = require('./server');
+    const wrapped = server.wrapForEvalScriptTransport('"源文本"');
+
+    assert.ok(/^[\x00-\x7f]*$/.test(wrapped), 'wrapper source must be ASCII-only');
+    assert.match(wrapped, /\\u6e90\\u6587\\u672c/);
+
+    const payload = eval(wrapped); // eslint-disable-line no-eval
+    assert.ok(/^[\x00-\x7f]*$/.test(payload), 'evalScript payload must be ASCII-only');
+    assert.strictEqual(decodeTransportEnvelope(payload), '源文本');
+});
+
+test('wrapForEvalScriptTransport returns an error envelope for thrown ExtendScript errors', () => {
+    delete require.cache[require.resolve('./server')];
+    const server = require('./server');
+    const wrapped = server.wrapForEvalScriptTransport('throw new Error("boom")');
+
+    assert.ok(/^[\x00-\x7f]*$/.test(wrapped), 'wrapper source must be ASCII-only');
+    const payload = eval(wrapped); // eslint-disable-line no-eval
+    assert.ok(/^[\x00-\x7f]*$/.test(payload), 'evalScript payload must be ASCII-only');
+    assert.throws(
+        () => server.decodeEvalScriptTransportResult(payload),
+        /ExtendScript error: Error: boom/
+    );
+});
+
+test('/exec reports empty evalScript output as no output', async () => {
+    delete require.cache[require.resolve('./server')];
+    delete require.cache[require.resolve('./jsx-bridge')];
+    const server = require('./server');
+    server.activity._reset();
+    server.setPaused(false);
+    server._setExecToken('known-secret-token');
+    server.setCSInterface({
+        evalScript: function (jsx, cb) { cb(''); },
+    });
+    const app = server.buildApp();
+    const srv = await new Promise((resolve) => {
+        const s = app.listen(0, '127.0.0.1', () => resolve(s));
+    });
+    try {
+        const r = await post(
+            srv.address().port,
+            '/exec',
+            { 'X-AE-MCP-Token': 'known-secret-token' },
+            { code: 'throw new Error("boom")' }
+        );
+        assert.strictEqual(r.status, 200);
+        assert.strictEqual(r.body.ok, false);
+        assert.match(r.body.error, /no output/);
+    } finally {
+        srv.close();
+    }
+});
+
+test('/exec reports decoded ExtendScript transport errors', async () => {
+    delete require.cache[require.resolve('./server')];
+    delete require.cache[require.resolve('./jsx-bridge')];
+    const server = require('./server');
+    server.activity._reset();
+    server.setPaused(false);
+    server._setExecToken('known-secret-token');
+    server.setCSInterface({
+        evalScript: function (jsx, cb) { cb('{"ok":false,"error":"\\u7206\\u70b8"}'); },
+    });
+    const app = server.buildApp();
+    const srv = await new Promise((resolve) => {
+        const s = app.listen(0, '127.0.0.1', () => resolve(s));
+    });
+    try {
+        const r = await post(
+            srv.address().port,
+            '/exec',
+            { 'X-AE-MCP-Token': 'known-secret-token' },
+            { code: 'throw new Error("boom")' }
+        );
+        assert.strictEqual(r.status, 200);
+        assert.strictEqual(r.body.ok, false);
+        assert.match(r.body.error, /爆炸/);
     } finally {
         srv.close();
     }
