@@ -113,6 +113,15 @@ export function useWizardWiring({ extRoot, lang, claudeStatus } = {}) {
     dispatch({ type: 'detect-result', id: 'login', ok: false });
   }, []);
 
+  // 进入向导即自动检测全部工具行，免去逐行手点复检；login 行由下方
+  // claudeStatus effect 驱动。ref 防依赖变化下的重复触发。
+  const bootDetectRef = React.useRef(false);
+  React.useEffect(() => {
+    if (bootDetectRef.current) return;
+    bootDetectRef.current = true;
+    ['uv', 'aeMcp', 'node', 'claude'].forEach((id) => { detect(id); });
+  }, [detect]);
+
   React.useEffect(() => {
     if (claudeStatus) {
       const ok = isLoginOk(claudeStatus);

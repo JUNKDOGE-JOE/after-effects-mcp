@@ -15,15 +15,17 @@ function getCepRequire() {
   throw new Error('CEP Node require is unavailable');
 }
 
+// claude is an npm .cmd shim: execFile cannot launch .cmd without a shell on
+// Windows (uv/node are real .exe), so its probe runs with shell: true.
 const DETECT = {
   uv: { file: 'uv', args: ['--version'] },
   node: { file: 'node', args: ['--version'] },
-  claude: { file: 'claude', args: ['--version'] },
+  claude: { file: 'claude', args: ['--version'], shell: true },
 };
 
-function execVersion(execFile, file, args, env) {
+function execVersion(execFile, file, args, env, shell) {
   return new Promise((resolve) => {
-    execFile(file, args, { windowsHide: true, env }, (err, stdout, stderr) => {
+    execFile(file, args, { windowsHide: true, env, shell: shell === true }, (err, stdout, stderr) => {
       if (err) return resolve({ ok: false });
       resolve({ ok: true, version: String(stdout || stderr || '').trim() });
     });
@@ -59,7 +61,7 @@ export async function detectTool(id, { execFileImpl, env, fsImpl } = {}) {
   if (id === 'aeMcp') return detectAeMcp({ execFileImpl, env, fsImpl });
   const spec = DETECT[id];
   const execFile = execFileImpl || getCepRequire()('child_process').execFile;
-  return execVersion(execFile, spec.file, spec.args, env);
+  return execVersion(execFile, spec.file, spec.args, env, spec.shell);
 }
 
 const REPO = 'https://github.com/JUNKDOGE-JOE/after-effects-mcp';

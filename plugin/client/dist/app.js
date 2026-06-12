@@ -12383,11 +12383,11 @@
   var DETECT = {
     uv: { file: "uv", args: ["--version"] },
     node: { file: "node", args: ["--version"] },
-    claude: { file: "claude", args: ["--version"] }
+    claude: { file: "claude", args: ["--version"], shell: true }
   };
-  function execVersion(execFile, file, args, env) {
+  function execVersion(execFile, file, args, env, shell) {
     return new Promise((resolve) => {
-      execFile(file, args, { windowsHide: true, env }, (err, stdout, stderr) => {
+      execFile(file, args, { windowsHide: true, env, shell: shell === true }, (err, stdout, stderr) => {
         if (err) return resolve({ ok: false });
         resolve({ ok: true, version: String(stdout || stderr || "").trim() });
       });
@@ -12416,7 +12416,7 @@
     if (id === "aeMcp") return detectAeMcp({ execFileImpl, env, fsImpl });
     const spec = DETECT[id];
     const execFile = execFileImpl || getCepRequire5()("child_process").execFile;
-    return execVersion(execFile, spec.file, spec.args, env);
+    return execVersion(execFile, spec.file, spec.args, env, spec.shell);
   }
   var REPO = "https://github.com/JUNKDOGE-JOE/after-effects-mcp";
   function buildInstallCommands({ panelVersion, repoRoot }) {
@@ -12549,6 +12549,14 @@
       openLoginTerminal({ tool: "claude" });
       dispatch({ type: "detect-result", id: "login", ok: false });
     }, []);
+    const bootDetectRef = import_react39.default.useRef(false);
+    import_react39.default.useEffect(() => {
+      if (bootDetectRef.current) return;
+      bootDetectRef.current = true;
+      ["uv", "aeMcp", "node", "claude"].forEach((id) => {
+        detect(id);
+      });
+    }, [detect]);
     import_react39.default.useEffect(() => {
       if (claudeStatus) {
         const ok = isLoginOk(claudeStatus);
