@@ -74,7 +74,10 @@ async function flush() {
 }
 
 function respond(proc, request, result = {}) {
-  proc.pushStdout({ jsonrpc: '2.0', id: request.id, result });
+  // Real app-server responses omit the jsonrpc envelope (verified live) -
+  // fixtures match reality; notification fixtures keep the envelope so the
+  // tolerant parser stays covered for both shapes.
+  proc.pushStdout({ id: request.id, result });
 }
 
 async function startTurn(backend, proc, text = 'hello') {
