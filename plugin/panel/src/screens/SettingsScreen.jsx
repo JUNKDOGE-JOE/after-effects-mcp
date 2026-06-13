@@ -9,12 +9,18 @@ import { Input } from '../components/forms/Input';
 import { Select } from '../components/forms/Select';
 import { Field } from '../components/forms/Field';
 import { Toast } from '../components/shell/Toast';
+import { EXTERNAL_CLIENTS, mcpConfigFor } from '../cep/externalClients';
 import { copyText } from '../lib/clipboard';
 
 const S = {
   zh: {
     ai: 'AI 服务',
     conn: '连接',
+    externalClients: '外接客户端',
+    externalClientsCap: '给常见 MCP 客户端复制配置；文档型框架按其接入方式配置。',
+    mcpStdio: 'MCP stdio',
+    mcpDoc: '文档接入',
+    openDocs: '打开文档',
     sec: '安全',
     gen: '通用',
     about: '关于',
@@ -75,6 +81,11 @@ const S = {
   en: {
     ai: 'AI service',
     conn: 'Connection',
+    externalClients: 'External clients',
+    externalClientsCap: 'Copy config for common MCP clients; configure documentation-driven frameworks with their own flow.',
+    mcpStdio: 'MCP stdio',
+    mcpDoc: 'Docs',
+    openDocs: 'Open docs',
     sec: 'Security',
     gen: 'General',
     about: 'About',
@@ -156,6 +167,30 @@ function ClientRow({ name, lastActive, blocked, onBlock, blockLabel }) {
       <span style={{ font: '400 10px/1 var(--font-ui)', color: 'var(--text-tertiary)' }}>{blockLabel}</span>
       <Switch checked={blocked} onChange={onBlock} />
     </div>
+  );
+}
+
+function ExternalClientRow({ client, t, configText, copied, onCopy }) {
+  const isStdio = client.kind === 'mcp-stdio';
+  return (
+    <details style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-well)', padding: '7px 8px' }}>
+      <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', font: '500 12px/1.35 var(--font-ui)', color: 'var(--text-primary)' }}>{client.name}</span>
+          <span style={{ display: 'block', font: '400 10px/1.35 var(--font-ui)', color: 'var(--text-tertiary)' }}>{isStdio ? t.mcpStdio : t.mcpDoc}</span>
+        </span>
+        {isStdio ? <Button variant="secondary" size="sm" icon="copy" onClick={(e) => { e.preventDefault(); onCopy(); }}>{copied ? t.copied : t.copy}</Button> : null}
+      </summary>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+        {client.installHint ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-secondary)' }}>{client.installHint}</div> : null}
+        {client.loginHint ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>{client.loginHint}</div> : null}
+        {isStdio ? (
+          <pre style={{ margin: 0, maxHeight: 128, overflow: 'auto', padding: 8, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', background: 'var(--gray-0)', color: 'var(--text-secondary)', font: '400 10px/1.4 var(--font-mono)', whiteSpace: 'pre' }}>{configText}</pre>
+        ) : null}
+        {client.networkNote ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>{client.networkNote}</div> : null}
+        <a href={client.docsUrl} target="_blank" rel="noreferrer" style={{ font: '500 11px/1.35 var(--font-ui)', color: 'var(--accent)' }}>{t.openDocs}</a>
+      </div>
+    </details>
   );
 }
 
@@ -360,6 +395,22 @@ export function SettingsScreen({
             <Button variant="secondary" icon="copy" onClick={() => copy('mcp', mcpConfig)}>{t.copy}</Button>
           </div>
         </Field>
+      </Section>
+
+      <Section title={t.externalClients} caption={t.externalClientsCap}>
+        {EXTERNAL_CLIENTS.map((externalClient) => {
+          const configText = JSON.stringify(mcpConfigFor(externalClient, Number(draftPort) || port || 11488), null, 2);
+          return (
+            <ExternalClientRow
+              key={externalClient.id}
+              client={externalClient}
+              t={t}
+              configText={configText}
+              copied={copied === externalClient.id}
+              onCopy={() => copy(externalClient.id, configText)}
+            />
+          );
+        })}
       </Section>
 
       <Section title={t.sec}>

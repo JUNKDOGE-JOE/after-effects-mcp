@@ -1,0 +1,53 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { EXTERNAL_CLIENTS, mcpConfigFor } from '../src/cep/externalClients.js';
+
+test('external client registry covers seeded clients with required fields', () => {
+  const expectedIds = [
+    'claude-desktop',
+    'claude-code',
+    'cursor',
+    'openclaw',
+    'astrbot',
+    'gemini-antigravity',
+    'opencode-external',
+  ];
+  const ids = EXTERNAL_CLIENTS.map((client) => client.id);
+
+  for (const id of expectedIds) {
+    assert.ok(ids.includes(id), `missing ${id}`);
+  }
+
+  for (const client of EXTERNAL_CLIENTS) {
+    assert.equal(typeof client.name, 'string', `${client.id} name`);
+    assert.ok(client.name.length > 0, `${client.id} name is empty`);
+    assert.ok(['mcp-stdio', 'mcp-doc'].includes(client.kind), `${client.id} kind`);
+    assert.equal(typeof client.installHint, 'string', `${client.id} installHint`);
+    assert.ok(client.installHint.length > 0, `${client.id} installHint is empty`);
+    assert.equal(typeof client.loginHint, 'string', `${client.id} loginHint`);
+    assert.ok(client.loginHint.length > 0, `${client.id} loginHint is empty`);
+    assert.equal(typeof client.docsUrl, 'string', `${client.id} docsUrl`);
+    assert.ok(client.docsUrl.length > 0, `${client.id} docsUrl is empty`);
+  }
+});
+
+test('IM bot clients are documentation-driven and warn about localhost reachability', () => {
+  for (const id of ['openclaw', 'astrbot']) {
+    const client = EXTERNAL_CLIENTS.find((item) => item.id === id);
+    assert.equal(client.kind, 'mcp-doc');
+    assert.match(client.networkNote, /127\.0\.0\.1:11488/);
+    assert.match(client.networkNote, /(同机|same machine)/i);
+  }
+});
+
+test('mcpConfigFor returns ae-mcp stdio config with panel plugin URL', () => {
+  const config = mcpConfigFor({ kind: 'mcp-stdio' }, 11488);
+
+  assert.deepEqual(config.mcpServers.ae, {
+    command: 'ae-mcp',
+    env: {
+      AE_MCP_BACKEND: 'ae-mcp',
+      AE_MCP_PLUGIN_URL: 'http://127.0.0.1:11488',
+    },
+  });
+});
