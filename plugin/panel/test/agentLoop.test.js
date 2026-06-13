@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createSseParser } from '../src/lib/sse.js';
 import { createAgentLoop } from '../src/lib/agentLoop.js';
+import { buildSystemPrompt } from '../src/lib/anthropic.js';
 
 function sseFrame(event, data) {
   return 'event: ' + event + '\n' + 'data: ' + JSON.stringify(data) + '\n\n';
@@ -298,4 +299,26 @@ test('createAgentLoop passes effort and fast options to Anthropic', async () => 
 
   assert.equal(calls[0].effort, 'low');
   assert.equal(calls[0].fast, true);
+});
+
+test('createAgentLoop appends ae-mcp server instructions to the system prompt', async () => {
+  const calls = [];
+  const mcp = { ...makeMcp(), getServerInstructions: () => 'GUARDRAILS_X' };
+  const loop = makeLoop({ anthropic: anthropicFromSse([textTurn('ok')], calls), mcp });
+
+  await loop.sendUser('hi');
+
+  // Both the static BYOK prompt and the server guardrails must be present.
+  assert.ok(calls[0].system.includes('GUARDRAILS_X'));
+  assert.ok(calls[0].system.includes(buildSystemPrompt('zh')));
+});
+
+test('createAgentLoop omits server instructions when the mcp fake lacks the method', async () => {
+  const calls = [];
+  const loop = makeLoop({ anthropic: anthropicFromSse([textTurn('ok')], calls) });
+
+  await loop.sendUser('hi');
+
+  // Default-safe: a fake without getServerInstructions yields the bare prompt.
+  assert.equal(calls[0].system, buildSystemPrompt('zh'));
 });

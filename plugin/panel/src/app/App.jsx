@@ -31,6 +31,11 @@ import { useWizardWiring } from './wizardWiring';
 import { runDiagnostics } from '../cep/diagnostics';
 import { copyText } from '../lib/clipboard';
 import { createHostController, loadSavedPort, savePort, DEFAULT_PORT, buildMcpConfig, isValidPort } from '../cep/hostBridge';
+import { loadExpertGuidance, saveExpertGuidance } from '../lib/expertGuidance.js';
+
+// Re-export so app code has a single import surface; the helpers themselves live
+// in lib/ so the test suite (node --test, which cannot parse JSX) can import them.
+export { loadExpertGuidance, saveExpertGuidance };
 
 const T = {
   zh: {
@@ -229,6 +234,7 @@ function Shell({ cs }) {
   const [sessionFast, setSessionFast] = React.useState(null);
   const [permissionMode, setPermissionMode] = React.useState(() => readPref('ae_mcp_perm_mode', 'manual'));
   const [backendPref, setBackendPref] = React.useState(() => readPref('ae_mcp_backend', 'subscription'));
+  const [expertGuidance, setExpertGuidance] = React.useState(() => loadExpertGuidance(window.localStorage));
   const [probe, setProbe] = React.useState(null);
   const [codexProbe, setCodexProbe] = React.useState(null);
   const [codexModels, setCodexModels] = React.useState(() => readCachedCodexModels(window.localStorage));
@@ -275,7 +281,10 @@ function Shell({ cs }) {
   };
   const extRoot = cs && cs.getSystemPath ? cs.getSystemPath('extension') : '';
   const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
-  const mcp = React.useMemo(() => createMcpClient({ extRoot }), [extRoot]);
+  const mcp = React.useMemo(() => createMcpClient({
+    extRoot,
+    getExpertGuidance: () => loadExpertGuidance(window.localStorage),
+  }), [extRoot]);
   const handleChatEvent = React.useCallback((evt) => {
     if (evt.type === 'turn-start') setChatStreaming(true);
     if (evt.type === 'thinking') setThinkingActive(!!evt.active);
@@ -325,6 +334,8 @@ function Shell({ cs }) {
     getEffort: () => runtimeRef.current.effort,
     getFast: () => runtimeRef.current.fast,
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
+    getExpertGuidance: () => loadExpertGuidance(window.localStorage),
+    getServerInstructions: () => mcp.getServerInstructions(),
     lang,
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
@@ -335,6 +346,7 @@ function Shell({ cs }) {
     getModel: () => runtimeRef.current.model,
     getPermissionMode: () => runtimeRef.current.permissionMode,
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
+    getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
   }), [extRoot, mcp, handleChatEvent]);
@@ -537,7 +549,7 @@ function Shell({ cs }) {
     setWizardDone(true);
   };
 
-  const mcpConfigStr = JSON.stringify(buildMcpConfig(status.port), null, 2);
+  const mcpConfigStr = JSON.stringify(buildMcpConfig(status.port, expertGuidance), null, 2);
   const claudeStatus = probe === null ? { state: 'checking' }
     : probe.nodeOk === false ? { state: 'no-node', detail: probe.detail }
     : probe.loggedIn === false ? { state: 'not-logged-in', detail: probe.detail }
@@ -670,6 +682,8 @@ function Shell({ cs }) {
             onModelChange={(m) => { setModel(m); writePref('ae_mcp_model', m); }}
             backend={backendPref}
             onBackendChange={(m) => { setBackendPref(m); writePref('ae_mcp_backend', m); }}
+            expertGuidance={expertGuidance}
+            onExpertGuidance={(v) => { setExpertGuidance(v); saveExpertGuidance(window.localStorage, v); }}
             claudeStatus={claudeStatus}
             onRecheckClaude={runClaudeProbe}
             codexStatus={codexStatus}

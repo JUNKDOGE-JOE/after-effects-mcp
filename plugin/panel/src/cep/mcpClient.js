@@ -1,4 +1,5 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
+import { expertGuidanceEnv } from './externalClients.js';
 
 const DEFAULT_TIMEOUT_MS = 30000;
 const MCP_PROTOCOL_VERSION = '2025-06-18';
@@ -162,12 +163,14 @@ export function createMcpClient({
   onCrash,
   extRoot,
   repoRoot,
+  getExpertGuidance = () => true,
   packageVersion = PANEL_VERSION,
   retryDelays = [1000, 2000, 4000],
 } = {}) {
   let proc = null;
   let rpc = null;
   let tools = null;
+  let serverInstructions = '';
   let status = 'idle';
   let startPromise = null;
   let retryCount = 0;
@@ -198,7 +201,10 @@ export function createMcpClient({
     startPromise = (async () => {
       const commandSpec = await resolveCommand({ extRoot, repoRoot });
       const spawn = getSpawn();
-      const spawnEnv = Object.assign({}, getCepEnv(), env || {}, { AE_MCP_BACKEND: 'ae-mcp' });
+      const spawnEnv = Object.assign({}, getCepEnv(), env || {}, {
+        AE_MCP_BACKEND: 'ae-mcp',
+        ...expertGuidanceEnv(getExpertGuidance()),
+      });
       proc = spawn(commandSpec.command, commandSpec.args || [], {
         stdio: 'pipe',
         windowsHide: true,
@@ -212,11 +218,12 @@ export function createMcpClient({
       proc.on('error', (err) => handleCrash(err));
       if (proc.stderr && proc.stderr.on) proc.stderr.on('data', () => {});
 
-      await rpc.request('initialize', {
+      const initResult = await rpc.request('initialize', {
         protocolVersion: MCP_PROTOCOL_VERSION,
         clientInfo: { name: 'panel-chat', version: packageVersion },
         capabilities: {},
       });
+      serverInstructions = (initResult && initResult.instructions) || '';
       rpc.notify('notifications/initialized');
       const listed = await rpc.request('tools/list', {});
       tools = listed && Array.isArray(listed.tools) ? listed.tools : [];
@@ -291,5 +298,5 @@ export function createMcpClient({
     startPromise = null;
   }
 
-  return { start, listTools, callTool, stop, state: currentState };
+  return { start, listTools, callTool, stop, state: currentState, getServerInstructions: () => serverInstructions };
 }

@@ -433,6 +433,62 @@ test('createCodexBackend reset kills the app-server process and clears thread st
   await second;
 });
 
+test('createCodexBackend prepends server instructions as a preamble on the first turn only', async () => {
+  const { backend, spawned } = makeBackend({ getServerInstructions: () => 'CODEX_PREAMBLE' });
+  const { pending, proc } = await startTurn(backend, spawned, 'first message');
+
+  const firstTurn = parseWrites(proc).at(-1);
+  assert.equal(firstTurn.method, 'turn/start');
+  const firstText = firstTurn.params.input[0].text;
+  assert.ok(firstText.startsWith('CODEX_PREAMBLE'));
+  assert.ok(firstText.includes('first message'));
+
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+
+  const second = backend.sendUser('second message');
+  await flush();
+  const secondTurn = parseWrites(proc).at(-1);
+  assert.equal(secondTurn.method, 'turn/start');
+  assert.equal(secondTurn.params.threadId, 'thread_1');
+  // The preamble lives in thread history; the second turn must not repeat it.
+  assert.equal(secondTurn.params.input[0].text, 'second message');
+  assert.equal(secondTurn.params.input[0].text.includes('CODEX_PREAMBLE'), false);
+  respond(proc, secondTurn, {});
+  await flush();
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await second;
+});
+
+test('createCodexBackend re-sends the preamble after a thread reset', async () => {
+  const { backend, spawned } = makeBackend({ getServerInstructions: () => 'CODEX_PREAMBLE' });
+  const { pending, proc } = await startTurn(backend, spawned, 'before reset');
+  assert.ok(parseWrites(proc).at(-1).params.input[0].text.startsWith('CODEX_PREAMBLE'));
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+
+  backend.reset();
+  await pending;
+
+  // A brand-new thread (after reset) spawns a fresh process and must re-send
+  // the preamble. Drive the new proc manually since startTurn targets procs[0].
+  const second = backend.sendUser('after reset');
+  await flush();
+  const proc2 = spawned.procs[1];
+  respond(proc2, parseWrites(proc2)[0], {});
+  await flush();
+  respond(proc2, parseWrites(proc2)[1], { threadId: 'thread_2' });
+  await flush();
+  const turn = parseWrites(proc2)[2];
+  assert.equal(turn.method, 'turn/start');
+  assert.ok(turn.params.input[0].text.startsWith('CODEX_PREAMBLE'));
+  assert.ok(turn.params.input[0].text.includes('after reset'));
+  respond(proc2, turn, {});
+  await flush();
+  proc2.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await second;
+});
+
 test('createCodexBackend probeAccount initializes and reads account plus model list', async () => {
   const { backend, spawned } = makeBackend();
   const probe = backend.probeAccount();

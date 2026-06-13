@@ -1,4 +1,5 @@
 import { createSseParser } from '../lib/sse.js';
+import { expertGuidanceEnv } from './externalClients.js';
 
 const MCP_TIMEOUT_MS = 120000;
 const READY_TIMEOUT_MS = 30000;
@@ -169,6 +170,7 @@ export function createOpenCodeBackend({
   getPermissionMode,
   getMcpSpec,
   getToolMeta,
+  getExpertGuidance = () => true,
   onEvent,
   env,
 } = {}) {
@@ -276,6 +278,7 @@ export function createOpenCodeBackend({
           timeout: MCP_TIMEOUT_MS,
           environment: Object.assign({}, (mcpSpec && mcpSpec.env) || {}, {
             AE_MCP_BACKEND: 'ae-mcp',
+            ...expertGuidanceEnv(getExpertGuidance()),
           }),
         },
       },
