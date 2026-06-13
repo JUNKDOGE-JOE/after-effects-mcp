@@ -78,7 +78,9 @@ function prefixedToolName(raw) {
   const text = String(raw || '');
   if (!text) return '';
   if (text.startsWith('mcp__')) return text;
-  return 'mcp__ae__' + text.replace(/^ae__/, '').replace(/^mcp__ae__/, '');
+  // opencode names an MCP tool "<server>_<tool>" — ae's ae_ping becomes
+  // "ae_ae_ping". Strip the single "ae_" server prefix once -> "ae_ping".
+  return 'mcp__ae__' + text.replace(/^ae_/, '');
 }
 
 function eventType(evt) {
@@ -445,73 +447,79 @@ export function createOpenCodeBackend({
     });
   }
 
-  function emitToolStart(evt) {
-    const toolUseId = eventToolId(evt);
-    if (!toolUseId || startedTools.has(toolUseId)) return;
-    startedTools.add(toolUseId);
-    emit({ type: 'tool-start', toolUseId, name: eventToolName(evt), input: eventInput(evt) });
-  }
-
-  function handleOpenCodeEvent(evt) {
-    const type = eventType(evt);
-    if (!type) return;
-    const evtSessionId = eventSessionId(evt);
-    if (sessionId && evtSessionId && evtSessionId !== sessionId) return;
-
-    if (type === 'EventSessionNextPrompted' || type === 'EventSessionNextPromptAdmitted') {
-      if (!turnStarted) {
-        turnStarted = true;
-        emit({ type: 'turn-start' });
-      }
-      return;
-    }
-    if (type === 'EventSessionNextTextDelta') {
-      emit({ type: 'thinking', active: false });
-      const text = evt.text !== undefined ? evt.text : evt.delta !== undefined ? evt.delta : evt.content;
-      if (text) {
-        activeAssistantText += String(text);
-        emit({ type: 'text-delta', text: String(text) });
-      }
-      return;
-    }
-    if (type === 'EventSessionNextReasoningStarted') {
-      emit({ type: 'thinking', active: true });
-      return;
-    }
-    if (type === 'EventSessionNextReasoningEnded') {
-      emit({ type: 'thinking', active: false });
-      return;
-    }
-    if (type === 'EventSessionNextToolInputStarted' || type === 'EventSessionNextToolInputEnded' || type === 'EventSessionNextToolCalled') {
-      emitToolStart(evt);
-      return;
-    }
-    if (type === 'EventSessionNextToolSuccess' || type === 'EventSessionNextToolFailed') {
+  function handleToolPart(part) {
+    const toolUseId = String(part.callID || part.id || '');
+    if (!toolUseId) return;
+    const name = prefixedToolName(part.tool || part.name);
+    const state = part.state || {};
+    const status = state.status;
+    if (status === 'completed' || status === 'error') {
+      const ms = state.time && Number.isFinite(state.time.start) && Number.isFinite(state.time.end)
+        ? state.time.end - state.time.start
+        : undefined;
       emit({
         type: 'tool-result',
-        toolUseId: eventToolId(evt),
-        name: eventToolName(evt),
-        ok: type === 'EventSessionNextToolSuccess',
-        text: eventOutputText(evt),
-        durationMs: evt.durationMs || evt.duration,
+        toolUseId,
+        name,
+        ok: status === 'completed',
+        text: typeof state.output === 'string' ? state.output : eventOutputText(state),
+        durationMs: ms,
       });
       return;
     }
-    if (type === 'EventSessionIdle') {
-      drainApprovals();
-      emit({ type: 'turn-end', stopReason: 'end_turn' });
-      transcript.push({ role: 'assistant', text: activeAssistantText });
-      finishActive();
+    // pending / running -> tool-start (once)
+    if (startedTools.has(toolUseId)) return;
+    startedTools.add(toolUseId);
+    emit({ type: 'tool-start', toolUseId, name, input: state.input || {} });
+  }
+
+  // Real opencode SSE wire model (live-verified): every event is
+  // { type, properties } with dotted lowercase types. Text/tool/reasoning ride
+  // message.part.*; turn lifecycle rides session.status (busy/idle).
+  function handleOpenCodeEvent(evt) {
+    const type = eventType(evt);
+    if (!type) return;
+    const p = (evt && evt.properties) || {};
+    if (sessionId && p.sessionID && p.sessionID !== sessionId) return;
+
+    if (type === 'session.status') {
+      const st = (p.status && p.status.type) || '';
+      if (st === 'busy') {
+        if (!turnStarted) { turnStarted = true; emit({ type: 'turn-start' }); }
+      } else if (st === 'idle') {
+        drainApprovals();
+        emit({ type: 'turn-end', stopReason: 'end_turn' });
+        transcript.push({ role: 'assistant', text: activeAssistantText });
+        finishActive();
+      }
       return;
     }
-    if (type === 'EventSessionError') {
-      const error = evt.error || evt;
+    if (type === 'message.part.delta') {
+      if (p.field === 'text') {
+        emit({ type: 'thinking', active: false });
+        const text = p.delta;
+        if (text) { activeAssistantText += String(text); emit({ type: 'text-delta', text: String(text) }); }
+      } else if (p.field === 'reasoning') {
+        emit({ type: 'thinking', active: true });
+      }
+      return;
+    }
+    if (type === 'message.part.updated') {
+      const part = p.part || {};
+      if (part.type === 'tool') handleToolPart(part);
+      else if (part.type === 'reasoning') emit({ type: 'thinking', active: true });
+      return;
+    }
+    if (type === 'session.error') {
+      const error = p.error || p;
       emit({ type: 'error', kind: error.kind || 'mcp', message: error.message || String(error || 'OpenCode session error') });
       finishActive();
       return;
     }
-    if (type === 'EventPermissionAsked' || type === 'EventPermissionV2Asked') {
-      handlePermission(evt);
+    // Permission ask: exact wire type unverified (ae_ping is read-only so it
+    // never fired in acceptance); match defensively on a permission-ish type.
+    if (/permission/i.test(String(type)) && /ask/i.test(String(type))) {
+      handlePermission({ ...p, properties: p });
     }
   }
 
