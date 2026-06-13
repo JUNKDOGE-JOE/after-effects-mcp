@@ -352,10 +352,14 @@ export function SettingsScreen({
     <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
       <Section title={t.ai}>
         <Field label={t.backend}>
+          {/* OpenCode embedded backend is implemented (openCodeBackend.js) but
+              NOT exposed for v0.7.0: its approval gating is unverified (opencode
+              permission-rule DSL + a live write-turn needed). Re-add the option
+              in v0.7.1 after gating is verified. OpenCode is available now as an
+              external client (see the External clients section). */}
           <Segmented full value={backend} onChange={onBackendChange} options={[
             { value: 'subscription', label: t.backendSub },
             { value: 'codex', label: t.backendCodex },
-            { value: 'opencode', label: t.backendOpenCode },
             { value: 'byok', label: t.backendByok },
           ]} />
         </Field>

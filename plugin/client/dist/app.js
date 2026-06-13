@@ -9092,7 +9092,6 @@
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.backend, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Segmented, { full: true, value: backend, onChange: onBackendChange, options: [
           { value: "subscription", label: t.backendSub },
           { value: "codex", label: t.backendCodex },
-          { value: "opencode", label: t.backendOpenCode },
           { value: "byok", label: t.backendByok }
         ] }) }),
         backend === "subscription" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.backendSub, caption: claudeState === "not-logged-in" ? t.claudeLoginCap : claudeStatus && claudeStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
