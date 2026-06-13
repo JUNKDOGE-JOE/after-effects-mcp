@@ -6,12 +6,14 @@ import {
   claudeSubDescriptor,
   byokStaticDescriptor,
   codexStaticDescriptor,
+  openCodeStaticDescriptor,
 } from '../../lib/backendCapabilities.js';
 
 export const BACKENDS = {
   subscription: { id: 'subscription', baseDescriptor: claudeSubDescriptor },
   byok: { id: 'byok', baseDescriptor: byokStaticDescriptor },
   codex: { id: 'codex', baseDescriptor: codexStaticDescriptor },
+  opencode: { id: 'opencode', baseDescriptor: openCodeStaticDescriptor },
 };
 
 // Real (conversation-bearing) backend ids — drives shouldResetOnBackendChange.
