@@ -18,7 +18,8 @@ import { createClaudeAgentBackend, resolveSystemNode } from '../cep/claudeAgentB
 import { createCodexBackend } from '../cep/codexBackend';
 import { reduceEvent } from '../lib/chatEntries';
 import { DEFAULT_MODEL, FALLBACK_MODEL } from '../lib/anthropic';
-import { claudeSubDescriptor, byokStaticDescriptor, mergeByokModels, codexStaticDescriptor, codexDescriptorFromModels } from '../lib/backendCapabilities';
+import { byokStaticDescriptor, mergeByokModels, codexDescriptorFromModels } from '../lib/backendCapabilities';
+import { baseDescriptorFor } from '../cep/backends/index.js';
 import { cachedByokModels } from '../cep/modelsApi';
 import { costBadge } from '../lib/composerOptions';
 import { useActivity } from '../cep/useActivity';
@@ -206,11 +207,7 @@ function Shell({ cs }) {
   const [chatEntries, setChatEntries] = React.useState([]);
   const [chatStreaming, setChatStreaming] = React.useState(false);
   const [thinkingActive, setThinkingActive] = React.useState(false);
-  const baseDescriptor = React.useMemo(() => {
-    if (backendPref === 'byok') return byokStaticDescriptor();
-    if (backendPref === 'codex') return codexStaticDescriptor();
-    return claudeSubDescriptor();
-  }, [backendPref]);
+  const baseDescriptor = React.useMemo(() => baseDescriptorFor(backendPref), [backendPref]);
   const [descriptor, setDescriptor] = React.useState(() => baseDescriptor);
   React.useEffect(() => {
     let alive = true;
@@ -300,7 +297,9 @@ function Shell({ cs }) {
   }), [extRoot, mcp, handleChatEvent]);
 
   const effective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey, codexProbe });
-  const activeBackend = effective.backend === 'subscription' ? claudeBackend : effective.backend === 'codex' ? codexBackend : byokLoop;
+  // Map real-backend id -> instance (registry leaves a slot for OpenCode/F2).
+  const backendInstances = { subscription: claudeBackend, byok: byokLoop, codex: codexBackend };
+  const activeBackend = backendInstances[effective.backend] || byokLoop;
   const activeBackendRef = React.useRef(null);
 
   const runClaudeProbe = React.useCallback(() => {
