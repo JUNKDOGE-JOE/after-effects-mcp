@@ -137,3 +137,66 @@ export function codexDescriptorFromModels(modelListResult) {
     perTurnModelSwitch: true,
   };
 }
+
+export function openCodeStaticDescriptor() {
+  const models = [
+    { id: 'north-mini-code-free', label: 'North Mini Code Free', effortLevels: [], cost: 1, adaptive: false },
+  ];
+  return {
+    id: 'opencode',
+    label: 'OpenCode',
+    models,
+    defaultModelId: 'north-mini-code-free',
+    defaultEffort: null,
+    supportsFast: () => false,
+    approvalModes: APPROVAL_MODES,
+    perTurnModelSwitch: true,
+  };
+}
+
+function providerEntries(providerResult) {
+  if (Array.isArray(providerResult)) return providerResult.map((p) => [p && (p.id || p.providerID || p.providerId || p.name), p]);
+  if (providerResult && Array.isArray(providerResult.providers)) {
+    return providerResult.providers.map((p) => [p && (p.id || p.providerID || p.providerId || p.name), p]);
+  }
+  if (providerResult && typeof providerResult === 'object') return Object.entries(providerResult);
+  return [];
+}
+
+function modelEntries(provider) {
+  const models = provider && provider.models;
+  if (Array.isArray(models)) return models.map((m) => [m && (m.id || m.modelID || m.modelId || m.name), m]);
+  if (models && typeof models === 'object') return Object.entries(models);
+  return [];
+}
+
+export function openCodeDescriptorFromModels(providerResult) {
+  const models = [];
+  for (const [providerKey, provider] of providerEntries(providerResult)) {
+    const providerID = String((provider && (provider.id || provider.providerID || provider.providerId)) || providerKey || 'opencode');
+    for (const [modelKey, raw] of modelEntries(provider)) {
+      const modelId = String((raw && (raw.id || raw.modelID || raw.modelId)) || modelKey || '');
+      if (!modelId) continue;
+      models.push({
+        id: providerID === 'opencode' ? modelId : providerID + '/' + modelId,
+        label: (raw && (raw.name || raw.displayName || raw.display_name)) || modelId,
+        effortLevels: [],
+        cost: String(modelId).endsWith('-free') ? 1 : 2,
+        adaptive: false,
+      });
+    }
+  }
+
+  if (!models.length) return openCodeStaticDescriptor();
+  const defaultModel = models.find((m) => m.id === 'north-mini-code-free') || models.find((m) => String(m.id).endsWith('/north-mini-code-free')) || models[0];
+  return {
+    id: 'opencode',
+    label: 'OpenCode',
+    models,
+    defaultModelId: defaultModel.id,
+    defaultEffort: null,
+    supportsFast: () => false,
+    approvalModes: APPROVAL_MODES,
+    perTurnModelSwitch: true,
+  };
+}

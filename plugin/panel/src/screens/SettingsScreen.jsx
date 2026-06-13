@@ -28,6 +28,7 @@ const S = {
     backendSub: 'Claude',
     backendByok: 'BYOK',
     backendCodex: 'Codex',
+    backendOpenCode: 'OpenCode',
     claudeReady: '已登录 ✓',
     claudeNotLoggedIn: '未登录',
     claudeChecking: '检测中…',
@@ -40,6 +41,12 @@ const S = {
     codexChecking: '检测中…',
     codexLoginCap: '在终端完成 codex 登录，然后点「重新检测」',
     recheckCodex: '重新检测',
+    openCodeSub: 'OpenCode',
+    openCodeReady: '已登录 ✓',
+    openCodeNotLoggedIn: '未登录 OpenCode',
+    openCodeChecking: '检测中…',
+    openCodeLoginCap: '在终端完成 opencode 登录，然后点「重新检测」',
+    recheckOpenCode: '重新检测',
     apiKey: 'API Key',
     apiKeyCap: '仅保存在本机，不会上传',
     saveVerify: '保存并验证',
@@ -93,6 +100,7 @@ const S = {
     backendSub: 'Claude',
     backendByok: 'BYOK',
     backendCodex: 'Codex',
+    backendOpenCode: 'OpenCode',
     claudeReady: 'Logged in ✓',
     claudeNotLoggedIn: 'Not logged in',
     claudeChecking: 'Checking…',
@@ -105,6 +113,12 @@ const S = {
     codexChecking: 'Checking…',
     codexLoginCap: 'Sign in with codex in a terminal, then click Re-check',
     recheckCodex: 'Re-check',
+    openCodeSub: 'OpenCode',
+    openCodeReady: 'Logged in ✓',
+    openCodeNotLoggedIn: 'Not logged in to OpenCode',
+    openCodeChecking: 'Checking…',
+    openCodeLoginCap: 'Sign in with opencode in a terminal, then click Re-check',
+    recheckOpenCode: 'Re-check',
     apiKey: 'API Key',
     apiKeyCap: 'Stored locally, never uploaded',
     saveVerify: 'Save and verify',
@@ -264,6 +278,8 @@ export function SettingsScreen({
   onRecheckClaude,
   codexStatus = { state: 'checking' },
   onRecheckCodex,
+  openCodeStatus = { state: 'checking' },
+  onRecheckOpenCode,
 }) {
   const t = S[lang] || S.zh;
   const [key, setKey] = React.useState(apiKey);
@@ -292,6 +308,9 @@ export function SettingsScreen({
   const codexState = (codexStatus && codexStatus.state) || 'checking';
   const codexBadgeStatus = codexState === 'ready' ? 'ok' : codexState === 'not-logged-in' ? 'warn' : 'neutral';
   const codexBadgeText = codexState === 'ready' ? t.codexReady : codexState === 'not-logged-in' ? t.codexNotLoggedIn : t.codexChecking;
+  const openCodeState = (openCodeStatus && openCodeStatus.state) || 'checking';
+  const openCodeBadgeStatus = openCodeState === 'ready' ? 'ok' : openCodeState === 'not-logged-in' ? 'warn' : 'neutral';
+  const openCodeBadgeText = openCodeState === 'ready' ? t.openCodeReady : openCodeState === 'not-logged-in' ? t.openCodeNotLoggedIn : t.openCodeChecking;
   const saveApiKey = () => {
     if (aiBusy) return;
     setAiBusy(true);
@@ -336,6 +355,7 @@ export function SettingsScreen({
           <Segmented full value={backend} onChange={onBackendChange} options={[
             { value: 'subscription', label: t.backendSub },
             { value: 'codex', label: t.backendCodex },
+            { value: 'opencode', label: t.backendOpenCode },
             { value: 'byok', label: t.backendByok },
           ]} />
         </Field>
@@ -353,6 +373,14 @@ export function SettingsScreen({
               <Badge status={codexBadgeStatus}>{codexBadgeText}</Badge>
               {codexState === 'ready' && (codexStatus.email || codexStatus.planType) ? <span style={{ flex: 1, font: '400 11px/1 var(--font-mono)', color: 'var(--text-secondary)' }}>{[codexStatus.email, codexStatus.planType].filter(Boolean).join(' · ')}</span> : <span style={{ flex: 1 }} />}
               <Button variant="secondary" icon="rotate-cw" disabled={codexState === 'checking'} onClick={onRecheckCodex}>{t.recheckCodex}</Button>
+            </div>
+          </Field>
+        ) : backend === 'opencode' ? (
+          <Field label={t.openCodeSub} caption={openCodeState === 'not-logged-in' ? t.openCodeLoginCap : (openCodeStatus && openCodeStatus.detail) || null}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Badge status={openCodeBadgeStatus}>{openCodeBadgeText}</Badge>
+              <span style={{ flex: 1 }} />
+              <Button variant="secondary" icon="rotate-cw" disabled={openCodeState === 'checking'} onClick={onRecheckOpenCode}>{t.recheckOpenCode}</Button>
             </div>
           </Field>
         ) : (
