@@ -2,306 +2,322 @@
 
 ## 中文
 
-这份文档描述的是“Agent + MCP + AE 插件”如何一起工作，不是安装细节本身。安装步骤见 [docs/INSTALL.md](INSTALL.md)。
+这份文档描述 v0.7.0 的两条使用路径：面板内嵌 AI 对话，以及外部 MCP 客户端接入。安装和发布细节分别见根目录 README 与 [docs/RELEASE.md](RELEASE.md)。
 
 ## 1. 架构同步
 
 ```text
-Agent app
-  -> MCP config (`ae-mcp`)
-  -> ae_mcp server
-  -> ae-mcp bridge backend
-  -> HTTP 127.0.0.1:11488
-  -> CEP panel host
+MCP 客户端或面板内嵌 AI
+  -> packages/core (ae_mcp, Python stdio MCP server, 31 ae_ tools)
+  -> backend (packages/bridge, httpx)
+  -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
   -> CSInterface.evalScript
-  -> AE ExtendScript
+  -> ExtendScript (plugin/jsx/runtime.jsx + jsx_templates/*.jsx)
+  -> After Effects project state
 ```
 
 ```mermaid
 flowchart LR
-    A["Agent app"] --> B["MCP config<br/>command = ae-mcp"]
-    B --> C["ae_mcp server"]
-    C --> D["ae-mcp bridge backend"]
-    D --> E["HTTP 127.0.0.1:11488"]
-    E --> F["CEP panel host"]
-    F --> G["CSInterface.evalScript"]
-    G --> H["AE ExtendScript"]
-    H --> I["After Effects project state"]
+    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>31 ae_ tools"]
+    B --> C["ae-mcp bridge<br/>httpx backend"]
+    C --> D["127.0.0.1:11488"]
+    D --> E["CEP panel host<br/>Express"]
+    E --> F["CSInterface.evalScript"]
+    F --> G["ExtendScript runtime + templates"]
+    G --> H["After Effects"]
 ```
 
 每一层各自负责：
 
-- Agent app：发起工具调用，例如 `ae.previewFrame`、`ae.createRig`、`ae.exec`。
-- `ae-mcp`：暴露 MCP tool surface，做 schema 校验和 handler 路由。
-- `ae-mcp-bridge`：把 handler 的 AE 调用转成对本地面板的 HTTP 请求。
-- CEP panel：常驻在 AE 内，接收 HTTP 请求并把 JSX 投给 ExtendScript。
-- ExtendScript：在 AE 里真正读取项目、改图层、写表达式、创建 rig。
+- 面板内嵌 AI 或外部 MCP 客户端：发起工具调用，例如 `ae_previewFrame`、`ae_createRig`、`ae_exec`。
+- `ae-mcp` / `ae_mcp`：暴露 MCP tool surface，做 schema 校验、工具 annotations、审批 gate 和 handler 路由。
+- `ae-mcp-bridge`：把 handler 的 AE 调用转成对本机面板的 HTTP 请求。
+- CEP panel host：常驻在 AE 内，接收 HTTP 请求并把 JSX 投给 ExtendScript。
+- ExtendScript：在 AE 里真正读取项目、改图层、写表达式、创建 rig、保存 checkpoint。
+- `ae-mcp-snapshot-mss`：提供跨平台截图 backend。
 
-## 2. 首次接通
+## 2. 面板内嵌对话
 
-推荐第一次按这个顺序验证：
+v0.7.0 面板已经是完整产品，不只是 MCP config 面板。
 
-1. 装好 Python 侧 `ae-mcp`、`ae-mcp-bridge`、`ae-mcp-snapshot-mss`。
-2. 安装并打开 AE 面板。
-3. 确认面板绿灯，端口正确。
-4. 把面板里的 `MCP config` 复制到 Agent 客户端。
-5. 在 Agent 里运行 `ae.ping`。
-6. 通过后再跑 `ae.overview`、`ae.previewFrame`、`ae.createRig`。
+内嵌后端：
 
-建议不要一上来就让 Agent 执行复杂 JSX。先用 `ae.ping` 和只读工具确认链路通了，再做写操作。
+- Claude 订阅：默认后端。面板 spawn 系统 Node，运行 Claude Agent SDK sidecar，复用 `claude` 登录态；不落盘 API key 或 token。
+- BYOK：用户提供 Anthropic API key，由面板侧 agent loop 调 Anthropic API。
+- Codex：面板 spawn `codex app-server`，复用 Codex CLI 登录态。
+
+Composer 选择条：
+
+- 模型：带成本标识，会话内切换不清空对话。
+- 思考深度：使用后端原生 effort 档位。
+- 快速模式：后端支持时显示。
+- 审批档：只读 / 手动 / 自动 / 免审。
+
+审批语义由工具 annotations 驱动，跨 Claude 订阅、BYOK、Codex 保持一致。活动流会记录工具运行过程；kill switch 会熔断所有 AI 操作。
+
+## 3. 首跑路径
+
+推荐第一次按这个顺序：
+
+1. 安装 ZXP，并打开 `Window -> Extensions -> ae-mcp`。
+2. 在首跑向导中检测 `uv` 和 ae-mcp；缺失时先看命令原文，再一键安装。
+3. 使用内嵌 Claude 订阅时，检测 Node >= 18、Claude CLI，并通过可见终端完成 `claude` 登录。
+4. 使用内嵌 Codex 时，确认 Codex CLI 已登录（`codex login`）。
+5. 使用外部 MCP 客户端时，复制面板生成的 MCP config。
+6. 运行连接诊断；如果外部客户端已连入，再从 `ae_ping` / `ae_overview` 开始。
 
 ```mermaid
 flowchart TD
-    A["Install Python packages<br/>ae-mcp + ae-mcp-bridge + ae-mcp-snapshot-mss"] --> B["Install CEP panel"]
-    B --> C["Open AE panel"]
-    C --> D{"Panel green?"}
-    D -- "No" --> E["Fix install / port / AE modal issues"]
-    E --> C
-    D -- "Yes" --> F["Copy MCP config into Agent app"]
-    F --> G["Run ae.ping"]
-    G --> H{"Ping ok?"}
-    H -- "No" --> I["Check launcher, backend package, port, panel state"]
-    I --> G
-    H -- "Yes" --> J["Run ae.overview"]
-    J --> K["Run ae.previewFrame"]
-    K --> L["Run ae.createRig or other write tools"]
+    A["Install ZXP panel"] --> B["Open Window -> Extensions -> ae-mcp"]
+    B --> C["First-run wizard checks uv + ae-mcp"]
+    C --> D{ "Built-in chat?" }
+    D -- "Claude subscription" --> E["Check Node + Claude CLI + login"]
+    D -- "BYOK" --> F["Enter Anthropic key"]
+    D -- "Codex" --> G["Check Codex CLI login"]
+    D -- "External MCP" --> H["Copy MCP config"]
+    E --> I["Run diagnostics"]
+    F --> I
+    G --> I
+    H --> I
+    I --> J["Start with ae_ping / ae_overview"]
 ```
 
-## 3. 日常使用节奏
+首跑向导的 ae-mcp 安装命令使用 `uv tool install --from ... ae-mcp --with ...`。开发 checkout 使用本地 `packages/*` 路径；发布包使用 tag 固定的 `git+https` source。
+
+## 4. 外部客户端
+
+外部客户端使用 stdio MCP config：
+
+```json
+{
+  "mcpServers": {
+    "ae": {
+      "command": "ae-mcp",
+      "env": {
+        "AE_MCP_BACKEND": "ae-mcp",
+        "AE_MCP_PLUGIN_URL": "http://127.0.0.1:11488"
+      }
+    }
+  }
+}
+```
+
+已覆盖的客户端形态包括 Claude Desktop、Claude Code、Cursor、OpenCode、OpenClaw、AstrBot、Gemini Antigravity 等。OpenCode 在 v0.7.0 属于外部客户端，不是面板内嵌后端。
+
+网络注意事项：
+
+- `127.0.0.1:11488` 指的是 After Effects 所在机器。
+- Claude Desktop、Claude Code、Cursor、OpenCode 这类本机客户端通常直接可用。
+- OpenClaw、AstrBot 等 IM-bot 框架常驻或 Docker 化时，可能不在 AE 同机；必须保证它们能访问 AE 机器上的面板端口，或把 ae-mcp 封装到同机 runtime。
+
+## 5. 日常使用节奏
 
 比较稳的一条工作流是：
 
-1. 先用只读工具建立上下文。  
-   常用：`ae.overview`、`ae.layers`、`ae.getProperties`、`ae.scanPropertyTree`  
-   大型 comp 可给 `ae.layers` 传 `format='text'` + `offset`/`limit`，输出更省 token；默认仍一次返回全部图层。
+1. 先用只读工具建立上下文。常用：`ae_overview`、`ae_layers`、`ae_getProperties`、`ae_scanPropertyTree`。大型 comp 可给 `ae_layers` 传 `format='text'` + `offset`/`limit`。
 
-2. 再做窄范围写操作。  
-   常用：`ae.setProperty`、`ae.applyEffect`、`ae.createLayer`、`ae.exec`
+2. 再做窄范围写操作。常用：`ae_setProperty`、`ae_applyEffect`、`ae_createLayer`、`ae_exec`。
 
-3. 涉及表达式时先做机器校验。  
-   常用：`ae.validateExpressions`
+3. 涉及表达式时先做机器校验。常用：`ae_validateExpressions`。
 
-4. 涉及画面变化时再做预览。  
-   常用：`ae.previewFrame`
+4. 涉及画面变化时做 preview / snapshot。常用：`ae_previewFrame`、`ae_snapshot`。
 
-5. 需要回退点时加 checkpoint。  
-   常用：`ae.checkpoint`、`ae.revert`
+5. 风险较高的批量编辑先建回退点。常用：`ae_checkpoint`、`ae_revert`，或 `ae_exec` 的 `checkpoint_label`。
 
 这样做的好处是：
 
-- Agent 先理解 comp 和 layer 结构，再动手，误改更少。
+- AI 先理解 comp 和 layer 结构，再动手。
 - 表达式错误能在视觉检查前被机器发现。
-- `ae.previewFrame` 用来做快速 viewer feedback，而不是替代真实渲染。
+- checkpoint undo 和 `emptyResult` 语义已在 v0.7.0 补齐，适合作为常规安全网。
 
-```mermaid
-flowchart TD
-    A["Read context<br/>ae.overview / ae.layers / ae.getProperties"] --> B["Write targeted changes<br/>ae.setProperty / ae.applyEffect / ae.exec"]
-    B --> C{"Expressions changed?"}
-    C -- "Yes" --> D["Run ae.validateExpressions"]
-    C -- "No" --> E{"Visible frame changed?"}
-    D --> E
-    E -- "Yes" --> F["Run ae.previewFrame"]
-    E -- "No" --> G{"Risky batch edit?"}
-    F --> G
-    G -- "Yes" --> H["Create checkpoint or revert point"]
-    G -- "No" --> I["Continue iterating"]
-    H --> I
-```
+## 6. 常见故障定位
 
-## 4. 推荐的 Agent 提示习惯
+如果工具可见但调用失败，按这个顺序排：
 
-如果你在用 Codex、Cursor、Claude Code 这类 Agent，推荐让它们遵守这几个顺序习惯：
+1. 面板是否打开，host 是否监听 `127.0.0.1:11488`。
+2. `AE_MCP_PLUGIN_URL` 是否和面板端口一致。
+3. 外部客户端是否能真正启动 `ae-mcp` launcher。
+4. 当前 `ae-mcp` tool install 是否包含 `packages/bridge`。
+5. 当前环境是否能加载 `ae-mcp-snapshot-mss`（影响 `ae_snapshot`）。
+6. AE 是否有模态弹窗卡住 `evalScript`。
+7. 连接诊断中的 token、Python signal、ExtendScript ping 是否通过。
 
-- 修改前先读：先 `ae.overview` / `ae.layers`，再写。
-- 表达式先校验：写完表达式先 `ae.validateExpressions`。
-- 预览先快照：先 `ae.previewFrame`，不要默认真实渲染。
-- 大改前先 checkpoint：尤其是批量 `ae.exec` 之前。
+如果 `ae_ping` 不通，就不要继续测高阶工具，先把链路打通。
 
-## 5. 常见故障定位
+## 7. 能力边界
 
-如果 Agent 看得到工具，但调用失败，通常按这个顺序排：
+v0.7.0 适合：
 
-1. 面板是不是绿灯。
-2. `AE_MCP_PLUGIN_URL` 端口是不是和面板一致。
-3. Agent 侧 `command` 能不能真的启动 `ae-mcp`。
-4. 当前 Python 环境里有没有 `ae-mcp-bridge`。
-5. AE 里是不是有模态弹窗卡住 `evalScript`。
+- 项目检查和图层分析。
+- 属性修改、效果应用、表达式写入与校验。
+- 快速 preview / snapshot。
+- checkpoint / revert 安全迭代。
+- 基础 rig 创建。
+- 内嵌 AI 对话或外部 MCP 客户端驱动 AE。
 
-如果 `ae.ping` 不通，就不要继续测高阶工具，先把链路打通。
+仍需如实标注：
 
-## 6. 能力边界
-
-这套工作流当前适合：
-
-- 项目检查和图层分析
-- 属性修改和效果应用
-- 表达式写入与校验
-- 快速 viewer 预览
-- 基础 rig 创建
-- 本地 skill 驱动的重复工作流
-
-当前还不适合把它当成：
-
-- 精准 comp crop 渲染器
-- 完整 rigging 平台
-- 单安装即用的 HTTP-only MCP 插件
-
-## 7. 平台说明
-
-- Windows 是当前唯一做过 CI 和 live 实机验证的平台。
-- macOS 已补安装脚本和文档路径，但还没有做实机验证。
-- 在 macOS 上，`ae.previewFrame` 和窗口定位相关行为尤其值得谨慎，因为当前仓库没有 mac 实机覆盖。
-- 如果你在 macOS 上试跑这条链路，请优先从 `ae.ping` 开始，跑出问题后提 GitHub issue，并附上 AE 版本、macOS 版本、Python 版本和面板日志。
+- ae-mcp 默认通过本机面板端口控制 AE；远端/Docker 客户端需要处理网络可达性。
+- ZXP 是面板安装面；Python 三件套是 MCP server/backend/snapshot 安装面，两者都需要。
+- 图像生成不属于 ae-mcp 工具范围；由模型或外部生成器完成，再由 AE 工具导入和操作。
 
 ## English
 
-This document describes how the Agent, MCP server, and AE plugin work together. For installation steps, see [docs/INSTALL.md](INSTALL.md).
+This document describes the two v0.7.0 usage paths: built-in AI chat inside the panel, and external MCP clients. For install and release details, see the root README and [docs/RELEASE.md](RELEASE.md).
 
 ## 1. Shared Architecture
 
 ```text
-Agent app
-  -> MCP config (`ae-mcp`)
-  -> ae_mcp server
-  -> ae-mcp bridge backend
-  -> HTTP 127.0.0.1:11488
-  -> CEP panel host
+MCP client or panel-embedded AI
+  -> packages/core (ae_mcp, Python stdio MCP server, 31 ae_ tools)
+  -> backend (packages/bridge, httpx)
+  -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
   -> CSInterface.evalScript
-  -> AE ExtendScript
+  -> ExtendScript (plugin/jsx/runtime.jsx + jsx_templates/*.jsx)
+  -> After Effects project state
 ```
 
 ```mermaid
 flowchart LR
-    A["Agent app"] --> B["MCP config<br/>command = ae-mcp"]
-    B --> C["ae_mcp server"]
-    C --> D["ae-mcp bridge backend"]
-    D --> E["HTTP 127.0.0.1:11488"]
-    E --> F["CEP panel host"]
-    F --> G["CSInterface.evalScript"]
-    G --> H["AE ExtendScript"]
-    H --> I["After Effects project state"]
+    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>31 ae_ tools"]
+    B --> C["ae-mcp bridge<br/>httpx backend"]
+    C --> D["127.0.0.1:11488"]
+    D --> E["CEP panel host<br/>Express"]
+    E --> F["CSInterface.evalScript"]
+    F --> G["ExtendScript runtime + templates"]
+    G --> H["After Effects"]
 ```
 
 Each layer is responsible for:
 
-- Agent app: issues tool calls such as `ae.previewFrame`, `ae.createRig`, or `ae.exec`.
-- `ae-mcp`: exposes the MCP tool surface and handles schema validation plus routing.
+- Embedded AI or external MCP client: issues tool calls such as `ae_previewFrame`, `ae_createRig`, or `ae_exec`.
+- `ae-mcp` / `ae_mcp`: exposes MCP tools, schemas, tool annotations, approval gates, and handler routing.
 - `ae-mcp-bridge`: turns handler-side AE requests into HTTP calls to the local panel.
-- CEP panel: stays resident inside AE, receives HTTP requests, and forwards JSX into ExtendScript.
-- ExtendScript: performs the actual project reads, layer edits, expression writes, and rig creation inside After Effects.
+- CEP panel host: stays resident inside AE, receives HTTP requests, and forwards JSX into ExtendScript.
+- ExtendScript: performs project reads, layer edits, expression writes, rig creation, and checkpoints.
+- `ae-mcp-snapshot-mss`: provides the cross-platform screenshot backend.
 
-## 2. First Connection
+## 2. Built-In Chat
+
+The v0.7.0 panel is a full product, not just an MCP config panel.
+
+Embedded backends:
+
+- Claude subscription: the default. The panel spawns system Node, runs a Claude Agent SDK sidecar, and reuses the local `claude` login without storing API keys or tokens.
+- BYOK: the user provides an Anthropic API key; the panel runs its own agent loop against the Anthropic API.
+- Codex: the panel spawns `codex app-server` and reuses the Codex CLI login.
+
+Composer controls:
+
+- Model: cost badges, switchable inside a session without clearing the conversation.
+- Reasoning effort: native effort levels from each backend.
+- Fast mode: shown when supported.
+- Approval mode: read-only / manual / auto / bypass.
+
+Tool annotations drive approval behavior consistently across Claude subscription, BYOK, and Codex. The activity stream records tool execution, and the kill switch stops all AI operations.
+
+## 3. First Run
 
 Recommended first-run order:
 
-1. Install the Python-side `ae-mcp`, `ae-mcp-bridge`, and `ae-mcp-snapshot-mss`.
-2. Install and open the AE panel.
-3. Confirm the panel is green and the port is correct.
-4. Copy the panel's `MCP config` into the Agent client.
-5. Run `ae.ping` from the Agent.
-6. Only after that, try `ae.overview`, `ae.previewFrame`, and `ae.createRig`.
-
-Do not start with complex JSX writes. Use `ae.ping` and read-only tools first, then move into mutation.
+1. Install the ZXP and open `Window -> Extensions -> ae-mcp`.
+2. In the first-run wizard, check `uv` and ae-mcp; when missing, inspect the command preview before one-click install.
+3. For built-in Claude subscription, check Node >= 18 and Claude CLI, then complete `claude` login in the visible terminal.
+4. For built-in Codex, confirm Codex CLI login (`codex login`).
+5. For external MCP clients, copy the MCP config generated by the panel.
+6. Run diagnostics; once an external client is connected, start with `ae_ping` / `ae_overview`.
 
 ```mermaid
 flowchart TD
-    A["Install Python packages<br/>ae-mcp + ae-mcp-bridge + ae-mcp-snapshot-mss"] --> B["Install CEP panel"]
-    B --> C["Open AE panel"]
-    C --> D{"Panel green?"}
-    D -- "No" --> E["Fix install / port / AE modal issues"]
-    E --> C
-    D -- "Yes" --> F["Copy MCP config into Agent app"]
-    F --> G["Run ae.ping"]
-    G --> H{"Ping ok?"}
-    H -- "No" --> I["Check launcher, backend package, port, panel state"]
-    I --> G
-    H -- "Yes" --> J["Run ae.overview"]
-    J --> K["Run ae.previewFrame"]
-    K --> L["Run ae.createRig or other write tools"]
+    A["Install ZXP panel"] --> B["Open Window -> Extensions -> ae-mcp"]
+    B --> C["First-run wizard checks uv + ae-mcp"]
+    C --> D{ "Built-in chat?" }
+    D -- "Claude subscription" --> E["Check Node + Claude CLI + login"]
+    D -- "BYOK" --> F["Enter Anthropic key"]
+    D -- "Codex" --> G["Check Codex CLI login"]
+    D -- "External MCP" --> H["Copy MCP config"]
+    E --> I["Run diagnostics"]
+    F --> I
+    G --> I
+    H --> I
+    I --> J["Start with ae_ping / ae_overview"]
 ```
 
-## 3. Day-to-Day Usage Rhythm
+The wizard installs ae-mcp with `uv tool install --from ... ae-mcp --with ...`. Development checkouts use local `packages/*` paths; release installs use tag-pinned `git+https` sources.
+
+## 4. External Clients
+
+External clients use stdio MCP config:
+
+```json
+{
+  "mcpServers": {
+    "ae": {
+      "command": "ae-mcp",
+      "env": {
+        "AE_MCP_BACKEND": "ae-mcp",
+        "AE_MCP_PLUGIN_URL": "http://127.0.0.1:11488"
+      }
+    }
+  }
+}
+```
+
+Covered client shapes include Claude Desktop, Claude Code, Cursor, OpenCode, OpenClaw, AstrBot, Gemini Antigravity, and similar clients. OpenCode is external in v0.7.0; it is not an embedded panel backend.
+
+Network notes:
+
+- `127.0.0.1:11488` means the After Effects machine.
+- Local clients such as Claude Desktop, Claude Code, Cursor, and OpenCode usually work directly.
+- Long-running or Dockerized IM-bot frameworks such as OpenClaw and AstrBot may not be on the AE machine; they must reach the panel port on that machine, or wrap ae-mcp in a same-machine runtime.
+
+## 5. Day-to-Day Rhythm
 
 A stable working rhythm is:
 
-1. Use read tools to establish context first.  
-   Common: `ae.overview`, `ae.layers`, `ae.getProperties`, `ae.scanPropertyTree`  
-   For large comps, pass `ae.layers` `format='text'` + `offset`/`limit` to save tokens; the default still returns all layers.
+1. Use read tools to establish context first. Common: `ae_overview`, `ae_layers`, `ae_getProperties`, `ae_scanPropertyTree`. For large comps, use `ae_layers` with `format='text'` + `offset`/`limit`.
 
-2. Then do narrow write operations.  
-   Common: `ae.setProperty`, `ae.applyEffect`, `ae.createLayer`, `ae.exec`
+2. Then do narrow write operations. Common: `ae_setProperty`, `ae_applyEffect`, `ae_createLayer`, `ae_exec`.
 
-3. Machine-check expressions before visual review.  
-   Common: `ae.validateExpressions`
+3. Machine-check expressions before visual review. Common: `ae_validateExpressions`.
 
-4. Use preview after visible changes.  
-   Common: `ae.previewFrame`
+4. Preview or snapshot after visible changes. Common: `ae_previewFrame`, `ae_snapshot`.
 
-5. Add rollback points for risky edits.  
-   Common: `ae.checkpoint`, `ae.revert`
+5. Add rollback points for risky edits. Common: `ae_checkpoint`, `ae_revert`, or `ae_exec` with `checkpoint_label`.
 
 This helps because:
 
-- the Agent understands the comp and layer structure before mutating it
-- expression failures are caught before visual QA
-- `ae.previewFrame` provides fast viewer feedback instead of pretending to be final render output
+- The AI understands comp and layer structure before mutating it.
+- Expression failures are caught before visual QA.
+- Checkpoint undo and `emptyResult` semantics are delivered in v0.7.0 and are suitable as a regular safety net.
 
-```mermaid
-flowchart TD
-    A["Read context<br/>ae.overview / ae.layers / ae.getProperties"] --> B["Write targeted changes<br/>ae.setProperty / ae.applyEffect / ae.exec"]
-    B --> C{"Expressions changed?"}
-    C -- "Yes" --> D["Run ae.validateExpressions"]
-    C -- "No" --> E{"Visible frame changed?"}
-    D --> E
-    E -- "Yes" --> F["Run ae.previewFrame"]
-    E -- "No" --> G{"Risky batch edit?"}
-    F --> G
-    G -- "Yes" --> H["Create checkpoint or revert point"]
-    G -- "No" --> I["Continue iterating"]
-    H --> I
-```
+## 6. Common Failure Isolation
 
-## 4. Recommended Agent Habits
+If tools are visible but calls fail, check in this order:
 
-For Codex, Cursor, Claude Code, and similar Agents, these habits tend to work well:
-
-- Read before write: run `ae.overview` / `ae.layers` before mutation.
-- Validate expressions first: run `ae.validateExpressions` after writing expressions.
-- Preview before render: use `ae.previewFrame` before reaching for real rendering workflows.
-- Checkpoint before large edits: especially before broad `ae.exec` operations.
-
-## 5. Common Failure Isolation
-
-If the Agent can see the tools but calls fail, check in this order:
-
-1. Is the panel green?
+1. Is the panel open and is the host listening on `127.0.0.1:11488`?
 2. Does `AE_MCP_PLUGIN_URL` match the panel port?
-3. Can the Agent-side `command` actually launch `ae-mcp`?
-4. Is `ae-mcp-bridge` installed in that Python environment?
-5. Is a modal AE dialog blocking `evalScript`?
+3. Can the external client actually launch the `ae-mcp` launcher?
+4. Does the current `ae-mcp` tool install include `packages/bridge`?
+5. Can the environment load `ae-mcp-snapshot-mss` for `ae_snapshot`?
+6. Is a modal AE dialog blocking `evalScript`?
+7. Do the diagnostics pass for token, Python signal, and ExtendScript ping?
 
-If `ae.ping` fails, stop there and fix the connection before testing higher-level tools.
+If `ae_ping` fails, stop there and fix the connection before testing higher-level tools.
 
-## 6. Capability Boundaries
+## 7. Capability Boundaries
 
-This workflow is currently a good fit for:
+v0.7.0 is a good fit for:
 
 - project inspection and layer analysis
-- property edits and effect application
-- expression writes plus validation
-- fast viewer preview
+- property edits, effect application, expression writes, and validation
+- fast preview / snapshot
+- checkpoint / revert iteration
 - basic rig creation
-- local skill-driven reusable workflows
+- AE control from built-in AI chat or external MCP clients
 
-It is not yet a good fit for treating ae-mcp as:
+Still label these honestly:
 
-- a precise comp-crop renderer
-- a complete rigging platform
-- a single-install HTTP-only MCP plugin
-
-## 7. Platform Notes
-
-- Windows is the only platform currently covered by CI and live hardware verification.
-- macOS now has an install script and documented paths, but has not yet been hardware-verified.
-- On macOS, treat `ae.previewFrame` and window-targeting behavior with extra caution because this repository does not yet have real-machine coverage there.
-- If you try the full path on macOS, start with `ae.ping`, and if anything fails, please open a GitHub issue with your AE version, macOS version, Python version, and panel logs.
+- ae-mcp controls AE through a local panel port by default; remote or Dockerized clients must handle network reachability.
+- ZXP is the panel install surface; the Python trio is the MCP server/backend/snapshot install surface. Both are needed.
+- Image generation is outside ae-mcp's tool scope; the model or an external generator creates images, then AE tools import and manipulate them.

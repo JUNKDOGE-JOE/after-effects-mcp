@@ -8266,7 +8266,7 @@
   // package.json
   var package_default = {
     name: "ae-mcp-panel",
-    version: "0.6.0",
+    version: "0.7.0",
     private: true,
     type: "module",
     scripts: {
@@ -8669,6 +8669,81 @@
     );
   }
 
+  // src/cep/externalClients.js
+  var EXTERNAL_CLIENTS = [
+    {
+      id: "claude-desktop",
+      name: "Claude Desktop",
+      kind: "mcp-stdio",
+      installHint: "Install Claude Desktop and open its MCP server settings.",
+      loginHint: "Sign in to Claude Desktop before starting the handshake.",
+      docsUrl: "https://support.anthropic.com/en/articles/10949351-getting-started-with-model-context-protocol-mcp-on-claude-for-desktop"
+    },
+    {
+      id: "claude-code",
+      name: "Claude Code",
+      kind: "mcp-stdio",
+      installHint: "Install Claude Code and add ae-mcp as a local MCP server.",
+      loginHint: "Run claude /login if Claude Code is not signed in.",
+      docsUrl: "https://docs.anthropic.com/en/docs/claude-code/mcp"
+    },
+    {
+      id: "cursor",
+      name: "Cursor",
+      kind: "mcp-stdio",
+      installHint: "Open Cursor MCP settings and add this server config.",
+      loginHint: "Restart Cursor after saving MCP settings.",
+      docsUrl: "https://docs.cursor.com/context/model-context-protocol"
+    },
+    {
+      id: "openclaw",
+      name: "OpenClaw",
+      kind: "mcp-doc",
+      installHint: "Follow the OpenClaw integration docs for adding external tools.",
+      loginHint: "Use the account and runtime required by your OpenClaw deployment.",
+      docsUrl: "https://github.com/bestK/OpenClaw",
+      networkNote: "OpenClaw is often long-running or Dockerized. Keep it on the same machine / \u540C\u673A as After Effects, or make sure it can reach 127.0.0.1:11488. MCP-client support is unverified; ae may need to be wrapped as an OpenClaw skill."
+    },
+    {
+      id: "astrbot",
+      name: "AstrBot",
+      kind: "mcp-doc",
+      installHint: "AstrBot v3.5.0+ can add multiple MCP servers from the panel.",
+      loginHint: "Use the account and platform adapter required by your AstrBot deployment.",
+      docsUrl: "https://docs.astrbot.app/",
+      networkNote: "AstrBot is often long-running or Dockerized. Keep it on the same machine / \u540C\u673A as After Effects, or make sure it can reach 127.0.0.1:11488 before adding the MCP server in AstrBot v3.5.0+."
+    },
+    {
+      id: "gemini-antigravity",
+      name: "Gemini Antigravity",
+      kind: "mcp-stdio",
+      installHint: "Add ae-mcp as a local stdio MCP server in Gemini Antigravity.",
+      loginHint: "Sign in to Gemini Antigravity before starting the handshake.",
+      docsUrl: "https://ai.google.dev/gemini-api/docs"
+    },
+    {
+      id: "opencode-external",
+      name: "opencode",
+      kind: "mcp-stdio",
+      installHint: "Use this external opencode config when the embedded panel flow is blocked.",
+      loginHint: "Sign in to opencode before starting the handshake.",
+      docsUrl: "https://opencode.ai/docs"
+    }
+  ];
+  function mcpConfigFor(client, port = 11488) {
+    return {
+      mcpServers: {
+        ae: {
+          command: "ae-mcp",
+          env: {
+            AE_MCP_BACKEND: "ae-mcp",
+            AE_MCP_PLUGIN_URL: `http://127.0.0.1:${port}`
+          }
+        }
+      }
+    };
+  }
+
   // src/lib/clipboard.js
   function copyTextLegacy(text) {
     const ta = document.createElement("textarea");
@@ -8699,6 +8774,11 @@
     zh: {
       ai: "AI \u670D\u52A1",
       conn: "\u8FDE\u63A5",
+      externalClients: "\u5916\u63A5\u5BA2\u6237\u7AEF",
+      externalClientsCap: "\u7ED9\u5E38\u89C1 MCP \u5BA2\u6237\u7AEF\u590D\u5236\u914D\u7F6E\uFF1B\u6587\u6863\u578B\u6846\u67B6\u6309\u5176\u63A5\u5165\u65B9\u5F0F\u914D\u7F6E\u3002",
+      mcpStdio: "MCP stdio",
+      mcpDoc: "\u6587\u6863\u63A5\u5165",
+      openDocs: "\u6253\u5F00\u6587\u6863",
       sec: "\u5B89\u5168",
       gen: "\u901A\u7528",
       about: "\u5173\u4E8E",
@@ -8706,6 +8786,7 @@
       backendSub: "Claude",
       backendByok: "BYOK",
       backendCodex: "Codex",
+      backendOpenCode: "OpenCode",
       claudeReady: "\u5DF2\u767B\u5F55 \u2713",
       claudeNotLoggedIn: "\u672A\u767B\u5F55",
       claudeChecking: "\u68C0\u6D4B\u4E2D\u2026",
@@ -8718,6 +8799,12 @@
       codexChecking: "\u68C0\u6D4B\u4E2D\u2026",
       codexLoginCap: "\u5728\u7EC8\u7AEF\u5B8C\u6210 codex \u767B\u5F55\uFF0C\u7136\u540E\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D",
       recheckCodex: "\u91CD\u65B0\u68C0\u6D4B",
+      openCodeSub: "OpenCode",
+      openCodeReady: "\u5DF2\u767B\u5F55 \u2713",
+      openCodeNotLoggedIn: "\u672A\u767B\u5F55 OpenCode",
+      openCodeChecking: "\u68C0\u6D4B\u4E2D\u2026",
+      openCodeLoginCap: "\u5728\u7EC8\u7AEF\u5B8C\u6210 opencode \u767B\u5F55\uFF0C\u7136\u540E\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D",
+      recheckOpenCode: "\u91CD\u65B0\u68C0\u6D4B",
       apiKey: "API Key",
       apiKeyCap: "\u4EC5\u4FDD\u5B58\u5728\u672C\u673A\uFF0C\u4E0D\u4F1A\u4E0A\u4F20",
       saveVerify: "\u4FDD\u5B58\u5E76\u9A8C\u8BC1",
@@ -8759,6 +8846,11 @@
     en: {
       ai: "AI service",
       conn: "Connection",
+      externalClients: "External clients",
+      externalClientsCap: "Copy config for common MCP clients; configure documentation-driven frameworks with their own flow.",
+      mcpStdio: "MCP stdio",
+      mcpDoc: "Docs",
+      openDocs: "Open docs",
       sec: "Security",
       gen: "General",
       about: "About",
@@ -8766,6 +8858,7 @@
       backendSub: "Claude",
       backendByok: "BYOK",
       backendCodex: "Codex",
+      backendOpenCode: "OpenCode",
       claudeReady: "Logged in \u2713",
       claudeNotLoggedIn: "Not logged in",
       claudeChecking: "Checking\u2026",
@@ -8778,6 +8871,12 @@
       codexChecking: "Checking\u2026",
       codexLoginCap: "Sign in with codex in a terminal, then click Re-check",
       recheckCodex: "Re-check",
+      openCodeSub: "OpenCode",
+      openCodeReady: "Logged in \u2713",
+      openCodeNotLoggedIn: "Not logged in to OpenCode",
+      openCodeChecking: "Checking\u2026",
+      openCodeLoginCap: "Sign in with opencode in a terminal, then click Re-check",
+      recheckOpenCode: "Re-check",
       apiKey: "API Key",
       apiKeyCap: "Stored locally, never uploaded",
       saveVerify: "Save and verify",
@@ -8832,6 +8931,28 @@
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { font: "400 10px/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: blockLabel }),
       /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Switch, { checked: blocked, onChange: onBlock })
+    ] });
+  }
+  function ExternalClientRow({ client, t, configText, copied, onCopy }) {
+    const isStdio = client.kind === "mcp-stdio";
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: client.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: isStdio ? t.mcpStdio : t.mcpDoc })
+        ] }),
+        isStdio ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: (e) => {
+          e.preventDefault();
+          onCopy();
+        }, children: copied ? t.copied : t.copy }) : null
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
+        client.installHint ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-secondary)" }, children: client.installHint }) : null,
+        client.loginHint ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: client.loginHint }) : null,
+        isStdio ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("pre", { style: { margin: 0, maxHeight: 128, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", background: "var(--gray-0)", color: "var(--text-secondary)", font: "400 10px/1.4 var(--font-mono)", whiteSpace: "pre" }, children: configText }) : null,
+        client.networkNote ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: client.networkNote }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("a", { href: client.docsUrl, target: "_blank", rel: "noreferrer", style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--accent)" }, children: t.openDocs })
+      ] })
     ] });
   }
   function VersionRow({ label, value, badge }) {
@@ -8896,7 +9017,9 @@
     claudeStatus = { state: "checking" },
     onRecheckClaude,
     codexStatus = { state: "checking" },
-    onRecheckCodex
+    onRecheckCodex,
+    openCodeStatus = { state: "checking" },
+    onRecheckOpenCode
   }) {
     const t = S[lang] || S.zh;
     const [key, setKey] = import_react19.default.useState(apiKey);
@@ -8924,6 +9047,9 @@
     const codexState = codexStatus && codexStatus.state || "checking";
     const codexBadgeStatus = codexState === "ready" ? "ok" : codexState === "not-logged-in" ? "warn" : "neutral";
     const codexBadgeText = codexState === "ready" ? t.codexReady : codexState === "not-logged-in" ? t.codexNotLoggedIn : t.codexChecking;
+    const openCodeState = openCodeStatus && openCodeStatus.state || "checking";
+    const openCodeBadgeStatus = openCodeState === "ready" ? "ok" : openCodeState === "not-logged-in" ? "warn" : "neutral";
+    const openCodeBadgeText = openCodeState === "ready" ? t.openCodeReady : openCodeState === "not-logged-in" ? t.openCodeNotLoggedIn : t.openCodeChecking;
     const saveApiKey = () => {
       if (aiBusy) return;
       setAiBusy(true);
@@ -8979,6 +9105,10 @@
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: codexBadgeStatus, children: codexBadgeText }),
           codexState === "ready" && (codexStatus.email || codexStatus.planType) ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1, font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: [codexStatus.email, codexStatus.planType].filter(Boolean).join(" \xB7 ") }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1 } }),
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: codexState === "checking", onClick: onRecheckCodex, children: t.recheckCodex })
+        ] }) }) : backend === "opencode" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.openCodeSub, caption: openCodeState === "not-logged-in" ? t.openCodeLoginCap : openCodeStatus && openCodeStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: openCodeBadgeStatus, children: openCodeBadgeText }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: openCodeState === "checking", onClick: onRecheckOpenCode, children: t.recheckOpenCode })
         ] }) }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.apiKey, caption: t.apiKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { secret: true, value: key, onChange: setKey, placeholder: "sk-ant-...", style: { flex: 1 } }),
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "primary", disabled: aiBusy || !key.trim(), onClick: saveApiKey, children: aiBusy ? t.validating : t.saveVerify }),
@@ -9005,6 +9135,20 @@
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "copy", onClick: () => copy("mcp", mcpConfig), children: t.copy })
         ] }) })
       ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Section, { title: t.externalClients, caption: t.externalClientsCap, children: EXTERNAL_CLIENTS.map((externalClient) => {
+        const configText = JSON.stringify(mcpConfigFor(externalClient, Number(draftPort) || port || 11488), null, 2);
+        return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+          ExternalClientRow,
+          {
+            client: externalClient,
+            t,
+            configText,
+            copied: copied === externalClient.id,
+            onCopy: () => copy(externalClient.id, configText)
+          },
+          externalClient.id
+        );
+      }) }),
       /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { title: t.sec, children: [
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 2 }, children: t.clients }),
         clients.map((client) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
@@ -9080,7 +9224,8 @@
   var RESULT = {
     success: { icon: "check", color: "var(--ok)" },
     error: { icon: "x", color: "var(--error)" },
-    denied: { icon: "circle-slash", color: "var(--text-tertiary)" }
+    denied: { icon: "circle-slash", color: "var(--text-tertiary)" },
+    empty: { icon: "triangle-alert", color: "var(--warn)" }
   };
   function ActivityRow({
     time,
@@ -9088,6 +9233,7 @@
     verb,
     target,
     result = "success",
+    resultTitle,
     params,
     undoLabel = "\u64A4\u9500\u5230\u6B64\u524D",
     onUndo,
@@ -9116,7 +9262,7 @@
             transition: "background var(--dur-fast) var(--ease-out)"
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Icon2, { name: r.icon, size: 12, strokeWidth: 2.5, color: r.color }),
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { title: resultTitle, style: { display: "inline-flex", flex: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Icon2, { name: r.icon, size: 12, strokeWidth: 2.5, color: r.color }) }),
             /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { style: { flex: "none", font: `var(--weight-regular) var(--text-micro)/1 var(--font-mono)`, color: "var(--text-tertiary)" }, children: time }),
             /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Badge, { status: "neutral", style: { flex: "none", maxWidth: 84, overflow: "hidden" }, children: source }),
             /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { style: { flex: "none", font: `var(--weight-medium) var(--text-caption)/1 var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "nowrap" }, children: verb }),
@@ -9184,7 +9330,43 @@
     if (evt.denied === "paused") return "denied-paused";
     if (evt.denied === "blocked") return "denied-blocked";
     if (evt.denied) return "denied";
+    if (evt.ok && evt.emptyResult) return "empty";
     return evt.ok ? "ok" : "error";
+  }
+  function parseToolPayload(result) {
+    if (result && Array.isArray(result.content) && result.content[0] && typeof result.content[0].text === "string") {
+      try {
+        return JSON.parse(result.content[0].text);
+      } catch (e) {
+        return result;
+      }
+    }
+    return result;
+  }
+  async function revertToPreviousCheckpoint(mcp, { branchBeforeRevert = true } = {}) {
+    if (!mcp || typeof mcp.callTool !== "function") {
+      throw new Error("MCP client is unavailable");
+    }
+    const listResult = await mcp.callTool("ae.checkpoint", { action: "list", limit: 1 });
+    const listed = parseToolPayload(listResult);
+    if (listResult && listResult.isError || listed && listed.ok === false) {
+      throw new Error(listed && listed.error || "Checkpoint list failed");
+    }
+    const checkpoints = listed && Array.isArray(listed.checkpoints) ? listed.checkpoints : [];
+    const checkpoint = checkpoints[0] || null;
+    const checkpointId = checkpoint && (checkpoint.id || checkpoint.checkpoint_id);
+    if (!checkpointId) {
+      throw new Error("No checkpoint available to revert");
+    }
+    const revertResult = await mcp.callTool("ae.revert", {
+      checkpoint_id: checkpointId,
+      branch_before_revert: branchBeforeRevert
+    });
+    const reverted = parseToolPayload(revertResult);
+    if (revertResult && revertResult.isError || reverted && reverted.ok === false) {
+      throw new Error(reverted && reverted.error || "Checkpoint revert failed");
+    }
+    return reverted;
   }
   function filterEvents(events, { mode, query }) {
     let out = events;
@@ -9205,7 +9387,11 @@
       errF: "\u5931\u8D25",
       empty: "\u6682\u65E0\u6D3B\u52A8",
       emptyCap: "\u6240\u6709\u5BA2\u6237\u7AEF\u5BF9\u5DE5\u7A0B\u7684\u6BCF\u4E00\u6B21\u64CD\u4F5C\u90FD\u4F1A\u8BB0\u5F55\u5728\u8FD9\u91CC\u3002",
-      clear: "\u6E05\u7A7A"
+      clear: "\u6E05\u7A7A",
+      undoCheckpoint: "\u64A4\u9500\u5230\u4E0A\u4E00\u68C0\u67E5\u70B9",
+      undoingCheckpoint: "\u64A4\u9500\u4E2D\u2026",
+      undoCheckpointTitle: "\u6062\u590D\u6700\u8FD1\u4E00\u6B21\u4FDD\u5B58\u7684 MCP \u68C0\u67E5\u70B9",
+      emptyResult: "\u65E0\u8FD4\u56DE\u503C"
     },
     en: {
       search: "Search actions\u2026",
@@ -9213,12 +9399,17 @@
       errF: "Failed",
       empty: "No activity yet",
       emptyCap: "Every operation from every client is logged here.",
-      clear: "Clear"
+      clear: "Clear",
+      undoCheckpoint: "Undo to previous checkpoint",
+      undoingCheckpoint: "Undoing\u2026",
+      undoCheckpointTitle: "Restore the most recent saved MCP checkpoint",
+      emptyResult: "No return value"
     }
   };
   function rowResult(evt) {
     const outcome = eventOutcome(evt);
     if (outcome === "ok") return "success";
+    if (outcome === "empty") return "empty";
     if (outcome.indexOf("denied") === 0) return "denied";
     return "error";
   }
@@ -9227,6 +9418,7 @@
       client: evt.client,
       undoGroup: evt.undoGroup,
       durationMs: evt.durationMs,
+      emptyResult: evt.emptyResult,
       error: evt.error
     };
   }
@@ -9234,14 +9426,25 @@
     events = [],
     lang = "zh",
     onClear,
+    onUndoCheckpoint,
     emptyTitle,
     emptyCaption
   }) {
     const t = A[lang] || A.zh;
     const [q, setQ] = import_react22.default.useState("");
     const [res, setRes] = import_react22.default.useState("all");
+    const [undoing, setUndoing] = import_react22.default.useState(false);
     const rows = filterEvents(events, { mode: res, query: q });
     const empty = events.length === 0;
+    const undoCheckpoint = async () => {
+      if (!onUndoCheckpoint || undoing) return;
+      setUndoing(true);
+      try {
+        await onUndoCheckpoint();
+      } finally {
+        setUndoing(false);
+      }
+    };
     return /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: empty ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(EmptyState, { icon: "list", title: emptyTitle || t.empty, caption: emptyCaption || t.emptyCap, style: { flex: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(import_react22.default.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", borderBottom: "1px solid var(--border-subtle)" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
@@ -9264,7 +9467,10 @@
             ]
           }
         ),
-        onClear ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { display: "flex", alignItems: "center", padding: "var(--space-2) var(--space-2) var(--space-2) 0" }, children: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Button, { size: "sm", variant: "ghost", icon: "trash-2", onClick: onClear, title: t.clear, children: t.clear }) }) : null
+        onClear ? /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-1)", padding: "var(--space-2) var(--space-2) var(--space-2) 0" }, children: [
+          onUndoCheckpoint ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Button, { size: "sm", variant: "secondary", icon: "undo-2", onClick: undoCheckpoint, disabled: undoing, title: t.undoCheckpointTitle, children: undoing ? t.undoingCheckpoint : t.undoCheckpoint }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Button, { size: "sm", variant: "ghost", icon: "trash-2", onClick: onClear, title: t.clear, children: t.clear })
+        ] }) : null
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { flex: 1, minHeight: 0, overflow: "auto" }, children: rows.length ? rows.map((evt) => /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
         ActivityRow,
@@ -9272,8 +9478,9 @@
           time: new Date(evt.ts).toLocaleTimeString(),
           source: evt.client,
           verb: eventTitle(evt, lang),
-          target: evt.error || "",
+          target: eventOutcome(evt) === "empty" ? t.emptyResult : evt.error || "",
           result: rowResult(evt),
+          resultTitle: eventOutcome(evt) === "empty" ? t.emptyResult : void 0,
           params: eventDetails(evt)
         },
         evt.id
@@ -9410,6 +9617,8 @@
       b3: "\u9009\u62E9\u4F60\u7684\u5BA2\u6237\u7AEF\uFF0C\u628A\u914D\u7F6E\u7C98\u8D34\u8FDB\u5B83\u7684 MCP \u8BBE\u7F6E\uFF1A",
       builtin: "\u9762\u677F\u5185\u7F6E\u5BF9\u8BDD",
       builtinNote: "\u65E0\u9700\u914D\u7F6E\uFF0C\u5F00\u7BB1\u5373\u7528",
+      docClient: "\u67E5\u770B\u63A5\u5165\u6587\u6863",
+      docOnly: "\u6309\u6587\u6863\u63A5\u5165",
       t4w: "\u7B49\u5F85\u63E1\u624B\u2026",
       b4w: "\u5728\u5BA2\u6237\u7AEF\u91CC\u53D1\u8D77\u4E00\u6B21\u5BF9\u8BDD\uFF0C\u9762\u677F\u4F1A\u81EA\u52A8\u5B8C\u6210\u63E1\u624B\u3002",
       t4s: "\u8FDE\u63A5\u6210\u529F",
@@ -9441,6 +9650,8 @@
       b3: "Pick your client and paste the config into its MCP settings:",
       builtin: "Built-in chat",
       builtinNote: "No config needed \u2014 works out of the box",
+      docClient: "Open integration docs",
+      docOnly: "Use docs",
       t4w: "Waiting for handshake\u2026",
       b4w: "Start a conversation in your client; the panel completes the handshake automatically.",
       t4s: "Connected",
@@ -9450,12 +9661,6 @@
       diagnose: "Run diagnostics"
     }
   };
-  var CLIENTS = [
-    { id: "builtin", name: "builtin" },
-    { id: "claude-desktop", name: "Claude Desktop" },
-    { id: "claude-code", name: "Claude Code" },
-    { id: "cursor", name: "Cursor" }
-  ];
   var EMPTY_STEPS = initialStepStates();
   var STEP_LABELS = {
     uv: "uv",
@@ -9560,6 +9765,9 @@
     commandPreviews = {}
   }) {
     const t = W[lang] || W.zh;
+    const clientOptions = [{ id: "builtin", name: "builtin" }, ...EXTERNAL_CLIENTS];
+    const selectedExternalClient = EXTERNAL_CLIENTS.find((item) => item.id === client);
+    const selectedMcpConfig = selectedExternalClient && selectedExternalClient.kind === "mcp-stdio" ? mcpConfig || JSON.stringify(mcpConfigFor(selectedExternalClient), null, 2) : "";
     return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "var(--space-6) var(--space-5) var(--space-5)" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", gap: 5 }, children: [1, 2, 3, 4].map((n) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { width: n === step ? 14 : 5, height: 5, borderRadius: 3, background: n === step ? "var(--gray-11)" : n < step ? "var(--gray-9)" : "var(--gray-6)", transition: "width var(--dur-base) var(--ease-out)" } }, n)) }),
@@ -9596,17 +9804,21 @@
         step === 3 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
           /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t3 }),
           /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b3 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: CLIENTS.map((c) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: clientOptions.map((c) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
             ClientRow2,
             {
               name: c.id === "builtin" ? t.builtin : c.name,
-              note: c.id === "builtin" ? t.builtinNote : null,
+              note: c.id === "builtin" ? t.builtinNote : c.kind === "mcp-doc" ? t.docOnly : null,
               selected: client === c.id,
               onSelect: () => onClient && onClient(c.id)
             },
             c.id
           )) }),
-          client !== "builtin" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(CodeBlock, { code: mcpConfig, copyLabel: t.copy, onCopy, maxHeight: 150 }) : null,
+          selectedExternalClient && selectedExternalClient.kind === "mcp-stdio" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(CodeBlock, { code: selectedMcpConfig, copyLabel: t.copy, onCopy: () => onCopy ? onCopy(selectedMcpConfig) : copyText2(selectedMcpConfig), maxHeight: 150 }) : null,
+          selectedExternalClient && selectedExternalClient.kind === "mcp-doc" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8, padding: 10, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-panel)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("a", { href: selectedExternalClient.docsUrl, target: "_blank", rel: "noreferrer", style: { font: "500 12px/1.35 var(--font-ui)", color: "var(--accent)" }, children: t.docClient }),
+            selectedExternalClient.networkNote ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: selectedExternalClient.networkNote }) : null
+          ] }) : null,
           client === "builtin" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: SUBSCRIPTION_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
             InstallStepRow,
             {
@@ -11341,6 +11553,189 @@
     };
   }
 
+  // src/lib/backendCapabilities.js
+  var CLAUDE_PRICE_USD_PER_MTOK = {
+    "claude-fable-5": { input: 10, output: 50 },
+    "claude-opus-4-8": { input: 5, output: 25 },
+    "claude-sonnet-4-6": { input: 3, output: 15 },
+    "claude-haiku-4-5-20251001": { input: 1, output: 5 }
+  };
+  var CLAUDE_MODELS = [
+    { id: "claude-fable-5", label: "Fable 5", effortLevels: ["low", "medium", "high", "xhigh", "max"], adaptive: true },
+    { id: "claude-opus-4-8", label: "Opus 4.8", effortLevels: ["low", "medium", "high", "xhigh", "max"], adaptive: true },
+    { id: "claude-sonnet-4-6", label: "Sonnet 4.6", effortLevels: ["low", "medium", "high", "max"], adaptive: true },
+    { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5", effortLevels: ["low", "medium", "high"], adaptive: false }
+  ];
+  var APPROVAL_MODES = [
+    { id: "readonly", zh: "\u53EA\u8BFB", en: "Read-only", anchorZh: "\u4EC5\u653E\u884C\u53EA\u8BFB\u5DE5\u5177 \xB7 dontAsk", anchorEn: "read-only allowlist \xB7 dontAsk" },
+    { id: "manual", zh: "\u624B\u52A8", en: "Manual", anchorZh: "\u6BCF\u4E2A\u5199\u64CD\u4F5C\u5F39\u5361 \xB7 canUseTool", anchorEn: "every write asks \xB7 canUseTool" },
+    { id: "auto", zh: "\u81EA\u52A8", en: "Auto", anchorZh: "\u4EC5\u7834\u574F\u6027\u5F39\u5361 \xB7 \u6CE8\u89E3\u5206\u7EA7", anchorEn: "destructive asks \xB7 annotations" },
+    { id: "none", zh: "\u514D\u5BA1", en: "Bypass", anchorZh: "\u5168\u653E\uFF08\u4EC5 ae \u5DE5\u5177\uFF09\xB7 dontAsk", anchorEn: "allow all ae tools \xB7 dontAsk" }
+  ];
+  var TIER_ORDER = [1, 3, 5, 10];
+  function costTier(modelId) {
+    const price = CLAUDE_PRICE_USD_PER_MTOK[modelId];
+    if (!price) return 2;
+    const idx = TIER_ORDER.indexOf(price.input);
+    return idx === -1 ? 2 : idx + 1;
+  }
+  function withCost(models) {
+    return models.map((m) => ({ ...m, cost: costTier(m.id) }));
+  }
+  function claudeSubDescriptor() {
+    return {
+      id: "claude-sub",
+      label: "\u8BA2\u9605",
+      models: withCost(CLAUDE_MODELS),
+      defaultModelId: "claude-sonnet-4-6",
+      defaultEffort: "high",
+      supportsFast: () => false,
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
+  function byokStaticDescriptor() {
+    return {
+      ...claudeSubDescriptor(),
+      id: "byok",
+      label: "BYOK",
+      supportsFast: (modelId) => /claude-opus-4-(6|7|8)/.test(String(modelId || ""))
+    };
+  }
+  function mergeByokModels(descriptor, apiModels) {
+    if (!apiModels) return descriptor;
+    const curated = new Map(descriptor.models.map((m) => [m.id, m]));
+    const models = apiModels.map((m) => {
+      const known = curated.get(m.id);
+      if (known) return known;
+      return { id: m.id, label: m.display_name || m.id, effortLevels: [], cost: costTier(m.id) };
+    });
+    return { ...descriptor, models };
+  }
+  function codexStaticDescriptor() {
+    const models = [
+      { id: "gpt-5.5", label: "GPT-5.5", effortLevels: ["low", "medium", "high", "xhigh"], cost: 2, adaptive: false },
+      { id: "gpt-5.4", label: "GPT-5.4", effortLevels: ["low", "medium", "high", "xhigh"], cost: 2, adaptive: false }
+    ];
+    return {
+      id: "codex",
+      label: "Codex",
+      models,
+      defaultModelId: "gpt-5.5",
+      defaultEffort: "medium",
+      supportsFast: (modelId) => modelId === "gpt-5.5",
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
+  function modelListArray(modelListResult) {
+    if (Array.isArray(modelListResult)) return modelListResult;
+    if (modelListResult && Array.isArray(modelListResult.models)) return modelListResult.models;
+    return [];
+  }
+  function codexDescriptorFromModels(modelListResult) {
+    var _a;
+    const rawModels = modelListArray(modelListResult).filter((m) => m && m.hidden !== true);
+    if (!rawModels.length) return codexStaticDescriptor();
+    const fastModels = /* @__PURE__ */ new Set();
+    const models = rawModels.map((m) => {
+      const id = String(m.id || "");
+      if (Array.isArray(m.additionalSpeedTiers) && m.additionalSpeedTiers.includes("fast")) fastModels.add(id);
+      return {
+        id,
+        label: m.displayName || m.display_name || id,
+        effortLevels: Array.isArray(m.supportedReasoningEfforts) ? m.supportedReasoningEfforts.map((e) => e && e.reasoningEffort).filter(Boolean) : [],
+        cost: 2,
+        adaptive: false
+      };
+    }).filter((m) => m.id);
+    if (!models.length) return codexStaticDescriptor();
+    const defaultRaw = rawModels.find((m) => m && m.hidden !== true && m.isDefault === true) || rawModels[0];
+    const defaultModelId = defaultRaw && defaultRaw.id ? String(defaultRaw.id) : models[0].id;
+    const defaultEffort = defaultRaw && defaultRaw.defaultReasoningEffort ? defaultRaw.defaultReasoningEffort : ((_a = models.find((m) => m.id === defaultModelId)) == null ? void 0 : _a.effortLevels[0]) || "medium";
+    return {
+      id: "codex",
+      label: "Codex",
+      models,
+      defaultModelId,
+      defaultEffort,
+      supportsFast: (modelId) => fastModels.has(String(modelId || "")),
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
+  function openCodeStaticDescriptor() {
+    const models = [
+      { id: "north-mini-code-free", label: "North Mini Code Free", effortLevels: [], cost: 1, adaptive: false }
+    ];
+    return {
+      id: "opencode",
+      label: "OpenCode",
+      models,
+      defaultModelId: "north-mini-code-free",
+      defaultEffort: null,
+      supportsFast: () => false,
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
+  function providerEntries(providerResult) {
+    if (Array.isArray(providerResult)) return providerResult.map((p) => [p && (p.id || p.providerID || p.providerId || p.name), p]);
+    if (providerResult && Array.isArray(providerResult.providers)) {
+      return providerResult.providers.map((p) => [p && (p.id || p.providerID || p.providerId || p.name), p]);
+    }
+    if (providerResult && typeof providerResult === "object") return Object.entries(providerResult);
+    return [];
+  }
+  function modelEntries(provider) {
+    const models = provider && provider.models;
+    if (Array.isArray(models)) return models.map((m) => [m && (m.id || m.modelID || m.modelId || m.name), m]);
+    if (models && typeof models === "object") return Object.entries(models);
+    return [];
+  }
+  function openCodeDescriptorFromModels(providerResult) {
+    const models = [];
+    for (const [providerKey, provider] of providerEntries(providerResult)) {
+      const providerID = String(provider && (provider.id || provider.providerID || provider.providerId) || providerKey || "opencode");
+      for (const [modelKey, raw] of modelEntries(provider)) {
+        const modelId = String(raw && (raw.id || raw.modelID || raw.modelId) || modelKey || "");
+        if (!modelId) continue;
+        models.push({
+          id: providerID === "opencode" ? modelId : providerID + "/" + modelId,
+          label: raw && (raw.name || raw.displayName || raw.display_name) || modelId,
+          effortLevels: [],
+          cost: String(modelId).endsWith("-free") ? 1 : 2,
+          adaptive: false
+        });
+      }
+    }
+    if (!models.length) return openCodeStaticDescriptor();
+    const defaultModel = models.find((m) => m.id === "north-mini-code-free") || models.find((m) => String(m.id).endsWith("/north-mini-code-free")) || models[0];
+    return {
+      id: "opencode",
+      label: "OpenCode",
+      models,
+      defaultModelId: defaultModel.id,
+      defaultEffort: null,
+      supportsFast: () => false,
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
+
+  // src/cep/backends/index.js
+  var BACKENDS = {
+    subscription: { id: "subscription", baseDescriptor: claudeSubDescriptor },
+    byok: { id: "byok", baseDescriptor: byokStaticDescriptor },
+    codex: { id: "codex", baseDescriptor: codexStaticDescriptor },
+    opencode: { id: "opencode", baseDescriptor: openCodeStaticDescriptor }
+  };
+  var REAL_BACKENDS = Object.keys(BACKENDS);
+  function baseDescriptorFor(backendId) {
+    const entry = BACKENDS[backendId];
+    return entry ? entry.baseDescriptor() : claudeSubDescriptor();
+  }
+
   // src/lib/backendSelect.js
   function pickBackend({ pref, probe, hasApiKey, codexProbe }) {
     if (pref === "byok") {
@@ -11370,7 +11765,7 @@
     return { allowedTools, annotations };
   }
   function shouldResetOnBackendChange(prevReal, next) {
-    if (next !== "subscription" && next !== "byok" && next !== "codex") return { reset: false, nextReal: prevReal || null };
+    if (!REAL_BACKENDS.includes(next)) return { reset: false, nextReal: prevReal || null };
     if (!prevReal) return { reset: false, nextReal: next };
     if (prevReal === next) return { reset: false, nextReal: prevReal };
     return { reset: true, nextReal: next };
@@ -11405,7 +11800,7 @@
   // src/cep/mcpClient.js
   var DEFAULT_TIMEOUT_MS = 3e4;
   var MCP_PROTOCOL_VERSION = "2025-06-18";
-  var PANEL_VERSION = "0.6.0";
+  var PANEL_VERSION = "0.7.0";
   function getCepRequire() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
@@ -12675,6 +13070,556 @@
     };
   }
 
+  // src/cep/openCodeBackend.js
+  var MCP_TIMEOUT_MS = 12e4;
+  var READY_TIMEOUT_MS2 = 3e4;
+  var READY_POLL_MS = 250;
+  var DEFAULT_PROVIDER_ID = "opencode";
+  var DEFAULT_MODEL_ID = "north-mini-code-free";
+  function getCepRequire5() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
+      return globalThis.window.cep_node.require;
+    }
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function getCepEnv5() {
+    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
+  }
+  function defaultFetch() {
+    if (globalThis.window && globalThis.window.fetch) return globalThis.window.fetch.bind(globalThis.window);
+    if (globalThis.fetch) return globalThis.fetch.bind(globalThis);
+    throw new Error("fetch is unavailable");
+  }
+  function defaultFs3() {
+    return getCepRequire5()("fs");
+  }
+  function defaultOs() {
+    return getCepRequire5()("os");
+  }
+  function defaultPath() {
+    return getCepRequire5()("path");
+  }
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+  function appendTail4(tail, chunk) {
+    const next = tail + String(chunk || "");
+    return next.length > 4096 ? next.slice(next.length - 4096) : next;
+  }
+  function decodeChunk(value) {
+    if (typeof value === "string") return value;
+    return new TextDecoder().decode(value);
+  }
+  function randomTempName() {
+    return "ae-opencode-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+  }
+  async function defaultGetPort() {
+    const net = getCepRequire5()("net");
+    return new Promise((resolve, reject) => {
+      const server = net.createServer();
+      server.on("error", reject);
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address();
+        const port = address && typeof address === "object" ? address.port : 0;
+        server.close(() => resolve(port));
+      });
+    });
+  }
+  function asCommandArray(mcpSpec) {
+    const command = mcpSpec && mcpSpec.command ? String(mcpSpec.command) : "ae-mcp";
+    const args = mcpSpec && Array.isArray(mcpSpec.args) ? mcpSpec.args.map(String) : [];
+    return [command].concat(args);
+  }
+  function prefixedToolName2(raw) {
+    const text = String(raw || "");
+    if (!text) return "";
+    if (text.startsWith("mcp__")) return text;
+    return "mcp__ae__" + text.replace(/^ae_/, "");
+  }
+  function eventType(evt) {
+    return evt && (evt.type || evt.event || evt.kind || evt.name);
+  }
+  function eventToolId(evt) {
+    return String(evt && (evt.callID || evt.callId || evt.toolCallID || evt.toolCallId || evt.id || evt.call && evt.call.id) || "");
+  }
+  function eventPermissionId(evt) {
+    return String(evt && (evt.permissionID || evt.permissionId || evt.id || evt.requestID || evt.requestId) || eventToolId(evt));
+  }
+  function eventToolName(evt) {
+    return prefixedToolName2(evt && (evt.tool || evt.toolName || evt.name || evt.call && (evt.call.tool || evt.call.name) || evt.permission && (evt.permission.tool || evt.permission.name)));
+  }
+  function eventInput(evt) {
+    if (!evt || typeof evt !== "object") return {};
+    if (evt.input !== void 0) return evt.input;
+    if (evt.arguments !== void 0) return evt.arguments;
+    if (evt.args !== void 0) return evt.args;
+    if (evt.call && evt.call.input !== void 0) return evt.call.input;
+    if (evt.permission && evt.permission.input !== void 0) return evt.permission.input;
+    return {};
+  }
+  function eventOutputText(evt) {
+    const value = evt && (evt.output !== void 0 ? evt.output : evt.result !== void 0 ? evt.result : evt.error);
+    if (value === void 0 || value === null) return "";
+    if (typeof value === "string") return value;
+    try {
+      return JSON.stringify(value);
+    } catch (e) {
+      return String(value);
+    }
+  }
+  function parseModel(value) {
+    const raw = String(value || DEFAULT_MODEL_ID);
+    if (raw.includes("/")) {
+      const [providerID, ...rest] = raw.split("/");
+      return { id: rest.join("/") || DEFAULT_MODEL_ID, providerID: providerID || DEFAULT_PROVIDER_ID };
+    }
+    if (raw.includes(":")) {
+      const [providerID, ...rest] = raw.split(":");
+      return { id: rest.join(":") || DEFAULT_MODEL_ID, providerID: providerID || DEFAULT_PROVIDER_ID };
+    }
+    return { id: raw, providerID: DEFAULT_PROVIDER_ID };
+  }
+  function permissionRuleset(mode) {
+    if (mode === "none") return { type: "allow" };
+    return { type: "ask" };
+  }
+  function permissionReplyBody(decision) {
+    if (decision === "deny") return { action: "deny", remember: false };
+    return { action: "allow", remember: decision === "allow-session" };
+  }
+  function permissionReplyPath(sessionId, permissionId) {
+    return "/session/" + encodeURIComponent(sessionId) + "/permission/" + encodeURIComponent(permissionId);
+  }
+  function createOpenCodeBackend({
+    spawnImpl,
+    fetchImpl,
+    getPort = defaultGetPort,
+    fsImpl,
+    osImpl,
+    pathImpl,
+    tempDirName = randomTempName,
+    getModel,
+    getPermissionMode,
+    getMcpSpec,
+    getToolMeta,
+    onEvent,
+    env
+  } = {}) {
+    let proc = null;
+    let port = null;
+    let baseUrl = "";
+    let configHome = "";
+    let sessionId = null;
+    let serverPromise = null;
+    let sessionPromise = null;
+    let sseStarted = false;
+    let sseClosed = false;
+    let stopping = false;
+    let stderrTail = "";
+    let activeRun = null;
+    let activeResolve = null;
+    let activeAssistantText = "";
+    let turnStarted = false;
+    let toolMeta = { annotations: {} };
+    const pendingApprovals = /* @__PURE__ */ new Map();
+    const sessionAllowedTools = /* @__PURE__ */ new Set();
+    const startedTools = /* @__PURE__ */ new Set();
+    const transcript = [];
+    function emit(evt) {
+      if (onEvent) onEvent(evt);
+    }
+    function fetcher() {
+      return fetchImpl || defaultFetch();
+    }
+    function currentEnv() {
+      return Object.assign({}, getCepEnv5(), env || {});
+    }
+    function finishActive() {
+      if (!activeResolve) {
+        activeRun = null;
+        activeAssistantText = "";
+        turnStarted = false;
+        startedTools.clear();
+        return;
+      }
+      const resolve = activeResolve;
+      activeResolve = null;
+      activeRun = null;
+      activeAssistantText = "";
+      turnStarted = false;
+      startedTools.clear();
+      resolve();
+    }
+    async function request(path, options = {}) {
+      const response = await fetcher()(baseUrl + path, options);
+      if (!response || !response.ok) {
+        const text = response && response.text ? await response.text().catch(() => "") : "";
+        throw new Error("OpenCode HTTP " + (response ? response.status : "error") + (text ? ": " + text : ""));
+      }
+      return response;
+    }
+    async function requestJson(path, options = {}) {
+      const response = await request(path, options);
+      return response.json ? response.json() : {};
+    }
+    async function postJson(path, body) {
+      return requestJson(path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body || {})
+      });
+    }
+    async function waitForMcp() {
+      const deadline = Date.now() + READY_TIMEOUT_MS2;
+      let lastError = null;
+      while (Date.now() < deadline) {
+        try {
+          const status = await requestJson("/mcp");
+          if (status && status.ae && status.ae.status === "connected") return true;
+        } catch (e) {
+          lastError = e;
+        }
+        await sleep(READY_POLL_MS);
+      }
+      throw lastError || new Error("OpenCode MCP server did not become ready.");
+    }
+    function writeConfig(mcpSpec) {
+      const fs = fsImpl || defaultFs3();
+      const os = osImpl || defaultOs();
+      const path = pathImpl || defaultPath();
+      configHome = path.join(os.tmpdir(), tempDirName());
+      const configDir = path.join(configHome, "opencode");
+      fs.mkdirSync(configDir, { recursive: true });
+      const config = {
+        $schema: "https://opencode.ai/config.json",
+        mcp: {
+          ae: {
+            type: "local",
+            command: asCommandArray(mcpSpec),
+            enabled: true,
+            timeout: MCP_TIMEOUT_MS,
+            environment: Object.assign({}, mcpSpec && mcpSpec.env || {}, {
+              AE_MCP_BACKEND: "ae-mcp"
+            })
+          }
+        }
+      };
+      fs.writeFileSync(path.join(configDir, "opencode.json"), JSON.stringify(config, null, 2));
+    }
+    function handleExit(code, signal) {
+      const wasStopping = stopping;
+      proc = null;
+      serverPromise = null;
+      sessionPromise = null;
+      sessionId = null;
+      sseClosed = true;
+      sseStarted = false;
+      if (wasStopping) return;
+      if (activeRun) {
+        const detail = stderrTail ? String(code) + (signal ? " " + signal : "") + " " + stderrTail : String(code) + (signal ? " " + signal : "");
+        emit({ type: "error", kind: "mcp", message: "opencode serve exited: " + detail });
+        finishActive();
+      }
+    }
+    function handleError(error) {
+      proc = null;
+      serverPromise = null;
+      sessionPromise = null;
+      sessionId = null;
+      sseClosed = true;
+      sseStarted = false;
+      if (activeRun) {
+        emit({ type: "error", kind: "mcp", message: error && error.message ? error.message : "opencode serve error" });
+        finishActive();
+      }
+    }
+    async function startServer() {
+      if (proc && baseUrl) return true;
+      if (serverPromise) return serverPromise;
+      serverPromise = (async () => {
+        const mcpSpec = getMcpSpec ? await getMcpSpec() : { command: "ae-mcp", args: [] };
+        writeConfig(mcpSpec);
+        port = await getPort();
+        baseUrl = "http://127.0.0.1:" + port;
+        const spawn = spawnImpl || getCepRequire5()("child_process").spawn;
+        const spawnEnv = Object.assign({}, currentEnv(), { XDG_CONFIG_HOME: configHome });
+        stderrTail = "";
+        stopping = false;
+        sseClosed = false;
+        proc = spawn("opencode", ["serve", "--port", String(port)], {
+          stdio: "pipe",
+          windowsHide: true,
+          shell: true,
+          env: spawnEnv
+        });
+        if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
+          stderrTail = appendTail4(stderrTail, chunk);
+        });
+        if (proc.on) {
+          proc.on("exit", (code, signal) => handleExit(code, signal));
+          proc.on("error", (error) => handleError(error));
+        }
+        await waitForMcp();
+        startSse();
+        return true;
+      })();
+      try {
+        return await serverPromise;
+      } finally {
+        serverPromise = null;
+      }
+    }
+    async function readSseBody(body, parser) {
+      if (!body) return;
+      if (body.getReader) {
+        const reader = body.getReader();
+        while (!sseClosed) {
+          const next = await reader.read();
+          if (!next || next.done) break;
+          parser.feed(decodeChunk(next.value));
+        }
+        return;
+      }
+      if (body[Symbol.asyncIterator]) {
+        for await (const chunk of body) {
+          if (sseClosed) break;
+          parser.feed(decodeChunk(chunk));
+        }
+      }
+    }
+    function startSse() {
+      if (sseStarted) return;
+      sseStarted = true;
+      const parser = createSseParser(({ data }) => handleOpenCodeEvent(data));
+      request("/event").then((response) => readSseBody(response.body, parser)).catch((e) => {
+        if (!sseClosed && activeRun) {
+          emit({ type: "error", kind: "mcp", message: e && e.message ? e.message : "OpenCode event stream failed." });
+          finishActive();
+        }
+      });
+    }
+    async function ensureSession() {
+      if (sessionId) return sessionId;
+      if (sessionPromise) return sessionPromise;
+      sessionPromise = (async () => {
+        await startServer();
+        toolMeta = getToolMeta ? await getToolMeta() : { annotations: {} };
+        const result = await postJson("/session", {
+          title: "After Effects MCP",
+          model: parseModel(getModel ? getModel() : DEFAULT_MODEL_ID),
+          permission: permissionRuleset(getPermissionMode ? getPermissionMode() : "manual")
+        });
+        sessionId = String(result && (result.id || result.sessionID || result.sessionId) || "");
+        if (!sessionId) throw new Error("OpenCode did not return a session id.");
+        return sessionId;
+      })();
+      try {
+        return await sessionPromise;
+      } finally {
+        sessionPromise = null;
+      }
+    }
+    function annFor(name) {
+      const annotations = toolMeta && toolMeta.annotations || {};
+      return annotations[name] || {};
+    }
+    async function replyPermission(permissionId, decision) {
+      if (!sessionId || !permissionId) return;
+      await postJson(permissionReplyPath(sessionId, permissionId), permissionReplyBody(decision));
+    }
+    async function autoReply(permissionId, decision) {
+      try {
+        await replyPermission(permissionId, decision);
+      } catch (e) {
+        emit({ type: "error", kind: "mcp", message: e && e.message ? e.message : "Failed to reply to OpenCode permission request." });
+      }
+    }
+    function handlePermission(evt) {
+      const permissionId = eventPermissionId(evt);
+      const name = eventToolName(evt);
+      const input = eventInput(evt) || {};
+      const ann = annFor(name);
+      const tier = getPermissionMode ? getPermissionMode() : "manual";
+      if (sessionAllowedTools.has(name) || ann.readOnly || tier === "none" || tier === "auto" && !ann.destructive) {
+        autoReply(permissionId, "allow");
+        return;
+      }
+      if (tier === "readonly") {
+        autoReply(permissionId, "deny");
+        emit({ type: "tool-denied", toolUseId: permissionId });
+        return;
+      }
+      pendingApprovals.set(permissionId, { name, input });
+      emit({
+        type: "approval-required",
+        toolUseId: permissionId,
+        name,
+        input,
+        risk: ann.destructive ? "destructive" : "write"
+      });
+    }
+    function handleToolPart(part) {
+      const toolUseId = String(part.callID || part.id || "");
+      if (!toolUseId) return;
+      const name = prefixedToolName2(part.tool || part.name);
+      const state = part.state || {};
+      const status = state.status;
+      if (status === "completed" || status === "error") {
+        const ms = state.time && Number.isFinite(state.time.start) && Number.isFinite(state.time.end) ? state.time.end - state.time.start : void 0;
+        emit({
+          type: "tool-result",
+          toolUseId,
+          name,
+          ok: status === "completed",
+          text: typeof state.output === "string" ? state.output : eventOutputText(state),
+          durationMs: ms
+        });
+        return;
+      }
+      if (startedTools.has(toolUseId)) return;
+      startedTools.add(toolUseId);
+      emit({ type: "tool-start", toolUseId, name, input: state.input || {} });
+    }
+    function handleOpenCodeEvent(evt) {
+      const type = eventType(evt);
+      if (!type) return;
+      const p = evt && evt.properties || {};
+      if (sessionId && p.sessionID && p.sessionID !== sessionId) return;
+      if (type === "session.status") {
+        const st = p.status && p.status.type || "";
+        if (st === "busy") {
+          if (!turnStarted) {
+            turnStarted = true;
+            emit({ type: "turn-start" });
+          }
+        } else if (st === "idle") {
+          drainApprovals();
+          emit({ type: "turn-end", stopReason: "end_turn" });
+          transcript.push({ role: "assistant", text: activeAssistantText });
+          finishActive();
+        }
+        return;
+      }
+      if (type === "message.part.delta") {
+        if (p.field === "text") {
+          emit({ type: "thinking", active: false });
+          const text = p.delta;
+          if (text) {
+            activeAssistantText += String(text);
+            emit({ type: "text-delta", text: String(text) });
+          }
+        } else if (p.field === "reasoning") {
+          emit({ type: "thinking", active: true });
+        }
+        return;
+      }
+      if (type === "message.part.updated") {
+        const part = p.part || {};
+        if (part.type === "tool") handleToolPart(part);
+        else if (part.type === "reasoning") emit({ type: "thinking", active: true });
+        return;
+      }
+      if (type === "session.error") {
+        const error = p.error || p;
+        emit({ type: "error", kind: error.kind || "mcp", message: error.message || String(error || "OpenCode session error") });
+        finishActive();
+        return;
+      }
+      if (/permission/i.test(String(type)) && /ask/i.test(String(type))) {
+        handlePermission({ ...p, properties: p });
+      }
+    }
+    function drainApprovals() {
+      const replies = [];
+      for (const [permissionId] of Array.from(pendingApprovals.entries())) {
+        pendingApprovals.delete(permissionId);
+        replies.push(autoReply(permissionId, "deny"));
+        emit({ type: "tool-denied", toolUseId: permissionId });
+      }
+      return Promise.allSettled(replies);
+    }
+    async function sendUser(text) {
+      if (activeRun) return activeRun;
+      activeAssistantText = "";
+      activeRun = new Promise((resolve) => {
+        activeResolve = resolve;
+      });
+      try {
+        const id = await ensureSession();
+        const userText = String(text || "");
+        transcript.push({ role: "user", text: userText });
+        await postJson("/session/" + encodeURIComponent(id) + "/message", {
+          parts: [{ type: "text", text: userText }]
+        });
+      } catch (e) {
+        emit({ type: "error", kind: "mcp", message: e && e.message ? e.message : "Failed to start OpenCode turn." });
+        finishActive();
+      }
+      return activeRun;
+    }
+    async function approve(toolUseId, decision) {
+      const id = String(toolUseId);
+      const approval = pendingApprovals.get(id);
+      if (!approval) return;
+      pendingApprovals.delete(id);
+      if (decision === "allow-session") sessionAllowedTools.add(approval.name);
+      await replyPermission(id, decision);
+      if (decision === "deny") emit({ type: "tool-denied", toolUseId: id });
+      else emit({ type: "tool-allowed", toolUseId: id });
+    }
+    async function stop() {
+      if (sessionId) {
+        await postJson("/session/" + encodeURIComponent(sessionId) + "/interrupt", {}).catch(() => {
+        });
+      }
+      await drainApprovals();
+      if (activeRun) {
+        emit({ type: "error", kind: "aborted", message: "Turn aborted." });
+        finishActive();
+      }
+    }
+    function reset() {
+      stopping = true;
+      sseClosed = true;
+      sseStarted = false;
+      pendingApprovals.clear();
+      sessionAllowedTools.clear();
+      sessionId = null;
+      sessionPromise = null;
+      activeResolve = null;
+      activeRun = null;
+      activeAssistantText = "";
+      turnStarted = false;
+      startedTools.clear();
+      transcript.length = 0;
+      if (proc && proc.kill) proc.kill();
+      proc = null;
+      serverPromise = null;
+      try {
+        if (configHome) {
+          const fs = fsImpl || defaultFs3();
+          fs.rmSync(configHome, { recursive: true, force: true });
+        }
+      } catch (e) {
+      }
+    }
+    async function probeAccount() {
+      try {
+        await startServer();
+        const providers = await requestJson("/config/providers").catch(() => requestJson("/provider"));
+        return { loggedIn: true, models: providers };
+      } catch (e) {
+        return { loggedIn: false, detail: e && e.message ? e.message : String(e) };
+      }
+    }
+    function getMessages() {
+      return transcript.slice();
+    }
+    return { sendUser, approve, stop, reset, getMessages, probeAccount };
+  }
+
   // src/lib/chatEntries.js
   function nextId(entries, prefix) {
     return `${prefix}-${entries.length + 1}`;
@@ -12772,122 +13717,10 @@
     }
   }
 
-  // src/lib/backendCapabilities.js
-  var CLAUDE_PRICE_USD_PER_MTOK = {
-    "claude-fable-5": { input: 10, output: 50 },
-    "claude-opus-4-8": { input: 5, output: 25 },
-    "claude-sonnet-4-6": { input: 3, output: 15 },
-    "claude-haiku-4-5-20251001": { input: 1, output: 5 }
-  };
-  var CLAUDE_MODELS = [
-    { id: "claude-fable-5", label: "Fable 5", effortLevels: ["low", "medium", "high", "xhigh", "max"], adaptive: true },
-    { id: "claude-opus-4-8", label: "Opus 4.8", effortLevels: ["low", "medium", "high", "xhigh", "max"], adaptive: true },
-    { id: "claude-sonnet-4-6", label: "Sonnet 4.6", effortLevels: ["low", "medium", "high", "max"], adaptive: true },
-    { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5", effortLevels: ["low", "medium", "high"], adaptive: false }
-  ];
-  var APPROVAL_MODES = [
-    { id: "readonly", zh: "\u53EA\u8BFB", en: "Read-only", anchorZh: "\u4EC5\u653E\u884C\u53EA\u8BFB\u5DE5\u5177 \xB7 dontAsk", anchorEn: "read-only allowlist \xB7 dontAsk" },
-    { id: "manual", zh: "\u624B\u52A8", en: "Manual", anchorZh: "\u6BCF\u4E2A\u5199\u64CD\u4F5C\u5F39\u5361 \xB7 canUseTool", anchorEn: "every write asks \xB7 canUseTool" },
-    { id: "auto", zh: "\u81EA\u52A8", en: "Auto", anchorZh: "\u4EC5\u7834\u574F\u6027\u5F39\u5361 \xB7 \u6CE8\u89E3\u5206\u7EA7", anchorEn: "destructive asks \xB7 annotations" },
-    { id: "none", zh: "\u514D\u5BA1", en: "Bypass", anchorZh: "\u5168\u653E\uFF08\u4EC5 ae \u5DE5\u5177\uFF09\xB7 dontAsk", anchorEn: "allow all ae tools \xB7 dontAsk" }
-  ];
-  var TIER_ORDER = [1, 3, 5, 10];
-  function costTier(modelId) {
-    const price = CLAUDE_PRICE_USD_PER_MTOK[modelId];
-    if (!price) return 2;
-    const idx = TIER_ORDER.indexOf(price.input);
-    return idx === -1 ? 2 : idx + 1;
-  }
-  function withCost(models) {
-    return models.map((m) => ({ ...m, cost: costTier(m.id) }));
-  }
-  function claudeSubDescriptor() {
-    return {
-      id: "claude-sub",
-      label: "\u8BA2\u9605",
-      models: withCost(CLAUDE_MODELS),
-      defaultModelId: "claude-sonnet-4-6",
-      defaultEffort: "high",
-      supportsFast: () => false,
-      approvalModes: APPROVAL_MODES,
-      perTurnModelSwitch: true
-    };
-  }
-  function byokStaticDescriptor() {
-    return {
-      ...claudeSubDescriptor(),
-      id: "byok",
-      label: "BYOK",
-      supportsFast: (modelId) => /claude-opus-4-(6|7|8)/.test(String(modelId || ""))
-    };
-  }
-  function mergeByokModels(descriptor, apiModels) {
-    if (!apiModels) return descriptor;
-    const curated = new Map(descriptor.models.map((m) => [m.id, m]));
-    const models = apiModels.map((m) => {
-      const known = curated.get(m.id);
-      if (known) return known;
-      return { id: m.id, label: m.display_name || m.id, effortLevels: [], cost: costTier(m.id) };
-    });
-    return { ...descriptor, models };
-  }
-  function codexStaticDescriptor() {
-    const models = [
-      { id: "gpt-5.5", label: "GPT-5.5", effortLevels: ["low", "medium", "high", "xhigh"], cost: 2, adaptive: false },
-      { id: "gpt-5.4", label: "GPT-5.4", effortLevels: ["low", "medium", "high", "xhigh"], cost: 2, adaptive: false }
-    ];
-    return {
-      id: "codex",
-      label: "Codex",
-      models,
-      defaultModelId: "gpt-5.5",
-      defaultEffort: "medium",
-      supportsFast: (modelId) => modelId === "gpt-5.5",
-      approvalModes: APPROVAL_MODES,
-      perTurnModelSwitch: true
-    };
-  }
-  function modelListArray(modelListResult) {
-    if (Array.isArray(modelListResult)) return modelListResult;
-    if (modelListResult && Array.isArray(modelListResult.models)) return modelListResult.models;
-    return [];
-  }
-  function codexDescriptorFromModels(modelListResult) {
-    var _a;
-    const rawModels = modelListArray(modelListResult).filter((m) => m && m.hidden !== true);
-    if (!rawModels.length) return codexStaticDescriptor();
-    const fastModels = /* @__PURE__ */ new Set();
-    const models = rawModels.map((m) => {
-      const id = String(m.id || "");
-      if (Array.isArray(m.additionalSpeedTiers) && m.additionalSpeedTiers.includes("fast")) fastModels.add(id);
-      return {
-        id,
-        label: m.displayName || m.display_name || id,
-        effortLevels: Array.isArray(m.supportedReasoningEfforts) ? m.supportedReasoningEfforts.map((e) => e && e.reasoningEffort).filter(Boolean) : [],
-        cost: 2,
-        adaptive: false
-      };
-    }).filter((m) => m.id);
-    if (!models.length) return codexStaticDescriptor();
-    const defaultRaw = rawModels.find((m) => m && m.hidden !== true && m.isDefault === true) || rawModels[0];
-    const defaultModelId = defaultRaw && defaultRaw.id ? String(defaultRaw.id) : models[0].id;
-    const defaultEffort = defaultRaw && defaultRaw.defaultReasoningEffort ? defaultRaw.defaultReasoningEffort : ((_a = models.find((m) => m.id === defaultModelId)) == null ? void 0 : _a.effortLevels[0]) || "medium";
-    return {
-      id: "codex",
-      label: "Codex",
-      models,
-      defaultModelId,
-      defaultEffort,
-      supportsFast: (modelId) => fastModels.has(String(modelId || "")),
-      approvalModes: APPROVAL_MODES,
-      perTurnModelSwitch: true
-    };
-  }
-
   // src/cep/modelsApi.js
   var CACHE_KEY = "ae_mcp_byok_models";
   var TTL_MS = 24 * 60 * 60 * 1e3;
-  function getCepRequire5() {
+  function getCepRequire6() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -12896,7 +13729,7 @@
     throw new Error("CEP Node require is unavailable");
   }
   function fetchAnthropicModels({ apiKey, httpsImpl, timeoutMs = 8e3 } = {}) {
-    const https = httpsImpl || getCepRequire5()("https");
+    const https = httpsImpl || getCepRequire6()("https");
     return new Promise((resolve) => {
       const req = https.request({
         hostname: "api.anthropic.com",
@@ -13028,7 +13861,7 @@
 
   // src/cep/wizardActions.js
   var OUTPUT_TAIL = 8192;
-  function getCepRequire6() {
+  function getCepRequire7() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -13053,7 +13886,7 @@
     return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
   }
   async function detectAeMcp({ execFileImpl, env, fsImpl }) {
-    const execFile = execFileImpl || getCepRequire6()("child_process").execFile;
+    const execFile = execFileImpl || getCepRequire7()("child_process").execFile;
     const whereHit = await new Promise((resolve) => {
       execFile("where", ["ae-mcp"], { windowsHide: true, env }, (err, stdout) => {
         resolve(err ? "" : String(stdout || "").split(/\r?\n/).map((l) => l.trim()).find(Boolean) || "");
@@ -13063,7 +13896,7 @@
     const profile = (env || getCepEnvSafe()).USERPROFILE || "";
     if (profile) {
       const shim = profile.replace(/[\\/]+$/, "") + "\\.local\\bin\\ae-mcp.exe";
-      const fs = fsImpl || getCepRequire6()("fs");
+      const fs = fsImpl || getCepRequire7()("fs");
       if (fs.existsSync(shim)) return { ok: true, version: shim };
     }
     return { ok: false };
@@ -13071,7 +13904,7 @@
   async function detectTool(id, { execFileImpl, env, fsImpl } = {}) {
     if (id === "aeMcp") return detectAeMcp({ execFileImpl, env, fsImpl });
     const spec = DETECT[id];
-    const execFile = execFileImpl || getCepRequire6()("child_process").execFile;
+    const execFile = execFileImpl || getCepRequire7()("child_process").execFile;
     return execVersion(execFile, spec.file, spec.args, env, spec.shell);
   }
   var REPO = "https://github.com/JUNKDOGE-JOE/after-effects-mcp";
@@ -13086,7 +13919,7 @@
     };
   }
   function runAction({ file, args, spawnImpl, env, onChunk }) {
-    const spawn = spawnImpl || getCepRequire6()("child_process").spawn;
+    const spawn = spawnImpl || getCepRequire7()("child_process").spawn;
     return new Promise((resolve) => {
       let output = "";
       const push = (chunk) => {
@@ -13110,11 +13943,11 @@
     return [file, ...args.map((a) => /\s/.test(a) ? `"${a}"` : a)].join(" ");
   }
   function detectRepoRoot({ extRoot, fsImpl }) {
-    return findProjectRoot({ extRoot, repoRoot: "", fsImpl: fsImpl || getCepRequire6()("fs") });
+    return findProjectRoot({ extRoot, repoRoot: "", fsImpl: fsImpl || getCepRequire7()("fs") });
   }
   var LOGIN_COMMANDS = { claude: "claude", codex: "codex login" };
   function openLoginTerminal({ tool, spawnImpl } = {}) {
-    const spawn = spawnImpl || getCepRequire6()("child_process").spawn;
+    const spawn = spawnImpl || getCepRequire7()("child_process").spawn;
     const command = LOGIN_COMMANDS[tool] || LOGIN_COMMANDS.claude;
     const child = spawn("cmd", ["/c", "start", "ae-mcp login", "pwsh", "-NoExit", "-Command", command], {
       detached: true,
@@ -13422,7 +14255,7 @@
       }
     };
   }
-  function getCepRequire7() {
+  function getCepRequire8() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -13435,7 +14268,7 @@
     function start(port) {
       onStatus("starting", port);
       try {
-        const cepRequire4 = getCepRequire7();
+        const cepRequire4 = getCepRequire8();
         const path = cepRequire4("path");
         const extRoot = normalizeCepPath(cs2.getSystemPath("extension"));
         const hostPath = path.join(extRoot, "host", "server.js");
@@ -13488,6 +14321,8 @@
       notLoggedInHint: "Claude \u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login\uFF0C\u518D\u5230\u8BBE\u7F6E\u91CC\u91CD\u65B0\u68C0\u6D4B",
       codexProbingHint: "\u6B63\u5728\u68C0\u6D4B Codex \u767B\u5F55\u6001\u2026",
       codexNotLoggedInHint: "Codex \u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C codex \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B",
+      openCodeProbingHint: "\u6B63\u5728\u68C0\u6D4B OpenCode \u767B\u5F55\u6001\u2026",
+      openCodeNotLoggedInHint: "OpenCode \u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u5B8C\u6210\u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B",
       noNodeHint: "\u5185\u5D4C\u5BF9\u8BDD\u9700\u8981\u7CFB\u7EDF Node 18+",
       pausedHint: "\u5DF2\u6682\u505C \u2014 \u6062\u590D\u540E\u624D\u80FD\u53D1\u9001",
       goSettings: "\u53BB\u8BBE\u7F6E"
@@ -13515,6 +14350,8 @@
       notLoggedInHint: "Not logged in: run claude /login in a terminal, then re-check in Settings",
       codexProbingHint: "Checking Codex login\u2026",
       codexNotLoggedInHint: "Codex is not logged in: log in with codex, then re-check",
+      openCodeProbingHint: "Checking OpenCode login\u2026",
+      openCodeNotLoggedInHint: "OpenCode is not logged in: sign in with opencode, then re-check",
       noNodeHint: "Embedded chat needs system Node 18+",
       pausedHint: "Paused \u2014 resume to send",
       goSettings: "Open Settings"
@@ -13535,6 +14372,7 @@
     }
   }
   var CODEX_MODELS_CACHE_KEY = "ae_mcp_codex_models";
+  var OPENCODE_MODELS_CACHE_KEY = "ae_mcp_opencode_models";
   var CODEX_MODELS_CACHE_MS = 24 * 60 * 60 * 1e3;
   function readCachedCodexModels(storage) {
     try {
@@ -13551,6 +14389,24 @@
   function writeCachedCodexModels(storage, models) {
     try {
       storage.setItem(CODEX_MODELS_CACHE_KEY, JSON.stringify({ ts: Date.now(), models }));
+    } catch (e) {
+    }
+  }
+  function readCachedOpenCodeModels(storage) {
+    try {
+      const raw = storage.getItem(OPENCODE_MODELS_CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.models) return null;
+      if (Date.now() - Number(parsed.ts || 0) > CODEX_MODELS_CACHE_MS) return null;
+      return parsed.models;
+    } catch (e) {
+      return null;
+    }
+  }
+  function writeCachedOpenCodeModels(storage, models) {
+    try {
+      storage.setItem(OPENCODE_MODELS_CACHE_KEY, JSON.stringify({ ts: Date.now(), models }));
     } catch (e) {
     }
   }
@@ -13626,14 +14482,12 @@
     const [probe, setProbe] = import_react40.default.useState(null);
     const [codexProbe, setCodexProbe] = import_react40.default.useState(null);
     const [codexModels, setCodexModels] = import_react40.default.useState(() => readCachedCodexModels(window.localStorage));
+    const [openCodeProbe, setOpenCodeProbe] = import_react40.default.useState(null);
+    const [openCodeModels, setOpenCodeModels] = import_react40.default.useState(() => readCachedOpenCodeModels(window.localStorage));
     const [chatEntries, setChatEntries] = import_react40.default.useState([]);
     const [chatStreaming, setChatStreaming] = import_react40.default.useState(false);
     const [thinkingActive, setThinkingActive] = import_react40.default.useState(false);
-    const baseDescriptor = import_react40.default.useMemo(() => {
-      if (backendPref === "byok") return byokStaticDescriptor();
-      if (backendPref === "codex") return codexStaticDescriptor();
-      return claudeSubDescriptor();
-    }, [backendPref]);
+    const baseDescriptor = import_react40.default.useMemo(() => baseDescriptorFor(backendPref), [backendPref]);
     const [descriptor, setDescriptor] = import_react40.default.useState(() => baseDescriptor);
     import_react40.default.useEffect(() => {
       let alive = true;
@@ -13648,10 +14502,14 @@
         const cached = codexModels || readCachedCodexModels(window.localStorage);
         if (cached) setDescriptor(codexDescriptorFromModels({ models: cached }));
       }
+      if (backendPref === "opencode") {
+        const cached = openCodeModels || readCachedOpenCodeModels(window.localStorage);
+        if (cached) setDescriptor(openCodeDescriptorFromModels(cached));
+      }
       return () => {
         alive = false;
       };
-    }, [apiKey, backendPref, baseDescriptor, codexModels]);
+    }, [apiKey, backendPref, baseDescriptor, codexModels, openCodeModels]);
     const requestedModel = sessionModel || model;
     const effectiveModel = descriptor.models.some((m) => m.id === requestedModel) ? requestedModel : descriptor.defaultModelId || descriptor.models[0] && descriptor.models[0].id || requestedModel;
     const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
@@ -13713,8 +14571,18 @@
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, mcp, handleChatEvent]);
-    const effective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey, codexProbe });
-    const activeBackend = effective.backend === "subscription" ? claudeBackend : effective.backend === "codex" ? codexBackend : byokLoop;
+    const openCodeBackend = import_react40.default.useMemo(() => createOpenCodeBackend({
+      getMcpSpec: () => resolveMcpCommand({ extRoot }),
+      getModel: () => runtimeRef.current.model,
+      getPermissionMode: () => runtimeRef.current.permissionMode,
+      getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
+      env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
+      onEvent: handleChatEvent
+    }), [extRoot, mcp, handleChatEvent]);
+    const selectedEffective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey, codexProbe });
+    const effective = backendPref === "opencode" ? openCodeProbe === null ? { backend: "none", reason: "opencode-probing" } : !openCodeProbe || !openCodeProbe.loggedIn ? { backend: "none", reason: "opencode-not-logged-in" } : { backend: "opencode", reason: "ok" } : selectedEffective;
+    const backendInstances = { subscription: claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend };
+    const activeBackend = backendInstances[effective.backend] || byokLoop;
     const activeBackendRef = import_react40.default.useRef(null);
     const runClaudeProbe = import_react40.default.useCallback(() => {
       let alive = true;
@@ -13756,6 +14624,27 @@
       if (backendPref !== "codex") return void 0;
       return runCodexProbe();
     }, [backendPref, runCodexProbe]);
+    const runOpenCodeProbe = import_react40.default.useCallback(() => {
+      let alive = true;
+      setOpenCodeProbe(null);
+      openCodeBackend.probeAccount().then((result) => {
+        if (!alive) return;
+        setOpenCodeProbe(result);
+        if (result && result.models) {
+          setOpenCodeModels(result.models);
+          writeCachedOpenCodeModels(window.localStorage, result.models);
+        }
+      }).catch((e) => {
+        if (alive) setOpenCodeProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
+      });
+      return () => {
+        alive = false;
+      };
+    }, [openCodeBackend]);
+    import_react40.default.useEffect(() => {
+      if (backendPref !== "opencode") return void 0;
+      return runOpenCodeProbe();
+    }, [backendPref, runOpenCodeProbe]);
     import_react40.default.useEffect(() => {
       const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
       activeBackendRef.current = decision.nextReal;
@@ -13763,12 +14652,13 @@
       byokLoop.reset();
       claudeBackend.reset();
       codexBackend.reset();
+      openCodeBackend.reset();
       setChatEntries([]);
       setChatStreaming(false);
       setSessionModel(null);
       setSessionEffort(null);
       setSessionFast(null);
-    }, [effective.backend, byokLoop, claudeBackend, codexBackend]);
+    }, [effective.backend, byokLoop, claudeBackend, codexBackend, openCodeBackend]);
     const sendChat = (text) => {
       const trimmed = String(text || "").trim();
       if (!trimmed) return;
@@ -13783,6 +14673,14 @@
     const pushLog = import_react40.default.useCallback((m) => {
       setLogs((xs) => [...xs.slice(-199), `[${(/* @__PURE__ */ new Date()).toLocaleTimeString()}] ${m}`]);
     }, []);
+    const undoToPreviousCheckpoint = import_react40.default.useCallback(async () => {
+      try {
+        await revertToPreviousCheckpoint(mcp);
+        pushLog("Reverted to previous checkpoint");
+      } catch (e) {
+        pushLog("Checkpoint revert failed: " + (e && e.message ? e.message : String(e)));
+      }
+    }, [mcp, pushLog]);
     import_react40.default.useEffect(() => {
       const port = loadSavedPort(window.localStorage) || DEFAULT_PORT;
       ctrl.current = createHostController({
@@ -13862,6 +14760,7 @@
     const mcpConfigStr = JSON.stringify(buildMcpConfig(status.port), null, 2);
     const claudeStatus = probe === null ? { state: "checking" } : probe.nodeOk === false ? { state: "no-node", detail: probe.detail } : probe.loggedIn === false ? { state: "not-logged-in", detail: probe.detail } : { state: "ready", nodeVersion: probe.nodeVersion };
     const codexStatus = codexProbe === null ? { state: "checking" } : codexProbe.loggedIn === false ? { state: "not-logged-in", detail: codexProbe.detail } : { state: "ready", email: codexProbe.email, planType: codexProbe.planType };
+    const openCodeStatus = openCodeProbe === null ? { state: "checking" } : openCodeProbe.loggedIn === false ? { state: "not-logged-in", detail: openCodeProbe.detail } : { state: "ready" };
     const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
     if (!wizardDone) {
       return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
@@ -13895,7 +14794,7 @@
       { id: "activity", icon: "list-checks", label: t.activity },
       { id: "settings", icon: "settings", label: t.settings }
     ];
-    const backendDisabledHint = effective.reason === "probing" ? t.probingHint : effective.reason === "not-logged-in" ? t.notLoggedInHint : effective.reason === "codex-probing" ? t.codexProbingHint : effective.reason === "codex-not-logged-in" ? t.codexNotLoggedInHint : effective.reason === "no-node" ? t.noNodeHint : effective.reason === "no-key" ? t.noKeyHint : "";
+    const backendDisabledHint = effective.reason === "probing" ? t.probingHint : effective.reason === "not-logged-in" ? t.notLoggedInHint : effective.reason === "codex-probing" ? t.codexProbingHint : effective.reason === "codex-not-logged-in" ? t.codexNotLoggedInHint : effective.reason === "opencode-probing" ? t.openCodeProbingHint : effective.reason === "opencode-not-logged-in" ? t.openCodeNotLoggedInHint : effective.reason === "no-node" ? t.noNodeHint : effective.reason === "no-key" ? t.noKeyHint : "";
     const composerDisabled = paused || effective.backend === "none";
     const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
     return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(import_react40.default.Fragment, { children: [
@@ -13952,6 +14851,7 @@
             events,
             lang,
             onClear: clear,
+            onUndoCheckpoint: undoToPreviousCheckpoint,
             emptyTitle: t.actEmptyT,
             emptyCaption: t.actEmptyB
           }
@@ -14001,7 +14901,9 @@
             claudeStatus,
             onRecheckClaude: runClaudeProbe,
             codexStatus,
-            onRecheckCodex: runCodexProbe
+            onRecheckCodex: runCodexProbe,
+            openCodeStatus,
+            onRecheckOpenCode: runOpenCodeProbe
           },
           tokenEpoch
         ) : null

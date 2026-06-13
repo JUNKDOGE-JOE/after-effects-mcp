@@ -7,6 +7,7 @@ const RESULT = {
   success: { icon: 'check', color: 'var(--ok)' },
   error: { icon: 'x', color: 'var(--error)' },
   denied: { icon: 'circle-slash', color: 'var(--text-tertiary)' },
+  empty: { icon: 'triangle-alert', color: 'var(--warn)' },
 };
 
 export function ActivityRow({
@@ -15,6 +16,7 @@ export function ActivityRow({
   verb,
   target,
   result = 'success',
+  resultTitle,
   params,
   undoLabel = '撤销到此前',
   onUndo,
@@ -42,7 +44,9 @@ export function ActivityRow({
           transition: 'background var(--dur-fast) var(--ease-out)',
         }}
       >
-        <Icon name={r.icon} size={12} strokeWidth={2.5} color={r.color} />
+        <span title={resultTitle} style={{ display: 'inline-flex', flex: 'none' }}>
+          <Icon name={r.icon} size={12} strokeWidth={2.5} color={r.color} />
+        </span>
         <span style={{ flex: 'none', font: `var(--weight-regular) var(--text-micro)/1 var(--font-mono)`, color: 'var(--text-tertiary)' }}>{time}</span>
         <Badge status="neutral" style={{ flex: 'none', maxWidth: 84, overflow: 'hidden' }}>{source}</Badge>
         <span style={{ flex: 'none', font: `var(--weight-medium) var(--text-caption)/1 var(--font-ui)`, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>

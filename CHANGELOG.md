@@ -10,6 +10,25 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### [0.7.0] — 2026-06-13
+
+内嵌对话走向**多框架**，并把后端接入正式化：新增 **Codex 内嵌后端**之外，这一版把"内嵌后端接口"抽象成注册表 + 契约，新增**外接客户端注册表**（让任意 MCP 客户端一键接入），P6 的撤销/空结果标记，以及一次彻底的文档刷新。
+
+#### ✨ 新增
+- **内嵌后端接口正式化**——后端注册表 + 冻结的事件契约 + 一致性测试，把上一版真机踩出的协议坑固化为新后端必须满足的契约；面板按注册表查表选择后端，新增后端不再往主流程塞分支。
+- **外接客户端注册表**——数据驱动的外接客户端清单（Claude Desktop / Claude Code / Cursor / OpenCode / OpenClaw / AstrBot / Gemini Antigravity），向导第 3 步与设置页据此渲染并生成正确的 MCP 配置。新增一个框架 = 加一行数据。
+- **OpenCode 外接支持**——OpenCode 作为外接 MCP 客户端接入 ae-mcp（面板内嵌 OpenCode 后端已实现但门控待验证，延后到 v0.7.1）。
+- **IM-bot 框架网络提示**——OpenClaw / AstrBot 等常驻或 Docker 化、可能不与 AE 同机；注册表条目明确同机 / `127.0.0.1:11488` 端口可达性要求。
+- **P6：撤销到上一检查点 + 空结果标记**——活动流把"成功但无返回值"的工具调用（AE 2026 未捕获异常的静默空结果类）显著标记为中性"无返回值"，区别于错误；新增"撤销到上一检查点"动作。
+- **全模型矩阵冒烟脚本**（`scripts/live-model-matrix.mjs`）——两后端 × 多模型一键体检。
+
+#### 🐛 修复 / 改进
+- 文档全面刷新到 v0.7.0 真实状态（README / WORKFLOW / RELEASE / 各包 readme / parity roadmap）：完整面板产品、双层后端接入、`uv tool install` 三件套安装（不再是失效的 `pip install ae-mcp`）。
+
+#### 📦 说明
+- 内嵌后端：Claude 订阅需 Node ≥18 + 已登录 Claude Code；Codex 需 Codex CLI 登录；BYOK 需 Anthropic key。
+- OpenCode 这一版仅作外接客户端；面板内嵌 OpenCode 留待 v0.7.1（其审批门控需 OpenCode 权限 DSL 的真机验证）。
+
 ### [0.6.0] — 2026-06-13
 
 内嵌对话成为**多 agent 框架**产品：新增 **Codex 后端**（OpenAI 订阅直连），加上模型/思考/快速/审批四枚 composer 便捷选择、向导全包一键化与一轮显著的降错工程。本版包含原计划 v0.5.0 的全部内容。升级后请重新安装/同步面板并重载；Python 端建议一起升。
@@ -133,6 +152,25 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### [0.7.0] — 2026-06-13
+
+The embedded chat goes **multi-framework** and the backend interface is formalized: beyond the new **Codex embedded backend**, this release extracts the embedded-backend interface into a registry + contract, adds an **external-client registry** (any MCP client connects with one click), the P6 undo / empty-result flag, and a full docs refresh.
+
+#### ✨ Added
+- **Formalized embedded-backend interface** — a backend registry + a frozen event contract + a conformance test that pins the protocol gaps last release's live testing uncovered as a contract every backend must satisfy. The panel selects backends by registry lookup, so a new backend is no longer another branch threaded through the app.
+- **External-client registry** — a data-driven list of external MCP clients (Claude Desktop / Claude Code / Cursor / OpenCode / OpenClaw / AstrBot / Gemini Antigravity); the wizard step 3 and a Settings section render from it and generate the correct MCP config. Adding a framework is one data row.
+- **OpenCode external support** — OpenCode connects to ae-mcp as an external MCP client. (An embedded OpenCode backend is implemented but its approval gating is unverified, so it is deferred to v0.7.1.)
+- **IM-bot network note** — OpenClaw / AstrBot and similar are often long-running or Dockerized and may not share a machine with AE; registry entries spell out the same-machine / `127.0.0.1:11488` reachability requirement.
+- **P6: undo to last checkpoint + empty-result flag** — the activity feed marks successful-but-empty tool calls (the AE-2026 uncaught-exception silent-empty class) as a neutral "no return value" distinct from errors; a new "undo to previous checkpoint" action is available.
+- **Model-matrix smoke script** (`scripts/live-model-matrix.mjs`) — one command checks both backends across models.
+
+#### 🐛 Fixed / Improved
+- Docs fully refreshed to the v0.7.0 reality (README / WORKFLOW / RELEASE / package readmes / parity roadmap): the full panel product, the two-tier backend story, and `uv tool install` of the three packages (replacing the dead `pip install ae-mcp`).
+
+#### 📦 Notes
+- Embedded backends: Claude subscription needs Node ≥18 + a logged-in Claude Code; Codex needs the Codex CLI logged in; BYOK needs an Anthropic key.
+- OpenCode is external-only this release; embedded OpenCode lands in v0.7.1 (its approval gating needs live verification of OpenCode's permission DSL).
 
 ### [0.6.0] — 2026-06-13
 

@@ -9,12 +9,18 @@ import { Input } from '../components/forms/Input';
 import { Select } from '../components/forms/Select';
 import { Field } from '../components/forms/Field';
 import { Toast } from '../components/shell/Toast';
+import { EXTERNAL_CLIENTS, mcpConfigFor } from '../cep/externalClients';
 import { copyText } from '../lib/clipboard';
 
 const S = {
   zh: {
     ai: 'AI 服务',
     conn: '连接',
+    externalClients: '外接客户端',
+    externalClientsCap: '给常见 MCP 客户端复制配置；文档型框架按其接入方式配置。',
+    mcpStdio: 'MCP stdio',
+    mcpDoc: '文档接入',
+    openDocs: '打开文档',
     sec: '安全',
     gen: '通用',
     about: '关于',
@@ -22,6 +28,7 @@ const S = {
     backendSub: 'Claude',
     backendByok: 'BYOK',
     backendCodex: 'Codex',
+    backendOpenCode: 'OpenCode',
     claudeReady: '已登录 ✓',
     claudeNotLoggedIn: '未登录',
     claudeChecking: '检测中…',
@@ -34,6 +41,12 @@ const S = {
     codexChecking: '检测中…',
     codexLoginCap: '在终端完成 codex 登录，然后点「重新检测」',
     recheckCodex: '重新检测',
+    openCodeSub: 'OpenCode',
+    openCodeReady: '已登录 ✓',
+    openCodeNotLoggedIn: '未登录 OpenCode',
+    openCodeChecking: '检测中…',
+    openCodeLoginCap: '在终端完成 opencode 登录，然后点「重新检测」',
+    recheckOpenCode: '重新检测',
     apiKey: 'API Key',
     apiKeyCap: '仅保存在本机，不会上传',
     saveVerify: '保存并验证',
@@ -75,6 +88,11 @@ const S = {
   en: {
     ai: 'AI service',
     conn: 'Connection',
+    externalClients: 'External clients',
+    externalClientsCap: 'Copy config for common MCP clients; configure documentation-driven frameworks with their own flow.',
+    mcpStdio: 'MCP stdio',
+    mcpDoc: 'Docs',
+    openDocs: 'Open docs',
     sec: 'Security',
     gen: 'General',
     about: 'About',
@@ -82,6 +100,7 @@ const S = {
     backendSub: 'Claude',
     backendByok: 'BYOK',
     backendCodex: 'Codex',
+    backendOpenCode: 'OpenCode',
     claudeReady: 'Logged in ✓',
     claudeNotLoggedIn: 'Not logged in',
     claudeChecking: 'Checking…',
@@ -94,6 +113,12 @@ const S = {
     codexChecking: 'Checking…',
     codexLoginCap: 'Sign in with codex in a terminal, then click Re-check',
     recheckCodex: 'Re-check',
+    openCodeSub: 'OpenCode',
+    openCodeReady: 'Logged in ✓',
+    openCodeNotLoggedIn: 'Not logged in to OpenCode',
+    openCodeChecking: 'Checking…',
+    openCodeLoginCap: 'Sign in with opencode in a terminal, then click Re-check',
+    recheckOpenCode: 'Re-check',
     apiKey: 'API Key',
     apiKeyCap: 'Stored locally, never uploaded',
     saveVerify: 'Save and verify',
@@ -156,6 +181,30 @@ function ClientRow({ name, lastActive, blocked, onBlock, blockLabel }) {
       <span style={{ font: '400 10px/1 var(--font-ui)', color: 'var(--text-tertiary)' }}>{blockLabel}</span>
       <Switch checked={blocked} onChange={onBlock} />
     </div>
+  );
+}
+
+function ExternalClientRow({ client, t, configText, copied, onCopy }) {
+  const isStdio = client.kind === 'mcp-stdio';
+  return (
+    <details style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-well)', padding: '7px 8px' }}>
+      <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', font: '500 12px/1.35 var(--font-ui)', color: 'var(--text-primary)' }}>{client.name}</span>
+          <span style={{ display: 'block', font: '400 10px/1.35 var(--font-ui)', color: 'var(--text-tertiary)' }}>{isStdio ? t.mcpStdio : t.mcpDoc}</span>
+        </span>
+        {isStdio ? <Button variant="secondary" size="sm" icon="copy" onClick={(e) => { e.preventDefault(); onCopy(); }}>{copied ? t.copied : t.copy}</Button> : null}
+      </summary>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+        {client.installHint ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-secondary)' }}>{client.installHint}</div> : null}
+        {client.loginHint ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>{client.loginHint}</div> : null}
+        {isStdio ? (
+          <pre style={{ margin: 0, maxHeight: 128, overflow: 'auto', padding: 8, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', background: 'var(--gray-0)', color: 'var(--text-secondary)', font: '400 10px/1.4 var(--font-mono)', whiteSpace: 'pre' }}>{configText}</pre>
+        ) : null}
+        {client.networkNote ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>{client.networkNote}</div> : null}
+        <a href={client.docsUrl} target="_blank" rel="noreferrer" style={{ font: '500 11px/1.35 var(--font-ui)', color: 'var(--accent)' }}>{t.openDocs}</a>
+      </div>
+    </details>
   );
 }
 
@@ -229,6 +278,8 @@ export function SettingsScreen({
   onRecheckClaude,
   codexStatus = { state: 'checking' },
   onRecheckCodex,
+  openCodeStatus = { state: 'checking' },
+  onRecheckOpenCode,
 }) {
   const t = S[lang] || S.zh;
   const [key, setKey] = React.useState(apiKey);
@@ -257,6 +308,9 @@ export function SettingsScreen({
   const codexState = (codexStatus && codexStatus.state) || 'checking';
   const codexBadgeStatus = codexState === 'ready' ? 'ok' : codexState === 'not-logged-in' ? 'warn' : 'neutral';
   const codexBadgeText = codexState === 'ready' ? t.codexReady : codexState === 'not-logged-in' ? t.codexNotLoggedIn : t.codexChecking;
+  const openCodeState = (openCodeStatus && openCodeStatus.state) || 'checking';
+  const openCodeBadgeStatus = openCodeState === 'ready' ? 'ok' : openCodeState === 'not-logged-in' ? 'warn' : 'neutral';
+  const openCodeBadgeText = openCodeState === 'ready' ? t.openCodeReady : openCodeState === 'not-logged-in' ? t.openCodeNotLoggedIn : t.openCodeChecking;
   const saveApiKey = () => {
     if (aiBusy) return;
     setAiBusy(true);
@@ -298,6 +352,11 @@ export function SettingsScreen({
     <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
       <Section title={t.ai}>
         <Field label={t.backend}>
+          {/* OpenCode embedded backend is implemented (openCodeBackend.js) but
+              NOT exposed for v0.7.0: its approval gating is unverified (opencode
+              permission-rule DSL + a live write-turn needed). Re-add the option
+              in v0.7.1 after gating is verified. OpenCode is available now as an
+              external client (see the External clients section). */}
           <Segmented full value={backend} onChange={onBackendChange} options={[
             { value: 'subscription', label: t.backendSub },
             { value: 'codex', label: t.backendCodex },
@@ -318,6 +377,14 @@ export function SettingsScreen({
               <Badge status={codexBadgeStatus}>{codexBadgeText}</Badge>
               {codexState === 'ready' && (codexStatus.email || codexStatus.planType) ? <span style={{ flex: 1, font: '400 11px/1 var(--font-mono)', color: 'var(--text-secondary)' }}>{[codexStatus.email, codexStatus.planType].filter(Boolean).join(' · ')}</span> : <span style={{ flex: 1 }} />}
               <Button variant="secondary" icon="rotate-cw" disabled={codexState === 'checking'} onClick={onRecheckCodex}>{t.recheckCodex}</Button>
+            </div>
+          </Field>
+        ) : backend === 'opencode' ? (
+          <Field label={t.openCodeSub} caption={openCodeState === 'not-logged-in' ? t.openCodeLoginCap : (openCodeStatus && openCodeStatus.detail) || null}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Badge status={openCodeBadgeStatus}>{openCodeBadgeText}</Badge>
+              <span style={{ flex: 1 }} />
+              <Button variant="secondary" icon="rotate-cw" disabled={openCodeState === 'checking'} onClick={onRecheckOpenCode}>{t.recheckOpenCode}</Button>
             </div>
           </Field>
         ) : (
@@ -360,6 +427,22 @@ export function SettingsScreen({
             <Button variant="secondary" icon="copy" onClick={() => copy('mcp', mcpConfig)}>{t.copy}</Button>
           </div>
         </Field>
+      </Section>
+
+      <Section title={t.externalClients} caption={t.externalClientsCap}>
+        {EXTERNAL_CLIENTS.map((externalClient) => {
+          const configText = JSON.stringify(mcpConfigFor(externalClient, Number(draftPort) || port || 11488), null, 2);
+          return (
+            <ExternalClientRow
+              key={externalClient.id}
+              client={externalClient}
+              t={t}
+              configText={configText}
+              copied={copied === externalClient.id}
+              onCopy={() => copy(externalClient.id, configText)}
+            />
+          );
+        })}
       </Section>
 
       <Section title={t.sec}>
