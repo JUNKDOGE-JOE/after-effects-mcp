@@ -5,6 +5,7 @@ import { IconButton } from '../components/core/IconButton';
 import { Segmented } from '../components/core/Segmented';
 import { Spinner } from '../components/core/Spinner';
 import { AIAvatar } from '../components/chat/AIAvatar';
+import { EXTERNAL_CLIENTS, mcpConfigFor } from '../cep/externalClients';
 import { initialStepStates, LOCAL_STEPS, SUBSCRIPTION_STEPS } from '../lib/wizardSteps';
 
 const W = {
@@ -22,6 +23,8 @@ const W = {
     t3: '连接 AI 客户端',
     b3: '选择你的客户端，把配置粘贴进它的 MCP 设置：',
     builtin: '面板内置对话', builtinNote: '无需配置，开箱即用',
+    docClient: '查看接入文档',
+    docOnly: '按文档接入',
     t4w: '等待握手…',
     b4w: '在客户端里发起一次对话，面板会自动完成握手。',
     t4s: '连接成功',
@@ -44,6 +47,8 @@ const W = {
     t3: 'Connect an AI client',
     b3: 'Pick your client and paste the config into its MCP settings:',
     builtin: 'Built-in chat', builtinNote: 'No config needed — works out of the box',
+    docClient: 'Open integration docs',
+    docOnly: 'Use docs',
     t4w: 'Waiting for handshake…',
     b4w: 'Start a conversation in your client; the panel completes the handshake automatically.',
     t4s: 'Connected',
@@ -53,13 +58,6 @@ const W = {
     diagnose: 'Run diagnostics',
   },
 };
-
-const CLIENTS = [
-  { id: 'builtin', name: 'builtin' },
-  { id: 'claude-desktop', name: 'Claude Desktop' },
-  { id: 'claude-code', name: 'Claude Code' },
-  { id: 'cursor', name: 'Cursor' },
-];
 
 const EMPTY_STEPS = initialStepStates();
 
@@ -170,6 +168,11 @@ export function WizardScreen({
   commandPreviews = {},
 }) {
   const t = W[lang] || W.zh;
+  const clientOptions = [{ id: 'builtin', name: 'builtin' }, ...EXTERNAL_CLIENTS];
+  const selectedExternalClient = EXTERNAL_CLIENTS.find((item) => item.id === client);
+  const selectedMcpConfig = selectedExternalClient && selectedExternalClient.kind === 'mcp-stdio'
+    ? (mcpConfig || JSON.stringify(mcpConfigFor(selectedExternalClient), null, 2))
+    : '';
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 'var(--space-6) var(--space-5) var(--space-5)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -223,17 +226,23 @@ export function WizardScreen({
             <div style={{ font: '600 20px/1.35 var(--font-ui)', color: 'var(--text-primary)' }}>{t.t3}</div>
             <div style={{ font: '400 12px/1.55 var(--font-ui)', color: 'var(--text-secondary)' }}>{t.b3}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {CLIENTS.map((c) => (
+              {clientOptions.map((c) => (
                 <ClientRow
                   key={c.id}
                   name={c.id === 'builtin' ? t.builtin : c.name}
-                  note={c.id === 'builtin' ? t.builtinNote : null}
+                  note={c.id === 'builtin' ? t.builtinNote : c.kind === 'mcp-doc' ? t.docOnly : null}
                   selected={client === c.id}
                   onSelect={() => onClient && onClient(c.id)}
                 />
               ))}
             </div>
-            {client !== 'builtin' ? <CodeBlock code={mcpConfig} copyLabel={t.copy} onCopy={onCopy} maxHeight={150} /> : null}
+            {selectedExternalClient && selectedExternalClient.kind === 'mcp-stdio' ? <CodeBlock code={selectedMcpConfig} copyLabel={t.copy} onCopy={() => (onCopy ? onCopy(selectedMcpConfig) : copyText(selectedMcpConfig))} maxHeight={150} /> : null}
+            {selectedExternalClient && selectedExternalClient.kind === 'mcp-doc' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--bg-panel)' }}>
+                <a href={selectedExternalClient.docsUrl} target="_blank" rel="noreferrer" style={{ font: '500 12px/1.35 var(--font-ui)', color: 'var(--accent)' }}>{t.docClient}</a>
+                {selectedExternalClient.networkNote ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>{selectedExternalClient.networkNote}</div> : null}
+              </div>
+            ) : null}
             {client === 'builtin' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {SUBSCRIPTION_STEPS.map((id) => (

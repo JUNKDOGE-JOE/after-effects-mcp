@@ -1,70 +1,89 @@
-# AEMCP → Atom Parity: Optimization Roadmap
+# AEMCP -> Atom Parity: Optimization Roadmap
 
-Synthesized from five per-area audits, with load-bearing facts re-verified against the codebase (`runtime.jsx`, `server.py`, `handlers/core.py` `_run_exec`, `jsx_result.py`, `checkpoint_store.py`). The plan favors changes that ship safely **without a live AE** (pytest + JSX-render-string token assertions) and respects two project-specific hazards from memory: (a) `ae_exec` silently no-ops when `undo_group_name`/`checkpoint_label` are misused, and (b) a thrown script error mid checkpoint/revert can delete unrelated layers — so **JSX must never throw**.
+This roadmap is now updated to the v0.7.0 state. Earlier audits were written when ae-mcp was still mostly an MCP-only/simple-RPC chain; v0.7.0 delivered the panel product layer, multi-backend embedded chat, approval flow, diagnostics, and several core parity fixes.
 
-## Verified foundations (drive the ordering)
-- `plugin/jsx/runtime.jsx` is **JSON-polyfill-only** (33 lines, gated on `typeof JSON==='undefined'`). No Array/Object polyfills, no domain helpers. It loads once into the persistent ES3 engine — so anything added there is free for all `ae.exec`/`ae.readProps` user code. **This is why polyfills+helpers rank first.**
-- `server.py::_format_result` (L48-49) **passes a `str` return through verbatim**, so compact text needs **no wire-boundary change** — a pure standalone Python win.
-- `Server("ae")` is built with **no `instructions=` arg** (L62), though mcp 1.27.0 plumbs it to clients at handshake — the cheapest always-on guidance channel is empty.
-- `_run_exec` checkpoint **leak confirmed**: the `_resolve_project_path` probe (L172) and `dst.parent.mkdir` (L178) are **outside** the checkpoint `try/except` (begins L181) — a hung probe or unwritable store aborts the user's edit.
-- `CheckpointStore.__init__` does eager `root.mkdir` (L49); `list_checkpoints` uses unguarded `d.glob` / `d.exists()` (L132-135) — confirmed startup-crash + hang risk on a dead/locked store dir.
+## v0.7.0 Current State
 
-## Per-area gaps (summary)
+Architecture:
 
-**1. ExtendScript runtime + `ae.exec` envelope.** No ES3 Array/Object polyfills (agent-idiomatic JS throws); no shared path/matchName resolver (copy-pasted `split('/')` loops in `set_property.jsx`, `inspect_property_capabilities.jsx`); `ae.exec` returns only the bare last-expr value — no touched-paths, no failed-mutation attribution, no auto expression-error report; no matchName resolver despite scan/getProperties emitting matchPaths.
+```text
+MCP client
+  -> packages/core (ae_mcp, Python stdio MCP server, 31 ae_ tools)
+  -> backend (packages/bridge, httpx)
+  -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
+  -> CSInterface.evalScript
+  -> ExtendScript (plugin/jsx/runtime.jsx + jsx_templates/*.jsx)
+```
 
-**2. Read-verb output format.** Every read verb is forced to verbose JSON at the dispatch boundary; no `format`/`compact` flag anywhere; `ae.layers` has **zero pagination** and omits `type`/parent; `scanPropertyTree` repeats 7 keys per node; `getProperties` pages internally but still emits verbose objects.
+Panel product:
 
-**3. Discovery verbs.** `scanPropertyTree` lacks path subtree-root, query filter, and paging (unbounded dump); `getKeyframes.path` is **required** (no scan mode) and single-layer; `getProperties` ranking is near-trivial; bare matchNames with no `#ordinal` so duplicate siblings aren't addressable.
+- Built-in AI chat is delivered.
+- Embedded backends are Claude subscription, BYOK Anthropic, and Codex.
+- Composer controls are delivered: model with cost badges, reasoning effort, fast mode where supported, and approval mode.
+- Four approval modes are delivered: read-only, manual, auto, bypass.
+- First-run wizard is delivered: `uv`, Node, Claude CLI, and ae-mcp detection/install; command preview before execution; visible login terminal.
+- Activity stream and AI kill switch are delivered.
+- Connection diagnostics are delivered.
+- External client path is delivered for Claude Desktop, Claude Code, Cursor, OpenCode, OpenClaw, AstrBot, Gemini Antigravity, and similar MCP clients.
 
-**4. previewFrame.** Screen-grab of the whole AE window, not a render: `scale` is a no-op; no auto-sample/range/count, no maxWidth downscale, no contact-sheet grid, no diff, no comp-space ROI (no comp→pixel map exists); frame `width/height` are window pixels.
+OpenCode note: OpenCode is an external client in v0.7.0. Embedded OpenCode is intentionally not counted as delivered here; it is deferred to v0.7.1.
 
-**5. createRig.** 4 fixed rig_types; `options:Dict[str,Any]` is opaque in `tools/list`; only slider/angle/checkbox/color; always spawns a new null; every control **must** be wired (4 transform paths only, unknown paths fail **silently**); no defaults/options metadata; no groups; N separate effects not one named pseudo-effect.
+## Delivered Parity Items
 
-**6. init/checkpoint.** `ae.init` returns no guidance and no active_comp_state (bare `activeItemId`); `refresh_only` is a dead param; MCP server instructions unused; checkpoint best-effort guarantee leaks; store construction + listing are fragile. (Genuine advantage: whole-project revert is structurally all-or-nothing — worth keeping + documenting.)
+| Area | Status | Notes |
+|---|---:|---|
+| P1 Runtime helpers | Delivered | Shared ExtendScript prelude/runtime helpers exist and templates use the AEMCP helper path. |
+| P2 Compact read output | Delivered | `ae.layers` supports pagination and `format='text'`; compact render support exists in Python. |
+| P3 Static server guidance | Delivered | MCP server is constructed with `instructions=SERVER_INSTRUCTIONS`. |
+| P4 Non-blocking `ae.exec` checkpoint | Delivered | Auto-checkpoint is best-effort and guarded so checkpoint failures do not abort the edit. |
+| P5 `ae.layers` pagination + type/parent | Delivered | `ae.layers` supports offset/limit and richer layer fields. |
+| P6 Init/checkpoint hardening | Delivered | `ae.init` guidance/state improvements, checkpoint undo, and `emptyResult` handling are part of the v0.7.0 baseline. |
+| Multi-framework client path | Delivered | Panel-generated MCP config covers mainstream local clients and documents same-machine/port reachability for IM-bot/Docker deployments. |
+| Panel product layer | Delivered | Built-in chat, approvals, wizard, diagnostics, activity stream, and kill switch are v0.7.0 features. |
 
-## Ranked roadmap
+## Remaining Roadmap
 
-| # | Title | Area | Lev | Eff | Risk | Depends on |
-|---|-------|------|-----|-----|------|-----------|
-| 1 | ES3 polyfills + AEMCP helper namespace in `runtime.jsx` | runtime | H | S | L | — |
-| 2 | `render_text.py` module + `format:'json'\|'text'` flag | read-format | H | M | L | — |
-| 3 | Static guidance via `Server(instructions=...)` | init/guidance | H | S | L | 1 |
-| 4 | Non-blocking auto-checkpoint in `ae.exec` (wrap probe+mkdir) | checkpoint | H | S | L | — |
-| 5 | `ae.layers` pagination + type/parent | read-format | H | S | L | 2 |
-| 6 | Enrich `ae.init` with active_comp_state + `refresh_only` | init/guidance | H | M | L | 3 |
-| 7 | `maxWidth` downscale (make `scale` real) via Pillow | previewFrame | H | S | L | — |
-| 8 | Model createRig controls in pydantic (drop `Dict[str,Any]`) | createRig | H | S | L | — |
-| 9 | Harden `CheckpointStore` (lazy mkdir + guarded listing) | checkpoint | M | M | M | — |
-| 10 | `scanPropertyTree`: path root + query + paging | discovery | H | M | L | 1 |
-| 11 | SCAN mode for `getKeyframes` (path optional) | discovery | H | M | L | 1 |
-| 12 | Contact-sheet grid for >2 previewFrames | previewFrame | H | M | L | 7 |
-| 13 | Richer `ae.exec` envelope (opt-in touched/failed/expr-errors) | exec envelope | H | M | M | 1, 14 |
-| 14 | Self-attributing `AEMCP.set(...)` touched-path buffer | runtime | M | S | L | 1 |
-| 15 | createRig `control_panel` native builder (7 types + defaults) | createRig | H | M | M | 8 |
-| 16 | Auto-sample previewFrame by duration + range + count | previewFrame | H | M | L | 7, 12 |
-| 17 | Compact flatten renderers (scan/props/keyframes) | read-format | M | S | L | 2 |
-| 18 | Refactor template path-walk → `AEMCP.propByPath` | runtime | M | S | L | 1 |
-| 19 | Strengthen `getProperties` ranking | discovery | M | S | L | — |
-| 20 | createRig wiring map + surface unwired/failed paths | createRig | M | S | L | 15 |
-| 21 | Document/preserve whole-project revert as a guarantee | checkpoint | M | S | L | 3 |
-| 22 | previewFrame diff mode (Pillow `ImageChops`) | previewFrame | M | S | L | 7 |
-| 23 | Shared ES3 query/ordinal matchName resolver in `runtime.jsx` | runtime | M | M | M | 1, 10, 11 |
-| 24 | createRig one-level group nesting (ADBE Group) | createRig | M | M | H | 15 |
-| 25 | previewFrame ROI (window-pixel, NOT comp-space) | previewFrame | L | S | M | 7 |
+| # | Title | Area | Priority | Notes |
+|---|---|---|---|---|
+| 1 | More compact renderers for scan/props/keyframes | read-format | M | `ae.layers` text mode exists; extend the same discipline to larger read verbs. |
+| 2 | Richer `ae.exec` envelope | exec envelope | M | Keep opt-in; report touched paths, failed mutation attribution, and expression errors without breaking existing return shapes. |
+| 3 | Stronger property discovery filters | discovery | M | Path root, query, paging, and better ranking remain useful for large comps. |
+| 4 | `getKeyframes` scan mode | discovery | M | Current workflows still benefit from easier keyframe discovery across selected layers/comps. |
+| 5 | Preview contact sheets / sampling | previewFrame | M | Useful for reviewing motion over a range rather than one frame at a time. |
+| 6 | Preview diff mode | previewFrame | M | Good follow-up once baseline preview paths are stable. |
+| 7 | More typed rig controls and presets | createRig | M | `ae.createRig` remains useful but not a full rigging platform. |
+| 8 | Embedded OpenCode backend | panel | M | Deferred from v0.7.0 to v0.7.1; keep docs clear that v0.7.0 OpenCode is external. |
+| 9 | More robust remote/Docker client guidance | workflow | S | OpenClaw/AstrBot-style deployments need explicit network examples beyond same-machine warning. |
 
-## Top quick wins
-1. **Item 1** — ES3 polyfills + `AEMCP` namespace: highest leverage, additive with `if(!x)` guards, free for all user JSX, token-asserted unit tests. The foundation.
-2. **Item 2** — Compact text renderer + `format` flag: `_format_result` already passes `str` through, so no boundary/JSX change; default `json` keeps tests green; ~2.9x savings on `ae.layers`.
-3. **Item 3** — `Server(instructions=...)`: one arg, already plumbed by the SDK; mirrors Atom's biggest differentiator at zero per-call cost.
-4. **Item 4** — Non-blocking checkpoint: surgical fix for a confirmed leak; monkeypatch-testable.
-5. **Item 5** — `ae.layers` paging + type/parent: small JSX slice + two fields; caps unbounded replies, feeds item 2's `Page:` line.
-6. **Item 8** — Type createRig controls: makes the verb self-describing in `tools/list` (Atom's core strength) with no JSX/AE change; de-risks item 15.
+## Cautions That Still Apply
 
-## Cautions
-- **Build order is load-bearing.** `runtime.jsx` helpers (1) → `AEMCP.set` buffer (14) → richer exec envelope (13): the envelope's `touchedPaths` come from the buffer; build the envelope first and you ship an empty feature. `render_text.py` (2) before the flatten renderers (17). RigControl schema (8) before `control_panel` (15) before wiring (20) before group nesting (24).
-- **Two things are infeasible — scope honestly.** (a) A true before/after `.aep` diff for the exec envelope is expensive over the string bridge and unsafe given the broken checkpoint store — capture a cheap structured signal instead. (b) Comp-coordinate ROI: `capture(main_window=True)` grabs the whole window via `GetWindowRect` with no comp→screen pixel map, so item 25 can only crop the screenshot in window pixels — label it loudly; real comp ROI needs the viewer child HWND + zoom math (separate future work).
-- **`runtime.jsx` is the blast radius.** It loads once at startup, so a syntax error breaks every verb. Keep additions strictly ES3 (`var` only, no arrow/const/template-literals/Array methods), guard polyfills with `if(!x)`, guard the shared matcher (23) with per-template inline fallbacks for stale panels, and add a live smoke test. This is why item 23 is risk=medium despite being mostly cleanup.
-- **Never throw from JSX** (recorded hazard: a mid-checkpoint/revert throw can delete layers). All new fallible JSX — `setPropertyParameters` on pre-2019.1 AE, ADBE Group nesting, the generic wiring walker, control defaults — must `try/catch` and return `{ok,...,note}`, mirroring the existing `checkpointSkipped` pattern. Surface unwired/failed paths (item 20) instead of dropping them silently.
-- **Back-compat or you break the suite.** Every new field defaults to today's behavior (`format='json'`, `report=False`, `offset=0`, `path=None`, `max_width=None`). Existing pytest asserts on dicts and full JSON shapes (incl. keyframe easing tangents) — add keys, never remove.
-- **Live verification is read-only here** (down bridge + broken store). Treat JSX-mutation behavior as unverifiable on this machine: prefer faithful extractions over redesigns, preserve recognizable string tokens for render-token tests, and reserve `tests/live/` for the few items that truly need it (createRig control types).
+- `runtime.jsx` / shared prelude changes have high blast radius. Keep additions ES3-compatible and covered by render-token tests plus live smoke where possible.
+- Existing tool return shapes are part of the MCP contract. Add fields and opt-in formats; do not remove current JSON defaults.
+- Checkpoint/revert must remain fail-safe. Any checkpoint failure should surface as a note or skipped state, not abort unrelated user edits.
+- Preview capture is for fast feedback. Do not document it as a final render pipeline unless the implementation actually switches to a render-backed path.
+- Remote clients must account for `127.0.0.1:11488` resolving on their own host. Dockerized or remote IM-bot frameworks need same-machine execution, port forwarding, or a wrapper running beside AE.
+
+## Verification Targets
+
+Use these before claiming parity work is delivered:
+
+```powershell
+uv run pytest
+```
+
+With After Effects open and the panel running:
+
+```powershell
+$env:AE_MCP_LIVE_TESTS = "1"
+$env:AE_MCP_BACKEND = "ae-mcp"
+$env:AE_MCP_PLUGIN_URL = "http://127.0.0.1:11488"
+uv run pytest packages/core/tests/live -o addopts='' -vv
+```
+
+Panel/model smoke:
+
+```powershell
+node scripts/live-model-matrix.mjs
+```
+
+For release-facing work, also rebuild `plugin/client/dist/app.js` and run the ZXP smoke from [docs/RELEASE.md](RELEASE.md).

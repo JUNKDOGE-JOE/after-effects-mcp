@@ -10,15 +10,18 @@ import { WizardScreen } from '../screens/WizardScreen';
 import { ConnectionDrawer } from '../screens/ConnectionDrawer';
 import { ChatScreen } from '../screens/ChatScreen';
 import { createAgentLoop } from '../lib/agentLoop';
+import { revertToPreviousCheckpoint } from '../lib/activityModel';
 import { pickBackend, deriveToolMeta, shouldResetOnBackendChange } from '../lib/backendSelect';
 import { createMcpClient, resolveMcpCommand } from '../cep/mcpClient';
 import { createApiKeyStore } from '../cep/apiKey';
 import { probeClaudeLogin, resolveSidecarPath } from '../cep/claudeAuth';
 import { createClaudeAgentBackend, resolveSystemNode } from '../cep/claudeAgentBackend';
 import { createCodexBackend } from '../cep/codexBackend';
+import { createOpenCodeBackend } from '../cep/openCodeBackend';
 import { reduceEvent } from '../lib/chatEntries';
 import { DEFAULT_MODEL, FALLBACK_MODEL } from '../lib/anthropic';
-import { claudeSubDescriptor, byokStaticDescriptor, mergeByokModels, codexStaticDescriptor, codexDescriptorFromModels } from '../lib/backendCapabilities';
+import { byokStaticDescriptor, mergeByokModels, codexDescriptorFromModels, openCodeDescriptorFromModels } from '../lib/backendCapabilities';
+import { baseDescriptorFor } from '../cep/backends/index.js';
 import { cachedByokModels } from '../cep/modelsApi';
 import { costBadge } from '../lib/composerOptions';
 import { useActivity } from '../cep/useActivity';
@@ -53,6 +56,8 @@ const T = {
     notLoggedInHint: 'Claude 未登录：在终端运行 claude /login，再到设置里重新检测',
     codexProbingHint: '正在检测 Codex 登录态…',
     codexNotLoggedInHint: 'Codex 未登录：在终端运行 codex 登录后重新检测',
+    openCodeProbingHint: '正在检测 OpenCode 登录态…',
+    openCodeNotLoggedInHint: 'OpenCode 未登录：在终端完成登录后重新检测',
     noNodeHint: '内嵌对话需要系统 Node 18+',
     pausedHint: '已暂停 — 恢复后才能发送',
     goSettings: '去设置',
@@ -80,6 +85,8 @@ const T = {
     notLoggedInHint: 'Not logged in: run claude /login in a terminal, then re-check in Settings',
     codexProbingHint: 'Checking Codex login…',
     codexNotLoggedInHint: 'Codex is not logged in: log in with codex, then re-check',
+    openCodeProbingHint: 'Checking OpenCode login…',
+    openCodeNotLoggedInHint: 'OpenCode is not logged in: sign in with opencode, then re-check',
     noNodeHint: 'Embedded chat needs system Node 18+',
     pausedHint: 'Paused — resume to send',
     goSettings: 'Open Settings',
@@ -97,6 +104,7 @@ function writePref(key, value) {
 }
 
 const CODEX_MODELS_CACHE_KEY = 'ae_mcp_codex_models';
+const OPENCODE_MODELS_CACHE_KEY = 'ae_mcp_opencode_models';
 const CODEX_MODELS_CACHE_MS = 24 * 60 * 60 * 1000;
 
 function readCachedCodexModels(storage) {
@@ -115,6 +123,27 @@ function readCachedCodexModels(storage) {
 function writeCachedCodexModels(storage, models) {
   try {
     storage.setItem(CODEX_MODELS_CACHE_KEY, JSON.stringify({ ts: Date.now(), models }));
+  } catch (e) {
+    // best-effort
+  }
+}
+
+function readCachedOpenCodeModels(storage) {
+  try {
+    const raw = storage.getItem(OPENCODE_MODELS_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.models) return null;
+    if (Date.now() - Number(parsed.ts || 0) > CODEX_MODELS_CACHE_MS) return null;
+    return parsed.models;
+  } catch (e) {
+    return null;
+  }
+}
+
+function writeCachedOpenCodeModels(storage, models) {
+  try {
+    storage.setItem(OPENCODE_MODELS_CACHE_KEY, JSON.stringify({ ts: Date.now(), models }));
   } catch (e) {
     // best-effort
   }
@@ -203,14 +232,12 @@ function Shell({ cs }) {
   const [probe, setProbe] = React.useState(null);
   const [codexProbe, setCodexProbe] = React.useState(null);
   const [codexModels, setCodexModels] = React.useState(() => readCachedCodexModels(window.localStorage));
+  const [openCodeProbe, setOpenCodeProbe] = React.useState(null);
+  const [openCodeModels, setOpenCodeModels] = React.useState(() => readCachedOpenCodeModels(window.localStorage));
   const [chatEntries, setChatEntries] = React.useState([]);
   const [chatStreaming, setChatStreaming] = React.useState(false);
   const [thinkingActive, setThinkingActive] = React.useState(false);
-  const baseDescriptor = React.useMemo(() => {
-    if (backendPref === 'byok') return byokStaticDescriptor();
-    if (backendPref === 'codex') return codexStaticDescriptor();
-    return claudeSubDescriptor();
-  }, [backendPref]);
+  const baseDescriptor = React.useMemo(() => baseDescriptorFor(backendPref), [backendPref]);
   const [descriptor, setDescriptor] = React.useState(() => baseDescriptor);
   React.useEffect(() => {
     let alive = true;
@@ -224,8 +251,12 @@ function Shell({ cs }) {
       const cached = codexModels || readCachedCodexModels(window.localStorage);
       if (cached) setDescriptor(codexDescriptorFromModels({ models: cached }));
     }
+    if (backendPref === 'opencode') {
+      const cached = openCodeModels || readCachedOpenCodeModels(window.localStorage);
+      if (cached) setDescriptor(openCodeDescriptorFromModels(cached));
+    }
     return () => { alive = false; };
-  }, [apiKey, backendPref, baseDescriptor, codexModels]);
+  }, [apiKey, backendPref, baseDescriptor, codexModels, openCodeModels]);
   const requestedModel = sessionModel || model;
   const effectiveModel = descriptor.models.some((m) => m.id === requestedModel)
     ? requestedModel
@@ -299,8 +330,24 @@ function Shell({ cs }) {
     onEvent: handleChatEvent,
   }), [extRoot, mcp, handleChatEvent]);
 
-  const effective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey, codexProbe });
-  const activeBackend = effective.backend === 'subscription' ? claudeBackend : effective.backend === 'codex' ? codexBackend : byokLoop;
+  const openCodeBackend = React.useMemo(() => createOpenCodeBackend({
+    getMcpSpec: () => resolveMcpCommand({ extRoot }),
+    getModel: () => runtimeRef.current.model,
+    getPermissionMode: () => runtimeRef.current.permissionMode,
+    getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
+    env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
+    onEvent: handleChatEvent,
+  }), [extRoot, mcp, handleChatEvent]);
+
+  const selectedEffective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey, codexProbe });
+  const effective = backendPref === 'opencode'
+    ? openCodeProbe === null ? { backend: 'none', reason: 'opencode-probing' }
+      : !openCodeProbe || !openCodeProbe.loggedIn ? { backend: 'none', reason: 'opencode-not-logged-in' }
+      : { backend: 'opencode', reason: 'ok' }
+    : selectedEffective;
+  // Map real-backend id -> instance (registry leaves a slot for OpenCode/F2).
+  const backendInstances = { subscription: claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend };
+  const activeBackend = backendInstances[effective.backend] || byokLoop;
   const activeBackendRef = React.useRef(null);
 
   const runClaudeProbe = React.useCallback(() => {
@@ -343,6 +390,27 @@ function Shell({ cs }) {
     return runCodexProbe();
   }, [backendPref, runCodexProbe]);
 
+  const runOpenCodeProbe = React.useCallback(() => {
+    let alive = true;
+    setOpenCodeProbe(null);
+    openCodeBackend.probeAccount().then((result) => {
+      if (!alive) return;
+      setOpenCodeProbe(result);
+      if (result && result.models) {
+        setOpenCodeModels(result.models);
+        writeCachedOpenCodeModels(window.localStorage, result.models);
+      }
+    }).catch((e) => {
+      if (alive) setOpenCodeProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
+    });
+    return () => { alive = false; };
+  }, [openCodeBackend]);
+
+  React.useEffect(() => {
+    if (backendPref !== 'opencode') return undefined;
+    return runOpenCodeProbe();
+  }, [backendPref, runOpenCodeProbe]);
+
   React.useEffect(() => {
     const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
     activeBackendRef.current = decision.nextReal;
@@ -350,12 +418,13 @@ function Shell({ cs }) {
     byokLoop.reset();
     claudeBackend.reset();
     codexBackend.reset();
+    openCodeBackend.reset();
     setChatEntries([]);
     setChatStreaming(false);
     setSessionModel(null);
     setSessionEffort(null);
     setSessionFast(null);
-  }, [effective.backend, byokLoop, claudeBackend, codexBackend]);
+  }, [effective.backend, byokLoop, claudeBackend, codexBackend, openCodeBackend]);
 
   const sendChat = (text) => {
     const trimmed = String(text || '').trim();
@@ -373,6 +442,15 @@ function Shell({ cs }) {
   const pushLog = React.useCallback((m) => {
     setLogs((xs) => [...xs.slice(-199), `[${new Date().toLocaleTimeString()}] ${m}`]);
   }, []);
+
+  const undoToPreviousCheckpoint = React.useCallback(async () => {
+    try {
+      await revertToPreviousCheckpoint(mcp);
+      pushLog('Reverted to previous checkpoint');
+    } catch (e) {
+      pushLog('Checkpoint revert failed: ' + (e && e.message ? e.message : String(e)));
+    }
+  }, [mcp, pushLog]);
 
   React.useEffect(() => {
     const port = loadSavedPort(window.localStorage) || DEFAULT_PORT;
@@ -467,6 +545,9 @@ function Shell({ cs }) {
   const codexStatus = codexProbe === null ? { state: 'checking' }
     : codexProbe.loggedIn === false ? { state: 'not-logged-in', detail: codexProbe.detail }
     : { state: 'ready', email: codexProbe.email, planType: codexProbe.planType };
+  const openCodeStatus = openCodeProbe === null ? { state: 'checking' }
+    : openCodeProbe.loggedIn === false ? { state: 'not-logged-in', detail: openCodeProbe.detail }
+    : { state: 'ready' };
   const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
 
   if (!wizardDone) {
@@ -501,6 +582,8 @@ function Shell({ cs }) {
     : effective.reason === 'not-logged-in' ? t.notLoggedInHint
     : effective.reason === 'codex-probing' ? t.codexProbingHint
     : effective.reason === 'codex-not-logged-in' ? t.codexNotLoggedInHint
+    : effective.reason === 'opencode-probing' ? t.openCodeProbingHint
+    : effective.reason === 'opencode-not-logged-in' ? t.openCodeNotLoggedInHint
     : effective.reason === 'no-node' ? t.noNodeHint
     : effective.reason === 'no-key' ? t.noKeyHint
     : '';
@@ -552,6 +635,7 @@ function Shell({ cs }) {
             events={events}
             lang={lang}
             onClear={clear}
+            onUndoCheckpoint={undoToPreviousCheckpoint}
             emptyTitle={t.actEmptyT}
             emptyCaption={t.actEmptyB}
           />
@@ -590,6 +674,8 @@ function Shell({ cs }) {
             onRecheckClaude={runClaudeProbe}
             codexStatus={codexStatus}
             onRecheckCodex={runCodexProbe}
+            openCodeStatus={openCodeStatus}
+            onRecheckOpenCode={runOpenCodeProbe}
           />
         ) : null}
       </div>
