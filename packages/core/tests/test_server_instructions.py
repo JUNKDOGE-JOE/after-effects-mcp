@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import logging
+import re
 
-from ae_mcp.instructions import SERVER_INSTRUCTIONS
+import pytest
+
+from ae_mcp.instructions import SERVER_INSTRUCTIONS, build_server_instructions, _BASE_INSTRUCTIONS
 from ae_mcp.server import build_server
 
 
@@ -31,17 +34,15 @@ def test_instructions_use_underscore_verb_names_not_dotted():
     """Issue #4: model-facing guidance must not feed the model dotted verb
     names it can't call on strict clients. No dotted ``ae.<verb>`` token may
     appear in the instructions (AEMCP.* helper calls are not verbs)."""
-    import re
-
     dotted = re.findall(r"\bae\.[a-zA-Z]\w*", SERVER_INSTRUCTIONS)
     assert dotted == [], f"instructions still name dotted verbs: {sorted(set(dotted))}"
 
 
 def test_build_server_advertises_instructions():
     server = build_server()
-    assert server.instructions == SERVER_INSTRUCTIONS
+    assert server.instructions == build_server_instructions()
     opts = server.create_initialization_options()
-    assert opts.instructions == SERVER_INSTRUCTIONS
+    assert opts.instructions == build_server_instructions()
 
 
 def test_filtered_tool_names_logs_when_backend_selection_fails(monkeypatch, caplog):
@@ -63,3 +64,30 @@ def test_filtered_tool_names_logs_when_backend_selection_fails(monkeypatch, capl
         f"expected a backend-selection WARNING, got: {[r.getMessage() for r in warnings]}"
     )
     assert any("ae_status" in r.getMessage() for r in warnings)
+
+
+# --- Toggle tests ---
+
+def test_expert_guidance_on_by_default(monkeypatch):
+    monkeypatch.delenv("AE_MCP_EXPERT_GUIDANCE", raising=False)
+    text = build_server_instructions()
+    assert "EXTENDSCRIPT EXPERT GUARDRAILS" in text
+    assert "PostScript name" in text
+    assert text.startswith(_BASE_INSTRUCTIONS)
+
+
+@pytest.mark.parametrize("val", ["0", "off", "false", "lean", "none", ""])
+def test_expert_guidance_disabled_values(monkeypatch, val):
+    monkeypatch.setenv("AE_MCP_EXPERT_GUIDANCE", val)
+    assert build_server_instructions() == _BASE_INSTRUCTIONS
+
+
+@pytest.mark.parametrize("val", ["1", "on", "true", "FULL"])
+def test_expert_guidance_enabled_values(monkeypatch, val):
+    monkeypatch.setenv("AE_MCP_EXPERT_GUIDANCE", val)
+    assert "EXTENDSCRIPT EXPERT GUARDRAILS" in build_server_instructions()
+
+
+def test_addendum_has_no_dotted_verbs():
+    from ae_mcp.instructions import _EXPERT_ADDENDUM
+    assert re.findall(r"\bae\.[a-zA-Z]\w*", _EXPERT_ADDENDUM) == []

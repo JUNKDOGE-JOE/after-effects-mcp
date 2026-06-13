@@ -59,13 +59,20 @@ export const EXTERNAL_CLIENTS = [
   },
 ];
 
-export function mcpConfigFor(client, port = 11488) {
+// The ae-mcp server defaults the expert anti-error guidance ON, so we only need
+// to emit an env var when the user has turned it OFF. Returns {} when enabled.
+export function expertGuidanceEnv(on) {
+  return on ? {} : { AE_MCP_EXPERT_GUIDANCE: '0' };
+}
+
+export function mcpConfigFor(client, port = 11488, expertGuidance = true) {
   return {
     mcpServers: {
       ae: {
         command: 'ae-mcp',
         env: {
           AE_MCP_BACKEND: 'ae-mcp',
+          ...expertGuidanceEnv(expertGuidance !== false),
           AE_MCP_PLUGIN_URL: `http://127.0.0.1:${port}`,
         },
       },

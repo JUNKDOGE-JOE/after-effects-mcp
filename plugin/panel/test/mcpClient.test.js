@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { _createRpc, findProjectRoot, resolveMcpCommand } from '../src/cep/mcpClient.js';
+import { _createRpc, createMcpClient, findProjectRoot, resolveMcpCommand } from '../src/cep/mcpClient.js';
 
 function makeRpc(timeoutMs = 50) {
   const writes = [];
@@ -125,4 +125,65 @@ test('resolveMcpCommand reports a repair hint when no executable can be found', 
     }),
     /Unable to find ae-mcp/,
   );
+});
+
+function makeFakeProc() {
+  const stdoutHandlers = [];
+  return {
+    stdin: { write() {} },
+    stdout: { on(event, handler) { if (event === 'data') stdoutHandlers.push(handler); } },
+    stderr: { on() {} },
+    on() {},
+    kill() {},
+    pushStdout(message) {
+      const line = typeof message === 'string' ? message : JSON.stringify(message) + '\n';
+      for (const handler of stdoutHandlers) handler(line);
+    },
+  };
+}
+
+// Spawn fake that auto-answers initialize (with a configurable result) and
+// tools/list so createMcpClient.start() resolves to ready.
+function spawnReplying(initResult) {
+  let proc = null;
+  const spawnImpl = () => {
+    proc = makeFakeProc();
+    const origWrite = proc.stdin.write;
+    proc.stdin.write = (line) => {
+      origWrite(line);
+      const msg = JSON.parse(line);
+      if (msg.method === 'initialize') {
+        proc.pushStdout({ jsonrpc: '2.0', id: msg.id, result: initResult });
+      } else if (msg.method === 'tools/list') {
+        proc.pushStdout({ jsonrpc: '2.0', id: msg.id, result: { tools: [] } });
+      }
+    };
+    return proc;
+  };
+  return { spawnImpl };
+}
+
+test('createMcpClient captures server instructions from the initialize result', async () => {
+  const { spawnImpl } = spawnReplying({ instructions: 'SERVER_GUIDE' });
+  const client = createMcpClient({
+    spawnImpl,
+    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
+  });
+
+  assert.equal(client.getServerInstructions(), '');
+  await client.start();
+  assert.equal(client.getServerInstructions(), 'SERVER_GUIDE');
+  client.stop();
+});
+
+test('createMcpClient defaults server instructions to empty when absent', async () => {
+  const { spawnImpl } = spawnReplying({});
+  const client = createMcpClient({
+    spawnImpl,
+    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
+  });
+
+  await client.start();
+  assert.equal(client.getServerInstructions(), '');
+  client.stop();
 });

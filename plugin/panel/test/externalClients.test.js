@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { EXTERNAL_CLIENTS, mcpConfigFor } from '../src/cep/externalClients.js';
+import { EXTERNAL_CLIENTS, mcpConfigFor, expertGuidanceEnv } from '../src/cep/externalClients.js';
 
 test('external client registry covers seeded clients with required fields', () => {
   const expectedIds = [
@@ -50,4 +50,23 @@ test('mcpConfigFor returns ae-mcp stdio config with panel plugin URL', () => {
       AE_MCP_PLUGIN_URL: 'http://127.0.0.1:11488',
     },
   });
+});
+
+test('expertGuidanceEnv: empty when on, sets 0 when off', () => {
+  assert.deepEqual(expertGuidanceEnv(true), {});
+  assert.deepEqual(expertGuidanceEnv(false), { AE_MCP_EXPERT_GUIDANCE: '0' });
+});
+
+test('mcpConfigFor omits guidance var when enabled (default + explicit), sets 0 when disabled', () => {
+  // default (no third arg) is enabled -> no extra var, preserving existing output
+  const dflt = mcpConfigFor('claude-desktop', 11488);
+  const on = mcpConfigFor('claude-desktop', 11488, true);
+  const off = mcpConfigFor('claude-desktop', 11488, false);
+
+  assert.equal(JSON.stringify(dflt).includes('AE_MCP_EXPERT_GUIDANCE'), false);
+  assert.equal(JSON.stringify(on).includes('AE_MCP_EXPERT_GUIDANCE'), false);
+  assert.equal(JSON.stringify(off).includes('"AE_MCP_EXPERT_GUIDANCE":"0"'), true);
+  // the disabled var sits next to AE_MCP_BACKEND in the ae server env
+  assert.equal(off.mcpServers.ae.env.AE_MCP_BACKEND, 'ae-mcp');
+  assert.equal(off.mcpServers.ae.env.AE_MCP_EXPERT_GUIDANCE, '0');
 });

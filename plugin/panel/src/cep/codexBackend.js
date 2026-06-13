@@ -1,5 +1,6 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
 import { PANEL_VERSION } from './mcpClient.js';
+import { expertGuidanceEnv } from './externalClients.js';
 
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -196,6 +197,8 @@ export function createCodexBackend({
   getPermissionMode,
   getMcpSpec,
   getToolMeta,
+  getExpertGuidance = () => true,
+  getServerInstructions = () => '',
   onEvent,
   lang = 'zh',
   env,
@@ -206,6 +209,10 @@ export function createCodexBackend({
   let initializePromise = null;
   let initialized = false;
   let threadId = null;
+  // Codex does not forward the ae-mcp server `instructions` to the model, so we
+  // inject them once as a preamble on the first turn of each (re)started thread.
+  // Reset alongside every threadId reset so a fresh thread re-sends it.
+  let preambleSent = false;
   let currentTurnId = null;
   let stopping = false;
   let stderrTail = '';
@@ -371,6 +378,7 @@ export function createCodexBackend({
     initializePromise = null;
     initialized = false;
     threadId = null;
+    preambleSent = false;
     if (wasStopping) return;
     if (activeRun) {
       emit({ type: 'error', kind: 'mcp', message: 'codex app-server exited: ' + detail });
@@ -387,6 +395,7 @@ export function createCodexBackend({
     initializePromise = null;
     initialized = false;
     threadId = null;
+    preambleSent = false;
     if (activeRun) {
       emit({ type: 'error', kind: 'mcp', message: err.message });
       finishActive();
@@ -469,6 +478,7 @@ export function createCodexBackend({
             args: mcpSpec.args || [],
             env: Object.assign({}, mcpSpec.env || {}, {
               AE_MCP_BACKEND: 'ae-mcp',
+              ...expertGuidanceEnv(getExpertGuidance()),
             }),
           },
         },
@@ -503,11 +513,20 @@ export function createCodexBackend({
       await ensureThread();
       const userText = String(text || '');
       transcript.push({ role: 'user', text: userText });
+      // On the first turn of a (re)started thread, prepend the ae-mcp server
+      // instructions as a preamble (Codex does not forward them to the model).
+      // Attempt only once per thread; subsequent turns rely on thread history.
+      let turnText = userText;
+      if (!preambleSent) {
+        const instr = (getServerInstructions() || '').trim();
+        if (instr) turnText = instr + '\n\n---\n\n' + userText;
+        preambleSent = true;
+      }
       // turn/start resolves long before turn/completed; track it so a
       // JSON-RPC error (bad model, dead thread) surfaces instead of
       // leaving the run promise spinning forever. The first ack can wait
       // on the injected ae-mcp cold start, hence the long timeout.
-      rpc.request('turn/start', turnParams(userText), 180000).catch((e) => {
+      rpc.request('turn/start', turnParams(turnText), 180000).catch((e) => {
         const message = e && e.message ? e.message : 'Failed to start Codex turn.';
         emit({ type: 'error', kind: /model/i.test(message) ? 'model' : 'mcp', message });
         finishActive();
@@ -557,6 +576,7 @@ export function createCodexBackend({
     initializePromise = null;
     initialized = false;
     threadId = null;
+    preambleSent = false;
     currentTurnId = null;
     transcript = [];
     pendingApprovals.clear();

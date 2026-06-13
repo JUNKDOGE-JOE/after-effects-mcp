@@ -1,5 +1,7 @@
 // CEP-only module: spawns the in-process Express host (plugin/host/server.js)
 // the way the legacy client.js did. Pure helpers are exported for tests.
+import { expertGuidanceEnv } from './externalClients.js';
+
 export function normalizeCepPath(value) {
   var normalized = String(value || '');
   normalized = normalized.replace(/^file:\\+/i, '');
@@ -33,12 +35,16 @@ export function savePort(storage, port) {
   }
 }
 
-export function buildMcpConfig(port) {
+export function buildMcpConfig(port, expertGuidance = true) {
   return {
     mcpServers: {
       ae: {
         command: 'ae-mcp',
-        env: { AE_MCP_BACKEND: 'ae-mcp', AE_MCP_PLUGIN_URL: 'http://127.0.0.1:' + port },
+        env: Object.assign(
+          { AE_MCP_BACKEND: 'ae-mcp' },
+          expertGuidanceEnv(expertGuidance !== false),
+          { AE_MCP_PLUGIN_URL: 'http://127.0.0.1:' + port },
+        ),
       },
     },
   };

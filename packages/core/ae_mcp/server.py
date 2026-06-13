@@ -25,7 +25,7 @@ from ae_mcp import approval_gate, client_identity
 from ae_mcp.annotations import VERB_ANNOTATIONS
 from ae_mcp.error_hints import append_hint
 from ae_mcp.handlers import HANDLERS, load_all
-from ae_mcp.instructions import SERVER_INSTRUCTIONS
+from ae_mcp.instructions import SERVER_INSTRUCTIONS, build_server_instructions
 
 log = logging.getLogger("ae_mcp.server")
 
@@ -169,7 +169,7 @@ def build_server() -> Server:
             "exposed tool-name collision(s): " + "; ".join(collisions)
         )
 
-    server: Server = Server("ae", instructions=SERVER_INSTRUCTIONS)
+    server: Server = Server("ae", instructions=build_server_instructions())
 
     @server.list_tools()
     async def _list_tools() -> List[Tool]:

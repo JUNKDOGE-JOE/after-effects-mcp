@@ -31,4 +31,5 @@ packages = ["ae_mcp"]
 include = [
     "ae_mcp/**/*.py",
     "ae_mcp/jsx_templates/*.jsx",
+    "ae_mcp/skills_bundled/*.json",
 ]
