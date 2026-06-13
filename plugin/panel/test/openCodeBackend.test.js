@@ -190,29 +190,31 @@ test('createOpenCodeBackend starts opencode serve, writes isolated ae MCP config
   assert.equal(sessionCall.body.permission.type, 'ask');
   assert.equal(fetched.calls.some((call) => call.path === '/session/session_1/message' && call.body.parts[0].text === 'hello'), true);
 
-  fetched.sse.push({ type: 'EventSessionIdle', sessionID: 'session_1' });
+  fetched.sse.push({ type: 'session.status', properties: { sessionID: 'session_1', status: { type: 'idle' } } });
   await pending;
 });
 
+// Fixtures use the REAL opencode wire shapes (live-verified 2026-06-13):
+// { type, properties } with dotted types; text via message.part.delta
+// (field:'text'), tools via message.part.updated (part.type:'tool', state),
+// turn lifecycle via session.status (busy/idle). MCP tool name is doubled
+// "ae_ae_ping" (server "ae" + tool "ae_ping").
 test('createOpenCodeBackend maps text, reasoning, tool, and idle SSE events to panel events', async () => {
   const { backend, events, fetched } = makeBackend();
   const pending = backend.sendUser('events');
   await flush();
 
-  fetched.sse.push({ type: 'EventSessionNextPrompted', sessionID: 'session_1' });
-  fetched.sse.push({ type: 'EventSessionNextReasoningStarted', sessionID: 'session_1' });
-  fetched.sse.push({ type: 'EventSessionNextReasoningDelta', sessionID: 'session_1', delta: 'think' });
-  fetched.sse.push({ type: 'EventSessionNextReasoningEnded', sessionID: 'session_1' });
-  fetched.sse.push({ type: 'EventSessionNextTextDelta', sessionID: 'session_1', text: 'hi' });
-  fetched.sse.push({ type: 'EventSessionNextToolInputStarted', sessionID: 'session_1', callID: 'tool_1', tool: 'ae_ping', input: { x: 1 } });
-  fetched.sse.push({ type: 'EventSessionNextToolSuccess', sessionID: 'session_1', callID: 'tool_1', tool: 'ae_ping', output: { ok: true }, duration: 25 });
-  fetched.sse.push({ type: 'EventSessionIdle', sessionID: 'session_1' });
+  fetched.sse.push({ type: 'session.status', properties: { sessionID: 'session_1', status: { type: 'busy' } } });
+  fetched.sse.push({ type: 'message.part.delta', properties: { sessionID: 'session_1', field: 'reasoning', delta: 'think' } });
+  fetched.sse.push({ type: 'message.part.delta', properties: { sessionID: 'session_1', field: 'text', delta: 'hi' } });
+  fetched.sse.push({ type: 'message.part.updated', properties: { sessionID: 'session_1', part: { type: 'tool', tool: 'ae_ae_ping', callID: 'tool_1', state: { status: 'running', input: { x: 1 } } } } });
+  fetched.sse.push({ type: 'message.part.updated', properties: { sessionID: 'session_1', part: { type: 'tool', tool: 'ae_ae_ping', callID: 'tool_1', state: { status: 'completed', output: '{"ok":true}', time: { start: 0, end: 25 } } } } });
+  fetched.sse.push({ type: 'session.status', properties: { sessionID: 'session_1', status: { type: 'idle' } } });
   await pending;
 
   assert.deepEqual(events, [
     { type: 'turn-start' },
     { type: 'thinking', active: true },
-    { type: 'thinking', active: false },
     { type: 'thinking', active: false },
     { type: 'text-delta', text: 'hi' },
     { type: 'tool-start', toolUseId: 'tool_1', name: 'mcp__ae__ae_ping', input: { x: 1 } },
@@ -226,13 +228,11 @@ test('OpenCode approval adapter applies annotation tiers and posts approval repl
   const pending = backend.sendUser('approve');
   await flush();
 
+  // Permission wire-type is UNVERIFIED (ae_ping is read-only so it never fired
+  // in live acceptance); adapter matches defensively on a permission*ask* type.
   fetched.sse.push({
-    type: 'EventPermissionAsked',
-    sessionID: 'session_1',
-    permissionID: 'perm_1',
-    callID: 'tool_1',
-    tool: 'ae_exec',
-    input: { code: 'app.project' },
+    type: 'permission.asked',
+    properties: { sessionID: 'session_1', permissionID: 'perm_1', tool: 'ae_ae_exec', input: { code: 'app.project' } },
   });
   await flush();
   assert.deepEqual(events.at(-1), {
@@ -252,18 +252,14 @@ test('OpenCode approval adapter applies annotation tiers and posts approval repl
   assert.deepEqual(events.at(-1), { type: 'tool-allowed', toolUseId: 'perm_1' });
 
   fetched.sse.push({
-    type: 'EventPermissionAsked',
-    sessionID: 'session_1',
-    permissionID: 'perm_2',
-    callID: 'tool_2',
-    tool: 'ae_exec',
-    input: { code: 'app.project.item(1).remove()' },
+    type: 'permission.asked',
+    properties: { sessionID: 'session_1', permissionID: 'perm_2', tool: 'ae_ae_exec', input: { code: 'app.project.item(1).remove()' } },
   });
   await flush();
   assert.equal(events.at(-1).type, 'tool-allowed');
   assert.equal(fetched.calls.at(-1).path, '/session/session_1/permission/perm_2');
 
-  fetched.sse.push({ type: 'EventSessionIdle', sessionID: 'session_1' });
+  fetched.sse.push({ type: 'session.status', properties: { sessionID: 'session_1', status: { type: 'idle' } } });
   await pending;
 });
 
@@ -271,7 +267,7 @@ test('OpenCode stop interrupts the session, drains pending approvals, and emits 
   const { backend, events, fetched } = makeBackend();
   const pending = backend.sendUser('stop');
   await flush();
-  fetched.sse.push({ type: 'EventPermissionAsked', sessionID: 'session_1', permissionID: 'perm_stop', tool: 'ae_exec', input: {} });
+  fetched.sse.push({ type: 'permission.asked', properties: { sessionID: 'session_1', permissionID: 'perm_stop', tool: 'ae_ae_exec', input: {} } });
   await flush();
 
   await backend.stop();
