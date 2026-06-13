@@ -10,6 +10,7 @@ import { WizardScreen } from '../screens/WizardScreen';
 import { ConnectionDrawer } from '../screens/ConnectionDrawer';
 import { ChatScreen } from '../screens/ChatScreen';
 import { createAgentLoop } from '../lib/agentLoop';
+import { revertToPreviousCheckpoint } from '../lib/activityModel';
 import { pickBackend, deriveToolMeta, shouldResetOnBackendChange } from '../lib/backendSelect';
 import { createMcpClient, resolveMcpCommand } from '../cep/mcpClient';
 import { createApiKeyStore } from '../cep/apiKey';
@@ -374,6 +375,15 @@ function Shell({ cs }) {
     setLogs((xs) => [...xs.slice(-199), `[${new Date().toLocaleTimeString()}] ${m}`]);
   }, []);
 
+  const undoToPreviousCheckpoint = React.useCallback(async () => {
+    try {
+      await revertToPreviousCheckpoint(mcp);
+      pushLog('Reverted to previous checkpoint');
+    } catch (e) {
+      pushLog('Checkpoint revert failed: ' + (e && e.message ? e.message : String(e)));
+    }
+  }, [mcp, pushLog]);
+
   React.useEffect(() => {
     const port = loadSavedPort(window.localStorage) || DEFAULT_PORT;
     ctrl.current = createHostController({
@@ -552,6 +562,7 @@ function Shell({ cs }) {
             events={events}
             lang={lang}
             onClear={clear}
+            onUndoCheckpoint={undoToPreviousCheckpoint}
             emptyTitle={t.actEmptyT}
             emptyCaption={t.actEmptyB}
           />
