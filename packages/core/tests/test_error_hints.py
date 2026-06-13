@@ -127,3 +127,27 @@ def test_ok_false_json_result_is_preserved_for_upper_layer_hinting():
         "ok": False,
         "error": "TypeError: null 不是对象 (line 4)",
     }
+
+
+def test_append_hint_for_detached_property_ref():
+    hinted = append_hint('由于参数 1，无法设置值。该属性未与图层关联。')
+    assert "[hint]" in hinted
+    assert "AEMCP.propByMatchPath" in hinted
+
+
+def test_append_hint_for_invalid_font_name():
+    hinted = append_hint('After Effects 错误: font 包含无效字符')
+    assert "[hint]" in hinted
+    assert "PostScript name" in hinted
+
+
+def test_append_hint_for_fontsize_cap():
+    hinted = append_hint('值 1300 out of range 0.1 至 1296')
+    assert "[hint]" in hinted
+    assert "1296" in hinted
+
+
+def test_null_hint_mentions_effect_index_fallback():
+    hinted = append_hint("TypeError: null 不是对象 (line 4)")
+    assert "AEMCP.mustFind(value, name)" in hinted
+    assert "effect.property(1)" in hinted

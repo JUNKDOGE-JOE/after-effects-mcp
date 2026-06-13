@@ -144,6 +144,11 @@ export function createAgentLoop({
       try {
         const tools = await mcp.listTools();
         const toolByName = new Map((tools || []).map((tool) => [tool.name, tool]));
+        // ae-mcp advertises its operating guidance (incl. ExtendScript guardrails)
+        // via the MCP initialize instructions; append it to the static BYOK
+        // prompt so this backend gets the same single source of truth.
+        const serverInstr = (mcp.getServerInstructions && mcp.getServerInstructions()) || '';
+        const system = serverInstr ? buildSystemPrompt(lang) + '\n\n' + serverInstr : buildSystemPrompt(lang);
         let toolRounds = 0;
 
         while (true) {
@@ -155,7 +160,7 @@ export function createAgentLoop({
           const result = await anthropic({
             apiKey: getApiKey && getApiKey(),
             model: (getModel && getModel()) || DEFAULT_MODEL,
-            system: buildSystemPrompt(lang),
+            system,
             messages: clone(messages),
             tools,
             signal: controller.signal,

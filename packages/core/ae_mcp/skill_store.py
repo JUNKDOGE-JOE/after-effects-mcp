@@ -25,6 +25,10 @@ def _skill_root() -> Path:
     return Path.home() / ".ae-mcp" / "skills"
 
 
+def _bundled_root() -> Path:
+    return Path(__file__).resolve().parent / "skills_bundled"
+
+
 def validate_name(name: str) -> str:
     if not _NAME_RE.fullmatch(name):
         raise SkillError("invalid skill name")
@@ -60,28 +64,38 @@ class Skill:
 
 
 class SkillStore:
-    def __init__(self, root: Path | None = None) -> None:
+    def __init__(self, root: Path | None = None, bundled_root: Path | None = None) -> None:
         self.root = root or _skill_root()
+        self.bundled_root = bundled_root if bundled_root is not None else _bundled_root()
 
     def _path(self, name: str) -> Path:
         return self.root / f"{validate_name(name)}.json"
 
-    def list(self) -> list[Skill]:
-        if not self.root.exists():
-            return []
-        skills: list[Skill] = []
-        for path in sorted(self.root.glob("*.json")):
+    def _read_dir(self, root: Path) -> dict[str, Skill]:
+        out: dict[str, Skill] = {}
+        if not root.exists():
+            return out
+        for path in sorted(root.glob("*.json")):
             try:
-                skills.append(Skill.from_dict(json.loads(path.read_text(encoding="utf-8"))))
+                skill = Skill.from_dict(json.loads(path.read_text(encoding="utf-8")))
             except Exception:
                 continue
-        return skills
+            out[skill.name] = skill
+        return out
+
+    def list(self) -> list[Skill]:
+        merged = self._read_dir(self.bundled_root)
+        merged.update(self._read_dir(self.root))  # user overrides bundled by name
+        return [merged[name] for name in sorted(merged)]
 
     def load(self, name: str) -> Skill:
         path = self._path(name)
-        if not path.exists():
-            raise SkillError(f"skill not found: {name}")
-        return Skill.from_dict(json.loads(path.read_text(encoding="utf-8")))
+        if path.exists():
+            return Skill.from_dict(json.loads(path.read_text(encoding="utf-8")))
+        bundled = self.bundled_root / f"{validate_name(name)}.json"
+        if bundled.exists():
+            return Skill.from_dict(json.loads(bundled.read_text(encoding="utf-8")))
+        raise SkillError(f"skill not found: {name}")
 
     def create(self, skill: Skill, *, overwrite: bool = False) -> Skill:
         path = self._path(skill.name)
@@ -105,6 +119,9 @@ class SkillStore:
     def delete(self, name: str) -> None:
         path = self._path(name)
         if not path.exists():
+            bundled = self.bundled_root / f"{validate_name(name)}.json"
+            if bundled.exists():
+                raise SkillError(f"cannot delete bundled skill: {name}")
             raise SkillError(f"skill not found: {name}")
         path.unlink()
 

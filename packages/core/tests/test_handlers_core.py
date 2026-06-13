@@ -345,12 +345,17 @@ async def test_skill_crud_and_render(monkeypatch, tmp_path):
     assert created["ok"] is True
 
     listed = await _run_skill_list(S.AeSkillListArgs(), None)
-    assert listed["skills"] == [{
+    names = [s["name"] for s in listed["skills"]]
+    assert "wiggle-position" in names
+    wiggle = next(s for s in listed["skills"] if s["name"] == "wiggle-position")
+    assert wiggle == {
         "name": "wiggle-position",
         "description": "Add wiggle expression",
         "template_type": "jsx",
         "args": ["freq", "amp"],
-    }]
+    }
+    # The bundled extendscript-cookbook is always listed (default skill).
+    assert "extendscript-cookbook" in names
 
     rendered = await _run_skill_use(S.AeSkillUseArgs(name="wiggle-position"), None)
     assert rendered["ok"] is True

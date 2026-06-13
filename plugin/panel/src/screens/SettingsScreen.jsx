@@ -72,6 +72,8 @@ const S = {
     mins: (n) => `${n} 分钟前`,
     hours: (n) => `${n} 小时前`,
     language: '界面语言',
+    expertGuidance: 'AE 专家防错指导',
+    expertGuidanceCap: '增加每会话一次性握手 token，换更少的 AE 脚本报错',
     logLevel: '日志级别',
     exportLog: '导出日志',
     mcp: 'MCP 配置',
@@ -144,6 +146,8 @@ const S = {
     mins: (n) => `${n} min ago`,
     hours: (n) => `${n} h ago`,
     language: 'Language',
+    expertGuidance: 'AE expert anti-error guidance',
+    expertGuidanceCap: 'Adds a one-time handshake token cost per session for fewer AE scripting errors',
     logLevel: 'Log level',
     exportLog: 'Export log',
     mcp: 'MCP config',
@@ -274,6 +278,8 @@ export function SettingsScreen({
   onModelChange,
   backend = 'subscription',
   onBackendChange,
+  expertGuidance = true,
+  onExpertGuidance,
   claudeStatus = { state: 'checking' },
   onRecheckClaude,
   codexStatus = { state: 'checking' },
@@ -431,7 +437,7 @@ export function SettingsScreen({
 
       <Section title={t.externalClients} caption={t.externalClientsCap}>
         {EXTERNAL_CLIENTS.map((externalClient) => {
-          const configText = JSON.stringify(mcpConfigFor(externalClient, Number(draftPort) || port || 11488), null, 2);
+          const configText = JSON.stringify(mcpConfigFor(externalClient, Number(draftPort) || port || 11488, expertGuidance), null, 2);
           return (
             <ExternalClientRow
               key={externalClient.id}
@@ -460,6 +466,9 @@ export function SettingsScreen({
       </Section>
 
       <Section title={t.gen}>
+        <Field layout="row" label={t.expertGuidance} caption={t.expertGuidanceCap}>
+          <Switch checked={expertGuidance} onChange={(v) => onExpertGuidance && onExpertGuidance(v)} />
+        </Field>
         <Field label={t.language}>
           <Segmented full value={lang} onChange={onLangChange} options={[{ value: 'zh', label: '中文' }, { value: 'en', label: 'English' }]} />
         </Field>
