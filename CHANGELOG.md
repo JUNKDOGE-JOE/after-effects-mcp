@@ -10,6 +10,20 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### [0.8.0] — 2026-06-14
+
+把 AE 操作专识沉淀进 ae-mcp 本体——跨后端、免沙箱，且**默认开、可一键关**：常驻成本由用户掌控。
+
+#### ✨ 新增
+- **AE 专家防错指导（默认开，可关）**——握手指令新增一段 ExtendScript 高频陷阱铁律（文字层取回-改-回写 / 字体 PostScript 名 / addProperty 两遍法 / 新建图层 prepend 顺序 / effect 子属性按索引）。由 `AE_MCP_EXPERT_GUIDANCE` 开关控制，是唯一的常驻 token 成本（每会话握手仅下发一次）；面板设置页一键开关。
+- **内置技能库（7 个，按需取、零常驻）**——`ae_skillList`/`ae_skillUse` 现自带一套打包技能：`extendscript-cookbook`（情景化 JSX 配方与坑）、`kinetic-typography`、`ease-and-timing`、`grade-stack`、`render-order`、`project-organization`、`glow-recipes`。走新的"内置只读技能目录"机制（用户同名技能可覆盖、内置不可删），随包发布；只有 agent 主动取用时才占 token。
+- **错误提示扩充**——新增「属性未与图层关联 / 字体名无效 / fontSize 超 1296」三条自动修复提示，并给 null 族提示补上"effect 子属性改用索引"的兜底。
+- **三后端都吃到指导**——mcpClient 捕获握手指令；BYOK 追加进 system；Codex 以首轮 preamble 注入（Codex 不转发 MCP 指令）；Claude 订阅经 Agent SDK 原生转发。
+
+#### 📦 说明
+- 开关默认开；介意常驻成本的用户可在设置页关掉，技能与错误提示不受影响、始终可用。
+- 内嵌后端要求不变（Claude 订阅 Node≥18 + 登录 / Codex CLI 登录 / BYOK Anthropic key）。
+
 ### [0.7.0] — 2026-06-13
 
 内嵌对话走向**多框架**，并把后端接入正式化：新增 **Codex 内嵌后端**之外，这一版把"内嵌后端接口"抽象成注册表 + 契约，新增**外接客户端注册表**（让任意 MCP 客户端一键接入），P6 的撤销/空结果标记，以及一次彻底的文档刷新。
@@ -152,6 +166,20 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### [0.8.0] — 2026-06-14
+
+Bake durable AE operating expertise into ae-mcp itself — cross-backend, sandbox-immune, **default-on but one-click off** so the standing cost stays user-controlled.
+
+#### ✨ Added
+- **AE expert anti-error guidance (default on, toggleable)** — the handshake instructions gain a block of high-frequency ExtendScript guardrails (text-layer retrieve-modify-setValue / PostScript font names / addProperty two-pass / new-layer prepend order / effect sub-property by index). Controlled by `AE_MCP_EXPERT_GUIDANCE` — the only always-on token cost (delivered once per session at handshake); one-click in Settings.
+- **Bundled skill library (7, on-demand, zero standing cost)** — `ae_skillList`/`ae_skillUse` now ship a packaged skill set: `extendscript-cookbook` (situational JSX recipes & traps), `kinetic-typography`, `ease-and-timing`, `grade-stack`, `render-order`, `project-organization`, `glow-recipes`. Via a new bundled read-only skills dir (user skills override by name; bundled can't be deleted), shipped with the package; tokens are spent only when an agent fetches one.
+- **More error hints** — three new auto-fix hints (detached property ref / invalid font name / fontSize over 1296) plus an effect-sub-property-by-index fallback on the null-family hint.
+- **Guidance reaches all three backends** — mcpClient captures the handshake instructions; BYOK appends them to its system prompt; Codex injects them as a first-turn preamble (Codex doesn't forward MCP instructions); the Claude subscription gets them natively via the Agent SDK.
+
+#### 📦 Notes
+- The toggle defaults on; cost-conscious users can switch it off in Settings — skills and error hints are unaffected and always available.
+- Embedded-backend requirements unchanged (Claude subscription Node≥18 + login / Codex CLI login / BYOK Anthropic key).
 
 ### [0.7.0] — 2026-06-13
 

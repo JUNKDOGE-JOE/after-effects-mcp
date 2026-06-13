@@ -8266,7 +8266,7 @@
   // package.json
   var package_default = {
     name: "ae-mcp-panel",
-    version: "0.7.0",
+    version: "0.8.0",
     private: true,
     type: "module",
     scripts: {
@@ -8730,13 +8730,17 @@
       docsUrl: "https://opencode.ai/docs"
     }
   ];
-  function mcpConfigFor(client, port = 11488) {
+  function expertGuidanceEnv(on) {
+    return on ? {} : { AE_MCP_EXPERT_GUIDANCE: "0" };
+  }
+  function mcpConfigFor(client, port = 11488, expertGuidance = true) {
     return {
       mcpServers: {
         ae: {
           command: "ae-mcp",
           env: {
             AE_MCP_BACKEND: "ae-mcp",
+            ...expertGuidanceEnv(expertGuidance !== false),
             AE_MCP_PLUGIN_URL: `http://127.0.0.1:${port}`
           }
         }
@@ -8830,6 +8834,8 @@
       mins: (n) => `${n} \u5206\u949F\u524D`,
       hours: (n) => `${n} \u5C0F\u65F6\u524D`,
       language: "\u754C\u9762\u8BED\u8A00",
+      expertGuidance: "AE \u4E13\u5BB6\u9632\u9519\u6307\u5BFC",
+      expertGuidanceCap: "\u589E\u52A0\u6BCF\u4F1A\u8BDD\u4E00\u6B21\u6027\u63E1\u624B token\uFF0C\u6362\u66F4\u5C11\u7684 AE \u811A\u672C\u62A5\u9519",
       logLevel: "\u65E5\u5FD7\u7EA7\u522B",
       exportLog: "\u5BFC\u51FA\u65E5\u5FD7",
       mcp: "MCP \u914D\u7F6E",
@@ -8902,6 +8908,8 @@
       mins: (n) => `${n} min ago`,
       hours: (n) => `${n} h ago`,
       language: "Language",
+      expertGuidance: "AE expert anti-error guidance",
+      expertGuidanceCap: "Adds a one-time handshake token cost per session for fewer AE scripting errors",
       logLevel: "Log level",
       exportLog: "Export log",
       mcp: "MCP config",
@@ -9014,6 +9022,8 @@
     onModelChange,
     backend = "subscription",
     onBackendChange,
+    expertGuidance = true,
+    onExpertGuidance,
     claudeStatus = { state: "checking" },
     onRecheckClaude,
     codexStatus = { state: "checking" },
@@ -9136,7 +9146,7 @@
         ] }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Section, { title: t.externalClients, caption: t.externalClientsCap, children: EXTERNAL_CLIENTS.map((externalClient) => {
-        const configText = JSON.stringify(mcpConfigFor(externalClient, Number(draftPort) || port || 11488), null, 2);
+        const configText = JSON.stringify(mcpConfigFor(externalClient, Number(draftPort) || port || 11488, expertGuidance), null, 2);
         return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
           ExternalClientRow,
           {
@@ -9164,6 +9174,7 @@
         ))
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { title: t.gen, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { layout: "row", label: t.expertGuidance, caption: t.expertGuidanceCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Switch, { checked: expertGuidance, onChange: (v) => onExpertGuidance && onExpertGuidance(v) }) }),
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.language, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] }) }),
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.logLevel, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: logLevel, onChange: setLogLevel, style: { flex: 1 }, options: [
@@ -11478,6 +11489,8 @@
         try {
           const tools = await mcp.listTools();
           const toolByName = new Map((tools || []).map((tool) => [tool.name, tool]));
+          const serverInstr = mcp.getServerInstructions && mcp.getServerInstructions() || "";
+          const system = serverInstr ? buildSystemPrompt(lang) + "\n\n" + serverInstr : buildSystemPrompt(lang);
           let toolRounds = 0;
           while (true) {
             if (toolRounds >= maxToolRounds) {
@@ -11487,7 +11500,7 @@
             const result = await anthropic({
               apiKey: getApiKey && getApiKey(),
               model: getModel && getModel() || DEFAULT_MODEL,
-              system: buildSystemPrompt(lang),
+              system,
               messages: clone(messages),
               tools,
               signal: controller.signal,
@@ -11800,7 +11813,7 @@
   // src/cep/mcpClient.js
   var DEFAULT_TIMEOUT_MS = 3e4;
   var MCP_PROTOCOL_VERSION = "2025-06-18";
-  var PANEL_VERSION = "0.7.0";
+  var PANEL_VERSION = "0.8.0";
   function getCepRequire() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
@@ -11934,12 +11947,14 @@
     onCrash,
     extRoot,
     repoRoot,
+    getExpertGuidance = () => true,
     packageVersion = PANEL_VERSION,
     retryDelays = [1e3, 2e3, 4e3]
   } = {}) {
     let proc = null;
     let rpc = null;
     let tools = null;
+    let serverInstructions = "";
     let status = "idle";
     let startPromise = null;
     let retryCount = 0;
@@ -11966,7 +11981,10 @@
       startPromise = (async () => {
         const commandSpec = await resolveCommand({ extRoot, repoRoot });
         const spawn = getSpawn();
-        const spawnEnv = Object.assign({}, getCepEnv(), env || {}, { AE_MCP_BACKEND: "ae-mcp" });
+        const spawnEnv = Object.assign({}, getCepEnv(), env || {}, {
+          AE_MCP_BACKEND: "ae-mcp",
+          ...expertGuidanceEnv(getExpertGuidance())
+        });
         proc = spawn(commandSpec.command, commandSpec.args || [], {
           stdio: "pipe",
           windowsHide: true,
@@ -11980,11 +11998,12 @@
         proc.on("error", (err) => handleCrash(err));
         if (proc.stderr && proc.stderr.on) proc.stderr.on("data", () => {
         });
-        await rpc.request("initialize", {
+        const initResult = await rpc.request("initialize", {
           protocolVersion: MCP_PROTOCOL_VERSION,
           clientInfo: { name: "panel-chat", version: packageVersion },
           capabilities: {}
         });
+        serverInstructions = initResult && initResult.instructions || "";
         rpc.notify("notifications/initialized");
         const listed = await rpc.request("tools/list", {});
         tools = listed && Array.isArray(listed.tools) ? listed.tools : [];
@@ -12054,7 +12073,7 @@
       rpc = null;
       startPromise = null;
     }
-    return { start, listTools, callTool, stop, state: currentState };
+    return { start, listTools, callTool, stop, state: currentState, getServerInstructions: () => serverInstructions };
   }
 
   // src/cep/apiKey.js
@@ -12693,6 +12712,8 @@
     getPermissionMode,
     getMcpSpec,
     getToolMeta,
+    getExpertGuidance = () => true,
+    getServerInstructions = () => "",
     onEvent,
     lang = "zh",
     env
@@ -12703,6 +12724,7 @@
     let initializePromise = null;
     let initialized = false;
     let threadId = null;
+    let preambleSent = false;
     let currentTurnId = null;
     let stopping = false;
     let stderrTail = "";
@@ -12855,6 +12877,7 @@
       initializePromise = null;
       initialized = false;
       threadId = null;
+      preambleSent = false;
       if (wasStopping) return;
       if (activeRun) {
         emit({ type: "error", kind: "mcp", message: "codex app-server exited: " + detail });
@@ -12870,6 +12893,7 @@
       initializePromise = null;
       initialized = false;
       threadId = null;
+      preambleSent = false;
       if (activeRun) {
         emit({ type: "error", kind: "mcp", message: err.message });
         finishActive();
@@ -12948,7 +12972,8 @@
               command: mcpSpec.command,
               args: mcpSpec.args || [],
               env: Object.assign({}, mcpSpec.env || {}, {
-                AE_MCP_BACKEND: "ae-mcp"
+                AE_MCP_BACKEND: "ae-mcp",
+                ...expertGuidanceEnv(getExpertGuidance())
               })
             }
           }
@@ -12980,7 +13005,13 @@
         await ensureThread();
         const userText = String(text || "");
         transcript.push({ role: "user", text: userText });
-        rpc.request("turn/start", turnParams(userText), 18e4).catch((e) => {
+        let turnText = userText;
+        if (!preambleSent) {
+          const instr = (getServerInstructions() || "").trim();
+          if (instr) turnText = instr + "\n\n---\n\n" + userText;
+          preambleSent = true;
+        }
+        rpc.request("turn/start", turnParams(turnText), 18e4).catch((e) => {
           const message = e && e.message ? e.message : "Failed to start Codex turn.";
           emit({ type: "error", kind: /model/i.test(message) ? "model" : "mcp", message });
           finishActive();
@@ -13028,6 +13059,7 @@
       initializePromise = null;
       initialized = false;
       threadId = null;
+      preambleSent = false;
       currentTurnId = null;
       transcript = [];
       pendingApprovals.clear();
@@ -13204,6 +13236,7 @@
     getPermissionMode,
     getMcpSpec,
     getToolMeta,
+    getExpertGuidance = () => true,
     onEvent,
     env
   } = {}) {
@@ -13301,7 +13334,8 @@
             enabled: true,
             timeout: MCP_TIMEOUT_MS,
             environment: Object.assign({}, mcpSpec && mcpSpec.env || {}, {
-              AE_MCP_BACKEND: "ae-mcp"
+              AE_MCP_BACKEND: "ae-mcp",
+              ...expertGuidanceEnv(getExpertGuidance())
             })
           }
         }
@@ -14245,12 +14279,16 @@
     } catch (e) {
     }
   }
-  function buildMcpConfig(port) {
+  function buildMcpConfig(port, expertGuidance = true) {
     return {
       mcpServers: {
         ae: {
           command: "ae-mcp",
-          env: { AE_MCP_BACKEND: "ae-mcp", AE_MCP_PLUGIN_URL: "http://127.0.0.1:" + port }
+          env: Object.assign(
+            { AE_MCP_BACKEND: "ae-mcp" },
+            expertGuidanceEnv(expertGuidance !== false),
+            { AE_MCP_PLUGIN_URL: "http://127.0.0.1:" + port }
+          )
         }
       }
     };
@@ -14293,6 +14331,22 @@
       }
     }
     return { start, restart, getHost: () => host };
+  }
+
+  // src/lib/expertGuidance.js
+  var EXPERT_GUIDANCE_KEY = "ae-mcp.expertGuidance";
+  function loadExpertGuidance(storage) {
+    try {
+      return storage.getItem(EXPERT_GUIDANCE_KEY) !== "0";
+    } catch (e) {
+      return true;
+    }
+  }
+  function saveExpertGuidance(storage, on) {
+    try {
+      storage.setItem(EXPERT_GUIDANCE_KEY, on ? "1" : "0");
+    } catch (e) {
+    }
   }
 
   // src/app/App.jsx
@@ -14479,6 +14533,7 @@
     const [sessionFast, setSessionFast] = import_react40.default.useState(null);
     const [permissionMode, setPermissionMode] = import_react40.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
     const [backendPref, setBackendPref] = import_react40.default.useState(() => readPref("ae_mcp_backend", "subscription"));
+    const [expertGuidance, setExpertGuidance] = import_react40.default.useState(() => loadExpertGuidance(window.localStorage));
     const [probe, setProbe] = import_react40.default.useState(null);
     const [codexProbe, setCodexProbe] = import_react40.default.useState(null);
     const [codexModels, setCodexModels] = import_react40.default.useState(() => readCachedCodexModels(window.localStorage));
@@ -14526,7 +14581,10 @@
     };
     const extRoot = cs2 && cs2.getSystemPath ? cs2.getSystemPath("extension") : "";
     const sidecarPath = import_react40.default.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
-    const mcp = import_react40.default.useMemo(() => createMcpClient({ extRoot }), [extRoot]);
+    const mcp = import_react40.default.useMemo(() => createMcpClient({
+      extRoot,
+      getExpertGuidance: () => loadExpertGuidance(window.localStorage)
+    }), [extRoot]);
     const handleChatEvent = import_react40.default.useCallback((evt) => {
       if (evt.type === "turn-start") setChatStreaming(true);
       if (evt.type === "thinking") setThinkingActive(!!evt.active);
@@ -14567,6 +14625,8 @@
       getEffort: () => runtimeRef.current.effort,
       getFast: () => runtimeRef.current.fast,
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
+      getExpertGuidance: () => loadExpertGuidance(window.localStorage),
+      getServerInstructions: () => mcp.getServerInstructions(),
       lang,
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
@@ -14576,6 +14636,7 @@
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
+      getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, mcp, handleChatEvent]);
@@ -14757,7 +14818,7 @@
       markWizardDone(window.localStorage);
       setWizardDone(true);
     };
-    const mcpConfigStr = JSON.stringify(buildMcpConfig(status.port), null, 2);
+    const mcpConfigStr = JSON.stringify(buildMcpConfig(status.port, expertGuidance), null, 2);
     const claudeStatus = probe === null ? { state: "checking" } : probe.nodeOk === false ? { state: "no-node", detail: probe.detail } : probe.loggedIn === false ? { state: "not-logged-in", detail: probe.detail } : { state: "ready", nodeVersion: probe.nodeVersion };
     const codexStatus = codexProbe === null ? { state: "checking" } : codexProbe.loggedIn === false ? { state: "not-logged-in", detail: codexProbe.detail } : { state: "ready", email: codexProbe.email, planType: codexProbe.planType };
     const openCodeStatus = openCodeProbe === null ? { state: "checking" } : openCodeProbe.loggedIn === false ? { state: "not-logged-in", detail: openCodeProbe.detail } : { state: "ready" };
@@ -14897,6 +14958,11 @@
             onBackendChange: (m) => {
               setBackendPref(m);
               writePref("ae_mcp_backend", m);
+            },
+            expertGuidance,
+            onExpertGuidance: (v) => {
+              setExpertGuidance(v);
+              saveExpertGuidance(window.localStorage, v);
             },
             claudeStatus,
             onRecheckClaude: runClaudeProbe,
