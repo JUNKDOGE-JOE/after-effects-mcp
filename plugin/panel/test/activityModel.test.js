@@ -20,6 +20,11 @@ test('eventOutcome maps denied states before ok/error', () => {
   assert.equal(eventOutcome({ ok: false }), 'error');
 });
 
+test('eventOutcome marks ok events with an empty result separately', () => {
+  assert.equal(eventOutcome({ ok: true, emptyResult: true }), 'empty');
+  assert.equal(eventOutcome({ ok: true }), 'ok');
+});
+
 test('filterEvents failed mode includes errors and denied operations', () => {
   const events = [
     { id: 1, ok: true },

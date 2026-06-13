@@ -244,7 +244,13 @@ function buildApp() {
         try {
             const encoded = await jsxBridge.evalScript(transported, t);
             const result = decodeEvalScriptTransportResult(encoded);
-            activity.record({ client, undoGroup: undoGroup || null, ok: true, durationMs: Date.now() - startedAt });
+            activity.record({
+                client,
+                undoGroup: undoGroup || null,
+                ok: true,
+                durationMs: Date.now() - startedAt,
+                ...(result === '' ? { emptyResult: true } : {}),
+            });
             res.json({ ok: true, result: result || '' });
         } catch (e) {
             activity.record({ client, undoGroup: undoGroup || null, ok: false, error: e.message, durationMs: Date.now() - startedAt });

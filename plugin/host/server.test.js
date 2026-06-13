@@ -375,6 +375,40 @@ test('/exec success is recorded in /activity with client label', async () => {
     }
 });
 
+test('/exec records emptyResult when the decoded result is empty', async () => {
+    delete require.cache[require.resolve('./server')];
+    delete require.cache[require.resolve('./jsx-bridge')];
+    const server = require('./server');
+    server.activity._reset();
+    server.setPaused(false);
+    server._setExecToken('known-secret-token');
+    server.setCSInterface({
+        evalScript: function (jsx, cb) { cb('{"ok":true,"result":""}'); },
+    });
+    const app = server.buildApp();
+    const srv = await new Promise((resolve) => {
+        const s = app.listen(0, '127.0.0.1', () => resolve(s));
+    });
+    try {
+        const r = await post(
+            srv.address().port,
+            '/exec',
+            { 'X-AE-MCP-Token': 'known-secret-token', 'x-ae-mcp-client': 'Claude Desktop/1.2' },
+            { code: 'undefined', undoGroup: 'unit' }
+        );
+        assert.strictEqual(r.status, 200);
+        assert.strictEqual(r.body.ok, true);
+        assert.strictEqual(r.body.result, '');
+
+        const events = server.activity.list();
+        assert.strictEqual(events.length, 1);
+        assert.strictEqual(events[0].ok, true);
+        assert.strictEqual(events[0].emptyResult, true);
+    } finally {
+        srv.close();
+    }
+});
+
 test('/exec feeds client registry and python version into connection info', async () => {
     const { srv, port } = await startApp();
     const server = require('./server');
