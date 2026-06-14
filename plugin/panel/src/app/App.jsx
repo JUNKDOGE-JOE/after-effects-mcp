@@ -25,7 +25,6 @@ import { baseDescriptorFor } from '../cep/backends/index.js';
 import { cachedByokModels } from '../cep/modelsApi';
 import { costBadge } from '../lib/composerOptions';
 import { useActivity } from '../cep/useActivity';
-import { useHandshake } from '../cep/useHandshake';
 import { isWizardDone, markWizardDone } from '../cep/firstRun';
 import { useWizardWiring } from './wizardWiring';
 import { runDiagnostics } from '../cep/diagnostics';
@@ -206,7 +205,6 @@ function Shell({ cs }) {
   const [wizardDone, setWizardDone] = React.useState(() => isWizardDone(window.localStorage));
   const [wizStep, setWizStep] = React.useState(1);
   const [wizClient, setWizClient] = React.useState('claude-desktop');
-  const handshake = useHandshake(getHost, !wizardDone && wizStep === 4);
 
   // Connection drawer + diagnostics
   const [drawerOpen, setDrawerOpen] = React.useState(false);
@@ -570,13 +568,11 @@ function Shell({ cs }) {
         onLangChange={setLang}
         client={wizClient}
         onClient={setWizClient}
-        handshake={handshake}
         clientName={(CLIENT_NAMES[wizClient] || CLIENT_NAMES['claude-desktop'])[lang]}
         mcpConfig={mcpConfigStr}
-        onNext={() => setWizStep((s) => Math.min(4, s + 1))}
+        onNext={() => setWizStep((s) => Math.min(3, s + 1))}
         onBack={() => setWizStep((s) => Math.max(1, s - 1))}
         onCopy={() => copyText(mcpConfigStr)}
-        onDiagnose={() => { finishWizard(); setDrawerOpen(true); runDiag(); }}
         onDone={finishWizard}
         onSkip={finishWizard}
         {...wizard.props}

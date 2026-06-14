@@ -10,7 +10,7 @@ import { initialStepStates, LOCAL_STEPS, SUBSCRIPTION_STEPS } from '../lib/wizar
 
 const W = {
   zh: {
-    stepOf: (n) => `第 ${n} 步 / 共 4 步`,
+    stepOf: (n) => `第 ${n} 步 / 共 3 步`,
     back: '上一步', next: '下一步', start: '开始使用', skip: '跳过向导',
     t1: '欢迎使用 ae-mcp',
     b1: '让 AI 助手安全地操作你的 After Effects 工程 — 每一步可见、可批准、可撤销。',
@@ -25,16 +25,9 @@ const W = {
     builtin: '面板内置对话', builtinNote: '无需配置，开箱即用',
     docClient: '查看接入文档',
     docOnly: '按文档接入',
-    t4w: '等待握手…',
-    b4w: '在客户端里发起一次对话，面板会自动完成握手。',
-    t4s: '连接成功',
-    b4s: (c) => `${c} 已连接，可以开始让 AI 操作你的工程了。`,
-    t4t: '尚未收到连接',
-    b4t: '超过 60 秒没有客户端接入。逐项体检可以找出问题：',
-    diagnose: '运行诊断',
   },
   en: {
-    stepOf: (n) => `Step ${n} of 4`,
+    stepOf: (n) => `Step ${n} of 3`,
     back: 'Back', next: 'Next', start: 'Start using', skip: 'Skip setup',
     t1: 'Welcome to ae-mcp',
     b1: 'Let AI assistants operate your After Effects project safely — every step visible, approvable, undoable.',
@@ -49,13 +42,6 @@ const W = {
     builtin: 'Built-in chat', builtinNote: 'No config needed — works out of the box',
     docClient: 'Open integration docs',
     docOnly: 'Use docs',
-    t4w: 'Waiting for handshake…',
-    b4w: 'Start a conversation in your client; the panel completes the handshake automatically.',
-    t4s: 'Connected',
-    b4s: (c) => `${c} is connected. You can start directing AI in your project.`,
-    t4t: 'No connection yet',
-    b4t: 'No client joined within 60 seconds. Run diagnostics to find the issue:',
-    diagnose: 'Run diagnostics',
   },
 };
 
@@ -152,13 +138,11 @@ export function WizardScreen({
   onLangChange,
   client = 'claude-desktop',
   onClient,
-  handshake = 'waiting',
   clientName = 'Claude Desktop',
   mcpConfig = '',
   onNext,
   onBack,
   onCopy,
-  onDiagnose,
   onDone,
   onSkip,
   stepStates = EMPTY_STEPS,
@@ -177,13 +161,13 @@ export function WizardScreen({
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 'var(--space-6) var(--space-5) var(--space-5)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{ display: 'flex', gap: 5 }}>
-          {[1, 2, 3, 4].map((n) => (
+          {[1, 2, 3].map((n) => (
             <span key={n} style={{ width: n === step ? 14 : 5, height: 5, borderRadius: 3, background: n === step ? 'var(--gray-11)' : n < step ? 'var(--gray-9)' : 'var(--gray-6)', transition: 'width var(--dur-base) var(--ease-out)' }}></span>
           ))}
         </div>
         <span style={{ font: '400 10px/1 var(--font-mono)', color: 'var(--text-tertiary)' }}>{t.stepOf(step)}</span>
         <span style={{ flex: 1 }}></span>
-        {onSkip && step < 4 ? (
+        {onSkip && step < 3 ? (
           <Button variant="ghost" size="sm" onClick={onSkip} style={{ color: 'var(--text-tertiary)' }}>{t.skip}</Button>
         ) : null}
       </div>
@@ -263,46 +247,16 @@ export function WizardScreen({
           </React.Fragment>
         ) : null}
 
-        {step === 4 ? (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-2)', textAlign: 'center' }}>
-            {handshake === 'waiting' ? (
-              <React.Fragment>
-                <Spinner size={28} />
-                <div style={{ font: '600 15px/1.35 var(--font-ui)', color: 'var(--text-primary)', marginTop: 8 }}>{t.t4w}</div>
-                <div style={{ font: '400 11px/1.55 var(--font-ui)', color: 'var(--text-secondary)', maxWidth: 230 }}>{t.b4w}</div>
-              </React.Fragment>
-            ) : null}
-            {handshake === 'success' ? (
-              <React.Fragment>
-                <span style={{ width: 48, height: 48, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--ok-bg)', border: '1px solid var(--ok-border)', borderRadius: '50%' }}>
-                  <Icon name="check" size={22} strokeWidth={2.5} color="var(--ok)" />
-                </span>
-                <div style={{ font: '600 15px/1.35 var(--font-ui)', color: 'var(--text-primary)', marginTop: 8 }}>{t.t4s}</div>
-                <div style={{ font: '400 11px/1.55 var(--font-ui)', color: 'var(--text-secondary)', maxWidth: 230 }}>{t.b4s(clientName)}</div>
-              </React.Fragment>
-            ) : null}
-            {handshake === 'timeout' ? (
-              <React.Fragment>
-                <span style={{ width: 48, height: 48, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--warn-bg)', border: '1px solid var(--warn-border)', borderRadius: '50%' }}>
-                  <Icon name="triangle-alert" size={20} strokeWidth={2} color="var(--warn)" />
-                </span>
-                <div style={{ font: '600 15px/1.35 var(--font-ui)', color: 'var(--text-primary)', marginTop: 8 }}>{t.t4t}</div>
-                <div style={{ font: '400 11px/1.55 var(--font-ui)', color: 'var(--text-secondary)', maxWidth: 240 }}>{t.b4t}</div>
-                <Button variant="secondary" icon="stethoscope" onClick={onDiagnose} style={{ marginTop: 4 }}>{t.diagnose}</Button>
-              </React.Fragment>
-            ) : null}
-          </div>
-        ) : null}
       </div>
 
       <div style={{ display: 'flex', gap: 'var(--space-15)', paddingTop: 'var(--space-3)' }}>
         {step > 1 ? <Button variant="ghost" size="lg" onClick={onBack}>{t.back}</Button> : null}
         <span style={{ flex: 1 }}></span>
-        {step < 4 ? (
+        {step < 3 ? (
           <Button variant="primary" size="lg" onClick={onNext}>{t.next}</Button>
-        ) : handshake === 'success' ? (
+        ) : (
           <Button variant="primary" size="lg" onClick={onDone}>{t.start}</Button>
-        ) : null}
+        )}
       </div>
     </div>
   );
