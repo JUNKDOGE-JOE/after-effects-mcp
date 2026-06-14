@@ -10,6 +10,11 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### [0.8.1] — 2026-06-14
+
+#### 🐛 修复 / 改进
+- **引导向导去掉「等待握手」死胡同步骤**——该步在客户端未连接时根本没有完成按钮(只能干等或 60s 超时),而它只是连接验证、并非功能门;连接状态本就常驻在 ConnectionDrawer。向导精简为 **3 步**,末步「连接 AI 客户端」直接「开始使用」。
+
 ### [0.8.0] — 2026-06-14
 
 把 AE 操作专识沉淀进 ae-mcp 本体——跨后端、免沙箱，且**默认开、可一键关**：常驻成本由用户掌控。
@@ -166,6 +171,11 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### [0.8.1] — 2026-06-14
+
+#### 🐛 Fixed
+- **Removed the dead-end "waiting for handshake" wizard step** — it had no finish button until a client happened to connect (only wait / 60s timeout), yet it was a verification, not a functional gate; connection status already lives in the always-visible ConnectionDrawer. The wizard is now **3 steps**, finishing at the "Connect an AI client" step.
 
 ### [0.8.0] — 2026-06-14
 
