@@ -51,7 +51,7 @@ uv tool install --force --from packages/core ae-mcp --with packages/bridge --wit
 发布 tag 安装命令：
 
 ```powershell
-uv tool install --force --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.0#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.0#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.0#subdirectory=packages/snapshot-mss
+uv tool install --force --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.1#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.1#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.1#subdirectory=packages/snapshot-mss
 ```
 
 安装后确认 launcher 可被外部客户端找到。不要把公共 PyPI 同名包写成用户安装路径。
@@ -184,7 +184,7 @@ uv tool install --force --from packages/core ae-mcp --with packages/bridge --wit
 Release-tag install:
 
 ```powershell
-uv tool install --force --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.0#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.0#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.0#subdirectory=packages/snapshot-mss
+uv tool install --force --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.1#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.1#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.1#subdirectory=packages/snapshot-mss
 ```
 
 After install, confirm the launcher is visible to external clients. Do not document the public PyPI name as the user install path.

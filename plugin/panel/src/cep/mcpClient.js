@@ -3,7 +3,7 @@ import { expertGuidanceEnv } from './externalClients.js';
 
 const DEFAULT_TIMEOUT_MS = 30000;
 const MCP_PROTOCOL_VERSION = '2025-06-18';
-export const PANEL_VERSION = '0.8.0';
+export const PANEL_VERSION = '0.8.1';
 
 function getCepRequire() {
   if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
