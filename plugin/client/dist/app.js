@@ -7280,11 +7280,11 @@
   });
 
   // src/main.jsx
-  var import_react41 = __toESM(require_react(), 1);
+  var import_react40 = __toESM(require_react(), 1);
   var import_client = __toESM(require_client(), 1);
 
   // src/app/App.jsx
-  var import_react40 = __toESM(require_react(), 1);
+  var import_react39 = __toESM(require_react(), 1);
 
   // src/app/i18n.jsx
   var import_react = __toESM(require_react(), 1);
@@ -8266,7 +8266,7 @@
   // package.json
   var package_default = {
     name: "ae-mcp-panel",
-    version: "0.8.0",
+    version: "0.8.1",
     private: true,
     type: "module",
     scripts: {
@@ -9606,7 +9606,7 @@
   var import_jsx_runtime23 = __toESM(require_jsx_runtime(), 1);
   var W = {
     zh: {
-      stepOf: (n) => `\u7B2C ${n} \u6B65 / \u5171 4 \u6B65`,
+      stepOf: (n) => `\u7B2C ${n} \u6B65 / \u5171 3 \u6B65`,
       back: "\u4E0A\u4E00\u6B65",
       next: "\u4E0B\u4E00\u6B65",
       start: "\u5F00\u59CB\u4F7F\u7528",
@@ -9629,17 +9629,10 @@
       builtin: "\u9762\u677F\u5185\u7F6E\u5BF9\u8BDD",
       builtinNote: "\u65E0\u9700\u914D\u7F6E\uFF0C\u5F00\u7BB1\u5373\u7528",
       docClient: "\u67E5\u770B\u63A5\u5165\u6587\u6863",
-      docOnly: "\u6309\u6587\u6863\u63A5\u5165",
-      t4w: "\u7B49\u5F85\u63E1\u624B\u2026",
-      b4w: "\u5728\u5BA2\u6237\u7AEF\u91CC\u53D1\u8D77\u4E00\u6B21\u5BF9\u8BDD\uFF0C\u9762\u677F\u4F1A\u81EA\u52A8\u5B8C\u6210\u63E1\u624B\u3002",
-      t4s: "\u8FDE\u63A5\u6210\u529F",
-      b4s: (c) => `${c} \u5DF2\u8FDE\u63A5\uFF0C\u53EF\u4EE5\u5F00\u59CB\u8BA9 AI \u64CD\u4F5C\u4F60\u7684\u5DE5\u7A0B\u4E86\u3002`,
-      t4t: "\u5C1A\u672A\u6536\u5230\u8FDE\u63A5",
-      b4t: "\u8D85\u8FC7 60 \u79D2\u6CA1\u6709\u5BA2\u6237\u7AEF\u63A5\u5165\u3002\u9010\u9879\u4F53\u68C0\u53EF\u4EE5\u627E\u51FA\u95EE\u9898\uFF1A",
-      diagnose: "\u8FD0\u884C\u8BCA\u65AD"
+      docOnly: "\u6309\u6587\u6863\u63A5\u5165"
     },
     en: {
-      stepOf: (n) => `Step ${n} of 4`,
+      stepOf: (n) => `Step ${n} of 3`,
       back: "Back",
       next: "Next",
       start: "Start using",
@@ -9662,14 +9655,7 @@
       builtin: "Built-in chat",
       builtinNote: "No config needed \u2014 works out of the box",
       docClient: "Open integration docs",
-      docOnly: "Use docs",
-      t4w: "Waiting for handshake\u2026",
-      b4w: "Start a conversation in your client; the panel completes the handshake automatically.",
-      t4s: "Connected",
-      b4s: (c) => `${c} is connected. You can start directing AI in your project.`,
-      t4t: "No connection yet",
-      b4t: "No client joined within 60 seconds. Run diagnostics to find the issue:",
-      diagnose: "Run diagnostics"
+      docOnly: "Use docs"
     }
   };
   var EMPTY_STEPS = initialStepStates();
@@ -9760,13 +9746,11 @@
     onLangChange,
     client = "claude-desktop",
     onClient,
-    handshake = "waiting",
     clientName = "Claude Desktop",
     mcpConfig = "",
     onNext,
     onBack,
     onCopy,
-    onDiagnose,
     onDone,
     onSkip,
     stepStates = EMPTY_STEPS,
@@ -9781,10 +9765,10 @@
     const selectedMcpConfig = selectedExternalClient && selectedExternalClient.kind === "mcp-stdio" ? mcpConfig || JSON.stringify(mcpConfigFor(selectedExternalClient), null, 2) : "";
     return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "var(--space-6) var(--space-5) var(--space-5)" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", gap: 5 }, children: [1, 2, 3, 4].map((n) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { width: n === step ? 14 : 5, height: 5, borderRadius: 3, background: n === step ? "var(--gray-11)" : n < step ? "var(--gray-9)" : "var(--gray-6)", transition: "width var(--dur-base) var(--ease-out)" } }, n)) }),
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", gap: 5 }, children: [1, 2, 3].map((n) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { width: n === step ? 14 : 5, height: 5, borderRadius: 3, background: n === step ? "var(--gray-11)" : n < step ? "var(--gray-9)" : "var(--gray-6)", transition: "width var(--dur-base) var(--ease-out)" } }, n)) }),
         /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { font: "400 10px/1 var(--font-mono)", color: "var(--text-tertiary)" }, children: t.stepOf(step) }),
         /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1 } }),
-        onSkip && step < 4 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "ghost", size: "sm", onClick: onSkip, style: { color: "var(--text-tertiary)" }, children: t.skip }) : null
+        onSkip && step < 3 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "ghost", size: "sm", onClick: onSkip, style: { color: "var(--text-tertiary)" }, children: t.skip }) : null
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", paddingTop: "var(--space-6)" }, children: [
         step === 1 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
@@ -9844,30 +9828,12 @@
             },
             id
           )) }) : null
-        ] }) : null,
-        step === 4 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "var(--space-2)", textAlign: "center" }, children: [
-          handshake === "waiting" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Spinner, { size: 28 }),
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 15px/1.35 var(--font-ui)", color: "var(--text-primary)", marginTop: 8 }, children: t.t4w }),
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 11px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 230 }, children: t.b4w })
-          ] }) : null,
-          handshake === "success" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { width: 48, height: 48, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--ok-bg)", border: "1px solid var(--ok-border)", borderRadius: "50%" }, children: /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Icon2, { name: "check", size: 22, strokeWidth: 2.5, color: "var(--ok)" }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 15px/1.35 var(--font-ui)", color: "var(--text-primary)", marginTop: 8 }, children: t.t4s }),
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 11px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 230 }, children: t.b4s(clientName) })
-          ] }) : null,
-          handshake === "timeout" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { width: 48, height: 48, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--warn-bg)", border: "1px solid var(--warn-border)", borderRadius: "50%" }, children: /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Icon2, { name: "triangle-alert", size: 20, strokeWidth: 2, color: "var(--warn)" }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 15px/1.35 var(--font-ui)", color: "var(--text-primary)", marginTop: 8 }, children: t.t4t }),
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 11px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 240 }, children: t.b4t }),
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "secondary", icon: "stethoscope", onClick: onDiagnose, style: { marginTop: 4 }, children: t.diagnose })
-          ] }) : null
         ] }) : null
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", paddingTop: "var(--space-3)" }, children: [
         step > 1 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "ghost", size: "lg", onClick: onBack, children: t.back }) : null,
         /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1 } }),
-        step < 4 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "primary", size: "lg", onClick: onNext, children: t.next }) : handshake === "success" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "primary", size: "lg", onClick: onDone, children: t.start }) : null
+        step < 3 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "primary", size: "lg", onClick: onNext, children: t.next }) : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "primary", size: "lg", onClick: onDone, children: t.start })
       ] })
     ] });
   }
@@ -11813,7 +11779,7 @@
   // src/cep/mcpClient.js
   var DEFAULT_TIMEOUT_MS = 3e4;
   var MCP_PROTOCOL_VERSION = "2025-06-18";
-  var PANEL_VERSION = "0.8.0";
+  var PANEL_VERSION = "0.8.1";
   function getCepRequire() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
@@ -13843,37 +13809,6 @@
     return { events, clear };
   }
 
-  // src/cep/useHandshake.js
-  var import_react38 = __toESM(require_react(), 1);
-  function handshakeReached(info, since) {
-    if (!info) return false;
-    if (info.lastHealthAt && info.lastHealthAt > since) return true;
-    if (info.lastClientSeenAt && info.lastClientSeenAt > since) return true;
-    return false;
-  }
-  function useHandshake(getHost, active) {
-    const [state, setState] = import_react38.default.useState("waiting");
-    import_react38.default.useEffect(() => {
-      if (!active) return void 0;
-      const since = Date.now();
-      setState("waiting");
-      const started = Date.now();
-      const t = setInterval(() => {
-        const host = getHost && getHost();
-        const info = host && host.getConnectionInfo && host.getConnectionInfo();
-        if (handshakeReached(info, since)) {
-          setState("success");
-          clearInterval(t);
-        } else if (Date.now() - started > 6e4) {
-          setState("timeout");
-          clearInterval(t);
-        }
-      }, 1500);
-      return () => clearInterval(t);
-    }, [getHost, active]);
-    return state;
-  }
-
   // src/cep/firstRun.js
   var WIZARD_DONE_KEY = "ae_mcp_wizard_done";
   function isWizardDone(storage) {
@@ -13891,7 +13826,7 @@
   }
 
   // src/app/wizardWiring.js
-  var import_react39 = __toESM(require_react(), 1);
+  var import_react38 = __toESM(require_react(), 1);
 
   // src/cep/wizardActions.js
   var OUTPUT_TAIL = 8192;
@@ -14005,31 +13940,31 @@
     return text.includes("winget") && (text.includes("not recognized") || text.includes("not found") || text.includes("enoent") || text.includes("cannot find"));
   }
   function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin } = {}) {
-    const [stepStates, dispatch] = import_react39.default.useReducer(stepReducer, null, initialStepStates);
-    const [useUvFallback, setUseUvFallback] = import_react39.default.useState(false);
-    const repoRoot = import_react39.default.useMemo(() => {
+    const [stepStates, dispatch] = import_react38.default.useReducer(stepReducer, null, initialStepStates);
+    const [useUvFallback, setUseUvFallback] = import_react38.default.useState(false);
+    const repoRoot = import_react38.default.useMemo(() => {
       try {
         return detectRepoRoot({ extRoot });
       } catch (e) {
         return "";
       }
     }, [extRoot]);
-    const cmds = import_react39.default.useMemo(() => buildInstallCommands({
+    const cmds = import_react38.default.useMemo(() => buildInstallCommands({
       panelVersion: PANEL_VERSION,
       repoRoot
     }), [repoRoot]);
-    const activeCmds = import_react39.default.useMemo(() => ({
+    const activeCmds = import_react38.default.useMemo(() => ({
       ...cmds,
       uv: useUvFallback ? cmds.uvFallback : cmds.uv
     }), [cmds, useUvFallback]);
-    const commandPreviews = import_react39.default.useMemo(() => ({
+    const commandPreviews = import_react38.default.useMemo(() => ({
       uv: commandPreview(activeCmds.uv),
       aeMcp: commandPreview(activeCmds.aeMcp),
       node: commandPreview(activeCmds.node),
       claude: commandPreview(activeCmds.claude),
       login: "claude"
     }), [activeCmds]);
-    const detect = import_react39.default.useCallback(async (id) => {
+    const detect = import_react38.default.useCallback(async (id) => {
       dispatch({ type: "detect-start", id });
       if (id === "login") {
         if (recheckLogin) {
@@ -14044,7 +13979,7 @@
       dispatch({ type: "detect-result", id, ok: result.ok, version: result.version || "" });
       return result;
     }, [claudeStatus, recheckLogin]);
-    const install = import_react39.default.useCallback(async (id) => {
+    const install = import_react38.default.useCallback(async (id) => {
       const cmd = activeCmds[id];
       if (!cmd) return { ok: false, output: "No command configured for " + id };
       if (id === "uv" && useUvFallback) {
@@ -14072,19 +14007,19 @@
       await detect(id);
       return result;
     }, [activeCmds, detect, lang, useUvFallback]);
-    const openLogin = import_react39.default.useCallback(() => {
+    const openLogin = import_react38.default.useCallback(() => {
       openLoginTerminal({ tool: "claude" });
       dispatch({ type: "detect-result", id: "login", ok: false });
     }, []);
-    const bootDetectRef = import_react39.default.useRef(false);
-    import_react39.default.useEffect(() => {
+    const bootDetectRef = import_react38.default.useRef(false);
+    import_react38.default.useEffect(() => {
       if (bootDetectRef.current) return;
       bootDetectRef.current = true;
       ["uv", "aeMcp", "node", "claude"].forEach((id) => {
         detect(id);
       });
     }, [detect]);
-    import_react39.default.useEffect(() => {
+    import_react38.default.useEffect(() => {
       if (!claudeStatus) return;
       if (claudeStatus.state === "checking") {
         dispatch({ type: "detect-start", id: "login" });
@@ -14496,55 +14431,54 @@
   function Shell({ cs: cs2 }) {
     const { lang, setLang } = useLang();
     const t = T[lang];
-    const [tab, setTab] = import_react40.default.useState("chat");
-    const [status, setStatus] = import_react40.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
-    const [paused, setPaused] = import_react40.default.useState(false);
-    const [logs, setLogs] = import_react40.default.useState([]);
-    const ctrl = import_react40.default.useRef(null);
-    const getHost = import_react40.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
-    const [wizardDone, setWizardDone] = import_react40.default.useState(() => isWizardDone(window.localStorage));
-    const [wizStep, setWizStep] = import_react40.default.useState(1);
-    const [wizClient, setWizClient] = import_react40.default.useState("claude-desktop");
-    const handshake = useHandshake(getHost, !wizardDone && wizStep === 4);
-    const [drawerOpen, setDrawerOpen] = import_react40.default.useState(false);
-    const [connInfo, setConnInfo] = import_react40.default.useState(null);
-    const [diagnostics, setDiagnostics] = import_react40.default.useState(null);
+    const [tab, setTab] = import_react39.default.useState("chat");
+    const [status, setStatus] = import_react39.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
+    const [paused, setPaused] = import_react39.default.useState(false);
+    const [logs, setLogs] = import_react39.default.useState([]);
+    const ctrl = import_react39.default.useRef(null);
+    const getHost = import_react39.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
+    const [wizardDone, setWizardDone] = import_react39.default.useState(() => isWizardDone(window.localStorage));
+    const [wizStep, setWizStep] = import_react39.default.useState(1);
+    const [wizClient, setWizClient] = import_react39.default.useState("claude-desktop");
+    const [drawerOpen, setDrawerOpen] = import_react39.default.useState(false);
+    const [connInfo, setConnInfo] = import_react39.default.useState(null);
+    const [diagnostics, setDiagnostics] = import_react39.default.useState(null);
     const { events, clear } = useActivity(getHost);
-    const [clients, setClients] = import_react40.default.useState([]);
-    const [confirmRegen, setConfirmRegen] = import_react40.default.useState(false);
-    const [tokenEpoch, setTokenEpoch] = import_react40.default.useState(0);
-    const keyStore = import_react40.default.useMemo(() => {
+    const [clients, setClients] = import_react39.default.useState([]);
+    const [confirmRegen, setConfirmRegen] = import_react39.default.useState(false);
+    const [tokenEpoch, setTokenEpoch] = import_react39.default.useState(0);
+    const keyStore = import_react39.default.useMemo(() => {
       try {
         return createApiKeyStore();
       } catch (e) {
         return null;
       }
     }, []);
-    const [apiKey, setApiKey] = import_react40.default.useState(() => {
+    const [apiKey, setApiKey] = import_react39.default.useState(() => {
       try {
         return keyStore ? keyStore.readKey() : "";
       } catch (e) {
         return "";
       }
     });
-    const [model, setModel] = import_react40.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
-    const [sessionModel, setSessionModel] = import_react40.default.useState(null);
-    const [sessionEffort, setSessionEffort] = import_react40.default.useState(null);
-    const [sessionFast, setSessionFast] = import_react40.default.useState(null);
-    const [permissionMode, setPermissionMode] = import_react40.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
-    const [backendPref, setBackendPref] = import_react40.default.useState(() => readPref("ae_mcp_backend", "subscription"));
-    const [expertGuidance, setExpertGuidance] = import_react40.default.useState(() => loadExpertGuidance(window.localStorage));
-    const [probe, setProbe] = import_react40.default.useState(null);
-    const [codexProbe, setCodexProbe] = import_react40.default.useState(null);
-    const [codexModels, setCodexModels] = import_react40.default.useState(() => readCachedCodexModels(window.localStorage));
-    const [openCodeProbe, setOpenCodeProbe] = import_react40.default.useState(null);
-    const [openCodeModels, setOpenCodeModels] = import_react40.default.useState(() => readCachedOpenCodeModels(window.localStorage));
-    const [chatEntries, setChatEntries] = import_react40.default.useState([]);
-    const [chatStreaming, setChatStreaming] = import_react40.default.useState(false);
-    const [thinkingActive, setThinkingActive] = import_react40.default.useState(false);
-    const baseDescriptor = import_react40.default.useMemo(() => baseDescriptorFor(backendPref), [backendPref]);
-    const [descriptor, setDescriptor] = import_react40.default.useState(() => baseDescriptor);
-    import_react40.default.useEffect(() => {
+    const [model, setModel] = import_react39.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
+    const [sessionModel, setSessionModel] = import_react39.default.useState(null);
+    const [sessionEffort, setSessionEffort] = import_react39.default.useState(null);
+    const [sessionFast, setSessionFast] = import_react39.default.useState(null);
+    const [permissionMode, setPermissionMode] = import_react39.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
+    const [backendPref, setBackendPref] = import_react39.default.useState(() => readPref("ae_mcp_backend", "subscription"));
+    const [expertGuidance, setExpertGuidance] = import_react39.default.useState(() => loadExpertGuidance(window.localStorage));
+    const [probe, setProbe] = import_react39.default.useState(null);
+    const [codexProbe, setCodexProbe] = import_react39.default.useState(null);
+    const [codexModels, setCodexModels] = import_react39.default.useState(() => readCachedCodexModels(window.localStorage));
+    const [openCodeProbe, setOpenCodeProbe] = import_react39.default.useState(null);
+    const [openCodeModels, setOpenCodeModels] = import_react39.default.useState(() => readCachedOpenCodeModels(window.localStorage));
+    const [chatEntries, setChatEntries] = import_react39.default.useState([]);
+    const [chatStreaming, setChatStreaming] = import_react39.default.useState(false);
+    const [thinkingActive, setThinkingActive] = import_react39.default.useState(false);
+    const baseDescriptor = import_react39.default.useMemo(() => baseDescriptorFor(backendPref), [backendPref]);
+    const [descriptor, setDescriptor] = import_react39.default.useState(() => baseDescriptor);
+    import_react39.default.useEffect(() => {
       let alive = true;
       setDescriptor(baseDescriptor);
       if (backendPref === "byok" && apiKey) {
@@ -14570,7 +14504,7 @@
     const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
     const effectiveEffort = sessionEffort || (modelMeta.effortLevels && modelMeta.effortLevels.length ? descriptor.defaultEffort : null);
     const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
-    const runtimeRef = import_react40.default.useRef({ apiKey, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast });
+    const runtimeRef = import_react39.default.useRef({ apiKey, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast });
     runtimeRef.current = {
       apiKey,
       model: effectiveModel,
@@ -14580,12 +14514,12 @@
       fast: effectiveFast
     };
     const extRoot = cs2 && cs2.getSystemPath ? cs2.getSystemPath("extension") : "";
-    const sidecarPath = import_react40.default.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
-    const mcp = import_react40.default.useMemo(() => createMcpClient({
+    const sidecarPath = import_react39.default.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
+    const mcp = import_react39.default.useMemo(() => createMcpClient({
       extRoot,
       getExpertGuidance: () => loadExpertGuidance(window.localStorage)
     }), [extRoot]);
-    const handleChatEvent = import_react40.default.useCallback((evt) => {
+    const handleChatEvent = import_react39.default.useCallback((evt) => {
       if (evt.type === "turn-start") setChatStreaming(true);
       if (evt.type === "thinking") setThinkingActive(!!evt.active);
       if (evt.type === "turn-end" || evt.type === "error") {
@@ -14594,7 +14528,7 @@
       }
       setChatEntries((entries) => reduceEvent(entries, evt));
     }, []);
-    const byokLoop = import_react40.default.useMemo(() => {
+    const byokLoop = import_react39.default.useMemo(() => {
       return createAgentLoop({
         getApiKey: () => runtimeRef.current.apiKey,
         getModel: () => runtimeRef.current.model,
@@ -14606,7 +14540,7 @@
         onEvent: handleChatEvent
       });
     }, [mcp, handleChatEvent]);
-    const claudeBackend = import_react40.default.useMemo(() => createClaudeAgentBackend({
+    const claudeBackend = import_react39.default.useMemo(() => createClaudeAgentBackend({
       resolveNode: resolveSystemNode,
       sidecarPath,
       getMcpSpec: () => resolveMcpCommand({ extRoot }),
@@ -14618,7 +14552,7 @@
       lang,
       onEvent: handleChatEvent
     }), [extRoot, sidecarPath, mcp, handleChatEvent]);
-    const codexBackend = import_react40.default.useMemo(() => createCodexBackend({
+    const codexBackend = import_react39.default.useMemo(() => createCodexBackend({
       getMcpSpec: () => resolveMcpCommand({ extRoot }),
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
@@ -14631,7 +14565,7 @@
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, mcp, handleChatEvent]);
-    const openCodeBackend = import_react40.default.useMemo(() => createOpenCodeBackend({
+    const openCodeBackend = import_react39.default.useMemo(() => createOpenCodeBackend({
       getMcpSpec: () => resolveMcpCommand({ extRoot }),
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
@@ -14644,8 +14578,8 @@
     const effective = backendPref === "opencode" ? openCodeProbe === null ? { backend: "none", reason: "opencode-probing" } : !openCodeProbe || !openCodeProbe.loggedIn ? { backend: "none", reason: "opencode-not-logged-in" } : { backend: "opencode", reason: "ok" } : selectedEffective;
     const backendInstances = { subscription: claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend };
     const activeBackend = backendInstances[effective.backend] || byokLoop;
-    const activeBackendRef = import_react40.default.useRef(null);
-    const runClaudeProbe = import_react40.default.useCallback(() => {
+    const activeBackendRef = import_react39.default.useRef(null);
+    const runClaudeProbe = import_react39.default.useCallback(() => {
       let alive = true;
       setProbe(null);
       probeClaudeLogin({
@@ -14660,11 +14594,11 @@
         alive = false;
       };
     }, [sidecarPath]);
-    import_react40.default.useEffect(() => {
+    import_react39.default.useEffect(() => {
       if (backendPref !== "subscription") return void 0;
       return runClaudeProbe();
     }, [backendPref, runClaudeProbe]);
-    const runCodexProbe = import_react40.default.useCallback(() => {
+    const runCodexProbe = import_react39.default.useCallback(() => {
       let alive = true;
       setCodexProbe(null);
       codexBackend.probeAccount().then((result) => {
@@ -14681,11 +14615,11 @@
         alive = false;
       };
     }, [codexBackend]);
-    import_react40.default.useEffect(() => {
+    import_react39.default.useEffect(() => {
       if (backendPref !== "codex") return void 0;
       return runCodexProbe();
     }, [backendPref, runCodexProbe]);
-    const runOpenCodeProbe = import_react40.default.useCallback(() => {
+    const runOpenCodeProbe = import_react39.default.useCallback(() => {
       let alive = true;
       setOpenCodeProbe(null);
       openCodeBackend.probeAccount().then((result) => {
@@ -14702,11 +14636,11 @@
         alive = false;
       };
     }, [openCodeBackend]);
-    import_react40.default.useEffect(() => {
+    import_react39.default.useEffect(() => {
       if (backendPref !== "opencode") return void 0;
       return runOpenCodeProbe();
     }, [backendPref, runOpenCodeProbe]);
-    import_react40.default.useEffect(() => {
+    import_react39.default.useEffect(() => {
       const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
       activeBackendRef.current = decision.nextReal;
       if (!decision.reset) return;
@@ -14731,10 +14665,10 @@
       setChatStreaming(false);
       setChatEntries([]);
     };
-    const pushLog = import_react40.default.useCallback((m) => {
+    const pushLog = import_react39.default.useCallback((m) => {
       setLogs((xs) => [...xs.slice(-199), `[${(/* @__PURE__ */ new Date()).toLocaleTimeString()}] ${m}`]);
     }, []);
-    const undoToPreviousCheckpoint = import_react40.default.useCallback(async () => {
+    const undoToPreviousCheckpoint = import_react39.default.useCallback(async () => {
       try {
         await revertToPreviousCheckpoint(mcp);
         pushLog("Reverted to previous checkpoint");
@@ -14742,7 +14676,7 @@
         pushLog("Checkpoint revert failed: " + (e && e.message ? e.message : String(e)));
       }
     }, [mcp, pushLog]);
-    import_react40.default.useEffect(() => {
+    import_react39.default.useEffect(() => {
       const port = loadSavedPort(window.localStorage) || DEFAULT_PORT;
       ctrl.current = createHostController({
         cs: cs2,
@@ -14758,7 +14692,7 @@
       });
       ctrl.current.start(port);
     }, [cs2, pushLog]);
-    import_react40.default.useEffect(() => {
+    import_react39.default.useEffect(() => {
       if (!drawerOpen) return void 0;
       const update = () => {
         const h = getHost();
@@ -14768,7 +14702,7 @@
       const i = setInterval(update, 3e3);
       return () => clearInterval(i);
     }, [drawerOpen, getHost]);
-    import_react40.default.useEffect(() => {
+    import_react39.default.useEffect(() => {
       if (tab !== "settings") return void 0;
       const update = () => {
         const h = getHost();
@@ -14779,7 +14713,7 @@
       const i = setInterval(update, 4e3);
       return () => clearInterval(i);
     }, [tab, getHost]);
-    const runDiag = import_react40.default.useCallback(async () => {
+    const runDiag = import_react39.default.useCallback(async () => {
       setDiagnostics("running");
       try {
         const items = await runDiagnostics({
@@ -14832,17 +14766,11 @@
           onLangChange: setLang,
           client: wizClient,
           onClient: setWizClient,
-          handshake,
           clientName: (CLIENT_NAMES[wizClient] || CLIENT_NAMES["claude-desktop"])[lang],
           mcpConfig: mcpConfigStr,
-          onNext: () => setWizStep((s) => Math.min(4, s + 1)),
+          onNext: () => setWizStep((s) => Math.min(3, s + 1)),
           onBack: () => setWizStep((s) => Math.max(1, s - 1)),
           onCopy: () => copyText(mcpConfigStr),
-          onDiagnose: () => {
-            finishWizard();
-            setDrawerOpen(true);
-            runDiag();
-          },
           onDone: finishWizard,
           onSkip: finishWizard,
           ...wizard.props
@@ -14858,7 +14786,7 @@
     const backendDisabledHint = effective.reason === "probing" ? t.probingHint : effective.reason === "not-logged-in" ? t.notLoggedInHint : effective.reason === "codex-probing" ? t.codexProbingHint : effective.reason === "codex-not-logged-in" ? t.codexNotLoggedInHint : effective.reason === "opencode-probing" ? t.openCodeProbingHint : effective.reason === "opencode-not-logged-in" ? t.openCodeNotLoggedInHint : effective.reason === "no-node" ? t.noNodeHint : effective.reason === "no-key" ? t.noKeyHint : "";
     const composerDisabled = paused || effective.backend === "none";
     const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
-    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(import_react40.default.Fragment, { children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(import_react39.default.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
         StatusBar,
         {
