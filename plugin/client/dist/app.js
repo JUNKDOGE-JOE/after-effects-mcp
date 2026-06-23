@@ -14184,15 +14184,13 @@
     async function probeAccount() {
       try {
         await ensureSession();
-        let models = null;
-        try {
-          const msgs = await rpc.request("session/messages", { sessionId });
-          models = null;
-        } catch (e) {
-        }
-        return { loggedIn: true, provider: "zcode", models };
+        return { loggedIn: true, provider: "zcode" };
       } catch (e) {
-        return { loggedIn: false, detail: e && e.message ? e.message : String(e) };
+        return {
+          loggedIn: true,
+          provider: "zcode",
+          probeWarning: e && e.message ? e.message : String(e)
+        };
       }
     }
     return {
@@ -15375,7 +15373,7 @@
     const claudeStatus = probe === null ? { state: "checking" } : probe.nodeOk === false ? { state: "no-node", detail: probe.detail } : probe.loggedIn === false ? { state: "not-logged-in", detail: probe.detail } : { state: "ready", nodeVersion: probe.nodeVersion };
     const codexStatus = codexProbe === null ? { state: "checking" } : codexProbe.loggedIn === false ? { state: "not-logged-in", detail: codexProbe.detail } : { state: "ready", email: codexProbe.email, planType: codexProbe.planType };
     const openCodeStatus = openCodeProbe === null ? { state: "checking" } : openCodeProbe.loggedIn === false ? { state: "not-logged-in", detail: openCodeProbe.detail } : { state: "ready" };
-    const zcodeStatus = zcodeProbe === null ? { state: "checking" } : zcodeProbe.loggedIn === false ? { state: "not-logged-in", detail: zcodeProbe.detail } : { state: "ready", provider: zcodeProbe.provider };
+    const zcodeStatus = zcodeProbe === null ? { state: "checking" } : zcodeProbe.probeWarning ? { state: "ready", provider: zcodeProbe.provider, detail: zcodeProbe.probeWarning } : { state: "ready", provider: zcodeProbe.provider };
     const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
     if (!wizardDone) {
       return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(

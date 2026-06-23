@@ -592,21 +592,25 @@ export function createZcodeBackend({
     }
   }
 
+  // ZCode authenticates via a provider API key in ~/.zcode/v2/config.json
+  // (e.g. MediaStorm GLM), NOT via `zcode login` (Z.AI OAuth). So there is no
+  // "logged in" state to probe — if we can spawn app-server and create a
+  // session, the backend is usable; if we can't, it's an environment problem
+  // (CLI not found / Node missing), not a login problem. We never report
+  // loggedIn:false, because that would block the user behind a fake "please
+  // zcode login" gate that does not apply to API-key providers.
   async function probeAccount() {
     try {
       await ensureSession();
-      // session/create already returned settings.model.available + current.
-      // Re-fetch the session to surface provider/login info.
-      let models = null;
-      try {
-        const msgs = await rpc.request('session/messages', { sessionId });
-        // session/messages confirms the session is live; models come from the
-        // create result which we don't retain here, so report loggedIn on liveness.
-        models = null;
-      } catch (e) { /* liveness check only */ }
-      return { loggedIn: true, provider: 'zcode', models };
+      return { loggedIn: true, provider: 'zcode' };
     } catch (e) {
-      return { loggedIn: false, detail: e && e.message ? e.message : String(e) };
+      // Surface the real reason (CLI not found, Node missing, etc.) as a
+      // warning rather than a login failure, so the user can still try.
+      return {
+        loggedIn: true,
+        provider: 'zcode',
+        probeWarning: e && e.message ? e.message : String(e),
+      };
     }
   }
 

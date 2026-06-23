@@ -597,7 +597,7 @@ function Shell({ cs }) {
     : openCodeProbe.loggedIn === false ? { state: 'not-logged-in', detail: openCodeProbe.detail }
     : { state: 'ready' };
   const zcodeStatus = zcodeProbe === null ? { state: 'checking' }
-    : zcodeProbe.loggedIn === false ? { state: 'not-logged-in', detail: zcodeProbe.detail }
+    : zcodeProbe.probeWarning ? { state: 'ready', provider: zcodeProbe.provider, detail: zcodeProbe.probeWarning }
     : { state: 'ready', provider: zcodeProbe.provider };
   const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
 

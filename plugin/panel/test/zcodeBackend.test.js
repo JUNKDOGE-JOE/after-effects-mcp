@@ -275,11 +275,14 @@ test('probeAccount reports loggedIn when session/create succeeds', async () => {
   assert.equal(result.provider, 'zcode');
 });
 
-test('probeAccount reports not-logged-in when the CLI cannot be resolved', async () => {
+test('probeAccount stays loggedIn with a warning when the CLI cannot be resolved', async () => {
+  // ZCode uses a provider API key, not `zcode login` — a spawn failure is an
+  // environment problem, not a login problem, so we must not gate the user
+  // behind a fake "not logged in" state.
   const { backend } = makeBackend({ resolveCli: async () => ({ ok: false, detail: 'not installed' }) });
   const result = await backend.probeAccount();
-  assert.equal(result.loggedIn, false);
-  assert.match(result.detail, /not installed/);
+  assert.equal(result.loggedIn, true);
+  assert.match(result.probeWarning, /not installed/);
 });
 
 // --- descriptor tests ---
