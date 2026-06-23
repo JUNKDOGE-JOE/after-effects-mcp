@@ -205,16 +205,20 @@ export function openCodeDescriptorFromModels(providerResult) {
 // MCP server, so an embedded ZCode backend needs no MCP wiring of its own.
 // Models come from session/create's settings.model.available:
 // {label, ref:{modelId, providerId}, contextWindow}.
+// thoughtLevel is set via session/create or session/setThoughtLevel and takes
+// the enum low/medium/high (verified in the zcode.cjs 0.14.8 bundle).
+const ZCODE_EFFORT_LEVELS = ['low', 'medium', 'high'];
+
 export function zcodeStaticDescriptor() {
   const models = [
-    { id: 'glm-5.2', label: 'GLM-5.2', effortLevels: [], cost: 2, adaptive: false },
+    { id: 'glm-5.2', label: 'GLM-5.2', effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false },
   ];
   return {
     id: 'zcode',
     label: 'ZCode',
     models,
     defaultModelId: 'glm-5.2',
-    defaultEffort: null,
+    defaultEffort: 'medium',
     supportsFast: () => false,
     approvalModes: APPROVAL_MODES,
     perTurnModelSwitch: true,
@@ -233,7 +237,7 @@ export function zcodeDescriptorFromModels(sessionCreateResult) {
     return {
       id: providerId ? providerId + '/' + id : id,
       label: m.label || id,
-      effortLevels: [],
+      effortLevels: ZCODE_EFFORT_LEVELS,
       cost: 2,
       adaptive: false,
     };
@@ -245,7 +249,7 @@ export function zcodeDescriptorFromModels(sessionCreateResult) {
     label: 'ZCode',
     models,
     defaultModelId: models.some((m) => m.id === defaultId) ? defaultId : models[0].id,
-    defaultEffort: null,
+    defaultEffort: 'medium',
     supportsFast: () => false,
     approvalModes: APPROVAL_MODES,
     perTurnModelSwitch: true,

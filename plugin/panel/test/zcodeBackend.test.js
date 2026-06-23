@@ -292,6 +292,48 @@ test('zcodeStaticDescriptor satisfies the backend descriptor contract', () => {
   assert.equal(typeof d.supportsFast, 'function');
   assert.equal(d.perTurnModelSwitch, true);
   assert.equal(Array.isArray(d.approvalModes) && d.approvalModes.length, 4);
+  // thoughtLevel enum is low/medium/high (verified in zcode.cjs 0.14.8).
+  assert.deepEqual(d.models[0].effortLevels, ['low', 'medium', 'high']);
+  assert.equal(d.defaultEffort, 'medium');
+});
+
+test('session/create carries thoughtLevel when getEffort returns a valid level', async () => {
+  const { backend, spawned } = makeBackend({ getEffort: () => 'high' });
+  backend.sendUser('hello');
+  await flush();
+  const proc = spawned.procs[0];
+  const createReq = parseWrites(proc)[0];
+  assert.equal(createReq.method, 'session/create');
+  assert.equal(createReq.params.thoughtLevel, 'high');
+});
+
+test('session/create omits thoughtLevel when getEffort is null', async () => {
+  const { backend, spawned } = makeBackend({ getEffort: () => null });
+  backend.sendUser('hello');
+  await flush();
+  const proc = spawned.procs[0];
+  const createReq = parseWrites(proc)[0];
+  assert.equal(createReq.params.thoughtLevel, undefined);
+});
+
+test('setThoughtLevel pushes a session/setThoughtLevel request', async () => {
+  const { backend, spawned } = makeBackend();
+  const { proc } = await startTurn(backend, spawned, 'hello');
+  const before = parseWrites(proc).length;
+  const pending = backend.setThoughtLevel('high');
+  await flush();
+  const setReq = parseWrites(proc).slice(before).find((m) => m.method === 'session/setThoughtLevel');
+  assert.ok(setReq, 'session/setThoughtLevel sent');
+  assert.equal(setReq.params.thoughtLevel, 'high');
+  respond(proc, setReq, { ok: true });
+  assert.equal(await pending, true);
+});
+
+test('setThoughtLevel rejects an invalid level', async () => {
+  const { backend, spawned } = makeBackend();
+  await startTurn(backend, spawned, 'hello');
+  const ok = await backend.setThoughtLevel('turbo');
+  assert.equal(ok, false);
 });
 
 test('zcodeDescriptorFromModels builds from session/create model.available', () => {

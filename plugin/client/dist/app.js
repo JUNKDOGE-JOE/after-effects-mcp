@@ -11754,16 +11754,17 @@
       perTurnModelSwitch: true
     };
   }
+  var ZCODE_EFFORT_LEVELS = ["low", "medium", "high"];
   function zcodeStaticDescriptor() {
     const models = [
-      { id: "glm-5.2", label: "GLM-5.2", effortLevels: [], cost: 2, adaptive: false }
+      { id: "glm-5.2", label: "GLM-5.2", effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false }
     ];
     return {
       id: "zcode",
       label: "ZCode",
       models,
       defaultModelId: "glm-5.2",
-      defaultEffort: null,
+      defaultEffort: "medium",
       supportsFast: () => false,
       approvalModes: APPROVAL_MODES,
       perTurnModelSwitch: true
@@ -13831,6 +13832,7 @@
     spawnImpl,
     getModel,
     getPermissionMode,
+    getEffort = () => null,
     getToolMeta,
     getExpertGuidance = () => true,
     getServerInstructions = () => "",
@@ -14050,6 +14052,11 @@
       const tier = getPermissionMode ? getPermissionMode() : "manual";
       return MODE_BY_TIER[tier] || "build";
     }
+    function thoughtLevelFromEffort() {
+      const effort = getEffort ? getEffort() : null;
+      if (!effort) return void 0;
+      return ["low", "medium", "high"].includes(effort) ? effort : void 0;
+    }
     async function ensureSession() {
       if (sessionId) return sessionId;
       if (sessionPromise) return sessionPromise;
@@ -14057,10 +14064,13 @@
         await startProcess();
         toolMeta = getToolMeta ? await getToolMeta() : { allowedTools: [], annotations: {} };
         const spawnEnv = currentEnv();
-        const result = await rpc.request("session/create", {
+        const createParams = {
           workspace: workspaceFromEnv(spawnEnv),
           mode: modeFromTier()
-        });
+        };
+        const thoughtLevel = thoughtLevelFromEffort();
+        if (thoughtLevel) createParams.thoughtLevel = thoughtLevel;
+        const result = await rpc.request("session/create", createParams);
         sessionId = result && result.session && result.session.sessionId || null;
         if (!sessionId) throw new Error("ZCode session/create returned no sessionId");
         if (!subscribed) {
@@ -14145,6 +14155,16 @@
       stderrTail = "";
       stopping = false;
     }
+    async function setThoughtLevel(level) {
+      if (!sessionId || !rpc) return false;
+      if (!["low", "medium", "high"].includes(level)) return false;
+      try {
+        await rpc.request("session/setThoughtLevel", { sessionId, thoughtLevel: level });
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
     async function probeAccount() {
       try {
         await ensureSession();
@@ -14164,6 +14184,7 @@
       approve,
       stop,
       reset,
+      setThoughtLevel,
       getMessages: () => clone4(transcript),
       probeAccount
     };
@@ -15127,6 +15148,7 @@
     const zcodeBackend = import_react39.default.useMemo(() => createZcodeBackend({
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
+      getEffort: () => runtimeRef.current.effort,
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
       getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       getServerInstructions: () => mcp.getServerInstructions(),
@@ -15215,6 +15237,10 @@
       if (backendPref !== "zcode") return void 0;
       return runZcodeProbe();
     }, [backendPref, runZcodeProbe]);
+    import_react39.default.useEffect(() => {
+      if (effective.backend !== "zcode" || !effectiveEffort) return;
+      zcodeBackend.setThoughtLevel(effectiveEffort);
+    }, [effective.backend, effectiveEffort, zcodeBackend]);
     import_react39.default.useEffect(() => {
       const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
       activeBackendRef.current = decision.nextReal;

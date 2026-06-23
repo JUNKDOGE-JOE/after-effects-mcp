@@ -190,6 +190,7 @@ export function createZcodeBackend({
   spawnImpl,
   getModel,
   getPermissionMode,
+  getEffort = () => null,
   getToolMeta,
   getExpertGuidance = () => true,
   getServerInstructions = () => '',
@@ -436,6 +437,14 @@ export function createZcodeBackend({
     return MODE_BY_TIER[tier] || 'build';
   }
 
+  // ZCode thoughtLevel enum: low/medium/high. session/create accepts it on the
+  // input params (che schema); per-turn changes go through session/setThoughtLevel.
+  function thoughtLevelFromEffort() {
+    const effort = getEffort ? getEffort() : null;
+    if (!effort) return undefined;
+    return ['low', 'medium', 'high'].includes(effort) ? effort : undefined;
+  }
+
   async function ensureSession() {
     if (sessionId) return sessionId;
     if (sessionPromise) return sessionPromise;
@@ -443,10 +452,13 @@ export function createZcodeBackend({
       await startProcess();
       toolMeta = getToolMeta ? await getToolMeta() : { allowedTools: [], annotations: {} };
       const spawnEnv = currentEnv();
-      const result = await rpc.request('session/create', {
+      const createParams = {
         workspace: workspaceFromEnv(spawnEnv),
         mode: modeFromTier(),
-      });
+      };
+      const thoughtLevel = thoughtLevelFromEffort();
+      if (thoughtLevel) createParams.thoughtLevel = thoughtLevel;
+      const result = await rpc.request('session/create', createParams);
       sessionId = (result && result.session && result.session.sessionId) || null;
       if (!sessionId) throw new Error('ZCode session/create returned no sessionId');
 
@@ -542,6 +554,20 @@ export function createZcodeBackend({
     stopping = false;
   }
 
+  // Per-turn thoughtLevel change (composer "thinking" chip). session/send does
+  // not accept thoughtLevel, so a mid-conversation switch uses the dedicated
+  // session/setThoughtLevel method (params: {sessionId, thoughtLevel, ...}).
+  async function setThoughtLevel(level) {
+    if (!sessionId || !rpc) return false;
+    if (!['low', 'medium', 'high'].includes(level)) return false;
+    try {
+      await rpc.request('session/setThoughtLevel', { sessionId, thoughtLevel: level });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   async function probeAccount() {
     try {
       await ensureSession();
@@ -565,6 +591,7 @@ export function createZcodeBackend({
     approve,
     stop,
     reset,
+    setThoughtLevel,
     getMessages: () => clone(transcript),
     probeAccount,
   };

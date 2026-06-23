@@ -354,6 +354,7 @@ function Shell({ cs }) {
   const zcodeBackend = React.useMemo(() => createZcodeBackend({
     getModel: () => runtimeRef.current.model,
     getPermissionMode: () => runtimeRef.current.permissionMode,
+    getEffort: () => runtimeRef.current.effort,
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     getServerInstructions: () => mcp.getServerInstructions(),
@@ -448,6 +449,13 @@ function Shell({ cs }) {
     if (backendPref !== 'zcode') return undefined;
     return runZcodeProbe();
   }, [backendPref, runZcodeProbe]);
+
+  // ZCode session/send does not carry thoughtLevel, so a mid-conversation effort
+  // change is pushed via the dedicated session/setThoughtLevel method.
+  React.useEffect(() => {
+    if (effective.backend !== 'zcode' || !effectiveEffort) return;
+    zcodeBackend.setThoughtLevel(effectiveEffort);
+  }, [effective.backend, effectiveEffort, zcodeBackend]);
 
   React.useEffect(() => {
     const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
