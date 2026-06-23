@@ -13833,6 +13833,7 @@
     getModel,
     getPermissionMode,
     getEffort = () => null,
+    getMcpSpec,
     getToolMeta,
     getExpertGuidance = () => true,
     getServerInstructions = () => "",
@@ -14070,6 +14071,21 @@
         };
         const thoughtLevel = thoughtLevelFromEffort();
         if (thoughtLevel) createParams.thoughtLevel = thoughtLevel;
+        if (getMcpSpec) {
+          const spec = await getMcpSpec();
+          if (spec && spec.command) {
+            const envObj = Object.assign({}, spec.env || {}, {
+              AE_MCP_BACKEND: "ae-mcp",
+              ...expertGuidanceEnv(getExpertGuidance())
+            });
+            createParams.mcpServers = [{
+              name: "ae",
+              command: spec.command,
+              args: spec.args || [],
+              env: Object.entries(envObj).map(([name, value]) => ({ name, value: String(value) }))
+            }];
+          }
+        }
         const result = await rpc.request("session/create", createParams);
         sessionId = result && result.session && result.session.sessionId || null;
         if (!sessionId) throw new Error("ZCode session/create returned no sessionId");
@@ -15146,6 +15162,7 @@
       onEvent: handleChatEvent
     }), [extRoot, mcp, handleChatEvent]);
     const zcodeBackend = import_react39.default.useMemo(() => createZcodeBackend({
+      getMcpSpec: () => resolveMcpCommand({ extRoot }),
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
       getEffort: () => runtimeRef.current.effort,

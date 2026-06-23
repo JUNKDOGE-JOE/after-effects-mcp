@@ -24,6 +24,7 @@
 
 import { createNdjsonReader } from '../lib/ndjson.js';
 import { resolveSystemNode } from './claudeAgentBackend.js';
+import { expertGuidanceEnv } from './externalClients.js';
 
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -191,6 +192,7 @@ export function createZcodeBackend({
   getModel,
   getPermissionMode,
   getEffort = () => null,
+  getMcpSpec,
   getToolMeta,
   getExpertGuidance = () => true,
   getServerInstructions = () => '',
@@ -458,6 +460,28 @@ export function createZcodeBackend({
       };
       const thoughtLevel = thoughtLevelFromEffort();
       if (thoughtLevel) createParams.thoughtLevel = thoughtLevel;
+
+      // Inject the ae MCP server into the session. ZCode app-server does NOT
+      // auto-load mcp.servers from ~/.zcode/cli/config.json (that file is for
+      // the CLI TUI); session/create accepts mcpServers on its input params
+      // (che schema, Eht entries), so we pass it here — same pattern codex/
+      // opencode use. env is [{name,value}] (the app-server's wire format).
+      if (getMcpSpec) {
+        const spec = await getMcpSpec();
+        if (spec && spec.command) {
+          const envObj = Object.assign({}, spec.env || {}, {
+            AE_MCP_BACKEND: 'ae-mcp',
+            ...expertGuidanceEnv(getExpertGuidance()),
+          });
+          createParams.mcpServers = [{
+            name: 'ae',
+            command: spec.command,
+            args: spec.args || [],
+            env: Object.entries(envObj).map(([name, value]) => ({ name, value: String(value) })),
+          }];
+        }
+      }
+
       const result = await rpc.request('session/create', createParams);
       sessionId = (result && result.session && result.session.sessionId) || null;
       if (!sessionId) throw new Error('ZCode session/create returned no sessionId');

@@ -336,6 +336,38 @@ test('setThoughtLevel rejects an invalid level', async () => {
   assert.equal(ok, false);
 });
 
+test('session/create injects the ae MCP server when getMcpSpec is provided', async () => {
+  const { backend, spawned } = makeBackend({
+    getMcpSpec: async () => ({ command: 'ae-mcp', args: ['--stdio'], env: { A: 'B' } }),
+    getExpertGuidance: () => true,
+  });
+  backend.sendUser('hello');
+  await flush();
+  const proc = spawned.procs[0];
+  const createReq = parseWrites(proc)[0];
+  assert.equal(createReq.method, 'session/create');
+  assert.ok(Array.isArray(createReq.params.mcpServers), 'mcpServers array present');
+  assert.equal(createReq.params.mcpServers.length, 1);
+  const ae = createReq.params.mcpServers[0];
+  assert.equal(ae.name, 'ae');
+  assert.equal(ae.command, 'ae-mcp');
+  assert.deepEqual(ae.args, ['--stdio']);
+  // env is the app-server wire format [{name,value}], not an object.
+  assert.ok(Array.isArray(ae.env), 'env is array');
+  assert.equal(ae.env[0].name, 'A');
+  assert.equal(ae.env[0].value, 'B');
+  assert.ok(ae.env.some((e) => e.name === 'AE_MCP_BACKEND' && e.value === 'ae-mcp'));
+});
+
+test('session/create omits mcpServers when getMcpSpec is absent', async () => {
+  const { backend, spawned } = makeBackend();
+  backend.sendUser('hello');
+  await flush();
+  const proc = spawned.procs[0];
+  const createReq = parseWrites(proc)[0];
+  assert.equal(createReq.params.mcpServers, undefined);
+});
+
 test('zcodeDescriptorFromModels builds from session/create model.available', () => {
   const result = zcodeDescriptorFromModels({
     settings: {

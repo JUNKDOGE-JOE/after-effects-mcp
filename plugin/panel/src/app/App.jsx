@@ -352,6 +352,7 @@ function Shell({ cs }) {
   }), [extRoot, mcp, handleChatEvent]);
 
   const zcodeBackend = React.useMemo(() => createZcodeBackend({
+    getMcpSpec: () => resolveMcpCommand({ extRoot }),
     getModel: () => runtimeRef.current.model,
     getPermissionMode: () => runtimeRef.current.permissionMode,
     getEffort: () => runtimeRef.current.effort,
