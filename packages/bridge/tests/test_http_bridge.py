@@ -49,7 +49,15 @@ async def test_health_check_ok():
 
     async def _resp(request):
         captured["python"] = request.headers.get("x-ae-mcp-python")
-        return Response(200, json={"ok": True})
+        # Mirror the real host /health shape post-B1: it now echoes the
+        # python handshake fields. health_check must stay True with the extras.
+        return Response(200, json={
+            "ok": True,
+            "pluginVersion": "0.8.1",
+            "port": 11488,
+            "pythonVersion": "1.27.2",
+            "pythonLastSeenAt": 1719000000000,
+        })
 
     async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
         mock.get("/health").mock(side_effect=_resp)

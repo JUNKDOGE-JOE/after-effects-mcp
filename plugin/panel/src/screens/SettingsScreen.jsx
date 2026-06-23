@@ -28,6 +28,7 @@ const S = {
     backendSub: 'Claude',
     backendByok: 'BYOK',
     backendCodex: 'Codex',
+    backendZcode: 'ZCode',
     backendOpenCode: 'OpenCode',
     claudeReady: '已登录 ✓',
     claudeNotLoggedIn: '未登录',
@@ -41,6 +42,12 @@ const S = {
     codexChecking: '检测中…',
     codexLoginCap: '在终端完成 codex 登录，然后点「重新检测」',
     recheckCodex: '重新检测',
+    zcodeSub: 'ZCode',
+    zcodeReady: '已登录 ✓',
+    zcodeNotLoggedIn: '未登录 ZCode',
+    zcodeChecking: '检测中…',
+    zcodeLoginCap: '在终端运行 zcode login 完成登录（或通过 ZCode 应用登录），然后点「重新检测」',
+    recheckZcode: '重新检测',
     openCodeSub: 'OpenCode',
     openCodeReady: '已登录 ✓',
     openCodeNotLoggedIn: '未登录 OpenCode',
@@ -102,6 +109,7 @@ const S = {
     backendSub: 'Claude',
     backendByok: 'BYOK',
     backendCodex: 'Codex',
+    backendZcode: 'ZCode',
     backendOpenCode: 'OpenCode',
     claudeReady: 'Logged in ✓',
     claudeNotLoggedIn: 'Not logged in',
@@ -115,6 +123,12 @@ const S = {
     codexChecking: 'Checking…',
     codexLoginCap: 'Sign in with codex in a terminal, then click Re-check',
     recheckCodex: 'Re-check',
+    zcodeSub: 'ZCode',
+    zcodeReady: 'Logged in ✓',
+    zcodeNotLoggedIn: 'Not logged in to ZCode',
+    zcodeChecking: 'Checking…',
+    zcodeLoginCap: 'Run `zcode login` (or sign in via the ZCode app), then click Re-check',
+    recheckZcode: 'Re-check',
     openCodeSub: 'OpenCode',
     openCodeReady: 'Logged in ✓',
     openCodeNotLoggedIn: 'Not logged in to OpenCode',
@@ -286,6 +300,8 @@ export function SettingsScreen({
   onRecheckCodex,
   openCodeStatus = { state: 'checking' },
   onRecheckOpenCode,
+  zcodeStatus = { state: 'checking' },
+  onRecheckZcode,
 }) {
   const t = S[lang] || S.zh;
   const [key, setKey] = React.useState(apiKey);
@@ -317,6 +333,9 @@ export function SettingsScreen({
   const openCodeState = (openCodeStatus && openCodeStatus.state) || 'checking';
   const openCodeBadgeStatus = openCodeState === 'ready' ? 'ok' : openCodeState === 'not-logged-in' ? 'warn' : 'neutral';
   const openCodeBadgeText = openCodeState === 'ready' ? t.openCodeReady : openCodeState === 'not-logged-in' ? t.openCodeNotLoggedIn : t.openCodeChecking;
+  const zcodeState = (zcodeStatus && zcodeStatus.state) || 'checking';
+  const zcodeBadgeStatus = zcodeState === 'ready' ? 'ok' : zcodeState === 'not-logged-in' ? 'warn' : 'neutral';
+  const zcodeBadgeText = zcodeState === 'ready' ? t.zcodeReady : zcodeState === 'not-logged-in' ? t.zcodeNotLoggedIn : t.zcodeChecking;
   const saveApiKey = () => {
     if (aiBusy) return;
     setAiBusy(true);
@@ -366,6 +385,7 @@ export function SettingsScreen({
           <Segmented full value={backend} onChange={onBackendChange} options={[
             { value: 'subscription', label: t.backendSub },
             { value: 'codex', label: t.backendCodex },
+            { value: 'zcode', label: t.backendZcode },
             { value: 'byok', label: t.backendByok },
           ]} />
         </Field>
@@ -391,6 +411,14 @@ export function SettingsScreen({
               <Badge status={openCodeBadgeStatus}>{openCodeBadgeText}</Badge>
               <span style={{ flex: 1 }} />
               <Button variant="secondary" icon="rotate-cw" disabled={openCodeState === 'checking'} onClick={onRecheckOpenCode}>{t.recheckOpenCode}</Button>
+            </div>
+          </Field>
+        ) : backend === 'zcode' ? (
+          <Field label={t.zcodeSub} caption={zcodeState === 'not-logged-in' ? t.zcodeLoginCap : (zcodeStatus && zcodeStatus.detail) || null}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Badge status={zcodeBadgeStatus}>{zcodeBadgeText}</Badge>
+              <span style={{ flex: 1 }} />
+              <Button variant="secondary" icon="rotate-cw" disabled={zcodeState === 'checking'} onClick={onRecheckZcode}>{t.recheckZcode}</Button>
             </div>
           </Field>
         ) : (

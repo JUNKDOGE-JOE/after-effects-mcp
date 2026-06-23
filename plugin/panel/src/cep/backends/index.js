@@ -7,6 +7,7 @@ import {
   byokStaticDescriptor,
   codexStaticDescriptor,
   openCodeStaticDescriptor,
+  zcodeStaticDescriptor,
 } from '../../lib/backendCapabilities.js';
 
 export const BACKENDS = {
@@ -14,6 +15,7 @@ export const BACKENDS = {
   byok: { id: 'byok', baseDescriptor: byokStaticDescriptor },
   codex: { id: 'codex', baseDescriptor: codexStaticDescriptor },
   opencode: { id: 'opencode', baseDescriptor: openCodeStaticDescriptor },
+  zcode: { id: 'zcode', baseDescriptor: zcodeStaticDescriptor },
 };
 
 // Real (conversation-bearing) backend ids — drives shouldResetOnBackendChange.

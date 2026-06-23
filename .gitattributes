@@ -1,0 +1,8 @@
+# Normalize text files to LF on checkout (prevents CRLF drift on Windows,
+# where core.autocrlf=true would otherwise rewrite dist/app.js and mask real
+# source/dist mismatches — see issue #36).
+* text=auto eol=lf
+
+# Bundled panel artifacts are build outputs; treat as binary so checkout
+# preserves exact bytes and `git diff` can verify dist matches a rebuild.
+plugin/client/dist/** binary

@@ -1,6 +1,6 @@
 import { REAL_BACKENDS } from '../cep/backends/index.js';
 
-export function pickBackend({ pref, probe, hasApiKey, codexProbe }) {
+export function pickBackend({ pref, probe, hasApiKey, codexProbe, zcodeProbe }) {
   if (pref === 'byok') {
     return hasApiKey ? { backend: 'byok', reason: 'ok' } : { backend: 'none', reason: 'no-key' };
   }
@@ -9,6 +9,12 @@ export function pickBackend({ pref, probe, hasApiKey, codexProbe }) {
     if (codexProbe === null) return { backend: 'none', reason: 'codex-probing' };
     if (!codexProbe || !codexProbe.loggedIn) return { backend: 'none', reason: 'codex-not-logged-in' };
     return { backend: 'codex', reason: 'ok' };
+  }
+
+  if (pref === 'zcode') {
+    if (zcodeProbe === null) return { backend: 'none', reason: 'zcode-probing' };
+    if (!zcodeProbe || !zcodeProbe.loggedIn) return { backend: 'none', reason: 'zcode-not-logged-in' };
+    return { backend: 'zcode', reason: 'ok' };
   }
 
   if (probe === null) return { backend: 'none', reason: 'probing' };

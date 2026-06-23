@@ -46,7 +46,7 @@ def test_build_server_advertises_instructions():
 
 
 def test_filtered_tool_names_logs_when_backend_selection_fails(monkeypatch, caplog):
-    """A failing backend must still expose ae.status and log where to look."""
+    """A failing backend must still expose ae.status + ae.diagnose and log where to look."""
     from ae_mcp.backends import discovery as _discovery
     from ae_mcp import server as _server
 
@@ -58,7 +58,7 @@ def test_filtered_tool_names_logs_when_backend_selection_fails(monkeypatch, capl
     with caplog.at_level(logging.WARNING, logger="ae_mcp.server"):
         result = _server._filtered_tool_names()
 
-    assert result == {"ae.status"}
+    assert result == {"ae.status", "ae.diagnose"}
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert any("backend selection failed" in r.getMessage() for r in warnings), (
         f"expected a backend-selection WARNING, got: {[r.getMessage() for r in warnings]}"

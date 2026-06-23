@@ -186,10 +186,15 @@ function buildApp() {
         }
         // Presence of CSInterface (set up by the panel at startup) is the
         // readiness proxy. /exec is what actually probes AE.
+        // Echo the last-seen Python handshake state so external MCP clients
+        // (e.g. ae_diagnose) can verify the bridge is wired up without needing
+        // an /exec round-trip. Fields are null until the Python bridge pings.
         res.json({
             ok: true,
             pluginVersion: PKG_VERSION,
             port: currentPort,
+            pythonVersion: lastPythonVersion || null,
+            pythonLastSeenAt: lastHealthAt || null,
         });
     });
 

@@ -15,7 +15,7 @@ test('contract event vocabulary is the frozen canonical set', () => {
 });
 
 test('registry exposes the real embedded backends', () => {
-  assert.deepEqual(REAL_BACKENDS, ['subscription', 'byok', 'codex', 'opencode']);
+  assert.deepEqual(REAL_BACKENDS, ['subscription', 'byok', 'codex', 'opencode', 'zcode']);
   for (const id of REAL_BACKENDS) {
     assert.equal(BACKENDS[id].id, id);
     assert.equal(typeof BACKENDS[id].baseDescriptor, 'function');

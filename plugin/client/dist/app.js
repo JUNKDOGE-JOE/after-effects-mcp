@@ -8728,12 +8728,39 @@
       installHint: "Use this external opencode config when the embedded panel flow is blocked.",
       loginHint: "Sign in to opencode before starting the handshake.",
       docsUrl: "https://opencode.ai/docs"
+    },
+    {
+      id: "zcode",
+      name: "ZCode",
+      kind: "mcp-stdio",
+      installHint: "Add ae-mcp as a local MCP server in ~/.zcode/cli/config.json (mcp.servers).",
+      loginHint: "Run `zcode login` (or sign in via the ZCode app) before starting.",
+      docsUrl: "https://zcode.z.ai"
     }
   ];
   function expertGuidanceEnv(on) {
     return on ? {} : { AE_MCP_EXPERT_GUIDANCE: "0" };
   }
+  function zcodeMcpConfig(port = 11488, expertGuidance = true) {
+    return {
+      mcp: {
+        servers: {
+          ae: {
+            name: "ae",
+            command: "ae-mcp",
+            args: [],
+            env: Object.assign(
+              { AE_MCP_BACKEND: "ae-mcp" },
+              expertGuidanceEnv(expertGuidance !== false),
+              { AE_MCP_PLUGIN_URL: `http://127.0.0.1:${port}` }
+            )
+          }
+        }
+      }
+    };
+  }
   function mcpConfigFor(client, port = 11488, expertGuidance = true) {
+    if (client && client.id === "zcode") return zcodeMcpConfig(port, expertGuidance);
     return {
       mcpServers: {
         ae: {
@@ -8790,6 +8817,7 @@
       backendSub: "Claude",
       backendByok: "BYOK",
       backendCodex: "Codex",
+      backendZcode: "ZCode",
       backendOpenCode: "OpenCode",
       claudeReady: "\u5DF2\u767B\u5F55 \u2713",
       claudeNotLoggedIn: "\u672A\u767B\u5F55",
@@ -8803,6 +8831,12 @@
       codexChecking: "\u68C0\u6D4B\u4E2D\u2026",
       codexLoginCap: "\u5728\u7EC8\u7AEF\u5B8C\u6210 codex \u767B\u5F55\uFF0C\u7136\u540E\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D",
       recheckCodex: "\u91CD\u65B0\u68C0\u6D4B",
+      zcodeSub: "ZCode",
+      zcodeReady: "\u5DF2\u767B\u5F55 \u2713",
+      zcodeNotLoggedIn: "\u672A\u767B\u5F55 ZCode",
+      zcodeChecking: "\u68C0\u6D4B\u4E2D\u2026",
+      zcodeLoginCap: "\u5728\u7EC8\u7AEF\u8FD0\u884C zcode login \u5B8C\u6210\u767B\u5F55\uFF08\u6216\u901A\u8FC7 ZCode \u5E94\u7528\u767B\u5F55\uFF09\uFF0C\u7136\u540E\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D",
+      recheckZcode: "\u91CD\u65B0\u68C0\u6D4B",
       openCodeSub: "OpenCode",
       openCodeReady: "\u5DF2\u767B\u5F55 \u2713",
       openCodeNotLoggedIn: "\u672A\u767B\u5F55 OpenCode",
@@ -8864,6 +8898,7 @@
       backendSub: "Claude",
       backendByok: "BYOK",
       backendCodex: "Codex",
+      backendZcode: "ZCode",
       backendOpenCode: "OpenCode",
       claudeReady: "Logged in \u2713",
       claudeNotLoggedIn: "Not logged in",
@@ -8877,6 +8912,12 @@
       codexChecking: "Checking\u2026",
       codexLoginCap: "Sign in with codex in a terminal, then click Re-check",
       recheckCodex: "Re-check",
+      zcodeSub: "ZCode",
+      zcodeReady: "Logged in \u2713",
+      zcodeNotLoggedIn: "Not logged in to ZCode",
+      zcodeChecking: "Checking\u2026",
+      zcodeLoginCap: "Run `zcode login` (or sign in via the ZCode app), then click Re-check",
+      recheckZcode: "Re-check",
       openCodeSub: "OpenCode",
       openCodeReady: "Logged in \u2713",
       openCodeNotLoggedIn: "Not logged in to OpenCode",
@@ -9029,7 +9070,9 @@
     codexStatus = { state: "checking" },
     onRecheckCodex,
     openCodeStatus = { state: "checking" },
-    onRecheckOpenCode
+    onRecheckOpenCode,
+    zcodeStatus = { state: "checking" },
+    onRecheckZcode
   }) {
     const t = S[lang] || S.zh;
     const [key, setKey] = import_react19.default.useState(apiKey);
@@ -9060,6 +9103,9 @@
     const openCodeState = openCodeStatus && openCodeStatus.state || "checking";
     const openCodeBadgeStatus = openCodeState === "ready" ? "ok" : openCodeState === "not-logged-in" ? "warn" : "neutral";
     const openCodeBadgeText = openCodeState === "ready" ? t.openCodeReady : openCodeState === "not-logged-in" ? t.openCodeNotLoggedIn : t.openCodeChecking;
+    const zcodeState = zcodeStatus && zcodeStatus.state || "checking";
+    const zcodeBadgeStatus = zcodeState === "ready" ? "ok" : zcodeState === "not-logged-in" ? "warn" : "neutral";
+    const zcodeBadgeText = zcodeState === "ready" ? t.zcodeReady : zcodeState === "not-logged-in" ? t.zcodeNotLoggedIn : t.zcodeChecking;
     const saveApiKey = () => {
       if (aiBusy) return;
       setAiBusy(true);
@@ -9102,6 +9148,7 @@
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.backend, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Segmented, { full: true, value: backend, onChange: onBackendChange, options: [
           { value: "subscription", label: t.backendSub },
           { value: "codex", label: t.backendCodex },
+          { value: "zcode", label: t.backendZcode },
           { value: "byok", label: t.backendByok }
         ] }) }),
         backend === "subscription" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.backendSub, caption: claudeState === "not-logged-in" ? t.claudeLoginCap : claudeStatus && claudeStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
@@ -9119,6 +9166,10 @@
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: openCodeBadgeStatus, children: openCodeBadgeText }),
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1 } }),
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: openCodeState === "checking", onClick: onRecheckOpenCode, children: t.recheckOpenCode })
+        ] }) }) : backend === "zcode" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.zcodeSub, caption: zcodeState === "not-logged-in" ? t.zcodeLoginCap : zcodeStatus && zcodeStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: zcodeBadgeStatus, children: zcodeBadgeText }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: zcodeState === "checking", onClick: onRecheckZcode, children: t.recheckZcode })
         ] }) }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.apiKey, caption: t.apiKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { secret: true, value: key, onChange: setKey, placeholder: "sk-ant-...", style: { flex: 1 } }),
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "primary", disabled: aiBusy || !key.trim(), onClick: saveApiKey, children: aiBusy ? t.validating : t.saveVerify }),
@@ -9748,6 +9799,8 @@
     onClient,
     clientName = "Claude Desktop",
     mcpConfig = "",
+    port = 11488,
+    expertGuidance = true,
     onNext,
     onBack,
     onCopy,
@@ -9762,7 +9815,7 @@
     const t = W[lang] || W.zh;
     const clientOptions = [{ id: "builtin", name: "builtin" }, ...EXTERNAL_CLIENTS];
     const selectedExternalClient = EXTERNAL_CLIENTS.find((item) => item.id === client);
-    const selectedMcpConfig = selectedExternalClient && selectedExternalClient.kind === "mcp-stdio" ? mcpConfig || JSON.stringify(mcpConfigFor(selectedExternalClient), null, 2) : "";
+    const selectedMcpConfig = selectedExternalClient && selectedExternalClient.kind === "mcp-stdio" ? JSON.stringify(mcpConfigFor(selectedExternalClient, port, expertGuidance), null, 2) : "";
     return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "var(--space-6) var(--space-5) var(--space-5)" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", gap: 5 }, children: [1, 2, 3].map((n) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { width: n === step ? 14 : 5, height: 5, borderRadius: 3, background: n === step ? "var(--gray-11)" : n < step ? "var(--gray-9)" : "var(--gray-6)", transition: "width var(--dur-base) var(--ease-out)" } }, n)) }),
@@ -11701,13 +11754,29 @@
       perTurnModelSwitch: true
     };
   }
+  function zcodeStaticDescriptor() {
+    const models = [
+      { id: "glm-5.2", label: "GLM-5.2", effortLevels: [], cost: 2, adaptive: false }
+    ];
+    return {
+      id: "zcode",
+      label: "ZCode",
+      models,
+      defaultModelId: "glm-5.2",
+      defaultEffort: null,
+      supportsFast: () => false,
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
 
   // src/cep/backends/index.js
   var BACKENDS = {
     subscription: { id: "subscription", baseDescriptor: claudeSubDescriptor },
     byok: { id: "byok", baseDescriptor: byokStaticDescriptor },
     codex: { id: "codex", baseDescriptor: codexStaticDescriptor },
-    opencode: { id: "opencode", baseDescriptor: openCodeStaticDescriptor }
+    opencode: { id: "opencode", baseDescriptor: openCodeStaticDescriptor },
+    zcode: { id: "zcode", baseDescriptor: zcodeStaticDescriptor }
   };
   var REAL_BACKENDS = Object.keys(BACKENDS);
   function baseDescriptorFor(backendId) {
@@ -11716,7 +11785,7 @@
   }
 
   // src/lib/backendSelect.js
-  function pickBackend({ pref, probe, hasApiKey, codexProbe }) {
+  function pickBackend({ pref, probe, hasApiKey, codexProbe, zcodeProbe }) {
     if (pref === "byok") {
       return hasApiKey ? { backend: "byok", reason: "ok" } : { backend: "none", reason: "no-key" };
     }
@@ -11724,6 +11793,11 @@
       if (codexProbe === null) return { backend: "none", reason: "codex-probing" };
       if (!codexProbe || !codexProbe.loggedIn) return { backend: "none", reason: "codex-not-logged-in" };
       return { backend: "codex", reason: "ok" };
+    }
+    if (pref === "zcode") {
+      if (zcodeProbe === null) return { backend: "none", reason: "zcode-probing" };
+      if (!zcodeProbe || !zcodeProbe.loggedIn) return { backend: "none", reason: "zcode-not-logged-in" };
+      return { backend: "zcode", reason: "ok" };
     }
     if (probe === null) return { backend: "none", reason: "probing" };
     if (!probe.nodeOk) return hasApiKey ? { backend: "byok", reason: "no-node" } : { backend: "none", reason: "no-node" };
@@ -13620,6 +13694,481 @@
     return { sendUser, approve, stop, reset, getMessages, probeAccount };
   }
 
+  // src/cep/zcodeBackend.js
+  var RPC_TIMEOUT_MS2 = 3e4;
+  var STDERR_TAIL_LIMIT3 = 4096;
+  var DELIVERY_KIND = "desktop-continuous";
+  var MODE_BY_TIER = {
+    readonly: "plan",
+    manual: "build",
+    auto: "edit",
+    none: "yolo"
+  };
+  function getCepRequire6() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
+      return globalThis.window.cep_node.require;
+    }
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function getCepEnv6() {
+    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
+  }
+  function appendTail5(tail, chunk) {
+    const next = tail + String(chunk || "");
+    return next.length > STDERR_TAIL_LIMIT3 ? next.slice(next.length - STDERR_TAIL_LIMIT3) : next;
+  }
+  function clone4(value) {
+    return value == null ? value : JSON.parse(JSON.stringify(value));
+  }
+  async function resolveZcodeCli({ env, execFileImpl }) {
+    const override = env && env.AE_MCP_ZCODE_CLI;
+    if (override) return { ok: true, cliPath: override };
+    const localAppData = env && (env.LOCALAPPDATA || env.LocalAppData);
+    if (localAppData) {
+      const path = localAppData + "\\Programs\\ZCode\\resources\\glm\\zcode.cjs";
+      try {
+        await statFile(path);
+        return { ok: true, cliPath: path };
+      } catch (e) {
+      }
+    }
+    const execFile = execFileImpl || getCepRequire6()("child_process").execFile;
+    try {
+      const where = await execFileAsync2(execFile, "where", ["zcode"], env || {});
+      if (!where.err && where.stdout) {
+        const exe = String(where.stdout).split(/\r?\n/)[0].trim();
+        if (exe) return { ok: true, cliPath: exe, isExe: true };
+      }
+    } catch (e) {
+    }
+    return { ok: false, detail: "ZCode CLI not found. Install ZCode or set AE_MCP_ZCODE_CLI to the zcode.cjs path." };
+  }
+  function statFile(path) {
+    const fs = getCepRequire6()("fs");
+    return new Promise((resolve, reject) => fs.stat(path, (err) => err ? reject(err) : resolve()));
+  }
+  function execFileAsync2(execFile, cmd, args, env) {
+    return new Promise((resolve) => {
+      execFile(cmd, args, { env, windowsHide: true }, (err, stdout, stderr) => {
+        resolve({ err, stdout: String(stdout || ""), stderr: String(stderr || "") });
+      });
+    });
+  }
+  function createRpc2({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEOUT_MS2 }) {
+    let nextId2 = 1;
+    const pending = /* @__PURE__ */ new Map();
+    function writeMessage(message) {
+      writeLine(JSON.stringify(message) + "\n");
+    }
+    function rejectPending(id, error) {
+      const entry = pending.get(id);
+      if (!entry) return;
+      pending.delete(id);
+      clearTimeout(entry.timer);
+      entry.reject(error);
+    }
+    function handleMessage(message) {
+      if (!message || typeof message !== "object") return;
+      const hasId = message.id !== void 0 && message.id !== null;
+      if (hasId && !message.method) {
+        const entry = pending.get(message.id);
+        if (!entry) return;
+        pending.delete(message.id);
+        clearTimeout(entry.timer);
+        if (message.error) {
+          const error = new Error(message.error.message || "ZCode request failed");
+          error.code = message.error.code;
+          error.data = message.error.data;
+          entry.reject(error);
+        } else {
+          entry.resolve(message.result);
+        }
+        return;
+      }
+      if (message.method && hasId) {
+        if (onRequest) onRequest(message);
+        return;
+      }
+      if (message.method && onNotification) onNotification(message);
+    }
+    function request(method, params, timeoutOverrideMs) {
+      const id = nextId2++;
+      const message = { id, method };
+      if (params !== void 0) message.params = params;
+      const limit = timeoutOverrideMs || timeoutMs;
+      const promise = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => rejectPending(id, new Error(method + " timed out after " + limit + "ms")), limit);
+        pending.set(id, { resolve, reject, timer });
+      });
+      writeMessage(message);
+      return promise;
+    }
+    function fireRequest(method, params) {
+      const id = nextId2++;
+      const message = { id, method };
+      if (params !== void 0) message.params = params;
+      writeMessage(message);
+      return id;
+    }
+    function respond(id, result) {
+      writeMessage({ id, result });
+    }
+    function respondError(id, code, message) {
+      writeMessage({ id, error: { code, message } });
+    }
+    function close(reason = new Error("ZCode app-server closed")) {
+      for (const id of Array.from(pending.keys())) rejectPending(id, reason);
+    }
+    return { request, fireRequest, respond, respondError, close, handleMessage };
+  }
+  function mcpToolName2(name) {
+    const text = String(name || "");
+    return text.startsWith("mcp__") ? text : "mcp__ae__" + text;
+  }
+  function createZcodeBackend({
+    spawnImpl,
+    getModel,
+    getPermissionMode,
+    getToolMeta,
+    getExpertGuidance = () => true,
+    getServerInstructions = () => "",
+    onEvent,
+    lang = "zh",
+    env,
+    resolveCli = resolveZcodeCli,
+    resolveNode = resolveSystemNode
+  }) {
+    let proc = null;
+    let rpc = null;
+    let startPromise = null;
+    let sessionPromise = null;
+    let sessionId = null;
+    let subscribed = false;
+    let stopping = false;
+    let stderrTail = "";
+    let transcript = [];
+    let activeRun = null;
+    let activeResolve = null;
+    let activeAssistantText = "";
+    let toolMeta = { allowedTools: [], annotations: {} };
+    const pendingApprovals = /* @__PURE__ */ new Map();
+    const sessionAllowedTools = /* @__PURE__ */ new Set();
+    function emit(evt) {
+      if (onEvent) onEvent(evt);
+    }
+    function getSpawn() {
+      if (spawnImpl) return spawnImpl;
+      return getCepRequire6()("child_process").spawn;
+    }
+    function currentEnv() {
+      return Object.assign({}, getCepEnv6(), env || {});
+    }
+    function finishActive() {
+      if (!activeResolve) {
+        activeRun = null;
+        activeAssistantText = "";
+        return;
+      }
+      const resolve = activeResolve;
+      activeResolve = null;
+      activeRun = null;
+      activeAssistantText = "";
+      resolve();
+    }
+    function drainApprovals() {
+      for (const [toolUseId, approval] of Array.from(pendingApprovals.entries())) {
+        if (rpc) rpc.respond(approval.rpcId, { decision: "decline" });
+        pendingApprovals.delete(toolUseId);
+        emit({ type: "tool-denied", toolUseId });
+      }
+    }
+    function handleNotification(message) {
+      const params = message.params || {};
+      const type = params.type || message.method;
+      if (type === "turn.started") {
+        emit({ type: "turn-start" });
+        return;
+      }
+      if (type === "model.streaming") {
+        const payload = params.payload || {};
+        if (payload.kind === "text_delta" && payload.delta) {
+          activeAssistantText += String(payload.delta);
+          emit({ type: "text-delta", text: String(payload.delta) });
+        }
+        return;
+      }
+      if (type === "tool.updated" || type === "part.started" || type === "part.upserted") {
+        const payload = params.payload || {};
+        if (payload.toolName || payload.tool) {
+          emit({
+            type: "tool-start",
+            toolUseId: String(payload.toolCallId || payload.id || ""),
+            name: mcpToolName2(payload.toolName || payload.tool),
+            input: payload.input || payload.arguments
+          });
+        }
+        return;
+      }
+      if (type === "permission.requested") {
+        handlePermissionRequest(params);
+        return;
+      }
+      if (type === "turn.completed") {
+        drainApprovals();
+        const payload = params.payload || {};
+        emit({ type: "turn-end", stopReason: "end_turn" });
+        transcript.push({ role: "assistant", text: activeAssistantText || payload.response || "" });
+        finishActive();
+        return;
+      }
+      if (type === "turn.failed") {
+        const payload = params.payload || {};
+        const message2 = payload.error || payload.message || "ZCode turn failed";
+        emit({ type: "error", kind: "mcp", message: String(message2) });
+        finishActive();
+        return;
+      }
+    }
+    function handlePermissionRequest(params) {
+      const payload = params.payload || params;
+      const toolUseId = String(payload.toolCallId || "");
+      const name = mcpToolName2(payload.toolName || "");
+      const input = payload.input || {};
+      const riskLevel = payload.riskLevel || "medium";
+      const annotations = toolMeta && toolMeta.annotations || {};
+      const ann = annotations[name] || {};
+      const tier = getPermissionMode ? getPermissionMode() : "manual";
+      const requestId = payload.requestId || null;
+      if (sessionAllowedTools.has(name) || ann.readOnly || tier === "none" || tier === "auto" && !ann.destructive && riskLevel === "low") {
+        if (requestId && rpc) rpc.respond(requestId, { decision: "allow" });
+        emit({ type: "tool-allowed", toolUseId });
+        return;
+      }
+      if (tier === "readonly") {
+        if (requestId && rpc) rpc.respond(requestId, { decision: "decline" });
+        emit({ type: "tool-denied", toolUseId });
+        return;
+      }
+      pendingApprovals.set(toolUseId, { rpcId: requestId, name, input });
+      emit({
+        type: "approval-required",
+        toolUseId,
+        name,
+        input,
+        risk: ann.destructive ? "destructive" : "write"
+      });
+    }
+    function handleExit(code, signal) {
+      const wasStopping = stopping;
+      const detail = stderrTail ? String(code) + (signal ? " " + signal : "") + " " + stderrTail : String(code) + (signal ? " " + signal : "");
+      if (rpc) rpc.close(new Error("ZCode app-server exited: " + detail));
+      proc = null;
+      rpc = null;
+      startPromise = null;
+      sessionPromise = null;
+      sessionId = null;
+      subscribed = false;
+      if (wasStopping) return;
+      if (activeRun) {
+        emit({ type: "error", kind: "mcp", message: "ZCode app-server exited: " + detail });
+        finishActive();
+      }
+    }
+    function handleError(error) {
+      const err = error instanceof Error ? error : new Error("ZCode app-server error");
+      if (rpc) rpc.close(err);
+      proc = null;
+      rpc = null;
+      startPromise = null;
+      sessionPromise = null;
+      sessionId = null;
+      subscribed = false;
+      if (activeRun) {
+        emit({ type: "error", kind: "mcp", message: err.message });
+        finishActive();
+      }
+    }
+    async function startProcess() {
+      if (proc && rpc) return true;
+      if (startPromise) return startPromise;
+      startPromise = (async () => {
+        let execFileImpl = null;
+        try {
+          execFileImpl = getCepRequire6()("child_process").execFile;
+        } catch (e) {
+        }
+        const cli = await resolveCli({ env: currentEnv(), execFileImpl });
+        if (!cli.ok) throw new Error(cli.detail);
+        const spawn = getSpawn();
+        const spawnEnv = currentEnv();
+        stderrTail = "";
+        stopping = false;
+        let cmd;
+        let cmdArgs;
+        if (cli.isExe) {
+          cmd = cli.cliPath;
+          cmdArgs = ["app-server"];
+        } else {
+          const node = await resolveNode({ env: spawnEnv });
+          if (!node.ok) throw new Error(node.detail);
+          cmd = node.nodePath;
+          cmdArgs = [cli.cliPath, "app-server"];
+        }
+        proc = spawn(cmd, cmdArgs, {
+          stdio: "pipe",
+          windowsHide: true,
+          env: spawnEnv
+        });
+        rpc = createRpc2({
+          writeLine: (line) => proc.stdin.write(line),
+          onNotification: handleNotification
+        });
+        const reader = createNdjsonReader((message) => rpc && rpc.handleMessage(message));
+        if (proc.stdout && proc.stdout.on) proc.stdout.on("data", reader);
+        if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
+          stderrTail = appendTail5(stderrTail, chunk);
+        });
+        proc.on("exit", (code, signal) => handleExit(code, signal));
+        proc.on("error", (error) => handleError(error));
+        return true;
+      })();
+      try {
+        return await startPromise;
+      } finally {
+        startPromise = null;
+      }
+    }
+    function workspaceFromEnv(spawnEnv) {
+      const extRoot = spawnEnv && (spawnEnv.AE_MCP_PANEL_EXT_ROOT || spawnEnv.EXTENSION_ROOT);
+      const path = extRoot ? String(extRoot).replace(/\//g, "\\").replace(/\\+$/, "") : spawnEnv && (spawnEnv.TEMP || spawnEnv.TMP) || ".";
+      const key = path.replace(/\\/g, "\\");
+      return { workspacePath: path, workspaceKey: key };
+    }
+    function modeFromTier() {
+      const tier = getPermissionMode ? getPermissionMode() : "manual";
+      return MODE_BY_TIER[tier] || "build";
+    }
+    async function ensureSession() {
+      if (sessionId) return sessionId;
+      if (sessionPromise) return sessionPromise;
+      sessionPromise = (async () => {
+        await startProcess();
+        toolMeta = getToolMeta ? await getToolMeta() : { allowedTools: [], annotations: {} };
+        const spawnEnv = currentEnv();
+        const result = await rpc.request("session/create", {
+          workspace: workspaceFromEnv(spawnEnv),
+          mode: modeFromTier()
+        });
+        sessionId = result && result.session && result.session.sessionId || null;
+        if (!sessionId) throw new Error("ZCode session/create returned no sessionId");
+        if (!subscribed) {
+          rpc.fireRequest("session/subscribe", { sessionId, deliveryKind: DELIVERY_KIND });
+          subscribed = true;
+        }
+        return sessionId;
+      })();
+      try {
+        return await sessionPromise;
+      } finally {
+        sessionPromise = null;
+      }
+    }
+    async function sendUser(text) {
+      if (activeRun) return activeRun;
+      activeAssistantText = "";
+      activeRun = new Promise((resolve) => {
+        activeResolve = resolve;
+      });
+      try {
+        await ensureSession();
+        const userText = String(text || "");
+        transcript.push({ role: "user", text: userText });
+        let turnText = userText;
+        if (transcript.filter((m) => m.role === "user").length === 1) {
+          const instr = (getServerInstructions() || "").trim();
+          if (instr) turnText = instr + "\n\n---\n\n" + userText;
+        }
+        rpc.request("session/send", { sessionId, content: turnText }, 18e4).catch((e) => {
+          const message = e && e.message ? e.message : "Failed to start ZCode turn.";
+          emit({ type: "error", kind: /model/i.test(message) ? "model" : "mcp", message });
+          finishActive();
+        });
+      } catch (e) {
+        emit({ type: "error", kind: "mcp", message: e && e.message ? e.message : "Failed to start ZCode turn." });
+        finishActive();
+      }
+      return activeRun;
+    }
+    function approve(toolUseId, decision) {
+      const id = String(toolUseId);
+      const approval = pendingApprovals.get(id);
+      if (!approval) return;
+      pendingApprovals.delete(id);
+      const allow = decision !== "deny";
+      if (allow && decision === "allow-session") sessionAllowedTools.add(approval.name);
+      if (approval.rpcId && rpc) rpc.respond(approval.rpcId, { decision: allow ? "allow" : "decline" });
+      emit({ type: allow ? "tool-allowed" : "tool-denied", toolUseId: id });
+    }
+    function stop() {
+      if (rpc && sessionId) {
+        rpc.fireRequest("session/stop", { sessionId });
+      }
+      drainApprovals();
+      if (activeRun) {
+        emit({ type: "error", kind: "aborted", message: "Turn aborted." });
+        finishActive();
+      }
+    }
+    function reset() {
+      stopping = true;
+      drainApprovals();
+      if (rpc) rpc.close(new Error("ZCode backend reset"));
+      if (proc) {
+        try {
+          proc.kill();
+        } catch (e) {
+        }
+      }
+      proc = null;
+      rpc = null;
+      startPromise = null;
+      sessionPromise = null;
+      sessionId = null;
+      subscribed = false;
+      transcript = [];
+      pendingApprovals.clear();
+      sessionAllowedTools.clear();
+      toolMeta = { allowedTools: [], annotations: {} };
+      finishActive();
+      stderrTail = "";
+      stopping = false;
+    }
+    async function probeAccount() {
+      try {
+        await ensureSession();
+        let models = null;
+        try {
+          const msgs = await rpc.request("session/messages", { sessionId });
+          models = null;
+        } catch (e) {
+        }
+        return { loggedIn: true, provider: "zcode", models };
+      } catch (e) {
+        return { loggedIn: false, detail: e && e.message ? e.message : String(e) };
+      }
+    }
+    return {
+      sendUser,
+      approve,
+      stop,
+      reset,
+      getMessages: () => clone4(transcript),
+      probeAccount
+    };
+  }
+
   // src/lib/chatEntries.js
   function nextId(entries, prefix) {
     return `${prefix}-${entries.length + 1}`;
@@ -13720,7 +14269,7 @@
   // src/cep/modelsApi.js
   var CACHE_KEY = "ae_mcp_byok_models";
   var TTL_MS = 24 * 60 * 60 * 1e3;
-  function getCepRequire6() {
+  function getCepRequire7() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -13729,7 +14278,7 @@
     throw new Error("CEP Node require is unavailable");
   }
   function fetchAnthropicModels({ apiKey, httpsImpl, timeoutMs = 8e3 } = {}) {
-    const https = httpsImpl || getCepRequire6()("https");
+    const https = httpsImpl || getCepRequire7()("https");
     return new Promise((resolve) => {
       const req = https.request({
         hostname: "api.anthropic.com",
@@ -13830,7 +14379,7 @@
 
   // src/cep/wizardActions.js
   var OUTPUT_TAIL = 8192;
-  function getCepRequire7() {
+  function getCepRequire8() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -13855,7 +14404,7 @@
     return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
   }
   async function detectAeMcp({ execFileImpl, env, fsImpl }) {
-    const execFile = execFileImpl || getCepRequire7()("child_process").execFile;
+    const execFile = execFileImpl || getCepRequire8()("child_process").execFile;
     const whereHit = await new Promise((resolve) => {
       execFile("where", ["ae-mcp"], { windowsHide: true, env }, (err, stdout) => {
         resolve(err ? "" : String(stdout || "").split(/\r?\n/).map((l) => l.trim()).find(Boolean) || "");
@@ -13865,7 +14414,7 @@
     const profile = (env || getCepEnvSafe()).USERPROFILE || "";
     if (profile) {
       const shim = profile.replace(/[\\/]+$/, "") + "\\.local\\bin\\ae-mcp.exe";
-      const fs = fsImpl || getCepRequire7()("fs");
+      const fs = fsImpl || getCepRequire8()("fs");
       if (fs.existsSync(shim)) return { ok: true, version: shim };
     }
     return { ok: false };
@@ -13873,7 +14422,7 @@
   async function detectTool(id, { execFileImpl, env, fsImpl } = {}) {
     if (id === "aeMcp") return detectAeMcp({ execFileImpl, env, fsImpl });
     const spec = DETECT[id];
-    const execFile = execFileImpl || getCepRequire7()("child_process").execFile;
+    const execFile = execFileImpl || getCepRequire8()("child_process").execFile;
     return execVersion(execFile, spec.file, spec.args, env, spec.shell);
   }
   var REPO = "https://github.com/JUNKDOGE-JOE/after-effects-mcp";
@@ -13888,7 +14437,7 @@
     };
   }
   function runAction({ file, args, spawnImpl, env, onChunk }) {
-    const spawn = spawnImpl || getCepRequire7()("child_process").spawn;
+    const spawn = spawnImpl || getCepRequire8()("child_process").spawn;
     return new Promise((resolve) => {
       let output = "";
       const push = (chunk) => {
@@ -13912,11 +14461,11 @@
     return [file, ...args.map((a) => /\s/.test(a) ? `"${a}"` : a)].join(" ");
   }
   function detectRepoRoot({ extRoot, fsImpl }) {
-    return findProjectRoot({ extRoot, repoRoot: "", fsImpl: fsImpl || getCepRequire7()("fs") });
+    return findProjectRoot({ extRoot, repoRoot: "", fsImpl: fsImpl || getCepRequire8()("fs") });
   }
   var LOGIN_COMMANDS = { claude: "claude", codex: "codex login" };
   function openLoginTerminal({ tool, spawnImpl } = {}) {
-    const spawn = spawnImpl || getCepRequire7()("child_process").spawn;
+    const spawn = spawnImpl || getCepRequire8()("child_process").spawn;
     const command = LOGIN_COMMANDS[tool] || LOGIN_COMMANDS.claude;
     const child = spawn("cmd", ["/c", "start", "ae-mcp login", "pwsh", "-NoExit", "-Command", command], {
       detached: true,
@@ -14228,7 +14777,7 @@
       }
     };
   }
-  function getCepRequire8() {
+  function getCepRequire9() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -14241,7 +14790,7 @@
     function start(port) {
       onStatus("starting", port);
       try {
-        const cepRequire4 = getCepRequire8();
+        const cepRequire4 = getCepRequire9();
         const path = cepRequire4("path");
         const extRoot = normalizeCepPath(cs2.getSystemPath("extension"));
         const hostPath = path.join(extRoot, "host", "server.js");
@@ -14473,6 +15022,7 @@
     const [codexModels, setCodexModels] = import_react39.default.useState(() => readCachedCodexModels(window.localStorage));
     const [openCodeProbe, setOpenCodeProbe] = import_react39.default.useState(null);
     const [openCodeModels, setOpenCodeModels] = import_react39.default.useState(() => readCachedOpenCodeModels(window.localStorage));
+    const [zcodeProbe, setZcodeProbe] = import_react39.default.useState(null);
     const [chatEntries, setChatEntries] = import_react39.default.useState([]);
     const [chatStreaming, setChatStreaming] = import_react39.default.useState(false);
     const [thinkingActive, setThinkingActive] = import_react39.default.useState(false);
@@ -14574,9 +15124,18 @@
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, mcp, handleChatEvent]);
-    const selectedEffective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey, codexProbe });
+    const zcodeBackend = import_react39.default.useMemo(() => createZcodeBackend({
+      getModel: () => runtimeRef.current.model,
+      getPermissionMode: () => runtimeRef.current.permissionMode,
+      getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
+      getExpertGuidance: () => loadExpertGuidance(window.localStorage),
+      getServerInstructions: () => mcp.getServerInstructions(),
+      env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
+      onEvent: handleChatEvent
+    }), [extRoot, mcp, handleChatEvent]);
+    const selectedEffective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey, codexProbe, zcodeProbe });
     const effective = backendPref === "opencode" ? openCodeProbe === null ? { backend: "none", reason: "opencode-probing" } : !openCodeProbe || !openCodeProbe.loggedIn ? { backend: "none", reason: "opencode-not-logged-in" } : { backend: "opencode", reason: "ok" } : selectedEffective;
-    const backendInstances = { subscription: claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend };
+    const backendInstances = { subscription: claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };
     const activeBackend = backendInstances[effective.backend] || byokLoop;
     const activeBackendRef = import_react39.default.useRef(null);
     const runClaudeProbe = import_react39.default.useCallback(() => {
@@ -14640,6 +15199,22 @@
       if (backendPref !== "opencode") return void 0;
       return runOpenCodeProbe();
     }, [backendPref, runOpenCodeProbe]);
+    const runZcodeProbe = import_react39.default.useCallback(() => {
+      let alive = true;
+      setZcodeProbe(null);
+      zcodeBackend.probeAccount().then((result) => {
+        if (alive) setZcodeProbe(result);
+      }).catch((e) => {
+        if (alive) setZcodeProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
+      });
+      return () => {
+        alive = false;
+      };
+    }, [zcodeBackend]);
+    import_react39.default.useEffect(() => {
+      if (backendPref !== "zcode") return void 0;
+      return runZcodeProbe();
+    }, [backendPref, runZcodeProbe]);
     import_react39.default.useEffect(() => {
       const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
       activeBackendRef.current = decision.nextReal;
@@ -14648,12 +15223,13 @@
       claudeBackend.reset();
       codexBackend.reset();
       openCodeBackend.reset();
+      zcodeBackend.reset();
       setChatEntries([]);
       setChatStreaming(false);
       setSessionModel(null);
       setSessionEffort(null);
       setSessionFast(null);
-    }, [effective.backend, byokLoop, claudeBackend, codexBackend, openCodeBackend]);
+    }, [effective.backend, byokLoop, claudeBackend, codexBackend, openCodeBackend, zcodeBackend]);
     const sendChat = (text) => {
       const trimmed = String(text || "").trim();
       if (!trimmed) return;
@@ -14756,6 +15332,7 @@
     const claudeStatus = probe === null ? { state: "checking" } : probe.nodeOk === false ? { state: "no-node", detail: probe.detail } : probe.loggedIn === false ? { state: "not-logged-in", detail: probe.detail } : { state: "ready", nodeVersion: probe.nodeVersion };
     const codexStatus = codexProbe === null ? { state: "checking" } : codexProbe.loggedIn === false ? { state: "not-logged-in", detail: codexProbe.detail } : { state: "ready", email: codexProbe.email, planType: codexProbe.planType };
     const openCodeStatus = openCodeProbe === null ? { state: "checking" } : openCodeProbe.loggedIn === false ? { state: "not-logged-in", detail: openCodeProbe.detail } : { state: "ready" };
+    const zcodeStatus = zcodeProbe === null ? { state: "checking" } : zcodeProbe.loggedIn === false ? { state: "not-logged-in", detail: zcodeProbe.detail } : { state: "ready", provider: zcodeProbe.provider };
     const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
     if (!wizardDone) {
       return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
@@ -14768,6 +15345,8 @@
           onClient: setWizClient,
           clientName: (CLIENT_NAMES[wizClient] || CLIENT_NAMES["claude-desktop"])[lang],
           mcpConfig: mcpConfigStr,
+          port: status.port,
+          expertGuidance,
           onNext: () => setWizStep((s) => Math.min(3, s + 1)),
           onBack: () => setWizStep((s) => Math.max(1, s - 1)),
           onCopy: () => copyText(mcpConfigStr),
@@ -14897,7 +15476,9 @@
             codexStatus,
             onRecheckCodex: runCodexProbe,
             openCodeStatus,
-            onRecheckOpenCode: runOpenCodeProbe
+            onRecheckOpenCode: runOpenCodeProbe,
+            zcodeStatus,
+            onRecheckZcode: runZcodeProbe
           },
           tokenEpoch
         ) : null

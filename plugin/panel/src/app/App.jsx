@@ -18,6 +18,7 @@ import { probeClaudeLogin, resolveSidecarPath } from '../cep/claudeAuth';
 import { createClaudeAgentBackend, resolveSystemNode } from '../cep/claudeAgentBackend';
 import { createCodexBackend } from '../cep/codexBackend';
 import { createOpenCodeBackend } from '../cep/openCodeBackend';
+import { createZcodeBackend } from '../cep/zcodeBackend';
 import { reduceEvent } from '../lib/chatEntries';
 import { DEFAULT_MODEL, FALLBACK_MODEL } from '../lib/anthropic';
 import { byokStaticDescriptor, mergeByokModels, codexDescriptorFromModels, openCodeDescriptorFromModels } from '../lib/backendCapabilities';
@@ -238,6 +239,7 @@ function Shell({ cs }) {
   const [codexModels, setCodexModels] = React.useState(() => readCachedCodexModels(window.localStorage));
   const [openCodeProbe, setOpenCodeProbe] = React.useState(null);
   const [openCodeModels, setOpenCodeModels] = React.useState(() => readCachedOpenCodeModels(window.localStorage));
+  const [zcodeProbe, setZcodeProbe] = React.useState(null);
   const [chatEntries, setChatEntries] = React.useState([]);
   const [chatStreaming, setChatStreaming] = React.useState(false);
   const [thinkingActive, setThinkingActive] = React.useState(false);
@@ -349,14 +351,24 @@ function Shell({ cs }) {
     onEvent: handleChatEvent,
   }), [extRoot, mcp, handleChatEvent]);
 
-  const selectedEffective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey, codexProbe });
+  const zcodeBackend = React.useMemo(() => createZcodeBackend({
+    getModel: () => runtimeRef.current.model,
+    getPermissionMode: () => runtimeRef.current.permissionMode,
+    getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
+    getExpertGuidance: () => loadExpertGuidance(window.localStorage),
+    getServerInstructions: () => mcp.getServerInstructions(),
+    env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
+    onEvent: handleChatEvent,
+  }), [extRoot, mcp, handleChatEvent]);
+
+  const selectedEffective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey, codexProbe, zcodeProbe });
   const effective = backendPref === 'opencode'
     ? openCodeProbe === null ? { backend: 'none', reason: 'opencode-probing' }
       : !openCodeProbe || !openCodeProbe.loggedIn ? { backend: 'none', reason: 'opencode-not-logged-in' }
       : { backend: 'opencode', reason: 'ok' }
     : selectedEffective;
-  // Map real-backend id -> instance (registry leaves a slot for OpenCode/F2).
-  const backendInstances = { subscription: claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend };
+  // Map real-backend id -> instance.
+  const backendInstances = { subscription: claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };
   const activeBackend = backendInstances[effective.backend] || byokLoop;
   const activeBackendRef = React.useRef(null);
 
@@ -421,6 +433,22 @@ function Shell({ cs }) {
     return runOpenCodeProbe();
   }, [backendPref, runOpenCodeProbe]);
 
+  const runZcodeProbe = React.useCallback(() => {
+    let alive = true;
+    setZcodeProbe(null);
+    zcodeBackend.probeAccount().then((result) => {
+      if (alive) setZcodeProbe(result);
+    }).catch((e) => {
+      if (alive) setZcodeProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
+    });
+    return () => { alive = false; };
+  }, [zcodeBackend]);
+
+  React.useEffect(() => {
+    if (backendPref !== 'zcode') return undefined;
+    return runZcodeProbe();
+  }, [backendPref, runZcodeProbe]);
+
   React.useEffect(() => {
     const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
     activeBackendRef.current = decision.nextReal;
@@ -429,12 +457,13 @@ function Shell({ cs }) {
     claudeBackend.reset();
     codexBackend.reset();
     openCodeBackend.reset();
+    zcodeBackend.reset();
     setChatEntries([]);
     setChatStreaming(false);
     setSessionModel(null);
     setSessionEffort(null);
     setSessionFast(null);
-  }, [effective.backend, byokLoop, claudeBackend, codexBackend, openCodeBackend]);
+  }, [effective.backend, byokLoop, claudeBackend, codexBackend, openCodeBackend, zcodeBackend]);
 
   const sendChat = (text) => {
     const trimmed = String(text || '').trim();
@@ -558,6 +587,9 @@ function Shell({ cs }) {
   const openCodeStatus = openCodeProbe === null ? { state: 'checking' }
     : openCodeProbe.loggedIn === false ? { state: 'not-logged-in', detail: openCodeProbe.detail }
     : { state: 'ready' };
+  const zcodeStatus = zcodeProbe === null ? { state: 'checking' }
+    : zcodeProbe.loggedIn === false ? { state: 'not-logged-in', detail: zcodeProbe.detail }
+    : { state: 'ready', provider: zcodeProbe.provider };
   const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
 
   if (!wizardDone) {
@@ -570,6 +602,8 @@ function Shell({ cs }) {
         onClient={setWizClient}
         clientName={(CLIENT_NAMES[wizClient] || CLIENT_NAMES['claude-desktop'])[lang]}
         mcpConfig={mcpConfigStr}
+        port={status.port}
+        expertGuidance={expertGuidance}
         onNext={() => setWizStep((s) => Math.min(3, s + 1))}
         onBack={() => setWizStep((s) => Math.max(1, s - 1))}
         onCopy={() => copyText(mcpConfigStr)}
@@ -686,6 +720,8 @@ function Shell({ cs }) {
             onRecheckCodex={runCodexProbe}
             openCodeStatus={openCodeStatus}
             onRecheckOpenCode={runOpenCodeProbe}
+            zcodeStatus={zcodeStatus}
+            onRecheckZcode={runZcodeProbe}
           />
         ) : null}
       </div>

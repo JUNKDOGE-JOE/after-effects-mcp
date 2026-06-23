@@ -199,3 +199,55 @@ export function openCodeDescriptorFromModels(providerResult) {
     perTurnModelSwitch: true,
   };
 }
+
+// ZCode ships a CLI (zcode.cjs app-server) whose login state is shared with
+// the Electron app and whose ~/.zcode/cli/config.json already registers the ae
+// MCP server, so an embedded ZCode backend needs no MCP wiring of its own.
+// Models come from session/create's settings.model.available:
+// {label, ref:{modelId, providerId}, contextWindow}.
+export function zcodeStaticDescriptor() {
+  const models = [
+    { id: 'glm-5.2', label: 'GLM-5.2', effortLevels: [], cost: 2, adaptive: false },
+  ];
+  return {
+    id: 'zcode',
+    label: 'ZCode',
+    models,
+    defaultModelId: 'glm-5.2',
+    defaultEffort: null,
+    supportsFast: () => false,
+    approvalModes: APPROVAL_MODES,
+    perTurnModelSwitch: true,
+  };
+}
+
+export function zcodeDescriptorFromModels(sessionCreateResult) {
+  const available = sessionCreateResult && sessionCreateResult.settings && sessionCreateResult.settings.model && Array.isArray(sessionCreateResult.settings.model.available)
+    ? sessionCreateResult.settings.model.available
+    : [];
+  const current = sessionCreateResult && sessionCreateResult.settings && sessionCreateResult.settings.model && sessionCreateResult.settings.model.current;
+  const models = available.map((m) => {
+    const ref = m.ref || {};
+    const id = ref.modelId || m.label || '';
+    const providerId = ref.providerId || '';
+    return {
+      id: providerId ? providerId + '/' + id : id,
+      label: m.label || id,
+      effortLevels: [],
+      cost: 2,
+      adaptive: false,
+    };
+  }).filter((m) => m.id);
+  if (!models.length) return zcodeStaticDescriptor();
+  const defaultId = current ? (current.providerId ? current.providerId + '/' + current.modelId : current.modelId) : models[0].id;
+  return {
+    id: 'zcode',
+    label: 'ZCode',
+    models,
+    defaultModelId: models.some((m) => m.id === defaultId) ? defaultId : models[0].id,
+    defaultEffort: null,
+    supportsFast: () => false,
+    approvalModes: APPROVAL_MODES,
+    perTurnModelSwitch: true,
+  };
+}
