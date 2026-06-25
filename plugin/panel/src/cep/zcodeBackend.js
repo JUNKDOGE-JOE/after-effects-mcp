@@ -216,6 +216,7 @@ export function createZcodeBackend({
   let activeAssistantText = '';
   let toolMeta = { allowedTools: [], annotations: {} };
   const pendingApprovals = new Map();
+  const pendingElicitations = new Map();
   const sessionAllowedTools = new Set();
 
   function emit(evt) {
@@ -250,26 +251,82 @@ export function createZcodeBackend({
       pendingApprovals.delete(toolUseId);
       emit({ type: 'tool-denied', toolUseId });
     }
+    for (const [toolUseId, elicit] of Array.from(pendingElicitations.entries())) {
+      if (rpc && elicit.rpcId) rpc.respond(elicit.rpcId, { action: 'decline' });
+      pendingElicitations.delete(toolUseId);
+      emit({ type: 'tool-denied', toolUseId });
+    }
   }
 
-  // ZCode sends elicitation/permission as REQUESTS (with id) — e.g. when the
-  // agent calls AskUserQuestion or a tool needs approval. Without handling
-  // these, the request is dropped and the agent hangs forever. This is the
-  // single most important fix for "askquestion stuck" / "turn never completes".
+  // ZCode sends two kinds of server-initiated REQUESTS (with id) that we must
+  // reply to, or the agent hangs forever:
+  //   - elicitation/create (mode:"form"): AskUserQuestion — the agent wants the
+  //     user to pick from options defined in requestedSchema.properties. Reply
+  //     with {action:"accept", content:{<field>:<value>}} or {action:"decline"}.
+  //   - permission.requested / session/permission: tool approval. Reply with
+  //     {decision:"allow"|"decline"}.
+  // These have DIFFERENT reply shapes — mixing them up silently breaks the turn.
   function handleRequest(message) {
     const method = message.method;
     const params = message.params || {};
 
-    // Elicitation / permission requests: route through the same approval logic
-    // as permission.requested notifications, then reply to the request id.
-    if (method === 'elicitation/create' || method === 'permission.requested' || method === 'session/permission') {
+    if (method === 'elicitation/create') {
+      handleElicitation(params, message.id);
+      return;
+    }
+    if (method === 'permission.requested' || method === 'session/permission') {
       handlePermissionRequest(params, message.id);
       return;
     }
-
-    // Unknown requests: respond with method-not-found so the agent can proceed
-    // instead of hanging.
+    // Unknown requests: respond so the agent can proceed instead of hanging.
     if (rpc) rpc.respondError(message.id, -32601, 'Method not found: ' + method);
+  }
+
+  // AskUserQuestion: the agent presents a form. requestedSchema.properties maps
+  // field names to option definitions (each with an enum of choices). We surface
+  // this as an approval-required event so the panel's ApprovalCard renders the
+  // question + options; the user's selection comes back via approve() and we
+  // reply with {action:"accept", content:{field:choice}}.
+  function handleElicitation(params, rpcId) {
+    const message = params.message || '';
+    const schema = params.requestedSchema || {};
+    const props = schema.properties || {};
+    const required = schema.required || [];
+
+    // If there are no properties, this is a simple yes/no — auto-accept.
+    const fieldNames = Object.keys(props);
+    if (!fieldNames.length) {
+      if (rpcId && rpc) rpc.respond(rpcId, { action: 'accept', content: {} });
+      return;
+    }
+
+    // In non-interactive tiers (none/auto), auto-accept with the first option
+    // of each field so the turn isn't blocked.
+    const tier = getPermissionMode ? getPermissionMode() : 'manual';
+    if (tier === 'none' || tier === 'auto') {
+      const autoContent = {};
+      for (const fn of fieldNames) {
+        const opts = props[fn] && props[fn].enum;
+        autoContent[fn] = opts && opts.length ? opts[0] : '';
+      }
+      if (rpcId && rpc) rpc.respond(rpcId, { action: 'accept', content: autoContent });
+      return;
+    }
+
+    // Build a single approval card: the question text + the first field's
+    // options as choices (ZCode AskUserQuestion typically has one field).
+    const primaryField = fieldNames[0];
+    const primaryProp = props[primaryField] || {};
+    const choices = Array.isArray(primaryProp.enum) ? primaryProp.enum : [];
+    const toolUseId = 'elicit_' + rpcId;
+    pendingElicitations.set(toolUseId, { rpcId, fieldNames, props, required });
+    emit({
+      type: 'approval-required',
+      toolUseId,
+      name: 'AskUserQuestion',
+      input: { question: message, field: primaryField, choices, fields: fieldNames },
+      risk: 'write',
+    });
   }
 
   function handleNotification(message) {
@@ -573,6 +630,30 @@ export function createZcodeBackend({
 
   function approve(toolUseId, decision) {
     const id = String(toolUseId);
+
+    // Elicitation (AskUserQuestion) reply: {action, content}. The "decision"
+    // from the panel carries the user's selected choice text.
+    const elicit = pendingElicitations.get(id);
+    if (elicit) {
+      pendingElicitations.delete(id);
+      if (decision === 'deny') {
+        if (elicit.rpcId && rpc) rpc.respond(elicit.rpcId, { action: 'decline' });
+        emit({ type: 'tool-denied', toolUseId: id });
+      } else {
+        // Build content from the chosen value; for single-field elicitation,
+        // the decision string IS the chosen option.
+        const content = {};
+        const fn = elicit.fieldNames[0];
+        content[fn] = typeof decision === 'string' && decision !== 'allow' && decision !== 'allow-session'
+          ? decision
+          : (elicit.props[fn] && elicit.props[fn].enum && elicit.props[fn].enum[0]) || '';
+        if (elicit.rpcId && rpc) rpc.respond(elicit.rpcId, { action: 'accept', content });
+        emit({ type: 'tool-allowed', toolUseId: id });
+      }
+      return;
+    }
+
+    // Permission (tool approval) reply: {decision}.
     const approval = pendingApprovals.get(id);
     if (!approval) return;
     pendingApprovals.delete(id);
@@ -608,6 +689,7 @@ export function createZcodeBackend({
     subscribed = false;
     transcript = [];
     pendingApprovals.clear();
+    pendingElicitations.clear();
     sessionAllowedTools.clear();
     toolMeta = { allowedTools: [], annotations: {} };
     finishActive();

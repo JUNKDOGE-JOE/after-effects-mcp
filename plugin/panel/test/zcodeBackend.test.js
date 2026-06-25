@@ -347,6 +347,64 @@ test('setThoughtLevel rejects an invalid level', async () => {
   assert.equal(ok, false);
 });
 
+test('elicitation/create (AskUserQuestion) surfaces options and replies with action/content', async () => {
+  const { backend, events, spawned } = makeBackend({ getPermissionMode: () => 'manual' });
+  const { proc } = await startTurn(backend, spawned, 'pick a color');
+  // Simulate ZCode sending an elicitation/create REQUEST (mode:form) with a
+  // requestedSchema whose property "color" has an enum of choices.
+  proc.pushStdout({
+    id: 99,
+    method: 'elicitation/create',
+    params: {
+      mode: 'form',
+      message: 'Which color?',
+      requestedSchema: {
+        type: 'object',
+        properties: { color: { type: 'string', enum: ['red', 'green', 'blue'] } },
+        required: ['color'],
+      },
+    },
+  });
+  await flush();
+
+  // The panel should have received an approval-required with the choices.
+  const approval = events.find((e) => e.type === 'approval-required' && e.name === 'AskUserQuestion');
+  assert.ok(approval, 'approval-required emitted for elicitation');
+  assert.deepEqual(approval.input.choices, ['red', 'green', 'blue']);
+
+  // User picks "green" — approve() must reply with {action:"accept", content:{color:"green"}}.
+  backend.approve(approval.toolUseId, 'green');
+  await flush();
+  const reply = parseWrites(proc).find((m) => m.id === 99);
+  assert.ok(reply, 'elicitation reply sent');
+  assert.equal(reply.result.action, 'accept');
+  assert.deepEqual(reply.result.content, { color: 'green' });
+});
+
+test('elicitation auto-accepts in none tier (no blocking)', async () => {
+  const { backend, events, spawned } = makeBackend({ getPermissionMode: () => 'none' });
+  const { proc } = await startTurn(backend, spawned, 'pick a color');
+  proc.pushStdout({
+    id: 100,
+    method: 'elicitation/create',
+    params: {
+      mode: 'form',
+      message: 'Which color?',
+      requestedSchema: {
+        type: 'object',
+        properties: { color: { type: 'string', enum: ['red', 'green'] } },
+        required: ['color'],
+      },
+    },
+  });
+  await flush();
+  // Should auto-accept with the first option, no approval-required emitted.
+  assert.ok(!events.some((e) => e.type === 'approval-required'));
+  const reply = parseWrites(proc).find((m) => m.id === 100);
+  assert.equal(reply.result.action, 'accept');
+  assert.equal(reply.result.content.color, 'red');
+});
+
 test('session/create injects the ae MCP server when getMcpSpec is provided', async () => {
   const { backend, spawned } = makeBackend({
     getMcpSpec: async () => ({ command: 'ae-mcp', args: ['--stdio'], env: { A: 'B' } }),

@@ -13857,6 +13857,7 @@
     let activeAssistantText = "";
     let toolMeta = { allowedTools: [], annotations: {} };
     const pendingApprovals = /* @__PURE__ */ new Map();
+    const pendingElicitations = /* @__PURE__ */ new Map();
     const sessionAllowedTools = /* @__PURE__ */ new Set();
     function emit(evt) {
       if (onEvent) onEvent(evt);
@@ -13886,15 +13887,57 @@
         pendingApprovals.delete(toolUseId);
         emit({ type: "tool-denied", toolUseId });
       }
+      for (const [toolUseId, elicit] of Array.from(pendingElicitations.entries())) {
+        if (rpc && elicit.rpcId) rpc.respond(elicit.rpcId, { action: "decline" });
+        pendingElicitations.delete(toolUseId);
+        emit({ type: "tool-denied", toolUseId });
+      }
     }
     function handleRequest(message) {
       const method = message.method;
       const params = message.params || {};
-      if (method === "elicitation/create" || method === "permission.requested" || method === "session/permission") {
+      if (method === "elicitation/create") {
+        handleElicitation(params, message.id);
+        return;
+      }
+      if (method === "permission.requested" || method === "session/permission") {
         handlePermissionRequest(params, message.id);
         return;
       }
       if (rpc) rpc.respondError(message.id, -32601, "Method not found: " + method);
+    }
+    function handleElicitation(params, rpcId) {
+      const message = params.message || "";
+      const schema = params.requestedSchema || {};
+      const props = schema.properties || {};
+      const required = schema.required || [];
+      const fieldNames = Object.keys(props);
+      if (!fieldNames.length) {
+        if (rpcId && rpc) rpc.respond(rpcId, { action: "accept", content: {} });
+        return;
+      }
+      const tier = getPermissionMode ? getPermissionMode() : "manual";
+      if (tier === "none" || tier === "auto") {
+        const autoContent = {};
+        for (const fn of fieldNames) {
+          const opts = props[fn] && props[fn].enum;
+          autoContent[fn] = opts && opts.length ? opts[0] : "";
+        }
+        if (rpcId && rpc) rpc.respond(rpcId, { action: "accept", content: autoContent });
+        return;
+      }
+      const primaryField = fieldNames[0];
+      const primaryProp = props[primaryField] || {};
+      const choices = Array.isArray(primaryProp.enum) ? primaryProp.enum : [];
+      const toolUseId = "elicit_" + rpcId;
+      pendingElicitations.set(toolUseId, { rpcId, fieldNames, props, required });
+      emit({
+        type: "approval-required",
+        toolUseId,
+        name: "AskUserQuestion",
+        input: { question: message, field: primaryField, choices, fields: fieldNames },
+        risk: "write"
+      });
     }
     function handleNotification(message) {
       const params = message.params || {};
@@ -14149,6 +14192,21 @@
     }
     function approve(toolUseId, decision) {
       const id = String(toolUseId);
+      const elicit = pendingElicitations.get(id);
+      if (elicit) {
+        pendingElicitations.delete(id);
+        if (decision === "deny") {
+          if (elicit.rpcId && rpc) rpc.respond(elicit.rpcId, { action: "decline" });
+          emit({ type: "tool-denied", toolUseId: id });
+        } else {
+          const content = {};
+          const fn = elicit.fieldNames[0];
+          content[fn] = typeof decision === "string" && decision !== "allow" && decision !== "allow-session" ? decision : elicit.props[fn] && elicit.props[fn].enum && elicit.props[fn].enum[0] || "";
+          if (elicit.rpcId && rpc) rpc.respond(elicit.rpcId, { action: "accept", content });
+          emit({ type: "tool-allowed", toolUseId: id });
+        }
+        return;
+      }
       const approval = pendingApprovals.get(id);
       if (!approval) return;
       pendingApprovals.delete(id);
@@ -14185,6 +14243,7 @@
       subscribed = false;
       transcript = [];
       pendingApprovals.clear();
+      pendingElicitations.clear();
       sessionAllowedTools.clear();
       toolMeta = { allowedTools: [], annotations: {} };
       finishActive();
