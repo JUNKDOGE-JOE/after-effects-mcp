@@ -13887,9 +13887,28 @@
         emit({ type: "tool-denied", toolUseId });
       }
     }
+    function handleRequest(message) {
+      const method = message.method;
+      const params = message.params || {};
+      if (method === "elicitation/create" || method === "permission.requested" || method === "session/permission") {
+        handlePermissionRequest(params, message.id);
+        return;
+      }
+      if (rpc) rpc.respondError(message.id, -32601, "Method not found: " + method);
+    }
     function handleNotification(message) {
       const params = message.params || {};
       const type = params.type || message.method;
+      if (type === "state.updated") {
+        const patch = params.patch || params.payload || {};
+        if (patch.status === "idle" && activeRun) {
+          drainApprovals();
+          emit({ type: "turn-end", stopReason: "end_turn" });
+          transcript.push({ role: "assistant", text: activeAssistantText });
+          finishActive();
+        }
+        return;
+      }
       if (type === "turn.started") {
         emit({ type: "turn-start" });
         return;
@@ -13915,7 +13934,7 @@
         return;
       }
       if (type === "permission.requested") {
-        handlePermissionRequest(params);
+        handlePermissionRequest(params, null);
         return;
       }
       if (type === "turn.completed") {
@@ -13934,27 +13953,27 @@
         return;
       }
     }
-    function handlePermissionRequest(params) {
+    function handlePermissionRequest(params, rpcId) {
       const payload = params.payload || params;
-      const toolUseId = String(payload.toolCallId || "");
-      const name = mcpToolName2(payload.toolName || "");
-      const input = payload.input || {};
+      const toolUseId = String(payload.toolCallId || payload.requestId || rpcId || "");
+      const name = mcpToolName2(payload.toolName || payload.tool || "");
+      const input = payload.input || payload.arguments || {};
       const riskLevel = payload.riskLevel || "medium";
       const annotations = toolMeta && toolMeta.annotations || {};
       const ann = annotations[name] || {};
       const tier = getPermissionMode ? getPermissionMode() : "manual";
-      const requestId = payload.requestId || null;
+      const replyId = rpcId || payload.requestId || null;
       if (sessionAllowedTools.has(name) || ann.readOnly || tier === "none" || tier === "auto" && !ann.destructive && riskLevel === "low") {
-        if (requestId && rpc) rpc.respond(requestId, { decision: "allow" });
+        if (replyId && rpc) rpc.respond(replyId, { decision: "allow" });
         emit({ type: "tool-allowed", toolUseId });
         return;
       }
       if (tier === "readonly") {
-        if (requestId && rpc) rpc.respond(requestId, { decision: "decline" });
+        if (replyId && rpc) rpc.respond(replyId, { decision: "decline" });
         emit({ type: "tool-denied", toolUseId });
         return;
       }
-      pendingApprovals.set(toolUseId, { rpcId: requestId, name, input });
+      pendingApprovals.set(toolUseId, { rpcId: replyId, name, input });
       emit({
         type: "approval-required",
         toolUseId,
@@ -14026,7 +14045,8 @@
         });
         rpc = createRpc2({
           writeLine: (line) => proc.stdin.write(line),
-          onNotification: handleNotification
+          onNotification: handleNotification,
+          onRequest: handleRequest
         });
         const reader = createNdjsonReader((message) => rpc && rpc.handleMessage(message));
         if (proc.stdout && proc.stdout.on) proc.stdout.on("data", reader);
@@ -14090,7 +14110,7 @@
         sessionId = result && result.session && result.session.sessionId || null;
         if (!sessionId) throw new Error("ZCode session/create returned no sessionId");
         if (!subscribed) {
-          rpc.fireRequest("session/subscribe", { sessionId, deliveryKind: DELIVERY_KIND });
+          await rpc.request("session/subscribe", { sessionId, deliveryKind: DELIVERY_KIND }, 1e4);
           subscribed = true;
         }
         return sessionId;

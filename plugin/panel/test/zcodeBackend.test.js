@@ -110,7 +110,11 @@ async function startTurn(backend, spawned, text = 'hello') {
   respond(proc, createReq, { session: { sessionId: 'sess_test' }, settings: { model: { available: [] } } });
   await flush();
 
-  // 2. session/subscribe (fire-and-forget, no response needed)
+  // 2. session/subscribe (now a request — respond to its ack)
+  const subReq = parseWrites(proc).find((m) => m.method === 'session/subscribe');
+  if (subReq) respond(proc, subReq, { sessionId: 'sess_test', eventSeq: 0 });
+  await flush();
+
   // 3. session/send
   const sendReq = parseWrites(proc).find((m) => m.method === 'session/send');
   assert.ok(sendReq, 'session/send was sent');
@@ -269,6 +273,10 @@ test('probeAccount reports loggedIn when session/create succeeds', async () => {
   const proc = spawned.procs[0];
   const createReq = parseWrites(proc)[0];
   respond(proc, createReq, { session: { sessionId: 'sess_probe' }, settings: { model: { available: [] } } });
+  await flush();
+  // respond to the subscribe request so ensureSession resolves
+  const subReq = parseWrites(proc).find((m) => m.method === 'session/subscribe');
+  if (subReq) respond(proc, subReq, { sessionId: 'sess_probe', eventSeq: 0 });
   await flush();
   const result = await probe;
   assert.equal(result.loggedIn, true);

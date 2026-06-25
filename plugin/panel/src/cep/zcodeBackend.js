@@ -252,9 +252,44 @@ export function createZcodeBackend({
     }
   }
 
+  // ZCode sends elicitation/permission as REQUESTS (with id) — e.g. when the
+  // agent calls AskUserQuestion or a tool needs approval. Without handling
+  // these, the request is dropped and the agent hangs forever. This is the
+  // single most important fix for "askquestion stuck" / "turn never completes".
+  function handleRequest(message) {
+    const method = message.method;
+    const params = message.params || {};
+
+    // Elicitation / permission requests: route through the same approval logic
+    // as permission.requested notifications, then reply to the request id.
+    if (method === 'elicitation/create' || method === 'permission.requested' || method === 'session/permission') {
+      handlePermissionRequest(params, message.id);
+      return;
+    }
+
+    // Unknown requests: respond with method-not-found so the agent can proceed
+    // instead of hanging.
+    if (rpc) rpc.respondError(message.id, -32601, 'Method not found: ' + method);
+  }
+
   function handleNotification(message) {
     const params = message.params || {};
     const type = params.type || message.method;
+
+    // state.updated is the reliable turn-lifecycle signal: status flips to
+    // "running" on prompt start and back to "idle" on completion. We use the
+    // idle transition as a FALLBACK for finishActive() in case turn.completed
+    // is missed — without it, the panel stays "executing" forever.
+    if (type === 'state.updated') {
+      const patch = params.patch || params.payload || {};
+      if (patch.status === 'idle' && activeRun) {
+        drainApprovals();
+        emit({ type: 'turn-end', stopReason: 'end_turn' });
+        transcript.push({ role: 'assistant', text: activeAssistantText });
+        finishActive();
+      }
+      return;
+    }
 
     if (type === 'turn.started') {
       emit({ type: 'turn-start' });
@@ -282,7 +317,7 @@ export function createZcodeBackend({
       return;
     }
     if (type === 'permission.requested') {
-      handlePermissionRequest(params);
+      handlePermissionRequest(params, null);
       return;
     }
     if (type === 'turn.completed') {
@@ -302,34 +337,33 @@ export function createZcodeBackend({
     }
   }
 
-  function handlePermissionRequest(params) {
+  function handlePermissionRequest(params, rpcId) {
     const payload = params.payload || params;
-    const toolUseId = String(payload.toolCallId || '');
-    const name = mcpToolName(payload.toolName || '');
-    const input = payload.input || {};
+    const toolUseId = String(payload.toolCallId || payload.requestId || rpcId || '');
+    const name = mcpToolName(payload.toolName || payload.tool || '');
+    const input = payload.input || payload.arguments || {};
     const riskLevel = payload.riskLevel || 'medium';
     const annotations = (toolMeta && toolMeta.annotations) || {};
     const ann = annotations[name] || {};
     const tier = getPermissionMode ? getPermissionMode() : 'manual';
 
-    // rpcId: ZCode sends permission.requested as a notification, so there is no
-    // request id to reply to. We stash the requestId if present and resolve via
-    // elicitation/create; otherwise we rely on session-level allow/deny sets.
-    const requestId = payload.requestId || null;
+    // rpcId comes from handleRequest (elicitation/permission as a request) or
+    // from the requestId field in a permission.requested notification.
+    const replyId = rpcId || payload.requestId || null;
 
     if (sessionAllowedTools.has(name) || ann.readOnly || tier === 'none' || (tier === 'auto' && !ann.destructive && riskLevel === 'low')) {
-      if (requestId && rpc) rpc.respond(requestId, { decision: 'allow' });
+      if (replyId && rpc) rpc.respond(replyId, { decision: 'allow' });
       emit({ type: 'tool-allowed', toolUseId });
       return;
     }
 
     if (tier === 'readonly') {
-      if (requestId && rpc) rpc.respond(requestId, { decision: 'decline' });
+      if (replyId && rpc) rpc.respond(replyId, { decision: 'decline' });
       emit({ type: 'tool-denied', toolUseId });
       return;
     }
 
-    pendingApprovals.set(toolUseId, { rpcId: requestId, name, input });
+    pendingApprovals.set(toolUseId, { rpcId: replyId, name, input });
     emit({
       type: 'approval-required',
       toolUseId,
@@ -409,6 +443,7 @@ export function createZcodeBackend({
       rpc = createRpc({
         writeLine: (line) => proc.stdin.write(line),
         onNotification: handleNotification,
+        onRequest: handleRequest,
       });
       const reader = createNdjsonReader((message) => rpc && rpc.handleMessage(message));
       if (proc.stdout && proc.stdout.on) proc.stdout.on('data', reader);
@@ -487,9 +522,11 @@ export function createZcodeBackend({
       if (!sessionId) throw new Error('ZCode session/create returned no sessionId');
 
       // Subscribe to the event stream. desktop-continuous streams turn events
-      // as notifications for the life of the subscription.
+      // as notifications for the life of the subscription. Use request() (not
+      // fireRequest) so we wait for the ack and know the subscription is live
+      // before sending the first turn — otherwise early events can be missed.
       if (!subscribed) {
-        rpc.fireRequest('session/subscribe', { sessionId, deliveryKind: DELIVERY_KIND });
+        await rpc.request('session/subscribe', { sessionId, deliveryKind: DELIVERY_KIND }, 10000);
         subscribed = true;
       }
       return sessionId;
