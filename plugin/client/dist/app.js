@@ -13858,6 +13858,7 @@
     let toolMeta = { allowedTools: [], annotations: {} };
     const pendingApprovals = /* @__PURE__ */ new Map();
     const pendingElicitations = /* @__PURE__ */ new Map();
+    const pendingUserInputs = /* @__PURE__ */ new Map();
     const sessionAllowedTools = /* @__PURE__ */ new Set();
     function emit(evt) {
       if (onEvent) onEvent(evt);
@@ -13892,19 +13893,58 @@
         pendingElicitations.delete(toolUseId);
         emit({ type: "tool-denied", toolUseId });
       }
+      for (const [toolUseId, ui] of Array.from(pendingUserInputs.entries())) {
+        if (rpc && ui.rpcId) rpc.respond(ui.rpcId, { decision: "decline", answers: {} });
+        pendingUserInputs.delete(toolUseId);
+        emit({ type: "tool-denied", toolUseId });
+      }
     }
     function handleRequest(message) {
       const method = message.method;
       const params = message.params || {};
+      if (method === "interaction/requestUserInput") {
+        handleUserInput(params, message.id);
+        return;
+      }
       if (method === "elicitation/create") {
         handleElicitation(params, message.id);
         return;
       }
-      if (method === "permission.requested" || method === "session/permission") {
+      if (method === "permission.requested" || method === "session/permission" || method === "interaction/requestPermission") {
         handlePermissionRequest(params, message.id);
         return;
       }
       if (rpc) rpc.respondError(message.id, -32601, "Method not found: " + method);
+    }
+    function handleUserInput(params, rpcId) {
+      const input = params.input || params;
+      const questions = input.questions || [];
+      const tier = getPermissionMode ? getPermissionMode() : "manual";
+      if (!questions.length || tier === "none" || tier === "auto") {
+        const answers = {};
+        for (const q2 of questions) {
+          const opts = q2.options || [];
+          answers[q2.question || q2.header || "question"] = opts.length ? opts[0].label : "";
+        }
+        if (rpcId && rpc) rpc.respond(rpcId, { decision: "allow", answers });
+        return;
+      }
+      const q = questions[0];
+      const choices = (q.options || []).map((o) => o.label);
+      const toolUseId = "ask_" + rpcId;
+      pendingUserInputs.set(toolUseId, { rpcId, questions });
+      emit({
+        type: "approval-required",
+        toolUseId,
+        name: "AskUserQuestion",
+        input: {
+          question: q.question || q.header || "",
+          header: q.header,
+          choices,
+          fields: questions.map((qq) => qq.question || qq.header || "")
+        },
+        risk: "write"
+      });
     }
     function handleElicitation(params, rpcId) {
       const message = params.message || "";
@@ -14192,6 +14232,24 @@
     }
     function approve(toolUseId, decision) {
       const id = String(toolUseId);
+      const userInput = pendingUserInputs.get(id);
+      if (userInput) {
+        pendingUserInputs.delete(id);
+        if (decision === "deny") {
+          if (userInput.rpcId && rpc) rpc.respond(userInput.rpcId, { decision: "decline", answers: {} });
+          emit({ type: "tool-denied", toolUseId: id });
+        } else {
+          const answers = {};
+          const chosen = typeof decision === "string" && decision !== "allow" && decision !== "allow-session" ? decision : "";
+          for (const q of userInput.questions) {
+            const key = q.question || q.header || "question";
+            answers[key] = chosen || q.options && q.options[0] && q.options[0].label || "";
+          }
+          if (userInput.rpcId && rpc) rpc.respond(userInput.rpcId, { decision: "allow", answers });
+          emit({ type: "tool-allowed", toolUseId: id });
+        }
+        return;
+      }
       const elicit = pendingElicitations.get(id);
       if (elicit) {
         pendingElicitations.delete(id);
@@ -14244,6 +14302,7 @@
       transcript = [];
       pendingApprovals.clear();
       pendingElicitations.clear();
+      pendingUserInputs.clear();
       sessionAllowedTools.clear();
       toolMeta = { allowedTools: [], annotations: {} };
       finishActive();

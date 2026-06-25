@@ -405,6 +405,43 @@ test('elicitation auto-accepts in none tier (no blocking)', async () => {
   assert.equal(reply.result.content.color, 'red');
 });
 
+test('interaction/requestUserInput (AskUserQuestion) surfaces choices and replies with decision/answers', async () => {
+  const { backend, events, spawned } = makeBackend({ getPermissionMode: () => 'manual' });
+  const { proc } = await startTurn(backend, spawned, 'pick a color');
+  // ZCode sends interaction/requestUserInput as a REQUEST (with id).
+  proc.pushStdout({
+    id: 77,
+    method: 'interaction/requestUserInput',
+    params: {
+      prompt: 'Tool AskUserQuestion requires user interaction',
+      input: {
+        questions: [{
+          question: 'Which color do you prefer: red or blue?',
+          header: 'Color choice',
+          multiSelect: false,
+          options: [
+            { label: 'Red', description: 'You prefer the color red.' },
+            { label: 'Blue', description: 'You prefer the color blue.' },
+          ],
+        }],
+      },
+    },
+  });
+  await flush();
+
+  const approval = events.find((e) => e.type === 'approval-required' && e.name === 'AskUserQuestion');
+  assert.ok(approval, 'approval-required emitted for AskUserQuestion');
+  assert.deepEqual(approval.input.choices, ['Red', 'Blue']);
+
+  // User picks "Blue" — approve() must reply {decision:"allow", answers:{...:"Blue"}}.
+  backend.approve(approval.toolUseId, 'Blue');
+  await flush();
+  const reply = parseWrites(proc).find((m) => m.id === 77);
+  assert.ok(reply, 'requestUserInput reply sent');
+  assert.equal(reply.result.decision, 'allow');
+  assert.equal(reply.result.answers['Which color do you prefer: red or blue?'], 'Blue');
+});
+
 test('session/create injects the ae MCP server when getMcpSpec is provided', async () => {
   const { backend, spawned } = makeBackend({
     getMcpSpec: async () => ({ command: 'ae-mcp', args: ['--stdio'], env: { A: 'B' } }),

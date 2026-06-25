@@ -217,6 +217,7 @@ export function createZcodeBackend({
   let toolMeta = { allowedTools: [], annotations: {} };
   const pendingApprovals = new Map();
   const pendingElicitations = new Map();
+  const pendingUserInputs = new Map();
   const sessionAllowedTools = new Set();
 
   function emit(evt) {
@@ -256,6 +257,11 @@ export function createZcodeBackend({
       pendingElicitations.delete(toolUseId);
       emit({ type: 'tool-denied', toolUseId });
     }
+    for (const [toolUseId, ui] of Array.from(pendingUserInputs.entries())) {
+      if (rpc && ui.rpcId) rpc.respond(ui.rpcId, { decision: 'decline', answers: {} });
+      pendingUserInputs.delete(toolUseId);
+      emit({ type: 'tool-denied', toolUseId });
+    }
   }
 
   // ZCode sends two kinds of server-initiated REQUESTS (with id) that we must
@@ -270,16 +276,63 @@ export function createZcodeBackend({
     const method = message.method;
     const params = message.params || {};
 
+    // AskUserQuestion: ZCode sends interaction/requestUserInput as a REQUEST
+    // (with id). params.input.questions[] carries the options. Reply with
+    // {decision:"allow", answers:{<question text>:<selected label>}}.
+    if (method === 'interaction/requestUserInput') {
+      handleUserInput(params, message.id);
+      return;
+    }
     if (method === 'elicitation/create') {
       handleElicitation(params, message.id);
       return;
     }
-    if (method === 'permission.requested' || method === 'session/permission') {
+    if (method === 'permission.requested' || method === 'session/permission' || method === 'interaction/requestPermission') {
       handlePermissionRequest(params, message.id);
       return;
     }
     // Unknown requests: respond so the agent can proceed instead of hanging.
     if (rpc) rpc.respondError(message.id, -32601, 'Method not found: ' + method);
+  }
+
+  // AskUserQuestion via interaction/requestUserInput. params shape:
+  //   { input: { questions: [{ question, header, options: [{label, description}],
+  //                            multiSelect }] }, prompt, questions }
+  // Reply: { decision: "allow", answers: { <question text>: <chosen label> } }
+  function handleUserInput(params, rpcId) {
+    const input = params.input || params;
+    const questions = input.questions || [];
+    const tier = getPermissionMode ? getPermissionMode() : 'manual';
+
+    // No questions or non-interactive tier: auto-accept with first option.
+    if (!questions.length || tier === 'none' || tier === 'auto') {
+      const answers = {};
+      for (const q of questions) {
+        const opts = q.options || [];
+        answers[q.question || q.header || 'question'] = opts.length ? opts[0].label : '';
+      }
+      if (rpcId && rpc) rpc.respond(rpcId, { decision: 'allow', answers });
+      return;
+    }
+
+    // Surface the FIRST question as an approval card. The panel's ApprovalCard
+    // renders input.choices; the user's selection returns via approve().
+    const q = questions[0];
+    const choices = (q.options || []).map((o) => o.label);
+    const toolUseId = 'ask_' + rpcId;
+    pendingUserInputs.set(toolUseId, { rpcId, questions });
+    emit({
+      type: 'approval-required',
+      toolUseId,
+      name: 'AskUserQuestion',
+      input: {
+        question: q.question || q.header || '',
+        header: q.header,
+        choices,
+        fields: questions.map((qq) => qq.question || qq.header || ''),
+      },
+      risk: 'write',
+    });
   }
 
   // AskUserQuestion: the agent presents a form. requestedSchema.properties maps
@@ -631,6 +684,27 @@ export function createZcodeBackend({
   function approve(toolUseId, decision) {
     const id = String(toolUseId);
 
+    // AskUserQuestion via interaction/requestUserInput: reply {decision, answers}.
+    const userInput = pendingUserInputs.get(id);
+    if (userInput) {
+      pendingUserInputs.delete(id);
+      if (decision === 'deny') {
+        if (userInput.rpcId && rpc) rpc.respond(userInput.rpcId, { decision: 'decline', answers: {} });
+        emit({ type: 'tool-denied', toolUseId: id });
+      } else {
+        // decision carries the chosen label; map it to each question.
+        const answers = {};
+        const chosen = typeof decision === 'string' && decision !== 'allow' && decision !== 'allow-session' ? decision : '';
+        for (const q of userInput.questions) {
+          const key = q.question || q.header || 'question';
+          answers[key] = chosen || (q.options && q.options[0] && q.options[0].label) || '';
+        }
+        if (userInput.rpcId && rpc) rpc.respond(userInput.rpcId, { decision: 'allow', answers });
+        emit({ type: 'tool-allowed', toolUseId: id });
+      }
+      return;
+    }
+
     // Elicitation (AskUserQuestion) reply: {action, content}. The "decision"
     // from the panel carries the user's selected choice text.
     const elicit = pendingElicitations.get(id);
@@ -690,6 +764,7 @@ export function createZcodeBackend({
     transcript = [];
     pendingApprovals.clear();
     pendingElicitations.clear();
+    pendingUserInputs.clear();
     sessionAllowedTools.clear();
     toolMeta = { allowedTools: [], annotations: {} };
     finishActive();
