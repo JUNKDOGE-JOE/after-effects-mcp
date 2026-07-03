@@ -6,6 +6,7 @@
 // - effort levels: low/medium/high/xhigh/max; Sonnet 5 supports xhigh;
 //   Sonnet 4.6 has no xhigh; Haiku hides unsupported tiers.
 // - fast mode: direct API only (BYOK), Opus 4.x only, 3x price.
+import { readZcodeDesktopModel } from '../cep/zcodeBackend.js';
 
 export const CLAUDE_PRICE_USD_PER_MTOK = {
   'claude-fable-5': { input: 10, output: 50 },
@@ -234,6 +235,38 @@ export function zcodeStaticDescriptor() {
     label: 'ZCode',
     models,
     defaultModelId: 'builtin:bigmodel-start-plan/GLM-5.2',
+    defaultEffort: 'high',
+    supportsFast: () => false,
+    approvalModes: APPROVAL_MODES,
+    perTurnModelSwitch: false,
+  };
+}
+
+// Bug fix: before session/create returns a real model list, the descriptor
+// used to fall back to zcodeStaticDescriptor()'s hardcoded
+// 'builtin:bigmodel-start-plan/GLM-5.2' defaultModelId. That builtin id is
+// NOT what actually gets sent to the ZCode app-server (zcodeBackend's
+// currentModelRef falls through to the CLI config / ZCODE_BUILTIN_DEFAULT_MODEL
+// when no explicit ref is chosen), so the settings display and the real
+// send-time model could disagree, and a stale/invalid stored pref would get
+// reconciled to the wrong (builtin) model instead of the CLI-configured one.
+//
+// While CLI inheritance is active (~/.zcode/cli/config.json names a model
+// whose provider exists in the merged config), the single source of truth
+// for "what will actually be sent" IS that CLI-configured model. Build a
+// descriptor around it so display and reconciliation agree with send-time
+// behavior. Only fall back to the static/builtin descriptor when there is
+// truly no CLI-configured model available.
+export function zcodeDynamicDescriptor({ env, fsImpl } = {}) {
+  let cliModel = '';
+  try { cliModel = String(readZcodeDesktopModel({ env, fsImpl }) || '').trim(); } catch (e) { /* ignore unreadable CLI config */ }
+  if (!cliModel) return zcodeStaticDescriptor();
+  const label = cliModel.includes('/') ? cliModel.slice(cliModel.indexOf('/') + 1) : cliModel;
+  return {
+    id: 'zcode',
+    label: 'ZCode',
+    models: [{ id: cliModel, label, effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false }],
+    defaultModelId: cliModel,
     defaultEffort: 'high',
     supportsFast: () => false,
     approvalModes: APPROVAL_MODES,

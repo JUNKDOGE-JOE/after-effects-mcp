@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createZcodeBackend, zcodeModelFromDesktopConfig, zcodeRuntimeModelFromDesktopConfig, mergeZcodeConfigs, resolveZcodeProviderApiKey, summarizeZcodeConfig, readZcodeDesktopModel } from '../src/cep/zcodeBackend.js';
-import { zcodeStaticDescriptor, zcodeDescriptorFromModels } from '../src/lib/backendCapabilities.js';
+import { zcodeStaticDescriptor, zcodeDescriptorFromModels, zcodeDynamicDescriptor } from '../src/lib/backendCapabilities.js';
+import { reconcileModelPref } from '../src/lib/descriptorSelect.js';
 
 // --- harness (mirrors codexBackend.test.js shape, adapted to ZCode protocol) ---
 
@@ -973,6 +974,59 @@ test('readZcodeDesktopModel merges ~/.zcode/cli/config.json and prefers its top-
     'C:\\Users\\me\\.zcode\\v2\\setting.json': JSON.stringify({ providerFamilyDomain: 'zai' }),
   };
   assert.equal(readZcodeDesktopModel({ env, fsImpl: fakeFs(files) }), 'mediastorm_glm/glm-5.2');
+});
+
+// End-to-end regression for the "settings page shows CLI model X, but Chat
+// actually sends builtin GLM-5.2" bug. Before the fix, the zcode descriptor
+// used for both display and reconcileModelPref's reset target was
+// zcodeStaticDescriptor()'s hardcoded builtin list (defaultModelId
+// 'builtin:bigmodel-start-plan/GLM-5.2') until a live session existed. A
+// stale/invalid stored pref (Y) would reconcile to that builtin id instead of
+// the CLI-configured model (X), and createZcodeBackend's currentModelRef
+// would then send whatever getModel() returns first if it looks like a
+// non-legacy '<provider>/<model>' ref -- so the wrong (builtin) model shipped
+// in the session/create request.
+test('CLI config X + stale stored model Y reconcile to X, and X is what session/create actually sends', async () => {
+  const env = { USERPROFILE: 'C:\\Users\\me', PATH: 'C:\\Node', TEMP: 'C:\\tmp', LOCALAPPDATA: 'C:\\Users\\test\\AppData\\Local', AE_MCP_PANEL_EXT_ROOT: 'C:\\Repo\\plugin\\panel' };
+  const files = {
+    'C:\\Users\\me\\.zcode\\cli\\config.json': JSON.stringify({
+      provider: { mediastorm_glm: CLI_PROVIDER },
+      model: 'mediastorm_glm/deepseek-v4-flash',
+    }),
+  };
+  const fsImpl = fakeFs(files);
+  const cliModel = 'mediastorm_glm/deepseek-v4-flash';
+
+  // 1. Settings-page display source: the descriptor built while CLI
+  //    inheritance is active (no live session yet) must be built around the
+  //    CLI-configured model, not the static/builtin list.
+  const descriptor = zcodeDynamicDescriptor({ env, fsImpl });
+  assert.equal(descriptor.defaultModelId, cliModel);
+  assert.deepEqual(descriptor.models.map((m) => m.id), [cliModel]);
+
+  // 2. A stale/invalid previously-selected model Y (not in the descriptor's
+  //    models) must reconcile to X (the CLI model), not to a builtin.
+  const staleY = 'mediastorm_glm/glm-5.2';
+  const reconciled = reconcileModelPref(staleY, descriptor, { isCustom: false });
+  assert.equal(reconciled, cliModel);
+  assert.notEqual(reconciled, 'builtin:bigmodel-start-plan/GLM-5.2');
+
+  // 3. The reconciled value, fed into createZcodeBackend as getModel(), must
+  //    be exactly what session/create's model field carries -- the real
+  //    send-time behavior, not just descriptor bookkeeping.
+  const { backend, spawned } = makeBackend({
+    getModel: () => reconciled,
+    readDesktopModel: () => readZcodeDesktopModel({ env, fsImpl }),
+    env,
+  });
+  backend.sendUser('hello');
+  await flush();
+
+  const createReq = parseWrites(spawned.procs[0])[0];
+  assert.deepEqual(createReq.params.model, {
+    providerId: 'mediastorm_glm',
+    modelId: 'deepseek-v4-flash',
+  });
 });
 
 test('summarizeZcodeConfig reports cli/desktop/start-plan channel facts', () => {
