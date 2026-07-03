@@ -4,7 +4,7 @@
 // Needs: claude login (sidecar path) + codex login. Costs a few cents total.
 import { spawn } from 'node:child_process';
 
-const CLAUDE_MODELS = ['claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'];
+const CLAUDE_MODELS = ['claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'];
 const CODEX_MODELS = ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex-spark'];
 const PROMPT = '只回两个字母：ok';
 const results = [];
