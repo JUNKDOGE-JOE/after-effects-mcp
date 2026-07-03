@@ -2,7 +2,7 @@
 
 ## 中文
 
-ae-mcp 是一个**后端无关**的 MCP server，让 AI 客户端驱动 Adobe After Effects。v0.8.2 支持外部 MCP 客户端和完整的 CEP 面板产品：面板内可直接对话、审批工具调用、诊断连接，并一键安装本地依赖。
+ae-mcp 是一个**后端无关**的 MCP server，让 AI 客户端驱动 Adobe After Effects。v0.8.3 支持外部 MCP 客户端和完整的 CEP 面板产品：面板内可直接对话、审批工具调用、诊断连接，并一键安装本地依赖。
 
 ```text
 MCP client
@@ -16,7 +16,7 @@ MCP client
 
 `ae_previewFrame` 通过 `CompItem.saveFrameToPng` 渲染真实合成像素（viewer snapshot 仅作 fallback）；`packages/snapshot-mss` 提供跨平台 `mss` 截图后端，用于 `ae_snapshot` 屏幕捕获。
 
-### v0.8.2 状态
+### v0.8.3 状态
 
 - Python stdio MCP server 暴露 32 个 `ae_` 工具，工具名使用下划线形式（例如 `ae_ping`、`ae_previewFrame`），内部仍映射到 `ae.*` verbs。
 - CEP 面板不再只是连接配置器：它包含内嵌 AI 对话、composer 便捷选择条、四档审批、首跑向导、活动流、kill switch 和连接诊断。
@@ -71,7 +71,7 @@ uv tool install --from packages/core ae-mcp --with packages/bridge --with packag
 终端用户从发布 tag 安装：
 
 ```powershell
-uv tool install --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.2#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.2#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.2#subdirectory=packages/snapshot-mss
+uv tool install --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.3#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.3#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.3#subdirectory=packages/snapshot-mss
 ```
 
 面板安装使用 ZXP 包：推荐 aescripts ZXP Installer，也可用 ExMan Cmd。安装后打开 `Window -> Extensions -> ae-mcp`。
@@ -116,7 +116,7 @@ cd ..\..
 .\scripts\install-plugin-dev.ps1
 ```
 
-macOS 开发脚本存在，但 v0.8.2 主要验证面仍以 Windows + AE live 为准。
+macOS 开发脚本存在，但 v0.8.3 主要验证面仍以 Windows + AE live 为准。
 
 ### 测试
 
@@ -169,7 +169,7 @@ ae-mcp 项目代码使用 MIT License，见 [LICENSE](LICENSE)。
 
 ## English
 
-ae-mcp is a **backend-agnostic** MCP server for driving Adobe After Effects from AI clients. In v0.8.2 it supports external MCP clients and a full CEP panel product: built-in chat, tool approvals, connection diagnostics, and one-click local setup.
+ae-mcp is a **backend-agnostic** MCP server for driving Adobe After Effects from AI clients. In v0.8.3 it supports external MCP clients and a full CEP panel product: built-in chat, tool approvals, connection diagnostics, and one-click local setup.
 
 ```text
 MCP client
@@ -183,7 +183,7 @@ MCP client
 
 `ae_previewFrame` renders real comp pixels through `CompItem.saveFrameToPng` with viewer snapshot only as a fallback; `packages/snapshot-mss` provides the cross-platform `mss` screenshot backend for `ae_snapshot` screen capture.
 
-### v0.8.2 Status
+### v0.8.3 Status
 
 - The Python stdio MCP server exposes 32 `ae_` tools. MCP tool names use underscores, such as `ae_ping` and `ae_previewFrame`; internally they still map to `ae.*` verbs.
 - The CEP panel is no longer just a connection configurator. It includes built-in AI chat, composer controls, four approval modes, a first-run wizard, an activity stream, a kill switch, and connection diagnostics.
@@ -238,7 +238,7 @@ uv tool install --from packages/core ae-mcp --with packages/bridge --with packag
 End users install from the release tag:
 
 ```powershell
-uv tool install --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.2#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.2#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.2#subdirectory=packages/snapshot-mss
+uv tool install --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.3#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.3#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.3#subdirectory=packages/snapshot-mss
 ```
 
 Install the panel from the ZXP package with aescripts ZXP Installer or ExMan Cmd. Then open `Window -> Extensions -> ae-mcp`.
@@ -283,7 +283,7 @@ cd ..\..
 .\scripts\install-plugin-dev.ps1
 ```
 
-The macOS development script exists, but v0.8.2 validation is primarily Windows + AE live.
+The macOS development script exists, but v0.8.3 validation is primarily Windows + AE live.
 
 ### Test
 

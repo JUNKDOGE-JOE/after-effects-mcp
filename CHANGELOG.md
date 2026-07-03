@@ -10,6 +10,17 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### [0.8.3] — 2026-07-03
+
+#### ✨ 新增
+- **Claude Sonnet 5 进入精选模型列表并成为新的 Claude 默认模型**（#40）；Codex 静态模型列表新增 **GPT-5.4 mini**。
+
+#### 🔧 改进
+- **BYOK / Codex API profile 字段统一**（#41）——两类 API profile 现在共用 `ApiProfileFields` 组件，减少重复表单逻辑。
+- **ZCode `*-start-plan` 边界写入工作流文档**（#42）——明确该类 provider 仍依赖桌面端能力。
+- **实时模型矩阵补齐 `claude-sonnet-5`**（#43）。
+- **README 刷新到 v0.8.2 状态**（#44、#45）——补齐 ZCode 后端、`ae_diagnose`、真实合成帧预览，并新增中英双语截图区。
+
 ### [0.8.2] — 2026-07-03
 
 #### ✨ 新增
@@ -184,6 +195,17 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### [0.8.3] — 2026-07-03
+
+#### ✨ Added
+- **Claude Sonnet 5 is now in the curated model list and is the new Claude default** (#40); **GPT-5.4 mini** was added to the Codex static list.
+
+#### 🔧 Improved
+- **BYOK / Codex API profile fields are unified** (#41) — both profile types now share the `ApiProfileFields` component, reducing duplicated form logic.
+- **ZCode `*-start-plan` boundaries are documented in WORKFLOW.md** (#42) — these providers are explicitly desktop-only.
+- **The live model matrix now includes `claude-sonnet-5`** (#43).
+- **README refreshed to the v0.8.2 state** (#44, #45) — ZCode backend, `ae_diagnose`, real comp-frame previews, and bilingual screenshots are documented.
 
 ### [0.8.2] — 2026-07-03
 
