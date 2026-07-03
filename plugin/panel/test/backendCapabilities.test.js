@@ -13,8 +13,11 @@ test('claude-sub descriptor lists the full family with effort levels', () => {
   assert.equal(d.id, 'claude-sub');
   const ids = d.models.map((m) => m.id);
   assert.deepEqual(ids, [
-    'claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001',
+    'claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001',
   ]);
+  const sonnet5 = d.models.find((m) => m.id === 'claude-sonnet-5');
+  assert.deepEqual(sonnet5.effortLevels, ['low', 'medium', 'high', 'xhigh']);
+  assert.equal(sonnet5.effortLevels.includes('max'), false);
   const sonnet = d.models.find((m) => m.id === 'claude-sonnet-4-6');
   assert.deepEqual(sonnet.effortLevels, ['low', 'medium', 'high', 'max']);
   const fable = d.models.find((m) => m.id === 'claude-fable-5');
@@ -24,7 +27,7 @@ test('claude-sub descriptor lists the full family with effort levels', () => {
   assert.deepEqual(haiku.effortLevels, ['low', 'medium', 'high']);
   assert.equal(haiku.adaptive, false);
   assert.equal(fable.adaptive, true);
-  assert.equal(d.defaultModelId, 'claude-sonnet-4-6');
+  assert.equal(d.defaultModelId, 'claude-sonnet-5');
   assert.equal(d.defaultEffort, 'high');
   assert.equal(d.supportsFast('claude-opus-4-8'), false);
 });
@@ -37,6 +40,7 @@ test('byok descriptor enables fast only for opus models', () => {
 
 test('cost tiers derive from the price map', () => {
   assert.equal(costTier('claude-haiku-4-5-20251001'), 1);
+  assert.equal(costTier('claude-sonnet-5'), 2);
   assert.equal(costTier('claude-fable-5'), 4);
 });
 
@@ -116,7 +120,14 @@ test('codexDescriptorFromModels falls back to static descriptor for empty input'
   const staticDescriptor = codexStaticDescriptor();
   assert.equal(fallback.id, staticDescriptor.id);
   assert.equal(fallback.label, staticDescriptor.label);
-  assert.deepEqual(fallback.models.map((m) => m.id), ['gpt-5.5', 'gpt-5.4']);
+  assert.deepEqual(fallback.models.map((m) => m.id), ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini']);
+  assert.deepEqual(fallback.models.find((m) => m.id === 'gpt-5.4-mini'), {
+    id: 'gpt-5.4-mini',
+    label: 'GPT-5.4 mini',
+    effortLevels: ['low', 'medium', 'high', 'xhigh'],
+    cost: 1,
+    adaptive: false,
+  });
   assert.equal(fallback.defaultEffort, 'medium');
   assert.equal(fallback.supportsFast('gpt-5.5'), true);
 });
@@ -126,7 +137,7 @@ test('descriptorWithCustomModel promotes a user-supplied model id without losing
 
   assert.equal(descriptor.defaultModelId, 'provider/custom-model');
   assert.equal(descriptor.models[0].id, 'provider/custom-model');
-  assert.deepEqual(descriptor.models.slice(1).map((m) => m.id), ['gpt-5.5', 'gpt-5.4']);
+  assert.deepEqual(descriptor.models.slice(1).map((m) => m.id), ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini']);
 });
 
 test('zcodeStaticDescriptor keeps model metadata but does not advertise per-turn model switching', () => {
