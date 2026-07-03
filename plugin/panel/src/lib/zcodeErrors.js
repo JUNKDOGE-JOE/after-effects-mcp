@@ -3,7 +3,9 @@
 // below for diagnostics. en (and unknown patterns) pass through.
 const ZH_RULES = [
   {
-    re: /Model provider is missing an API key:\s*([^\s.]+)/i,
+    // Provider ids may contain dots (e.g. "mediastorm_glm/glm-5.2"): capture the
+    // whole non-space run, then drop one trailing sentence terminator if present.
+    re: /Model provider is missing an API key:\s*([^\s]+?)[.。]?(?=\s|$)/i,
     hint: (m) => 'ZCode provider「' + m[1] + '」缺少 API Key —— 到 设置 → AI 服务 → ZCode 通道 粘贴一次 Key（保存在本机 ~/.ae-mcp/zcode-key），或在 ~/.zcode/cli/config.json 里配置。',
   },
   {
@@ -21,7 +23,13 @@ export function localizeZcodeError(message, lang = 'en') {
   if (lang !== 'zh' || !text) return text;
   for (const rule of ZH_RULES) {
     const m = rule.re.exec(text);
-    if (m) return rule.hint(m) + '\n' + text;
+    if (m) {
+      const hint = rule.hint(m);
+      // Idempotent: if the text already starts with this guidance header
+      // (i.e. it was localized before), do not prepend it again.
+      if (text.startsWith(hint)) return text;
+      return hint + '\n' + text;
+    }
   }
   return text;
 }

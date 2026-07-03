@@ -14,8 +14,12 @@ export function channelTexts(probe, lang = 'zh') {
   };
 }
 
+const LOCK_TEXTS = {
+  locked: { zh: '已锁定', en: 'Locked' },
+  unlocked: { zh: '锁定', en: 'Lock' },
+};
+
 export function lockLabel(channel, lockedChannel, lang = 'zh') {
-  const locked = channel === lockedChannel;
-  if (lang === 'en') return locked ? 'Locked' : 'Lock';
-  return locked ? '已锁定' : '锁定';
+  const texts = channel === lockedChannel ? LOCK_TEXTS.locked : LOCK_TEXTS.unlocked;
+  return texts[lang] || texts.zh;
 }
