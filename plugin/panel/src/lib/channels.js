@@ -58,7 +58,12 @@ export function codexChannels({ codexProbe, customProvider, cliConfig, cliConfig
     detail: customProvider && customProvider.baseUrl ? customProvider.baseUrl : '',
     fixHint: { zh: '在「Provider 管理」新增/选择一个 OpenAI 兼容 provider（Base URL + Key）。', en: 'Add or pick an OpenAI-compatible provider (base URL + key) in Provider Manager.' },
   };
-  return [cli, cliConfigChannel, custom];
+  // An explicitly-configured custom provider always outranks the inherited
+  // cli-config one when both are simultaneously usable (ok). zcode has no
+  // equivalent "explicit custom provider" channel to conflict with cli-config,
+  // so there's no existing precedent to mirror there; this ordering rule is
+  // specific to codex's cli-config-vs-custom overlap.
+  return custom.ok ? [cli, custom, cliConfigChannel] : [cli, cliConfigChannel, custom];
 }
 
 export function zcodeChannels({ zcodeProbe, configSummary } = {}) {
