@@ -25,7 +25,7 @@ test('codexChannels: cli login state + custom provider channel', () => {
   assert.equal(list[2].channel, 'custom');
   assert.equal(list[2].ok, false);
   const custom = codexChannels({ codexProbe: { loggedIn: false, runtimeOk: true }, customProvider: { baseUrl: 'https://r', apiKey: 'k' } });
-  assert.equal(custom[2].ok, true);
+  assert.equal(custom.find((c) => c.channel === 'custom').ok, true);
   assert.match(codexChannels({ codexProbe: { loggedIn: false } }).find((c) => c.channel === 'cli').fixHint.zh, /AE_MCP_CODEX_CLI/);
 });
 
@@ -63,6 +63,20 @@ test('codexChannels: cli-config channel is positioned between cli and custom', (
     cliConfigApiKey: 'k',
   });
   assert.equal(runtimeNotOk[1].ok, false);
+});
+
+test('codexChannels: custom provider outranks cli-config in pickChannel when both are ok', () => {
+  const list = codexChannels({
+    codexProbe: { loggedIn: false, runtimeOk: true },
+    customProvider: { baseUrl: 'https://custom.example/v1', apiKey: 'ck' },
+    cliConfig: { model: 'gpt-5.5', providerId: 'mediastorm_glm', provider: { name: 'MediaStorm GLM', baseUrl: 'https://api.example.com/v1', envKey: 'MEDIASTORM_GLM_API_KEY', wireApi: 'responses' } },
+    cliConfigApiKey: 'k',
+  });
+  const custom = list.find((c) => c.channel === 'custom');
+  const cliConfig = list.find((c) => c.channel === 'cli-config');
+  assert.equal(custom.ok, true);
+  assert.equal(cliConfig.ok, true);
+  assert.equal(pickChannel(list).channel, 'custom', 'explicit custom provider must outrank inherited cli-config when both are ok');
 });
 
 test('zcodeChannels: cli-config first, desktop second, start-plan never ok without credentials', () => {
