@@ -17,12 +17,10 @@ weak JSON contract:
 - Other non-JSON text — returned as `{ok:true, content:text}` because some
   callers intentionally use ae.exec to fetch a string.
 
-History: the previous helpers (one per handler file: core/typed/rig/skills)
-all wrapped *any* non-JSON output — including empty and "undefined" — as
-`{ok:true, content:...}`. That hid the multi-statement undo-group wrap bug
-(see plugin/host/server.js wrapWithUndoGroup) for a long time: AE did
-nothing, MCP reported success. PR #1 fixed the wrap; this module makes the
-detection mode permanent.
+The parser is intentionally stricter than the old per-handler helpers:
+empty output and "undefined" are execution failures, not successful string
+results. That keeps broken multi-statement JSX templates from looking like
+successful no-op executions.
 """
 from __future__ import annotations
 

@@ -50,6 +50,7 @@ function makeToolResult(toolUseId, text, isError) {
 
 export function createAgentLoop({
   getApiKey,
+  getApiBaseUrl,
   getModel,
   mcp,
   getPermissionMode,
@@ -159,6 +160,7 @@ export function createAgentLoop({
 
           const result = await anthropic({
             apiKey: getApiKey && getApiKey(),
+            baseUrl: getApiBaseUrl && getApiBaseUrl(),
             model: (getModel && getModel()) || DEFAULT_MODEL,
             system,
             messages: clone(messages),

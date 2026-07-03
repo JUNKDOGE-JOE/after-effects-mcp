@@ -140,6 +140,8 @@ export function WizardScreen({
   onClient,
   clientName = 'Claude Desktop',
   mcpConfig = '',
+  port = 11488,
+  expertGuidance = true,
   onNext,
   onBack,
   onCopy,
@@ -154,8 +156,10 @@ export function WizardScreen({
   const t = W[lang] || W.zh;
   const clientOptions = [{ id: 'builtin', name: 'builtin' }, ...EXTERNAL_CLIENTS];
   const selectedExternalClient = EXTERNAL_CLIENTS.find((item) => item.id === client);
+  // Prefer the per-client config (so ZCode shows its mcp.servers format, etc.);
+  // fall back to the generic connection config passed from App.
   const selectedMcpConfig = selectedExternalClient && selectedExternalClient.kind === 'mcp-stdio'
-    ? (mcpConfig || JSON.stringify(mcpConfigFor(selectedExternalClient), null, 2))
+    ? JSON.stringify(mcpConfigFor(selectedExternalClient, port, expertGuidance), null, 2)
     : '';
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 'var(--space-6) var(--space-5) var(--space-5)' }}>

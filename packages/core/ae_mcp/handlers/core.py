@@ -18,6 +18,7 @@ import logging
 import os
 import shutil
 import tempfile
+import time
 import uuid
 from functools import lru_cache
 from pathlib import Path
@@ -44,6 +45,9 @@ def _backend():
 _store = checkpoint_store.CheckpointStore()
 _TEMPLATES = Path(__file__).resolve().parent.parent / "jsx_templates"
 _PREVIEW_SESSION_ID = uuid.uuid4().hex[:10]
+_PREVIEW_ROOT = Path(tempfile.gettempdir()) / "ae_mcp_previews"
+_PREVIEW_CLEANUP_DONE = False
+_PREVIEW_CLEANUP_AGE_SEC = 24 * 60 * 60
 
 
 def _load_jsx(name: str) -> Template:
@@ -510,12 +514,55 @@ register("ae.snapshot", schemas.AeSnapshotArgs, _run_snapshot)
 
 
 # ---------------------------------------------------------------------------
-# ae.previewFrame — fast viewer capture, not a real render.
+# ae.previewFrame — comp-frame PNG first, viewer snapshot fallback.
 # ---------------------------------------------------------------------------
 
 
 def _default_preview_dir() -> Path:
-    return Path(tempfile.gettempdir()) / "ae_mcp_previews" / _PREVIEW_SESSION_ID
+    return _PREVIEW_ROOT / _PREVIEW_SESSION_ID
+
+
+def _newest_mtime(path: Path) -> float:
+    newest = path.stat().st_mtime
+    for child in path.rglob("*"):
+        try:
+            newest = max(newest, child.stat().st_mtime)
+        except OSError:
+            continue
+    return newest
+
+
+def _cleanup_old_preview_sessions(
+    *,
+    root: Path = _PREVIEW_ROOT,
+    current_session_id: str = _PREVIEW_SESSION_ID,
+    older_than_sec: float = _PREVIEW_CLEANUP_AGE_SEC,
+    now: float | None = None,
+) -> int:
+    root = Path(root)
+    if not root.exists():
+        return 0
+    cutoff = (time.time() if now is None else now) - older_than_sec
+    removed = 0
+    for child in root.iterdir():
+        try:
+            if not child.is_dir() or child.name == current_session_id:
+                continue
+            if _newest_mtime(child) >= cutoff:
+                continue
+            shutil.rmtree(child)
+            removed += 1
+        except OSError:
+            log.debug("preview cleanup skipped %s", child, exc_info=True)
+    return removed
+
+
+def _cleanup_default_preview_root_once() -> None:
+    global _PREVIEW_CLEANUP_DONE
+    if _PREVIEW_CLEANUP_DONE:
+        return
+    _PREVIEW_CLEANUP_DONE = True
+    _cleanup_old_preview_sessions()
 
 
 def _preview_frame_requests(args: schemas.AePreviewFrameArgs, out_dir: Path) -> list[dict[str, Any]]:
@@ -588,20 +635,38 @@ def _downscale_png(path: Path, scale: float) -> Optional[tuple[int, int]]:
         return None
 
 
+async def _wait_for_png(path: Path, timeout_sec: float = 5.0) -> bool:
+    deadline = asyncio.get_running_loop().time() + timeout_sec
+    png_sig = b"\x89PNG\r\n\x1a\n"
+    while True:
+        try:
+            if path.exists() and path.stat().st_size >= len(png_sig):
+                with path.open("rb") as fh:
+                    if fh.read(len(png_sig)) == png_sig:
+                        return True
+        except OSError:
+            pass
+        if asyncio.get_running_loop().time() >= deadline:
+            return False
+        await asyncio.sleep(0.05)
+
+
 async def _run_preview_frame(args: schemas.AePreviewFrameArgs, ctx: Any) -> Any:
     from ae_mcp.handlers.typed import _comp_expr  # type: ignore
     from ae_mcp.snapshot import discovery as _snap_discovery
 
-    snapper = _snap_discovery.select_snapshotter()
-    if snapper is None:
-        return {"ok": False, "error": "no snapshotter installed (try `pip install ae-mcp-snapshot-mss`)"}
-
-    out_dir = Path(args.out_dir) if args.out_dir else _default_preview_dir()
+    if args.out_dir:
+        out_dir = Path(args.out_dir)
+    else:
+        _cleanup_default_preview_root_once()
+        out_dir = _default_preview_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     frame_requests = _preview_frame_requests(args, out_dir)
     tmpl = _load_jsx("preview_viewer.jsx")
+    snapper = None
 
     async def _call() -> Any:
+        nonlocal snapper
         frames: list[dict[str, Any]] = []
         comp_id: str | None = None
         comp_name: str | None = None
@@ -610,15 +675,51 @@ async def _run_preview_frame(args: schemas.AePreviewFrameArgs, ctx: Any) -> Any:
             jsx = with_prelude(tmpl.substitute(
                 comp_expr=_comp_expr(args.comp_id),
                 time=json.dumps(frame_request["time"]),
+                path=json.dumps(str(frame_request["path"])),
             ))
             out = await _backend().exec(code=jsx, timeout_sec=15.0)
             prepared = _try_json(out)
             if not isinstance(prepared, dict) or not prepared.get("ok"):
                 return prepared
 
+            comp_id = str(prepared.get("compId"))
+            comp_name = prepared.get("compName")
+
+            if prepared.get("source") == "comp" or prepared.get("method") == "saveFrameToPng":
+                frame_w = prepared.get("width")
+                frame_h = prepared.get("height")
+                snap_path = prepared.get("path") or str(frame_request["path"])
+                if snap_path and await _wait_for_png(Path(str(snap_path))):
+                    new_dims = _downscale_png(Path(str(snap_path)), args.scale)
+                    if new_dims is not None:
+                        frame_w, frame_h = new_dims
+                    frame = {
+                        "time": prepared.get("time"),
+                        "path": snap_path,
+                        "width": frame_w,
+                        "height": frame_h,
+                        "sizeBytes": Path(str(snap_path)).stat().st_size,
+                        "source": "comp",
+                        "method": "saveFrameToPng",
+                        "compId": comp_id,
+                    }
+                    if args.include_base64:
+                        frame["base64"] = base64.b64encode(Path(str(snap_path)).read_bytes()).decode("ascii")
+                    frames.append(frame)
+                    continue
+                prepared["fallbackReason"] = "saveFrameToPng did not create a PNG file"
+
+            if snapper is None:
+                snapper = _snap_discovery.select_snapshotter()
+            if snapper is None:
+                return {
+                    "ok": False,
+                    "error": "no snapshotter installed (try `pip install ae-mcp-snapshot-mss`)",
+                    "fallbackReason": prepared.get("fallbackReason"),
+                }
+
             # Yield to AE's main thread so the viewer can repaint at the new
-            # comp.time before we screen-grab. Without this we capture the
-            # stale viewer (the JSX returned before AE drew anything new).
+            # comp.time before the screen-grab fallback.
             if args.repaint_delay_ms > 0:
                 await asyncio.sleep(args.repaint_delay_ms / 1000.0)
 
@@ -630,9 +731,6 @@ async def _run_preview_frame(args: schemas.AePreviewFrameArgs, ctx: Any) -> Any:
             if not snap.get("ok"):
                 return snap
 
-            comp_id = str(prepared.get("compId"))
-            comp_name = prepared.get("compName")
-            # Apply the requested output scale to the captured PNG (in place).
             frame_w = snap.get("width")
             frame_h = snap.get("height")
             snap_path = snap.get("path")
@@ -654,6 +752,8 @@ async def _run_preview_frame(args: schemas.AePreviewFrameArgs, ctx: Any) -> Any:
                 "method": snap.get("method"),
                 "compId": comp_id,
             }
+            if prepared.get("fallbackReason"):
+                frame["fallbackReason"] = prepared.get("fallbackReason")
             if args.include_base64 and frame["path"]:
                 p = Path(str(frame["path"]))
                 if p.exists():

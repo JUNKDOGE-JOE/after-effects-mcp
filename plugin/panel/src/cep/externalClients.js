@@ -57,6 +57,14 @@ export const EXTERNAL_CLIENTS = [
     loginHint: 'Sign in to opencode before starting the handshake.',
     docsUrl: 'https://opencode.ai/docs',
   },
+  {
+    id: 'zcode',
+    name: 'ZCode',
+    kind: 'mcp-stdio',
+    installHint: 'Add ae-mcp as a local MCP server in ~/.zcode/cli/config.json (mcp.servers).',
+    loginHint: 'Open ZCode and make sure its selected provider has an API key before starting.',
+    docsUrl: 'https://zcode.z.ai',
+  },
 ];
 
 // The ae-mcp server defaults the expert anti-error guidance ON, so we only need
@@ -65,7 +73,32 @@ export function expertGuidanceEnv(on) {
   return on ? {} : { AE_MCP_EXPERT_GUIDANCE: '0' };
 }
 
+// ZCode reads MCP servers from ~/.zcode/cli/config.json under `mcp.servers`,
+// NOT the standard `mcpServers` key. Its server objects are strict:
+// {name, command, args, env} where env is an OBJECT {KEY:VALUE} (ZCode runs
+// Object.entries(env) internally, so an array would corrupt the values).
+// See issue #36 / the ZCode config debugging saga.
+function zcodeMcpConfig(port = 11488, expertGuidance = true) {
+  return {
+    mcp: {
+      servers: {
+        ae: {
+          name: 'ae',
+          command: 'ae-mcp',
+          args: [],
+          env: Object.assign(
+            { AE_MCP_BACKEND: 'ae-mcp' },
+            expertGuidanceEnv(expertGuidance !== false),
+            { AE_MCP_PLUGIN_URL: `http://127.0.0.1:${port}` },
+          ),
+        },
+      },
+    },
+  };
+}
+
 export function mcpConfigFor(client, port = 11488, expertGuidance = true) {
+  if (client && client.id === 'zcode') return zcodeMcpConfig(port, expertGuidance);
   return {
     mcpServers: {
       ae: {

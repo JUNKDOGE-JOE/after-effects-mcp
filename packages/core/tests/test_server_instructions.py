@@ -30,6 +30,14 @@ def test_instructions_cover_key_discipline():
     assert "NEVER let JSX throw" in text
 
 
+def test_instructions_cover_panel_runtime_and_file_hygiene():
+    text = SERVER_INSTRUCTIONS
+    assert "Do not switch to OS screenshots" in text
+    assert "report the MCP failure" in text
+    assert "project workspace" in text
+    assert "ae_mcp_previews" in text
+
+
 def test_instructions_use_underscore_verb_names_not_dotted():
     """Model-facing guidance must not feed the model dotted verb names it
     can't call on strict clients. No dotted ``ae.<verb>`` token may appear in
@@ -46,7 +54,7 @@ def test_build_server_advertises_instructions():
 
 
 def test_filtered_tool_names_logs_when_backend_selection_fails(monkeypatch, caplog):
-    """A failing backend must still expose ae.status and log where to look."""
+    """A failing backend must still expose ae.status + ae.diagnose and log where to look."""
     from ae_mcp.backends import discovery as _discovery
     from ae_mcp import server as _server
 
@@ -58,7 +66,7 @@ def test_filtered_tool_names_logs_when_backend_selection_fails(monkeypatch, capl
     with caplog.at_level(logging.WARNING, logger="ae_mcp.server"):
         result = _server._filtered_tool_names()
 
-    assert result == {"ae.status"}
+    assert result == {"ae.status", "ae.diagnose"}
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert any("backend selection failed" in r.getMessage() for r in warnings), (
         f"expected a backend-selection WARNING, got: {[r.getMessage() for r in warnings]}"

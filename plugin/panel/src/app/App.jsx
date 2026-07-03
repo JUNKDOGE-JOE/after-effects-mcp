@@ -18,17 +18,21 @@ import { probeClaudeLogin, resolveSidecarPath } from '../cep/claudeAuth';
 import { createClaudeAgentBackend, resolveSystemNode } from '../cep/claudeAgentBackend';
 import { createCodexBackend } from '../cep/codexBackend';
 import { createOpenCodeBackend } from '../cep/openCodeBackend';
+import { createZcodeBackend } from '../cep/zcodeBackend';
 import { reduceEvent } from '../lib/chatEntries';
 import { DEFAULT_MODEL, FALLBACK_MODEL } from '../lib/anthropic';
-import { byokStaticDescriptor, mergeByokModels, codexDescriptorFromModels, openCodeDescriptorFromModels } from '../lib/backendCapabilities';
+import { byokStaticDescriptor, mergeByokModels, codexDescriptorFromModels, openCodeDescriptorFromModels, descriptorWithCustomModel } from '../lib/backendCapabilities';
 import { baseDescriptorFor } from '../cep/backends/index.js';
 import { cachedByokModels } from '../cep/modelsApi';
 import { costBadge } from '../lib/composerOptions';
+import { anthropicEndpoint, normalizeProviderProfile } from '../lib/providerProfile.js';
 import { useActivity } from '../cep/useActivity';
 import { isWizardDone, markWizardDone } from '../cep/firstRun';
 import { useWizardWiring } from './wizardWiring';
 import { runDiagnostics } from '../cep/diagnostics';
 import { copyText } from '../lib/clipboard';
+import { copyWizardConfig } from '../lib/wizardCopy.js';
+import { zcodeUnavailableHint } from '../lib/settingsState.js';
 import { createHostController, loadSavedPort, savePort, DEFAULT_PORT, buildMcpConfig, isValidPort } from '../cep/hostBridge';
 import { loadExpertGuidance, saveExpertGuidance } from '../lib/expertGuidance.js';
 
@@ -60,8 +64,12 @@ const T = {
     notLoggedInHint: 'Claude 未登录：在终端运行 claude /login，再到设置里重新检测',
     codexProbingHint: '正在检测 Codex 登录态…',
     codexNotLoggedInHint: 'Codex 未登录：在终端运行 codex 登录后重新检测',
+    codexRuntimeHint: 'Codex 运行时不可用：请确认 codex CLI 可用后重新检测',
     openCodeProbingHint: '正在检测 OpenCode 登录态…',
     openCodeNotLoggedInHint: 'OpenCode 未登录：在终端完成登录后重新检测',
+    zcodeProbingHint: '正在检测 ZCode 运行时…',
+    zcodeNotLoggedInHint: 'ZCode 当前不可用：请打开 ZCode 或完成登录后重新检测',
+    zcodeRuntimeHint: 'ZCode 运行时不可用：请安装 ZCode，确认 Node 可用，或设置 AE_MCP_ZCODE_CLI 后重新检测',
     noNodeHint: '内嵌对话需要系统 Node 18+',
     pausedHint: '已暂停 — 恢复后才能发送',
     goSettings: '去设置',
@@ -89,8 +97,12 @@ const T = {
     notLoggedInHint: 'Not logged in: run claude /login in a terminal, then re-check in Settings',
     codexProbingHint: 'Checking Codex login…',
     codexNotLoggedInHint: 'Codex is not logged in: log in with codex, then re-check',
+    codexRuntimeHint: 'Codex runtime unavailable: confirm the codex CLI is available, then re-check',
     openCodeProbingHint: 'Checking OpenCode login…',
     openCodeNotLoggedInHint: 'OpenCode is not logged in: sign in with opencode, then re-check',
+    zcodeProbingHint: 'Checking ZCode runtime…',
+    zcodeNotLoggedInHint: 'ZCode is not available: open ZCode or sign in, then re-check',
+    zcodeRuntimeHint: 'ZCode runtime unavailable: install ZCode, confirm Node is available, or set AE_MCP_ZCODE_CLI, then re-check',
     noNodeHint: 'Embedded chat needs system Node 18+',
     pausedHint: 'Paused — resume to send',
     goSettings: 'Open Settings',
@@ -153,11 +165,11 @@ function writeCachedOpenCodeModels(storage, models) {
   }
 }
 
-async function validateAnthropicKey(key) {
+async function validateAnthropicKey(key, baseUrl = '') {
   // /v1/models is not CORS-enabled for direct browser access (verified in AE:
   // the preflight fails), so validate against /v1/messages — the endpoint the
   // chat actually uses — with a 1-token haiku ping. 401/403 = invalid key.
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
+  const r = await fetch(anthropicEndpoint(baseUrl, '/v1/messages'), {
     method: 'POST',
     headers: {
       'x-api-key': key,
@@ -226,6 +238,12 @@ function Shell({ cs }) {
   const [apiKey, setApiKey] = React.useState(() => {
     try { return keyStore ? keyStore.readKey() : ''; } catch (e) { return ''; }
   });
+  const [anthropicBaseUrl, setAnthropicBaseUrl] = React.useState(() => readPref('ae_mcp_anthropic_base_url', ''));
+  const [codexApiKey, setCodexApiKey] = React.useState(() => {
+    try { return keyStore ? keyStore.readKey('codex') : ''; } catch (e) { return ''; }
+  });
+  const [codexBaseUrl, setCodexBaseUrl] = React.useState(() => readPref('ae_mcp_codex_base_url', ''));
+  const [customModel, setCustomModel] = React.useState(() => readPref('ae_mcp_custom_model', ''));
   const [model, setModel] = React.useState(() => readPref('ae_mcp_model', DEFAULT_MODEL));
   const [sessionModel, setSessionModel] = React.useState(null);
   const [sessionEffort, setSessionEffort] = React.useState(null);
@@ -238,29 +256,31 @@ function Shell({ cs }) {
   const [codexModels, setCodexModels] = React.useState(() => readCachedCodexModels(window.localStorage));
   const [openCodeProbe, setOpenCodeProbe] = React.useState(null);
   const [openCodeModels, setOpenCodeModels] = React.useState(() => readCachedOpenCodeModels(window.localStorage));
+  const [zcodeProbe, setZcodeProbe] = React.useState(null);
   const [chatEntries, setChatEntries] = React.useState([]);
   const [chatStreaming, setChatStreaming] = React.useState(false);
   const [thinkingActive, setThinkingActive] = React.useState(false);
-  const baseDescriptor = React.useMemo(() => baseDescriptorFor(backendPref), [backendPref]);
+  const customModelForBackend = (backendPref === 'byok' || backendPref === 'codex') ? customModel : '';
+  const baseDescriptor = React.useMemo(() => descriptorWithCustomModel(baseDescriptorFor(backendPref), customModelForBackend), [backendPref, customModelForBackend]);
   const [descriptor, setDescriptor] = React.useState(() => baseDescriptor);
   React.useEffect(() => {
     let alive = true;
     setDescriptor(baseDescriptor);
     if (backendPref === 'byok' && apiKey) {
-      cachedByokModels({ apiKey }).then((list) => {
-        if (alive) setDescriptor(mergeByokModels(byokStaticDescriptor(), list));
+      cachedByokModels({ apiKey, baseUrl: anthropicBaseUrl }).then((list) => {
+        if (alive) setDescriptor(descriptorWithCustomModel(mergeByokModels(byokStaticDescriptor(), list), customModelForBackend));
       }).catch(() => {});
     }
     if (backendPref === 'codex') {
       const cached = codexModels || readCachedCodexModels(window.localStorage);
-      if (cached) setDescriptor(codexDescriptorFromModels({ models: cached }));
+      if (cached) setDescriptor(descriptorWithCustomModel(codexDescriptorFromModels({ models: cached }), customModelForBackend));
     }
     if (backendPref === 'opencode') {
       const cached = openCodeModels || readCachedOpenCodeModels(window.localStorage);
       if (cached) setDescriptor(openCodeDescriptorFromModels(cached));
     }
     return () => { alive = false; };
-  }, [apiKey, backendPref, baseDescriptor, codexModels, openCodeModels]);
+  }, [anthropicBaseUrl, apiKey, backendPref, baseDescriptor, codexModels, customModelForBackend, openCodeModels]);
   const requestedModel = sessionModel || model;
   const effectiveModel = descriptor.models.some((m) => m.id === requestedModel)
     ? requestedModel
@@ -268,9 +288,17 @@ function Shell({ cs }) {
   const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
   const effectiveEffort = sessionEffort || (modelMeta.effortLevels && modelMeta.effortLevels.length ? descriptor.defaultEffort : null);
   const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
-  const runtimeRef = React.useRef({ apiKey, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast });
+  const providerProfile = React.useMemo(() => normalizeProviderProfile({
+    anthropicBaseUrl,
+    codexApiKey,
+    codexBaseUrl,
+  }), [anthropicBaseUrl, codexApiKey, codexBaseUrl]);
+  const hasCodexCustomProvider = Boolean(providerProfile.codexBaseUrl);
+  const runtimeRef = React.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast });
   runtimeRef.current = {
     apiKey,
+    apiBaseUrl: providerProfile.anthropicBaseUrl,
+    providerProfile,
     model: effectiveModel,
     permissionMode,
     effort: effectiveEffort,
@@ -296,6 +324,7 @@ function Shell({ cs }) {
   const byokLoop = React.useMemo(() => {
     return createAgentLoop({
       getApiKey: () => runtimeRef.current.apiKey,
+      getApiBaseUrl: () => runtimeRef.current.apiBaseUrl,
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
       getEffort: () => runtimeRef.current.effort,
@@ -334,6 +363,7 @@ function Shell({ cs }) {
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     getServerInstructions: () => mcp.getServerInstructions(),
+    getProviderProfile: () => runtimeRef.current.providerProfile,
     lang,
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
@@ -349,14 +379,26 @@ function Shell({ cs }) {
     onEvent: handleChatEvent,
   }), [extRoot, mcp, handleChatEvent]);
 
-  const selectedEffective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey, codexProbe });
+  const zcodeBackend = React.useMemo(() => createZcodeBackend({
+    getMcpSpec: () => resolveMcpCommand({ extRoot }),
+    getModel: () => runtimeRef.current.model,
+    getPermissionMode: () => runtimeRef.current.permissionMode,
+    getEffort: () => runtimeRef.current.effort,
+    getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
+    getExpertGuidance: () => loadExpertGuidance(window.localStorage),
+    getServerInstructions: () => mcp.getServerInstructions(),
+    env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
+    onEvent: handleChatEvent,
+  }), [extRoot, mcp, handleChatEvent]);
+
+  const selectedEffective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey, codexProbe, hasCodexCustomProvider, zcodeProbe });
   const effective = backendPref === 'opencode'
     ? openCodeProbe === null ? { backend: 'none', reason: 'opencode-probing' }
       : !openCodeProbe || !openCodeProbe.loggedIn ? { backend: 'none', reason: 'opencode-not-logged-in' }
       : { backend: 'opencode', reason: 'ok' }
     : selectedEffective;
-  // Map real-backend id -> instance (registry leaves a slot for OpenCode/F2).
-  const backendInstances = { subscription: claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend };
+  // Map real-backend id -> instance.
+  const backendInstances = { subscription: claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };
   const activeBackend = backendInstances[effective.backend] || byokLoop;
   const activeBackendRef = React.useRef(null);
 
@@ -421,6 +463,29 @@ function Shell({ cs }) {
     return runOpenCodeProbe();
   }, [backendPref, runOpenCodeProbe]);
 
+  const runZcodeProbe = React.useCallback(() => {
+    let alive = true;
+    setZcodeProbe(null);
+    zcodeBackend.probeAccount().then((result) => {
+      if (alive) setZcodeProbe(result);
+    }).catch((e) => {
+      if (alive) setZcodeProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
+    });
+    return () => { alive = false; };
+  }, [zcodeBackend]);
+
+  React.useEffect(() => {
+    if (backendPref !== 'zcode') return undefined;
+    return runZcodeProbe();
+  }, [backendPref, runZcodeProbe]);
+
+  // ZCode session/send does not carry thoughtLevel, so a mid-conversation effort
+  // change is pushed via the dedicated session/setThoughtLevel method.
+  React.useEffect(() => {
+    if (effective.backend !== 'zcode' || !effectiveEffort) return;
+    zcodeBackend.setThoughtLevel(effectiveEffort);
+  }, [effective.backend, effectiveEffort, zcodeBackend]);
+
   React.useEffect(() => {
     const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
     activeBackendRef.current = decision.nextReal;
@@ -429,12 +494,13 @@ function Shell({ cs }) {
     claudeBackend.reset();
     codexBackend.reset();
     openCodeBackend.reset();
+    zcodeBackend.reset();
     setChatEntries([]);
     setChatStreaming(false);
     setSessionModel(null);
     setSessionEffort(null);
     setSessionFast(null);
-  }, [effective.backend, byokLoop, claudeBackend, codexBackend, openCodeBackend]);
+  }, [effective.backend, byokLoop, claudeBackend, codexBackend, openCodeBackend, zcodeBackend]);
 
   const sendChat = (text) => {
     const trimmed = String(text || '').trim();
@@ -553,11 +619,17 @@ function Shell({ cs }) {
     : probe.loggedIn === false ? { state: 'not-logged-in', detail: probe.detail }
     : { state: 'ready', nodeVersion: probe.nodeVersion };
   const codexStatus = codexProbe === null ? { state: 'checking' }
+    : hasCodexCustomProvider && codexProbe.runtimeOk !== false ? { state: 'ready', planType: 'Custom API', detail: codexProbe.detail }
+    : hasCodexCustomProvider && codexProbe.runtimeOk === false ? { state: 'runtime-error', detail: codexProbe.detail }
     : codexProbe.loggedIn === false ? { state: 'not-logged-in', detail: codexProbe.detail }
     : { state: 'ready', email: codexProbe.email, planType: codexProbe.planType };
   const openCodeStatus = openCodeProbe === null ? { state: 'checking' }
     : openCodeProbe.loggedIn === false ? { state: 'not-logged-in', detail: openCodeProbe.detail }
     : { state: 'ready' };
+  const zcodeStatus = zcodeProbe === null ? { state: 'checking' }
+    : zcodeProbe.runtimeOk === false ? { state: 'runtime-error', provider: zcodeProbe.provider, detail: zcodeProbe.detail }
+    : zcodeProbe.loggedIn === false ? { state: 'not-logged-in', provider: zcodeProbe.provider, detail: zcodeProbe.detail }
+    : { state: 'ready', provider: zcodeProbe.provider };
   const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
 
   if (!wizardDone) {
@@ -570,9 +642,11 @@ function Shell({ cs }) {
         onClient={setWizClient}
         clientName={(CLIENT_NAMES[wizClient] || CLIENT_NAMES['claude-desktop'])[lang]}
         mcpConfig={mcpConfigStr}
+        port={status.port}
+        expertGuidance={expertGuidance}
         onNext={() => setWizStep((s) => Math.min(3, s + 1))}
         onBack={() => setWizStep((s) => Math.max(1, s - 1))}
-        onCopy={() => copyText(mcpConfigStr)}
+        onCopy={(text) => copyWizardConfig(copyText, mcpConfigStr, text)}
         onDone={finishWizard}
         onSkip={finishWizard}
         {...wizard.props}
@@ -590,8 +664,12 @@ function Shell({ cs }) {
     : effective.reason === 'not-logged-in' ? t.notLoggedInHint
     : effective.reason === 'codex-probing' ? t.codexProbingHint
     : effective.reason === 'codex-not-logged-in' ? t.codexNotLoggedInHint
+    : effective.reason === 'codex-runtime-unavailable' ? t.codexRuntimeHint
     : effective.reason === 'opencode-probing' ? t.openCodeProbingHint
     : effective.reason === 'opencode-not-logged-in' ? t.openCodeNotLoggedInHint
+    : effective.reason === 'zcode-probing' ? t.zcodeProbingHint
+    : effective.reason === 'zcode-not-logged-in' ? t.zcodeNotLoggedInHint
+    : effective.reason === 'zcode-runtime-unavailable' ? zcodeUnavailableHint(zcodeStatus, t.zcodeRuntimeHint)
     : effective.reason === 'no-node' ? t.noNodeHint
     : effective.reason === 'no-key' ? t.noKeyHint
     : '';
@@ -672,10 +750,42 @@ function Shell({ cs }) {
             apiKey={apiKey}
             onSaveApiKey={(k) => { if (keyStore) keyStore.writeKey(k); setApiKey(k); }}
             onClearApiKey={() => { if (keyStore) keyStore.clearKey(); setApiKey(''); }}
+            anthropicBaseUrl={anthropicBaseUrl}
+            onAnthropicBaseUrlChange={(v) => { setAnthropicBaseUrl(v); writePref('ae_mcp_anthropic_base_url', v); }}
+            codexApiKey={codexApiKey}
+            codexBaseUrl={codexBaseUrl}
+            onCodexBaseUrlChange={(v) => {
+              setCodexBaseUrl(v);
+              writePref('ae_mcp_codex_base_url', v);
+              setCodexProbe(null);
+              codexBackend.reset();
+            }}
+            onSaveCodexApiKey={(k) => {
+              if (keyStore) keyStore.writeKey(k, 'codex');
+              setCodexApiKey(k);
+              setCodexProbe(null);
+              codexBackend.reset();
+            }}
+            onClearCodexApiKey={() => {
+              if (keyStore) keyStore.clearKey('codex');
+              setCodexApiKey('');
+              setCodexProbe(null);
+              codexBackend.reset();
+            }}
             validateKey={validateAnthropicKey}
             model={effectiveModel}
             modelOptions={modelOptions}
+            modelSwitchable={descriptor.perTurnModelSwitch !== false}
             onModelChange={(m) => { setModel(m); writePref('ae_mcp_model', m); }}
+            customModel={customModel}
+            onCustomModelChange={(m) => {
+              setCustomModel(m);
+              writePref('ae_mcp_custom_model', m);
+              if (String(m || '').trim()) {
+                setModel(String(m || '').trim());
+                writePref('ae_mcp_model', String(m || '').trim());
+              }
+            }}
             backend={backendPref}
             onBackendChange={(m) => { setBackendPref(m); writePref('ae_mcp_backend', m); }}
             expertGuidance={expertGuidance}
@@ -686,6 +796,8 @@ function Shell({ cs }) {
             onRecheckCodex={runCodexProbe}
             openCodeStatus={openCodeStatus}
             onRecheckOpenCode={runOpenCodeProbe}
+            zcodeStatus={zcodeStatus}
+            onRecheckZcode={runZcodeProbe}
           />
         ) : null}
       </div>

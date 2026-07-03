@@ -38,9 +38,10 @@ _LEADING_VERB = re.compile(r"^(ae\.[A-Za-z][A-Za-z0-9]*)")
 def _filtered_tool_names() -> set:
     """Return verb names this server should expose.
 
-    Always includes ae.status so clients have a diagnostic entry point even
-    when backend selection fails. Other verbs depend on backend capabilities
-    and whether a snapshotter is available.
+    Always includes ae.status (install diagnostics) and ae.diagnose (live
+    connection self-check) so clients have diagnostic entry points even when
+    backend selection fails. Other verbs depend on backend capabilities and
+    whether a snapshotter is available.
     """
     from ae_mcp.backends import discovery as _discovery
     from ae_mcp.snapshot import discovery as _snap_discovery
@@ -49,11 +50,11 @@ def _filtered_tool_names() -> set:
         supported = backend.supported_verbs()
     except Exception as e:  # noqa: BLE001
         log.warning(
-            "backend selection failed; exposing only ae.status "
-            "(tool name ae_status) for diagnostics: %s",
+            "backend selection failed; exposing only ae.status + ae.diagnose "
+            "(ae_status, ae_diagnose) for diagnostics: %s",
             e,
         )
-        return {"ae.status"}
+        return {"ae.status", "ae.diagnose"}
     try:
         snapshotter = _snap_discovery.select_snapshotter()
     except Exception as e:  # noqa: BLE001
@@ -61,7 +62,7 @@ def _filtered_tool_names() -> set:
         snapshotter = None
     if snapshotter is None:
         supported = supported - {"ae.snapshot"}
-    return supported | {"ae.status"}
+    return supported | {"ae.status", "ae.diagnose"}
 
 
 def _format_result(result: Any) -> str:

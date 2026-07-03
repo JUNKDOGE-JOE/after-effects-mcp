@@ -76,6 +76,19 @@ export function mergeByokModels(descriptor, apiModels) {
   return { ...descriptor, models };
 }
 
+export function descriptorWithCustomModel(descriptor, modelId) {
+  const id = String(modelId || '').trim();
+  if (!id) return descriptor;
+  const existing = descriptor.models.find((m) => m.id === id);
+  const custom = existing || { id, label: id, effortLevels: [], cost: 2, adaptive: false };
+  const rest = descriptor.models.filter((m) => m.id !== id);
+  return {
+    ...descriptor,
+    models: [custom, ...rest],
+    defaultModelId: id,
+  };
+}
+
 export function codexStaticDescriptor() {
   const models = [
     { id: 'gpt-5.5', label: 'GPT-5.5', effortLevels: ['low', 'medium', 'high', 'xhigh'], cost: 2, adaptive: false },
@@ -197,5 +210,61 @@ export function openCodeDescriptorFromModels(providerResult) {
     supportsFast: () => false,
     approvalModes: APPROVAL_MODES,
     perTurnModelSwitch: true,
+  };
+}
+
+// ZCode's app-server needs an explicit provider/model ref before it can create
+// an embedded session. The desktop app stores the current builtin provider
+// under ~/.zcode/v2/config.json; zcodeBackend reads it at runtime and this
+// descriptor mirrors the common built-in plan fallback.
+// Models come from session/create's settings.model.available:
+// {label, ref:{modelId, providerId}, contextWindow}.
+const ZCODE_EFFORT_LEVELS = ['nothink', 'high', 'max'];
+
+export function zcodeStaticDescriptor() {
+  const models = [
+    { id: 'builtin:bigmodel-start-plan/GLM-5.2', label: 'GLM-5.2', effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false },
+    { id: 'builtin:bigmodel-start-plan/GLM-5-Turbo', label: 'GLM-5 Turbo', effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false },
+  ];
+  return {
+    id: 'zcode',
+    label: 'ZCode',
+    models,
+    defaultModelId: 'builtin:bigmodel-start-plan/GLM-5.2',
+    defaultEffort: 'high',
+    supportsFast: () => false,
+    approvalModes: APPROVAL_MODES,
+    perTurnModelSwitch: false,
+  };
+}
+
+export function zcodeDescriptorFromModels(sessionCreateResult) {
+  const available = sessionCreateResult && sessionCreateResult.settings && sessionCreateResult.settings.model && Array.isArray(sessionCreateResult.settings.model.available)
+    ? sessionCreateResult.settings.model.available
+    : [];
+  const current = sessionCreateResult && sessionCreateResult.settings && sessionCreateResult.settings.model && sessionCreateResult.settings.model.current;
+  const models = available.map((m) => {
+    const ref = m.ref || {};
+    const id = ref.modelId || m.label || '';
+    const providerId = ref.providerId || '';
+    return {
+      id: providerId ? providerId + '/' + id : id,
+      label: m.label || id,
+      effortLevels: ZCODE_EFFORT_LEVELS,
+      cost: 2,
+      adaptive: false,
+    };
+  }).filter((m) => m.id);
+  if (!models.length) return zcodeStaticDescriptor();
+  const defaultId = current ? (current.providerId ? current.providerId + '/' + current.modelId : current.modelId) : models[0].id;
+  return {
+    id: 'zcode',
+    label: 'ZCode',
+    models,
+    defaultModelId: models.some((m) => m.id === defaultId) ? defaultId : models[0].id,
+    defaultEffort: 'medium',
+    supportsFast: () => false,
+    approvalModes: APPROVAL_MODES,
+    perTurnModelSwitch: false,
   };
 }
