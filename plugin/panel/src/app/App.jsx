@@ -18,7 +18,9 @@ import { probeClaudeLogin, resolveSidecarPath } from '../cep/claudeAuth';
 import { createClaudeAgentBackend, resolveSystemNode } from '../cep/claudeAgentBackend';
 import { createCodexBackend } from '../cep/codexBackend';
 import { createOpenCodeBackend } from '../cep/openCodeBackend';
-import { createZcodeBackend } from '../cep/zcodeBackend';
+import { createZcodeBackend, summarizeZcodeConfig } from '../cep/zcodeBackend';
+import { claudeChannels, codexChannels, zcodeChannels, migrateBackendPref } from '../lib/channels.js';
+import { createProviderStore } from '../cep/providerStore';
 import { reduceEvent } from '../lib/chatEntries';
 import { DEFAULT_MODEL, FALLBACK_MODEL } from '../lib/anthropic';
 import { byokStaticDescriptor, mergeByokModels, codexDescriptorFromModels, openCodeDescriptorFromModels, descriptorWithCustomModel } from '../lib/backendCapabilities';
@@ -249,7 +251,22 @@ function Shell({ cs }) {
   const [sessionEffort, setSessionEffort] = React.useState(null);
   const [sessionFast, setSessionFast] = React.useState(null);
   const [permissionMode, setPermissionMode] = React.useState(() => readPref('ae_mcp_perm_mode', 'manual'));
-  const [backendPref, setBackendPref] = React.useState(() => readPref('ae_mcp_backend', 'subscription'));
+  const backendMigration = React.useMemo(() => migrateBackendPref(window.localStorage), []);
+  const [backendPref, setBackendPref] = React.useState(() => backendMigration.pref);
+  const [channelLock, setChannelLock] = React.useState(() => backendMigration.lockedChannel);
+  const providerStore = React.useMemo(() => {
+    try {
+      const store = createProviderStore();
+      store.migrateLegacy({
+        readKey: (name) => { try { return keyStore ? keyStore.readKey(name) : ''; } catch (e) { return ''; } },
+        readPref: (key) => readPref(key, ''),
+      });
+      return store;
+    } catch (e) { return null; }
+  }, [keyStore]);
+  const [providers, setProviders] = React.useState(() => (providerStore ? providerStore.list() : []));
+  const [claudeProviderId, setClaudeProviderId] = React.useState(() => readPref('ae_mcp_claude_provider', ''));
+  const [codexProviderId, setCodexProviderId] = React.useState(() => readPref('ae_mcp_codex_provider', ''));
   const [expertGuidance, setExpertGuidance] = React.useState(() => loadExpertGuidance(window.localStorage));
   const [probe, setProbe] = React.useState(null);
   const [codexProbe, setCodexProbe] = React.useState(null);
@@ -288,23 +305,34 @@ function Shell({ cs }) {
   const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
   const effectiveEffort = sessionEffort || (modelMeta.effortLevels && modelMeta.effortLevels.length ? descriptor.defaultEffort : null);
   const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
+  const claudeApiProvider = React.useMemo(() => {
+    const fromStore = providers.find((p) => p.id === claudeProviderId) || null;
+    if (fromStore && fromStore.baseUrl && fromStore.apiKey) return fromStore;
+    if (apiKey) return { id: 'legacy-anthropic', name: 'Claude API', protocol: 'anthropic', baseUrl: anthropicBaseUrl || 'https://api.anthropic.com', apiKey, probedModels: [], probedAt: 0 };
+    return fromStore;
+  }, [providers, claudeProviderId, apiKey, anthropicBaseUrl]);
+  const codexCustomProvider = React.useMemo(() => {
+    const fromStore = providers.find((p) => p.id === codexProviderId) || null;
+    if (fromStore && fromStore.baseUrl && fromStore.apiKey) return fromStore;
+    if (codexBaseUrl) return { id: 'legacy-codex', name: 'Codex custom', protocol: 'openai-compatible', baseUrl: codexBaseUrl, apiKey: codexApiKey, probedModels: [], probedAt: 0 };
+    return fromStore;
+  }, [providers, codexProviderId, codexBaseUrl, codexApiKey]);
+  const zcodeConfigSummary = React.useMemo(() => {
+    try { return summarizeZcodeConfig({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {}, storedKey: (() => { try { return keyStore ? keyStore.readKey('zcode') : ''; } catch (e) { return ''; } })() }); } catch (e) { return null; }
+    // zcodeProbe in deps: re-summarize after each re-check so pasted keys reflect immediately.
+  }, [keyStore, zcodeProbe]);
+  const channels = React.useMemo(() => ({
+    claude: claudeChannels({ probe, apiProvider: claudeApiProvider }),
+    codex: codexChannels({ codexProbe, customProvider: codexCustomProvider }),
+    zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary }),
+  }), [probe, claudeApiProvider, codexProbe, codexCustomProvider, zcodeProbe, zcodeConfigSummary]);
   const providerProfile = React.useMemo(() => normalizeProviderProfile({
-    anthropicBaseUrl,
-    codexApiKey,
-    codexBaseUrl,
-  }), [anthropicBaseUrl, codexApiKey, codexBaseUrl]);
+    anthropicBaseUrl: claudeApiProvider ? claudeApiProvider.baseUrl : anthropicBaseUrl,
+    codexApiKey: codexCustomProvider ? codexCustomProvider.apiKey : codexApiKey,
+    codexBaseUrl: codexCustomProvider ? codexCustomProvider.baseUrl : codexBaseUrl,
+  }), [claudeApiProvider, anthropicBaseUrl, codexCustomProvider, codexApiKey, codexBaseUrl]);
   const hasCodexCustomProvider = Boolean(providerProfile.codexBaseUrl);
-  const runtimeRef = React.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast });
-  runtimeRef.current = {
-    apiKey,
-    apiBaseUrl: providerProfile.anthropicBaseUrl,
-    providerProfile,
-    model: effectiveModel,
-    permissionMode,
-    effort: effectiveEffort,
-    thinking: modelMeta.adaptive === true ? 'adaptive' : null,
-    fast: effectiveFast,
-  };
+  const runtimeRef = React.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: 'subscription', claudeApiProvider: null });
   const extRoot = cs && cs.getSystemPath ? cs.getSystemPath('extension') : '';
   const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
   const mcp = React.useMemo(() => createMcpClient({
@@ -350,6 +378,8 @@ function Shell({ cs }) {
     getPermissionMode: () => runtimeRef.current.permissionMode,
     getEffort: () => runtimeRef.current.effort,
     getThinking: () => runtimeRef.current.thinking,
+    getChannel: () => runtimeRef.current.claudeChannel || 'subscription',
+    getApiProvider: () => runtimeRef.current.claudeApiProvider || null,
     lang,
     onEvent: handleChatEvent,
   }), [extRoot, sidecarPath, mcp, handleChatEvent]);
@@ -391,14 +421,22 @@ function Shell({ cs }) {
     onEvent: handleChatEvent,
   }), [extRoot, mcp, handleChatEvent]);
 
-  const selectedEffective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey, codexProbe, hasCodexCustomProvider, zcodeProbe });
-  const effective = backendPref === 'opencode'
-    ? openCodeProbe === null ? { backend: 'none', reason: 'opencode-probing' }
-      : !openCodeProbe || !openCodeProbe.loggedIn ? { backend: 'none', reason: 'opencode-not-logged-in' }
-      : { backend: 'opencode', reason: 'ok' }
-    : selectedEffective;
+  const nodeOk = !(probe && probe.nodeOk === false);
+  const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock, nodeOk });
+  runtimeRef.current = {
+    apiKey: claudeApiProvider ? claudeApiProvider.apiKey : apiKey,
+    apiBaseUrl: providerProfile.anthropicBaseUrl,
+    providerProfile,
+    model: effectiveModel,
+    permissionMode,
+    effort: effectiveEffort,
+    thinking: modelMeta.adaptive === true ? 'adaptive' : null,
+    fast: effectiveFast,
+    claudeChannel: effective.backend === 'claude-api' ? 'api' : 'subscription',
+    claudeApiProvider,
+  };
   // Map real-backend id -> instance.
-  const backendInstances = { subscription: claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };
+  const backendInstances = { subscription: claudeBackend, 'claude-api': claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };
   const activeBackend = backendInstances[effective.backend] || byokLoop;
   const activeBackendRef = React.useRef(null);
 
@@ -660,19 +698,10 @@ function Shell({ cs }) {
     { id: 'activity', icon: 'list-checks', label: t.activity },
     { id: 'settings', icon: 'settings', label: t.settings },
   ];
-  const backendDisabledHint = effective.reason === 'probing' ? t.probingHint
-    : effective.reason === 'not-logged-in' ? t.notLoggedInHint
-    : effective.reason === 'codex-probing' ? t.codexProbingHint
-    : effective.reason === 'codex-not-logged-in' ? t.codexNotLoggedInHint
-    : effective.reason === 'codex-runtime-unavailable' ? t.codexRuntimeHint
-    : effective.reason === 'opencode-probing' ? t.openCodeProbingHint
-    : effective.reason === 'opencode-not-logged-in' ? t.openCodeNotLoggedInHint
-    : effective.reason === 'zcode-probing' ? t.zcodeProbingHint
-    : effective.reason === 'zcode-not-logged-in' ? t.zcodeNotLoggedInHint
-    : effective.reason === 'zcode-runtime-unavailable' ? zcodeUnavailableHint(zcodeStatus, t.zcodeRuntimeHint)
-    : effective.reason === 'no-node' ? t.noNodeHint
-    : effective.reason === 'no-key' ? t.noKeyHint
-    : '';
+  const backendDisabledHint = (effective.fixHint && (effective.fixHint[lang] || effective.fixHint.zh))
+    || (effective.reason && effective.reason.endsWith('-probing')
+      ? (lang === 'zh' ? '正在检测凭据通道…' : 'Checking credential channels…')
+      : '');
   const composerDisabled = paused || effective.backend === 'none';
   const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
 

@@ -1,31 +1,32 @@
 import { REAL_BACKENDS } from '../cep/backends/index.js';
+import { pickChannel } from './channels.js';
 
-export function pickBackend({ pref, probe, hasApiKey, codexProbe, hasCodexCustomProvider = false, zcodeProbe }) {
-  if (pref === 'byok') {
-    return hasApiKey ? { backend: 'byok', reason: 'ok' } : { backend: 'none', reason: 'no-key' };
+// Spec D: one selection algorithm for all backends, fed by uniform channel
+// probe arrays. `pref` is the 3-way backend choice (subscription|codex|zcode);
+// channels = { claude: [...], codex: [...], zcode: [...] }.
+export function pickBackend({ pref, channels = {}, lockedChannel = '', nodeOk = true }) {
+  const group = pref === 'codex' || pref === 'zcode' ? pref : 'claude';
+  const list = channels[group] || [];
+  if (list.some((c) => c && c.checking)) {
+    return { backend: 'none', reason: group + '-probing', channel: null, fixHint: null };
   }
-
-  if (pref === 'codex') {
-    if (codexProbe === null) return { backend: 'none', reason: 'codex-probing' };
-    if (hasCodexCustomProvider) {
-      if (!codexProbe || codexProbe.runtimeOk === false) return { backend: 'none', reason: 'codex-runtime-unavailable' };
-      return { backend: 'codex', reason: 'ok' };
+  const chosen = pickChannel(list, lockedChannel);
+  if (!chosen || !chosen.ok) {
+    const hintSource = chosen || list.find((c) => c && !c.ok) || list[0] || null;
+    return {
+      backend: 'none',
+      reason: group + '-no-channel',
+      channel: chosen ? chosen.channel : null,
+      fixHint: hintSource ? hintSource.fixHint || null : null,
+    };
+  }
+  if (group === 'claude') {
+    if (chosen.channel === 'api') {
+      return { backend: nodeOk ? 'claude-api' : 'byok', reason: 'ok', channel: 'api', fixHint: null };
     }
-    if (!codexProbe || !codexProbe.loggedIn) return { backend: 'none', reason: 'codex-not-logged-in' };
-    return { backend: 'codex', reason: 'ok' };
+    return { backend: 'subscription', reason: 'ok', channel: 'subscription', fixHint: null };
   }
-
-  if (pref === 'zcode') {
-    if (zcodeProbe === null) return { backend: 'none', reason: 'zcode-probing' };
-    if (!zcodeProbe || !zcodeProbe.loggedIn) return { backend: 'none', reason: 'zcode-not-logged-in' };
-    if (zcodeProbe.runtimeOk === false) return { backend: 'none', reason: 'zcode-runtime-unavailable' };
-    return { backend: 'zcode', reason: 'ok' };
-  }
-
-  if (probe === null) return { backend: 'none', reason: 'probing' };
-  if (!probe.nodeOk) return hasApiKey ? { backend: 'byok', reason: 'no-node' } : { backend: 'none', reason: 'no-node' };
-  if (!probe.loggedIn) return hasApiKey ? { backend: 'byok', reason: 'not-logged-in' } : { backend: 'none', reason: 'not-logged-in' };
-  return { backend: 'subscription', reason: 'ok' };
+  return { backend: group, reason: 'ok', channel: chosen.channel, fixHint: null };
 }
 
 export function deriveToolMeta(tools) {

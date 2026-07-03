@@ -1,32 +1,50 @@
+import { pickBackend, deriveToolMeta, shouldResetOnBackendChange } from '../src/lib/backendSelect.js';
+import { claudeChannels, codexChannels, zcodeChannels } from '../src/lib/channels.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pickBackend, deriveToolMeta, shouldResetOnBackendChange } from '../src/lib/backendSelect.js';
 
-test('pickBackend follows subscription and BYOK selection rules', () => {
-  const cases = [
-    [{ pref: 'byok', probe: null, hasApiKey: true }, { backend: 'byok', reason: 'ok' }],
-    [{ pref: 'byok', probe: null, hasApiKey: false }, { backend: 'none', reason: 'no-key' }],
-    [{ pref: 'subscription', probe: null, hasApiKey: true }, { backend: 'none', reason: 'probing' }],
-    [{ pref: 'subscription', probe: null, hasApiKey: false }, { backend: 'none', reason: 'probing' }],
-    [{ pref: 'subscription', probe: { nodeOk: false, loggedIn: false }, hasApiKey: true }, { backend: 'byok', reason: 'no-node' }],
-    [{ pref: 'subscription', probe: { nodeOk: false, loggedIn: false }, hasApiKey: false }, { backend: 'none', reason: 'no-node' }],
-    [{ pref: 'subscription', probe: { nodeOk: true, loggedIn: false }, hasApiKey: true }, { backend: 'byok', reason: 'not-logged-in' }],
-    [{ pref: 'subscription', probe: { nodeOk: true, loggedIn: false }, hasApiKey: false }, { backend: 'none', reason: 'not-logged-in' }],
-    [{ pref: 'subscription', probe: { nodeOk: true, loggedIn: true }, hasApiKey: false }, { backend: 'subscription', reason: 'ok' }],
-    [{ pref: 'codex', probe: { nodeOk: true, loggedIn: true }, codexProbe: null, hasApiKey: true }, { backend: 'none', reason: 'codex-probing' }],
-    [{ pref: 'codex', probe: { nodeOk: true, loggedIn: true }, codexProbe: { loggedIn: false }, hasApiKey: true }, { backend: 'none', reason: 'codex-not-logged-in' }],
-    [{ pref: 'codex', probe: { nodeOk: true, loggedIn: true }, codexProbe: { loggedIn: true }, hasApiKey: false }, { backend: 'codex', reason: 'ok' }],
-    [{ pref: 'codex', probe: { nodeOk: true, loggedIn: true }, codexProbe: { loggedIn: false, runtimeOk: true }, hasCodexCustomProvider: true }, { backend: 'codex', reason: 'ok' }],
-    [{ pref: 'codex', probe: { nodeOk: true, loggedIn: true }, codexProbe: { loggedIn: false, runtimeOk: false }, hasCodexCustomProvider: true }, { backend: 'none', reason: 'codex-runtime-unavailable' }],
-    [{ pref: 'zcode', probe: { nodeOk: true, loggedIn: true }, zcodeProbe: null, hasApiKey: true }, { backend: 'none', reason: 'zcode-probing' }],
-    [{ pref: 'zcode', probe: { nodeOk: true, loggedIn: true }, zcodeProbe: { loggedIn: false }, hasApiKey: true }, { backend: 'none', reason: 'zcode-not-logged-in' }],
-    [{ pref: 'zcode', probe: { nodeOk: true, loggedIn: true }, zcodeProbe: { loggedIn: true, runtimeOk: false }, hasApiKey: true }, { backend: 'none', reason: 'zcode-runtime-unavailable' }],
-    [{ pref: 'zcode', probe: { nodeOk: true, loggedIn: true }, zcodeProbe: { loggedIn: true, runtimeOk: true }, hasApiKey: false }, { backend: 'zcode', reason: 'ok' }],
-  ];
+function ch(channel, ok, fixHint = { zh: 'zh-fix', en: 'en-fix' }, checking = false) {
+  return { channel, ok, checking, detail: '', source: { zh: 's', en: 's' }, fixHint };
+}
 
-  for (const [input, expected] of cases) {
-    assert.deepEqual(pickBackend(input), expected);
-  }
+test('pickBackend: claude subscription channel wins when ok', () => {
+  const result = pickBackend({ pref: 'subscription', channels: { claude: [ch('subscription', true), ch('api', false)] } });
+  assert.deepEqual(result, { backend: 'subscription', reason: 'ok', channel: 'subscription', fixHint: null });
+});
+
+test('pickBackend: claude api channel routes to claude-api with node, byok without', () => {
+  const channels = { claude: [ch('subscription', false), ch('api', true)] };
+  assert.equal(pickBackend({ pref: 'subscription', channels, nodeOk: true }).backend, 'claude-api');
+  assert.equal(pickBackend({ pref: 'subscription', channels, nodeOk: false }).backend, 'byok');
+});
+
+test('pickBackend: probing and no-channel states carry reason + fixHint', () => {
+  const probing = pickBackend({ pref: 'codex', channels: { codex: [ch('cli', false, undefined, true)] } });
+  assert.deepEqual(probing, { backend: 'none', reason: 'codex-probing', channel: null, fixHint: null });
+  const dead = pickBackend({ pref: 'zcode', channels: { zcode: [ch('cli-config', false), ch('desktop', false)] } });
+  assert.equal(dead.backend, 'none');
+  assert.equal(dead.reason, 'zcode-no-channel');
+  assert.equal(dead.fixHint.zh, 'zh-fix');
+});
+
+test('pickBackend: locked channel is respected; a locked-but-broken channel surfaces its own fixHint', () => {
+  const channels = { codex: [ch('cli', true), ch('custom', true)] };
+  assert.equal(pickBackend({ pref: 'codex', channels, lockedChannel: 'custom' }).channel, 'custom');
+  const brokenLock = pickBackend({ pref: 'codex', channels: { codex: [ch('cli', true), ch('custom', false, { zh: '配 provider', en: 'add provider' })] }, lockedChannel: 'custom' });
+  assert.equal(brokenLock.backend, 'none');
+  assert.equal(brokenLock.fixHint.zh, '配 provider');
+});
+
+test('pickBackend integrates with real channel builders end to end', () => {
+  const channels = {
+    claude: claudeChannels({ probe: { nodeOk: true, loggedIn: true }, apiProvider: null }),
+    codex: codexChannels({ codexProbe: null }),
+    zcode: zcodeChannels({ zcodeProbe: { runtimeOk: true }, configSummary: { startPlan: { providerId: 'builtin:zai-start-plan', hasCredential: false } } }),
+  };
+  assert.equal(pickBackend({ pref: 'subscription', channels }).backend, 'subscription');
+  assert.equal(pickBackend({ pref: 'codex', channels }).reason, 'codex-probing');
+  const zc = pickBackend({ pref: 'zcode', channels });
+  assert.equal(zc.backend, 'none', 'keyless start-plan never becomes the default');
 });
 
 test('deriveToolMeta maps AE tools for Claude Agent SDK metadata', () => {
