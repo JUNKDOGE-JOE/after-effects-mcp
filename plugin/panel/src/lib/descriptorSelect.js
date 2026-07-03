@@ -9,6 +9,7 @@ import {
   codexDescriptorFromModels,
   descriptorWithCustomModel,
   descriptorFromProbedModels,
+  zcodeDescriptorFromModels,
 } from './backendCapabilities.js';
 
 // effectiveBackend 'byok' = API channel chosen but Node runtime broken; the
@@ -26,6 +27,7 @@ export function selectDescriptor({
   codexCustomProvider = null,
   byokApiModels = null,
   codexCachedModels = null,
+  zcodeSessionModels = null,
 }) {
   const claudeApi = isClaudeApiBackend(effectiveBackend);
   const customId = (claudeApi || backendPref === 'codex') ? String(customModel || '').trim() : '';
@@ -47,5 +49,30 @@ export function selectDescriptor({
     }
     return baseDescriptor;
   }
+  // ZCode: the live model list only becomes known after session/create
+  // returns settings.model.available (see zcodeBackend.js's
+  // 'zcode-session-created' event). Until then, fall back to baseDescriptor
+  // (itself the static curated list). Gated on backendPref (not just
+  // effectiveBackend) so probing states ('zcode-probing' etc, where
+  // effectiveBackend may read as 'none') still pick up session data as soon
+  // as it's available.
+  if (backendPref === 'zcode' || effectiveBackend === 'zcode') {
+    if (zcodeSessionModels) return zcodeDescriptorFromModels(zcodeSessionModels);
+    return baseDescriptor;
+  }
   return baseDescriptor;
+}
+
+// Bug 2: a stale localStorage model id (e.g. a pre-migration hardcoded
+// 'glm-5.2') can silently outrank a freshly-computed descriptor's
+// defaultModelId when the stored id isn't among the descriptor's current
+// models. Reset to defaultModelId in that case. Custom model ids (isCustom)
+// are exempt: they are intentionally NOT part of the curated list.
+export function reconcileModelPref(model, descriptor, { isCustom = false } = {}) {
+  if (isCustom) return model;
+  const models = (descriptor && Array.isArray(descriptor.models)) ? descriptor.models : [];
+  if (!models.length) return model;
+  const trimmed = String(model || '').trim();
+  if (trimmed && models.some((m) => m.id === trimmed)) return trimmed;
+  return descriptor.defaultModelId;
 }

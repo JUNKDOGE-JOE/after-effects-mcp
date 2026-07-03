@@ -1021,3 +1021,47 @@ test('zh lang backends localize turn.failed missing-key errors (spec B1)', async
   assert.match(err.message, /缺少 API Key/);
   assert.match(err.message, /builtin:zai-start-plan/);
 });
+
+// Regression: the composer's model chip is built from session/create's
+// settings.model.available via zcodeDescriptorFromModels, but that result
+// was never surfaced past ensureSession() — the panel had no way to see it,
+// so the model chip disappeared entirely. Fix: emit a 'zcode-session-created'
+// event carrying the session/create result so App.jsx can build a live
+// descriptor from it.
+test('ensureSession emits zcode-session-created with the session/create result', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const pending = backend.sendUser('hello');
+  await flush();
+  const proc = spawned.procs[0];
+  const createReq = parseWrites(proc)[0];
+  assert.equal(createReq.method, 'session/create');
+  // settings is a sibling of session in the real session/create result (see
+  // the startTurn() harness above: { session: {...}, settings: {...} }).
+  const createResult = {
+    session: { sessionId: 'sess_test' },
+    settings: {
+      model: {
+        available: [{ label: 'GLM-5.2', ref: { modelId: 'GLM-5.2', providerId: 'bigmodel-start-plan' } }],
+        current: { modelId: 'GLM-5.2', providerId: 'bigmodel-start-plan' },
+      },
+    },
+  };
+  respond(proc, createReq, createResult);
+  await flush();
+
+  const subReq = parseWrites(proc).find((m) => m.method === 'session/subscribe');
+  if (subReq) respond(proc, subReq, { sessionId: 'sess_test', eventSeq: 0 });
+  await flush();
+  const sendReq = parseWrites(proc).find((m) => m.method === 'session/send');
+  respond(proc, sendReq, { accepted: true, sessionId: 'sess_test' });
+  await flush();
+
+  const sessionCreated = events.find((e) => e.type === 'zcode-session-created');
+  assert.ok(sessionCreated, 'zcode-session-created event was emitted');
+  assert.deepEqual(sessionCreated.result, createResult);
+  // The emitted result must be directly usable by zcodeDescriptorFromModels,
+  // i.e. settings must be at the top level, not nested under .session.
+  const descriptor = zcodeDescriptorFromModels(sessionCreated.result);
+  assert.equal(descriptor.models.length, 1);
+  assert.equal(descriptor.defaultModelId, 'bigmodel-start-plan/GLM-5.2');
+});
