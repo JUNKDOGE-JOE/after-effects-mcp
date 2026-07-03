@@ -35,6 +35,14 @@ OpenClaw、AstrBot 等 IM-bot 框架常驻或 Docker 化时，未必和 After Ef
 - 活动流和 kill switch：可熔断所有 AI 操作。
 - 连接诊断：检查 host、token、Python 客户端信号、AE project、ExtendScript ping，并检测 `uv` / `node` / `claude`；外部客户端也可运行 `ae_diagnose` 做一次性链路检查。
 
+### 截图
+
+<table>
+  <tr><td><img src="docs/images/settings-backends.png" width="380"><br>设置页：Claude / Codex / ZCode / BYOK 后端与 MCP 配置</td><td><img src="docs/images/chat-home.jpg" width="380"><br>聊天首页：启动建议与 composer 快捷选择条</td></tr>
+  <tr><td><img src="docs/images/wizard-install.jpg" width="380"><br>首跑向导：安装本地服务并检测 uv / ae-mcp</td><td><img src="docs/images/wizard-connect-clients.jpg" width="380"><br>首跑向导：连接 AI 客户端并生成 MCP JSON</td></tr>
+  <tr><td><img src="docs/images/wizard-client-checks.jpg" width="380"><br>客户端检查：Node.js、Claude Code 与登录状态</td><td><img src="docs/images/chat-login-hint.jpg" width="380"><br>聊天页：Claude 登录提示与跳转设置</td></tr>
+</table>
+
 ### Tool Surface
 
 | 分类 | Tools |
@@ -193,6 +201,14 @@ Long-running or Dockerized IM-bot frameworks such as OpenClaw and AstrBot may no
 - First-run wizard: detects and installs `uv`, Node, Claude CLI, and ae-mcp; shows commands verbatim before running; opens visible login terminals; no AE restart required after Python-side install.
 - Activity stream and kill switch for stopping all AI operations.
 - Diagnostics for host, token, Python client signal, AE project, ExtendScript ping, plus `uv` / `node` / `claude` detection. External clients can also run `ae_diagnose` for a one-shot chain check.
+
+### Screenshots
+
+<table>
+  <tr><td><img src="docs/images/settings-backends.png" width="380"><br>Settings: Claude / Codex / ZCode / BYOK backends and MCP config</td><td><img src="docs/images/chat-home.jpg" width="380"><br>Chat home: starter suggestions and composer controls</td></tr>
+  <tr><td><img src="docs/images/wizard-install.jpg" width="380"><br>First-run wizard: local service install with uv / ae-mcp checks</td><td><img src="docs/images/wizard-connect-clients.jpg" width="380"><br>First-run wizard: AI client connection and generated MCP JSON</td></tr>
+  <tr><td><img src="docs/images/wizard-client-checks.jpg" width="380"><br>Client checks: Node.js, Claude Code, and login status</td><td><img src="docs/images/chat-login-hint.jpg" width="380"><br>Chat login hint with a direct settings action</td></tr>
+</table>
 
 ### Tool Surface
 
