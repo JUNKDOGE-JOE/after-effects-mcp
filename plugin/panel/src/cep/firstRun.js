@@ -15,3 +15,11 @@ export function markWizardDone(storage) {
     // best-effort persistence
   }
 }
+
+export function clearWizardDone(storage) {
+  try {
+    storage.removeItem(WIZARD_DONE_KEY);
+  } catch (e) {
+    // best-effort persistence
+  }
+}

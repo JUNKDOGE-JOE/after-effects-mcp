@@ -34,12 +34,11 @@ import { cachedByokModels } from '../cep/modelsApi';
 import { costBadge } from '../lib/composerOptions';
 import { anthropicEndpoint, normalizeProviderProfile } from '../lib/providerProfile.js';
 import { useActivity } from '../cep/useActivity';
-import { isWizardDone, markWizardDone } from '../cep/firstRun';
+import { isWizardDone, markWizardDone, clearWizardDone } from '../cep/firstRun';
 import { useWizardWiring } from './wizardWiring';
 import { runDiagnostics } from '../cep/diagnostics';
 import { copyText } from '../lib/clipboard';
 import { copyWizardConfig } from '../lib/wizardCopy.js';
-import { zcodeUnavailableHint } from '../lib/settingsState.js';
 import { createHostController, loadSavedPort, savePort, DEFAULT_PORT, buildMcpConfig, isValidPort } from '../cep/hostBridge';
 import { loadExpertGuidance, saveExpertGuidance } from '../lib/expertGuidance.js';
 import pkg from '../../package.json';
@@ -69,18 +68,6 @@ const T = {
     regenBody: '所有已连接的 AI 客户端会立即失去访问权限，需要重启它们才能重新连接。',
     regenConfirm: '重新生成',
     cancel: '取消',
-    noKeyHint: '先在设置里配置 Anthropic API Key',
-    probingHint: '正在检测 Claude 登录态…',
-    notLoggedInHint: 'Claude 未登录：在终端运行 claude /login，再到设置里重新检测',
-    codexProbingHint: '正在检测 Codex 登录态…',
-    codexNotLoggedInHint: 'Codex 未登录：在终端运行 codex 登录后重新检测',
-    codexRuntimeHint: 'Codex 运行时不可用：请确认 codex CLI 可用后重新检测',
-    openCodeProbingHint: '正在检测 OpenCode 登录态…',
-    openCodeNotLoggedInHint: 'OpenCode 未登录：在终端完成登录后重新检测',
-    zcodeProbingHint: '正在检测 ZCode 运行时…',
-    zcodeNotLoggedInHint: 'ZCode 当前不可用：请打开 ZCode 或完成登录后重新检测',
-    zcodeRuntimeHint: 'ZCode 运行时不可用：请安装 ZCode，确认 Node 可用，或设置 AE_MCP_ZCODE_CLI 后重新检测',
-    noNodeHint: '内嵌对话需要系统 Node 18+',
     pausedHint: '已暂停 — 恢复后才能发送',
     goSettings: '去设置',
   },
@@ -102,18 +89,6 @@ const T = {
     regenBody: 'Every connected AI client loses access immediately and must be restarted to reconnect.',
     regenConfirm: 'Regenerate',
     cancel: 'Cancel',
-    noKeyHint: 'Set your Anthropic API key in Settings first',
-    probingHint: 'Checking Claude login…',
-    notLoggedInHint: 'Not logged in: run claude /login in a terminal, then re-check in Settings',
-    codexProbingHint: 'Checking Codex login…',
-    codexNotLoggedInHint: 'Codex is not logged in: log in with codex, then re-check',
-    codexRuntimeHint: 'Codex runtime unavailable: confirm the codex CLI is available, then re-check',
-    openCodeProbingHint: 'Checking OpenCode login…',
-    openCodeNotLoggedInHint: 'OpenCode is not logged in: sign in with opencode, then re-check',
-    zcodeProbingHint: 'Checking ZCode runtime…',
-    zcodeNotLoggedInHint: 'ZCode is not available: open ZCode or sign in, then re-check',
-    zcodeRuntimeHint: 'ZCode runtime unavailable: install ZCode, confirm Node is available, or set AE_MCP_ZCODE_CLI, then re-check',
-    noNodeHint: 'Embedded chat needs system Node 18+',
     pausedHint: 'Paused — resume to send',
     goSettings: 'Open Settings',
   },
@@ -132,7 +107,6 @@ function writePref(key, value) {
 }
 
 const CODEX_MODELS_CACHE_KEY = 'ae_mcp_codex_models';
-const OPENCODE_MODELS_CACHE_KEY = 'ae_mcp_opencode_models';
 const CODEX_MODELS_CACHE_MS = 24 * 60 * 60 * 1000;
 
 function readCachedCodexModels(storage) {
@@ -151,27 +125,6 @@ function readCachedCodexModels(storage) {
 function writeCachedCodexModels(storage, models) {
   try {
     storage.setItem(CODEX_MODELS_CACHE_KEY, JSON.stringify({ ts: Date.now(), models }));
-  } catch (e) {
-    // best-effort
-  }
-}
-
-function readCachedOpenCodeModels(storage) {
-  try {
-    const raw = storage.getItem(OPENCODE_MODELS_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || !parsed.models) return null;
-    if (Date.now() - Number(parsed.ts || 0) > CODEX_MODELS_CACHE_MS) return null;
-    return parsed.models;
-  } catch (e) {
-    return null;
-  }
-}
-
-function writeCachedOpenCodeModels(storage, models) {
-  try {
-    storage.setItem(OPENCODE_MODELS_CACHE_KEY, JSON.stringify({ ts: Date.now(), models }));
   } catch (e) {
     // best-effort
   }
@@ -284,8 +237,6 @@ function Shell({ cs }) {
   const [probe, setProbe] = React.useState(null);
   const [codexProbe, setCodexProbe] = React.useState(null);
   const [codexModels, setCodexModels] = React.useState(() => readCachedCodexModels(window.localStorage));
-  const [openCodeProbe, setOpenCodeProbe] = React.useState(null);
-  const [openCodeModels, setOpenCodeModels] = React.useState(() => readCachedOpenCodeModels(window.localStorage));
   const [zcodeProbe, setZcodeProbe] = React.useState(null);
   const [chatEntries, setChatEntries] = React.useState([]);
   const [chatStreaming, setChatStreaming] = React.useState(false);
@@ -374,7 +325,6 @@ function Shell({ cs }) {
     codexApiKey: codexCustomProvider ? codexCustomProvider.apiKey : codexApiKey,
     codexBaseUrl: codexCustomProvider ? codexCustomProvider.baseUrl : codexBaseUrl,
   }), [claudeApiProvider, anthropicBaseUrl, codexCustomProvider, codexApiKey, codexBaseUrl]);
-  const hasCodexCustomProvider = Boolean(providerProfile.codexBaseUrl);
   const runtimeRef = React.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: 'subscription', claudeApiProvider: null });
   const extRoot = cs && cs.getSystemPath ? cs.getSystemPath('extension') : '';
   const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
@@ -496,7 +446,6 @@ function Shell({ cs }) {
       codexCustomProvider,
       byokApiModels: null,
       codexCachedModels: codexModels || readCachedCodexModels(window.localStorage),
-      openCodeCachedModels: openCodeModels || readCachedOpenCodeModels(window.localStorage),
     };
     setDescriptor(selectDescriptor(facts));
     const hasProbed = Boolean(claudeApiProvider && claudeApiProvider.probedModels && claudeApiProvider.probedModels.length);
@@ -507,7 +456,7 @@ function Shell({ cs }) {
       }).catch(() => {});
     }
     return () => { alive = false; };
-  }, [effective.backend, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, openCodeModels, apiKey, anthropicBaseUrl]);
+  }, [effective.backend, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, apiKey, anthropicBaseUrl]);
   const activeBackendRef = React.useRef(null);
 
   const runClaudeProbe = React.useCallback(() => {
@@ -549,27 +498,6 @@ function Shell({ cs }) {
     if (backendPref !== 'codex') return undefined;
     return runCodexProbe();
   }, [backendPref, runCodexProbe]);
-
-  const runOpenCodeProbe = React.useCallback(() => {
-    let alive = true;
-    setOpenCodeProbe(null);
-    openCodeBackend.probeAccount().then((result) => {
-      if (!alive) return;
-      setOpenCodeProbe(result);
-      if (result && result.models) {
-        setOpenCodeModels(result.models);
-        writeCachedOpenCodeModels(window.localStorage, result.models);
-      }
-    }).catch((e) => {
-      if (alive) setOpenCodeProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
-    });
-    return () => { alive = false; };
-  }, [openCodeBackend]);
-
-  React.useEffect(() => {
-    if (backendPref !== 'opencode') return undefined;
-    return runOpenCodeProbe();
-  }, [backendPref, runOpenCodeProbe]);
 
   const runZcodeProbe = React.useCallback(() => {
     let alive = true;
@@ -744,18 +672,6 @@ function Shell({ cs }) {
     : probe.nodeOk === false ? { state: 'no-node', detail: probe.detail }
     : probe.loggedIn === false ? { state: 'not-logged-in', detail: probe.detail }
     : { state: 'ready', nodeVersion: probe.nodeVersion };
-  const codexStatus = codexProbe === null ? { state: 'checking' }
-    : hasCodexCustomProvider && codexProbe.runtimeOk !== false ? { state: 'ready', planType: 'Custom API', detail: codexProbe.detail }
-    : hasCodexCustomProvider && codexProbe.runtimeOk === false ? { state: 'runtime-error', detail: codexProbe.detail }
-    : codexProbe.loggedIn === false ? { state: 'not-logged-in', detail: codexProbe.detail }
-    : { state: 'ready', email: codexProbe.email, planType: codexProbe.planType };
-  const openCodeStatus = openCodeProbe === null ? { state: 'checking' }
-    : openCodeProbe.loggedIn === false ? { state: 'not-logged-in', detail: openCodeProbe.detail }
-    : { state: 'ready' };
-  const zcodeStatus = zcodeProbe === null ? { state: 'checking' }
-    : zcodeProbe.runtimeOk === false ? { state: 'runtime-error', provider: zcodeProbe.provider, detail: zcodeProbe.detail }
-    : zcodeProbe.loggedIn === false ? { state: 'not-logged-in', provider: zcodeProbe.provider, detail: zcodeProbe.detail }
-    : { state: 'ready', provider: zcodeProbe.provider };
   const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
 
   if (!wizardDone) {
@@ -770,6 +686,8 @@ function Shell({ cs }) {
         mcpConfig={mcpConfigStr}
         port={status.port}
         expertGuidance={expertGuidance}
+        channels={channels}
+        activeChannel={effective.channel || ''}
         onNext={() => setWizStep((s) => Math.min(3, s + 1))}
         onBack={() => setWizStep((s) => Math.max(1, s - 1))}
         onCopy={(text) => copyWizardConfig(copyText, mcpConfigStr, text)}
@@ -915,6 +833,11 @@ function Shell({ cs }) {
             logLevel={logLevel}
             onLogLevel={(v) => { setLogLevel(v); writePref('ae_mcp_log_level', v); }}
             onExportLogs={exportLogs}
+            onRerunWizard={() => {
+              clearWizardDone(window.localStorage);
+              setWizStep(1);
+              setWizardDone(false);
+            }}
           />
         ) : null}
       </div>

@@ -15,6 +15,19 @@ import { zcodeModelLocked as shouldLockZcodeModel } from '../lib/settingsState';
 import { Icon } from '../components/core/Icon';
 import { loadSectionState, saveSectionState, toggleSection } from '../lib/settingsSections';
 
+const REPO_URL = 'https://github.com/JUNKDOGE-JOE/after-effects-mcp';
+const DOCS_URL = 'https://github.com/JUNKDOGE-JOE/after-effects-mcp#readme';
+
+function openExternal(url) {
+  try {
+    if (globalThis.window && window.cep && window.cep.util && window.cep.util.openURLInDefaultBrowser) {
+      window.cep.util.openURLInDefaultBrowser(url);
+      return;
+    }
+  } catch (e) { /* fall through */ }
+  try { window.open(url, '_blank'); } catch (e) { /* best effort */ }
+}
+
 const S = {
   zh: {
     ai: 'AI 服务',
@@ -37,8 +50,6 @@ const S = {
     claude3pNote: 'Claude-3p 桌面版的凭据无法自动读取；请在 Provider 管理里手动填写一次 Base URL 与 Token。',
     zcodeKeyPlaceholder: '粘贴 provider API Key（存本机）',
     zcodeKeyStored: '已保存到 ~/.ae-mcp/zcode-key，可粘贴新值覆盖',
-    providerManage: 'Provider 管理',
-    apiBaseUrl: 'API Base URL',
     save: '保存',
     modelDefault: '默认模型（打开面板时使用）',
     customModel: '自定义模型 ID',
@@ -51,8 +62,6 @@ const S = {
     regen: '重新生成',
     tokenCap: '重新生成后需重启你的 AI 客户端',
     tokenMissing: '未找到 ~/.ae-mcp/auth-token',
-    autostart: '随 AE 启动',
-    autostartCap: '打开工程时自动启动服务',
     clients: '已连接客户端',
     lastActive: '最后活跃',
     blocked: '屏蔽',
@@ -73,6 +82,7 @@ const S = {
     pending: 'P3 接通',
     docs: '文档',
     github: 'GitHub',
+    rerunWizard: '重新运行向导',
   },
   en: {
     ai: 'AI service',
@@ -95,8 +105,6 @@ const S = {
     claude3pNote: 'Claude-3p desktop credentials cannot be read automatically; fill the base URL and token once in Provider Manager.',
     zcodeKeyPlaceholder: 'Paste the provider API key (stored locally)',
     zcodeKeyStored: 'Saved to ~/.ae-mcp/zcode-key; paste a new value to overwrite',
-    providerManage: 'Provider manager',
-    apiBaseUrl: 'API Base URL',
     save: 'Save',
     modelDefault: 'Default model (used when the panel opens)',
     customModel: 'Custom model ID',
@@ -109,8 +117,6 @@ const S = {
     regen: 'Regenerate',
     tokenCap: 'Restart your AI client after regenerating.',
     tokenMissing: '~/.ae-mcp/auth-token not found',
-    autostart: 'Launch with AE',
-    autostartCap: 'Start the service when a project opens',
     clients: 'Connected clients',
     lastActive: 'Last active',
     blocked: 'Block',
@@ -131,6 +137,7 @@ const S = {
     pending: 'P3',
     docs: 'Docs',
     github: 'GitHub',
+    rerunWizard: 'Re-run setup wizard',
   },
 };
 
@@ -286,13 +293,13 @@ export function SettingsScreen({
   logLevel = 'info',
   onLogLevel,
   onExportLogs,
+  onRerunWizard,
 }) {
   const t = S[lang] || S.zh;
   const zcodeModelLocked = shouldLockZcodeModel({ backend, modelSwitchable });
   const [customModelDraft, setCustomModelDraft] = React.useState(customModel);
   const [draftPort, setDraftPort] = React.useState(String(port));
   const [tokenRaw, setTokenRaw] = React.useState('');
-  const [autostart, setAutostart] = React.useState(true);
   const [copied, setCopied] = React.useState('');
   const [sections, setSections] = React.useState(() => loadSectionState(window.localStorage));
   const onToggleSection = (id) => setSections((s) => {
@@ -404,9 +411,6 @@ export function SettingsScreen({
             <Button variant="secondary" icon="rotate-cw" onClick={regenerate}>{t.regen}</Button>
           </div>
         </Field>
-        <Field layout="row" label={t.autostart} caption={t.autostartCap}>
-          <Switch checked={autostart} onChange={setAutostart} />
-        </Field>
         <Field label={t.mcp} caption={copied === 'mcp' ? t.copied : null}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <pre style={{ margin: 0, maxHeight: 160, overflow: 'auto', padding: 8, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--bg-well)', color: 'var(--text-secondary)', font: '400 10px/1.4 var(--font-mono)' }}>{mcpConfig}</pre>
@@ -475,8 +479,10 @@ export function SettingsScreen({
         <VersionRow label={t.verHost} value={hostVersion} badge={hostVersion === '-' ? <Badge status="neutral">{t.pending}</Badge> : null} />
         <VersionRow label={t.verPy} value={pythonVersion} badge={pythonVersion === '-' ? <Badge status="neutral">{t.pending}</Badge> : null} />
         <div style={{ display: 'flex', gap: 6 }}>
-          <Button variant="ghost" size="sm" icon="book-open">{t.docs}</Button>
-          <Button variant="ghost" size="sm" icon="github">{t.github}</Button>
+          <Button variant="ghost" size="sm" icon="book-open" onClick={() => openExternal(DOCS_URL)}>{t.docs}</Button>
+          <Button variant="ghost" size="sm" icon="github" onClick={() => openExternal(REPO_URL)}>{t.github}</Button>
+          <span style={{ flex: 1 }} />
+          <Button variant="ghost" size="sm" icon="rotate-cw" onClick={onRerunWizard}>{t.rerunWizard}</Button>
         </div>
       </Section>
     </div>

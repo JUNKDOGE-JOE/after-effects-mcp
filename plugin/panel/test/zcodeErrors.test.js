@@ -23,3 +23,16 @@ test('en and unknown messages pass through unchanged', () => {
   assert.equal(localizeZcodeError('some other error', 'zh'), 'some other error');
   assert.equal(localizeZcodeError('', 'zh'), '');
 });
+
+test('zh captures provider ids containing dots without truncation', () => {
+  const zh = localizeZcodeError('Model provider is missing an API key: mediastorm_glm/glm-5.2.', 'zh');
+  assert.match(zh, /「mediastorm_glm\/glm-5\.2」/);
+});
+
+test('localizeZcodeError is idempotent: re-localizing does not duplicate the guidance header', () => {
+  const raw = 'Model provider is missing an API key: builtin:zai-start-plan.';
+  const once = localizeZcodeError(raw, 'zh');
+  const twice = localizeZcodeError(once, 'zh');
+  assert.equal(twice, once);
+  assert.equal(localizeZcodeError(localizeZcodeError('Provider authentication failed.', 'zh'), 'zh'), localizeZcodeError('Provider authentication failed.', 'zh'));
+});

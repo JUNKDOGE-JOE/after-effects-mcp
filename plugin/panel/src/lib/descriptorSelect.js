@@ -7,7 +7,6 @@ import {
   mergeByokModels,
   codexStaticDescriptor,
   codexDescriptorFromModels,
-  openCodeDescriptorFromModels,
   descriptorWithCustomModel,
   descriptorFromProbedModels,
 } from './backendCapabilities.js';
@@ -27,7 +26,6 @@ export function selectDescriptor({
   codexCustomProvider = null,
   byokApiModels = null,
   codexCachedModels = null,
-  openCodeCachedModels = null,
 }) {
   const claudeApi = isClaudeApiBackend(effectiveBackend);
   const customId = (claudeApi || backendPref === 'codex') ? String(customModel || '').trim() : '';
@@ -48,9 +46,6 @@ export function selectDescriptor({
       return descriptorWithCustomModel(codexDescriptorFromModels({ models: codexCachedModels }), customId);
     }
     return baseDescriptor;
-  }
-  if (backendPref === 'opencode' && openCodeCachedModels) {
-    return openCodeDescriptorFromModels(openCodeCachedModels);
   }
   return baseDescriptor;
 }
