@@ -1010,3 +1010,14 @@ test('stored panel zcode key flows into spawn env via the apiKeyEnv chain', asyn
   assert.equal(spawned.calls[0].options.env.ZCODE_API_KEY, 'sk-panel');
   assert.equal(spawned.calls[0].options.env.MEDIASTORM_GLM_API_KEY, 'sk-panel');
 });
+
+test('zh lang backends localize turn.failed missing-key errors (spec B1)', async () => {
+  const { backend, events, spawned } = makeBackend({ lang: 'zh' });
+  const { proc, pending } = await startTurn(backend, spawned, 'hi');
+  pushEvent(proc, 'turn.failed', { error: { message: 'Model provider is missing an API key: builtin:zai-start-plan' } });
+  await pending;
+  await flush();
+  const err = events.find((e) => e.type === 'error');
+  assert.match(err.message, /缺少 API Key/);
+  assert.match(err.message, /builtin:zai-start-plan/);
+});
