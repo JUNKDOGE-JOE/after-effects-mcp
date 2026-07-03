@@ -84,10 +84,10 @@
       var I = Array.isArray;
       var J = Object.prototype.hasOwnProperty;
       var K = { current: null };
-      var L2 = { key: true, ref: true, __self: true, __source: true };
+      var L3 = { key: true, ref: true, __self: true, __source: true };
       function M(a, b, e) {
         var d, c = {}, k = null, h = null;
-        if (null != b) for (d in void 0 !== b.ref && (h = b.ref), void 0 !== b.key && (k = "" + b.key), b) J.call(b, d) && !L2.hasOwnProperty(d) && (c[d] = b[d]);
+        if (null != b) for (d in void 0 !== b.ref && (h = b.ref), void 0 !== b.key && (k = "" + b.key), b) J.call(b, d) && !L3.hasOwnProperty(d) && (c[d] = b[d]);
         var g = arguments.length - 2;
         if (1 === g) c.children = e;
         else if (1 < g) {
@@ -205,7 +205,7 @@
           void 0 !== b.ref && (k = b.ref, h = K.current);
           void 0 !== b.key && (c = "" + b.key);
           if (a.type && a.type.defaultProps) var g = a.type.defaultProps;
-          for (f in b) J.call(b, f) && !L2.hasOwnProperty(f) && (d[f] = void 0 === b[f] && void 0 !== g ? g[f] : b[f]);
+          for (f in b) J.call(b, f) && !L3.hasOwnProperty(f) && (d[f] = void 0 === b[f] && void 0 !== g ? g[f] : b[f]);
         }
         var f = arguments.length - 2;
         if (1 === f) d.children = e;
@@ -389,7 +389,7 @@
       }
       function J(a, b) {
         A2 = false;
-        B && (B = false, E(L2), L2 = -1);
+        B && (B = false, E(L3), L3 = -1);
         z = true;
         var c = y;
         try {
@@ -419,7 +419,7 @@
       }
       var N = false;
       var O = null;
-      var L2 = -1;
+      var L3 = -1;
       var P = 5;
       var Q = -1;
       function M() {
@@ -457,7 +457,7 @@
         N || (N = true, S2());
       }
       function K(a, b) {
-        L2 = D2(function() {
+        L3 = D2(function() {
           a(exports.unstable_now());
         }, b);
       }
@@ -544,7 +544,7 @@
         }
         e = c + e;
         a = { id: u++, callback: b, priorityLevel: a, startTime: c, expirationTime: e, sortIndex: -1 };
-        c > d ? (a.sortIndex = c, f(t, a), null === h(r) && a === h(t) && (B ? (E(L2), L2 = -1) : B = true, K(H, c - d))) : (a.sortIndex = e, f(r, a), A2 || z || (A2 = true, I(J)));
+        c > d ? (a.sortIndex = c, f(t, a), null === h(r) && a === h(t) && (B ? (E(L3), L3 = -1) : B = true, K(H, c - d))) : (a.sortIndex = e, f(r, a), A2 || z || (A2 = true, I(J)));
         return a;
       };
       exports.unstable_shouldYield = M;
@@ -3495,7 +3495,7 @@
       function Bh(a) {
         vh.current === a && (E(uh), E(vh));
       }
-      var L2 = Uf(0);
+      var L3 = Uf(0);
       function Ch(a) {
         for (var b = a; null !== b; ) {
           if (13 === b.tag) {
@@ -4285,11 +4285,11 @@
         return { baseLanes: a, cachePool: null, transitions: null };
       }
       function oj(a, b, c) {
-        var d = b.pendingProps, e = L2.current, f = false, g = 0 !== (b.flags & 128), h;
+        var d = b.pendingProps, e = L3.current, f = false, g = 0 !== (b.flags & 128), h;
         (h = g) || (h = null !== a && null === a.memoizedState ? false : 0 !== (e & 2));
         if (h) f = true, b.flags &= -129;
         else if (null === a || null !== a.memoizedState) e |= 1;
-        G(L2, e & 1);
+        G(L3, e & 1);
         if (null === a) {
           Eg(b);
           a = b.memoizedState;
@@ -4443,7 +4443,7 @@
       function xj(a, b, c) {
         var d = b.pendingProps, e = d.revealOrder, f = d.tail;
         Xi(a, b, d.children, c);
-        d = L2.current;
+        d = L3.current;
         if (0 !== (d & 2)) d = d & 1 | 2, b.flags |= 128;
         else {
           if (null !== a && 0 !== (a.flags & 128)) a: for (a = b.child; null !== a; ) {
@@ -4464,7 +4464,7 @@
           }
           d &= 1;
         }
-        G(L2, d);
+        G(L3, d);
         if (0 === (b.mode & 1)) b.memoizedState = null;
         else switch (e) {
           case "forwards":
@@ -4538,13 +4538,13 @@
           case 13:
             d = b.memoizedState;
             if (null !== d) {
-              if (null !== d.dehydrated) return G(L2, L2.current & 1), b.flags |= 128, null;
+              if (null !== d.dehydrated) return G(L3, L3.current & 1), b.flags |= 128, null;
               if (0 !== (c & b.child.childLanes)) return oj(a, b, c);
-              G(L2, L2.current & 1);
+              G(L3, L3.current & 1);
               a = Zi(a, b, c);
               return null !== a ? a.sibling : null;
             }
-            G(L2, L2.current & 1);
+            G(L3, L3.current & 1);
             break;
           case 19:
             d = 0 !== (c & b.childLanes);
@@ -4554,7 +4554,7 @@
             }
             e = b.memoizedState;
             null !== e && (e.rendering = null, e.tail = null, e.lastEffect = null);
-            G(L2, L2.current);
+            G(L3, L3.current);
             if (d) break;
             else return null;
           case 22:
@@ -4916,7 +4916,7 @@
             S2(b);
             return null;
           case 13:
-            E(L2);
+            E(L3);
             d = b.memoizedState;
             if (null === a || null !== a.memoizedState && null !== a.memoizedState.dehydrated) {
               if (I && null !== yg && 0 !== (b.mode & 1) && 0 === (b.flags & 128)) Hg(), Ig(), b.flags |= 98560, f = false;
@@ -4935,7 +4935,7 @@
             }
             if (0 !== (b.flags & 128)) return b.lanes = c, b;
             d = null !== d;
-            d !== (null !== a && null !== a.memoizedState) && d && (b.child.flags |= 8192, 0 !== (b.mode & 1) && (null === a || 0 !== (L2.current & 1) ? 0 === T2 && (T2 = 3) : tj()));
+            d !== (null !== a && null !== a.memoizedState) && d && (b.child.flags |= 8192, 0 !== (b.mode & 1) && (null === a || 0 !== (L3.current & 1) ? 0 === T2 && (T2 = 3) : tj()));
             null !== b.updateQueue && (b.flags |= 4);
             S2(b);
             return null;
@@ -4946,7 +4946,7 @@
           case 17:
             return Zf(b.type) && $f(), S2(b), null;
           case 19:
-            E(L2);
+            E(L3);
             f = b.memoizedState;
             if (null === f) return S2(b), null;
             d = 0 !== (b.flags & 128);
@@ -4963,7 +4963,7 @@
                   b.subtreeFlags = 0;
                   d = c;
                   for (c = b.child; null !== c; ) f = c, a = d, f.flags &= 14680066, g = f.alternate, null === g ? (f.childLanes = 0, f.lanes = a, f.child = null, f.subtreeFlags = 0, f.memoizedProps = null, f.memoizedState = null, f.updateQueue = null, f.dependencies = null, f.stateNode = null) : (f.childLanes = g.childLanes, f.lanes = g.lanes, f.child = g.child, f.subtreeFlags = 0, f.deletions = null, f.memoizedProps = g.memoizedProps, f.memoizedState = g.memoizedState, f.updateQueue = g.updateQueue, f.type = g.type, a = g.dependencies, f.dependencies = null === a ? null : { lanes: a.lanes, firstContext: a.firstContext }), c = c.sibling;
-                  G(L2, L2.current & 1 | 2);
+                  G(L3, L3.current & 1 | 2);
                   return b.child;
                 }
                 a = a.sibling;
@@ -4976,7 +4976,7 @@
               } else 2 * B() - f.renderingStartTime > Gj && 1073741824 !== c && (b.flags |= 128, d = true, Dj(f, false), b.lanes = 4194304);
               f.isBackwards ? (g.sibling = b.child, b.child = g) : (c = f.last, null !== c ? c.sibling = g : b.child = g, f.last = g);
             }
-            if (null !== f.tail) return b = f.tail, f.rendering = b, f.tail = b.sibling, f.renderingStartTime = B(), b.sibling = null, c = L2.current, G(L2, d ? c & 1 | 2 : c & 1), b;
+            if (null !== f.tail) return b = f.tail, f.rendering = b, f.tail = b.sibling, f.renderingStartTime = B(), b.sibling = null, c = L3.current, G(L3, d ? c & 1 | 2 : c & 1), b;
             S2(b);
             return null;
           case 22:
@@ -4999,7 +4999,7 @@
           case 5:
             return Bh(b), null;
           case 13:
-            E(L2);
+            E(L3);
             a = b.memoizedState;
             if (null !== a && null !== a.dehydrated) {
               if (null === b.alternate) throw Error(p(340));
@@ -5008,7 +5008,7 @@
             a = b.flags;
             return a & 65536 ? (b.flags = a & -65537 | 128, b) : null;
           case 19:
-            return E(L2), null;
+            return E(L3), null;
           case 4:
             return zh(), null;
           case 10:
@@ -6049,10 +6049,10 @@
               zh();
               break;
             case 13:
-              E(L2);
+              E(L3);
               break;
             case 19:
-              E(L2);
+              E(L3);
               break;
             case 10:
               ah(d.type._context);
@@ -8261,7 +8261,7 @@
   }
 
   // src/screens/SettingsScreen.jsx
-  var import_react20 = __toESM(require_react(), 1);
+  var import_react19 = __toESM(require_react(), 1);
 
   // package.json
   var package_default = {
@@ -8434,29 +8434,65 @@
     );
   }
 
-  // src/components/forms/ApiProfileFields.jsx
-  var import_react17 = __toESM(require_react(), 1);
-
-  // src/components/forms/Field.jsx
+  // src/components/settings/ChannelCard.jsx
   var import_react15 = __toESM(require_react(), 1);
+
+  // src/lib/channelCard.js
+  function channelDot(probe) {
+    if (!probe || probe.checking) return "neutral";
+    return probe.ok ? "ok" : "warn";
+  }
+  function channelTexts(probe, lang = "zh") {
+    const pick = (obj) => obj ? obj[lang] || obj.zh || "" : "";
+    return {
+      source: pick(probe && probe.source),
+      detail: probe && probe.detail || "",
+      fixHint: probe && !probe.ok && !probe.checking ? pick(probe.fixHint) : ""
+    };
+  }
+  var LOCK_TEXTS = {
+    locked: { zh: "\u5DF2\u9501\u5B9A", en: "Locked" },
+    unlocked: { zh: "\u9501\u5B9A", en: "Lock" }
+  };
+  function lockLabel(channel, lockedChannel, lang = "zh") {
+    const texts = channel === lockedChannel ? LOCK_TEXTS.locked : LOCK_TEXTS.unlocked;
+    return texts[lang] || texts.zh;
+  }
+
+  // src/components/settings/ChannelCard.jsx
   var import_jsx_runtime13 = __toESM(require_jsx_runtime(), 1);
-  function Field({ label, hint, caption, layout = "stack", children, style }) {
-    if (layout === "row") {
-      return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: "var(--hit-min)", ...style }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { font: `var(--weight-regular) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: label }),
-          caption ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)", marginTop: 2 }, children: caption }) : null
-        ] }),
-        children
-      ] });
-    }
-    return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-1)", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "var(--space-2)" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("label", { style: { font: `var(--weight-medium) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-secondary)" }, children: label }),
-        hint ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)" }, children: hint }) : null
-      ] }),
-      children,
-      caption ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-tertiary)" }, children: caption }) : null
+  var DOT_COLOR = { ok: "var(--ok)", warn: "var(--warn)", neutral: "var(--text-tertiary)" };
+  function ChannelDot({ token }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { width: 8, height: 8, flex: "none", borderRadius: "50%", background: DOT_COLOR[token] || DOT_COLOR.neutral } });
+  }
+  function ChannelCard({
+    lang = "zh",
+    channels = [],
+    activeChannel = "",
+    lockedChannel = "",
+    onLockChannel,
+    onRecheck,
+    recheckLabel,
+    recheckDisabled = false,
+    readOnly = false,
+    renderChannelBody
+  }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+      channels.map((probe) => {
+        const texts = channelTexts(probe, lang);
+        const isActive = probe.channel === activeChannel;
+        return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px", border: `1px solid ${isActive ? "var(--border-strong)" : "var(--border-subtle)"}`, borderRadius: "var(--radius-md)", background: "var(--bg-well)" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(ChannelDot, { token: channelDot(probe) }),
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Badge, { status: channelDot(probe), children: texts.source }),
+            texts.detail ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { flex: 1, minWidth: 0, font: "400 10px/1.35 var(--font-mono)", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: texts.detail }) : /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { flex: 1 } }),
+            !readOnly && onLockChannel ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => onLockChannel(probe.channel === lockedChannel ? "" : probe.channel), children: lockLabel(probe.channel, lockedChannel, lang) }) : null
+          ] }),
+          texts.fixHint ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { font: "400 10px/1.5 var(--font-ui)", color: "var(--text-tertiary)", whiteSpace: "pre-wrap" }, children: texts.fixHint }) : null,
+          !readOnly && renderChannelBody ? renderChannelBody(probe.channel) : null
+        ] }, probe.channel);
+      }),
+      !readOnly && onRecheck ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { display: "flex", justifyContent: "flex-end" }, children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: recheckDisabled, onClick: onRecheck, children: recheckLabel }) }) : null
     ] });
   }
 
@@ -8535,43 +8571,13 @@
     );
   }
 
-  // src/components/forms/ApiProfileFields.jsx
-  var import_jsx_runtime15 = __toESM(require_jsx_runtime(), 1);
-  function ApiProfileFields({ baseUrl, apiKey }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(import_react17.default.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Field, { label: baseUrl.label, caption: baseUrl.caption, children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
-        Input,
-        {
-          mono: true,
-          value: baseUrl.value,
-          onChange: baseUrl.onChange,
-          placeholder: baseUrl.placeholder
-        }
-      ) }),
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Field, { label: apiKey.label, caption: apiKey.caption, children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
-          Input,
-          {
-            secret: true,
-            value: apiKey.value,
-            onChange: apiKey.onChange,
-            placeholder: apiKey.placeholder,
-            style: { flex: 1 }
-          }
-        ),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Button, { variant: "primary", disabled: apiKey.busy || apiKey.saveDisabled, onClick: apiKey.onSave, children: apiKey.saveLabel }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Button, { variant: "secondary", disabled: apiKey.busy, onClick: apiKey.onClear, children: apiKey.clearLabel })
-      ] }) })
-    ] });
-  }
-
   // src/components/forms/Select.jsx
-  var import_react18 = __toESM(require_react(), 1);
-  var import_jsx_runtime16 = __toESM(require_jsx_runtime(), 1);
+  var import_react17 = __toESM(require_react(), 1);
+  var import_jsx_runtime15 = __toESM(require_jsx_runtime(), 1);
   function Select({ options = [], value, onChange, disabled = false, full = true, size = "md", style }) {
-    const [focus, setFocus] = import_react18.default.useState(false);
+    const [focus, setFocus] = import_react17.default.useState(false);
     const h = size === "lg" ? 28 : 24;
-    return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
       "span",
       {
         style: {
@@ -8588,7 +8594,7 @@
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
             "select",
             {
               value,
@@ -8610,10 +8616,10 @@
                 font: `var(--weight-regular) var(--text-body)/1 var(--font-ui)`,
                 cursor: disabled ? "default" : "pointer"
               },
-              children: options.map((opt) => /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("option", { value: opt.value, style: { background: "var(--bg-overlay)", color: "var(--text-primary)" }, children: opt.label }, opt.value))
+              children: options.map((opt) => /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("option", { value: opt.value, style: { background: "var(--bg-overlay)", color: "var(--text-primary)" }, children: opt.label }, opt.value))
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
             Icon2,
             {
               name: "chevron-down",
@@ -8627,79 +8633,27 @@
     );
   }
 
-  // src/components/shell/Toast.jsx
-  var import_react19 = __toESM(require_react(), 1);
-  var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
-  var TOAST_ICONS = {
-    ok: { icon: "check", color: "var(--ok)" },
-    error: { icon: "circle-alert", color: "var(--error)" },
-    warn: { icon: "triangle-alert", color: "var(--warn)" },
-    info: { icon: "info", color: "var(--text-secondary)" }
-  };
-  function Toast({ type = "info", message, actionLabel, onAction, onClose, style }) {
-    const t = TOAST_ICONS[type] || TOAST_ICONS.info;
-    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
-      "div",
-      {
-        role: "status",
-        style: {
-          display: "flex",
-          alignItems: "center",
-          gap: "var(--space-2)",
-          maxWidth: "100%",
-          padding: "5px 6px 5px 10px",
-          background: "var(--bg-overlay)",
-          border: "1px solid var(--border-strong)",
-          borderRadius: "var(--radius-md)",
-          boxShadow: "var(--shadow-toast)",
-          animation: "ds-fade-up var(--dur-slow) var(--ease-out)",
-          ...style
-        },
-        children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Icon2, { name: t.icon, size: 13, strokeWidth: 2.25, color: t.color }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
-            "span",
-            {
-              style: {
-                flex: 1,
-                minWidth: 0,
-                font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`,
-                color: "var(--text-primary)"
-              },
-              children: message
-            }
-          ),
-          actionLabel ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(ToastAction, { label: actionLabel, onClick: onAction }) : null,
-          onClose ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(IconButton, { icon: "x", title: "\u5173\u95ED Dismiss", onClick: onClose, style: { width: 20, height: 20 } }) : null
-        ]
-      }
-    );
-  }
-  function ToastAction({ label, onClick }) {
-    const [hover, setHover] = import_react19.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
-      "button",
-      {
-        type: "button",
-        className: "ds-focusable",
-        onClick,
-        onMouseEnter: () => setHover(true),
-        onMouseLeave: () => setHover(false),
-        style: {
-          flex: "none",
-          height: 20,
-          padding: "0 6px",
-          background: hover ? "var(--bg-active)" : "var(--bg-hover)",
-          border: "1px solid var(--border-strong)",
-          borderRadius: "var(--radius-sm)",
-          color: "var(--text-primary)",
-          font: `var(--weight-medium) var(--text-caption)/1 var(--font-ui)`,
-          cursor: "pointer",
-          whiteSpace: "nowrap"
-        },
-        children: label
-      }
-    );
+  // src/components/forms/Field.jsx
+  var import_react18 = __toESM(require_react(), 1);
+  var import_jsx_runtime16 = __toESM(require_jsx_runtime(), 1);
+  function Field({ label, hint, caption, layout = "stack", children, style }) {
+    if (layout === "row") {
+      return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: "var(--hit-min)", ...style }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { style: { font: `var(--weight-regular) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: label }),
+          caption ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)", marginTop: 2 }, children: caption }) : null
+        ] }),
+        children
+      ] });
+    }
+    return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-1)", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "var(--space-2)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("label", { style: { font: `var(--weight-medium) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-secondary)" }, children: label }),
+        hint ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)" }, children: hint }) : null
+      ] }),
+      children,
+      caption ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-tertiary)" }, children: caption }) : null
+    ] });
   }
 
   // src/cep/externalClients.js
@@ -8836,20 +8790,54 @@
   function zcodeModelLocked({ backend, modelSwitchable }) {
     return backend === "zcode" && modelSwitchable === false;
   }
-  function zcodeRuntimeBadge(zcodeStatus, t) {
-    const state = zcodeStatus && zcodeStatus.state || "checking";
-    if (state === "ready") return { status: "ok", text: t.zcodeReady };
-    if (state === "not-logged-in") return { status: "warn", text: t.zcodeNotLoggedIn };
-    if (state === "runtime-error") return { status: "error", text: t.zcodeRuntimeError };
-    return { status: "neutral", text: t.zcodeChecking };
+
+  // src/lib/settingsSections.js
+  var KEY2 = "ae_mcp_settings_sections";
+  var SECTION_IDS = ["ai", "conn", "externalClients", "sec", "gen", "about"];
+  function defaultSectionState() {
+    return { ai: true, conn: false, externalClients: false, sec: false, gen: false, about: false };
   }
-  function zcodeUnavailableHint(zcodeStatus, fallback) {
-    const detail = zcodeStatus && zcodeStatus.detail ? String(zcodeStatus.detail).trim() : "";
-    return detail || fallback;
+  function loadSectionState(storage) {
+    try {
+      const raw = storage.getItem(KEY2);
+      if (!raw) return defaultSectionState();
+      const parsed = JSON.parse(raw);
+      const state = defaultSectionState();
+      for (const id of SECTION_IDS) {
+        if (typeof parsed[id] === "boolean") state[id] = parsed[id];
+      }
+      return state;
+    } catch (e) {
+      return defaultSectionState();
+    }
+  }
+  function saveSectionState(storage, state) {
+    try {
+      storage.setItem(KEY2, JSON.stringify(state));
+    } catch (e) {
+    }
+  }
+  function toggleSection(state, id) {
+    return { ...state, [id]: !state[id] };
   }
 
   // src/screens/SettingsScreen.jsx
-  var import_jsx_runtime18 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
+  var REPO_URL = "https://github.com/JUNKDOGE-JOE/after-effects-mcp";
+  var DOCS_URL = "https://github.com/JUNKDOGE-JOE/after-effects-mcp#readme";
+  function openExternal(url) {
+    try {
+      if (globalThis.window && window.cep && window.cep.util && window.cep.util.openURLInDefaultBrowser) {
+        window.cep.util.openURLInDefaultBrowser(url);
+        return;
+      }
+    } catch (e) {
+    }
+    try {
+      window.open(url, "_blank");
+    } catch (e) {
+    }
+  }
   var S = {
     zh: {
       ai: "AI \u670D\u52A1",
@@ -8864,55 +8852,18 @@
       about: "\u5173\u4E8E",
       backend: "\u540E\u7AEF",
       backendSub: "Claude",
-      backendByok: "BYOK",
       backendCodex: "Codex",
       backendZcode: "ZCode",
-      backendOpenCode: "OpenCode",
-      claudeReady: "\u5DF2\u767B\u5F55 \u2713",
-      claudeNotLoggedIn: "\u672A\u767B\u5F55",
-      claudeChecking: "\u68C0\u6D4B\u4E2D\u2026",
-      claudeNoNode: "\u9700\u8981 Node 18+",
-      claudeLoginCap: "\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login \u5B8C\u6210\u767B\u5F55\uFF0C\u7136\u540E\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D",
-      recheckClaude: "\u91CD\u65B0\u68C0\u6D4B",
-      codexSub: "Codex",
-      codexReady: "\u5DF2\u767B\u5F55 \u2713",
-      codexCustomReady: "Custom API \u2713",
-      codexNotLoggedIn: "\u672A\u767B\u5F55 codex",
-      codexRuntimeError: "\u8FD0\u884C\u65F6\u4E0D\u53EF\u7528",
-      codexChecking: "\u68C0\u6D4B\u4E2D\u2026",
-      codexLoginCap: "\u5728\u7EC8\u7AEF\u5B8C\u6210 codex \u767B\u5F55\uFF0C\u7136\u540E\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D",
-      recheckCodex: "\u91CD\u65B0\u68C0\u6D4B",
-      zcodeSub: "ZCode",
-      zcodeReady: "\u8FD0\u884C\u65F6\u53EF\u7528 \u2713",
-      zcodeNotLoggedIn: "ZCode \u4E0D\u53EF\u7528",
-      zcodeRuntimeError: "\u8FD0\u884C\u65F6\u4E0D\u53EF\u7528",
-      zcodeChecking: "\u68C0\u6D4B\u4E2D\u2026",
-      zcodeLoginCap: "\u6253\u5F00 ZCode \u5E94\u7528\uFF0C\u6216\u786E\u8BA4 ZCode CLI/Node \u53EF\u7528\uFF0C\u7136\u540E\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D",
-      recheckZcode: "\u91CD\u65B0\u68C0\u6D4B",
-      openCodeSub: "OpenCode",
-      openCodeReady: "\u5DF2\u767B\u5F55 \u2713",
-      openCodeNotLoggedIn: "\u672A\u767B\u5F55 OpenCode",
-      openCodeChecking: "\u68C0\u6D4B\u4E2D\u2026",
-      openCodeLoginCap: "\u5728\u7EC8\u7AEF\u5B8C\u6210 opencode \u767B\u5F55\uFF0C\u7136\u540E\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D",
-      recheckOpenCode: "\u91CD\u65B0\u68C0\u6D4B",
-      apiKey: "API Key",
-      apiKeyCap: "\u4EC5\u4FDD\u5B58\u5728\u672C\u673A\uFF0C\u4E0D\u4F1A\u4E0A\u4F20",
-      apiBaseUrl: "API Base URL",
-      anthropicBaseUrlCap: "\u7559\u7A7A\u4F7F\u7528\u5B98\u65B9 Anthropic API",
-      codexBaseUrlCap: "\u7559\u7A7A\u4F7F\u7528\u5B98\u65B9 Codex \u767B\u5F55\u6001\uFF1B\u586B\u5199\u540E\u4F7F\u7528\u81EA\u5B9A\u4E49 OpenAI-compatible provider",
-      codexApiKeyCap: "\u4EC5\u7528\u4E8E\u81EA\u5B9A\u4E49 Codex provider\uFF0C\u4FDD\u5B58\u5728\u672C\u673A",
+      recheck: "\u91CD\u65B0\u68C0\u6D4B",
+      providerNone: "\uFF08\u672A\u9009\u62E9 provider\uFF09",
+      importClaudeSettings: "\u4ECE ~/.claude/settings.json \u5BFC\u5165",
+      claude3pNote: "Claude-3p \u684C\u9762\u7248\u7684\u51ED\u636E\u65E0\u6CD5\u81EA\u52A8\u8BFB\u53D6\uFF1B\u8BF7\u5728 Provider \u7BA1\u7406\u91CC\u624B\u52A8\u586B\u5199\u4E00\u6B21 Base URL \u4E0E Token\u3002",
+      zcodeKeyPlaceholder: "\u7C98\u8D34 provider API Key\uFF08\u5B58\u672C\u673A\uFF09",
+      zcodeKeyStored: "\u5DF2\u4FDD\u5B58\u5230 ~/.ae-mcp/zcode-key\uFF0C\u53EF\u7C98\u8D34\u65B0\u503C\u8986\u76D6",
       save: "\u4FDD\u5B58",
-      saveVerify: "\u4FDD\u5B58\u5E76\u9A8C\u8BC1",
-      validating: "\u6B63\u5728\u9A8C\u8BC1\u2026",
-      saved: "API Key \u5DF2\u4FDD\u5B58\u5E76\u9A8C\u8BC1",
-      savedLocal: "\u5DF2\u4FDD\u5B58\u5230\u672C\u673A",
-      invalidKey: "\u65E0\u6548 key",
-      verifyFailed: "\u9A8C\u8BC1\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5",
-      clear: "\u6E05\u9664",
-      cleared: "API Key \u5DF2\u6E05\u9664",
       modelDefault: "\u9ED8\u8BA4\u6A21\u578B\uFF08\u6253\u5F00\u9762\u677F\u65F6\u4F7F\u7528\uFF09",
       customModel: "\u81EA\u5B9A\u4E49\u6A21\u578B ID",
-      customModelCap: "\u53EF\u9009\uFF1B\u586B\u5199\u540E\u4F18\u5148\u7528\u4E8E BYOK/Codex",
+      customModelCap: "\u53EF\u9009\uFF1B\u586B\u5199\u540E\u4F18\u5148\u7528\u4E8E Codex",
       zcodeModelManaged: "\u7531 ZCode \u5F53\u524D\u4F1A\u8BDD\u7BA1\u7406",
       port: "\u7AEF\u53E3",
       portHint: "\u9ED8\u8BA4 11488",
@@ -8921,8 +8872,6 @@
       regen: "\u91CD\u65B0\u751F\u6210",
       tokenCap: "\u91CD\u65B0\u751F\u6210\u540E\u9700\u91CD\u542F\u4F60\u7684 AI \u5BA2\u6237\u7AEF",
       tokenMissing: "\u672A\u627E\u5230 ~/.ae-mcp/auth-token",
-      autostart: "\u968F AE \u542F\u52A8",
-      autostartCap: "\u6253\u5F00\u5DE5\u7A0B\u65F6\u81EA\u52A8\u542F\u52A8\u670D\u52A1",
       clients: "\u5DF2\u8FDE\u63A5\u5BA2\u6237\u7AEF",
       lastActive: "\u6700\u540E\u6D3B\u8DC3",
       blocked: "\u5C4F\u853D",
@@ -8942,7 +8891,8 @@
       verPy: "Python \u670D\u52A1",
       pending: "P3 \u63A5\u901A",
       docs: "\u6587\u6863",
-      github: "GitHub"
+      github: "GitHub",
+      rerunWizard: "\u91CD\u65B0\u8FD0\u884C\u5411\u5BFC"
     },
     en: {
       ai: "AI service",
@@ -8957,55 +8907,18 @@
       about: "About",
       backend: "Backend",
       backendSub: "Claude",
-      backendByok: "BYOK",
       backendCodex: "Codex",
       backendZcode: "ZCode",
-      backendOpenCode: "OpenCode",
-      claudeReady: "Logged in \u2713",
-      claudeNotLoggedIn: "Not logged in",
-      claudeChecking: "Checking\u2026",
-      claudeNoNode: "Needs Node 18+",
-      claudeLoginCap: "Run claude /login in a terminal, then click Re-check",
-      recheckClaude: "Re-check",
-      codexSub: "Codex",
-      codexReady: "Logged in \u2713",
-      codexCustomReady: "Custom API \u2713",
-      codexNotLoggedIn: "Not logged in to codex",
-      codexRuntimeError: "Runtime unavailable",
-      codexChecking: "Checking\u2026",
-      codexLoginCap: "Sign in with codex in a terminal, then click Re-check",
-      recheckCodex: "Re-check",
-      zcodeSub: "ZCode",
-      zcodeReady: "Runtime ready \u2713",
-      zcodeNotLoggedIn: "ZCode unavailable",
-      zcodeRuntimeError: "Runtime unavailable",
-      zcodeChecking: "Checking\u2026",
-      zcodeLoginCap: "Open the ZCode app, or confirm the ZCode CLI and Node are available, then click Re-check",
-      recheckZcode: "Re-check",
-      openCodeSub: "OpenCode",
-      openCodeReady: "Logged in \u2713",
-      openCodeNotLoggedIn: "Not logged in to OpenCode",
-      openCodeChecking: "Checking\u2026",
-      openCodeLoginCap: "Sign in with opencode in a terminal, then click Re-check",
-      recheckOpenCode: "Re-check",
-      apiKey: "API Key",
-      apiKeyCap: "Stored locally, never uploaded",
-      apiBaseUrl: "API Base URL",
-      anthropicBaseUrlCap: "Leave blank to use the official Anthropic API",
-      codexBaseUrlCap: "Leave blank for official Codex login; fill to use a custom OpenAI-compatible provider",
-      codexApiKeyCap: "Only used for a custom Codex provider; stored locally",
+      recheck: "Re-check",
+      providerNone: "(no provider selected)",
+      importClaudeSettings: "Import from ~/.claude/settings.json",
+      claude3pNote: "Claude-3p desktop credentials cannot be read automatically; fill the base URL and token once in Provider Manager.",
+      zcodeKeyPlaceholder: "Paste the provider API key (stored locally)",
+      zcodeKeyStored: "Saved to ~/.ae-mcp/zcode-key; paste a new value to overwrite",
       save: "Save",
-      saveVerify: "Save and verify",
-      validating: "Validating\u2026",
-      saved: "API Key saved and verified",
-      savedLocal: "Saved locally",
-      invalidKey: "Invalid key",
-      verifyFailed: "Verification failed. Try again later.",
-      clear: "Clear",
-      cleared: "API Key cleared",
       modelDefault: "Default model (used when the panel opens)",
       customModel: "Custom model ID",
-      customModelCap: "Optional; takes priority for BYOK/Codex",
+      customModelCap: "Optional; takes priority for Codex",
       zcodeModelManaged: "Managed by the current ZCode session",
       port: "Port",
       portHint: "Default 11488",
@@ -9014,8 +8927,6 @@
       regen: "Regenerate",
       tokenCap: "Restart your AI client after regenerating.",
       tokenMissing: "~/.ae-mcp/auth-token not found",
-      autostart: "Launch with AE",
-      autostartCap: "Start the service when a project opens",
       clients: "Connected clients",
       lastActive: "Last active",
       blocked: "Block",
@@ -9035,53 +8946,77 @@
       verPy: "Python service",
       pending: "P3",
       docs: "Docs",
-      github: "GitHub"
+      github: "GitHub",
+      rerunWizard: "Re-run setup wizard"
     }
   };
-  function Section({ title, children, disabled, caption }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)", opacity: disabled ? 0.45 : 1 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { font: "600 11px/1 var(--font-ui)", letterSpacing: "0.04em", color: "var(--text-tertiary)", textTransform: "uppercase", paddingBottom: 2, borderBottom: "1px solid var(--border-subtle)" }, children: title }),
-      caption ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: caption }) : null,
-      children
+  function Section({ id, title, children, disabled, caption, expanded, onToggle }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)", opacity: disabled ? 0.45 : 1 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
+        "button",
+        {
+          type: "button",
+          "aria-expanded": expanded,
+          className: "ds-focusable",
+          onClick: () => onToggle && onToggle(id),
+          style: { display: "flex", alignItems: "center", gap: 6, width: "100%", background: "none", border: "none", padding: "0 0 2px", cursor: "pointer", borderBottom: "1px solid var(--border-subtle)", textAlign: "left" },
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Icon2, { name: expanded ? "chevron-down" : "chevron-right", size: 12, strokeWidth: 2, color: "var(--text-tertiary)" }),
+            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { font: "600 11px/1 var(--font-ui)", letterSpacing: "0.04em", color: "var(--text-tertiary)", textTransform: "uppercase" }, children: title })
+          ]
+        }
+      ),
+      expanded && caption ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: caption }) : null,
+      expanded ? children : null
+    ] });
+  }
+  function ZcodeKeyFallback({ t, stored, onSave }) {
+    const [draft, setDraft] = import_react19.default.useState("");
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6, alignItems: "center" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { secret: true, value: draft, onChange: setDraft, placeholder: stored ? t.zcodeKeyStored : t.zcodeKeyPlaceholder, style: { flex: 1 } }),
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "primary", size: "sm", disabled: !draft.trim(), onClick: () => {
+        if (onSave) onSave(draft.trim());
+        setDraft("");
+      }, children: t.save })
     ] });
   }
   function ClientRow({ name, lastActive, blocked, onBlock, blockLabel }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 32, padding: "2px 8px", background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", opacity: blocked ? 0.55 : 1 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", textDecoration: blocked ? "line-through" : "none" }, children: name }),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: lastActive })
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 32, padding: "2px 8px", background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", opacity: blocked ? 0.55 : 1 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", textDecoration: blocked ? "line-through" : "none" }, children: name }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: lastActive })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { font: "400 10px/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: blockLabel }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Switch, { checked: blocked, onChange: onBlock })
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { font: "400 10px/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: blockLabel }),
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Switch, { checked: blocked, onChange: onBlock })
     ] });
   }
   function ExternalClientRow({ client, t, configText, copied, onCopy }) {
     const isStdio = client.kind === "mcp-stdio";
-    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: client.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: isStdio ? t.mcpStdio : t.mcpDoc })
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: client.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: isStdio ? t.mcpStdio : t.mcpDoc })
         ] }),
-        isStdio ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: (e) => {
+        isStdio ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: (e) => {
           e.preventDefault();
           onCopy();
         }, children: copied ? t.copied : t.copy }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
-        client.installHint ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-secondary)" }, children: client.installHint }) : null,
-        client.loginHint ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: client.loginHint }) : null,
-        isStdio ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("pre", { style: { margin: 0, maxHeight: 128, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", background: "var(--gray-0)", color: "var(--text-secondary)", font: "400 10px/1.4 var(--font-mono)", whiteSpace: "pre" }, children: configText }) : null,
-        client.networkNote ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: client.networkNote }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("a", { href: client.docsUrl, target: "_blank", rel: "noreferrer", style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--accent)" }, children: t.openDocs })
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
+        client.installHint ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-secondary)" }, children: client.installHint }) : null,
+        client.loginHint ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: client.loginHint }) : null,
+        isStdio ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("pre", { style: { margin: 0, maxHeight: 128, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", background: "var(--gray-0)", color: "var(--text-secondary)", font: "400 10px/1.4 var(--font-mono)", whiteSpace: "pre" }, children: configText }) : null,
+        client.networkNote ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: client.networkNote }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("a", { href: client.docsUrl, target: "_blank", rel: "noreferrer", style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--accent)" }, children: t.openDocs })
       ] })
     ] });
   }
   function VersionRow({ label, value, badge }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { flex: 1, font: "400 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: label }),
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1, font: "400 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: label }),
       badge,
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: value })
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: value })
     ] });
   }
   function maskToken(value) {
@@ -9127,17 +9062,6 @@
     onRegenToken,
     hostVersion = "-",
     pythonVersion = "-",
-    apiKey = "",
-    onSaveApiKey,
-    onClearApiKey,
-    anthropicBaseUrl = "",
-    onAnthropicBaseUrlChange,
-    codexApiKey = "",
-    codexBaseUrl = "",
-    onCodexBaseUrlChange,
-    onSaveCodexApiKey,
-    onClearCodexApiKey,
-    validateKey,
     model = "claude-sonnet-4-6",
     modelOptions,
     modelSwitchable = true,
@@ -9148,36 +9072,42 @@
     onBackendChange,
     expertGuidance = true,
     onExpertGuidance,
-    claudeStatus = { state: "checking" },
-    onRecheckClaude,
-    codexStatus = { state: "checking" },
-    onRecheckCodex,
-    openCodeStatus = { state: "checking" },
-    onRecheckOpenCode,
-    zcodeStatus = { state: "checking" },
-    onRecheckZcode
+    channels = { claude: [], codex: [], zcode: [] },
+    activeChannel = "",
+    lockedChannel = "",
+    onLockChannel,
+    onRecheckBackend,
+    recheckDisabled = false,
+    providers = [],
+    claudeProviderId = "",
+    onClaudeProviderChange,
+    codexProviderId = "",
+    onCodexProviderChange,
+    onImportClaudeSettings,
+    claudeSettingsImportAvailable = false,
+    onSaveZcodeKey,
+    zcodeKeyStored = false,
+    providerManager = null,
+    logLevel = "info",
+    onLogLevel,
+    onExportLogs,
+    onRerunWizard
   }) {
     const t = S[lang] || S.zh;
     const zcodeModelLocked2 = zcodeModelLocked({ backend, modelSwitchable });
-    const [key, setKey] = import_react20.default.useState(apiKey);
-    const [apiBaseUrlDraft, setApiBaseUrlDraft] = import_react20.default.useState(anthropicBaseUrl);
-    const [codexKeyDraft, setCodexKeyDraft] = import_react20.default.useState(codexApiKey);
-    const [codexBaseUrlDraft, setCodexBaseUrlDraft] = import_react20.default.useState(codexBaseUrl);
-    const [customModelDraft, setCustomModelDraft] = import_react20.default.useState(customModel);
-    const [aiBusy, setAiBusy] = import_react20.default.useState(false);
-    const [aiToast, setAiToast] = import_react20.default.useState(null);
-    const [draftPort, setDraftPort] = import_react20.default.useState(String(port));
-    const [tokenRaw, setTokenRaw] = import_react20.default.useState("");
-    const [autostart, setAutostart] = import_react20.default.useState(true);
-    const [logLevel, setLogLevel] = import_react20.default.useState("info");
-    const [copied, setCopied] = import_react20.default.useState("");
-    import_react20.default.useEffect(() => setDraftPort(String(port)), [port]);
-    import_react20.default.useEffect(() => setTokenRaw(readTokenValue()), []);
-    import_react20.default.useEffect(() => setKey(apiKey), [apiKey]);
-    import_react20.default.useEffect(() => setApiBaseUrlDraft(anthropicBaseUrl), [anthropicBaseUrl]);
-    import_react20.default.useEffect(() => setCodexKeyDraft(codexApiKey), [codexApiKey]);
-    import_react20.default.useEffect(() => setCodexBaseUrlDraft(codexBaseUrl), [codexBaseUrl]);
-    import_react20.default.useEffect(() => setCustomModelDraft(customModel), [customModel]);
+    const [customModelDraft, setCustomModelDraft] = import_react19.default.useState(customModel);
+    const [draftPort, setDraftPort] = import_react19.default.useState(String(port));
+    const [tokenRaw, setTokenRaw] = import_react19.default.useState("");
+    const [copied, setCopied] = import_react19.default.useState("");
+    const [sections, setSections] = import_react19.default.useState(() => loadSectionState(window.localStorage));
+    const onToggleSection = (id) => setSections((s) => {
+      const next = toggleSection(s, id);
+      saveSectionState(window.localStorage, next);
+      return next;
+    });
+    import_react19.default.useEffect(() => setDraftPort(String(port)), [port]);
+    import_react19.default.useEffect(() => setTokenRaw(readTokenValue()), []);
+    import_react19.default.useEffect(() => setCustomModelDraft(customModel), [customModel]);
     const copy = (label, text) => {
       copyText(text).then(() => {
         setCopied(label);
@@ -9186,62 +9116,6 @@
       });
     };
     const tokenDisplay = tokenRaw ? maskToken(tokenRaw) : t.tokenMissing;
-    const claudeState = claudeStatus && claudeStatus.state || "checking";
-    const claudeBadgeStatus = claudeState === "ready" ? "ok" : claudeState === "not-logged-in" ? "warn" : claudeState === "no-node" ? "error" : "neutral";
-    const claudeBadgeText = claudeState === "ready" ? t.claudeReady : claudeState === "not-logged-in" ? t.claudeNotLoggedIn : claudeState === "no-node" ? t.claudeNoNode : t.claudeChecking;
-    const codexState = codexStatus && codexStatus.state || "checking";
-    const codexBadgeStatus = codexState === "ready" ? "ok" : codexState === "not-logged-in" ? "warn" : codexState === "runtime-error" ? "error" : "neutral";
-    const codexBadgeText = codexState === "ready" && codexStatus && codexStatus.planType === "Custom API" ? t.codexCustomReady : codexState === "ready" ? t.codexReady : codexState === "not-logged-in" ? t.codexNotLoggedIn : codexState === "runtime-error" ? t.codexRuntimeError : t.codexChecking;
-    const openCodeState = openCodeStatus && openCodeStatus.state || "checking";
-    const openCodeBadgeStatus = openCodeState === "ready" ? "ok" : openCodeState === "not-logged-in" ? "warn" : "neutral";
-    const openCodeBadgeText = openCodeState === "ready" ? t.openCodeReady : openCodeState === "not-logged-in" ? t.openCodeNotLoggedIn : t.openCodeChecking;
-    const zcodeState = zcodeStatus && zcodeStatus.state || "checking";
-    const zcodeBadge = zcodeRuntimeBadge(zcodeStatus, t);
-    const saveApiKey = () => {
-      if (aiBusy) return;
-      setAiBusy(true);
-      setAiToast(null);
-      Promise.resolve(validateKey ? validateKey(key, apiBaseUrlDraft) : true).then((result) => {
-        const ok = result === true || result && result.ok === true || result && result.status === 200;
-        const status = result && typeof result === "object" ? result.status : null;
-        if (!ok) {
-          setAiToast({ type: "error", message: status === 401 ? t.invalidKey : t.verifyFailed });
-          return null;
-        }
-        return Promise.resolve(onSaveApiKey ? onSaveApiKey(key) : null).then(() => {
-          setAiToast({ type: "ok", message: t.saved });
-        });
-      }).catch((e) => {
-        const status = e && (e.status || e.response && e.response.status);
-        setAiToast({ type: "error", message: status === 401 ? t.invalidKey : t.verifyFailed });
-      }).finally(() => setAiBusy(false));
-    };
-    const saveCodexKey = () => {
-      if (aiBusy) return;
-      setAiBusy(true);
-      setAiToast(null);
-      Promise.resolve(onSaveCodexApiKey ? onSaveCodexApiKey(codexKeyDraft) : null).then(() => {
-        setAiToast({ type: "ok", message: t.savedLocal });
-      }).catch(() => {
-        setAiToast({ type: "error", message: t.verifyFailed });
-      }).finally(() => setAiBusy(false));
-    };
-    const clearApiKey = () => {
-      setKey("");
-      Promise.resolve(onClearApiKey ? onClearApiKey() : null).then(() => {
-        setAiToast({ type: "info", message: t.cleared });
-      }).catch(() => {
-        setAiToast({ type: "error", message: t.verifyFailed });
-      });
-    };
-    const clearCodexKey = () => {
-      setCodexKeyDraft("");
-      Promise.resolve(onClearCodexApiKey ? onClearCodexApiKey() : null).then(() => {
-        setAiToast({ type: "info", message: t.cleared });
-      }).catch(() => {
-        setAiToast({ type: "error", message: t.verifyFailed });
-      });
-    };
     const regenerate = () => {
       if (!onRegenToken) return;
       const result = onRegenToken();
@@ -9252,120 +9126,76 @@
         setTokenRaw(result || readTokenValue());
       }
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-5)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(Section, { title: t.ai, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.backend, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Segmented, { full: true, value: backend, onChange: onBackendChange, options: [
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-5)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { id: "ai", title: t.ai, expanded: sections.ai, onToggle: onToggleSection, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.backend, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Segmented, { full: true, value: backend, onChange: onBackendChange, options: [
           { value: "subscription", label: t.backendSub },
           { value: "codex", label: t.backendCodex },
-          { value: "zcode", label: t.backendZcode },
-          { value: "byok", label: t.backendByok }
+          { value: "zcode", label: t.backendZcode }
         ] }) }),
-        backend === "subscription" ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.backendSub, caption: claudeState === "not-logged-in" ? t.claudeLoginCap : claudeStatus && claudeStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Badge, { status: claudeBadgeStatus, children: claudeBadgeText }),
-          claudeState === "ready" && claudeStatus.nodeVersion ? /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("span", { style: { flex: 1, font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: [
-            "Node ",
-            String(claudeStatus.nodeVersion).replace(/^v?/, "v")
-          ] }) : /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { flex: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: claudeState === "checking", onClick: onRecheckClaude, children: t.recheckClaude })
-        ] }) }) : backend === "codex" ? /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(import_react20.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.codexSub, caption: codexState === "not-logged-in" ? t.codexLoginCap : codexStatus && codexStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Badge, { status: codexBadgeStatus, children: codexBadgeText }),
-            codexState === "ready" && (codexStatus.email || codexStatus.planType) ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { flex: 1, font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: [codexStatus.email, codexStatus.planType].filter(Boolean).join(" \xB7 ") }) : /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { flex: 1 } }),
-            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: codexState === "checking", onClick: onRecheckCodex, children: t.recheckCodex })
-          ] }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
-            ApiProfileFields,
-            {
-              baseUrl: {
-                value: codexBaseUrlDraft,
-                onChange: (v) => {
-                  setCodexBaseUrlDraft(v);
-                  if (onCodexBaseUrlChange) onCodexBaseUrlChange(v);
-                },
-                label: t.apiBaseUrl,
-                caption: t.codexBaseUrlCap,
-                placeholder: "https://api.openai.com"
-              },
-              apiKey: {
-                value: codexKeyDraft,
-                onChange: setCodexKeyDraft,
-                label: t.apiKey,
-                caption: t.codexApiKeyCap,
-                placeholder: "sk-...",
-                saveLabel: aiBusy ? t.validating : t.save,
-                busy: aiBusy,
-                saveDisabled: false,
-                onSave: saveCodexKey,
-                clearLabel: t.clear,
-                onClear: clearCodexKey
-              }
-            }
-          )
-        ] }) : backend === "opencode" ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.openCodeSub, caption: openCodeState === "not-logged-in" ? t.openCodeLoginCap : openCodeStatus && openCodeStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Badge, { status: openCodeBadgeStatus, children: openCodeBadgeText }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { flex: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: openCodeState === "checking", onClick: onRecheckOpenCode, children: t.recheckOpenCode })
-        ] }) }) : backend === "zcode" ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.zcodeSub, caption: zcodeState === "not-logged-in" ? t.zcodeLoginCap : zcodeStatus && zcodeStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Badge, { status: zcodeBadge.status, children: zcodeBadge.text }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { flex: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: zcodeState === "checking", onClick: onRecheckZcode, children: t.recheckZcode })
-        ] }) }) : /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(import_react20.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
-          ApiProfileFields,
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+          ChannelCard,
           {
-            baseUrl: {
-              value: apiBaseUrlDraft,
-              onChange: (v) => {
-                setApiBaseUrlDraft(v);
-                if (onAnthropicBaseUrlChange) onAnthropicBaseUrlChange(v);
-              },
-              label: t.apiBaseUrl,
-              caption: t.anthropicBaseUrlCap,
-              placeholder: "https://api.anthropic.com"
-            },
-            apiKey: {
-              value: key,
-              onChange: setKey,
-              label: t.apiKey,
-              caption: t.apiKeyCap,
-              placeholder: "sk-ant-...",
-              saveLabel: aiBusy ? t.validating : t.saveVerify,
-              busy: aiBusy,
-              saveDisabled: !key.trim(),
-              onSave: saveApiKey,
-              clearLabel: t.clear,
-              onClear: clearApiKey
+            lang,
+            channels: backend === "codex" ? channels.codex : backend === "zcode" ? channels.zcode : channels.claude,
+            activeChannel,
+            lockedChannel,
+            onLockChannel,
+            onRecheck: onRecheckBackend,
+            recheckLabel: t.recheck,
+            recheckDisabled,
+            renderChannelBody: (channel) => {
+              if (backend !== "codex" && backend !== "zcode" && channel === "api") {
+                return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: claudeProviderId, onChange: onClaudeProviderChange, options: [
+                    { value: "", label: t.providerNone },
+                    ...providers.filter((p) => p.protocol === "anthropic").map((p) => ({ value: p.id, label: p.name }))
+                  ] }),
+                  claudeSettingsImportAvailable ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", size: "sm", icon: "download", onClick: onImportClaudeSettings, children: t.importClaudeSettings }) : null,
+                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.5 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.claude3pNote })
+                ] });
+              }
+              if (backend === "codex" && channel === "custom") {
+                return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: codexProviderId, onChange: onCodexProviderChange, options: [
+                  { value: "", label: t.providerNone },
+                  ...providers.filter((p) => p.protocol === "openai-compatible").map((p) => ({ value: p.id, label: p.name }))
+                ] });
+              }
+              if (backend === "zcode" && channel === "cli-config") {
+                return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(ZcodeKeyFallback, { t, stored: zcodeKeyStored, onSave: onSaveZcodeKey });
+              }
+              return null;
             }
           }
-        ) }),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.modelDefault, children: zcodeModelLocked2 ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { minHeight: 28, display: "flex", alignItems: "center", padding: "0 8px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: t.zcodeModelManaged }) : /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || [
+        ),
+        providerManager,
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.modelDefault, children: zcodeModelLocked2 ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { minHeight: 28, display: "flex", alignItems: "center", padding: "0 8px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: t.zcodeModelManaged }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || [
           { value: "claude-sonnet-5", label: "Claude Sonnet 5" },
           { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
           { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" }
         ] }) }),
-        backend === "byok" || backend === "codex" ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.customModel, caption: t.customModelCap, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Input, { mono: true, value: customModelDraft, onChange: (v) => {
+        backend === "codex" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.customModel, caption: t.customModelCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { mono: true, value: customModelDraft, onChange: (v) => {
           setCustomModelDraft(v);
           if (onCustomModelChange) onCustomModelChange(v);
-        }, placeholder: backend === "codex" ? "provider/model" : "claude-custom" }) }) : null,
-        aiToast ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Toast, { type: aiToast.type, message: aiToast.message, onClose: () => setAiToast(null) }) : null
+        }, placeholder: backend === "codex" ? "provider/model" : "claude-custom" }) }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(Section, { title: t.conn, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.port, hint: t.portHint, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Input, { mono: true, value: draftPort, onChange: setDraftPort, style: { flex: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", onClick: () => onApplyPort && onApplyPort(draftPort), children: t.apply })
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { id: "conn", title: t.conn, expanded: sections.conn, onToggle: onToggleSection, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.port, hint: t.portHint, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { mono: true, value: draftPort, onChange: setDraftPort, style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", onClick: () => onApplyPort && onApplyPort(draftPort), children: t.apply })
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.token, caption: t.tokenCap, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Input, { mono: true, value: tokenDisplay, style: { flex: 1 }, suffix: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(IconButton, { icon: "copy", title: t.copy, disabled: !tokenRaw, onClick: () => copy("token", tokenRaw), style: { width: 20, height: 20 } }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", icon: "rotate-cw", onClick: regenerate, children: t.regen })
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.token, caption: t.tokenCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { mono: true, value: tokenDisplay, style: { flex: 1 }, suffix: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(IconButton, { icon: "copy", title: t.copy, disabled: !tokenRaw, onClick: () => copy("token", tokenRaw), style: { width: 20, height: 20 } }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", onClick: regenerate, children: t.regen })
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { layout: "row", label: t.autostart, caption: t.autostartCap, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Switch, { checked: autostart, onChange: setAutostart }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.mcp, caption: copied === "mcp" ? t.copied : null, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("pre", { style: { margin: 0, maxHeight: 160, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-secondary)", font: "400 10px/1.4 var(--font-mono)" }, children: mcpConfig }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", icon: "copy", onClick: () => copy("mcp", mcpConfig), children: t.copy })
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.mcp, caption: copied === "mcp" ? t.copied : null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("pre", { style: { margin: 0, maxHeight: 160, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-secondary)", font: "400 10px/1.4 var(--font-mono)" }, children: mcpConfig }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "copy", onClick: () => copy("mcp", mcpConfig), children: t.copy })
         ] }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Section, { title: t.externalClients, caption: t.externalClientsCap, children: EXTERNAL_CLIENTS.map((externalClient) => {
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Section, { id: "externalClients", title: t.externalClients, caption: t.externalClientsCap, expanded: sections.externalClients, onToggle: onToggleSection, children: EXTERNAL_CLIENTS.map((externalClient) => {
         const configText = JSON.stringify(mcpConfigFor(externalClient, Number(draftPort) || port || 11488, expertGuidance), null, 2);
-        return /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
           ExternalClientRow,
           {
             client: externalClient,
@@ -9377,9 +9207,9 @@
           externalClient.id
         );
       }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(Section, { title: t.sec, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 2 }, children: t.clients }),
-        clients.map((client) => /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { id: "sec", title: t.sec, expanded: sections.sec, onToggle: onToggleSection, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 2 }, children: t.clients }),
+        clients.map((client) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
           ClientRow,
           {
             name: client.label,
@@ -9391,40 +9221,42 @@
           client.label
         ))
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(Section, { title: t.gen, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { layout: "row", label: t.expertGuidance, caption: t.expertGuidanceCap, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Switch, { checked: expertGuidance, onChange: (v) => onExpertGuidance && onExpertGuidance(v) }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.language, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.logLevel, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Select, { value: logLevel, onChange: setLogLevel, style: { flex: 1 }, options: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { id: "gen", title: t.gen, expanded: sections.gen, onToggle: onToggleSection, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { layout: "row", label: t.expertGuidance, caption: t.expertGuidanceCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Switch, { checked: expertGuidance, onChange: (v) => onExpertGuidance && onExpertGuidance(v) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.language, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.logLevel, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: logLevel, onChange: onLogLevel, style: { flex: 1 }, options: [
             { value: "error", label: "Error" },
             { value: "info", label: "Info" },
             { value: "debug", label: "Debug" }
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", icon: "download", disabled: true, children: t.exportLog })
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "download", onClick: onExportLogs, children: t.exportLog })
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.logs, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("details", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("summary", { style: { cursor: "pointer", color: "var(--text-secondary)", font: "500 11px/1.35 var(--font-ui)" }, children: t.logs }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("pre", { style: { margin: "6px 0 0", maxHeight: 128, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-tertiary)", font: "400 10px/1.4 var(--font-mono)" }, children: logs.join("\n") })
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.logs, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("details", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("summary", { style: { cursor: "pointer", color: "var(--text-secondary)", font: "500 11px/1.35 var(--font-ui)" }, children: t.logs }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("pre", { style: { margin: "6px 0 0", maxHeight: 128, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-tertiary)", font: "400 10px/1.4 var(--font-mono)" }, children: logs.join("\n") })
         ] }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(Section, { title: t.about, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(VersionRow, { label: t.verPanel, value: `v${package_default.version}` }),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(VersionRow, { label: t.verHost, value: hostVersion, badge: hostVersion === "-" ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Badge, { status: "neutral", children: t.pending }) : null }),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(VersionRow, { label: t.verPy, value: pythonVersion, badge: pythonVersion === "-" ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Badge, { status: "neutral", children: t.pending }) : null }),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "ghost", size: "sm", icon: "book-open", children: t.docs }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "ghost", size: "sm", icon: "github", children: t.github })
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { id: "about", title: t.about, expanded: sections.about, onToggle: onToggleSection, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(VersionRow, { label: t.verPanel, value: `v${package_default.version}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(VersionRow, { label: t.verHost, value: hostVersion, badge: hostVersion === "-" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: "neutral", children: t.pending }) : null }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(VersionRow, { label: t.verPy, value: pythonVersion, badge: pythonVersion === "-" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: "neutral", children: t.pending }) : null }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "ghost", size: "sm", icon: "book-open", onClick: () => openExternal(DOCS_URL), children: t.docs }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "ghost", size: "sm", icon: "github", onClick: () => openExternal(REPO_URL), children: t.github }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "ghost", size: "sm", icon: "rotate-cw", onClick: onRerunWizard, children: t.rerunWizard })
         ] })
       ] })
     ] });
   }
 
   // src/screens/ActivityScreen.jsx
-  var import_react23 = __toESM(require_react(), 1);
+  var import_react22 = __toESM(require_react(), 1);
 
   // src/components/activity/FilterBar.jsx
-  var import_react21 = __toESM(require_react(), 1);
-  var import_jsx_runtime19 = __toESM(require_jsx_runtime(), 1);
+  var import_react20 = __toESM(require_react(), 1);
+  var import_jsx_runtime18 = __toESM(require_jsx_runtime(), 1);
   function FilterBar({
     query = "",
     onQuery,
@@ -9432,8 +9264,8 @@
     filters = [],
     style
   }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", padding: "var(--space-2)", borderBottom: "1px solid var(--border-subtle)", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", padding: "var(--space-2)", borderBottom: "1px solid var(--border-subtle)", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
         Input,
         {
           value: query,
@@ -9443,13 +9275,13 @@
           suffix: null
         }
       ),
-      filters.map((f, i) => /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Select, { full: false, value: f.value, onChange: f.onChange, options: f.options, style: { flex: "none", width: f.width || 96 } }, i))
+      filters.map((f, i) => /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Select, { full: false, value: f.value, onChange: f.onChange, options: f.options, style: { flex: "none", width: f.width || 96 } }, i))
     ] });
   }
 
   // src/components/activity/ActivityRow.jsx
-  var import_react22 = __toESM(require_react(), 1);
-  var import_jsx_runtime20 = __toESM(require_jsx_runtime(), 1);
+  var import_react21 = __toESM(require_react(), 1);
+  var import_jsx_runtime19 = __toESM(require_jsx_runtime(), 1);
   var RESULT = {
     success: { icon: "check", color: "var(--ok)" },
     error: { icon: "x", color: "var(--error)" },
@@ -9469,11 +9301,11 @@
     expandable = true,
     style
   }) {
-    const [expanded, setExpanded] = import_react22.default.useState(false);
-    const [hover, setHover] = import_react22.default.useState(false);
+    const [expanded, setExpanded] = import_react21.default.useState(false);
+    const [hover, setHover] = import_react21.default.useState(false);
     const r = RESULT[result] || RESULT.success;
-    return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { borderBottom: "1px solid var(--border-subtle)", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { borderBottom: "1px solid var(--border-subtle)", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(
         "div",
         {
           role: expandable ? "button" : void 0,
@@ -9491,11 +9323,11 @@
             transition: "background var(--dur-fast) var(--ease-out)"
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { title: resultTitle, style: { display: "inline-flex", flex: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Icon2, { name: r.icon, size: 12, strokeWidth: 2.5, color: r.color }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { flex: "none", font: `var(--weight-regular) var(--text-micro)/1 var(--font-mono)`, color: "var(--text-tertiary)" }, children: time }),
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Badge, { status: "neutral", style: { flex: "none", maxWidth: 84, overflow: "hidden" }, children: source }),
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { flex: "none", font: `var(--weight-medium) var(--text-caption)/1 var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "nowrap" }, children: verb }),
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { title: resultTitle, style: { display: "inline-flex", flex: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Icon2, { name: r.icon, size: 12, strokeWidth: 2.5, color: r.color }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { style: { flex: "none", font: `var(--weight-regular) var(--text-micro)/1 var(--font-mono)`, color: "var(--text-tertiary)" }, children: time }),
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Badge, { status: "neutral", style: { flex: "none", maxWidth: 84, overflow: "hidden" }, children: source }),
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { style: { flex: "none", font: `var(--weight-medium) var(--text-caption)/1 var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "nowrap" }, children: verb }),
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
               "span",
               {
                 style: {
@@ -9510,7 +9342,7 @@
                 children: target
               }
             ),
-            expandable ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+            expandable ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
               Icon2,
               {
                 name: "chevron-down",
@@ -9522,8 +9354,8 @@
           ]
         }
       ),
-      expanded ? /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2) 26px", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
-        params != null ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+      expanded ? /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2) 26px", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
+        params != null ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
           "pre",
           {
             style: {
@@ -9542,7 +9374,7 @@
             children: typeof params === "string" ? params : JSON.stringify(params, null, 2)
           }
         ) : null,
-        onUndo ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Button, { size: "sm", variant: "secondary", icon: "undo-2", onClick: onUndo, style: { alignSelf: "flex-start" }, children: undoLabel }) : null
+        onUndo ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Button, { size: "sm", variant: "secondary", icon: "undo-2", onClick: onUndo, style: { alignSelf: "flex-start" }, children: undoLabel }) : null
       ] }) : null
     ] });
   }
@@ -9608,7 +9440,7 @@
   }
 
   // src/screens/ActivityScreen.jsx
-  var import_jsx_runtime21 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime20 = __toESM(require_jsx_runtime(), 1);
   var A = {
     zh: {
       search: "\u641C\u7D22\u64CD\u4F5C\u2026",
@@ -9660,9 +9492,9 @@
     emptyCaption
   }) {
     const t = A[lang] || A.zh;
-    const [q, setQ] = import_react23.default.useState("");
-    const [res, setRes] = import_react23.default.useState("all");
-    const [undoing, setUndoing] = import_react23.default.useState(false);
+    const [q, setQ] = import_react22.default.useState("");
+    const [res, setRes] = import_react22.default.useState("all");
+    const [undoing, setUndoing] = import_react22.default.useState(false);
     const rows = filterEvents(events, { mode: res, query: q });
     const empty = events.length === 0;
     const undoCheckpoint = async () => {
@@ -9674,9 +9506,9 @@
         setUndoing(false);
       }
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: empty ? /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(EmptyState, { icon: "list", title: emptyTitle || t.empty, caption: emptyCaption || t.emptyCap, style: { flex: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)(import_react23.default.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { style: { display: "flex", borderBottom: "1px solid var(--border-subtle)" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: empty ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(EmptyState, { icon: "list", title: emptyTitle || t.empty, caption: emptyCaption || t.emptyCap, style: { flex: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(import_react22.default.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", borderBottom: "1px solid var(--border-subtle)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
           FilterBar,
           {
             query: q,
@@ -9696,12 +9528,12 @@
             ]
           }
         ),
-        onClear ? /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-1)", padding: "var(--space-2) var(--space-2) var(--space-2) 0" }, children: [
-          onUndoCheckpoint ? /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(Button, { size: "sm", variant: "secondary", icon: "undo-2", onClick: undoCheckpoint, disabled: undoing, title: t.undoCheckpointTitle, children: undoing ? t.undoingCheckpoint : t.undoCheckpoint }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(Button, { size: "sm", variant: "ghost", icon: "trash-2", onClick: onClear, title: t.clear, children: t.clear })
+        onClear ? /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-1)", padding: "var(--space-2) var(--space-2) var(--space-2) 0" }, children: [
+          onUndoCheckpoint ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Button, { size: "sm", variant: "secondary", icon: "undo-2", onClick: undoCheckpoint, disabled: undoing, title: t.undoCheckpointTitle, children: undoing ? t.undoingCheckpoint : t.undoCheckpoint }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Button, { size: "sm", variant: "ghost", icon: "trash-2", onClick: onClear, title: t.clear, children: t.clear })
         ] }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { style: { flex: 1, minHeight: 0, overflow: "auto" }, children: rows.length ? rows.map((evt) => /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { flex: 1, minHeight: 0, overflow: "auto" }, children: rows.length ? rows.map((evt) => /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
         ActivityRow,
         {
           time: new Date(evt.ts).toLocaleTimeString(),
@@ -9713,18 +9545,18 @@
           params: eventDetails(evt)
         },
         evt.id
-      )) : /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(EmptyState, { icon: "list", title: emptyTitle || t.empty, caption: emptyCaption || t.emptyCap, style: { flex: 1 } }) })
+      )) : /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(EmptyState, { icon: "list", title: emptyTitle || t.empty, caption: emptyCaption || t.emptyCap, style: { flex: 1 } }) })
     ] }) });
   }
 
   // src/screens/WizardScreen.jsx
-  var import_react26 = __toESM(require_react(), 1);
+  var import_react25 = __toESM(require_react(), 1);
 
   // src/components/core/Spinner.jsx
-  var import_react24 = __toESM(require_react(), 1);
-  var import_jsx_runtime22 = __toESM(require_jsx_runtime(), 1);
+  var import_react23 = __toESM(require_react(), 1);
+  var import_jsx_runtime21 = __toESM(require_jsx_runtime(), 1);
   function Spinner({ size = 12, style }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
       "span",
       {
         role: "progressbar",
@@ -9745,10 +9577,10 @@
   }
 
   // src/components/chat/AIAvatar.jsx
-  var import_react25 = __toESM(require_react(), 1);
-  var import_jsx_runtime23 = __toESM(require_jsx_runtime(), 1);
+  var import_react24 = __toESM(require_react(), 1);
+  var import_jsx_runtime22 = __toESM(require_jsx_runtime(), 1);
   function AIAvatar({ size = 20, style }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
       "span",
       {
         "aria-label": "AI",
@@ -9764,7 +9596,7 @@
           borderRadius: "var(--radius-md)",
           ...style
         },
-        children: /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Icon2, { name: "sparkles", size: Math.round(size * 0.6), color: "var(--accent)", strokeWidth: 2 })
+        children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Icon2, { name: "sparkles", size: Math.round(size * 0.6), color: "var(--accent)", strokeWidth: 2 })
       }
     );
   }
@@ -9821,7 +9653,7 @@
   }
 
   // src/screens/WizardScreen.jsx
-  var import_jsx_runtime24 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime23 = __toESM(require_jsx_runtime(), 1);
   var W = {
     zh: {
       stepOf: (n) => `\u7B2C ${n} \u6B65 / \u5171 3 \u6B65`,
@@ -9891,14 +9723,14 @@
     }
   }
   function CodeBlock({ code, copyLabel, onCopy, maxHeight }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { position: "relative", background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("pre", { style: { margin: 0, padding: "10px 36px 10px 12px", font: "400 11px/1.7 var(--font-mono)", color: "var(--text-primary)", overflow: "auto", maxHeight: maxHeight || 180, whiteSpace: "pre" }, children: code }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(IconButton, { icon: "copy", title: copyLabel, variant: "secondary", onClick: onCopy, style: { position: "absolute", top: 6, right: 6, background: "var(--bg-panel)" } })
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { position: "relative", background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("pre", { style: { margin: 0, padding: "10px 36px 10px 12px", font: "400 11px/1.7 var(--font-mono)", color: "var(--text-primary)", overflow: "auto", maxHeight: maxHeight || 180, whiteSpace: "pre" }, children: code }),
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(IconButton, { icon: "copy", title: copyLabel, variant: "secondary", onClick: onCopy, style: { position: "absolute", top: 6, right: 6, background: "var(--bg-panel)" } })
     ] });
   }
   function ClientRow2({ name, note, selected, onSelect }) {
-    const [hover, setHover] = import_react26.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
+    const [hover, setHover] = import_react25.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(
       "button",
       {
         type: "button",
@@ -9921,11 +9753,11 @@
           transition: "background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out)"
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: name }),
-            note ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: note }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: name }),
+            note ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: note }) : null
           ] }),
-          selected ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Icon2, { name: "check", size: 13, strokeWidth: 2.5, color: "var(--text-primary)" }) : null
+          selected ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Icon2, { name: "check", size: 13, strokeWidth: 2.5, color: "var(--text-primary)" }) : null
         ]
       }
     );
@@ -9936,25 +9768,25 @@
     const isProblem = status === "missing" || status === "fail";
     const icon = status === "ok" ? "check" : isProblem ? "triangle-alert" : status === "idle" ? "circle" : null;
     const tail = String(state && state.logTail || "").split(/\r?\n/).slice(-6).join("\n");
-    return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { display: "flex", gap: 8, padding: "9px 10px", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-panel)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { width: 18, height: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none", color: status === "ok" ? "var(--ok)" : isProblem ? "var(--warn)" : "var(--text-tertiary)" }, children: isBusy ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Spinner, { size: 14 }) : /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Icon2, { name: icon, size: 15, strokeWidth: 2 }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, minHeight: 18 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: label }),
-          status === "ok" && state.version ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: state.version }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { flex: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(IconButton, { icon: "rotate-cw", title: t.recheck, variant: "secondary", size: "sm", disabled: isBusy, onClick: onDetect })
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", gap: 8, padding: "9px 10px", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-panel)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { width: 18, height: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none", color: status === "ok" ? "var(--ok)" : isProblem ? "var(--warn)" : "var(--text-tertiary)" }, children: isBusy ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Spinner, { size: 14 }) : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Icon2, { name: icon, size: 15, strokeWidth: 2 }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, minHeight: 18 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: label }),
+          status === "ok" && state.version ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: state.version }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(IconButton, { icon: "rotate-cw", title: t.recheck, variant: "secondary", size: "sm", disabled: isBusy, onClick: onDetect })
         ] }),
-        hint ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: hint }) : null,
-        isProblem ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(import_react26.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("code", { style: { display: "block", padding: "6px 8px", background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", font: "400 10px/1.55 var(--font-mono)", color: "var(--text-primary)", overflow: "auto", whiteSpace: "pre" }, children: commandPreview2 }),
-          login ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.loginHint }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Button, { variant: "secondary", size: "sm", onClick: onInstall, children: login ? t.openLogin : t.install }),
-            status === "fail" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => copyText2(state.logTail), children: t.copyLog }) : null
+        hint ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: hint }) : null,
+        isProblem ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("code", { style: { display: "block", padding: "6px 8px", background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", font: "400 10px/1.55 var(--font-mono)", color: "var(--text-primary)", overflow: "auto", whiteSpace: "pre" }, children: commandPreview2 }),
+          login ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.loginHint }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "secondary", size: "sm", onClick: onInstall, children: login ? t.openLogin : t.install }),
+            status === "fail" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => copyText2(state.logTail), children: t.copyLog }) : null
           ] })
         ] }) : null,
-        status === "running" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("pre", { style: { margin: 0, maxHeight: 96, overflow: "auto", padding: 8, background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", font: "400 10px/1.45 var(--font-mono)", color: "var(--text-secondary)", whiteSpace: "pre-wrap" }, children: tail }) : null
+        status === "running" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("pre", { style: { margin: 0, maxHeight: 96, overflow: "auto", padding: 8, background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", font: "400 10px/1.45 var(--font-mono)", color: "var(--text-secondary)", whiteSpace: "pre-wrap" }, children: tail }) : null
       ] })
     ] });
   }
@@ -9977,33 +9809,35 @@
     onDetect,
     onInstall,
     onOpenLogin,
-    commandPreviews = {}
+    commandPreviews = {},
+    channels = { claude: [], codex: [], zcode: [] },
+    activeChannel = ""
   }) {
     const t = W[lang] || W.zh;
     const clientOptions = [{ id: "builtin", name: "builtin" }, ...EXTERNAL_CLIENTS];
     const selectedExternalClient = EXTERNAL_CLIENTS.find((item) => item.id === client);
     const selectedMcpConfig = selectedExternalClient && selectedExternalClient.kind === "mcp-stdio" ? JSON.stringify(mcpConfigFor(selectedExternalClient, port, expertGuidance), null, 2) : "";
-    return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "var(--space-6) var(--space-5) var(--space-5)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { display: "flex", gap: 5 }, children: [1, 2, 3].map((n) => /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { width: n === step ? 14 : 5, height: 5, borderRadius: 3, background: n === step ? "var(--gray-11)" : n < step ? "var(--gray-9)" : "var(--gray-6)", transition: "width var(--dur-base) var(--ease-out)" } }, n)) }),
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { font: "400 10px/1 var(--font-mono)", color: "var(--text-tertiary)" }, children: t.stepOf(step) }),
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { flex: 1 } }),
-        onSkip && step < 3 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Button, { variant: "ghost", size: "sm", onClick: onSkip, style: { color: "var(--text-tertiary)" }, children: t.skip }) : null
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "var(--space-6) var(--space-5) var(--space-5)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", gap: 5 }, children: [1, 2, 3].map((n) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { width: n === step ? 14 : 5, height: 5, borderRadius: 3, background: n === step ? "var(--gray-11)" : n < step ? "var(--gray-9)" : "var(--gray-6)", transition: "width var(--dur-base) var(--ease-out)" } }, n)) }),
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { font: "400 10px/1 var(--font-mono)", color: "var(--text-tertiary)" }, children: t.stepOf(step) }),
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1 } }),
+        onSkip && step < 3 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "ghost", size: "sm", onClick: onSkip, style: { color: "var(--text-tertiary)" }, children: t.skip }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", paddingTop: "var(--space-6)" }, children: [
-        step === 1 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(import_react26.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(AIAvatar, { size: 44 }),
-          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t1 }),
-          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b1 }),
-          /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { marginTop: "var(--space-2)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginBottom: 6 }, children: t.langLabel }),
-            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] })
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", paddingTop: "var(--space-6)" }, children: [
+        step === 1 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(AIAvatar, { size: 44 }),
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t1 }),
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b1 }),
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { marginTop: "var(--space-2)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginBottom: 6 }, children: t.langLabel }),
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] })
           ] })
         ] }) : null,
-        step === 2 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(import_react26.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t2 }),
-          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b2 }),
-          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: LOCAL_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
+        step === 2 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t2 }),
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b2 }),
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: LOCAL_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
             InstallStepRow,
             {
               label: STEP_LABELS[id],
@@ -10016,10 +9850,10 @@
             id
           )) })
         ] }) : null,
-        step === 3 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(import_react26.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t3 }),
-          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b3 }),
-          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: clientOptions.map((c) => /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
+        step === 3 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t3 }),
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b3 }),
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: clientOptions.map((c) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
             ClientRow2,
             {
               name: c.id === "builtin" ? t.builtin : c.name,
@@ -10029,41 +9863,44 @@
             },
             c.id
           )) }),
-          selectedExternalClient && selectedExternalClient.kind === "mcp-stdio" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(CodeBlock, { code: selectedMcpConfig, copyLabel: t.copy, onCopy: () => onCopy ? onCopy(selectedMcpConfig) : copyText2(selectedMcpConfig), maxHeight: 150 }) : null,
-          selectedExternalClient && selectedExternalClient.kind === "mcp-doc" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8, padding: 10, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-panel)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("a", { href: selectedExternalClient.docsUrl, target: "_blank", rel: "noreferrer", style: { font: "500 12px/1.35 var(--font-ui)", color: "var(--accent)" }, children: t.docClient }),
-            selectedExternalClient.networkNote ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: selectedExternalClient.networkNote }) : null
+          selectedExternalClient && selectedExternalClient.kind === "mcp-stdio" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(CodeBlock, { code: selectedMcpConfig, copyLabel: t.copy, onCopy: () => onCopy ? onCopy(selectedMcpConfig) : copyText2(selectedMcpConfig), maxHeight: 150 }) : null,
+          selectedExternalClient && selectedExternalClient.kind === "mcp-doc" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8, padding: 10, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-panel)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("a", { href: selectedExternalClient.docsUrl, target: "_blank", rel: "noreferrer", style: { font: "500 12px/1.35 var(--font-ui)", color: "var(--accent)" }, children: t.docClient }),
+            selectedExternalClient.networkNote ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: selectedExternalClient.networkNote }) : null
           ] }) : null,
-          client === "builtin" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: SUBSCRIPTION_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
-            InstallStepRow,
-            {
-              label: STEP_LABELS[id],
-              state: stepStates[id] || EMPTY_STEPS[id],
-              commandPreview: commandPreviews[id] || (id === "login" ? "claude" : ""),
-              t,
-              login: id === "login",
-              hint: id === "node" ? t.uacNote : null,
-              onDetect: () => onDetect && onDetect(id),
-              onInstall: () => id === "login" ? onOpenLogin && onOpenLogin() : onInstall && onInstall(id)
-            },
-            id
-          )) }) : null
+          client === "builtin" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: [
+            SUBSCRIPTION_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
+              InstallStepRow,
+              {
+                label: STEP_LABELS[id],
+                state: stepStates[id] || EMPTY_STEPS[id],
+                commandPreview: commandPreviews[id] || (id === "login" ? "claude" : ""),
+                t,
+                login: id === "login",
+                hint: id === "node" ? t.uacNote : null,
+                onDetect: () => onDetect && onDetect(id),
+                onInstall: () => id === "login" ? onOpenLogin && onOpenLogin() : onInstall && onInstall(id)
+              },
+              id
+            )),
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(ChannelCard, { lang, channels: channels.claude, activeChannel, readOnly: true })
+          ] }) : null
         ] }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", paddingTop: "var(--space-3)" }, children: [
-        step > 1 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Button, { variant: "ghost", size: "lg", onClick: onBack, children: t.back }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { flex: 1 } }),
-        step < 3 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Button, { variant: "primary", size: "lg", onClick: onNext, children: t.next }) : /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Button, { variant: "primary", size: "lg", onClick: onDone, children: t.start })
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", paddingTop: "var(--space-3)" }, children: [
+        step > 1 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "ghost", size: "lg", onClick: onBack, children: t.back }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1 } }),
+        step < 3 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "primary", size: "lg", onClick: onNext, children: t.next }) : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "primary", size: "lg", onClick: onDone, children: t.start })
       ] })
     ] });
   }
 
   // src/screens/ConnectionDrawer.jsx
-  var import_react29 = __toESM(require_react(), 1);
+  var import_react28 = __toESM(require_react(), 1);
 
   // src/components/shell/DiagnosticItem.jsx
-  var import_react27 = __toESM(require_react(), 1);
-  var import_jsx_runtime25 = __toESM(require_jsx_runtime(), 1);
+  var import_react26 = __toESM(require_react(), 1);
+  var import_jsx_runtime24 = __toESM(require_jsx_runtime(), 1);
   var GLYPHS = {
     pass: { icon: "check", color: "var(--ok)" },
     fail: { icon: "x", color: "var(--error)" },
@@ -10071,10 +9908,10 @@
   };
   function DiagnosticItem({ label, status = "pending", detail, actionLabel, onAction, style }) {
     const g = GLYPHS[status];
-    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { padding: "var(--space-1) 0", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: 22 }, children: [
-        status === "running" ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Spinner, { size: 12 }) : /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Icon2, { name: g.icon, size: 12, strokeWidth: 2.5, color: g.color }),
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { padding: "var(--space-1) 0", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: 22 }, children: [
+        status === "running" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Spinner, { size: 12 }) : /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Icon2, { name: g.icon, size: 12, strokeWidth: 2.5, color: g.color }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
           "span",
           {
             style: {
@@ -10087,7 +9924,7 @@
           }
         )
       ] }),
-      status === "fail" && detail ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
+      status === "fail" && detail ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
         "div",
         {
           style: {
@@ -10101,8 +9938,8 @@
             borderRadius: "var(--radius-sm)"
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: detail }),
-            actionLabel ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, style: { flex: "none" }, children: actionLabel }) : null
+            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: detail }),
+            actionLabel ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, style: { flex: "none" }, children: actionLabel }) : null
           ]
         }
       ) : null
@@ -10110,19 +9947,19 @@
   }
 
   // src/components/shell/Drawer.jsx
-  var import_react28 = __toESM(require_react(), 1);
-  var import_jsx_runtime26 = __toESM(require_jsx_runtime(), 1);
+  var import_react27 = __toESM(require_react(), 1);
+  var import_jsx_runtime25 = __toESM(require_jsx_runtime(), 1);
   function Drawer({ open = false, title, onClose, children, closeTitle = "\u5173\u95ED Close", style }) {
     if (!open) return null;
-    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { position: "absolute", inset: 0, zIndex: 30 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { position: "absolute", inset: 0, zIndex: 30 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
         "div",
         {
           onClick: onClose,
           style: { position: "absolute", inset: 0, background: "var(--scrim)", animation: "ds-fade var(--dur-slow) var(--ease-out)" }
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
         "div",
         {
           role: "dialog",
@@ -10143,7 +9980,7 @@
             ...style
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(
+            /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
               "div",
               {
                 style: {
@@ -10154,12 +9991,12 @@
                   borderBottom: "1px solid var(--border-subtle)"
                 },
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-semibold) var(--text-heading)/1 var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
-                  /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(IconButton, { icon: "x", title: closeTitle, onClick: onClose })
+                  /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-semibold) var(--text-heading)/1 var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
+                  /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(IconButton, { icon: "x", title: closeTitle, onClick: onClose })
                 ]
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { overflow: "auto", padding: "var(--space-3)" }, children })
+            /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { overflow: "auto", padding: "var(--space-3)" }, children })
           ]
         }
       )
@@ -10167,7 +10004,7 @@
   }
 
   // src/screens/ConnectionDrawer.jsx
-  var import_jsx_runtime27 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime26 = __toESM(require_jsx_runtime(), 1);
   var D = {
     zh: {
       title: "\u8FDE\u63A5",
@@ -10225,9 +10062,9 @@
     }
   };
   function KV({ k, children }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { width: 72, flex: "none", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: k }),
-      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.35 var(--font-mono)", color: "var(--text-primary)" }, children })
+    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { width: 72, flex: "none", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: k }),
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.35 var(--font-mono)", color: "var(--text-primary)" }, children })
     ] });
   }
   function formatTime(ts) {
@@ -10253,42 +10090,42 @@
     const hostVersion = info.hostVersion || "-";
     const mismatch = info.pythonVersion && info.pythonVersion !== panelVersion;
     const recent = info.lastClientSeenAt ? [{ time: formatTime(info.lastClientSeenAt), text: lang === "zh" ? "\u5916\u90E8 MCP \u5BA2\u6237\u7AEF" : "External MCP client" }] : [];
-    return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(KV, { k: t.status, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(StatusDot, { status: connected ? "connected" : "waiting", size: 7 }),
-        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { fontFamily: "var(--font-ui)" }, children: statusLabel || (connected ? t.connected : t.waiting) })
+    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(KV, { k: t.status, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(StatusDot, { status: connected ? "connected" : "waiting", size: 7 }),
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { fontFamily: "var(--font-ui)" }, children: statusLabel || (connected ? t.connected : t.waiting) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(KV, { k: t.port, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(KV, { k: t.port, children: [
         info.port || "-",
         " ",
-        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(IconButton, { icon: "copy", title: t.copyConfig, onClick: () => callCopy(onCopyConfig), style: { width: 20, height: 20 } })
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(IconButton, { icon: "copy", title: t.copyConfig, onClick: () => callCopy(onCopyConfig), style: { width: 20, height: 20 } })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(KV, { k: t.token, children: info.tokenLabel || t.tokenLocal }),
-      /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(KV, { k: t.ver, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(KV, { k: t.token, children: info.tokenLabel || t.tokenLocal }),
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(KV, { k: t.ver, children: [
         "v",
         panelVersion,
         " \xB7 host ",
         hostVersion,
         " \xB7 py ",
         pythonVersion,
-        mismatch ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Badge, { status: "warn", children: t.mismatch }) : null
+        mismatch ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Badge, { status: "warn", children: t.mismatch }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 4 }, children: t.recent }),
-      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", padding: "2px 8px" }, children: (recent.length ? recent : [{ time: "-", text: t.noRecent }]).map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", minHeight: 22, font: "400 10px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }, children: r.time }),
-        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: r.text })
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 4 }, children: t.recent }),
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", padding: "2px 8px" }, children: (recent.length ? recent : [{ time: "-", text: t.noRecent }]).map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", minHeight: 22, font: "400 10px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }, children: r.time }),
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: r.text })
       ] }, i)) }),
-      /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => callCopy(onCopyConfig), children: t.copyConfig }),
-        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRestart, children: t.restart }),
-        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Button, { variant: "secondary", size: "sm", icon: "stethoscope", onClick: onDiagnose, children: t.diagnose })
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => callCopy(onCopyConfig), children: t.copyConfig }),
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRestart, children: t.restart }),
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "stethoscope", onClick: onDiagnose, children: t.diagnose })
       ] })
     ] });
   }
   function DiagnosticsBody({ lang = "zh", diagnostics = [], onRerun }) {
     const t = D[lang] || D.zh;
-    return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", flexDirection: "column" }, children: [
-      diagnostics.map((c) => /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", flexDirection: "column" }, children: [
+      diagnostics.map((c) => /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
         DiagnosticItem,
         {
           label: t.checks[c.id] || c.id,
@@ -10297,10 +10134,10 @@
         },
         c.id
       )),
-      /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", justifyContent: "flex-end", gap: 6, paddingTop: "var(--space-2)" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => copyText(JSON.stringify(diagnostics, null, 2)).catch(() => {
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", justifyContent: "flex-end", gap: 6, paddingTop: "var(--space-2)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => copyText(JSON.stringify(diagnostics, null, 2)).catch(() => {
         }), children: t.copyReport }),
-        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRerun, children: t.rerun })
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRerun, children: t.rerun })
       ] })
     ] });
   }
@@ -10308,8 +10145,8 @@
     const diagList = Array.isArray(diagnostics) ? diagnostics : [];
     const t = D[lang] || D.zh;
     const panelVersion = info.panelVersion || package_default.version;
-    return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(Drawer, { open, title: t.title, onClose, closeTitle: t.close, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(Drawer, { open, title: t.title, onClose, closeTitle: t.close, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
         ConnectionDrawerBody,
         {
           lang,
@@ -10320,19 +10157,19 @@
           onDiagnose
         }
       ),
-      diagList.length ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { marginTop: "var(--space-3)", paddingTop: "var(--space-2)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(DiagnosticsBody, { lang, diagnostics: diagList, onRerun: onDiagnose }) }) : null
+      diagList.length ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { marginTop: "var(--space-3)", paddingTop: "var(--space-2)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(DiagnosticsBody, { lang, diagnostics: diagList, onRerun: onDiagnose }) }) : null
     ] });
   }
 
   // src/screens/ChatScreen.jsx
-  var import_react37 = __toESM(require_react(), 1);
+  var import_react36 = __toESM(require_react(), 1);
 
   // src/components/chat/ChatBubble.jsx
-  var import_react30 = __toESM(require_react(), 1);
-  var import_jsx_runtime28 = __toESM(require_jsx_runtime(), 1);
+  var import_react29 = __toESM(require_react(), 1);
+  var import_jsx_runtime27 = __toESM(require_jsx_runtime(), 1);
   function ChatBubble({ role = "ai", children, streaming = false, avatar = true, style }) {
     if (role === "user") {
-      return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("div", { style: { display: "flex", justifyContent: "flex-end", ...style }, children: /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { display: "flex", justifyContent: "flex-end", ...style }, children: /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
         "div",
         {
           style: {
@@ -10350,9 +10187,9 @@
         }
       ) });
     }
-    return /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "flex-start", ...style }, children: [
-      avatar ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(AIAvatar, { style: { marginTop: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { width: 20, flex: "none" } }),
-      /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "flex-start", ...style }, children: [
+      avatar ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(AIAvatar, { style: { marginTop: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { width: 20, flex: "none" } }),
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(
         "div",
         {
           style: {
@@ -10364,7 +10201,7 @@
           },
           children: [
             children,
-            streaming ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+            streaming ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
               "span",
               {
                 style: {
@@ -10386,15 +10223,15 @@
   }
 
   // src/components/chat/ToolCallCard.jsx
-  var import_react31 = __toESM(require_react(), 1);
-  var import_jsx_runtime29 = __toESM(require_jsx_runtime(), 1);
+  var import_react30 = __toESM(require_react(), 1);
+  var import_jsx_runtime28 = __toESM(require_jsx_runtime(), 1);
   function StatusGlyph({ status }) {
-    if (status === "running") return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Spinner, { size: 12 });
-    if (status === "error") return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Icon2, { name: "x", size: 12, strokeWidth: 2.5, color: "var(--error)" });
-    return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.5, color: "var(--ok)" });
+    if (status === "running") return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Spinner, { size: 12 });
+    if (status === "error") return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Icon2, { name: "x", size: 12, strokeWidth: 2.5, color: "var(--error)" });
+    return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.5, color: "var(--ok)" });
   }
   function ParamsBlock({ params }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
       "pre",
       {
         style: {
@@ -10414,8 +10251,8 @@
     );
   }
   function HeaderRow({ status, verb, target, expandable, expanded, onToggle }) {
-    const [hover, setHover] = import_react31.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
+    const [hover, setHover] = import_react30.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
       "div",
       {
         role: expandable ? "button" : void 0,
@@ -10433,9 +10270,9 @@
           transition: "background var(--dur-fast) var(--ease-out)"
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(StatusGlyph, { status }),
-          /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("span", { style: { font: `var(--weight-medium) var(--text-body)/1 var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "nowrap" }, children: verb }),
-          /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(StatusGlyph, { status }),
+          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { font: `var(--weight-medium) var(--text-body)/1 var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "nowrap" }, children: verb }),
+          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
             "span",
             {
               style: {
@@ -10450,7 +10287,7 @@
               children: target
             }
           ),
-          expandable ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
+          expandable ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
             Icon2,
             {
               name: "chevron-down",
@@ -10476,10 +10313,10 @@
     retryLabel = "\u91CD\u8BD5",
     style
   }) {
-    const [expanded, setExpanded] = import_react31.default.useState(defaultExpanded);
+    const [expanded, setExpanded] = import_react30.default.useState(defaultExpanded);
     const isGroup = Array.isArray(steps) && steps.length > 0;
     const expandable = isGroup || params != null;
-    return /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
       "div",
       {
         style: {
@@ -10491,7 +10328,7 @@
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
             HeaderRow,
             {
               status,
@@ -10502,14 +10339,14 @@
               onToggle: () => setExpanded(!expanded)
             }
           ),
-          expanded && isGroup ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { style: { borderTop: "1px solid var(--border-subtle)", padding: "var(--space-1) 0" }, children: steps.map((s, i) => /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
+          expanded && isGroup ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("div", { style: { borderTop: "1px solid var(--border-subtle)", padding: "var(--space-1) 0" }, children: steps.map((s, i) => /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
             "div",
             {
               style: { display: "flex", alignItems: "center", gap: "var(--space-15)", minHeight: 22, padding: "0 var(--space-2) 0 var(--space-5)" },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(StatusGlyph, { status: s.status || "success" }),
-                /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)`, color: "var(--text-secondary)", whiteSpace: "nowrap" }, children: s.verb }),
-                /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(StatusGlyph, { status: s.status || "success" }),
+                /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)`, color: "var(--text-secondary)", whiteSpace: "nowrap" }, children: s.verb }),
+                /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
                   "span",
                   {
                     style: {
@@ -10528,8 +10365,8 @@
             },
             i
           )) }) : null,
-          expanded && !isGroup && params != null ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(ParamsBlock, { params }) : null,
-          status === "error" && errorMessage2 ? /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
+          expanded && !isGroup && params != null ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(ParamsBlock, { params }) : null,
+          status === "error" && errorMessage2 ? /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
             "div",
             {
               style: {
@@ -10541,8 +10378,8 @@
                 background: "var(--error-bg)"
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--error)" }, children: errorMessage2 }),
-                onRetry ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Button, { size: "sm", variant: "secondary", icon: "rotate-cw", onClick: onRetry, children: retryLabel }) : null
+                /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--error)" }, children: errorMessage2 }),
+                onRetry ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Button, { size: "sm", variant: "secondary", icon: "rotate-cw", onClick: onRetry, children: retryLabel }) : null
               ]
             }
           ) : null
@@ -10552,8 +10389,8 @@
   }
 
   // src/components/chat/ApprovalCard.jsx
-  var import_react32 = __toESM(require_react(), 1);
-  var import_jsx_runtime30 = __toESM(require_jsx_runtime(), 1);
+  var import_react31 = __toESM(require_react(), 1);
+  var import_jsx_runtime29 = __toESM(require_jsx_runtime(), 1);
   var L = {
     zh: {
       needs: "\u9700\u8981\u6279\u51C6",
@@ -10588,10 +10425,10 @@
     onAllowSession,
     style
   }) {
-    const [expanded, setExpanded] = import_react32.default.useState(false);
+    const [expanded, setExpanded] = import_react31.default.useState(false);
     const t = L[lang] || L.zh;
     const high = risk === "high";
-    return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
       "div",
       {
         style: {
@@ -10603,19 +10440,19 @@
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { padding: "var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-15)" }, children: high ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Badge, { status: "error", icon: "shield-alert", children: t.high }) : /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Badge, { status: "warn", icon: "shield", children: t.needs }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: { font: `var(--weight-semibold) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
-            description ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: description }) : null,
-            params != null ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(ApprovalParams, { t, expanded, onToggle: () => setExpanded(!expanded), params }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { style: { padding: "var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-15)" }, children: high ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Badge, { status: "error", icon: "shield-alert", children: t.high }) : /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Badge, { status: "warn", icon: "shield", children: t.needs }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { style: { font: `var(--weight-semibold) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
+            description ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: description }) : null,
+            params != null ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(ApprovalParams, { t, expanded, onToggle: () => setExpanded(!expanded), params }) : null
           ] }),
-          state === "pending" ? /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Button, { variant: high ? "danger" : "primary", full: true, onClick: onAllow, children: t.allow }),
-              /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Button, { variant: "secondary", full: true, onClick: onDeny, children: t.deny })
+          state === "pending" ? /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Button, { variant: high ? "danger" : "primary", full: true, onClick: onAllow, children: t.allow }),
+              /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Button, { variant: "secondary", full: true, onClick: onDeny, children: t.deny })
             ] }),
-            onAllowSession && !high ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Button, { variant: "ghost", size: "sm", onClick: onAllowSession, style: { alignSelf: "flex-start", color: "var(--text-tertiary)" }, children: t.session }) : null
-          ] }) : /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
+            onAllowSession && !high ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Button, { variant: "ghost", size: "sm", onClick: onAllowSession, style: { alignSelf: "flex-start", color: "var(--text-tertiary)" }, children: t.session }) : null
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
             "div",
             {
               style: {
@@ -10628,7 +10465,7 @@
                 color: state === "allowed" ? "var(--ok)" : "var(--text-tertiary)"
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Icon2, { name: state === "allowed" ? "check" : "x", size: 12, strokeWidth: 2.5 }),
+                /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Icon2, { name: state === "allowed" ? "check" : "x", size: 12, strokeWidth: 2.5 }),
                 state === "allowed" ? t.allowed : t.denied
               ]
             }
@@ -10638,9 +10475,9 @@
     );
   }
   function ApprovalParams({ t, expanded, onToggle, params }) {
-    const [hover, setHover] = import_react32.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
+    const [hover, setHover] = import_react31.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
         "button",
         {
           type: "button",
@@ -10661,12 +10498,12 @@
             color: hover ? "var(--text-secondary)" : "var(--text-tertiary)"
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Icon2, { name: "chevron-right", size: 11, style: { transform: expanded ? "rotate(90deg)" : "none", transition: "transform var(--dur-base) var(--ease-out)" } }),
+            /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Icon2, { name: "chevron-right", size: 11, style: { transform: expanded ? "rotate(90deg)" : "none", transition: "transform var(--dur-base) var(--ease-out)" } }),
             t.params
           ]
         }
       ),
-      expanded ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
+      expanded ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
         "pre",
         {
           style: {
@@ -10689,11 +10526,11 @@
   }
 
   // src/components/chat/PromptCard.jsx
-  var import_react33 = __toESM(require_react(), 1);
-  var import_jsx_runtime31 = __toESM(require_jsx_runtime(), 1);
+  var import_react32 = __toESM(require_react(), 1);
+  var import_jsx_runtime30 = __toESM(require_jsx_runtime(), 1);
   function PromptCard({ icon = "wand-2", title, caption, onClick, style }) {
-    const [hover, setHover] = import_react33.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
+    const [hover, setHover] = import_react32.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
       "button",
       {
         type: "button",
@@ -10716,10 +10553,10 @@
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Icon2, { name: icon, size: 14, color: "var(--text-tertiary)", style: { marginTop: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { display: "block", font: `var(--weight-medium) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
-            caption ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { display: "block", marginTop: 2, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)" }, children: caption }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Icon2, { name: icon, size: 14, color: "var(--text-tertiary)", style: { marginTop: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { style: { display: "block", font: `var(--weight-medium) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
+            caption ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { style: { display: "block", marginTop: 2, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)" }, children: caption }) : null
           ] })
         ]
       }
@@ -10727,8 +10564,8 @@
   }
 
   // src/components/chat/Composer.jsx
-  var import_react34 = __toESM(require_react(), 1);
-  var import_jsx_runtime32 = __toESM(require_jsx_runtime(), 1);
+  var import_react33 = __toESM(require_react(), 1);
+  var import_jsx_runtime31 = __toESM(require_jsx_runtime(), 1);
   function Composer({
     value = "",
     onChange,
@@ -10741,7 +10578,7 @@
     placeholder,
     style
   }) {
-    const [focus, setFocus] = import_react34.default.useState(false);
+    const [focus, setFocus] = import_react33.default.useState(false);
     const canSend = !disabled && !streaming && value.trim().length > 0;
     const handleKey = (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
@@ -10749,9 +10586,9 @@
         if (canSend && onSend) onSend();
       }
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-15)", ...style }, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-15)", ...style }, children: [
       notice,
-      /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
+      /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
         "div",
         {
           style: {
@@ -10768,7 +10605,7 @@
             transition: "border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out)"
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
               "textarea",
               {
                 rows: 1,
@@ -10793,19 +10630,19 @@
                 }
               }
             ),
-            options ? /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 2, minWidth: 0 }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 2 }, children: options }),
-              streaming ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
-            ] }) : streaming ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
+            options ? /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 2, minWidth: 0 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 2 }, children: options }),
+              streaming ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
+            ] }) : streaming ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
           ]
         }
       )
     ] });
   }
   function SendButton({ icon, title, kind, disabled = false, onClick }) {
-    const [hover, setHover] = import_react34.default.useState(false);
+    const [hover, setHover] = import_react33.default.useState(false);
     const active = kind === "send" && !disabled;
-    return /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
       "button",
       {
         type: "button",
@@ -10831,19 +10668,19 @@
           cursor: disabled ? "default" : "pointer",
           transition: "background var(--dur-fast) var(--ease-out)"
         },
-        children: /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Icon2, { name: icon, size: 13, strokeWidth: 2.25 })
+        children: /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Icon2, { name: icon, size: 13, strokeWidth: 2.25 })
       }
     );
   }
 
   // src/components/chat/ComposerChip.jsx
-  var import_react36 = __toESM(require_react(), 1);
+  var import_react35 = __toESM(require_react(), 1);
 
   // src/components/core/Menu.jsx
-  var import_react35 = __toESM(require_react(), 1);
-  var import_jsx_runtime33 = __toESM(require_jsx_runtime(), 1);
+  var import_react34 = __toESM(require_react(), 1);
+  var import_jsx_runtime32 = __toESM(require_jsx_runtime(), 1);
   function Keycap({ children }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
       "span",
       {
         style: {
@@ -10864,9 +10701,9 @@
     );
   }
   function MenuRow({ item, onClose }) {
-    const [hover, setHover] = import_react35.default.useState(false);
+    const [hover, setHover] = import_react34.default.useState(false);
     const disabled = !!item.disabled;
-    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
       "button",
       {
         type: "button",
@@ -10895,15 +10732,15 @@
           transition: "background var(--dur-fast) var(--ease-out)"
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: item.label }),
-          item.checked ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.25, color: "var(--text-primary)" }) : null,
-          item.hint ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { style: { flex: "none", font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: item.hint }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: item.label }),
+          item.checked ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.25, color: "var(--text-primary)" }) : null,
+          item.hint ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { flex: "none", font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: item.hint }) : null
         ]
       }
     );
   }
   function Menu({ header, items = [], footer, onClose, minWidth = 184, style }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
       "div",
       {
         role: "menu",
@@ -10917,7 +10754,7 @@
           ...style
         },
         children: [
-          header ? /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
+          header ? /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
             "div",
             {
               style: {
@@ -10930,15 +10767,15 @@
                 marginBottom: "var(--space-1)"
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { style: { font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: header.label }),
-                header.keys && header.keys.length ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { style: { display: "inline-flex", gap: 3 }, children: header.keys.map((k, i) => /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Keycap, { children: k }, i)) }) : null
+                /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: header.label }),
+                header.keys && header.keys.length ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { display: "inline-flex", gap: 3 }, children: header.keys.map((k, i) => /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Keycap, { children: k }, i)) }) : null
               ]
             }
           ) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { style: { display: "flex", flexDirection: "column" }, children: items.map(
-            (item, i) => item.divider ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { style: { height: 1, background: "var(--border-subtle)", margin: "4px 0" } }, i) : /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(MenuRow, { item, onClose }, i)
+          /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { display: "flex", flexDirection: "column" }, children: items.map(
+            (item, i) => item.divider ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { height: 1, background: "var(--border-subtle)", margin: "4px 0" } }, i) : /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(MenuRow, { item, onClose }, i)
           ) }),
-          footer ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+          footer ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
             "div",
             {
               style: {
@@ -10957,7 +10794,7 @@
   }
 
   // src/components/chat/ComposerChip.jsx
-  var import_jsx_runtime34 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime33 = __toESM(require_jsx_runtime(), 1);
   function ComposerChip({
     icon,
     label,
@@ -10971,11 +10808,11 @@
     title,
     style
   }) {
-    const [hover, setHover] = import_react36.default.useState(false);
-    const [open, setOpen] = import_react36.default.useState(false);
-    const rootRef = import_react36.default.useRef(null);
+    const [hover, setHover] = import_react35.default.useState(false);
+    const [open, setOpen] = import_react35.default.useState(false);
+    const rootRef = import_react35.default.useRef(null);
     const isMenu = Array.isArray(items) && items.length > 0;
-    import_react36.default.useEffect(() => {
+    import_react35.default.useEffect(() => {
       if (!open) return void 0;
       const onDoc = (e) => {
         if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
@@ -10991,8 +10828,8 @@
       };
     }, [open]);
     const lit = active || open;
-    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { ref: rootRef, style: { position: "relative", flex: "none", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { ref: rootRef, style: { position: "relative", flex: "none", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
         "button",
         {
           type: "button",
@@ -11025,14 +10862,14 @@
             whiteSpace: "nowrap"
           },
           children: [
-            icon ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Icon2, { name: icon, size: 12 }) : null,
-            label ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { style: { overflow: "hidden", textOverflow: "ellipsis", maxWidth: 96 }, children: label }) : null,
-            !isMenu && onToggle && active ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Icon2, { name: "check", size: 10, strokeWidth: 2.5 }) : null,
-            isMenu ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Icon2, { name: "chevron-down", size: 10, strokeWidth: 2, style: { opacity: 0.7 } }) : null
+            icon ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Icon2, { name: icon, size: 12 }) : null,
+            label ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { style: { overflow: "hidden", textOverflow: "ellipsis", maxWidth: 96 }, children: label }) : null,
+            !isMenu && onToggle && active ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Icon2, { name: "check", size: 10, strokeWidth: 2.5 }) : null,
+            isMenu ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Icon2, { name: "chevron-down", size: 10, strokeWidth: 2, style: { opacity: 0.7 } }) : null
           ]
         }
       ),
-      isMenu && open ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+      isMenu && open ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
         "div",
         {
           style: {
@@ -11042,7 +10879,7 @@
             zIndex: 30,
             animation: "ds-fade-up var(--dur-base) var(--ease-out)"
           },
-          children: /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Menu, { header: menuHeader, items, footer: menuFooter, onClose: () => setOpen(false) })
+          children: /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Menu, { header: menuHeader, items, footer: menuFooter, onClose: () => setOpen(false) })
         }
       ) : null
     ] });
@@ -11092,7 +10929,7 @@
   }
 
   // src/screens/ChatScreen.jsx
-  var import_jsx_runtime35 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime34 = __toESM(require_jsx_runtime(), 1);
   var C = {
     zh: {
       hello: "\u4F60\u597D\uFF01\u6211\u53EF\u4EE5\u76F4\u63A5\u64CD\u4F5C\u5F53\u524D\u6253\u5F00\u7684 AE \u5DE5\u7A0B\u3002\u8BD5\u8BD5\u8FD9\u4E9B\uFF1A",
@@ -11148,10 +10985,10 @@
     ]
   };
   function Notice({ text, actionLabel, onAction }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "var(--bg-well)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Icon2, { name: "plug", size: 12, color: "var(--text-tertiary)" }),
-      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { flex: 1, minWidth: 0, font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: text }),
-      onAction ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, children: actionLabel }) : null
+    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "var(--bg-well)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Icon2, { name: "plug", size: 12, color: "var(--text-tertiary)" }),
+      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { style: { flex: 1, minWidth: 0, font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: text }),
+      onAction ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, children: actionLabel }) : null
     ] });
   }
   function statusForTool(state) {
@@ -11172,15 +11009,15 @@
   function Entry({ entry, lang, onApprove }) {
     const t = C[lang] || C.zh;
     if (entry.type === "user-text") {
-      return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(ChatBubble, { role: "user", children: entry.text });
+      return /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(ChatBubble, { role: "user", children: entry.text });
     }
     if (entry.type === "ai-text") {
-      return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(ChatBubble, { role: "ai", children: entry.text });
+      return /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(ChatBubble, { role: "ai", children: entry.text });
     }
     if (entry.type === "tool-call") {
       const highRisk = entry.risk === "destructive";
-      return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { paddingLeft: 28, display: "flex", flexDirection: "column", gap: 6 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { paddingLeft: 28, display: "flex", flexDirection: "column", gap: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
           ToolCallCard,
           {
             verb: titleForTool(entry, lang),
@@ -11190,7 +11027,7 @@
             errorMessage: entry.state === "error" ? entry.text : null
           }
         ),
-        entry.state === "awaiting-approval" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+        entry.state === "awaiting-approval" ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
           ApprovalCard,
           {
             risk: highRisk ? "high" : "normal",
@@ -11206,7 +11043,7 @@
       ] });
     }
     if (entry.type === "error") {
-      return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(ToolCallCard, { verb: entry.kind === "model" ? t.modelErrorTitle : t.errorTitle, target: entry.kind, status: "error", errorMessage: entry.message }) });
+      return /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(ToolCallCard, { verb: entry.kind === "model" ? t.modelErrorTitle : t.errorTitle, target: entry.kind, status: "error", errorMessage: entry.message }) });
     }
     return null;
   }
@@ -11239,13 +11076,13 @@
     onChipApproval
   }) {
     const t = C[lang] || C.zh;
-    const [draft, setDraft] = import_react37.default.useState("");
-    const logRef = import_react37.default.useRef(null);
+    const [draft, setDraft] = import_react36.default.useState("");
+    const logRef = import_react36.default.useRef(null);
     const hasEntries = entries.length > 0;
     const prompts = promptCards || DEFAULT_PROMPTS[lang] || DEFAULT_PROMPTS.zh;
     const chips = chipState && chipState.descriptor ? buildComposerChips({ ...chipState, lang }) : null;
-    const composerOptions = chips ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(import_react37.default.Fragment, { children: [
-      chips.model ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+    const composerOptions = chips ? /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(import_react36.default.Fragment, { children: [
+      chips.model ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
         ComposerChip,
         {
           icon: "box",
@@ -11255,7 +11092,7 @@
           items: menuItems(chips.model.items, chipState.modelId, onChipModel)
         }
       ) : null,
-      chips.effort ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+      chips.effort ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
         ComposerChip,
         {
           icon: "brain",
@@ -11265,7 +11102,7 @@
           items: menuItems(chips.effort.items, chipState.effort, onChipEffort)
         }
       ) : null,
-      chips.fast ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+      chips.fast ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
         ComposerChip,
         {
           icon: "zap",
@@ -11275,7 +11112,7 @@
           onToggle: (next) => onChipFast && onChipFast(next)
         }
       ) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
         ComposerChip,
         {
           icon: "shield",
@@ -11286,7 +11123,7 @@
         }
       )
     ] }) : null;
-    import_react37.default.useEffect(() => {
+    import_react36.default.useEffect(() => {
       const el = logRef.current;
       if (el) el.scrollTop = el.scrollHeight;
     }, [entries, streaming, thinking]);
@@ -11296,19 +11133,19 @@
       if (onSend) onSend(text);
       setDraft("");
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { ref: logRef, style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }, children: [
-        !hasEntries && composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(import_react37.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(AIAvatar, { size: 32 }),
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { font: "600 12px/1.35 var(--font-ui)", color: "var(--text-primary)", maxWidth: 240 }, children: disabledHint || t.keyTitle }),
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { font: "400 11px/1.45 var(--font-ui)", color: "var(--text-tertiary)", maxWidth: 250 }, children: t.keyCaption })
+    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { ref: logRef, style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }, children: [
+        !hasEntries && composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(import_react36.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(AIAvatar, { size: 32 }),
+          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { font: "600 12px/1.35 var(--font-ui)", color: "var(--text-primary)", maxWidth: 240 }, children: disabledHint || t.keyTitle }),
+          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { font: "400 11px/1.45 var(--font-ui)", color: "var(--text-tertiary)", maxWidth: 250 }, children: t.keyCaption })
         ] }) }) : null,
-        !hasEntries && !composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(import_react37.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(AIAvatar, { size: 32 }),
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 240 }, children: t.hello })
+        !hasEntries && !composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(import_react36.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(AIAvatar, { size: 32 }),
+            /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 240 }, children: t.hello })
           ] }),
-          prompts.map((card) => /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+          prompts.map((card) => /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
             PromptCard,
             {
               icon: card.icon,
@@ -11322,13 +11159,13 @@
             card.id || card.title
           ))
         ] }) : null,
-        entries.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Entry, { entry, lang, onApprove }, entry.id)),
-        streaming && thinking ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { paddingLeft: 28, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Spinner, { size: 12 }),
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { children: t.thinking })
+        entries.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Entry, { entry, lang, onApprove }, entry.id)),
+        streaming && thinking ? /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { paddingLeft: 28, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Spinner, { size: 12 }),
+          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { children: t.thinking })
         ] }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
         Composer,
         {
           value: draft,
@@ -11339,7 +11176,7 @@
           disabled: composerDisabled,
           placeholder: t.placeholder,
           options: composerOptions,
-          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : null
+          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : null
         }
       ) })
     ] });
@@ -11457,10 +11294,18 @@
     url.hash = "";
     return url.toString();
   }
+  function ensureUserEnv(env = {}, { homedir = "", appData = "" } = {}) {
+    const next = { ...env };
+    const anchor = String(next.USERPROFILE || next.HOME || homedir || "").replace(/[\\/]+$/, "");
+    if (!anchor) return next;
+    if (!next.USERPROFILE) next.USERPROFILE = anchor;
+    if (!next.HOME) next.HOME = anchor;
+    if (!next.APPDATA) next.APPDATA = appData || anchor + "\\AppData\\Roaming";
+    return next;
+  }
 
   // src/lib/anthropic.js
   var DEFAULT_MODEL = "claude-sonnet-4-6";
-  var FALLBACK_MODEL = "claude-haiku-4-5-20251001";
   function buildSystemPrompt(lang = "zh") {
     if (lang === "en") {
       return [
@@ -11839,6 +11684,1647 @@
     };
   }
 
+  // src/lib/ndjson.js
+  function createLineSplitter(onLine) {
+    let buffer = "";
+    return function push(chunk) {
+      buffer += String(chunk || "");
+      let index = buffer.indexOf("\n");
+      while (index !== -1) {
+        const line = buffer.slice(0, index).trim();
+        buffer = buffer.slice(index + 1);
+        if (line) onLine(line);
+        index = buffer.indexOf("\n");
+      }
+    };
+  }
+  function createNdjsonReader(onMessage) {
+    return createLineSplitter((line) => {
+      let message;
+      try {
+        message = JSON.parse(line);
+      } catch (e) {
+        return;
+      }
+      onMessage(message);
+    });
+  }
+
+  // src/lib/claudeChannel.js
+  function claudeChannelEnv(baseEnv = {}, { channel = "subscription", provider = null } = {}) {
+    const env = { ...baseEnv };
+    delete env.ANTHROPIC_API_KEY;
+    if (channel === "api" && provider && provider.baseUrl) {
+      env.ANTHROPIC_BASE_URL = String(provider.baseUrl);
+      if (provider.apiKey) env.ANTHROPIC_AUTH_TOKEN = String(provider.apiKey);
+      else delete env.ANTHROPIC_AUTH_TOKEN;
+      return env;
+    }
+    delete env.ANTHROPIC_BASE_URL;
+    delete env.ANTHROPIC_AUTH_TOKEN;
+    return env;
+  }
+
+  // src/cep/claudeAgentBackend.js
+  var READY_TIMEOUT_MS = 15e3;
+  var STDERR_TAIL_LIMIT = 4096;
+  var FIXED_NODE_CANDIDATE = "C:\\Program Files\\nodejs\\node.exe";
+  function getCepRequire() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
+      return globalThis.window.cep_node.require;
+    }
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function getCepEnv() {
+    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
+  }
+  function execFileAsync(execFileImpl, file, args, env) {
+    return new Promise((resolve) => {
+      execFileImpl(file, args, { windowsHide: true, env }, (err, stdout, stderr) => {
+        resolve({ err, stdout: String(stdout || ""), stderr: String(stderr || "") });
+      });
+    });
+  }
+  function nodeCandidates(stdout) {
+    const seen = /* @__PURE__ */ new Set();
+    const candidates = String(stdout || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    candidates.push(FIXED_NODE_CANDIDATE);
+    return candidates.filter((candidate) => {
+      if (seen.has(candidate)) return false;
+      seen.add(candidate);
+      return true;
+    });
+  }
+  function parseMajor(version) {
+    const match = String(version || "").trim().match(/^v(\d+)/);
+    return match ? Number(match[1]) : 0;
+  }
+  async function resolveSystemNode({ execFileImpl, env } = {}) {
+    const execFile = execFileImpl || getCepRequire()("child_process").execFile;
+    const processEnv = env || getCepEnv();
+    const where = await execFileAsync(execFile, "where", ["node"], processEnv);
+    const candidates = nodeCandidates(where.err ? "" : where.stdout);
+    for (const candidate of candidates) {
+      const checked = await execFileAsync(execFile, candidate, ["--version"], processEnv);
+      if (checked.err) continue;
+      const version = String(checked.stdout || checked.stderr || "").trim();
+      if (parseMajor(version) >= 18) return { ok: true, nodePath: candidate, version };
+    }
+    return { ok: false, detail: "No system Node 18+ found." };
+  }
+  function clone2(value) {
+    return value == null ? value : JSON.parse(JSON.stringify(value));
+  }
+  function nodeMissingMessage(lang) {
+    if (lang === "zh") return "\u5185\u5D4C\u5BF9\u8BDD\u9700\u8981\u7CFB\u7EDF Node 18+\uFF08\u672A\u68C0\u6D4B\u5230\uFF09\u3002\u5B89\u88C5 Node.js LTS \u540E\u91CD\u8BD5\u3002";
+    return "Embedded chat needs system Node 18+. Install Node.js LTS and retry.";
+  }
+  function appendTail2(tail, chunk) {
+    const next = tail + String(chunk || "");
+    return next.length > STDERR_TAIL_LIMIT ? next.slice(next.length - STDERR_TAIL_LIMIT) : next;
+  }
+  function createClaudeAgentBackend({
+    resolveNode = resolveSystemNode,
+    sidecarPath,
+    getMcpSpec,
+    getToolMeta,
+    getModel,
+    getPermissionMode,
+    getEffort,
+    getThinking,
+    getChannel = () => "subscription",
+    getApiProvider = () => null,
+    onEvent,
+    lang = "zh",
+    spawnImpl,
+    env
+  }) {
+    let proc = null;
+    let startPromise = null;
+    let pendingReadyReject = null;
+    let pendingReadyTimer = null;
+    let ready = false;
+    let stopping = false;
+    let stderrTail = "";
+    let transcript = [];
+    let activeRun = null;
+    let activeResolve = null;
+    let activeAssistantText = "";
+    function emit(evt) {
+      if (onEvent) onEvent(evt);
+    }
+    function getSpawn() {
+      if (spawnImpl) return spawnImpl;
+      return getCepRequire()("child_process").spawn;
+    }
+    function writeMessage(message) {
+      if (!proc || !proc.stdin || !proc.stdin.write) return;
+      proc.stdin.write(JSON.stringify(message) + "\n");
+    }
+    function finishActive() {
+      if (!activeResolve) {
+        activeRun = null;
+        activeAssistantText = "";
+        return;
+      }
+      const resolve = activeResolve;
+      activeResolve = null;
+      activeRun = null;
+      activeAssistantText = "";
+      resolve();
+    }
+    function handleSidecarMessage(message) {
+      if (!message || message.t === "ready") return;
+      if (message.t !== "event") return;
+      const event = message.event;
+      if (!event) return;
+      if (event.type === "text-delta") activeAssistantText += String(event.text || "");
+      emit(event);
+      if (event.type === "turn-end") {
+        transcript.push({ role: "assistant", text: activeAssistantText });
+        finishActive();
+      }
+      if (event.type === "error") finishActive();
+    }
+    function exitDetail(code, signal) {
+      const suffix = signal ? String(code) + " " + signal : String(code);
+      return stderrTail ? suffix + " " + stderrTail : suffix;
+    }
+    function clearReadyWait() {
+      if (pendingReadyTimer) clearTimeout(pendingReadyTimer);
+      pendingReadyTimer = null;
+      pendingReadyReject = null;
+    }
+    function handleExit(code, signal) {
+      const wasStopping = stopping;
+      const wasReady = ready;
+      const detail = exitDetail(code, signal);
+      const rejectReady = pendingReadyReject;
+      proc = null;
+      ready = false;
+      startPromise = null;
+      stopping = false;
+      if (wasStopping) return;
+      if (!wasReady && rejectReady) {
+        clearReadyWait();
+        rejectReady(new Error("sidecar exited: " + detail));
+        return;
+      }
+      if (activeRun) {
+        emit({ type: "error", kind: "mcp", message: "sidecar exited: " + detail });
+        finishActive();
+      }
+    }
+    function handleProcError(error) {
+      const rejectReady = pendingReadyReject;
+      proc = null;
+      ready = false;
+      startPromise = null;
+      if (rejectReady) {
+        clearReadyWait();
+        rejectReady(error instanceof Error ? error : new Error("sidecar error"));
+        return;
+      }
+      if (activeRun) {
+        emit({ type: "error", kind: "mcp", message: error && error.message ? error.message : "sidecar error" });
+        finishActive();
+      }
+    }
+    async function startSidecar() {
+      if (proc && ready) return true;
+      if (startPromise) return startPromise;
+      startPromise = (async () => {
+        const node = await resolveNode();
+        if (!node || !node.ok) {
+          emit({ type: "error", kind: "mcp", message: nodeMissingMessage(lang) });
+          return false;
+        }
+        const mcpSpec = await getMcpSpec();
+        const meta = await getToolMeta();
+        const spawn = getSpawn();
+        const channel = getChannel ? getChannel() : "subscription";
+        const spawnEnv = claudeChannelEnv(env || getCepEnv(), { channel, provider: getApiProvider ? getApiProvider() : null });
+        stderrTail = "";
+        stopping = false;
+        ready = false;
+        let readyResolve;
+        let readyReject;
+        const readyPromise = new Promise((resolve, reject) => {
+          readyResolve = resolve;
+          readyReject = reject;
+        });
+        pendingReadyReject = readyReject;
+        pendingReadyTimer = setTimeout(() => {
+          pendingReadyTimer = null;
+          pendingReadyReject = null;
+          try {
+            stopping = true;
+            if (proc) proc.kill();
+          } catch (e) {
+          }
+          readyReject(new Error("sidecar ready timed out"));
+        }, READY_TIMEOUT_MS);
+        try {
+          proc = spawn(node.nodePath, [
+            sidecarPath,
+            "--mcp",
+            JSON.stringify(mcpSpec),
+            "--allowed-tools",
+            JSON.stringify(meta.allowedTools),
+            "--annotations",
+            JSON.stringify(meta.annotations),
+            "--model",
+            getModel(),
+            "--lang",
+            lang,
+            "--channel",
+            channel
+          ], {
+            stdio: "pipe",
+            windowsHide: true,
+            env: spawnEnv
+          });
+        } catch (e) {
+          clearReadyWait();
+          throw e;
+        }
+        const reader = createNdjsonReader((message) => {
+          if (message && message.t === "ready") {
+            ready = true;
+            clearReadyWait();
+            readyResolve(true);
+            return;
+          }
+          handleSidecarMessage(message);
+        });
+        if (proc.stdout && proc.stdout.on) proc.stdout.on("data", reader);
+        if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
+          stderrTail = appendTail2(stderrTail, chunk);
+        });
+        proc.on("exit", (code, signal) => handleExit(code, signal));
+        proc.on("error", (error) => {
+          handleProcError(error);
+        });
+        await readyPromise;
+        return true;
+      })();
+      try {
+        return await startPromise;
+      } catch (e) {
+        emit({ type: "error", kind: "mcp", message: e && e.message ? e.message : "Failed to start sidecar." });
+        return false;
+      } finally {
+        startPromise = null;
+      }
+    }
+    async function sendUser(text) {
+      if (activeRun) return activeRun;
+      activeAssistantText = "";
+      activeRun = new Promise((resolve) => {
+        activeResolve = resolve;
+      });
+      const ok = await startSidecar();
+      if (!ok) {
+        finishActive();
+        return activeRun;
+      }
+      const userText = String(text || "");
+      transcript.push({ role: "user", text: userText });
+      writeMessage({
+        t: "user",
+        text: userText,
+        permissionMode: getPermissionMode(),
+        model: getModel(),
+        effort: getEffort ? getEffort() : void 0,
+        thinking: getThinking ? getThinking() : void 0
+      });
+      return activeRun;
+    }
+    function approve(toolUseId, decision) {
+      writeMessage({ t: "approve", id: toolUseId, decision });
+    }
+    function stop() {
+      writeMessage({ t: "stop" });
+    }
+    function reset() {
+      stopping = true;
+      if (proc) {
+        try {
+          proc.kill();
+        } catch (e) {
+        }
+      }
+      proc = null;
+      ready = false;
+      startPromise = null;
+      transcript = [];
+      finishActive();
+      stderrTail = "";
+      stopping = false;
+    }
+    return {
+      sendUser,
+      approve,
+      stop,
+      reset,
+      getMessages: () => clone2(transcript),
+      getStderrTail: () => stderrTail
+    };
+  }
+
+  // src/cep/apiKey.js
+  var KEY_FILES = {
+    anthropic: "anthropic-key",
+    codex: "codex-key",
+    zcode: "zcode-key"
+  };
+  function cepRequire2() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) return globalThis.window.cep_node.require;
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    return null;
+  }
+  function defaultDeps() {
+    const req = cepRequire2();
+    if (!req) throw new Error("CEP Node require is unavailable");
+    return {
+      fs: req("fs"),
+      os: req("os"),
+      path: req("path"),
+      pid: req("process") && req("process").pid
+    };
+  }
+  function createApiKeyStore(deps = defaultDeps()) {
+    const fs = deps.fs;
+    const os = deps.os;
+    const path = deps.path;
+    function keyDir() {
+      return path.join(os.homedir(), ".ae-mcp");
+    }
+    function keyFile(name = "anthropic") {
+      const file = KEY_FILES[String(name || "anthropic")];
+      if (!file) throw new Error("Unsupported API key name: " + name);
+      return file;
+    }
+    function keyPath(name = "anthropic") {
+      return path.join(keyDir(), keyFile(name));
+    }
+    function readKey(name = "anthropic") {
+      try {
+        return fs.readFileSync(keyPath(name), "utf8").trim();
+      } catch (e) {
+        if (e && e.code === "ENOENT") return "";
+        throw e;
+      }
+    }
+    function writeKey(key, name = "anthropic") {
+      const value = String(key || "").trim();
+      const dir = keyDir();
+      const fileName = keyFile(name);
+      const file = keyPath(name);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const pid = deps.pid || 0;
+      const tmp = path.join(dir, `${fileName}.${pid}.${Date.now()}.tmp`);
+      fs.writeFileSync(tmp, value, "utf8");
+      try {
+        fs.chmodSync(tmp, 384);
+      } catch (e) {
+      }
+      fs.renameSync(tmp, file);
+      return value;
+    }
+    function clearKey(name = "anthropic") {
+      try {
+        fs.unlinkSync(keyPath(name));
+      } catch (e) {
+        if (!e || e.code !== "ENOENT") throw e;
+      }
+    }
+    return { keyDir, keyPath, readKey, writeKey, clearKey };
+  }
+
+  // src/lib/zcodeErrors.js
+  var ZH_RULES = [
+    {
+      // Provider ids may contain dots (e.g. "mediastorm_glm/glm-5.2"): capture the
+      // whole non-space run, then drop one trailing sentence terminator if present.
+      re: /Model provider is missing an API key:\s*([^\s]+?)[.。]?(?=\s|$)/i,
+      hint: (m) => "ZCode provider\u300C" + m[1] + "\u300D\u7F3A\u5C11 API Key \u2014\u2014 \u5230 \u8BBE\u7F6E \u2192 AI \u670D\u52A1 \u2192 ZCode \u901A\u9053 \u7C98\u8D34\u4E00\u6B21 Key\uFF08\u4FDD\u5B58\u5728\u672C\u673A ~/.ae-mcp/zcode-key\uFF09\uFF0C\u6216\u5728 ~/.zcode/cli/config.json \u91CC\u914D\u7F6E\u3002"
+    },
+    {
+      re: /Model config is missing/i,
+      hint: () => "\u672A\u627E\u5230 ZCode \u6A21\u578B\u914D\u7F6E \u2014\u2014 \u6253\u5F00 ZCode \u9009\u62E9 provider/model\uFF0C\u6216\u521B\u5EFA ~/.zcode/cli/config.json \u6307\u5B9A provider \u4E0E\u9ED8\u8BA4\u6A21\u578B\u3002"
+    },
+    {
+      re: /Provider authentication failed/i,
+      hint: () => "ZCode provider \u9274\u6743\u5931\u8D25 \u2014\u2014 \u68C0\u67E5 API Key \u662F\u5426\u6709\u6548\uFF1B\u82E5\u662F\u5B98\u65B9\u6258\u7BA1\u8BA1\u5212\uFF08start-plan\uFF09\uFF0C\u9762\u677F\u5C1A\u4E0D\u652F\u6301\u5176\u684C\u9762\u9A8C\u8BC1\u7801\u6865\u63A5\uFF0C\u8BF7\u6539\u7528 CLI \u914D\u7F6E\u901A\u9053\u3002"
+    }
+  ];
+  function localizeZcodeError(message, lang = "en") {
+    const text = String(message || "");
+    if (lang !== "zh" || !text) return text;
+    for (const rule of ZH_RULES) {
+      const m = rule.re.exec(text);
+      if (m) {
+        const hint = rule.hint(m);
+        if (text.startsWith(hint)) return text;
+        return hint + "\n" + text;
+      }
+    }
+    return text;
+  }
+
+  // src/cep/zcodeBackend.js
+  var RPC_TIMEOUT_MS = 3e4;
+  var STDERR_TAIL_LIMIT2 = 4096;
+  var DELIVERY_KIND = "desktop-continuous";
+  var ZCODE_BUILTIN_DEFAULT_MODEL = "builtin:bigmodel-start-plan/GLM-5.2";
+  var LEGACY_ZCODE_MODEL_REFS = /* @__PURE__ */ new Set(["mediastorm_glm/glm-5.2"]);
+  var ZCODE_THOUGHT_LEVELS = /* @__PURE__ */ new Set(["nothink", "high", "max", "low", "medium"]);
+  var ZCODE_CREDENTIAL_PREFIX = "enc:v1:";
+  var ZCODE_API_KEY_NAME = "zcode-api-key";
+  var BIGMODEL_API_ORIGIN = "https://bigmodel.cn";
+  var ZAI_BIZ_API_ORIGIN = "https://api.z.ai";
+  var JSON_CONTENT_TYPE = "application/json";
+  var MODE_BY_TIER = {
+    readonly: "plan",
+    manual: "build",
+    auto: "edit",
+    none: "yolo"
+  };
+  function getCepRequire2() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
+      return globalThis.window.cep_node.require;
+    }
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function getCepEnv2() {
+    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
+  }
+  function appendTail3(tail, chunk) {
+    const next = tail + String(chunk || "");
+    return next.length > STDERR_TAIL_LIMIT2 ? next.slice(next.length - STDERR_TAIL_LIMIT2) : next;
+  }
+  function clone3(value) {
+    return value == null ? value : JSON.parse(JSON.stringify(value));
+  }
+  async function resolveZcodeCli({ env, execFileImpl }) {
+    const override = env && env.AE_MCP_ZCODE_CLI;
+    if (override) return { ok: true, cliPath: override };
+    const localAppData = env && (env.LOCALAPPDATA || env.LocalAppData);
+    if (localAppData) {
+      const path = localAppData + "\\Programs\\ZCode\\resources\\glm\\zcode.cjs";
+      try {
+        await statFile(path);
+        return { ok: true, cliPath: path };
+      } catch (e) {
+      }
+    }
+    const execFile = execFileImpl || getCepRequire2()("child_process").execFile;
+    try {
+      const where = await execFileAsync2(execFile, "where", ["zcode"], env || {});
+      if (!where.err && where.stdout) {
+        const exe = String(where.stdout).split(/\r?\n/)[0].trim();
+        if (exe) return { ok: true, cliPath: exe, isExe: true };
+      }
+    } catch (e) {
+    }
+    return { ok: false, detail: "ZCode CLI not found. Install ZCode or set AE_MCP_ZCODE_CLI to the zcode.cjs path." };
+  }
+  function statFile(path) {
+    const fs = getCepRequire2()("fs");
+    return new Promise((resolve, reject) => fs.stat(path, (err) => err ? reject(err) : resolve()));
+  }
+  function execFileAsync2(execFile, cmd, args, env) {
+    return new Promise((resolve) => {
+      execFile(cmd, args, { env, windowsHide: true }, (err, stdout, stderr) => {
+        resolve({ err, stdout: String(stdout || ""), stderr: String(stderr || "") });
+      });
+    });
+  }
+  function createRpc({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEOUT_MS }) {
+    let nextId2 = 1;
+    const pending = /* @__PURE__ */ new Map();
+    function writeMessage(message) {
+      writeLine(JSON.stringify(message) + "\n");
+    }
+    function rejectPending(id, error) {
+      const entry = pending.get(id);
+      if (!entry) return;
+      pending.delete(id);
+      clearTimeout(entry.timer);
+      entry.reject(error);
+    }
+    function handleMessage(message) {
+      if (!message || typeof message !== "object") return;
+      const hasId = message.id !== void 0 && message.id !== null;
+      if (hasId && !message.method) {
+        const entry = pending.get(message.id);
+        if (!entry) return;
+        pending.delete(message.id);
+        clearTimeout(entry.timer);
+        if (message.error) {
+          const error = new Error(message.error.message || "ZCode request failed");
+          error.code = message.error.code;
+          error.data = message.error.data;
+          entry.reject(error);
+        } else {
+          entry.resolve(message.result);
+        }
+        return;
+      }
+      if (message.method && hasId) {
+        if (onRequest) onRequest(message);
+        return;
+      }
+      if (message.method && onNotification) onNotification(message);
+    }
+    function request(method, params, timeoutOverrideMs) {
+      const id = nextId2++;
+      const message = { id, method };
+      if (params !== void 0) message.params = params;
+      const limit = timeoutOverrideMs || timeoutMs;
+      const promise = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => rejectPending(id, new Error(method + " timed out after " + limit + "ms")), limit);
+        pending.set(id, { resolve, reject, timer });
+      });
+      writeMessage(message);
+      return promise;
+    }
+    function fireRequest(method, params) {
+      const id = nextId2++;
+      const message = { id, method };
+      if (params !== void 0) message.params = params;
+      writeMessage(message);
+      return id;
+    }
+    function respond(id, result) {
+      writeMessage({ id, result });
+    }
+    function respondError(id, code, message) {
+      writeMessage({ id, error: { code, message } });
+    }
+    function close(reason = new Error("ZCode app-server closed")) {
+      for (const id of Array.from(pending.keys())) rejectPending(id, reason);
+    }
+    return { request, fireRequest, respond, respondError, close, handleMessage };
+  }
+  function mcpToolName(name) {
+    const text = String(name || "");
+    return text.startsWith("mcp__") ? text : "mcp__ae__" + text;
+  }
+  function zcodeProviderId(modelRef) {
+    const text = String(modelRef || "").trim();
+    const slash = text.indexOf("/");
+    return slash > 0 ? text.slice(0, slash).trim() : "";
+  }
+  function zcodeProviderApiKeyEnv(providerId) {
+    const text = String(providerId || "").trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").toUpperCase();
+    return text ? text + "_API_KEY" : "";
+  }
+  function zcodeModelIds(provider) {
+    const models = provider && provider.models;
+    if (Array.isArray(models)) return models.map((m) => m && (m.id || m.modelID || m.modelId || m.name)).filter(Boolean).map(String);
+    if (models && typeof models === "object") return Object.keys(models);
+    return [];
+  }
+  function zcodePreferredModelId(provider) {
+    const ids = zcodeModelIds(provider);
+    if (!ids.length) return "";
+    return ids.find((id) => id === "GLM-5.2") || ids.find((id) => /GLM-5\.2/i.test(id)) || ids[0];
+  }
+  function hasZcodeProviderCredential(provider, env = {}) {
+    const options = provider && provider.options && typeof provider.options === "object" ? provider.options : {};
+    if (options.apiKey || provider && provider.apiKey) return true;
+    const keyEnv = String(options.apiKeyEnv || "").trim();
+    return Boolean(keyEnv && env[keyEnv]);
+  }
+  function zcodeProviderScore(providerId, provider, family, env = {}, { allowEmptyModels = false } = {}) {
+    if (!provider || typeof provider !== "object") return -1;
+    if (provider.enabled === false || provider.systemDisabledReason) return -1;
+    if (!zcodeModelIds(provider).length && !allowEmptyModels) return -1;
+    const id = String(providerId || "");
+    let score = 0;
+    if (provider.enabled === true) score += 100;
+    if (family && id === "builtin:" + family + "-start-plan") score += 80;
+    if (family && id === "builtin:" + family + "-coding-plan") score += 70;
+    if (family && id === "builtin:" + family) score += 40;
+    if (/-start-plan$/.test(id)) score += 30;
+    if (/-coding-plan$/.test(id)) score += 20;
+    if (hasZcodeProviderCredential(provider, env)) score += 300;
+    return score;
+  }
+  function zcodeDesktopProviderEntry({ config, setting, modelRef, env = {} }) {
+    const providers = config && config.provider && typeof config.provider === "object" ? config.provider : {};
+    const entries = Object.entries(providers);
+    if (!entries.length) return null;
+    const family = String(setting && setting.providerFamilyDomain || "").trim();
+    const requested = zcodeProtocolModelFromRef(modelRef);
+    if (requested && providers[requested.providerId]) {
+      const provider = providers[requested.providerId];
+      const score = zcodeProviderScore(requested.providerId, provider, family, env, { allowEmptyModels: true });
+      if (score >= 0) return { providerId: requested.providerId, provider, modelId: requested.modelId, score };
+    }
+    let best = null;
+    for (const [providerId, provider] of entries) {
+      const score = zcodeProviderScore(providerId, provider, family, env);
+      if (score < 0) continue;
+      if (!best || score > best.score) best = { providerId, provider, score };
+    }
+    if (!best) return null;
+    const modelId = zcodePreferredModelId(best.provider);
+    return modelId ? { ...best, modelId } : null;
+  }
+  function zcodeModelFromDesktopConfig({ config, setting, env = {} }) {
+    const entry = zcodeDesktopProviderEntry({ config, setting, env });
+    return entry ? entry.providerId + "/" + entry.modelId : "";
+  }
+  function zcodeProtocolProviderKind(kind) {
+    const text = String(kind || "").trim();
+    if (text === "openai" || text === "openai-compatible") return text;
+    return "anthropic";
+  }
+  function zcodeProtocolApiFormat(provider, kind) {
+    const direct = provider && (provider.apiFormat || provider.api_format);
+    if (direct) return direct;
+    if (kind === "openai") return "openai-responses";
+    if (kind === "openai-compatible") return "openai-chat-completions";
+    return "anthropic-messages";
+  }
+  function positiveNumber(value) {
+    return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : void 0;
+  }
+  function zcodeProtocolModelEntry(modelId, raw) {
+    const model = raw && typeof raw === "object" ? raw : {};
+    const limit = model.limit && typeof model.limit === "object" ? model.limit : {};
+    return {
+      modelId,
+      ...model.label || model.name ? { label: model.label || model.name } : {},
+      ...positiveNumber(model.contextWindow || limit.contextWindow) ? { contextWindow: positiveNumber(model.contextWindow || limit.contextWindow) } : {},
+      ...positiveNumber(model.maxOutputTokens || limit.maxOutputTokens) ? { maxOutputTokens: positiveNumber(model.maxOutputTokens || limit.maxOutputTokens) } : {}
+    };
+  }
+  function zcodeProtocolModels(provider, selectedModelId) {
+    const models = provider && provider.models;
+    const result = [];
+    if (Array.isArray(models)) {
+      for (const raw of models) {
+        const id = raw && (raw.id || raw.modelID || raw.modelId || raw.name);
+        if (id) result.push(zcodeProtocolModelEntry(String(id), raw));
+      }
+    } else if (models && typeof models === "object") {
+      for (const [id, raw] of Object.entries(models)) result.push(zcodeProtocolModelEntry(String(id), raw));
+    }
+    if (selectedModelId && !result.some((m) => m.modelId === selectedModelId)) {
+      result.unshift({ modelId: selectedModelId });
+    }
+    return result;
+  }
+  function resolveZcodeProviderApiKey({ provider, env = {}, storedKey = "" } = {}) {
+    const options = provider && provider.options && typeof provider.options === "object" ? provider.options : {};
+    const inline = options.apiKey || provider && provider.apiKey;
+    if (inline) return { key: String(inline), source: "config" };
+    const keyEnv = String(options.apiKeyEnv || "").trim();
+    if (keyEnv && env[keyEnv]) return { key: String(env[keyEnv]), source: "env" };
+    if (storedKey) return { key: String(storedKey), source: "panel" };
+    return { key: "", source: "" };
+  }
+  function zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef, thoughtLevel, env = {}, storedKey = "" } = {}) {
+    var _a;
+    const entry = zcodeDesktopProviderEntry({ config, setting, modelRef, env });
+    if (!entry) return null;
+    const provider = entry.provider || {};
+    const options = provider.options && typeof provider.options === "object" ? provider.options : {};
+    const kind = zcodeProtocolProviderKind(provider.kind);
+    const apiKey = resolveZcodeProviderApiKey({ provider, env, storedKey }).key;
+    const protocolProvider = {
+      providerId: entry.providerId,
+      kind,
+      apiFormat: zcodeProtocolApiFormat(provider, kind),
+      ...provider.name || provider.label ? { label: provider.name || provider.label } : {},
+      source: provider.source || "custom",
+      ...options.baseURL || provider.baseURL || provider.endpoints && provider.endpoints.baseURL ? { baseURL: options.baseURL || provider.baseURL || provider.endpoints.baseURL } : {},
+      ...apiKey ? { apiKey: { source: "inline", value: String(apiKey) } } : {},
+      ...typeof options.apiKeyRequired === "boolean" || typeof provider.apiKeyRequired === "boolean" ? { apiKeyRequired: (_a = options.apiKeyRequired) != null ? _a : provider.apiKeyRequired } : {},
+      models: zcodeProtocolModels(provider, entry.modelId)
+    };
+    return {
+      revision: "desktop-v2:" + entry.providerId,
+      generatedAt: Date.now(),
+      model: { providerId: entry.providerId, modelId: entry.modelId },
+      provider: protocolProvider,
+      ...thoughtLevel ? { thoughtLevel } : {}
+    };
+  }
+  function zcodeDesktopBasePath(env) {
+    const home = env && (env.USERPROFILE || env.HOME || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : ""));
+    return home ? String(home).replace(/[\\/]+$/, "") + "\\.zcode\\v2" : "";
+  }
+  function readJsonFile(fsImpl, path) {
+    try {
+      return JSON.parse(fsImpl.readFileSync(path, "utf8"));
+    } catch (e) {
+      return null;
+    }
+  }
+  function zcodeCliBasePath(env) {
+    const home = env && (env.USERPROFILE || env.HOME || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : ""));
+    return home ? String(home).replace(/[\\/]+$/, "") + "\\.zcode\\cli" : "";
+  }
+  function mergeZcodeConfigs({ cliConfig, desktopConfig } = {}) {
+    const desktopProviders = desktopConfig && desktopConfig.provider && typeof desktopConfig.provider === "object" ? desktopConfig.provider : {};
+    const cliProviders = cliConfig && cliConfig.provider && typeof cliConfig.provider === "object" ? cliConfig.provider : {};
+    const provider = Object.assign({}, desktopProviders, cliProviders);
+    return Object.keys(provider).length ? { provider } : null;
+  }
+  function readZcodeConfigs({ env, fsImpl } = {}) {
+    const fs = fsImpl || getCepRequire2()("fs");
+    const desktopBase = zcodeDesktopBasePath(env || {});
+    const cliBase = zcodeCliBasePath(env || {});
+    const desktopConfig = desktopBase ? readJsonFile(fs, desktopBase + "\\config.json") : null;
+    const setting = desktopBase ? readJsonFile(fs, desktopBase + "\\setting.json") : null;
+    const cliConfig = cliBase ? readJsonFile(fs, cliBase + "\\config.json") : null;
+    const cliModel = cliConfig && typeof cliConfig.model === "string" ? cliConfig.model.trim() : "";
+    return { config: mergeZcodeConfigs({ cliConfig, desktopConfig }), setting, cliModel, cliConfig, desktopConfig };
+  }
+  function readZcodeDesktopModel({ env, fsImpl } = {}) {
+    const { config, setting, cliModel } = readZcodeConfigs({ env, fsImpl });
+    if (cliModel) {
+      const requested = zcodeProtocolModelFromRef(cliModel);
+      if (requested && config && config.provider && config.provider[requested.providerId]) return cliModel;
+    }
+    return zcodeModelFromDesktopConfig({ config, setting, env: env || {} });
+  }
+  function readZcodeDesktopRuntimeModel({ env, fsImpl, modelRef, thoughtLevel, storedKey = "" } = {}) {
+    const { config, setting, cliModel } = readZcodeConfigs({ env, fsImpl });
+    const ref = modelRef || cliModel || "";
+    return zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef: ref, thoughtLevel, env: env || {}, storedKey });
+  }
+  function summarizeZcodeConfig({ env = {}, fsImpl, storedKey = "" } = {}) {
+    const { cliConfig, desktopConfig, cliModel } = readZcodeConfigs({ env, fsImpl });
+    const cliProviders = cliConfig && cliConfig.provider || {};
+    const cliProviderId = zcodeProviderId(cliModel) || Object.keys(cliProviders)[0] || "";
+    const cliProvider = cliProviderId ? cliProviders[cliProviderId] : null;
+    const cliResolved = cliProvider ? resolveZcodeProviderApiKey({ provider: cliProvider, env, storedKey }) : { key: "", source: "" };
+    const desktopIds = Object.keys(desktopConfig && desktopConfig.provider || {});
+    const startPlanId = desktopIds.find((id) => /-start-plan$/.test(id)) || "";
+    const startPlanProvider = startPlanId ? desktopConfig.provider[startPlanId] : null;
+    return {
+      cli: cliProvider ? {
+        providerId: cliProviderId,
+        model: cliModel,
+        apiKeyEnv: String(cliProvider.options && cliProvider.options.apiKeyEnv || ""),
+        hasCredential: Boolean(cliResolved.key),
+        keySource: cliResolved.source
+      } : null,
+      desktop: desktopIds.length ? { providerId: desktopIds[0] } : null,
+      startPlan: startPlanId ? {
+        providerId: startPlanId,
+        hasCredential: hasZcodeProviderCredential(startPlanProvider, env)
+      } : null
+    };
+  }
+  function zcodeProviderFamily(providerId) {
+    const text = String(providerId || "").trim();
+    const id = text.startsWith("builtin:") ? text.slice("builtin:".length) : text;
+    return id.replace(/-(?:start|coding)-plan$/i, "").split(/[/:]/)[0];
+  }
+  function getNodeBuffer() {
+    return globalThis.Buffer || getCepRequire2()("buffer").Buffer;
+  }
+  function zcodeCredentialSecret(env, osImpl) {
+    const explicit = env && env.ZCODE_CREDENTIAL_SECRET && String(env.ZCODE_CREDENTIAL_SECRET).trim();
+    if (explicit) return explicit;
+    const os = osImpl || getCepRequire2()("os");
+    let username = "unknown";
+    try {
+      username = os.userInfo().username;
+    } catch (e) {
+    }
+    return "zcode-credential-fallback:" + os.platform() + ":" + os.homedir() + ":" + username;
+  }
+  function decryptZcodeCredentialValue(value, { env, cryptoImpl, osImpl } = {}) {
+    const text = String(value || "");
+    if (!text.startsWith(ZCODE_CREDENTIAL_PREFIX)) return text;
+    const crypto = cryptoImpl || getCepRequire2()("crypto");
+    const BufferImpl = getNodeBuffer();
+    const parts = text.slice(ZCODE_CREDENTIAL_PREFIX.length).split(".");
+    if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) {
+      throw new Error("Credential decrypt failed: invalid ciphertext format");
+    }
+    const key = crypto.createHash("sha256").update(zcodeCredentialSecret(env || {}, osImpl)).digest();
+    const iv = BufferImpl.from(parts[0], "base64url");
+    const authTag = BufferImpl.from(parts[1], "base64url");
+    const cipherText = BufferImpl.from(parts[2], "base64url");
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+    decipher.setAuthTag(authTag);
+    return BufferImpl.concat([decipher.update(cipherText), decipher.final()]).toString("utf8");
+  }
+  function readZcodeOAuthAccessToken({ env, fsImpl, providerId } = {}) {
+    const base = zcodeDesktopBasePath(env || {});
+    if (!base) return "";
+    const fs = fsImpl || getCepRequire2()("fs");
+    const credentials = readJsonFile(fs, base + "\\credentials.json");
+    if (!credentials || typeof credentials !== "object") return "";
+    const providers = [];
+    const family = zcodeProviderFamily(providerId);
+    if (family) providers.push(family);
+    const active = credentials["oauth:active_provider"];
+    if (active) {
+      try {
+        const activeProvider = decryptZcodeCredentialValue(active, { env });
+        if (activeProvider && !providers.includes(activeProvider)) providers.push(activeProvider);
+      } catch (e) {
+      }
+    }
+    for (const provider of providers) {
+      const raw = credentials["oauth:" + provider + ":access_token"];
+      if (!raw) continue;
+      return decryptZcodeCredentialValue(raw, { env });
+    }
+    return "";
+  }
+  function resolveBigModelApiOrigin(env = {}) {
+    const explicit = env.BIGMODEL_API_BASE_URL || env.BIGMODEL_PRODUCTION_API_BASE_URL;
+    return String(explicit || BIGMODEL_API_ORIGIN).replace(/\/+$/, "");
+  }
+  function remoteCodeOk(code) {
+    return code === void 0 || code === null || code === 0 || code === 200 || code === "0" || code === "200";
+  }
+  async function defaultHttpRequestJson({ url, method = "GET", headers = {}, body }) {
+    const target = new URL(url);
+    const moduleName = target.protocol === "http:" ? "http" : "https";
+    const http = getCepRequire2()(moduleName);
+    const BufferImpl = getNodeBuffer();
+    const payload = body === void 0 ? null : typeof body === "string" ? body : JSON.stringify(body);
+    const requestHeaders = Object.assign({}, headers);
+    if (payload !== null && requestHeaders["Content-Length"] === void 0) {
+      requestHeaders["Content-Length"] = String(BufferImpl.byteLength(payload));
+    }
+    return new Promise((resolve, reject) => {
+      const req = http.request(target, { method, headers: requestHeaders }, (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => {
+          const text = BufferImpl.concat(chunks).toString("utf8");
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            reject(new Error("ZCode OAuth request failed with HTTP " + res.statusCode + ": " + text.slice(0, 300)));
+            return;
+          }
+          try {
+            resolve(text ? JSON.parse(text) : {});
+          } catch (e) {
+            reject(new Error("ZCode OAuth response was not valid JSON"));
+          }
+        });
+      });
+      req.on("error", reject);
+      if (payload !== null) req.write(payload);
+      req.end();
+    });
+  }
+  async function requestRemoteData(requestJson, options) {
+    var _a;
+    const json = await requestJson(options);
+    if (!json || typeof json !== "object") throw new Error("ZCode OAuth response was empty");
+    if (!remoteCodeOk(json.code)) throw new Error(json.msg || "Remote business error " + json.code);
+    return (_a = json.data) != null ? _a : null;
+  }
+  function pickOrgAndProject(customerInfo) {
+    const organizations = customerInfo && Array.isArray(customerInfo.organizations) ? customerInfo.organizations : [];
+    const org = organizations.find((item) => String(item.organizationName || "").includes("\u9ED8\u8BA4\u673A\u6784")) || organizations[0];
+    const projects = org && Array.isArray(org.projects) ? org.projects : [];
+    const project = projects.find((item) => String(item.projectName || "").includes("\u9ED8\u8BA4\u9879\u76EE")) || projects[0];
+    if (!org || !project || !org.organizationId || !project.projectId) return null;
+    return { organizationId: org.organizationId, projectId: project.projectId };
+  }
+  async function resolveBizApiKey({ authorization, host, requestJson, requireSecretKey = false }) {
+    const headers = { Authorization: authorization, "Content-Type": JSON_CONTENT_TYPE };
+    const customer = await requestRemoteData(requestJson, {
+      method: "GET",
+      url: host + "/api/biz/customer/getCustomerInfo",
+      headers
+    });
+    const orgProject = pickOrgAndProject(customer);
+    if (!orgProject) throw new Error("Unable to resolve ZCode OAuth organization and project.");
+    const apiKeysUrl = host + "/api/biz/v1/organization/" + encodeURIComponent(orgProject.organizationId) + "/projects/" + encodeURIComponent(orgProject.projectId) + "/api_keys";
+    const apiKeys = await requestRemoteData(requestJson, { method: "GET", url: apiKeysUrl, headers });
+    const existing = Array.isArray(apiKeys) ? apiKeys.find((item) => item && item.name === ZCODE_API_KEY_NAME) : null;
+    const created = existing || await requestRemoteData(requestJson, {
+      method: "POST",
+      url: apiKeysUrl,
+      headers,
+      body: { name: ZCODE_API_KEY_NAME }
+    });
+    const apiKey = String(created && (created.apiKey || created.api_key) || "").trim();
+    if (!apiKey) throw new Error("ZCode OAuth API key response is missing apiKey.");
+    const copied = await requestRemoteData(requestJson, {
+      method: "GET",
+      url: apiKeysUrl + "/copy/" + encodeURIComponent(apiKey),
+      headers
+    });
+    const secretKey = String(copied && (copied.secretKey || copied.secret_key) || "").trim();
+    if (!secretKey && requireSecretKey) throw new Error("ZCode OAuth API key copy response is missing secretKey.");
+    return secretKey ? apiKey + "." + secretKey : apiKey;
+  }
+  async function resolveZcodeCodingPlanApiKey({ accessToken, providerId, env, requestJson = defaultHttpRequestJson } = {}) {
+    const token = String(accessToken || "").trim();
+    if (!token) throw new Error("ZCode desktop OAuth token is unavailable.");
+    const family = zcodeProviderFamily(providerId);
+    if (family === "zai") {
+      const data = await requestRemoteData(requestJson, {
+        method: "POST",
+        url: ZAI_BIZ_API_ORIGIN + "/api/auth/z/login",
+        headers: { "Content-Type": JSON_CONTENT_TYPE },
+        body: { token }
+      });
+      const bizToken = String(data && (data.access_token || data.accessToken) || "").trim();
+      if (!bizToken) throw new Error("ZCode OAuth biz token response is missing access_token.");
+      return resolveBizApiKey({ authorization: "Bearer " + bizToken, host: ZAI_BIZ_API_ORIGIN, requestJson, requireSecretKey: true });
+    }
+    return resolveBizApiKey({ authorization: token, host: resolveBigModelApiOrigin(env || {}), requestJson });
+  }
+  function runtimeModelWithApiKey(runtimeModel, apiKey) {
+    const next = clone3(runtimeModel);
+    next.revision = (runtimeModel.revision || "runtime-model") + ":oauth:" + Date.now();
+    next.generatedAt = Date.now();
+    next.provider = Object.assign({}, next.provider || {}, {
+      apiKey: { source: "inline", value: String(apiKey) }
+    });
+    return next;
+  }
+  function isZcodePlanRuntimeModel(runtimeModel, providerId) {
+    const provider = runtimeModel && runtimeModel.provider ? runtimeModel.provider : {};
+    const id = String(providerId || provider.providerId || "").trim();
+    const baseURL = String(provider.baseURL || "").replace(/\/+$/, "").toLowerCase();
+    return /-start-plan$/i.test(id) || baseURL.endsWith("/zcode-plan") || baseURL.endsWith("/zcode-plan/anthropic");
+  }
+  function zcodePlanRuntimeHeadersMessage() {
+    return "ZCode desktop OAuth plan providers require ZCode desktop captcha/runtime headers before model requests. The AE panel can read the desktop provider config, but the current app-server bridge cannot generate or apply those headers yet. Use ZCode Desktop chat or configure an API-key provider in ZCode for now.";
+  }
+  function isLegacyZcodeModelRef(modelRef) {
+    return LEGACY_ZCODE_MODEL_REFS.has(String(modelRef || "").trim());
+  }
+  function zcodeProtocolModelFromRef(modelRef) {
+    const text = String(modelRef || "").trim();
+    const slash = text.indexOf("/");
+    if (slash <= 0 || slash === text.length - 1) return null;
+    return {
+      providerId: text.slice(0, slash),
+      modelId: text.slice(slash + 1)
+    };
+  }
+  function zcodeMissingApiKeyHint(message) {
+    const text = String(message || "");
+    const match = /Model provider is missing an API key:\s*([^\s.]+)/i.exec(text);
+    if (!match || /AE_MCP_ZCODE_API_KEY|ZCODE_API_KEY/.test(text)) return text;
+    const providerEnv = zcodeProviderApiKeyEnv(match[1]);
+    const vars = ["AE_MCP_ZCODE_API_KEY"];
+    if (providerEnv) vars.push(providerEnv);
+    vars.push("ZCODE_API_KEY");
+    return (text.endsWith(".") ? text : text + ".") + " Set " + vars.join(", ") + " before launching AE.";
+  }
+  function zcodeMissingModelConfigHint(message) {
+    const text = String(message || "");
+    if (!/Model config is missing/i.test(text) || /Open ZCode/.test(text)) return text;
+    return (text.endsWith(".") ? text : text + ".") + " Open ZCode and select a provider/model, or create ~/.zcode/cli/config.json with an explicit provider/model before launching AE.";
+  }
+  function zcodeProviderAuthenticationHint(message) {
+    const text = String(message || "");
+    if (!/Provider authentication failed/i.test(text) || /runtime headers/i.test(text)) return text;
+    return (text.endsWith(".") ? text : text + ".") + " If this is a ZCode desktop OAuth plan provider, the AE panel cannot yet bridge ZCode desktop captcha/runtime headers.";
+  }
+  function zcodePlanRuntimeFailureHint(message, runtimeModel) {
+    const text = String(message || "");
+    if (!/Provider authentication failed|Model request failed/i.test(text)) return text;
+    if (/runtime headers/i.test(text) || !isZcodePlanRuntimeModel(runtimeModel)) return text;
+    return (text.endsWith(".") ? text : text + ".") + " " + zcodePlanRuntimeHeadersMessage();
+  }
+  function zcodeRepairHint(message) {
+    return zcodeProviderAuthenticationHint(zcodeMissingModelConfigHint(zcodeMissingApiKeyHint(message)));
+  }
+  function zcodeErrorMessage(value, fallback = "ZCode turn failed", lang = "en") {
+    if (!value) return localizeZcodeError(zcodeRepairHint(fallback), lang);
+    if (typeof value === "string") return localizeZcodeError(zcodeRepairHint(value), lang);
+    if (typeof value === "object") {
+      const direct = value.message || value.detail || value.reason || value.error;
+      if (direct && direct !== value) return zcodeErrorMessage(direct, fallback, lang);
+      try {
+        const text = JSON.stringify(value);
+        return localizeZcodeError(zcodeRepairHint(text && text !== "{}" ? text : fallback), lang);
+      } catch (e) {
+        return localizeZcodeError(zcodeRepairHint(fallback), lang);
+      }
+    }
+    return localizeZcodeError(zcodeRepairHint(String(value)), lang);
+  }
+  function zcodeErrorKind(message) {
+    return /\b(model|provider|api[-\s_]*key|credential|auth)\b/i.test(String(message || "")) ? "model" : "mcp";
+  }
+  function defaultReadStoredZcodeKey() {
+    try {
+      return createApiKeyStore().readKey("zcode");
+    } catch (e) {
+      return "";
+    }
+  }
+  function createZcodeBackend({
+    spawnImpl,
+    getModel,
+    getPermissionMode,
+    getEffort = () => null,
+    getMcpSpec,
+    getToolMeta,
+    getExpertGuidance = () => true,
+    getServerInstructions = () => "",
+    onEvent,
+    lang = "zh",
+    env,
+    readDesktopModel = readZcodeDesktopModel,
+    readDesktopRuntimeModel = readZcodeDesktopRuntimeModel,
+    readOAuthAccessToken = readZcodeOAuthAccessToken,
+    resolveCodingPlanApiKey = resolveZcodeCodingPlanApiKey,
+    resolveCli = resolveZcodeCli,
+    resolveNode = resolveSystemNode,
+    readStoredZcodeKey = defaultReadStoredZcodeKey
+  }) {
+    let proc = null;
+    let rpc = null;
+    let startPromise = null;
+    let sessionPromise = null;
+    let sessionId = null;
+    let subscribed = false;
+    let activeRuntimeModel = null;
+    let stopping = false;
+    let stderrTail = "";
+    let transcript = [];
+    let activeRun = null;
+    let activeResolve = null;
+    let activeAssistantText = "";
+    let toolMeta = { allowedTools: [], annotations: {} };
+    const pendingApprovals = /* @__PURE__ */ new Map();
+    const pendingElicitations = /* @__PURE__ */ new Map();
+    const pendingUserInputs = /* @__PURE__ */ new Map();
+    const sessionAllowedTools = /* @__PURE__ */ new Set();
+    function emit(evt) {
+      if (onEvent) onEvent(evt);
+    }
+    function getSpawn() {
+      if (spawnImpl) return spawnImpl;
+      return getCepRequire2()("child_process").spawn;
+    }
+    function currentEnv() {
+      const next = Object.assign({}, getCepEnv2(), env || {});
+      const panelModel = next.AE_MCP_ZCODE_MODEL && String(next.AE_MCP_ZCODE_MODEL).trim();
+      if (!next.ZCODE_MODEL && panelModel) next.ZCODE_MODEL = panelModel;
+      const panelApiKey = next.AE_MCP_ZCODE_API_KEY && String(next.AE_MCP_ZCODE_API_KEY).trim() || String(readStoredZcodeKey() || "").trim();
+      if (panelApiKey) {
+        if (!next.ZCODE_API_KEY) next.ZCODE_API_KEY = panelApiKey;
+        const providerEnv = zcodeProviderApiKeyEnv(zcodeProviderId(next.ZCODE_MODEL));
+        if (providerEnv && !next[providerEnv]) next[providerEnv] = panelApiKey;
+      }
+      return next;
+    }
+    function currentModelRef(spawnEnv) {
+      const explicitEnvModel = spawnEnv && spawnEnv.ZCODE_MODEL && String(spawnEnv.ZCODE_MODEL).trim();
+      if (explicitEnvModel) return explicitEnvModel;
+      const selectedModel = getModel ? String(getModel() || "").trim() : "";
+      if (selectedModel.includes("/") && !isLegacyZcodeModelRef(selectedModel)) return selectedModel;
+      let desktopModel = "";
+      try {
+        desktopModel = readDesktopModel ? String(readDesktopModel({ env: spawnEnv }) || "").trim() : "";
+      } catch (e) {
+      }
+      if (desktopModel) return desktopModel;
+      if (selectedModel.includes("/")) return selectedModel;
+      return ZCODE_BUILTIN_DEFAULT_MODEL;
+    }
+    function currentRuntimeModel(spawnEnv, modelRef, thoughtLevel) {
+      if (!readDesktopRuntimeModel) return null;
+      try {
+        return readDesktopRuntimeModel({ env: spawnEnv, modelRef, thoughtLevel, storedKey: String(readStoredZcodeKey() || "").trim() }) || null;
+      } catch (e) {
+        return null;
+      }
+    }
+    function finishActive() {
+      if (!activeResolve) {
+        activeRun = null;
+        activeAssistantText = "";
+        return;
+      }
+      const resolve = activeResolve;
+      activeResolve = null;
+      activeRun = null;
+      activeAssistantText = "";
+      resolve();
+    }
+    function drainApprovals() {
+      for (const [toolUseId, approval] of Array.from(pendingApprovals.entries())) {
+        if (rpc) rpc.respond(approval.rpcId, { decision: "decline" });
+        pendingApprovals.delete(toolUseId);
+        emit({ type: "tool-denied", toolUseId });
+      }
+      for (const [toolUseId, elicit] of Array.from(pendingElicitations.entries())) {
+        if (rpc && elicit.rpcId) rpc.respond(elicit.rpcId, { action: "decline" });
+        pendingElicitations.delete(toolUseId);
+        emit({ type: "tool-denied", toolUseId });
+      }
+      for (const [toolUseId, ui] of Array.from(pendingUserInputs.entries())) {
+        if (rpc && ui.rpcId) rpc.respond(ui.rpcId, { decision: "decline", answers: {} });
+        pendingUserInputs.delete(toolUseId);
+        emit({ type: "tool-denied", toolUseId });
+      }
+    }
+    function handleRequest(message) {
+      const method = message.method;
+      const params = message.params || {};
+      if (method === "interaction/requestUserInput") {
+        handleUserInput(params, message.id);
+        return;
+      }
+      if (method === "interaction/requestProviderRuntimeHeaders") {
+        handleProviderRuntimeHeaders(params, message.id);
+        return;
+      }
+      if (method === "elicitation/create") {
+        handleElicitation(params, message.id);
+        return;
+      }
+      if (method === "permission.requested" || method === "session/permission" || method === "interaction/requestPermission") {
+        handlePermissionRequest(params, message.id);
+        return;
+      }
+      if (rpc) rpc.respondError(message.id, -32601, "Method not found: " + method);
+    }
+    async function handleProviderRuntimeHeaders(params, rpcId) {
+      try {
+        const spawnEnv = currentEnv();
+        const providerId = String(params.providerId || params.modelRef && params.modelRef.providerId || activeRuntimeModel && activeRuntimeModel.model && activeRuntimeModel.model.providerId || "").trim();
+        const modelId = String(params.modelRef && params.modelRef.modelId || activeRuntimeModel && activeRuntimeModel.model && activeRuntimeModel.model.modelId || "").trim();
+        const modelRef = providerId && modelId ? providerId + "/" + modelId : currentModelRef(spawnEnv);
+        const runtimeModel = activeRuntimeModel || currentRuntimeModel(spawnEnv, modelRef, thoughtLevelFromEffort());
+        if (!providerId || !runtimeModel) throw new Error("ZCode runtime model is unavailable for OAuth header refresh.");
+        if (isZcodePlanRuntimeModel(runtimeModel, providerId)) {
+          if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: zcodePlanRuntimeHeadersMessage() });
+          return;
+        }
+        const accessToken = await readOAuthAccessToken({ env: spawnEnv, providerId, modelRef });
+        if (!accessToken) throw new Error("ZCode desktop OAuth token is unavailable. Open ZCode, sign in again, then retry from the panel.");
+        const apiKey = await resolveCodingPlanApiKey({ accessToken, providerId, env: spawnEnv });
+        const refreshedRuntimeModel = runtimeModelWithApiKey(runtimeModel, apiKey);
+        await rpc.request("session/updateRuntimeModelConfig", {
+          sessionId: params.sessionId || sessionId,
+          runtimeModel: refreshedRuntimeModel
+        }, RPC_TIMEOUT_MS);
+        activeRuntimeModel = refreshedRuntimeModel;
+        if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: true, providerRevision: refreshedRuntimeModel.revision });
+      } catch (e) {
+        const message = zcodeErrorMessage(e, "ZCode desktop OAuth header refresh failed.", lang);
+        if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: message });
+      }
+    }
+    function handleUserInput(params, rpcId) {
+      const input = params.input || params;
+      const questions = input.questions || [];
+      const tier = getPermissionMode ? getPermissionMode() : "manual";
+      if (!questions.length || tier === "none" || tier === "auto") {
+        const answers = {};
+        for (const q2 of questions) {
+          const opts = q2.options || [];
+          answers[q2.question || q2.header || "question"] = opts.length ? opts[0].label : "";
+        }
+        if (rpcId && rpc) rpc.respond(rpcId, { decision: "allow", answers });
+        return;
+      }
+      const q = questions[0];
+      const choices = (q.options || []).map((o) => o.label);
+      const toolUseId = "ask_" + rpcId;
+      pendingUserInputs.set(toolUseId, { rpcId, questions });
+      emit({
+        type: "approval-required",
+        toolUseId,
+        name: "AskUserQuestion",
+        input: {
+          question: q.question || q.header || "",
+          header: q.header,
+          choices,
+          fields: questions.map((qq) => qq.question || qq.header || "")
+        },
+        risk: "write"
+      });
+    }
+    function handleElicitation(params, rpcId) {
+      const message = params.message || "";
+      const schema = params.requestedSchema || {};
+      const props = schema.properties || {};
+      const required = schema.required || [];
+      const fieldNames = Object.keys(props);
+      if (!fieldNames.length) {
+        if (rpcId && rpc) rpc.respond(rpcId, { action: "accept", content: {} });
+        return;
+      }
+      const tier = getPermissionMode ? getPermissionMode() : "manual";
+      if (tier === "none" || tier === "auto") {
+        const autoContent = {};
+        for (const fn of fieldNames) {
+          const opts = props[fn] && props[fn].enum;
+          autoContent[fn] = opts && opts.length ? opts[0] : "";
+        }
+        if (rpcId && rpc) rpc.respond(rpcId, { action: "accept", content: autoContent });
+        return;
+      }
+      const primaryField = fieldNames[0];
+      const primaryProp = props[primaryField] || {};
+      const choices = Array.isArray(primaryProp.enum) ? primaryProp.enum : [];
+      const toolUseId = "elicit_" + rpcId;
+      pendingElicitations.set(toolUseId, { rpcId, fieldNames, props, required });
+      emit({
+        type: "approval-required",
+        toolUseId,
+        name: "AskUserQuestion",
+        input: { question: message, field: primaryField, choices, fields: fieldNames },
+        risk: "write"
+      });
+    }
+    function handleNotification(message) {
+      const params = message.params || {};
+      const type = params.type || message.method;
+      if (type === "state.updated") {
+        const patch = params.patch || params.payload || {};
+        if (patch.status === "idle" && activeRun) {
+          drainApprovals();
+          emit({ type: "turn-end", stopReason: "end_turn" });
+          transcript.push({ role: "assistant", text: activeAssistantText });
+          finishActive();
+        }
+        return;
+      }
+      if (type === "turn.started") {
+        emit({ type: "turn-start" });
+        return;
+      }
+      if (type === "model.streaming") {
+        const payload = params.payload || {};
+        if (payload.kind === "text_delta" && payload.delta) {
+          activeAssistantText += String(payload.delta);
+          emit({ type: "text-delta", text: String(payload.delta) });
+        }
+        return;
+      }
+      if (type === "tool.updated" || type === "part.started" || type === "part.upserted") {
+        const payload = params.payload || {};
+        if (payload.toolName || payload.tool) {
+          emit({
+            type: "tool-start",
+            toolUseId: String(payload.toolCallId || payload.id || ""),
+            name: mcpToolName(payload.toolName || payload.tool),
+            input: payload.input || payload.arguments
+          });
+        }
+        return;
+      }
+      if (type === "permission.requested") {
+        handlePermissionRequest(params, null);
+        return;
+      }
+      if (type === "turn.completed") {
+        drainApprovals();
+        const payload = params.payload || {};
+        emit({ type: "turn-end", stopReason: "end_turn" });
+        transcript.push({ role: "assistant", text: activeAssistantText || payload.response || "" });
+        finishActive();
+        return;
+      }
+      if (type === "turn.failed") {
+        const payload = params.payload || {};
+        const message2 = zcodePlanRuntimeFailureHint(zcodeErrorMessage(payload.error || payload.message, "ZCode turn failed", lang), activeRuntimeModel);
+        emit({ type: "error", kind: zcodeErrorKind(message2), message: message2 });
+        finishActive();
+        return;
+      }
+    }
+    function handlePermissionRequest(params, rpcId) {
+      const payload = params.payload || params;
+      const toolUseId = String(payload.toolCallId || payload.requestId || rpcId || "");
+      const name = mcpToolName(payload.toolName || payload.tool || "");
+      const input = payload.input || payload.arguments || {};
+      const riskLevel = payload.riskLevel || "medium";
+      const annotations = toolMeta && toolMeta.annotations || {};
+      const ann = annotations[name] || {};
+      const tier = getPermissionMode ? getPermissionMode() : "manual";
+      const replyId = rpcId || payload.requestId || null;
+      if (sessionAllowedTools.has(name) || ann.readOnly || tier === "none" || tier === "auto" && !ann.destructive && riskLevel === "low") {
+        if (replyId && rpc) rpc.respond(replyId, { decision: "allow" });
+        emit({ type: "tool-allowed", toolUseId });
+        return;
+      }
+      if (tier === "readonly") {
+        if (replyId && rpc) rpc.respond(replyId, { decision: "decline" });
+        emit({ type: "tool-denied", toolUseId });
+        return;
+      }
+      pendingApprovals.set(toolUseId, { rpcId: replyId, name, input });
+      emit({
+        type: "approval-required",
+        toolUseId,
+        name,
+        input,
+        risk: ann.destructive ? "destructive" : "write"
+      });
+    }
+    function handleExit(code, signal) {
+      const wasStopping = stopping;
+      const detail = stderrTail ? String(code) + (signal ? " " + signal : "") + " " + stderrTail : String(code) + (signal ? " " + signal : "");
+      if (rpc) rpc.close(new Error("ZCode app-server exited: " + detail));
+      proc = null;
+      rpc = null;
+      startPromise = null;
+      sessionPromise = null;
+      sessionId = null;
+      subscribed = false;
+      if (wasStopping) return;
+      if (activeRun) {
+        emit({ type: "error", kind: "mcp", message: "ZCode app-server exited: " + detail });
+        finishActive();
+      }
+    }
+    function handleError(error) {
+      const err = error instanceof Error ? error : new Error("ZCode app-server error");
+      if (rpc) rpc.close(err);
+      proc = null;
+      rpc = null;
+      startPromise = null;
+      sessionPromise = null;
+      sessionId = null;
+      subscribed = false;
+      if (activeRun) {
+        emit({ type: "error", kind: "mcp", message: err.message });
+        finishActive();
+      }
+    }
+    async function startProcess() {
+      if (proc && rpc) return true;
+      if (startPromise) return startPromise;
+      startPromise = (async () => {
+        let execFileImpl = null;
+        try {
+          execFileImpl = getCepRequire2()("child_process").execFile;
+        } catch (e) {
+        }
+        const cli = await resolveCli({ env: currentEnv(), execFileImpl });
+        if (!cli.ok) throw new Error(cli.detail);
+        const spawn = getSpawn();
+        const spawnEnv = currentEnv();
+        stderrTail = "";
+        stopping = false;
+        let cmd;
+        let cmdArgs;
+        if (cli.isExe) {
+          cmd = cli.cliPath;
+          cmdArgs = ["app-server"];
+        } else {
+          const node = await resolveNode({ env: spawnEnv });
+          if (!node.ok) throw new Error(node.detail);
+          cmd = node.nodePath;
+          cmdArgs = [cli.cliPath, "app-server"];
+        }
+        proc = spawn(cmd, cmdArgs, {
+          stdio: "pipe",
+          windowsHide: true,
+          env: spawnEnv
+        });
+        rpc = createRpc({
+          writeLine: (line) => proc.stdin.write(line),
+          onNotification: handleNotification,
+          onRequest: handleRequest
+        });
+        const reader = createNdjsonReader((message) => rpc && rpc.handleMessage(message));
+        if (proc.stdout && proc.stdout.on) proc.stdout.on("data", reader);
+        if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
+          stderrTail = appendTail3(stderrTail, chunk);
+        });
+        proc.on("exit", (code, signal) => handleExit(code, signal));
+        proc.on("error", (error) => handleError(error));
+        return true;
+      })();
+      try {
+        return await startPromise;
+      } finally {
+        startPromise = null;
+      }
+    }
+    function workspaceFromEnv(spawnEnv) {
+      const extRoot = spawnEnv && (spawnEnv.AE_MCP_PANEL_EXT_ROOT || spawnEnv.EXTENSION_ROOT);
+      const path = extRoot ? String(extRoot).replace(/\//g, "\\").replace(/\\+$/, "") : spawnEnv && (spawnEnv.TEMP || spawnEnv.TMP) || ".";
+      const key = path.replace(/\\/g, "\\");
+      return { workspacePath: path, workspaceKey: key };
+    }
+    function modeFromTier() {
+      const tier = getPermissionMode ? getPermissionMode() : "manual";
+      return MODE_BY_TIER[tier] || "build";
+    }
+    function thoughtLevelFromEffort() {
+      const effort = getEffort ? getEffort() : null;
+      if (!effort) return void 0;
+      return ZCODE_THOUGHT_LEVELS.has(effort) ? effort : void 0;
+    }
+    async function ensureSession() {
+      if (sessionId) return sessionId;
+      if (sessionPromise) return sessionPromise;
+      sessionPromise = (async () => {
+        await startProcess();
+        toolMeta = getToolMeta ? await getToolMeta() : { allowedTools: [], annotations: {} };
+        const spawnEnv = currentEnv();
+        const createParams = {
+          workspace: workspaceFromEnv(spawnEnv),
+          mode: modeFromTier()
+        };
+        const thoughtLevel = thoughtLevelFromEffort();
+        const modelRef = currentModelRef(spawnEnv);
+        const runtimeModel = currentRuntimeModel(spawnEnv, modelRef, thoughtLevel);
+        if (runtimeModel) createParams.runtimeModel = runtimeModel;
+        activeRuntimeModel = runtimeModel || null;
+        const model = runtimeModel && runtimeModel.model || zcodeProtocolModelFromRef(modelRef);
+        if (model) createParams.model = model;
+        if (thoughtLevel) createParams.thoughtLevel = thoughtLevel;
+        if (getMcpSpec) {
+          const spec = await getMcpSpec();
+          if (spec && spec.command) {
+            const envObj = Object.assign({}, spec.env || {}, {
+              AE_MCP_BACKEND: "ae-mcp",
+              ...expertGuidanceEnv(getExpertGuidance())
+            });
+            createParams.mcpServers = [{
+              name: "ae",
+              command: spec.command,
+              args: spec.args || [],
+              env: Object.entries(envObj).map(([name, value]) => ({ name, value: String(value) }))
+            }];
+          }
+        }
+        const result = await rpc.request("session/create", createParams);
+        const nextSessionId = result && result.session && result.session.sessionId || null;
+        if (!nextSessionId) throw new Error("ZCode session/create returned no sessionId");
+        emit({ type: "zcode-session-created", result });
+        if (!subscribed) {
+          await rpc.request("session/subscribe", { sessionId: nextSessionId, deliveryKind: DELIVERY_KIND }, 1e4);
+          subscribed = true;
+        }
+        sessionId = nextSessionId;
+        return sessionId;
+      })();
+      try {
+        return await sessionPromise;
+      } finally {
+        sessionPromise = null;
+      }
+    }
+    async function sendUser(text) {
+      if (activeRun) return activeRun;
+      activeAssistantText = "";
+      activeRun = new Promise((resolve) => {
+        activeResolve = resolve;
+      });
+      try {
+        await ensureSession();
+        const userText = String(text || "");
+        transcript.push({ role: "user", text: userText });
+        let turnText = userText;
+        if (transcript.filter((m) => m.role === "user").length === 1) {
+          const instr = (getServerInstructions() || "").trim();
+          if (instr) turnText = instr + "\n\n---\n\n" + userText;
+        }
+        rpc.request("session/send", { sessionId, content: turnText }, 18e4).catch((e) => {
+          const message = zcodeErrorMessage(e, "Failed to start ZCode turn.", lang);
+          emit({ type: "error", kind: zcodeErrorKind(message), message });
+          finishActive();
+        });
+      } catch (e) {
+        const message = zcodeErrorMessage(e, "Failed to start ZCode turn.", lang);
+        emit({ type: "error", kind: zcodeErrorKind(message), message });
+        finishActive();
+      }
+      return activeRun;
+    }
+    function approve(toolUseId, decision) {
+      const id = String(toolUseId);
+      const userInput = pendingUserInputs.get(id);
+      if (userInput) {
+        pendingUserInputs.delete(id);
+        if (decision === "deny") {
+          if (userInput.rpcId && rpc) rpc.respond(userInput.rpcId, { decision: "decline", answers: {} });
+          emit({ type: "tool-denied", toolUseId: id });
+        } else {
+          const answers = {};
+          const chosen = typeof decision === "string" && decision !== "allow" && decision !== "allow-session" ? decision : "";
+          for (const q of userInput.questions) {
+            const key = q.question || q.header || "question";
+            answers[key] = chosen || q.options && q.options[0] && q.options[0].label || "";
+          }
+          if (userInput.rpcId && rpc) rpc.respond(userInput.rpcId, { decision: "allow", answers });
+          emit({ type: "tool-allowed", toolUseId: id });
+        }
+        return;
+      }
+      const elicit = pendingElicitations.get(id);
+      if (elicit) {
+        pendingElicitations.delete(id);
+        if (decision === "deny") {
+          if (elicit.rpcId && rpc) rpc.respond(elicit.rpcId, { action: "decline" });
+          emit({ type: "tool-denied", toolUseId: id });
+        } else {
+          const content = {};
+          const fn = elicit.fieldNames[0];
+          content[fn] = typeof decision === "string" && decision !== "allow" && decision !== "allow-session" ? decision : elicit.props[fn] && elicit.props[fn].enum && elicit.props[fn].enum[0] || "";
+          if (elicit.rpcId && rpc) rpc.respond(elicit.rpcId, { action: "accept", content });
+          emit({ type: "tool-allowed", toolUseId: id });
+        }
+        return;
+      }
+      const approval = pendingApprovals.get(id);
+      if (!approval) return;
+      pendingApprovals.delete(id);
+      const allow = decision !== "deny";
+      if (allow && decision === "allow-session") sessionAllowedTools.add(approval.name);
+      if (approval.rpcId && rpc) rpc.respond(approval.rpcId, { decision: allow ? "allow" : "decline" });
+      emit({ type: allow ? "tool-allowed" : "tool-denied", toolUseId: id });
+    }
+    function stop() {
+      if (rpc && sessionId) {
+        rpc.fireRequest("session/stop", { sessionId });
+      }
+      drainApprovals();
+      if (activeRun) {
+        emit({ type: "error", kind: "aborted", message: "Turn aborted." });
+        finishActive();
+      }
+    }
+    function reset() {
+      stopping = true;
+      drainApprovals();
+      if (rpc) rpc.close(new Error("ZCode backend reset"));
+      if (proc) {
+        try {
+          proc.kill();
+        } catch (e) {
+        }
+      }
+      proc = null;
+      rpc = null;
+      startPromise = null;
+      sessionPromise = null;
+      sessionId = null;
+      subscribed = false;
+      activeRuntimeModel = null;
+      transcript = [];
+      pendingApprovals.clear();
+      pendingElicitations.clear();
+      pendingUserInputs.clear();
+      sessionAllowedTools.clear();
+      toolMeta = { allowedTools: [], annotations: {} };
+      finishActive();
+      stderrTail = "";
+      stopping = false;
+    }
+    async function setThoughtLevel(level) {
+      if (!sessionId || !rpc) return false;
+      if (!ZCODE_THOUGHT_LEVELS.has(level)) return false;
+      try {
+        await rpc.request("session/setThoughtLevel", { sessionId, thoughtLevel: level });
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+    async function probeAccount() {
+      try {
+        await ensureSession();
+        return { loggedIn: true, runtimeOk: true, provider: "zcode" };
+      } catch (e) {
+        return {
+          loggedIn: true,
+          runtimeOk: false,
+          provider: "zcode",
+          detail: zcodeErrorMessage(e, "ZCode runtime unavailable.", lang)
+        };
+      }
+    }
+    return {
+      sendUser,
+      approve,
+      stop,
+      reset,
+      setThoughtLevel,
+      getMessages: () => clone3(transcript),
+      probeAccount
+    };
+  }
+
   // src/lib/backendCapabilities.js
   var CLAUDE_PRICE_USD_PER_MTOK = {
     "claude-fable-5": { input: 10, output: 50 },
@@ -11980,49 +13466,6 @@
       perTurnModelSwitch: true
     };
   }
-  function providerEntries(providerResult) {
-    if (Array.isArray(providerResult)) return providerResult.map((p) => [p && (p.id || p.providerID || p.providerId || p.name), p]);
-    if (providerResult && Array.isArray(providerResult.providers)) {
-      return providerResult.providers.map((p) => [p && (p.id || p.providerID || p.providerId || p.name), p]);
-    }
-    if (providerResult && typeof providerResult === "object") return Object.entries(providerResult);
-    return [];
-  }
-  function modelEntries(provider) {
-    const models = provider && provider.models;
-    if (Array.isArray(models)) return models.map((m) => [m && (m.id || m.modelID || m.modelId || m.name), m]);
-    if (models && typeof models === "object") return Object.entries(models);
-    return [];
-  }
-  function openCodeDescriptorFromModels(providerResult) {
-    const models = [];
-    for (const [providerKey, provider] of providerEntries(providerResult)) {
-      const providerID = String(provider && (provider.id || provider.providerID || provider.providerId) || providerKey || "opencode");
-      for (const [modelKey, raw] of modelEntries(provider)) {
-        const modelId = String(raw && (raw.id || raw.modelID || raw.modelId) || modelKey || "");
-        if (!modelId) continue;
-        models.push({
-          id: providerID === "opencode" ? modelId : providerID + "/" + modelId,
-          label: raw && (raw.name || raw.displayName || raw.display_name) || modelId,
-          effortLevels: [],
-          cost: String(modelId).endsWith("-free") ? 1 : 2,
-          adaptive: false
-        });
-      }
-    }
-    if (!models.length) return openCodeStaticDescriptor();
-    const defaultModel = models.find((m) => m.id === "north-mini-code-free") || models.find((m) => String(m.id).endsWith("/north-mini-code-free")) || models[0];
-    return {
-      id: "opencode",
-      label: "OpenCode",
-      models,
-      defaultModelId: defaultModel.id,
-      defaultEffort: null,
-      supportsFast: () => false,
-      approvalModes: APPROVAL_MODES,
-      perTurnModelSwitch: true
-    };
-  }
   var ZCODE_EFFORT_LEVELS = ["nothink", "high", "max"];
   function zcodeStaticDescriptor() {
     const models = [
@@ -12040,45 +13483,209 @@
       perTurnModelSwitch: false
     };
   }
+  function zcodeDynamicDescriptor({ env, fsImpl } = {}) {
+    let cliModel = "";
+    try {
+      cliModel = String(readZcodeDesktopModel({ env, fsImpl }) || "").trim();
+    } catch (e) {
+    }
+    if (!cliModel) return zcodeStaticDescriptor();
+    const label = cliModel.includes("/") ? cliModel.slice(cliModel.indexOf("/") + 1) : cliModel;
+    return {
+      id: "zcode",
+      label: "ZCode",
+      models: [{ id: cliModel, label, effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false }],
+      defaultModelId: cliModel,
+      defaultEffort: "high",
+      supportsFast: () => false,
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: false
+    };
+  }
+  function zcodeDescriptorFromModels(sessionCreateResult) {
+    const available = sessionCreateResult && sessionCreateResult.settings && sessionCreateResult.settings.model && Array.isArray(sessionCreateResult.settings.model.available) ? sessionCreateResult.settings.model.available : [];
+    const current = sessionCreateResult && sessionCreateResult.settings && sessionCreateResult.settings.model && sessionCreateResult.settings.model.current;
+    const models = available.map((m) => {
+      const ref = m.ref || {};
+      const id = ref.modelId || m.label || "";
+      const providerId = ref.providerId || "";
+      return {
+        id: providerId ? providerId + "/" + id : id,
+        label: m.label || id,
+        effortLevels: ZCODE_EFFORT_LEVELS,
+        cost: 2,
+        adaptive: false
+      };
+    }).filter((m) => m.id);
+    if (!models.length) return zcodeStaticDescriptor();
+    const defaultId = current ? current.providerId ? current.providerId + "/" + current.modelId : current.modelId : models[0].id;
+    return {
+      id: "zcode",
+      label: "ZCode",
+      models,
+      defaultModelId: models.some((m) => m.id === defaultId) ? defaultId : models[0].id,
+      defaultEffort: "medium",
+      supportsFast: () => false,
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: false
+    };
+  }
+  function descriptorFromProbedModels(descriptor, probedModels) {
+    if (!Array.isArray(probedModels) || !probedModels.length) return descriptor;
+    const curated = new Map(descriptor.models.map((m) => [m.id, m]));
+    const models = probedModels.map((m) => {
+      const known = curated.get(m.id);
+      if (known) return known;
+      return { id: m.id, label: m.label || m.id, effortLevels: [], cost: costTier(m.id), adaptive: false };
+    });
+    return { ...descriptor, models, defaultModelId: models[0].id };
+  }
 
   // src/cep/backends/index.js
   var BACKENDS = {
     subscription: { id: "subscription", baseDescriptor: claudeSubDescriptor },
     byok: { id: "byok", baseDescriptor: byokStaticDescriptor },
+    "claude-api": { id: "claude-api", baseDescriptor: byokStaticDescriptor },
     codex: { id: "codex", baseDescriptor: codexStaticDescriptor },
     opencode: { id: "opencode", baseDescriptor: openCodeStaticDescriptor },
+    // zcode's baseDescriptor is intentionally NOT zcodeStaticDescriptor here:
+    // baseDescriptorFor() special-cases 'zcode' below to build a live,
+    // CLI-config-aware descriptor. zcodeStaticDescriptor remains the ultimate
+    // fallback (used by zcodeDynamicDescriptor itself, and by
+    // zcodeDescriptorFromModels once a session exists) when no CLI config is
+    // readable at all.
     zcode: { id: "zcode", baseDescriptor: zcodeStaticDescriptor }
   };
   var REAL_BACKENDS = Object.keys(BACKENDS);
-  function baseDescriptorFor(backendId) {
+  function baseDescriptorFor(backendId, env) {
+    if (backendId === "zcode") return zcodeDynamicDescriptor({ env });
     const entry = BACKENDS[backendId];
     return entry ? entry.baseDescriptor() : claudeSubDescriptor();
   }
 
-  // src/lib/backendSelect.js
-  function pickBackend({ pref, probe, hasApiKey, codexProbe, hasCodexCustomProvider = false, zcodeProbe }) {
-    if (pref === "byok") {
-      return hasApiKey ? { backend: "byok", reason: "ok" } : { backend: "none", reason: "no-key" };
+  // src/lib/channels.js
+  function claudeChannels({ probe, apiProvider } = {}) {
+    const sub = {
+      channel: "subscription",
+      source: { zh: "\u8BA2\u9605\u767B\u5F55", en: "Subscription login" },
+      checking: probe === null,
+      ok: Boolean(probe && probe.nodeOk !== false && probe.loggedIn),
+      detail: probe && probe.detail || "",
+      fixHint: probe && probe.nodeOk === false ? { zh: "\u5185\u5D4C\u5BF9\u8BDD\u9700\u8981\u7CFB\u7EDF Node 18+\uFF1A\u5B89\u88C5 Node.js LTS \u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u6216\u4F7F\u7528\u4E0B\u65B9\u300CAPI \u76F4\u8FDE\u300D\u901A\u9053\uFF08\u65E0 Node \u65F6\u81EA\u52A8\u964D\u7EA7\u4E3A\u76F4\u8FDE HTTP\uFF09\u3002", en: "Embedded chat needs system Node 18+: install Node.js LTS and re-check, or use the API direct channel below (falls back to direct HTTP without Node)." } : { zh: "\u8BA2\u9605\u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login \u5B8C\u6210\u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u6216\u6539\u7528\u4E0B\u65B9\u300CAPI \u76F4\u8FDE\u300D\u901A\u9053\u3002", en: "Not logged in: run claude /login in a terminal and re-check, or switch to the API direct channel below." }
+    };
+    const api = {
+      channel: "api",
+      source: { zh: "\u9762\u677F\u914D\u7F6E \xB7 API \u76F4\u8FDE", en: "Panel config \xB7 API direct" },
+      checking: false,
+      ok: Boolean(apiProvider && apiProvider.baseUrl && apiProvider.apiKey),
+      detail: apiProvider && apiProvider.baseUrl ? apiProvider.baseUrl : "",
+      fixHint: { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E/\u9009\u62E9\u4E00\u4E2A Anthropic \u534F\u8BAE provider\uFF08Base URL + Key/Token\uFF09\uFF0C\u6216\u4E00\u952E\u5BFC\u5165 ~/.claude/settings.json\u3002Claude-3p \u684C\u9762\u7248\u51ED\u636E\u65E0\u6CD5\u81EA\u52A8\u8BFB\u53D6\uFF0C\u8BF7\u624B\u52A8\u586B\u4E00\u6B21\u3002", en: "Add or pick an Anthropic-protocol provider (base URL + key/token) in Provider Manager, or import from ~/.claude/settings.json. Claude-3p desktop credentials cannot be read automatically; paste them once." }
+    };
+    return [sub, api];
+  }
+  function codexChannels({ codexProbe, customProvider } = {}) {
+    const cli = {
+      channel: "cli",
+      source: { zh: "Codex CLI \u767B\u5F55\u6001", en: "Codex CLI login" },
+      checking: codexProbe === null,
+      ok: Boolean(codexProbe && codexProbe.loggedIn),
+      detail: codexProbe ? [codexProbe.email, codexProbe.planType, codexProbe.cliPath, codexProbe.cliVersion].filter(Boolean).join(" \xB7 ") : "",
+      fixHint: { zh: "\u5728\u7EC8\u7AEF\u5B8C\u6210 codex \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u82E5 codex \u4E0D\u5728\u9762\u677F PATH \u4E0A\uFF0C\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF AE_MCP_CODEX_CLI \u6307\u5411 codex \u53EF\u6267\u884C\u6587\u4EF6\u540E\u91CD\u542F AE\u3002", en: "Sign in with codex in a terminal and re-check; if codex is not on the panel PATH, set AE_MCP_CODEX_CLI to the codex executable and restart AE." }
+    };
+    const custom = {
+      channel: "custom",
+      source: { zh: "\u81EA\u5B9A\u4E49 provider", en: "Custom provider" },
+      checking: false,
+      ok: Boolean(customProvider && customProvider.baseUrl && customProvider.apiKey && (!codexProbe || codexProbe.runtimeOk !== false)),
+      detail: customProvider && customProvider.baseUrl ? customProvider.baseUrl : "",
+      fixHint: { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E/\u9009\u62E9\u4E00\u4E2A OpenAI \u517C\u5BB9 provider\uFF08Base URL + Key\uFF09\u3002", en: "Add or pick an OpenAI-compatible provider (base URL + key) in Provider Manager." }
+    };
+    return [cli, custom];
+  }
+  function zcodeChannels({ zcodeProbe, configSummary } = {}) {
+    const summary = configSummary || {};
+    const runtimeOk = Boolean(zcodeProbe && zcodeProbe.runtimeOk !== false);
+    const runtimeHint = { zh: "ZCode \u8FD0\u884C\u65F6\u4E0D\u53EF\u7528\uFF1A\u5B89\u88C5 ZCode\u3001\u786E\u8BA4\u7CFB\u7EDF Node \u53EF\u7528\uFF0C\u6216\u8BBE\u7F6E AE_MCP_ZCODE_CLI \u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "ZCode runtime unavailable: install ZCode, confirm system Node, or set AE_MCP_ZCODE_CLI, then re-check." };
+    const cli = {
+      channel: "cli-config",
+      source: { zh: "\u7EE7\u627F\u81EA ZCode CLI", en: "Inherited from ZCode CLI" },
+      checking: zcodeProbe === null,
+      ok: Boolean(summary.cli && summary.cli.hasCredential && runtimeOk),
+      detail: summary.cli ? summary.cli.model || summary.cli.providerId : "",
+      fixHint: !runtimeOk && summary.cli ? runtimeHint : summary.cli && !summary.cli.hasCredential ? { zh: "\u68C0\u6D4B\u5230 ZCode CLI provider\u300C" + summary.cli.providerId + "\u300D\uFF0C\u4F46\u5176 API Key \u73AF\u5883\u53D8\u91CF\uFF08" + (summary.cli.apiKeyEnv || "-") + "\uFF09\u6CA1\u6709\u88AB\u9762\u677F\u7EE7\u627F\u3002\u5728\u4E0B\u65B9\u7C98\u8D34\u4E00\u6B21 Key\uFF08\u4FDD\u5B58\u5230\u672C\u673A ~/.ae-mcp/zcode-key\uFF09\u5373\u53EF\u4F7F\u7528\u3002", en: 'Found ZCode CLI provider "' + summary.cli.providerId + '", but its API key env (' + (summary.cli.apiKeyEnv || "-") + ") is not inherited by the panel. Paste the key once below (stored at ~/.ae-mcp/zcode-key)." } : { zh: "\u672A\u627E\u5230 ~/.zcode/cli/config.json \u7684\u53EF\u7528 provider\uFF1A\u5148\u5728 ZCode CLI \u91CC\u914D\u7F6E provider \u4E0E\u9ED8\u8BA4\u6A21\u578B\u3002", en: "No usable provider in ~/.zcode/cli/config.json: configure a provider and default model in the ZCode CLI first." }
+    };
+    const desktop = {
+      channel: "desktop",
+      source: { zh: "\u7EE7\u627F\u81EA ZCode \u684C\u9762\u7248", en: "Inherited from ZCode desktop" },
+      checking: zcodeProbe === null,
+      ok: Boolean(summary.desktop && runtimeOk),
+      detail: summary.desktop ? summary.desktop.providerId : "",
+      fixHint: !runtimeOk && summary.desktop ? runtimeHint : { zh: "\u6253\u5F00 ZCode \u684C\u9762\u7248\u5E76\u9009\u62E9\u4E00\u4E2A provider/model\uFF0C\u7136\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "Open ZCode desktop, pick a provider/model, then re-check." }
+    };
+    const startPlan = {
+      channel: "start-plan",
+      source: { zh: "\u5B98\u65B9\u6258\u7BA1\u8BA1\u5212", en: "Official hosted plan" },
+      checking: false,
+      ok: Boolean(summary.startPlan && summary.startPlan.hasCredential && runtimeOk),
+      detail: summary.startPlan ? summary.startPlan.providerId : "",
+      fixHint: { zh: "\u5B98\u65B9\u6258\u7BA1\u8BA1\u5212\u9700\u8981 ZCode \u684C\u9762\u9A8C\u8BC1\u7801\u6865\u63A5\uFF08\u9762\u677F\u5C1A\u672A\u5B9E\u73B0\uFF09\uFF1A\u68C0\u6D4B\u5230\u6709\u6548\u51ED\u636E\u524D\u4E0D\u53EF\u9009\u3002\u8BF7\u4F7F\u7528 CLI \u914D\u7F6E\u6216\u684C\u9762\u7248\u901A\u9053\u3002", en: "The hosted plan needs the ZCode desktop captcha bridge (not implemented in the panel yet) and stays unavailable until valid credentials are detected. Use the CLI-config or desktop channel instead." }
+    };
+    return [cli, desktop, startPlan];
+  }
+  function pickChannel(channels, lockedChannel = "") {
+    const list = Array.isArray(channels) ? channels : [];
+    if (lockedChannel) {
+      const locked = list.find((c) => c && c.channel === lockedChannel);
+      if (locked) return locked;
     }
-    if (pref === "codex") {
-      if (codexProbe === null) return { backend: "none", reason: "codex-probing" };
-      if (hasCodexCustomProvider) {
-        if (!codexProbe || codexProbe.runtimeOk === false) return { backend: "none", reason: "codex-runtime-unavailable" };
-        return { backend: "codex", reason: "ok" };
+    return list.find((c) => c && c.ok) || null;
+  }
+  function migrateBackendPref(storage) {
+    let pref = "subscription";
+    let lockedChannel = "";
+    try {
+      const raw = storage.getItem("ae_mcp_backend") || "subscription";
+      lockedChannel = storage.getItem("ae_mcp_channel_lock") || "";
+      if (raw === "byok") {
+        pref = "subscription";
+        lockedChannel = "api";
+        storage.setItem("ae_mcp_backend", pref);
+        storage.setItem("ae_mcp_channel_lock", lockedChannel);
+      } else if (raw === "opencode") {
+        pref = "subscription";
+        storage.setItem("ae_mcp_backend", pref);
+      } else if (raw === "codex" || raw === "zcode" || raw === "subscription") {
+        pref = raw;
       }
-      if (!codexProbe || !codexProbe.loggedIn) return { backend: "none", reason: "codex-not-logged-in" };
-      return { backend: "codex", reason: "ok" };
+    } catch (e) {
     }
-    if (pref === "zcode") {
-      if (zcodeProbe === null) return { backend: "none", reason: "zcode-probing" };
-      if (!zcodeProbe || !zcodeProbe.loggedIn) return { backend: "none", reason: "zcode-not-logged-in" };
-      if (zcodeProbe.runtimeOk === false) return { backend: "none", reason: "zcode-runtime-unavailable" };
-      return { backend: "zcode", reason: "ok" };
+    return { pref, lockedChannel };
+  }
+
+  // src/lib/backendSelect.js
+  function pickBackend({ pref, channels = {}, lockedChannel = "", nodeOk = true }) {
+    const group = pref === "codex" || pref === "zcode" ? pref : "claude";
+    const list = channels[group] || [];
+    if (list.some((c) => c && c.checking)) {
+      return { backend: "none", reason: group + "-probing", channel: null, fixHint: null };
     }
-    if (probe === null) return { backend: "none", reason: "probing" };
-    if (!probe.nodeOk) return hasApiKey ? { backend: "byok", reason: "no-node" } : { backend: "none", reason: "no-node" };
-    if (!probe.loggedIn) return hasApiKey ? { backend: "byok", reason: "not-logged-in" } : { backend: "none", reason: "not-logged-in" };
-    return { backend: "subscription", reason: "ok" };
+    const chosen = pickChannel(list, lockedChannel);
+    if (!chosen || !chosen.ok) {
+      const hintSource = chosen || list.find((c) => c && !c.ok) || list[0] || null;
+      return {
+        backend: "none",
+        reason: group + "-no-channel",
+        channel: chosen ? chosen.channel : null,
+        fixHint: hintSource ? hintSource.fixHint || null : null
+      };
+    }
+    if (group === "claude") {
+      if (chosen.channel === "api") {
+        return { backend: nodeOk ? "claude-api" : "byok", reason: "ok", channel: "api", fixHint: null };
+      }
+      return { backend: "subscription", reason: "ok", channel: "subscription", fixHint: null };
+    }
+    return { backend: group, reason: "ok", channel: chosen.channel, fixHint: null };
   }
   function deriveToolMeta(tools) {
     const allowedTools = [];
@@ -12100,37 +13707,11 @@
     return { reset: true, nextReal: next };
   }
 
-  // src/lib/ndjson.js
-  function createLineSplitter(onLine) {
-    let buffer = "";
-    return function push(chunk) {
-      buffer += String(chunk || "");
-      let index = buffer.indexOf("\n");
-      while (index !== -1) {
-        const line = buffer.slice(0, index).trim();
-        buffer = buffer.slice(index + 1);
-        if (line) onLine(line);
-        index = buffer.indexOf("\n");
-      }
-    };
-  }
-  function createNdjsonReader(onMessage) {
-    return createLineSplitter((line) => {
-      let message;
-      try {
-        message = JSON.parse(line);
-      } catch (e) {
-        return;
-      }
-      onMessage(message);
-    });
-  }
-
   // src/cep/mcpClient.js
   var DEFAULT_TIMEOUT_MS = 3e4;
   var MCP_PROTOCOL_VERSION = "2025-06-18";
   var PANEL_VERSION = "0.8.3";
-  function getCepRequire() {
+  function getCepRequire3() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -12138,7 +13719,7 @@
     if (globalThis.require) return globalThis.require;
     throw new Error("CEP Node require is unavailable");
   }
-  function getCepEnv() {
+  function getCepEnv3() {
     return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
   }
   function normalizeFsPath(value) {
@@ -12159,7 +13740,7 @@
     return String(stdout || "").split(/\r?\n/).map((line) => line.trim()).find(Boolean) || "";
   }
   function defaultWhereImpl() {
-    const childProcess = getCepRequire()("child_process");
+    const childProcess = getCepRequire3()("child_process");
     return new Promise((resolve) => {
       childProcess.execFile("where", ["ae-mcp"], { windowsHide: true }, (err, stdout) => {
         resolve(err ? "" : stdout);
@@ -12167,7 +13748,7 @@
     });
   }
   function defaultFs() {
-    return getCepRequire()("fs");
+    return getCepRequire3()("fs");
   }
   function findProjectRoot({ extRoot, repoRoot, fsImpl }) {
     if (repoRoot && fsImpl.existsSync(joinPath(repoRoot, "pyproject.toml"))) return normalizeFsPath(repoRoot);
@@ -12193,7 +13774,7 @@
     const found = firstWhereHit(await whereImpl("ae-mcp"));
     if (found) return { command: found, args: [], source: "where" };
     const fs = fsImpl || defaultFs();
-    const profile = (envImpl || getCepEnv()).USERPROFILE || "";
+    const profile = (envImpl || getCepEnv3()).USERPROFILE || "";
     if (profile) {
       const shim = joinPath(joinPath(joinPath(normalizeFsPath(profile), ".local"), "bin"), "ae-mcp.exe");
       if (fs.existsSync(shim)) return { command: shim, args: [], source: "uv-tool" };
@@ -12282,7 +13863,7 @@
     }
     function getSpawn() {
       if (spawnImpl) return spawnImpl;
-      return getCepRequire()("child_process").spawn;
+      return getCepRequire3()("child_process").spawn;
     }
     function attachBeforeUnload() {
       if (globalThis.window && globalThis.window.addEventListener) {
@@ -12297,7 +13878,7 @@
       startPromise = (async () => {
         const commandSpec = await resolveCommand({ extRoot, repoRoot });
         const spawn = getSpawn();
-        const spawnEnv = Object.assign({}, getCepEnv(), env || {}, {
+        const spawnEnv = Object.assign({}, getCepEnv3(), env || {}, {
           AE_MCP_BACKEND: "ae-mcp",
           ...expertGuidanceEnv(getExpertGuidance())
         });
@@ -12392,78 +13973,8 @@
     return { start, listTools, callTool, stop, state: currentState, getServerInstructions: () => serverInstructions };
   }
 
-  // src/cep/apiKey.js
-  var KEY_FILES = {
-    anthropic: "anthropic-key",
-    codex: "codex-key"
-  };
-  function cepRequire2() {
-    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) return globalThis.window.cep_node.require;
-    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    return null;
-  }
-  function defaultDeps() {
-    const req = cepRequire2();
-    if (!req) throw new Error("CEP Node require is unavailable");
-    return {
-      fs: req("fs"),
-      os: req("os"),
-      path: req("path"),
-      pid: req("process") && req("process").pid
-    };
-  }
-  function createApiKeyStore(deps = defaultDeps()) {
-    const fs = deps.fs;
-    const os = deps.os;
-    const path = deps.path;
-    function keyDir() {
-      return path.join(os.homedir(), ".ae-mcp");
-    }
-    function keyFile(name = "anthropic") {
-      const file = KEY_FILES[String(name || "anthropic")];
-      if (!file) throw new Error("Unsupported API key name: " + name);
-      return file;
-    }
-    function keyPath(name = "anthropic") {
-      return path.join(keyDir(), keyFile(name));
-    }
-    function readKey(name = "anthropic") {
-      try {
-        return fs.readFileSync(keyPath(name), "utf8").trim();
-      } catch (e) {
-        if (e && e.code === "ENOENT") return "";
-        throw e;
-      }
-    }
-    function writeKey(key, name = "anthropic") {
-      const value = String(key || "").trim();
-      const dir = keyDir();
-      const fileName = keyFile(name);
-      const file = keyPath(name);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      const pid = deps.pid || 0;
-      const tmp = path.join(dir, `${fileName}.${pid}.${Date.now()}.tmp`);
-      fs.writeFileSync(tmp, value, "utf8");
-      try {
-        fs.chmodSync(tmp, 384);
-      } catch (e) {
-      }
-      fs.renameSync(tmp, file);
-      return value;
-    }
-    function clearKey(name = "anthropic") {
-      try {
-        fs.unlinkSync(keyPath(name));
-      } catch (e) {
-        if (!e || e.code !== "ENOENT") throw e;
-      }
-    }
-    return { keyDir, keyPath, readKey, writeKey, clearKey };
-  }
-
   // src/cep/claudeAuth.js
-  function getCepRequire2() {
+  function getCepRequire4() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -12471,7 +13982,7 @@
     if (globalThis.require) return globalThis.require;
     throw new Error("CEP Node require is unavailable");
   }
-  function getCepEnv2() {
+  function getCepEnv4() {
     return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
   }
   function normalizeFsPath2(value) {
@@ -12480,10 +13991,10 @@
     return text;
   }
   function defaultFs2() {
-    return getCepRequire2()("fs");
+    return getCepRequire4()("fs");
   }
   function defaultSpawn() {
-    return getCepRequire2()("child_process").spawn;
+    return getCepRequire4()("child_process").spawn;
   }
   function joinPath2(base, leaf) {
     return normalizeFsPath2(base) + "\\" + leaf;
@@ -12513,8 +14024,7 @@
       let stderr = "";
       let proc = null;
       const spawn = spawnImpl || defaultSpawn();
-      const spawnEnv = Object.assign({}, getCepEnv2(), env || {});
-      delete spawnEnv.ANTHROPIC_API_KEY;
+      const spawnEnv = claudeChannelEnv(Object.assign({}, getCepEnv4(), env || {}), { channel: "subscription" });
       function finish(result) {
         if (settled) return;
         settled = true;
@@ -12567,322 +14077,14 @@
     });
   }
 
-  // src/cep/claudeAgentBackend.js
-  var READY_TIMEOUT_MS = 15e3;
-  var STDERR_TAIL_LIMIT = 4096;
-  var FIXED_NODE_CANDIDATE = "C:\\Program Files\\nodejs\\node.exe";
-  function getCepRequire3() {
-    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-      return globalThis.window.cep_node.require;
-    }
-    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    throw new Error("CEP Node require is unavailable");
-  }
-  function getCepEnv3() {
-    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
-  }
-  function execFileAsync(execFileImpl, file, args, env) {
-    return new Promise((resolve) => {
-      execFileImpl(file, args, { windowsHide: true, env }, (err, stdout, stderr) => {
-        resolve({ err, stdout: String(stdout || ""), stderr: String(stderr || "") });
-      });
-    });
-  }
-  function nodeCandidates(stdout) {
-    const seen = /* @__PURE__ */ new Set();
-    const candidates = String(stdout || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    candidates.push(FIXED_NODE_CANDIDATE);
-    return candidates.filter((candidate) => {
-      if (seen.has(candidate)) return false;
-      seen.add(candidate);
-      return true;
-    });
-  }
-  function parseMajor(version) {
-    const match = String(version || "").trim().match(/^v(\d+)/);
-    return match ? Number(match[1]) : 0;
-  }
-  async function resolveSystemNode({ execFileImpl, env } = {}) {
-    const execFile = execFileImpl || getCepRequire3()("child_process").execFile;
-    const processEnv = env || getCepEnv3();
-    const where = await execFileAsync(execFile, "where", ["node"], processEnv);
-    const candidates = nodeCandidates(where.err ? "" : where.stdout);
-    for (const candidate of candidates) {
-      const checked = await execFileAsync(execFile, candidate, ["--version"], processEnv);
-      if (checked.err) continue;
-      const version = String(checked.stdout || checked.stderr || "").trim();
-      if (parseMajor(version) >= 18) return { ok: true, nodePath: candidate, version };
-    }
-    return { ok: false, detail: "No system Node 18+ found." };
-  }
-  function clone2(value) {
-    return value == null ? value : JSON.parse(JSON.stringify(value));
-  }
-  function nodeMissingMessage(lang) {
-    if (lang === "zh") return "\u5185\u5D4C\u5BF9\u8BDD\u9700\u8981\u7CFB\u7EDF Node 18+\uFF08\u672A\u68C0\u6D4B\u5230\uFF09\u3002\u5B89\u88C5 Node.js LTS \u540E\u91CD\u8BD5\u3002";
-    return "Embedded chat needs system Node 18+. Install Node.js LTS and retry.";
-  }
-  function sanitizeEnv(env) {
-    const copy = Object.assign({}, env || {});
-    delete copy.ANTHROPIC_API_KEY;
-    return copy;
-  }
-  function appendTail2(tail, chunk) {
-    const next = tail + String(chunk || "");
-    return next.length > STDERR_TAIL_LIMIT ? next.slice(next.length - STDERR_TAIL_LIMIT) : next;
-  }
-  function createClaudeAgentBackend({
-    resolveNode = resolveSystemNode,
-    sidecarPath,
-    getMcpSpec,
-    getToolMeta,
-    getModel,
-    getPermissionMode,
-    getEffort,
-    getThinking,
-    onEvent,
-    lang = "zh",
-    spawnImpl,
-    env
-  }) {
-    let proc = null;
-    let startPromise = null;
-    let pendingReadyReject = null;
-    let pendingReadyTimer = null;
-    let ready = false;
-    let stopping = false;
-    let stderrTail = "";
-    let transcript = [];
-    let activeRun = null;
-    let activeResolve = null;
-    let activeAssistantText = "";
-    function emit(evt) {
-      if (onEvent) onEvent(evt);
-    }
-    function getSpawn() {
-      if (spawnImpl) return spawnImpl;
-      return getCepRequire3()("child_process").spawn;
-    }
-    function writeMessage(message) {
-      if (!proc || !proc.stdin || !proc.stdin.write) return;
-      proc.stdin.write(JSON.stringify(message) + "\n");
-    }
-    function finishActive() {
-      if (!activeResolve) {
-        activeRun = null;
-        activeAssistantText = "";
-        return;
-      }
-      const resolve = activeResolve;
-      activeResolve = null;
-      activeRun = null;
-      activeAssistantText = "";
-      resolve();
-    }
-    function handleSidecarMessage(message) {
-      if (!message || message.t === "ready") return;
-      if (message.t !== "event") return;
-      const event = message.event;
-      if (!event) return;
-      if (event.type === "text-delta") activeAssistantText += String(event.text || "");
-      emit(event);
-      if (event.type === "turn-end") {
-        transcript.push({ role: "assistant", text: activeAssistantText });
-        finishActive();
-      }
-      if (event.type === "error") finishActive();
-    }
-    function exitDetail(code, signal) {
-      const suffix = signal ? String(code) + " " + signal : String(code);
-      return stderrTail ? suffix + " " + stderrTail : suffix;
-    }
-    function clearReadyWait() {
-      if (pendingReadyTimer) clearTimeout(pendingReadyTimer);
-      pendingReadyTimer = null;
-      pendingReadyReject = null;
-    }
-    function handleExit(code, signal) {
-      const wasStopping = stopping;
-      const wasReady = ready;
-      const detail = exitDetail(code, signal);
-      const rejectReady = pendingReadyReject;
-      proc = null;
-      ready = false;
-      startPromise = null;
-      stopping = false;
-      if (wasStopping) return;
-      if (!wasReady && rejectReady) {
-        clearReadyWait();
-        rejectReady(new Error("sidecar exited: " + detail));
-        return;
-      }
-      if (activeRun) {
-        emit({ type: "error", kind: "mcp", message: "sidecar exited: " + detail });
-        finishActive();
-      }
-    }
-    function handleProcError(error) {
-      const rejectReady = pendingReadyReject;
-      proc = null;
-      ready = false;
-      startPromise = null;
-      if (rejectReady) {
-        clearReadyWait();
-        rejectReady(error instanceof Error ? error : new Error("sidecar error"));
-        return;
-      }
-      if (activeRun) {
-        emit({ type: "error", kind: "mcp", message: error && error.message ? error.message : "sidecar error" });
-        finishActive();
-      }
-    }
-    async function startSidecar() {
-      if (proc && ready) return true;
-      if (startPromise) return startPromise;
-      startPromise = (async () => {
-        const node = await resolveNode();
-        if (!node || !node.ok) {
-          emit({ type: "error", kind: "mcp", message: nodeMissingMessage(lang) });
-          return false;
-        }
-        const mcpSpec = await getMcpSpec();
-        const meta = await getToolMeta();
-        const spawn = getSpawn();
-        const spawnEnv = sanitizeEnv(env || getCepEnv3());
-        stderrTail = "";
-        stopping = false;
-        ready = false;
-        let readyResolve;
-        let readyReject;
-        const readyPromise = new Promise((resolve, reject) => {
-          readyResolve = resolve;
-          readyReject = reject;
-        });
-        pendingReadyReject = readyReject;
-        pendingReadyTimer = setTimeout(() => {
-          pendingReadyTimer = null;
-          pendingReadyReject = null;
-          try {
-            stopping = true;
-            if (proc) proc.kill();
-          } catch (e) {
-          }
-          readyReject(new Error("sidecar ready timed out"));
-        }, READY_TIMEOUT_MS);
-        try {
-          proc = spawn(node.nodePath, [
-            sidecarPath,
-            "--mcp",
-            JSON.stringify(mcpSpec),
-            "--allowed-tools",
-            JSON.stringify(meta.allowedTools),
-            "--annotations",
-            JSON.stringify(meta.annotations),
-            "--model",
-            getModel(),
-            "--lang",
-            lang
-          ], {
-            stdio: "pipe",
-            windowsHide: true,
-            env: spawnEnv
-          });
-        } catch (e) {
-          clearReadyWait();
-          throw e;
-        }
-        const reader = createNdjsonReader((message) => {
-          if (message && message.t === "ready") {
-            ready = true;
-            clearReadyWait();
-            readyResolve(true);
-            return;
-          }
-          handleSidecarMessage(message);
-        });
-        if (proc.stdout && proc.stdout.on) proc.stdout.on("data", reader);
-        if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
-          stderrTail = appendTail2(stderrTail, chunk);
-        });
-        proc.on("exit", (code, signal) => handleExit(code, signal));
-        proc.on("error", (error) => {
-          handleProcError(error);
-        });
-        await readyPromise;
-        return true;
-      })();
-      try {
-        return await startPromise;
-      } catch (e) {
-        emit({ type: "error", kind: "mcp", message: e && e.message ? e.message : "Failed to start sidecar." });
-        return false;
-      } finally {
-        startPromise = null;
-      }
-    }
-    async function sendUser(text) {
-      if (activeRun) return activeRun;
-      activeAssistantText = "";
-      activeRun = new Promise((resolve) => {
-        activeResolve = resolve;
-      });
-      const ok = await startSidecar();
-      if (!ok) {
-        finishActive();
-        return activeRun;
-      }
-      const userText = String(text || "");
-      transcript.push({ role: "user", text: userText });
-      writeMessage({
-        t: "user",
-        text: userText,
-        permissionMode: getPermissionMode(),
-        model: getModel(),
-        effort: getEffort ? getEffort() : void 0,
-        thinking: getThinking ? getThinking() : void 0
-      });
-      return activeRun;
-    }
-    function approve(toolUseId, decision) {
-      writeMessage({ t: "approve", id: toolUseId, decision });
-    }
-    function stop() {
-      writeMessage({ t: "stop" });
-    }
-    function reset() {
-      stopping = true;
-      if (proc) {
-        try {
-          proc.kill();
-        } catch (e) {
-        }
-      }
-      proc = null;
-      ready = false;
-      startPromise = null;
-      transcript = [];
-      finishActive();
-      stderrTail = "";
-      stopping = false;
-    }
-    return {
-      sendUser,
-      approve,
-      stop,
-      reset,
-      getMessages: () => clone2(transcript)
-    };
-  }
-
   // src/cep/codexBackend.js
-  var RPC_TIMEOUT_MS = 3e4;
-  var STDERR_TAIL_LIMIT2 = 4096;
+  var RPC_TIMEOUT_MS2 = 3e4;
+  var STDERR_TAIL_LIMIT3 = 4096;
   var APPROVAL_POLICY = {
     granular: { mcp_elicitations: true, rules: false, sandbox_approval: false }
   };
   var SANDBOX_POLICY = { type: "readOnly" };
-  function getCepRequire4() {
+  function getCepRequire5() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -12890,14 +14092,14 @@
     if (globalThis.require) return globalThis.require;
     throw new Error("CEP Node require is unavailable");
   }
-  function getCepEnv4() {
+  function getCepEnv5() {
     return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
   }
-  function appendTail3(tail, chunk) {
+  function appendTail4(tail, chunk) {
     const next = tail + String(chunk || "");
-    return next.length > STDERR_TAIL_LIMIT2 ? next.slice(next.length - STDERR_TAIL_LIMIT2) : next;
+    return next.length > STDERR_TAIL_LIMIT3 ? next.slice(next.length - STDERR_TAIL_LIMIT3) : next;
   }
-  function clone3(value) {
+  function clone4(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
   }
   function normalizeFsPath3(value) {
@@ -12915,7 +14117,7 @@
     if (parent) return parent;
     if (env && (env.TEMP || env.TMP)) return env.TEMP || env.TMP;
     try {
-      return getCepRequire4()("os").tmpdir();
+      return getCepRequire5()("os").tmpdir();
     } catch (e) {
       return ".";
     }
@@ -12926,7 +14128,7 @@
   function errorMessage(id, code, message) {
     return { jsonrpc: "2.0", id, error: { code, message } };
   }
-  function createRpc({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEOUT_MS }) {
+  function createRpc2({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEOUT_MS2 }) {
     let nextId2 = 1;
     const pending = /* @__PURE__ */ new Map();
     function writeMessage(message) {
@@ -13018,7 +14220,7 @@
   function itemFromParams(params) {
     return params && params.item || params || {};
   }
-  function mcpToolName(item) {
+  function mcpToolName2(item) {
     const tool = item && (item.tool || item.name);
     return tool ? "mcp__ae__" + String(tool).replace(/^mcp__ae__/, "") : "";
   }
@@ -13028,6 +14230,41 @@
   }
   function threadIdFromResult(result) {
     return result && (result.threadId || result.id || result.thread && result.thread.id) || null;
+  }
+  function execFileAsync3(execFile, cmd, args, env) {
+    return new Promise((resolve) => {
+      execFile(cmd, args, { env, windowsHide: true }, (err, stdout, stderr) => {
+        resolve({ err, stdout: String(stdout || ""), stderr: String(stderr || "") });
+      });
+    });
+  }
+  function getHomedir() {
+    try {
+      return getCepRequire5()("os").homedir();
+    } catch (e) {
+      return "";
+    }
+  }
+  async function resolveCodexCli({ env, execFileImpl } = {}) {
+    const override = env && env.AE_MCP_CODEX_CLI;
+    if (override) return { ok: true, cliPath: String(override), version: "" };
+    let execFile = execFileImpl;
+    if (!execFile) {
+      try {
+        execFile = getCepRequire5()("child_process").execFile;
+      } catch (e) {
+        return { ok: false, cliPath: "", version: "", detail: "child_process unavailable" };
+      }
+    }
+    const where = await execFileAsync3(execFile, "where", ["codex"], env || {});
+    if (!where.err && where.stdout) {
+      const exe = String(where.stdout).split(/\r?\n/)[0].trim();
+      if (exe) {
+        const v = await execFileAsync3(execFile, exe, ["--version"], env || {});
+        return { ok: true, cliPath: exe, version: v.err ? "" : String(v.stdout || v.stderr || "").trim() };
+      }
+    }
+    return { ok: false, cliPath: "", version: "", detail: "codex CLI not found on PATH. Sign in with codex in a terminal, or set AE_MCP_CODEX_CLI to the executable." };
   }
   function createCodexBackend({
     spawnImpl,
@@ -13040,6 +14277,7 @@
     getExpertGuidance = () => true,
     getServerInstructions = () => "",
     getProviderProfile = () => ({}),
+    resolveCli = resolveCodexCli,
     onEvent,
     lang = "zh",
     env
@@ -13059,6 +14297,7 @@
     let activeResolve = null;
     let activeAssistantText = "";
     let toolMeta = { allowedTools: [], annotations: {} };
+    let lastCliInfo = null;
     const pendingApprovals = /* @__PURE__ */ new Map();
     const sessionAllowedTools = /* @__PURE__ */ new Set();
     function emit(evt) {
@@ -13066,10 +14305,10 @@
     }
     function getSpawn() {
       if (spawnImpl) return spawnImpl;
-      return getCepRequire4()("child_process").spawn;
+      return getCepRequire5()("child_process").spawn;
     }
     function currentEnv() {
-      return Object.assign({}, getCepEnv4(), env || {});
+      return Object.assign({}, getCepEnv5(), env || {});
     }
     function finishActive() {
       if (!activeResolve) {
@@ -13116,7 +14355,7 @@
         emit({
           type: "tool-start",
           toolUseId: String(item.id || ""),
-          name: mcpToolName(item),
+          name: mcpToolName2(item),
           input: item.arguments
         });
         return;
@@ -13131,7 +14370,7 @@
         emit({
           type: "tool-result",
           toolUseId: String(item.id || ""),
-          name: mcpToolName(item),
+          name: mcpToolName2(item),
           ok: !item.error && item.status === "completed",
           text: toolResultText(item.result),
           durationMs: item.durationMs
@@ -13230,17 +14469,20 @@
       if (startPromise) return startPromise;
       startPromise = (async () => {
         const spawn = getSpawn();
-        const spawnEnv = currentEnv();
+        const spawnEnv = ensureUserEnv(currentEnv(), { homedir: getHomedir() });
         const providerProfile = normalizeProviderProfile(getProviderProfile ? getProviderProfile() : {}, spawnEnv);
         stderrTail = "";
         stopping = false;
-        proc = spawn("codex", codexAppServerArgs(providerProfile), {
+        const cliOverride = spawnEnv.AE_MCP_CODEX_CLI ? { ok: true, cliPath: String(spawnEnv.AE_MCP_CODEX_CLI), version: "" } : null;
+        lastCliInfo = cliOverride || lastCliInfo;
+        const command = cliOverride ? cliOverride.cliPath : "codex";
+        proc = spawn(command, codexAppServerArgs(providerProfile), {
           stdio: "pipe",
           windowsHide: true,
           shell: true,
           env: codexSpawnEnv(providerProfile, spawnEnv)
         });
-        rpc = createRpc({
+        rpc = createRpc2({
           writeLine: (line) => proc.stdin.write(line),
           onNotification: handleNotification,
           onRequest: handleRequest
@@ -13248,7 +14490,7 @@
         const reader = createNdjsonReader((message) => rpc && rpc.handleMessage(message));
         if (proc.stdout && proc.stdout.on) proc.stdout.on("data", reader);
         if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
-          stderrTail = appendTail3(stderrTail, chunk);
+          stderrTail = appendTail4(stderrTail, chunk);
         });
         proc.on("exit", (code, signal) => handleExit(code, signal));
         proc.on("error", (error) => handleError(error));
@@ -13397,6 +14639,19 @@
       stopping = false;
     }
     async function probeAccount() {
+      const spawnEnv = ensureUserEnv(currentEnv(), { homedir: getHomedir() });
+      let cliInfo = { ok: false, cliPath: "", version: "" };
+      try {
+        let execFileImpl = null;
+        try {
+          execFileImpl = getCepRequire5()("child_process").execFile;
+        } catch (e) {
+        }
+        cliInfo = await resolveCli({ env: spawnEnv, execFileImpl });
+        lastCliInfo = cliInfo;
+      } catch (e) {
+      }
+      const diag = { cliPath: cliInfo.cliPath || "", cliVersion: cliInfo.version || "" };
       try {
         await initialize();
         const accountResult = await rpc.request("account/read", {});
@@ -13408,16 +14663,18 @@
           models = null;
         }
         const account = accountResult && accountResult.account;
-        if (!account) return { loggedIn: false, runtimeOk: true, detail: accountResult && accountResult.requiresOpenaiAuth ? "OpenAI auth required" : void 0, models };
+        if (!account) return { loggedIn: false, runtimeOk: true, detail: accountResult && accountResult.requiresOpenaiAuth ? "OpenAI auth required" : void 0, models, ...diag };
         return {
           loggedIn: true,
           runtimeOk: true,
           email: account.email,
           planType: account.planType,
-          models
+          models,
+          ...diag
         };
       } catch (e) {
-        return { loggedIn: false, runtimeOk: false, detail: e && e.message ? e.message : String(e) };
+        const detail = [e && e.message ? e.message : String(e), cliInfo.ok ? "" : cliInfo.detail].filter(Boolean).join(" | ");
+        return { loggedIn: false, runtimeOk: false, detail, ...diag };
       }
     }
     return {
@@ -13425,7 +14682,7 @@
       approve,
       stop,
       reset,
-      getMessages: () => clone3(transcript),
+      getMessages: () => clone4(transcript),
       probeAccount
     };
   }
@@ -13436,7 +14693,7 @@
   var READY_POLL_MS = 250;
   var DEFAULT_PROVIDER_ID = "opencode";
   var DEFAULT_MODEL_ID = "north-mini-code-free";
-  function getCepRequire5() {
+  function getCepRequire6() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -13444,7 +14701,7 @@
     if (globalThis.require) return globalThis.require;
     throw new Error("CEP Node require is unavailable");
   }
-  function getCepEnv5() {
+  function getCepEnv6() {
     return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
   }
   function defaultFetch() {
@@ -13453,18 +14710,18 @@
     throw new Error("fetch is unavailable");
   }
   function defaultFs3() {
-    return getCepRequire5()("fs");
+    return getCepRequire6()("fs");
   }
   function defaultOs() {
-    return getCepRequire5()("os");
+    return getCepRequire6()("os");
   }
   function defaultPath() {
-    return getCepRequire5()("path");
+    return getCepRequire6()("path");
   }
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
-  function appendTail4(tail, chunk) {
+  function appendTail5(tail, chunk) {
     const next = tail + String(chunk || "");
     return next.length > 4096 ? next.slice(next.length - 4096) : next;
   }
@@ -13476,7 +14733,7 @@
     return "ae-opencode-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
   }
   async function defaultGetPort() {
-    const net = getCepRequire5()("net");
+    const net = getCepRequire6()("net");
     return new Promise((resolve, reject) => {
       const server = net.createServer();
       server.on("error", reject);
@@ -13595,7 +14852,7 @@
       return fetchImpl || defaultFetch();
     }
     function currentEnv() {
-      return Object.assign({}, getCepEnv5(), env || {});
+      return Object.assign({}, getCepEnv6(), env || {});
     }
     function finishActive() {
       if (!activeResolve) {
@@ -13705,7 +14962,7 @@
         writeConfig(mcpSpec);
         port = await getPort();
         baseUrl = "http://127.0.0.1:" + port;
-        const spawn = spawnImpl || getCepRequire5()("child_process").spawn;
+        const spawn = spawnImpl || getCepRequire6()("child_process").spawn;
         const spawnEnv = Object.assign({}, currentEnv(), { XDG_CONFIG_HOME: configHome });
         stderrTail = "";
         stopping = false;
@@ -13717,7 +14974,7 @@
           env: spawnEnv
         });
         if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
-          stderrTail = appendTail4(stderrTail, chunk);
+          stderrTail = appendTail5(stderrTail, chunk);
         });
         if (proc.on) {
           proc.on("exit", (code, signal) => handleExit(code, signal));
@@ -13982,25 +15239,226 @@
     return { sendUser, approve, stop, reset, getMessages, probeAccount };
   }
 
-  // src/cep/zcodeBackend.js
-  var RPC_TIMEOUT_MS2 = 3e4;
-  var STDERR_TAIL_LIMIT3 = 4096;
-  var DELIVERY_KIND = "desktop-continuous";
-  var ZCODE_BUILTIN_DEFAULT_MODEL = "builtin:bigmodel-start-plan/GLM-5.2";
-  var LEGACY_ZCODE_MODEL_REFS = /* @__PURE__ */ new Set(["mediastorm_glm/glm-5.2"]);
-  var ZCODE_THOUGHT_LEVELS = /* @__PURE__ */ new Set(["nothink", "high", "max", "low", "medium"]);
-  var ZCODE_CREDENTIAL_PREFIX = "enc:v1:";
-  var ZCODE_API_KEY_NAME = "zcode-api-key";
-  var BIGMODEL_API_ORIGIN = "https://bigmodel.cn";
-  var ZAI_BIZ_API_ORIGIN = "https://api.z.ai";
-  var JSON_CONTENT_TYPE = "application/json";
-  var MODE_BY_TIER = {
-    readonly: "plan",
-    manual: "build",
-    auto: "edit",
-    none: "yolo"
+  // src/cep/providerStore.js
+  var PROTOCOLS = /* @__PURE__ */ new Set(["anthropic", "openai-compatible"]);
+  var FILE_NAME = "providers.json";
+  function cepRequire3() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) return globalThis.window.cep_node.require;
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    return null;
+  }
+  function defaultDeps2() {
+    const req = cepRequire3();
+    if (!req) throw new Error("CEP Node require is unavailable");
+    return {
+      fs: req("fs"),
+      os: req("os"),
+      path: req("path"),
+      pid: req("process") && req("process").pid
+    };
+  }
+  function normalizeProviderEntry(input = {}) {
+    const id = String(input.id || "").trim();
+    if (!id) throw new Error("Provider entry needs an id");
+    const protocol = String(input.protocol || "openai-compatible");
+    if (!PROTOCOLS.has(protocol)) throw new Error("Unsupported provider protocol: " + protocol);
+    return {
+      id,
+      name: String(input.name || "").trim() || id,
+      protocol,
+      baseUrl: String(input.baseUrl || "").trim().replace(/\/+$/, ""),
+      apiKey: String(input.apiKey || "").trim(),
+      probedModels: Array.isArray(input.probedModels) ? input.probedModels : [],
+      probedAt: Number(input.probedAt) || 0
+    };
+  }
+  function createProviderStore(deps = defaultDeps2()) {
+    const { fs, os, path } = deps;
+    function dir() {
+      return path.join(os.homedir(), ".ae-mcp");
+    }
+    function filePath() {
+      return path.join(dir(), FILE_NAME);
+    }
+    function readState() {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(filePath(), "utf8"));
+        if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.providers)) {
+          return { version: 1, migratedLegacy: false, providers: [] };
+        }
+        return { version: 1, migratedLegacy: parsed.migratedLegacy === true, providers: parsed.providers };
+      } catch (e) {
+        return { version: 1, migratedLegacy: false, providers: [] };
+      }
+    }
+    function writeState(state) {
+      const d = dir();
+      if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+      const pid = deps.pid || 0;
+      const tmp = path.join(d, FILE_NAME + "." + pid + "." + Date.now() + ".tmp");
+      fs.writeFileSync(tmp, JSON.stringify(state, null, 2), "utf8");
+      try {
+        fs.chmodSync(tmp, 384);
+      } catch (e) {
+      }
+      fs.renameSync(tmp, filePath());
+      return state;
+    }
+    function list() {
+      return readState().providers.map((p) => normalizeProviderEntry(p));
+    }
+    function get(id) {
+      return list().find((p) => p.id === String(id || "").trim()) || null;
+    }
+    function upsert(entry) {
+      const next = normalizeProviderEntry(entry);
+      const state = readState();
+      const idx = state.providers.findIndex((p) => p && p.id === next.id);
+      if (idx === -1) state.providers.push(next);
+      else state.providers[idx] = next;
+      writeState(state);
+      return next;
+    }
+    function remove(id) {
+      const state = readState();
+      state.providers = state.providers.filter((p) => p && p.id !== String(id || "").trim());
+      writeState(state);
+    }
+    function migrateLegacy({ readKey, readPref: readPref2, markDone = true } = {}) {
+      const state = readState();
+      if (state.migratedLegacy) return { migrated: [] };
+      const migrated = [];
+      const anthropicKey = readKey ? String(readKey("anthropic") || "") : "";
+      const anthropicBase = readPref2 ? String(readPref2("ae_mcp_anthropic_base_url") || "") : "";
+      if (anthropicKey || anthropicBase) {
+        migrated.push(upsert({
+          id: "legacy-anthropic",
+          name: "Claude API (migrated)",
+          protocol: "anthropic",
+          baseUrl: anthropicBase || "https://api.anthropic.com",
+          apiKey: anthropicKey
+        }));
+      }
+      const codexKey = readKey ? String(readKey("codex") || "") : "";
+      const codexBase = readPref2 ? String(readPref2("ae_mcp_codex_base_url") || "") : "";
+      if (codexKey || codexBase) {
+        migrated.push(upsert({
+          id: "legacy-codex",
+          name: "Codex custom (migrated)",
+          protocol: "openai-compatible",
+          baseUrl: codexBase,
+          apiKey: codexKey
+        }));
+      }
+      if (markDone) {
+        const after = readState();
+        after.migratedLegacy = true;
+        writeState(after);
+      }
+      return { migrated };
+    }
+    return { filePath, list, get, upsert, remove, migrateLegacy };
+  }
+
+  // src/components/settings/ProviderManagerSection.jsx
+  var import_react37 = __toESM(require_react(), 1);
+
+  // src/lib/providerManagerState.js
+  function emptyDraft() {
+    return { id: "", name: "", protocol: "openai-compatible", baseUrl: "", apiKey: "" };
+  }
+  function draftFromEntry(entry) {
+    return {
+      id: entry.id,
+      name: entry.name,
+      protocol: entry.protocol,
+      baseUrl: entry.baseUrl,
+      apiKey: entry.apiKey
+    };
+  }
+  function validateDraft(draft) {
+    if (!String(draft.name || "").trim() && !String(draft.id || "").trim()) return "\u540D\u79F0\u4E0D\u80FD\u4E3A\u7A7A / name is required";
+    if (!/^https?:\/\//i.test(String(draft.baseUrl || "").trim())) return "Base URL \u5FC5\u987B\u4EE5 http(s):// \u5F00\u5934 / must start with http(s)://";
+    return "";
+  }
+  function draftToEntry(draft) {
+    const name = String(draft.name || draft.id || "").trim();
+    const id = String(draft.id || "").trim() || name.replace(/[^A-Za-z0-9_-]+/g, "-").toLowerCase();
+    return { id, name, protocol: draft.protocol, baseUrl: draft.baseUrl, apiKey: draft.apiKey };
+  }
+
+  // src/components/settings/ProviderManagerSection.jsx
+  var import_jsx_runtime35 = __toESM(require_jsx_runtime(), 1);
+  var L2 = {
+    zh: { title: "Provider \u7BA1\u7406", add: "\u65B0\u589E", edit: "\u7F16\u8F91", del: "\u5220\u9664", probe: "\u63A2\u6D4B\u6A21\u578B", probing: "\u63A2\u6D4B\u4E2D\u2026", save: "\u4FDD\u5B58", cancel: "\u53D6\u6D88", name: "\u540D\u79F0", protocol: "\u534F\u8BAE", baseUrl: "Base URL", apiKey: "API Key", keyCap: "\u4EC5\u4FDD\u5B58\u5728\u672C\u673A ~/.ae-mcp/providers.json", models: (n) => `${n} \u4E2A\u6A21\u578B`, probeFailed: "\u63A2\u6D4B\u5931\u8D25\uFF08\u53EF\u624B\u586B\u6A21\u578B ID \u7EE7\u7EED\u4F7F\u7528\uFF09\uFF1A", importCc: "\u4ECE cc-switch \u5BFC\u5165" },
+    en: { title: "Provider manager", add: "Add", edit: "Edit", del: "Delete", probe: "Probe models", probing: "Probing\u2026", save: "Save", cancel: "Cancel", name: "Name", protocol: "Protocol", baseUrl: "Base URL", apiKey: "API Key", keyCap: "Stored locally in ~/.ae-mcp/providers.json", models: (n) => `${n} models`, probeFailed: "Probe failed (manual model id still works): ", importCc: "Import from cc-switch" }
   };
-  function getCepRequire6() {
+  function ProviderManagerSection({ lang = "zh", providers = [], onUpsert, onRemove, onProbe, probing = "", probeErrors = {}, ccSwitch = null, onImportCcSwitch }) {
+    const t = L2[lang] || L2.zh;
+    const [draft, setDraft] = import_react37.default.useState(null);
+    const [error, setError] = import_react37.default.useState("");
+    const save = () => {
+      const message = validateDraft(draft);
+      if (message) {
+        setError(message);
+        return;
+      }
+      onUpsert(draftToEntry(draft));
+      setDraft(null);
+      setError("");
+    };
+    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { flex: 1, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: (e) => {
+          e.preventDefault();
+          setDraft(emptyDraft());
+        }, children: t.add })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
+        ccSwitch && onImportCcSwitch ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "secondary", size: "sm", icon: "download", onClick: onImportCcSwitch, children: t.importCc }) : null,
+        providers.map((p) => /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: "6px 8px", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { flex: 1, minWidth: 0, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: p.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Badge, { status: "neutral", children: p.protocol }),
+            p.probedModels.length ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Badge, { status: "ok", children: t.models(p.probedModels.length) }) : null,
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", disabled: probing === p.id, onClick: () => onProbe(p), children: probing === p.id ? t.probing : t.probe }),
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => {
+              setDraft(draftFromEntry(p));
+              setError("");
+            }, children: t.edit }),
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => onRemove(p.id), children: t.del })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: p.baseUrl }),
+          probeErrors[p.id] ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: [
+            t.probeFailed,
+            probeErrors[p.id]
+          ] }) : null
+        ] }, p.id)),
+        draft ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, padding: "8px", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Input, { value: draft.name, onChange: (v) => setDraft({ ...draft, name: v }) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.protocol, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Select, { value: draft.protocol, onChange: (v) => setDraft({ ...draft, protocol: v }), options: [
+            { value: "openai-compatible", label: "OpenAI compatible" },
+            { value: "anthropic", label: "Anthropic" }
+          ] }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.baseUrl, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Input, { mono: true, value: draft.baseUrl, onChange: (v) => setDraft({ ...draft, baseUrl: v }), placeholder: "https://token.mediastorm.studio/v1" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.apiKey, caption: t.keyCap, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Input, { secret: true, value: draft.apiKey, onChange: (v) => setDraft({ ...draft, apiKey: v }) }) }),
+          error ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: error }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", gap: 6, justifyContent: "flex-end" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => {
+              setDraft(null);
+              setError("");
+            }, children: t.cancel }),
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "primary", size: "sm", onClick: save, children: t.save })
+          ] })
+        ] }) : null
+      ] })
+    ] });
+  }
+
+  // src/cep/modelProbe.js
+  function getCepRequire7() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -14008,1102 +15466,162 @@
     if (globalThis.require) return globalThis.require;
     throw new Error("CEP Node require is unavailable");
   }
-  function getCepEnv6() {
-    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
-  }
-  function appendTail5(tail, chunk) {
-    const next = tail + String(chunk || "");
-    return next.length > STDERR_TAIL_LIMIT3 ? next.slice(next.length - STDERR_TAIL_LIMIT3) : next;
-  }
-  function clone4(value) {
-    return value == null ? value : JSON.parse(JSON.stringify(value));
-  }
-  async function resolveZcodeCli({ env, execFileImpl }) {
-    const override = env && env.AE_MCP_ZCODE_CLI;
-    if (override) return { ok: true, cliPath: override };
-    const localAppData = env && (env.LOCALAPPDATA || env.LocalAppData);
-    if (localAppData) {
-      const path = localAppData + "\\Programs\\ZCode\\resources\\glm\\zcode.cjs";
-      try {
-        await statFile(path);
-        return { ok: true, cliPath: path };
-      } catch (e) {
-      }
+  function probeHeaders(protocol, apiKey) {
+    if (protocol === "anthropic") {
+      return { "x-api-key": String(apiKey || ""), "anthropic-version": "2023-06-01" };
     }
-    const execFile = execFileImpl || getCepRequire6()("child_process").execFile;
+    return { Authorization: "Bearer " + String(apiKey || "") };
+  }
+  function parseModelsList(json) {
+    const list = Array.isArray(json) ? json : json && Array.isArray(json.data) ? json.data : json && Array.isArray(json.models) ? json.models : [];
+    return list.map((m) => {
+      const id = m && (m.id || m.model || m.name);
+      if (!id) return null;
+      return { id: String(id), label: String(m.display_name || m.displayName || id) };
+    }).filter(Boolean);
+  }
+  function probeProviderModels({ baseUrl, apiKey, protocol = "openai-compatible", httpsImpl, timeoutMs = 8e3 } = {}) {
+    let endpoint;
     try {
-      const where = await execFileAsync2(execFile, "where", ["zcode"], env || {});
-      if (!where.err && where.stdout) {
-        const exe = String(where.stdout).split(/\r?\n/)[0].trim();
-        if (exe) return { ok: true, cliPath: exe, isExe: true };
-      }
+      const root = String(baseUrl || "").replace(/\/+$/, "").replace(/\/v1$/, "");
+      endpoint = new URL(root + "/v1/models");
     } catch (e) {
+      return Promise.resolve({ ok: false, status: 0, models: [], detail: "Invalid base URL" });
     }
-    return { ok: false, detail: "ZCode CLI not found. Install ZCode or set AE_MCP_ZCODE_CLI to the zcode.cjs path." };
-  }
-  function statFile(path) {
-    const fs = getCepRequire6()("fs");
-    return new Promise((resolve, reject) => fs.stat(path, (err) => err ? reject(err) : resolve()));
-  }
-  function execFileAsync2(execFile, cmd, args, env) {
+    let https;
+    try {
+      https = httpsImpl || getCepRequire7()(endpoint.protocol === "http:" ? "http" : "https");
+    } catch (e) {
+      return Promise.resolve({ ok: false, status: 0, models: [], detail: e.message });
+    }
     return new Promise((resolve) => {
-      execFile(cmd, args, { env, windowsHide: true }, (err, stdout, stderr) => {
-        resolve({ err, stdout: String(stdout || ""), stderr: String(stderr || "") });
-      });
-    });
-  }
-  function createRpc2({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEOUT_MS2 }) {
-    let nextId2 = 1;
-    const pending = /* @__PURE__ */ new Map();
-    function writeMessage(message) {
-      writeLine(JSON.stringify(message) + "\n");
-    }
-    function rejectPending(id, error) {
-      const entry = pending.get(id);
-      if (!entry) return;
-      pending.delete(id);
-      clearTimeout(entry.timer);
-      entry.reject(error);
-    }
-    function handleMessage(message) {
-      if (!message || typeof message !== "object") return;
-      const hasId = message.id !== void 0 && message.id !== null;
-      if (hasId && !message.method) {
-        const entry = pending.get(message.id);
-        if (!entry) return;
-        pending.delete(message.id);
-        clearTimeout(entry.timer);
-        if (message.error) {
-          const error = new Error(message.error.message || "ZCode request failed");
-          error.code = message.error.code;
-          error.data = message.error.data;
-          entry.reject(error);
-        } else {
-          entry.resolve(message.result);
-        }
-        return;
-      }
-      if (message.method && hasId) {
-        if (onRequest) onRequest(message);
-        return;
-      }
-      if (message.method && onNotification) onNotification(message);
-    }
-    function request(method, params, timeoutOverrideMs) {
-      const id = nextId2++;
-      const message = { id, method };
-      if (params !== void 0) message.params = params;
-      const limit = timeoutOverrideMs || timeoutMs;
-      const promise = new Promise((resolve, reject) => {
-        const timer = setTimeout(() => rejectPending(id, new Error(method + " timed out after " + limit + "ms")), limit);
-        pending.set(id, { resolve, reject, timer });
-      });
-      writeMessage(message);
-      return promise;
-    }
-    function fireRequest(method, params) {
-      const id = nextId2++;
-      const message = { id, method };
-      if (params !== void 0) message.params = params;
-      writeMessage(message);
-      return id;
-    }
-    function respond(id, result) {
-      writeMessage({ id, result });
-    }
-    function respondError(id, code, message) {
-      writeMessage({ id, error: { code, message } });
-    }
-    function close(reason = new Error("ZCode app-server closed")) {
-      for (const id of Array.from(pending.keys())) rejectPending(id, reason);
-    }
-    return { request, fireRequest, respond, respondError, close, handleMessage };
-  }
-  function mcpToolName2(name) {
-    const text = String(name || "");
-    return text.startsWith("mcp__") ? text : "mcp__ae__" + text;
-  }
-  function zcodeProviderId(modelRef) {
-    const text = String(modelRef || "").trim();
-    const slash = text.indexOf("/");
-    return slash > 0 ? text.slice(0, slash).trim() : "";
-  }
-  function zcodeProviderApiKeyEnv(providerId) {
-    const text = String(providerId || "").trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").toUpperCase();
-    return text ? text + "_API_KEY" : "";
-  }
-  function zcodeModelIds(provider) {
-    const models = provider && provider.models;
-    if (Array.isArray(models)) return models.map((m) => m && (m.id || m.modelID || m.modelId || m.name)).filter(Boolean).map(String);
-    if (models && typeof models === "object") return Object.keys(models);
-    return [];
-  }
-  function zcodePreferredModelId(provider) {
-    const ids = zcodeModelIds(provider);
-    if (!ids.length) return "";
-    return ids.find((id) => id === "GLM-5.2") || ids.find((id) => /GLM-5\.2/i.test(id)) || ids[0];
-  }
-  function zcodeProviderScore(providerId, provider, family) {
-    if (!provider || typeof provider !== "object") return -1;
-    if (provider.enabled === false || provider.systemDisabledReason) return -1;
-    if (!zcodeModelIds(provider).length) return -1;
-    const id = String(providerId || "");
-    let score = 0;
-    if (provider.enabled === true) score += 100;
-    if (family && id === "builtin:" + family + "-start-plan") score += 80;
-    if (family && id === "builtin:" + family + "-coding-plan") score += 70;
-    if (family && id === "builtin:" + family) score += 40;
-    if (/-start-plan$/.test(id)) score += 30;
-    if (/-coding-plan$/.test(id)) score += 20;
-    if (provider.options && provider.options.apiKey) score += 10;
-    return score;
-  }
-  function zcodeDesktopProviderEntry({ config, setting, modelRef }) {
-    const providers = config && config.provider && typeof config.provider === "object" ? config.provider : {};
-    const entries = Object.entries(providers);
-    if (!entries.length) return null;
-    const family = String(setting && setting.providerFamilyDomain || "").trim();
-    const requested = zcodeProtocolModelFromRef(modelRef);
-    if (requested && providers[requested.providerId]) {
-      const provider = providers[requested.providerId];
-      const score = zcodeProviderScore(requested.providerId, provider, family);
-      if (score >= 0) return { providerId: requested.providerId, provider, modelId: requested.modelId, score };
-    }
-    let best = null;
-    for (const [providerId, provider] of entries) {
-      const score = zcodeProviderScore(providerId, provider, family);
-      if (score < 0) continue;
-      if (!best || score > best.score) best = { providerId, provider, score };
-    }
-    if (!best) return null;
-    const modelId = zcodePreferredModelId(best.provider);
-    return modelId ? { ...best, modelId } : null;
-  }
-  function zcodeModelFromDesktopConfig({ config, setting }) {
-    const entry = zcodeDesktopProviderEntry({ config, setting });
-    return entry ? entry.providerId + "/" + entry.modelId : "";
-  }
-  function zcodeProtocolProviderKind(kind) {
-    const text = String(kind || "").trim();
-    if (text === "openai" || text === "openai-compatible") return text;
-    return "anthropic";
-  }
-  function zcodeProtocolApiFormat(provider, kind) {
-    const direct = provider && (provider.apiFormat || provider.api_format);
-    if (direct) return direct;
-    if (kind === "openai") return "openai-responses";
-    if (kind === "openai-compatible") return "openai-chat-completions";
-    return "anthropic-messages";
-  }
-  function positiveNumber(value) {
-    return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : void 0;
-  }
-  function zcodeProtocolModelEntry(modelId, raw) {
-    const model = raw && typeof raw === "object" ? raw : {};
-    const limit = model.limit && typeof model.limit === "object" ? model.limit : {};
-    return {
-      modelId,
-      ...model.label || model.name ? { label: model.label || model.name } : {},
-      ...positiveNumber(model.contextWindow || limit.contextWindow) ? { contextWindow: positiveNumber(model.contextWindow || limit.contextWindow) } : {},
-      ...positiveNumber(model.maxOutputTokens || limit.maxOutputTokens) ? { maxOutputTokens: positiveNumber(model.maxOutputTokens || limit.maxOutputTokens) } : {}
-    };
-  }
-  function zcodeProtocolModels(provider, selectedModelId) {
-    const models = provider && provider.models;
-    const result = [];
-    if (Array.isArray(models)) {
-      for (const raw of models) {
-        const id = raw && (raw.id || raw.modelID || raw.modelId || raw.name);
-        if (id) result.push(zcodeProtocolModelEntry(String(id), raw));
-      }
-    } else if (models && typeof models === "object") {
-      for (const [id, raw] of Object.entries(models)) result.push(zcodeProtocolModelEntry(String(id), raw));
-    }
-    if (selectedModelId && !result.some((m) => m.modelId === selectedModelId)) {
-      result.unshift({ modelId: selectedModelId });
-    }
-    return result;
-  }
-  function zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef, thoughtLevel } = {}) {
-    var _a;
-    const entry = zcodeDesktopProviderEntry({ config, setting, modelRef });
-    if (!entry) return null;
-    const provider = entry.provider || {};
-    const options = provider.options && typeof provider.options === "object" ? provider.options : {};
-    const kind = zcodeProtocolProviderKind(provider.kind);
-    const apiKey = options.apiKey || provider.apiKey;
-    const protocolProvider = {
-      providerId: entry.providerId,
-      kind,
-      apiFormat: zcodeProtocolApiFormat(provider, kind),
-      ...provider.name || provider.label ? { label: provider.name || provider.label } : {},
-      source: provider.source || "custom",
-      ...options.baseURL || provider.baseURL || provider.endpoints && provider.endpoints.baseURL ? { baseURL: options.baseURL || provider.baseURL || provider.endpoints.baseURL } : {},
-      ...apiKey ? { apiKey: { source: "inline", value: String(apiKey) } } : {},
-      ...typeof options.apiKeyRequired === "boolean" || typeof provider.apiKeyRequired === "boolean" ? { apiKeyRequired: (_a = options.apiKeyRequired) != null ? _a : provider.apiKeyRequired } : {},
-      models: zcodeProtocolModels(provider, entry.modelId)
-    };
-    return {
-      revision: "desktop-v2:" + entry.providerId,
-      generatedAt: Date.now(),
-      model: { providerId: entry.providerId, modelId: entry.modelId },
-      provider: protocolProvider,
-      ...thoughtLevel ? { thoughtLevel } : {}
-    };
-  }
-  function zcodeDesktopBasePath(env) {
-    const home = env && (env.USERPROFILE || env.HOME || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : ""));
-    return home ? String(home).replace(/[\\/]+$/, "") + "\\.zcode\\v2" : "";
-  }
-  function readJsonFile(fsImpl, path) {
-    try {
-      return JSON.parse(fsImpl.readFileSync(path, "utf8"));
-    } catch (e) {
-      return null;
-    }
-  }
-  function readZcodeDesktopModel({ env, fsImpl } = {}) {
-    const base = zcodeDesktopBasePath(env || {});
-    if (!base) return "";
-    const fs = fsImpl || getCepRequire6()("fs");
-    const config = readJsonFile(fs, base + "\\config.json");
-    const setting = readJsonFile(fs, base + "\\setting.json");
-    return zcodeModelFromDesktopConfig({ config, setting });
-  }
-  function readZcodeDesktopRuntimeModel({ env, fsImpl, modelRef, thoughtLevel } = {}) {
-    const base = zcodeDesktopBasePath(env || {});
-    if (!base) return null;
-    const fs = fsImpl || getCepRequire6()("fs");
-    const config = readJsonFile(fs, base + "\\config.json");
-    const setting = readJsonFile(fs, base + "\\setting.json");
-    return zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef, thoughtLevel });
-  }
-  function zcodeProviderFamily(providerId) {
-    const text = String(providerId || "").trim();
-    const id = text.startsWith("builtin:") ? text.slice("builtin:".length) : text;
-    return id.replace(/-(?:start|coding)-plan$/i, "").split(/[/:]/)[0];
-  }
-  function getNodeBuffer() {
-    return globalThis.Buffer || getCepRequire6()("buffer").Buffer;
-  }
-  function zcodeCredentialSecret(env, osImpl) {
-    const explicit = env && env.ZCODE_CREDENTIAL_SECRET && String(env.ZCODE_CREDENTIAL_SECRET).trim();
-    if (explicit) return explicit;
-    const os = osImpl || getCepRequire6()("os");
-    let username = "unknown";
-    try {
-      username = os.userInfo().username;
-    } catch (e) {
-    }
-    return "zcode-credential-fallback:" + os.platform() + ":" + os.homedir() + ":" + username;
-  }
-  function decryptZcodeCredentialValue(value, { env, cryptoImpl, osImpl } = {}) {
-    const text = String(value || "");
-    if (!text.startsWith(ZCODE_CREDENTIAL_PREFIX)) return text;
-    const crypto = cryptoImpl || getCepRequire6()("crypto");
-    const BufferImpl = getNodeBuffer();
-    const parts = text.slice(ZCODE_CREDENTIAL_PREFIX.length).split(".");
-    if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) {
-      throw new Error("Credential decrypt failed: invalid ciphertext format");
-    }
-    const key = crypto.createHash("sha256").update(zcodeCredentialSecret(env || {}, osImpl)).digest();
-    const iv = BufferImpl.from(parts[0], "base64url");
-    const authTag = BufferImpl.from(parts[1], "base64url");
-    const cipherText = BufferImpl.from(parts[2], "base64url");
-    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
-    decipher.setAuthTag(authTag);
-    return BufferImpl.concat([decipher.update(cipherText), decipher.final()]).toString("utf8");
-  }
-  function readZcodeOAuthAccessToken({ env, fsImpl, providerId } = {}) {
-    const base = zcodeDesktopBasePath(env || {});
-    if (!base) return "";
-    const fs = fsImpl || getCepRequire6()("fs");
-    const credentials = readJsonFile(fs, base + "\\credentials.json");
-    if (!credentials || typeof credentials !== "object") return "";
-    const providers = [];
-    const family = zcodeProviderFamily(providerId);
-    if (family) providers.push(family);
-    const active = credentials["oauth:active_provider"];
-    if (active) {
-      try {
-        const activeProvider = decryptZcodeCredentialValue(active, { env });
-        if (activeProvider && !providers.includes(activeProvider)) providers.push(activeProvider);
-      } catch (e) {
-      }
-    }
-    for (const provider of providers) {
-      const raw = credentials["oauth:" + provider + ":access_token"];
-      if (!raw) continue;
-      return decryptZcodeCredentialValue(raw, { env });
-    }
-    return "";
-  }
-  function resolveBigModelApiOrigin(env = {}) {
-    const explicit = env.BIGMODEL_API_BASE_URL || env.BIGMODEL_PRODUCTION_API_BASE_URL;
-    return String(explicit || BIGMODEL_API_ORIGIN).replace(/\/+$/, "");
-  }
-  function remoteCodeOk(code) {
-    return code === void 0 || code === null || code === 0 || code === 200 || code === "0" || code === "200";
-  }
-  async function defaultHttpRequestJson({ url, method = "GET", headers = {}, body }) {
-    const target = new URL(url);
-    const moduleName = target.protocol === "http:" ? "http" : "https";
-    const http = getCepRequire6()(moduleName);
-    const BufferImpl = getNodeBuffer();
-    const payload = body === void 0 ? null : typeof body === "string" ? body : JSON.stringify(body);
-    const requestHeaders = Object.assign({}, headers);
-    if (payload !== null && requestHeaders["Content-Length"] === void 0) {
-      requestHeaders["Content-Length"] = String(BufferImpl.byteLength(payload));
-    }
-    return new Promise((resolve, reject) => {
-      const req = http.request(target, { method, headers: requestHeaders }, (res) => {
-        const chunks = [];
-        res.on("data", (chunk) => chunks.push(chunk));
+      const req = https.request({
+        hostname: endpoint.hostname,
+        port: endpoint.port || void 0,
+        protocol: endpoint.protocol,
+        path: endpoint.pathname + endpoint.search,
+        method: "GET",
+        headers: probeHeaders(protocol, apiKey)
+      }, (res) => {
+        let body = "";
+        res.on("data", (chunk) => {
+          body += chunk;
+        });
         res.on("end", () => {
-          const text = BufferImpl.concat(chunks).toString("utf8");
-          if (res.statusCode < 200 || res.statusCode >= 300) {
-            reject(new Error("ZCode OAuth request failed with HTTP " + res.statusCode + ": " + text.slice(0, 300)));
+          if (res.statusCode !== 200) {
+            resolve({ ok: false, status: res.statusCode, models: [], detail: "HTTP " + res.statusCode + ": " + body.slice(0, 200) });
             return;
           }
           try {
-            resolve(text ? JSON.parse(text) : {});
+            const models = parseModelsList(JSON.parse(body));
+            resolve(models.length ? { ok: true, status: 200, models, detail: "" } : { ok: false, status: 200, models: [], detail: "Empty model list" });
           } catch (e) {
-            reject(new Error("ZCode OAuth response was not valid JSON"));
+            resolve({ ok: false, status: 200, models: [], detail: "Response was not valid JSON" });
           }
         });
       });
-      req.on("error", reject);
-      if (payload !== null) req.write(payload);
+      req.on("error", (err) => resolve({ ok: false, status: 0, models: [], detail: err && err.message ? err.message : "request failed" }));
+      if (req.setTimeout) req.setTimeout(timeoutMs, () => {
+        try {
+          req.destroy();
+        } catch (e) {
+        }
+        resolve({ ok: false, status: 0, models: [], detail: "timeout" });
+      });
       req.end();
     });
   }
-  async function requestRemoteData(requestJson, options) {
-    var _a;
-    const json = await requestJson(options);
-    if (!json || typeof json !== "object") throw new Error("ZCode OAuth response was empty");
-    if (!remoteCodeOk(json.code)) throw new Error(json.msg || "Remote business error " + json.code);
-    return (_a = json.data) != null ? _a : null;
+
+  // src/cep/ccSwitch.js
+  var CONFIG_NAMES = ["config.json", "providers.json"];
+  function getCepRequire8() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
+      return globalThis.window.cep_node.require;
+    }
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
   }
-  function pickOrgAndProject(customerInfo) {
-    const organizations = customerInfo && Array.isArray(customerInfo.organizations) ? customerInfo.organizations : [];
-    const org = organizations.find((item) => String(item.organizationName || "").includes("\u9ED8\u8BA4\u673A\u6784")) || organizations[0];
-    const projects = org && Array.isArray(org.projects) ? org.projects : [];
-    const project = projects.find((item) => String(item.projectName || "").includes("\u9ED8\u8BA4\u9879\u76EE")) || projects[0];
-    if (!org || !project || !org.organizationId || !project.projectId) return null;
-    return { organizationId: org.organizationId, projectId: project.projectId };
+  function candidateDirs(env = {}) {
+    const home = String(env.USERPROFILE || env.HOME || "").replace(/[\/]+$/, "");
+    const appData = String(env.APPDATA || (home ? home + "\\AppData\\Roaming" : "")).replace(/[\/]+$/, "");
+    const dirs = [];
+    if (home) {
+      dirs.push(home + "\\.cc-switch");
+      dirs.push(home + "\\.config\\cc-switch");
+    }
+    if (appData) dirs.push(appData + "\\cc-switch");
+    return dirs;
   }
-  async function resolveBizApiKey({ authorization, host, requestJson, requireSecretKey = false }) {
-    const headers = { Authorization: authorization, "Content-Type": JSON_CONTENT_TYPE };
-    const customer = await requestRemoteData(requestJson, {
-      method: "GET",
-      url: host + "/api/biz/customer/getCustomerInfo",
-      headers
-    });
-    const orgProject = pickOrgAndProject(customer);
-    if (!orgProject) throw new Error("Unable to resolve ZCode OAuth organization and project.");
-    const apiKeysUrl = host + "/api/biz/v1/organization/" + encodeURIComponent(orgProject.organizationId) + "/projects/" + encodeURIComponent(orgProject.projectId) + "/api_keys";
-    const apiKeys = await requestRemoteData(requestJson, { method: "GET", url: apiKeysUrl, headers });
-    const existing = Array.isArray(apiKeys) ? apiKeys.find((item) => item && item.name === ZCODE_API_KEY_NAME) : null;
-    const created = existing || await requestRemoteData(requestJson, {
-      method: "POST",
-      url: apiKeysUrl,
-      headers,
-      body: { name: ZCODE_API_KEY_NAME }
-    });
-    const apiKey = String(created && (created.apiKey || created.api_key) || "").trim();
-    if (!apiKey) throw new Error("ZCode OAuth API key response is missing apiKey.");
-    const copied = await requestRemoteData(requestJson, {
-      method: "GET",
-      url: apiKeysUrl + "/copy/" + encodeURIComponent(apiKey),
-      headers
-    });
-    const secretKey = String(copied && (copied.secretKey || copied.secret_key) || "").trim();
-    if (!secretKey && requireSecretKey) throw new Error("ZCode OAuth API key copy response is missing secretKey.");
-    return secretKey ? apiKey + "." + secretKey : apiKey;
+  function rawProviders(parsed) {
+    if (!parsed || typeof parsed !== "object") return [];
+    if (Array.isArray(parsed.providers)) return parsed.providers;
+    if (Array.isArray(parsed.profiles)) return parsed.profiles;
+    if (parsed.providers && typeof parsed.providers === "object") return Object.values(parsed.providers);
+    return [];
   }
-  async function resolveZcodeCodingPlanApiKey({ accessToken, providerId, env, requestJson = defaultHttpRequestJson } = {}) {
-    const token = String(accessToken || "").trim();
-    if (!token) throw new Error("ZCode desktop OAuth token is unavailable.");
-    const family = zcodeProviderFamily(providerId);
-    if (family === "zai") {
-      const data = await requestRemoteData(requestJson, {
-        method: "POST",
-        url: ZAI_BIZ_API_ORIGIN + "/api/auth/z/login",
-        headers: { "Content-Type": JSON_CONTENT_TYPE },
-        body: { token }
-      });
-      const bizToken = String(data && (data.access_token || data.accessToken) || "").trim();
-      if (!bizToken) throw new Error("ZCode OAuth biz token response is missing access_token.");
-      return resolveBizApiKey({ authorization: "Bearer " + bizToken, host: ZAI_BIZ_API_ORIGIN, requestJson, requireSecretKey: true });
-    }
-    return resolveBizApiKey({ authorization: token, host: resolveBigModelApiOrigin(env || {}), requestJson });
+  function ccSwitchProviderEntries(list) {
+    return (Array.isArray(list) ? list : []).map((p) => {
+      if (!p || typeof p !== "object") return null;
+      const name = String(p.name || p.title || p.id || "").trim();
+      const baseUrl = String(p.baseUrl || p.base_url || p.url || "").trim();
+      const apiKey = String(p.apiKey || p.api_key || p.key || p.token || "").trim();
+      if (!name || !baseUrl) return null;
+      const protocol = /anthropic/i.test(String(p.type || p.protocol || p.kind || "")) ? "anthropic" : "openai-compatible";
+      return { id: "ccswitch-" + name.replace(/[^A-Za-z0-9_-]+/g, "-").toLowerCase(), name, protocol, baseUrl, apiKey };
+    }).filter(Boolean);
   }
-  function runtimeModelWithApiKey(runtimeModel, apiKey) {
-    const next = clone4(runtimeModel);
-    next.revision = (runtimeModel.revision || "runtime-model") + ":oauth:" + Date.now();
-    next.generatedAt = Date.now();
-    next.provider = Object.assign({}, next.provider || {}, {
-      apiKey: { source: "inline", value: String(apiKey) }
-    });
-    return next;
-  }
-  function isZcodePlanRuntimeModel(runtimeModel, providerId) {
-    const provider = runtimeModel && runtimeModel.provider ? runtimeModel.provider : {};
-    const id = String(providerId || provider.providerId || "").trim();
-    const baseURL = String(provider.baseURL || "").replace(/\/+$/, "").toLowerCase();
-    return /-start-plan$/i.test(id) || baseURL.endsWith("/zcode-plan") || baseURL.endsWith("/zcode-plan/anthropic");
-  }
-  function zcodePlanRuntimeHeadersMessage() {
-    return "ZCode desktop OAuth plan providers require ZCode desktop captcha/runtime headers before model requests. The AE panel can read the desktop provider config, but the current app-server bridge cannot generate or apply those headers yet. Use ZCode Desktop chat or configure an API-key provider in ZCode for now.";
-  }
-  function isLegacyZcodeModelRef(modelRef) {
-    return LEGACY_ZCODE_MODEL_REFS.has(String(modelRef || "").trim());
-  }
-  function zcodeProtocolModelFromRef(modelRef) {
-    const text = String(modelRef || "").trim();
-    const slash = text.indexOf("/");
-    if (slash <= 0 || slash === text.length - 1) return null;
-    return {
-      providerId: text.slice(0, slash),
-      modelId: text.slice(slash + 1)
-    };
-  }
-  function zcodeMissingApiKeyHint(message) {
-    const text = String(message || "");
-    const match = /Model provider is missing an API key:\s*([^\s.]+)/i.exec(text);
-    if (!match || /AE_MCP_ZCODE_API_KEY|ZCODE_API_KEY/.test(text)) return text;
-    const providerEnv = zcodeProviderApiKeyEnv(match[1]);
-    const vars = ["AE_MCP_ZCODE_API_KEY"];
-    if (providerEnv) vars.push(providerEnv);
-    vars.push("ZCODE_API_KEY");
-    return (text.endsWith(".") ? text : text + ".") + " Set " + vars.join(", ") + " before launching AE.";
-  }
-  function zcodeMissingModelConfigHint(message) {
-    const text = String(message || "");
-    if (!/Model config is missing/i.test(text) || /Open ZCode/.test(text)) return text;
-    return (text.endsWith(".") ? text : text + ".") + " Open ZCode and select a provider/model, or create ~/.zcode/cli/config.json with an explicit provider/model before launching AE.";
-  }
-  function zcodeProviderAuthenticationHint(message) {
-    const text = String(message || "");
-    if (!/Provider authentication failed/i.test(text) || /runtime headers/i.test(text)) return text;
-    return (text.endsWith(".") ? text : text + ".") + " If this is a ZCode desktop OAuth plan provider, the AE panel cannot yet bridge ZCode desktop captcha/runtime headers.";
-  }
-  function zcodePlanRuntimeFailureHint(message, runtimeModel) {
-    const text = String(message || "");
-    if (!/Provider authentication failed|Model request failed/i.test(text)) return text;
-    if (/runtime headers/i.test(text) || !isZcodePlanRuntimeModel(runtimeModel)) return text;
-    return (text.endsWith(".") ? text : text + ".") + " " + zcodePlanRuntimeHeadersMessage();
-  }
-  function zcodeRepairHint(message) {
-    return zcodeProviderAuthenticationHint(zcodeMissingModelConfigHint(zcodeMissingApiKeyHint(message)));
-  }
-  function zcodeErrorMessage(value, fallback = "ZCode turn failed") {
-    if (!value) return zcodeRepairHint(fallback);
-    if (typeof value === "string") return zcodeRepairHint(value);
-    if (typeof value === "object") {
-      const direct = value.message || value.detail || value.reason || value.error;
-      if (direct && direct !== value) return zcodeErrorMessage(direct, fallback);
-      try {
-        const text = JSON.stringify(value);
-        return zcodeRepairHint(text && text !== "{}" ? text : fallback);
-      } catch (e) {
-        return zcodeRepairHint(fallback);
-      }
+  function detectCcSwitch({ env = {}, fsImpl } = {}) {
+    let fs;
+    try {
+      fs = fsImpl || getCepRequire8()("fs");
+    } catch (e) {
+      return null;
     }
-    return zcodeRepairHint(String(value));
-  }
-  function zcodeErrorKind(message) {
-    return /\b(model|provider|api[-\s_]*key|credential|auth)\b/i.test(String(message || "")) ? "model" : "mcp";
-  }
-  function createZcodeBackend({
-    spawnImpl,
-    getModel,
-    getPermissionMode,
-    getEffort = () => null,
-    getMcpSpec,
-    getToolMeta,
-    getExpertGuidance = () => true,
-    getServerInstructions = () => "",
-    onEvent,
-    lang = "zh",
-    env,
-    readDesktopModel = readZcodeDesktopModel,
-    readDesktopRuntimeModel = readZcodeDesktopRuntimeModel,
-    readOAuthAccessToken = readZcodeOAuthAccessToken,
-    resolveCodingPlanApiKey = resolveZcodeCodingPlanApiKey,
-    resolveCli = resolveZcodeCli,
-    resolveNode = resolveSystemNode
-  }) {
-    let proc = null;
-    let rpc = null;
-    let startPromise = null;
-    let sessionPromise = null;
-    let sessionId = null;
-    let subscribed = false;
-    let activeRuntimeModel = null;
-    let stopping = false;
-    let stderrTail = "";
-    let transcript = [];
-    let activeRun = null;
-    let activeResolve = null;
-    let activeAssistantText = "";
-    let toolMeta = { allowedTools: [], annotations: {} };
-    const pendingApprovals = /* @__PURE__ */ new Map();
-    const pendingElicitations = /* @__PURE__ */ new Map();
-    const pendingUserInputs = /* @__PURE__ */ new Map();
-    const sessionAllowedTools = /* @__PURE__ */ new Set();
-    function emit(evt) {
-      if (onEvent) onEvent(evt);
-    }
-    function getSpawn() {
-      if (spawnImpl) return spawnImpl;
-      return getCepRequire6()("child_process").spawn;
-    }
-    function currentEnv() {
-      const next = Object.assign({}, getCepEnv6(), env || {});
-      const panelModel = next.AE_MCP_ZCODE_MODEL && String(next.AE_MCP_ZCODE_MODEL).trim();
-      if (!next.ZCODE_MODEL && panelModel) next.ZCODE_MODEL = panelModel;
-      const panelApiKey = next.AE_MCP_ZCODE_API_KEY && String(next.AE_MCP_ZCODE_API_KEY).trim();
-      if (panelApiKey) {
-        if (!next.ZCODE_API_KEY) next.ZCODE_API_KEY = panelApiKey;
-        const providerEnv = zcodeProviderApiKeyEnv(zcodeProviderId(next.ZCODE_MODEL));
-        if (providerEnv && !next[providerEnv]) next[providerEnv] = panelApiKey;
-      }
-      return next;
-    }
-    function currentModelRef(spawnEnv) {
-      const explicitEnvModel = spawnEnv && spawnEnv.ZCODE_MODEL && String(spawnEnv.ZCODE_MODEL).trim();
-      if (explicitEnvModel) return explicitEnvModel;
-      const selectedModel = getModel ? String(getModel() || "").trim() : "";
-      if (selectedModel.includes("/") && !isLegacyZcodeModelRef(selectedModel)) return selectedModel;
-      let desktopModel = "";
-      try {
-        desktopModel = readDesktopModel ? String(readDesktopModel({ env: spawnEnv }) || "").trim() : "";
-      } catch (e) {
-      }
-      if (desktopModel) return desktopModel;
-      if (selectedModel.includes("/")) return selectedModel;
-      return ZCODE_BUILTIN_DEFAULT_MODEL;
-    }
-    function currentRuntimeModel(spawnEnv, modelRef, thoughtLevel) {
-      if (!readDesktopRuntimeModel) return null;
-      try {
-        return readDesktopRuntimeModel({ env: spawnEnv, modelRef, thoughtLevel }) || null;
-      } catch (e) {
-        return null;
-      }
-    }
-    function finishActive() {
-      if (!activeResolve) {
-        activeRun = null;
-        activeAssistantText = "";
-        return;
-      }
-      const resolve = activeResolve;
-      activeResolve = null;
-      activeRun = null;
-      activeAssistantText = "";
-      resolve();
-    }
-    function drainApprovals() {
-      for (const [toolUseId, approval] of Array.from(pendingApprovals.entries())) {
-        if (rpc) rpc.respond(approval.rpcId, { decision: "decline" });
-        pendingApprovals.delete(toolUseId);
-        emit({ type: "tool-denied", toolUseId });
-      }
-      for (const [toolUseId, elicit] of Array.from(pendingElicitations.entries())) {
-        if (rpc && elicit.rpcId) rpc.respond(elicit.rpcId, { action: "decline" });
-        pendingElicitations.delete(toolUseId);
-        emit({ type: "tool-denied", toolUseId });
-      }
-      for (const [toolUseId, ui] of Array.from(pendingUserInputs.entries())) {
-        if (rpc && ui.rpcId) rpc.respond(ui.rpcId, { decision: "decline", answers: {} });
-        pendingUserInputs.delete(toolUseId);
-        emit({ type: "tool-denied", toolUseId });
-      }
-    }
-    function handleRequest(message) {
-      const method = message.method;
-      const params = message.params || {};
-      if (method === "interaction/requestUserInput") {
-        handleUserInput(params, message.id);
-        return;
-      }
-      if (method === "interaction/requestProviderRuntimeHeaders") {
-        handleProviderRuntimeHeaders(params, message.id);
-        return;
-      }
-      if (method === "elicitation/create") {
-        handleElicitation(params, message.id);
-        return;
-      }
-      if (method === "permission.requested" || method === "session/permission" || method === "interaction/requestPermission") {
-        handlePermissionRequest(params, message.id);
-        return;
-      }
-      if (rpc) rpc.respondError(message.id, -32601, "Method not found: " + method);
-    }
-    async function handleProviderRuntimeHeaders(params, rpcId) {
-      try {
-        const spawnEnv = currentEnv();
-        const providerId = String(params.providerId || params.modelRef && params.modelRef.providerId || activeRuntimeModel && activeRuntimeModel.model && activeRuntimeModel.model.providerId || "").trim();
-        const modelId = String(params.modelRef && params.modelRef.modelId || activeRuntimeModel && activeRuntimeModel.model && activeRuntimeModel.model.modelId || "").trim();
-        const modelRef = providerId && modelId ? providerId + "/" + modelId : currentModelRef(spawnEnv);
-        const runtimeModel = activeRuntimeModel || currentRuntimeModel(spawnEnv, modelRef, thoughtLevelFromEffort());
-        if (!providerId || !runtimeModel) throw new Error("ZCode runtime model is unavailable for OAuth header refresh.");
-        if (isZcodePlanRuntimeModel(runtimeModel, providerId)) {
-          if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: zcodePlanRuntimeHeadersMessage() });
-          return;
-        }
-        const accessToken = await readOAuthAccessToken({ env: spawnEnv, providerId, modelRef });
-        if (!accessToken) throw new Error("ZCode desktop OAuth token is unavailable. Open ZCode, sign in again, then retry from the panel.");
-        const apiKey = await resolveCodingPlanApiKey({ accessToken, providerId, env: spawnEnv });
-        const refreshedRuntimeModel = runtimeModelWithApiKey(runtimeModel, apiKey);
-        await rpc.request("session/updateRuntimeModelConfig", {
-          sessionId: params.sessionId || sessionId,
-          runtimeModel: refreshedRuntimeModel
-        }, RPC_TIMEOUT_MS2);
-        activeRuntimeModel = refreshedRuntimeModel;
-        if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: true, providerRevision: refreshedRuntimeModel.revision });
-      } catch (e) {
-        const message = zcodeErrorMessage(e, "ZCode desktop OAuth header refresh failed.");
-        if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: message });
-      }
-    }
-    function handleUserInput(params, rpcId) {
-      const input = params.input || params;
-      const questions = input.questions || [];
-      const tier = getPermissionMode ? getPermissionMode() : "manual";
-      if (!questions.length || tier === "none" || tier === "auto") {
-        const answers = {};
-        for (const q2 of questions) {
-          const opts = q2.options || [];
-          answers[q2.question || q2.header || "question"] = opts.length ? opts[0].label : "";
-        }
-        if (rpcId && rpc) rpc.respond(rpcId, { decision: "allow", answers });
-        return;
-      }
-      const q = questions[0];
-      const choices = (q.options || []).map((o) => o.label);
-      const toolUseId = "ask_" + rpcId;
-      pendingUserInputs.set(toolUseId, { rpcId, questions });
-      emit({
-        type: "approval-required",
-        toolUseId,
-        name: "AskUserQuestion",
-        input: {
-          question: q.question || q.header || "",
-          header: q.header,
-          choices,
-          fields: questions.map((qq) => qq.question || qq.header || "")
-        },
-        risk: "write"
-      });
-    }
-    function handleElicitation(params, rpcId) {
-      const message = params.message || "";
-      const schema = params.requestedSchema || {};
-      const props = schema.properties || {};
-      const required = schema.required || [];
-      const fieldNames = Object.keys(props);
-      if (!fieldNames.length) {
-        if (rpcId && rpc) rpc.respond(rpcId, { action: "accept", content: {} });
-        return;
-      }
-      const tier = getPermissionMode ? getPermissionMode() : "manual";
-      if (tier === "none" || tier === "auto") {
-        const autoContent = {};
-        for (const fn of fieldNames) {
-          const opts = props[fn] && props[fn].enum;
-          autoContent[fn] = opts && opts.length ? opts[0] : "";
-        }
-        if (rpcId && rpc) rpc.respond(rpcId, { action: "accept", content: autoContent });
-        return;
-      }
-      const primaryField = fieldNames[0];
-      const primaryProp = props[primaryField] || {};
-      const choices = Array.isArray(primaryProp.enum) ? primaryProp.enum : [];
-      const toolUseId = "elicit_" + rpcId;
-      pendingElicitations.set(toolUseId, { rpcId, fieldNames, props, required });
-      emit({
-        type: "approval-required",
-        toolUseId,
-        name: "AskUserQuestion",
-        input: { question: message, field: primaryField, choices, fields: fieldNames },
-        risk: "write"
-      });
-    }
-    function handleNotification(message) {
-      const params = message.params || {};
-      const type = params.type || message.method;
-      if (type === "state.updated") {
-        const patch = params.patch || params.payload || {};
-        if (patch.status === "idle" && activeRun) {
-          drainApprovals();
-          emit({ type: "turn-end", stopReason: "end_turn" });
-          transcript.push({ role: "assistant", text: activeAssistantText });
-          finishActive();
-        }
-        return;
-      }
-      if (type === "turn.started") {
-        emit({ type: "turn-start" });
-        return;
-      }
-      if (type === "model.streaming") {
-        const payload = params.payload || {};
-        if (payload.kind === "text_delta" && payload.delta) {
-          activeAssistantText += String(payload.delta);
-          emit({ type: "text-delta", text: String(payload.delta) });
-        }
-        return;
-      }
-      if (type === "tool.updated" || type === "part.started" || type === "part.upserted") {
-        const payload = params.payload || {};
-        if (payload.toolName || payload.tool) {
-          emit({
-            type: "tool-start",
-            toolUseId: String(payload.toolCallId || payload.id || ""),
-            name: mcpToolName2(payload.toolName || payload.tool),
-            input: payload.input || payload.arguments
-          });
-        }
-        return;
-      }
-      if (type === "permission.requested") {
-        handlePermissionRequest(params, null);
-        return;
-      }
-      if (type === "turn.completed") {
-        drainApprovals();
-        const payload = params.payload || {};
-        emit({ type: "turn-end", stopReason: "end_turn" });
-        transcript.push({ role: "assistant", text: activeAssistantText || payload.response || "" });
-        finishActive();
-        return;
-      }
-      if (type === "turn.failed") {
-        const payload = params.payload || {};
-        const message2 = zcodePlanRuntimeFailureHint(zcodeErrorMessage(payload.error || payload.message), activeRuntimeModel);
-        emit({ type: "error", kind: zcodeErrorKind(message2), message: message2 });
-        finishActive();
-        return;
-      }
-    }
-    function handlePermissionRequest(params, rpcId) {
-      const payload = params.payload || params;
-      const toolUseId = String(payload.toolCallId || payload.requestId || rpcId || "");
-      const name = mcpToolName2(payload.toolName || payload.tool || "");
-      const input = payload.input || payload.arguments || {};
-      const riskLevel = payload.riskLevel || "medium";
-      const annotations = toolMeta && toolMeta.annotations || {};
-      const ann = annotations[name] || {};
-      const tier = getPermissionMode ? getPermissionMode() : "manual";
-      const replyId = rpcId || payload.requestId || null;
-      if (sessionAllowedTools.has(name) || ann.readOnly || tier === "none" || tier === "auto" && !ann.destructive && riskLevel === "low") {
-        if (replyId && rpc) rpc.respond(replyId, { decision: "allow" });
-        emit({ type: "tool-allowed", toolUseId });
-        return;
-      }
-      if (tier === "readonly") {
-        if (replyId && rpc) rpc.respond(replyId, { decision: "decline" });
-        emit({ type: "tool-denied", toolUseId });
-        return;
-      }
-      pendingApprovals.set(toolUseId, { rpcId: replyId, name, input });
-      emit({
-        type: "approval-required",
-        toolUseId,
-        name,
-        input,
-        risk: ann.destructive ? "destructive" : "write"
-      });
-    }
-    function handleExit(code, signal) {
-      const wasStopping = stopping;
-      const detail = stderrTail ? String(code) + (signal ? " " + signal : "") + " " + stderrTail : String(code) + (signal ? " " + signal : "");
-      if (rpc) rpc.close(new Error("ZCode app-server exited: " + detail));
-      proc = null;
-      rpc = null;
-      startPromise = null;
-      sessionPromise = null;
-      sessionId = null;
-      subscribed = false;
-      if (wasStopping) return;
-      if (activeRun) {
-        emit({ type: "error", kind: "mcp", message: "ZCode app-server exited: " + detail });
-        finishActive();
-      }
-    }
-    function handleError(error) {
-      const err = error instanceof Error ? error : new Error("ZCode app-server error");
-      if (rpc) rpc.close(err);
-      proc = null;
-      rpc = null;
-      startPromise = null;
-      sessionPromise = null;
-      sessionId = null;
-      subscribed = false;
-      if (activeRun) {
-        emit({ type: "error", kind: "mcp", message: err.message });
-        finishActive();
-      }
-    }
-    async function startProcess() {
-      if (proc && rpc) return true;
-      if (startPromise) return startPromise;
-      startPromise = (async () => {
-        let execFileImpl = null;
+    for (const dir of candidateDirs(env)) {
+      for (const name of CONFIG_NAMES) {
+        const file = dir + "\\" + name;
         try {
-          execFileImpl = getCepRequire6()("child_process").execFile;
-        } catch (e) {
-        }
-        const cli = await resolveCli({ env: currentEnv(), execFileImpl });
-        if (!cli.ok) throw new Error(cli.detail);
-        const spawn = getSpawn();
-        const spawnEnv = currentEnv();
-        stderrTail = "";
-        stopping = false;
-        let cmd;
-        let cmdArgs;
-        if (cli.isExe) {
-          cmd = cli.cliPath;
-          cmdArgs = ["app-server"];
-        } else {
-          const node = await resolveNode({ env: spawnEnv });
-          if (!node.ok) throw new Error(node.detail);
-          cmd = node.nodePath;
-          cmdArgs = [cli.cliPath, "app-server"];
-        }
-        proc = spawn(cmd, cmdArgs, {
-          stdio: "pipe",
-          windowsHide: true,
-          env: spawnEnv
-        });
-        rpc = createRpc2({
-          writeLine: (line) => proc.stdin.write(line),
-          onNotification: handleNotification,
-          onRequest: handleRequest
-        });
-        const reader = createNdjsonReader((message) => rpc && rpc.handleMessage(message));
-        if (proc.stdout && proc.stdout.on) proc.stdout.on("data", reader);
-        if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
-          stderrTail = appendTail5(stderrTail, chunk);
-        });
-        proc.on("exit", (code, signal) => handleExit(code, signal));
-        proc.on("error", (error) => handleError(error));
-        return true;
-      })();
-      try {
-        return await startPromise;
-      } finally {
-        startPromise = null;
-      }
-    }
-    function workspaceFromEnv(spawnEnv) {
-      const extRoot = spawnEnv && (spawnEnv.AE_MCP_PANEL_EXT_ROOT || spawnEnv.EXTENSION_ROOT);
-      const path = extRoot ? String(extRoot).replace(/\//g, "\\").replace(/\\+$/, "") : spawnEnv && (spawnEnv.TEMP || spawnEnv.TMP) || ".";
-      const key = path.replace(/\\/g, "\\");
-      return { workspacePath: path, workspaceKey: key };
-    }
-    function modeFromTier() {
-      const tier = getPermissionMode ? getPermissionMode() : "manual";
-      return MODE_BY_TIER[tier] || "build";
-    }
-    function thoughtLevelFromEffort() {
-      const effort = getEffort ? getEffort() : null;
-      if (!effort) return void 0;
-      return ZCODE_THOUGHT_LEVELS.has(effort) ? effort : void 0;
-    }
-    async function ensureSession() {
-      if (sessionId) return sessionId;
-      if (sessionPromise) return sessionPromise;
-      sessionPromise = (async () => {
-        await startProcess();
-        toolMeta = getToolMeta ? await getToolMeta() : { allowedTools: [], annotations: {} };
-        const spawnEnv = currentEnv();
-        const createParams = {
-          workspace: workspaceFromEnv(spawnEnv),
-          mode: modeFromTier()
-        };
-        const thoughtLevel = thoughtLevelFromEffort();
-        const modelRef = currentModelRef(spawnEnv);
-        const runtimeModel = currentRuntimeModel(spawnEnv, modelRef, thoughtLevel);
-        if (runtimeModel) createParams.runtimeModel = runtimeModel;
-        activeRuntimeModel = runtimeModel || null;
-        const model = runtimeModel && runtimeModel.model || zcodeProtocolModelFromRef(modelRef);
-        if (model) createParams.model = model;
-        if (thoughtLevel) createParams.thoughtLevel = thoughtLevel;
-        if (getMcpSpec) {
-          const spec = await getMcpSpec();
-          if (spec && spec.command) {
-            const envObj = Object.assign({}, spec.env || {}, {
-              AE_MCP_BACKEND: "ae-mcp",
-              ...expertGuidanceEnv(getExpertGuidance())
-            });
-            createParams.mcpServers = [{
-              name: "ae",
-              command: spec.command,
-              args: spec.args || [],
-              env: Object.entries(envObj).map(([name, value]) => ({ name, value: String(value) }))
-            }];
-          }
-        }
-        const result = await rpc.request("session/create", createParams);
-        const nextSessionId = result && result.session && result.session.sessionId || null;
-        if (!nextSessionId) throw new Error("ZCode session/create returned no sessionId");
-        if (!subscribed) {
-          await rpc.request("session/subscribe", { sessionId: nextSessionId, deliveryKind: DELIVERY_KIND }, 1e4);
-          subscribed = true;
-        }
-        sessionId = nextSessionId;
-        return sessionId;
-      })();
-      try {
-        return await sessionPromise;
-      } finally {
-        sessionPromise = null;
-      }
-    }
-    async function sendUser(text) {
-      if (activeRun) return activeRun;
-      activeAssistantText = "";
-      activeRun = new Promise((resolve) => {
-        activeResolve = resolve;
-      });
-      try {
-        await ensureSession();
-        const userText = String(text || "");
-        transcript.push({ role: "user", text: userText });
-        let turnText = userText;
-        if (transcript.filter((m) => m.role === "user").length === 1) {
-          const instr = (getServerInstructions() || "").trim();
-          if (instr) turnText = instr + "\n\n---\n\n" + userText;
-        }
-        rpc.request("session/send", { sessionId, content: turnText }, 18e4).catch((e) => {
-          const message = zcodeErrorMessage(e, "Failed to start ZCode turn.");
-          emit({ type: "error", kind: zcodeErrorKind(message), message });
-          finishActive();
-        });
-      } catch (e) {
-        const message = zcodeErrorMessage(e, "Failed to start ZCode turn.");
-        emit({ type: "error", kind: zcodeErrorKind(message), message });
-        finishActive();
-      }
-      return activeRun;
-    }
-    function approve(toolUseId, decision) {
-      const id = String(toolUseId);
-      const userInput = pendingUserInputs.get(id);
-      if (userInput) {
-        pendingUserInputs.delete(id);
-        if (decision === "deny") {
-          if (userInput.rpcId && rpc) rpc.respond(userInput.rpcId, { decision: "decline", answers: {} });
-          emit({ type: "tool-denied", toolUseId: id });
-        } else {
-          const answers = {};
-          const chosen = typeof decision === "string" && decision !== "allow" && decision !== "allow-session" ? decision : "";
-          for (const q of userInput.questions) {
-            const key = q.question || q.header || "question";
-            answers[key] = chosen || q.options && q.options[0] && q.options[0].label || "";
-          }
-          if (userInput.rpcId && rpc) rpc.respond(userInput.rpcId, { decision: "allow", answers });
-          emit({ type: "tool-allowed", toolUseId: id });
-        }
-        return;
-      }
-      const elicit = pendingElicitations.get(id);
-      if (elicit) {
-        pendingElicitations.delete(id);
-        if (decision === "deny") {
-          if (elicit.rpcId && rpc) rpc.respond(elicit.rpcId, { action: "decline" });
-          emit({ type: "tool-denied", toolUseId: id });
-        } else {
-          const content = {};
-          const fn = elicit.fieldNames[0];
-          content[fn] = typeof decision === "string" && decision !== "allow" && decision !== "allow-session" ? decision : elicit.props[fn] && elicit.props[fn].enum && elicit.props[fn].enum[0] || "";
-          if (elicit.rpcId && rpc) rpc.respond(elicit.rpcId, { action: "accept", content });
-          emit({ type: "tool-allowed", toolUseId: id });
-        }
-        return;
-      }
-      const approval = pendingApprovals.get(id);
-      if (!approval) return;
-      pendingApprovals.delete(id);
-      const allow = decision !== "deny";
-      if (allow && decision === "allow-session") sessionAllowedTools.add(approval.name);
-      if (approval.rpcId && rpc) rpc.respond(approval.rpcId, { decision: allow ? "allow" : "decline" });
-      emit({ type: allow ? "tool-allowed" : "tool-denied", toolUseId: id });
-    }
-    function stop() {
-      if (rpc && sessionId) {
-        rpc.fireRequest("session/stop", { sessionId });
-      }
-      drainApprovals();
-      if (activeRun) {
-        emit({ type: "error", kind: "aborted", message: "Turn aborted." });
-        finishActive();
-      }
-    }
-    function reset() {
-      stopping = true;
-      drainApprovals();
-      if (rpc) rpc.close(new Error("ZCode backend reset"));
-      if (proc) {
-        try {
-          proc.kill();
+          if (!fs.existsSync(file)) continue;
+          const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+          const providers = ccSwitchProviderEntries(rawProviders(parsed));
+          if (providers.length) return { dir, file, providers };
         } catch (e) {
         }
       }
-      proc = null;
-      rpc = null;
-      startPromise = null;
-      sessionPromise = null;
-      sessionId = null;
-      subscribed = false;
-      activeRuntimeModel = null;
-      transcript = [];
-      pendingApprovals.clear();
-      pendingElicitations.clear();
-      pendingUserInputs.clear();
-      sessionAllowedTools.clear();
-      toolMeta = { allowedTools: [], annotations: {} };
-      finishActive();
-      stderrTail = "";
-      stopping = false;
     }
-    async function setThoughtLevel(level) {
-      if (!sessionId || !rpc) return false;
-      if (!ZCODE_THOUGHT_LEVELS.has(level)) return false;
-      try {
-        await rpc.request("session/setThoughtLevel", { sessionId, thoughtLevel: level });
-        return true;
-      } catch (e) {
-        return false;
-      }
+    return null;
+  }
+
+  // src/cep/claudeSettingsImport.js
+  function getCepRequire9() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
+      return globalThis.window.cep_node.require;
     }
-    async function probeAccount() {
-      try {
-        await ensureSession();
-        return { loggedIn: true, runtimeOk: true, provider: "zcode" };
-      } catch (e) {
-        return {
-          loggedIn: true,
-          runtimeOk: false,
-          provider: "zcode",
-          detail: zcodeErrorMessage(e, "ZCode runtime unavailable.")
-        };
-      }
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function readClaudeSettingsEnv({ env = {}, fsImpl } = {}) {
+    const home = env.USERPROFILE || env.HOME || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : "");
+    if (!home) return null;
+    let fs;
+    try {
+      fs = fsImpl || getCepRequire9()("fs");
+    } catch (e) {
+      return null;
     }
-    return {
-      sendUser,
-      approve,
-      stop,
-      reset,
-      setThoughtLevel,
-      getMessages: () => clone4(transcript),
-      probeAccount
-    };
+    let parsed;
+    try {
+      parsed = JSON.parse(fs.readFileSync(String(home).replace(/[\\/]+$/, "") + "\\.claude\\settings.json", "utf8"));
+    } catch (e) {
+      return null;
+    }
+    const settingsEnv = parsed && parsed.env && typeof parsed.env === "object" ? parsed.env : {};
+    const baseUrl = String(settingsEnv.ANTHROPIC_BASE_URL || "").trim();
+    const authToken = String(settingsEnv.ANTHROPIC_AUTH_TOKEN || "").trim();
+    if (!baseUrl && !authToken) return null;
+    return { baseUrl, authToken };
   }
 
   // src/lib/chatEntries.js
@@ -15203,10 +15721,60 @@
     }
   }
 
+  // src/lib/descriptorSelect.js
+  function isClaudeApiBackend(effectiveBackend) {
+    return effectiveBackend === "claude-api" || effectiveBackend === "byok";
+  }
+  function selectDescriptor({
+    effectiveBackend = "none",
+    backendPref = "subscription",
+    baseDescriptor,
+    customModel = "",
+    claudeApiProvider = null,
+    codexCustomProvider = null,
+    byokApiModels = null,
+    codexCachedModels = null,
+    zcodeSessionModels = null
+  }) {
+    const claudeApi = isClaudeApiBackend(effectiveBackend);
+    const customId = claudeApi || backendPref === "codex" ? String(customModel || "").trim() : "";
+    if (claudeApi) {
+      if (claudeApiProvider && claudeApiProvider.probedModels && claudeApiProvider.probedModels.length) {
+        return descriptorWithCustomModel(descriptorFromProbedModels(byokStaticDescriptor(), claudeApiProvider.probedModels), customId);
+      }
+      if (byokApiModels) {
+        return descriptorWithCustomModel(mergeByokModels(byokStaticDescriptor(), byokApiModels), customId);
+      }
+      return baseDescriptor;
+    }
+    if (backendPref === "codex") {
+      if (codexCustomProvider && codexCustomProvider.probedModels && codexCustomProvider.probedModels.length) {
+        return descriptorWithCustomModel(descriptorFromProbedModels(codexStaticDescriptor(), codexCustomProvider.probedModels), customId);
+      }
+      if (codexCachedModels) {
+        return descriptorWithCustomModel(codexDescriptorFromModels({ models: codexCachedModels }), customId);
+      }
+      return baseDescriptor;
+    }
+    if (backendPref === "zcode" || effectiveBackend === "zcode") {
+      if (zcodeSessionModels) return zcodeDescriptorFromModels(zcodeSessionModels);
+      return baseDescriptor;
+    }
+    return baseDescriptor;
+  }
+  function reconcileModelPref(model, descriptor, { isCustom = false } = {}) {
+    if (isCustom) return model;
+    const models = descriptor && Array.isArray(descriptor.models) ? descriptor.models : [];
+    if (!models.length) return model;
+    const trimmed = String(model || "").trim();
+    if (trimmed && models.some((m) => m.id === trimmed)) return trimmed;
+    return descriptor.defaultModelId;
+  }
+
   // src/cep/modelsApi.js
   var CACHE_KEY = "ae_mcp_byok_models";
   var TTL_MS = 24 * 60 * 60 * 1e3;
-  function getCepRequire7() {
+  function getCepRequire10() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -15215,7 +15783,7 @@
     throw new Error("CEP Node require is unavailable");
   }
   function fetchAnthropicModels({ apiKey, baseUrl = "", httpsImpl, timeoutMs = 8e3 } = {}) {
-    const https = httpsImpl || getCepRequire7()("https");
+    const https = httpsImpl || getCepRequire10()("https");
     return new Promise((resolve) => {
       let endpoint;
       try {
@@ -15319,13 +15887,19 @@
     } catch (e) {
     }
   }
+  function clearWizardDone(storage) {
+    try {
+      storage.removeItem(WIZARD_DONE_KEY);
+    } catch (e) {
+    }
+  }
 
   // src/app/wizardWiring.js
   var import_react39 = __toESM(require_react(), 1);
 
   // src/cep/wizardActions.js
   var OUTPUT_TAIL = 8192;
-  function getCepRequire8() {
+  function getCepRequire11() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -15350,7 +15924,7 @@
     return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
   }
   async function detectAeMcp({ execFileImpl, env, fsImpl }) {
-    const execFile = execFileImpl || getCepRequire8()("child_process").execFile;
+    const execFile = execFileImpl || getCepRequire11()("child_process").execFile;
     const whereHit = await new Promise((resolve) => {
       execFile("where", ["ae-mcp"], { windowsHide: true, env }, (err, stdout) => {
         resolve(err ? "" : String(stdout || "").split(/\r?\n/).map((l) => l.trim()).find(Boolean) || "");
@@ -15360,7 +15934,7 @@
     const profile = (env || getCepEnvSafe()).USERPROFILE || "";
     if (profile) {
       const shim = profile.replace(/[\\/]+$/, "") + "\\.local\\bin\\ae-mcp.exe";
-      const fs = fsImpl || getCepRequire8()("fs");
+      const fs = fsImpl || getCepRequire11()("fs");
       if (fs.existsSync(shim)) return { ok: true, version: shim };
     }
     return { ok: false };
@@ -15368,7 +15942,7 @@
   async function detectTool(id, { execFileImpl, env, fsImpl } = {}) {
     if (id === "aeMcp") return detectAeMcp({ execFileImpl, env, fsImpl });
     const spec = DETECT[id];
-    const execFile = execFileImpl || getCepRequire8()("child_process").execFile;
+    const execFile = execFileImpl || getCepRequire11()("child_process").execFile;
     return execVersion(execFile, spec.file, spec.args, env, spec.shell);
   }
   var REPO = "https://github.com/JUNKDOGE-JOE/after-effects-mcp";
@@ -15383,7 +15957,7 @@
     };
   }
   function runAction({ file, args, spawnImpl, env, onChunk }) {
-    const spawn = spawnImpl || getCepRequire8()("child_process").spawn;
+    const spawn = spawnImpl || getCepRequire11()("child_process").spawn;
     return new Promise((resolve) => {
       let output = "";
       const push = (chunk) => {
@@ -15407,11 +15981,11 @@
     return [file, ...args.map((a) => /\s/.test(a) ? `"${a}"` : a)].join(" ");
   }
   function detectRepoRoot({ extRoot, fsImpl }) {
-    return findProjectRoot({ extRoot, repoRoot: "", fsImpl: fsImpl || getCepRequire8()("fs") });
+    return findProjectRoot({ extRoot, repoRoot: "", fsImpl: fsImpl || getCepRequire11()("fs") });
   }
   var LOGIN_COMMANDS = { claude: "claude", codex: "codex login" };
   function openLoginTerminal({ tool, spawnImpl } = {}) {
-    const spawn = spawnImpl || getCepRequire8()("child_process").spawn;
+    const spawn = spawnImpl || getCepRequire11()("child_process").spawn;
     const command = LOGIN_COMMANDS[tool] || LOGIN_COMMANDS.claude;
     const child = spawn("cmd", ["/c", "start", "ae-mcp login", "pwsh", "-NoExit", "-Command", command], {
       detached: true,
@@ -15729,7 +16303,7 @@
       }
     };
   }
-  function getCepRequire9() {
+  function getCepRequire12() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -15742,12 +16316,12 @@
     function start(port) {
       onStatus("starting", port);
       try {
-        const cepRequire4 = getCepRequire9();
-        const path = cepRequire4("path");
+        const cepRequire5 = getCepRequire12();
+        const path = cepRequire5("path");
         const extRoot = normalizeCepPath(cs2.getSystemPath("extension"));
         const hostPath = path.join(extRoot, "host", "server.js");
         onLog("host: " + hostPath);
-        host = cepRequire4(hostPath);
+        host = cepRequire5(hostPath);
         host.setCSInterface(cs2);
         window.addEventListener("beforeunload", () => {
           try {
@@ -15785,6 +16359,74 @@
     }
   }
 
+  // src/lib/logExport.js
+  function redactSecrets(text) {
+    var s = String(text == null ? "" : text);
+    var mask = function(v) {
+      return v.slice(0, 6) + "...[redacted]";
+    };
+    s = s.replace(/((?:ANTHROPIC_AUTH_TOKEN|[A-Z_]*API_KEY)\s*[=:]\s*)(\S+)/g, function(m, pre, v) {
+      return pre + mask(v);
+    });
+    s = s.replace(/((?:Authorization|x-api-key)\s*[:=]\s*(?:Bearer\s+)?)(\S+)/gi, function(m, pre, v) {
+      return pre + mask(v);
+    });
+    s = s.replace(/sk-[A-Za-z0-9_-]{8,}/g, function(m) {
+      return mask(m);
+    });
+    return s;
+  }
+  function buildLogExport({ panelLogs = [], hostInfo = {}, sidecarTail = "", version = "", now = /* @__PURE__ */ new Date() } = {}) {
+    const lines = [];
+    lines.push("# ae-mcp panel log export");
+    lines.push("exported-at: " + now.toISOString());
+    lines.push("panel-version: " + (version || "-"));
+    lines.push("host-version: " + (hostInfo.hostVersion || "-"));
+    lines.push("python-version: " + (hostInfo.pythonVersion || "-"));
+    lines.push("");
+    lines.push("## panel logs (" + panelLogs.length + ")");
+    for (const line of panelLogs) lines.push(redactSecrets(line));
+    lines.push("");
+    lines.push("## sidecar stderr tail");
+    lines.push(sidecarTail ? redactSecrets(sidecarTail) : "(empty)");
+    return lines.join("\n") + "\n";
+  }
+  function exportFileName(now = /* @__PURE__ */ new Date()) {
+    return "export-" + now.toISOString().replace(/[:.]/g, "-") + ".txt";
+  }
+  function keepLogLine(level, message) {
+    if (level !== "error") return true;
+    return /error|failed|exception/i.test(String(message || ""));
+  }
+
+  // src/cep/logExportFs.js
+  function getCepRequire13() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
+      return globalThis.window.cep_node.require;
+    }
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function writeLogExport({ text, fileName, deps }) {
+    const req = deps ? null : getCepRequire13();
+    const fs = deps ? deps.fs : req("fs");
+    const os = deps ? deps.os : req("os");
+    const path = deps ? deps.path : req("path");
+    const dir = path.join(os.homedir(), ".ae-mcp", "logs");
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, fileName);
+    fs.writeFileSync(file, text, "utf8");
+    return file;
+  }
+  function revealInExplorer(filePath, execImpl, onError) {
+    const exec = execImpl || getCepRequire13()("child_process").exec;
+    const winPath = String(filePath).replace(/\//g, "\\");
+    exec('explorer.exe /select,"' + winPath + '"', { windowsHide: true }, (err) => {
+      if (err && onError) onError(err);
+    });
+  }
+
   // src/app/App.jsx
   var import_jsx_runtime36 = __toESM(require_jsx_runtime(), 1);
   var T = {
@@ -15806,18 +16448,6 @@
       regenBody: "\u6240\u6709\u5DF2\u8FDE\u63A5\u7684 AI \u5BA2\u6237\u7AEF\u4F1A\u7ACB\u5373\u5931\u53BB\u8BBF\u95EE\u6743\u9650\uFF0C\u9700\u8981\u91CD\u542F\u5B83\u4EEC\u624D\u80FD\u91CD\u65B0\u8FDE\u63A5\u3002",
       regenConfirm: "\u91CD\u65B0\u751F\u6210",
       cancel: "\u53D6\u6D88",
-      noKeyHint: "\u5148\u5728\u8BBE\u7F6E\u91CC\u914D\u7F6E Anthropic API Key",
-      probingHint: "\u6B63\u5728\u68C0\u6D4B Claude \u767B\u5F55\u6001\u2026",
-      notLoggedInHint: "Claude \u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login\uFF0C\u518D\u5230\u8BBE\u7F6E\u91CC\u91CD\u65B0\u68C0\u6D4B",
-      codexProbingHint: "\u6B63\u5728\u68C0\u6D4B Codex \u767B\u5F55\u6001\u2026",
-      codexNotLoggedInHint: "Codex \u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C codex \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B",
-      codexRuntimeHint: "Codex \u8FD0\u884C\u65F6\u4E0D\u53EF\u7528\uFF1A\u8BF7\u786E\u8BA4 codex CLI \u53EF\u7528\u540E\u91CD\u65B0\u68C0\u6D4B",
-      openCodeProbingHint: "\u6B63\u5728\u68C0\u6D4B OpenCode \u767B\u5F55\u6001\u2026",
-      openCodeNotLoggedInHint: "OpenCode \u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u5B8C\u6210\u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B",
-      zcodeProbingHint: "\u6B63\u5728\u68C0\u6D4B ZCode \u8FD0\u884C\u65F6\u2026",
-      zcodeNotLoggedInHint: "ZCode \u5F53\u524D\u4E0D\u53EF\u7528\uFF1A\u8BF7\u6253\u5F00 ZCode \u6216\u5B8C\u6210\u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B",
-      zcodeRuntimeHint: "ZCode \u8FD0\u884C\u65F6\u4E0D\u53EF\u7528\uFF1A\u8BF7\u5B89\u88C5 ZCode\uFF0C\u786E\u8BA4 Node \u53EF\u7528\uFF0C\u6216\u8BBE\u7F6E AE_MCP_ZCODE_CLI \u540E\u91CD\u65B0\u68C0\u6D4B",
-      noNodeHint: "\u5185\u5D4C\u5BF9\u8BDD\u9700\u8981\u7CFB\u7EDF Node 18+",
       pausedHint: "\u5DF2\u6682\u505C \u2014 \u6062\u590D\u540E\u624D\u80FD\u53D1\u9001",
       goSettings: "\u53BB\u8BBE\u7F6E"
     },
@@ -15839,22 +16469,11 @@
       regenBody: "Every connected AI client loses access immediately and must be restarted to reconnect.",
       regenConfirm: "Regenerate",
       cancel: "Cancel",
-      noKeyHint: "Set your Anthropic API key in Settings first",
-      probingHint: "Checking Claude login\u2026",
-      notLoggedInHint: "Not logged in: run claude /login in a terminal, then re-check in Settings",
-      codexProbingHint: "Checking Codex login\u2026",
-      codexNotLoggedInHint: "Codex is not logged in: log in with codex, then re-check",
-      codexRuntimeHint: "Codex runtime unavailable: confirm the codex CLI is available, then re-check",
-      openCodeProbingHint: "Checking OpenCode login\u2026",
-      openCodeNotLoggedInHint: "OpenCode is not logged in: sign in with opencode, then re-check",
-      zcodeProbingHint: "Checking ZCode runtime\u2026",
-      zcodeNotLoggedInHint: "ZCode is not available: open ZCode or sign in, then re-check",
-      zcodeRuntimeHint: "ZCode runtime unavailable: install ZCode, confirm Node is available, or set AE_MCP_ZCODE_CLI, then re-check",
-      noNodeHint: "Embedded chat needs system Node 18+",
       pausedHint: "Paused \u2014 resume to send",
       goSettings: "Open Settings"
     }
   };
+  var pkgVersion = package_default.version;
   function readPref(key, fallback) {
     try {
       const v = window.localStorage.getItem(key);
@@ -15870,7 +16489,6 @@
     }
   }
   var CODEX_MODELS_CACHE_KEY = "ae_mcp_codex_models";
-  var OPENCODE_MODELS_CACHE_KEY = "ae_mcp_opencode_models";
   var CODEX_MODELS_CACHE_MS = 24 * 60 * 60 * 1e3;
   function readCachedCodexModels(storage) {
     try {
@@ -15890,49 +16508,13 @@
     } catch (e) {
     }
   }
-  function readCachedOpenCodeModels(storage) {
-    try {
-      const raw = storage.getItem(OPENCODE_MODELS_CACHE_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (!parsed || !parsed.models) return null;
-      if (Date.now() - Number(parsed.ts || 0) > CODEX_MODELS_CACHE_MS) return null;
-      return parsed.models;
-    } catch (e) {
-      return null;
-    }
-  }
-  function writeCachedOpenCodeModels(storage, models) {
-    try {
-      storage.setItem(OPENCODE_MODELS_CACHE_KEY, JSON.stringify({ ts: Date.now(), models }));
-    } catch (e) {
-    }
-  }
-  async function validateAnthropicKey(key, baseUrl = "") {
-    const r = await fetch(anthropicEndpoint(baseUrl, "/v1/messages"), {
-      method: "POST",
-      headers: {
-        "x-api-key": key,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true",
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({
-        model: FALLBACK_MODEL,
-        max_tokens: 1,
-        messages: [{ role: "user", content: "ping" }]
-      })
-    });
-    const ok = r.ok;
-    return { ok, status: ok ? 200 : r.status === 403 ? 401 : r.status };
-  }
   var CLIENT_NAMES = {
     builtin: { zh: "\u9762\u677F\u5185\u7F6E\u5BF9\u8BDD", en: "Built-in chat" },
     "claude-desktop": { zh: "Claude Desktop", en: "Claude Desktop" },
     "claude-code": { zh: "Claude Code", en: "Claude Code" },
     cursor: { zh: "Cursor", en: "Cursor" }
   };
-  function cepRequire3(mod) {
+  function cepRequire4(mod) {
     if (window.cep_node && window.cep_node.require) return window.cep_node.require(mod);
     if (window.require) return window.require(mod);
     return null;
@@ -15981,67 +16563,152 @@
     const [codexBaseUrl, setCodexBaseUrl] = import_react40.default.useState(() => readPref("ae_mcp_codex_base_url", ""));
     const [customModel, setCustomModel] = import_react40.default.useState(() => readPref("ae_mcp_custom_model", ""));
     const [model, setModel] = import_react40.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
+    const [logLevel, setLogLevel] = import_react40.default.useState(() => readPref("ae_mcp_log_level", "info"));
+    const logLevelRef = import_react40.default.useRef(logLevel);
+    logLevelRef.current = logLevel;
     const [sessionModel, setSessionModel] = import_react40.default.useState(null);
     const [sessionEffort, setSessionEffort] = import_react40.default.useState(null);
     const [sessionFast, setSessionFast] = import_react40.default.useState(null);
     const [permissionMode, setPermissionMode] = import_react40.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
-    const [backendPref, setBackendPref] = import_react40.default.useState(() => readPref("ae_mcp_backend", "subscription"));
+    const backendMigration = import_react40.default.useMemo(() => migrateBackendPref(window.localStorage), []);
+    const [backendPref, setBackendPref] = import_react40.default.useState(() => backendMigration.pref);
+    const [channelLock, setChannelLock] = import_react40.default.useState(() => backendMigration.lockedChannel);
+    const providerStore = import_react40.default.useMemo(() => {
+      try {
+        const store = createProviderStore();
+        store.migrateLegacy({
+          readKey: (name) => {
+            try {
+              return keyStore ? keyStore.readKey(name) : "";
+            } catch (e) {
+              return "";
+            }
+          },
+          readPref: (key) => readPref(key, "")
+        });
+        return store;
+      } catch (e) {
+        return null;
+      }
+    }, [keyStore]);
+    const [providers, setProviders] = import_react40.default.useState(() => providerStore ? providerStore.list() : []);
+    const [claudeProviderId, setClaudeProviderId] = import_react40.default.useState(() => readPref("ae_mcp_claude_provider", ""));
+    const [codexProviderId, setCodexProviderId] = import_react40.default.useState(() => readPref("ae_mcp_codex_provider", ""));
     const [expertGuidance, setExpertGuidance] = import_react40.default.useState(() => loadExpertGuidance(window.localStorage));
     const [probe, setProbe] = import_react40.default.useState(null);
     const [codexProbe, setCodexProbe] = import_react40.default.useState(null);
     const [codexModels, setCodexModels] = import_react40.default.useState(() => readCachedCodexModels(window.localStorage));
-    const [openCodeProbe, setOpenCodeProbe] = import_react40.default.useState(null);
-    const [openCodeModels, setOpenCodeModels] = import_react40.default.useState(() => readCachedOpenCodeModels(window.localStorage));
     const [zcodeProbe, setZcodeProbe] = import_react40.default.useState(null);
+    const [zcodeSessionModels, setZcodeSessionModels] = import_react40.default.useState(null);
     const [chatEntries, setChatEntries] = import_react40.default.useState([]);
     const [chatStreaming, setChatStreaming] = import_react40.default.useState(false);
     const [thinkingActive, setThinkingActive] = import_react40.default.useState(false);
-    const customModelForBackend = backendPref === "byok" || backendPref === "codex" ? customModel : "";
-    const baseDescriptor = import_react40.default.useMemo(() => descriptorWithCustomModel(baseDescriptorFor(backendPref), customModelForBackend), [backendPref, customModelForBackend]);
+    const customModelForBackend = backendPref === "codex" ? customModel : "";
+    const baseDescriptor = import_react40.default.useMemo(() => descriptorWithCustomModel(baseDescriptorFor(backendPref, window.cep_node && window.cep_node.process && window.cep_node.process.env || {}), customModelForBackend), [backendPref, customModelForBackend]);
     const [descriptor, setDescriptor] = import_react40.default.useState(() => baseDescriptor);
-    import_react40.default.useEffect(() => {
-      let alive = true;
-      setDescriptor(baseDescriptor);
-      if (backendPref === "byok" && apiKey) {
-        cachedByokModels({ apiKey, baseUrl: anthropicBaseUrl }).then((list) => {
-          if (alive) setDescriptor(descriptorWithCustomModel(mergeByokModels(byokStaticDescriptor(), list), customModelForBackend));
-        }).catch(() => {
-        });
-      }
-      if (backendPref === "codex") {
-        const cached = codexModels || readCachedCodexModels(window.localStorage);
-        if (cached) setDescriptor(descriptorWithCustomModel(codexDescriptorFromModels({ models: cached }), customModelForBackend));
-      }
-      if (backendPref === "opencode") {
-        const cached = openCodeModels || readCachedOpenCodeModels(window.localStorage);
-        if (cached) setDescriptor(openCodeDescriptorFromModels(cached));
-      }
-      return () => {
-        alive = false;
-      };
-    }, [anthropicBaseUrl, apiKey, backendPref, baseDescriptor, codexModels, customModelForBackend, openCodeModels]);
     const requestedModel = sessionModel || model;
     const effectiveModel = descriptor.models.some((m) => m.id === requestedModel) ? requestedModel : descriptor.defaultModelId || descriptor.models[0] && descriptor.models[0].id || requestedModel;
     const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
     const effectiveEffort = sessionEffort || (modelMeta.effortLevels && modelMeta.effortLevels.length ? descriptor.defaultEffort : null);
     const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
+    const claudeApiProvider = import_react40.default.useMemo(() => {
+      const fromStore = providers.find((p) => p.id === claudeProviderId) || null;
+      if (fromStore && fromStore.baseUrl && fromStore.apiKey) return fromStore;
+      if (apiKey) return { id: "legacy-anthropic", name: "Claude API", protocol: "anthropic", baseUrl: anthropicBaseUrl || "https://api.anthropic.com", apiKey, probedModels: [], probedAt: 0 };
+      return fromStore;
+    }, [providers, claudeProviderId, apiKey, anthropicBaseUrl]);
+    const codexCustomProvider = import_react40.default.useMemo(() => {
+      const fromStore = providers.find((p) => p.id === codexProviderId) || null;
+      if (fromStore && fromStore.baseUrl && fromStore.apiKey) return fromStore;
+      if (codexBaseUrl) return { id: "legacy-codex", name: "Codex custom", protocol: "openai-compatible", baseUrl: codexBaseUrl, apiKey: codexApiKey, probedModels: [], probedAt: 0 };
+      return fromStore;
+    }, [providers, codexProviderId, codexBaseUrl, codexApiKey]);
+    const [providerProbing, setProviderProbing] = import_react40.default.useState("");
+    const [providerProbeErrors, setProviderProbeErrors] = import_react40.default.useState({});
+    const ccSwitchFound = import_react40.default.useMemo(() => {
+      try {
+        return detectCcSwitch({ env: window.cep_node && window.cep_node.process && window.cep_node.process.env || {} });
+      } catch (e) {
+        return null;
+      }
+    }, []);
+    const providerManager = /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+      ProviderManagerSection,
+      {
+        lang,
+        providers,
+        probing: providerProbing,
+        probeErrors: providerProbeErrors,
+        ccSwitch: ccSwitchFound,
+        onImportCcSwitch: () => {
+          if (!ccSwitchFound || !providerStore) return;
+          for (const entry of ccSwitchFound.providers) providerStore.upsert(entry);
+          setProviders(providerStore.list());
+        },
+        onUpsert: (entry) => {
+          if (!providerStore) return;
+          const existing = providerStore.get(entry.id);
+          providerStore.upsert({ ...entry, probedModels: existing ? existing.probedModels : [], probedAt: existing ? existing.probedAt : 0 });
+          setProviders(providerStore.list());
+        },
+        onRemove: (id) => {
+          if (!providerStore) return;
+          providerStore.remove(id);
+          setProviders(providerStore.list());
+          if (claudeProviderId === id) {
+            setClaudeProviderId("");
+            writePref("ae_mcp_claude_provider", "");
+          }
+          if (codexProviderId === id) {
+            setCodexProviderId("");
+            writePref("ae_mcp_codex_provider", "");
+          }
+        },
+        onProbe: async (p) => {
+          setProviderProbing(p.id);
+          const result = await probeProviderModels({ baseUrl: p.baseUrl, apiKey: p.apiKey, protocol: p.protocol });
+          setProviderProbing("");
+          if (result.ok && providerStore) {
+            providerStore.upsert({ ...p, probedModels: result.models, probedAt: Date.now() });
+            setProviders(providerStore.list());
+            setProviderProbeErrors((errs) => ({ ...errs, [p.id]: "" }));
+          } else {
+            setProviderProbeErrors((errs) => ({ ...errs, [p.id]: result.detail || "HTTP " + result.status }));
+          }
+        }
+      }
+    );
+    const zcodeConfigSummary = import_react40.default.useMemo(() => {
+      try {
+        return summarizeZcodeConfig({ env: window.cep_node && window.cep_node.process && window.cep_node.process.env || {}, storedKey: (() => {
+          try {
+            return keyStore ? keyStore.readKey("zcode") : "";
+          } catch (e) {
+            return "";
+          }
+        })() });
+      } catch (e) {
+        return null;
+      }
+    }, [keyStore, zcodeProbe]);
+    const channels = import_react40.default.useMemo(() => ({
+      claude: claudeChannels({ probe, apiProvider: claudeApiProvider }),
+      codex: codexChannels({ codexProbe, customProvider: codexCustomProvider }),
+      zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary })
+    }), [probe, claudeApiProvider, codexProbe, codexCustomProvider, zcodeProbe, zcodeConfigSummary]);
+    const claudeSettingsHint = import_react40.default.useMemo(() => {
+      try {
+        return readClaudeSettingsEnv({ env: window.cep_node && window.cep_node.process && window.cep_node.process.env || {} });
+      } catch (e) {
+        return null;
+      }
+    }, []);
     const providerProfile = import_react40.default.useMemo(() => normalizeProviderProfile({
-      anthropicBaseUrl,
-      codexApiKey,
-      codexBaseUrl
-    }), [anthropicBaseUrl, codexApiKey, codexBaseUrl]);
-    const hasCodexCustomProvider = Boolean(providerProfile.codexBaseUrl);
-    const runtimeRef = import_react40.default.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast });
-    runtimeRef.current = {
-      apiKey,
-      apiBaseUrl: providerProfile.anthropicBaseUrl,
-      providerProfile,
-      model: effectiveModel,
-      permissionMode,
-      effort: effectiveEffort,
-      thinking: modelMeta.adaptive === true ? "adaptive" : null,
-      fast: effectiveFast
-    };
+      anthropicBaseUrl: claudeApiProvider ? claudeApiProvider.baseUrl : anthropicBaseUrl,
+      codexApiKey: codexCustomProvider ? codexCustomProvider.apiKey : codexApiKey,
+      codexBaseUrl: codexCustomProvider ? codexCustomProvider.baseUrl : codexBaseUrl
+    }), [claudeApiProvider, anthropicBaseUrl, codexCustomProvider, codexApiKey, codexBaseUrl]);
+    const runtimeRef = import_react40.default.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: "subscription", claudeApiProvider: null });
     const extRoot = cs2 && cs2.getSystemPath ? cs2.getSystemPath("extension") : "";
     const sidecarPath = import_react40.default.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
     const mcp = import_react40.default.useMemo(() => createMcpClient({
@@ -16055,6 +16722,7 @@
         setChatStreaming(false);
         setThinkingActive(false);
       }
+      if (evt.type === "zcode-session-created") setZcodeSessionModels(evt.result || null);
       setChatEntries((entries) => reduceEvent(entries, evt));
     }, []);
     const byokLoop = import_react40.default.useMemo(() => {
@@ -16079,6 +16747,8 @@
       getPermissionMode: () => runtimeRef.current.permissionMode,
       getEffort: () => runtimeRef.current.effort,
       getThinking: () => runtimeRef.current.thinking,
+      getChannel: () => runtimeRef.current.claudeChannel || "subscription",
+      getApiProvider: () => runtimeRef.current.claudeApiProvider || null,
       lang,
       onEvent: handleChatEvent
     }), [extRoot, sidecarPath, mcp, handleChatEvent]);
@@ -16116,10 +16786,55 @@
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, mcp, handleChatEvent]);
-    const selectedEffective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey, codexProbe, hasCodexCustomProvider, zcodeProbe });
-    const effective = backendPref === "opencode" ? openCodeProbe === null ? { backend: "none", reason: "opencode-probing" } : !openCodeProbe || !openCodeProbe.loggedIn ? { backend: "none", reason: "opencode-not-logged-in" } : { backend: "opencode", reason: "ok" } : selectedEffective;
-    const backendInstances = { subscription: claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };
+    const nodeOk = !(probe && probe.nodeOk === false);
+    const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock, nodeOk });
+    runtimeRef.current = {
+      apiKey: claudeApiProvider ? claudeApiProvider.apiKey : apiKey,
+      apiBaseUrl: providerProfile.anthropicBaseUrl,
+      providerProfile,
+      model: effectiveModel,
+      permissionMode,
+      effort: effectiveEffort,
+      thinking: modelMeta.adaptive === true ? "adaptive" : null,
+      fast: effectiveFast,
+      claudeChannel: effective.backend === "claude-api" ? "api" : "subscription",
+      claudeApiProvider
+    };
+    const backendInstances = { subscription: claudeBackend, "claude-api": claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };
     const activeBackend = backendInstances[effective.backend] || byokLoop;
+    import_react40.default.useEffect(() => {
+      let alive = true;
+      const facts = {
+        effectiveBackend: effective.backend,
+        backendPref,
+        baseDescriptor,
+        customModel,
+        claudeApiProvider,
+        codexCustomProvider,
+        byokApiModels: null,
+        codexCachedModels: codexModels || readCachedCodexModels(window.localStorage),
+        zcodeSessionModels
+      };
+      const nextDescriptor = selectDescriptor(facts);
+      setDescriptor(nextDescriptor);
+      const isCustomModelPath = backendPref === "codex" && customModelForBackend && model === customModelForBackend;
+      const reconciled = reconcileModelPref(model, nextDescriptor, { isCustom: isCustomModelPath });
+      if (reconciled !== model) {
+        setModel(reconciled);
+        writePref("ae_mcp_model", reconciled);
+      }
+      const hasProbed = Boolean(claudeApiProvider && claudeApiProvider.probedModels && claudeApiProvider.probedModels.length);
+      const claudeKey = claudeApiProvider ? claudeApiProvider.apiKey : apiKey;
+      if (isClaudeApiBackend(effective.backend) && claudeKey && !hasProbed) {
+        cachedByokModels({ apiKey: claudeKey, baseUrl: claudeApiProvider ? claudeApiProvider.baseUrl : anthropicBaseUrl }).then((list) => {
+          if (alive) setDescriptor(selectDescriptor({ ...facts, byokApiModels: list }));
+        }).catch(() => {
+        });
+      }
+      return () => {
+        alive = false;
+      };
+    }, [effective.backend, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, apiKey, anthropicBaseUrl, zcodeSessionModels]);
     const activeBackendRef = import_react40.default.useRef(null);
     const runClaudeProbe = import_react40.default.useCallback(() => {
       let alive = true;
@@ -16161,27 +16876,6 @@
       if (backendPref !== "codex") return void 0;
       return runCodexProbe();
     }, [backendPref, runCodexProbe]);
-    const runOpenCodeProbe = import_react40.default.useCallback(() => {
-      let alive = true;
-      setOpenCodeProbe(null);
-      openCodeBackend.probeAccount().then((result) => {
-        if (!alive) return;
-        setOpenCodeProbe(result);
-        if (result && result.models) {
-          setOpenCodeModels(result.models);
-          writeCachedOpenCodeModels(window.localStorage, result.models);
-        }
-      }).catch((e) => {
-        if (alive) setOpenCodeProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
-      });
-      return () => {
-        alive = false;
-      };
-    }, [openCodeBackend]);
-    import_react40.default.useEffect(() => {
-      if (backendPref !== "opencode") return void 0;
-      return runOpenCodeProbe();
-    }, [backendPref, runOpenCodeProbe]);
     const runZcodeProbe = import_react40.default.useCallback(() => {
       let alive = true;
       setZcodeProbe(null);
@@ -16216,6 +16910,7 @@
       setSessionModel(null);
       setSessionEffort(null);
       setSessionFast(null);
+      if (decision.nextReal !== "zcode") setZcodeSessionModels(null);
     }, [effective.backend, byokLoop, claudeBackend, codexBackend, openCodeBackend, zcodeBackend]);
     const sendChat = (text) => {
       const trimmed = String(text || "").trim();
@@ -16229,8 +16924,24 @@
       setChatEntries([]);
     };
     const pushLog = import_react40.default.useCallback((m) => {
+      if (!keepLogLine(logLevelRef.current, m)) return;
       setLogs((xs) => [...xs.slice(-199), `[${(/* @__PURE__ */ new Date()).toLocaleTimeString()}] ${m}`]);
     }, []);
+    const exportLogs = import_react40.default.useCallback(() => {
+      try {
+        const text = buildLogExport({
+          panelLogs: logs,
+          hostInfo: { hostVersion: connInfo && connInfo.hostVersion || "-", pythonVersion: connInfo && connInfo.pythonVersion || "-" },
+          sidecarTail: claudeBackend.getStderrTail ? claudeBackend.getStderrTail() : "",
+          version: pkgVersion
+        });
+        const file = writeLogExport({ text, fileName: exportFileName() });
+        revealInExplorer(file, void 0, (err) => pushLog("Log export reveal failed: " + (err && err.message ? err.message : String(err))));
+        pushLog("Log exported: " + file);
+      } catch (e) {
+        pushLog("Log export failed: " + (e && e.message ? e.message : String(e)));
+      }
+    }, [logs, connInfo, claudeBackend, pushLog]);
     const undoToPreviousCheckpoint = import_react40.default.useCallback(async () => {
       try {
         await revertToPreviousCheckpoint(mcp);
@@ -16282,8 +16993,8 @@
         const items = await runDiagnostics({
           getHost,
           port: status.port,
-          fs: cepRequire3("fs"),
-          os: cepRequire3("os"),
+          fs: cepRequire4("fs"),
+          os: cepRequire4("os"),
           fetchImpl: window.fetch.bind(window)
         });
         setDiagnostics(items);
@@ -16317,9 +17028,6 @@
     };
     const mcpConfigStr = JSON.stringify(buildMcpConfig(status.port, expertGuidance), null, 2);
     const claudeStatus = probe === null ? { state: "checking" } : probe.nodeOk === false ? { state: "no-node", detail: probe.detail } : probe.loggedIn === false ? { state: "not-logged-in", detail: probe.detail } : { state: "ready", nodeVersion: probe.nodeVersion };
-    const codexStatus = codexProbe === null ? { state: "checking" } : hasCodexCustomProvider && codexProbe.runtimeOk !== false ? { state: "ready", planType: "Custom API", detail: codexProbe.detail } : hasCodexCustomProvider && codexProbe.runtimeOk === false ? { state: "runtime-error", detail: codexProbe.detail } : codexProbe.loggedIn === false ? { state: "not-logged-in", detail: codexProbe.detail } : { state: "ready", email: codexProbe.email, planType: codexProbe.planType };
-    const openCodeStatus = openCodeProbe === null ? { state: "checking" } : openCodeProbe.loggedIn === false ? { state: "not-logged-in", detail: openCodeProbe.detail } : { state: "ready" };
-    const zcodeStatus = zcodeProbe === null ? { state: "checking" } : zcodeProbe.runtimeOk === false ? { state: "runtime-error", provider: zcodeProbe.provider, detail: zcodeProbe.detail } : zcodeProbe.loggedIn === false ? { state: "not-logged-in", provider: zcodeProbe.provider, detail: zcodeProbe.detail } : { state: "ready", provider: zcodeProbe.provider };
     const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
     if (!wizardDone) {
       return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
@@ -16334,6 +17042,8 @@
           mcpConfig: mcpConfigStr,
           port: status.port,
           expertGuidance,
+          channels,
+          activeChannel: effective.channel || "",
           onNext: () => setWizStep((s) => Math.min(3, s + 1)),
           onBack: () => setWizStep((s) => Math.max(1, s - 1)),
           onCopy: (text) => copyWizardConfig(copyText, mcpConfigStr, text),
@@ -16349,7 +17059,7 @@
       { id: "activity", icon: "list-checks", label: t.activity },
       { id: "settings", icon: "settings", label: t.settings }
     ];
-    const backendDisabledHint = effective.reason === "probing" ? t.probingHint : effective.reason === "not-logged-in" ? t.notLoggedInHint : effective.reason === "codex-probing" ? t.codexProbingHint : effective.reason === "codex-not-logged-in" ? t.codexNotLoggedInHint : effective.reason === "codex-runtime-unavailable" ? t.codexRuntimeHint : effective.reason === "opencode-probing" ? t.openCodeProbingHint : effective.reason === "opencode-not-logged-in" ? t.openCodeNotLoggedInHint : effective.reason === "zcode-probing" ? t.zcodeProbingHint : effective.reason === "zcode-not-logged-in" ? t.zcodeNotLoggedInHint : effective.reason === "zcode-runtime-unavailable" ? zcodeUnavailableHint(zcodeStatus, t.zcodeRuntimeHint) : effective.reason === "no-node" ? t.noNodeHint : effective.reason === "no-key" ? t.noKeyHint : "";
+    const backendDisabledHint = effective.fixHint && (effective.fixHint[lang] || effective.fixHint.zh) || (effective.reason && effective.reason.endsWith("-probing") ? lang === "zh" ? "\u6B63\u5728\u68C0\u6D4B\u51ED\u636E\u901A\u9053\u2026" : "Checking credential channels\u2026" : "");
     const composerDisabled = paused || effective.backend === "none";
     const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
     return /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)(import_react40.default.Fragment, { children: [
@@ -16432,41 +17142,54 @@
             onRegenToken: () => setConfirmRegen(true),
             hostVersion: connInfo && connInfo.hostVersion || "-",
             pythonVersion: connInfo && connInfo.pythonVersion || "-",
-            apiKey,
-            onSaveApiKey: (k) => {
-              if (keyStore) keyStore.writeKey(k);
-              setApiKey(k);
+            channels,
+            activeChannel: effective.channel || "",
+            lockedChannel: channelLock,
+            onLockChannel: (c) => {
+              setChannelLock(c);
+              writePref("ae_mcp_channel_lock", c);
             },
-            onClearApiKey: () => {
-              if (keyStore) keyStore.clearKey();
-              setApiKey("");
+            onRecheckBackend: () => {
+              if (backendPref === "codex") runCodexProbe();
+              else if (backendPref === "zcode") runZcodeProbe();
+              else runClaudeProbe();
             },
-            anthropicBaseUrl,
-            onAnthropicBaseUrlChange: (v) => {
-              setAnthropicBaseUrl(v);
-              writePref("ae_mcp_anthropic_base_url", v);
+            recheckDisabled: backendPref === "codex" ? codexProbe === null : backendPref === "zcode" ? zcodeProbe === null : probe === null,
+            providers,
+            providerManager,
+            claudeProviderId,
+            onClaudeProviderChange: (id) => {
+              setClaudeProviderId(id);
+              writePref("ae_mcp_claude_provider", id);
             },
-            codexApiKey,
-            codexBaseUrl,
-            onCodexBaseUrlChange: (v) => {
-              setCodexBaseUrl(v);
-              writePref("ae_mcp_codex_base_url", v);
+            codexProviderId,
+            onCodexProviderChange: (id) => {
+              setCodexProviderId(id);
+              writePref("ae_mcp_codex_provider", id);
               setCodexProbe(null);
               codexBackend.reset();
             },
-            onSaveCodexApiKey: (k) => {
-              if (keyStore) keyStore.writeKey(k, "codex");
-              setCodexApiKey(k);
-              setCodexProbe(null);
-              codexBackend.reset();
+            claudeSettingsImportAvailable: Boolean(claudeSettingsHint),
+            onImportClaudeSettings: () => {
+              if (!claudeSettingsHint || !providerStore) return;
+              const entry = providerStore.upsert({ id: "claude-settings-import", name: "Claude Code \u914D\u7F6E", protocol: "anthropic", baseUrl: claudeSettingsHint.baseUrl, apiKey: claudeSettingsHint.authToken });
+              setProviders(providerStore.list());
+              setClaudeProviderId(entry.id);
+              writePref("ae_mcp_claude_provider", entry.id);
             },
-            onClearCodexApiKey: () => {
-              if (keyStore) keyStore.clearKey("codex");
-              setCodexApiKey("");
-              setCodexProbe(null);
-              codexBackend.reset();
+            onSaveZcodeKey: (k) => {
+              if (keyStore) keyStore.writeKey(k, "zcode");
+              setZcodeProbe(null);
+              zcodeBackend.reset();
+              runZcodeProbe();
             },
-            validateKey: validateAnthropicKey,
+            zcodeKeyStored: (() => {
+              try {
+                return Boolean(keyStore && keyStore.readKey("zcode"));
+              } catch (e) {
+                return false;
+              }
+            })(),
             model: effectiveModel,
             modelOptions,
             modelSwitchable: descriptor.perTurnModelSwitch !== false,
@@ -16493,14 +17216,17 @@
               setExpertGuidance(v);
               saveExpertGuidance(window.localStorage, v);
             },
-            claudeStatus,
-            onRecheckClaude: runClaudeProbe,
-            codexStatus,
-            onRecheckCodex: runCodexProbe,
-            openCodeStatus,
-            onRecheckOpenCode: runOpenCodeProbe,
-            zcodeStatus,
-            onRecheckZcode: runZcodeProbe
+            logLevel,
+            onLogLevel: (v) => {
+              setLogLevel(v);
+              writePref("ae_mcp_log_level", v);
+            },
+            onExportLogs: exportLogs,
+            onRerunWizard: () => {
+              clearWizardDone(window.localStorage);
+              setWizStep(1);
+              setWizardDone(false);
+            }
           },
           tokenEpoch
         ) : null

@@ -246,7 +246,7 @@ function Shell({ cs }) {
   const [chatStreaming, setChatStreaming] = React.useState(false);
   const [thinkingActive, setThinkingActive] = React.useState(false);
   const customModelForBackend = backendPref === 'codex' ? customModel : '';
-  const baseDescriptor = React.useMemo(() => descriptorWithCustomModel(baseDescriptorFor(backendPref), customModelForBackend), [backendPref, customModelForBackend]);
+  const baseDescriptor = React.useMemo(() => descriptorWithCustomModel(baseDescriptorFor(backendPref, (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {}), customModelForBackend), [backendPref, customModelForBackend]);
   const [descriptor, setDescriptor] = React.useState(() => baseDescriptor);
   const requestedModel = sessionModel || model;
   const effectiveModel = descriptor.models.some((m) => m.id === requestedModel)
