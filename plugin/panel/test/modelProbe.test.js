@@ -1,0 +1,68 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { parseModelsList, probeHeaders, probeProviderModels } from '../src/cep/modelProbe.js';
+
+test('parseModelsList handles OpenAI-style {data:[{id}]}', () => {
+  const models = parseModelsList({ data: [{ id: 'glm-5.2' }, { id: 'deepseek-v4' }, { object: 'noise' }] });
+  assert.deepEqual(models, [
+    { id: 'glm-5.2', label: 'glm-5.2' },
+    { id: 'deepseek-v4', label: 'deepseek-v4' },
+  ]);
+});
+
+test('parseModelsList handles Anthropic-style display_name and bare arrays', () => {
+  assert.deepEqual(parseModelsList({ data: [{ id: 'claude-sonnet-5', display_name: 'Claude Sonnet 5' }] }),
+    [{ id: 'claude-sonnet-5', label: 'Claude Sonnet 5' }]);
+  assert.deepEqual(parseModelsList([{ id: 'm1' }]), [{ id: 'm1', label: 'm1' }]);
+  assert.deepEqual(parseModelsList(null), []);
+});
+
+test('probeHeaders picks auth scheme by protocol', () => {
+  assert.deepEqual(probeHeaders('openai-compatible', 'sk-x'), { Authorization: 'Bearer sk-x' });
+  assert.deepEqual(probeHeaders('anthropic', 'sk-a'), { 'x-api-key': 'sk-a', 'anthropic-version': '2023-06-01' });
+});
+
+function makeHttps(handler) {
+  return {
+    request(options, onRes) {
+      const res = { handlers: {}, on(ev, fn) { this.handlers[ev] = fn; } };
+      const req = {
+        handlers: {},
+        on(ev, fn) { this.handlers[ev] = fn; return this; },
+        setTimeout() {},
+        destroy() {},
+        end() { handler(options, res, onRes, req); },
+      };
+      return req;
+    },
+  };
+}
+
+test('probeProviderModels returns ok with parsed models on 200', async () => {
+  const https = makeHttps((options, res, onRes) => {
+    assert.equal(options.path, '/v1/models');
+    assert.equal(options.headers.Authorization, 'Bearer sk-x');
+    onRes(Object.assign(res, { statusCode: 200 }));
+    res.handlers.data(JSON.stringify({ data: [{ id: 'glm-5.2' }] }));
+    res.handlers.end();
+  });
+  const result = await probeProviderModels({ baseUrl: 'https://token.mediastorm.studio/v1/', apiKey: 'sk-x', protocol: 'openai-compatible', httpsImpl: https });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.models, [{ id: 'glm-5.2', label: 'glm-5.2' }]);
+});
+
+test('probeProviderModels degrades to ok:false on 401 and network error', async () => {
+  const https401 = makeHttps((options, res, onRes) => {
+    onRes(Object.assign(res, { statusCode: 401 }));
+    res.handlers.data('unauthorized');
+    res.handlers.end();
+  });
+  const denied = await probeProviderModels({ baseUrl: 'https://h/v1', apiKey: 'bad', httpsImpl: https401 });
+  assert.equal(denied.ok, false);
+  assert.equal(denied.status, 401);
+
+  const httpsErr = makeHttps((options, res, onRes, req) => { req.handlers.error(new Error('ECONNREFUSED')); });
+  const down = await probeProviderModels({ baseUrl: 'https://h/v1', apiKey: 'k', httpsImpl: httpsErr });
+  assert.equal(down.ok, false);
+  assert.match(down.detail, /ECONNREFUSED/);
+});
