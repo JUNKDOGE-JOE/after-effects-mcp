@@ -335,5 +335,6 @@ export function createClaudeAgentBackend({
     stop,
     reset,
     getMessages: () => clone(transcript),
+    getStderrTail: () => stderrTail,
   };
 }
