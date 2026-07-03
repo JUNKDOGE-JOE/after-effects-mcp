@@ -21,10 +21,14 @@ import { createOpenCodeBackend } from '../cep/openCodeBackend';
 import { createZcodeBackend, summarizeZcodeConfig } from '../cep/zcodeBackend';
 import { claudeChannels, codexChannels, zcodeChannels, migrateBackendPref } from '../lib/channels.js';
 import { createProviderStore } from '../cep/providerStore';
+import { ProviderManagerSection } from '../components/settings/ProviderManagerSection';
+import { probeProviderModels } from '../cep/modelProbe';
+import { detectCcSwitch } from '../cep/ccSwitch';
 import { readClaudeSettingsEnv } from '../cep/claudeSettingsImport';
 import { reduceEvent } from '../lib/chatEntries';
 import { DEFAULT_MODEL, FALLBACK_MODEL } from '../lib/anthropic';
-import { byokStaticDescriptor, mergeByokModels, codexDescriptorFromModels, openCodeDescriptorFromModels, descriptorWithCustomModel } from '../lib/backendCapabilities';
+import { descriptorWithCustomModel } from '../lib/backendCapabilities';
+import { selectDescriptor, isClaudeApiBackend } from '../lib/descriptorSelect';
 import { baseDescriptorFor } from '../cep/backends/index.js';
 import { cachedByokModels } from '../cep/modelsApi';
 import { costBadge } from '../lib/composerOptions';
@@ -278,27 +282,9 @@ function Shell({ cs }) {
   const [chatEntries, setChatEntries] = React.useState([]);
   const [chatStreaming, setChatStreaming] = React.useState(false);
   const [thinkingActive, setThinkingActive] = React.useState(false);
-  const customModelForBackend = (backendPref === 'byok' || backendPref === 'codex') ? customModel : '';
+  const customModelForBackend = backendPref === 'codex' ? customModel : '';
   const baseDescriptor = React.useMemo(() => descriptorWithCustomModel(baseDescriptorFor(backendPref), customModelForBackend), [backendPref, customModelForBackend]);
   const [descriptor, setDescriptor] = React.useState(() => baseDescriptor);
-  React.useEffect(() => {
-    let alive = true;
-    setDescriptor(baseDescriptor);
-    if (backendPref === 'byok' && apiKey) {
-      cachedByokModels({ apiKey, baseUrl: anthropicBaseUrl }).then((list) => {
-        if (alive) setDescriptor(descriptorWithCustomModel(mergeByokModels(byokStaticDescriptor(), list), customModelForBackend));
-      }).catch(() => {});
-    }
-    if (backendPref === 'codex') {
-      const cached = codexModels || readCachedCodexModels(window.localStorage);
-      if (cached) setDescriptor(descriptorWithCustomModel(codexDescriptorFromModels({ models: cached }), customModelForBackend));
-    }
-    if (backendPref === 'opencode') {
-      const cached = openCodeModels || readCachedOpenCodeModels(window.localStorage);
-      if (cached) setDescriptor(openCodeDescriptorFromModels(cached));
-    }
-    return () => { alive = false; };
-  }, [anthropicBaseUrl, apiKey, backendPref, baseDescriptor, codexModels, customModelForBackend, openCodeModels]);
   const requestedModel = sessionModel || model;
   const effectiveModel = descriptor.models.some((m) => m.id === requestedModel)
     ? requestedModel
@@ -318,6 +304,51 @@ function Shell({ cs }) {
     if (codexBaseUrl) return { id: 'legacy-codex', name: 'Codex custom', protocol: 'openai-compatible', baseUrl: codexBaseUrl, apiKey: codexApiKey, probedModels: [], probedAt: 0 };
     return fromStore;
   }, [providers, codexProviderId, codexBaseUrl, codexApiKey]);
+
+  const [providerProbing, setProviderProbing] = React.useState('');
+  const [providerProbeErrors, setProviderProbeErrors] = React.useState({});
+  const ccSwitchFound = React.useMemo(() => {
+    try { return detectCcSwitch({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {} }); } catch (e) { return null; }
+  }, []);
+  const providerManager = (
+    <ProviderManagerSection
+      lang={lang}
+      providers={providers}
+      probing={providerProbing}
+      probeErrors={providerProbeErrors}
+      ccSwitch={ccSwitchFound}
+      onImportCcSwitch={() => {
+        if (!ccSwitchFound || !providerStore) return;
+        for (const entry of ccSwitchFound.providers) providerStore.upsert(entry);
+        setProviders(providerStore.list());
+      }}
+      onUpsert={(entry) => {
+        if (!providerStore) return;
+        const existing = providerStore.get(entry.id);
+        providerStore.upsert({ ...entry, probedModels: existing ? existing.probedModels : [], probedAt: existing ? existing.probedAt : 0 });
+        setProviders(providerStore.list());
+      }}
+      onRemove={(id) => {
+        if (!providerStore) return;
+        providerStore.remove(id);
+        setProviders(providerStore.list());
+        if (claudeProviderId === id) { setClaudeProviderId(''); writePref('ae_mcp_claude_provider', ''); }
+        if (codexProviderId === id) { setCodexProviderId(''); writePref('ae_mcp_codex_provider', ''); }
+      }}
+      onProbe={async (p) => {
+        setProviderProbing(p.id);
+        const result = await probeProviderModels({ baseUrl: p.baseUrl, apiKey: p.apiKey, protocol: p.protocol });
+        setProviderProbing('');
+        if (result.ok && providerStore) {
+          providerStore.upsert({ ...p, probedModels: result.models, probedAt: Date.now() });
+          setProviders(providerStore.list());
+          setProviderProbeErrors((errs) => ({ ...errs, [p.id]: '' }));
+        } else {
+          setProviderProbeErrors((errs) => ({ ...errs, [p.id]: result.detail || ('HTTP ' + result.status) }));
+        }
+      }}
+    />
+  );
   const zcodeConfigSummary = React.useMemo(() => {
     try { return summarizeZcodeConfig({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {}, storedKey: (() => { try { return keyStore ? keyStore.readKey('zcode') : ''; } catch (e) { return ''; } })() }); } catch (e) { return null; }
     // zcodeProbe in deps: re-summarize after each re-check so pasted keys reflect immediately.
@@ -442,6 +473,33 @@ function Shell({ cs }) {
   // Map real-backend id -> instance.
   const backendInstances = { subscription: claudeBackend, 'claude-api': claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };
   const activeBackend = backendInstances[effective.backend] || byokLoop;
+
+  // Descriptor selection is keyed on the EFFECTIVE backend from pickBackend,
+  // not backendPref: 'byok' never appears as a pref (migrateBackendPref maps
+  // it away), only as an effective backend when Node is broken.
+  React.useEffect(() => {
+    let alive = true;
+    const facts = {
+      effectiveBackend: effective.backend,
+      backendPref,
+      baseDescriptor,
+      customModel,
+      claudeApiProvider,
+      codexCustomProvider,
+      byokApiModels: null,
+      codexCachedModels: codexModels || readCachedCodexModels(window.localStorage),
+      openCodeCachedModels: openCodeModels || readCachedOpenCodeModels(window.localStorage),
+    };
+    setDescriptor(selectDescriptor(facts));
+    const hasProbed = Boolean(claudeApiProvider && claudeApiProvider.probedModels && claudeApiProvider.probedModels.length);
+    const claudeKey = claudeApiProvider ? claudeApiProvider.apiKey : apiKey;
+    if (isClaudeApiBackend(effective.backend) && claudeKey && !hasProbed) {
+      cachedByokModels({ apiKey: claudeKey, baseUrl: claudeApiProvider ? claudeApiProvider.baseUrl : anthropicBaseUrl }).then((list) => {
+        if (alive) setDescriptor(selectDescriptor({ ...facts, byokApiModels: list }));
+      }).catch(() => {});
+    }
+    return () => { alive = false; };
+  }, [effective.backend, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, openCodeModels, apiKey, anthropicBaseUrl]);
   const activeBackendRef = React.useRef(null);
 
   const runClaudeProbe = React.useCallback(() => {
@@ -791,6 +849,7 @@ function Shell({ cs }) {
             }}
             recheckDisabled={backendPref === 'codex' ? codexProbe === null : backendPref === 'zcode' ? zcodeProbe === null : probe === null}
             providers={providers}
+            providerManager={providerManager}
             claudeProviderId={claudeProviderId}
             onClaudeProviderChange={(id) => { setClaudeProviderId(id); writePref('ae_mcp_claude_provider', id); }}
             codexProviderId={codexProviderId}

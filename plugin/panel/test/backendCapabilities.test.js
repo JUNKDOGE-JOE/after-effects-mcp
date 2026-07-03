@@ -171,3 +171,16 @@ test('zcodeDescriptorFromModels keeps live model metadata but does not advertise
   ]);
   assert.equal(descriptor.perTurnModelSwitch, false);
 });
+
+test('descriptorFromProbedModels replaces curated models for custom-provider channels', async () => {
+  const { byokStaticDescriptor, descriptorFromProbedModels } = await import('../src/lib/backendCapabilities.js');
+  const base = byokStaticDescriptor();
+  const probed = descriptorFromProbedModels(base, [{ id: 'glm-5.2', label: 'GLM 5.2' }, { id: 'claude-sonnet-5', label: 'x' }]);
+  assert.equal(probed.models.length, 2);
+  assert.equal(probed.models[0].id, 'glm-5.2');
+  assert.equal(probed.models[0].label, 'GLM 5.2');
+  assert.equal(probed.models[1].label, 'Sonnet 5', 'curated metadata reused when ids match');
+  assert.equal(probed.defaultModelId, 'glm-5.2');
+  assert.equal(descriptorFromProbedModels(base, []), base, 'empty probe keeps descriptor (manual model id fallback)');
+  assert.equal(descriptorFromProbedModels(base, null), base);
+});

@@ -271,3 +271,18 @@ export function zcodeDescriptorFromModels(sessionCreateResult) {
     perTurnModelSwitch: false,
   };
 }
+
+// Spec A2: custom-provider channels list what /v1/models actually returned;
+// curated metadata (effort levels, cost) is reused when ids overlap. An
+// empty/failed probe keeps the descriptor unchanged so the manual custom
+// model id path still works.
+export function descriptorFromProbedModels(descriptor, probedModels) {
+  if (!Array.isArray(probedModels) || !probedModels.length) return descriptor;
+  const curated = new Map(descriptor.models.map((m) => [m.id, m]));
+  const models = probedModels.map((m) => {
+    const known = curated.get(m.id);
+    if (known) return known;
+    return { id: m.id, label: m.label || m.id, effortLevels: [], cost: costTier(m.id), adaptive: false };
+  });
+  return { ...descriptor, models, defaultModelId: models[0].id };
+}
