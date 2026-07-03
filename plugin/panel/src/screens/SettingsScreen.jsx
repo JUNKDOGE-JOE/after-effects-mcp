@@ -5,6 +5,7 @@ import { Button } from '../components/core/Button';
 import { IconButton } from '../components/core/IconButton';
 import { Switch } from '../components/core/Switch';
 import { Segmented } from '../components/core/Segmented';
+import { ApiProfileFields } from '../components/forms/ApiProfileFields';
 import { Input } from '../components/forms/Input';
 import { Select } from '../components/forms/Select';
 import { Field } from '../components/forms/Field';
@@ -472,16 +473,28 @@ export function SettingsScreen({
                 <Button variant="secondary" icon="rotate-cw" disabled={codexState === 'checking'} onClick={onRecheckCodex}>{t.recheckCodex}</Button>
               </div>
             </Field>
-            <Field label={t.apiBaseUrl} caption={t.codexBaseUrlCap}>
-              <Input mono value={codexBaseUrlDraft} onChange={(v) => { setCodexBaseUrlDraft(v); if (onCodexBaseUrlChange) onCodexBaseUrlChange(v); }} placeholder="https://api.openai.com" />
-            </Field>
-            <Field label={t.apiKey} caption={t.codexApiKeyCap}>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <Input secret value={codexKeyDraft} onChange={setCodexKeyDraft} placeholder="sk-..." style={{ flex: 1 }} />
-                <Button variant="primary" disabled={aiBusy} onClick={saveCodexKey}>{aiBusy ? t.validating : t.save}</Button>
-                <Button variant="secondary" disabled={aiBusy} onClick={clearCodexKey}>{t.clear}</Button>
-              </div>
-            </Field>
+            <ApiProfileFields
+              baseUrl={{
+                value: codexBaseUrlDraft,
+                onChange: (v) => { setCodexBaseUrlDraft(v); if (onCodexBaseUrlChange) onCodexBaseUrlChange(v); },
+                label: t.apiBaseUrl,
+                caption: t.codexBaseUrlCap,
+                placeholder: 'https://api.openai.com',
+              }}
+              apiKey={{
+                value: codexKeyDraft,
+                onChange: setCodexKeyDraft,
+                label: t.apiKey,
+                caption: t.codexApiKeyCap,
+                placeholder: 'sk-...',
+                saveLabel: aiBusy ? t.validating : t.save,
+                busy: aiBusy,
+                saveDisabled: false,
+                onSave: saveCodexKey,
+                clearLabel: t.clear,
+                onClear: clearCodexKey,
+              }}
+            />
           </React.Fragment>
         ) : backend === 'opencode' ? (
           <Field label={t.openCodeSub} caption={openCodeState === 'not-logged-in' ? t.openCodeLoginCap : (openCodeStatus && openCodeStatus.detail) || null}>
@@ -501,16 +514,28 @@ export function SettingsScreen({
           </Field>
         ) : (
           <React.Fragment>
-            <Field label={t.apiBaseUrl} caption={t.anthropicBaseUrlCap}>
-              <Input mono value={apiBaseUrlDraft} onChange={(v) => { setApiBaseUrlDraft(v); if (onAnthropicBaseUrlChange) onAnthropicBaseUrlChange(v); }} placeholder="https://api.anthropic.com" />
-            </Field>
-            <Field label={t.apiKey} caption={t.apiKeyCap}>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <Input secret value={key} onChange={setKey} placeholder="sk-ant-..." style={{ flex: 1 }} />
-                <Button variant="primary" disabled={aiBusy || !key.trim()} onClick={saveApiKey}>{aiBusy ? t.validating : t.saveVerify}</Button>
-                <Button variant="secondary" disabled={aiBusy} onClick={clearApiKey}>{t.clear}</Button>
-              </div>
-            </Field>
+            <ApiProfileFields
+              baseUrl={{
+                value: apiBaseUrlDraft,
+                onChange: (v) => { setApiBaseUrlDraft(v); if (onAnthropicBaseUrlChange) onAnthropicBaseUrlChange(v); },
+                label: t.apiBaseUrl,
+                caption: t.anthropicBaseUrlCap,
+                placeholder: 'https://api.anthropic.com',
+              }}
+              apiKey={{
+                value: key,
+                onChange: setKey,
+                label: t.apiKey,
+                caption: t.apiKeyCap,
+                placeholder: 'sk-ant-...',
+                saveLabel: aiBusy ? t.validating : t.saveVerify,
+                busy: aiBusy,
+                saveDisabled: !key.trim(),
+                onSave: saveApiKey,
+                clearLabel: t.clear,
+                onClear: clearApiKey,
+              }}
+            />
           </React.Fragment>
         )}
         <Field label={t.modelDefault}>
@@ -520,6 +545,7 @@ export function SettingsScreen({
             </div>
           ) : (
             <Select value={model} onChange={onModelChange} options={modelOptions || [
+              { value: 'claude-sonnet-5', label: 'Claude Sonnet 5' },
               { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
               { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
             ]} />
