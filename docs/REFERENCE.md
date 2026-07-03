@@ -27,6 +27,12 @@
 | `AE_MCP_SKILL_DIR` | skill 存储目录（`ae.skill*` 读写的 `<name>.json`） | `~/.ae-mcp/skills` |
 | `AE_MCP_CHECKPOINT_KEEP` | 每个工程保留的 checkpoint 数量上限（旧的自动清理，最小 1） | `50` |
 
+### 面板内嵌 provider 配置
+
+- BYOK 后端默认调用官方 Anthropic API；在设置里填写 API Base URL 时，会把 `/v1/messages` 与 `/v1/models` 接到该兼容端点，并按 Base URL 隔离模型缓存。
+- Codex 后端默认走 `codex app-server` + Codex CLI 登录态；在设置里填写 API Base URL 后，会用 `codex app-server -c model_provider=...` 启动自定义 OpenAI-compatible provider，并把本地保存的 Codex API Key 通过 `AE_MCP_CODEX_API_KEY` 传给 app-server。
+- 自定义模型 ID 会插入 BYOK/Codex 的模型列表首位，作为默认模型；清空后回到探测到的模型列表。
+
 ### 架构
 
 ```text
@@ -110,9 +116,11 @@ MCP client
 
 `times` 优先于 `time`；两者都不传时使用当前 comp 时间。默认返回文件路径，`include_base64=true` 时返回 base64。
 
-当前实现会让 AE 打开目标 comp、设置时间，然后通过 snapshotter 抓取可见 AE 窗口/viewer。它接近 Atom/FX Console 风格的即时预览：不走 Render Queue、不调用 `saveFrameToPng`、不触发覆盖文件弹窗。它不保证 comp 原始尺寸或 alpha。
+当前实现会让 AE 打开目标 comp、设置时间，然后优先调用 `CompItem.saveFrameToPng` 写出合成帧 PNG。这个路径不依赖可见窗口，不会把 AE 面板、前景遮挡窗口或桌面像素写进 preview。若当前 AE 版本或工程状态无法写出 PNG，才回退到 snapshotter 抓取可见 viewer，并在返回帧里标记 `source: "viewer"`。
 
-真实渲染帧应由未来的 `ae.renderFrame` 类 API 承担。`ae.snapshot` 仍然是底层诊断截图。
+`source: "comp"` 表示拿到的是合成帧像素；`source: "viewer"` 表示使用了兼容 fallback。`ae.snapshot` 仍然是底层诊断截图。
+
+默认输出目录是 `%TEMP%/ae_mcp_previews/<session>/`。服务进程内首次使用默认目录时会清理超过 24 小时未更新的旧 session 目录；显式传入 `out_dir` 时不做清理，调用方负责管理该目录。
 
 ### Skill System
 
@@ -222,6 +230,12 @@ ae-mcp 是独立实现，参考了 Atom 风格 AE 操作面和 FX Console 风格
 | `AE_MCP_SKILL_DIR` | Directory where skills are stored (the `<name>.json` files read/written by `ae.skill*`) | `~/.ae-mcp/skills` |
 | `AE_MCP_CHECKPOINT_KEEP` | Max checkpoints retained per project (older ones are pruned; minimum 1) | `50` |
 
+### Built-In Provider Configuration
+
+- The BYOK backend calls the official Anthropic API by default. When API Base URL is set in Settings, `/v1/messages` and `/v1/models` are routed to that compatible endpoint, and the model cache is separated by base URL.
+- The Codex backend uses `codex app-server` plus Codex CLI login by default. When API Base URL is set in Settings, it starts `codex app-server -c model_provider=...` for a custom OpenAI-compatible provider and passes the locally saved Codex API key to app-server as `AE_MCP_CODEX_API_KEY`.
+- A custom model ID is inserted at the top of the BYOK/Codex model list and becomes the default model. Clearing it returns to the probed model list.
+
 ### Architecture
 
 ```text
@@ -311,9 +325,11 @@ aborting your edit. Multi-statement scripts also run fully under an undo group.
 
 `times` wins over `time`; if neither is supplied, the current comp time is previewed. The default response returns file paths. Set `include_base64=true` to include inline image bytes.
 
-The implementation opens the target comp, sets the requested time, then captures the visible AE window/viewer through the installed snapshotter. It matches Atom/FX Console-style instant preview: no Render Queue, no `saveFrameToPng`, and no overwrite prompt. It does not guarantee native comp dimensions or alpha.
+The implementation opens the target comp, sets the requested time, then prefers `CompItem.saveFrameToPng` to write a comp-frame PNG. This path does not depend on visible window pixels, so AE panels, foreground windows, and desktop occlusion are not included in the preview. If the current AE version or project state cannot write the PNG, it falls back to the installed snapshotter and marks the frame with `source: "viewer"`.
 
-True rendered frames should be handled by a future `ae.renderFrame`-style API. `ae.snapshot` remains the lower-level diagnostic capture primitive.
+`source: "comp"` means the preview contains comp-frame pixels; `source: "viewer"` means the compatibility fallback was used. `ae.snapshot` remains the lower-level diagnostic capture primitive.
+
+The default output directory is `%TEMP%/ae_mcp_previews/<session>/`. On the first use of that default root in a service process, stale session directories not updated for 24 hours are pruned. Explicit `out_dir` values are never pruned by ae-mcp; the caller owns that directory.
 
 ### Skill System
 

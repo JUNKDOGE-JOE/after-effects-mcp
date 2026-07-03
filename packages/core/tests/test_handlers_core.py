@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -170,7 +171,133 @@ class _FakeSnapshotter:
 
 
 @pytest.mark.asyncio
-async def test_preview_frame_uses_viewer_snapshot_not_render(monkeypatch, mock_backend, tmp_path):
+async def test_preview_frame_saves_comp_frame_without_snapshotter(monkeypatch, mock_backend, tmp_path):
+    monkeypatch.setattr("ae_mcp.snapshot.discovery.select_snapshotter", lambda: None)
+
+    def _render_response(code, **kwargs):
+        import re
+        from PIL import Image
+
+        match = re.search(r"new File\((\".*?\")\)", code)
+        assert match, code
+        path = Path(json.loads(match.group(1)))
+        Image.new("RGB", (160, 90), (30, 40, 50)).save(path, "PNG")
+        return json.dumps({
+            "ok": True,
+            "compId": "7",
+            "compName": "Preview",
+            "time": 0.5,
+            "path": str(path),
+            "width": 160,
+            "height": 90,
+            "source": "comp",
+            "method": "saveFrameToPng",
+        })
+
+    mock_backend.set_response(_render_response)
+
+    _, run_fn = HANDLERS["ae.previewFrame"]
+    result = await run_fn(
+        S.AePreviewFrameArgs(comp_id="7", time=0.5, out_dir=str(tmp_path)),
+        None,
+    )
+
+    assert result["ok"] is True
+    assert result["compId"] == "7"
+    frame = result["frames"][0]
+    assert frame["path"]
+    assert frame["width"] == 160
+    assert frame["height"] == 90
+    assert frame["source"] == "comp"
+    assert frame["method"] == "saveFrameToPng"
+    assert Path(frame["path"]).exists()
+    jsx = mock_backend.calls[-1]["code"]
+    assert "saveFrameToPng" in jsx
+    assert "openInViewer" in jsx
+    assert "AEMCP.compById(7)" in jsx
+
+
+def test_preview_cleanup_prunes_only_stale_session_dirs(tmp_path):
+    import os
+    from ae_mcp.handlers import core as core_handlers
+
+    root = tmp_path / "ae_mcp_previews"
+    stale = root / "old-session"
+    fresh = root / "fresh-session"
+    current = root / "current-session"
+    loose = root / "loose.png"
+    for directory in [stale, fresh, current]:
+        directory.mkdir(parents=True)
+        (directory / "frame.png").write_bytes(b"png")
+    loose.write_bytes(b"png")
+
+    now = time.time()
+    old = now - (49 * 60 * 60)
+    recent = now - (2 * 60 * 60)
+    os.utime(stale / "frame.png", (old, old))
+    os.utime(stale, (old, old))
+    os.utime(fresh / "frame.png", (recent, recent))
+    os.utime(fresh, (recent, recent))
+    os.utime(current / "frame.png", (old, old))
+    os.utime(current, (old, old))
+
+    removed = core_handlers._cleanup_old_preview_sessions(
+        root=root,
+        current_session_id="current-session",
+        older_than_sec=24 * 60 * 60,
+        now=now,
+    )
+
+    assert removed == 1
+    assert not stale.exists()
+    assert fresh.exists()
+    assert current.exists()
+    assert loose.exists()
+
+
+@pytest.mark.asyncio
+async def test_preview_frame_waits_for_async_save_frame(monkeypatch, mock_backend, tmp_path):
+    monkeypatch.setattr("ae_mcp.snapshot.discovery.select_snapshotter", lambda: None)
+
+    def _render_response(code, **kwargs):
+        import re
+        import threading
+        from PIL import Image
+
+        match = re.search(r"new File\((\".*?\")\)", code)
+        path = Path(json.loads(match.group(1)))
+
+        def _write_later():
+            Image.new("RGB", (96, 54), (9, 8, 7)).save(path, "PNG")
+
+        threading.Timer(0.05, _write_later).start()
+        return json.dumps({
+            "ok": True,
+            "compId": "7",
+            "compName": "Preview",
+            "time": 0.5,
+            "path": str(path),
+            "width": 96,
+            "height": 54,
+            "source": "comp",
+            "method": "saveFrameToPng",
+        })
+
+    mock_backend.set_response(_render_response)
+
+    _, run_fn = HANDLERS["ae.previewFrame"]
+    result = await run_fn(
+        S.AePreviewFrameArgs(comp_id="7", time=0.5, out_dir=str(tmp_path)),
+        None,
+    )
+
+    assert result["ok"] is True
+    assert result["frames"][0]["source"] == "comp"
+    assert Path(result["frames"][0]["path"]).exists()
+
+
+@pytest.mark.asyncio
+async def test_preview_frame_falls_back_to_viewer_snapshot(monkeypatch, mock_backend, tmp_path):
     monkeypatch.setattr(
         "ae_mcp.snapshot.discovery.select_snapshotter",
         lambda: _FakeSnapshotter(),
@@ -180,6 +307,9 @@ async def test_preview_frame_uses_viewer_snapshot_not_render(monkeypatch, mock_b
         "compId": "7",
         "compName": "Preview",
         "time": 0.5,
+        "source": "viewer",
+        "method": "ViewerCapture",
+        "fallbackReason": "saveFrameToPng unavailable",
     }))
 
     _, run_fn = HANDLERS["ae.previewFrame"]
@@ -194,23 +324,35 @@ async def test_preview_frame_uses_viewer_snapshot_not_render(monkeypatch, mock_b
     assert result["frames"][0]["width"] == 800
     assert result["frames"][0]["source"] == "viewer"
     jsx = mock_backend.calls[-1]["code"]
-    assert "saveFrameToPng" not in jsx
+    assert "saveFrameToPng" in jsx
     assert "openInViewer" in jsx
     assert "AEMCP.compById(7)" in jsx
 
 
 @pytest.mark.asyncio
 async def test_preview_frame_can_attach_base64(monkeypatch, mock_backend, tmp_path):
-    monkeypatch.setattr(
-        "ae_mcp.snapshot.discovery.select_snapshotter",
-        lambda: _FakeSnapshotter(),
-    )
-    mock_backend.set_response(json.dumps({
-        "ok": True,
-        "compId": "active",
-        "compName": "Preview",
-        "time": 0,
-    }))
+    monkeypatch.setattr("ae_mcp.snapshot.discovery.select_snapshotter", lambda: None)
+
+    def _render_response(code, **kwargs):
+        import re
+        from PIL import Image
+
+        match = re.search(r"new File\((\".*?\")\)", code)
+        path = Path(json.loads(match.group(1)))
+        Image.new("RGB", (32, 18), (1, 2, 3)).save(path, "PNG")
+        return json.dumps({
+            "ok": True,
+            "compId": "active",
+            "compName": "Preview",
+            "time": 0,
+            "path": str(path),
+            "width": 32,
+            "height": 18,
+            "source": "comp",
+            "method": "saveFrameToPng",
+        })
+
+    mock_backend.set_response(_render_response)
 
     _, run_fn = HANDLERS["ae.previewFrame"]
     result = await run_fn(
@@ -218,13 +360,22 @@ async def test_preview_frame_can_attach_base64(monkeypatch, mock_backend, tmp_pa
         None,
     )
 
-    assert result["frames"][0]["sizeBytes"] == len(b"png-bytes")
-    assert result["frames"][0]["base64"] == "cG5nLWJ5dGVz"
+    assert result["frames"][0]["sizeBytes"] > 0
+    assert result["frames"][0]["base64"]
 
 
 @pytest.mark.asyncio
 async def test_preview_frame_errors_without_snapshotter(monkeypatch, mock_backend, tmp_path):
     monkeypatch.setattr("ae_mcp.snapshot.discovery.select_snapshotter", lambda: None)
+    mock_backend.set_response(json.dumps({
+        "ok": True,
+        "compId": "active",
+        "compName": "Preview",
+        "time": 0,
+        "source": "viewer",
+        "method": "ViewerCapture",
+        "fallbackReason": "saveFrameToPng unavailable",
+    }))
     _, run_fn = HANDLERS["ae.previewFrame"]
     result = await run_fn(S.AePreviewFrameArgs(out_dir=str(tmp_path)), None)
     assert result["ok"] is False

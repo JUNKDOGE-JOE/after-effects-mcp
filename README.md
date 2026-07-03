@@ -20,7 +20,7 @@ MCP client
 
 - Python stdio MCP server 暴露 31 个 `ae_` 工具，工具名使用下划线形式（例如 `ae_ping`、`ae_previewFrame`），内部仍映射到 `ae.*` verbs。
 - CEP 面板不再只是连接配置器：它包含内嵌 AI 对话、composer 便捷选择条、四档审批、首跑向导、活动流、kill switch 和连接诊断。
-- 内嵌后端有三类：**Claude 订阅**（默认；面板 spawn 系统 Node 跑 Claude Agent SDK sidecar，复用 `claude` 登录态，零 key / 零 token 落盘）、**BYOK**（用户自己的 Anthropic API key agent loop）、**Codex**（spawn `codex app-server`，复用 Codex 订阅）。
+- 内嵌后端有三类：**Claude 订阅**（默认；面板 spawn 系统 Node 跑 Claude Agent SDK sidecar，复用 `claude` 登录态，零 key / 零 token 落盘）、**BYOK**（用户自己的 Anthropic API key agent loop，可配置 Anthropic-compatible Base URL）、**Codex**（spawn `codex app-server`，可复用 Codex 登录态，也可配置 OpenAI-compatible 自定义 provider）。
 - OpenCode 在 v0.7.0 是**外接 MCP 客户端**，不是内嵌后端；内嵌 OpenCode 计划延后到 v0.7.1。
 - 外部客户端可通过面板生成的 MCP config 接入：Claude Desktop、Claude Code、Cursor、OpenCode、OpenClaw、AstrBot、Gemini Antigravity 等。
 
@@ -71,8 +71,8 @@ uv tool install --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.
 内嵌后端额外要求：
 
 - Claude 订阅：本机 Node >= 18，已安装并登录 Claude Code（`claude`）。
-- BYOK：Anthropic API key。
-- Codex：已安装并登录 Codex CLI（`codex login`）。
+- BYOK：Anthropic API key；需要代理或兼容服务时可在设置里填写 API Base URL 和自定义模型 ID。
+- Codex：已安装 Codex CLI。官方账号路径需要 `codex login`；自定义 provider 路径在设置里填写 API Base URL、API Key 和模型 ID。
 
 外部 MCP 客户端配置示例：
 
@@ -178,7 +178,7 @@ MCP client
 
 - The Python stdio MCP server exposes 31 `ae_` tools. MCP tool names use underscores, such as `ae_ping` and `ae_previewFrame`; internally they still map to `ae.*` verbs.
 - The CEP panel is no longer just a connection configurator. It includes built-in AI chat, composer controls, four approval modes, a first-run wizard, an activity stream, a kill switch, and connection diagnostics.
-- Embedded backends: **Claude subscription** (default; the panel spawns system Node to run a Claude Agent SDK sidecar, reusing the local `claude` login with no key/token stored), **BYOK** (Anthropic API key agent loop), and **Codex** (spawns `codex app-server`, reusing the Codex subscription).
+- Embedded backends: **Claude subscription** (default; the panel spawns system Node to run a Claude Agent SDK sidecar, reusing the local `claude` login with no key/token stored), **BYOK** (Anthropic API key agent loop with an optional Anthropic-compatible base URL), and **Codex** (spawns `codex app-server`, reusing the Codex login or an OpenAI-compatible custom provider).
 - OpenCode is an **external MCP client** in v0.7.0, not an embedded backend. Embedded OpenCode is deferred to v0.7.1.
 - External clients can connect through the panel-generated MCP config: Claude Desktop, Claude Code, Cursor, OpenCode, OpenClaw, AstrBot, Gemini Antigravity, and similar clients.
 
@@ -229,8 +229,8 @@ Install the panel from the ZXP package with aescripts ZXP Installer or ExMan Cmd
 Embedded backend requirements:
 
 - Claude subscription: local Node >= 18 and a logged-in Claude Code CLI (`claude`).
-- BYOK: an Anthropic API key.
-- Codex: logged-in Codex CLI (`codex login`).
+- BYOK: an Anthropic API key; set API Base URL and a custom model ID in Settings when using a compatible proxy/provider.
+- Codex: an installed Codex CLI. The official account path needs `codex login`; the custom-provider path uses API Base URL, API key, and model ID from Settings.
 
 External MCP client config:
 

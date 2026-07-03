@@ -216,6 +216,34 @@ test('createCodexBackend starts codex app-server and sends thread/start with AE 
   await pending;
 });
 
+test('createCodexBackend starts app-server with custom provider config when supplied', async () => {
+  const { backend, spawned } = makeBackend({
+    getProviderProfile: () => ({
+      codexBaseUrl: 'https://proxy.example/openai',
+      codexApiKey: 'sk-proxy',
+      codexProviderId: 'my-provider',
+      codexWireApi: 'chat',
+    }),
+  });
+
+  const { pending, proc } = await startTurn(backend, spawned, 'custom provider');
+
+  assert.equal(spawned.calls[0].command, 'codex');
+  assert.deepEqual(spawned.calls[0].args, [
+    'app-server',
+    '-c', 'model_provider="my-provider"',
+    '-c', 'model_providers.my-provider.name="AE MCP Custom"',
+    '-c', 'model_providers.my-provider.base_url="https://proxy.example/openai"',
+    '-c', 'model_providers.my-provider.env_key="AE_MCP_CODEX_API_KEY"',
+    '-c', 'model_providers.my-provider.wire_api="responses"',
+    '-c', 'model_providers.my-provider.requires_openai_auth=false',
+  ]);
+  assert.equal(spawned.calls[0].options.env.AE_MCP_CODEX_API_KEY, 'sk-proxy');
+
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+});
+
 test('createCodexBackend reuses threadId on subsequent turns', async () => {
   const { backend, spawned } = makeBackend({
     getFast: () => false,
@@ -505,8 +533,28 @@ test('createCodexBackend probeAccount initializes and reads account plus model l
 
   assert.deepEqual(await probe, {
     loggedIn: true,
+    runtimeOk: true,
     email: 'a@example.com',
     planType: 'plus',
     models: [{ id: 'gpt-5.5', displayName: 'GPT-5.5', hidden: false }],
+  });
+});
+
+test('createCodexBackend probeAccount reports runtime ok when OpenAI auth is absent', async () => {
+  const { backend, spawned } = makeBackend();
+  const probe = backend.probeAccount();
+  await flush();
+  const proc = spawned.procs[0];
+  respond(proc, parseWrites(proc)[0], {});
+  await flush();
+  respond(proc, parseWrites(proc)[1], { requiresOpenaiAuth: true });
+  await flush();
+  respond(proc, parseWrites(proc)[2], { models: [] });
+
+  assert.deepEqual(await probe, {
+    loggedIn: false,
+    runtimeOk: true,
+    detail: 'OpenAI auth required',
+    models: [],
   });
 });

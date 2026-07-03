@@ -11,6 +11,7 @@ test('external client registry covers seeded clients with required fields', () =
     'astrbot',
     'gemini-antigravity',
     'opencode-external',
+    'zcode',
   ];
   const ids = EXTERNAL_CLIENTS.map((client) => client.id);
 
@@ -50,6 +51,38 @@ test('mcpConfigFor returns ae-mcp stdio config with panel plugin URL', () => {
       AE_MCP_PLUGIN_URL: 'http://127.0.0.1:11488',
     },
   });
+});
+
+test('mcpConfigFor emits ZCode mcp.servers format (object env, not array)', () => {
+  const config = mcpConfigFor({ id: 'zcode' }, 11488);
+
+  // ZCode reads ~/.zcode/cli/config.json -> mcp.servers.<name>, strict server
+  // object {name, command, args, env} where env MUST be an object {KEY:VALUE}.
+  // An array env corrupts via Object.entries -> value becomes an object (#36 saga).
+  assert.deepEqual(config, {
+    mcp: {
+      servers: {
+        ae: {
+          name: 'ae',
+          command: 'ae-mcp',
+          args: [],
+          env: {
+            AE_MCP_BACKEND: 'ae-mcp',
+            AE_MCP_PLUGIN_URL: 'http://127.0.0.1:11488',
+          },
+        },
+      },
+    },
+  });
+  // env is a plain object, not an array.
+  assert.equal(Array.isArray(config.mcp.servers.ae.env), false);
+});
+
+test('mcpConfigFor ZCode honors expertGuidance off', () => {
+  const off = mcpConfigFor({ id: 'zcode' }, 11488, false);
+  assert.equal(off.mcp.servers.ae.env.AE_MCP_EXPERT_GUIDANCE, '0');
+  const on = mcpConfigFor({ id: 'zcode' }, 11488, true);
+  assert.equal('AE_MCP_EXPERT_GUIDANCE' in on.mcp.servers.ae.env, false);
 });
 
 test('expertGuidanceEnv: empty when on, sets 0 when off', () => {

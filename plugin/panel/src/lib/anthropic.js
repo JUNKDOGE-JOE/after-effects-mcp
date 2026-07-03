@@ -1,4 +1,5 @@
 import { createSseParser } from './sse.js';
+import { anthropicEndpoint } from './providerProfile.js';
 
 export const DEFAULT_MODEL = 'claude-sonnet-4-6';
 export const FALLBACK_MODEL = 'claude-haiku-4-5-20251001';
@@ -16,6 +17,8 @@ export function buildSystemPrompt(lang = 'zh') {
       '- Prefer typed tools (ae_createLayer / ae_setProperty / ae_readProps, etc.); use ae_exec scripts only when no typed tool fits.',
       '- Before scripting, inspect with read tools (ae_overview / ae_layers / ae_readProps) to confirm structure instead of guessing project contents.',
       '- ae_exec accepts only code and undoGroup; it has no comp_id or other targeting parameters. Put target lookup inside the script.',
+      '- If the MCP/panel path is unavailable, Do not switch to OS screenshots, desktop automation, or ad-hoc external scripts; report the MCP failure to the user.',
+      '- Keep generated files and temporary files in the project workspace or a user-approved output directory; do not scatter files outside it.',
       '',
       'ExtendScript scripting pitfalls (must follow):',
       '- setTemporalEaseAtKey ease arrays must match the property dimension (1D like Opacity=1; Scale 3D=3; spatial properties like Position=1). Use AEMCP.easeKeys(prop) to size them automatically.',
@@ -36,6 +39,8 @@ export function buildSystemPrompt(lang = 'zh') {
     '- 优先使用 typed 工具（ae_createLayer / ae_setProperty / ae_readProps 等）；只有没有对应工具时才用 ae_exec 写脚本。',
     '- 写脚本前先用读工具（ae_overview / ae_layers / ae_readProps）确认结构，不要凭记忆猜测工程内容。',
     '- ae_exec 只接受 code 与 undoGroup 两个参数，没有 comp_id 等定位参数——目标定位写在脚本里。',
+    '- MCP/面板通道不可用时，Do not switch to OS screenshots、桌面自动化或外部临时脚本；report the MCP failure 给用户。',
+    '- 生成文件和 temporary files 放在 project workspace 或用户明确同意的输出目录，不要散落到工作区外。',
     '',
     'ExtendScript 高频陷阱（务必遵守）：',
     '- setTemporalEaseAtKey 的缓动数组长度必须等于属性维度（一维如 Opacity=1；Scale 三维=3；空间属性如 Position=1）。直接用 AEMCP.easeKeys(prop) 自动处理。',
@@ -110,6 +115,7 @@ function finishBlocks(blocks) {
 
 export async function sendAnthropicMessage({
   apiKey,
+  baseUrl = '',
   model = DEFAULT_MODEL,
   system = buildSystemPrompt('zh'),
   messages,
@@ -125,6 +131,7 @@ export async function sendAnthropicMessage({
 
   let response;
   try {
+    const url = anthropicEndpoint(baseUrl, '/v1/messages');
     const headers = {
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
@@ -142,7 +149,7 @@ export async function sendAnthropicMessage({
     };
     if (effort) body.output_config = { effort };
     if (fast) body.speed = 'fast';
-    response = await fetchImpl('https://api.anthropic.com/v1/messages', {
+    response = await fetchImpl(url, {
       method: 'POST',
       signal,
       headers,

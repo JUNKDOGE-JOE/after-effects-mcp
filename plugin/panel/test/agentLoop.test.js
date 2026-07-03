@@ -84,9 +84,10 @@ function makeMcp({ tools, resultText = 'ok', isError = false } = {}) {
   };
 }
 
-function makeLoop({ anthropic, mcp = makeMcp(), mode = 'none', events = [], getEffort, getFast }) {
+function makeLoop({ anthropic, mcp = makeMcp(), mode = 'none', events = [], getEffort, getFast, getApiBaseUrl }) {
   return createAgentLoop({
     getApiKey: () => 'sk-test',
+    getApiBaseUrl,
     getModel: () => 'claude-sonnet-4-6',
     getPermissionMode: () => mode,
     getEffort,
@@ -299,6 +300,18 @@ test('createAgentLoop passes effort and fast options to Anthropic', async () => 
 
   assert.equal(calls[0].effort, 'low');
   assert.equal(calls[0].fast, true);
+});
+
+test('createAgentLoop passes custom Anthropic base URL to the direct API backend', async () => {
+  const calls = [];
+  const loop = makeLoop({
+    anthropic: anthropicFromSse([textTurn('ok')], calls),
+    getApiBaseUrl: () => 'https://proxy.example/anthropic',
+  });
+
+  await loop.sendUser('hi');
+
+  assert.equal(calls[0].baseUrl, 'https://proxy.example/anthropic');
 });
 
 test('createAgentLoop appends ae-mcp server instructions to the system prompt', async () => {

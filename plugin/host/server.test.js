@@ -321,6 +321,9 @@ test('/health without python identity does not record a health probe time', asyn
         assert.strictEqual(r.status, 200);
         assert.strictEqual(r.body.ok, true);
         assert.strictEqual(server.getConnectionInfo().lastHealthAt, null);
+        // /health echoes the (absent) python handshake state as null.
+        assert.strictEqual(r.body.pythonVersion, null);
+        assert.strictEqual(r.body.pythonLastSeenAt, null);
     } finally {
         srv.close();
     }
@@ -338,6 +341,10 @@ test('/health with python identity records the last health probe time and versio
         assert.ok(info.lastHealthAt >= before);
         assert.ok(info.lastHealthAt <= after);
         assert.strictEqual(info.pythonVersion, '0.3.2-test');
+        // /health echoes the recorded python handshake state back to the caller.
+        assert.strictEqual(r.body.pythonVersion, '0.3.2-test');
+        assert.ok(r.body.pythonLastSeenAt >= before);
+        assert.ok(r.body.pythonLastSeenAt <= after);
     } finally {
         srv.close();
     }

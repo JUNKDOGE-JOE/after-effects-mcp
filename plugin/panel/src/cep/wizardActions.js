@@ -36,10 +36,9 @@ function getCepEnvSafe() {
   return (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env) || {};
 }
 
-// ae-mcp is a stdio MCP server: launched with ANY argv it ignores the flags
-// and blocks serving stdin (verified live — `ae-mcp --version` hangs forever),
-// so its presence is checked WITHOUT executing it: `where` hit or the uv tool
-// shim existing on disk. The resolved path doubles as the version detail.
+// ae-mcp is a stdio MCP server: launched with any argv it serves stdin instead
+// of exposing a version command, so presence is checked without executing it.
+// The resolved path doubles as the version detail.
 async function detectAeMcp({ execFileImpl, env, fsImpl }) {
   const execFile = execFileImpl || getCepRequire()('child_process').execFile;
   const whereHit = await new Promise((resolve) => {

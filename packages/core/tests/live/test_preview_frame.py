@@ -1,4 +1,4 @@
-"""Live tests for ae.previewFrame viewer capture."""
+"""Live tests for ae.previewFrame comp-frame capture."""
 from __future__ import annotations
 
 import asyncio
@@ -56,7 +56,8 @@ async def test_preview_frame_active_comp_current_time(preview_scene, artifact_di
     assert path.exists()
     assert frame["path"] == str(path)
     assert path.stat().st_size > 100
-    assert frame["source"] == "viewer"
+    assert frame["source"] == "comp"
+    assert frame["method"] == "saveFrameToPng"
     _assert_png(path)
 
 
@@ -95,9 +96,9 @@ async def test_preview_frame_multiple_times_with_base64(preview_scene, artifact_
         assert frame["base64"]
 
 
-# Regression: previewFrame must give different bytes per time when content
-# at those times is visibly different. Before the repaint_delay_ms fix,
-# every frame was a stale capture of the same viewer state.
+# previewFrame must give different bytes per time when content at those times
+# is visibly different. This catches stale viewer fallback captures and failed
+# comp-frame time selection.
 ANIMATED_SETUP_JSX = """
 (function(){
   try {
@@ -115,9 +116,7 @@ ANIMATED_SETUP_JSX = """
 
 @pytest.mark.asyncio
 async def test_preview_frame_captures_different_times_distinctly(clean_project, artifact_dir):
-    """Before fix: all frames were byte-identical because viewer hadn't repainted
-    between time-set and capture. After fix: frames at distinct times must
-    differ in pixel content (we use file bytes as a cheap proxy)."""
+    """Frames at distinct times must differ in pixel content."""
     out = asyncio.run(clean_project.exec(code=ANIMATED_SETUP_JSX, timeout_sec=20.0)) \
         if False else await clean_project.exec(code=ANIMATED_SETUP_JSX, timeout_sec=20.0)
     parsed = json.loads(out)

@@ -15,7 +15,7 @@ test('contract event vocabulary is the frozen canonical set', () => {
 });
 
 test('registry exposes the real embedded backends', () => {
-  assert.deepEqual(REAL_BACKENDS, ['subscription', 'byok', 'codex', 'opencode']);
+  assert.deepEqual(REAL_BACKENDS, ['subscription', 'byok', 'codex', 'opencode', 'zcode']);
   for (const id of REAL_BACKENDS) {
     assert.equal(BACKENDS[id].id, id);
     assert.equal(typeof BACKENDS[id].baseDescriptor, 'function');
@@ -25,13 +25,21 @@ test('registry exposes the real embedded backends', () => {
 test('every registered backend yields a conformant descriptor', () => {
   // The descriptor contract a new backend (OpenCode, …) must satisfy so the
   // chips/settings render with zero hardcoding.
+  const expectedModelSwitching = {
+    subscription: true,
+    byok: true,
+    codex: true,
+    opencode: true,
+    zcode: false,
+  };
   for (const id of REAL_BACKENDS) {
     const d = baseDescriptorFor(id);
     assert.ok(Array.isArray(d.models) && d.models.length > 0, id + ' models');
     assert.ok(d.defaultModelId, id + ' defaultModelId');
     assert.ok(Array.isArray(d.approvalModes) && d.approvalModes.length === 4, id + ' approvalModes');
     assert.equal(typeof d.supportsFast, 'function', id + ' supportsFast');
-    assert.equal(d.perTurnModelSwitch, true, id + ' perTurnModelSwitch');
+    assert.equal(typeof d.perTurnModelSwitch, 'boolean', id + ' perTurnModelSwitch');
+    assert.equal(d.perTurnModelSwitch, expectedModelSwitching[id], id + ' perTurnModelSwitch');
     for (const m of d.models) {
       assert.ok(m.id && m.label, id + ' model id/label');
       assert.ok(Array.isArray(m.effortLevels), id + ' effortLevels');

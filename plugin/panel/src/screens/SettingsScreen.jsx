@@ -11,6 +11,7 @@ import { Field } from '../components/forms/Field';
 import { Toast } from '../components/shell/Toast';
 import { EXTERNAL_CLIENTS, mcpConfigFor } from '../cep/externalClients';
 import { copyText } from '../lib/clipboard';
+import { zcodeModelLocked as shouldLockZcodeModel, zcodeRuntimeBadge } from '../lib/settingsState';
 
 const S = {
   zh: {
@@ -28,6 +29,7 @@ const S = {
     backendSub: 'Claude',
     backendByok: 'BYOK',
     backendCodex: 'Codex',
+    backendZcode: 'ZCode',
     backendOpenCode: 'OpenCode',
     claudeReady: '已登录 ✓',
     claudeNotLoggedIn: '未登录',
@@ -37,10 +39,19 @@ const S = {
     recheckClaude: '重新检测',
     codexSub: 'Codex',
     codexReady: '已登录 ✓',
+    codexCustomReady: 'Custom API ✓',
     codexNotLoggedIn: '未登录 codex',
+    codexRuntimeError: '运行时不可用',
     codexChecking: '检测中…',
     codexLoginCap: '在终端完成 codex 登录，然后点「重新检测」',
     recheckCodex: '重新检测',
+    zcodeSub: 'ZCode',
+    zcodeReady: '运行时可用 ✓',
+    zcodeNotLoggedIn: 'ZCode 不可用',
+    zcodeRuntimeError: '运行时不可用',
+    zcodeChecking: '检测中…',
+    zcodeLoginCap: '打开 ZCode 应用，或确认 ZCode CLI/Node 可用，然后点「重新检测」',
+    recheckZcode: '重新检测',
     openCodeSub: 'OpenCode',
     openCodeReady: '已登录 ✓',
     openCodeNotLoggedIn: '未登录 OpenCode',
@@ -49,14 +60,23 @@ const S = {
     recheckOpenCode: '重新检测',
     apiKey: 'API Key',
     apiKeyCap: '仅保存在本机，不会上传',
+    apiBaseUrl: 'API Base URL',
+    anthropicBaseUrlCap: '留空使用官方 Anthropic API',
+    codexBaseUrlCap: '留空使用官方 Codex 登录态；填写后使用自定义 OpenAI-compatible provider',
+    codexApiKeyCap: '仅用于自定义 Codex provider，保存在本机',
+    save: '保存',
     saveVerify: '保存并验证',
     validating: '正在验证…',
     saved: 'API Key 已保存并验证',
+    savedLocal: '已保存到本机',
     invalidKey: '无效 key',
     verifyFailed: '验证失败，请稍后重试',
     clear: '清除',
     cleared: 'API Key 已清除',
     modelDefault: '默认模型（打开面板时使用）',
+    customModel: '自定义模型 ID',
+    customModelCap: '可选；填写后优先用于 BYOK/Codex',
+    zcodeModelManaged: '由 ZCode 当前会话管理',
     port: '端口',
     portHint: '默认 11488',
     apply: '应用',
@@ -102,6 +122,7 @@ const S = {
     backendSub: 'Claude',
     backendByok: 'BYOK',
     backendCodex: 'Codex',
+    backendZcode: 'ZCode',
     backendOpenCode: 'OpenCode',
     claudeReady: 'Logged in ✓',
     claudeNotLoggedIn: 'Not logged in',
@@ -111,10 +132,19 @@ const S = {
     recheckClaude: 'Re-check',
     codexSub: 'Codex',
     codexReady: 'Logged in ✓',
+    codexCustomReady: 'Custom API ✓',
     codexNotLoggedIn: 'Not logged in to codex',
+    codexRuntimeError: 'Runtime unavailable',
     codexChecking: 'Checking…',
     codexLoginCap: 'Sign in with codex in a terminal, then click Re-check',
     recheckCodex: 'Re-check',
+    zcodeSub: 'ZCode',
+    zcodeReady: 'Runtime ready ✓',
+    zcodeNotLoggedIn: 'ZCode unavailable',
+    zcodeRuntimeError: 'Runtime unavailable',
+    zcodeChecking: 'Checking…',
+    zcodeLoginCap: 'Open the ZCode app, or confirm the ZCode CLI and Node are available, then click Re-check',
+    recheckZcode: 'Re-check',
     openCodeSub: 'OpenCode',
     openCodeReady: 'Logged in ✓',
     openCodeNotLoggedIn: 'Not logged in to OpenCode',
@@ -123,14 +153,23 @@ const S = {
     recheckOpenCode: 'Re-check',
     apiKey: 'API Key',
     apiKeyCap: 'Stored locally, never uploaded',
+    apiBaseUrl: 'API Base URL',
+    anthropicBaseUrlCap: 'Leave blank to use the official Anthropic API',
+    codexBaseUrlCap: 'Leave blank for official Codex login; fill to use a custom OpenAI-compatible provider',
+    codexApiKeyCap: 'Only used for a custom Codex provider; stored locally',
+    save: 'Save',
     saveVerify: 'Save and verify',
     validating: 'Validating…',
     saved: 'API Key saved and verified',
+    savedLocal: 'Saved locally',
     invalidKey: 'Invalid key',
     verifyFailed: 'Verification failed. Try again later.',
     clear: 'Clear',
     cleared: 'API Key cleared',
     modelDefault: 'Default model (used when the panel opens)',
+    customModel: 'Custom model ID',
+    customModelCap: 'Optional; takes priority for BYOK/Codex',
+    zcodeModelManaged: 'Managed by the current ZCode session',
     port: 'Port',
     portHint: 'Default 11488',
     apply: 'Apply',
@@ -272,10 +311,20 @@ export function SettingsScreen({
   apiKey = '',
   onSaveApiKey,
   onClearApiKey,
+  anthropicBaseUrl = '',
+  onAnthropicBaseUrlChange,
+  codexApiKey = '',
+  codexBaseUrl = '',
+  onCodexBaseUrlChange,
+  onSaveCodexApiKey,
+  onClearCodexApiKey,
   validateKey,
   model = 'claude-sonnet-4-6',
   modelOptions,
+  modelSwitchable = true,
   onModelChange,
+  customModel = '',
+  onCustomModelChange,
   backend = 'subscription',
   onBackendChange,
   expertGuidance = true,
@@ -286,9 +335,16 @@ export function SettingsScreen({
   onRecheckCodex,
   openCodeStatus = { state: 'checking' },
   onRecheckOpenCode,
+  zcodeStatus = { state: 'checking' },
+  onRecheckZcode,
 }) {
   const t = S[lang] || S.zh;
+  const zcodeModelLocked = shouldLockZcodeModel({ backend, modelSwitchable });
   const [key, setKey] = React.useState(apiKey);
+  const [apiBaseUrlDraft, setApiBaseUrlDraft] = React.useState(anthropicBaseUrl);
+  const [codexKeyDraft, setCodexKeyDraft] = React.useState(codexApiKey);
+  const [codexBaseUrlDraft, setCodexBaseUrlDraft] = React.useState(codexBaseUrl);
+  const [customModelDraft, setCustomModelDraft] = React.useState(customModel);
   const [aiBusy, setAiBusy] = React.useState(false);
   const [aiToast, setAiToast] = React.useState(null);
   const [draftPort, setDraftPort] = React.useState(String(port));
@@ -300,6 +356,10 @@ export function SettingsScreen({
   React.useEffect(() => setDraftPort(String(port)), [port]);
   React.useEffect(() => setTokenRaw(readTokenValue()), []);
   React.useEffect(() => setKey(apiKey), [apiKey]);
+  React.useEffect(() => setApiBaseUrlDraft(anthropicBaseUrl), [anthropicBaseUrl]);
+  React.useEffect(() => setCodexKeyDraft(codexApiKey), [codexApiKey]);
+  React.useEffect(() => setCodexBaseUrlDraft(codexBaseUrl), [codexBaseUrl]);
+  React.useEffect(() => setCustomModelDraft(customModel), [customModel]);
 
   const copy = (label, text) => {
     copyText(text).then(() => {
@@ -312,16 +372,23 @@ export function SettingsScreen({
   const claudeBadgeStatus = claudeState === 'ready' ? 'ok' : claudeState === 'not-logged-in' ? 'warn' : claudeState === 'no-node' ? 'error' : 'neutral';
   const claudeBadgeText = claudeState === 'ready' ? t.claudeReady : claudeState === 'not-logged-in' ? t.claudeNotLoggedIn : claudeState === 'no-node' ? t.claudeNoNode : t.claudeChecking;
   const codexState = (codexStatus && codexStatus.state) || 'checking';
-  const codexBadgeStatus = codexState === 'ready' ? 'ok' : codexState === 'not-logged-in' ? 'warn' : 'neutral';
-  const codexBadgeText = codexState === 'ready' ? t.codexReady : codexState === 'not-logged-in' ? t.codexNotLoggedIn : t.codexChecking;
+  const codexBadgeStatus = codexState === 'ready' ? 'ok' : codexState === 'not-logged-in' ? 'warn' : codexState === 'runtime-error' ? 'error' : 'neutral';
+  const codexBadgeText = codexState === 'ready' && codexStatus && codexStatus.planType === 'Custom API'
+    ? t.codexCustomReady
+    : codexState === 'ready' ? t.codexReady
+      : codexState === 'not-logged-in' ? t.codexNotLoggedIn
+        : codexState === 'runtime-error' ? t.codexRuntimeError
+          : t.codexChecking;
   const openCodeState = (openCodeStatus && openCodeStatus.state) || 'checking';
   const openCodeBadgeStatus = openCodeState === 'ready' ? 'ok' : openCodeState === 'not-logged-in' ? 'warn' : 'neutral';
   const openCodeBadgeText = openCodeState === 'ready' ? t.openCodeReady : openCodeState === 'not-logged-in' ? t.openCodeNotLoggedIn : t.openCodeChecking;
+  const zcodeState = (zcodeStatus && zcodeStatus.state) || 'checking';
+  const zcodeBadge = zcodeRuntimeBadge(zcodeStatus, t);
   const saveApiKey = () => {
     if (aiBusy) return;
     setAiBusy(true);
     setAiToast(null);
-    Promise.resolve(validateKey ? validateKey(key) : true).then((result) => {
+    Promise.resolve(validateKey ? validateKey(key, apiBaseUrlDraft) : true).then((result) => {
       const ok = result === true || (result && result.ok === true) || (result && result.status === 200);
       const status = result && typeof result === 'object' ? result.status : null;
       if (!ok) {
@@ -336,9 +403,27 @@ export function SettingsScreen({
       setAiToast({ type: 'error', message: status === 401 ? t.invalidKey : t.verifyFailed });
     }).finally(() => setAiBusy(false));
   };
+  const saveCodexKey = () => {
+    if (aiBusy) return;
+    setAiBusy(true);
+    setAiToast(null);
+    Promise.resolve(onSaveCodexApiKey ? onSaveCodexApiKey(codexKeyDraft) : null).then(() => {
+      setAiToast({ type: 'ok', message: t.savedLocal });
+    }).catch(() => {
+      setAiToast({ type: 'error', message: t.verifyFailed });
+    }).finally(() => setAiBusy(false));
+  };
   const clearApiKey = () => {
     setKey('');
     Promise.resolve(onClearApiKey ? onClearApiKey() : null).then(() => {
+      setAiToast({ type: 'info', message: t.cleared });
+    }).catch(() => {
+      setAiToast({ type: 'error', message: t.verifyFailed });
+    });
+  };
+  const clearCodexKey = () => {
+    setCodexKeyDraft('');
+    Promise.resolve(onClearCodexApiKey ? onClearCodexApiKey() : null).then(() => {
       setAiToast({ type: 'info', message: t.cleared });
     }).catch(() => {
       setAiToast({ type: 'error', message: t.verifyFailed });
@@ -366,6 +451,7 @@ export function SettingsScreen({
           <Segmented full value={backend} onChange={onBackendChange} options={[
             { value: 'subscription', label: t.backendSub },
             { value: 'codex', label: t.backendCodex },
+            { value: 'zcode', label: t.backendZcode },
             { value: 'byok', label: t.backendByok },
           ]} />
         </Field>
@@ -378,13 +464,25 @@ export function SettingsScreen({
             </div>
           </Field>
         ) : backend === 'codex' ? (
-          <Field label={t.codexSub} caption={codexState === 'not-logged-in' ? t.codexLoginCap : (codexStatus && codexStatus.detail) || null}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Badge status={codexBadgeStatus}>{codexBadgeText}</Badge>
-              {codexState === 'ready' && (codexStatus.email || codexStatus.planType) ? <span style={{ flex: 1, font: '400 11px/1 var(--font-mono)', color: 'var(--text-secondary)' }}>{[codexStatus.email, codexStatus.planType].filter(Boolean).join(' · ')}</span> : <span style={{ flex: 1 }} />}
-              <Button variant="secondary" icon="rotate-cw" disabled={codexState === 'checking'} onClick={onRecheckCodex}>{t.recheckCodex}</Button>
-            </div>
-          </Field>
+          <React.Fragment>
+            <Field label={t.codexSub} caption={codexState === 'not-logged-in' ? t.codexLoginCap : (codexStatus && codexStatus.detail) || null}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Badge status={codexBadgeStatus}>{codexBadgeText}</Badge>
+                {codexState === 'ready' && (codexStatus.email || codexStatus.planType) ? <span style={{ flex: 1, font: '400 11px/1 var(--font-mono)', color: 'var(--text-secondary)' }}>{[codexStatus.email, codexStatus.planType].filter(Boolean).join(' · ')}</span> : <span style={{ flex: 1 }} />}
+                <Button variant="secondary" icon="rotate-cw" disabled={codexState === 'checking'} onClick={onRecheckCodex}>{t.recheckCodex}</Button>
+              </div>
+            </Field>
+            <Field label={t.apiBaseUrl} caption={t.codexBaseUrlCap}>
+              <Input mono value={codexBaseUrlDraft} onChange={(v) => { setCodexBaseUrlDraft(v); if (onCodexBaseUrlChange) onCodexBaseUrlChange(v); }} placeholder="https://api.openai.com" />
+            </Field>
+            <Field label={t.apiKey} caption={t.codexApiKeyCap}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <Input secret value={codexKeyDraft} onChange={setCodexKeyDraft} placeholder="sk-..." style={{ flex: 1 }} />
+                <Button variant="primary" disabled={aiBusy} onClick={saveCodexKey}>{aiBusy ? t.validating : t.save}</Button>
+                <Button variant="secondary" disabled={aiBusy} onClick={clearCodexKey}>{t.clear}</Button>
+              </div>
+            </Field>
+          </React.Fragment>
         ) : backend === 'opencode' ? (
           <Field label={t.openCodeSub} caption={openCodeState === 'not-logged-in' ? t.openCodeLoginCap : (openCodeStatus && openCodeStatus.detail) || null}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -393,21 +491,45 @@ export function SettingsScreen({
               <Button variant="secondary" icon="rotate-cw" disabled={openCodeState === 'checking'} onClick={onRecheckOpenCode}>{t.recheckOpenCode}</Button>
             </div>
           </Field>
-        ) : (
-          <Field label={t.apiKey} caption={t.apiKeyCap}>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <Input secret value={key} onChange={setKey} placeholder="sk-ant-..." style={{ flex: 1 }} />
-              <Button variant="primary" disabled={aiBusy || !key.trim()} onClick={saveApiKey}>{aiBusy ? t.validating : t.saveVerify}</Button>
-              <Button variant="secondary" disabled={aiBusy} onClick={clearApiKey}>{t.clear}</Button>
+        ) : backend === 'zcode' ? (
+          <Field label={t.zcodeSub} caption={zcodeState === 'not-logged-in' ? t.zcodeLoginCap : (zcodeStatus && zcodeStatus.detail) || null}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Badge status={zcodeBadge.status}>{zcodeBadge.text}</Badge>
+              <span style={{ flex: 1 }} />
+              <Button variant="secondary" icon="rotate-cw" disabled={zcodeState === 'checking'} onClick={onRecheckZcode}>{t.recheckZcode}</Button>
             </div>
           </Field>
+        ) : (
+          <React.Fragment>
+            <Field label={t.apiBaseUrl} caption={t.anthropicBaseUrlCap}>
+              <Input mono value={apiBaseUrlDraft} onChange={(v) => { setApiBaseUrlDraft(v); if (onAnthropicBaseUrlChange) onAnthropicBaseUrlChange(v); }} placeholder="https://api.anthropic.com" />
+            </Field>
+            <Field label={t.apiKey} caption={t.apiKeyCap}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <Input secret value={key} onChange={setKey} placeholder="sk-ant-..." style={{ flex: 1 }} />
+                <Button variant="primary" disabled={aiBusy || !key.trim()} onClick={saveApiKey}>{aiBusy ? t.validating : t.saveVerify}</Button>
+                <Button variant="secondary" disabled={aiBusy} onClick={clearApiKey}>{t.clear}</Button>
+              </div>
+            </Field>
+          </React.Fragment>
         )}
         <Field label={t.modelDefault}>
-          <Select value={model} onChange={onModelChange} options={modelOptions || [
-            { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-            { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
-          ]} />
+          {zcodeModelLocked ? (
+            <div style={{ minHeight: 28, display: 'flex', alignItems: 'center', padding: '0 8px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-well)', font: '400 11px/1.35 var(--font-ui)', color: 'var(--text-secondary)' }}>
+              {t.zcodeModelManaged}
+            </div>
+          ) : (
+            <Select value={model} onChange={onModelChange} options={modelOptions || [
+              { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+              { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
+            ]} />
+          )}
         </Field>
+        {(backend === 'byok' || backend === 'codex') ? (
+          <Field label={t.customModel} caption={t.customModelCap}>
+            <Input mono value={customModelDraft} onChange={(v) => { setCustomModelDraft(v); if (onCustomModelChange) onCustomModelChange(v); }} placeholder={backend === 'codex' ? 'provider/model' : 'claude-custom'} />
+          </Field>
+        ) : null}
         {aiToast ? <Toast type={aiToast.type} message={aiToast.message} onClose={() => setAiToast(null)} /> : null}
       </Section>
 

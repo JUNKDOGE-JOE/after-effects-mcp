@@ -161,8 +161,8 @@ class AePreviewFrameArgs(_StrictModel):
         300, ge=0, le=5000,
         description=(
             "Milliseconds to wait between setting comp.time and capturing the "
-            "viewer, so AE's main thread has time to repaint at the new time. "
-            "Lower = faster, riskier. 0 = no wait (will likely capture stale viewer)."
+            "viewer fallback, so AE's main thread has time to repaint at the "
+            "new time. Ignored when saveFrameToPng writes the comp frame."
         ),
     )
 
@@ -403,6 +403,11 @@ class AeStatusArgs(_StrictModel):
     pass
 
 
+class AeDiagnoseArgs(_StrictModel):
+    """ae.diagnose — end-to-end connection self-check for external MCP clients: host reachable, Python bridge handshake seen, auth token valid, AE responsive + project open. Works even when backend selection fails. Call after wiring ae-mcp into a client to verify the full chain in one shot."""
+    pass
+
+
 # ---------------------------------------------------------------------------
 # Registry of verb -> schema (handlers.core / handlers.typed reference this)
 # ---------------------------------------------------------------------------
@@ -421,6 +426,7 @@ SCHEMAS = {
     "ae.applyEffect": AeApplyEffectArgs,
     "ae.ping": AePingArgs,
     "ae.status": AeStatusArgs,
+    "ae.diagnose": AeDiagnoseArgs,
     "ae.createLayer": AeCreateLayerArgs,
     "ae.setProperty": AeSetPropertyArgs,
     "ae.moveLayer": AeMoveLayerArgs,
@@ -442,4 +448,4 @@ SCHEMAS = {
     "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 31, f"expected 31 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 32, f"expected 32 verbs, got {len(SCHEMAS)}"

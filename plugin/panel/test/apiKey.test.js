@@ -66,6 +66,18 @@ test('writeKey atomically writes, chmods, renames, and readKey trims the stored 
   assert.equal(deps.chmods[0][1], 0o600);
 });
 
+test('writeKey can store Codex and Anthropic keys separately', () => {
+  const deps = makeDeps();
+  const store = createApiKeyStore(deps);
+  store.writeKey('sk-ant-test');
+  store.writeKey('sk-codex-test', 'codex');
+
+  assert.equal(store.readKey(), 'sk-ant-test');
+  assert.equal(store.readKey('codex'), 'sk-codex-test');
+  assert.equal(deps.files.has('/home/user/.ae-mcp/anthropic-key'), true);
+  assert.equal(deps.files.has('/home/user/.ae-mcp/codex-key'), true);
+});
+
 test('clearKey removes an existing key and ignores missing files', () => {
   const deps = makeDeps();
   const store = createApiKeyStore(deps);

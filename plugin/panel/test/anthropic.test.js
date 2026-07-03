@@ -57,6 +57,15 @@ test('buildSystemPrompt includes ExtendScript pitfall anchors in both languages'
   }
 });
 
+test('buildSystemPrompt includes runtime and file hygiene boundaries', () => {
+  for (const prompt of [buildSystemPrompt('zh'), buildSystemPrompt('en')]) {
+    assert.match(prompt, /Do not switch to OS screenshots/);
+    assert.match(prompt, /report the MCP failure/);
+    assert.match(prompt, /project workspace/);
+    assert.match(prompt, /temporary files/);
+  }
+});
+
 test('sendAnthropicMessage sends effort and fast-mode parameters when requested', async () => {
   const calls = [];
   const fetchImpl = async (url, init) => {
@@ -78,6 +87,24 @@ test('sendAnthropicMessage sends effort and fast-mode parameters when requested'
   assert.equal(body.output_config.effort, 'high');
   assert.equal(body.speed, 'fast');
   assert.equal(calls[0].init.headers['anthropic-beta'], 'fast-mode-2026-02-01');
+});
+
+test('sendAnthropicMessage can target an Anthropic-compatible base URL', async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init });
+    return { ok: true, body: streamFromText(sseFrame('message_stop', { type: 'message_stop' })) };
+  };
+
+  await sendAnthropicMessage({
+    apiKey: 'sk-test',
+    baseUrl: 'https://proxy.example/anthropic/',
+    messages: [{ role: 'user', content: 'hi' }],
+    tools: [],
+    fetchImpl,
+  });
+
+  assert.equal(calls[0].url, 'https://proxy.example/anthropic/v1/messages');
 });
 
 test('sendAnthropicMessage omits effort and fast fields by default', async () => {

@@ -1,4 +1,5 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
+import { codexAppServerArgs, codexSpawnEnv, normalizeProviderProfile } from '../lib/providerProfile.js';
 import { PANEL_VERSION } from './mcpClient.js';
 import { expertGuidanceEnv } from './externalClients.js';
 
@@ -199,6 +200,7 @@ export function createCodexBackend({
   getToolMeta,
   getExpertGuidance = () => true,
   getServerInstructions = () => '',
+  getProviderProfile = () => ({}),
   onEvent,
   lang = 'zh',
   env,
@@ -408,13 +410,14 @@ export function createCodexBackend({
     startPromise = (async () => {
       const spawn = getSpawn();
       const spawnEnv = currentEnv();
+      const providerProfile = normalizeProviderProfile(getProviderProfile ? getProviderProfile() : {}, spawnEnv);
       stderrTail = '';
       stopping = false;
-      proc = spawn('codex', ['app-server'], {
+      proc = spawn('codex', codexAppServerArgs(providerProfile), {
         stdio: 'pipe',
         windowsHide: true,
         shell: true,
-        env: spawnEnv,
+        env: codexSpawnEnv(providerProfile, spawnEnv),
       });
       rpc = createRpc({
         writeLine: (line) => proc.stdin.write(line),
@@ -599,15 +602,16 @@ export function createCodexBackend({
         models = null;
       }
       const account = accountResult && accountResult.account;
-      if (!account) return { loggedIn: false, detail: accountResult && accountResult.requiresOpenaiAuth ? 'OpenAI auth required' : undefined, models };
+      if (!account) return { loggedIn: false, runtimeOk: true, detail: accountResult && accountResult.requiresOpenaiAuth ? 'OpenAI auth required' : undefined, models };
       return {
         loggedIn: true,
+        runtimeOk: true,
         email: account.email,
         planType: account.planType,
         models,
       };
     } catch (e) {
-      return { loggedIn: false, detail: e && e.message ? e.message : String(e) };
+      return { loggedIn: false, runtimeOk: false, detail: e && e.message ? e.message : String(e) };
     }
   }
 

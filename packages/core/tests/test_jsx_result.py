@@ -1,11 +1,7 @@
 """Tests for jsx_result.parse_jsx_result — the strict JSX→dict contract.
 
-History: the per-handler `_try_json` predecessors all silently wrapped any
-non-JSON output (including empty and the literal "undefined") as
-`{ok:true, content:...}`. That masked the multi-statement undo-group wrap
-bug (PR #1) — JSX did nothing, MCP reported success. parse_jsx_result
-surfaces those silent-failure shapes as `ok:false` so future regressions
-are caught at the boundary.
+Empty output and the literal "undefined" must surface as failures, because
+broken JSX templates can otherwise look like successful no-op executions.
 """
 from __future__ import annotations
 

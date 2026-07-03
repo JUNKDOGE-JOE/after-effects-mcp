@@ -178,13 +178,15 @@ export function ChatScreen({
   const chips = chipState && chipState.descriptor ? buildComposerChips({ ...chipState, lang }) : null;
   const composerOptions = chips ? (
     <React.Fragment>
-      <ComposerChip
-        icon="box"
-        label={chips.model.current}
-        title={t.modelChip}
-        menuHeader={{ label: t.modelChip }}
-        items={menuItems(chips.model.items, chipState.modelId, onChipModel)}
-      />
+      {chips.model ? (
+        <ComposerChip
+          icon="box"
+          label={chips.model.current}
+          title={t.modelChip}
+          menuHeader={{ label: t.modelChip }}
+          items={menuItems(chips.model.items, chipState.modelId, onChipModel)}
+        />
+      ) : null}
       {chips.effort ? (
         <ComposerChip
           icon="brain"

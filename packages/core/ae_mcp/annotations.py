@@ -43,6 +43,7 @@ VERB_ANNOTATIONS: dict[str, ToolAnnotations] = {
     # proxy, so it carries the same worst-path destructive hint.
     "ae.skillUse": _ann(False, True, False),
     "ae.status": _ann(True, False, True),
+    "ae.diagnose": _ann(True, False, True),
     "ae.createLayer": _ann(False, False, False),
     "ae.setProperty": _ann(False, False, True),
     "ae.moveLayer": _ann(False, False, True),
