@@ -5,14 +5,13 @@ import { Button } from '../components/core/Button';
 import { IconButton } from '../components/core/IconButton';
 import { Switch } from '../components/core/Switch';
 import { Segmented } from '../components/core/Segmented';
-import { ApiProfileFields } from '../components/forms/ApiProfileFields';
+import { ChannelCard } from '../components/settings/ChannelCard';
 import { Input } from '../components/forms/Input';
 import { Select } from '../components/forms/Select';
 import { Field } from '../components/forms/Field';
-import { Toast } from '../components/shell/Toast';
 import { EXTERNAL_CLIENTS, mcpConfigFor } from '../cep/externalClients';
 import { copyText } from '../lib/clipboard';
-import { zcodeModelLocked as shouldLockZcodeModel, zcodeRuntimeBadge } from '../lib/settingsState';
+import { zcodeModelLocked as shouldLockZcodeModel } from '../lib/settingsState';
 import { Icon } from '../components/core/Icon';
 import { loadSectionState, saveSectionState, toggleSection } from '../lib/settingsSections';
 
@@ -30,55 +29,20 @@ const S = {
     about: '关于',
     backend: '后端',
     backendSub: 'Claude',
-    backendByok: 'BYOK',
     backendCodex: 'Codex',
     backendZcode: 'ZCode',
-    backendOpenCode: 'OpenCode',
-    claudeReady: '已登录 ✓',
-    claudeNotLoggedIn: '未登录',
-    claudeChecking: '检测中…',
-    claudeNoNode: '需要 Node 18+',
-    claudeLoginCap: '在终端运行 claude /login 完成登录，然后点「重新检测」',
-    recheckClaude: '重新检测',
-    codexSub: 'Codex',
-    codexReady: '已登录 ✓',
-    codexCustomReady: 'Custom API ✓',
-    codexNotLoggedIn: '未登录 codex',
-    codexRuntimeError: '运行时不可用',
-    codexChecking: '检测中…',
-    codexLoginCap: '在终端完成 codex 登录，然后点「重新检测」',
-    recheckCodex: '重新检测',
-    zcodeSub: 'ZCode',
-    zcodeReady: '运行时可用 ✓',
-    zcodeNotLoggedIn: 'ZCode 不可用',
-    zcodeRuntimeError: '运行时不可用',
-    zcodeChecking: '检测中…',
-    zcodeLoginCap: '打开 ZCode 应用，或确认 ZCode CLI/Node 可用，然后点「重新检测」',
-    recheckZcode: '重新检测',
-    openCodeSub: 'OpenCode',
-    openCodeReady: '已登录 ✓',
-    openCodeNotLoggedIn: '未登录 OpenCode',
-    openCodeChecking: '检测中…',
-    openCodeLoginCap: '在终端完成 opencode 登录，然后点「重新检测」',
-    recheckOpenCode: '重新检测',
-    apiKey: 'API Key',
-    apiKeyCap: '仅保存在本机，不会上传',
+    recheck: '重新检测',
+    providerNone: '（未选择 provider）',
+    importClaudeSettings: '从 ~/.claude/settings.json 导入',
+    claude3pNote: 'Claude-3p 桌面版的凭据无法自动读取；请在 Provider 管理里手动填写一次 Base URL 与 Token。',
+    zcodeKeyPlaceholder: '粘贴 provider API Key（存本机）',
+    zcodeKeyStored: '已保存到 ~/.ae-mcp/zcode-key，可粘贴新值覆盖',
+    providerManage: 'Provider 管理',
     apiBaseUrl: 'API Base URL',
-    anthropicBaseUrlCap: '留空使用官方 Anthropic API',
-    codexBaseUrlCap: '留空使用官方 Codex 登录态；填写后使用自定义 OpenAI-compatible provider',
-    codexApiKeyCap: '仅用于自定义 Codex provider，保存在本机',
     save: '保存',
-    saveVerify: '保存并验证',
-    validating: '正在验证…',
-    saved: 'API Key 已保存并验证',
-    savedLocal: '已保存到本机',
-    invalidKey: '无效 key',
-    verifyFailed: '验证失败，请稍后重试',
-    clear: '清除',
-    cleared: 'API Key 已清除',
     modelDefault: '默认模型（打开面板时使用）',
     customModel: '自定义模型 ID',
-    customModelCap: '可选；填写后优先用于 BYOK/Codex',
+    customModelCap: '可选；填写后优先用于 Codex',
     zcodeModelManaged: '由 ZCode 当前会话管理',
     port: '端口',
     portHint: '默认 11488',
@@ -123,55 +87,20 @@ const S = {
     about: 'About',
     backend: 'Backend',
     backendSub: 'Claude',
-    backendByok: 'BYOK',
     backendCodex: 'Codex',
     backendZcode: 'ZCode',
-    backendOpenCode: 'OpenCode',
-    claudeReady: 'Logged in ✓',
-    claudeNotLoggedIn: 'Not logged in',
-    claudeChecking: 'Checking…',
-    claudeNoNode: 'Needs Node 18+',
-    claudeLoginCap: 'Run claude /login in a terminal, then click Re-check',
-    recheckClaude: 'Re-check',
-    codexSub: 'Codex',
-    codexReady: 'Logged in ✓',
-    codexCustomReady: 'Custom API ✓',
-    codexNotLoggedIn: 'Not logged in to codex',
-    codexRuntimeError: 'Runtime unavailable',
-    codexChecking: 'Checking…',
-    codexLoginCap: 'Sign in with codex in a terminal, then click Re-check',
-    recheckCodex: 'Re-check',
-    zcodeSub: 'ZCode',
-    zcodeReady: 'Runtime ready ✓',
-    zcodeNotLoggedIn: 'ZCode unavailable',
-    zcodeRuntimeError: 'Runtime unavailable',
-    zcodeChecking: 'Checking…',
-    zcodeLoginCap: 'Open the ZCode app, or confirm the ZCode CLI and Node are available, then click Re-check',
-    recheckZcode: 'Re-check',
-    openCodeSub: 'OpenCode',
-    openCodeReady: 'Logged in ✓',
-    openCodeNotLoggedIn: 'Not logged in to OpenCode',
-    openCodeChecking: 'Checking…',
-    openCodeLoginCap: 'Sign in with opencode in a terminal, then click Re-check',
-    recheckOpenCode: 'Re-check',
-    apiKey: 'API Key',
-    apiKeyCap: 'Stored locally, never uploaded',
+    recheck: 'Re-check',
+    providerNone: '(no provider selected)',
+    importClaudeSettings: 'Import from ~/.claude/settings.json',
+    claude3pNote: 'Claude-3p desktop credentials cannot be read automatically; fill the base URL and token once in Provider Manager.',
+    zcodeKeyPlaceholder: 'Paste the provider API key (stored locally)',
+    zcodeKeyStored: 'Saved to ~/.ae-mcp/zcode-key; paste a new value to overwrite',
+    providerManage: 'Provider manager',
     apiBaseUrl: 'API Base URL',
-    anthropicBaseUrlCap: 'Leave blank to use the official Anthropic API',
-    codexBaseUrlCap: 'Leave blank for official Codex login; fill to use a custom OpenAI-compatible provider',
-    codexApiKeyCap: 'Only used for a custom Codex provider; stored locally',
     save: 'Save',
-    saveVerify: 'Save and verify',
-    validating: 'Validating…',
-    saved: 'API Key saved and verified',
-    savedLocal: 'Saved locally',
-    invalidKey: 'Invalid key',
-    verifyFailed: 'Verification failed. Try again later.',
-    clear: 'Clear',
-    cleared: 'API Key cleared',
     modelDefault: 'Default model (used when the panel opens)',
     customModel: 'Custom model ID',
-    customModelCap: 'Optional; takes priority for BYOK/Codex',
+    customModelCap: 'Optional; takes priority for Codex',
     zcodeModelManaged: 'Managed by the current ZCode session',
     port: 'Port',
     portHint: 'Default 11488',
@@ -220,6 +149,16 @@ function Section({ id, title, children, disabled, caption, expanded, onToggle })
       </button>
       {expanded && caption ? <div style={{ font: '400 10px/1.35 var(--font-ui)', color: 'var(--text-tertiary)' }}>{caption}</div> : null}
       {expanded ? children : null}
+    </div>
+  );
+}
+
+function ZcodeKeyFallback({ t, stored, onSave }) {
+  const [draft, setDraft] = React.useState('');
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <Input secret value={draft} onChange={setDraft} placeholder={stored ? t.zcodeKeyStored : t.zcodeKeyPlaceholder} style={{ flex: 1 }} />
+      <Button variant="primary" size="sm" disabled={!draft.trim()} onClick={() => { if (onSave) onSave(draft.trim()); setDraft(''); }}>{t.save}</Button>
     </div>
   );
 }
@@ -318,17 +257,6 @@ export function SettingsScreen({
   onRegenToken,
   hostVersion = '-',
   pythonVersion = '-',
-  apiKey = '',
-  onSaveApiKey,
-  onClearApiKey,
-  anthropicBaseUrl = '',
-  onAnthropicBaseUrlChange,
-  codexApiKey = '',
-  codexBaseUrl = '',
-  onCodexBaseUrlChange,
-  onSaveCodexApiKey,
-  onClearCodexApiKey,
-  validateKey,
   model = 'claude-sonnet-4-6',
   modelOptions,
   modelSwitchable = true,
@@ -339,24 +267,26 @@ export function SettingsScreen({
   onBackendChange,
   expertGuidance = true,
   onExpertGuidance,
-  claudeStatus = { state: 'checking' },
-  onRecheckClaude,
-  codexStatus = { state: 'checking' },
-  onRecheckCodex,
-  openCodeStatus = { state: 'checking' },
-  onRecheckOpenCode,
-  zcodeStatus = { state: 'checking' },
-  onRecheckZcode,
+  channels = { claude: [], codex: [], zcode: [] },
+  activeChannel = '',
+  lockedChannel = '',
+  onLockChannel,
+  onRecheckBackend,
+  recheckDisabled = false,
+  providers = [],
+  claudeProviderId = '',
+  onClaudeProviderChange,
+  codexProviderId = '',
+  onCodexProviderChange,
+  onImportClaudeSettings,
+  claudeSettingsImportAvailable = false,
+  onSaveZcodeKey,
+  zcodeKeyStored = false,
+  providerManager = null,
 }) {
   const t = S[lang] || S.zh;
   const zcodeModelLocked = shouldLockZcodeModel({ backend, modelSwitchable });
-  const [key, setKey] = React.useState(apiKey);
-  const [apiBaseUrlDraft, setApiBaseUrlDraft] = React.useState(anthropicBaseUrl);
-  const [codexKeyDraft, setCodexKeyDraft] = React.useState(codexApiKey);
-  const [codexBaseUrlDraft, setCodexBaseUrlDraft] = React.useState(codexBaseUrl);
   const [customModelDraft, setCustomModelDraft] = React.useState(customModel);
-  const [aiBusy, setAiBusy] = React.useState(false);
-  const [aiToast, setAiToast] = React.useState(null);
   const [draftPort, setDraftPort] = React.useState(String(port));
   const [tokenRaw, setTokenRaw] = React.useState('');
   const [autostart, setAutostart] = React.useState(true);
@@ -371,10 +301,6 @@ export function SettingsScreen({
 
   React.useEffect(() => setDraftPort(String(port)), [port]);
   React.useEffect(() => setTokenRaw(readTokenValue()), []);
-  React.useEffect(() => setKey(apiKey), [apiKey]);
-  React.useEffect(() => setApiBaseUrlDraft(anthropicBaseUrl), [anthropicBaseUrl]);
-  React.useEffect(() => setCodexKeyDraft(codexApiKey), [codexApiKey]);
-  React.useEffect(() => setCodexBaseUrlDraft(codexBaseUrl), [codexBaseUrl]);
   React.useEffect(() => setCustomModelDraft(customModel), [customModel]);
 
   const copy = (label, text) => {
@@ -384,67 +310,6 @@ export function SettingsScreen({
     }).catch(() => {});
   };
   const tokenDisplay = tokenRaw ? maskToken(tokenRaw) : t.tokenMissing;
-  const claudeState = (claudeStatus && claudeStatus.state) || 'checking';
-  const claudeBadgeStatus = claudeState === 'ready' ? 'ok' : claudeState === 'not-logged-in' ? 'warn' : claudeState === 'no-node' ? 'error' : 'neutral';
-  const claudeBadgeText = claudeState === 'ready' ? t.claudeReady : claudeState === 'not-logged-in' ? t.claudeNotLoggedIn : claudeState === 'no-node' ? t.claudeNoNode : t.claudeChecking;
-  const codexState = (codexStatus && codexStatus.state) || 'checking';
-  const codexBadgeStatus = codexState === 'ready' ? 'ok' : codexState === 'not-logged-in' ? 'warn' : codexState === 'runtime-error' ? 'error' : 'neutral';
-  const codexBadgeText = codexState === 'ready' && codexStatus && codexStatus.planType === 'Custom API'
-    ? t.codexCustomReady
-    : codexState === 'ready' ? t.codexReady
-      : codexState === 'not-logged-in' ? t.codexNotLoggedIn
-        : codexState === 'runtime-error' ? t.codexRuntimeError
-          : t.codexChecking;
-  const openCodeState = (openCodeStatus && openCodeStatus.state) || 'checking';
-  const openCodeBadgeStatus = openCodeState === 'ready' ? 'ok' : openCodeState === 'not-logged-in' ? 'warn' : 'neutral';
-  const openCodeBadgeText = openCodeState === 'ready' ? t.openCodeReady : openCodeState === 'not-logged-in' ? t.openCodeNotLoggedIn : t.openCodeChecking;
-  const zcodeState = (zcodeStatus && zcodeStatus.state) || 'checking';
-  const zcodeBadge = zcodeRuntimeBadge(zcodeStatus, t);
-  const saveApiKey = () => {
-    if (aiBusy) return;
-    setAiBusy(true);
-    setAiToast(null);
-    Promise.resolve(validateKey ? validateKey(key, apiBaseUrlDraft) : true).then((result) => {
-      const ok = result === true || (result && result.ok === true) || (result && result.status === 200);
-      const status = result && typeof result === 'object' ? result.status : null;
-      if (!ok) {
-        setAiToast({ type: 'error', message: status === 401 ? t.invalidKey : t.verifyFailed });
-        return null;
-      }
-      return Promise.resolve(onSaveApiKey ? onSaveApiKey(key) : null).then(() => {
-        setAiToast({ type: 'ok', message: t.saved });
-      });
-    }).catch((e) => {
-      const status = e && (e.status || (e.response && e.response.status));
-      setAiToast({ type: 'error', message: status === 401 ? t.invalidKey : t.verifyFailed });
-    }).finally(() => setAiBusy(false));
-  };
-  const saveCodexKey = () => {
-    if (aiBusy) return;
-    setAiBusy(true);
-    setAiToast(null);
-    Promise.resolve(onSaveCodexApiKey ? onSaveCodexApiKey(codexKeyDraft) : null).then(() => {
-      setAiToast({ type: 'ok', message: t.savedLocal });
-    }).catch(() => {
-      setAiToast({ type: 'error', message: t.verifyFailed });
-    }).finally(() => setAiBusy(false));
-  };
-  const clearApiKey = () => {
-    setKey('');
-    Promise.resolve(onClearApiKey ? onClearApiKey() : null).then(() => {
-      setAiToast({ type: 'info', message: t.cleared });
-    }).catch(() => {
-      setAiToast({ type: 'error', message: t.verifyFailed });
-    });
-  };
-  const clearCodexKey = () => {
-    setCodexKeyDraft('');
-    Promise.resolve(onClearCodexApiKey ? onClearCodexApiKey() : null).then(() => {
-      setAiToast({ type: 'info', message: t.cleared });
-    }).catch(() => {
-      setAiToast({ type: 'error', message: t.verifyFailed });
-    });
-  };
   const regenerate = () => {
     if (!onRegenToken) return;
     const result = onRegenToken();
@@ -459,100 +324,51 @@ export function SettingsScreen({
     <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
       <Section id="ai" title={t.ai} expanded={sections.ai} onToggle={onToggleSection}>
         <Field label={t.backend}>
-          {/* OpenCode embedded backend is implemented (openCodeBackend.js) but
-              NOT exposed for v0.7.0: its approval gating is unverified (opencode
-              permission-rule DSL + a live write-turn needed). Re-add the option
-              in v0.7.1 after gating is verified. OpenCode is available now as an
-              external client (see the External clients section). */}
           <Segmented full value={backend} onChange={onBackendChange} options={[
             { value: 'subscription', label: t.backendSub },
             { value: 'codex', label: t.backendCodex },
             { value: 'zcode', label: t.backendZcode },
-            { value: 'byok', label: t.backendByok },
           ]} />
         </Field>
-        {backend === 'subscription' ? (
-          <Field label={t.backendSub} caption={claudeState === 'not-logged-in' ? t.claudeLoginCap : (claudeStatus && claudeStatus.detail) || null}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Badge status={claudeBadgeStatus}>{claudeBadgeText}</Badge>
-              {claudeState === 'ready' && claudeStatus.nodeVersion ? <span style={{ flex: 1, font: '400 11px/1 var(--font-mono)', color: 'var(--text-secondary)' }}>Node {String(claudeStatus.nodeVersion).replace(/^v?/, 'v')}</span> : <span style={{ flex: 1 }} />}
-              <Button variant="secondary" icon="rotate-cw" disabled={claudeState === 'checking'} onClick={onRecheckClaude}>{t.recheckClaude}</Button>
-            </div>
-          </Field>
-        ) : backend === 'codex' ? (
-          <React.Fragment>
-            <Field label={t.codexSub} caption={codexState === 'not-logged-in' ? t.codexLoginCap : (codexStatus && codexStatus.detail) || null}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Badge status={codexBadgeStatus}>{codexBadgeText}</Badge>
-                {codexState === 'ready' && (codexStatus.email || codexStatus.planType) ? <span style={{ flex: 1, font: '400 11px/1 var(--font-mono)', color: 'var(--text-secondary)' }}>{[codexStatus.email, codexStatus.planType].filter(Boolean).join(' · ')}</span> : <span style={{ flex: 1 }} />}
-                <Button variant="secondary" icon="rotate-cw" disabled={codexState === 'checking'} onClick={onRecheckCodex}>{t.recheckCodex}</Button>
-              </div>
-            </Field>
-            <ApiProfileFields
-              baseUrl={{
-                value: codexBaseUrlDraft,
-                onChange: (v) => { setCodexBaseUrlDraft(v); if (onCodexBaseUrlChange) onCodexBaseUrlChange(v); },
-                label: t.apiBaseUrl,
-                caption: t.codexBaseUrlCap,
-                placeholder: 'https://api.openai.com',
-              }}
-              apiKey={{
-                value: codexKeyDraft,
-                onChange: setCodexKeyDraft,
-                label: t.apiKey,
-                caption: t.codexApiKeyCap,
-                placeholder: 'sk-...',
-                saveLabel: aiBusy ? t.validating : t.save,
-                busy: aiBusy,
-                saveDisabled: false,
-                onSave: saveCodexKey,
-                clearLabel: t.clear,
-                onClear: clearCodexKey,
-              }}
-            />
-          </React.Fragment>
-        ) : backend === 'opencode' ? (
-          <Field label={t.openCodeSub} caption={openCodeState === 'not-logged-in' ? t.openCodeLoginCap : (openCodeStatus && openCodeStatus.detail) || null}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Badge status={openCodeBadgeStatus}>{openCodeBadgeText}</Badge>
-              <span style={{ flex: 1 }} />
-              <Button variant="secondary" icon="rotate-cw" disabled={openCodeState === 'checking'} onClick={onRecheckOpenCode}>{t.recheckOpenCode}</Button>
-            </div>
-          </Field>
-        ) : backend === 'zcode' ? (
-          <Field label={t.zcodeSub} caption={zcodeState === 'not-logged-in' ? t.zcodeLoginCap : (zcodeStatus && zcodeStatus.detail) || null}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Badge status={zcodeBadge.status}>{zcodeBadge.text}</Badge>
-              <span style={{ flex: 1 }} />
-              <Button variant="secondary" icon="rotate-cw" disabled={zcodeState === 'checking'} onClick={onRecheckZcode}>{t.recheckZcode}</Button>
-            </div>
-          </Field>
-        ) : (
-          <React.Fragment>
-            <ApiProfileFields
-              baseUrl={{
-                value: apiBaseUrlDraft,
-                onChange: (v) => { setApiBaseUrlDraft(v); if (onAnthropicBaseUrlChange) onAnthropicBaseUrlChange(v); },
-                label: t.apiBaseUrl,
-                caption: t.anthropicBaseUrlCap,
-                placeholder: 'https://api.anthropic.com',
-              }}
-              apiKey={{
-                value: key,
-                onChange: setKey,
-                label: t.apiKey,
-                caption: t.apiKeyCap,
-                placeholder: 'sk-ant-...',
-                saveLabel: aiBusy ? t.validating : t.saveVerify,
-                busy: aiBusy,
-                saveDisabled: !key.trim(),
-                onSave: saveApiKey,
-                clearLabel: t.clear,
-                onClear: clearApiKey,
-              }}
-            />
-          </React.Fragment>
-        )}
+        <ChannelCard
+          lang={lang}
+          channels={backend === 'codex' ? channels.codex : backend === 'zcode' ? channels.zcode : channels.claude}
+          activeChannel={activeChannel}
+          lockedChannel={lockedChannel}
+          onLockChannel={onLockChannel}
+          onRecheck={onRecheckBackend}
+          recheckLabel={t.recheck}
+          recheckDisabled={recheckDisabled}
+          renderChannelBody={(channel) => {
+            if (backend !== 'codex' && backend !== 'zcode' && channel === 'api') {
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <Select value={claudeProviderId} onChange={onClaudeProviderChange} options={[
+                    { value: '', label: t.providerNone },
+                    ...providers.filter((p) => p.protocol === 'anthropic').map((p) => ({ value: p.id, label: p.name })),
+                  ]} />
+                  {claudeSettingsImportAvailable ? (
+                    <Button variant="secondary" size="sm" icon="download" onClick={onImportClaudeSettings}>{t.importClaudeSettings}</Button>
+                  ) : null}
+                  <div style={{ font: '400 10px/1.5 var(--font-ui)', color: 'var(--text-tertiary)' }}>{t.claude3pNote}</div>
+                </div>
+              );
+            }
+            if (backend === 'codex' && channel === 'custom') {
+              return (
+                <Select value={codexProviderId} onChange={onCodexProviderChange} options={[
+                  { value: '', label: t.providerNone },
+                  ...providers.filter((p) => p.protocol === 'openai-compatible').map((p) => ({ value: p.id, label: p.name })),
+                ]} />
+              );
+            }
+            if (backend === 'zcode' && channel === 'cli-config') {
+              return <ZcodeKeyFallback t={t} stored={zcodeKeyStored} onSave={onSaveZcodeKey} />;
+            }
+            return null;
+          }}
+        />
+        {providerManager}
         <Field label={t.modelDefault}>
           {zcodeModelLocked ? (
             <div style={{ minHeight: 28, display: 'flex', alignItems: 'center', padding: '0 8px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-well)', font: '400 11px/1.35 var(--font-ui)', color: 'var(--text-secondary)' }}>
@@ -566,12 +382,11 @@ export function SettingsScreen({
             ]} />
           )}
         </Field>
-        {(backend === 'byok' || backend === 'codex') ? (
+        {backend === 'codex' ? (
           <Field label={t.customModel} caption={t.customModelCap}>
             <Input mono value={customModelDraft} onChange={(v) => { setCustomModelDraft(v); if (onCustomModelChange) onCustomModelChange(v); }} placeholder={backend === 'codex' ? 'provider/model' : 'claude-custom'} />
           </Field>
         ) : null}
-        {aiToast ? <Toast type={aiToast.type} message={aiToast.message} onClose={() => setAiToast(null)} /> : null}
       </Section>
 
       <Section id="conn" title={t.conn} expanded={sections.conn} onToggle={onToggleSection}>
