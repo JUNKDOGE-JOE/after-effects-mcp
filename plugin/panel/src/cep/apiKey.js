@@ -1,4 +1,7 @@
-const KEY_FILE = 'anthropic-key';
+const KEY_FILES = {
+  anthropic: 'anthropic-key',
+  codex: 'codex-key',
+};
 
 function cepRequire() {
   if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) return globalThis.window.cep_node.require;
@@ -27,26 +30,33 @@ export function createApiKeyStore(deps = defaultDeps()) {
     return path.join(os.homedir(), '.ae-mcp');
   }
 
-  function keyPath() {
-    return path.join(keyDir(), KEY_FILE);
+  function keyFile(name = 'anthropic') {
+    const file = KEY_FILES[String(name || 'anthropic')];
+    if (!file) throw new Error('Unsupported API key name: ' + name);
+    return file;
   }
 
-  function readKey() {
+  function keyPath(name = 'anthropic') {
+    return path.join(keyDir(), keyFile(name));
+  }
+
+  function readKey(name = 'anthropic') {
     try {
-      return fs.readFileSync(keyPath(), 'utf8').trim();
+      return fs.readFileSync(keyPath(name), 'utf8').trim();
     } catch (e) {
       if (e && e.code === 'ENOENT') return '';
       throw e;
     }
   }
 
-  function writeKey(key) {
+  function writeKey(key, name = 'anthropic') {
     const value = String(key || '').trim();
     const dir = keyDir();
-    const file = keyPath();
+    const fileName = keyFile(name);
+    const file = keyPath(name);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const pid = deps.pid || 0;
-    const tmp = path.join(dir, `${KEY_FILE}.${pid}.${Date.now()}.tmp`);
+    const tmp = path.join(dir, `${fileName}.${pid}.${Date.now()}.tmp`);
     fs.writeFileSync(tmp, value, 'utf8');
     try {
       fs.chmodSync(tmp, 0o600);
@@ -57,9 +67,9 @@ export function createApiKeyStore(deps = defaultDeps()) {
     return value;
   }
 
-  function clearKey() {
+  function clearKey(name = 'anthropic') {
     try {
-      fs.unlinkSync(keyPath());
+      fs.unlinkSync(keyPath(name));
     } catch (e) {
       if (!e || e.code !== 'ENOENT') throw e;
     }

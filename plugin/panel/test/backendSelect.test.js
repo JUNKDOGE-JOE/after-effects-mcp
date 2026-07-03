@@ -16,6 +16,12 @@ test('pickBackend follows subscription and BYOK selection rules', () => {
     [{ pref: 'codex', probe: { nodeOk: true, loggedIn: true }, codexProbe: null, hasApiKey: true }, { backend: 'none', reason: 'codex-probing' }],
     [{ pref: 'codex', probe: { nodeOk: true, loggedIn: true }, codexProbe: { loggedIn: false }, hasApiKey: true }, { backend: 'none', reason: 'codex-not-logged-in' }],
     [{ pref: 'codex', probe: { nodeOk: true, loggedIn: true }, codexProbe: { loggedIn: true }, hasApiKey: false }, { backend: 'codex', reason: 'ok' }],
+    [{ pref: 'codex', probe: { nodeOk: true, loggedIn: true }, codexProbe: { loggedIn: false, runtimeOk: true }, hasCodexCustomProvider: true }, { backend: 'codex', reason: 'ok' }],
+    [{ pref: 'codex', probe: { nodeOk: true, loggedIn: true }, codexProbe: { loggedIn: false, runtimeOk: false }, hasCodexCustomProvider: true }, { backend: 'none', reason: 'codex-runtime-unavailable' }],
+    [{ pref: 'zcode', probe: { nodeOk: true, loggedIn: true }, zcodeProbe: null, hasApiKey: true }, { backend: 'none', reason: 'zcode-probing' }],
+    [{ pref: 'zcode', probe: { nodeOk: true, loggedIn: true }, zcodeProbe: { loggedIn: false }, hasApiKey: true }, { backend: 'none', reason: 'zcode-not-logged-in' }],
+    [{ pref: 'zcode', probe: { nodeOk: true, loggedIn: true }, zcodeProbe: { loggedIn: true, runtimeOk: false }, hasApiKey: true }, { backend: 'none', reason: 'zcode-runtime-unavailable' }],
+    [{ pref: 'zcode', probe: { nodeOk: true, loggedIn: true }, zcodeProbe: { loggedIn: true, runtimeOk: true }, hasApiKey: false }, { backend: 'zcode', reason: 'ok' }],
   ];
 
   for (const [input, expected] of cases) {

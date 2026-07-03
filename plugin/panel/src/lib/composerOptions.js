@@ -20,12 +20,13 @@ export function buildComposerChips({
   const effortLevels = Array.isArray(currentModel.effortLevels) ? currentModel.effortLevels : [];
   const approvals = descriptor.approvalModes || [];
   const currentApproval = approvals.find((m) => m.id === permissionMode) || approvals[0] || {};
+  const modelSwitchable = descriptor.perTurnModelSwitch !== false;
 
   return {
-    model: {
+    model: modelSwitchable ? {
       current: currentModel.label || currentModel.id || '',
       items: models.map((m) => ({ id: m.id, label: m.label || m.id, caption: costBadge(m.cost) })),
-    },
+    } : null,
     effort: effortLevels.length ? {
       current: effort,
       items: effortLevels.map((id) => ({ id, label: id, caption: '' })),

@@ -4,6 +4,8 @@ import {
   CLAUDE_MODELS, APPROVAL_MODES, costTier,
   claudeSubDescriptor, byokStaticDescriptor, mergeByokModels,
   codexStaticDescriptor, codexDescriptorFromModels,
+  descriptorWithCustomModel,
+  zcodeStaticDescriptor, zcodeDescriptorFromModels,
 } from '../src/lib/backendCapabilities.js';
 
 test('claude-sub descriptor lists the full family with effort levels', () => {
@@ -117,4 +119,44 @@ test('codexDescriptorFromModels falls back to static descriptor for empty input'
   assert.deepEqual(fallback.models.map((m) => m.id), ['gpt-5.5', 'gpt-5.4']);
   assert.equal(fallback.defaultEffort, 'medium');
   assert.equal(fallback.supportsFast('gpt-5.5'), true);
+});
+
+test('descriptorWithCustomModel promotes a user-supplied model id without losing the base list', () => {
+  const descriptor = descriptorWithCustomModel(codexStaticDescriptor(), 'provider/custom-model');
+
+  assert.equal(descriptor.defaultModelId, 'provider/custom-model');
+  assert.equal(descriptor.models[0].id, 'provider/custom-model');
+  assert.deepEqual(descriptor.models.slice(1).map((m) => m.id), ['gpt-5.5', 'gpt-5.4']);
+});
+
+test('zcodeStaticDescriptor keeps model metadata but does not advertise per-turn model switching', () => {
+  const descriptor = zcodeStaticDescriptor();
+  assert.equal(descriptor.id, 'zcode');
+  assert.equal(descriptor.defaultModelId, 'builtin:bigmodel-start-plan/GLM-5.2');
+  assert.deepEqual(descriptor.models.map((m) => m.id), [
+    'builtin:bigmodel-start-plan/GLM-5.2',
+    'builtin:bigmodel-start-plan/GLM-5-Turbo',
+  ]);
+  assert.ok(descriptor.models.length > 0);
+  assert.equal(descriptor.perTurnModelSwitch, false);
+});
+
+test('zcodeDescriptorFromModels keeps live model metadata but does not advertise per-turn model switching', () => {
+  const descriptor = zcodeDescriptorFromModels({
+    settings: {
+      model: {
+        available: [
+          { label: 'GLM-5.2', ref: { modelId: 'glm-5.2', providerId: 'mediastorm_glm' } },
+          { label: 'Deepseek V4', ref: { modelId: 'deepseek-v4-pro', providerId: 'mediastorm_glm' } },
+        ],
+        current: { modelId: 'glm-5.2', providerId: 'mediastorm_glm' },
+      },
+    },
+  });
+  assert.equal(descriptor.defaultModelId, 'mediastorm_glm/glm-5.2');
+  assert.deepEqual(descriptor.models.map((m) => m.id), [
+    'mediastorm_glm/glm-5.2',
+    'mediastorm_glm/deepseek-v4-pro',
+  ]);
+  assert.equal(descriptor.perTurnModelSwitch, false);
 });

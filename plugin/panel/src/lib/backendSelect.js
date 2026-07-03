@@ -1,12 +1,16 @@
 import { REAL_BACKENDS } from '../cep/backends/index.js';
 
-export function pickBackend({ pref, probe, hasApiKey, codexProbe, zcodeProbe }) {
+export function pickBackend({ pref, probe, hasApiKey, codexProbe, hasCodexCustomProvider = false, zcodeProbe }) {
   if (pref === 'byok') {
     return hasApiKey ? { backend: 'byok', reason: 'ok' } : { backend: 'none', reason: 'no-key' };
   }
 
   if (pref === 'codex') {
     if (codexProbe === null) return { backend: 'none', reason: 'codex-probing' };
+    if (hasCodexCustomProvider) {
+      if (!codexProbe || codexProbe.runtimeOk === false) return { backend: 'none', reason: 'codex-runtime-unavailable' };
+      return { backend: 'codex', reason: 'ok' };
+    }
     if (!codexProbe || !codexProbe.loggedIn) return { backend: 'none', reason: 'codex-not-logged-in' };
     return { backend: 'codex', reason: 'ok' };
   }
@@ -14,6 +18,7 @@ export function pickBackend({ pref, probe, hasApiKey, codexProbe, zcodeProbe }) 
   if (pref === 'zcode') {
     if (zcodeProbe === null) return { backend: 'none', reason: 'zcode-probing' };
     if (!zcodeProbe || !zcodeProbe.loggedIn) return { backend: 'none', reason: 'zcode-not-logged-in' };
+    if (zcodeProbe.runtimeOk === false) return { backend: 'none', reason: 'zcode-runtime-unavailable' };
     return { backend: 'zcode', reason: 'ok' };
   }
 

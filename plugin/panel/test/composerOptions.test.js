@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildComposerChips, costBadge } from '../src/lib/composerOptions.js';
-import { byokStaticDescriptor, claudeSubDescriptor, mergeByokModels } from '../src/lib/backendCapabilities.js';
+import { byokStaticDescriptor, claudeSubDescriptor, mergeByokModels, zcodeStaticDescriptor } from '../src/lib/backendCapabilities.js';
 
 test('costBadge renders $ per tier', () => {
   assert.equal(costBadge(1), '$');
@@ -42,4 +42,15 @@ test('byok opus shows fast toggle and full effort ladder', () => {
   });
   assert.deepEqual(chips.effort.items.map((i) => i.id), ['low', 'medium', 'high', 'xhigh', 'max']);
   assert.equal(chips.fast.active, true);
+});
+
+test('chips omit model selector for descriptors without per-turn model switching', () => {
+  const chips = buildComposerChips({
+    descriptor: { ...zcodeStaticDescriptor(), perTurnModelSwitch: false },
+    modelId: 'builtin:bigmodel-start-plan/GLM-5.2',
+    effort: 'high', fast: false, permissionMode: 'manual', lang: 'zh',
+  });
+  assert.equal(chips.model, null);
+  assert.deepEqual(chips.effort.items.map((i) => i.id), ['nothink', 'high', 'max']);
+  assert.equal(chips.approval.items.length, 4);
 });

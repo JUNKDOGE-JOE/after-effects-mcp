@@ -33,6 +33,19 @@ test('fetchAnthropicModels parses and filters claude models', async () => {
   assert.equal(https.calls[0].headers['x-api-key'], 'sk-x');
 });
 
+test('fetchAnthropicModels supports an Anthropic-compatible base URL', async () => {
+  const https = fakeHttps(200, { data: [{ id: 'claude-proxy-1', display_name: 'Claude Proxy' }] });
+  const models = await fetchAnthropicModels({
+    apiKey: 'sk-x',
+    baseUrl: 'https://proxy.example/anthropic/',
+    httpsImpl: https,
+  });
+
+  assert.deepEqual(models.map((m) => m.id), ['claude-proxy-1']);
+  assert.equal(https.calls[0].hostname, 'proxy.example');
+  assert.equal(https.calls[0].path, '/anthropic/v1/models?limit=100');
+});
+
 test('cachedByokModels hits cache inside TTL and refetches after expiry', async () => {
   let fetchCount = 0;
   const fetcher = async () => { fetchCount += 1; return [{ id: 'claude-sonnet-4-6', display_name: 'S' }]; };
@@ -45,6 +58,23 @@ test('cachedByokModels hits cache inside TTL and refetches after expiry', async 
   assert.equal(fetchCount, 1);
   nowMs += 25 * 60 * 60 * 1000;
   await cachedByokModels(opts);
+  assert.equal(fetchCount, 2);
+});
+
+test('cachedByokModels separates cache entries by base URL', async () => {
+  let fetchCount = 0;
+  const fetcher = async () => {
+    fetchCount += 1;
+    return [{ id: 'claude-sonnet-4-6', display_name: 'S' }];
+  };
+  const store = new Map();
+  const storage = { getItem: (k) => store.get(k) || null, setItem: (k, v) => store.set(k, v) };
+  const now = () => 1000;
+
+  await cachedByokModels({ apiKey: 'sk-x', baseUrl: 'https://a.example', fetcher, storage, now });
+  await cachedByokModels({ apiKey: 'sk-x', baseUrl: 'https://a.example', fetcher, storage, now });
+  await cachedByokModels({ apiKey: 'sk-x', baseUrl: 'https://b.example', fetcher, storage, now });
+
   assert.equal(fetchCount, 2);
 });
 

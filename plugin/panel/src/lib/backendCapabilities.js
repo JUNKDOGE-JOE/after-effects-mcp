@@ -76,6 +76,19 @@ export function mergeByokModels(descriptor, apiModels) {
   return { ...descriptor, models };
 }
 
+export function descriptorWithCustomModel(descriptor, modelId) {
+  const id = String(modelId || '').trim();
+  if (!id) return descriptor;
+  const existing = descriptor.models.find((m) => m.id === id);
+  const custom = existing || { id, label: id, effortLevels: [], cost: 2, adaptive: false };
+  const rest = descriptor.models.filter((m) => m.id !== id);
+  return {
+    ...descriptor,
+    models: [custom, ...rest],
+    defaultModelId: id,
+  };
+}
+
 export function codexStaticDescriptor() {
   const models = [
     { id: 'gpt-5.5', label: 'GPT-5.5', effortLevels: ['low', 'medium', 'high', 'xhigh'], cost: 2, adaptive: false },
@@ -200,28 +213,28 @@ export function openCodeDescriptorFromModels(providerResult) {
   };
 }
 
-// ZCode ships a CLI (zcode.cjs app-server) whose login state is shared with
-// the Electron app and whose ~/.zcode/cli/config.json already registers the ae
-// MCP server, so an embedded ZCode backend needs no MCP wiring of its own.
+// ZCode's app-server needs an explicit provider/model ref before it can create
+// an embedded session. The desktop app stores the current builtin provider
+// under ~/.zcode/v2/config.json; zcodeBackend reads it at runtime and this
+// descriptor mirrors the common built-in plan fallback.
 // Models come from session/create's settings.model.available:
 // {label, ref:{modelId, providerId}, contextWindow}.
-// thoughtLevel is set via session/create or session/setThoughtLevel and takes
-// the enum low/medium/high (verified in the zcode.cjs 0.14.8 bundle).
-const ZCODE_EFFORT_LEVELS = ['low', 'medium', 'high'];
+const ZCODE_EFFORT_LEVELS = ['nothink', 'high', 'max'];
 
 export function zcodeStaticDescriptor() {
   const models = [
-    { id: 'glm-5.2', label: 'GLM-5.2', effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false },
+    { id: 'builtin:bigmodel-start-plan/GLM-5.2', label: 'GLM-5.2', effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false },
+    { id: 'builtin:bigmodel-start-plan/GLM-5-Turbo', label: 'GLM-5 Turbo', effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false },
   ];
   return {
     id: 'zcode',
     label: 'ZCode',
     models,
-    defaultModelId: 'glm-5.2',
-    defaultEffort: 'medium',
+    defaultModelId: 'builtin:bigmodel-start-plan/GLM-5.2',
+    defaultEffort: 'high',
     supportsFast: () => false,
     approvalModes: APPROVAL_MODES,
-    perTurnModelSwitch: true,
+    perTurnModelSwitch: false,
   };
 }
 
@@ -252,6 +265,6 @@ export function zcodeDescriptorFromModels(sessionCreateResult) {
     defaultEffort: 'medium',
     supportsFast: () => false,
     approvalModes: APPROVAL_MODES,
-    perTurnModelSwitch: true,
+    perTurnModelSwitch: false,
   };
 }

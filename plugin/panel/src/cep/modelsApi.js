@@ -1,5 +1,7 @@
 // /v1/models via cep_node's Node https. Browser fetch is CORS-blocked in CEP
 // (verified note at App.jsx:91); the Node channel has no CORS.
+import { anthropicEndpoint, normalizeBaseUrl } from '../lib/providerProfile.js';
+
 const CACHE_KEY = 'ae_mcp_byok_models';
 const TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -12,12 +14,21 @@ function getCepRequire() {
   throw new Error('CEP Node require is unavailable');
 }
 
-export function fetchAnthropicModels({ apiKey, httpsImpl, timeoutMs = 8000 } = {}) {
+export function fetchAnthropicModels({ apiKey, baseUrl = '', httpsImpl, timeoutMs = 8000 } = {}) {
   const https = httpsImpl || getCepRequire()('https');
   return new Promise((resolve) => {
+    let endpoint;
+    try {
+      endpoint = new URL(anthropicEndpoint(baseUrl, '/v1/models?limit=100'));
+    } catch (e) {
+      resolve(null);
+      return;
+    }
     const req = https.request({
-      hostname: 'api.anthropic.com',
-      path: '/v1/models?limit=100',
+      hostname: endpoint.hostname,
+      port: endpoint.port || undefined,
+      protocol: endpoint.protocol,
+      path: endpoint.pathname + endpoint.search,
       method: 'GET',
       headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
     }, (res) => {
@@ -38,9 +49,9 @@ export function fetchAnthropicModels({ apiKey, httpsImpl, timeoutMs = 8000 } = {
   });
 }
 
-export async function cachedByokModels({ apiKey, fetcher, storage, now = Date.now } = {}) {
+export async function cachedByokModels({ apiKey, baseUrl = '', fetcher, storage, now = Date.now } = {}) {
   const store = storage || globalThis.localStorage;
-  const keyTag = String(apiKey || '').slice(-6);
+  const keyTag = String(apiKey || '').slice(-6) + '|' + normalizeBaseUrl(baseUrl);
   try {
     const raw = store.getItem(CACHE_KEY);
     if (raw) {
@@ -48,7 +59,7 @@ export async function cachedByokModels({ apiKey, fetcher, storage, now = Date.no
       if (cached.keyTag === keyTag && now() - cached.at < TTL_MS) return cached.models;
     }
   } catch (e) { /* cache is best-effort */ }
-  const run = fetcher || (() => fetchAnthropicModels({ apiKey }));
+  const run = fetcher || (() => fetchAnthropicModels({ apiKey, baseUrl }));
   const models = await run();
   if (models) {
     try { store.setItem(CACHE_KEY, JSON.stringify({ keyTag, at: now(), models })); } catch (e) { /* ignore */ }
