@@ -476,9 +476,9 @@ export function createOpenCodeBackend({
     emit({ type: 'tool-start', toolUseId, name, input: state.input || {} });
   }
 
-  // Real opencode SSE wire model (live-verified): every event is
-  // { type, properties } with dotted lowercase types. Text/tool/reasoning ride
-  // message.part.*; turn lifecycle rides session.status (busy/idle).
+  // OpenCode SSE events arrive as { type, properties } with dotted lowercase
+  // types. Text/tool/reasoning ride message.part.*; turn lifecycle rides
+  // session.status (busy/idle).
   function handleOpenCodeEvent(evt) {
     const type = eventType(evt);
     if (!type) return;
@@ -519,8 +519,8 @@ export function createOpenCodeBackend({
       finishActive();
       return;
     }
-    // Permission ask: exact wire type unverified (ae_ping is read-only so it
-    // never fired in acceptance); match defensively on a permission-ish type.
+    // Permission prompts may not appear on read-only tool paths, so match
+    // defensively on a permission-ish ask type.
     if (/permission/i.test(String(type)) && /ask/i.test(String(type))) {
       handlePermission({ ...p, properties: p });
     }

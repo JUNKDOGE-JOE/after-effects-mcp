@@ -56,7 +56,7 @@ def test_resolve_unknown_returns_none():
 
 
 # ---------------------------------------------------------------------------
-# Issue #7 — reverse map (O(1) hot path) + collision guard / uniqueness.
+# Reverse-map hot path + collision guard / uniqueness.
 # ---------------------------------------------------------------------------
 
 
@@ -100,12 +100,11 @@ def test_build_server_raises_on_exposed_name_collision(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Issue #5 — wire/dispatch-level regression tests.
+# Wire/dispatch-level regression tests.
 #
-# These exercise the integration points PR #3 changed: _list_tools must emit
-# underscore-form names, and _call_tool must reassign to the canonical verb
-# before dispatch. Both stayed green under the old helper-only tests even when
-# the regressions were reintroduced.
+# These exercise integration points helper-only tests miss: _list_tools must
+# emit underscore-form names, and _call_tool must reassign to the canonical
+# verb before dispatch.
 # ---------------------------------------------------------------------------
 
 

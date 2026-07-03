@@ -1,10 +1,10 @@
 // Backend capability descriptors. UI (chips + settings) renders ONLY from
 // these - no hardcoded model ids or tier names anywhere else.
-// Facts (verified 2026-06-12 against official docs):
+// Capability facts backed by official docs and observed backend behavior:
 // - subscription has NO plan-availability API; curated list + friendly
 //   open-turn error is the only honest shape.
 // - effort levels: low/medium/high/xhigh/max; xhigh is Fable/Opus 4.8 only;
-//   Sonnet 4.6 has no xhigh; Haiku support unverified -> empty (chip hidden).
+//   Sonnet 4.6 has no xhigh; Haiku hides unsupported tiers.
 // - fast mode: direct API only (BYOK), Opus 4.x only, 3x price.
 
 export const CLAUDE_PRICE_USD_PER_MTOK = {
@@ -15,8 +15,7 @@ export const CLAUDE_PRICE_USD_PER_MTOK = {
 };
 
 // adaptive: whether the model takes thinking {type:'adaptive'}. Haiku accepts
-// effort (live-probed 2026-06-12, effort:'high' turns succeed) but its
-// adaptive-thinking support is unverified, so effort and adaptive decouple.
+// effort, but adaptive thinking stays off so effort and adaptive decouple.
 export const CLAUDE_MODELS = [
   { id: 'claude-fable-5', label: 'Fable 5', effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'], adaptive: true },
   { id: 'claude-opus-4-8', label: 'Opus 4.8', effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'], adaptive: true },

@@ -40,7 +40,7 @@ def test_store_root_per_full_path(tmp_path):
 
 
 def test_same_basename_different_paths_get_different_dirs(tmp_path):
-    # Issue #10: C:\a\project.aep and C:\b\project.aep must NOT collide.
+    # Same-basename projects in different directories must not collide.
     store = CheckpointStore(root=tmp_path)
     da = store._dir_for("C:/a/project.aep")
     db = store._dir_for("C:/b/project.aep")

@@ -794,9 +794,9 @@ async def test_exec_no_label_skips_checkpoint(mock_backend, tmp_path, monkeypatc
 
 @pytest.mark.asyncio
 async def test_revert_restores_over_original_and_reopens(mock_backend, tmp_path, monkeypatch):
-    # Issue #10 Bug 1: revert must restore the checkpoint OVER the original
-    # project path and reopen the ORIGINAL — never open the temp copy in
-    # place. Verify the close -> copy(atomic) -> open ordering.
+    # Revert must restore the checkpoint OVER the original project path and
+    # reopen the ORIGINAL — never open the temp copy in place. Verify the
+    # close -> copy(atomic) -> open ordering.
     from ae_mcp import checkpoint_store
     store = checkpoint_store.CheckpointStore(root=tmp_path)
     monkeypatch.setattr("ae_mcp.handlers.core._store", store)

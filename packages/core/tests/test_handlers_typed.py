@@ -46,7 +46,7 @@ def test_render_set_property_with_keyframe():
     jsx = T.render_set_property(args)
     # Single-layer resolution must route through AEMCP.layerById so a stale
     # /out-of-range id returns null (caught by the `if (!layer)` guard) instead
-    # of throwing (issue #8).
+    # of throwing.
     assert "AEMCP.layerById(comp, 2)" in jsx
     assert '"Transform/Position"' in jsx
     assert "[100, 200]" in jsx
@@ -75,9 +75,9 @@ def test_render_set_property_at_time_allows_negative_times(at_time):
 def test_render_move_layer_clamps_in_js_not_py():
     args = S.AeMoveLayerArgs(layer_id=3, to_index=10)
     jsx = T.render_move_layer(args)
-    # The source layer is resolved via AEMCP.layerById (issue #8). The
-    # destination `comp.layer(to)` stays as-is — `to` is clamped to a valid
-    # 1-based index in JS, so it never throws.
+    # The source layer resolves through AEMCP.layerById. The destination
+    # `comp.layer(to)` stays as-is because `to` is clamped to a valid 1-based
+    # index in JS, so it never throws.
     assert "AEMCP.layerById(comp, 3)" in jsx
     assert "var to = 10;" in jsx
 
@@ -179,7 +179,7 @@ def test_render_get_properties_substitutes_query():
     assert '"pos rot|opacity"' in jsx
     assert '[1, 2]' in jsx or '[1,2]' in jsx
     # Per-layer resolution in the loop routes through AEMCP.layerById so a
-    # stale id is skipped via `continue` instead of throwing (issue #8).
+    # stale id is skipped via `continue` instead of throwing.
     assert "AEMCP.layerById(comp, layerIds[li])" in jsx
     assert "AEMCP.safeValue(" in jsx
 
@@ -214,7 +214,7 @@ def test_render_scan_property_tree():
     from ae_mcp.handlers.typed import render_scan_property_tree
     args = schemas.AeScanPropertyTreeArgs(layer_id=3, max_depth=2, include_values=False)
     jsx = render_scan_property_tree(args)
-    assert "AEMCP.layerById(comp, 3)" in jsx  # issue #8
+    assert "AEMCP.layerById(comp, 3)" in jsx
     assert "var maxDepth = 2;" in jsx
     assert "var includeValues = false;" in jsx
     assert "AEMCP.safeValue(" in jsx
@@ -237,7 +237,7 @@ def test_render_inspect_property_capabilities():
     args = schemas.AeInspectPropertyCapabilitiesArgs(layer_id=1, path="Transform/Position")
     jsx = render_inspect_property_capabilities(args)
     assert '"Transform/Position"' in jsx
-    assert "AEMCP.layerById(comp, 1)" in jsx  # issue #8
+    assert "AEMCP.layerById(comp, 1)" in jsx
 
 
 @pytest.mark.asyncio
@@ -276,7 +276,7 @@ def test_render_get_keyframes():
     args = schemas.AeGetKeyframesArgs(layer_id=1, path="Transform/Position")
     jsx = render_get_keyframes(args)
     assert '"Transform/Position"' in jsx
-    assert "AEMCP.layerById(comp, 1)" in jsx  # issue #8
+    assert "AEMCP.layerById(comp, 1)" in jsx
     assert "AEMCP.safeValue(" in jsx
 
 
@@ -301,8 +301,8 @@ def test_render_search_project():
 
 
 def test_render_create_layer_position_uses_matchname():
-    # #12: position must be addressed by matchName, not the localized display
-    # names "Transform"/"Position" (null on JP/DE AE -> position silently lost).
+    # Position must be addressed by matchName, not localized display names
+    # such as "Transform"/"Position" that resolve to null on JP/DE AE.
     from ae_mcp.handlers.typed import render_create_layer
     args = S.AeCreateLayerArgs(type="solid", name="P", position=(10, 20, 0))
     jsx = render_create_layer(args)
@@ -313,7 +313,7 @@ def test_render_create_layer_position_uses_matchname():
 
 
 def test_render_search_project_has_time_budget():
-    # #12: traversal must be wall-clock bounded so big projects return partial
+    # Traversal must be wall-clock bounded so big projects return partial
     # results instead of blowing the 30s timeout with zero output.
     from ae_mcp.handlers.typed import render_search_project, _TRAVERSAL_BUDGET_MS
     jsx = render_search_project(schemas.AeSearchProjectArgs(query="x"))
@@ -333,9 +333,9 @@ def test_render_scan_property_tree_has_time_budget():
 
 
 def test_render_create_rig_uses_layerById():
-    # #12 (carried from PR #14 review): resolve the target via AEMCP.layerById
-    # so the `if (!target)` guard is reachable and returns the friendly
-    # "target layer not found" message instead of AE's raw exception.
+    # Resolve the target via AEMCP.layerById so the `if (!target)` guard is
+    # reachable and returns the friendly "target layer not found" message
+    # instead of AE's raw exception.
     from ae_mcp.handlers.rig import _load_jsx
     import json as _json
     jsx = _load_jsx("create_rig.jsx").substitute(
