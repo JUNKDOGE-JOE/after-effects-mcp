@@ -21,6 +21,7 @@ import { createOpenCodeBackend } from '../cep/openCodeBackend';
 import { createZcodeBackend, summarizeZcodeConfig } from '../cep/zcodeBackend';
 import { claudeChannels, codexChannels, zcodeChannels, migrateBackendPref } from '../lib/channels.js';
 import { createProviderStore } from '../cep/providerStore';
+import { readClaudeSettingsEnv } from '../cep/claudeSettingsImport';
 import { reduceEvent } from '../lib/chatEntries';
 import { DEFAULT_MODEL, FALLBACK_MODEL } from '../lib/anthropic';
 import { byokStaticDescriptor, mergeByokModels, codexDescriptorFromModels, openCodeDescriptorFromModels, descriptorWithCustomModel } from '../lib/backendCapabilities';
@@ -326,6 +327,9 @@ function Shell({ cs }) {
     codex: codexChannels({ codexProbe, customProvider: codexCustomProvider }),
     zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary }),
   }), [probe, claudeApiProvider, codexProbe, codexCustomProvider, zcodeProbe, zcodeConfigSummary]);
+  const claudeSettingsHint = React.useMemo(() => {
+    try { return readClaudeSettingsEnv({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {} }); } catch (e) { return null; }
+  }, []);
   const providerProfile = React.useMemo(() => normalizeProviderProfile({
     anthropicBaseUrl: claudeApiProvider ? claudeApiProvider.baseUrl : anthropicBaseUrl,
     codexApiKey: codexCustomProvider ? codexCustomProvider.apiKey : codexApiKey,
@@ -776,32 +780,36 @@ function Shell({ cs }) {
             onRegenToken={() => setConfirmRegen(true)}
             hostVersion={(connInfo && connInfo.hostVersion) || '-'}
             pythonVersion={(connInfo && connInfo.pythonVersion) || '-'}
-            apiKey={apiKey}
-            onSaveApiKey={(k) => { if (keyStore) keyStore.writeKey(k); setApiKey(k); }}
-            onClearApiKey={() => { if (keyStore) keyStore.clearKey(); setApiKey(''); }}
-            anthropicBaseUrl={anthropicBaseUrl}
-            onAnthropicBaseUrlChange={(v) => { setAnthropicBaseUrl(v); writePref('ae_mcp_anthropic_base_url', v); }}
-            codexApiKey={codexApiKey}
-            codexBaseUrl={codexBaseUrl}
-            onCodexBaseUrlChange={(v) => {
-              setCodexBaseUrl(v);
-              writePref('ae_mcp_codex_base_url', v);
-              setCodexProbe(null);
-              codexBackend.reset();
+            channels={channels}
+            activeChannel={effective.channel || ''}
+            lockedChannel={channelLock}
+            onLockChannel={(c) => { setChannelLock(c); writePref('ae_mcp_channel_lock', c); }}
+            onRecheckBackend={() => {
+              if (backendPref === 'codex') runCodexProbe();
+              else if (backendPref === 'zcode') runZcodeProbe();
+              else runClaudeProbe();
             }}
-            onSaveCodexApiKey={(k) => {
-              if (keyStore) keyStore.writeKey(k, 'codex');
-              setCodexApiKey(k);
-              setCodexProbe(null);
-              codexBackend.reset();
+            recheckDisabled={backendPref === 'codex' ? codexProbe === null : backendPref === 'zcode' ? zcodeProbe === null : probe === null}
+            providers={providers}
+            claudeProviderId={claudeProviderId}
+            onClaudeProviderChange={(id) => { setClaudeProviderId(id); writePref('ae_mcp_claude_provider', id); }}
+            codexProviderId={codexProviderId}
+            onCodexProviderChange={(id) => { setCodexProviderId(id); writePref('ae_mcp_codex_provider', id); setCodexProbe(null); codexBackend.reset(); }}
+            claudeSettingsImportAvailable={Boolean(claudeSettingsHint)}
+            onImportClaudeSettings={() => {
+              if (!claudeSettingsHint || !providerStore) return;
+              const entry = providerStore.upsert({ id: 'claude-settings-import', name: 'Claude Code 配置', protocol: 'anthropic', baseUrl: claudeSettingsHint.baseUrl, apiKey: claudeSettingsHint.authToken });
+              setProviders(providerStore.list());
+              setClaudeProviderId(entry.id);
+              writePref('ae_mcp_claude_provider', entry.id);
             }}
-            onClearCodexApiKey={() => {
-              if (keyStore) keyStore.clearKey('codex');
-              setCodexApiKey('');
-              setCodexProbe(null);
-              codexBackend.reset();
+            onSaveZcodeKey={(k) => {
+              if (keyStore) keyStore.writeKey(k, 'zcode');
+              setZcodeProbe(null);
+              zcodeBackend.reset();
+              runZcodeProbe();
             }}
-            validateKey={validateAnthropicKey}
+            zcodeKeyStored={(() => { try { return Boolean(keyStore && keyStore.readKey('zcode')); } catch (e) { return false; } })()}
             model={effectiveModel}
             modelOptions={modelOptions}
             modelSwitchable={descriptor.perTurnModelSwitch !== false}
@@ -819,14 +827,6 @@ function Shell({ cs }) {
             onBackendChange={(m) => { setBackendPref(m); writePref('ae_mcp_backend', m); }}
             expertGuidance={expertGuidance}
             onExpertGuidance={(v) => { setExpertGuidance(v); saveExpertGuidance(window.localStorage, v); }}
-            claudeStatus={claudeStatus}
-            onRecheckClaude={runClaudeProbe}
-            codexStatus={codexStatus}
-            onRecheckCodex={runCodexProbe}
-            openCodeStatus={openCodeStatus}
-            onRecheckOpenCode={runOpenCodeProbe}
-            zcodeStatus={zcodeStatus}
-            onRecheckZcode={runZcodeProbe}
           />
         ) : null}
       </div>
