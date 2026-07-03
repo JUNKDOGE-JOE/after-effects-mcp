@@ -1,5 +1,5 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
-import { codexAppServerArgs, codexSpawnEnv, normalizeProviderProfile } from '../lib/providerProfile.js';
+import { codexAppServerArgs, codexSpawnEnv, ensureUserEnv, normalizeProviderProfile } from '../lib/providerProfile.js';
 import { PANEL_VERSION } from './mcpClient.js';
 import { expertGuidanceEnv } from './externalClients.js';
 
@@ -190,6 +190,38 @@ function threadIdFromResult(result) {
   return (result && (result.threadId || result.id || (result.thread && result.thread.id))) || null;
 }
 
+function execFileAsync(execFile, cmd, args, env) {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { env, windowsHide: true }, (err, stdout, stderr) => {
+      resolve({ err, stdout: String(stdout || ''), stderr: String(stderr || '') });
+    });
+  });
+}
+
+function getHomedir() {
+  try { return getCepRequire()('os').homedir(); } catch (e) { return ''; }
+}
+
+// Spec B2: resolve the codex binary explicitly. AE_MCP_CODEX_CLI overrides
+// (mirrors AE_MCP_ZCODE_CLI); otherwise `where codex` on the spawn PATH.
+export async function resolveCodexCli({ env, execFileImpl } = {}) {
+  const override = env && env.AE_MCP_CODEX_CLI;
+  if (override) return { ok: true, cliPath: String(override), version: '' };
+  let execFile = execFileImpl;
+  if (!execFile) {
+    try { execFile = getCepRequire()('child_process').execFile; } catch (e) { return { ok: false, cliPath: '', version: '', detail: 'child_process unavailable' }; }
+  }
+  const where = await execFileAsync(execFile, 'where', ['codex'], env || {});
+  if (!where.err && where.stdout) {
+    const exe = String(where.stdout).split(/\r?\n/)[0].trim();
+    if (exe) {
+      const v = await execFileAsync(execFile, exe, ['--version'], env || {});
+      return { ok: true, cliPath: exe, version: v.err ? '' : String(v.stdout || v.stderr || '').trim() };
+    }
+  }
+  return { ok: false, cliPath: '', version: '', detail: 'codex CLI not found on PATH. Sign in with codex in a terminal, or set AE_MCP_CODEX_CLI to the executable.' };
+}
+
 export function createCodexBackend({
   spawnImpl,
   getModel,
@@ -201,6 +233,7 @@ export function createCodexBackend({
   getExpertGuidance = () => true,
   getServerInstructions = () => '',
   getProviderProfile = () => ({}),
+  resolveCli = resolveCodexCli,
   onEvent,
   lang = 'zh',
   env,
@@ -223,6 +256,7 @@ export function createCodexBackend({
   let activeResolve = null;
   let activeAssistantText = '';
   let toolMeta = { allowedTools: [], annotations: {} };
+  let lastCliInfo = null;
   const pendingApprovals = new Map();
   const sessionAllowedTools = new Set();
 
@@ -409,11 +443,14 @@ export function createCodexBackend({
     if (startPromise) return startPromise;
     startPromise = (async () => {
       const spawn = getSpawn();
-      const spawnEnv = currentEnv();
+      const spawnEnv = ensureUserEnv(currentEnv(), { homedir: getHomedir() });
       const providerProfile = normalizeProviderProfile(getProviderProfile ? getProviderProfile() : {}, spawnEnv);
       stderrTail = '';
       stopping = false;
-      proc = spawn('codex', codexAppServerArgs(providerProfile), {
+      const cliOverride = spawnEnv.AE_MCP_CODEX_CLI ? { ok: true, cliPath: String(spawnEnv.AE_MCP_CODEX_CLI), version: '' } : null;
+      lastCliInfo = cliOverride || lastCliInfo;
+      const command = cliOverride ? cliOverride.cliPath : 'codex';
+      proc = spawn(command, codexAppServerArgs(providerProfile), {
         stdio: 'pipe',
         windowsHide: true,
         shell: true,
@@ -591,6 +628,15 @@ export function createCodexBackend({
   }
 
   async function probeAccount() {
+    const spawnEnv = ensureUserEnv(currentEnv(), { homedir: getHomedir() });
+    let cliInfo = { ok: false, cliPath: '', version: '' };
+    try {
+      let execFileImpl = null;
+      try { execFileImpl = getCepRequire()('child_process').execFile; } catch (e) { /* non-CEP env */ }
+      cliInfo = await resolveCli({ env: spawnEnv, execFileImpl });
+      lastCliInfo = cliInfo;
+    } catch (e) { /* diagnostics only, never blocks the probe */ }
+    const diag = { cliPath: cliInfo.cliPath || '', cliVersion: cliInfo.version || '' };
     try {
       await initialize();
       const accountResult = await rpc.request('account/read', {});
@@ -602,16 +648,18 @@ export function createCodexBackend({
         models = null;
       }
       const account = accountResult && accountResult.account;
-      if (!account) return { loggedIn: false, runtimeOk: true, detail: accountResult && accountResult.requiresOpenaiAuth ? 'OpenAI auth required' : undefined, models };
+      if (!account) return { loggedIn: false, runtimeOk: true, detail: accountResult && accountResult.requiresOpenaiAuth ? 'OpenAI auth required' : undefined, models, ...diag };
       return {
         loggedIn: true,
         runtimeOk: true,
         email: account.email,
         planType: account.planType,
         models,
+        ...diag,
       };
     } catch (e) {
-      return { loggedIn: false, runtimeOk: false, detail: e && e.message ? e.message : String(e) };
+      const detail = [e && e.message ? e.message : String(e), cliInfo.ok ? '' : cliInfo.detail].filter(Boolean).join(' | ');
+      return { loggedIn: false, runtimeOk: false, detail, ...diag };
     }
   }
 

@@ -537,6 +537,8 @@ test('createCodexBackend probeAccount initializes and reads account plus model l
     email: 'a@example.com',
     planType: 'plus',
     models: [{ id: 'gpt-5.5', displayName: 'GPT-5.5', hidden: false }],
+    cliPath: '',
+    cliVersion: '',
   });
 });
 
@@ -556,5 +558,45 @@ test('createCodexBackend probeAccount reports runtime ok when OpenAI auth is abs
     runtimeOk: true,
     detail: 'OpenAI auth required',
     models: [],
+    cliPath: '',
+    cliVersion: '',
   });
+});
+
+test('spawn env is completed with USERPROFILE/HOME/APPDATA (spec B2)', async () => {
+  const { backend, spawned } = makeBackend({ env: { PATH: 'C:\\bin', HOME: 'C:\\Users\\test' } });
+  backend.sendUser('hi');
+  await flush();
+  const call = spawned.calls[0];
+  assert.equal(call.options.env.USERPROFILE, 'C:\\Users\\test');
+  assert.equal(call.options.env.APPDATA, 'C:\\Users\\test\\AppData\\Roaming');
+});
+
+test('AE_MCP_CODEX_CLI overrides the spawned codex binary', async () => {
+  const { backend, spawned } = makeBackend({ env: { PATH: 'C:\\bin', AE_MCP_CODEX_CLI: 'D:\\tools\\codex\\codex.exe' } });
+  backend.sendUser('hi');
+  await flush();
+  const call = spawned.calls[0];
+  assert.equal(call.command, 'D:\\tools\\codex\\codex.exe');
+});
+
+test('probeAccount reports resolved codex cliPath and cliVersion for diagnostics', async () => {
+  const { backend, spawned } = makeBackend({
+    resolveCli: async () => ({ ok: true, cliPath: 'C:\\bin\\codex.exe', version: 'codex-cli 1.2.3' }),
+  });
+  const probe = backend.probeAccount();
+  await flush();
+  const proc = spawned.procs[0];
+  respond(proc, parseWrites(proc)[0], {});
+  await flush();
+  assert.equal(parseWrites(proc)[1].method, 'account/read');
+  respond(proc, parseWrites(proc)[1], { account: { type: 'chatgpt', email: 'a@example.com', planType: 'plus' } });
+  await flush();
+  assert.equal(parseWrites(proc)[2].method, 'model/list');
+  respond(proc, parseWrites(proc)[2], { models: [{ id: 'gpt-5.5', displayName: 'GPT-5.5', hidden: false }] });
+
+  const result = await probe;
+  assert.equal(result.loggedIn, true);
+  assert.equal(result.cliPath, 'C:\\bin\\codex.exe');
+  assert.equal(result.cliVersion, 'codex-cli 1.2.3');
 });
