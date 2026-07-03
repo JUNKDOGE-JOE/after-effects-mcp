@@ -441,3 +441,28 @@ test('default subscription channel keeps current sanitize behavior and passes --
   backend.reset();
   await run;
 });
+
+
+test('getStderrTail exposes the sidecar stderr buffer for log export', async () => {
+  const spawned = makeSpawn();
+  const backend = createClaudeAgentBackend({
+    resolveNode: async () => ({ ok: true, nodePath: 'C:\node.exe', version: 'v20.0.0' }),
+    sidecarPath: 'C:\ext\sidecar\agent-sidecar.mjs',
+    getMcpSpec: async () => ({ command: 'uv', args: [], env: {} }),
+    getToolMeta: async () => ({ allowedTools: [], annotations: {} }),
+    getModel: () => 'claude-sonnet-5',
+    getPermissionMode: () => 'manual',
+    spawnImpl: spawned.spawn,
+    env: { PATH: 'C:\bin' },
+  });
+  assert.equal(backend.getStderrTail(), '');
+  const run = backend.sendUser('hi');
+  await flush();
+  const proc = spawned.procs[0];
+  proc.pushStderr('sidecar warn: something');
+  proc.pushStdout(JSON.stringify({ t: 'ready' }) + '\n');
+  await flush();
+  assert.match(backend.getStderrTail(), /sidecar warn/);
+  backend.reset();
+  await run;
+});

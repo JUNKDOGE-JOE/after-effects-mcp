@@ -42,6 +42,9 @@ import { copyWizardConfig } from '../lib/wizardCopy.js';
 import { zcodeUnavailableHint } from '../lib/settingsState.js';
 import { createHostController, loadSavedPort, savePort, DEFAULT_PORT, buildMcpConfig, isValidPort } from '../cep/hostBridge';
 import { loadExpertGuidance, saveExpertGuidance } from '../lib/expertGuidance.js';
+import pkg from '../../package.json';
+import { buildLogExport, exportFileName, keepLogLine } from '../lib/logExport.js';
+import { writeLogExport, revealInExplorer } from '../cep/logExportFs.js';
 
 // Re-export so app code has a single import surface; the helpers themselves live
 // in lib/ so the test suite (node --test, which cannot parse JSX) can import them.
@@ -115,6 +118,8 @@ const T = {
     goSettings: 'Open Settings',
   },
 };
+
+const pkgVersion = pkg.version;
 
 function readPref(key, fallback) {
   try {
@@ -252,6 +257,9 @@ function Shell({ cs }) {
   const [codexBaseUrl, setCodexBaseUrl] = React.useState(() => readPref('ae_mcp_codex_base_url', ''));
   const [customModel, setCustomModel] = React.useState(() => readPref('ae_mcp_custom_model', ''));
   const [model, setModel] = React.useState(() => readPref('ae_mcp_model', DEFAULT_MODEL));
+  const [logLevel, setLogLevel] = React.useState(() => readPref('ae_mcp_log_level', 'info'));
+  const logLevelRef = React.useRef(logLevel);
+  logLevelRef.current = logLevel;
   const [sessionModel, setSessionModel] = React.useState(null);
   const [sessionEffort, setSessionEffort] = React.useState(null);
   const [sessionFast, setSessionFast] = React.useState(null);
@@ -615,9 +623,27 @@ function Shell({ cs }) {
     setChatEntries([]);
   };
 
+  // Note: the log-level filter is intentionally applied at append time only; existing buffered lines are unaffected by later level changes.
   const pushLog = React.useCallback((m) => {
+    if (!keepLogLine(logLevelRef.current, m)) return;
     setLogs((xs) => [...xs.slice(-199), `[${new Date().toLocaleTimeString()}] ${m}`]);
   }, []);
+
+  const exportLogs = React.useCallback(() => {
+    try {
+      const text = buildLogExport({
+        panelLogs: logs,
+        hostInfo: { hostVersion: (connInfo && connInfo.hostVersion) || '-', pythonVersion: (connInfo && connInfo.pythonVersion) || '-' },
+        sidecarTail: claudeBackend.getStderrTail ? claudeBackend.getStderrTail() : '',
+        version: pkgVersion,
+      });
+      const file = writeLogExport({ text, fileName: exportFileName() });
+      revealInExplorer(file, undefined, (err) => pushLog('Log export reveal failed: ' + (err && err.message ? err.message : String(err))));
+      pushLog('Log exported: ' + file);
+    } catch (e) {
+      pushLog('Log export failed: ' + (e && e.message ? e.message : String(e)));
+    }
+  }, [logs, connInfo, claudeBackend, pushLog]);
 
   const undoToPreviousCheckpoint = React.useCallback(async () => {
     try {
@@ -886,6 +912,9 @@ function Shell({ cs }) {
             onBackendChange={(m) => { setBackendPref(m); writePref('ae_mcp_backend', m); }}
             expertGuidance={expertGuidance}
             onExpertGuidance={(v) => { setExpertGuidance(v); saveExpertGuidance(window.localStorage, v); }}
+            logLevel={logLevel}
+            onLogLevel={(v) => { setLogLevel(v); writePref('ae_mcp_log_level', v); }}
+            onExportLogs={exportLogs}
           />
         ) : null}
       </div>

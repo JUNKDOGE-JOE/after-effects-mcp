@@ -283,6 +283,9 @@ export function SettingsScreen({
   onSaveZcodeKey,
   zcodeKeyStored = false,
   providerManager = null,
+  logLevel = 'info',
+  onLogLevel,
+  onExportLogs,
 }) {
   const t = S[lang] || S.zh;
   const zcodeModelLocked = shouldLockZcodeModel({ backend, modelSwitchable });
@@ -290,7 +293,6 @@ export function SettingsScreen({
   const [draftPort, setDraftPort] = React.useState(String(port));
   const [tokenRaw, setTokenRaw] = React.useState('');
   const [autostart, setAutostart] = React.useState(true);
-  const [logLevel, setLogLevel] = React.useState('info');
   const [copied, setCopied] = React.useState('');
   const [sections, setSections] = React.useState(() => loadSectionState(window.localStorage));
   const onToggleSection = (id) => setSections((s) => {
@@ -452,12 +454,12 @@ export function SettingsScreen({
         </Field>
         <Field label={t.logLevel}>
           <div style={{ display: 'flex', gap: 6 }}>
-            <Select value={logLevel} onChange={setLogLevel} style={{ flex: 1 }} options={[
+            <Select value={logLevel} onChange={onLogLevel} style={{ flex: 1 }} options={[
               { value: 'error', label: 'Error' },
               { value: 'info', label: 'Info' },
               { value: 'debug', label: 'Debug' },
             ]} />
-            <Button variant="secondary" icon="download" disabled>{t.exportLog}</Button>
+            <Button variant="secondary" icon="download" onClick={onExportLogs}>{t.exportLog}</Button>
           </div>
         </Field>
         <Field label={t.logs}>
