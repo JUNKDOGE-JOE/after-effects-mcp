@@ -289,6 +289,9 @@ export function SettingsScreen({
   claudeSettingsImportAvailable = false,
   onSaveZcodeKey,
   zcodeKeyStored = false,
+  onSaveCodexKey,
+  codexKeyStored = false,
+  codexCliConfig = null,
   providerManager = null,
   logLevel = 'info',
   onLogLevel,
@@ -373,6 +376,18 @@ export function SettingsScreen({
             }
             if (backend === 'zcode' && channel === 'cli-config') {
               return <ZcodeKeyFallback t={t} stored={zcodeKeyStored} onSave={onSaveZcodeKey} />;
+            }
+            if (backend === 'codex' && channel === 'cli-config') {
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {codexCliConfig && codexCliConfig.provider ? (
+                    <div style={{ font: '400 10px/1.5 var(--font-ui)', color: 'var(--text-tertiary)' }}>
+                      {[codexCliConfig.providerId, codexCliConfig.model, codexCliConfig.provider.baseUrl].filter(Boolean).join(' · ')}
+                    </div>
+                  ) : null}
+                  <ZcodeKeyFallback t={t} stored={codexKeyStored} onSave={onSaveCodexKey} />
+                </div>
+              );
             }
             return null;
           }}

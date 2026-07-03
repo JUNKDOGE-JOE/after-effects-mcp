@@ -233,6 +233,12 @@ export function createCodexBackend({
   getExpertGuidance = () => true,
   getServerInstructions = () => '',
   getProviderProfile = () => ({}),
+  // Spec A extension: when the panel has no explicit custom provider
+  // configured, inherit a model_provider already declared in
+  // ~/.codex/config.toml. config.toml owns model_provider selection; the
+  // panel only supplies the missing API key env var the provider needs (no
+  // `-c model_provider=...` override).
+  getCliConfigProvider = () => null,
   resolveCli = resolveCodexCli,
   onEvent,
   lang = 'zh',
@@ -450,11 +456,22 @@ export function createCodexBackend({
       const cliOverride = spawnEnv.AE_MCP_CODEX_CLI ? { ok: true, cliPath: String(spawnEnv.AE_MCP_CODEX_CLI), version: '' } : null;
       lastCliInfo = cliOverride || lastCliInfo;
       const command = cliOverride ? cliOverride.cliPath : 'codex';
+      let spawnEnvWithCreds = codexSpawnEnv(providerProfile, spawnEnv);
+      // Only inherit cli-config's provider env var when the panel has no
+      // explicit custom provider (codexBaseUrl) configured — an explicit
+      // custom provider always wins.
+      if (!providerProfile.codexBaseUrl) {
+        const cliConfig = getCliConfigProvider ? getCliConfigProvider() : null;
+        const envKey = cliConfig && cliConfig.provider && String(cliConfig.provider.envKey || '').trim();
+        if (envKey && cliConfig.apiKey) {
+          spawnEnvWithCreds = Object.assign({}, spawnEnvWithCreds, { [envKey]: cliConfig.apiKey });
+        }
+      }
       proc = spawn(command, codexAppServerArgs(providerProfile), {
         stdio: 'pipe',
         windowsHide: true,
         shell: true,
-        env: codexSpawnEnv(providerProfile, spawnEnv),
+        env: spawnEnvWithCreds,
       });
       rpc = createRpc({
         writeLine: (line) => proc.stdin.write(line),

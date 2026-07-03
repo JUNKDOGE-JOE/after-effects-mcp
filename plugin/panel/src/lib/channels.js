@@ -24,7 +24,7 @@ export function claudeChannels({ probe, apiProvider } = {}) {
   return [sub, api];
 }
 
-export function codexChannels({ codexProbe, customProvider } = {}) {
+export function codexChannels({ codexProbe, customProvider, cliConfig, cliConfigApiKey } = {}) {
   const cli = {
     channel: 'cli',
     source: { zh: 'Codex CLI 登录态', en: 'Codex CLI login' },
@@ -32,6 +32,23 @@ export function codexChannels({ codexProbe, customProvider } = {}) {
     ok: Boolean(codexProbe && codexProbe.loggedIn),
     detail: codexProbe ? [codexProbe.email, codexProbe.planType, codexProbe.cliPath, codexProbe.cliVersion].filter(Boolean).join(' · ') : '',
     fixHint: { zh: '在终端完成 codex 登录后重新检测；若 codex 不在面板 PATH 上，设置环境变量 AE_MCP_CODEX_CLI 指向 codex 可执行文件后重启 AE。', en: 'Sign in with codex in a terminal and re-check; if codex is not on the panel PATH, set AE_MCP_CODEX_CLI to the codex executable and restart AE.' },
+  };
+  // Spec A extension: inherit a custom model_provider declared in
+  // ~/.codex/config.toml (mirrors zcodeChannels' 'cli-config' pattern).
+  const runtimeOk = Boolean(!codexProbe || codexProbe.runtimeOk !== false);
+  const hasProvider = Boolean(cliConfig && cliConfig.provider);
+  const hasKey = Boolean(cliConfigApiKey);
+  const cliConfigChannel = {
+    channel: 'cli-config',
+    source: { zh: '继承自 Codex CLI 配置', en: 'Inherited from Codex CLI config' },
+    checking: false,
+    ok: hasProvider && hasKey && runtimeOk,
+    detail: hasProvider ? [cliConfig.providerId, cliConfig.model, cliConfig.provider.baseUrl].filter(Boolean).join(' · ') : '',
+    fixHint: !hasProvider
+      ? { zh: '未找到 ~/.codex/config.toml 的可用 provider：先在 Codex CLI 里配置 model_provider。', en: 'No usable provider in ~/.codex/config.toml: configure model_provider in the Codex CLI first.' }
+      : !hasKey
+        ? { zh: '检测到 Codex CLI provider「' + cliConfig.providerId + '」，但其 API Key 环境变量（' + (cliConfig.provider.envKey || '-') + '）没有被面板继承。在下方粘贴一次 Key（保存到本机 ~/.ae-mcp/codex-key）即可使用。', en: 'Found Codex CLI provider "' + cliConfig.providerId + '", but its API key env (' + (cliConfig.provider.envKey || '-') + ') is not inherited by the panel. Paste the key once below (stored at ~/.ae-mcp/codex-key).' }
+        : { zh: 'Codex 运行时不可用：请检查 Codex CLI 安装后重新检测。', en: 'Codex runtime unavailable: check the Codex CLI install and re-check.' },
   };
   const custom = {
     channel: 'custom',
@@ -41,7 +58,7 @@ export function codexChannels({ codexProbe, customProvider } = {}) {
     detail: customProvider && customProvider.baseUrl ? customProvider.baseUrl : '',
     fixHint: { zh: '在「Provider 管理」新增/选择一个 OpenAI 兼容 provider（Base URL + Key）。', en: 'Add or pick an OpenAI-compatible provider (base URL + key) in Provider Manager.' },
   };
-  return [cli, custom];
+  return [cli, cliConfigChannel, custom];
 }
 
 export function zcodeChannels({ zcodeProbe, configSummary } = {}) {

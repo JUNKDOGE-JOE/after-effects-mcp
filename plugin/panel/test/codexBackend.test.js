@@ -244,6 +244,56 @@ test('createCodexBackend starts app-server with custom provider config when supp
   await pending;
 });
 
+test('createCodexBackend injects cli-config provider env var when no custom provider is configured', async () => {
+  const { backend, spawned } = makeBackend({
+    getCliConfigProvider: () => ({
+      provider: { envKey: 'MEDIASTORM_GLM_API_KEY', baseUrl: 'https://api.example.com/v1' },
+      apiKey: 'stored-codex-key',
+    }),
+  });
+
+  const { pending, proc } = await startTurn(backend, spawned, 'cli-config env');
+
+  assert.equal(spawned.calls[0].command, 'codex');
+  // config.toml already declares model_provider; no -c override args.
+  assert.deepEqual(spawned.calls[0].args, ['app-server']);
+  assert.equal(spawned.calls[0].options.env.MEDIASTORM_GLM_API_KEY, 'stored-codex-key');
+
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+});
+
+test('createCodexBackend prefers an explicit custom provider over cli-config inheritance', async () => {
+  const { backend, spawned } = makeBackend({
+    getProviderProfile: () => ({
+      codexBaseUrl: 'https://proxy.example/openai',
+      codexApiKey: 'sk-proxy',
+      codexProviderId: 'my-provider',
+    }),
+    getCliConfigProvider: () => ({
+      provider: { envKey: 'MEDIASTORM_GLM_API_KEY', baseUrl: 'https://api.example.com/v1' },
+      apiKey: 'stored-codex-key',
+    }),
+  });
+
+  const { pending, proc } = await startTurn(backend, spawned, 'custom wins');
+
+  assert.deepEqual(spawned.calls[0].args, [
+    'app-server',
+    '-c', 'model_provider="my-provider"',
+    '-c', 'model_providers.my-provider.name="AE MCP Custom"',
+    '-c', 'model_providers.my-provider.base_url="https://proxy.example/openai"',
+    '-c', 'model_providers.my-provider.env_key="AE_MCP_CODEX_API_KEY"',
+    '-c', 'model_providers.my-provider.wire_api="responses"',
+    '-c', 'model_providers.my-provider.requires_openai_auth=false',
+  ]);
+  assert.equal(spawned.calls[0].options.env.AE_MCP_CODEX_API_KEY, 'sk-proxy');
+  assert.equal(Object.hasOwn(spawned.calls[0].options.env, 'MEDIASTORM_GLM_API_KEY'), false);
+
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+});
+
 test('createCodexBackend reuses threadId on subsequent turns', async () => {
   const { backend, spawned } = makeBackend({
     getFast: () => false,
