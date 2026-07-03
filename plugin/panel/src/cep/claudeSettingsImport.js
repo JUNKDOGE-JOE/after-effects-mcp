@@ -17,7 +17,7 @@ export function readClaudeSettingsEnv({ env = {}, fsImpl } = {}) {
   try { fs = fsImpl || getCepRequire()('fs'); } catch (e) { return null; }
   let parsed;
   try {
-    parsed = JSON.parse(fs.readFileSync(String(home).replace(/[\/]+$/, '') + '\.claude\settings.json', 'utf8'));
+    parsed = JSON.parse(fs.readFileSync(String(home).replace(/[\\/]+$/, '') + '\\.claude\\settings.json', 'utf8'));
   } catch (e) {
     return null;
   }
