@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createZcodeBackend, zcodeModelFromDesktopConfig, zcodeRuntimeModelFromDesktopConfig } from '../src/cep/zcodeBackend.js';
+import { createZcodeBackend, zcodeModelFromDesktopConfig, zcodeRuntimeModelFromDesktopConfig, mergeZcodeConfigs, resolveZcodeProviderApiKey, summarizeZcodeConfig, readZcodeDesktopModel } from '../src/cep/zcodeBackend.js';
 import { zcodeStaticDescriptor, zcodeDescriptorFromModels } from '../src/lib/backendCapabilities.js';
 
 // --- harness (mirrors codexBackend.test.js shape, adapted to ZCode protocol) ---
@@ -887,4 +887,126 @@ test('zcodeDescriptorFromModels falls back to static when no models', () => {
   const result = zcodeDescriptorFromModels({});
   assert.equal(result.id, 'zcode');
   assert.ok(result.models.length > 0);
+});
+
+
+// --- Task 4: CLI config merge + score fix + apiKeyEnv chain ---
+
+const CLI_PROVIDER = {
+  kind: 'openai-compatible',
+  name: 'MediaStorm GLM',
+  options: { baseURL: 'https://api.example.com/v1', apiKeyEnv: 'MEDIASTORM_GLM_API_KEY' },
+};
+
+function fakeFs(files) {
+  return {
+    readFileSync(p) {
+      if (!(p in files)) { const e = new Error('ENOENT: ' + p); e.code = 'ENOENT'; throw e; }
+      return files[p];
+    },
+  };
+}
+
+test('mergeZcodeConfigs lets CLI providers override desktop providers of the same id', () => {
+  const merged = mergeZcodeConfigs({
+    cliConfig: { provider: { shared: { kind: 'openai-compatible', options: { baseURL: 'https://cli' } }, cliOnly: {} } },
+    desktopConfig: { provider: { shared: { kind: 'anthropic' }, desktopOnly: {} } },
+  });
+  assert.equal(merged.provider.shared.options.baseURL, 'https://cli');
+  assert.ok(merged.provider.cliOnly);
+  assert.ok(merged.provider.desktopOnly);
+  assert.equal(mergeZcodeConfigs({}), null);
+});
+
+test('a credentialed custom provider outranks a keyless builtin start-plan (spec B1 regression)', () => {
+  const model = zcodeModelFromDesktopConfig({
+    setting: { providerFamilyDomain: 'zai' },
+    env: { MEDIASTORM_GLM_API_KEY: 'sk-live' },
+    config: {
+      provider: {
+        'builtin:zai-start-plan': { enabled: true, models: { 'GLM-5.2': {} } },
+        mediastorm_glm: { ...CLI_PROVIDER, models: { 'glm-5.2': {} } },
+      },
+    },
+  });
+  assert.equal(model, 'mediastorm_glm/glm-5.2');
+});
+
+test('without any credential the builtin start-plan still wins (no behavior change)', () => {
+  const model = zcodeModelFromDesktopConfig({
+    setting: { providerFamilyDomain: 'zai' },
+    env: {},
+    config: {
+      provider: {
+        'builtin:zai-start-plan': { enabled: true, models: { 'GLM-5.2': {} } },
+        mediastorm_glm: { ...CLI_PROVIDER, models: { 'glm-5.2': {} } },
+      },
+    },
+  });
+  assert.equal(model, 'builtin:zai-start-plan/GLM-5.2');
+});
+
+test('resolveZcodeProviderApiKey chain: config -> env[apiKeyEnv] -> stored panel key -> empty', () => {
+  assert.deepEqual(resolveZcodeProviderApiKey({ provider: { options: { apiKey: 'inline' } } }), { key: 'inline', source: 'config' });
+  assert.deepEqual(resolveZcodeProviderApiKey({ provider: CLI_PROVIDER, env: { MEDIASTORM_GLM_API_KEY: 'sk-env' } }), { key: 'sk-env', source: 'env' });
+  assert.deepEqual(resolveZcodeProviderApiKey({ provider: CLI_PROVIDER, env: {}, storedKey: 'sk-panel' }), { key: 'sk-panel', source: 'panel' });
+  assert.deepEqual(resolveZcodeProviderApiKey({ provider: CLI_PROVIDER, env: {} }), { key: '', source: '' });
+});
+
+test('zcodeRuntimeModelFromDesktopConfig injects the resolved apiKeyEnv key for a modelRef-selected provider without models', () => {
+  const config = { provider: { mediastorm_glm: CLI_PROVIDER } };
+  const fromEnv = zcodeRuntimeModelFromDesktopConfig({ config, setting: {}, modelRef: 'mediastorm_glm/glm-5.2', env: { MEDIASTORM_GLM_API_KEY: 'sk-env' } });
+  assert.equal(fromEnv.model.modelId, 'glm-5.2');
+  assert.deepEqual(fromEnv.provider.apiKey, { source: 'inline', value: 'sk-env' });
+  assert.deepEqual(fromEnv.provider.models, [{ modelId: 'glm-5.2' }]);
+  const fromPanel = zcodeRuntimeModelFromDesktopConfig({ config, setting: {}, modelRef: 'mediastorm_glm/glm-5.2', env: {}, storedKey: 'sk-panel' });
+  assert.deepEqual(fromPanel.provider.apiKey, { source: 'inline', value: 'sk-panel' });
+  const none = zcodeRuntimeModelFromDesktopConfig({ config, setting: {}, modelRef: 'mediastorm_glm/glm-5.2', env: {} });
+  assert.equal(none.provider.apiKey, undefined);
+});
+
+test('readZcodeDesktopModel merges ~/.zcode/cli/config.json and prefers its top-level model', () => {
+  const env = { USERPROFILE: 'C:\\Users\\me' };
+  const files = {
+    'C:\\Users\\me\\.zcode\\cli\\config.json': JSON.stringify({ provider: { mediastorm_glm: CLI_PROVIDER }, model: 'mediastorm_glm/glm-5.2' }),
+    'C:\\Users\\me\\.zcode\\v2\\config.json': JSON.stringify({ provider: { 'builtin:zai-start-plan': { enabled: true, models: { 'GLM-5.2': {} } } } }),
+    'C:\\Users\\me\\.zcode\\v2\\setting.json': JSON.stringify({ providerFamilyDomain: 'zai' }),
+  };
+  assert.equal(readZcodeDesktopModel({ env, fsImpl: fakeFs(files) }), 'mediastorm_glm/glm-5.2');
+});
+
+test('summarizeZcodeConfig reports cli/desktop/start-plan channel facts', () => {
+  const env = { USERPROFILE: 'C:\\Users\\me' };
+  const files = {
+    'C:\\Users\\me\\.zcode\\cli\\config.json': JSON.stringify({ provider: { mediastorm_glm: CLI_PROVIDER }, model: 'mediastorm_glm/glm-5.2' }),
+    'C:\\Users\\me\\.zcode\\v2\\config.json': JSON.stringify({ provider: { 'builtin:zai-start-plan': { enabled: true, models: { 'GLM-5.2': {} } } } }),
+  };
+  const bare = summarizeZcodeConfig({ env, fsImpl: fakeFs(files) });
+  assert.equal(bare.cli.providerId, 'mediastorm_glm');
+  assert.equal(bare.cli.model, 'mediastorm_glm/glm-5.2');
+  assert.equal(bare.cli.apiKeyEnv, 'MEDIASTORM_GLM_API_KEY');
+  assert.equal(bare.cli.hasCredential, false);
+  assert.equal(bare.desktop.providerId, 'builtin:zai-start-plan');
+  assert.equal(bare.startPlan.providerId, 'builtin:zai-start-plan');
+  assert.equal(bare.startPlan.hasCredential, false);
+  const withKey = summarizeZcodeConfig({ env: { ...env, MEDIASTORM_GLM_API_KEY: 'k' }, fsImpl: fakeFs(files) });
+  assert.equal(withKey.cli.hasCredential, true);
+  assert.equal(withKey.cli.keySource, 'env');
+  const withStored = summarizeZcodeConfig({ env, fsImpl: fakeFs(files), storedKey: 'panel-key' });
+  assert.equal(withStored.cli.hasCredential, true);
+  assert.equal(withStored.cli.keySource, 'panel');
+});
+
+test('stored panel zcode key flows into spawn env via the apiKeyEnv chain', async () => {
+  const { backend, spawned } = makeBackend({
+    readStoredZcodeKey: () => 'sk-panel',
+    env: {
+      PATH: 'C:\Node', TEMP: 'C:\tmp', LOCALAPPDATA: 'C:\Users\test\AppData\Local',
+      AE_MCP_PANEL_EXT_ROOT: 'C:\Repo\plugin\panel', AE_MCP_ZCODE_MODEL: 'mediastorm_glm/glm-5.2',
+    },
+  });
+  backend.sendUser('hello');
+  await flush();
+  assert.equal(spawned.calls[0].options.env.ZCODE_API_KEY, 'sk-panel');
+  assert.equal(spawned.calls[0].options.env.MEDIASTORM_GLM_API_KEY, 'sk-panel');
 });
