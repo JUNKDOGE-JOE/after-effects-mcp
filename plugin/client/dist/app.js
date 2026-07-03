@@ -7280,11 +7280,11 @@
   });
 
   // src/main.jsx
-  var import_react40 = __toESM(require_react(), 1);
+  var import_react41 = __toESM(require_react(), 1);
   var import_client = __toESM(require_client(), 1);
 
   // src/app/App.jsx
-  var import_react39 = __toESM(require_react(), 1);
+  var import_react40 = __toESM(require_react(), 1);
 
   // src/app/i18n.jsx
   var import_react = __toESM(require_react(), 1);
@@ -8261,7 +8261,7 @@
   }
 
   // src/screens/SettingsScreen.jsx
-  var import_react19 = __toESM(require_react(), 1);
+  var import_react20 = __toESM(require_react(), 1);
 
   // package.json
   var package_default = {
@@ -8434,9 +8434,35 @@
     );
   }
 
-  // src/components/forms/Input.jsx
+  // src/components/forms/ApiProfileFields.jsx
+  var import_react17 = __toESM(require_react(), 1);
+
+  // src/components/forms/Field.jsx
   var import_react15 = __toESM(require_react(), 1);
   var import_jsx_runtime13 = __toESM(require_jsx_runtime(), 1);
+  function Field({ label, hint, caption, layout = "stack", children, style }) {
+    if (layout === "row") {
+      return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: "var(--hit-min)", ...style }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { font: `var(--weight-regular) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: label }),
+          caption ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)", marginTop: 2 }, children: caption }) : null
+        ] }),
+        children
+      ] });
+    }
+    return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-1)", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "var(--space-2)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("label", { style: { font: `var(--weight-medium) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-secondary)" }, children: label }),
+        hint ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)" }, children: hint }) : null
+      ] }),
+      children,
+      caption ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-tertiary)" }, children: caption }) : null
+    ] });
+  }
+
+  // src/components/forms/Input.jsx
+  var import_react16 = __toESM(require_react(), 1);
+  var import_jsx_runtime14 = __toESM(require_jsx_runtime(), 1);
   function Input({
     value,
     onChange,
@@ -8451,10 +8477,10 @@
     full = true,
     style
   }) {
-    const [focus, setFocus] = import_react15.default.useState(false);
-    const [revealed, setRevealed] = import_react15.default.useState(false);
+    const [focus, setFocus] = import_react16.default.useState(false);
+    const [revealed, setRevealed] = import_react16.default.useState(false);
     const h = size === "lg" ? 28 : 24;
-    return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
       "span",
       {
         style: {
@@ -8472,7 +8498,7 @@
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
             "input",
             {
               type: secret && !revealed ? "password" : type === "password" ? "text" : type,
@@ -8494,7 +8520,7 @@
               }
             }
           ),
-          secret ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+          secret ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
             IconButton,
             {
               icon: revealed ? "eye-off" : "eye",
@@ -8509,13 +8535,43 @@
     );
   }
 
+  // src/components/forms/ApiProfileFields.jsx
+  var import_jsx_runtime15 = __toESM(require_jsx_runtime(), 1);
+  function ApiProfileFields({ baseUrl, apiKey }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(import_react17.default.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Field, { label: baseUrl.label, caption: baseUrl.caption, children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+        Input,
+        {
+          mono: true,
+          value: baseUrl.value,
+          onChange: baseUrl.onChange,
+          placeholder: baseUrl.placeholder
+        }
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Field, { label: apiKey.label, caption: apiKey.caption, children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+          Input,
+          {
+            secret: true,
+            value: apiKey.value,
+            onChange: apiKey.onChange,
+            placeholder: apiKey.placeholder,
+            style: { flex: 1 }
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Button, { variant: "primary", disabled: apiKey.busy || apiKey.saveDisabled, onClick: apiKey.onSave, children: apiKey.saveLabel }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Button, { variant: "secondary", disabled: apiKey.busy, onClick: apiKey.onClear, children: apiKey.clearLabel })
+      ] }) })
+    ] });
+  }
+
   // src/components/forms/Select.jsx
-  var import_react16 = __toESM(require_react(), 1);
-  var import_jsx_runtime14 = __toESM(require_jsx_runtime(), 1);
+  var import_react18 = __toESM(require_react(), 1);
+  var import_jsx_runtime16 = __toESM(require_jsx_runtime(), 1);
   function Select({ options = [], value, onChange, disabled = false, full = true, size = "md", style }) {
-    const [focus, setFocus] = import_react16.default.useState(false);
+    const [focus, setFocus] = import_react18.default.useState(false);
     const h = size === "lg" ? 28 : 24;
-    return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
       "span",
       {
         style: {
@@ -8532,7 +8588,7 @@
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
             "select",
             {
               value,
@@ -8554,10 +8610,10 @@
                 font: `var(--weight-regular) var(--text-body)/1 var(--font-ui)`,
                 cursor: disabled ? "default" : "pointer"
               },
-              children: options.map((opt) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: opt.value, style: { background: "var(--bg-overlay)", color: "var(--text-primary)" }, children: opt.label }, opt.value))
+              children: options.map((opt) => /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("option", { value: opt.value, style: { background: "var(--bg-overlay)", color: "var(--text-primary)" }, children: opt.label }, opt.value))
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
             Icon2,
             {
               name: "chevron-down",
@@ -8571,32 +8627,9 @@
     );
   }
 
-  // src/components/forms/Field.jsx
-  var import_react17 = __toESM(require_react(), 1);
-  var import_jsx_runtime15 = __toESM(require_jsx_runtime(), 1);
-  function Field({ label, hint, caption, layout = "stack", children, style }) {
-    if (layout === "row") {
-      return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: "var(--hit-min)", ...style }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { style: { font: `var(--weight-regular) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: label }),
-          caption ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)", marginTop: 2 }, children: caption }) : null
-        ] }),
-        children
-      ] });
-    }
-    return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-1)", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "var(--space-2)" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("label", { style: { font: `var(--weight-medium) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-secondary)" }, children: label }),
-        hint ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)" }, children: hint }) : null
-      ] }),
-      children,
-      caption ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-tertiary)" }, children: caption }) : null
-    ] });
-  }
-
   // src/components/shell/Toast.jsx
-  var import_react18 = __toESM(require_react(), 1);
-  var import_jsx_runtime16 = __toESM(require_jsx_runtime(), 1);
+  var import_react19 = __toESM(require_react(), 1);
+  var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
   var TOAST_ICONS = {
     ok: { icon: "check", color: "var(--ok)" },
     error: { icon: "circle-alert", color: "var(--error)" },
@@ -8605,7 +8638,7 @@
   };
   function Toast({ type = "info", message, actionLabel, onAction, onClose, style }) {
     const t = TOAST_ICONS[type] || TOAST_ICONS.info;
-    return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
       "div",
       {
         role: "status",
@@ -8623,8 +8656,8 @@
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Icon2, { name: t.icon, size: 13, strokeWidth: 2.25, color: t.color }),
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Icon2, { name: t.icon, size: 13, strokeWidth: 2.25, color: t.color }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
             "span",
             {
               style: {
@@ -8636,15 +8669,15 @@
               children: message
             }
           ),
-          actionLabel ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(ToastAction, { label: actionLabel, onClick: onAction }) : null,
-          onClose ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(IconButton, { icon: "x", title: "\u5173\u95ED Dismiss", onClick: onClose, style: { width: 20, height: 20 } }) : null
+          actionLabel ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(ToastAction, { label: actionLabel, onClick: onAction }) : null,
+          onClose ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(IconButton, { icon: "x", title: "\u5173\u95ED Dismiss", onClick: onClose, style: { width: 20, height: 20 } }) : null
         ]
       }
     );
   }
   function ToastAction({ label, onClick }) {
-    const [hover, setHover] = import_react18.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+    const [hover, setHover] = import_react19.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
       "button",
       {
         type: "button",
@@ -8816,7 +8849,7 @@
   }
 
   // src/screens/SettingsScreen.jsx
-  var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime18 = __toESM(require_jsx_runtime(), 1);
   var S = {
     zh: {
       ai: "AI \u670D\u52A1",
@@ -9006,49 +9039,49 @@
     }
   };
   function Section({ title, children, disabled, caption }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)", opacity: disabled ? 0.45 : 1 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "600 11px/1 var(--font-ui)", letterSpacing: "0.04em", color: "var(--text-tertiary)", textTransform: "uppercase", paddingBottom: 2, borderBottom: "1px solid var(--border-subtle)" }, children: title }),
-      caption ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: caption }) : null,
+    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)", opacity: disabled ? 0.45 : 1 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { font: "600 11px/1 var(--font-ui)", letterSpacing: "0.04em", color: "var(--text-tertiary)", textTransform: "uppercase", paddingBottom: 2, borderBottom: "1px solid var(--border-subtle)" }, children: title }),
+      caption ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: caption }) : null,
       children
     ] });
   }
   function ClientRow({ name, lastActive, blocked, onBlock, blockLabel }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 32, padding: "2px 8px", background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", opacity: blocked ? 0.55 : 1 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", textDecoration: blocked ? "line-through" : "none" }, children: name }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: lastActive })
+    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 32, padding: "2px 8px", background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", opacity: blocked ? 0.55 : 1 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", textDecoration: blocked ? "line-through" : "none" }, children: name }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: lastActive })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { font: "400 10px/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: blockLabel }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Switch, { checked: blocked, onChange: onBlock })
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { font: "400 10px/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: blockLabel }),
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Switch, { checked: blocked, onChange: onBlock })
     ] });
   }
   function ExternalClientRow({ client, t, configText, copied, onCopy }) {
     const isStdio = client.kind === "mcp-stdio";
-    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: client.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: isStdio ? t.mcpStdio : t.mcpDoc })
+    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: client.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: isStdio ? t.mcpStdio : t.mcpDoc })
         ] }),
-        isStdio ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: (e) => {
+        isStdio ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: (e) => {
           e.preventDefault();
           onCopy();
         }, children: copied ? t.copied : t.copy }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
-        client.installHint ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-secondary)" }, children: client.installHint }) : null,
-        client.loginHint ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: client.loginHint }) : null,
-        isStdio ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("pre", { style: { margin: 0, maxHeight: 128, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", background: "var(--gray-0)", color: "var(--text-secondary)", font: "400 10px/1.4 var(--font-mono)", whiteSpace: "pre" }, children: configText }) : null,
-        client.networkNote ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: client.networkNote }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("a", { href: client.docsUrl, target: "_blank", rel: "noreferrer", style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--accent)" }, children: t.openDocs })
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
+        client.installHint ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-secondary)" }, children: client.installHint }) : null,
+        client.loginHint ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: client.loginHint }) : null,
+        isStdio ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("pre", { style: { margin: 0, maxHeight: 128, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", background: "var(--gray-0)", color: "var(--text-secondary)", font: "400 10px/1.4 var(--font-mono)", whiteSpace: "pre" }, children: configText }) : null,
+        client.networkNote ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: client.networkNote }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("a", { href: client.docsUrl, target: "_blank", rel: "noreferrer", style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--accent)" }, children: t.openDocs })
       ] })
     ] });
   }
   function VersionRow({ label, value, badge }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1, font: "400 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: label }),
+    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { flex: 1, font: "400 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: label }),
       badge,
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: value })
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: value })
     ] });
   }
   function maskToken(value) {
@@ -9126,25 +9159,25 @@
   }) {
     const t = S[lang] || S.zh;
     const zcodeModelLocked2 = zcodeModelLocked({ backend, modelSwitchable });
-    const [key, setKey] = import_react19.default.useState(apiKey);
-    const [apiBaseUrlDraft, setApiBaseUrlDraft] = import_react19.default.useState(anthropicBaseUrl);
-    const [codexKeyDraft, setCodexKeyDraft] = import_react19.default.useState(codexApiKey);
-    const [codexBaseUrlDraft, setCodexBaseUrlDraft] = import_react19.default.useState(codexBaseUrl);
-    const [customModelDraft, setCustomModelDraft] = import_react19.default.useState(customModel);
-    const [aiBusy, setAiBusy] = import_react19.default.useState(false);
-    const [aiToast, setAiToast] = import_react19.default.useState(null);
-    const [draftPort, setDraftPort] = import_react19.default.useState(String(port));
-    const [tokenRaw, setTokenRaw] = import_react19.default.useState("");
-    const [autostart, setAutostart] = import_react19.default.useState(true);
-    const [logLevel, setLogLevel] = import_react19.default.useState("info");
-    const [copied, setCopied] = import_react19.default.useState("");
-    import_react19.default.useEffect(() => setDraftPort(String(port)), [port]);
-    import_react19.default.useEffect(() => setTokenRaw(readTokenValue()), []);
-    import_react19.default.useEffect(() => setKey(apiKey), [apiKey]);
-    import_react19.default.useEffect(() => setApiBaseUrlDraft(anthropicBaseUrl), [anthropicBaseUrl]);
-    import_react19.default.useEffect(() => setCodexKeyDraft(codexApiKey), [codexApiKey]);
-    import_react19.default.useEffect(() => setCodexBaseUrlDraft(codexBaseUrl), [codexBaseUrl]);
-    import_react19.default.useEffect(() => setCustomModelDraft(customModel), [customModel]);
+    const [key, setKey] = import_react20.default.useState(apiKey);
+    const [apiBaseUrlDraft, setApiBaseUrlDraft] = import_react20.default.useState(anthropicBaseUrl);
+    const [codexKeyDraft, setCodexKeyDraft] = import_react20.default.useState(codexApiKey);
+    const [codexBaseUrlDraft, setCodexBaseUrlDraft] = import_react20.default.useState(codexBaseUrl);
+    const [customModelDraft, setCustomModelDraft] = import_react20.default.useState(customModel);
+    const [aiBusy, setAiBusy] = import_react20.default.useState(false);
+    const [aiToast, setAiToast] = import_react20.default.useState(null);
+    const [draftPort, setDraftPort] = import_react20.default.useState(String(port));
+    const [tokenRaw, setTokenRaw] = import_react20.default.useState("");
+    const [autostart, setAutostart] = import_react20.default.useState(true);
+    const [logLevel, setLogLevel] = import_react20.default.useState("info");
+    const [copied, setCopied] = import_react20.default.useState("");
+    import_react20.default.useEffect(() => setDraftPort(String(port)), [port]);
+    import_react20.default.useEffect(() => setTokenRaw(readTokenValue()), []);
+    import_react20.default.useEffect(() => setKey(apiKey), [apiKey]);
+    import_react20.default.useEffect(() => setApiBaseUrlDraft(anthropicBaseUrl), [anthropicBaseUrl]);
+    import_react20.default.useEffect(() => setCodexKeyDraft(codexApiKey), [codexApiKey]);
+    import_react20.default.useEffect(() => setCodexBaseUrlDraft(codexBaseUrl), [codexBaseUrl]);
+    import_react20.default.useEffect(() => setCustomModelDraft(customModel), [customModel]);
     const copy = (label, text) => {
       copyText(text).then(() => {
         setCopied(label);
@@ -9219,83 +9252,120 @@
         setTokenRaw(result || readTokenValue());
       }
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-5)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { title: t.ai, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.backend, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Segmented, { full: true, value: backend, onChange: onBackendChange, options: [
+    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-5)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(Section, { title: t.ai, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.backend, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Segmented, { full: true, value: backend, onChange: onBackendChange, options: [
           { value: "subscription", label: t.backendSub },
           { value: "codex", label: t.backendCodex },
           { value: "zcode", label: t.backendZcode },
           { value: "byok", label: t.backendByok }
         ] }) }),
-        backend === "subscription" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.backendSub, caption: claudeState === "not-logged-in" ? t.claudeLoginCap : claudeStatus && claudeStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: claudeBadgeStatus, children: claudeBadgeText }),
-          claudeState === "ready" && claudeStatus.nodeVersion ? /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { flex: 1, font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: [
+        backend === "subscription" ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.backendSub, caption: claudeState === "not-logged-in" ? t.claudeLoginCap : claudeStatus && claudeStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Badge, { status: claudeBadgeStatus, children: claudeBadgeText }),
+          claudeState === "ready" && claudeStatus.nodeVersion ? /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("span", { style: { flex: 1, font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: [
             "Node ",
             String(claudeStatus.nodeVersion).replace(/^v?/, "v")
-          ] }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: claudeState === "checking", onClick: onRecheckClaude, children: t.recheckClaude })
-        ] }) }) : backend === "codex" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(import_react19.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.codexSub, caption: codexState === "not-logged-in" ? t.codexLoginCap : codexStatus && codexStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: codexBadgeStatus, children: codexBadgeText }),
-            codexState === "ready" && (codexStatus.email || codexStatus.planType) ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1, font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: [codexStatus.email, codexStatus.planType].filter(Boolean).join(" \xB7 ") }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1 } }),
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: codexState === "checking", onClick: onRecheckCodex, children: t.recheckCodex })
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: claudeState === "checking", onClick: onRecheckClaude, children: t.recheckClaude })
+        ] }) }) : backend === "codex" ? /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(import_react20.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.codexSub, caption: codexState === "not-logged-in" ? t.codexLoginCap : codexStatus && codexStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Badge, { status: codexBadgeStatus, children: codexBadgeText }),
+            codexState === "ready" && (codexStatus.email || codexStatus.planType) ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { flex: 1, font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: [codexStatus.email, codexStatus.planType].filter(Boolean).join(" \xB7 ") }) : /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { flex: 1 } }),
+            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: codexState === "checking", onClick: onRecheckCodex, children: t.recheckCodex })
           ] }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.apiBaseUrl, caption: t.codexBaseUrlCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { mono: true, value: codexBaseUrlDraft, onChange: (v) => {
-            setCodexBaseUrlDraft(v);
-            if (onCodexBaseUrlChange) onCodexBaseUrlChange(v);
-          }, placeholder: "https://api.openai.com" }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.apiKey, caption: t.codexApiKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { secret: true, value: codexKeyDraft, onChange: setCodexKeyDraft, placeholder: "sk-...", style: { flex: 1 } }),
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "primary", disabled: aiBusy, onClick: saveCodexKey, children: aiBusy ? t.validating : t.save }),
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", disabled: aiBusy, onClick: clearCodexKey, children: t.clear })
-          ] }) })
-        ] }) : backend === "opencode" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.openCodeSub, caption: openCodeState === "not-logged-in" ? t.openCodeLoginCap : openCodeStatus && openCodeStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: openCodeBadgeStatus, children: openCodeBadgeText }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: openCodeState === "checking", onClick: onRecheckOpenCode, children: t.recheckOpenCode })
-        ] }) }) : backend === "zcode" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.zcodeSub, caption: zcodeState === "not-logged-in" ? t.zcodeLoginCap : zcodeStatus && zcodeStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: zcodeBadge.status, children: zcodeBadge.text }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: zcodeState === "checking", onClick: onRecheckZcode, children: t.recheckZcode })
-        ] }) }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(import_react19.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.apiBaseUrl, caption: t.anthropicBaseUrlCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { mono: true, value: apiBaseUrlDraft, onChange: (v) => {
-            setApiBaseUrlDraft(v);
-            if (onAnthropicBaseUrlChange) onAnthropicBaseUrlChange(v);
-          }, placeholder: "https://api.anthropic.com" }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.apiKey, caption: t.apiKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { secret: true, value: key, onChange: setKey, placeholder: "sk-ant-...", style: { flex: 1 } }),
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "primary", disabled: aiBusy || !key.trim(), onClick: saveApiKey, children: aiBusy ? t.validating : t.saveVerify }),
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", disabled: aiBusy, onClick: clearApiKey, children: t.clear })
-          ] }) })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.modelDefault, children: zcodeModelLocked2 ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { minHeight: 28, display: "flex", alignItems: "center", padding: "0 8px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: t.zcodeModelManaged }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+            ApiProfileFields,
+            {
+              baseUrl: {
+                value: codexBaseUrlDraft,
+                onChange: (v) => {
+                  setCodexBaseUrlDraft(v);
+                  if (onCodexBaseUrlChange) onCodexBaseUrlChange(v);
+                },
+                label: t.apiBaseUrl,
+                caption: t.codexBaseUrlCap,
+                placeholder: "https://api.openai.com"
+              },
+              apiKey: {
+                value: codexKeyDraft,
+                onChange: setCodexKeyDraft,
+                label: t.apiKey,
+                caption: t.codexApiKeyCap,
+                placeholder: "sk-...",
+                saveLabel: aiBusy ? t.validating : t.save,
+                busy: aiBusy,
+                saveDisabled: false,
+                onSave: saveCodexKey,
+                clearLabel: t.clear,
+                onClear: clearCodexKey
+              }
+            }
+          )
+        ] }) : backend === "opencode" ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.openCodeSub, caption: openCodeState === "not-logged-in" ? t.openCodeLoginCap : openCodeStatus && openCodeStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Badge, { status: openCodeBadgeStatus, children: openCodeBadgeText }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: openCodeState === "checking", onClick: onRecheckOpenCode, children: t.recheckOpenCode })
+        ] }) }) : backend === "zcode" ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.zcodeSub, caption: zcodeState === "not-logged-in" ? t.zcodeLoginCap : zcodeStatus && zcodeStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Badge, { status: zcodeBadge.status, children: zcodeBadge.text }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: zcodeState === "checking", onClick: onRecheckZcode, children: t.recheckZcode })
+        ] }) }) : /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(import_react20.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+          ApiProfileFields,
+          {
+            baseUrl: {
+              value: apiBaseUrlDraft,
+              onChange: (v) => {
+                setApiBaseUrlDraft(v);
+                if (onAnthropicBaseUrlChange) onAnthropicBaseUrlChange(v);
+              },
+              label: t.apiBaseUrl,
+              caption: t.anthropicBaseUrlCap,
+              placeholder: "https://api.anthropic.com"
+            },
+            apiKey: {
+              value: key,
+              onChange: setKey,
+              label: t.apiKey,
+              caption: t.apiKeyCap,
+              placeholder: "sk-ant-...",
+              saveLabel: aiBusy ? t.validating : t.saveVerify,
+              busy: aiBusy,
+              saveDisabled: !key.trim(),
+              onSave: saveApiKey,
+              clearLabel: t.clear,
+              onClear: clearApiKey
+            }
+          }
+        ) }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.modelDefault, children: zcodeModelLocked2 ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { minHeight: 28, display: "flex", alignItems: "center", padding: "0 8px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: t.zcodeModelManaged }) : /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || [
+          { value: "claude-sonnet-5", label: "Claude Sonnet 5" },
           { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
           { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" }
         ] }) }),
-        backend === "byok" || backend === "codex" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.customModel, caption: t.customModelCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { mono: true, value: customModelDraft, onChange: (v) => {
+        backend === "byok" || backend === "codex" ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.customModel, caption: t.customModelCap, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Input, { mono: true, value: customModelDraft, onChange: (v) => {
           setCustomModelDraft(v);
           if (onCustomModelChange) onCustomModelChange(v);
         }, placeholder: backend === "codex" ? "provider/model" : "claude-custom" }) }) : null,
-        aiToast ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Toast, { type: aiToast.type, message: aiToast.message, onClose: () => setAiToast(null) }) : null
+        aiToast ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Toast, { type: aiToast.type, message: aiToast.message, onClose: () => setAiToast(null) }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { title: t.conn, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.port, hint: t.portHint, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { mono: true, value: draftPort, onChange: setDraftPort, style: { flex: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", onClick: () => onApplyPort && onApplyPort(draftPort), children: t.apply })
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(Section, { title: t.conn, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.port, hint: t.portHint, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Input, { mono: true, value: draftPort, onChange: setDraftPort, style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", onClick: () => onApplyPort && onApplyPort(draftPort), children: t.apply })
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.token, caption: t.tokenCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { mono: true, value: tokenDisplay, style: { flex: 1 }, suffix: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(IconButton, { icon: "copy", title: t.copy, disabled: !tokenRaw, onClick: () => copy("token", tokenRaw), style: { width: 20, height: 20 } }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", onClick: regenerate, children: t.regen })
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.token, caption: t.tokenCap, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Input, { mono: true, value: tokenDisplay, style: { flex: 1 }, suffix: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(IconButton, { icon: "copy", title: t.copy, disabled: !tokenRaw, onClick: () => copy("token", tokenRaw), style: { width: 20, height: 20 } }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", icon: "rotate-cw", onClick: regenerate, children: t.regen })
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { layout: "row", label: t.autostart, caption: t.autostartCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Switch, { checked: autostart, onChange: setAutostart }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.mcp, caption: copied === "mcp" ? t.copied : null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("pre", { style: { margin: 0, maxHeight: 160, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-secondary)", font: "400 10px/1.4 var(--font-mono)" }, children: mcpConfig }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "copy", onClick: () => copy("mcp", mcpConfig), children: t.copy })
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { layout: "row", label: t.autostart, caption: t.autostartCap, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Switch, { checked: autostart, onChange: setAutostart }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.mcp, caption: copied === "mcp" ? t.copied : null, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("pre", { style: { margin: 0, maxHeight: 160, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-secondary)", font: "400 10px/1.4 var(--font-mono)" }, children: mcpConfig }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", icon: "copy", onClick: () => copy("mcp", mcpConfig), children: t.copy })
         ] }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Section, { title: t.externalClients, caption: t.externalClientsCap, children: EXTERNAL_CLIENTS.map((externalClient) => {
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Section, { title: t.externalClients, caption: t.externalClientsCap, children: EXTERNAL_CLIENTS.map((externalClient) => {
         const configText = JSON.stringify(mcpConfigFor(externalClient, Number(draftPort) || port || 11488, expertGuidance), null, 2);
-        return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
           ExternalClientRow,
           {
             client: externalClient,
@@ -9307,9 +9377,9 @@
           externalClient.id
         );
       }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { title: t.sec, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 2 }, children: t.clients }),
-        clients.map((client) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(Section, { title: t.sec, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 2 }, children: t.clients }),
+        clients.map((client) => /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
           ClientRow,
           {
             name: client.label,
@@ -9321,40 +9391,40 @@
           client.label
         ))
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { title: t.gen, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { layout: "row", label: t.expertGuidance, caption: t.expertGuidanceCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Switch, { checked: expertGuidance, onChange: (v) => onExpertGuidance && onExpertGuidance(v) }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.language, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.logLevel, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: logLevel, onChange: setLogLevel, style: { flex: 1 }, options: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(Section, { title: t.gen, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { layout: "row", label: t.expertGuidance, caption: t.expertGuidanceCap, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Switch, { checked: expertGuidance, onChange: (v) => onExpertGuidance && onExpertGuidance(v) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.language, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.logLevel, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Select, { value: logLevel, onChange: setLogLevel, style: { flex: 1 }, options: [
             { value: "error", label: "Error" },
             { value: "info", label: "Info" },
             { value: "debug", label: "Debug" }
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "download", disabled: true, children: t.exportLog })
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", icon: "download", disabled: true, children: t.exportLog })
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.logs, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("details", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("summary", { style: { cursor: "pointer", color: "var(--text-secondary)", font: "500 11px/1.35 var(--font-ui)" }, children: t.logs }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("pre", { style: { margin: "6px 0 0", maxHeight: 128, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-tertiary)", font: "400 10px/1.4 var(--font-mono)" }, children: logs.join("\n") })
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.logs, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("details", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("summary", { style: { cursor: "pointer", color: "var(--text-secondary)", font: "500 11px/1.35 var(--font-ui)" }, children: t.logs }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("pre", { style: { margin: "6px 0 0", maxHeight: 128, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-tertiary)", font: "400 10px/1.4 var(--font-mono)" }, children: logs.join("\n") })
         ] }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { title: t.about, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(VersionRow, { label: t.verPanel, value: `v${package_default.version}` }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(VersionRow, { label: t.verHost, value: hostVersion, badge: hostVersion === "-" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: "neutral", children: t.pending }) : null }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(VersionRow, { label: t.verPy, value: pythonVersion, badge: pythonVersion === "-" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: "neutral", children: t.pending }) : null }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "ghost", size: "sm", icon: "book-open", children: t.docs }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "ghost", size: "sm", icon: "github", children: t.github })
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(Section, { title: t.about, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(VersionRow, { label: t.verPanel, value: `v${package_default.version}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(VersionRow, { label: t.verHost, value: hostVersion, badge: hostVersion === "-" ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Badge, { status: "neutral", children: t.pending }) : null }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(VersionRow, { label: t.verPy, value: pythonVersion, badge: pythonVersion === "-" ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Badge, { status: "neutral", children: t.pending }) : null }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "ghost", size: "sm", icon: "book-open", children: t.docs }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "ghost", size: "sm", icon: "github", children: t.github })
         ] })
       ] })
     ] });
   }
 
   // src/screens/ActivityScreen.jsx
-  var import_react22 = __toESM(require_react(), 1);
+  var import_react23 = __toESM(require_react(), 1);
 
   // src/components/activity/FilterBar.jsx
-  var import_react20 = __toESM(require_react(), 1);
-  var import_jsx_runtime18 = __toESM(require_jsx_runtime(), 1);
+  var import_react21 = __toESM(require_react(), 1);
+  var import_jsx_runtime19 = __toESM(require_jsx_runtime(), 1);
   function FilterBar({
     query = "",
     onQuery,
@@ -9362,8 +9432,8 @@
     filters = [],
     style
   }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", padding: "var(--space-2)", borderBottom: "1px solid var(--border-subtle)", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", padding: "var(--space-2)", borderBottom: "1px solid var(--border-subtle)", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
         Input,
         {
           value: query,
@@ -9373,13 +9443,13 @@
           suffix: null
         }
       ),
-      filters.map((f, i) => /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Select, { full: false, value: f.value, onChange: f.onChange, options: f.options, style: { flex: "none", width: f.width || 96 } }, i))
+      filters.map((f, i) => /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Select, { full: false, value: f.value, onChange: f.onChange, options: f.options, style: { flex: "none", width: f.width || 96 } }, i))
     ] });
   }
 
   // src/components/activity/ActivityRow.jsx
-  var import_react21 = __toESM(require_react(), 1);
-  var import_jsx_runtime19 = __toESM(require_jsx_runtime(), 1);
+  var import_react22 = __toESM(require_react(), 1);
+  var import_jsx_runtime20 = __toESM(require_jsx_runtime(), 1);
   var RESULT = {
     success: { icon: "check", color: "var(--ok)" },
     error: { icon: "x", color: "var(--error)" },
@@ -9399,11 +9469,11 @@
     expandable = true,
     style
   }) {
-    const [expanded, setExpanded] = import_react21.default.useState(false);
-    const [hover, setHover] = import_react21.default.useState(false);
+    const [expanded, setExpanded] = import_react22.default.useState(false);
+    const [hover, setHover] = import_react22.default.useState(false);
     const r = RESULT[result] || RESULT.success;
-    return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { borderBottom: "1px solid var(--border-subtle)", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { borderBottom: "1px solid var(--border-subtle)", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
         "div",
         {
           role: expandable ? "button" : void 0,
@@ -9421,11 +9491,11 @@
             transition: "background var(--dur-fast) var(--ease-out)"
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { title: resultTitle, style: { display: "inline-flex", flex: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Icon2, { name: r.icon, size: 12, strokeWidth: 2.5, color: r.color }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { style: { flex: "none", font: `var(--weight-regular) var(--text-micro)/1 var(--font-mono)`, color: "var(--text-tertiary)" }, children: time }),
-            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Badge, { status: "neutral", style: { flex: "none", maxWidth: 84, overflow: "hidden" }, children: source }),
-            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { style: { flex: "none", font: `var(--weight-medium) var(--text-caption)/1 var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "nowrap" }, children: verb }),
-            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { title: resultTitle, style: { display: "inline-flex", flex: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Icon2, { name: r.icon, size: 12, strokeWidth: 2.5, color: r.color }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { flex: "none", font: `var(--weight-regular) var(--text-micro)/1 var(--font-mono)`, color: "var(--text-tertiary)" }, children: time }),
+            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Badge, { status: "neutral", style: { flex: "none", maxWidth: 84, overflow: "hidden" }, children: source }),
+            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { flex: "none", font: `var(--weight-medium) var(--text-caption)/1 var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "nowrap" }, children: verb }),
+            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
               "span",
               {
                 style: {
@@ -9440,7 +9510,7 @@
                 children: target
               }
             ),
-            expandable ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+            expandable ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
               Icon2,
               {
                 name: "chevron-down",
@@ -9452,8 +9522,8 @@
           ]
         }
       ),
-      expanded ? /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2) 26px", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
-        params != null ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+      expanded ? /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2) 26px", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
+        params != null ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
           "pre",
           {
             style: {
@@ -9472,7 +9542,7 @@
             children: typeof params === "string" ? params : JSON.stringify(params, null, 2)
           }
         ) : null,
-        onUndo ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Button, { size: "sm", variant: "secondary", icon: "undo-2", onClick: onUndo, style: { alignSelf: "flex-start" }, children: undoLabel }) : null
+        onUndo ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Button, { size: "sm", variant: "secondary", icon: "undo-2", onClick: onUndo, style: { alignSelf: "flex-start" }, children: undoLabel }) : null
       ] }) : null
     ] });
   }
@@ -9538,7 +9608,7 @@
   }
 
   // src/screens/ActivityScreen.jsx
-  var import_jsx_runtime20 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime21 = __toESM(require_jsx_runtime(), 1);
   var A = {
     zh: {
       search: "\u641C\u7D22\u64CD\u4F5C\u2026",
@@ -9590,9 +9660,9 @@
     emptyCaption
   }) {
     const t = A[lang] || A.zh;
-    const [q, setQ] = import_react22.default.useState("");
-    const [res, setRes] = import_react22.default.useState("all");
-    const [undoing, setUndoing] = import_react22.default.useState(false);
+    const [q, setQ] = import_react23.default.useState("");
+    const [res, setRes] = import_react23.default.useState("all");
+    const [undoing, setUndoing] = import_react23.default.useState(false);
     const rows = filterEvents(events, { mode: res, query: q });
     const empty = events.length === 0;
     const undoCheckpoint = async () => {
@@ -9604,9 +9674,9 @@
         setUndoing(false);
       }
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: empty ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(EmptyState, { icon: "list", title: emptyTitle || t.empty, caption: emptyCaption || t.emptyCap, style: { flex: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(import_react22.default.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", borderBottom: "1px solid var(--border-subtle)" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: empty ? /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(EmptyState, { icon: "list", title: emptyTitle || t.empty, caption: emptyCaption || t.emptyCap, style: { flex: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)(import_react23.default.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { style: { display: "flex", borderBottom: "1px solid var(--border-subtle)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
           FilterBar,
           {
             query: q,
@@ -9626,12 +9696,12 @@
             ]
           }
         ),
-        onClear ? /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-1)", padding: "var(--space-2) var(--space-2) var(--space-2) 0" }, children: [
-          onUndoCheckpoint ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Button, { size: "sm", variant: "secondary", icon: "undo-2", onClick: undoCheckpoint, disabled: undoing, title: t.undoCheckpointTitle, children: undoing ? t.undoingCheckpoint : t.undoCheckpoint }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Button, { size: "sm", variant: "ghost", icon: "trash-2", onClick: onClear, title: t.clear, children: t.clear })
+        onClear ? /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-1)", padding: "var(--space-2) var(--space-2) var(--space-2) 0" }, children: [
+          onUndoCheckpoint ? /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(Button, { size: "sm", variant: "secondary", icon: "undo-2", onClick: undoCheckpoint, disabled: undoing, title: t.undoCheckpointTitle, children: undoing ? t.undoingCheckpoint : t.undoCheckpoint }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(Button, { size: "sm", variant: "ghost", icon: "trash-2", onClick: onClear, title: t.clear, children: t.clear })
         ] }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { flex: 1, minHeight: 0, overflow: "auto" }, children: rows.length ? rows.map((evt) => /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { style: { flex: 1, minHeight: 0, overflow: "auto" }, children: rows.length ? rows.map((evt) => /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
         ActivityRow,
         {
           time: new Date(evt.ts).toLocaleTimeString(),
@@ -9643,18 +9713,18 @@
           params: eventDetails(evt)
         },
         evt.id
-      )) : /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(EmptyState, { icon: "list", title: emptyTitle || t.empty, caption: emptyCaption || t.emptyCap, style: { flex: 1 } }) })
+      )) : /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(EmptyState, { icon: "list", title: emptyTitle || t.empty, caption: emptyCaption || t.emptyCap, style: { flex: 1 } }) })
     ] }) });
   }
 
   // src/screens/WizardScreen.jsx
-  var import_react25 = __toESM(require_react(), 1);
+  var import_react26 = __toESM(require_react(), 1);
 
   // src/components/core/Spinner.jsx
-  var import_react23 = __toESM(require_react(), 1);
-  var import_jsx_runtime21 = __toESM(require_jsx_runtime(), 1);
+  var import_react24 = __toESM(require_react(), 1);
+  var import_jsx_runtime22 = __toESM(require_jsx_runtime(), 1);
   function Spinner({ size = 12, style }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
       "span",
       {
         role: "progressbar",
@@ -9675,10 +9745,10 @@
   }
 
   // src/components/chat/AIAvatar.jsx
-  var import_react24 = __toESM(require_react(), 1);
-  var import_jsx_runtime22 = __toESM(require_jsx_runtime(), 1);
+  var import_react25 = __toESM(require_react(), 1);
+  var import_jsx_runtime23 = __toESM(require_jsx_runtime(), 1);
   function AIAvatar({ size = 20, style }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
       "span",
       {
         "aria-label": "AI",
@@ -9694,7 +9764,7 @@
           borderRadius: "var(--radius-md)",
           ...style
         },
-        children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Icon2, { name: "sparkles", size: Math.round(size * 0.6), color: "var(--accent)", strokeWidth: 2 })
+        children: /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Icon2, { name: "sparkles", size: Math.round(size * 0.6), color: "var(--accent)", strokeWidth: 2 })
       }
     );
   }
@@ -9751,7 +9821,7 @@
   }
 
   // src/screens/WizardScreen.jsx
-  var import_jsx_runtime23 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime24 = __toESM(require_jsx_runtime(), 1);
   var W = {
     zh: {
       stepOf: (n) => `\u7B2C ${n} \u6B65 / \u5171 3 \u6B65`,
@@ -9821,14 +9891,14 @@
     }
   }
   function CodeBlock({ code, copyLabel, onCopy, maxHeight }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { position: "relative", background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("pre", { style: { margin: 0, padding: "10px 36px 10px 12px", font: "400 11px/1.7 var(--font-mono)", color: "var(--text-primary)", overflow: "auto", maxHeight: maxHeight || 180, whiteSpace: "pre" }, children: code }),
-      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(IconButton, { icon: "copy", title: copyLabel, variant: "secondary", onClick: onCopy, style: { position: "absolute", top: 6, right: 6, background: "var(--bg-panel)" } })
+    return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { position: "relative", background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("pre", { style: { margin: 0, padding: "10px 36px 10px 12px", font: "400 11px/1.7 var(--font-mono)", color: "var(--text-primary)", overflow: "auto", maxHeight: maxHeight || 180, whiteSpace: "pre" }, children: code }),
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(IconButton, { icon: "copy", title: copyLabel, variant: "secondary", onClick: onCopy, style: { position: "absolute", top: 6, right: 6, background: "var(--bg-panel)" } })
     ] });
   }
   function ClientRow2({ name, note, selected, onSelect }) {
-    const [hover, setHover] = import_react25.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(
+    const [hover, setHover] = import_react26.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
       "button",
       {
         type: "button",
@@ -9851,11 +9921,11 @@
           transition: "background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out)"
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: name }),
-            note ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: note }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: name }),
+            note ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: note }) : null
           ] }),
-          selected ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Icon2, { name: "check", size: 13, strokeWidth: 2.5, color: "var(--text-primary)" }) : null
+          selected ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Icon2, { name: "check", size: 13, strokeWidth: 2.5, color: "var(--text-primary)" }) : null
         ]
       }
     );
@@ -9866,25 +9936,25 @@
     const isProblem = status === "missing" || status === "fail";
     const icon = status === "ok" ? "check" : isProblem ? "triangle-alert" : status === "idle" ? "circle" : null;
     const tail = String(state && state.logTail || "").split(/\r?\n/).slice(-6).join("\n");
-    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", gap: 8, padding: "9px 10px", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-panel)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { width: 18, height: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none", color: status === "ok" ? "var(--ok)" : isProblem ? "var(--warn)" : "var(--text-tertiary)" }, children: isBusy ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Spinner, { size: 14 }) : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Icon2, { name: icon, size: 15, strokeWidth: 2 }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, minHeight: 18 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: label }),
-          status === "ok" && state.version ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: state.version }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(IconButton, { icon: "rotate-cw", title: t.recheck, variant: "secondary", size: "sm", disabled: isBusy, onClick: onDetect })
+    return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { display: "flex", gap: 8, padding: "9px 10px", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-panel)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { width: 18, height: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none", color: status === "ok" ? "var(--ok)" : isProblem ? "var(--warn)" : "var(--text-tertiary)" }, children: isBusy ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Spinner, { size: 14 }) : /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Icon2, { name: icon, size: 15, strokeWidth: 2 }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, minHeight: 18 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: label }),
+          status === "ok" && state.version ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: state.version }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(IconButton, { icon: "rotate-cw", title: t.recheck, variant: "secondary", size: "sm", disabled: isBusy, onClick: onDetect })
         ] }),
-        hint ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: hint }) : null,
-        isProblem ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("code", { style: { display: "block", padding: "6px 8px", background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", font: "400 10px/1.55 var(--font-mono)", color: "var(--text-primary)", overflow: "auto", whiteSpace: "pre" }, children: commandPreview2 }),
-          login ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.loginHint }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "secondary", size: "sm", onClick: onInstall, children: login ? t.openLogin : t.install }),
-            status === "fail" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => copyText2(state.logTail), children: t.copyLog }) : null
+        hint ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: hint }) : null,
+        isProblem ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(import_react26.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("code", { style: { display: "block", padding: "6px 8px", background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", font: "400 10px/1.55 var(--font-mono)", color: "var(--text-primary)", overflow: "auto", whiteSpace: "pre" }, children: commandPreview2 }),
+          login ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.loginHint }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Button, { variant: "secondary", size: "sm", onClick: onInstall, children: login ? t.openLogin : t.install }),
+            status === "fail" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => copyText2(state.logTail), children: t.copyLog }) : null
           ] })
         ] }) : null,
-        status === "running" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("pre", { style: { margin: 0, maxHeight: 96, overflow: "auto", padding: 8, background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", font: "400 10px/1.45 var(--font-mono)", color: "var(--text-secondary)", whiteSpace: "pre-wrap" }, children: tail }) : null
+        status === "running" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("pre", { style: { margin: 0, maxHeight: 96, overflow: "auto", padding: 8, background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", font: "400 10px/1.45 var(--font-mono)", color: "var(--text-secondary)", whiteSpace: "pre-wrap" }, children: tail }) : null
       ] })
     ] });
   }
@@ -9913,27 +9983,27 @@
     const clientOptions = [{ id: "builtin", name: "builtin" }, ...EXTERNAL_CLIENTS];
     const selectedExternalClient = EXTERNAL_CLIENTS.find((item) => item.id === client);
     const selectedMcpConfig = selectedExternalClient && selectedExternalClient.kind === "mcp-stdio" ? JSON.stringify(mcpConfigFor(selectedExternalClient, port, expertGuidance), null, 2) : "";
-    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "var(--space-6) var(--space-5) var(--space-5)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", gap: 5 }, children: [1, 2, 3].map((n) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { width: n === step ? 14 : 5, height: 5, borderRadius: 3, background: n === step ? "var(--gray-11)" : n < step ? "var(--gray-9)" : "var(--gray-6)", transition: "width var(--dur-base) var(--ease-out)" } }, n)) }),
-        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { font: "400 10px/1 var(--font-mono)", color: "var(--text-tertiary)" }, children: t.stepOf(step) }),
-        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1 } }),
-        onSkip && step < 3 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "ghost", size: "sm", onClick: onSkip, style: { color: "var(--text-tertiary)" }, children: t.skip }) : null
+    return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "var(--space-6) var(--space-5) var(--space-5)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { display: "flex", gap: 5 }, children: [1, 2, 3].map((n) => /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { width: n === step ? 14 : 5, height: 5, borderRadius: 3, background: n === step ? "var(--gray-11)" : n < step ? "var(--gray-9)" : "var(--gray-6)", transition: "width var(--dur-base) var(--ease-out)" } }, n)) }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { font: "400 10px/1 var(--font-mono)", color: "var(--text-tertiary)" }, children: t.stepOf(step) }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { flex: 1 } }),
+        onSkip && step < 3 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Button, { variant: "ghost", size: "sm", onClick: onSkip, style: { color: "var(--text-tertiary)" }, children: t.skip }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", paddingTop: "var(--space-6)" }, children: [
-        step === 1 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(AIAvatar, { size: 44 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t1 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b1 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { marginTop: "var(--space-2)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginBottom: 6 }, children: t.langLabel }),
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] })
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", paddingTop: "var(--space-6)" }, children: [
+        step === 1 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(import_react26.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(AIAvatar, { size: 44 }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t1 }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b1 }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { marginTop: "var(--space-2)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginBottom: 6 }, children: t.langLabel }),
+            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] })
           ] })
         ] }) : null,
-        step === 2 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t2 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b2 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: LOCAL_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
+        step === 2 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(import_react26.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t2 }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b2 }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: LOCAL_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
             InstallStepRow,
             {
               label: STEP_LABELS[id],
@@ -9946,10 +10016,10 @@
             id
           )) })
         ] }) : null,
-        step === 3 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t3 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b3 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: clientOptions.map((c) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
+        step === 3 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(import_react26.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t3 }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b3 }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: clientOptions.map((c) => /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
             ClientRow2,
             {
               name: c.id === "builtin" ? t.builtin : c.name,
@@ -9959,12 +10029,12 @@
             },
             c.id
           )) }),
-          selectedExternalClient && selectedExternalClient.kind === "mcp-stdio" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(CodeBlock, { code: selectedMcpConfig, copyLabel: t.copy, onCopy: () => onCopy ? onCopy(selectedMcpConfig) : copyText2(selectedMcpConfig), maxHeight: 150 }) : null,
-          selectedExternalClient && selectedExternalClient.kind === "mcp-doc" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8, padding: 10, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-panel)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("a", { href: selectedExternalClient.docsUrl, target: "_blank", rel: "noreferrer", style: { font: "500 12px/1.35 var(--font-ui)", color: "var(--accent)" }, children: t.docClient }),
-            selectedExternalClient.networkNote ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: selectedExternalClient.networkNote }) : null
+          selectedExternalClient && selectedExternalClient.kind === "mcp-stdio" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(CodeBlock, { code: selectedMcpConfig, copyLabel: t.copy, onCopy: () => onCopy ? onCopy(selectedMcpConfig) : copyText2(selectedMcpConfig), maxHeight: 150 }) : null,
+          selectedExternalClient && selectedExternalClient.kind === "mcp-doc" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8, padding: 10, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-panel)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("a", { href: selectedExternalClient.docsUrl, target: "_blank", rel: "noreferrer", style: { font: "500 12px/1.35 var(--font-ui)", color: "var(--accent)" }, children: t.docClient }),
+            selectedExternalClient.networkNote ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: selectedExternalClient.networkNote }) : null
           ] }) : null,
-          client === "builtin" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: SUBSCRIPTION_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
+          client === "builtin" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: SUBSCRIPTION_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
             InstallStepRow,
             {
               label: STEP_LABELS[id],
@@ -9980,20 +10050,20 @@
           )) }) : null
         ] }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", paddingTop: "var(--space-3)" }, children: [
-        step > 1 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "ghost", size: "lg", onClick: onBack, children: t.back }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1 } }),
-        step < 3 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "primary", size: "lg", onClick: onNext, children: t.next }) : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "primary", size: "lg", onClick: onDone, children: t.start })
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", paddingTop: "var(--space-3)" }, children: [
+        step > 1 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Button, { variant: "ghost", size: "lg", onClick: onBack, children: t.back }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { flex: 1 } }),
+        step < 3 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Button, { variant: "primary", size: "lg", onClick: onNext, children: t.next }) : /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Button, { variant: "primary", size: "lg", onClick: onDone, children: t.start })
       ] })
     ] });
   }
 
   // src/screens/ConnectionDrawer.jsx
-  var import_react28 = __toESM(require_react(), 1);
+  var import_react29 = __toESM(require_react(), 1);
 
   // src/components/shell/DiagnosticItem.jsx
-  var import_react26 = __toESM(require_react(), 1);
-  var import_jsx_runtime24 = __toESM(require_jsx_runtime(), 1);
+  var import_react27 = __toESM(require_react(), 1);
+  var import_jsx_runtime25 = __toESM(require_jsx_runtime(), 1);
   var GLYPHS = {
     pass: { icon: "check", color: "var(--ok)" },
     fail: { icon: "x", color: "var(--error)" },
@@ -10001,10 +10071,10 @@
   };
   function DiagnosticItem({ label, status = "pending", detail, actionLabel, onAction, style }) {
     const g = GLYPHS[status];
-    return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { padding: "var(--space-1) 0", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: 22 }, children: [
-        status === "running" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Spinner, { size: 12 }) : /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Icon2, { name: g.icon, size: 12, strokeWidth: 2.5, color: g.color }),
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { padding: "var(--space-1) 0", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: 22 }, children: [
+        status === "running" ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Spinner, { size: 12 }) : /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Icon2, { name: g.icon, size: 12, strokeWidth: 2.5, color: g.color }),
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
           "span",
           {
             style: {
@@ -10017,7 +10087,7 @@
           }
         )
       ] }),
-      status === "fail" && detail ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
+      status === "fail" && detail ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
         "div",
         {
           style: {
@@ -10031,8 +10101,8 @@
             borderRadius: "var(--radius-sm)"
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: detail }),
-            actionLabel ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, style: { flex: "none" }, children: actionLabel }) : null
+            /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: detail }),
+            actionLabel ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, style: { flex: "none" }, children: actionLabel }) : null
           ]
         }
       ) : null
@@ -10040,19 +10110,19 @@
   }
 
   // src/components/shell/Drawer.jsx
-  var import_react27 = __toESM(require_react(), 1);
-  var import_jsx_runtime25 = __toESM(require_jsx_runtime(), 1);
+  var import_react28 = __toESM(require_react(), 1);
+  var import_jsx_runtime26 = __toESM(require_jsx_runtime(), 1);
   function Drawer({ open = false, title, onClose, children, closeTitle = "\u5173\u95ED Close", style }) {
     if (!open) return null;
-    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { position: "absolute", inset: 0, zIndex: 30 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { position: "absolute", inset: 0, zIndex: 30 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
         "div",
         {
           onClick: onClose,
           style: { position: "absolute", inset: 0, background: "var(--scrim)", animation: "ds-fade var(--dur-slow) var(--ease-out)" }
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(
         "div",
         {
           role: "dialog",
@@ -10073,7 +10143,7 @@
             ...style
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
+            /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(
               "div",
               {
                 style: {
@@ -10084,12 +10154,12 @@
                   borderBottom: "1px solid var(--border-subtle)"
                 },
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-semibold) var(--text-heading)/1 var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
-                  /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(IconButton, { icon: "x", title: closeTitle, onClick: onClose })
+                  /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-semibold) var(--text-heading)/1 var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
+                  /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(IconButton, { icon: "x", title: closeTitle, onClick: onClose })
                 ]
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { overflow: "auto", padding: "var(--space-3)" }, children })
+            /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { overflow: "auto", padding: "var(--space-3)" }, children })
           ]
         }
       )
@@ -10097,7 +10167,7 @@
   }
 
   // src/screens/ConnectionDrawer.jsx
-  var import_jsx_runtime26 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime27 = __toESM(require_jsx_runtime(), 1);
   var D = {
     zh: {
       title: "\u8FDE\u63A5",
@@ -10155,9 +10225,9 @@
     }
   };
   function KV({ k, children }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { width: 72, flex: "none", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: k }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.35 var(--font-mono)", color: "var(--text-primary)" }, children })
+    return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { width: 72, flex: "none", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: k }),
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.35 var(--font-mono)", color: "var(--text-primary)" }, children })
     ] });
   }
   function formatTime(ts) {
@@ -10183,42 +10253,42 @@
     const hostVersion = info.hostVersion || "-";
     const mismatch = info.pythonVersion && info.pythonVersion !== panelVersion;
     const recent = info.lastClientSeenAt ? [{ time: formatTime(info.lastClientSeenAt), text: lang === "zh" ? "\u5916\u90E8 MCP \u5BA2\u6237\u7AEF" : "External MCP client" }] : [];
-    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(KV, { k: t.status, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(StatusDot, { status: connected ? "connected" : "waiting", size: 7 }),
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { fontFamily: "var(--font-ui)" }, children: statusLabel || (connected ? t.connected : t.waiting) })
+    return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(KV, { k: t.status, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(StatusDot, { status: connected ? "connected" : "waiting", size: 7 }),
+        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { fontFamily: "var(--font-ui)" }, children: statusLabel || (connected ? t.connected : t.waiting) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(KV, { k: t.port, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(KV, { k: t.port, children: [
         info.port || "-",
         " ",
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(IconButton, { icon: "copy", title: t.copyConfig, onClick: () => callCopy(onCopyConfig), style: { width: 20, height: 20 } })
+        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(IconButton, { icon: "copy", title: t.copyConfig, onClick: () => callCopy(onCopyConfig), style: { width: 20, height: 20 } })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(KV, { k: t.token, children: info.tokenLabel || t.tokenLocal }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(KV, { k: t.ver, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(KV, { k: t.token, children: info.tokenLabel || t.tokenLocal }),
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(KV, { k: t.ver, children: [
         "v",
         panelVersion,
         " \xB7 host ",
         hostVersion,
         " \xB7 py ",
         pythonVersion,
-        mismatch ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Badge, { status: "warn", children: t.mismatch }) : null
+        mismatch ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Badge, { status: "warn", children: t.mismatch }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 4 }, children: t.recent }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", padding: "2px 8px" }, children: (recent.length ? recent : [{ time: "-", text: t.noRecent }]).map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", minHeight: 22, font: "400 10px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }, children: r.time }),
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: r.text })
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 4 }, children: t.recent }),
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", padding: "2px 8px" }, children: (recent.length ? recent : [{ time: "-", text: t.noRecent }]).map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", minHeight: 22, font: "400 10px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }, children: r.time }),
+        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: r.text })
       ] }, i)) }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => callCopy(onCopyConfig), children: t.copyConfig }),
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRestart, children: t.restart }),
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "stethoscope", onClick: onDiagnose, children: t.diagnose })
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => callCopy(onCopyConfig), children: t.copyConfig }),
+        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRestart, children: t.restart }),
+        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Button, { variant: "secondary", size: "sm", icon: "stethoscope", onClick: onDiagnose, children: t.diagnose })
       ] })
     ] });
   }
   function DiagnosticsBody({ lang = "zh", diagnostics = [], onRerun }) {
     const t = D[lang] || D.zh;
-    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", flexDirection: "column" }, children: [
-      diagnostics.map((c) => /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", flexDirection: "column" }, children: [
+      diagnostics.map((c) => /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
         DiagnosticItem,
         {
           label: t.checks[c.id] || c.id,
@@ -10227,10 +10297,10 @@
         },
         c.id
       )),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", justifyContent: "flex-end", gap: 6, paddingTop: "var(--space-2)" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => copyText(JSON.stringify(diagnostics, null, 2)).catch(() => {
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", justifyContent: "flex-end", gap: 6, paddingTop: "var(--space-2)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => copyText(JSON.stringify(diagnostics, null, 2)).catch(() => {
         }), children: t.copyReport }),
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRerun, children: t.rerun })
+        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRerun, children: t.rerun })
       ] })
     ] });
   }
@@ -10238,8 +10308,8 @@
     const diagList = Array.isArray(diagnostics) ? diagnostics : [];
     const t = D[lang] || D.zh;
     const panelVersion = info.panelVersion || package_default.version;
-    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(Drawer, { open, title: t.title, onClose, closeTitle: t.close, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(Drawer, { open, title: t.title, onClose, closeTitle: t.close, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
         ConnectionDrawerBody,
         {
           lang,
@@ -10250,19 +10320,19 @@
           onDiagnose
         }
       ),
-      diagList.length ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { marginTop: "var(--space-3)", paddingTop: "var(--space-2)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(DiagnosticsBody, { lang, diagnostics: diagList, onRerun: onDiagnose }) }) : null
+      diagList.length ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { marginTop: "var(--space-3)", paddingTop: "var(--space-2)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(DiagnosticsBody, { lang, diagnostics: diagList, onRerun: onDiagnose }) }) : null
     ] });
   }
 
   // src/screens/ChatScreen.jsx
-  var import_react36 = __toESM(require_react(), 1);
+  var import_react37 = __toESM(require_react(), 1);
 
   // src/components/chat/ChatBubble.jsx
-  var import_react29 = __toESM(require_react(), 1);
-  var import_jsx_runtime27 = __toESM(require_jsx_runtime(), 1);
+  var import_react30 = __toESM(require_react(), 1);
+  var import_jsx_runtime28 = __toESM(require_jsx_runtime(), 1);
   function ChatBubble({ role = "ai", children, streaming = false, avatar = true, style }) {
     if (role === "user") {
-      return /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { display: "flex", justifyContent: "flex-end", ...style }, children: /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("div", { style: { display: "flex", justifyContent: "flex-end", ...style }, children: /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
         "div",
         {
           style: {
@@ -10280,9 +10350,9 @@
         }
       ) });
     }
-    return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "flex-start", ...style }, children: [
-      avatar ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(AIAvatar, { style: { marginTop: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { width: 20, flex: "none" } }),
-      /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "flex-start", ...style }, children: [
+      avatar ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(AIAvatar, { style: { marginTop: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { width: 20, flex: "none" } }),
+      /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
         "div",
         {
           style: {
@@ -10294,7 +10364,7 @@
           },
           children: [
             children,
-            streaming ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
+            streaming ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
               "span",
               {
                 style: {
@@ -10316,15 +10386,15 @@
   }
 
   // src/components/chat/ToolCallCard.jsx
-  var import_react30 = __toESM(require_react(), 1);
-  var import_jsx_runtime28 = __toESM(require_jsx_runtime(), 1);
+  var import_react31 = __toESM(require_react(), 1);
+  var import_jsx_runtime29 = __toESM(require_jsx_runtime(), 1);
   function StatusGlyph({ status }) {
-    if (status === "running") return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Spinner, { size: 12 });
-    if (status === "error") return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Icon2, { name: "x", size: 12, strokeWidth: 2.5, color: "var(--error)" });
-    return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.5, color: "var(--ok)" });
+    if (status === "running") return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Spinner, { size: 12 });
+    if (status === "error") return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Icon2, { name: "x", size: 12, strokeWidth: 2.5, color: "var(--error)" });
+    return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.5, color: "var(--ok)" });
   }
   function ParamsBlock({ params }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
       "pre",
       {
         style: {
@@ -10344,8 +10414,8 @@
     );
   }
   function HeaderRow({ status, verb, target, expandable, expanded, onToggle }) {
-    const [hover, setHover] = import_react30.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
+    const [hover, setHover] = import_react31.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
       "div",
       {
         role: expandable ? "button" : void 0,
@@ -10363,9 +10433,9 @@
           transition: "background var(--dur-fast) var(--ease-out)"
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(StatusGlyph, { status }),
-          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { font: `var(--weight-medium) var(--text-body)/1 var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "nowrap" }, children: verb }),
-          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(StatusGlyph, { status }),
+          /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("span", { style: { font: `var(--weight-medium) var(--text-body)/1 var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "nowrap" }, children: verb }),
+          /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
             "span",
             {
               style: {
@@ -10380,7 +10450,7 @@
               children: target
             }
           ),
-          expandable ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+          expandable ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
             Icon2,
             {
               name: "chevron-down",
@@ -10406,10 +10476,10 @@
     retryLabel = "\u91CD\u8BD5",
     style
   }) {
-    const [expanded, setExpanded] = import_react30.default.useState(defaultExpanded);
+    const [expanded, setExpanded] = import_react31.default.useState(defaultExpanded);
     const isGroup = Array.isArray(steps) && steps.length > 0;
     const expandable = isGroup || params != null;
-    return /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
       "div",
       {
         style: {
@@ -10421,7 +10491,7 @@
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
             HeaderRow,
             {
               status,
@@ -10432,14 +10502,14 @@
               onToggle: () => setExpanded(!expanded)
             }
           ),
-          expanded && isGroup ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("div", { style: { borderTop: "1px solid var(--border-subtle)", padding: "var(--space-1) 0" }, children: steps.map((s, i) => /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
+          expanded && isGroup ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { style: { borderTop: "1px solid var(--border-subtle)", padding: "var(--space-1) 0" }, children: steps.map((s, i) => /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
             "div",
             {
               style: { display: "flex", alignItems: "center", gap: "var(--space-15)", minHeight: 22, padding: "0 var(--space-2) 0 var(--space-5)" },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(StatusGlyph, { status: s.status || "success" }),
-                /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)`, color: "var(--text-secondary)", whiteSpace: "nowrap" }, children: s.verb }),
-                /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(StatusGlyph, { status: s.status || "success" }),
+                /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)`, color: "var(--text-secondary)", whiteSpace: "nowrap" }, children: s.verb }),
+                /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
                   "span",
                   {
                     style: {
@@ -10458,8 +10528,8 @@
             },
             i
           )) }) : null,
-          expanded && !isGroup && params != null ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(ParamsBlock, { params }) : null,
-          status === "error" && errorMessage2 ? /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
+          expanded && !isGroup && params != null ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(ParamsBlock, { params }) : null,
+          status === "error" && errorMessage2 ? /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
             "div",
             {
               style: {
@@ -10471,8 +10541,8 @@
                 background: "var(--error-bg)"
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--error)" }, children: errorMessage2 }),
-                onRetry ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Button, { size: "sm", variant: "secondary", icon: "rotate-cw", onClick: onRetry, children: retryLabel }) : null
+                /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--error)" }, children: errorMessage2 }),
+                onRetry ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Button, { size: "sm", variant: "secondary", icon: "rotate-cw", onClick: onRetry, children: retryLabel }) : null
               ]
             }
           ) : null
@@ -10482,8 +10552,8 @@
   }
 
   // src/components/chat/ApprovalCard.jsx
-  var import_react31 = __toESM(require_react(), 1);
-  var import_jsx_runtime29 = __toESM(require_jsx_runtime(), 1);
+  var import_react32 = __toESM(require_react(), 1);
+  var import_jsx_runtime30 = __toESM(require_jsx_runtime(), 1);
   var L = {
     zh: {
       needs: "\u9700\u8981\u6279\u51C6",
@@ -10518,10 +10588,10 @@
     onAllowSession,
     style
   }) {
-    const [expanded, setExpanded] = import_react31.default.useState(false);
+    const [expanded, setExpanded] = import_react32.default.useState(false);
     const t = L[lang] || L.zh;
     const high = risk === "high";
-    return /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
       "div",
       {
         style: {
@@ -10533,19 +10603,19 @@
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { style: { padding: "var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-15)" }, children: high ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Badge, { status: "error", icon: "shield-alert", children: t.high }) : /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Badge, { status: "warn", icon: "shield", children: t.needs }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { style: { font: `var(--weight-semibold) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
-            description ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: description }) : null,
-            params != null ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(ApprovalParams, { t, expanded, onToggle: () => setExpanded(!expanded), params }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { padding: "var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-15)" }, children: high ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Badge, { status: "error", icon: "shield-alert", children: t.high }) : /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Badge, { status: "warn", icon: "shield", children: t.needs }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: { font: `var(--weight-semibold) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
+            description ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: description }) : null,
+            params != null ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(ApprovalParams, { t, expanded, onToggle: () => setExpanded(!expanded), params }) : null
           ] }),
-          state === "pending" ? /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Button, { variant: high ? "danger" : "primary", full: true, onClick: onAllow, children: t.allow }),
-              /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Button, { variant: "secondary", full: true, onClick: onDeny, children: t.deny })
+          state === "pending" ? /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Button, { variant: high ? "danger" : "primary", full: true, onClick: onAllow, children: t.allow }),
+              /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Button, { variant: "secondary", full: true, onClick: onDeny, children: t.deny })
             ] }),
-            onAllowSession && !high ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Button, { variant: "ghost", size: "sm", onClick: onAllowSession, style: { alignSelf: "flex-start", color: "var(--text-tertiary)" }, children: t.session }) : null
-          ] }) : /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
+            onAllowSession && !high ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Button, { variant: "ghost", size: "sm", onClick: onAllowSession, style: { alignSelf: "flex-start", color: "var(--text-tertiary)" }, children: t.session }) : null
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
             "div",
             {
               style: {
@@ -10558,7 +10628,7 @@
                 color: state === "allowed" ? "var(--ok)" : "var(--text-tertiary)"
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Icon2, { name: state === "allowed" ? "check" : "x", size: 12, strokeWidth: 2.5 }),
+                /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Icon2, { name: state === "allowed" ? "check" : "x", size: 12, strokeWidth: 2.5 }),
                 state === "allowed" ? t.allowed : t.denied
               ]
             }
@@ -10568,9 +10638,9 @@
     );
   }
   function ApprovalParams({ t, expanded, onToggle, params }) {
-    const [hover, setHover] = import_react31.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
+    const [hover, setHover] = import_react32.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
         "button",
         {
           type: "button",
@@ -10591,12 +10661,12 @@
             color: hover ? "var(--text-secondary)" : "var(--text-tertiary)"
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Icon2, { name: "chevron-right", size: 11, style: { transform: expanded ? "rotate(90deg)" : "none", transition: "transform var(--dur-base) var(--ease-out)" } }),
+            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Icon2, { name: "chevron-right", size: 11, style: { transform: expanded ? "rotate(90deg)" : "none", transition: "transform var(--dur-base) var(--ease-out)" } }),
             t.params
           ]
         }
       ),
-      expanded ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
+      expanded ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
         "pre",
         {
           style: {
@@ -10619,11 +10689,11 @@
   }
 
   // src/components/chat/PromptCard.jsx
-  var import_react32 = __toESM(require_react(), 1);
-  var import_jsx_runtime30 = __toESM(require_jsx_runtime(), 1);
+  var import_react33 = __toESM(require_react(), 1);
+  var import_jsx_runtime31 = __toESM(require_jsx_runtime(), 1);
   function PromptCard({ icon = "wand-2", title, caption, onClick, style }) {
-    const [hover, setHover] = import_react32.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
+    const [hover, setHover] = import_react33.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
       "button",
       {
         type: "button",
@@ -10646,10 +10716,10 @@
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Icon2, { name: icon, size: 14, color: "var(--text-tertiary)", style: { marginTop: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { style: { display: "block", font: `var(--weight-medium) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
-            caption ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { style: { display: "block", marginTop: 2, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)" }, children: caption }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Icon2, { name: icon, size: 14, color: "var(--text-tertiary)", style: { marginTop: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { display: "block", font: `var(--weight-medium) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
+            caption ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { display: "block", marginTop: 2, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)" }, children: caption }) : null
           ] })
         ]
       }
@@ -10657,8 +10727,8 @@
   }
 
   // src/components/chat/Composer.jsx
-  var import_react33 = __toESM(require_react(), 1);
-  var import_jsx_runtime31 = __toESM(require_jsx_runtime(), 1);
+  var import_react34 = __toESM(require_react(), 1);
+  var import_jsx_runtime32 = __toESM(require_jsx_runtime(), 1);
   function Composer({
     value = "",
     onChange,
@@ -10671,7 +10741,7 @@
     placeholder,
     style
   }) {
-    const [focus, setFocus] = import_react33.default.useState(false);
+    const [focus, setFocus] = import_react34.default.useState(false);
     const canSend = !disabled && !streaming && value.trim().length > 0;
     const handleKey = (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
@@ -10679,9 +10749,9 @@
         if (canSend && onSend) onSend();
       }
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-15)", ...style }, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-15)", ...style }, children: [
       notice,
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
+      /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
         "div",
         {
           style: {
@@ -10698,7 +10768,7 @@
             transition: "border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out)"
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
               "textarea",
               {
                 rows: 1,
@@ -10723,19 +10793,19 @@
                 }
               }
             ),
-            options ? /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 2, minWidth: 0 }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 2 }, children: options }),
-              streaming ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
-            ] }) : streaming ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
+            options ? /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 2, minWidth: 0 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 2 }, children: options }),
+              streaming ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
+            ] }) : streaming ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
           ]
         }
       )
     ] });
   }
   function SendButton({ icon, title, kind, disabled = false, onClick }) {
-    const [hover, setHover] = import_react33.default.useState(false);
+    const [hover, setHover] = import_react34.default.useState(false);
     const active = kind === "send" && !disabled;
-    return /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
       "button",
       {
         type: "button",
@@ -10761,19 +10831,19 @@
           cursor: disabled ? "default" : "pointer",
           transition: "background var(--dur-fast) var(--ease-out)"
         },
-        children: /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Icon2, { name: icon, size: 13, strokeWidth: 2.25 })
+        children: /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Icon2, { name: icon, size: 13, strokeWidth: 2.25 })
       }
     );
   }
 
   // src/components/chat/ComposerChip.jsx
-  var import_react35 = __toESM(require_react(), 1);
+  var import_react36 = __toESM(require_react(), 1);
 
   // src/components/core/Menu.jsx
-  var import_react34 = __toESM(require_react(), 1);
-  var import_jsx_runtime32 = __toESM(require_jsx_runtime(), 1);
+  var import_react35 = __toESM(require_react(), 1);
+  var import_jsx_runtime33 = __toESM(require_jsx_runtime(), 1);
   function Keycap({ children }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
       "span",
       {
         style: {
@@ -10794,9 +10864,9 @@
     );
   }
   function MenuRow({ item, onClose }) {
-    const [hover, setHover] = import_react34.default.useState(false);
+    const [hover, setHover] = import_react35.default.useState(false);
     const disabled = !!item.disabled;
-    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
       "button",
       {
         type: "button",
@@ -10825,15 +10895,15 @@
           transition: "background var(--dur-fast) var(--ease-out)"
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: item.label }),
-          item.checked ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.25, color: "var(--text-primary)" }) : null,
-          item.hint ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { flex: "none", font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: item.hint }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: item.label }),
+          item.checked ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.25, color: "var(--text-primary)" }) : null,
+          item.hint ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { style: { flex: "none", font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: item.hint }) : null
         ]
       }
     );
   }
   function Menu({ header, items = [], footer, onClose, minWidth = 184, style }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
       "div",
       {
         role: "menu",
@@ -10847,7 +10917,7 @@
           ...style
         },
         children: [
-          header ? /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
+          header ? /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
             "div",
             {
               style: {
@@ -10860,15 +10930,15 @@
                 marginBottom: "var(--space-1)"
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: header.label }),
-                header.keys && header.keys.length ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { display: "inline-flex", gap: 3 }, children: header.keys.map((k, i) => /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Keycap, { children: k }, i)) }) : null
+                /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { style: { font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: header.label }),
+                header.keys && header.keys.length ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { style: { display: "inline-flex", gap: 3 }, children: header.keys.map((k, i) => /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Keycap, { children: k }, i)) }) : null
               ]
             }
           ) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { display: "flex", flexDirection: "column" }, children: items.map(
-            (item, i) => item.divider ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { height: 1, background: "var(--border-subtle)", margin: "4px 0" } }, i) : /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(MenuRow, { item, onClose }, i)
+          /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { style: { display: "flex", flexDirection: "column" }, children: items.map(
+            (item, i) => item.divider ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { style: { height: 1, background: "var(--border-subtle)", margin: "4px 0" } }, i) : /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(MenuRow, { item, onClose }, i)
           ) }),
-          footer ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+          footer ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
             "div",
             {
               style: {
@@ -10887,7 +10957,7 @@
   }
 
   // src/components/chat/ComposerChip.jsx
-  var import_jsx_runtime33 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime34 = __toESM(require_jsx_runtime(), 1);
   function ComposerChip({
     icon,
     label,
@@ -10901,11 +10971,11 @@
     title,
     style
   }) {
-    const [hover, setHover] = import_react35.default.useState(false);
-    const [open, setOpen] = import_react35.default.useState(false);
-    const rootRef = import_react35.default.useRef(null);
+    const [hover, setHover] = import_react36.default.useState(false);
+    const [open, setOpen] = import_react36.default.useState(false);
+    const rootRef = import_react36.default.useRef(null);
     const isMenu = Array.isArray(items) && items.length > 0;
-    import_react35.default.useEffect(() => {
+    import_react36.default.useEffect(() => {
       if (!open) return void 0;
       const onDoc = (e) => {
         if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
@@ -10921,8 +10991,8 @@
       };
     }, [open]);
     const lit = active || open;
-    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { ref: rootRef, style: { position: "relative", flex: "none", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { ref: rootRef, style: { position: "relative", flex: "none", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(
         "button",
         {
           type: "button",
@@ -10955,14 +11025,14 @@
             whiteSpace: "nowrap"
           },
           children: [
-            icon ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Icon2, { name: icon, size: 12 }) : null,
-            label ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { style: { overflow: "hidden", textOverflow: "ellipsis", maxWidth: 96 }, children: label }) : null,
-            !isMenu && onToggle && active ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Icon2, { name: "check", size: 10, strokeWidth: 2.5 }) : null,
-            isMenu ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Icon2, { name: "chevron-down", size: 10, strokeWidth: 2, style: { opacity: 0.7 } }) : null
+            icon ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Icon2, { name: icon, size: 12 }) : null,
+            label ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { style: { overflow: "hidden", textOverflow: "ellipsis", maxWidth: 96 }, children: label }) : null,
+            !isMenu && onToggle && active ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Icon2, { name: "check", size: 10, strokeWidth: 2.5 }) : null,
+            isMenu ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Icon2, { name: "chevron-down", size: 10, strokeWidth: 2, style: { opacity: 0.7 } }) : null
           ]
         }
       ),
-      isMenu && open ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+      isMenu && open ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
         "div",
         {
           style: {
@@ -10972,7 +11042,7 @@
             zIndex: 30,
             animation: "ds-fade-up var(--dur-base) var(--ease-out)"
           },
-          children: /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Menu, { header: menuHeader, items, footer: menuFooter, onClose: () => setOpen(false) })
+          children: /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Menu, { header: menuHeader, items, footer: menuFooter, onClose: () => setOpen(false) })
         }
       ) : null
     ] });
@@ -11022,7 +11092,7 @@
   }
 
   // src/screens/ChatScreen.jsx
-  var import_jsx_runtime34 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime35 = __toESM(require_jsx_runtime(), 1);
   var C = {
     zh: {
       hello: "\u4F60\u597D\uFF01\u6211\u53EF\u4EE5\u76F4\u63A5\u64CD\u4F5C\u5F53\u524D\u6253\u5F00\u7684 AE \u5DE5\u7A0B\u3002\u8BD5\u8BD5\u8FD9\u4E9B\uFF1A",
@@ -11078,10 +11148,10 @@
     ]
   };
   function Notice({ text, actionLabel, onAction }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "var(--bg-well)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Icon2, { name: "plug", size: 12, color: "var(--text-tertiary)" }),
-      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { style: { flex: 1, minWidth: 0, font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: text }),
-      onAction ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, children: actionLabel }) : null
+    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "var(--bg-well)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Icon2, { name: "plug", size: 12, color: "var(--text-tertiary)" }),
+      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { flex: 1, minWidth: 0, font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: text }),
+      onAction ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, children: actionLabel }) : null
     ] });
   }
   function statusForTool(state) {
@@ -11102,15 +11172,15 @@
   function Entry({ entry, lang, onApprove }) {
     const t = C[lang] || C.zh;
     if (entry.type === "user-text") {
-      return /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(ChatBubble, { role: "user", children: entry.text });
+      return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(ChatBubble, { role: "user", children: entry.text });
     }
     if (entry.type === "ai-text") {
-      return /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(ChatBubble, { role: "ai", children: entry.text });
+      return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(ChatBubble, { role: "ai", children: entry.text });
     }
     if (entry.type === "tool-call") {
       const highRisk = entry.risk === "destructive";
-      return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { paddingLeft: 28, display: "flex", flexDirection: "column", gap: 6 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { paddingLeft: 28, display: "flex", flexDirection: "column", gap: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
           ToolCallCard,
           {
             verb: titleForTool(entry, lang),
@@ -11120,7 +11190,7 @@
             errorMessage: entry.state === "error" ? entry.text : null
           }
         ),
-        entry.state === "awaiting-approval" ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+        entry.state === "awaiting-approval" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
           ApprovalCard,
           {
             risk: highRisk ? "high" : "normal",
@@ -11136,7 +11206,7 @@
       ] });
     }
     if (entry.type === "error") {
-      return /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(ToolCallCard, { verb: entry.kind === "model" ? t.modelErrorTitle : t.errorTitle, target: entry.kind, status: "error", errorMessage: entry.message }) });
+      return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(ToolCallCard, { verb: entry.kind === "model" ? t.modelErrorTitle : t.errorTitle, target: entry.kind, status: "error", errorMessage: entry.message }) });
     }
     return null;
   }
@@ -11169,13 +11239,13 @@
     onChipApproval
   }) {
     const t = C[lang] || C.zh;
-    const [draft, setDraft] = import_react36.default.useState("");
-    const logRef = import_react36.default.useRef(null);
+    const [draft, setDraft] = import_react37.default.useState("");
+    const logRef = import_react37.default.useRef(null);
     const hasEntries = entries.length > 0;
     const prompts = promptCards || DEFAULT_PROMPTS[lang] || DEFAULT_PROMPTS.zh;
     const chips = chipState && chipState.descriptor ? buildComposerChips({ ...chipState, lang }) : null;
-    const composerOptions = chips ? /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(import_react36.default.Fragment, { children: [
-      chips.model ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+    const composerOptions = chips ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(import_react37.default.Fragment, { children: [
+      chips.model ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
         ComposerChip,
         {
           icon: "box",
@@ -11185,7 +11255,7 @@
           items: menuItems(chips.model.items, chipState.modelId, onChipModel)
         }
       ) : null,
-      chips.effort ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+      chips.effort ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
         ComposerChip,
         {
           icon: "brain",
@@ -11195,7 +11265,7 @@
           items: menuItems(chips.effort.items, chipState.effort, onChipEffort)
         }
       ) : null,
-      chips.fast ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+      chips.fast ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
         ComposerChip,
         {
           icon: "zap",
@@ -11205,7 +11275,7 @@
           onToggle: (next) => onChipFast && onChipFast(next)
         }
       ) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
         ComposerChip,
         {
           icon: "shield",
@@ -11216,7 +11286,7 @@
         }
       )
     ] }) : null;
-    import_react36.default.useEffect(() => {
+    import_react37.default.useEffect(() => {
       const el = logRef.current;
       if (el) el.scrollTop = el.scrollHeight;
     }, [entries, streaming, thinking]);
@@ -11226,19 +11296,19 @@
       if (onSend) onSend(text);
       setDraft("");
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { ref: logRef, style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }, children: [
-        !hasEntries && composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(import_react36.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(AIAvatar, { size: 32 }),
-          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { font: "600 12px/1.35 var(--font-ui)", color: "var(--text-primary)", maxWidth: 240 }, children: disabledHint || t.keyTitle }),
-          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { font: "400 11px/1.45 var(--font-ui)", color: "var(--text-tertiary)", maxWidth: 250 }, children: t.keyCaption })
+    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { ref: logRef, style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }, children: [
+        !hasEntries && composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(import_react37.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(AIAvatar, { size: 32 }),
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { font: "600 12px/1.35 var(--font-ui)", color: "var(--text-primary)", maxWidth: 240 }, children: disabledHint || t.keyTitle }),
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { font: "400 11px/1.45 var(--font-ui)", color: "var(--text-tertiary)", maxWidth: 250 }, children: t.keyCaption })
         ] }) }) : null,
-        !hasEntries && !composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(import_react36.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(AIAvatar, { size: 32 }),
-            /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 240 }, children: t.hello })
+        !hasEntries && !composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(import_react37.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(AIAvatar, { size: 32 }),
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 240 }, children: t.hello })
           ] }),
-          prompts.map((card) => /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+          prompts.map((card) => /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
             PromptCard,
             {
               icon: card.icon,
@@ -11252,13 +11322,13 @@
             card.id || card.title
           ))
         ] }) : null,
-        entries.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Entry, { entry, lang, onApprove }, entry.id)),
-        streaming && thinking ? /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { paddingLeft: 28, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Spinner, { size: 12 }),
-          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { children: t.thinking })
+        entries.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Entry, { entry, lang, onApprove }, entry.id)),
+        streaming && thinking ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { paddingLeft: 28, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Spinner, { size: 12 }),
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { children: t.thinking })
         ] }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
         Composer,
         {
           value: draft,
@@ -11269,7 +11339,7 @@
           disabled: composerDisabled,
           placeholder: t.placeholder,
           options: composerOptions,
-          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : null
+          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : null
         }
       ) })
     ] });
@@ -15205,10 +15275,10 @@
   }
 
   // src/cep/useActivity.js
-  var import_react37 = __toESM(require_react(), 1);
+  var import_react38 = __toESM(require_react(), 1);
   function useActivity(getHost) {
-    const [events, setEvents] = import_react37.default.useState([]);
-    import_react37.default.useEffect(() => {
+    const [events, setEvents] = import_react38.default.useState([]);
+    import_react38.default.useEffect(() => {
       let unsub = null;
       let retry = null;
       let disposed = false;
@@ -15230,7 +15300,7 @@
         if (retry) clearTimeout(retry);
       };
     }, [getHost]);
-    const clear = import_react37.default.useCallback(() => setEvents([]), []);
+    const clear = import_react38.default.useCallback(() => setEvents([]), []);
     return { events, clear };
   }
 
@@ -15251,7 +15321,7 @@
   }
 
   // src/app/wizardWiring.js
-  var import_react38 = __toESM(require_react(), 1);
+  var import_react39 = __toESM(require_react(), 1);
 
   // src/cep/wizardActions.js
   var OUTPUT_TAIL = 8192;
@@ -15365,31 +15435,31 @@
     return text.includes("winget") && (text.includes("not recognized") || text.includes("not found") || text.includes("enoent") || text.includes("cannot find"));
   }
   function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin } = {}) {
-    const [stepStates, dispatch] = import_react38.default.useReducer(stepReducer, null, initialStepStates);
-    const [useUvFallback, setUseUvFallback] = import_react38.default.useState(false);
-    const repoRoot = import_react38.default.useMemo(() => {
+    const [stepStates, dispatch] = import_react39.default.useReducer(stepReducer, null, initialStepStates);
+    const [useUvFallback, setUseUvFallback] = import_react39.default.useState(false);
+    const repoRoot = import_react39.default.useMemo(() => {
       try {
         return detectRepoRoot({ extRoot });
       } catch (e) {
         return "";
       }
     }, [extRoot]);
-    const cmds = import_react38.default.useMemo(() => buildInstallCommands({
+    const cmds = import_react39.default.useMemo(() => buildInstallCommands({
       panelVersion: PANEL_VERSION,
       repoRoot
     }), [repoRoot]);
-    const activeCmds = import_react38.default.useMemo(() => ({
+    const activeCmds = import_react39.default.useMemo(() => ({
       ...cmds,
       uv: useUvFallback ? cmds.uvFallback : cmds.uv
     }), [cmds, useUvFallback]);
-    const commandPreviews = import_react38.default.useMemo(() => ({
+    const commandPreviews = import_react39.default.useMemo(() => ({
       uv: commandPreview(activeCmds.uv),
       aeMcp: commandPreview(activeCmds.aeMcp),
       node: commandPreview(activeCmds.node),
       claude: commandPreview(activeCmds.claude),
       login: "claude"
     }), [activeCmds]);
-    const detect = import_react38.default.useCallback(async (id) => {
+    const detect = import_react39.default.useCallback(async (id) => {
       dispatch({ type: "detect-start", id });
       if (id === "login") {
         if (recheckLogin) {
@@ -15404,7 +15474,7 @@
       dispatch({ type: "detect-result", id, ok: result.ok, version: result.version || "" });
       return result;
     }, [claudeStatus, recheckLogin]);
-    const install = import_react38.default.useCallback(async (id) => {
+    const install = import_react39.default.useCallback(async (id) => {
       const cmd = activeCmds[id];
       if (!cmd) return { ok: false, output: "No command configured for " + id };
       if (id === "uv" && useUvFallback) {
@@ -15432,19 +15502,19 @@
       await detect(id);
       return result;
     }, [activeCmds, detect, lang, useUvFallback]);
-    const openLogin = import_react38.default.useCallback(() => {
+    const openLogin = import_react39.default.useCallback(() => {
       openLoginTerminal({ tool: "claude" });
       dispatch({ type: "detect-result", id: "login", ok: false });
     }, []);
-    const bootDetectRef = import_react38.default.useRef(false);
-    import_react38.default.useEffect(() => {
+    const bootDetectRef = import_react39.default.useRef(false);
+    import_react39.default.useEffect(() => {
       if (bootDetectRef.current) return;
       bootDetectRef.current = true;
       ["uv", "aeMcp", "node", "claude"].forEach((id) => {
         detect(id);
       });
     }, [detect]);
-    import_react38.default.useEffect(() => {
+    import_react39.default.useEffect(() => {
       if (!claudeStatus) return;
       if (claudeStatus.state === "checking") {
         dispatch({ type: "detect-start", id: "login" });
@@ -15716,7 +15786,7 @@
   }
 
   // src/app/App.jsx
-  var import_jsx_runtime35 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime36 = __toESM(require_jsx_runtime(), 1);
   var T = {
     zh: {
       connected: "\u670D\u52A1\u8FD0\u884C\u4E2D",
@@ -15870,66 +15940,66 @@
   function Shell({ cs: cs2 }) {
     const { lang, setLang } = useLang();
     const t = T[lang];
-    const [tab, setTab] = import_react39.default.useState("chat");
-    const [status, setStatus] = import_react39.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
-    const [paused, setPaused] = import_react39.default.useState(false);
-    const [logs, setLogs] = import_react39.default.useState([]);
-    const ctrl = import_react39.default.useRef(null);
-    const getHost = import_react39.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
-    const [wizardDone, setWizardDone] = import_react39.default.useState(() => isWizardDone(window.localStorage));
-    const [wizStep, setWizStep] = import_react39.default.useState(1);
-    const [wizClient, setWizClient] = import_react39.default.useState("claude-desktop");
-    const [drawerOpen, setDrawerOpen] = import_react39.default.useState(false);
-    const [connInfo, setConnInfo] = import_react39.default.useState(null);
-    const [diagnostics, setDiagnostics] = import_react39.default.useState(null);
+    const [tab, setTab] = import_react40.default.useState("chat");
+    const [status, setStatus] = import_react40.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
+    const [paused, setPaused] = import_react40.default.useState(false);
+    const [logs, setLogs] = import_react40.default.useState([]);
+    const ctrl = import_react40.default.useRef(null);
+    const getHost = import_react40.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
+    const [wizardDone, setWizardDone] = import_react40.default.useState(() => isWizardDone(window.localStorage));
+    const [wizStep, setWizStep] = import_react40.default.useState(1);
+    const [wizClient, setWizClient] = import_react40.default.useState("claude-desktop");
+    const [drawerOpen, setDrawerOpen] = import_react40.default.useState(false);
+    const [connInfo, setConnInfo] = import_react40.default.useState(null);
+    const [diagnostics, setDiagnostics] = import_react40.default.useState(null);
     const { events, clear } = useActivity(getHost);
-    const [clients, setClients] = import_react39.default.useState([]);
-    const [confirmRegen, setConfirmRegen] = import_react39.default.useState(false);
-    const [tokenEpoch, setTokenEpoch] = import_react39.default.useState(0);
-    const keyStore = import_react39.default.useMemo(() => {
+    const [clients, setClients] = import_react40.default.useState([]);
+    const [confirmRegen, setConfirmRegen] = import_react40.default.useState(false);
+    const [tokenEpoch, setTokenEpoch] = import_react40.default.useState(0);
+    const keyStore = import_react40.default.useMemo(() => {
       try {
         return createApiKeyStore();
       } catch (e) {
         return null;
       }
     }, []);
-    const [apiKey, setApiKey] = import_react39.default.useState(() => {
+    const [apiKey, setApiKey] = import_react40.default.useState(() => {
       try {
         return keyStore ? keyStore.readKey() : "";
       } catch (e) {
         return "";
       }
     });
-    const [anthropicBaseUrl, setAnthropicBaseUrl] = import_react39.default.useState(() => readPref("ae_mcp_anthropic_base_url", ""));
-    const [codexApiKey, setCodexApiKey] = import_react39.default.useState(() => {
+    const [anthropicBaseUrl, setAnthropicBaseUrl] = import_react40.default.useState(() => readPref("ae_mcp_anthropic_base_url", ""));
+    const [codexApiKey, setCodexApiKey] = import_react40.default.useState(() => {
       try {
         return keyStore ? keyStore.readKey("codex") : "";
       } catch (e) {
         return "";
       }
     });
-    const [codexBaseUrl, setCodexBaseUrl] = import_react39.default.useState(() => readPref("ae_mcp_codex_base_url", ""));
-    const [customModel, setCustomModel] = import_react39.default.useState(() => readPref("ae_mcp_custom_model", ""));
-    const [model, setModel] = import_react39.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
-    const [sessionModel, setSessionModel] = import_react39.default.useState(null);
-    const [sessionEffort, setSessionEffort] = import_react39.default.useState(null);
-    const [sessionFast, setSessionFast] = import_react39.default.useState(null);
-    const [permissionMode, setPermissionMode] = import_react39.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
-    const [backendPref, setBackendPref] = import_react39.default.useState(() => readPref("ae_mcp_backend", "subscription"));
-    const [expertGuidance, setExpertGuidance] = import_react39.default.useState(() => loadExpertGuidance(window.localStorage));
-    const [probe, setProbe] = import_react39.default.useState(null);
-    const [codexProbe, setCodexProbe] = import_react39.default.useState(null);
-    const [codexModels, setCodexModels] = import_react39.default.useState(() => readCachedCodexModels(window.localStorage));
-    const [openCodeProbe, setOpenCodeProbe] = import_react39.default.useState(null);
-    const [openCodeModels, setOpenCodeModels] = import_react39.default.useState(() => readCachedOpenCodeModels(window.localStorage));
-    const [zcodeProbe, setZcodeProbe] = import_react39.default.useState(null);
-    const [chatEntries, setChatEntries] = import_react39.default.useState([]);
-    const [chatStreaming, setChatStreaming] = import_react39.default.useState(false);
-    const [thinkingActive, setThinkingActive] = import_react39.default.useState(false);
+    const [codexBaseUrl, setCodexBaseUrl] = import_react40.default.useState(() => readPref("ae_mcp_codex_base_url", ""));
+    const [customModel, setCustomModel] = import_react40.default.useState(() => readPref("ae_mcp_custom_model", ""));
+    const [model, setModel] = import_react40.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
+    const [sessionModel, setSessionModel] = import_react40.default.useState(null);
+    const [sessionEffort, setSessionEffort] = import_react40.default.useState(null);
+    const [sessionFast, setSessionFast] = import_react40.default.useState(null);
+    const [permissionMode, setPermissionMode] = import_react40.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
+    const [backendPref, setBackendPref] = import_react40.default.useState(() => readPref("ae_mcp_backend", "subscription"));
+    const [expertGuidance, setExpertGuidance] = import_react40.default.useState(() => loadExpertGuidance(window.localStorage));
+    const [probe, setProbe] = import_react40.default.useState(null);
+    const [codexProbe, setCodexProbe] = import_react40.default.useState(null);
+    const [codexModels, setCodexModels] = import_react40.default.useState(() => readCachedCodexModels(window.localStorage));
+    const [openCodeProbe, setOpenCodeProbe] = import_react40.default.useState(null);
+    const [openCodeModels, setOpenCodeModels] = import_react40.default.useState(() => readCachedOpenCodeModels(window.localStorage));
+    const [zcodeProbe, setZcodeProbe] = import_react40.default.useState(null);
+    const [chatEntries, setChatEntries] = import_react40.default.useState([]);
+    const [chatStreaming, setChatStreaming] = import_react40.default.useState(false);
+    const [thinkingActive, setThinkingActive] = import_react40.default.useState(false);
     const customModelForBackend = backendPref === "byok" || backendPref === "codex" ? customModel : "";
-    const baseDescriptor = import_react39.default.useMemo(() => descriptorWithCustomModel(baseDescriptorFor(backendPref), customModelForBackend), [backendPref, customModelForBackend]);
-    const [descriptor, setDescriptor] = import_react39.default.useState(() => baseDescriptor);
-    import_react39.default.useEffect(() => {
+    const baseDescriptor = import_react40.default.useMemo(() => descriptorWithCustomModel(baseDescriptorFor(backendPref), customModelForBackend), [backendPref, customModelForBackend]);
+    const [descriptor, setDescriptor] = import_react40.default.useState(() => baseDescriptor);
+    import_react40.default.useEffect(() => {
       let alive = true;
       setDescriptor(baseDescriptor);
       if (backendPref === "byok" && apiKey) {
@@ -15955,13 +16025,13 @@
     const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
     const effectiveEffort = sessionEffort || (modelMeta.effortLevels && modelMeta.effortLevels.length ? descriptor.defaultEffort : null);
     const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
-    const providerProfile = import_react39.default.useMemo(() => normalizeProviderProfile({
+    const providerProfile = import_react40.default.useMemo(() => normalizeProviderProfile({
       anthropicBaseUrl,
       codexApiKey,
       codexBaseUrl
     }), [anthropicBaseUrl, codexApiKey, codexBaseUrl]);
     const hasCodexCustomProvider = Boolean(providerProfile.codexBaseUrl);
-    const runtimeRef = import_react39.default.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast });
+    const runtimeRef = import_react40.default.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast });
     runtimeRef.current = {
       apiKey,
       apiBaseUrl: providerProfile.anthropicBaseUrl,
@@ -15973,12 +16043,12 @@
       fast: effectiveFast
     };
     const extRoot = cs2 && cs2.getSystemPath ? cs2.getSystemPath("extension") : "";
-    const sidecarPath = import_react39.default.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
-    const mcp = import_react39.default.useMemo(() => createMcpClient({
+    const sidecarPath = import_react40.default.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
+    const mcp = import_react40.default.useMemo(() => createMcpClient({
       extRoot,
       getExpertGuidance: () => loadExpertGuidance(window.localStorage)
     }), [extRoot]);
-    const handleChatEvent = import_react39.default.useCallback((evt) => {
+    const handleChatEvent = import_react40.default.useCallback((evt) => {
       if (evt.type === "turn-start") setChatStreaming(true);
       if (evt.type === "thinking") setThinkingActive(!!evt.active);
       if (evt.type === "turn-end" || evt.type === "error") {
@@ -15987,7 +16057,7 @@
       }
       setChatEntries((entries) => reduceEvent(entries, evt));
     }, []);
-    const byokLoop = import_react39.default.useMemo(() => {
+    const byokLoop = import_react40.default.useMemo(() => {
       return createAgentLoop({
         getApiKey: () => runtimeRef.current.apiKey,
         getApiBaseUrl: () => runtimeRef.current.apiBaseUrl,
@@ -16000,7 +16070,7 @@
         onEvent: handleChatEvent
       });
     }, [mcp, handleChatEvent]);
-    const claudeBackend = import_react39.default.useMemo(() => createClaudeAgentBackend({
+    const claudeBackend = import_react40.default.useMemo(() => createClaudeAgentBackend({
       resolveNode: resolveSystemNode,
       sidecarPath,
       getMcpSpec: () => resolveMcpCommand({ extRoot }),
@@ -16012,7 +16082,7 @@
       lang,
       onEvent: handleChatEvent
     }), [extRoot, sidecarPath, mcp, handleChatEvent]);
-    const codexBackend = import_react39.default.useMemo(() => createCodexBackend({
+    const codexBackend = import_react40.default.useMemo(() => createCodexBackend({
       getMcpSpec: () => resolveMcpCommand({ extRoot }),
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
@@ -16026,7 +16096,7 @@
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, mcp, handleChatEvent]);
-    const openCodeBackend = import_react39.default.useMemo(() => createOpenCodeBackend({
+    const openCodeBackend = import_react40.default.useMemo(() => createOpenCodeBackend({
       getMcpSpec: () => resolveMcpCommand({ extRoot }),
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
@@ -16035,7 +16105,7 @@
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, mcp, handleChatEvent]);
-    const zcodeBackend = import_react39.default.useMemo(() => createZcodeBackend({
+    const zcodeBackend = import_react40.default.useMemo(() => createZcodeBackend({
       getMcpSpec: () => resolveMcpCommand({ extRoot }),
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
@@ -16050,8 +16120,8 @@
     const effective = backendPref === "opencode" ? openCodeProbe === null ? { backend: "none", reason: "opencode-probing" } : !openCodeProbe || !openCodeProbe.loggedIn ? { backend: "none", reason: "opencode-not-logged-in" } : { backend: "opencode", reason: "ok" } : selectedEffective;
     const backendInstances = { subscription: claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };
     const activeBackend = backendInstances[effective.backend] || byokLoop;
-    const activeBackendRef = import_react39.default.useRef(null);
-    const runClaudeProbe = import_react39.default.useCallback(() => {
+    const activeBackendRef = import_react40.default.useRef(null);
+    const runClaudeProbe = import_react40.default.useCallback(() => {
       let alive = true;
       setProbe(null);
       probeClaudeLogin({
@@ -16066,11 +16136,11 @@
         alive = false;
       };
     }, [sidecarPath]);
-    import_react39.default.useEffect(() => {
+    import_react40.default.useEffect(() => {
       if (backendPref !== "subscription") return void 0;
       return runClaudeProbe();
     }, [backendPref, runClaudeProbe]);
-    const runCodexProbe = import_react39.default.useCallback(() => {
+    const runCodexProbe = import_react40.default.useCallback(() => {
       let alive = true;
       setCodexProbe(null);
       codexBackend.probeAccount().then((result) => {
@@ -16087,11 +16157,11 @@
         alive = false;
       };
     }, [codexBackend]);
-    import_react39.default.useEffect(() => {
+    import_react40.default.useEffect(() => {
       if (backendPref !== "codex") return void 0;
       return runCodexProbe();
     }, [backendPref, runCodexProbe]);
-    const runOpenCodeProbe = import_react39.default.useCallback(() => {
+    const runOpenCodeProbe = import_react40.default.useCallback(() => {
       let alive = true;
       setOpenCodeProbe(null);
       openCodeBackend.probeAccount().then((result) => {
@@ -16108,11 +16178,11 @@
         alive = false;
       };
     }, [openCodeBackend]);
-    import_react39.default.useEffect(() => {
+    import_react40.default.useEffect(() => {
       if (backendPref !== "opencode") return void 0;
       return runOpenCodeProbe();
     }, [backendPref, runOpenCodeProbe]);
-    const runZcodeProbe = import_react39.default.useCallback(() => {
+    const runZcodeProbe = import_react40.default.useCallback(() => {
       let alive = true;
       setZcodeProbe(null);
       zcodeBackend.probeAccount().then((result) => {
@@ -16124,15 +16194,15 @@
         alive = false;
       };
     }, [zcodeBackend]);
-    import_react39.default.useEffect(() => {
+    import_react40.default.useEffect(() => {
       if (backendPref !== "zcode") return void 0;
       return runZcodeProbe();
     }, [backendPref, runZcodeProbe]);
-    import_react39.default.useEffect(() => {
+    import_react40.default.useEffect(() => {
       if (effective.backend !== "zcode" || !effectiveEffort) return;
       zcodeBackend.setThoughtLevel(effectiveEffort);
     }, [effective.backend, effectiveEffort, zcodeBackend]);
-    import_react39.default.useEffect(() => {
+    import_react40.default.useEffect(() => {
       const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
       activeBackendRef.current = decision.nextReal;
       if (!decision.reset) return;
@@ -16158,10 +16228,10 @@
       setChatStreaming(false);
       setChatEntries([]);
     };
-    const pushLog = import_react39.default.useCallback((m) => {
+    const pushLog = import_react40.default.useCallback((m) => {
       setLogs((xs) => [...xs.slice(-199), `[${(/* @__PURE__ */ new Date()).toLocaleTimeString()}] ${m}`]);
     }, []);
-    const undoToPreviousCheckpoint = import_react39.default.useCallback(async () => {
+    const undoToPreviousCheckpoint = import_react40.default.useCallback(async () => {
       try {
         await revertToPreviousCheckpoint(mcp);
         pushLog("Reverted to previous checkpoint");
@@ -16169,7 +16239,7 @@
         pushLog("Checkpoint revert failed: " + (e && e.message ? e.message : String(e)));
       }
     }, [mcp, pushLog]);
-    import_react39.default.useEffect(() => {
+    import_react40.default.useEffect(() => {
       const port = loadSavedPort(window.localStorage) || DEFAULT_PORT;
       ctrl.current = createHostController({
         cs: cs2,
@@ -16185,7 +16255,7 @@
       });
       ctrl.current.start(port);
     }, [cs2, pushLog]);
-    import_react39.default.useEffect(() => {
+    import_react40.default.useEffect(() => {
       if (!drawerOpen) return void 0;
       const update = () => {
         const h = getHost();
@@ -16195,7 +16265,7 @@
       const i = setInterval(update, 3e3);
       return () => clearInterval(i);
     }, [drawerOpen, getHost]);
-    import_react39.default.useEffect(() => {
+    import_react40.default.useEffect(() => {
       if (tab !== "settings") return void 0;
       const update = () => {
         const h = getHost();
@@ -16206,7 +16276,7 @@
       const i = setInterval(update, 4e3);
       return () => clearInterval(i);
     }, [tab, getHost]);
-    const runDiag = import_react39.default.useCallback(async () => {
+    const runDiag = import_react40.default.useCallback(async () => {
       setDiagnostics("running");
       try {
         const items = await runDiagnostics({
@@ -16252,7 +16322,7 @@
     const zcodeStatus = zcodeProbe === null ? { state: "checking" } : zcodeProbe.runtimeOk === false ? { state: "runtime-error", provider: zcodeProbe.provider, detail: zcodeProbe.detail } : zcodeProbe.loggedIn === false ? { state: "not-logged-in", provider: zcodeProbe.provider, detail: zcodeProbe.detail } : { state: "ready", provider: zcodeProbe.provider };
     const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
     if (!wizardDone) {
-      return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
         WizardScreen,
         {
           step: wizStep,
@@ -16282,8 +16352,8 @@
     const backendDisabledHint = effective.reason === "probing" ? t.probingHint : effective.reason === "not-logged-in" ? t.notLoggedInHint : effective.reason === "codex-probing" ? t.codexProbingHint : effective.reason === "codex-not-logged-in" ? t.codexNotLoggedInHint : effective.reason === "codex-runtime-unavailable" ? t.codexRuntimeHint : effective.reason === "opencode-probing" ? t.openCodeProbingHint : effective.reason === "opencode-not-logged-in" ? t.openCodeNotLoggedInHint : effective.reason === "zcode-probing" ? t.zcodeProbingHint : effective.reason === "zcode-not-logged-in" ? t.zcodeNotLoggedInHint : effective.reason === "zcode-runtime-unavailable" ? zcodeUnavailableHint(zcodeStatus, t.zcodeRuntimeHint) : effective.reason === "no-node" ? t.noNodeHint : effective.reason === "no-key" ? t.noKeyHint : "";
     const composerDisabled = paused || effective.backend === "none";
     const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
-    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(import_react39.default.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)(import_react40.default.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
         StatusBar,
         {
           status: statusForBar,
@@ -16298,8 +16368,8 @@
           settingsTitle: t.settings
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }, children: [
-        tab === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }, children: [
+        tab === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
           ChatScreen,
           {
             lang,
@@ -16330,7 +16400,7 @@
             }
           }
         ) : null,
-        tab === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+        tab === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
           ActivityScreen,
           {
             events,
@@ -16341,7 +16411,7 @@
             emptyCaption: t.actEmptyB
           }
         ) : null,
-        tab === "settings" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+        tab === "settings" ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
           SettingsScreen,
           {
             lang,
@@ -16435,8 +16505,8 @@
           tokenEpoch
         ) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(TabBar, { tabs, active: tab, onChange: setTab }),
-      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(TabBar, { tabs, active: tab, onChange: setTab }),
+      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
         ConnectionDrawer,
         {
           open: drawerOpen,
@@ -16449,7 +16519,7 @@
           onRestart: () => applyPort(status.port)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
         ConfirmDialog,
         {
           open: confirmRegen,
@@ -16474,13 +16544,13 @@
     ] });
   }
   function App({ cs: cs2 }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(LangProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Shell, { cs: cs2 }) });
+    return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(LangProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Shell, { cs: cs2 }) });
   }
 
   // src/main.jsx
-  var import_jsx_runtime36 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime37 = __toESM(require_jsx_runtime(), 1);
   var cs = new window.CSInterface();
-  (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime36.jsx)(App, { cs }));
+  (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime37.jsx)(App, { cs }));
 })();
 /*! Bundled license information:
 
