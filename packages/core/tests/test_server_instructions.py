@@ -30,6 +30,14 @@ def test_instructions_cover_key_discipline():
     assert "NEVER let JSX throw" in text
 
 
+def test_instructions_cover_panel_runtime_and_file_hygiene():
+    text = SERVER_INSTRUCTIONS
+    assert "Do not switch to OS screenshots" in text
+    assert "report the MCP failure" in text
+    assert "project workspace" in text
+    assert "ae_mcp_previews" in text
+
+
 def test_instructions_use_underscore_verb_names_not_dotted():
     """Model-facing guidance must not feed the model dotted verb names it
     can't call on strict clients. No dotted ``ae.<verb>`` token may appear in

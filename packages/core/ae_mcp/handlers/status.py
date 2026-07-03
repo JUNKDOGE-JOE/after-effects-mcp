@@ -17,7 +17,19 @@ from ae_mcp.jsx_prelude import with_prelude
 from ae_mcp.jsx_result import parse_jsx_result as _try_json
 from ae_mcp.snapshot import discovery as _snapshot_discovery
 
+try:
+    from importlib.metadata import version as _pkg_version
+except Exception:  # noqa: BLE001
+    _pkg_version = None
+
 log = logging.getLogger("ae_mcp.handlers.status")
+
+_PY_VERSION_HEADER = "x-ae-mcp-python"
+
+try:
+    _PY_VERSION = _pkg_version("ae-mcp") if _pkg_version else "unknown"
+except Exception:  # noqa: BLE001
+    _PY_VERSION = "unknown"
 
 
 async def _run_status(args: schemas.AeStatusArgs, ctx: Any) -> dict[str, Any]:
@@ -66,7 +78,7 @@ register("ae.status", schemas.AeStatusArgs, _run_status)
 #
 # ae.status only inspects the Python install (no network). ae.diagnose proves
 # the full chain a remote client cares about: host reachable, Python bridge
-# handshake seen (via the /health echo added in B1), auth token readable, AE
+# handshake seen via /health, auth token readable, AE
 # responsive + a project open. Each step is independent — one failure does not
 # abort the rest, so a half-wired install gets a full report in one call.
 # Exposed even when backend selection fails (server._filtered_tool_names), so a
@@ -85,7 +97,10 @@ async def _probe_host(url: str) -> dict[str, Any]:
     """Raw GET /health to capture the echoed python handshake fields."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as http:
-            r = await http.get(f"{url}/health")
+            r = await http.get(
+                f"{url}/health",
+                headers={_PY_VERSION_HEADER: _PY_VERSION},
+            )
         if r.status_code != 200:
             return {"reachable": False, "error": f"HTTP {r.status_code}"}
         body = r.json()
@@ -100,6 +115,22 @@ async def _probe_host(url: str) -> dict[str, Any]:
         }
     except Exception as e:  # noqa: BLE001
         return {"reachable": False, "error": str(e)}
+
+
+def _looks_like_token_error(message: str) -> bool:
+    msg = message.lower()
+    return (
+        "auth token" in msg
+        or "auth-token" in msg
+        or "could not read auth" in msg
+        or "invalid token" in msg
+        or "expired token" in msg
+        or "token not found" in msg
+        or "token is empty" in msg
+        or "http 401" in msg
+        or "unauthorized" in msg
+        or "forbidden" in msg
+    )
 
 
 async def _run_diagnose(args: schemas.AeDiagnoseArgs, ctx: Any) -> dict[str, Any]:
@@ -171,7 +202,7 @@ async def _run_diagnose(args: schemas.AeDiagnoseArgs, ctx: Any) -> dict[str, Any
             # A BackendError from _read_token surfaces here — distinguish it so
             # the caller knows the token is the problem, not AE.
             msg = str(e)
-            if "auth token" in msg.lower() or "token" in msg.lower():
+            if _looks_like_token_error(msg):
                 result["token"]["error"] = msg
             else:
                 result["token"]["valid"] = True  # token read ok; AE/host is the issue

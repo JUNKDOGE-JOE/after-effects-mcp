@@ -49,8 +49,8 @@ async def test_health_check_ok():
 
     async def _resp(request):
         captured["python"] = request.headers.get("x-ae-mcp-python")
-        # Mirror the real host /health shape post-B1: it now echoes the
-        # python handshake fields. health_check must stay True with the extras.
+        # Mirror the real host /health shape: it echoes the python handshake
+        # fields. health_check must stay True with the extras.
         return Response(200, json={
             "ok": True,
             "pluginVersion": "0.8.1",

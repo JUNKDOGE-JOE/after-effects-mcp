@@ -33,6 +33,14 @@ WORKFLOW — every task follows this loop:
                 progression; static changes (color/opacity) need one.
   4. Iterate  — If it's wrong, adjust and re-run. Keep going until it's right.
 
+PANEL RUNTIME & FILE HYGIENE:
+  Do not switch to OS screenshots, desktop automation, or ad-hoc external
+  scripts when the panel MCP path is unavailable; report the MCP failure and
+  what tool/status failed so the user can fix the integration.
+  Keep generated files and temporary files inside the project workspace or a
+  user-approved output directory. ae_previewFrame defaults to an ae_mcp_previews
+  temp session directory and old sessions are cleaned automatically.
+
 WRITING ExtendScript (ae_exec / ae_readProps):
   AE's classic engine is ECMAScript 3. Use `var`, the `function` keyword,
   traditional for-loops, and string concatenation. Avoid let/const, arrow

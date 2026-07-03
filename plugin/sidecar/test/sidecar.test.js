@@ -135,6 +135,18 @@ test('agent prompts include ExtendScript pitfall anchors in both languages', asy
   }
 })
 
+test('agent prompts forbid fallback screenshots and external temp-file sprawl', async () => {
+  const zhPrompt = await captureAgentPrompt('zh')
+  const enPrompt = await captureAgentPrompt('en')
+
+  for (const prompt of [zhPrompt, enPrompt]) {
+    assert.match(prompt, /Do not switch to OS screenshots/)
+    assert.match(prompt, /report the MCP failure/)
+    assert.match(prompt, /project workspace/)
+    assert.match(prompt, /temporary files/)
+  }
+})
+
 test('filters non ae tool_use and tool_result events while preserving ae tools', async () => {
   const writes = []
   const sidecar = createSidecar({

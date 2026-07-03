@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import httpx
 import pytest
 
 from ae_mcp.backends.discovery import BackendSelectionError
@@ -76,6 +77,49 @@ def _load_diagnose_handler():
     return schema_cls, run_fn
 
 
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("HttpBridge: invalid token", True),
+        ("HttpBridge: expired token", True),
+        ("HttpBridge: auth-token mismatch", True),
+        ("HttpBridge: plugin error: Unexpected token ;", False),
+    ],
+)
+def test_token_error_classifier_keeps_auth_and_syntax_errors_separate(message, expected):
+    from ae_mcp.handlers.status import _looks_like_token_error
+
+    assert _looks_like_token_error(message) is expected
+
+
+@pytest.mark.asyncio
+async def test_probe_host_sends_python_identity_header(respx_mock):
+    from ae_mcp.handlers.status import _probe_host
+
+    captured = {}
+
+    def _resp(request):
+        captured["python"] = request.headers.get("x-ae-mcp-python")
+        return httpx.Response(
+            200,
+            json={
+                "ok": True,
+                "pluginVersion": "0.8.1",
+                "port": 11488,
+                "pythonVersion": captured["python"],
+                "pythonLastSeenAt": 1719000000000,
+            },
+        )
+
+    respx_mock.get("http://127.0.0.1:11488/health").mock(side_effect=_resp)
+
+    result = await _probe_host("http://127.0.0.1:11488")
+
+    assert result["reachable"] is True
+    assert captured["python"]
+    assert result["pythonVersion"] == captured["python"]
+
+
 @pytest.mark.asyncio
 async def test_diagnose_reports_full_chain_when_backend_healthy(monkeypatch):
     import json
@@ -122,6 +166,53 @@ async def test_diagnose_reports_token_error_without_aborting(monkeypatch):
     assert result["host"]["reachable"] is True
     assert result["token"]["valid"] is False
     assert "auth token" in result["token"].get("error", "")
+    assert result["ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_diagnose_reports_stale_token_unauthorized_as_token_invalid(monkeypatch):
+    from ae_mcp.backends.base import BackendError
+
+    backend = MockBackend()
+    backend.set_health(True)
+
+    async def _exec_unauthorized(code, **kwargs):
+        raise BackendError('HttpBridge: /exec HTTP 401: {"ok":false,"error":"unauthorized"}')
+
+    monkeypatch.setattr(backend, "exec", _exec_unauthorized)
+    monkeypatch.setattr("ae_mcp.backends.discovery.select_backend", lambda: backend)
+
+    schema_cls, run_fn = _load_diagnose_handler()
+    result = await run_fn(schema_cls(), None)
+
+    assert result["host"]["reachable"] is True
+    assert result["token"]["valid"] is False
+    assert "unauthorized" in result["token"]["error"]
+    assert result["ae"]["responsive"] is False
+    assert result["ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_diagnose_treats_non_auth_token_text_as_ae_error(monkeypatch):
+    from ae_mcp.backends.base import BackendError
+
+    backend = MockBackend()
+    backend.set_health(True)
+
+    async def _exec_syntax_error(code, **kwargs):
+        raise BackendError("HttpBridge: plugin error: ExtendScript error: Unexpected token ;")
+
+    monkeypatch.setattr(backend, "exec", _exec_syntax_error)
+    monkeypatch.setattr("ae_mcp.backends.discovery.select_backend", lambda: backend)
+
+    schema_cls, run_fn = _load_diagnose_handler()
+    result = await run_fn(schema_cls(), None)
+
+    assert result["host"]["reachable"] is True
+    assert result["token"]["valid"] is True
+    assert "error" not in result["token"]
+    assert result["ae"]["responsive"] is False
+    assert "Unexpected token" in result["ae"]["error"]
     assert result["ok"] is False
 
 
