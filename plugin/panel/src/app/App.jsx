@@ -29,6 +29,7 @@ import { reduceEvent } from '../lib/chatEntries';
 import { DEFAULT_MODEL, FALLBACK_MODEL } from '../lib/anthropic';
 import { descriptorWithCustomModel } from '../lib/backendCapabilities';
 import { selectDescriptor, isClaudeApiBackend, reconcileModelPref } from '../lib/descriptorSelect';
+import { readCachedZcodeProbedModels, writeCachedZcodeProbedModels } from '../lib/zcodeModelCache';
 import { baseDescriptorFor } from '../cep/backends/index.js';
 import { cachedByokModels } from '../cep/modelsApi';
 import { costBadge } from '../lib/composerOptions';
@@ -242,6 +243,12 @@ function Shell({ cs }) {
   // result), used by selectDescriptor to build a live model list for the
   // zcode backend. See zcodeDescriptorFromModels in backendCapabilities.js.
   const [zcodeSessionModels, setZcodeSessionModels] = React.useState(null);
+  // Probe-driven fallback (spec A2 applied to zcode): when session/create's
+  // settings.model.available is empty (custom openai-compatible providers
+  // have no session-side model enumeration), actively probe the CLI provider's
+  // /v1/models endpoint. Seeded from the 1h localStorage cache so a fresh
+  // panel load doesn't need to re-probe immediately. See lib/zcodeModelCache.js.
+  const [zcodeProbedModels, setZcodeProbedModels] = React.useState(() => readCachedZcodeProbedModels(window.localStorage));
   const [chatEntries, setChatEntries] = React.useState([]);
   const [chatStreaming, setChatStreaming] = React.useState(false);
   const [thinkingActive, setThinkingActive] = React.useState(false);
@@ -452,6 +459,7 @@ function Shell({ cs }) {
       byokApiModels: null,
       codexCachedModels: codexModels || readCachedCodexModels(window.localStorage),
       zcodeSessionModels,
+      zcodeProbedModels,
     };
     const nextDescriptor = selectDescriptor(facts);
     setDescriptor(nextDescriptor);
@@ -474,8 +482,36 @@ function Shell({ cs }) {
       }).catch(() => {});
     }
     return () => { alive = false; };
-  }, [effective.backend, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, apiKey, anthropicBaseUrl, zcodeSessionModels]);
+  }, [effective.backend, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, apiKey, anthropicBaseUrl, zcodeSessionModels, zcodeProbedModels]);
   const activeBackendRef = React.useRef(null);
+
+  // Probe the CLI-configured zcode provider's /v1/models when session data
+  // hasn't supplied a usable model list yet. Only runs for custom providers
+  // that expose a baseUrl and a resolved API key (summarizeZcodeConfig gives
+  // us both facts); a stale/expired cache entry re-triggers a fresh probe.
+  React.useEffect(() => {
+    if (backendPref !== 'zcode') return undefined;
+    if (zcodeSessionModels) return undefined;
+    const cli = zcodeConfigSummary && zcodeConfigSummary.cli;
+    if (!cli || !cli.model || !cli.baseUrl || !cli.hasCredential) return undefined;
+    const cached = readCachedZcodeProbedModels(window.localStorage);
+    if (cached && cached.cliModel === cli.model) {
+      if (cached !== zcodeProbedModels) setZcodeProbedModels(cached);
+      return undefined;
+    }
+    let alive = true;
+    const providerId = cli.providerId || '';
+    const apiKeyValue = (() => { try { return keyStore ? keyStore.readKey('zcode') : ''; } catch (e) { return ''; } })();
+    probeProviderModels({ baseUrl: cli.baseUrl, apiKey: apiKeyValue, protocol: cli.protocol }).then((result) => {
+      if (!alive) return;
+      if (result.ok && result.models && result.models.length) {
+        const entry = { cliModel: cli.model, providerId, probedModels: result.models };
+        writeCachedZcodeProbedModels(window.localStorage, entry);
+        setZcodeProbedModels(entry);
+      }
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [backendPref, zcodeSessionModels, zcodeConfigSummary, keyStore]);
 
   const runClaudeProbe = React.useCallback(() => {
     let alive = true;

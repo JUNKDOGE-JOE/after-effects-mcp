@@ -116,6 +116,55 @@ test('selectDescriptor zcode branch also triggers off backendPref when effective
   assert.equal(descriptor.models.length, 1);
 });
 
+// --- zcode probe-driven fallback (custom openai-compatible providers where
+// session/create's settings.model.available is empty) ---
+
+test('selectDescriptor uses zcodeProbedModels when session data is absent', () => {
+  const baseDescriptor = zcodeStaticDescriptor();
+  const descriptor = selectDescriptor({
+    effectiveBackend: 'zcode',
+    backendPref: 'zcode',
+    baseDescriptor,
+    zcodeSessionModels: null,
+    zcodeProbedModels: { cliModel: 'mediastorm_glm/deepseek-v4-flash', providerId: 'mediastorm_glm', probedModels: [{ id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' }, { id: 'glm-5.2', label: 'GLM-5.2' }] },
+  });
+  assert.equal(descriptor.id, 'zcode');
+  assert.deepEqual(descriptor.models.map((m) => m.id), ['mediastorm_glm/deepseek-v4-flash', 'mediastorm_glm/glm-5.2']);
+  assert.equal(descriptor.defaultModelId, 'mediastorm_glm/deepseek-v4-flash');
+});
+
+test('selectDescriptor prefers session data over probed models when both are present', () => {
+  const baseDescriptor = zcodeStaticDescriptor();
+  const sessionResult = {
+    settings: {
+      model: {
+        available: [{ label: 'GLM-5.2', ref: { modelId: 'GLM-5.2', providerId: 'bigmodel-start-plan' } }],
+        current: { modelId: 'GLM-5.2', providerId: 'bigmodel-start-plan' },
+      },
+    },
+  };
+  const descriptor = selectDescriptor({
+    effectiveBackend: 'zcode',
+    backendPref: 'zcode',
+    baseDescriptor,
+    zcodeSessionModels: sessionResult,
+    zcodeProbedModels: { cliModel: 'mediastorm_glm/deepseek-v4-flash', providerId: 'mediastorm_glm', probedModels: [{ id: 'deepseek-v4-flash' }] },
+  });
+  assert.deepEqual(descriptor.models.map((m) => m.id), ['bigmodel-start-plan/GLM-5.2']);
+});
+
+test('selectDescriptor falls back to baseDescriptor for zcode when probe also has nothing', () => {
+  const baseDescriptor = zcodeStaticDescriptor();
+  const descriptor = selectDescriptor({
+    effectiveBackend: 'zcode',
+    backendPref: 'zcode',
+    baseDescriptor,
+    zcodeSessionModels: null,
+    zcodeProbedModels: { cliModel: '', providerId: '', probedModels: [] },
+  });
+  assert.equal(descriptor, baseDescriptor);
+});
+
 // --- reconcileModelPref (bug 2) ---
 // A stale localStorage model id (e.g. an old glm-5.2 id) that is not in the
 // new descriptor's model list silently wins over the CLI-provided

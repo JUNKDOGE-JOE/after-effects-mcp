@@ -305,6 +305,46 @@ export function zcodeDescriptorFromModels(sessionCreateResult) {
   };
 }
 
+// Probe-driven ZCode descriptor: when session/create's settings.model.available
+// is empty (true for custom openai-compatible providers with no session-side
+// enumeration), fall back to actively probing the CLI-configured provider's
+// /v1/models endpoint (see cep/modelProbe.js's probeProviderModels, wired in
+// App.jsx). The CLI-configured model (the one actually sent on the wire, per
+// zcodeDynamicDescriptor's comment above) is pinned first and marked default;
+// duplicate ids from the probe are dropped in favor of that pinned entry.
+export function zcodeDescriptorFromProbedModels({ cliModel, providerId, probedModels } = {}) {
+  const cli = String(cliModel || '').trim();
+  if (!cli || !Array.isArray(probedModels) || !probedModels.length) return null;
+
+  const pid = String(providerId || '').trim();
+  const cliLabel = cli.includes('/') ? cli.slice(cli.indexOf('/') + 1) : cli;
+  const rest = probedModels
+    .map((m) => {
+      const rawId = String((m && m.id) || '').trim();
+      if (!rawId) return null;
+      const id = pid ? pid + '/' + rawId : rawId;
+      if (id === cli) return null;
+      return { id, label: (m && m.label) || rawId, effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false };
+    })
+    .filter(Boolean);
+
+  const models = [
+    { id: cli, label: cliLabel, effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false },
+    ...rest,
+  ];
+
+  return {
+    id: 'zcode',
+    label: 'ZCode',
+    models,
+    defaultModelId: cli,
+    defaultEffort: 'high',
+    supportsFast: () => false,
+    approvalModes: APPROVAL_MODES,
+    perTurnModelSwitch: false,
+  };
+}
+
 // Spec A2: custom-provider channels list what /v1/models actually returned;
 // curated metadata (effort levels, cost) is reused when ids overlap. An
 // empty/failed probe keeps the descriptor unchanged so the manual custom

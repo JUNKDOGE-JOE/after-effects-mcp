@@ -10,6 +10,7 @@ import {
   descriptorWithCustomModel,
   descriptorFromProbedModels,
   zcodeDescriptorFromModels,
+  zcodeDescriptorFromProbedModels,
 } from './backendCapabilities.js';
 
 // effectiveBackend 'byok' = API channel chosen but Node runtime broken; the
@@ -28,6 +29,7 @@ export function selectDescriptor({
   byokApiModels = null,
   codexCachedModels = null,
   zcodeSessionModels = null,
+  zcodeProbedModels = null,
 }) {
   const claudeApi = isClaudeApiBackend(effectiveBackend);
   const customId = (claudeApi || backendPref === 'codex') ? String(customModel || '').trim() : '';
@@ -51,13 +53,20 @@ export function selectDescriptor({
   }
   // ZCode: the live model list only becomes known after session/create
   // returns settings.model.available (see zcodeBackend.js's
-  // 'zcode-session-created' event). Until then, fall back to baseDescriptor
-  // (itself the static curated list). Gated on backendPref (not just
-  // effectiveBackend) so probing states ('zcode-probing' etc, where
-  // effectiveBackend may read as 'none') still pick up session data as soon
-  // as it's available.
+  // 'zcode-session-created' event). Session data always wins when present.
+  // When it's empty (custom openai-compatible providers have no session-side
+  // model enumeration), fall back to actively probing the CLI-configured
+  // provider's /v1/models endpoint (zcodeProbedModels, see App.jsx). If
+  // neither is available, fall back to baseDescriptor (the static curated
+  // list). Gated on backendPref (not just effectiveBackend) so probing states
+  // ('zcode-probing' etc, where effectiveBackend may read as 'none') still
+  // pick up session/probe data as soon as it's available.
   if (backendPref === 'zcode' || effectiveBackend === 'zcode') {
     if (zcodeSessionModels) return zcodeDescriptorFromModels(zcodeSessionModels);
+    if (zcodeProbedModels) {
+      const probed = zcodeDescriptorFromProbedModels(zcodeProbedModels);
+      if (probed) return probed;
+    }
     return baseDescriptor;
   }
   return baseDescriptor;
