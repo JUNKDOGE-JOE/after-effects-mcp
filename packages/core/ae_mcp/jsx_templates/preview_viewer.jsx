@@ -25,13 +25,40 @@
     // sleeps a few hundred ms before capture to be safe.
     try { app.scheduleTask("", 0, false); } catch (e) { /* AE < 17 lacks this */ }
 
+    var outFile = new File($path);
+    var fallbackReason = "";
+    if (typeof comp.saveFrameToPng === "function") {
+      try {
+        comp.saveFrameToPng(comp.time, outFile);
+        return JSON.stringify({
+          ok: true,
+          compId: String(comp.id),
+          compName: comp.name,
+          time: comp.time,
+          width: comp.width,
+          height: comp.height,
+          path: outFile.fsName,
+          source: "comp",
+          method: "saveFrameToPng",
+          existsImmediately: outFile.exists
+        });
+      } catch (renderErr) {
+        fallbackReason = renderErr && renderErr.message ? renderErr.message : String(renderErr);
+      }
+    } else {
+      fallbackReason = "saveFrameToPng unavailable.";
+    }
+
     return JSON.stringify({
       ok: true,
       compId: String(comp.id),
       compName: comp.name,
       time: comp.time,
       width: comp.width,
-      height: comp.height
+      height: comp.height,
+      source: "viewer",
+      method: "ViewerCapture",
+      fallbackReason: fallbackReason
     });
   } catch (e) {
     return fail(e && e.message ? e.message : e);

@@ -161,8 +161,8 @@ class AePreviewFrameArgs(_StrictModel):
         300, ge=0, le=5000,
         description=(
             "Milliseconds to wait between setting comp.time and capturing the "
-            "viewer, so AE's main thread has time to repaint at the new time. "
-            "Lower = faster, riskier. 0 = no wait (will likely capture stale viewer)."
+            "viewer fallback, so AE's main thread has time to repaint at the "
+            "new time. Ignored when saveFrameToPng writes the comp frame."
         ),
     )
 
