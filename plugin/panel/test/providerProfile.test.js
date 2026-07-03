@@ -4,6 +4,7 @@ import {
   anthropicEndpoint,
   codexAppServerArgs,
   codexSpawnEnv,
+  ensureUserEnv,
   normalizeProviderProfile,
 } from '../src/lib/providerProfile.js';
 
@@ -36,4 +37,20 @@ test('anthropicEndpoint appends API paths without dropping a proxy prefix', () =
     anthropicEndpoint('https://proxy.example/anthropic/', '/v1/messages'),
     'https://proxy.example/anthropic/v1/messages'
   );
+});
+
+test('ensureUserEnv fills USERPROFILE/HOME/APPDATA from whichever anchor exists', () => {
+  const fromHome = ensureUserEnv({ HOME: 'C:\\Users\\me\\' });
+  assert.equal(fromHome.USERPROFILE, 'C:\\Users\\me');
+  assert.equal(fromHome.HOME, 'C:\\Users\\me\\');
+  assert.equal(fromHome.APPDATA, 'C:\\Users\\me\\AppData\\Roaming');
+
+  const fromHomedir = ensureUserEnv({}, { homedir: 'C:\\Users\\me' });
+  assert.equal(fromHomedir.USERPROFILE, 'C:\\Users\\me');
+  assert.equal(fromHomedir.HOME, 'C:\\Users\\me');
+
+  const untouched = ensureUserEnv({ USERPROFILE: 'C:\\U', HOME: 'C:\\U', APPDATA: 'C:\\A' });
+  assert.equal(untouched.APPDATA, 'C:\\A');
+
+  assert.deepEqual(ensureUserEnv({ PATH: 'x' }), { PATH: 'x' });
 });
