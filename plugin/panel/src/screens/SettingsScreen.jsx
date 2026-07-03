@@ -13,6 +13,8 @@ import { Toast } from '../components/shell/Toast';
 import { EXTERNAL_CLIENTS, mcpConfigFor } from '../cep/externalClients';
 import { copyText } from '../lib/clipboard';
 import { zcodeModelLocked as shouldLockZcodeModel, zcodeRuntimeBadge } from '../lib/settingsState';
+import { Icon } from '../components/core/Icon';
+import { loadSectionState, saveSectionState, toggleSection } from '../lib/settingsSections';
 
 const S = {
   zh: {
@@ -203,14 +205,21 @@ const S = {
   },
 };
 
-function Section({ title, children, disabled, caption }) {
+function Section({ id, title, children, disabled, caption, expanded, onToggle }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', opacity: disabled ? 0.45 : 1 }}>
-      <div style={{ font: '600 11px/1 var(--font-ui)', letterSpacing: '0.04em', color: 'var(--text-tertiary)', textTransform: 'uppercase', paddingBottom: 2, borderBottom: '1px solid var(--border-subtle)' }}>
-        {title}
-      </div>
-      {caption ? <div style={{ font: '400 10px/1.35 var(--font-ui)', color: 'var(--text-tertiary)' }}>{caption}</div> : null}
-      {children}
+      <button
+        type="button"
+        aria-expanded={expanded}
+        className="ds-focusable"
+        onClick={() => onToggle && onToggle(id)}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', background: 'none', border: 'none', padding: '0 0 2px', cursor: 'pointer', borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}
+      >
+        <Icon name={expanded ? 'chevron-down' : 'chevron-right'} size={12} strokeWidth={2} color="var(--text-tertiary)" />
+        <span style={{ font: '600 11px/1 var(--font-ui)', letterSpacing: '0.04em', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>{title}</span>
+      </button>
+      {expanded && caption ? <div style={{ font: '400 10px/1.35 var(--font-ui)', color: 'var(--text-tertiary)' }}>{caption}</div> : null}
+      {expanded ? children : null}
     </div>
   );
 }
@@ -353,6 +362,12 @@ export function SettingsScreen({
   const [autostart, setAutostart] = React.useState(true);
   const [logLevel, setLogLevel] = React.useState('info');
   const [copied, setCopied] = React.useState('');
+  const [sections, setSections] = React.useState(() => loadSectionState(window.localStorage));
+  const onToggleSection = (id) => setSections((s) => {
+    const next = toggleSection(s, id);
+    saveSectionState(window.localStorage, next);
+    return next;
+  });
 
   React.useEffect(() => setDraftPort(String(port)), [port]);
   React.useEffect(() => setTokenRaw(readTokenValue()), []);
@@ -442,7 +457,7 @@ export function SettingsScreen({
 
   return (
     <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
-      <Section title={t.ai}>
+      <Section id="ai" title={t.ai} expanded={sections.ai} onToggle={onToggleSection}>
         <Field label={t.backend}>
           {/* OpenCode embedded backend is implemented (openCodeBackend.js) but
               NOT exposed for v0.7.0: its approval gating is unverified (opencode
@@ -559,7 +574,7 @@ export function SettingsScreen({
         {aiToast ? <Toast type={aiToast.type} message={aiToast.message} onClose={() => setAiToast(null)} /> : null}
       </Section>
 
-      <Section title={t.conn}>
+      <Section id="conn" title={t.conn} expanded={sections.conn} onToggle={onToggleSection}>
         <Field label={t.port} hint={t.portHint}>
           <div style={{ display: 'flex', gap: 6 }}>
             <Input mono value={draftPort} onChange={setDraftPort} style={{ flex: 1 }} />
@@ -583,7 +598,7 @@ export function SettingsScreen({
         </Field>
       </Section>
 
-      <Section title={t.externalClients} caption={t.externalClientsCap}>
+      <Section id="externalClients" title={t.externalClients} caption={t.externalClientsCap} expanded={sections.externalClients} onToggle={onToggleSection}>
         {EXTERNAL_CLIENTS.map((externalClient) => {
           const configText = JSON.stringify(mcpConfigFor(externalClient, Number(draftPort) || port || 11488, expertGuidance), null, 2);
           return (
@@ -599,7 +614,7 @@ export function SettingsScreen({
         })}
       </Section>
 
-      <Section title={t.sec}>
+      <Section id="sec" title={t.sec} expanded={sections.sec} onToggle={onToggleSection}>
         <div style={{ font: '500 11px/1.35 var(--font-ui)', color: 'var(--text-secondary)', marginTop: 2 }}>{t.clients}</div>
         {clients.map((client) => (
           <ClientRow
@@ -613,7 +628,7 @@ export function SettingsScreen({
         ))}
       </Section>
 
-      <Section title={t.gen}>
+      <Section id="gen" title={t.gen} expanded={sections.gen} onToggle={onToggleSection}>
         <Field layout="row" label={t.expertGuidance} caption={t.expertGuidanceCap}>
           <Switch checked={expertGuidance} onChange={(v) => onExpertGuidance && onExpertGuidance(v)} />
         </Field>
@@ -638,7 +653,7 @@ export function SettingsScreen({
         </Field>
       </Section>
 
-      <Section title={t.about}>
+      <Section id="about" title={t.about} expanded={sections.about} onToggle={onToggleSection}>
         <VersionRow label={t.verPanel} value={`v${pkg.version}`} />
         <VersionRow label={t.verHost} value={hostVersion} badge={hostVersion === '-' ? <Badge status="neutral">{t.pending}</Badge> : null} />
         <VersionRow label={t.verPy} value={pythonVersion} badge={pythonVersion === '-' ? <Badge status="neutral">{t.pending}</Badge> : null} />
