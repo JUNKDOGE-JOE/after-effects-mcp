@@ -1,6 +1,6 @@
 [project]
 name = "ae-mcp-snapshot-mss"
-version = "0.8.1"
+version = "0.8.2"
 description = "Cross-platform mss-based screen capture for ae-mcp"
 readme = "README.md"
 requires-python = ">=3.10"
