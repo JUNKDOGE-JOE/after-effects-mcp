@@ -11,7 +11,7 @@ import { Select } from '../components/forms/Select';
 import { Field } from '../components/forms/Field';
 import { EXTERNAL_CLIENTS, mcpConfigFor } from '../cep/externalClients';
 import { copyText } from '../lib/clipboard';
-import { zcodeModelLocked as shouldLockZcodeModel } from '../lib/settingsState';
+import { zcodeDefaultModelLocked as shouldLockZcodeDefaultModel } from '../lib/settingsState';
 import { Icon } from '../components/core/Icon';
 import { loadSectionState, saveSectionState, toggleSection } from '../lib/settingsSections';
 
@@ -296,7 +296,7 @@ export function SettingsScreen({
   onRerunWizard,
 }) {
   const t = S[lang] || S.zh;
-  const zcodeModelLocked = shouldLockZcodeModel({ backend, modelSwitchable });
+  const zcodeModelLocked = shouldLockZcodeDefaultModel({ backend, models: modelOptions });
   const [customModelDraft, setCustomModelDraft] = React.useState(customModel);
   const [draftPort, setDraftPort] = React.useState(String(port));
   const [tokenRaw, setTokenRaw] = React.useState('');
