@@ -644,6 +644,23 @@ export function createCodexBackend({
     stopping = false;
   }
 
+  // Bounded timeouts for the probe's own RPC calls. These are independent of
+  // (and tighter than) createRpc's generic RPC_TIMEOUT_MS: probeAccount backs
+  // the "checking credential channels" UI gate, so it must resolve quickly
+  // and NEVER hang even if a third-party relay's upstream stream to
+  // model/list disconnects without ever responding.
+  const PROBE_INITIALIZE_TIMEOUT_MS = 10000;
+  const PROBE_ACCOUNT_READ_TIMEOUT_MS = 10000;
+  const PROBE_MODEL_LIST_TIMEOUT_MS = 4000;
+
+  function withTimeout(promise, ms, label) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(Object.assign(new Error('probe timeout: ' + label), { probeTimeout: label })), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  }
+
   async function probeAccount() {
     const spawnEnv = ensureUserEnv(currentEnv(), { homedir: getHomedir() });
     let cliInfo = { ok: false, cliPath: '', version: '' };
@@ -654,14 +671,18 @@ export function createCodexBackend({
       lastCliInfo = cliInfo;
     } catch (e) { /* diagnostics only, never blocks the probe */ }
     const diag = { cliPath: cliInfo.cliPath || '', cliVersion: cliInfo.version || '' };
+    let probedProc = null;
     try {
-      await initialize();
-      const accountResult = await rpc.request('account/read', {});
+      await withTimeout(initialize(), PROBE_INITIALIZE_TIMEOUT_MS, 'initialize');
+      probedProc = proc;
+      const accountResult = await withTimeout(rpc.request('account/read', {}), PROBE_ACCOUNT_READ_TIMEOUT_MS, 'account/read');
       let models = null;
       try {
-        const listed = await rpc.request('model/list', {});
+        const listed = await withTimeout(rpc.request('model/list', {}), PROBE_MODEL_LIST_TIMEOUT_MS, 'model/list');
         models = Array.isArray(listed) ? listed : listed && listed.models;
       } catch (e) {
+        // Non-fatal: a stuck/slow model/list (e.g. a relay whose upstream
+        // stream disconnects) must not fail the whole probe.
         models = null;
       }
       const account = accountResult && accountResult.account;
@@ -676,6 +697,17 @@ export function createCodexBackend({
       };
     } catch (e) {
       const detail = [e && e.message ? e.message : String(e), cliInfo.ok ? '' : cliInfo.detail].filter(Boolean).join(' | ');
+      if (e && e.probeTimeout) {
+        // The app-server process behind this probe is stuck (e.g. hung
+        // upstream RPC). Kill this specific spawned process so it doesn't
+        // leak as a zombie; a fresh probe/turn will spawn a new one via
+        // startProcess()/initialize().
+        if (probedProc) {
+          try { probedProc.kill(); } catch (killErr) { /* best effort */ }
+        }
+        reset();
+        return { loggedIn: false, runtimeOk: false, detail: 'probe timeout: ' + e.probeTimeout + (detail ? ' | ' + detail : ''), ...diag };
+      }
       return { loggedIn: false, runtimeOk: false, detail, ...diag };
     }
   }

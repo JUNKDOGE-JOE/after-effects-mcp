@@ -650,3 +650,47 @@ test('probeAccount reports resolved codex cliPath and cliVersion for diagnostics
   assert.equal(result.cliPath, 'C:\\bin\\codex.exe');
   assert.equal(result.cliVersion, 'codex-cli 1.2.3');
 });
+
+test('probeAccount resolves within bounds when model/list never responds (relay stream hang)', async () => {
+  const { backend, spawned } = makeBackend();
+  const probe = backend.probeAccount();
+  await flush();
+  const proc = spawned.procs[0];
+  respond(proc, parseWrites(proc)[0], {});
+  await flush();
+  assert.equal(parseWrites(proc)[1].method, 'account/read');
+  respond(proc, parseWrites(proc)[1], { account: { type: 'chatgpt', email: 'a@example.com', planType: 'plus' } });
+  await flush();
+  assert.equal(parseWrites(proc)[2].method, 'model/list');
+  // Never respond to model/list — simulates a third-party relay whose
+  // upstream stream disconnects and never completes the request.
+
+  const start = Date.now();
+  const result = await probe;
+  const elapsedMs = Date.now() - start;
+
+  // A stuck model/list must not fail the whole probe: account/read already
+  // succeeded, so probeAccount should resolve as logged-in with models=null.
+  assert.ok(elapsedMs < 6000, `probeAccount took too long: ${elapsedMs}ms`);
+  assert.equal(result.loggedIn, true);
+  assert.equal(result.runtimeOk, true);
+  assert.equal(result.models, null);
+});
+
+test('probeAccount resolves within bounds and kills the process when initialize never responds', async () => {
+  const { backend, spawned } = makeBackend();
+  const probe = backend.probeAccount();
+  await flush();
+  const proc = spawned.procs[0];
+  // Never respond to `initialize` — simulates a fully hung app-server.
+
+  const start = Date.now();
+  const result = await probe;
+  const elapsedMs = Date.now() - start;
+
+  assert.ok(elapsedMs < 12000, `probeAccount took too long: ${elapsedMs}ms`);
+  assert.equal(result.loggedIn, false);
+  assert.equal(result.runtimeOk, false);
+  assert.match(result.detail, /timeout/i);
+  assert.equal(proc.killed, true);
+});
