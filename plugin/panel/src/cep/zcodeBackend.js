@@ -3,12 +3,11 @@
 // Spawns the ZCode CLI (`zcode.cjs app-server`) as a stdio JSON-RPC server and
 // drives it through the ZCode Protocol (NOT standard MCP — messages omit the
 // `jsonrpc` envelope; the server strict-parses and rejects it). Login state is
-// shared with the ZCode Electron app via ~/.zcode/v2/config.json, and the ae
-// MCP server is already registered in ~/.zcode/cli/config.json, so unlike the
-// codex/opencode backends we do NOT inject mcp_servers here — ZCode connects
-// to ae-mcp on its own.
+// shared with the ZCode Electron app via ~/.zcode/v2/config.json. The embedded
+// app-server session is isolated from the CLI TUI config, so session/create
+// receives the ae MCP server explicitly.
 //
-// Protocol (verified live against zcode.cjs 0.14.8, see C0 probe notes):
+// ZCode app-server protocol:
 //   session/create  {workspace:{workspacePath,workspaceKey}, mode} -> result.session.sessionId
 //   session/subscribe {sessionId, deliveryKind:"desktop-continuous"}  -> streams notifications
 //   session/send    {sessionId, content} -> {accepted:true}
@@ -29,6 +28,14 @@ import { expertGuidanceEnv } from './externalClients.js';
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
 const DELIVERY_KIND = 'desktop-continuous';
+const ZCODE_BUILTIN_DEFAULT_MODEL = 'builtin:bigmodel-start-plan/GLM-5.2';
+const LEGACY_ZCODE_MODEL_REFS = new Set(['mediastorm_glm/glm-5.2']);
+const ZCODE_THOUGHT_LEVELS = new Set(['nothink', 'high', 'max', 'low', 'medium']);
+const ZCODE_CREDENTIAL_PREFIX = 'enc:v1:';
+const ZCODE_API_KEY_NAME = 'zcode-api-key';
+const BIGMODEL_API_ORIGIN = 'https://bigmodel.cn';
+const ZAI_BIZ_API_ORIGIN = 'https://api.z.ai';
+const JSON_CONTENT_TYPE = 'application/json';
 
 // ZCode permission modes map onto the panel's four approval tiers.
 const MODE_BY_TIER = {
@@ -187,6 +194,450 @@ function mcpToolName(name) {
   return text.startsWith('mcp__') ? text : 'mcp__ae__' + text;
 }
 
+function zcodeProviderId(modelRef) {
+  const text = String(modelRef || '').trim();
+  const slash = text.indexOf('/');
+  return slash > 0 ? text.slice(0, slash).trim() : '';
+}
+
+function zcodeProviderApiKeyEnv(providerId) {
+  const text = String(providerId || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toUpperCase();
+  return text ? text + '_API_KEY' : '';
+}
+
+function zcodeModelIds(provider) {
+  const models = provider && provider.models;
+  if (Array.isArray(models)) return models.map((m) => m && (m.id || m.modelID || m.modelId || m.name)).filter(Boolean).map(String);
+  if (models && typeof models === 'object') return Object.keys(models);
+  return [];
+}
+
+function zcodePreferredModelId(provider) {
+  const ids = zcodeModelIds(provider);
+  if (!ids.length) return '';
+  return ids.find((id) => id === 'GLM-5.2') || ids.find((id) => /GLM-5\.2/i.test(id)) || ids[0];
+}
+
+function zcodeProviderScore(providerId, provider, family) {
+  if (!provider || typeof provider !== 'object') return -1;
+  if (provider.enabled === false || provider.systemDisabledReason) return -1;
+  if (!zcodeModelIds(provider).length) return -1;
+
+  const id = String(providerId || '');
+  let score = 0;
+  if (provider.enabled === true) score += 100;
+  if (family && id === 'builtin:' + family + '-start-plan') score += 80;
+  if (family && id === 'builtin:' + family + '-coding-plan') score += 70;
+  if (family && id === 'builtin:' + family) score += 40;
+  if (/-start-plan$/.test(id)) score += 30;
+  if (/-coding-plan$/.test(id)) score += 20;
+  if (provider.options && provider.options.apiKey) score += 10;
+  return score;
+}
+
+function zcodeDesktopProviderEntry({ config, setting, modelRef }) {
+  const providers = config && config.provider && typeof config.provider === 'object' ? config.provider : {};
+  const entries = Object.entries(providers);
+  if (!entries.length) return null;
+
+  const family = String((setting && setting.providerFamilyDomain) || '').trim();
+  const requested = zcodeProtocolModelFromRef(modelRef);
+  if (requested && providers[requested.providerId]) {
+    const provider = providers[requested.providerId];
+    const score = zcodeProviderScore(requested.providerId, provider, family);
+    if (score >= 0) return { providerId: requested.providerId, provider, modelId: requested.modelId, score };
+  }
+
+  let best = null;
+  for (const [providerId, provider] of entries) {
+    const score = zcodeProviderScore(providerId, provider, family);
+    if (score < 0) continue;
+    if (!best || score > best.score) best = { providerId, provider, score };
+  }
+  if (!best) return null;
+
+  const modelId = zcodePreferredModelId(best.provider);
+  return modelId ? { ...best, modelId } : null;
+}
+
+export function zcodeModelFromDesktopConfig({ config, setting }) {
+  const entry = zcodeDesktopProviderEntry({ config, setting });
+  return entry ? entry.providerId + '/' + entry.modelId : '';
+}
+
+function zcodeProtocolProviderKind(kind) {
+  const text = String(kind || '').trim();
+  if (text === 'openai' || text === 'openai-compatible') return text;
+  return 'anthropic';
+}
+
+function zcodeProtocolApiFormat(provider, kind) {
+  const direct = provider && (provider.apiFormat || provider.api_format);
+  if (direct) return direct;
+  if (kind === 'openai') return 'openai-responses';
+  if (kind === 'openai-compatible') return 'openai-chat-completions';
+  return 'anthropic-messages';
+}
+
+function positiveNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function zcodeProtocolModelEntry(modelId, raw) {
+  const model = raw && typeof raw === 'object' ? raw : {};
+  const limit = model.limit && typeof model.limit === 'object' ? model.limit : {};
+  return {
+    modelId,
+    ...(model.label || model.name ? { label: model.label || model.name } : {}),
+    ...(positiveNumber(model.contextWindow || limit.contextWindow) ? { contextWindow: positiveNumber(model.contextWindow || limit.contextWindow) } : {}),
+    ...(positiveNumber(model.maxOutputTokens || limit.maxOutputTokens) ? { maxOutputTokens: positiveNumber(model.maxOutputTokens || limit.maxOutputTokens) } : {}),
+  };
+}
+
+function zcodeProtocolModels(provider, selectedModelId) {
+  const models = provider && provider.models;
+  const result = [];
+  if (Array.isArray(models)) {
+    for (const raw of models) {
+      const id = raw && (raw.id || raw.modelID || raw.modelId || raw.name);
+      if (id) result.push(zcodeProtocolModelEntry(String(id), raw));
+    }
+  } else if (models && typeof models === 'object') {
+    for (const [id, raw] of Object.entries(models)) result.push(zcodeProtocolModelEntry(String(id), raw));
+  }
+  if (selectedModelId && !result.some((m) => m.modelId === selectedModelId)) {
+    result.unshift({ modelId: selectedModelId });
+  }
+  return result;
+}
+
+export function zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef, thoughtLevel } = {}) {
+  const entry = zcodeDesktopProviderEntry({ config, setting, modelRef });
+  if (!entry) return null;
+
+  const provider = entry.provider || {};
+  const options = provider.options && typeof provider.options === 'object' ? provider.options : {};
+  const kind = zcodeProtocolProviderKind(provider.kind);
+  const apiKey = options.apiKey || provider.apiKey;
+  const protocolProvider = {
+    providerId: entry.providerId,
+    kind,
+    apiFormat: zcodeProtocolApiFormat(provider, kind),
+    ...(provider.name || provider.label ? { label: provider.name || provider.label } : {}),
+    source: provider.source || 'custom',
+    ...(options.baseURL || provider.baseURL || (provider.endpoints && provider.endpoints.baseURL) ? { baseURL: options.baseURL || provider.baseURL || provider.endpoints.baseURL } : {}),
+    ...(apiKey ? { apiKey: { source: 'inline', value: String(apiKey) } } : {}),
+    ...(typeof options.apiKeyRequired === 'boolean' || typeof provider.apiKeyRequired === 'boolean' ? { apiKeyRequired: options.apiKeyRequired ?? provider.apiKeyRequired } : {}),
+    models: zcodeProtocolModels(provider, entry.modelId),
+  };
+
+  return {
+    revision: 'desktop-v2:' + entry.providerId,
+    generatedAt: Date.now(),
+    model: { providerId: entry.providerId, modelId: entry.modelId },
+    provider: protocolProvider,
+    ...(thoughtLevel ? { thoughtLevel } : {}),
+  };
+}
+
+function zcodeDesktopBasePath(env) {
+  const home = env && (env.USERPROFILE || env.HOME || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : ''));
+  return home ? String(home).replace(/[\\/]+$/, '') + '\\.zcode\\v2' : '';
+}
+
+function readJsonFile(fsImpl, path) {
+  try {
+    return JSON.parse(fsImpl.readFileSync(path, 'utf8'));
+  } catch (e) {
+    return null;
+  }
+}
+
+function readZcodeDesktopModel({ env, fsImpl } = {}) {
+  const base = zcodeDesktopBasePath(env || {});
+  if (!base) return '';
+  const fs = fsImpl || getCepRequire()('fs');
+  const config = readJsonFile(fs, base + '\\config.json');
+  const setting = readJsonFile(fs, base + '\\setting.json');
+  return zcodeModelFromDesktopConfig({ config, setting });
+}
+
+function readZcodeDesktopRuntimeModel({ env, fsImpl, modelRef, thoughtLevel } = {}) {
+  const base = zcodeDesktopBasePath(env || {});
+  if (!base) return null;
+  const fs = fsImpl || getCepRequire()('fs');
+  const config = readJsonFile(fs, base + '\\config.json');
+  const setting = readJsonFile(fs, base + '\\setting.json');
+  return zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef, thoughtLevel });
+}
+
+function zcodeProviderFamily(providerId) {
+  const text = String(providerId || '').trim();
+  const id = text.startsWith('builtin:') ? text.slice('builtin:'.length) : text;
+  return id.replace(/-(?:start|coding)-plan$/i, '').split(/[/:]/)[0];
+}
+
+function getNodeBuffer() {
+  return globalThis.Buffer || getCepRequire()('buffer').Buffer;
+}
+
+function zcodeCredentialSecret(env, osImpl) {
+  const explicit = env && env.ZCODE_CREDENTIAL_SECRET && String(env.ZCODE_CREDENTIAL_SECRET).trim();
+  if (explicit) return explicit;
+  const os = osImpl || getCepRequire()('os');
+  let username = 'unknown';
+  try { username = os.userInfo().username; } catch (e) { /* keep fallback username */ }
+  return 'zcode-credential-fallback:' + os.platform() + ':' + os.homedir() + ':' + username;
+}
+
+function decryptZcodeCredentialValue(value, { env, cryptoImpl, osImpl } = {}) {
+  const text = String(value || '');
+  if (!text.startsWith(ZCODE_CREDENTIAL_PREFIX)) return text;
+  const crypto = cryptoImpl || getCepRequire()('crypto');
+  const BufferImpl = getNodeBuffer();
+  const parts = text.slice(ZCODE_CREDENTIAL_PREFIX.length).split('.');
+  if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) {
+    throw new Error('Credential decrypt failed: invalid ciphertext format');
+  }
+  const key = crypto.createHash('sha256').update(zcodeCredentialSecret(env || {}, osImpl)).digest();
+  const iv = BufferImpl.from(parts[0], 'base64url');
+  const authTag = BufferImpl.from(parts[1], 'base64url');
+  const cipherText = BufferImpl.from(parts[2], 'base64url');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(authTag);
+  return BufferImpl.concat([decipher.update(cipherText), decipher.final()]).toString('utf8');
+}
+
+function readZcodeOAuthAccessToken({ env, fsImpl, providerId } = {}) {
+  const base = zcodeDesktopBasePath(env || {});
+  if (!base) return '';
+  const fs = fsImpl || getCepRequire()('fs');
+  const credentials = readJsonFile(fs, base + '\\credentials.json');
+  if (!credentials || typeof credentials !== 'object') return '';
+
+  const providers = [];
+  const family = zcodeProviderFamily(providerId);
+  if (family) providers.push(family);
+  const active = credentials['oauth:active_provider'];
+  if (active) {
+    try {
+      const activeProvider = decryptZcodeCredentialValue(active, { env });
+      if (activeProvider && !providers.includes(activeProvider)) providers.push(activeProvider);
+    } catch (e) { /* ignore unreadable active provider and try explicit provider */ }
+  }
+
+  for (const provider of providers) {
+    const raw = credentials['oauth:' + provider + ':access_token'];
+    if (!raw) continue;
+    return decryptZcodeCredentialValue(raw, { env });
+  }
+  return '';
+}
+
+function resolveBigModelApiOrigin(env = {}) {
+  const explicit = env.BIGMODEL_API_BASE_URL || env.BIGMODEL_PRODUCTION_API_BASE_URL;
+  return String(explicit || BIGMODEL_API_ORIGIN).replace(/\/+$/, '');
+}
+
+function remoteCodeOk(code) {
+  return code === undefined || code === null || code === 0 || code === 200 || code === '0' || code === '200';
+}
+
+async function defaultHttpRequestJson({ url, method = 'GET', headers = {}, body }) {
+  const target = new URL(url);
+  const moduleName = target.protocol === 'http:' ? 'http' : 'https';
+  const http = getCepRequire()(moduleName);
+  const BufferImpl = getNodeBuffer();
+  const payload = body === undefined ? null : (typeof body === 'string' ? body : JSON.stringify(body));
+  const requestHeaders = Object.assign({}, headers);
+  if (payload !== null && requestHeaders['Content-Length'] === undefined) {
+    requestHeaders['Content-Length'] = String(BufferImpl.byteLength(payload));
+  }
+  return new Promise((resolve, reject) => {
+    const req = http.request(target, { method, headers: requestHeaders }, (res) => {
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => {
+        const text = BufferImpl.concat(chunks).toString('utf8');
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          reject(new Error('ZCode OAuth request failed with HTTP ' + res.statusCode + ': ' + text.slice(0, 300)));
+          return;
+        }
+        try {
+          resolve(text ? JSON.parse(text) : {});
+        } catch (e) {
+          reject(new Error('ZCode OAuth response was not valid JSON'));
+        }
+      });
+    });
+    req.on('error', reject);
+    if (payload !== null) req.write(payload);
+    req.end();
+  });
+}
+
+async function requestRemoteData(requestJson, options) {
+  const json = await requestJson(options);
+  if (!json || typeof json !== 'object') throw new Error('ZCode OAuth response was empty');
+  if (!remoteCodeOk(json.code)) throw new Error(json.msg || ('Remote business error ' + json.code));
+  return json.data ?? null;
+}
+
+function pickOrgAndProject(customerInfo) {
+  const organizations = customerInfo && Array.isArray(customerInfo.organizations) ? customerInfo.organizations : [];
+  const org = organizations.find((item) => String(item.organizationName || '').includes('\u9ED8\u8BA4\u673A\u6784')) || organizations[0];
+  const projects = org && Array.isArray(org.projects) ? org.projects : [];
+  const project = projects.find((item) => String(item.projectName || '').includes('\u9ED8\u8BA4\u9879\u76EE')) || projects[0];
+  if (!org || !project || !org.organizationId || !project.projectId) return null;
+  return { organizationId: org.organizationId, projectId: project.projectId };
+}
+
+async function resolveBizApiKey({ authorization, host, requestJson, requireSecretKey = false }) {
+  const headers = { Authorization: authorization, 'Content-Type': JSON_CONTENT_TYPE };
+  const customer = await requestRemoteData(requestJson, {
+    method: 'GET',
+    url: host + '/api/biz/customer/getCustomerInfo',
+    headers,
+  });
+  const orgProject = pickOrgAndProject(customer);
+  if (!orgProject) throw new Error('Unable to resolve ZCode OAuth organization and project.');
+
+  const apiKeysUrl = host + '/api/biz/v1/organization/' + encodeURIComponent(orgProject.organizationId)
+    + '/projects/' + encodeURIComponent(orgProject.projectId) + '/api_keys';
+  const apiKeys = await requestRemoteData(requestJson, { method: 'GET', url: apiKeysUrl, headers });
+  const existing = Array.isArray(apiKeys) ? apiKeys.find((item) => item && item.name === ZCODE_API_KEY_NAME) : null;
+  const created = existing || await requestRemoteData(requestJson, {
+    method: 'POST',
+    url: apiKeysUrl,
+    headers,
+    body: { name: ZCODE_API_KEY_NAME },
+  });
+  const apiKey = String((created && (created.apiKey || created.api_key)) || '').trim();
+  if (!apiKey) throw new Error('ZCode OAuth API key response is missing apiKey.');
+
+  const copied = await requestRemoteData(requestJson, {
+    method: 'GET',
+    url: apiKeysUrl + '/copy/' + encodeURIComponent(apiKey),
+    headers,
+  });
+  const secretKey = String((copied && (copied.secretKey || copied.secret_key)) || '').trim();
+  if (!secretKey && requireSecretKey) throw new Error('ZCode OAuth API key copy response is missing secretKey.');
+  return secretKey ? apiKey + '.' + secretKey : apiKey;
+}
+
+async function resolveZcodeCodingPlanApiKey({ accessToken, providerId, env, requestJson = defaultHttpRequestJson } = {}) {
+  const token = String(accessToken || '').trim();
+  if (!token) throw new Error('ZCode desktop OAuth token is unavailable.');
+  const family = zcodeProviderFamily(providerId);
+  if (family === 'zai') {
+    const data = await requestRemoteData(requestJson, {
+      method: 'POST',
+      url: ZAI_BIZ_API_ORIGIN + '/api/auth/z/login',
+      headers: { 'Content-Type': JSON_CONTENT_TYPE },
+      body: { token },
+    });
+    const bizToken = String((data && (data.access_token || data.accessToken)) || '').trim();
+    if (!bizToken) throw new Error('ZCode OAuth biz token response is missing access_token.');
+    return resolveBizApiKey({ authorization: 'Bearer ' + bizToken, host: ZAI_BIZ_API_ORIGIN, requestJson, requireSecretKey: true });
+  }
+  return resolveBizApiKey({ authorization: token, host: resolveBigModelApiOrigin(env || {}), requestJson });
+}
+
+function runtimeModelWithApiKey(runtimeModel, apiKey) {
+  const next = clone(runtimeModel);
+  next.revision = (runtimeModel.revision || 'runtime-model') + ':oauth:' + Date.now();
+  next.generatedAt = Date.now();
+  next.provider = Object.assign({}, next.provider || {}, {
+    apiKey: { source: 'inline', value: String(apiKey) },
+  });
+  return next;
+}
+
+function isZcodePlanRuntimeModel(runtimeModel, providerId) {
+  const provider = runtimeModel && runtimeModel.provider ? runtimeModel.provider : {};
+  const id = String(providerId || provider.providerId || '').trim();
+  const baseURL = String(provider.baseURL || '').replace(/\/+$/, '').toLowerCase();
+  return /-start-plan$/i.test(id) || baseURL.endsWith('/zcode-plan') || baseURL.endsWith('/zcode-plan/anthropic');
+}
+
+function zcodePlanRuntimeHeadersMessage() {
+  return 'ZCode desktop OAuth plan providers require ZCode desktop captcha/runtime headers before model requests. '
+    + 'The AE panel can read the desktop provider config, but the current app-server bridge cannot generate or apply those headers yet. '
+    + 'Use ZCode Desktop chat or configure an API-key provider in ZCode for now.';
+}
+
+function isLegacyZcodeModelRef(modelRef) {
+  return LEGACY_ZCODE_MODEL_REFS.has(String(modelRef || '').trim());
+}
+
+function zcodeProtocolModelFromRef(modelRef) {
+  const text = String(modelRef || '').trim();
+  const slash = text.indexOf('/');
+  if (slash <= 0 || slash === text.length - 1) return null;
+  return {
+    providerId: text.slice(0, slash),
+    modelId: text.slice(slash + 1),
+  };
+}
+
+function zcodeMissingApiKeyHint(message) {
+  const text = String(message || '');
+  const match = /Model provider is missing an API key:\s*([^\s.]+)/i.exec(text);
+  if (!match || /AE_MCP_ZCODE_API_KEY|ZCODE_API_KEY/.test(text)) return text;
+  const providerEnv = zcodeProviderApiKeyEnv(match[1]);
+  const vars = ['AE_MCP_ZCODE_API_KEY'];
+  if (providerEnv) vars.push(providerEnv);
+  vars.push('ZCODE_API_KEY');
+  return (text.endsWith('.') ? text : text + '.') + ' Set ' + vars.join(', ') + ' before launching AE.';
+}
+
+function zcodeMissingModelConfigHint(message) {
+  const text = String(message || '');
+  if (!/Model config is missing/i.test(text) || /Open ZCode/.test(text)) return text;
+  return (text.endsWith('.') ? text : text + '.') + ' Open ZCode and select a provider/model, or create ~/.zcode/cli/config.json with an explicit provider/model before launching AE.';
+}
+
+function zcodeProviderAuthenticationHint(message) {
+  const text = String(message || '');
+  if (!/Provider authentication failed/i.test(text) || /runtime headers/i.test(text)) return text;
+  return (text.endsWith('.') ? text : text + '.') + ' If this is a ZCode desktop OAuth plan provider, the AE panel cannot yet bridge ZCode desktop captcha/runtime headers.';
+}
+
+function zcodePlanRuntimeFailureHint(message, runtimeModel) {
+  const text = String(message || '');
+  if (!/Provider authentication failed|Model request failed/i.test(text)) return text;
+  if (/runtime headers/i.test(text) || !isZcodePlanRuntimeModel(runtimeModel)) return text;
+  return (text.endsWith('.') ? text : text + '.') + ' ' + zcodePlanRuntimeHeadersMessage();
+}
+
+function zcodeRepairHint(message) {
+  return zcodeProviderAuthenticationHint(zcodeMissingModelConfigHint(zcodeMissingApiKeyHint(message)));
+}
+
+function zcodeErrorMessage(value, fallback = 'ZCode turn failed') {
+  if (!value) return zcodeRepairHint(fallback);
+  if (typeof value === 'string') return zcodeRepairHint(value);
+  if (typeof value === 'object') {
+    const direct = value.message || value.detail || value.reason || value.error;
+    if (direct && direct !== value) return zcodeErrorMessage(direct, fallback);
+    try {
+      const text = JSON.stringify(value);
+      return zcodeRepairHint(text && text !== '{}' ? text : fallback);
+    } catch (e) {
+      return zcodeRepairHint(fallback);
+    }
+  }
+  return zcodeRepairHint(String(value));
+}
+
+function zcodeErrorKind(message) {
+  return /\b(model|provider|api[-\s_]*key|credential|auth)\b/i.test(String(message || '')) ? 'model' : 'mcp';
+}
+
 export function createZcodeBackend({
   spawnImpl,
   getModel,
@@ -199,6 +650,10 @@ export function createZcodeBackend({
   onEvent,
   lang = 'zh',
   env,
+  readDesktopModel = readZcodeDesktopModel,
+  readDesktopRuntimeModel = readZcodeDesktopRuntimeModel,
+  readOAuthAccessToken = readZcodeOAuthAccessToken,
+  resolveCodingPlanApiKey = resolveZcodeCodingPlanApiKey,
   resolveCli = resolveZcodeCli,
   resolveNode = resolveSystemNode,
 }) {
@@ -208,6 +663,7 @@ export function createZcodeBackend({
   let sessionPromise = null;
   let sessionId = null;
   let subscribed = false;
+  let activeRuntimeModel = null;
   let stopping = false;
   let stderrTail = '';
   let transcript = [];
@@ -230,7 +686,39 @@ export function createZcodeBackend({
   }
 
   function currentEnv() {
-    return Object.assign({}, getCepEnv(), env || {});
+    const next = Object.assign({}, getCepEnv(), env || {});
+    const panelModel = next.AE_MCP_ZCODE_MODEL && String(next.AE_MCP_ZCODE_MODEL).trim();
+    if (!next.ZCODE_MODEL && panelModel) next.ZCODE_MODEL = panelModel;
+    const panelApiKey = next.AE_MCP_ZCODE_API_KEY && String(next.AE_MCP_ZCODE_API_KEY).trim();
+    if (panelApiKey) {
+      if (!next.ZCODE_API_KEY) next.ZCODE_API_KEY = panelApiKey;
+      const providerEnv = zcodeProviderApiKeyEnv(zcodeProviderId(next.ZCODE_MODEL));
+      if (providerEnv && !next[providerEnv]) next[providerEnv] = panelApiKey;
+    }
+    return next;
+  }
+
+  function currentModelRef(spawnEnv) {
+    const explicitEnvModel = spawnEnv && spawnEnv.ZCODE_MODEL && String(spawnEnv.ZCODE_MODEL).trim();
+    if (explicitEnvModel) return explicitEnvModel;
+
+    const selectedModel = getModel ? String(getModel() || '').trim() : '';
+    if (selectedModel.includes('/') && !isLegacyZcodeModelRef(selectedModel)) return selectedModel;
+
+    let desktopModel = '';
+    try { desktopModel = readDesktopModel ? String(readDesktopModel({ env: spawnEnv }) || '').trim() : ''; } catch (e) { /* ignore unreadable desktop config */ }
+    if (desktopModel) return desktopModel;
+    if (selectedModel.includes('/')) return selectedModel;
+    return ZCODE_BUILTIN_DEFAULT_MODEL;
+  }
+
+  function currentRuntimeModel(spawnEnv, modelRef, thoughtLevel) {
+    if (!readDesktopRuntimeModel) return null;
+    try {
+      return readDesktopRuntimeModel({ env: spawnEnv, modelRef, thoughtLevel }) || null;
+    } catch (e) {
+      return null;
+    }
   }
 
   function finishActive() {
@@ -283,6 +771,10 @@ export function createZcodeBackend({
       handleUserInput(params, message.id);
       return;
     }
+    if (method === 'interaction/requestProviderRuntimeHeaders') {
+      handleProviderRuntimeHeaders(params, message.id);
+      return;
+    }
     if (method === 'elicitation/create') {
       handleElicitation(params, message.id);
       return;
@@ -293,6 +785,34 @@ export function createZcodeBackend({
     }
     // Unknown requests: respond so the agent can proceed instead of hanging.
     if (rpc) rpc.respondError(message.id, -32601, 'Method not found: ' + method);
+  }
+
+  async function handleProviderRuntimeHeaders(params, rpcId) {
+    try {
+      const spawnEnv = currentEnv();
+      const providerId = String(params.providerId || (params.modelRef && params.modelRef.providerId) || (activeRuntimeModel && activeRuntimeModel.model && activeRuntimeModel.model.providerId) || '').trim();
+      const modelId = String((params.modelRef && params.modelRef.modelId) || (activeRuntimeModel && activeRuntimeModel.model && activeRuntimeModel.model.modelId) || '').trim();
+      const modelRef = providerId && modelId ? providerId + '/' + modelId : currentModelRef(spawnEnv);
+      const runtimeModel = activeRuntimeModel || currentRuntimeModel(spawnEnv, modelRef, thoughtLevelFromEffort());
+      if (!providerId || !runtimeModel) throw new Error('ZCode runtime model is unavailable for OAuth header refresh.');
+      if (isZcodePlanRuntimeModel(runtimeModel, providerId)) {
+        if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: zcodePlanRuntimeHeadersMessage() });
+        return;
+      }
+      const accessToken = await readOAuthAccessToken({ env: spawnEnv, providerId, modelRef });
+      if (!accessToken) throw new Error('ZCode desktop OAuth token is unavailable. Open ZCode, sign in again, then retry from the panel.');
+      const apiKey = await resolveCodingPlanApiKey({ accessToken, providerId, env: spawnEnv });
+      const refreshedRuntimeModel = runtimeModelWithApiKey(runtimeModel, apiKey);
+      await rpc.request('session/updateRuntimeModelConfig', {
+        sessionId: params.sessionId || sessionId,
+        runtimeModel: refreshedRuntimeModel,
+      }, RPC_TIMEOUT_MS);
+      activeRuntimeModel = refreshedRuntimeModel;
+      if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: true, providerRevision: refreshedRuntimeModel.revision });
+    } catch (e) {
+      const message = zcodeErrorMessage(e, 'ZCode desktop OAuth header refresh failed.');
+      if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: message });
+    }
   }
 
   // AskUserQuestion via interaction/requestUserInput. params shape:
@@ -440,8 +960,8 @@ export function createZcodeBackend({
     }
     if (type === 'turn.failed') {
       const payload = params.payload || {};
-      const message = payload.error || payload.message || 'ZCode turn failed';
-      emit({ type: 'error', kind: 'mcp', message: String(message) });
+      const message = zcodePlanRuntimeFailureHint(zcodeErrorMessage(payload.error || payload.message), activeRuntimeModel);
+      emit({ type: 'error', kind: zcodeErrorKind(message), message });
       finishActive();
       return;
     }
@@ -584,12 +1104,12 @@ export function createZcodeBackend({
     return MODE_BY_TIER[tier] || 'build';
   }
 
-  // ZCode thoughtLevel enum: low/medium/high. session/create accepts it on the
-  // input params (che schema); per-turn changes go through session/setThoughtLevel.
+  // ZCode thoughtLevel support varies by bundled provider; accept the current
+  // GLM values while keeping older app-server values valid for existing users.
   function thoughtLevelFromEffort() {
     const effort = getEffort ? getEffort() : null;
     if (!effort) return undefined;
-    return ['low', 'medium', 'high'].includes(effort) ? effort : undefined;
+    return ZCODE_THOUGHT_LEVELS.has(effort) ? effort : undefined;
   }
 
   async function ensureSession() {
@@ -604,6 +1124,12 @@ export function createZcodeBackend({
         mode: modeFromTier(),
       };
       const thoughtLevel = thoughtLevelFromEffort();
+      const modelRef = currentModelRef(spawnEnv);
+      const runtimeModel = currentRuntimeModel(spawnEnv, modelRef, thoughtLevel);
+      if (runtimeModel) createParams.runtimeModel = runtimeModel;
+      activeRuntimeModel = runtimeModel || null;
+      const model = (runtimeModel && runtimeModel.model) || zcodeProtocolModelFromRef(modelRef);
+      if (model) createParams.model = model;
       if (thoughtLevel) createParams.thoughtLevel = thoughtLevel;
 
       // Inject the ae MCP server into the session. ZCode app-server does NOT
@@ -628,17 +1154,18 @@ export function createZcodeBackend({
       }
 
       const result = await rpc.request('session/create', createParams);
-      sessionId = (result && result.session && result.session.sessionId) || null;
-      if (!sessionId) throw new Error('ZCode session/create returned no sessionId');
+      const nextSessionId = (result && result.session && result.session.sessionId) || null;
+      if (!nextSessionId) throw new Error('ZCode session/create returned no sessionId');
 
       // Subscribe to the event stream. desktop-continuous streams turn events
       // as notifications for the life of the subscription. Use request() (not
       // fireRequest) so we wait for the ack and know the subscription is live
       // before sending the first turn — otherwise early events can be missed.
       if (!subscribed) {
-        await rpc.request('session/subscribe', { sessionId, deliveryKind: DELIVERY_KIND }, 10000);
+        await rpc.request('session/subscribe', { sessionId: nextSessionId, deliveryKind: DELIVERY_KIND }, 10000);
         subscribed = true;
       }
+      sessionId = nextSessionId;
       return sessionId;
     })();
     try {
@@ -670,12 +1197,13 @@ export function createZcodeBackend({
 
       // session/send resolves on acceptance, long before turn.completed.
       rpc.request('session/send', { sessionId, content: turnText }, 180000).catch((e) => {
-        const message = e && e.message ? e.message : 'Failed to start ZCode turn.';
-        emit({ type: 'error', kind: /model/i.test(message) ? 'model' : 'mcp', message });
+        const message = zcodeErrorMessage(e, 'Failed to start ZCode turn.');
+        emit({ type: 'error', kind: zcodeErrorKind(message), message });
         finishActive();
       });
     } catch (e) {
-      emit({ type: 'error', kind: 'mcp', message: e && e.message ? e.message : 'Failed to start ZCode turn.' });
+      const message = zcodeErrorMessage(e, 'Failed to start ZCode turn.');
+      emit({ type: 'error', kind: zcodeErrorKind(message), message });
       finishActive();
     }
     return activeRun;
@@ -761,6 +1289,7 @@ export function createZcodeBackend({
     sessionPromise = null;
     sessionId = null;
     subscribed = false;
+    activeRuntimeModel = null;
     transcript = [];
     pendingApprovals.clear();
     pendingElicitations.clear();
@@ -777,7 +1306,7 @@ export function createZcodeBackend({
   // session/setThoughtLevel method (params: {sessionId, thoughtLevel, ...}).
   async function setThoughtLevel(level) {
     if (!sessionId || !rpc) return false;
-    if (!['low', 'medium', 'high'].includes(level)) return false;
+    if (!ZCODE_THOUGHT_LEVELS.has(level)) return false;
     try {
       await rpc.request('session/setThoughtLevel', { sessionId, thoughtLevel: level });
       return true;
@@ -786,24 +1315,21 @@ export function createZcodeBackend({
     }
   }
 
-  // ZCode authenticates via a provider API key in ~/.zcode/v2/config.json
-  // (e.g. MediaStorm GLM), NOT via `zcode login` (Z.AI OAuth). So there is no
-  // "logged in" state to probe — if we can spawn app-server and create a
-  // session, the backend is usable; if we can't, it's an environment problem
-  // (CLI not found / Node missing), not a login problem. We never report
-  // loggedIn:false, because that would block the user behind a fake "please
-  // zcode login" gate that does not apply to API-key providers.
+  // This probe validates the embedded app-server plumbing. Desktop OAuth plan
+  // providers can still fail later when the first model request asks the host
+  // for captcha/runtime headers.
   async function probeAccount() {
     try {
       await ensureSession();
-      return { loggedIn: true, provider: 'zcode' };
+      return { loggedIn: true, runtimeOk: true, provider: 'zcode' };
     } catch (e) {
       // Surface the real reason (CLI not found, Node missing, etc.) as a
-      // warning rather than a login failure, so the user can still try.
+      // runtime failure rather than a login failure.
       return {
         loggedIn: true,
+        runtimeOk: false,
         provider: 'zcode',
-        probeWarning: e && e.message ? e.message : String(e),
+        detail: zcodeErrorMessage(e, 'ZCode runtime unavailable.'),
       };
     }
   }

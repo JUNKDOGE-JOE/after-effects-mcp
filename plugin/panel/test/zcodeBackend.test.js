@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createZcodeBackend } from '../src/cep/zcodeBackend.js';
+import { createZcodeBackend, zcodeModelFromDesktopConfig, zcodeRuntimeModelFromDesktopConfig } from '../src/cep/zcodeBackend.js';
 import { zcodeStaticDescriptor, zcodeDescriptorFromModels } from '../src/lib/backendCapabilities.js';
 
 // --- harness (mirrors codexBackend.test.js shape, adapted to ZCode protocol) ---
@@ -55,6 +55,10 @@ async function flush() {
 // Respond to a ZCode request (no jsonrpc field — the protocol is stripped).
 function respond(proc, request, result = {}) {
   proc.pushStdout({ id: request.id, result });
+}
+
+function reject(proc, request, message = 'ZCode request failed') {
+  proc.pushStdout({ id: request.id, error: { message } });
 }
 
 // Push a ZCode notification (event) with the given type/payload.
@@ -137,6 +141,254 @@ test('createZcodeBackend spawns node with zcode.cjs app-server args', async () =
   assert.equal(spawned.calls[0].options.windowsHide, true);
 });
 
+test('createZcodeBackend passes AE_MCP_ZCODE_MODEL to ZCODE_MODEL', async () => {
+  const { backend, spawned } = makeBackend({
+    env: {
+      PATH: 'C:\\Node',
+      TEMP: 'C:\\tmp',
+      LOCALAPPDATA: 'C:\\Users\\test\\AppData\\Local',
+      AE_MCP_PANEL_EXT_ROOT: 'C:\\Repo\\plugin\\panel',
+      AE_MCP_ZCODE_MODEL: 'mediastorm_glm/glm-5.2',
+    },
+  });
+  backend.sendUser('hello');
+  await flush();
+
+  assert.equal(spawned.calls[0].options.env.ZCODE_MODEL, 'mediastorm_glm/glm-5.2');
+});
+
+test('session/create carries the selected panel model without forcing env config', async () => {
+  const { backend, spawned } = makeBackend({
+    getModel: () => 'builtin:bigmodel-start-plan/GLM-5.2',
+  });
+  backend.sendUser('hello');
+  await flush();
+
+  const createReq = parseWrites(spawned.procs[0])[0];
+  assert.equal(spawned.calls[0].options.env.ZCODE_MODEL, undefined);
+  assert.deepEqual(createReq.params.model, {
+    providerId: 'builtin:bigmodel-start-plan',
+    modelId: 'GLM-5.2',
+  });
+});
+
+test('createZcodeBackend replaces the legacy bundled model with the enabled desktop provider', async () => {
+  const { backend, spawned } = makeBackend({
+    getModel: () => 'mediastorm_glm/glm-5.2',
+    readDesktopModel: () => 'builtin:bigmodel-start-plan/GLM-5.2',
+    readDesktopRuntimeModel: () => ({
+      revision: 'desktop-v2',
+      generatedAt: 1,
+      model: { providerId: 'builtin:bigmodel-start-plan', modelId: 'GLM-5.2' },
+      provider: {
+        providerId: 'builtin:bigmodel-start-plan',
+        kind: 'anthropic',
+        apiFormat: 'anthropic-messages',
+        source: 'custom',
+        baseURL: 'https://zcode.z.ai/api/v1/zcode-plan/anthropic',
+        apiKey: { source: 'inline', value: 'secret' },
+        models: [{ modelId: 'GLM-5.2' }],
+      },
+    }),
+  });
+  backend.sendUser('hello');
+  await flush();
+
+  const createReq = parseWrites(spawned.procs[0])[0];
+  assert.equal(spawned.calls[0].options.env.ZCODE_MODEL, undefined);
+  assert.equal(createReq.params.runtimeModel.provider.providerId, 'builtin:bigmodel-start-plan');
+  assert.equal(createReq.params.runtimeModel.provider.apiKey.source, 'inline');
+  assert.deepEqual(createReq.params.model, {
+    providerId: 'builtin:bigmodel-start-plan',
+    modelId: 'GLM-5.2',
+  });
+});
+
+test('interaction/requestProviderRuntimeHeaders reports the desktop OAuth plan bridge gap', async () => {
+  const { backend, spawned } = makeBackend({
+    getModel: () => 'builtin:bigmodel-start-plan/GLM-5.2',
+    readDesktopRuntimeModel: () => ({
+      revision: 'desktop-v2:builtin:bigmodel-start-plan',
+      generatedAt: 1,
+      model: { providerId: 'builtin:bigmodel-start-plan', modelId: 'GLM-5.2' },
+      provider: {
+        providerId: 'builtin:bigmodel-start-plan',
+        kind: 'anthropic',
+        apiFormat: 'anthropic-messages',
+        source: 'custom',
+        baseURL: 'https://zcode.z.ai/api/v1/zcode-plan/anthropic',
+        models: [{ modelId: 'GLM-5.2' }],
+      },
+    }),
+    readOAuthAccessToken: () => { throw new Error('should not decrypt desktop OAuth tokens'); },
+    resolveCodingPlanApiKey: async () => { throw new Error('should not create provider API keys'); },
+  });
+  const { proc } = await startTurn(backend, spawned, 'hello');
+
+  proc.pushStdout({
+    id: 91,
+    method: 'interaction/requestProviderRuntimeHeaders',
+    params: {
+      requestId: 'runtime_headers_1',
+      sessionId: 'sess_test',
+      workspace: { workspacePath: 'C:\\Repo\\plugin\\panel', workspaceKey: 'C:\\Repo\\plugin\\panel' },
+      modelRef: { providerId: 'builtin:bigmodel-start-plan', modelId: 'GLM-5.2' },
+      providerId: 'builtin:bigmodel-start-plan',
+      reason: 'model-request',
+    },
+  });
+  await flush();
+
+  const updateReq = parseWrites(proc).find((m) => m.method === 'session/updateRuntimeModelConfig');
+  assert.equal(updateReq, undefined, 'zcode-plan must not be rewritten into a fake API-key provider');
+  const reply = parseWrites(proc).find((m) => m.id === 91);
+  assert.equal(reply.error, undefined);
+  assert.equal(reply.result.headersApplied, false);
+  assert.match(reply.result.errorMessage, /desktop OAuth/i);
+  assert.match(reply.result.errorMessage, /runtime headers/i);
+  assert.match(reply.result.errorMessage, /captcha/i);
+});
+
+test('interaction/requestProviderRuntimeHeaders reports provider header failures without method errors', async () => {
+  const { backend, spawned } = makeBackend({
+    getModel: () => 'builtin:bigmodel-start-plan/GLM-5.2',
+    readDesktopRuntimeModel: () => ({
+      revision: 'desktop-v2:builtin:bigmodel-start-plan',
+      generatedAt: 1,
+      model: { providerId: 'builtin:bigmodel-start-plan', modelId: 'GLM-5.2' },
+      provider: {
+        providerId: 'builtin:bigmodel-start-plan',
+        kind: 'anthropic',
+        apiFormat: 'anthropic-messages',
+        source: 'custom',
+        baseURL: 'https://zcode.z.ai/api/v1/zcode-plan/anthropic',
+        models: [{ modelId: 'GLM-5.2' }],
+      },
+    }),
+    readOAuthAccessToken: () => '',
+  });
+  const { proc } = await startTurn(backend, spawned, 'hello');
+
+  proc.pushStdout({
+    id: 92,
+    method: 'interaction/requestProviderRuntimeHeaders',
+    params: {
+      requestId: 'runtime_headers_2',
+      sessionId: 'sess_test',
+      workspace: { workspacePath: 'C:\\Repo\\plugin\\panel', workspaceKey: 'C:\\Repo\\plugin\\panel' },
+      modelRef: { providerId: 'builtin:bigmodel-start-plan', modelId: 'GLM-5.2' },
+      providerId: 'builtin:bigmodel-start-plan',
+      reason: 'model-request',
+    },
+  });
+  await flush();
+
+  const reply = parseWrites(proc).find((m) => m.id === 92);
+  assert.equal(reply.error, undefined);
+  assert.equal(reply.result.headersApplied, false);
+  assert.match(reply.result.errorMessage, /runtime headers/i);
+});
+
+test('zcodeModelFromDesktopConfig picks the enabled coding-plan provider from v2 settings', () => {
+  const model = zcodeModelFromDesktopConfig({
+    setting: {
+      providerFamilyDomain: 'bigmodel',
+      modelProviderFamilyModes: { bigmodel: 'oauth' },
+    },
+    config: {
+      provider: {
+        'builtin:bigmodel': {
+          name: 'Bigmodel - API Key',
+          models: { 'GLM-5.2': {} },
+        },
+        'builtin:bigmodel-start-plan': {
+          name: 'BigModel- Coding Plan',
+          enabled: true,
+          options: { apiKey: 'redacted' },
+          models: { 'GLM-5.2': {}, 'GLM-5-Turbo': { name: 'glm-5-turbo' } },
+        },
+        'builtin:zai-start-plan': {
+          enabled: false,
+          systemDisabledReason: 'oauth_provider_inactive',
+          models: { 'GLM-5.2': {} },
+        },
+      },
+    },
+  });
+
+  assert.equal(model, 'builtin:bigmodel-start-plan/GLM-5.2');
+});
+
+test('zcodeRuntimeModelFromDesktopConfig maps v2 provider config to a runtimeModel', () => {
+  const runtimeModel = zcodeRuntimeModelFromDesktopConfig({
+    modelRef: 'builtin:bigmodel-start-plan/GLM-5.2',
+    setting: { providerFamilyDomain: 'bigmodel' },
+    config: {
+      provider: {
+        'builtin:bigmodel-start-plan': {
+          name: 'BigModel- Coding Plan',
+          kind: 'anthropic',
+          enabled: true,
+          source: 'custom',
+          options: {
+            apiKey: 'desktop-secret',
+            baseURL: 'https://zcode.z.ai/api/v1/zcode-plan/anthropic',
+          },
+          models: {
+            'GLM-5.2': { contextWindow: 200000 },
+            'GLM-5-Turbo': { name: 'glm-5-turbo', maxOutputTokens: 8192 },
+          },
+        },
+      },
+    },
+  });
+
+  assert.equal(runtimeModel.model.providerId, 'builtin:bigmodel-start-plan');
+  assert.equal(runtimeModel.model.modelId, 'GLM-5.2');
+  assert.equal(runtimeModel.provider.kind, 'anthropic');
+  assert.equal(runtimeModel.provider.apiFormat, 'anthropic-messages');
+  assert.deepEqual(runtimeModel.provider.apiKey, { source: 'inline', value: 'desktop-secret' });
+  assert.deepEqual(runtimeModel.provider.models.map((m) => m.modelId), ['GLM-5.2', 'GLM-5-Turbo']);
+});
+
+test('createZcodeBackend maps AE_MCP_ZCODE_API_KEY to ZCode provider key env names', async () => {
+  const { backend, spawned } = makeBackend({
+    env: {
+      PATH: 'C:\\Node',
+      TEMP: 'C:\\tmp',
+      LOCALAPPDATA: 'C:\\Users\\test\\AppData\\Local',
+      AE_MCP_PANEL_EXT_ROOT: 'C:\\Repo\\plugin\\panel',
+      AE_MCP_ZCODE_MODEL: 'mediastorm_glm/glm-5.2',
+      AE_MCP_ZCODE_API_KEY: 'secret-key',
+    },
+  });
+  backend.sendUser('hello');
+  await flush();
+
+  assert.equal(spawned.calls[0].options.env.ZCODE_API_KEY, 'secret-key');
+  assert.equal(spawned.calls[0].options.env.MEDIASTORM_GLM_API_KEY, 'secret-key');
+});
+
+test('createZcodeBackend does not overwrite existing ZCode provider key env vars', async () => {
+  const { backend, spawned } = makeBackend({
+    env: {
+      PATH: 'C:\\Node',
+      TEMP: 'C:\\tmp',
+      LOCALAPPDATA: 'C:\\Users\\test\\AppData\\Local',
+      AE_MCP_PANEL_EXT_ROOT: 'C:\\Repo\\plugin\\panel',
+      AE_MCP_ZCODE_MODEL: 'mediastorm_glm/glm-5.2',
+      AE_MCP_ZCODE_API_KEY: 'panel-key',
+      ZCODE_API_KEY: 'generic-key',
+      MEDIASTORM_GLM_API_KEY: 'provider-key',
+    },
+  });
+  backend.sendUser('hello');
+  await flush();
+
+  assert.equal(spawned.calls[0].options.env.ZCODE_API_KEY, 'generic-key');
+  assert.equal(spawned.calls[0].options.env.MEDIASTORM_GLM_API_KEY, 'provider-key');
+});
+
 test('session/create is sent with a workspace object and permission mode', async () => {
   const { backend, spawned } = makeBackend();
   backend.sendUser('hello');
@@ -176,6 +428,69 @@ test('text-delta events flow from model.streaming notifications', async () => {
   assert.equal(deltas[1].text, 'G');
   assert.ok(events.some((e) => e.type === 'turn-start'));
   assert.ok(events.some((e) => e.type === 'turn-end' && e.stopReason === 'end_turn'));
+});
+
+test('turn.failed object errors keep their message and classify provider failures as model errors', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { proc, pending } = await startTurn(backend, spawned, 'say PONG');
+  pushEvent(proc, 'turn.failed', {
+    error: { message: 'Model provider is missing an API key: mediastorm_glm' },
+  });
+  await pending;
+  await flush();
+
+  assert.ok(events.some((e) => e.type === 'error'
+    && e.kind === 'model'
+    && e.message.includes('Model provider is missing an API key: mediastorm_glm')
+    && e.message.includes('AE_MCP_ZCODE_API_KEY')
+    && e.message.includes('MEDIASTORM_GLM_API_KEY')));
+});
+
+test('turn.failed provider authentication errors mention desktop OAuth runtime headers', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { proc, pending } = await startTurn(backend, spawned, 'say PONG');
+  pushEvent(proc, 'turn.failed', {
+    error: { message: 'Provider authentication failed.' },
+  });
+  await pending;
+  await flush();
+
+  assert.ok(events.some((e) => e.type === 'error'
+    && e.kind === 'model'
+    && e.message.includes('Provider authentication failed.')
+    && /desktop OAuth/i.test(e.message)
+    && /runtime headers/i.test(e.message)));
+});
+
+test('turn.failed model request errors mention desktop OAuth runtime headers for zcode-plan', async () => {
+  const { backend, events, spawned } = makeBackend({
+    getModel: () => 'builtin:bigmodel-start-plan/GLM-5.2',
+    readDesktopRuntimeModel: () => ({
+      revision: 'desktop-v2:builtin:bigmodel-start-plan',
+      generatedAt: 1,
+      model: { providerId: 'builtin:bigmodel-start-plan', modelId: 'GLM-5.2' },
+      provider: {
+        providerId: 'builtin:bigmodel-start-plan',
+        kind: 'anthropic',
+        apiFormat: 'anthropic-messages',
+        source: 'custom',
+        baseURL: 'https://zcode.z.ai/api/v1/zcode-plan/anthropic',
+        models: [{ modelId: 'GLM-5.2' }],
+      },
+    }),
+  });
+  const { proc, pending } = await startTurn(backend, spawned, 'say PONG');
+  pushEvent(proc, 'turn.failed', {
+    error: { message: 'Model request failed.' },
+  });
+  await pending;
+  await flush();
+
+  assert.ok(events.some((e) => e.type === 'error'
+    && e.kind === 'model'
+    && e.message.includes('Model request failed.')
+    && /desktop OAuth/i.test(e.message)
+    && /runtime headers/i.test(e.message)));
 });
 
 test('manual tier emits approval-required for a non-read-only tool', async () => {
@@ -280,17 +595,92 @@ test('probeAccount reports loggedIn when session/create succeeds', async () => {
   await flush();
   const result = await probe;
   assert.equal(result.loggedIn, true);
+  assert.equal(result.runtimeOk, true);
   assert.equal(result.provider, 'zcode');
 });
 
-test('probeAccount stays loggedIn with a warning when the CLI cannot be resolved', async () => {
+test('probeAccount reports runtime unavailable when the CLI cannot be resolved', async () => {
   // ZCode uses a provider API key, not `zcode login` — a spawn failure is an
   // environment problem, not a login problem, so we must not gate the user
   // behind a fake "not logged in" state.
   const { backend } = makeBackend({ resolveCli: async () => ({ ok: false, detail: 'not installed' }) });
   const result = await backend.probeAccount();
+  assert.deepEqual(result, {
+    loggedIn: true,
+    runtimeOk: false,
+    provider: 'zcode',
+    detail: 'not installed',
+  });
+});
+
+test('probeAccount reports provider API key repair hints when session/create fails for missing key', async () => {
+  const { backend, spawned } = makeBackend();
+  const probe = backend.probeAccount();
+  await flush();
+
+  const proc = spawned.procs[0];
+  const createReq = parseWrites(proc)[0];
+  reject(proc, createReq, 'Model provider is missing an API key: mediastorm_glm');
+  await flush();
+
+  const result = await probe;
   assert.equal(result.loggedIn, true);
-  assert.match(result.probeWarning, /not installed/);
+  assert.equal(result.runtimeOk, false);
+  assert.equal(result.provider, 'zcode');
+  assert.match(result.detail, /AE_MCP_ZCODE_API_KEY/);
+  assert.match(result.detail, /MEDIASTORM_GLM_API_KEY/);
+  assert.match(result.detail, /ZCODE_API_KEY/);
+});
+
+test('probeAccount reports model config repair hints when ZCode has no explicit provider', async () => {
+  const { backend, spawned } = makeBackend();
+  const probe = backend.probeAccount();
+  await flush();
+
+  const proc = spawned.procs[0];
+  const createReq = parseWrites(proc)[0];
+  reject(proc, createReq, 'Model config is missing. Create C:\\Users\\A\\.zcode\\cli\\config.json with an explicit model provider before running ZCode.');
+  await flush();
+
+  const result = await probe;
+  assert.equal(result.loggedIn, true);
+  assert.equal(result.runtimeOk, false);
+  assert.equal(result.provider, 'zcode');
+  assert.match(result.detail, /config\.json/);
+  assert.match(result.detail, /provider\/model/);
+  assert.match(result.detail, /Open ZCode/);
+});
+
+test('probeAccount does not cache sessionId when subscribe fails', async () => {
+  const { backend, spawned } = makeBackend();
+  const firstProbe = backend.probeAccount();
+  await flush();
+  const proc = spawned.procs[0];
+  const firstCreate = parseWrites(proc)[0];
+  respond(proc, firstCreate, { session: { sessionId: 'sess_partial' }, settings: { model: { available: [] } } });
+  await flush();
+  const firstSub = parseWrites(proc).find((m) => m.method === 'session/subscribe');
+  assert.ok(firstSub, 'probe subscribes before reporting runtime ready');
+  reject(proc, firstSub, 'subscribe failed');
+  await flush();
+  const firstResult = await firstProbe;
+  assert.equal(firstResult.runtimeOk, false);
+  assert.match(firstResult.detail, /subscribe failed/);
+
+  const writesBeforeRetry = parseWrites(proc).length;
+  const secondProbe = backend.probeAccount();
+  await flush();
+  const retryWrites = parseWrites(proc).slice(writesBeforeRetry);
+  const secondCreate = retryWrites.find((m) => m.method === 'session/create');
+  assert.ok(secondCreate, 'retry starts a fresh session/create after subscribe failure');
+  respond(proc, secondCreate, { session: { sessionId: 'sess_retry' }, settings: { model: { available: [] } } });
+  await flush();
+  const secondSub = parseWrites(proc).slice(writesBeforeRetry).find((m) => m.method === 'session/subscribe');
+  assert.ok(secondSub, 'retry subscribes before reporting runtime ready');
+  respond(proc, secondSub, { sessionId: 'sess_retry', eventSeq: 0 });
+  await flush();
+  const secondResult = await secondProbe;
+  assert.equal(secondResult.runtimeOk, true);
 });
 
 // --- descriptor tests ---
@@ -301,11 +691,10 @@ test('zcodeStaticDescriptor satisfies the backend descriptor contract', () => {
   assert.ok(Array.isArray(d.models) && d.models.length > 0);
   assert.ok(d.defaultModelId);
   assert.equal(typeof d.supportsFast, 'function');
-  assert.equal(d.perTurnModelSwitch, true);
+  assert.equal(d.perTurnModelSwitch, false);
   assert.equal(Array.isArray(d.approvalModes) && d.approvalModes.length, 4);
-  // thoughtLevel enum is low/medium/high (verified in zcode.cjs 0.14.8).
-  assert.deepEqual(d.models[0].effortLevels, ['low', 'medium', 'high']);
-  assert.equal(d.defaultEffort, 'medium');
+  assert.deepEqual(d.models[0].effortLevels, ['nothink', 'high', 'max']);
+  assert.equal(d.defaultEffort, 'high');
 });
 
 test('session/create carries thoughtLevel when getEffort returns a valid level', async () => {
@@ -491,6 +880,7 @@ test('zcodeDescriptorFromModels builds from session/create model.available', () 
   assert.equal(result.models[0].id, 'mediastorm_glm/glm-5.2');
   assert.equal(result.models[0].label, 'GLM-5.2');
   assert.equal(result.defaultModelId, 'mediastorm_glm/glm-5.2');
+  assert.equal(result.perTurnModelSwitch, false);
 });
 
 test('zcodeDescriptorFromModels falls back to static when no models', () => {

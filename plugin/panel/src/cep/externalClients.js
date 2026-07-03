@@ -62,7 +62,7 @@ export const EXTERNAL_CLIENTS = [
     name: 'ZCode',
     kind: 'mcp-stdio',
     installHint: 'Add ae-mcp as a local MCP server in ~/.zcode/cli/config.json (mcp.servers).',
-    loginHint: 'Run `zcode login` (or sign in via the ZCode app) before starting.',
+    loginHint: 'Open ZCode and make sure its selected provider has an API key before starting.',
     docsUrl: 'https://zcode.z.ai',
   },
 ];
