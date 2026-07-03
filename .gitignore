@@ -19,3 +19,7 @@ plugin/sidecar/node_modules/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local-only artifacts
+.rnd
+plugin/panel/ae_viewer_*.png

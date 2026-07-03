@@ -155,5 +155,5 @@ def render_skill(skill: Skill, provided_args: dict[str, Any]) -> str:
     # safe_substitute (not substitute) so idiomatic ExtendScript `$` sequences
     # like `$.writeln` / `$.global` pass through untouched instead of raising
     # "Invalid placeholder in string". Declared ${name} placeholders are still
-    # substituted; only unknown bare-$ runs are left verbatim. #12
+    # substituted; only unknown bare-$ runs are left verbatim.
     return Template(skill.template).safe_substitute(rendered_values)

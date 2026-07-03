@@ -194,7 +194,7 @@ test('createOpenCodeBackend starts opencode serve, writes isolated ae MCP config
   await pending;
 });
 
-// Fixtures use the REAL opencode wire shapes (live-verified 2026-06-13):
+// Fixtures use the real OpenCode wire shape:
 // { type, properties } with dotted types; text via message.part.delta
 // (field:'text'), tools via message.part.updated (part.type:'tool', state),
 // turn lifecycle via session.status (busy/idle). MCP tool name is doubled
@@ -228,8 +228,8 @@ test('OpenCode approval adapter applies annotation tiers and posts approval repl
   const pending = backend.sendUser('approve');
   await flush();
 
-  // Permission wire-type is UNVERIFIED (ae_ping is read-only so it never fired
-  // in live acceptance); adapter matches defensively on a permission*ask* type.
+  // Permission prompts may not appear on read-only tool paths, so the adapter
+  // matches defensively on a permission*ask* type.
   fetched.sse.push({
     type: 'permission.asked',
     properties: { sessionID: 'session_1', permissionID: 'perm_1', tool: 'ae_ae_exec', input: { code: 'app.project' } },

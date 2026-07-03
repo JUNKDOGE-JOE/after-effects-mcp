@@ -39,7 +39,7 @@ _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "jsx_templates"
 # large project returns partial results with truncated:true instead of running
 # past AE's 30s evalScript timeout (yielding zero output and a blocked UI).
 # Kept as a rendered constant rather than user-facing schema surface; ~20s sits
-# comfortably under the 30s exec timeout. #12
+# comfortably under the 30s exec timeout.
 _TRAVERSAL_BUDGET_MS = 20000
 
 

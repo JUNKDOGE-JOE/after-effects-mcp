@@ -163,10 +163,9 @@ class CheckpointStore:
         d = self._dir_for(source_path)
         if not d.exists():
             return []
-        # Belt-and-suspenders: even though directories are now keyed by the
-        # full resolved path, also filter returned entries by matching
-        # sourceProjectPath so a stray/mis-keyed sidecar can never surface a
-        # different project's checkpoint (issue #10).
+        # Belt-and-suspenders: filter returned entries by sourceProjectPath so
+        # a stray/mis-keyed sidecar can never surface a different project's
+        # checkpoint.
         want_key = _resolve_for_key(source_path) if source_path else None
         entries: List[Dict[str, Any]] = []
         for meta_file in d.glob("*.json"):
