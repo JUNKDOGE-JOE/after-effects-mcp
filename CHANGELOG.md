@@ -10,6 +10,19 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### [0.8.2] — 2026-07-03
+
+#### ✨ 新增
+- **ZCode 接入**——外接客户端注册表新增 ZCode，并能生成正确的 `mcp.servers` 配置；面板内嵌 ZCode chat 后端接入 `zcode.cjs app-server`，补齐 session 协议、四档审批映射和 elicitation / `AskUserQuestion` 处理。
+- **只读一键诊断 `ae.diagnose`**——新增始终暴露的只读 verb，一次探测 host `/health`（现在会回显 Python 握手字段）、token 有效性、AE 响应和工程打开状态，方便客户端先定位连接断点。
+- **真实合成帧预览**——`ae_previewFrame` 现在优先用 `CompItem.saveFrameToPng` 渲染真实 comp 像素，viewer snapshot 只作为 fallback；预览文件进入受管的 `ae_mcp_previews` 临时会话目录，并自动清理超过 24 小时的陈旧会话。
+- **Provider profiles 扩展**——BYOK 支持 Anthropic-compatible Base URL 和自定义模型 ID，并按 Base URL 缓存模型列表；Codex 后端支持 OpenAI-compatible 自定义 provider，API key 本地保存，`wire_api` 固定为 `responses`。
+
+#### 🐛 修复 / 改进
+- **ZCode 失败模式可读**——真机验证出的 provider API key、模型配置、desktop OAuth runtime-headers 缺口等失败，现在在面板里显示为可读提示，不再冒出 `[object Object]`。coding-plan providers 可经 OAuth credential bridge 工作；`*-start-plan` providers 仍需要 ZCode 桌面端（captcha / runtime headers 目前还不能桥接）。
+- **禁止截图绕路**——server instructions 和 sidecar prompts 明确禁止用 OS screenshot / desktop automation 绕过 `ae_previewFrame`，把预览路径收回到 AE 渲染链路。
+- **CI 锁住 panel dist**——CI 现在验证 `plugin/client/dist/app.js` 与 panel 源码同步；新增 `.gitattributes`，统一 `eol=lf` 并把 dist bundle 标为 binary。
+
 ### [0.8.1] — 2026-06-14
 
 #### 🐛 修复 / 改进
@@ -171,6 +184,19 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### [0.8.2] — 2026-07-03
+
+#### ✨ Added
+- **ZCode integration** — ZCode is now in the external-client registry with correct `mcp.servers` config generation; the embedded ZCode chat backend drives `zcode.cjs app-server` with session protocol support, four-tier approval mapping, and elicitation / `AskUserQuestion` handling.
+- **Read-only one-shot diagnostics with `ae.diagnose`** — a new always-exposed read-only verb probes host `/health` (now echoing Python handshake fields), token validity, AE responsiveness, and project-open state in one call.
+- **Real comp-pixel previews** — `ae_previewFrame` now renders through `CompItem.saveFrameToPng` first, using viewer snapshots only as a fallback; preview files live in a managed `ae_mcp_previews` temp session dir with automatic stale-session cleanup after 24 hours.
+- **Expanded provider profiles** — BYOK supports Anthropic-compatible base URLs and custom model IDs with a per-base-URL model cache; the Codex backend supports OpenAI-compatible custom providers with the API key stored locally and `wire_api` pinned to `responses`.
+
+#### 🐛 Fixed / Improved
+- **Readable ZCode failure hints** — live-tested provider API key, model config, and desktop OAuth runtime-headers failures now surface as panel hints instead of `[object Object]`. Coding-plan providers work through an OAuth credential bridge; `*-start-plan` providers still require the ZCode desktop app because captcha / runtime headers cannot be bridged yet.
+- **No screenshot workaround path** — server instructions and sidecar prompts now forbid OS-screenshot / desktop-automation substitutes for `ae_previewFrame`, keeping previews on the AE render path.
+- **CI guards the panel bundle** — CI now verifies `plugin/client/dist/app.js` is in sync with source; `.gitattributes` was added to enforce `eol=lf` and mark the dist bundle as binary.
 
 ### [0.8.1] — 2026-06-14
 

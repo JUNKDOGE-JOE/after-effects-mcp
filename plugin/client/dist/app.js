@@ -8266,7 +8266,7 @@
   // package.json
   var package_default = {
     name: "ae-mcp-panel",
-    version: "0.8.1",
+    version: "0.8.2",
     private: true,
     type: "module",
     scripts: {
@@ -12056,7 +12056,7 @@
   // src/cep/mcpClient.js
   var DEFAULT_TIMEOUT_MS = 3e4;
   var MCP_PROTOCOL_VERSION = "2025-06-18";
-  var PANEL_VERSION = "0.8.1";
+  var PANEL_VERSION = "0.8.2";
   function getCepRequire() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
