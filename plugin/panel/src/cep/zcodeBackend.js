@@ -25,6 +25,7 @@ import { createNdjsonReader } from '../lib/ndjson.js';
 import { resolveSystemNode } from './claudeAgentBackend.js';
 import { expertGuidanceEnv } from './externalClients.js';
 import { createApiKeyStore } from './apiKey.js';
+import { localizeZcodeError } from '../lib/zcodeErrors.js';
 
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -684,20 +685,20 @@ function zcodeRepairHint(message) {
   return zcodeProviderAuthenticationHint(zcodeMissingModelConfigHint(zcodeMissingApiKeyHint(message)));
 }
 
-function zcodeErrorMessage(value, fallback = 'ZCode turn failed') {
-  if (!value) return zcodeRepairHint(fallback);
-  if (typeof value === 'string') return zcodeRepairHint(value);
+function zcodeErrorMessage(value, fallback = 'ZCode turn failed', lang = 'en') {
+  if (!value) return localizeZcodeError(zcodeRepairHint(fallback), lang);
+  if (typeof value === 'string') return localizeZcodeError(zcodeRepairHint(value), lang);
   if (typeof value === 'object') {
     const direct = value.message || value.detail || value.reason || value.error;
-    if (direct && direct !== value) return zcodeErrorMessage(direct, fallback);
+    if (direct && direct !== value) return zcodeErrorMessage(direct, fallback, lang);
     try {
       const text = JSON.stringify(value);
-      return zcodeRepairHint(text && text !== '{}' ? text : fallback);
+      return localizeZcodeError(zcodeRepairHint(text && text !== '{}' ? text : fallback), lang);
     } catch (e) {
-      return zcodeRepairHint(fallback);
+      return localizeZcodeError(zcodeRepairHint(fallback), lang);
     }
   }
-  return zcodeRepairHint(String(value));
+  return localizeZcodeError(zcodeRepairHint(String(value)), lang);
 }
 
 function zcodeErrorKind(message) {
@@ -881,7 +882,7 @@ export function createZcodeBackend({
       activeRuntimeModel = refreshedRuntimeModel;
       if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: true, providerRevision: refreshedRuntimeModel.revision });
     } catch (e) {
-      const message = zcodeErrorMessage(e, 'ZCode desktop OAuth header refresh failed.');
+      const message = zcodeErrorMessage(e, 'ZCode desktop OAuth header refresh failed.', lang);
       if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: message });
     }
   }
@@ -1031,7 +1032,7 @@ export function createZcodeBackend({
     }
     if (type === 'turn.failed') {
       const payload = params.payload || {};
-      const message = zcodePlanRuntimeFailureHint(zcodeErrorMessage(payload.error || payload.message), activeRuntimeModel);
+      const message = zcodePlanRuntimeFailureHint(zcodeErrorMessage(payload.error || payload.message, 'ZCode turn failed', lang), activeRuntimeModel);
       emit({ type: 'error', kind: zcodeErrorKind(message), message });
       finishActive();
       return;
@@ -1268,12 +1269,12 @@ export function createZcodeBackend({
 
       // session/send resolves on acceptance, long before turn.completed.
       rpc.request('session/send', { sessionId, content: turnText }, 180000).catch((e) => {
-        const message = zcodeErrorMessage(e, 'Failed to start ZCode turn.');
+        const message = zcodeErrorMessage(e, 'Failed to start ZCode turn.', lang);
         emit({ type: 'error', kind: zcodeErrorKind(message), message });
         finishActive();
       });
     } catch (e) {
-      const message = zcodeErrorMessage(e, 'Failed to start ZCode turn.');
+      const message = zcodeErrorMessage(e, 'Failed to start ZCode turn.', lang);
       emit({ type: 'error', kind: zcodeErrorKind(message), message });
       finishActive();
     }
@@ -1400,7 +1401,7 @@ export function createZcodeBackend({
         loggedIn: true,
         runtimeOk: false,
         provider: 'zcode',
-        detail: zcodeErrorMessage(e, 'ZCode runtime unavailable.'),
+        detail: zcodeErrorMessage(e, 'ZCode runtime unavailable.', lang),
       };
     }
   }
