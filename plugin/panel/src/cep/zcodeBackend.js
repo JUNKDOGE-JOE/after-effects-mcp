@@ -24,6 +24,7 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
 import { resolveSystemNode } from './claudeAgentBackend.js';
 import { expertGuidanceEnv } from './externalClients.js';
+import { createApiKeyStore } from './apiKey.js';
 
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -222,10 +223,17 @@ function zcodePreferredModelId(provider) {
   return ids.find((id) => id === 'GLM-5.2') || ids.find((id) => /GLM-5\.2/i.test(id)) || ids[0];
 }
 
-function zcodeProviderScore(providerId, provider, family) {
+export function hasZcodeProviderCredential(provider, env = {}) {
+  const options = provider && provider.options && typeof provider.options === 'object' ? provider.options : {};
+  if (options.apiKey || (provider && provider.apiKey)) return true;
+  const keyEnv = String(options.apiKeyEnv || '').trim();
+  return Boolean(keyEnv && env[keyEnv]);
+}
+
+function zcodeProviderScore(providerId, provider, family, env = {}, { allowEmptyModels = false } = {}) {
   if (!provider || typeof provider !== 'object') return -1;
   if (provider.enabled === false || provider.systemDisabledReason) return -1;
-  if (!zcodeModelIds(provider).length) return -1;
+  if (!zcodeModelIds(provider).length && !allowEmptyModels) return -1;
 
   const id = String(providerId || '');
   let score = 0;
@@ -235,11 +243,14 @@ function zcodeProviderScore(providerId, provider, family) {
   if (family && id === 'builtin:' + family) score += 40;
   if (/-start-plan$/.test(id)) score += 30;
   if (/-coding-plan$/.test(id)) score += 20;
-  if (provider.options && provider.options.apiKey) score += 10;
+  // Spec B1: usable credentials MUST outrank the fixed family/start-plan
+  // bonuses. Max keyless total is 100+80+30 = 210, so credentials add 300 —
+  // a keyed custom provider always beats a keyless builtin start-plan.
+  if (hasZcodeProviderCredential(provider, env)) score += 300;
   return score;
 }
 
-function zcodeDesktopProviderEntry({ config, setting, modelRef }) {
+function zcodeDesktopProviderEntry({ config, setting, modelRef, env = {} }) {
   const providers = config && config.provider && typeof config.provider === 'object' ? config.provider : {};
   const entries = Object.entries(providers);
   if (!entries.length) return null;
@@ -248,13 +259,13 @@ function zcodeDesktopProviderEntry({ config, setting, modelRef }) {
   const requested = zcodeProtocolModelFromRef(modelRef);
   if (requested && providers[requested.providerId]) {
     const provider = providers[requested.providerId];
-    const score = zcodeProviderScore(requested.providerId, provider, family);
+    const score = zcodeProviderScore(requested.providerId, provider, family, env, { allowEmptyModels: true });
     if (score >= 0) return { providerId: requested.providerId, provider, modelId: requested.modelId, score };
   }
 
   let best = null;
   for (const [providerId, provider] of entries) {
-    const score = zcodeProviderScore(providerId, provider, family);
+    const score = zcodeProviderScore(providerId, provider, family, env);
     if (score < 0) continue;
     if (!best || score > best.score) best = { providerId, provider, score };
   }
@@ -264,8 +275,8 @@ function zcodeDesktopProviderEntry({ config, setting, modelRef }) {
   return modelId ? { ...best, modelId } : null;
 }
 
-export function zcodeModelFromDesktopConfig({ config, setting }) {
-  const entry = zcodeDesktopProviderEntry({ config, setting });
+export function zcodeModelFromDesktopConfig({ config, setting, env = {} }) {
+  const entry = zcodeDesktopProviderEntry({ config, setting, env });
   return entry ? entry.providerId + '/' + entry.modelId : '';
 }
 
@@ -315,14 +326,24 @@ function zcodeProtocolModels(provider, selectedModelId) {
   return result;
 }
 
-export function zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef, thoughtLevel } = {}) {
-  const entry = zcodeDesktopProviderEntry({ config, setting, modelRef });
+export function resolveZcodeProviderApiKey({ provider, env = {}, storedKey = '' } = {}) {
+  const options = provider && provider.options && typeof provider.options === 'object' ? provider.options : {};
+  const inline = options.apiKey || (provider && provider.apiKey);
+  if (inline) return { key: String(inline), source: 'config' };
+  const keyEnv = String(options.apiKeyEnv || '').trim();
+  if (keyEnv && env[keyEnv]) return { key: String(env[keyEnv]), source: 'env' };
+  if (storedKey) return { key: String(storedKey), source: 'panel' };
+  return { key: '', source: '' };
+}
+
+export function zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef, thoughtLevel, env = {}, storedKey = '' } = {}) {
+  const entry = zcodeDesktopProviderEntry({ config, setting, modelRef, env });
   if (!entry) return null;
 
   const provider = entry.provider || {};
   const options = provider.options && typeof provider.options === 'object' ? provider.options : {};
   const kind = zcodeProtocolProviderKind(provider.kind);
-  const apiKey = options.apiKey || provider.apiKey;
+  const apiKey = resolveZcodeProviderApiKey({ provider, env, storedKey }).key;
   const protocolProvider = {
     providerId: entry.providerId,
     kind,
@@ -357,22 +378,67 @@ function readJsonFile(fsImpl, path) {
   }
 }
 
-function readZcodeDesktopModel({ env, fsImpl } = {}) {
-  const base = zcodeDesktopBasePath(env || {});
-  if (!base) return '';
-  const fs = fsImpl || getCepRequire()('fs');
-  const config = readJsonFile(fs, base + '\\config.json');
-  const setting = readJsonFile(fs, base + '\\setting.json');
-  return zcodeModelFromDesktopConfig({ config, setting });
+function zcodeCliBasePath(env) {
+  const home = env && (env.USERPROFILE || env.HOME || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : ''));
+  return home ? String(home).replace(/[\\/]+$/, '') + '\\.zcode\\cli' : '';
 }
 
-function readZcodeDesktopRuntimeModel({ env, fsImpl, modelRef, thoughtLevel } = {}) {
-  const base = zcodeDesktopBasePath(env || {});
-  if (!base) return null;
+export function mergeZcodeConfigs({ cliConfig, desktopConfig } = {}) {
+  const desktopProviders = desktopConfig && desktopConfig.provider && typeof desktopConfig.provider === 'object' ? desktopConfig.provider : {};
+  const cliProviders = cliConfig && cliConfig.provider && typeof cliConfig.provider === 'object' ? cliConfig.provider : {};
+  const provider = Object.assign({}, desktopProviders, cliProviders);
+  return Object.keys(provider).length ? { provider } : null;
+}
+
+function readZcodeConfigs({ env, fsImpl } = {}) {
   const fs = fsImpl || getCepRequire()('fs');
-  const config = readJsonFile(fs, base + '\\config.json');
-  const setting = readJsonFile(fs, base + '\\setting.json');
-  return zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef, thoughtLevel });
+  const desktopBase = zcodeDesktopBasePath(env || {});
+  const cliBase = zcodeCliBasePath(env || {});
+  const desktopConfig = desktopBase ? readJsonFile(fs, desktopBase + '\\config.json') : null;
+  const setting = desktopBase ? readJsonFile(fs, desktopBase + '\\setting.json') : null;
+  const cliConfig = cliBase ? readJsonFile(fs, cliBase + '\\config.json') : null;
+  const cliModel = cliConfig && typeof cliConfig.model === 'string' ? cliConfig.model.trim() : '';
+  return { config: mergeZcodeConfigs({ cliConfig, desktopConfig }), setting, cliModel, cliConfig, desktopConfig };
+}
+
+export function readZcodeDesktopModel({ env, fsImpl } = {}) {
+  const { config, setting, cliModel } = readZcodeConfigs({ env, fsImpl });
+  if (cliModel) {
+    const requested = zcodeProtocolModelFromRef(cliModel);
+    if (requested && config && config.provider && config.provider[requested.providerId]) return cliModel;
+  }
+  return zcodeModelFromDesktopConfig({ config, setting, env: env || {} });
+}
+
+export function readZcodeDesktopRuntimeModel({ env, fsImpl, modelRef, thoughtLevel, storedKey = '' } = {}) {
+  const { config, setting, cliModel } = readZcodeConfigs({ env, fsImpl });
+  const ref = modelRef || cliModel || '';
+  return zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef: ref, thoughtLevel, env: env || {}, storedKey });
+}
+
+export function summarizeZcodeConfig({ env = {}, fsImpl, storedKey = '' } = {}) {
+  const { cliConfig, desktopConfig, cliModel } = readZcodeConfigs({ env, fsImpl });
+  const cliProviders = (cliConfig && cliConfig.provider) || {};
+  const cliProviderId = zcodeProviderId(cliModel) || Object.keys(cliProviders)[0] || '';
+  const cliProvider = cliProviderId ? cliProviders[cliProviderId] : null;
+  const cliResolved = cliProvider ? resolveZcodeProviderApiKey({ provider: cliProvider, env, storedKey }) : { key: '', source: '' };
+  const desktopIds = Object.keys((desktopConfig && desktopConfig.provider) || {});
+  const startPlanId = desktopIds.find((id) => /-start-plan$/.test(id)) || '';
+  const startPlanProvider = startPlanId ? desktopConfig.provider[startPlanId] : null;
+  return {
+    cli: cliProvider ? {
+      providerId: cliProviderId,
+      model: cliModel,
+      apiKeyEnv: String((cliProvider.options && cliProvider.options.apiKeyEnv) || ''),
+      hasCredential: Boolean(cliResolved.key),
+      keySource: cliResolved.source,
+    } : null,
+    desktop: desktopIds.length ? { providerId: desktopIds[0] } : null,
+    startPlan: startPlanId ? {
+      providerId: startPlanId,
+      hasCredential: hasZcodeProviderCredential(startPlanProvider, env),
+    } : null,
+  };
 }
 
 function zcodeProviderFamily(providerId) {
@@ -638,6 +704,10 @@ function zcodeErrorKind(message) {
   return /\b(model|provider|api[-\s_]*key|credential|auth)\b/i.test(String(message || '')) ? 'model' : 'mcp';
 }
 
+function defaultReadStoredZcodeKey() {
+  try { return createApiKeyStore().readKey('zcode'); } catch (e) { return ''; }
+}
+
 export function createZcodeBackend({
   spawnImpl,
   getModel,
@@ -656,6 +726,7 @@ export function createZcodeBackend({
   resolveCodingPlanApiKey = resolveZcodeCodingPlanApiKey,
   resolveCli = resolveZcodeCli,
   resolveNode = resolveSystemNode,
+  readStoredZcodeKey = defaultReadStoredZcodeKey,
 }) {
   let proc = null;
   let rpc = null;
@@ -689,7 +760,7 @@ export function createZcodeBackend({
     const next = Object.assign({}, getCepEnv(), env || {});
     const panelModel = next.AE_MCP_ZCODE_MODEL && String(next.AE_MCP_ZCODE_MODEL).trim();
     if (!next.ZCODE_MODEL && panelModel) next.ZCODE_MODEL = panelModel;
-    const panelApiKey = next.AE_MCP_ZCODE_API_KEY && String(next.AE_MCP_ZCODE_API_KEY).trim();
+    const panelApiKey = (next.AE_MCP_ZCODE_API_KEY && String(next.AE_MCP_ZCODE_API_KEY).trim()) || String(readStoredZcodeKey() || '').trim();
     if (panelApiKey) {
       if (!next.ZCODE_API_KEY) next.ZCODE_API_KEY = panelApiKey;
       const providerEnv = zcodeProviderApiKeyEnv(zcodeProviderId(next.ZCODE_MODEL));
@@ -715,7 +786,7 @@ export function createZcodeBackend({
   function currentRuntimeModel(spawnEnv, modelRef, thoughtLevel) {
     if (!readDesktopRuntimeModel) return null;
     try {
-      return readDesktopRuntimeModel({ env: spawnEnv, modelRef, thoughtLevel }) || null;
+      return readDesktopRuntimeModel({ env: spawnEnv, modelRef, thoughtLevel, storedKey: String(readStoredZcodeKey() || '').trim() }) || null;
     } catch (e) {
       return null;
     }
