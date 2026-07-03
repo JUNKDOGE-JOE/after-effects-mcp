@@ -63,7 +63,7 @@ uv tool install --from packages/core ae-mcp --with packages/bridge --with packag
 终端用户从发布 tag 安装：
 
 ```powershell
-uv tool install --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.1#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.1#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.1#subdirectory=packages/snapshot-mss
+uv tool install --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.2#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.2#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.2#subdirectory=packages/snapshot-mss
 ```
 
 面板安装使用 ZXP 包：推荐 aescripts ZXP Installer，也可用 ExMan Cmd。安装后打开 `Window -> Extensions -> ae-mcp`。
@@ -221,7 +221,7 @@ uv tool install --from packages/core ae-mcp --with packages/bridge --with packag
 End users install from the release tag:
 
 ```powershell
-uv tool install --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.1#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.1#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.1#subdirectory=packages/snapshot-mss
+uv tool install --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.2#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.2#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.2#subdirectory=packages/snapshot-mss
 ```
 
 Install the panel from the ZXP package with aescripts ZXP Installer or ExMan Cmd. Then open `Window -> Extensions -> ae-mcp`.
