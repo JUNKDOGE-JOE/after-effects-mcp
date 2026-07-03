@@ -11,7 +11,7 @@ import { Select } from '../components/forms/Select';
 import { Field } from '../components/forms/Field';
 import { EXTERNAL_CLIENTS, mcpConfigFor } from '../cep/externalClients';
 import { copyText } from '../lib/clipboard';
-import { zcodeDefaultModelLocked as shouldLockZcodeDefaultModel } from '../lib/settingsState';
+import { zcodeDefaultModelLocked as shouldLockZcodeDefaultModel, zcodeManagedModelLabel } from '../lib/settingsState';
 import { Icon } from '../components/core/Icon';
 import { loadSectionState, saveSectionState, toggleSection } from '../lib/settingsSections';
 
@@ -381,7 +381,7 @@ export function SettingsScreen({
         <Field label={t.modelDefault}>
           {zcodeModelLocked ? (
             <div style={{ minHeight: 28, display: 'flex', alignItems: 'center', padding: '0 8px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-well)', font: '400 11px/1.35 var(--font-ui)', color: 'var(--text-secondary)' }}>
-              {t.zcodeModelManaged}
+              {zcodeManagedModelLabel(lang, backend === 'zcode' ? model : '')}
             </div>
           ) : (
             <Select value={model} onChange={onModelChange} options={modelOptions || [

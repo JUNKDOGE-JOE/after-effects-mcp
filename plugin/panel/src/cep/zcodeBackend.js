@@ -433,6 +433,11 @@ export function summarizeZcodeConfig({ env = {}, fsImpl, storedKey = '' } = {}) 
       apiKeyEnv: String((cliProvider.options && cliProvider.options.apiKeyEnv) || ''),
       hasCredential: Boolean(cliResolved.key),
       keySource: cliResolved.source,
+      // Probe-driven model discovery (spec A2 applied to zcode): baseUrl +
+      // protocol let the panel call probeProviderModels against /v1/models
+      // when session/create's settings.model.available comes back empty.
+      baseUrl: String((cliProvider.options && cliProvider.options.baseURL) || cliProvider.baseURL || ''),
+      protocol: zcodeProtocolProviderKind(cliProvider.kind),
     } : null,
     desktop: desktopIds.length ? { providerId: desktopIds[0] } : null,
     startPlan: startPlanId ? {

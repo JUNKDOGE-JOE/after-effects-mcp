@@ -5,7 +5,7 @@ import {
   claudeSubDescriptor, byokStaticDescriptor, mergeByokModels,
   codexStaticDescriptor, codexDescriptorFromModels,
   descriptorWithCustomModel,
-  zcodeStaticDescriptor, zcodeDescriptorFromModels,
+  zcodeStaticDescriptor, zcodeDescriptorFromModels, zcodeDescriptorFromProbedModels,
 } from '../src/lib/backendCapabilities.js';
 
 test('claude-sub descriptor lists the full family with effort levels', () => {
@@ -170,6 +170,46 @@ test('zcodeDescriptorFromModels keeps live model metadata but does not advertise
     'mediastorm_glm/deepseek-v4-pro',
   ]);
   assert.equal(descriptor.perTurnModelSwitch, false);
+});
+
+test('zcodeDescriptorFromProbedModels maps probed models to providerId/modelId and pins the CLI model as default', () => {
+  const descriptor = zcodeDescriptorFromProbedModels({
+    cliModel: 'mediastorm_glm/deepseek-v4-flash',
+    providerId: 'mediastorm_glm',
+    probedModels: [
+      { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+      { id: 'glm-5.2', label: 'GLM-5.2' },
+    ],
+  });
+  assert.equal(descriptor.id, 'zcode');
+  assert.equal(descriptor.defaultModelId, 'mediastorm_glm/deepseek-v4-flash');
+  assert.deepEqual(descriptor.models.map((m) => m.id), [
+    'mediastorm_glm/deepseek-v4-flash',
+    'mediastorm_glm/glm-5.2',
+  ]);
+  assert.equal(descriptor.perTurnModelSwitch, false);
+});
+
+test('zcodeDescriptorFromProbedModels dedupes when CLI model is already in the probed list, keeping it first', () => {
+  const descriptor = zcodeDescriptorFromProbedModels({
+    cliModel: 'mediastorm_glm/glm-5.2',
+    providerId: 'mediastorm_glm',
+    probedModels: [
+      { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+      { id: 'glm-5.2', label: 'GLM-5.2' },
+    ],
+  });
+  assert.deepEqual(descriptor.models.map((m) => m.id), [
+    'mediastorm_glm/glm-5.2',
+    'mediastorm_glm/deepseek-v4-flash',
+  ]);
+  assert.equal(descriptor.defaultModelId, 'mediastorm_glm/glm-5.2');
+});
+
+test('zcodeDescriptorFromProbedModels falls back to null when probe is empty or missing cliModel', () => {
+  assert.equal(zcodeDescriptorFromProbedModels({ cliModel: '', providerId: 'p', probedModels: [{ id: 'a' }] }), null);
+  assert.equal(zcodeDescriptorFromProbedModels({ cliModel: 'p/a', providerId: 'p', probedModels: [] }), null);
+  assert.equal(zcodeDescriptorFromProbedModels({ cliModel: 'p/a', providerId: 'p', probedModels: null }), null);
 });
 
 test('descriptorFromProbedModels replaces curated models for custom-provider channels', async () => {

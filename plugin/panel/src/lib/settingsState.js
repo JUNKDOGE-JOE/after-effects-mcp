@@ -12,3 +12,17 @@ export function zcodeDefaultModelLocked({ backend, models }) {
   if (backend !== 'zcode') return false;
   return !Array.isArray(models) || models.length <= 1;
 }
+
+// Locked-state hint copy for the Settings "default model" field. Shows the
+// actual model id (e.g. 'mediastorm_glm/deepseek-v4-flash') when known,
+// falling back to the old generic wording only when no model id is
+// available (e.g. before the CLI config has been read at all).
+export function zcodeManagedModelLabel(lang, modelId) {
+  const id = String(modelId || '').trim();
+  if (!id) {
+    return lang === 'en' ? 'Managed by the current ZCode session' : '由 ZCode 当前会话管理';
+  }
+  return lang === 'en'
+    ? 'Current model: ' + id + ' (managed by ZCode configuration)'
+    : '当前模型：' + id + '（由 ZCode 配置管理）';
+}

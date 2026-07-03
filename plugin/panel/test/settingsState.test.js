@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { zcodeModelLocked, zcodeDefaultModelLocked } from '../src/lib/settingsState.js';
+import { zcodeModelLocked, zcodeDefaultModelLocked, zcodeManagedModelLabel } from '../src/lib/settingsState.js';
 
 test('zcodeModelLocked locks settings model control only for static ZCode sessions', () => {
   assert.equal(zcodeModelLocked({ backend: 'zcode', modelSwitchable: false }), true);
@@ -34,3 +34,26 @@ test('zcodeDefaultModelLocked never locks non-zcode backends', () => {
   assert.equal(zcodeDefaultModelLocked({ backend: 'codex', modelSwitchable: false, models: [] }), false);
   assert.equal(zcodeDefaultModelLocked({ backend: 'subscription', modelSwitchable: false, models: undefined }), false);
 });
+
+// The locked-state hint used to be a generic "managed by the current ZCode
+// session" string with no indication of which model is actually in use.
+// zcodeManagedModelLabel formats the actual model id (as sent on the wire,
+// e.g. from summarizeZcodeConfig().cli.model / the effective model) into the
+// zh/en copy so users can see what's really configured.
+test('zcodeManagedModelLabel formats the current model id into localized copy', () => {
+  assert.equal(
+    zcodeManagedModelLabel('zh', 'mediastorm_glm/deepseek-v4-flash'),
+    '当前模型：mediastorm_glm/deepseek-v4-flash（由 ZCode 配置管理）'
+  );
+  assert.equal(
+    zcodeManagedModelLabel('en', 'mediastorm_glm/deepseek-v4-flash'),
+    'Current model: mediastorm_glm/deepseek-v4-flash (managed by ZCode configuration)'
+  );
+});
+
+test('zcodeManagedModelLabel falls back to the generic copy when no model id is known', () => {
+  assert.equal(zcodeManagedModelLabel('zh', ''), '由 ZCode 当前会话管理');
+  assert.equal(zcodeManagedModelLabel('en', ''), 'Managed by the current ZCode session');
+  assert.equal(zcodeManagedModelLabel('en', null), 'Managed by the current ZCode session');
+});
+

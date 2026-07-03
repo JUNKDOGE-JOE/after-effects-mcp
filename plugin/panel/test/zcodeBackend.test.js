@@ -1093,6 +1093,31 @@ test('summarizeZcodeConfig reports cli/desktop/start-plan channel facts', () => 
   assert.equal(withStored.cli.keySource, 'panel');
 });
 
+// Probe-driven zcode model list (custom openai-compatible providers): the
+// panel needs the CLI provider's baseUrl + protocol kind to call
+// probeProviderModels (cep/modelProbe.js) against /v1/models.
+test('summarizeZcodeConfig exposes cli.baseUrl and cli.protocol for probe-driven model discovery', () => {
+  const env = { USERPROFILE: 'C:\\Users\\me' };
+  const files = {
+    'C:\\Users\\me\\.zcode\\cli\\config.json': JSON.stringify({ provider: { mediastorm_glm: CLI_PROVIDER }, model: 'mediastorm_glm/glm-5.2' }),
+    'C:\\Users\\me\\.zcode\\v2\\config.json': JSON.stringify({ provider: {} }),
+  };
+  const summary = summarizeZcodeConfig({ env, fsImpl: fakeFs(files) });
+  assert.equal(summary.cli.baseUrl, 'https://token.mediastorm.studio/v1');
+  assert.equal(summary.cli.protocol, 'openai-compatible');
+});
+
+test('summarizeZcodeConfig omits cli.baseUrl when the CLI provider has none configured', () => {
+  const env = { USERPROFILE: 'C:\\Users\\me' };
+  const files = {
+    'C:\\Users\\me\\.zcode\\cli\\config.json': JSON.stringify({ provider: { anthro: { kind: 'anthropic' } }, model: 'anthro/claude' }),
+    'C:\\Users\\me\\.zcode\\v2\\config.json': JSON.stringify({ provider: {} }),
+  };
+  const summary = summarizeZcodeConfig({ env, fsImpl: fakeFs(files) });
+  assert.equal(summary.cli.baseUrl, '');
+  assert.equal(summary.cli.protocol, 'anthropic');
+});
+
 test('stored panel zcode key flows into spawn env via the apiKeyEnv chain', async () => {
   const { backend, spawned } = makeBackend({
     readStoredZcodeKey: () => 'sk-panel',
