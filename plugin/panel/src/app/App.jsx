@@ -25,6 +25,7 @@ import { ProviderManagerSection } from '../components/settings/ProviderManagerSe
 import { probeProviderModels } from '../cep/modelProbe';
 import { detectCcSwitch } from '../cep/ccSwitch';
 import { readClaudeSettingsEnv } from '../cep/claudeSettingsImport';
+import { readCodexCliConfig, resolveCodexProviderApiKey } from '../cep/codexConfig';
 import { reduceEvent } from '../lib/chatEntries';
 import { DEFAULT_MODEL, FALLBACK_MODEL } from '../lib/anthropic';
 import { descriptorWithCustomModel } from '../lib/backendCapabilities';
@@ -323,11 +324,21 @@ function Shell({ cs }) {
     try { return summarizeZcodeConfig({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {}, storedKey: (() => { try { return keyStore ? keyStore.readKey('zcode') : ''; } catch (e) { return ''; } })() }); } catch (e) { return null; }
     // zcodeProbe in deps: re-summarize after each re-check so pasted keys reflect immediately.
   }, [keyStore, zcodeProbe]);
+  // Spec A extension: inherit a custom model_provider declared in
+  // ~/.codex/config.toml (mirrors zcodeConfigSummary above).
+  const codexCliConfig = React.useMemo(() => {
+    try { return readCodexCliConfig({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {} }); } catch (e) { return null; }
+  }, [codexProbe]);
+  const codexCliConfigApiKey = React.useMemo(() => {
+    const env = (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {};
+    const storedKey = (() => { try { return keyStore ? keyStore.readKey('codex') : ''; } catch (e) { return ''; } })();
+    return resolveCodexProviderApiKey({ provider: codexCliConfig && codexCliConfig.provider, env, storedKey });
+  }, [codexCliConfig, keyStore, codexApiKey]);
   const channels = React.useMemo(() => ({
     claude: claudeChannels({ probe, apiProvider: claudeApiProvider }),
-    codex: codexChannels({ codexProbe, customProvider: codexCustomProvider }),
+    codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, cliConfig: codexCliConfig, cliConfigApiKey: codexCliConfigApiKey }),
     zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary }),
-  }), [probe, claudeApiProvider, codexProbe, codexCustomProvider, zcodeProbe, zcodeConfigSummary]);
+  }), [probe, claudeApiProvider, codexProbe, codexCustomProvider, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliConfigApiKey]);
   const claudeSettingsHint = React.useMemo(() => {
     try { return readClaudeSettingsEnv({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {} }); } catch (e) { return null; }
   }, []);
@@ -399,10 +410,11 @@ function Shell({ cs }) {
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     getServerInstructions: () => mcp.getServerInstructions(),
     getProviderProfile: () => runtimeRef.current.providerProfile,
+    getCliConfigProvider: () => (codexCliConfig && codexCliConfig.provider ? { provider: codexCliConfig.provider, apiKey: codexCliConfigApiKey } : null),
     lang,
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
-  }), [extRoot, mcp, handleChatEvent]);
+  }), [extRoot, mcp, handleChatEvent, codexCliConfig, codexCliConfigApiKey]);
 
   const openCodeBackend = React.useMemo(() => createOpenCodeBackend({
     getMcpSpec: () => resolveMcpCommand({ extRoot }),
@@ -566,6 +578,25 @@ function Shell({ cs }) {
     if (backendPref !== 'codex') return undefined;
     return runCodexProbe();
   }, [backendPref, runCodexProbe]);
+
+  // Spec A extension: when the cli-config channel is active (custom provider
+  // via inherited config.toml), probe its /v1/models the same way zcode's
+  // cli-config channel does (same probeProviderModels entry point).
+  React.useEffect(() => {
+    if (backendPref !== 'codex') return undefined;
+    if (!codexCliConfig || !codexCliConfig.provider || !codexCliConfigApiKey) return undefined;
+    if (codexCustomProvider && codexCustomProvider.baseUrl) return undefined; // explicit custom provider wins
+    if (codexModels && codexModels.length > 1) return undefined;
+    let alive = true;
+    probeProviderModels({ baseUrl: codexCliConfig.provider.baseUrl, apiKey: codexCliConfigApiKey, protocol: 'openai-compatible' }).then((result) => {
+      if (!alive) return;
+      if (result.ok && result.models && result.models.length) {
+        setCodexModels(result.models);
+        writeCachedCodexModels(window.localStorage, result.models);
+      }
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [backendPref, codexCliConfig, codexCliConfigApiKey, codexCustomProvider, codexModels]);
 
   const runZcodeProbe = React.useCallback(() => {
     let alive = true;
@@ -882,6 +913,15 @@ function Shell({ cs }) {
               runZcodeProbe();
             }}
             zcodeKeyStored={(() => { try { return Boolean(keyStore && keyStore.readKey('zcode')); } catch (e) { return false; } })()}
+            onSaveCodexKey={(k) => {
+              if (keyStore) keyStore.writeKey(k, 'codex');
+              setCodexApiKey(k);
+              setCodexProbe(null);
+              codexBackend.reset();
+              runCodexProbe();
+            }}
+            codexKeyStored={Boolean(codexApiKey)}
+            codexCliConfig={codexCliConfig}
             model={effectiveModel}
             modelOptions={modelOptions}
             modelSwitchable={descriptor.perTurnModelSwitch !== false}

@@ -22,11 +22,47 @@ test('codexChannels: cli login state + custom provider channel', () => {
   assert.equal(list[0].channel, 'cli');
   assert.equal(list[0].ok, true);
   assert.match(list[0].detail, /codex\.exe/);
-  assert.equal(list[1].channel, 'custom');
-  assert.equal(list[1].ok, false);
+  assert.equal(list[2].channel, 'custom');
+  assert.equal(list[2].ok, false);
   const custom = codexChannels({ codexProbe: { loggedIn: false, runtimeOk: true }, customProvider: { baseUrl: 'https://r', apiKey: 'k' } });
-  assert.equal(custom[1].ok, true);
+  assert.equal(custom[2].ok, true);
   assert.match(codexChannels({ codexProbe: { loggedIn: false } }).find((c) => c.channel === 'cli').fixHint.zh, /AE_MCP_CODEX_CLI/);
+});
+
+test('codexChannels: cli-config channel is positioned between cli and custom', () => {
+  const withProviderAndKey = codexChannels({
+    codexProbe: { loggedIn: false, runtimeOk: true },
+    customProvider: null,
+    cliConfig: { model: 'gpt-5.5', providerId: 'mediastorm_glm', provider: { name: 'MediaStorm GLM', baseUrl: 'https://token.mediastorm.studio/v1', envKey: 'MEDIASTORM_GLM_API_KEY', wireApi: 'responses' } },
+    cliConfigApiKey: 'from-env-or-store',
+  });
+  assert.deepEqual(withProviderAndKey.map((c) => c.channel), ['cli', 'cli-config', 'custom']);
+  const cliConfigChannel = withProviderAndKey[1];
+  assert.equal(cliConfigChannel.ok, true);
+  assert.match(cliConfigChannel.source.zh, /继承自 Codex CLI 配置/);
+  assert.match(cliConfigChannel.source.en, /Inherited from Codex CLI config/);
+
+  const noKey = codexChannels({
+    codexProbe: { loggedIn: false, runtimeOk: true },
+    customProvider: null,
+    cliConfig: { model: 'gpt-5.5', providerId: 'mediastorm_glm', provider: { name: 'MediaStorm GLM', baseUrl: 'https://token.mediastorm.studio/v1', envKey: 'MEDIASTORM_GLM_API_KEY', wireApi: 'responses' } },
+    cliConfigApiKey: '',
+  });
+  assert.equal(noKey[1].ok, false);
+  assert.match(noKey[1].fixHint.zh, /粘贴/);
+  assert.match(noKey[1].fixHint.en, /codex-key/);
+
+  const noConfig = codexChannels({ codexProbe: { loggedIn: false, runtimeOk: true }, customProvider: null, cliConfig: null, cliConfigApiKey: '' });
+  assert.equal(noConfig[1].ok, false);
+  assert.match(noConfig[1].fixHint.zh, /Codex CLI/);
+
+  const runtimeNotOk = codexChannels({
+    codexProbe: { loggedIn: false, runtimeOk: false },
+    customProvider: null,
+    cliConfig: { model: 'gpt-5.5', providerId: 'mediastorm_glm', provider: { name: 'MediaStorm GLM', baseUrl: 'https://token.mediastorm.studio/v1', envKey: 'MEDIASTORM_GLM_API_KEY', wireApi: 'responses' } },
+    cliConfigApiKey: 'k',
+  });
+  assert.equal(runtimeNotOk[1].ok, false);
 });
 
 test('zcodeChannels: cli-config first, desktop second, start-plan never ok without credentials', () => {
