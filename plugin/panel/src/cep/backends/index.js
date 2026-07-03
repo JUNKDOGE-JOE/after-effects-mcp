@@ -13,6 +13,7 @@ import {
 export const BACKENDS = {
   subscription: { id: 'subscription', baseDescriptor: claudeSubDescriptor },
   byok: { id: 'byok', baseDescriptor: byokStaticDescriptor },
+  'claude-api': { id: 'claude-api', baseDescriptor: byokStaticDescriptor },
   codex: { id: 'codex', baseDescriptor: codexStaticDescriptor },
   opencode: { id: 'opencode', baseDescriptor: openCodeStaticDescriptor },
   zcode: { id: 'zcode', baseDescriptor: zcodeStaticDescriptor },
