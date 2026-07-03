@@ -60,7 +60,7 @@
         try {
             // Address Transform/Position by matchName so it resolves on
             // non-English AE (display-name "Transform"/"Position" is null on
-            // JP/DE/etc., which would silently drop the position). #12
+            // JP/DE/etc., which would silently drop the position).
             var posProp = AEMCP.propByMatchPath(
                 layer, "ADBE Transform Group#1/ADBE Position#1"
             );

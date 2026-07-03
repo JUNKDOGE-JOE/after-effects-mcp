@@ -40,8 +40,8 @@ def test_whitespace_only_is_failure():
 
 
 def test_undefined_literal_is_failure_not_silent_success():
-    # This is the exact symptom from the pre-PR-#1 wrap bug:
-    # JSX returned undefined → CSInterface returned the literal "undefined".
+    # JSX that returns undefined reaches CSInterface as the literal
+    # "undefined", which must be treated as failure rather than content.
     result = parse_jsx_result("undefined")
     assert result["ok"] is False
     assert "undefined" in result["error"]
@@ -89,9 +89,8 @@ def test_evalscript_error_sentinel_is_failure_not_silent_success():
 
 
 def test_evalscript_error_colon_variant_is_content():
-    # Exact matching is intentional: the colon variant is not CEP's sentinel.
-    # Issue #8 taught us that ':' vs '.' mismatch can miss the real sentinel;
-    # issue #23 taught us that a bare prefix check false-positives valid text.
+    # Exact matching is intentional: CEP's sentinel has a period, while the
+    # colon variant is ordinary diagnostic text that must remain content.
     content = "EvalScript error: ReferenceError foo is undefined"
     assert parse_jsx_result(content) == {"ok": True, "content": content}
 

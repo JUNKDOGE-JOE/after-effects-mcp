@@ -6,7 +6,7 @@
     var limit = ${limit};
 
     // Wall-clock budget so large projects return partial results instead of
-    // blowing the 30s evalScript timeout with zero output. #12
+    // blowing the 30s evalScript timeout with zero output.
     var BUDGET_MS = ${time_budget_ms};
     var START_MS = new Date().getTime();
     function overBudget() { return (new Date().getTime() - START_MS) >= BUDGET_MS; }

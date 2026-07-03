@@ -29,8 +29,8 @@ def test_runtime_file_exists():
 )
 def test_array_polyfill_present_and_guarded(src, method):
     assert f"if (!Array.prototype.{method})" in src
-    # Installed via the non-enumerable _definePoly helper (#12), no longer a
-    # bare `Array.prototype.X = function` assignment.
+    # Installed via the non-enumerable _definePoly helper so for-in loops do
+    # not surface polyfill names.
     assert f"_definePoly(Array.prototype, '{method}', function" in src
 
 
@@ -77,7 +77,7 @@ def test_json_stringify_guarded_by_function_check(src):
 
 
 def test_json_parse_polyfill_present_and_guarded(src):
-    # #12: classic-engine ae.exec code calling JSON.parse must not throw.
+    # Classic-engine ae.exec code calling JSON.parse must not throw.
     assert "typeof JSON.parse !== 'function'" in src
     assert "JSON.parse = function" in src
     # eval-with-validation must include Crockford's security regex so it can
@@ -87,8 +87,8 @@ def test_json_parse_polyfill_present_and_guarded(src):
 
 
 def test_array_polyfills_are_non_enumerable(src):
-    # #12: prototype additions install via a non-enumerable defineProperty
-    # helper so `for (var k in arr)` doesn't surface polyfill names.
+    # Prototype additions install via a non-enumerable defineProperty helper so
+    # `for (var k in arr)` doesn't surface polyfill names.
     assert "function _definePoly(proto, name, fn)" in src
     assert "Object.defineProperty(proto, name, {" in src
     assert "enumerable: false" in src

@@ -35,7 +35,7 @@ if (typeof JSON === 'undefined' || typeof JSON.stringify !== 'function') {
 }
 // JSON.parse polyfill for the classic engine. AE 2026's modern engine has a
 // native JSON.parse, so this is guarded to a no-op there. Agent ae.exec code
-// that calls JSON.parse would otherwise throw on the classic engine. #12
+// that calls JSON.parse would otherwise throw on the classic engine.
 //
 // eval-with-validation approach: the source is first vetted against the
 // security regex from Crockford's json2.js (which rejects anything that isn't
@@ -75,7 +75,7 @@ if (typeof JSON === 'undefined' || typeof JSON.parse !== 'function') {
 // polyfilled method names as keys (prototype-pollution hazard). Some ancient
 // engines throw when defineProperty is used on native prototypes, so the
 // helper wraps it in try/catch and falls back to a plain (enumerable)
-// assignment only when defineProperty is unavailable or fails. #12
+// assignment only when defineProperty is unavailable or fails.
 //
 // This file loads ONCE into the persistent engine (manifest ScriptPath), so a
 // syntax error here breaks EVERY verb. Edit with care.
