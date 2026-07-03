@@ -28,7 +28,7 @@ import { readClaudeSettingsEnv } from '../cep/claudeSettingsImport';
 import { reduceEvent } from '../lib/chatEntries';
 import { DEFAULT_MODEL, FALLBACK_MODEL } from '../lib/anthropic';
 import { descriptorWithCustomModel } from '../lib/backendCapabilities';
-import { selectDescriptor, isClaudeApiBackend } from '../lib/descriptorSelect';
+import { selectDescriptor, isClaudeApiBackend, reconcileModelPref } from '../lib/descriptorSelect';
 import { baseDescriptorFor } from '../cep/backends/index.js';
 import { cachedByokModels } from '../cep/modelsApi';
 import { costBadge } from '../lib/composerOptions';
@@ -238,6 +238,10 @@ function Shell({ cs }) {
   const [codexProbe, setCodexProbe] = React.useState(null);
   const [codexModels, setCodexModels] = React.useState(() => readCachedCodexModels(window.localStorage));
   const [zcodeProbe, setZcodeProbe] = React.useState(null);
+  // Populated from the 'zcode-session-created' chat event (session/create's
+  // result), used by selectDescriptor to build a live model list for the
+  // zcode backend. See zcodeDescriptorFromModels in backendCapabilities.js.
+  const [zcodeSessionModels, setZcodeSessionModels] = React.useState(null);
   const [chatEntries, setChatEntries] = React.useState([]);
   const [chatStreaming, setChatStreaming] = React.useState(false);
   const [thinkingActive, setThinkingActive] = React.useState(false);
@@ -339,6 +343,7 @@ function Shell({ cs }) {
       setChatStreaming(false);
       setThinkingActive(false);
     }
+    if (evt.type === 'zcode-session-created') setZcodeSessionModels(evt.result || null);
     setChatEntries((entries) => reduceEvent(entries, evt));
   }, []);
 
@@ -446,8 +451,21 @@ function Shell({ cs }) {
       codexCustomProvider,
       byokApiModels: null,
       codexCachedModels: codexModels || readCachedCodexModels(window.localStorage),
+      zcodeSessionModels,
     };
-    setDescriptor(selectDescriptor(facts));
+    const nextDescriptor = selectDescriptor(facts);
+    setDescriptor(nextDescriptor);
+    // Bug 2: a stale localStorage model id (from an older backend/session)
+    // can silently outrank the descriptor's current defaultModelId. Reset it
+    // when the current model isn't in the new descriptor's model list, but
+    // exempt the codex custom-model path (customModel is intentionally not
+    // in the curated list there).
+    const isCustomModelPath = backendPref === 'codex' && customModelForBackend && model === customModelForBackend;
+    const reconciled = reconcileModelPref(model, nextDescriptor, { isCustom: isCustomModelPath });
+    if (reconciled !== model) {
+      setModel(reconciled);
+      writePref('ae_mcp_model', reconciled);
+    }
     const hasProbed = Boolean(claudeApiProvider && claudeApiProvider.probedModels && claudeApiProvider.probedModels.length);
     const claudeKey = claudeApiProvider ? claudeApiProvider.apiKey : apiKey;
     if (isClaudeApiBackend(effective.backend) && claudeKey && !hasProbed) {
@@ -456,7 +474,7 @@ function Shell({ cs }) {
       }).catch(() => {});
     }
     return () => { alive = false; };
-  }, [effective.backend, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, apiKey, anthropicBaseUrl]);
+  }, [effective.backend, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, apiKey, anthropicBaseUrl, zcodeSessionModels]);
   const activeBackendRef = React.useRef(null);
 
   const runClaudeProbe = React.useCallback(() => {
@@ -536,6 +554,7 @@ function Shell({ cs }) {
     setSessionModel(null);
     setSessionEffort(null);
     setSessionFast(null);
+    if (decision.nextReal !== 'zcode') setZcodeSessionModels(null);
   }, [effective.backend, byokLoop, claudeBackend, codexBackend, openCodeBackend, zcodeBackend]);
 
   const sendChat = (text) => {

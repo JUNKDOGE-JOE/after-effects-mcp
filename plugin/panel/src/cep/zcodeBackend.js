@@ -1229,6 +1229,12 @@ export function createZcodeBackend({
       const nextSessionId = (result && result.session && result.session.sessionId) || null;
       if (!nextSessionId) throw new Error('ZCode session/create returned no sessionId');
 
+      // Surface the raw session/create result so the panel can build a live
+      // model-chip descriptor from settings.model.available (see
+      // zcodeDescriptorFromModels in lib/backendCapabilities.js). Without this
+      // the composer's model chip has no data and disappears entirely.
+      emit({ type: 'zcode-session-created', result: result });
+
       // Subscribe to the event stream. desktop-continuous streams turn events
       // as notifications for the life of the subscription. Use request() (not
       // fireRequest) so we wait for the ack and know the subscription is live

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { selectDescriptor, isClaudeApiBackend } from '../src/lib/descriptorSelect.js';
-import { byokStaticDescriptor, codexStaticDescriptor } from '../src/lib/backendCapabilities.js';
+import { selectDescriptor, isClaudeApiBackend, reconcileModelPref } from '../src/lib/descriptorSelect.js';
+import { byokStaticDescriptor, codexStaticDescriptor, zcodeStaticDescriptor } from '../src/lib/backendCapabilities.js';
 
 const probedProvider = { id: 'relay', probedModels: [{ id: 'glm-5.2', label: 'GLM 5.2' }, { id: 'deepseek-v4', label: 'Deepseek V4' }] };
 
@@ -52,4 +52,103 @@ test('subscription / none backends keep the base descriptor untouched', () => {
   const base = byokStaticDescriptor();
   assert.equal(selectDescriptor({ effectiveBackend: 'subscription', backendPref: 'subscription', baseDescriptor: base, claudeApiProvider: probedProvider }), base);
   assert.equal(selectDescriptor({ effectiveBackend: 'none', backendPref: 'subscription', baseDescriptor: base }), base);
+});
+
+// --- zcode branch (regression) ---
+// zcodeDescriptorFromModels lost all call sites in a refactor, so the live
+// model list from session/create never reached the composer descriptor and
+// the model chip disappeared entirely. selectDescriptor must build a live
+// zcode descriptor from session data when present, and fall back to the
+// static/base descriptor otherwise.
+
+test('selectDescriptor uses zcodeSessionModels to build a live descriptor when backend is zcode', () => {
+  const baseDescriptor = zcodeStaticDescriptor();
+  const sessionResult = {
+    settings: {
+      model: {
+        available: [
+          { label: 'GLM-5.2', ref: { modelId: 'GLM-5.2', providerId: 'bigmodel-start-plan' } },
+          { label: 'GLM-5 Turbo', ref: { modelId: 'GLM-5-Turbo', providerId: 'bigmodel-start-plan' } },
+        ],
+        current: { modelId: 'GLM-5.2', providerId: 'bigmodel-start-plan' },
+      },
+    },
+  };
+  const descriptor = selectDescriptor({
+    effectiveBackend: 'zcode',
+    backendPref: 'zcode',
+    baseDescriptor,
+    zcodeSessionModels: sessionResult,
+  });
+  assert.equal(descriptor.id, 'zcode');
+  assert.equal(descriptor.models.length, 2);
+  assert.equal(descriptor.defaultModelId, 'bigmodel-start-plan/GLM-5.2');
+});
+
+test('selectDescriptor falls back to baseDescriptor for zcode when there is no session data yet', () => {
+  const baseDescriptor = zcodeStaticDescriptor();
+  const descriptor = selectDescriptor({
+    effectiveBackend: 'zcode',
+    backendPref: 'zcode',
+    baseDescriptor,
+    zcodeSessionModels: null,
+  });
+  assert.equal(descriptor, baseDescriptor);
+});
+
+test('selectDescriptor zcode branch also triggers off backendPref when effectiveBackend differs (probing states)', () => {
+  const baseDescriptor = zcodeStaticDescriptor();
+  const sessionResult = {
+    settings: {
+      model: {
+        available: [{ label: 'GLM-5.2', ref: { modelId: 'GLM-5.2', providerId: 'bigmodel-start-plan' } }],
+        current: { modelId: 'GLM-5.2', providerId: 'bigmodel-start-plan' },
+      },
+    },
+  };
+  const descriptor = selectDescriptor({
+    effectiveBackend: 'none',
+    backendPref: 'zcode',
+    baseDescriptor,
+    zcodeSessionModels: sessionResult,
+  });
+  assert.equal(descriptor.id, 'zcode');
+  assert.equal(descriptor.models.length, 1);
+});
+
+// --- reconcileModelPref (bug 2) ---
+// A stale localStorage model id (e.g. an old glm-5.2 id) that is not in the
+// new descriptor's model list silently wins over the CLI-provided
+// defaultModelId. reconcileModelPref resets to the descriptor default when
+// the current model isn't present in the descriptor's model list, except for
+// the custom-model exemption where the model legitimately isn't curated.
+
+test('reconcileModelPref resets to defaultModelId when current model is not in the descriptor', () => {
+  const descriptor = { defaultModelId: 'mediastorm_glm/deepseek-v4-flash', models: [{ id: 'mediastorm_glm/deepseek-v4-flash' }, { id: 'other/model' }] };
+  const result = reconcileModelPref('glm-5.2', descriptor);
+  assert.equal(result, 'mediastorm_glm/deepseek-v4-flash');
+});
+
+test('reconcileModelPref keeps the current model when it is present in the descriptor', () => {
+  const descriptor = { defaultModelId: 'mediastorm_glm/deepseek-v4-flash', models: [{ id: 'mediastorm_glm/deepseek-v4-flash' }, { id: 'other/model' }] };
+  const result = reconcileModelPref('other/model', descriptor);
+  assert.equal(result, 'other/model');
+});
+
+test('reconcileModelPref is a no-op when the descriptor has no models (custom model path)', () => {
+  const descriptor = { defaultModelId: '', models: [] };
+  const result = reconcileModelPref('my-custom-model-id', descriptor);
+  assert.equal(result, 'my-custom-model-id');
+});
+
+test('reconcileModelPref exempts custom models even when the descriptor has a curated list', () => {
+  const descriptor = { defaultModelId: 'mediastorm_glm/deepseek-v4-flash', models: [{ id: 'mediastorm_glm/deepseek-v4-flash' }] };
+  const result = reconcileModelPref('my-custom-model-id', descriptor, { isCustom: true });
+  assert.equal(result, 'my-custom-model-id');
+});
+
+test('reconcileModelPref handles empty model by returning defaultModelId', () => {
+  const descriptor = { defaultModelId: 'mediastorm_glm/deepseek-v4-flash', models: [{ id: 'mediastorm_glm/deepseek-v4-flash' }] };
+  const result = reconcileModelPref('', descriptor);
+  assert.equal(result, 'mediastorm_glm/deepseek-v4-flash');
 });
