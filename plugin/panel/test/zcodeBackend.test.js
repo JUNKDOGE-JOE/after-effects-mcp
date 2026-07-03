@@ -582,6 +582,48 @@ test('reset kills the process and clears transcript', async () => {
   assert.deepEqual(backend.getMessages(), []);
 });
 
+test('sendUser recreates the session when the preferred model changed since session/create', async () => {
+  // Regression: ensureSession() must not blindly reuse a cached sessionId
+  // once the panel's default-model preference changes -- otherwise flipping
+  // "默认模型" in Settings silently keeps talking to the old model.
+  let model = 'provider-a/model-a';
+  const { backend, spawned } = makeBackend({ getModel: () => model });
+
+  // First turn establishes a session bound to model-a.
+  const first = await startTurn(backend, spawned, 'hello');
+  assert.equal(first.createReq.params.model.modelId, 'model-a');
+
+  // Finish the first turn so sendUser is free to run again.
+  pushEvent(first.proc, 'turn.completed', { response: 'ok' });
+  await first.pending;
+
+  // Flip the preferred model.
+  model = 'provider-b/model-b';
+
+  // Next sendUser must create a NEW session using the new model, not reuse
+  // the old sessionId.
+  const pending = backend.sendUser('again');
+  await flush();
+  const proc = spawned.procs[0];
+  const writes = parseWrites(proc);
+  const secondCreateReq = writes.filter((m) => m.method === 'session/create')[1];
+  assert.ok(secondCreateReq, 'a second session/create was sent after the model preference changed');
+  assert.equal(secondCreateReq.params.model.modelId, 'model-b');
+
+  respond(proc, secondCreateReq, { session: { sessionId: 'sess_test_2' }, settings: { model: { available: [] } } });
+  await flush();
+  const subReq2 = parseWrites(proc).filter((m) => m.method === 'session/subscribe')[1];
+  if (subReq2) respond(proc, subReq2, { sessionId: 'sess_test_2', eventSeq: 0 });
+  await flush();
+  const sendReq2 = parseWrites(proc).filter((m) => m.method === 'session/send')[1];
+  assert.ok(sendReq2, 'session/send was sent against the new session');
+  assert.equal(sendReq2.params.sessionId, 'sess_test_2');
+  respond(proc, sendReq2, { accepted: true, sessionId: 'sess_test_2' });
+  await flush();
+  pushEvent(proc, 'turn.completed', { response: 'ok' });
+  await pending;
+});
+
 test('probeAccount reports loggedIn when session/create succeeds', async () => {
   const { backend, spawned } = makeBackend();
   const probe = backend.probeAccount();

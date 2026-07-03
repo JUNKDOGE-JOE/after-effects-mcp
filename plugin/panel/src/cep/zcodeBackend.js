@@ -734,6 +734,7 @@ export function createZcodeBackend({
   let startPromise = null;
   let sessionPromise = null;
   let sessionId = null;
+  let sessionModelRef = null;
   let subscribed = false;
   let activeRuntimeModel = null;
   let stopping = false;
@@ -1084,6 +1085,7 @@ export function createZcodeBackend({
     startPromise = null;
     sessionPromise = null;
     sessionId = null;
+    sessionModelRef = null;
     subscribed = false;
     if (wasStopping) return;
     if (activeRun) {
@@ -1100,6 +1102,7 @@ export function createZcodeBackend({
     startPromise = null;
     sessionPromise = null;
     sessionId = null;
+    sessionModelRef = null;
     subscribed = false;
     if (activeRun) {
       emit({ type: 'error', kind: 'mcp', message: err.message });
@@ -1185,6 +1188,23 @@ export function createZcodeBackend({
   }
 
   async function ensureSession() {
+    // If a session already exists but the caller's preferred model has
+    // changed since that session was created (e.g. the user flipped
+    // "默认模型" in Settings), invalidate it here so the next call below
+    // establishes a fresh session/create bound to the new model. Kept inside
+    // ensureSession (rather than requiring App.jsx to call reset()/stop()
+    // explicitly) so this is robust regardless of call site.
+    if (sessionId && !sessionPromise) {
+      const desiredModelRef = currentModelRef(currentEnv());
+      if (desiredModelRef && sessionModelRef && desiredModelRef !== sessionModelRef) {
+        if (rpc && sessionId) {
+          try { rpc.fireRequest('session/stop', { sessionId }); } catch (e) { /* best effort */ }
+        }
+        sessionId = null;
+        sessionModelRef = null;
+        subscribed = false;
+      }
+    }
     if (sessionId) return sessionId;
     if (sessionPromise) return sessionPromise;
     sessionPromise = (async () => {
@@ -1244,6 +1264,7 @@ export function createZcodeBackend({
         subscribed = true;
       }
       sessionId = nextSessionId;
+      sessionModelRef = modelRef;
       return sessionId;
     })();
     try {
@@ -1366,6 +1387,7 @@ export function createZcodeBackend({
     startPromise = null;
     sessionPromise = null;
     sessionId = null;
+    sessionModelRef = null;
     subscribed = false;
     activeRuntimeModel = null;
     transcript = [];
