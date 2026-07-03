@@ -1,6 +1,7 @@
 const KEY_FILES = {
   anthropic: 'anthropic-key',
   codex: 'codex-key',
+  zcode: 'zcode-key',
 };
 
 function cepRequire() {
