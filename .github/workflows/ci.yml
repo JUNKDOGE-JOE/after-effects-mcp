@@ -57,6 +57,12 @@ jobs:
           npm ci
           npm test
 
+      - name: Verify panel dist is up to date
+        working-directory: plugin/panel
+        run: |
+          npm run build
+          git -C ../.. diff --exit-code --stat -- plugin/client/dist
+
       - name: Run sidecar tests
         working-directory: plugin/sidecar
         run: |

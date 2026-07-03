@@ -25,9 +25,9 @@
     mod
   ));
 
-  // node_modules/react/cjs/react.production.min.js
+  // ../../../../../plugin/panel/node_modules/react/cjs/react.production.min.js
   var require_react_production_min = __commonJS({
-    "node_modules/react/cjs/react.production.min.js"(exports) {
+    "../../../../../plugin/panel/node_modules/react/cjs/react.production.min.js"(exports) {
       "use strict";
       var l = Symbol.for("react.element");
       var n = Symbol.for("react.portal");
@@ -298,9 +298,9 @@
     }
   });
 
-  // node_modules/react/index.js
+  // ../../../../../plugin/panel/node_modules/react/index.js
   var require_react = __commonJS({
-    "node_modules/react/index.js"(exports, module) {
+    "../../../../../plugin/panel/node_modules/react/index.js"(exports, module) {
       "use strict";
       if (true) {
         module.exports = require_react_production_min();
@@ -310,9 +310,9 @@
     }
   });
 
-  // node_modules/scheduler/cjs/scheduler.production.min.js
+  // ../../../../../plugin/panel/node_modules/scheduler/cjs/scheduler.production.min.js
   var require_scheduler_production_min = __commonJS({
-    "node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
+    "../../../../../plugin/panel/node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
       "use strict";
       function f(a, b) {
         var c = a.length;
@@ -563,9 +563,9 @@
     }
   });
 
-  // node_modules/scheduler/index.js
+  // ../../../../../plugin/panel/node_modules/scheduler/index.js
   var require_scheduler = __commonJS({
-    "node_modules/scheduler/index.js"(exports, module) {
+    "../../../../../plugin/panel/node_modules/scheduler/index.js"(exports, module) {
       "use strict";
       if (true) {
         module.exports = require_scheduler_production_min();
@@ -575,9 +575,9 @@
     }
   });
 
-  // node_modules/react-dom/cjs/react-dom.production.min.js
+  // ../../../../../plugin/panel/node_modules/react-dom/cjs/react-dom.production.min.js
   var require_react_dom_production_min = __commonJS({
-    "node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
+    "../../../../../plugin/panel/node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
       "use strict";
       var aa = require_react();
       var ca = require_scheduler();
@@ -7185,9 +7185,9 @@
     }
   });
 
-  // node_modules/react-dom/index.js
+  // ../../../../../plugin/panel/node_modules/react-dom/index.js
   var require_react_dom = __commonJS({
-    "node_modules/react-dom/index.js"(exports, module) {
+    "../../../../../plugin/panel/node_modules/react-dom/index.js"(exports, module) {
       "use strict";
       function checkDCE() {
         if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ === "undefined" || typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.checkDCE !== "function") {
@@ -7211,9 +7211,9 @@
     }
   });
 
-  // node_modules/react-dom/client.js
+  // ../../../../../plugin/panel/node_modules/react-dom/client.js
   var require_client = __commonJS({
-    "node_modules/react-dom/client.js"(exports) {
+    "../../../../../plugin/panel/node_modules/react-dom/client.js"(exports) {
       "use strict";
       var m = require_react_dom();
       if (true) {
@@ -7242,9 +7242,9 @@
     }
   });
 
-  // node_modules/react/cjs/react-jsx-runtime.production.min.js
+  // ../../../../../plugin/panel/node_modules/react/cjs/react-jsx-runtime.production.min.js
   var require_react_jsx_runtime_production_min = __commonJS({
-    "node_modules/react/cjs/react-jsx-runtime.production.min.js"(exports) {
+    "../../../../../plugin/panel/node_modules/react/cjs/react-jsx-runtime.production.min.js"(exports) {
       "use strict";
       var f = require_react();
       var k = Symbol.for("react.element");
@@ -7267,9 +7267,9 @@
     }
   });
 
-  // node_modules/react/jsx-runtime.js
+  // ../../../../../plugin/panel/node_modules/react/jsx-runtime.js
   var require_jsx_runtime = __commonJS({
-    "node_modules/react/jsx-runtime.js"(exports, module) {
+    "../../../../../plugin/panel/node_modules/react/jsx-runtime.js"(exports, module) {
       "use strict";
       if (true) {
         module.exports = require_react_jsx_runtime_production_min();
@@ -7318,19 +7318,19 @@
   // src/components/core/Icon.jsx
   var import_react4 = __toESM(require_react(), 1);
 
-  // node_modules/lucide-react/dist/esm/createLucideIcon.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/createLucideIcon.js
   var import_react3 = __toESM(require_react());
 
-  // node_modules/lucide-react/dist/esm/shared/src/utils.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/shared/src/utils.js
   var toKebabCase = (string) => string.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
   var mergeClasses = (...classes) => classes.filter((className, index, array) => {
     return Boolean(className) && array.indexOf(className) === index;
   }).join(" ");
 
-  // node_modules/lucide-react/dist/esm/Icon.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/Icon.js
   var import_react2 = __toESM(require_react());
 
-  // node_modules/lucide-react/dist/esm/defaultAttributes.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/defaultAttributes.js
   var defaultAttributes = {
     xmlns: "http://www.w3.org/2000/svg",
     width: 24,
@@ -7343,7 +7343,7 @@
     strokeLinejoin: "round"
   };
 
-  // node_modules/lucide-react/dist/esm/Icon.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/Icon.js
   var Icon = (0, import_react2.forwardRef)(
     ({
       color = "currentColor",
@@ -7375,7 +7375,7 @@
     }
   );
 
-  // node_modules/lucide-react/dist/esm/createLucideIcon.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/createLucideIcon.js
   var createLucideIcon = (iconName, iconNode) => {
     const Component = (0, import_react3.forwardRef)(
       ({ className, ...props }, ref) => (0, import_react3.createElement)(Icon, {
@@ -7389,13 +7389,13 @@
     return Component;
   };
 
-  // node_modules/lucide-react/dist/esm/icons/arrow-up.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/arrow-up.js
   var ArrowUp = createLucideIcon("ArrowUp", [
     ["path", { d: "m5 12 7-7 7 7", key: "hav0vg" }],
     ["path", { d: "M12 19V5", key: "x0mq9r" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/book-open.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/book-open.js
   var BookOpen = createLucideIcon("BookOpen", [
     ["path", { d: "M12 7v14", key: "1akyts" }],
     [
@@ -7407,7 +7407,7 @@
     ]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/box.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/box.js
   var Box = createLucideIcon("Box", [
     [
       "path",
@@ -7420,7 +7420,7 @@
     ["path", { d: "M12 22V12", key: "d0xqtd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/brain.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/brain.js
   var Brain = createLucideIcon("Brain", [
     [
       "path",
@@ -7445,58 +7445,58 @@
     ["path", { d: "M19.967 17.484A4 4 0 0 1 18 18", key: "159ez6" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/check.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/check.js
   var Check = createLucideIcon("Check", [["path", { d: "M20 6 9 17l-5-5", key: "1gmf2c" }]]);
 
-  // node_modules/lucide-react/dist/esm/icons/chevron-down.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/chevron-down.js
   var ChevronDown = createLucideIcon("ChevronDown", [
     ["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/chevron-right.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/chevron-right.js
   var ChevronRight = createLucideIcon("ChevronRight", [
     ["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/circle-alert.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/circle-alert.js
   var CircleAlert = createLucideIcon("CircleAlert", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["line", { x1: "12", x2: "12", y1: "8", y2: "12", key: "1pkeuh" }],
     ["line", { x1: "12", x2: "12.01", y1: "16", y2: "16", key: "4dfq90" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/circle-slash.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/circle-slash.js
   var CircleSlash = createLucideIcon("CircleSlash", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["line", { x1: "9", x2: "15", y1: "15", y2: "9", key: "1dfufj" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/circle.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/circle.js
   var Circle = createLucideIcon("Circle", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/copy.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/copy.js
   var Copy = createLucideIcon("Copy", [
     ["rect", { width: "14", height: "14", x: "8", y: "8", rx: "2", ry: "2", key: "17jyea" }],
     ["path", { d: "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2", key: "zix9uf" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/download.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/download.js
   var Download = createLucideIcon("Download", [
     ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", key: "ih7n3h" }],
     ["polyline", { points: "7 10 12 15 17 10", key: "2ggqvy" }],
     ["line", { x1: "12", x2: "12", y1: "15", y2: "3", key: "1vk2je" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/external-link.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/external-link.js
   var ExternalLink = createLucideIcon("ExternalLink", [
     ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
     ["path", { d: "M10 14 21 3", key: "gplh6r" }],
     ["path", { d: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6", key: "a6xqqp" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/eye-off.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/eye-off.js
   var EyeOff = createLucideIcon("EyeOff", [
     [
       "path",
@@ -7516,7 +7516,7 @@
     ["path", { d: "m2 2 20 20", key: "1ooewy" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/eye.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/eye.js
   var Eye = createLucideIcon("Eye", [
     [
       "path",
@@ -7528,7 +7528,7 @@
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/file-text.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/file-text.js
   var FileText = createLucideIcon("FileText", [
     ["path", { d: "M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z", key: "1rqfz7" }],
     ["path", { d: "M14 2v4a2 2 0 0 0 2 2h4", key: "tnqrlb" }],
@@ -7537,7 +7537,7 @@
     ["path", { d: "M16 17H8", key: "z1uh3a" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/github.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/github.js
   var Github = createLucideIcon("Github", [
     [
       "path",
@@ -7549,28 +7549,28 @@
     ["path", { d: "M9 18c-4.51 2-5-2-7-2", key: "9comsn" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/globe.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/globe.js
   var Globe = createLucideIcon("Globe", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20", key: "13o1zl" }],
     ["path", { d: "M2 12h20", key: "9i4pu4" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/history.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/history.js
   var History = createLucideIcon("History", [
     ["path", { d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", key: "1357e3" }],
     ["path", { d: "M3 3v5h5", key: "1xhq8a" }],
     ["path", { d: "M12 7v5l4 2", key: "1fdv2h" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/info.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/info.js
   var Info = createLucideIcon("Info", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 16v-4", key: "1dtifu" }],
     ["path", { d: "M12 8h.01", key: "e9boi3" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/list-checks.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/list-checks.js
   var ListChecks = createLucideIcon("ListChecks", [
     ["path", { d: "m3 17 2 2 4-4", key: "1jhpwq" }],
     ["path", { d: "m3 7 2 2 4-4", key: "1obspn" }],
@@ -7579,7 +7579,7 @@
     ["path", { d: "M13 18h8", key: "oe0vm4" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/list.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/list.js
   var List = createLucideIcon("List", [
     ["path", { d: "M3 12h.01", key: "nlz23k" }],
     ["path", { d: "M3 18h.01", key: "1tta3j" }],
@@ -7589,23 +7589,23 @@
     ["path", { d: "M8 6h13", key: "ik3vkj" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/message-square.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/message-square.js
   var MessageSquare = createLucideIcon("MessageSquare", [
     ["path", { d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z", key: "1lielz" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/pause.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/pause.js
   var Pause = createLucideIcon("Pause", [
     ["rect", { x: "14", y: "4", width: "4", height: "16", rx: "1", key: "zuxfzm" }],
     ["rect", { x: "6", y: "4", width: "4", height: "16", rx: "1", key: "1okwgv" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/play.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/play.js
   var Play = createLucideIcon("Play", [
     ["polygon", { points: "6 3 20 12 6 21 6 3", key: "1oa8hb" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/plug.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/plug.js
   var Plug = createLucideIcon("Plug", [
     ["path", { d: "M12 22v-5", key: "1ega77" }],
     ["path", { d: "M9 8V2", key: "14iosj" }],
@@ -7613,25 +7613,25 @@
     ["path", { d: "M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z", key: "osxo6l" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/plus.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/plus.js
   var Plus = createLucideIcon("Plus", [
     ["path", { d: "M5 12h14", key: "1ays0h" }],
     ["path", { d: "M12 5v14", key: "s699le" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/rotate-cw.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/rotate-cw.js
   var RotateCw = createLucideIcon("RotateCw", [
     ["path", { d: "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8", key: "1p45f6" }],
     ["path", { d: "M21 3v5h-5", key: "1q7to0" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/search.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/search.js
   var Search = createLucideIcon("Search", [
     ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }],
     ["path", { d: "m21 21-4.3-4.3", key: "1qie3q" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/send.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/send.js
   var Send = createLucideIcon("Send", [
     [
       "path",
@@ -7643,7 +7643,7 @@
     ["path", { d: "m21.854 2.147-10.94 10.939", key: "12cjpa" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/settings.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/settings.js
   var Settings = createLucideIcon("Settings", [
     [
       "path",
@@ -7655,7 +7655,7 @@
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/shield-alert.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/shield-alert.js
   var ShieldAlert = createLucideIcon("ShieldAlert", [
     [
       "path",
@@ -7668,7 +7668,7 @@
     ["path", { d: "M12 16h.01", key: "1drbdi" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/shield.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/shield.js
   var Shield = createLucideIcon("Shield", [
     [
       "path",
@@ -7679,7 +7679,7 @@
     ]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/sparkles.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/sparkles.js
   var Sparkles = createLucideIcon("Sparkles", [
     [
       "path",
@@ -7694,12 +7694,12 @@
     ["path", { d: "M5 18H3", key: "zchphs" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/square.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/square.js
   var Square = createLucideIcon("Square", [
     ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", key: "afitv7" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/stethoscope.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/stethoscope.js
   var Stethoscope = createLucideIcon("Stethoscope", [
     ["path", { d: "M11 2v2", key: "1539x4" }],
     ["path", { d: "M5 2v2", key: "1yf1q8" }],
@@ -7708,7 +7708,7 @@
     ["circle", { cx: "20", cy: "10", r: "2", key: "ts1r5v" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/trash-2.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/trash-2.js
   var Trash2 = createLucideIcon("Trash2", [
     ["path", { d: "M3 6h18", key: "d0wm0j" }],
     ["path", { d: "M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6", key: "4alrt4" }],
@@ -7717,7 +7717,7 @@
     ["line", { x1: "14", x2: "14", y1: "11", y2: "17", key: "xtxkd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/triangle-alert.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/triangle-alert.js
   var TriangleAlert = createLucideIcon("TriangleAlert", [
     [
       "path",
@@ -7730,19 +7730,19 @@
     ["path", { d: "M12 17h.01", key: "p32p05" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/undo-2.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/undo-2.js
   var Undo2 = createLucideIcon("Undo2", [
     ["path", { d: "M9 14 4 9l5-5", key: "102s5s" }],
     ["path", { d: "M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11", key: "f3b9sd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/x.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/x.js
   var X = createLucideIcon("X", [
     ["path", { d: "M18 6 6 18", key: "1bl5f8" }],
     ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/zap.js
+  // ../../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/zap.js
   var Zap = createLucideIcon("Zap", [
     [
       "path",
@@ -8734,7 +8734,7 @@
       name: "ZCode",
       kind: "mcp-stdio",
       installHint: "Add ae-mcp as a local MCP server in ~/.zcode/cli/config.json (mcp.servers).",
-      loginHint: "Run `zcode login` (or sign in via the ZCode app) before starting.",
+      loginHint: "Open ZCode and make sure its selected provider has an API key before starting.",
       docsUrl: "https://zcode.z.ai"
     }
   ];
@@ -8799,6 +8799,22 @@
     return copyTextLegacy(text);
   }
 
+  // src/lib/settingsState.js
+  function zcodeModelLocked({ backend, modelSwitchable }) {
+    return backend === "zcode" && modelSwitchable === false;
+  }
+  function zcodeRuntimeBadge(zcodeStatus, t) {
+    const state = zcodeStatus && zcodeStatus.state || "checking";
+    if (state === "ready") return { status: "ok", text: t.zcodeReady };
+    if (state === "not-logged-in") return { status: "warn", text: t.zcodeNotLoggedIn };
+    if (state === "runtime-error") return { status: "error", text: t.zcodeRuntimeError };
+    return { status: "neutral", text: t.zcodeChecking };
+  }
+  function zcodeUnavailableHint(zcodeStatus, fallback) {
+    const detail = zcodeStatus && zcodeStatus.detail ? String(zcodeStatus.detail).trim() : "";
+    return detail || fallback;
+  }
+
   // src/screens/SettingsScreen.jsx
   var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
   var S = {
@@ -8827,15 +8843,18 @@
       recheckClaude: "\u91CD\u65B0\u68C0\u6D4B",
       codexSub: "Codex",
       codexReady: "\u5DF2\u767B\u5F55 \u2713",
+      codexCustomReady: "Custom API \u2713",
       codexNotLoggedIn: "\u672A\u767B\u5F55 codex",
+      codexRuntimeError: "\u8FD0\u884C\u65F6\u4E0D\u53EF\u7528",
       codexChecking: "\u68C0\u6D4B\u4E2D\u2026",
       codexLoginCap: "\u5728\u7EC8\u7AEF\u5B8C\u6210 codex \u767B\u5F55\uFF0C\u7136\u540E\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D",
       recheckCodex: "\u91CD\u65B0\u68C0\u6D4B",
       zcodeSub: "ZCode",
-      zcodeReady: "\u5DF2\u767B\u5F55 \u2713",
-      zcodeNotLoggedIn: "\u672A\u767B\u5F55 ZCode",
+      zcodeReady: "\u8FD0\u884C\u65F6\u53EF\u7528 \u2713",
+      zcodeNotLoggedIn: "ZCode \u4E0D\u53EF\u7528",
+      zcodeRuntimeError: "\u8FD0\u884C\u65F6\u4E0D\u53EF\u7528",
       zcodeChecking: "\u68C0\u6D4B\u4E2D\u2026",
-      zcodeLoginCap: "\u5728\u7EC8\u7AEF\u8FD0\u884C zcode login \u5B8C\u6210\u767B\u5F55\uFF08\u6216\u901A\u8FC7 ZCode \u5E94\u7528\u767B\u5F55\uFF09\uFF0C\u7136\u540E\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D",
+      zcodeLoginCap: "\u6253\u5F00 ZCode \u5E94\u7528\uFF0C\u6216\u786E\u8BA4 ZCode CLI/Node \u53EF\u7528\uFF0C\u7136\u540E\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D",
       recheckZcode: "\u91CD\u65B0\u68C0\u6D4B",
       openCodeSub: "OpenCode",
       openCodeReady: "\u5DF2\u767B\u5F55 \u2713",
@@ -8845,14 +8864,23 @@
       recheckOpenCode: "\u91CD\u65B0\u68C0\u6D4B",
       apiKey: "API Key",
       apiKeyCap: "\u4EC5\u4FDD\u5B58\u5728\u672C\u673A\uFF0C\u4E0D\u4F1A\u4E0A\u4F20",
+      apiBaseUrl: "API Base URL",
+      anthropicBaseUrlCap: "\u7559\u7A7A\u4F7F\u7528\u5B98\u65B9 Anthropic API",
+      codexBaseUrlCap: "\u7559\u7A7A\u4F7F\u7528\u5B98\u65B9 Codex \u767B\u5F55\u6001\uFF1B\u586B\u5199\u540E\u4F7F\u7528\u81EA\u5B9A\u4E49 OpenAI-compatible provider",
+      codexApiKeyCap: "\u4EC5\u7528\u4E8E\u81EA\u5B9A\u4E49 Codex provider\uFF0C\u4FDD\u5B58\u5728\u672C\u673A",
+      save: "\u4FDD\u5B58",
       saveVerify: "\u4FDD\u5B58\u5E76\u9A8C\u8BC1",
       validating: "\u6B63\u5728\u9A8C\u8BC1\u2026",
       saved: "API Key \u5DF2\u4FDD\u5B58\u5E76\u9A8C\u8BC1",
+      savedLocal: "\u5DF2\u4FDD\u5B58\u5230\u672C\u673A",
       invalidKey: "\u65E0\u6548 key",
       verifyFailed: "\u9A8C\u8BC1\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5",
       clear: "\u6E05\u9664",
       cleared: "API Key \u5DF2\u6E05\u9664",
       modelDefault: "\u9ED8\u8BA4\u6A21\u578B\uFF08\u6253\u5F00\u9762\u677F\u65F6\u4F7F\u7528\uFF09",
+      customModel: "\u81EA\u5B9A\u4E49\u6A21\u578B ID",
+      customModelCap: "\u53EF\u9009\uFF1B\u586B\u5199\u540E\u4F18\u5148\u7528\u4E8E BYOK/Codex",
+      zcodeModelManaged: "\u7531 ZCode \u5F53\u524D\u4F1A\u8BDD\u7BA1\u7406",
       port: "\u7AEF\u53E3",
       portHint: "\u9ED8\u8BA4 11488",
       apply: "\u5E94\u7528",
@@ -8908,15 +8936,18 @@
       recheckClaude: "Re-check",
       codexSub: "Codex",
       codexReady: "Logged in \u2713",
+      codexCustomReady: "Custom API \u2713",
       codexNotLoggedIn: "Not logged in to codex",
+      codexRuntimeError: "Runtime unavailable",
       codexChecking: "Checking\u2026",
       codexLoginCap: "Sign in with codex in a terminal, then click Re-check",
       recheckCodex: "Re-check",
       zcodeSub: "ZCode",
-      zcodeReady: "Logged in \u2713",
-      zcodeNotLoggedIn: "Not logged in to ZCode",
+      zcodeReady: "Runtime ready \u2713",
+      zcodeNotLoggedIn: "ZCode unavailable",
+      zcodeRuntimeError: "Runtime unavailable",
       zcodeChecking: "Checking\u2026",
-      zcodeLoginCap: "Run `zcode login` (or sign in via the ZCode app), then click Re-check",
+      zcodeLoginCap: "Open the ZCode app, or confirm the ZCode CLI and Node are available, then click Re-check",
       recheckZcode: "Re-check",
       openCodeSub: "OpenCode",
       openCodeReady: "Logged in \u2713",
@@ -8926,14 +8957,23 @@
       recheckOpenCode: "Re-check",
       apiKey: "API Key",
       apiKeyCap: "Stored locally, never uploaded",
+      apiBaseUrl: "API Base URL",
+      anthropicBaseUrlCap: "Leave blank to use the official Anthropic API",
+      codexBaseUrlCap: "Leave blank for official Codex login; fill to use a custom OpenAI-compatible provider",
+      codexApiKeyCap: "Only used for a custom Codex provider; stored locally",
+      save: "Save",
       saveVerify: "Save and verify",
       validating: "Validating\u2026",
       saved: "API Key saved and verified",
+      savedLocal: "Saved locally",
       invalidKey: "Invalid key",
       verifyFailed: "Verification failed. Try again later.",
       clear: "Clear",
       cleared: "API Key cleared",
       modelDefault: "Default model (used when the panel opens)",
+      customModel: "Custom model ID",
+      customModelCap: "Optional; takes priority for BYOK/Codex",
+      zcodeModelManaged: "Managed by the current ZCode session",
       port: "Port",
       portHint: "Default 11488",
       apply: "Apply",
@@ -9057,10 +9097,20 @@
     apiKey = "",
     onSaveApiKey,
     onClearApiKey,
+    anthropicBaseUrl = "",
+    onAnthropicBaseUrlChange,
+    codexApiKey = "",
+    codexBaseUrl = "",
+    onCodexBaseUrlChange,
+    onSaveCodexApiKey,
+    onClearCodexApiKey,
     validateKey,
     model = "claude-sonnet-4-6",
     modelOptions,
+    modelSwitchable = true,
     onModelChange,
+    customModel = "",
+    onCustomModelChange,
     backend = "subscription",
     onBackendChange,
     expertGuidance = true,
@@ -9075,7 +9125,12 @@
     onRecheckZcode
   }) {
     const t = S[lang] || S.zh;
+    const zcodeModelLocked2 = zcodeModelLocked({ backend, modelSwitchable });
     const [key, setKey] = import_react19.default.useState(apiKey);
+    const [apiBaseUrlDraft, setApiBaseUrlDraft] = import_react19.default.useState(anthropicBaseUrl);
+    const [codexKeyDraft, setCodexKeyDraft] = import_react19.default.useState(codexApiKey);
+    const [codexBaseUrlDraft, setCodexBaseUrlDraft] = import_react19.default.useState(codexBaseUrl);
+    const [customModelDraft, setCustomModelDraft] = import_react19.default.useState(customModel);
     const [aiBusy, setAiBusy] = import_react19.default.useState(false);
     const [aiToast, setAiToast] = import_react19.default.useState(null);
     const [draftPort, setDraftPort] = import_react19.default.useState(String(port));
@@ -9086,6 +9141,10 @@
     import_react19.default.useEffect(() => setDraftPort(String(port)), [port]);
     import_react19.default.useEffect(() => setTokenRaw(readTokenValue()), []);
     import_react19.default.useEffect(() => setKey(apiKey), [apiKey]);
+    import_react19.default.useEffect(() => setApiBaseUrlDraft(anthropicBaseUrl), [anthropicBaseUrl]);
+    import_react19.default.useEffect(() => setCodexKeyDraft(codexApiKey), [codexApiKey]);
+    import_react19.default.useEffect(() => setCodexBaseUrlDraft(codexBaseUrl), [codexBaseUrl]);
+    import_react19.default.useEffect(() => setCustomModelDraft(customModel), [customModel]);
     const copy = (label, text) => {
       copyText(text).then(() => {
         setCopied(label);
@@ -9098,19 +9157,18 @@
     const claudeBadgeStatus = claudeState === "ready" ? "ok" : claudeState === "not-logged-in" ? "warn" : claudeState === "no-node" ? "error" : "neutral";
     const claudeBadgeText = claudeState === "ready" ? t.claudeReady : claudeState === "not-logged-in" ? t.claudeNotLoggedIn : claudeState === "no-node" ? t.claudeNoNode : t.claudeChecking;
     const codexState = codexStatus && codexStatus.state || "checking";
-    const codexBadgeStatus = codexState === "ready" ? "ok" : codexState === "not-logged-in" ? "warn" : "neutral";
-    const codexBadgeText = codexState === "ready" ? t.codexReady : codexState === "not-logged-in" ? t.codexNotLoggedIn : t.codexChecking;
+    const codexBadgeStatus = codexState === "ready" ? "ok" : codexState === "not-logged-in" ? "warn" : codexState === "runtime-error" ? "error" : "neutral";
+    const codexBadgeText = codexState === "ready" && codexStatus && codexStatus.planType === "Custom API" ? t.codexCustomReady : codexState === "ready" ? t.codexReady : codexState === "not-logged-in" ? t.codexNotLoggedIn : codexState === "runtime-error" ? t.codexRuntimeError : t.codexChecking;
     const openCodeState = openCodeStatus && openCodeStatus.state || "checking";
     const openCodeBadgeStatus = openCodeState === "ready" ? "ok" : openCodeState === "not-logged-in" ? "warn" : "neutral";
     const openCodeBadgeText = openCodeState === "ready" ? t.openCodeReady : openCodeState === "not-logged-in" ? t.openCodeNotLoggedIn : t.openCodeChecking;
     const zcodeState = zcodeStatus && zcodeStatus.state || "checking";
-    const zcodeBadgeStatus = zcodeState === "ready" ? "ok" : zcodeState === "not-logged-in" ? "warn" : "neutral";
-    const zcodeBadgeText = zcodeState === "ready" ? t.zcodeReady : zcodeState === "not-logged-in" ? t.zcodeNotLoggedIn : t.zcodeChecking;
+    const zcodeBadge = zcodeRuntimeBadge(zcodeStatus, t);
     const saveApiKey = () => {
       if (aiBusy) return;
       setAiBusy(true);
       setAiToast(null);
-      Promise.resolve(validateKey ? validateKey(key) : true).then((result) => {
+      Promise.resolve(validateKey ? validateKey(key, apiBaseUrlDraft) : true).then((result) => {
         const ok = result === true || result && result.ok === true || result && result.status === 200;
         const status = result && typeof result === "object" ? result.status : null;
         if (!ok) {
@@ -9125,9 +9183,27 @@
         setAiToast({ type: "error", message: status === 401 ? t.invalidKey : t.verifyFailed });
       }).finally(() => setAiBusy(false));
     };
+    const saveCodexKey = () => {
+      if (aiBusy) return;
+      setAiBusy(true);
+      setAiToast(null);
+      Promise.resolve(onSaveCodexApiKey ? onSaveCodexApiKey(codexKeyDraft) : null).then(() => {
+        setAiToast({ type: "ok", message: t.savedLocal });
+      }).catch(() => {
+        setAiToast({ type: "error", message: t.verifyFailed });
+      }).finally(() => setAiBusy(false));
+    };
     const clearApiKey = () => {
       setKey("");
       Promise.resolve(onClearApiKey ? onClearApiKey() : null).then(() => {
+        setAiToast({ type: "info", message: t.cleared });
+      }).catch(() => {
+        setAiToast({ type: "error", message: t.verifyFailed });
+      });
+    };
+    const clearCodexKey = () => {
+      setCodexKeyDraft("");
+      Promise.resolve(onClearCodexApiKey ? onClearCodexApiKey() : null).then(() => {
         setAiToast({ type: "info", message: t.cleared });
       }).catch(() => {
         setAiToast({ type: "error", message: t.verifyFailed });
@@ -9158,27 +9234,48 @@
             String(claudeStatus.nodeVersion).replace(/^v?/, "v")
           ] }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1 } }),
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: claudeState === "checking", onClick: onRecheckClaude, children: t.recheckClaude })
-        ] }) }) : backend === "codex" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.codexSub, caption: codexState === "not-logged-in" ? t.codexLoginCap : codexStatus && codexStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: codexBadgeStatus, children: codexBadgeText }),
-          codexState === "ready" && (codexStatus.email || codexStatus.planType) ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1, font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: [codexStatus.email, codexStatus.planType].filter(Boolean).join(" \xB7 ") }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: codexState === "checking", onClick: onRecheckCodex, children: t.recheckCodex })
-        ] }) }) : backend === "opencode" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.openCodeSub, caption: openCodeState === "not-logged-in" ? t.openCodeLoginCap : openCodeStatus && openCodeStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+        ] }) }) : backend === "codex" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(import_react19.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.codexSub, caption: codexState === "not-logged-in" ? t.codexLoginCap : codexStatus && codexStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: codexBadgeStatus, children: codexBadgeText }),
+            codexState === "ready" && (codexStatus.email || codexStatus.planType) ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1, font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: [codexStatus.email, codexStatus.planType].filter(Boolean).join(" \xB7 ") }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1 } }),
+            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: codexState === "checking", onClick: onRecheckCodex, children: t.recheckCodex })
+          ] }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.apiBaseUrl, caption: t.codexBaseUrlCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { mono: true, value: codexBaseUrlDraft, onChange: (v) => {
+            setCodexBaseUrlDraft(v);
+            if (onCodexBaseUrlChange) onCodexBaseUrlChange(v);
+          }, placeholder: "https://api.openai.com" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.apiKey, caption: t.codexApiKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { secret: true, value: codexKeyDraft, onChange: setCodexKeyDraft, placeholder: "sk-...", style: { flex: 1 } }),
+            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "primary", disabled: aiBusy, onClick: saveCodexKey, children: aiBusy ? t.validating : t.save }),
+            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", disabled: aiBusy, onClick: clearCodexKey, children: t.clear })
+          ] }) })
+        ] }) : backend === "opencode" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.openCodeSub, caption: openCodeState === "not-logged-in" ? t.openCodeLoginCap : openCodeStatus && openCodeStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: openCodeBadgeStatus, children: openCodeBadgeText }),
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1 } }),
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: openCodeState === "checking", onClick: onRecheckOpenCode, children: t.recheckOpenCode })
         ] }) }) : backend === "zcode" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.zcodeSub, caption: zcodeState === "not-logged-in" ? t.zcodeLoginCap : zcodeStatus && zcodeStatus.detail || null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: zcodeBadgeStatus, children: zcodeBadgeText }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: zcodeBadge.status, children: zcodeBadge.text }),
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1 } }),
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", disabled: zcodeState === "checking", onClick: onRecheckZcode, children: t.recheckZcode })
-        ] }) }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.apiKey, caption: t.apiKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { secret: true, value: key, onChange: setKey, placeholder: "sk-ant-...", style: { flex: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "primary", disabled: aiBusy || !key.trim(), onClick: saveApiKey, children: aiBusy ? t.validating : t.saveVerify }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", disabled: aiBusy, onClick: clearApiKey, children: t.clear })
-        ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.modelDefault, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || [
+        ] }) }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(import_react19.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.apiBaseUrl, caption: t.anthropicBaseUrlCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { mono: true, value: apiBaseUrlDraft, onChange: (v) => {
+            setApiBaseUrlDraft(v);
+            if (onAnthropicBaseUrlChange) onAnthropicBaseUrlChange(v);
+          }, placeholder: "https://api.anthropic.com" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.apiKey, caption: t.apiKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { secret: true, value: key, onChange: setKey, placeholder: "sk-ant-...", style: { flex: 1 } }),
+            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "primary", disabled: aiBusy || !key.trim(), onClick: saveApiKey, children: aiBusy ? t.validating : t.saveVerify }),
+            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", disabled: aiBusy, onClick: clearApiKey, children: t.clear })
+          ] }) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.modelDefault, children: zcodeModelLocked2 ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { minHeight: 28, display: "flex", alignItems: "center", padding: "0 8px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: t.zcodeModelManaged }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || [
           { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
           { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" }
         ] }) }),
+        backend === "byok" || backend === "codex" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.customModel, caption: t.customModelCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { mono: true, value: customModelDraft, onChange: (v) => {
+          setCustomModelDraft(v);
+          if (onCustomModelChange) onCustomModelChange(v);
+        }, placeholder: backend === "codex" ? "provider/model" : "claude-custom" }) }) : null,
         aiToast ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Toast, { type: aiToast.type, message: aiToast.message, onClose: () => setAiToast(null) }) : null
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { title: t.conn, children: [
@@ -10902,11 +10999,12 @@
     const effortLevels = Array.isArray(currentModel.effortLevels) ? currentModel.effortLevels : [];
     const approvals = descriptor.approvalModes || [];
     const currentApproval = approvals.find((m) => m.id === permissionMode) || approvals[0] || {};
+    const modelSwitchable = descriptor.perTurnModelSwitch !== false;
     return {
-      model: {
+      model: modelSwitchable ? {
         current: currentModel.label || currentModel.id || "",
         items: models.map((m) => ({ id: m.id, label: m.label || m.id, caption: costBadge(m.cost) }))
-      },
+      } : null,
       effort: effortLevels.length ? {
         current: effort,
         items: effortLevels.map((id) => ({ id, label: id, caption: "" }))
@@ -11077,7 +11175,7 @@
     const prompts = promptCards || DEFAULT_PROMPTS[lang] || DEFAULT_PROMPTS.zh;
     const chips = chipState && chipState.descriptor ? buildComposerChips({ ...chipState, lang }) : null;
     const composerOptions = chips ? /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(import_react36.default.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+      chips.model ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
         ComposerChip,
         {
           icon: "box",
@@ -11086,7 +11184,7 @@
           menuHeader: { label: t.modelChip },
           items: menuItems(chips.model.items, chipState.modelId, onChipModel)
         }
-      ),
+      ) : null,
       chips.effort ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
         ComposerChip,
         {
@@ -11212,6 +11310,84 @@
     return { feed };
   }
 
+  // src/lib/providerProfile.js
+  var DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com";
+  var DEFAULT_CODEX_PROVIDER_ID = "ae_mcp_custom";
+  var DEFAULT_CODEX_WIRE_API = "responses";
+  var RESERVED_CODEX_PROVIDER_IDS = /* @__PURE__ */ new Set(["openai", "amazon-bedrock", "ollama", "lmstudio"]);
+  function firstValue(...values) {
+    for (const value of values) {
+      const text = String(value || "").trim();
+      if (text) return text;
+    }
+    return "";
+  }
+  function normalizeBaseUrl(value) {
+    return String(value || "").trim().replace(/\/+$/, "");
+  }
+  function normalizeProviderId(value) {
+    const raw = String(value || "").trim() || DEFAULT_CODEX_PROVIDER_ID;
+    const safe = raw.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || DEFAULT_CODEX_PROVIDER_ID;
+    return RESERVED_CODEX_PROVIDER_IDS.has(safe) ? safe + "-custom" : safe;
+  }
+  function normalizeCodexWireApi() {
+    return DEFAULT_CODEX_WIRE_API;
+  }
+  function tomlString(value) {
+    return JSON.stringify(String(value || ""));
+  }
+  function normalizeProviderProfile(input = {}, env = {}) {
+    const codexBaseUrl = normalizeBaseUrl(firstValue(input.codexBaseUrl, env.AE_MCP_CODEX_BASE_URL));
+    const anthropicBaseUrl = normalizeBaseUrl(firstValue(input.anthropicBaseUrl, env.AE_MCP_ANTHROPIC_BASE_URL));
+    return {
+      codexApiKey: firstValue(input.codexApiKey, env.AE_MCP_CODEX_API_KEY),
+      codexBaseUrl,
+      codexProviderId: normalizeProviderId(firstValue(input.codexProviderId, env.AE_MCP_CODEX_PROVIDER_ID)),
+      codexWireApi: normalizeCodexWireApi(),
+      anthropicBaseUrl
+    };
+  }
+  function codexAppServerArgs(profile = {}) {
+    const normalized = normalizeProviderProfile(profile);
+    if (!normalized.codexBaseUrl) return ["app-server"];
+    const provider = normalized.codexProviderId;
+    return [
+      "app-server",
+      "-c",
+      `model_provider=${tomlString(provider)}`,
+      "-c",
+      `model_providers.${provider}.name="AE MCP Custom"`,
+      "-c",
+      `model_providers.${provider}.base_url=${tomlString(normalized.codexBaseUrl)}`,
+      "-c",
+      `model_providers.${provider}.env_key="AE_MCP_CODEX_API_KEY"`,
+      "-c",
+      `model_providers.${provider}.wire_api=${tomlString(normalized.codexWireApi)}`,
+      "-c",
+      `model_providers.${provider}.requires_openai_auth=false`
+    ];
+  }
+  function codexSpawnEnv(profile = {}, baseEnv = {}) {
+    const normalized = normalizeProviderProfile(profile, baseEnv);
+    const env = { ...baseEnv || {} };
+    if (normalized.codexApiKey) env.AE_MCP_CODEX_API_KEY = normalized.codexApiKey;
+    return env;
+  }
+  function anthropicEndpoint(baseUrl, apiPath) {
+    const base = normalizeBaseUrl(baseUrl) || DEFAULT_ANTHROPIC_BASE_URL;
+    const url = new URL(base);
+    const prefix = url.pathname.replace(/\/+$/, "");
+    const rawPath = String(apiPath || "");
+    const queryIndex = rawPath.indexOf("?");
+    const pathPart = queryIndex === -1 ? rawPath : rawPath.slice(0, queryIndex);
+    const searchPart = queryIndex === -1 ? "" : rawPath.slice(queryIndex);
+    const suffix = pathPart.startsWith("/") ? pathPart : "/" + pathPart;
+    url.pathname = (prefix === "/" ? "" : prefix) + suffix;
+    url.search = searchPart;
+    url.hash = "";
+    return url.toString();
+  }
+
   // src/lib/anthropic.js
   var DEFAULT_MODEL = "claude-sonnet-4-6";
   var FALLBACK_MODEL = "claude-haiku-4-5-20251001";
@@ -11228,6 +11404,8 @@
         "- Prefer typed tools (ae_createLayer / ae_setProperty / ae_readProps, etc.); use ae_exec scripts only when no typed tool fits.",
         "- Before scripting, inspect with read tools (ae_overview / ae_layers / ae_readProps) to confirm structure instead of guessing project contents.",
         "- ae_exec accepts only code and undoGroup; it has no comp_id or other targeting parameters. Put target lookup inside the script.",
+        "- If the MCP/panel path is unavailable, Do not switch to OS screenshots, desktop automation, or ad-hoc external scripts; report the MCP failure to the user.",
+        "- Keep generated files and temporary files in the project workspace or a user-approved output directory; do not scatter files outside it.",
         "",
         "ExtendScript scripting pitfalls (must follow):",
         "- setTemporalEaseAtKey ease arrays must match the property dimension (1D like Opacity=1; Scale 3D=3; spatial properties like Position=1). Use AEMCP.easeKeys(prop) to size them automatically.",
@@ -11248,6 +11426,8 @@
       "- \u4F18\u5148\u4F7F\u7528 typed \u5DE5\u5177\uFF08ae_createLayer / ae_setProperty / ae_readProps \u7B49\uFF09\uFF1B\u53EA\u6709\u6CA1\u6709\u5BF9\u5E94\u5DE5\u5177\u65F6\u624D\u7528 ae_exec \u5199\u811A\u672C\u3002",
       "- \u5199\u811A\u672C\u524D\u5148\u7528\u8BFB\u5DE5\u5177\uFF08ae_overview / ae_layers / ae_readProps\uFF09\u786E\u8BA4\u7ED3\u6784\uFF0C\u4E0D\u8981\u51ED\u8BB0\u5FC6\u731C\u6D4B\u5DE5\u7A0B\u5185\u5BB9\u3002",
       "- ae_exec \u53EA\u63A5\u53D7 code \u4E0E undoGroup \u4E24\u4E2A\u53C2\u6570\uFF0C\u6CA1\u6709 comp_id \u7B49\u5B9A\u4F4D\u53C2\u6570\u2014\u2014\u76EE\u6807\u5B9A\u4F4D\u5199\u5728\u811A\u672C\u91CC\u3002",
+      "- MCP/\u9762\u677F\u901A\u9053\u4E0D\u53EF\u7528\u65F6\uFF0CDo not switch to OS screenshots\u3001\u684C\u9762\u81EA\u52A8\u5316\u6216\u5916\u90E8\u4E34\u65F6\u811A\u672C\uFF1Breport the MCP failure \u7ED9\u7528\u6237\u3002",
+      "- \u751F\u6210\u6587\u4EF6\u548C temporary files \u653E\u5728 project workspace \u6216\u7528\u6237\u660E\u786E\u540C\u610F\u7684\u8F93\u51FA\u76EE\u5F55\uFF0C\u4E0D\u8981\u6563\u843D\u5230\u5DE5\u4F5C\u533A\u5916\u3002",
       "",
       "ExtendScript \u9AD8\u9891\u9677\u9631\uFF08\u52A1\u5FC5\u9075\u5B88\uFF09\uFF1A",
       "- setTemporalEaseAtKey \u7684\u7F13\u52A8\u6570\u7EC4\u957F\u5EA6\u5FC5\u987B\u7B49\u4E8E\u5C5E\u6027\u7EF4\u5EA6\uFF08\u4E00\u7EF4\u5982 Opacity=1\uFF1BScale \u4E09\u7EF4=3\uFF1B\u7A7A\u95F4\u5C5E\u6027\u5982 Position=1\uFF09\u3002\u76F4\u63A5\u7528 AEMCP.easeKeys(prop) \u81EA\u52A8\u5904\u7406\u3002",
@@ -11316,6 +11496,7 @@
   }
   async function sendAnthropicMessage({
     apiKey,
+    baseUrl = "",
     model = DEFAULT_MODEL,
     system = buildSystemPrompt("zh"),
     messages,
@@ -11331,6 +11512,7 @@
     if (!fetchImpl) throw toError("network", "fetch is unavailable in this runtime.");
     let response;
     try {
+      const url = anthropicEndpoint(baseUrl, "/v1/messages");
       const headers = {
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
@@ -11348,7 +11530,7 @@
       };
       if (effort) body.output_config = { effort };
       if (fast) body.speed = "fast";
-      response = await fetchImpl("https://api.anthropic.com/v1/messages", {
+      response = await fetchImpl(url, {
         method: "POST",
         signal,
         headers,
@@ -11425,6 +11607,7 @@
   }
   function createAgentLoop({
     getApiKey,
+    getApiBaseUrl,
     getModel,
     mcp,
     getPermissionMode,
@@ -11518,6 +11701,7 @@
             }
             const result = await anthropic({
               apiKey: getApiKey && getApiKey(),
+              baseUrl: getApiBaseUrl && getApiBaseUrl(),
               model: getModel && getModel() || DEFAULT_MODEL,
               system,
               messages: clone(messages),
@@ -11644,6 +11828,18 @@
     });
     return { ...descriptor, models };
   }
+  function descriptorWithCustomModel(descriptor, modelId) {
+    const id = String(modelId || "").trim();
+    if (!id) return descriptor;
+    const existing = descriptor.models.find((m) => m.id === id);
+    const custom = existing || { id, label: id, effortLevels: [], cost: 2, adaptive: false };
+    const rest = descriptor.models.filter((m) => m.id !== id);
+    return {
+      ...descriptor,
+      models: [custom, ...rest],
+      defaultModelId: id
+    };
+  }
   function codexStaticDescriptor() {
     const models = [
       { id: "gpt-5.5", label: "GPT-5.5", effortLevels: ["low", "medium", "high", "xhigh"], cost: 2, adaptive: false },
@@ -11754,20 +11950,21 @@
       perTurnModelSwitch: true
     };
   }
-  var ZCODE_EFFORT_LEVELS = ["low", "medium", "high"];
+  var ZCODE_EFFORT_LEVELS = ["nothink", "high", "max"];
   function zcodeStaticDescriptor() {
     const models = [
-      { id: "glm-5.2", label: "GLM-5.2", effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false }
+      { id: "builtin:bigmodel-start-plan/GLM-5.2", label: "GLM-5.2", effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false },
+      { id: "builtin:bigmodel-start-plan/GLM-5-Turbo", label: "GLM-5 Turbo", effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false }
     ];
     return {
       id: "zcode",
       label: "ZCode",
       models,
-      defaultModelId: "glm-5.2",
-      defaultEffort: "medium",
+      defaultModelId: "builtin:bigmodel-start-plan/GLM-5.2",
+      defaultEffort: "high",
       supportsFast: () => false,
       approvalModes: APPROVAL_MODES,
-      perTurnModelSwitch: true
+      perTurnModelSwitch: false
     };
   }
 
@@ -11786,18 +11983,23 @@
   }
 
   // src/lib/backendSelect.js
-  function pickBackend({ pref, probe, hasApiKey, codexProbe, zcodeProbe }) {
+  function pickBackend({ pref, probe, hasApiKey, codexProbe, hasCodexCustomProvider = false, zcodeProbe }) {
     if (pref === "byok") {
       return hasApiKey ? { backend: "byok", reason: "ok" } : { backend: "none", reason: "no-key" };
     }
     if (pref === "codex") {
       if (codexProbe === null) return { backend: "none", reason: "codex-probing" };
+      if (hasCodexCustomProvider) {
+        if (!codexProbe || codexProbe.runtimeOk === false) return { backend: "none", reason: "codex-runtime-unavailable" };
+        return { backend: "codex", reason: "ok" };
+      }
       if (!codexProbe || !codexProbe.loggedIn) return { backend: "none", reason: "codex-not-logged-in" };
       return { backend: "codex", reason: "ok" };
     }
     if (pref === "zcode") {
       if (zcodeProbe === null) return { backend: "none", reason: "zcode-probing" };
       if (!zcodeProbe || !zcodeProbe.loggedIn) return { backend: "none", reason: "zcode-not-logged-in" };
+      if (zcodeProbe.runtimeOk === false) return { backend: "none", reason: "zcode-runtime-unavailable" };
       return { backend: "zcode", reason: "ok" };
     }
     if (probe === null) return { backend: "none", reason: "probing" };
@@ -12118,7 +12320,10 @@
   }
 
   // src/cep/apiKey.js
-  var KEY_FILE = "anthropic-key";
+  var KEY_FILES = {
+    anthropic: "anthropic-key",
+    codex: "codex-key"
+  };
   function cepRequire2() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) return globalThis.window.cep_node.require;
     if (globalThis.window && globalThis.window.require) return globalThis.window.require;
@@ -12142,24 +12347,30 @@
     function keyDir() {
       return path.join(os.homedir(), ".ae-mcp");
     }
-    function keyPath() {
-      return path.join(keyDir(), KEY_FILE);
+    function keyFile(name = "anthropic") {
+      const file = KEY_FILES[String(name || "anthropic")];
+      if (!file) throw new Error("Unsupported API key name: " + name);
+      return file;
     }
-    function readKey() {
+    function keyPath(name = "anthropic") {
+      return path.join(keyDir(), keyFile(name));
+    }
+    function readKey(name = "anthropic") {
       try {
-        return fs.readFileSync(keyPath(), "utf8").trim();
+        return fs.readFileSync(keyPath(name), "utf8").trim();
       } catch (e) {
         if (e && e.code === "ENOENT") return "";
         throw e;
       }
     }
-    function writeKey(key) {
+    function writeKey(key, name = "anthropic") {
       const value = String(key || "").trim();
       const dir = keyDir();
-      const file = keyPath();
+      const fileName = keyFile(name);
+      const file = keyPath(name);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       const pid = deps.pid || 0;
-      const tmp = path.join(dir, `${KEY_FILE}.${pid}.${Date.now()}.tmp`);
+      const tmp = path.join(dir, `${fileName}.${pid}.${Date.now()}.tmp`);
       fs.writeFileSync(tmp, value, "utf8");
       try {
         fs.chmodSync(tmp, 384);
@@ -12168,9 +12379,9 @@
       fs.renameSync(tmp, file);
       return value;
     }
-    function clearKey() {
+    function clearKey(name = "anthropic") {
       try {
-        fs.unlinkSync(keyPath());
+        fs.unlinkSync(keyPath(name));
       } catch (e) {
         if (!e || e.code !== "ENOENT") throw e;
       }
@@ -12755,6 +12966,7 @@
     getToolMeta,
     getExpertGuidance = () => true,
     getServerInstructions = () => "",
+    getProviderProfile = () => ({}),
     onEvent,
     lang = "zh",
     env
@@ -12946,13 +13158,14 @@
       startPromise = (async () => {
         const spawn = getSpawn();
         const spawnEnv = currentEnv();
+        const providerProfile = normalizeProviderProfile(getProviderProfile ? getProviderProfile() : {}, spawnEnv);
         stderrTail = "";
         stopping = false;
-        proc = spawn("codex", ["app-server"], {
+        proc = spawn("codex", codexAppServerArgs(providerProfile), {
           stdio: "pipe",
           windowsHide: true,
           shell: true,
-          env: spawnEnv
+          env: codexSpawnEnv(providerProfile, spawnEnv)
         });
         rpc = createRpc({
           writeLine: (line) => proc.stdin.write(line),
@@ -13122,15 +13335,16 @@
           models = null;
         }
         const account = accountResult && accountResult.account;
-        if (!account) return { loggedIn: false, detail: accountResult && accountResult.requiresOpenaiAuth ? "OpenAI auth required" : void 0, models };
+        if (!account) return { loggedIn: false, runtimeOk: true, detail: accountResult && accountResult.requiresOpenaiAuth ? "OpenAI auth required" : void 0, models };
         return {
           loggedIn: true,
+          runtimeOk: true,
           email: account.email,
           planType: account.planType,
           models
         };
       } catch (e) {
-        return { loggedIn: false, detail: e && e.message ? e.message : String(e) };
+        return { loggedIn: false, runtimeOk: false, detail: e && e.message ? e.message : String(e) };
       }
     }
     return {
@@ -13699,6 +13913,14 @@
   var RPC_TIMEOUT_MS2 = 3e4;
   var STDERR_TAIL_LIMIT3 = 4096;
   var DELIVERY_KIND = "desktop-continuous";
+  var ZCODE_BUILTIN_DEFAULT_MODEL = "builtin:bigmodel-start-plan/GLM-5.2";
+  var LEGACY_ZCODE_MODEL_REFS = /* @__PURE__ */ new Set(["mediastorm_glm/glm-5.2"]);
+  var ZCODE_THOUGHT_LEVELS = /* @__PURE__ */ new Set(["nothink", "high", "max", "low", "medium"]);
+  var ZCODE_CREDENTIAL_PREFIX = "enc:v1:";
+  var ZCODE_API_KEY_NAME = "zcode-api-key";
+  var BIGMODEL_API_ORIGIN = "https://bigmodel.cn";
+  var ZAI_BIZ_API_ORIGIN = "https://api.z.ai";
+  var JSON_CONTENT_TYPE = "application/json";
   var MODE_BY_TIER = {
     readonly: "plan",
     manual: "build",
@@ -13828,6 +14050,398 @@
     const text = String(name || "");
     return text.startsWith("mcp__") ? text : "mcp__ae__" + text;
   }
+  function zcodeProviderId(modelRef) {
+    const text = String(modelRef || "").trim();
+    const slash = text.indexOf("/");
+    return slash > 0 ? text.slice(0, slash).trim() : "";
+  }
+  function zcodeProviderApiKeyEnv(providerId) {
+    const text = String(providerId || "").trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").toUpperCase();
+    return text ? text + "_API_KEY" : "";
+  }
+  function zcodeModelIds(provider) {
+    const models = provider && provider.models;
+    if (Array.isArray(models)) return models.map((m) => m && (m.id || m.modelID || m.modelId || m.name)).filter(Boolean).map(String);
+    if (models && typeof models === "object") return Object.keys(models);
+    return [];
+  }
+  function zcodePreferredModelId(provider) {
+    const ids = zcodeModelIds(provider);
+    if (!ids.length) return "";
+    return ids.find((id) => id === "GLM-5.2") || ids.find((id) => /GLM-5\.2/i.test(id)) || ids[0];
+  }
+  function zcodeProviderScore(providerId, provider, family) {
+    if (!provider || typeof provider !== "object") return -1;
+    if (provider.enabled === false || provider.systemDisabledReason) return -1;
+    if (!zcodeModelIds(provider).length) return -1;
+    const id = String(providerId || "");
+    let score = 0;
+    if (provider.enabled === true) score += 100;
+    if (family && id === "builtin:" + family + "-start-plan") score += 80;
+    if (family && id === "builtin:" + family + "-coding-plan") score += 70;
+    if (family && id === "builtin:" + family) score += 40;
+    if (/-start-plan$/.test(id)) score += 30;
+    if (/-coding-plan$/.test(id)) score += 20;
+    if (provider.options && provider.options.apiKey) score += 10;
+    return score;
+  }
+  function zcodeDesktopProviderEntry({ config, setting, modelRef }) {
+    const providers = config && config.provider && typeof config.provider === "object" ? config.provider : {};
+    const entries = Object.entries(providers);
+    if (!entries.length) return null;
+    const family = String(setting && setting.providerFamilyDomain || "").trim();
+    const requested = zcodeProtocolModelFromRef(modelRef);
+    if (requested && providers[requested.providerId]) {
+      const provider = providers[requested.providerId];
+      const score = zcodeProviderScore(requested.providerId, provider, family);
+      if (score >= 0) return { providerId: requested.providerId, provider, modelId: requested.modelId, score };
+    }
+    let best = null;
+    for (const [providerId, provider] of entries) {
+      const score = zcodeProviderScore(providerId, provider, family);
+      if (score < 0) continue;
+      if (!best || score > best.score) best = { providerId, provider, score };
+    }
+    if (!best) return null;
+    const modelId = zcodePreferredModelId(best.provider);
+    return modelId ? { ...best, modelId } : null;
+  }
+  function zcodeModelFromDesktopConfig({ config, setting }) {
+    const entry = zcodeDesktopProviderEntry({ config, setting });
+    return entry ? entry.providerId + "/" + entry.modelId : "";
+  }
+  function zcodeProtocolProviderKind(kind) {
+    const text = String(kind || "").trim();
+    if (text === "openai" || text === "openai-compatible") return text;
+    return "anthropic";
+  }
+  function zcodeProtocolApiFormat(provider, kind) {
+    const direct = provider && (provider.apiFormat || provider.api_format);
+    if (direct) return direct;
+    if (kind === "openai") return "openai-responses";
+    if (kind === "openai-compatible") return "openai-chat-completions";
+    return "anthropic-messages";
+  }
+  function positiveNumber(value) {
+    return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : void 0;
+  }
+  function zcodeProtocolModelEntry(modelId, raw) {
+    const model = raw && typeof raw === "object" ? raw : {};
+    const limit = model.limit && typeof model.limit === "object" ? model.limit : {};
+    return {
+      modelId,
+      ...model.label || model.name ? { label: model.label || model.name } : {},
+      ...positiveNumber(model.contextWindow || limit.contextWindow) ? { contextWindow: positiveNumber(model.contextWindow || limit.contextWindow) } : {},
+      ...positiveNumber(model.maxOutputTokens || limit.maxOutputTokens) ? { maxOutputTokens: positiveNumber(model.maxOutputTokens || limit.maxOutputTokens) } : {}
+    };
+  }
+  function zcodeProtocolModels(provider, selectedModelId) {
+    const models = provider && provider.models;
+    const result = [];
+    if (Array.isArray(models)) {
+      for (const raw of models) {
+        const id = raw && (raw.id || raw.modelID || raw.modelId || raw.name);
+        if (id) result.push(zcodeProtocolModelEntry(String(id), raw));
+      }
+    } else if (models && typeof models === "object") {
+      for (const [id, raw] of Object.entries(models)) result.push(zcodeProtocolModelEntry(String(id), raw));
+    }
+    if (selectedModelId && !result.some((m) => m.modelId === selectedModelId)) {
+      result.unshift({ modelId: selectedModelId });
+    }
+    return result;
+  }
+  function zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef, thoughtLevel } = {}) {
+    var _a;
+    const entry = zcodeDesktopProviderEntry({ config, setting, modelRef });
+    if (!entry) return null;
+    const provider = entry.provider || {};
+    const options = provider.options && typeof provider.options === "object" ? provider.options : {};
+    const kind = zcodeProtocolProviderKind(provider.kind);
+    const apiKey = options.apiKey || provider.apiKey;
+    const protocolProvider = {
+      providerId: entry.providerId,
+      kind,
+      apiFormat: zcodeProtocolApiFormat(provider, kind),
+      ...provider.name || provider.label ? { label: provider.name || provider.label } : {},
+      source: provider.source || "custom",
+      ...options.baseURL || provider.baseURL || provider.endpoints && provider.endpoints.baseURL ? { baseURL: options.baseURL || provider.baseURL || provider.endpoints.baseURL } : {},
+      ...apiKey ? { apiKey: { source: "inline", value: String(apiKey) } } : {},
+      ...typeof options.apiKeyRequired === "boolean" || typeof provider.apiKeyRequired === "boolean" ? { apiKeyRequired: (_a = options.apiKeyRequired) != null ? _a : provider.apiKeyRequired } : {},
+      models: zcodeProtocolModels(provider, entry.modelId)
+    };
+    return {
+      revision: "desktop-v2:" + entry.providerId,
+      generatedAt: Date.now(),
+      model: { providerId: entry.providerId, modelId: entry.modelId },
+      provider: protocolProvider,
+      ...thoughtLevel ? { thoughtLevel } : {}
+    };
+  }
+  function zcodeDesktopBasePath(env) {
+    const home = env && (env.USERPROFILE || env.HOME || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : ""));
+    return home ? String(home).replace(/[\\/]+$/, "") + "\\.zcode\\v2" : "";
+  }
+  function readJsonFile(fsImpl, path) {
+    try {
+      return JSON.parse(fsImpl.readFileSync(path, "utf8"));
+    } catch (e) {
+      return null;
+    }
+  }
+  function readZcodeDesktopModel({ env, fsImpl } = {}) {
+    const base = zcodeDesktopBasePath(env || {});
+    if (!base) return "";
+    const fs = fsImpl || getCepRequire6()("fs");
+    const config = readJsonFile(fs, base + "\\config.json");
+    const setting = readJsonFile(fs, base + "\\setting.json");
+    return zcodeModelFromDesktopConfig({ config, setting });
+  }
+  function readZcodeDesktopRuntimeModel({ env, fsImpl, modelRef, thoughtLevel } = {}) {
+    const base = zcodeDesktopBasePath(env || {});
+    if (!base) return null;
+    const fs = fsImpl || getCepRequire6()("fs");
+    const config = readJsonFile(fs, base + "\\config.json");
+    const setting = readJsonFile(fs, base + "\\setting.json");
+    return zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef, thoughtLevel });
+  }
+  function zcodeProviderFamily(providerId) {
+    const text = String(providerId || "").trim();
+    const id = text.startsWith("builtin:") ? text.slice("builtin:".length) : text;
+    return id.replace(/-(?:start|coding)-plan$/i, "").split(/[/:]/)[0];
+  }
+  function getNodeBuffer() {
+    return globalThis.Buffer || getCepRequire6()("buffer").Buffer;
+  }
+  function zcodeCredentialSecret(env, osImpl) {
+    const explicit = env && env.ZCODE_CREDENTIAL_SECRET && String(env.ZCODE_CREDENTIAL_SECRET).trim();
+    if (explicit) return explicit;
+    const os = osImpl || getCepRequire6()("os");
+    let username = "unknown";
+    try {
+      username = os.userInfo().username;
+    } catch (e) {
+    }
+    return "zcode-credential-fallback:" + os.platform() + ":" + os.homedir() + ":" + username;
+  }
+  function decryptZcodeCredentialValue(value, { env, cryptoImpl, osImpl } = {}) {
+    const text = String(value || "");
+    if (!text.startsWith(ZCODE_CREDENTIAL_PREFIX)) return text;
+    const crypto = cryptoImpl || getCepRequire6()("crypto");
+    const BufferImpl = getNodeBuffer();
+    const parts = text.slice(ZCODE_CREDENTIAL_PREFIX.length).split(".");
+    if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) {
+      throw new Error("Credential decrypt failed: invalid ciphertext format");
+    }
+    const key = crypto.createHash("sha256").update(zcodeCredentialSecret(env || {}, osImpl)).digest();
+    const iv = BufferImpl.from(parts[0], "base64url");
+    const authTag = BufferImpl.from(parts[1], "base64url");
+    const cipherText = BufferImpl.from(parts[2], "base64url");
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+    decipher.setAuthTag(authTag);
+    return BufferImpl.concat([decipher.update(cipherText), decipher.final()]).toString("utf8");
+  }
+  function readZcodeOAuthAccessToken({ env, fsImpl, providerId } = {}) {
+    const base = zcodeDesktopBasePath(env || {});
+    if (!base) return "";
+    const fs = fsImpl || getCepRequire6()("fs");
+    const credentials = readJsonFile(fs, base + "\\credentials.json");
+    if (!credentials || typeof credentials !== "object") return "";
+    const providers = [];
+    const family = zcodeProviderFamily(providerId);
+    if (family) providers.push(family);
+    const active = credentials["oauth:active_provider"];
+    if (active) {
+      try {
+        const activeProvider = decryptZcodeCredentialValue(active, { env });
+        if (activeProvider && !providers.includes(activeProvider)) providers.push(activeProvider);
+      } catch (e) {
+      }
+    }
+    for (const provider of providers) {
+      const raw = credentials["oauth:" + provider + ":access_token"];
+      if (!raw) continue;
+      return decryptZcodeCredentialValue(raw, { env });
+    }
+    return "";
+  }
+  function resolveBigModelApiOrigin(env = {}) {
+    const explicit = env.BIGMODEL_API_BASE_URL || env.BIGMODEL_PRODUCTION_API_BASE_URL;
+    return String(explicit || BIGMODEL_API_ORIGIN).replace(/\/+$/, "");
+  }
+  function remoteCodeOk(code) {
+    return code === void 0 || code === null || code === 0 || code === 200 || code === "0" || code === "200";
+  }
+  async function defaultHttpRequestJson({ url, method = "GET", headers = {}, body }) {
+    const target = new URL(url);
+    const moduleName = target.protocol === "http:" ? "http" : "https";
+    const http = getCepRequire6()(moduleName);
+    const BufferImpl = getNodeBuffer();
+    const payload = body === void 0 ? null : typeof body === "string" ? body : JSON.stringify(body);
+    const requestHeaders = Object.assign({}, headers);
+    if (payload !== null && requestHeaders["Content-Length"] === void 0) {
+      requestHeaders["Content-Length"] = String(BufferImpl.byteLength(payload));
+    }
+    return new Promise((resolve, reject) => {
+      const req = http.request(target, { method, headers: requestHeaders }, (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => {
+          const text = BufferImpl.concat(chunks).toString("utf8");
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            reject(new Error("ZCode OAuth request failed with HTTP " + res.statusCode + ": " + text.slice(0, 300)));
+            return;
+          }
+          try {
+            resolve(text ? JSON.parse(text) : {});
+          } catch (e) {
+            reject(new Error("ZCode OAuth response was not valid JSON"));
+          }
+        });
+      });
+      req.on("error", reject);
+      if (payload !== null) req.write(payload);
+      req.end();
+    });
+  }
+  async function requestRemoteData(requestJson, options) {
+    var _a;
+    const json = await requestJson(options);
+    if (!json || typeof json !== "object") throw new Error("ZCode OAuth response was empty");
+    if (!remoteCodeOk(json.code)) throw new Error(json.msg || "Remote business error " + json.code);
+    return (_a = json.data) != null ? _a : null;
+  }
+  function pickOrgAndProject(customerInfo) {
+    const organizations = customerInfo && Array.isArray(customerInfo.organizations) ? customerInfo.organizations : [];
+    const org = organizations.find((item) => String(item.organizationName || "").includes("\u9ED8\u8BA4\u673A\u6784")) || organizations[0];
+    const projects = org && Array.isArray(org.projects) ? org.projects : [];
+    const project = projects.find((item) => String(item.projectName || "").includes("\u9ED8\u8BA4\u9879\u76EE")) || projects[0];
+    if (!org || !project || !org.organizationId || !project.projectId) return null;
+    return { organizationId: org.organizationId, projectId: project.projectId };
+  }
+  async function resolveBizApiKey({ authorization, host, requestJson, requireSecretKey = false }) {
+    const headers = { Authorization: authorization, "Content-Type": JSON_CONTENT_TYPE };
+    const customer = await requestRemoteData(requestJson, {
+      method: "GET",
+      url: host + "/api/biz/customer/getCustomerInfo",
+      headers
+    });
+    const orgProject = pickOrgAndProject(customer);
+    if (!orgProject) throw new Error("Unable to resolve ZCode OAuth organization and project.");
+    const apiKeysUrl = host + "/api/biz/v1/organization/" + encodeURIComponent(orgProject.organizationId) + "/projects/" + encodeURIComponent(orgProject.projectId) + "/api_keys";
+    const apiKeys = await requestRemoteData(requestJson, { method: "GET", url: apiKeysUrl, headers });
+    const existing = Array.isArray(apiKeys) ? apiKeys.find((item) => item && item.name === ZCODE_API_KEY_NAME) : null;
+    const created = existing || await requestRemoteData(requestJson, {
+      method: "POST",
+      url: apiKeysUrl,
+      headers,
+      body: { name: ZCODE_API_KEY_NAME }
+    });
+    const apiKey = String(created && (created.apiKey || created.api_key) || "").trim();
+    if (!apiKey) throw new Error("ZCode OAuth API key response is missing apiKey.");
+    const copied = await requestRemoteData(requestJson, {
+      method: "GET",
+      url: apiKeysUrl + "/copy/" + encodeURIComponent(apiKey),
+      headers
+    });
+    const secretKey = String(copied && (copied.secretKey || copied.secret_key) || "").trim();
+    if (!secretKey && requireSecretKey) throw new Error("ZCode OAuth API key copy response is missing secretKey.");
+    return secretKey ? apiKey + "." + secretKey : apiKey;
+  }
+  async function resolveZcodeCodingPlanApiKey({ accessToken, providerId, env, requestJson = defaultHttpRequestJson } = {}) {
+    const token = String(accessToken || "").trim();
+    if (!token) throw new Error("ZCode desktop OAuth token is unavailable.");
+    const family = zcodeProviderFamily(providerId);
+    if (family === "zai") {
+      const data = await requestRemoteData(requestJson, {
+        method: "POST",
+        url: ZAI_BIZ_API_ORIGIN + "/api/auth/z/login",
+        headers: { "Content-Type": JSON_CONTENT_TYPE },
+        body: { token }
+      });
+      const bizToken = String(data && (data.access_token || data.accessToken) || "").trim();
+      if (!bizToken) throw new Error("ZCode OAuth biz token response is missing access_token.");
+      return resolveBizApiKey({ authorization: "Bearer " + bizToken, host: ZAI_BIZ_API_ORIGIN, requestJson, requireSecretKey: true });
+    }
+    return resolveBizApiKey({ authorization: token, host: resolveBigModelApiOrigin(env || {}), requestJson });
+  }
+  function runtimeModelWithApiKey(runtimeModel, apiKey) {
+    const next = clone4(runtimeModel);
+    next.revision = (runtimeModel.revision || "runtime-model") + ":oauth:" + Date.now();
+    next.generatedAt = Date.now();
+    next.provider = Object.assign({}, next.provider || {}, {
+      apiKey: { source: "inline", value: String(apiKey) }
+    });
+    return next;
+  }
+  function isZcodePlanRuntimeModel(runtimeModel, providerId) {
+    const provider = runtimeModel && runtimeModel.provider ? runtimeModel.provider : {};
+    const id = String(providerId || provider.providerId || "").trim();
+    const baseURL = String(provider.baseURL || "").replace(/\/+$/, "").toLowerCase();
+    return /-start-plan$/i.test(id) || baseURL.endsWith("/zcode-plan") || baseURL.endsWith("/zcode-plan/anthropic");
+  }
+  function zcodePlanRuntimeHeadersMessage() {
+    return "ZCode desktop OAuth plan providers require ZCode desktop captcha/runtime headers before model requests. The AE panel can read the desktop provider config, but the current app-server bridge cannot generate or apply those headers yet. Use ZCode Desktop chat or configure an API-key provider in ZCode for now.";
+  }
+  function isLegacyZcodeModelRef(modelRef) {
+    return LEGACY_ZCODE_MODEL_REFS.has(String(modelRef || "").trim());
+  }
+  function zcodeProtocolModelFromRef(modelRef) {
+    const text = String(modelRef || "").trim();
+    const slash = text.indexOf("/");
+    if (slash <= 0 || slash === text.length - 1) return null;
+    return {
+      providerId: text.slice(0, slash),
+      modelId: text.slice(slash + 1)
+    };
+  }
+  function zcodeMissingApiKeyHint(message) {
+    const text = String(message || "");
+    const match = /Model provider is missing an API key:\s*([^\s.]+)/i.exec(text);
+    if (!match || /AE_MCP_ZCODE_API_KEY|ZCODE_API_KEY/.test(text)) return text;
+    const providerEnv = zcodeProviderApiKeyEnv(match[1]);
+    const vars = ["AE_MCP_ZCODE_API_KEY"];
+    if (providerEnv) vars.push(providerEnv);
+    vars.push("ZCODE_API_KEY");
+    return (text.endsWith(".") ? text : text + ".") + " Set " + vars.join(", ") + " before launching AE.";
+  }
+  function zcodeMissingModelConfigHint(message) {
+    const text = String(message || "");
+    if (!/Model config is missing/i.test(text) || /Open ZCode/.test(text)) return text;
+    return (text.endsWith(".") ? text : text + ".") + " Open ZCode and select a provider/model, or create ~/.zcode/cli/config.json with an explicit provider/model before launching AE.";
+  }
+  function zcodeProviderAuthenticationHint(message) {
+    const text = String(message || "");
+    if (!/Provider authentication failed/i.test(text) || /runtime headers/i.test(text)) return text;
+    return (text.endsWith(".") ? text : text + ".") + " If this is a ZCode desktop OAuth plan provider, the AE panel cannot yet bridge ZCode desktop captcha/runtime headers.";
+  }
+  function zcodePlanRuntimeFailureHint(message, runtimeModel) {
+    const text = String(message || "");
+    if (!/Provider authentication failed|Model request failed/i.test(text)) return text;
+    if (/runtime headers/i.test(text) || !isZcodePlanRuntimeModel(runtimeModel)) return text;
+    return (text.endsWith(".") ? text : text + ".") + " " + zcodePlanRuntimeHeadersMessage();
+  }
+  function zcodeRepairHint(message) {
+    return zcodeProviderAuthenticationHint(zcodeMissingModelConfigHint(zcodeMissingApiKeyHint(message)));
+  }
+  function zcodeErrorMessage(value, fallback = "ZCode turn failed") {
+    if (!value) return zcodeRepairHint(fallback);
+    if (typeof value === "string") return zcodeRepairHint(value);
+    if (typeof value === "object") {
+      const direct = value.message || value.detail || value.reason || value.error;
+      if (direct && direct !== value) return zcodeErrorMessage(direct, fallback);
+      try {
+        const text = JSON.stringify(value);
+        return zcodeRepairHint(text && text !== "{}" ? text : fallback);
+      } catch (e) {
+        return zcodeRepairHint(fallback);
+      }
+    }
+    return zcodeRepairHint(String(value));
+  }
+  function zcodeErrorKind(message) {
+    return /\b(model|provider|api[-\s_]*key|credential|auth)\b/i.test(String(message || "")) ? "model" : "mcp";
+  }
   function createZcodeBackend({
     spawnImpl,
     getModel,
@@ -13840,6 +14454,10 @@
     onEvent,
     lang = "zh",
     env,
+    readDesktopModel = readZcodeDesktopModel,
+    readDesktopRuntimeModel = readZcodeDesktopRuntimeModel,
+    readOAuthAccessToken = readZcodeOAuthAccessToken,
+    resolveCodingPlanApiKey = resolveZcodeCodingPlanApiKey,
     resolveCli = resolveZcodeCli,
     resolveNode = resolveSystemNode
   }) {
@@ -13849,6 +14467,7 @@
     let sessionPromise = null;
     let sessionId = null;
     let subscribed = false;
+    let activeRuntimeModel = null;
     let stopping = false;
     let stderrTail = "";
     let transcript = [];
@@ -13868,7 +14487,38 @@
       return getCepRequire6()("child_process").spawn;
     }
     function currentEnv() {
-      return Object.assign({}, getCepEnv6(), env || {});
+      const next = Object.assign({}, getCepEnv6(), env || {});
+      const panelModel = next.AE_MCP_ZCODE_MODEL && String(next.AE_MCP_ZCODE_MODEL).trim();
+      if (!next.ZCODE_MODEL && panelModel) next.ZCODE_MODEL = panelModel;
+      const panelApiKey = next.AE_MCP_ZCODE_API_KEY && String(next.AE_MCP_ZCODE_API_KEY).trim();
+      if (panelApiKey) {
+        if (!next.ZCODE_API_KEY) next.ZCODE_API_KEY = panelApiKey;
+        const providerEnv = zcodeProviderApiKeyEnv(zcodeProviderId(next.ZCODE_MODEL));
+        if (providerEnv && !next[providerEnv]) next[providerEnv] = panelApiKey;
+      }
+      return next;
+    }
+    function currentModelRef(spawnEnv) {
+      const explicitEnvModel = spawnEnv && spawnEnv.ZCODE_MODEL && String(spawnEnv.ZCODE_MODEL).trim();
+      if (explicitEnvModel) return explicitEnvModel;
+      const selectedModel = getModel ? String(getModel() || "").trim() : "";
+      if (selectedModel.includes("/") && !isLegacyZcodeModelRef(selectedModel)) return selectedModel;
+      let desktopModel = "";
+      try {
+        desktopModel = readDesktopModel ? String(readDesktopModel({ env: spawnEnv }) || "").trim() : "";
+      } catch (e) {
+      }
+      if (desktopModel) return desktopModel;
+      if (selectedModel.includes("/")) return selectedModel;
+      return ZCODE_BUILTIN_DEFAULT_MODEL;
+    }
+    function currentRuntimeModel(spawnEnv, modelRef, thoughtLevel) {
+      if (!readDesktopRuntimeModel) return null;
+      try {
+        return readDesktopRuntimeModel({ env: spawnEnv, modelRef, thoughtLevel }) || null;
+      } catch (e) {
+        return null;
+      }
     }
     function finishActive() {
       if (!activeResolve) {
@@ -13906,6 +14556,10 @@
         handleUserInput(params, message.id);
         return;
       }
+      if (method === "interaction/requestProviderRuntimeHeaders") {
+        handleProviderRuntimeHeaders(params, message.id);
+        return;
+      }
       if (method === "elicitation/create") {
         handleElicitation(params, message.id);
         return;
@@ -13915,6 +14569,33 @@
         return;
       }
       if (rpc) rpc.respondError(message.id, -32601, "Method not found: " + method);
+    }
+    async function handleProviderRuntimeHeaders(params, rpcId) {
+      try {
+        const spawnEnv = currentEnv();
+        const providerId = String(params.providerId || params.modelRef && params.modelRef.providerId || activeRuntimeModel && activeRuntimeModel.model && activeRuntimeModel.model.providerId || "").trim();
+        const modelId = String(params.modelRef && params.modelRef.modelId || activeRuntimeModel && activeRuntimeModel.model && activeRuntimeModel.model.modelId || "").trim();
+        const modelRef = providerId && modelId ? providerId + "/" + modelId : currentModelRef(spawnEnv);
+        const runtimeModel = activeRuntimeModel || currentRuntimeModel(spawnEnv, modelRef, thoughtLevelFromEffort());
+        if (!providerId || !runtimeModel) throw new Error("ZCode runtime model is unavailable for OAuth header refresh.");
+        if (isZcodePlanRuntimeModel(runtimeModel, providerId)) {
+          if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: zcodePlanRuntimeHeadersMessage() });
+          return;
+        }
+        const accessToken = await readOAuthAccessToken({ env: spawnEnv, providerId, modelRef });
+        if (!accessToken) throw new Error("ZCode desktop OAuth token is unavailable. Open ZCode, sign in again, then retry from the panel.");
+        const apiKey = await resolveCodingPlanApiKey({ accessToken, providerId, env: spawnEnv });
+        const refreshedRuntimeModel = runtimeModelWithApiKey(runtimeModel, apiKey);
+        await rpc.request("session/updateRuntimeModelConfig", {
+          sessionId: params.sessionId || sessionId,
+          runtimeModel: refreshedRuntimeModel
+        }, RPC_TIMEOUT_MS2);
+        activeRuntimeModel = refreshedRuntimeModel;
+        if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: true, providerRevision: refreshedRuntimeModel.revision });
+      } catch (e) {
+        const message = zcodeErrorMessage(e, "ZCode desktop OAuth header refresh failed.");
+        if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: message });
+      }
     }
     function handleUserInput(params, rpcId) {
       const input = params.input || params;
@@ -14030,8 +14711,8 @@
       }
       if (type === "turn.failed") {
         const payload = params.payload || {};
-        const message2 = payload.error || payload.message || "ZCode turn failed";
-        emit({ type: "error", kind: "mcp", message: String(message2) });
+        const message2 = zcodePlanRuntimeFailureHint(zcodeErrorMessage(payload.error || payload.message), activeRuntimeModel);
+        emit({ type: "error", kind: zcodeErrorKind(message2), message: message2 });
         finishActive();
         return;
       }
@@ -14159,7 +14840,7 @@
     function thoughtLevelFromEffort() {
       const effort = getEffort ? getEffort() : null;
       if (!effort) return void 0;
-      return ["low", "medium", "high"].includes(effort) ? effort : void 0;
+      return ZCODE_THOUGHT_LEVELS.has(effort) ? effort : void 0;
     }
     async function ensureSession() {
       if (sessionId) return sessionId;
@@ -14173,6 +14854,12 @@
           mode: modeFromTier()
         };
         const thoughtLevel = thoughtLevelFromEffort();
+        const modelRef = currentModelRef(spawnEnv);
+        const runtimeModel = currentRuntimeModel(spawnEnv, modelRef, thoughtLevel);
+        if (runtimeModel) createParams.runtimeModel = runtimeModel;
+        activeRuntimeModel = runtimeModel || null;
+        const model = runtimeModel && runtimeModel.model || zcodeProtocolModelFromRef(modelRef);
+        if (model) createParams.model = model;
         if (thoughtLevel) createParams.thoughtLevel = thoughtLevel;
         if (getMcpSpec) {
           const spec = await getMcpSpec();
@@ -14190,12 +14877,13 @@
           }
         }
         const result = await rpc.request("session/create", createParams);
-        sessionId = result && result.session && result.session.sessionId || null;
-        if (!sessionId) throw new Error("ZCode session/create returned no sessionId");
+        const nextSessionId = result && result.session && result.session.sessionId || null;
+        if (!nextSessionId) throw new Error("ZCode session/create returned no sessionId");
         if (!subscribed) {
-          await rpc.request("session/subscribe", { sessionId, deliveryKind: DELIVERY_KIND }, 1e4);
+          await rpc.request("session/subscribe", { sessionId: nextSessionId, deliveryKind: DELIVERY_KIND }, 1e4);
           subscribed = true;
         }
+        sessionId = nextSessionId;
         return sessionId;
       })();
       try {
@@ -14220,12 +14908,13 @@
           if (instr) turnText = instr + "\n\n---\n\n" + userText;
         }
         rpc.request("session/send", { sessionId, content: turnText }, 18e4).catch((e) => {
-          const message = e && e.message ? e.message : "Failed to start ZCode turn.";
-          emit({ type: "error", kind: /model/i.test(message) ? "model" : "mcp", message });
+          const message = zcodeErrorMessage(e, "Failed to start ZCode turn.");
+          emit({ type: "error", kind: zcodeErrorKind(message), message });
           finishActive();
         });
       } catch (e) {
-        emit({ type: "error", kind: "mcp", message: e && e.message ? e.message : "Failed to start ZCode turn." });
+        const message = zcodeErrorMessage(e, "Failed to start ZCode turn.");
+        emit({ type: "error", kind: zcodeErrorKind(message), message });
         finishActive();
       }
       return activeRun;
@@ -14299,6 +14988,7 @@
       sessionPromise = null;
       sessionId = null;
       subscribed = false;
+      activeRuntimeModel = null;
       transcript = [];
       pendingApprovals.clear();
       pendingElicitations.clear();
@@ -14311,7 +15001,7 @@
     }
     async function setThoughtLevel(level) {
       if (!sessionId || !rpc) return false;
-      if (!["low", "medium", "high"].includes(level)) return false;
+      if (!ZCODE_THOUGHT_LEVELS.has(level)) return false;
       try {
         await rpc.request("session/setThoughtLevel", { sessionId, thoughtLevel: level });
         return true;
@@ -14322,12 +15012,13 @@
     async function probeAccount() {
       try {
         await ensureSession();
-        return { loggedIn: true, provider: "zcode" };
+        return { loggedIn: true, runtimeOk: true, provider: "zcode" };
       } catch (e) {
         return {
           loggedIn: true,
+          runtimeOk: false,
           provider: "zcode",
-          probeWarning: e && e.message ? e.message : String(e)
+          detail: zcodeErrorMessage(e, "ZCode runtime unavailable.")
         };
       }
     }
@@ -14450,12 +15141,21 @@
     if (globalThis.require) return globalThis.require;
     throw new Error("CEP Node require is unavailable");
   }
-  function fetchAnthropicModels({ apiKey, httpsImpl, timeoutMs = 8e3 } = {}) {
+  function fetchAnthropicModels({ apiKey, baseUrl = "", httpsImpl, timeoutMs = 8e3 } = {}) {
     const https = httpsImpl || getCepRequire7()("https");
     return new Promise((resolve) => {
+      let endpoint;
+      try {
+        endpoint = new URL(anthropicEndpoint(baseUrl, "/v1/models?limit=100"));
+      } catch (e) {
+        resolve(null);
+        return;
+      }
       const req = https.request({
-        hostname: "api.anthropic.com",
-        path: "/v1/models?limit=100",
+        hostname: endpoint.hostname,
+        port: endpoint.port || void 0,
+        protocol: endpoint.protocol,
+        path: endpoint.pathname + endpoint.search,
         method: "GET",
         headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" }
       }, (res) => {
@@ -14479,9 +15179,9 @@
       req.end();
     });
   }
-  async function cachedByokModels({ apiKey, fetcher, storage, now = Date.now } = {}) {
+  async function cachedByokModels({ apiKey, baseUrl = "", fetcher, storage, now = Date.now } = {}) {
     const store = storage || globalThis.localStorage;
-    const keyTag = String(apiKey || "").slice(-6);
+    const keyTag = String(apiKey || "").slice(-6) + "|" + normalizeBaseUrl(baseUrl);
     try {
       const raw = store.getItem(CACHE_KEY);
       if (raw) {
@@ -14490,7 +15190,7 @@
       }
     } catch (e) {
     }
-    const run = fetcher || (() => fetchAnthropicModels({ apiKey }));
+    const run = fetcher || (() => fetchAnthropicModels({ apiKey, baseUrl }));
     const models = await run();
     if (models) {
       try {
@@ -14907,6 +15607,12 @@
     return items;
   }
 
+  // src/lib/wizardCopy.js
+  function copyWizardConfig(copyText3, fallbackConfig, selectedConfig) {
+    const text = selectedConfig || fallbackConfig || "";
+    return copyText3 ? copyText3(text) : void 0;
+  }
+
   // src/cep/hostBridge.js
   function normalizeCepPath(value) {
     var normalized = String(value || "");
@@ -15032,8 +15738,12 @@
       notLoggedInHint: "Claude \u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login\uFF0C\u518D\u5230\u8BBE\u7F6E\u91CC\u91CD\u65B0\u68C0\u6D4B",
       codexProbingHint: "\u6B63\u5728\u68C0\u6D4B Codex \u767B\u5F55\u6001\u2026",
       codexNotLoggedInHint: "Codex \u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C codex \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B",
+      codexRuntimeHint: "Codex \u8FD0\u884C\u65F6\u4E0D\u53EF\u7528\uFF1A\u8BF7\u786E\u8BA4 codex CLI \u53EF\u7528\u540E\u91CD\u65B0\u68C0\u6D4B",
       openCodeProbingHint: "\u6B63\u5728\u68C0\u6D4B OpenCode \u767B\u5F55\u6001\u2026",
       openCodeNotLoggedInHint: "OpenCode \u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u5B8C\u6210\u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B",
+      zcodeProbingHint: "\u6B63\u5728\u68C0\u6D4B ZCode \u8FD0\u884C\u65F6\u2026",
+      zcodeNotLoggedInHint: "ZCode \u5F53\u524D\u4E0D\u53EF\u7528\uFF1A\u8BF7\u6253\u5F00 ZCode \u6216\u5B8C\u6210\u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B",
+      zcodeRuntimeHint: "ZCode \u8FD0\u884C\u65F6\u4E0D\u53EF\u7528\uFF1A\u8BF7\u5B89\u88C5 ZCode\uFF0C\u786E\u8BA4 Node \u53EF\u7528\uFF0C\u6216\u8BBE\u7F6E AE_MCP_ZCODE_CLI \u540E\u91CD\u65B0\u68C0\u6D4B",
       noNodeHint: "\u5185\u5D4C\u5BF9\u8BDD\u9700\u8981\u7CFB\u7EDF Node 18+",
       pausedHint: "\u5DF2\u6682\u505C \u2014 \u6062\u590D\u540E\u624D\u80FD\u53D1\u9001",
       goSettings: "\u53BB\u8BBE\u7F6E"
@@ -15061,8 +15771,12 @@
       notLoggedInHint: "Not logged in: run claude /login in a terminal, then re-check in Settings",
       codexProbingHint: "Checking Codex login\u2026",
       codexNotLoggedInHint: "Codex is not logged in: log in with codex, then re-check",
+      codexRuntimeHint: "Codex runtime unavailable: confirm the codex CLI is available, then re-check",
       openCodeProbingHint: "Checking OpenCode login\u2026",
       openCodeNotLoggedInHint: "OpenCode is not logged in: sign in with opencode, then re-check",
+      zcodeProbingHint: "Checking ZCode runtime\u2026",
+      zcodeNotLoggedInHint: "ZCode is not available: open ZCode or sign in, then re-check",
+      zcodeRuntimeHint: "ZCode runtime unavailable: install ZCode, confirm Node is available, or set AE_MCP_ZCODE_CLI, then re-check",
       noNodeHint: "Embedded chat needs system Node 18+",
       pausedHint: "Paused \u2014 resume to send",
       goSettings: "Open Settings"
@@ -15121,8 +15835,8 @@
     } catch (e) {
     }
   }
-  async function validateAnthropicKey(key) {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
+  async function validateAnthropicKey(key, baseUrl = "") {
+    const r = await fetch(anthropicEndpoint(baseUrl, "/v1/messages"), {
       method: "POST",
       headers: {
         "x-api-key": key,
@@ -15183,6 +15897,16 @@
         return "";
       }
     });
+    const [anthropicBaseUrl, setAnthropicBaseUrl] = import_react39.default.useState(() => readPref("ae_mcp_anthropic_base_url", ""));
+    const [codexApiKey, setCodexApiKey] = import_react39.default.useState(() => {
+      try {
+        return keyStore ? keyStore.readKey("codex") : "";
+      } catch (e) {
+        return "";
+      }
+    });
+    const [codexBaseUrl, setCodexBaseUrl] = import_react39.default.useState(() => readPref("ae_mcp_codex_base_url", ""));
+    const [customModel, setCustomModel] = import_react39.default.useState(() => readPref("ae_mcp_custom_model", ""));
     const [model, setModel] = import_react39.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
     const [sessionModel, setSessionModel] = import_react39.default.useState(null);
     const [sessionEffort, setSessionEffort] = import_react39.default.useState(null);
@@ -15199,20 +15923,21 @@
     const [chatEntries, setChatEntries] = import_react39.default.useState([]);
     const [chatStreaming, setChatStreaming] = import_react39.default.useState(false);
     const [thinkingActive, setThinkingActive] = import_react39.default.useState(false);
-    const baseDescriptor = import_react39.default.useMemo(() => baseDescriptorFor(backendPref), [backendPref]);
+    const customModelForBackend = backendPref === "byok" || backendPref === "codex" ? customModel : "";
+    const baseDescriptor = import_react39.default.useMemo(() => descriptorWithCustomModel(baseDescriptorFor(backendPref), customModelForBackend), [backendPref, customModelForBackend]);
     const [descriptor, setDescriptor] = import_react39.default.useState(() => baseDescriptor);
     import_react39.default.useEffect(() => {
       let alive = true;
       setDescriptor(baseDescriptor);
       if (backendPref === "byok" && apiKey) {
-        cachedByokModels({ apiKey }).then((list) => {
-          if (alive) setDescriptor(mergeByokModels(byokStaticDescriptor(), list));
+        cachedByokModels({ apiKey, baseUrl: anthropicBaseUrl }).then((list) => {
+          if (alive) setDescriptor(descriptorWithCustomModel(mergeByokModels(byokStaticDescriptor(), list), customModelForBackend));
         }).catch(() => {
         });
       }
       if (backendPref === "codex") {
         const cached = codexModels || readCachedCodexModels(window.localStorage);
-        if (cached) setDescriptor(codexDescriptorFromModels({ models: cached }));
+        if (cached) setDescriptor(descriptorWithCustomModel(codexDescriptorFromModels({ models: cached }), customModelForBackend));
       }
       if (backendPref === "opencode") {
         const cached = openCodeModels || readCachedOpenCodeModels(window.localStorage);
@@ -15221,15 +15946,23 @@
       return () => {
         alive = false;
       };
-    }, [apiKey, backendPref, baseDescriptor, codexModels, openCodeModels]);
+    }, [anthropicBaseUrl, apiKey, backendPref, baseDescriptor, codexModels, customModelForBackend, openCodeModels]);
     const requestedModel = sessionModel || model;
     const effectiveModel = descriptor.models.some((m) => m.id === requestedModel) ? requestedModel : descriptor.defaultModelId || descriptor.models[0] && descriptor.models[0].id || requestedModel;
     const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
     const effectiveEffort = sessionEffort || (modelMeta.effortLevels && modelMeta.effortLevels.length ? descriptor.defaultEffort : null);
     const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
-    const runtimeRef = import_react39.default.useRef({ apiKey, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast });
+    const providerProfile = import_react39.default.useMemo(() => normalizeProviderProfile({
+      anthropicBaseUrl,
+      codexApiKey,
+      codexBaseUrl
+    }), [anthropicBaseUrl, codexApiKey, codexBaseUrl]);
+    const hasCodexCustomProvider = Boolean(providerProfile.codexBaseUrl);
+    const runtimeRef = import_react39.default.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast });
     runtimeRef.current = {
       apiKey,
+      apiBaseUrl: providerProfile.anthropicBaseUrl,
+      providerProfile,
       model: effectiveModel,
       permissionMode,
       effort: effectiveEffort,
@@ -15254,6 +15987,7 @@
     const byokLoop = import_react39.default.useMemo(() => {
       return createAgentLoop({
         getApiKey: () => runtimeRef.current.apiKey,
+        getApiBaseUrl: () => runtimeRef.current.apiBaseUrl,
         getModel: () => runtimeRef.current.model,
         getPermissionMode: () => runtimeRef.current.permissionMode,
         getEffort: () => runtimeRef.current.effort,
@@ -15284,6 +16018,7 @@
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
       getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       getServerInstructions: () => mcp.getServerInstructions(),
+      getProviderProfile: () => runtimeRef.current.providerProfile,
       lang,
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
@@ -15308,7 +16043,7 @@
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, mcp, handleChatEvent]);
-    const selectedEffective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey, codexProbe, zcodeProbe });
+    const selectedEffective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey, codexProbe, hasCodexCustomProvider, zcodeProbe });
     const effective = backendPref === "opencode" ? openCodeProbe === null ? { backend: "none", reason: "opencode-probing" } : !openCodeProbe || !openCodeProbe.loggedIn ? { backend: "none", reason: "opencode-not-logged-in" } : { backend: "opencode", reason: "ok" } : selectedEffective;
     const backendInstances = { subscription: claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };
     const activeBackend = backendInstances[effective.backend] || byokLoop;
@@ -15509,9 +16244,9 @@
     };
     const mcpConfigStr = JSON.stringify(buildMcpConfig(status.port, expertGuidance), null, 2);
     const claudeStatus = probe === null ? { state: "checking" } : probe.nodeOk === false ? { state: "no-node", detail: probe.detail } : probe.loggedIn === false ? { state: "not-logged-in", detail: probe.detail } : { state: "ready", nodeVersion: probe.nodeVersion };
-    const codexStatus = codexProbe === null ? { state: "checking" } : codexProbe.loggedIn === false ? { state: "not-logged-in", detail: codexProbe.detail } : { state: "ready", email: codexProbe.email, planType: codexProbe.planType };
+    const codexStatus = codexProbe === null ? { state: "checking" } : hasCodexCustomProvider && codexProbe.runtimeOk !== false ? { state: "ready", planType: "Custom API", detail: codexProbe.detail } : hasCodexCustomProvider && codexProbe.runtimeOk === false ? { state: "runtime-error", detail: codexProbe.detail } : codexProbe.loggedIn === false ? { state: "not-logged-in", detail: codexProbe.detail } : { state: "ready", email: codexProbe.email, planType: codexProbe.planType };
     const openCodeStatus = openCodeProbe === null ? { state: "checking" } : openCodeProbe.loggedIn === false ? { state: "not-logged-in", detail: openCodeProbe.detail } : { state: "ready" };
-    const zcodeStatus = zcodeProbe === null ? { state: "checking" } : zcodeProbe.probeWarning ? { state: "ready", provider: zcodeProbe.provider, detail: zcodeProbe.probeWarning } : { state: "ready", provider: zcodeProbe.provider };
+    const zcodeStatus = zcodeProbe === null ? { state: "checking" } : zcodeProbe.runtimeOk === false ? { state: "runtime-error", provider: zcodeProbe.provider, detail: zcodeProbe.detail } : zcodeProbe.loggedIn === false ? { state: "not-logged-in", provider: zcodeProbe.provider, detail: zcodeProbe.detail } : { state: "ready", provider: zcodeProbe.provider };
     const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
     if (!wizardDone) {
       return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
@@ -15528,7 +16263,7 @@
           expertGuidance,
           onNext: () => setWizStep((s) => Math.min(3, s + 1)),
           onBack: () => setWizStep((s) => Math.max(1, s - 1)),
-          onCopy: () => copyText(mcpConfigStr),
+          onCopy: (text) => copyWizardConfig(copyText, mcpConfigStr, text),
           onDone: finishWizard,
           onSkip: finishWizard,
           ...wizard.props
@@ -15541,7 +16276,7 @@
       { id: "activity", icon: "list-checks", label: t.activity },
       { id: "settings", icon: "settings", label: t.settings }
     ];
-    const backendDisabledHint = effective.reason === "probing" ? t.probingHint : effective.reason === "not-logged-in" ? t.notLoggedInHint : effective.reason === "codex-probing" ? t.codexProbingHint : effective.reason === "codex-not-logged-in" ? t.codexNotLoggedInHint : effective.reason === "opencode-probing" ? t.openCodeProbingHint : effective.reason === "opencode-not-logged-in" ? t.openCodeNotLoggedInHint : effective.reason === "no-node" ? t.noNodeHint : effective.reason === "no-key" ? t.noKeyHint : "";
+    const backendDisabledHint = effective.reason === "probing" ? t.probingHint : effective.reason === "not-logged-in" ? t.notLoggedInHint : effective.reason === "codex-probing" ? t.codexProbingHint : effective.reason === "codex-not-logged-in" ? t.codexNotLoggedInHint : effective.reason === "codex-runtime-unavailable" ? t.codexRuntimeHint : effective.reason === "opencode-probing" ? t.openCodeProbingHint : effective.reason === "opencode-not-logged-in" ? t.openCodeNotLoggedInHint : effective.reason === "zcode-probing" ? t.zcodeProbingHint : effective.reason === "zcode-not-logged-in" ? t.zcodeNotLoggedInHint : effective.reason === "zcode-runtime-unavailable" ? zcodeUnavailableHint(zcodeStatus, t.zcodeRuntimeHint) : effective.reason === "no-node" ? t.noNodeHint : effective.reason === "no-key" ? t.noKeyHint : "";
     const composerDisabled = paused || effective.backend === "none";
     const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
     return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(import_react39.default.Fragment, { children: [
@@ -15633,12 +16368,47 @@
               if (keyStore) keyStore.clearKey();
               setApiKey("");
             },
+            anthropicBaseUrl,
+            onAnthropicBaseUrlChange: (v) => {
+              setAnthropicBaseUrl(v);
+              writePref("ae_mcp_anthropic_base_url", v);
+            },
+            codexApiKey,
+            codexBaseUrl,
+            onCodexBaseUrlChange: (v) => {
+              setCodexBaseUrl(v);
+              writePref("ae_mcp_codex_base_url", v);
+              setCodexProbe(null);
+              codexBackend.reset();
+            },
+            onSaveCodexApiKey: (k) => {
+              if (keyStore) keyStore.writeKey(k, "codex");
+              setCodexApiKey(k);
+              setCodexProbe(null);
+              codexBackend.reset();
+            },
+            onClearCodexApiKey: () => {
+              if (keyStore) keyStore.clearKey("codex");
+              setCodexApiKey("");
+              setCodexProbe(null);
+              codexBackend.reset();
+            },
             validateKey: validateAnthropicKey,
             model: effectiveModel,
             modelOptions,
+            modelSwitchable: descriptor.perTurnModelSwitch !== false,
             onModelChange: (m) => {
               setModel(m);
               writePref("ae_mcp_model", m);
+            },
+            customModel,
+            onCustomModelChange: (m) => {
+              setCustomModel(m);
+              writePref("ae_mcp_custom_model", m);
+              if (String(m || "").trim()) {
+                setModel(String(m || "").trim());
+                writePref("ae_mcp_model", String(m || "").trim());
+              }
             },
             backend: backendPref,
             onBackendChange: (m) => {
