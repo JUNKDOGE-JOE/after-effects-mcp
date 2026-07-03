@@ -53,20 +53,30 @@ export function selectDescriptor({
   }
   // ZCode: the live model list only becomes known after session/create
   // returns settings.model.available (see zcodeBackend.js's
-  // 'zcode-session-created' event). Session data always wins when present.
-  // When it's empty (custom openai-compatible providers have no session-side
-  // model enumeration), fall back to actively probing the CLI-configured
-  // provider's /v1/models endpoint (zcodeProbedModels, see App.jsx). If
-  // neither is available, fall back to baseDescriptor (the static curated
-  // list). Gated on backendPref (not just effectiveBackend) so probing states
+  // 'zcode-session-created' event). Session data wins when it actually
+  // enumerates a choice (>1 model). Custom openai-compatible providers have
+  // no session-side enumeration: probeAccount's session/create on panel load
+  // returns a TRUTHY result whose available list is empty or only names the
+  // current model, and that thin result must NOT mask the probe-driven
+  // fallback (zcodeProbedModels, /v1/models via App.jsx) — that truthiness
+  // gate was the "still locked with a fresh 16-model cache" bug. Precedence:
+  // rich session list > probed models > thin session list > baseDescriptor.
+  // Gated on backendPref (not just effectiveBackend) so probing states
   // ('zcode-probing' etc, where effectiveBackend may read as 'none') still
-  // pick up session/probe data as soon as it's available.
+  // pick up data as soon as it's available.
   if (backendPref === 'zcode' || effectiveBackend === 'zcode') {
-    if (zcodeSessionModels) return zcodeDescriptorFromModels(zcodeSessionModels);
+    // Count the RAW enumeration, not the derived descriptor's models:
+    // zcodeDescriptorFromModels substitutes the static 2-model builtin list
+    // when available is empty, which must not pass for a real enumeration.
+    const available = zcodeSessionModels && zcodeSessionModels.settings && zcodeSessionModels.settings.model && Array.isArray(zcodeSessionModels.settings.model.available)
+      ? zcodeSessionModels.settings.model.available
+      : [];
+    if (available.length > 1) return zcodeDescriptorFromModels(zcodeSessionModels);
     if (zcodeProbedModels) {
       const probed = zcodeDescriptorFromProbedModels(zcodeProbedModels);
       if (probed) return probed;
     }
+    if (zcodeSessionModels) return zcodeDescriptorFromModels(zcodeSessionModels);
     return baseDescriptor;
   }
   return baseDescriptor;

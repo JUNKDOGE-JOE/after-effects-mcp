@@ -491,12 +491,26 @@ function Shell({ cs }) {
   // us both facts); a stale/expired cache entry re-triggers a fresh probe.
   React.useEffect(() => {
     if (backendPref !== 'zcode') return undefined;
-    if (zcodeSessionModels) return undefined;
+    // Only a session result that actually enumerates a choice (>1 model)
+    // makes probing unnecessary. probeAccount's session/create on custom
+    // providers returns a truthy result whose available list is empty or
+    // only names the current model — that must NOT suppress the probe.
+    const sessionAvailable = zcodeSessionModels && zcodeSessionModels.settings && zcodeSessionModels.settings.model && Array.isArray(zcodeSessionModels.settings.model.available)
+      ? zcodeSessionModels.settings.model.available
+      : [];
+    if (sessionAvailable.length > 1) return undefined;
     const cli = zcodeConfigSummary && zcodeConfigSummary.cli;
     if (!cli || !cli.model || !cli.baseUrl || !cli.hasCredential) return undefined;
     const cached = readCachedZcodeProbedModels(window.localStorage);
     if (cached && cached.cliModel === cli.model) {
-      if (cached !== zcodeProbedModels) setZcodeProbedModels(cached);
+      // Reference-compare fails (fresh object per read), so compare identity
+      // facts to avoid a setState loop between this effect and the descriptor
+      // effect (which now depends on zcodeSessionModels changes too).
+      const same = zcodeProbedModels
+        && zcodeProbedModels.cliModel === cached.cliModel
+        && Array.isArray(zcodeProbedModels.probedModels)
+        && zcodeProbedModels.probedModels.length === cached.probedModels.length;
+      if (!same) setZcodeProbedModels(cached);
       return undefined;
     }
     let alive = true;

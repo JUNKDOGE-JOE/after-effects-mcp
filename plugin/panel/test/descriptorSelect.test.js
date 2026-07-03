@@ -133,12 +133,15 @@ test('selectDescriptor uses zcodeProbedModels when session data is absent', () =
   assert.equal(descriptor.defaultModelId, 'mediastorm_glm/deepseek-v4-flash');
 });
 
-test('selectDescriptor prefers session data over probed models when both are present', () => {
+test('selectDescriptor prefers session data over probed models when the session lists more than one model', () => {
   const baseDescriptor = zcodeStaticDescriptor();
   const sessionResult = {
     settings: {
       model: {
-        available: [{ label: 'GLM-5.2', ref: { modelId: 'GLM-5.2', providerId: 'bigmodel-start-plan' } }],
+        available: [
+          { label: 'GLM-5.2', ref: { modelId: 'GLM-5.2', providerId: 'bigmodel-start-plan' } },
+          { label: 'GLM-5 Turbo', ref: { modelId: 'GLM-5-Turbo', providerId: 'bigmodel-start-plan' } },
+        ],
         current: { modelId: 'GLM-5.2', providerId: 'bigmodel-start-plan' },
       },
     },
@@ -150,7 +153,77 @@ test('selectDescriptor prefers session data over probed models when both are pre
     zcodeSessionModels: sessionResult,
     zcodeProbedModels: { cliModel: 'mediastorm_glm/deepseek-v4-flash', providerId: 'mediastorm_glm', probedModels: [{ id: 'deepseek-v4-flash' }] },
   });
-  assert.deepEqual(descriptor.models.map((m) => m.id), ['bigmodel-start-plan/GLM-5.2']);
+  assert.deepEqual(descriptor.models.map((m) => m.id), ['bigmodel-start-plan/GLM-5.2', 'bigmodel-start-plan/GLM-5-Turbo']);
+});
+
+// Regression (real-panel CDP finding): on panel load, runZcodeProbe ->
+// probeAccount -> ensureSession emits 'zcode-session-created' with a TRUTHY
+// result whose settings.model.available only names the single current model
+// (custom openai-compatible providers have no session-side enumeration).
+// The session branch used to win on truthiness alone, producing a 1-model
+// descriptor that masked the cached probed models -> Settings stayed locked
+// even with a fresh 16-model probe cache sitting in localStorage.
+test('selectDescriptor lets probed models beat a session result that only lists the single current model', () => {
+  const baseDescriptor = zcodeStaticDescriptor();
+  const sessionResult = {
+    settings: {
+      model: {
+        available: [{ label: 'deepseek-v4-flash', ref: { modelId: 'deepseek-v4-flash', providerId: 'mediastorm_glm' } }],
+        current: { modelId: 'deepseek-v4-flash', providerId: 'mediastorm_glm' },
+      },
+    },
+  };
+  const descriptor = selectDescriptor({
+    effectiveBackend: 'zcode',
+    backendPref: 'zcode',
+    baseDescriptor,
+    zcodeSessionModels: sessionResult,
+    zcodeProbedModels: {
+      cliModel: 'mediastorm_glm/deepseek-v4-flash',
+      providerId: 'mediastorm_glm',
+      probedModels: [{ id: 'deepseek-v4-flash' }, { id: 'glm-5.2' }, { id: 'glm-5-turbo' }],
+    },
+  });
+  assert.equal(descriptor.models.length, 3);
+  assert.equal(descriptor.defaultModelId, 'mediastorm_glm/deepseek-v4-flash');
+});
+
+test('selectDescriptor lets probed models beat a session result with an empty available list', () => {
+  const baseDescriptor = zcodeStaticDescriptor();
+  const sessionResult = { settings: { model: { available: [], current: null } } };
+  const descriptor = selectDescriptor({
+    effectiveBackend: 'zcode',
+    backendPref: 'zcode',
+    baseDescriptor,
+    zcodeSessionModels: sessionResult,
+    zcodeProbedModels: { cliModel: 'mediastorm_glm/deepseek-v4-flash', providerId: 'mediastorm_glm', probedModels: [{ id: 'deepseek-v4-flash' }, { id: 'glm-5.2' }] },
+  });
+  // Must be the probed list, NOT zcodeDescriptorFromModels' static builtin
+  // fallback (which also happens to have 2 entries).
+  assert.deepEqual(descriptor.models.map((m) => m.id), [
+    'mediastorm_glm/deepseek-v4-flash',
+    'mediastorm_glm/glm-5.2',
+  ]);
+});
+
+test('selectDescriptor keeps the session-derived descriptor when a thin session result has no probed backup', () => {
+  const baseDescriptor = zcodeStaticDescriptor();
+  const sessionResult = {
+    settings: {
+      model: {
+        available: [{ label: 'only', ref: { modelId: 'only', providerId: 'p' } }],
+        current: { modelId: 'only', providerId: 'p' },
+      },
+    },
+  };
+  const descriptor = selectDescriptor({
+    effectiveBackend: 'zcode',
+    backendPref: 'zcode',
+    baseDescriptor,
+    zcodeSessionModels: sessionResult,
+    zcodeProbedModels: null,
+  });
+  assert.deepEqual(descriptor.models.map((m) => m.id), ['p/only']);
 });
 
 test('selectDescriptor falls back to baseDescriptor for zcode when probe also has nothing', () => {
