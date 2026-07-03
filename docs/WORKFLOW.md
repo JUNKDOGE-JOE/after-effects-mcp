@@ -48,7 +48,7 @@ v0.7.0 面板已经是完整产品，不只是 MCP config 面板。
 
 桌面端边界：
 
-- ZCode 通过已安装应用携带的 `zcode.cjs app-server` 接入，面板驱动的是 app-server 协议，不做桌面 UI 自动化。
+- ZCode 通过已安装应用携带的 `zcode.cjs app-server` 接入，面板驱动的是 app-server 协议，不做桌面 UI 自动化；`*-start-plan` 订阅 provider 所需 captcha/runtime headers 只在桌面 Electron renderer 内生成，桌面应用不暴露本地 API，面板会快速失败并提示改用桌面端，API key 或 OAuth coding-plan provider 仍可在面板中使用。
 - Codex 通过 `codex app-server` 接入；当前没有额外的 Codex Desktop attach 协议。
 - Claude 订阅通过 Claude Agent SDK sidecar 接入；Claude Desktop 仍作为外部 MCP 客户端使用。
 - MCP 或面板通道不可用时，面板内 agent 应报告失败，不应切到系统截图、桌面自动化或临时 JSX 文件绕路。
@@ -217,7 +217,7 @@ Embedded backends:
 
 Desktop boundary:
 
-- ZCode connects through the installed app's bundled `zcode.cjs app-server`; the panel drives the app-server protocol, not desktop UI automation.
+- ZCode connects through the installed app's bundled `zcode.cjs app-server`; the panel drives the app-server protocol, not desktop UI automation. `*-start-plan` subscription providers need captcha/runtime headers generated only inside the desktop Electron renderer, and the desktop app exposes no local API for them, so the panel fails fast with a desktop-app-only hint; API key or OAuth coding-plan providers still work in the panel.
 - Codex connects through `codex app-server`; there is no separate Codex Desktop attach protocol in this plugin.
 - Claude subscription connects through the Claude Agent SDK sidecar; Claude Desktop remains an external MCP client path.
 - If MCP or the panel channel is unavailable, the in-panel agent should report the failure instead of falling back to OS screenshots, desktop automation, or ad-hoc JSX files.
