@@ -8787,8 +8787,16 @@
   }
 
   // src/lib/settingsState.js
-  function zcodeModelLocked({ backend, modelSwitchable }) {
-    return backend === "zcode" && modelSwitchable === false;
+  function zcodeDefaultModelLocked({ backend, models }) {
+    if (backend !== "zcode") return false;
+    return !Array.isArray(models) || models.length <= 1;
+  }
+  function zcodeManagedModelLabel(lang, modelId) {
+    const id = String(modelId || "").trim();
+    if (!id) {
+      return lang === "en" ? "Managed by the current ZCode session" : "\u7531 ZCode \u5F53\u524D\u4F1A\u8BDD\u7BA1\u7406";
+    }
+    return lang === "en" ? "Current model: " + id + " (managed by ZCode configuration)" : "\u5F53\u524D\u6A21\u578B\uFF1A" + id + "\uFF08\u7531 ZCode \u914D\u7F6E\u7BA1\u7406\uFF09";
   }
 
   // src/lib/settingsSections.js
@@ -9087,6 +9095,9 @@
     claudeSettingsImportAvailable = false,
     onSaveZcodeKey,
     zcodeKeyStored = false,
+    onSaveCodexKey,
+    codexKeyStored = false,
+    codexCliConfig = null,
     providerManager = null,
     logLevel = "info",
     onLogLevel,
@@ -9094,7 +9105,7 @@
     onRerunWizard
   }) {
     const t = S[lang] || S.zh;
-    const zcodeModelLocked2 = zcodeModelLocked({ backend, modelSwitchable });
+    const zcodeModelLocked = zcodeDefaultModelLocked({ backend, models: modelOptions });
     const [customModelDraft, setCustomModelDraft] = import_react19.default.useState(customModel);
     const [draftPort, setDraftPort] = import_react19.default.useState(String(port));
     const [tokenRaw, setTokenRaw] = import_react19.default.useState("");
@@ -9164,12 +9175,18 @@
               if (backend === "zcode" && channel === "cli-config") {
                 return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(ZcodeKeyFallback, { t, stored: zcodeKeyStored, onSave: onSaveZcodeKey });
               }
+              if (backend === "codex" && channel === "cli-config") {
+                return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+                  codexCliConfig && codexCliConfig.provider ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.5 var(--font-ui)", color: "var(--text-tertiary)" }, children: [codexCliConfig.providerId, codexCliConfig.model, codexCliConfig.provider.baseUrl].filter(Boolean).join(" \xB7 ") }) : null,
+                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(ZcodeKeyFallback, { t, stored: codexKeyStored, onSave: onSaveCodexKey })
+                ] });
+              }
               return null;
             }
           }
         ),
         providerManager,
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.modelDefault, children: zcodeModelLocked2 ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { minHeight: 28, display: "flex", alignItems: "center", padding: "0 8px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: t.zcodeModelManaged }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.modelDefault, children: zcodeModelLocked ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { minHeight: 28, display: "flex", alignItems: "center", padding: "0 8px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: zcodeManagedModelLabel(lang, backend === "zcode" ? model : "") }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || [
           { value: "claude-sonnet-5", label: "Claude Sonnet 5" },
           { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
           { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" }
@@ -12479,7 +12496,12 @@
         model: cliModel,
         apiKeyEnv: String(cliProvider.options && cliProvider.options.apiKeyEnv || ""),
         hasCredential: Boolean(cliResolved.key),
-        keySource: cliResolved.source
+        keySource: cliResolved.source,
+        // Probe-driven model discovery (spec A2 applied to zcode): baseUrl +
+        // protocol let the panel call probeProviderModels against /v1/models
+        // when session/create's settings.model.available comes back empty.
+        baseUrl: String(cliProvider.options && cliProvider.options.baseURL || cliProvider.baseURL || ""),
+        protocol: zcodeProtocolProviderKind(cliProvider.kind)
       } : null,
       desktop: desktopIds.length ? { providerId: desktopIds[0] } : null,
       startPlan: startPlanId ? {
@@ -12757,6 +12779,7 @@
     let startPromise = null;
     let sessionPromise = null;
     let sessionId = null;
+    let sessionModelRef = null;
     let subscribed = false;
     let activeRuntimeModel = null;
     let stopping = false;
@@ -13046,6 +13069,7 @@
       startPromise = null;
       sessionPromise = null;
       sessionId = null;
+      sessionModelRef = null;
       subscribed = false;
       if (wasStopping) return;
       if (activeRun) {
@@ -13061,6 +13085,7 @@
       startPromise = null;
       sessionPromise = null;
       sessionId = null;
+      sessionModelRef = null;
       subscribed = false;
       if (activeRun) {
         emit({ type: "error", kind: "mcp", message: err.message });
@@ -13134,6 +13159,20 @@
       return ZCODE_THOUGHT_LEVELS.has(effort) ? effort : void 0;
     }
     async function ensureSession() {
+      if (sessionId && !sessionPromise) {
+        const desiredModelRef = currentModelRef(currentEnv());
+        if (desiredModelRef && sessionModelRef && desiredModelRef !== sessionModelRef) {
+          if (rpc && sessionId) {
+            try {
+              rpc.fireRequest("session/stop", { sessionId });
+            } catch (e) {
+            }
+          }
+          sessionId = null;
+          sessionModelRef = null;
+          subscribed = false;
+        }
+      }
       if (sessionId) return sessionId;
       if (sessionPromise) return sessionPromise;
       sessionPromise = (async () => {
@@ -13176,6 +13215,7 @@
           subscribed = true;
         }
         sessionId = nextSessionId;
+        sessionModelRef = modelRef;
         return sessionId;
       })();
       try {
@@ -13279,6 +13319,7 @@
       startPromise = null;
       sessionPromise = null;
       sessionId = null;
+      sessionModelRef = null;
       subscribed = false;
       activeRuntimeModel = null;
       transcript = [];
@@ -13530,6 +13571,33 @@
       perTurnModelSwitch: false
     };
   }
+  function zcodeDescriptorFromProbedModels({ cliModel, providerId, probedModels } = {}) {
+    const cli = String(cliModel || "").trim();
+    if (!cli || !Array.isArray(probedModels) || !probedModels.length) return null;
+    const pid = String(providerId || "").trim();
+    const cliLabel = cli.includes("/") ? cli.slice(cli.indexOf("/") + 1) : cli;
+    const rest = probedModels.map((m) => {
+      const rawId = String(m && m.id || "").trim();
+      if (!rawId) return null;
+      const id = pid ? pid + "/" + rawId : rawId;
+      if (id === cli) return null;
+      return { id, label: m && m.label || rawId, effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false };
+    }).filter(Boolean);
+    const models = [
+      { id: cli, label: cliLabel, effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false },
+      ...rest
+    ];
+    return {
+      id: "zcode",
+      label: "ZCode",
+      models,
+      defaultModelId: cli,
+      defaultEffort: "high",
+      supportsFast: () => false,
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: false
+    };
+  }
   function descriptorFromProbedModels(descriptor, probedModels) {
     if (!Array.isArray(probedModels) || !probedModels.length) return descriptor;
     const curated = new Map(descriptor.models.map((m) => [m.id, m]));
@@ -13583,7 +13651,7 @@
     };
     return [sub, api];
   }
-  function codexChannels({ codexProbe, customProvider } = {}) {
+  function codexChannels({ codexProbe, customProvider, cliConfig, cliConfigApiKey } = {}) {
     const cli = {
       channel: "cli",
       source: { zh: "Codex CLI \u767B\u5F55\u6001", en: "Codex CLI login" },
@@ -13591,6 +13659,17 @@
       ok: Boolean(codexProbe && codexProbe.loggedIn),
       detail: codexProbe ? [codexProbe.email, codexProbe.planType, codexProbe.cliPath, codexProbe.cliVersion].filter(Boolean).join(" \xB7 ") : "",
       fixHint: { zh: "\u5728\u7EC8\u7AEF\u5B8C\u6210 codex \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u82E5 codex \u4E0D\u5728\u9762\u677F PATH \u4E0A\uFF0C\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF AE_MCP_CODEX_CLI \u6307\u5411 codex \u53EF\u6267\u884C\u6587\u4EF6\u540E\u91CD\u542F AE\u3002", en: "Sign in with codex in a terminal and re-check; if codex is not on the panel PATH, set AE_MCP_CODEX_CLI to the codex executable and restart AE." }
+    };
+    const runtimeOk = Boolean(!codexProbe || codexProbe.runtimeOk !== false);
+    const hasProvider = Boolean(cliConfig && cliConfig.provider);
+    const hasKey = Boolean(cliConfigApiKey);
+    const cliConfigChannel = {
+      channel: "cli-config",
+      source: { zh: "\u7EE7\u627F\u81EA Codex CLI \u914D\u7F6E", en: "Inherited from Codex CLI config" },
+      checking: false,
+      ok: hasProvider && hasKey && runtimeOk,
+      detail: hasProvider ? [cliConfig.providerId, cliConfig.model, cliConfig.provider.baseUrl].filter(Boolean).join(" \xB7 ") : "",
+      fixHint: !hasProvider ? { zh: "\u672A\u627E\u5230 ~/.codex/config.toml \u7684\u53EF\u7528 provider\uFF1A\u5148\u5728 Codex CLI \u91CC\u914D\u7F6E model_provider\u3002", en: "No usable provider in ~/.codex/config.toml: configure model_provider in the Codex CLI first." } : !hasKey ? { zh: "\u68C0\u6D4B\u5230 Codex CLI provider\u300C" + cliConfig.providerId + "\u300D\uFF0C\u4F46\u5176 API Key \u73AF\u5883\u53D8\u91CF\uFF08" + (cliConfig.provider.envKey || "-") + "\uFF09\u6CA1\u6709\u88AB\u9762\u677F\u7EE7\u627F\u3002\u5728\u4E0B\u65B9\u7C98\u8D34\u4E00\u6B21 Key\uFF08\u4FDD\u5B58\u5230\u672C\u673A ~/.ae-mcp/codex-key\uFF09\u5373\u53EF\u4F7F\u7528\u3002", en: 'Found Codex CLI provider "' + cliConfig.providerId + '", but its API key env (' + (cliConfig.provider.envKey || "-") + ") is not inherited by the panel. Paste the key once below (stored at ~/.ae-mcp/codex-key)." } : { zh: "Codex \u8FD0\u884C\u65F6\u4E0D\u53EF\u7528\uFF1A\u8BF7\u68C0\u67E5 Codex CLI \u5B89\u88C5\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "Codex runtime unavailable: check the Codex CLI install and re-check." }
     };
     const custom = {
       channel: "custom",
@@ -13600,7 +13679,7 @@
       detail: customProvider && customProvider.baseUrl ? customProvider.baseUrl : "",
       fixHint: { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E/\u9009\u62E9\u4E00\u4E2A OpenAI \u517C\u5BB9 provider\uFF08Base URL + Key\uFF09\u3002", en: "Add or pick an OpenAI-compatible provider (base URL + key) in Provider Manager." }
     };
-    return [cli, custom];
+    return custom.ok ? [cli, custom, cliConfigChannel] : [cli, cliConfigChannel, custom];
   }
   function zcodeChannels({ zcodeProbe, configSummary } = {}) {
     const summary = configSummary || {};
@@ -14128,6 +14207,10 @@
   function errorMessage(id, code, message) {
     return { jsonrpc: "2.0", id, error: { code, message } };
   }
+  function isTransientReconnectError(error) {
+    const message = error && error.message !== void 0 ? String(error.message) : "";
+    return /^reconnecting\.\.\.\s*\d+\/\d+$/i.test(message);
+  }
   function createRpc2({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEOUT_MS2 }) {
     let nextId2 = 1;
     const pending = /* @__PURE__ */ new Map();
@@ -14277,6 +14360,12 @@
     getExpertGuidance = () => true,
     getServerInstructions = () => "",
     getProviderProfile = () => ({}),
+    // Spec A extension: when the panel has no explicit custom provider
+    // configured, inherit a model_provider already declared in
+    // ~/.codex/config.toml. config.toml owns model_provider selection; the
+    // panel only supplies the missing API key env var the provider needs (no
+    // `-c model_provider=...` override).
+    getCliConfigProvider = () => null,
     resolveCli = resolveCodexCli,
     onEvent,
     lang = "zh",
@@ -14387,6 +14476,7 @@
       }
       if (message.method === "error") {
         const error = params.error || params;
+        if (isTransientReconnectError(error)) return;
         emit({ type: "error", kind: error.kind || "mcp", message: error.message || String(error || "Codex app-server error") });
         finishActive();
       }
@@ -14476,11 +14566,19 @@
         const cliOverride = spawnEnv.AE_MCP_CODEX_CLI ? { ok: true, cliPath: String(spawnEnv.AE_MCP_CODEX_CLI), version: "" } : null;
         lastCliInfo = cliOverride || lastCliInfo;
         const command = cliOverride ? cliOverride.cliPath : "codex";
+        let spawnEnvWithCreds = codexSpawnEnv(providerProfile, spawnEnv);
+        if (!providerProfile.codexBaseUrl) {
+          const cliConfig = getCliConfigProvider ? getCliConfigProvider() : null;
+          const envKey = cliConfig && cliConfig.provider && String(cliConfig.provider.envKey || "").trim();
+          if (envKey && cliConfig.apiKey) {
+            spawnEnvWithCreds = Object.assign({}, spawnEnvWithCreds, { [envKey]: cliConfig.apiKey });
+          }
+        }
         proc = spawn(command, codexAppServerArgs(providerProfile), {
           stdio: "pipe",
           windowsHide: true,
           shell: true,
-          env: codexSpawnEnv(providerProfile, spawnEnv)
+          env: spawnEnvWithCreds
         });
         rpc = createRpc2({
           writeLine: (line) => proc.stdin.write(line),
@@ -14638,6 +14736,16 @@
       stderrTail = "";
       stopping = false;
     }
+    const PROBE_INITIALIZE_TIMEOUT_MS = 1e4;
+    const PROBE_ACCOUNT_READ_TIMEOUT_MS = 1e4;
+    const PROBE_MODEL_LIST_TIMEOUT_MS = 4e3;
+    function withTimeout(promise, ms, label) {
+      let timer;
+      const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(Object.assign(new Error("probe timeout: " + label), { probeTimeout: label })), ms);
+      });
+      return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    }
     async function probeAccount() {
       const spawnEnv = ensureUserEnv(currentEnv(), { homedir: getHomedir() });
       let cliInfo = { ok: false, cliPath: "", version: "" };
@@ -14652,12 +14760,14 @@
       } catch (e) {
       }
       const diag = { cliPath: cliInfo.cliPath || "", cliVersion: cliInfo.version || "" };
+      let probedProc = null;
       try {
-        await initialize();
-        const accountResult = await rpc.request("account/read", {});
+        await withTimeout(initialize(), PROBE_INITIALIZE_TIMEOUT_MS, "initialize");
+        probedProc = proc;
+        const accountResult = await withTimeout(rpc.request("account/read", {}), PROBE_ACCOUNT_READ_TIMEOUT_MS, "account/read");
         let models = null;
         try {
-          const listed = await rpc.request("model/list", {});
+          const listed = await withTimeout(rpc.request("model/list", {}), PROBE_MODEL_LIST_TIMEOUT_MS, "model/list");
           models = Array.isArray(listed) ? listed : listed && listed.models;
         } catch (e) {
           models = null;
@@ -14674,6 +14784,16 @@
         };
       } catch (e) {
         const detail = [e && e.message ? e.message : String(e), cliInfo.ok ? "" : cliInfo.detail].filter(Boolean).join(" | ");
+        if (e && e.probeTimeout) {
+          if (probedProc) {
+            try {
+              probedProc.kill();
+            } catch (killErr) {
+            }
+          }
+          reset();
+          return { loggedIn: false, runtimeOk: false, detail: "probe timeout: " + e.probeTimeout + (detail ? " | " + detail : ""), ...diag };
+        }
         return { loggedIn: false, runtimeOk: false, detail, ...diag };
       }
     }
@@ -15624,6 +15744,102 @@
     return { baseUrl, authToken };
   }
 
+  // src/cep/codexConfig.js
+  function getCepRequire10() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
+      return globalThis.window.cep_node.require;
+    }
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function stripInlineComment(line) {
+    let inString = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"' && line[i - 1] !== "\\") inString = !inString;
+      else if (ch === "#" && !inString) return line.slice(0, i);
+    }
+    return line;
+  }
+  function unquote(value) {
+    const trimmed = String(value || "").trim();
+    if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
+      return trimmed.slice(1, -1);
+    }
+    if (trimmed.length >= 2 && trimmed.startsWith("'") && trimmed.endsWith("'")) {
+      return trimmed.slice(1, -1);
+    }
+    return trimmed;
+  }
+  function parseToml(text) {
+    const root = {};
+    const sections = {};
+    let current = root;
+    const lines = String(text || "").split(/\r?\n/);
+    for (const rawLine of lines) {
+      const noComment = stripInlineComment(rawLine).trim();
+      if (!noComment) continue;
+      const sectionMatch = noComment.match(/^\[([^\]]+)\]$/);
+      if (sectionMatch) {
+        const name = sectionMatch[1].trim();
+        sections[name] = sections[name] || {};
+        current = sections[name];
+        continue;
+      }
+      const kvMatch = noComment.match(/^([^=]+)=(.*)$/);
+      if (!kvMatch) continue;
+      const key = kvMatch[1].trim();
+      if (!key) continue;
+      current[key] = unquote(kvMatch[2]);
+    }
+    return { root, sections };
+  }
+  function readCodexCliConfig({ env = {}, fsImpl } = {}) {
+    const home = env.USERPROFILE || env.HOME || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : "");
+    if (!home) return null;
+    let fs;
+    try {
+      fs = fsImpl || getCepRequire10()("fs");
+    } catch (e) {
+      return null;
+    }
+    let text;
+    try {
+      text = fs.readFileSync(String(home).replace(/[\\/]+$/, "") + "\\.codex\\config.toml", "utf8");
+    } catch (e) {
+      return null;
+    }
+    let parsed;
+    try {
+      parsed = parseToml(text);
+    } catch (e) {
+      return null;
+    }
+    const model = String(parsed.root.model || "").trim();
+    const providerId = String(parsed.root.model_provider || "").trim();
+    if (!model && !providerId) return null;
+    const result = { model, providerId, provider: null };
+    if (providerId) {
+      const section = parsed.sections["model_providers." + providerId];
+      if (section) {
+        result.provider = {
+          name: String(section.name || "").trim(),
+          baseUrl: String(section.base_url || "").trim(),
+          envKey: String(section.env_key || "").trim(),
+          wireApi: String(section.wire_api || "").trim()
+        };
+      }
+    }
+    return result;
+  }
+  function resolveCodexProviderApiKey({ provider, env = {}, storedKey = "" } = {}) {
+    const envKey = provider && String(provider.envKey || "").trim();
+    if (envKey && env[envKey]) return String(env[envKey]);
+    if (storedKey) return String(storedKey);
+    return "";
+  }
+
   // src/lib/chatEntries.js
   function nextId(entries, prefix) {
     return `${prefix}-${entries.length + 1}`;
@@ -15734,7 +15950,8 @@
     codexCustomProvider = null,
     byokApiModels = null,
     codexCachedModels = null,
-    zcodeSessionModels = null
+    zcodeSessionModels = null,
+    zcodeProbedModels = null
   }) {
     const claudeApi = isClaudeApiBackend(effectiveBackend);
     const customId = claudeApi || backendPref === "codex" ? String(customModel || "").trim() : "";
@@ -15757,6 +15974,12 @@
       return baseDescriptor;
     }
     if (backendPref === "zcode" || effectiveBackend === "zcode") {
+      const available = zcodeSessionModels && zcodeSessionModels.settings && zcodeSessionModels.settings.model && Array.isArray(zcodeSessionModels.settings.model.available) ? zcodeSessionModels.settings.model.available : [];
+      if (available.length > 1) return zcodeDescriptorFromModels(zcodeSessionModels);
+      if (zcodeProbedModels) {
+        const probed = zcodeDescriptorFromProbedModels(zcodeProbedModels);
+        if (probed) return probed;
+      }
       if (zcodeSessionModels) return zcodeDescriptorFromModels(zcodeSessionModels);
       return baseDescriptor;
     }
@@ -15771,10 +15994,38 @@
     return descriptor.defaultModelId;
   }
 
+  // src/lib/zcodeModelCache.js
+  var ZCODE_PROBED_MODELS_CACHE_KEY = "ae_mcp_zcode_probed_models";
+  var ZCODE_PROBED_MODELS_CACHE_MS = 60 * 60 * 1e3;
+  function readCachedZcodeProbedModels(storage) {
+    try {
+      const raw = storage.getItem(ZCODE_PROBED_MODELS_CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return null;
+      if (!Array.isArray(parsed.probedModels)) return null;
+      if (Date.now() - Number(parsed.probedAt || 0) > ZCODE_PROBED_MODELS_CACHE_MS) return null;
+      return { cliModel: String(parsed.cliModel || ""), providerId: String(parsed.providerId || ""), probedModels: parsed.probedModels };
+    } catch (e) {
+      return null;
+    }
+  }
+  function writeCachedZcodeProbedModels(storage, { cliModel, providerId, probedModels } = {}) {
+    try {
+      storage.setItem(ZCODE_PROBED_MODELS_CACHE_KEY, JSON.stringify({
+        cliModel: String(cliModel || ""),
+        providerId: String(providerId || ""),
+        probedModels: Array.isArray(probedModels) ? probedModels : [],
+        probedAt: Date.now()
+      }));
+    } catch (e) {
+    }
+  }
+
   // src/cep/modelsApi.js
   var CACHE_KEY = "ae_mcp_byok_models";
   var TTL_MS = 24 * 60 * 60 * 1e3;
-  function getCepRequire10() {
+  function getCepRequire11() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -15783,7 +16034,7 @@
     throw new Error("CEP Node require is unavailable");
   }
   function fetchAnthropicModels({ apiKey, baseUrl = "", httpsImpl, timeoutMs = 8e3 } = {}) {
-    const https = httpsImpl || getCepRequire10()("https");
+    const https = httpsImpl || getCepRequire11()("https");
     return new Promise((resolve) => {
       let endpoint;
       try {
@@ -15899,7 +16150,7 @@
 
   // src/cep/wizardActions.js
   var OUTPUT_TAIL = 8192;
-  function getCepRequire11() {
+  function getCepRequire12() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -15924,7 +16175,7 @@
     return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
   }
   async function detectAeMcp({ execFileImpl, env, fsImpl }) {
-    const execFile = execFileImpl || getCepRequire11()("child_process").execFile;
+    const execFile = execFileImpl || getCepRequire12()("child_process").execFile;
     const whereHit = await new Promise((resolve) => {
       execFile("where", ["ae-mcp"], { windowsHide: true, env }, (err, stdout) => {
         resolve(err ? "" : String(stdout || "").split(/\r?\n/).map((l) => l.trim()).find(Boolean) || "");
@@ -15934,7 +16185,7 @@
     const profile = (env || getCepEnvSafe()).USERPROFILE || "";
     if (profile) {
       const shim = profile.replace(/[\\/]+$/, "") + "\\.local\\bin\\ae-mcp.exe";
-      const fs = fsImpl || getCepRequire11()("fs");
+      const fs = fsImpl || getCepRequire12()("fs");
       if (fs.existsSync(shim)) return { ok: true, version: shim };
     }
     return { ok: false };
@@ -15942,7 +16193,7 @@
   async function detectTool(id, { execFileImpl, env, fsImpl } = {}) {
     if (id === "aeMcp") return detectAeMcp({ execFileImpl, env, fsImpl });
     const spec = DETECT[id];
-    const execFile = execFileImpl || getCepRequire11()("child_process").execFile;
+    const execFile = execFileImpl || getCepRequire12()("child_process").execFile;
     return execVersion(execFile, spec.file, spec.args, env, spec.shell);
   }
   var REPO = "https://github.com/JUNKDOGE-JOE/after-effects-mcp";
@@ -15957,7 +16208,7 @@
     };
   }
   function runAction({ file, args, spawnImpl, env, onChunk }) {
-    const spawn = spawnImpl || getCepRequire11()("child_process").spawn;
+    const spawn = spawnImpl || getCepRequire12()("child_process").spawn;
     return new Promise((resolve) => {
       let output = "";
       const push = (chunk) => {
@@ -15981,11 +16232,11 @@
     return [file, ...args.map((a) => /\s/.test(a) ? `"${a}"` : a)].join(" ");
   }
   function detectRepoRoot({ extRoot, fsImpl }) {
-    return findProjectRoot({ extRoot, repoRoot: "", fsImpl: fsImpl || getCepRequire11()("fs") });
+    return findProjectRoot({ extRoot, repoRoot: "", fsImpl: fsImpl || getCepRequire12()("fs") });
   }
   var LOGIN_COMMANDS = { claude: "claude", codex: "codex login" };
   function openLoginTerminal({ tool, spawnImpl } = {}) {
-    const spawn = spawnImpl || getCepRequire11()("child_process").spawn;
+    const spawn = spawnImpl || getCepRequire12()("child_process").spawn;
     const command = LOGIN_COMMANDS[tool] || LOGIN_COMMANDS.claude;
     const child = spawn("cmd", ["/c", "start", "ae-mcp login", "pwsh", "-NoExit", "-Command", command], {
       detached: true,
@@ -16303,7 +16554,7 @@
       }
     };
   }
-  function getCepRequire12() {
+  function getCepRequire13() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -16316,7 +16567,7 @@
     function start(port) {
       onStatus("starting", port);
       try {
-        const cepRequire5 = getCepRequire12();
+        const cepRequire5 = getCepRequire13();
         const path = cepRequire5("path");
         const extRoot = normalizeCepPath(cs2.getSystemPath("extension"));
         const hostPath = path.join(extRoot, "host", "server.js");
@@ -16400,7 +16651,7 @@
   }
 
   // src/cep/logExportFs.js
-  function getCepRequire13() {
+  function getCepRequire14() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -16409,7 +16660,7 @@
     throw new Error("CEP Node require is unavailable");
   }
   function writeLogExport({ text, fileName, deps }) {
-    const req = deps ? null : getCepRequire13();
+    const req = deps ? null : getCepRequire14();
     const fs = deps ? deps.fs : req("fs");
     const os = deps ? deps.os : req("os");
     const path = deps ? deps.path : req("path");
@@ -16420,11 +16671,18 @@
     return file;
   }
   function revealInExplorer(filePath, execImpl, onError) {
-    const exec = execImpl || getCepRequire13()("child_process").exec;
+    const exec = execImpl || getCepRequire14()("child_process").exec;
     const winPath = String(filePath).replace(/\//g, "\\");
     exec('explorer.exe /select,"' + winPath + '"', { windowsHide: true }, (err) => {
       if (err && onError) onError(err);
     });
+  }
+
+  // src/lib/stableValue.js
+  function reconcileStableJsonValue(previous, value) {
+    const json = JSON.stringify(value);
+    if (previous && previous.json === json) return previous;
+    return { json, value };
   }
 
   // src/app/App.jsx
@@ -16600,6 +16858,7 @@
     const [codexModels, setCodexModels] = import_react40.default.useState(() => readCachedCodexModels(window.localStorage));
     const [zcodeProbe, setZcodeProbe] = import_react40.default.useState(null);
     const [zcodeSessionModels, setZcodeSessionModels] = import_react40.default.useState(null);
+    const [zcodeProbedModels, setZcodeProbedModels] = import_react40.default.useState(() => readCachedZcodeProbedModels(window.localStorage));
     const [chatEntries, setChatEntries] = import_react40.default.useState([]);
     const [chatStreaming, setChatStreaming] = import_react40.default.useState(false);
     const [thinkingActive, setThinkingActive] = import_react40.default.useState(false);
@@ -16691,11 +16950,33 @@
         return null;
       }
     }, [keyStore, zcodeProbe]);
+    const codexCliConfigStableRef = import_react40.default.useRef(null);
+    const codexCliConfig = import_react40.default.useMemo(() => {
+      let next;
+      try {
+        next = readCodexCliConfig({ env: window.cep_node && window.cep_node.process && window.cep_node.process.env || {} });
+      } catch (e) {
+        next = null;
+      }
+      codexCliConfigStableRef.current = reconcileStableJsonValue(codexCliConfigStableRef.current, next);
+      return codexCliConfigStableRef.current.value;
+    }, [codexProbe]);
+    const codexCliConfigApiKey = import_react40.default.useMemo(() => {
+      const env = window.cep_node && window.cep_node.process && window.cep_node.process.env || {};
+      const storedKey = (() => {
+        try {
+          return keyStore ? keyStore.readKey("codex") : "";
+        } catch (e) {
+          return "";
+        }
+      })();
+      return resolveCodexProviderApiKey({ provider: codexCliConfig && codexCliConfig.provider, env, storedKey });
+    }, [codexCliConfig, keyStore, codexApiKey]);
     const channels = import_react40.default.useMemo(() => ({
       claude: claudeChannels({ probe, apiProvider: claudeApiProvider }),
-      codex: codexChannels({ codexProbe, customProvider: codexCustomProvider }),
+      codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, cliConfig: codexCliConfig, cliConfigApiKey: codexCliConfigApiKey }),
       zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary })
-    }), [probe, claudeApiProvider, codexProbe, codexCustomProvider, zcodeProbe, zcodeConfigSummary]);
+    }), [probe, claudeApiProvider, codexProbe, codexCustomProvider, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliConfigApiKey]);
     const claudeSettingsHint = import_react40.default.useMemo(() => {
       try {
         return readClaudeSettingsEnv({ env: window.cep_node && window.cep_node.process && window.cep_node.process.env || {} });
@@ -16708,7 +16989,7 @@
       codexApiKey: codexCustomProvider ? codexCustomProvider.apiKey : codexApiKey,
       codexBaseUrl: codexCustomProvider ? codexCustomProvider.baseUrl : codexBaseUrl
     }), [claudeApiProvider, anthropicBaseUrl, codexCustomProvider, codexApiKey, codexBaseUrl]);
-    const runtimeRef = import_react40.default.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: "subscription", claudeApiProvider: null });
+    const runtimeRef = import_react40.default.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: "subscription", claudeApiProvider: null, codexCliConfigProvider: null });
     const extRoot = cs2 && cs2.getSystemPath ? cs2.getSystemPath("extension") : "";
     const sidecarPath = import_react40.default.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
     const mcp = import_react40.default.useMemo(() => createMcpClient({
@@ -16762,10 +17043,14 @@
       getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       getServerInstructions: () => mcp.getServerInstructions(),
       getProviderProfile: () => runtimeRef.current.providerProfile,
+      getCliConfigProvider: () => runtimeRef.current.codexCliConfigProvider,
       lang,
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, mcp, handleChatEvent]);
+    import_react40.default.useEffect(() => () => {
+      codexBackend.reset();
+    }, [codexBackend]);
     const openCodeBackend = import_react40.default.useMemo(() => createOpenCodeBackend({
       getMcpSpec: () => resolveMcpCommand({ extRoot }),
       getModel: () => runtimeRef.current.model,
@@ -16786,6 +17071,9 @@
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, mcp, handleChatEvent]);
+    import_react40.default.useEffect(() => () => {
+      zcodeBackend.reset();
+    }, [zcodeBackend]);
     const nodeOk = !(probe && probe.nodeOk === false);
     const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock, nodeOk });
     runtimeRef.current = {
@@ -16798,7 +17086,8 @@
       thinking: modelMeta.adaptive === true ? "adaptive" : null,
       fast: effectiveFast,
       claudeChannel: effective.backend === "claude-api" ? "api" : "subscription",
-      claudeApiProvider
+      claudeApiProvider,
+      codexCliConfigProvider: codexCliConfig && codexCliConfig.provider ? { provider: codexCliConfig.provider, apiKey: codexCliConfigApiKey } : null
     };
     const backendInstances = { subscription: claudeBackend, "claude-api": claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };
     const activeBackend = backendInstances[effective.backend] || byokLoop;
@@ -16813,7 +17102,8 @@
         codexCustomProvider,
         byokApiModels: null,
         codexCachedModels: codexModels || readCachedCodexModels(window.localStorage),
-        zcodeSessionModels
+        zcodeSessionModels,
+        zcodeProbedModels
       };
       const nextDescriptor = selectDescriptor(facts);
       setDescriptor(nextDescriptor);
@@ -16834,8 +17124,42 @@
       return () => {
         alive = false;
       };
-    }, [effective.backend, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, apiKey, anthropicBaseUrl, zcodeSessionModels]);
+    }, [effective.backend, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, apiKey, anthropicBaseUrl, zcodeSessionModels, zcodeProbedModels]);
     const activeBackendRef = import_react40.default.useRef(null);
+    import_react40.default.useEffect(() => {
+      if (backendPref !== "zcode") return void 0;
+      const sessionAvailable = zcodeSessionModels && zcodeSessionModels.settings && zcodeSessionModels.settings.model && Array.isArray(zcodeSessionModels.settings.model.available) ? zcodeSessionModels.settings.model.available : [];
+      if (sessionAvailable.length > 1) return void 0;
+      const cli = zcodeConfigSummary && zcodeConfigSummary.cli;
+      if (!cli || !cli.model || !cli.baseUrl || !cli.hasCredential) return void 0;
+      const cached = readCachedZcodeProbedModels(window.localStorage);
+      if (cached && cached.cliModel === cli.model) {
+        const same = zcodeProbedModels && zcodeProbedModels.cliModel === cached.cliModel && Array.isArray(zcodeProbedModels.probedModels) && zcodeProbedModels.probedModels.length === cached.probedModels.length;
+        if (!same) setZcodeProbedModels(cached);
+        return void 0;
+      }
+      let alive = true;
+      const providerId = cli.providerId || "";
+      const apiKeyValue = (() => {
+        try {
+          return keyStore ? keyStore.readKey("zcode") : "";
+        } catch (e) {
+          return "";
+        }
+      })();
+      probeProviderModels({ baseUrl: cli.baseUrl, apiKey: apiKeyValue, protocol: cli.protocol }).then((result) => {
+        if (!alive) return;
+        if (result.ok && result.models && result.models.length) {
+          const entry = { cliModel: cli.model, providerId, probedModels: result.models };
+          writeCachedZcodeProbedModels(window.localStorage, entry);
+          setZcodeProbedModels(entry);
+        }
+      }).catch(() => {
+      });
+      return () => {
+        alive = false;
+      };
+    }, [backendPref, zcodeSessionModels, zcodeConfigSummary, keyStore]);
     const runClaudeProbe = import_react40.default.useCallback(() => {
       let alive = true;
       setProbe(null);
@@ -16876,6 +17200,24 @@
       if (backendPref !== "codex") return void 0;
       return runCodexProbe();
     }, [backendPref, runCodexProbe]);
+    import_react40.default.useEffect(() => {
+      if (backendPref !== "codex") return void 0;
+      if (!codexCliConfig || !codexCliConfig.provider || !codexCliConfigApiKey) return void 0;
+      if (codexCustomProvider && codexCustomProvider.baseUrl) return void 0;
+      if (codexModels && codexModels.length > 1) return void 0;
+      let alive = true;
+      probeProviderModels({ baseUrl: codexCliConfig.provider.baseUrl, apiKey: codexCliConfigApiKey, protocol: "openai-compatible" }).then((result) => {
+        if (!alive) return;
+        if (result.ok && result.models && result.models.length) {
+          setCodexModels(result.models);
+          writeCachedCodexModels(window.localStorage, result.models);
+        }
+      }).catch(() => {
+      });
+      return () => {
+        alive = false;
+      };
+    }, [backendPref, codexCliConfig, codexCliConfigApiKey, codexCustomProvider, codexModels]);
     const runZcodeProbe = import_react40.default.useCallback(() => {
       let alive = true;
       setZcodeProbe(null);
@@ -17190,6 +17532,15 @@
                 return false;
               }
             })(),
+            onSaveCodexKey: (k) => {
+              if (keyStore) keyStore.writeKey(k, "codex");
+              setCodexApiKey(k);
+              setCodexProbe(null);
+              codexBackend.reset();
+              runCodexProbe();
+            },
+            codexKeyStored: Boolean(codexApiKey),
+            codexCliConfig,
             model: effectiveModel,
             modelOptions,
             modelSwitchable: descriptor.perTurnModelSwitch !== false,

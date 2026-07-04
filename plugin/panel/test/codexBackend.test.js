@@ -263,6 +263,40 @@ test('createCodexBackend injects cli-config provider env var when no custom prov
   await pending;
 });
 
+test('createCodexBackend reads cli-config provider lazily for each spawn', async () => {
+  let cliConfig = {
+    provider: { envKey: 'MEDIASTORM_GLM_API_KEY', baseUrl: 'https://api.example.com/v1' },
+    apiKey: 'first-key',
+  };
+  const { backend, spawned } = makeBackend({
+    getCliConfigProvider: () => cliConfig,
+  });
+
+  const { pending, proc } = await startTurn(backend, spawned, 'first cli-config env');
+  assert.equal(spawned.calls[0].options.env.MEDIASTORM_GLM_API_KEY, 'first-key');
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+
+  backend.reset();
+  cliConfig = {
+    provider: { envKey: 'MEDIASTORM_GLM_API_KEY', baseUrl: 'https://api.example.com/v1' },
+    apiKey: 'second-key',
+  };
+
+  const second = backend.sendUser('second cli-config env');
+  await flush();
+  const proc2 = spawned.procs[1];
+  respond(proc2, parseWrites(proc2)[0], {});
+  await flush();
+  respond(proc2, parseWrites(proc2)[1], { threadId: 'thread_2' });
+  await flush();
+  respond(proc2, parseWrites(proc2)[2], {});
+  assert.equal(spawned.calls.length, 2);
+  assert.equal(spawned.calls[1].options.env.MEDIASTORM_GLM_API_KEY, 'second-key');
+  proc2.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await second;
+});
+
 test('createCodexBackend prefers an explicit custom provider over cli-config inheritance', async () => {
   const { backend, spawned } = makeBackend({
     getProviderProfile: () => ({
@@ -357,6 +391,41 @@ test('createCodexBackend maps app-server turn and tool notifications to panel ev
     { type: 'tool-result', toolUseId: 'call_x', name: 'mcp__ae__ae_ping', ok: true, text: '{"ok": true}', durationMs: 53 },
     { type: 'turn-end', stopReason: 'end_turn' },
   ]);
+});
+
+test('createCodexBackend ignores transient app-server reconnect error notifications', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { pending, proc } = await startTurn(backend, spawned, 'reconnect');
+  let settled = false;
+  pending.then(() => {
+    settled = true;
+  });
+
+  proc.pushStdout({ jsonrpc: '2.0', method: 'error', params: { error: { message: 'Reconnecting... 1/5' } } });
+  await flush();
+
+  assert.equal(events.some((evt) => evt.type === 'error'), false);
+  assert.equal(settled, false);
+
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+  assert.equal(settled, true);
+});
+
+test('createCodexBackend treats non-reconnect app-server errors as terminal', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { pending, proc } = await startTurn(backend, spawned, 'real error');
+  let settled = false;
+  pending.then(() => {
+    settled = true;
+  });
+
+  proc.pushStdout({ jsonrpc: '2.0', method: 'error', params: { error: { kind: 'mcp', message: 'MCP server failed' } } });
+  await pending;
+  await flush();
+
+  assert.deepEqual(events.at(-1), { type: 'error', kind: 'mcp', message: 'MCP server failed' });
+  assert.equal(settled, true);
 });
 
 test('codex approval adapter applies four tiers and annotations', async () => {
