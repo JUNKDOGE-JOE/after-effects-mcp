@@ -46,6 +46,7 @@ import { loadExpertGuidance, saveExpertGuidance } from '../lib/expertGuidance.js
 import pkg from '../../package.json';
 import { buildLogExport, exportFileName, keepLogLine } from '../lib/logExport.js';
 import { writeLogExport, revealInExplorer } from '../cep/logExportFs.js';
+import { reconcileStableJsonValue } from '../lib/stableValue.js';
 
 // Re-export so app code has a single import surface; the helpers themselves live
 // in lib/ so the test suite (node --test, which cannot parse JSX) can import them.
@@ -324,10 +325,16 @@ function Shell({ cs }) {
     try { return summarizeZcodeConfig({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {}, storedKey: (() => { try { return keyStore ? keyStore.readKey('zcode') : ''; } catch (e) { return ''; } })() }); } catch (e) { return null; }
     // zcodeProbe in deps: re-summarize after each re-check so pasted keys reflect immediately.
   }, [keyStore, zcodeProbe]);
+  const codexCliConfigStableRef = React.useRef(null);
   // Spec A extension: inherit a custom model_provider declared in
   // ~/.codex/config.toml (mirrors zcodeConfigSummary above).
   const codexCliConfig = React.useMemo(() => {
-    try { return readCodexCliConfig({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {} }); } catch (e) { return null; }
+    let next;
+    try { next = readCodexCliConfig({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {} }); } catch (e) { next = null; }
+    // Probe state re-reads config.toml, but equal content must not recreate
+    // process-owning backends through referential churn.
+    codexCliConfigStableRef.current = reconcileStableJsonValue(codexCliConfigStableRef.current, next);
+    return codexCliConfigStableRef.current.value;
   }, [codexProbe]);
   const codexCliConfigApiKey = React.useMemo(() => {
     const env = (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {};
@@ -347,7 +354,7 @@ function Shell({ cs }) {
     codexApiKey: codexCustomProvider ? codexCustomProvider.apiKey : codexApiKey,
     codexBaseUrl: codexCustomProvider ? codexCustomProvider.baseUrl : codexBaseUrl,
   }), [claudeApiProvider, anthropicBaseUrl, codexCustomProvider, codexApiKey, codexBaseUrl]);
-  const runtimeRef = React.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: 'subscription', claudeApiProvider: null });
+  const runtimeRef = React.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: 'subscription', claudeApiProvider: null, codexCliConfigProvider: null });
   const extRoot = cs && cs.getSystemPath ? cs.getSystemPath('extension') : '';
   const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
   const mcp = React.useMemo(() => createMcpClient({
@@ -410,11 +417,15 @@ function Shell({ cs }) {
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     getServerInstructions: () => mcp.getServerInstructions(),
     getProviderProfile: () => runtimeRef.current.providerProfile,
-    getCliConfigProvider: () => (codexCliConfig && codexCliConfig.provider ? { provider: codexCliConfig.provider, apiKey: codexCliConfigApiKey } : null),
+    getCliConfigProvider: () => runtimeRef.current.codexCliConfigProvider,
     lang,
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
-  }), [extRoot, mcp, handleChatEvent, codexCliConfig, codexCliConfigApiKey]);
+  }), [extRoot, mcp, handleChatEvent]);
+
+  React.useEffect(() => () => {
+    codexBackend.reset();
+  }, [codexBackend]);
 
   const openCodeBackend = React.useMemo(() => createOpenCodeBackend({
     getMcpSpec: () => resolveMcpCommand({ extRoot }),
@@ -438,6 +449,10 @@ function Shell({ cs }) {
     onEvent: handleChatEvent,
   }), [extRoot, mcp, handleChatEvent]);
 
+  React.useEffect(() => () => {
+    zcodeBackend.reset();
+  }, [zcodeBackend]);
+
   const nodeOk = !(probe && probe.nodeOk === false);
   const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock, nodeOk });
   runtimeRef.current = {
@@ -451,6 +466,7 @@ function Shell({ cs }) {
     fast: effectiveFast,
     claudeChannel: effective.backend === 'claude-api' ? 'api' : 'subscription',
     claudeApiProvider,
+    codexCliConfigProvider: codexCliConfig && codexCliConfig.provider ? { provider: codexCliConfig.provider, apiKey: codexCliConfigApiKey } : null,
   };
   // Map real-backend id -> instance.
   const backendInstances = { subscription: claudeBackend, 'claude-api': claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };

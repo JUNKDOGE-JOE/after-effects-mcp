@@ -64,6 +64,13 @@ function errorMessage(id, code, message) {
   return { jsonrpc: '2.0', id, error: { code, message } };
 }
 
+function isTransientReconnectError(error) {
+  const message = error && error.message !== undefined ? String(error.message) : '';
+  // codex app-server currently exposes MCP cold-start retries only as this
+  // notification text; there is no structured retry flag in the panel protocol.
+  return /^reconnecting\.\.\.\s*\d+\/\d+$/i.test(message);
+}
+
 function createRpc({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEOUT_MS }) {
   let nextId = 1;
   const pending = new Map();
@@ -358,6 +365,7 @@ export function createCodexBackend({
     }
     if (message.method === 'error') {
       const error = params.error || params;
+      if (isTransientReconnectError(error)) return;
       emit({ type: 'error', kind: error.kind || 'mcp', message: error.message || String(error || 'Codex app-server error') });
       finishActive();
     }
