@@ -29,9 +29,11 @@
 
 ### 面板内嵌 provider 配置
 
-- BYOK 后端默认调用官方 Anthropic API；在设置里填写 API Base URL 时，会把 `/v1/messages` 与 `/v1/models` 接到该兼容端点，并按 Base URL 隔离模型缓存。
-- Codex 后端默认走 `codex app-server` + Codex CLI 登录态；在设置里填写 API Base URL 后，会用 `codex app-server -c model_provider=...` 启动自定义 OpenAI-compatible provider，并把本地保存的 Codex API Key 通过 `AE_MCP_CODEX_API_KEY` 传给 app-server。
-- 自定义模型 ID 会插入 BYOK/Codex 的模型列表首位，作为默认模型；清空后回到探测到的模型列表。
+- 面板设置页以 Claude / Codex / ZCode 三路后端组织内嵌 AI 服务，每路后端显示凭证通道卡，并可自动选择或手动锁定可用通道。
+- Claude 的 API 直连通道取代旧 BYOK 后端：官方 Anthropic API 或 Anthropic-compatible provider 都通过 Provider 管理器配置，`/v1/messages` 与 `/v1/models` 接到对应 Base URL。
+- Codex 后端默认走 `codex app-server` + Codex CLI 登录态；也可继承 `~/.codex/config.toml` 的自定义 model provider，或使用 Provider 管理器中的 OpenAI-compatible provider。
+- Provider 管理器把 OpenAI-compatible 与 Anthropic provider 保存在本机 `~/.ae-mcp/providers.json`，并支持 `/v1/models` 探测模型列表。显式自定义 provider 优先于继承配置。
+- 自定义模型 ID 会插入对应通道的模型列表首位，作为默认模型；清空后回到探测到的模型列表。
 
 ### 架构
 
@@ -232,9 +234,11 @@ ae-mcp 是独立实现，参考了 Atom 风格 AE 操作面和 FX Console 风格
 
 ### Built-In Provider Configuration
 
-- The BYOK backend calls the official Anthropic API by default. When API Base URL is set in Settings, `/v1/messages` and `/v1/models` are routed to that compatible endpoint, and the model cache is separated by base URL.
-- The Codex backend uses `codex app-server` plus Codex CLI login by default. When API Base URL is set in Settings, it starts `codex app-server -c model_provider=...` for a custom OpenAI-compatible provider and passes the locally saved Codex API key to app-server as `AE_MCP_CODEX_API_KEY`.
-- A custom model ID is inserted at the top of the BYOK/Codex model list and becomes the default model. Clearing it returns to the probed model list.
+- Built-in AI services are organized as Claude / Codex / ZCode backends. Each backend shows credential-channel cards in Settings, with automatic selection and optional manual channel locking.
+- Claude's API direct channel replaces the old BYOK backend. Official Anthropic API and Anthropic-compatible providers are configured in Provider Manager, and `/v1/messages` plus `/v1/models` route to the selected Base URL.
+- The Codex backend uses `codex app-server` plus Codex CLI login by default. It can also inherit custom model providers from `~/.codex/config.toml` or use an OpenAI-compatible provider from Provider Manager.
+- Provider Manager stores OpenAI-compatible and Anthropic providers locally in `~/.ae-mcp/providers.json` and can probe `/v1/models` for model lists. Explicit custom providers take priority over inherited config.
+- A custom model ID is inserted at the top of the selected channel's model list and becomes the default model. Clearing it returns to the probed model list.
 
 ### Architecture
 

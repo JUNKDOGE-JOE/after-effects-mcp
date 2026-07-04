@@ -2,7 +2,7 @@
 
 ## 中文
 
-ae-mcp 是一个**后端无关**的 MCP server，让 AI 客户端驱动 Adobe After Effects。v0.8.3 支持外部 MCP 客户端和完整的 CEP 面板产品：面板内可直接对话、审批工具调用、诊断连接，并一键安装本地依赖。
+ae-mcp 是一个**后端无关**的 MCP server，让 AI 客户端驱动 Adobe After Effects。v0.9.0 支持外部 MCP 客户端和完整的 CEP 面板产品：面板内可直接对话、审批工具调用、诊断连接，并一键安装本地依赖。
 
 ```text
 MCP client
@@ -16,11 +16,12 @@ MCP client
 
 `ae_previewFrame` 通过 `CompItem.saveFrameToPng` 渲染真实合成像素（viewer snapshot 仅作 fallback）；`packages/snapshot-mss` 提供跨平台 `mss` 截图后端，用于 `ae_snapshot` 屏幕捕获。
 
-### v0.8.3 状态
+### v0.9.0 状态
 
 - Python stdio MCP server 暴露 32 个 `ae_` 工具，工具名使用下划线形式（例如 `ae_ping`、`ae_previewFrame`），内部仍映射到 `ae.*` verbs。
 - CEP 面板不再只是连接配置器：它包含内嵌 AI 对话、composer 便捷选择条、四档审批、首跑向导、活动流、kill switch 和连接诊断。
-- 内嵌后端有四类：**Claude 订阅**（默认；面板 spawn 系统 Node 跑 Claude Agent SDK sidecar，复用 `claude` 登录态，零 key / 零 token 落盘）、**BYOK**（Anthropic-compatible Base URL 和自定义模型 ID）、**Codex**（`codex app-server`，官方登录或 OpenAI-compatible 自定义 provider）、**ZCode**（驱动已安装 ZCode 桌面应用内置的 `zcode.cjs app-server`，使用 session protocol 和四档审批映射）。
+- 内嵌 AI 服务为三路后端：**Claude**、**Codex**、**ZCode**。每个后端在设置页显示凭证通道卡，按优先级自动选择可用通道，也可手动锁定通道。Claude 包含订阅登录和 **API 直连**通道（原 BYOK 偏好会自动迁移）；Codex 支持 CLI 登录、继承 `~/.codex/config.toml` 的 model provider，以及 OpenAI-compatible 自定义 provider；ZCode 支持 API key / OAuth coding-plan provider，模型列表由 `/v1/models` 探测。
+- 设置页内置 Provider 管理器，可新增、编辑、删除 OpenAI-compatible 与 Anthropic 协议 provider（Base URL + Key），并通过 `/v1/models` 探测模型；provider 配置保存在本机 `~/.ae-mcp/providers.json`。
 - OpenCode 仍是**外接 MCP 客户端**；内嵌 OpenCode 已实现，但在审批 gating 验证完成前暂不暴露。
 - 外部客户端可通过面板生成的 MCP config 接入：Claude Desktop、Claude Code、Cursor、OpenCode、OpenClaw、AstrBot、Gemini Antigravity、ZCode 等。
 
@@ -28,7 +29,7 @@ OpenClaw、AstrBot 等 IM-bot 框架常驻或 Docker 化时，未必和 After Ef
 
 ### 面板能力
 
-- 内嵌聊天：Claude 订阅 / BYOK / Codex / ZCode。
+- 内嵌聊天：Claude / Codex / ZCode，按后端凭证通道选择订阅登录、API 直连、CLI 配置继承或自定义 provider。
 - Composer 选择条：模型（带成本标识，会话内切换不清空对话）、思考深度（后端原生 effort 档位）、快速模式、审批档。
 - 审批四档：只读、手动、自动、免审。审批语义由工具 annotations 驱动，跨后端一致。
 - 首跑向导：检测并安装 `uv`、Node、Claude CLI、ae-mcp；安装命令会先原文展示；登录会拉起可见终端；安装后不需要重启 AE。
@@ -71,17 +72,16 @@ uv tool install --from packages/core ae-mcp --with packages/bridge --with packag
 终端用户从发布 tag 安装：
 
 ```powershell
-uv tool install --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.3#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.3#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.3#subdirectory=packages/snapshot-mss
+uv tool install --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.0#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.0#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.0#subdirectory=packages/snapshot-mss
 ```
 
 面板安装使用 ZXP 包：推荐 aescripts ZXP Installer，也可用 ExMan Cmd。安装后打开 `Window -> Extensions -> ae-mcp`。
 
 内嵌后端额外要求：
 
-- Claude 订阅：本机 Node >= 18，已安装并登录 Claude Code（`claude`）。
-- BYOK：Anthropic API key；需要代理或兼容服务时可在设置里填写 API Base URL 和自定义模型 ID。
-- Codex：已安装 Codex CLI。官方账号路径需要 `codex login`；自定义 provider 路径在设置里填写 API Base URL、API Key 和模型 ID。
-- ZCode：已安装 ZCode 桌面应用。API key 或 OAuth coding-plan provider 可在面板使用；`*-start-plan` 订阅 provider 仅限桌面应用，面板会快速失败并提示。
+- Claude：本机 Node >= 18，已安装并登录 Claude Code（`claude`）；API 直连通道需要 Anthropic API key 或兼容 provider。
+- Codex：已安装 Codex CLI。官方账号路径需要 `codex login`；也可继承 `~/.codex/config.toml` 的自定义 model provider，或在 Provider 管理器中配置 OpenAI-compatible provider。
+- ZCode：已安装 ZCode 桌面应用。API key 或 OAuth coding-plan provider 可在面板使用；`*-start-plan` 官方托管计划仍需 ZCode 桌面端验证码桥接，面板检测到有效凭据前不可选。
 
 外部 MCP 客户端配置示例：
 
@@ -116,7 +116,7 @@ cd ..\..
 .\scripts\install-plugin-dev.ps1
 ```
 
-macOS 开发脚本存在，但 v0.8.3 主要验证面仍以 Windows + AE live 为准。
+macOS 开发脚本存在，但 v0.9.0 主要验证面仍以 Windows + AE live 为准。
 
 ### 测试
 
@@ -169,7 +169,7 @@ ae-mcp 项目代码使用 MIT License，见 [LICENSE](LICENSE)。
 
 ## English
 
-ae-mcp is a **backend-agnostic** MCP server for driving Adobe After Effects from AI clients. In v0.8.3 it supports external MCP clients and a full CEP panel product: built-in chat, tool approvals, connection diagnostics, and one-click local setup.
+ae-mcp is a **backend-agnostic** MCP server for driving Adobe After Effects from AI clients. In v0.9.0 it supports external MCP clients and a full CEP panel product: built-in chat, tool approvals, connection diagnostics, and one-click local setup.
 
 ```text
 MCP client
@@ -183,11 +183,12 @@ MCP client
 
 `ae_previewFrame` renders real comp pixels through `CompItem.saveFrameToPng` with viewer snapshot only as a fallback; `packages/snapshot-mss` provides the cross-platform `mss` screenshot backend for `ae_snapshot` screen capture.
 
-### v0.8.3 Status
+### v0.9.0 Status
 
 - The Python stdio MCP server exposes 32 `ae_` tools. MCP tool names use underscores, such as `ae_ping` and `ae_previewFrame`; internally they still map to `ae.*` verbs.
 - The CEP panel is no longer just a connection configurator. It includes built-in AI chat, composer controls, four approval modes, a first-run wizard, an activity stream, a kill switch, and connection diagnostics.
-- Embedded backends: **Claude subscription** (default; the panel spawns system Node to run a Claude Agent SDK sidecar, reusing the local `claude` login with no key/token stored), **BYOK** (Anthropic-compatible base URL and custom model IDs), **Codex** (`codex app-server` with official login or an OpenAI-compatible custom provider), and **ZCode** (drives the installed ZCode desktop app's bundled `zcode.cjs app-server` with session protocol and four-tier approval mapping).
+- Built-in AI services are organized as three backends: **Claude**, **Codex**, and **ZCode**. Each backend has credential-channel cards in Settings, with automatic priority-based selection and optional manual channel locking. Claude includes subscription login and an **API direct** channel (legacy BYOK preferences migrate automatically); Codex supports CLI login, inherited model providers from `~/.codex/config.toml`, and OpenAI-compatible custom providers; ZCode supports API-key / OAuth coding-plan providers with model lists probed from `/v1/models`.
+- Settings now include a Provider Manager for adding, editing, and deleting OpenAI-compatible and Anthropic providers (Base URL + key), with `/v1/models` probing. Provider config is stored locally at `~/.ae-mcp/providers.json`.
 - OpenCode remains an **external MCP client**. Embedded OpenCode is implemented but not yet exposed pending approval-gating verification.
 - External clients can connect through the panel-generated MCP config: Claude Desktop, Claude Code, Cursor, OpenCode, OpenClaw, AstrBot, Gemini Antigravity, ZCode, and similar clients.
 
@@ -195,7 +196,7 @@ Long-running or Dockerized IM-bot frameworks such as OpenClaw and AstrBot may no
 
 ### Panel Features
 
-- Built-in chat: Claude subscription / BYOK / Codex / ZCode.
+- Built-in chat: Claude / Codex / ZCode, with credential channels for subscription login, API direct, inherited CLI config, or custom providers depending on the backend.
 - Composer controls: model with cost badges, per-session model switching without clearing the conversation, native reasoning effort, fast mode, and approval mode.
 - Approval modes: read-only, manual, auto, bypass. Tool annotations drive consistent behavior across backends.
 - First-run wizard: detects and installs `uv`, Node, Claude CLI, and ae-mcp; shows commands verbatim before running; opens visible login terminals; no AE restart required after Python-side install.
@@ -238,17 +239,16 @@ uv tool install --from packages/core ae-mcp --with packages/bridge --with packag
 End users install from the release tag:
 
 ```powershell
-uv tool install --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.3#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.3#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.3#subdirectory=packages/snapshot-mss
+uv tool install --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.0#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.0#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.0#subdirectory=packages/snapshot-mss
 ```
 
 Install the panel from the ZXP package with aescripts ZXP Installer or ExMan Cmd. Then open `Window -> Extensions -> ae-mcp`.
 
 Embedded backend requirements:
 
-- Claude subscription: local Node >= 18 and a logged-in Claude Code CLI (`claude`).
-- BYOK: an Anthropic API key; set API Base URL and a custom model ID in Settings when using a compatible proxy/provider.
-- Codex: an installed Codex CLI. The official account path needs `codex login`; the custom-provider path uses API Base URL, API key, and model ID from Settings.
-- ZCode: an installed ZCode desktop app. Providers with an API key or OAuth coding-plan credentials work in the panel; `*-start-plan` subscription providers are desktop-app-only, so the panel fails fast with a hint.
+- Claude: local Node >= 18 and a logged-in Claude Code CLI (`claude`); the API direct channel needs an Anthropic API key or a compatible provider.
+- Codex: an installed Codex CLI. The official account path needs `codex login`; it can also inherit custom model providers from `~/.codex/config.toml` or use an OpenAI-compatible provider configured in Provider Manager.
+- ZCode: an installed ZCode desktop app. Providers with an API key or OAuth coding-plan credentials work in the panel; `*-start-plan` official hosted plans still need the ZCode desktop captcha bridge and stay unavailable until the panel detects valid credentials.
 
 External MCP client config:
 
@@ -283,7 +283,7 @@ cd ..\..
 .\scripts\install-plugin-dev.ps1
 ```
 
-The macOS development script exists, but v0.8.3 validation is primarily Windows + AE live.
+The macOS development script exists, but v0.9.0 validation is primarily Windows + AE live.
 
 ### Test
 

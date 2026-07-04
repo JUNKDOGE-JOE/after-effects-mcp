@@ -10,6 +10,29 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### [0.9.0] — 2026-07-04
+
+#### ✨ 新增
+- **统一凭证通道模型**（#47）——Claude / Codex / ZCode 三路后端现在各自呈现「凭证通道卡」，按优先级自动选择订阅登录、API 直连、CLI 配置继承、自定义 provider、桌面版继承或官方托管计划，并支持手动锁定某条通道。`pickBackend` 已改为通道驱动。
+- **Provider 管理器**（#47）——面板内可新增、编辑、删除 OpenAI-compatible 与 Anthropic 协议 provider（Base URL + Key），配置保存在本机 `~/.ae-mcp/providers.json`（0600 权限）；支持一键探测 `/v1/models` 拉取模型列表、从 cc-switch 导入，并自动迁移旧的 `anthropic-key` / `codex-key` / Base URL 偏好。
+- **Codex 继承 CLI 配置**（#47）——面板可直接继承 `~/.codex/config.toml` 中的自定义 `model_provider`，并支持对应 `/v1/models` 探测；显式自定义 provider 优先于继承配置。
+- **Claude API 直连通道**（#47）——可读取 `~/.claude/settings.json` 中的 `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` 作为导入提示；sidecar 新增 `--channel` 参数区分订阅与 API 环境处理。
+- **ZCode 模型体验升级**（#47）——模型列表改由 `/v1/models` 探测并缓存 1 小时，默认模型可解锁，会话内换模型会自动重建 session，并补齐缺 key、缺模型配置、desktop OAuth 缺口等双语可读错误提示。
+
+#### 🔧 改进
+- **设置页 UX 重构**（#47）——设置页改为状态持久化的折叠分区、三路后端分段控件、复用通道卡、About 链接和可重跑向导；日志导出进入工作中状态，包含脱敏与有效日志级别。
+
+#### 🐛 修复
+- **Codex 探测 / 后端重建死循环修复**（#47）——probe 状态变化不再造成配置对象身份抖动和 backend 反复重建；`cli-config` 经 `runtimeRef` 懒读，被替换的 backend 实例会 `reset()` 杀掉旧 app-server 进程，避免 UI 卡在「正在检测凭据通道」并泄漏大量进程。
+- **Codex 冷启动提示降噪**（#47）——app-server 冷启动时的 `Reconnecting... N/5` 瞬态通知不再渲染成红色对话错误。
+- **Probe 超时与进程卫生**（#47）——`probeAccount` 各 RPC 有独立有界超时；超时的探测进程会被 kill，不再泄漏。
+- **探测错误脱敏**（#47）——错误详情不再包含 provider 响应体原文，避免中转端点回显密钥进 UI。
+- **通道边界修正**（#47）——修复 `claudeSettingsImport` 反斜杠转义损坏、Codex 自定义 provider 在 `pickChannel` 中正确压过 `cli-config`、ZCode 缓存探测模型正确接入 descriptor 链等实机问题。
+
+#### 📦 说明
+- **BYOK 已并入 Claude 的「API 直连」通道**；旧偏好会自动迁移，无需手动操作。
+- **ZCode `*-start-plan` 官方托管计划仍需 ZCode 桌面端验证码桥接**；面板检测到有效凭据前不可选。
+
 ### [0.8.3] — 2026-07-03
 
 #### ✨ 新增
@@ -195,6 +218,29 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### [0.9.0] — 2026-07-04
+
+#### ✨ Added
+- **Unified credential channels** (#47) — Claude, Codex, and ZCode now each show credential-channel cards. The panel automatically picks the best available channel across subscription login, API direct, inherited CLI config, custom providers, desktop inheritance, and official hosted plans, with manual channel locking when needed. `pickBackend` is now channel-driven.
+- **Provider Manager** (#47) — Settings can add, edit, and delete OpenAI-compatible and Anthropic providers (Base URL + key), stored locally in `~/.ae-mcp/providers.json` with 0600 permissions. It can probe `/v1/models`, import from cc-switch, and migrate legacy `anthropic-key` / `codex-key` / Base URL preferences automatically.
+- **Codex CLI config inheritance** (#47) — the panel can inherit custom `model_provider` entries from `~/.codex/config.toml`, including `/v1/models` probing. Explicit custom providers take priority over inherited config.
+- **Claude API direct channel** (#47) — `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` from `~/.claude/settings.json` can be surfaced as import hints, and the sidecar now accepts `--channel` so subscription and API environments are handled separately.
+- **Better ZCode model handling** (#47) — model lists are probe-driven from `/v1/models` with a one-hour cache, default models can be unlocked, switching models inside a session rebuilds the session automatically, and missing-key / missing-model / desktop OAuth gaps now produce readable bilingual errors.
+
+#### 🔧 Improved
+- **Settings UX refresh** (#47) — Settings now use persistent collapsible sections, a three-way backend segmented control, reusable channel cards, About links, and a rerunnable wizard. Log export now has an in-progress state with redaction and effective log-level handling.
+
+#### 🐛 Fixed
+- **Codex probe / backend rebuild loop** (#47) — probe state changes no longer churn config object identity and repeatedly rebuild the backend. `cli-config` is read lazily through `runtimeRef`, and replaced backend instances call `reset()` to kill old app-server processes instead of leaking them while the UI stays stuck on credential-channel detection.
+- **Codex cold-start noise** (#47) — transient `Reconnecting... N/5` app-server startup notices no longer render as red chat errors.
+- **Probe timeout and process hygiene** (#47) — each `probeAccount` RPC has its own bounded timeout, and timed-out probe processes are killed instead of leaked.
+- **Probe error redaction** (#47) — probe error details no longer include raw provider response bodies, preventing relay endpoints from echoing secrets into the UI.
+- **Channel edge-case fixes** (#47) — fixed `claudeSettingsImport` backslash escaping, ensured Codex custom providers correctly outrank `cli-config` in `pickChannel`, and wired cached ZCode probed models into the descriptor chain.
+
+#### 📦 Notes
+- **BYOK is now Claude's API direct channel**; legacy preferences migrate automatically and require no manual action.
+- **ZCode `*-start-plan` official hosted plans still require the ZCode desktop captcha bridge** and remain unavailable until the panel detects valid credentials.
 
 ### [0.8.3] — 2026-07-03
 
