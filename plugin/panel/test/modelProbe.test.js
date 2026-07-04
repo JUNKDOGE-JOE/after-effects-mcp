@@ -66,3 +66,21 @@ test('probeProviderModels degrades to ok:false on 401 and network error', async 
   assert.equal(down.ok, false);
   assert.match(down.detail, /ECONNREFUSED/);
 });
+
+test('probeProviderModels does not include secret-bearing error bodies in detail', async () => {
+  const apiKey = 'sk-test-secret-1234567890';
+  const https = makeHttps((options, res, onRes) => {
+    onRes(Object.assign(res, { statusCode: 401 }));
+    res.handlers.data('Authorization: Bearer ' + apiKey + '\napiKey=' + apiKey);
+    res.handlers.end();
+  });
+
+  const result = await probeProviderModels({ baseUrl: 'https://h/v1', apiKey, httpsImpl: https });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 401);
+  assert.equal(result.detail, 'HTTP 401 from provider');
+  assert.doesNotMatch(result.detail, new RegExp(apiKey));
+  assert.doesNotMatch(result.detail, /Authorization/i);
+  assert.doesNotMatch(result.detail, /Bearer/i);
+});
