@@ -86,3 +86,13 @@ test('clearKey removes an existing key and ignores missing files', () => {
   assert.equal(store.readKey(), '');
   assert.doesNotThrow(() => store.clearKey());
 });
+
+test('writeKey can store a ZCode fallback key at ~/.ae-mcp/zcode-key', () => {
+  const deps = makeDeps();
+  const store = createApiKeyStore(deps);
+  store.writeKey('zc-secret', 'zcode');
+  assert.equal(store.readKey('zcode'), 'zc-secret');
+  assert.equal(deps.files.has('/home/user/.ae-mcp/zcode-key'), true);
+  store.clearKey('zcode');
+  assert.equal(store.readKey('zcode'), '');
+});

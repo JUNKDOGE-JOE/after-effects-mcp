@@ -1,4 +1,5 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
+import { claudeChannelEnv } from '../lib/claudeChannel.js';
 
 function getCepRequire() {
   if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
@@ -58,8 +59,8 @@ export async function probeClaudeLogin({
     let stderr = '';
     let proc = null;
     const spawn = spawnImpl || defaultSpawn();
-    const spawnEnv = Object.assign({}, getCepEnv(), env || {});
-    delete spawnEnv.ANTHROPIC_API_KEY;
+    // Subscription-channel probe: strip key/base-url overrides (spec B3).
+    const spawnEnv = claudeChannelEnv(Object.assign({}, getCepEnv(), env || {}), { channel: 'subscription' });
 
     function finish(result) {
       if (settled) return;

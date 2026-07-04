@@ -1,4 +1,5 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
+import { claudeChannelEnv } from '../lib/claudeChannel.js';
 
 const READY_TIMEOUT_MS = 15000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -66,12 +67,6 @@ function nodeMissingMessage(lang) {
   return 'Embedded chat needs system Node 18+. Install Node.js LTS and retry.';
 }
 
-function sanitizeEnv(env) {
-  const copy = Object.assign({}, env || {});
-  delete copy.ANTHROPIC_API_KEY;
-  return copy;
-}
-
 function appendTail(tail, chunk) {
   const next = tail + String(chunk || '');
   return next.length > STDERR_TAIL_LIMIT ? next.slice(next.length - STDERR_TAIL_LIMIT) : next;
@@ -86,6 +81,8 @@ export function createClaudeAgentBackend({
   getPermissionMode,
   getEffort,
   getThinking,
+  getChannel = () => 'subscription',
+  getApiProvider = () => null,
   onEvent,
   lang = 'zh',
   spawnImpl,
@@ -207,7 +204,8 @@ export function createClaudeAgentBackend({
       const mcpSpec = await getMcpSpec();
       const meta = await getToolMeta();
       const spawn = getSpawn();
-      const spawnEnv = sanitizeEnv(env || getCepEnv());
+      const channel = getChannel ? getChannel() : 'subscription';
+      const spawnEnv = claudeChannelEnv(env || getCepEnv(), { channel, provider: getApiProvider ? getApiProvider() : null });
       stderrTail = '';
       stopping = false;
       ready = false;
@@ -239,6 +237,7 @@ export function createClaudeAgentBackend({
           '--annotations', JSON.stringify(meta.annotations),
           '--model', getModel(),
           '--lang', lang,
+          '--channel', channel,
         ], {
           stdio: 'pipe',
           windowsHide: true,
@@ -336,5 +335,6 @@ export function createClaudeAgentBackend({
     stop,
     reset,
     getMessages: () => clone(transcript),
+    getStderrTail: () => stderrTail,
   };
 }

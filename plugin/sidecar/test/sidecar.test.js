@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { createSidecar } from '../lib.mjs'
+import { createSidecar, parseArgv } from '../lib.mjs'
 
 const defaultOptions = {
   probe: false,
@@ -696,3 +696,27 @@ async function captureAgentPrompt(lang) {
   await waitFor(() => eventCount(writes, 'turn-end') === 1)
   return seenOptions.agents.ae.prompt
 }
+
+test('parseArgv accepts --channel api and defaults to subscription', () => {
+  assert.equal(parseArgv(['--channel', 'api']).channel, 'api')
+  assert.equal(parseArgv([]).channel, 'subscription')
+  assert.equal(parseArgv(['--channel', 'bogus']).channel, 'subscription')
+})
+
+test('api channel keeps injected anthropic env vars in query env', async () => {
+  let queryEnv = null
+  const sidecar = createSidecar({
+    queryFn: async function * ({ options }) {
+      queryEnv = options.env
+      yield { type: 'result', subtype: 'success', is_error: false }
+    },
+    writeLine: () => {},
+    argvOptions: { ...defaultOptions, channel: 'api' },
+    env: { ANTHROPIC_API_KEY: 'secret', ANTHROPIC_BASE_URL: 'https://relay.example', ANTHROPIC_AUTH_TOKEN: 'tok' }
+  })
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'env', permissionMode: 'none' }))
+  await waitFor(() => queryEnv !== null)
+  assert.equal(queryEnv.ANTHROPIC_API_KEY, 'secret')
+  assert.equal(queryEnv.ANTHROPIC_BASE_URL, 'https://relay.example')
+  assert.equal(queryEnv.ANTHROPIC_AUTH_TOKEN, 'tok')
+})

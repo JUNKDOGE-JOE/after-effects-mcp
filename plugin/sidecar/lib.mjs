@@ -52,7 +52,8 @@ export function parseArgv(argv) {
     lang: 'zh',
     mcp: null,
     allowedTools: [],
-    annotations: {}
+    annotations: {},
+    channel: 'subscription'
   }
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -70,6 +71,9 @@ export function parseArgv(argv) {
     } else if (arg === '--lang') {
       const lang = argv[++i]
       options.lang = lang === 'en' ? 'en' : 'zh'
+    } else if (arg === '--channel') {
+      const channel = argv[++i]
+      options.channel = channel === 'api' ? 'api' : 'subscription'
     } else {
       throw new Error(`Unknown argument: ${arg}`)
     }
@@ -87,7 +91,7 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
   }
 
   const options = normalizeOptions(argvOptions)
-  const baseEnv = cleanEnv(env || {})
+  const baseEnv = cleanEnv(env || {}, options.channel)
   const approvals = new Map()
   const sessionAllowedTools = new Set()
   const toolUses = []
@@ -479,7 +483,8 @@ function normalizeOptions(argvOptions = {}) {
     lang: argvOptions.lang === 'en' ? 'en' : 'zh',
     mcp: argvOptions.mcp || null,
     allowedTools: Array.isArray(argvOptions.allowedTools) ? argvOptions.allowedTools : [],
-    annotations: isPlainObject(argvOptions.annotations) ? argvOptions.annotations : {}
+    annotations: isPlainObject(argvOptions.annotations) ? argvOptions.annotations : {},
+    channel: argvOptions.channel === 'api' ? 'api' : 'subscription'
   }
 }
 
@@ -490,9 +495,15 @@ function parseJsonArg(value, name) {
   return JSON.parse(value)
 }
 
-function cleanEnv(inputEnv) {
+function cleanEnv(inputEnv, channel = 'subscription') {
   const output = { ...inputEnv }
-  delete output.ANTHROPIC_API_KEY
+  // Subscription channel: the Agent SDK must self-discover login state, so a
+  // stray ANTHROPIC_API_KEY would silently reroute billing (spec B3).
+  // API-direct channel: the panel already curated the env (base URL + auth
+  // token injected); pass it through untouched.
+  if (channel !== 'api') {
+    delete output.ANTHROPIC_API_KEY
+  }
   return output
 }
 

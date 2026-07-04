@@ -244,6 +244,90 @@ test('createCodexBackend starts app-server with custom provider config when supp
   await pending;
 });
 
+test('createCodexBackend injects cli-config provider env var when no custom provider is configured', async () => {
+  const { backend, spawned } = makeBackend({
+    getCliConfigProvider: () => ({
+      provider: { envKey: 'MEDIASTORM_GLM_API_KEY', baseUrl: 'https://api.example.com/v1' },
+      apiKey: 'stored-codex-key',
+    }),
+  });
+
+  const { pending, proc } = await startTurn(backend, spawned, 'cli-config env');
+
+  assert.equal(spawned.calls[0].command, 'codex');
+  // config.toml already declares model_provider; no -c override args.
+  assert.deepEqual(spawned.calls[0].args, ['app-server']);
+  assert.equal(spawned.calls[0].options.env.MEDIASTORM_GLM_API_KEY, 'stored-codex-key');
+
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+});
+
+test('createCodexBackend reads cli-config provider lazily for each spawn', async () => {
+  let cliConfig = {
+    provider: { envKey: 'MEDIASTORM_GLM_API_KEY', baseUrl: 'https://api.example.com/v1' },
+    apiKey: 'first-key',
+  };
+  const { backend, spawned } = makeBackend({
+    getCliConfigProvider: () => cliConfig,
+  });
+
+  const { pending, proc } = await startTurn(backend, spawned, 'first cli-config env');
+  assert.equal(spawned.calls[0].options.env.MEDIASTORM_GLM_API_KEY, 'first-key');
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+
+  backend.reset();
+  cliConfig = {
+    provider: { envKey: 'MEDIASTORM_GLM_API_KEY', baseUrl: 'https://api.example.com/v1' },
+    apiKey: 'second-key',
+  };
+
+  const second = backend.sendUser('second cli-config env');
+  await flush();
+  const proc2 = spawned.procs[1];
+  respond(proc2, parseWrites(proc2)[0], {});
+  await flush();
+  respond(proc2, parseWrites(proc2)[1], { threadId: 'thread_2' });
+  await flush();
+  respond(proc2, parseWrites(proc2)[2], {});
+  assert.equal(spawned.calls.length, 2);
+  assert.equal(spawned.calls[1].options.env.MEDIASTORM_GLM_API_KEY, 'second-key');
+  proc2.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await second;
+});
+
+test('createCodexBackend prefers an explicit custom provider over cli-config inheritance', async () => {
+  const { backend, spawned } = makeBackend({
+    getProviderProfile: () => ({
+      codexBaseUrl: 'https://proxy.example/openai',
+      codexApiKey: 'sk-proxy',
+      codexProviderId: 'my-provider',
+    }),
+    getCliConfigProvider: () => ({
+      provider: { envKey: 'MEDIASTORM_GLM_API_KEY', baseUrl: 'https://api.example.com/v1' },
+      apiKey: 'stored-codex-key',
+    }),
+  });
+
+  const { pending, proc } = await startTurn(backend, spawned, 'custom wins');
+
+  assert.deepEqual(spawned.calls[0].args, [
+    'app-server',
+    '-c', 'model_provider="my-provider"',
+    '-c', 'model_providers.my-provider.name="AE MCP Custom"',
+    '-c', 'model_providers.my-provider.base_url="https://proxy.example/openai"',
+    '-c', 'model_providers.my-provider.env_key="AE_MCP_CODEX_API_KEY"',
+    '-c', 'model_providers.my-provider.wire_api="responses"',
+    '-c', 'model_providers.my-provider.requires_openai_auth=false',
+  ]);
+  assert.equal(spawned.calls[0].options.env.AE_MCP_CODEX_API_KEY, 'sk-proxy');
+  assert.equal(Object.hasOwn(spawned.calls[0].options.env, 'MEDIASTORM_GLM_API_KEY'), false);
+
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+});
+
 test('createCodexBackend reuses threadId on subsequent turns', async () => {
   const { backend, spawned } = makeBackend({
     getFast: () => false,
@@ -307,6 +391,41 @@ test('createCodexBackend maps app-server turn and tool notifications to panel ev
     { type: 'tool-result', toolUseId: 'call_x', name: 'mcp__ae__ae_ping', ok: true, text: '{"ok": true}', durationMs: 53 },
     { type: 'turn-end', stopReason: 'end_turn' },
   ]);
+});
+
+test('createCodexBackend ignores transient app-server reconnect error notifications', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { pending, proc } = await startTurn(backend, spawned, 'reconnect');
+  let settled = false;
+  pending.then(() => {
+    settled = true;
+  });
+
+  proc.pushStdout({ jsonrpc: '2.0', method: 'error', params: { error: { message: 'Reconnecting... 1/5' } } });
+  await flush();
+
+  assert.equal(events.some((evt) => evt.type === 'error'), false);
+  assert.equal(settled, false);
+
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+  assert.equal(settled, true);
+});
+
+test('createCodexBackend treats non-reconnect app-server errors as terminal', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { pending, proc } = await startTurn(backend, spawned, 'real error');
+  let settled = false;
+  pending.then(() => {
+    settled = true;
+  });
+
+  proc.pushStdout({ jsonrpc: '2.0', method: 'error', params: { error: { kind: 'mcp', message: 'MCP server failed' } } });
+  await pending;
+  await flush();
+
+  assert.deepEqual(events.at(-1), { type: 'error', kind: 'mcp', message: 'MCP server failed' });
+  assert.equal(settled, true);
 });
 
 test('codex approval adapter applies four tiers and annotations', async () => {
@@ -537,6 +656,8 @@ test('createCodexBackend probeAccount initializes and reads account plus model l
     email: 'a@example.com',
     planType: 'plus',
     models: [{ id: 'gpt-5.5', displayName: 'GPT-5.5', hidden: false }],
+    cliPath: '',
+    cliVersion: '',
   });
 });
 
@@ -556,5 +677,89 @@ test('createCodexBackend probeAccount reports runtime ok when OpenAI auth is abs
     runtimeOk: true,
     detail: 'OpenAI auth required',
     models: [],
+    cliPath: '',
+    cliVersion: '',
   });
+});
+
+test('spawn env is completed with USERPROFILE/HOME/APPDATA (spec B2)', async () => {
+  const { backend, spawned } = makeBackend({ env: { PATH: 'C:\\bin', HOME: 'C:\\Users\\test' } });
+  backend.sendUser('hi');
+  await flush();
+  const call = spawned.calls[0];
+  assert.equal(call.options.env.USERPROFILE, 'C:\\Users\\test');
+  assert.equal(call.options.env.APPDATA, 'C:\\Users\\test\\AppData\\Roaming');
+});
+
+test('AE_MCP_CODEX_CLI overrides the spawned codex binary', async () => {
+  const { backend, spawned } = makeBackend({ env: { PATH: 'C:\\bin', AE_MCP_CODEX_CLI: 'D:\\tools\\codex\\codex.exe' } });
+  backend.sendUser('hi');
+  await flush();
+  const call = spawned.calls[0];
+  assert.equal(call.command, 'D:\\tools\\codex\\codex.exe');
+});
+
+test('probeAccount reports resolved codex cliPath and cliVersion for diagnostics', async () => {
+  const { backend, spawned } = makeBackend({
+    resolveCli: async () => ({ ok: true, cliPath: 'C:\\bin\\codex.exe', version: 'codex-cli 1.2.3' }),
+  });
+  const probe = backend.probeAccount();
+  await flush();
+  const proc = spawned.procs[0];
+  respond(proc, parseWrites(proc)[0], {});
+  await flush();
+  assert.equal(parseWrites(proc)[1].method, 'account/read');
+  respond(proc, parseWrites(proc)[1], { account: { type: 'chatgpt', email: 'a@example.com', planType: 'plus' } });
+  await flush();
+  assert.equal(parseWrites(proc)[2].method, 'model/list');
+  respond(proc, parseWrites(proc)[2], { models: [{ id: 'gpt-5.5', displayName: 'GPT-5.5', hidden: false }] });
+
+  const result = await probe;
+  assert.equal(result.loggedIn, true);
+  assert.equal(result.cliPath, 'C:\\bin\\codex.exe');
+  assert.equal(result.cliVersion, 'codex-cli 1.2.3');
+});
+
+test('probeAccount resolves within bounds when model/list never responds (relay stream hang)', async () => {
+  const { backend, spawned } = makeBackend();
+  const probe = backend.probeAccount();
+  await flush();
+  const proc = spawned.procs[0];
+  respond(proc, parseWrites(proc)[0], {});
+  await flush();
+  assert.equal(parseWrites(proc)[1].method, 'account/read');
+  respond(proc, parseWrites(proc)[1], { account: { type: 'chatgpt', email: 'a@example.com', planType: 'plus' } });
+  await flush();
+  assert.equal(parseWrites(proc)[2].method, 'model/list');
+  // Never respond to model/list — simulates a third-party relay whose
+  // upstream stream disconnects and never completes the request.
+
+  const start = Date.now();
+  const result = await probe;
+  const elapsedMs = Date.now() - start;
+
+  // A stuck model/list must not fail the whole probe: account/read already
+  // succeeded, so probeAccount should resolve as logged-in with models=null.
+  assert.ok(elapsedMs < 6000, `probeAccount took too long: ${elapsedMs}ms`);
+  assert.equal(result.loggedIn, true);
+  assert.equal(result.runtimeOk, true);
+  assert.equal(result.models, null);
+});
+
+test('probeAccount resolves within bounds and kills the process when initialize never responds', async () => {
+  const { backend, spawned } = makeBackend();
+  const probe = backend.probeAccount();
+  await flush();
+  const proc = spawned.procs[0];
+  // Never respond to `initialize` — simulates a fully hung app-server.
+
+  const start = Date.now();
+  const result = await probe;
+  const elapsedMs = Date.now() - start;
+
+  assert.ok(elapsedMs < 12000, `probeAccount took too long: ${elapsedMs}ms`);
+  assert.equal(result.loggedIn, false);
+  assert.equal(result.runtimeOk, false);
+  assert.match(result.detail, /timeout/i);
+  assert.equal(proc.killed, true);
 });

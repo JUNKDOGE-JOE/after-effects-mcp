@@ -77,3 +77,16 @@ export function anthropicEndpoint(baseUrl, apiPath) {
   url.hash = '';
   return url.toString();
 }
+
+// Spec B2: the CEP env snapshot can miss USERPROFILE/HOME/APPDATA (they are
+// whatever AE was launched with). codex app-server needs them to locate its
+// login state, so fill them in before spawning.
+export function ensureUserEnv(env = {}, { homedir = '', appData = '' } = {}) {
+  const next = { ...env };
+  const anchor = String(next.USERPROFILE || next.HOME || homedir || '').replace(/[\\/]+$/, '');
+  if (!anchor) return next;
+  if (!next.USERPROFILE) next.USERPROFILE = anchor;
+  if (!next.HOME) next.HOME = anchor;
+  if (!next.APPDATA) next.APPDATA = appData || anchor + '\\AppData\\Roaming';
+  return next;
+}

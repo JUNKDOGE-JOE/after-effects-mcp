@@ -53,7 +53,7 @@ async def test_health_check_ok():
         # fields. health_check must stay True with the extras.
         return Response(200, json={
             "ok": True,
-            "pluginVersion": "0.8.3",
+            "pluginVersion": "0.9.0",
             "port": 11488,
             "pythonVersion": "1.27.2",
             "pythonLastSeenAt": 1719000000000,

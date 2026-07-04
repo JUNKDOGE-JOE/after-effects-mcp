@@ -18,23 +18,35 @@ import { probeClaudeLogin, resolveSidecarPath } from '../cep/claudeAuth';
 import { createClaudeAgentBackend, resolveSystemNode } from '../cep/claudeAgentBackend';
 import { createCodexBackend } from '../cep/codexBackend';
 import { createOpenCodeBackend } from '../cep/openCodeBackend';
-import { createZcodeBackend } from '../cep/zcodeBackend';
+import { createZcodeBackend, summarizeZcodeConfig } from '../cep/zcodeBackend';
+import { claudeChannels, codexChannels, zcodeChannels, migrateBackendPref } from '../lib/channels.js';
+import { createProviderStore } from '../cep/providerStore';
+import { ProviderManagerSection } from '../components/settings/ProviderManagerSection';
+import { probeProviderModels } from '../cep/modelProbe';
+import { detectCcSwitch } from '../cep/ccSwitch';
+import { readClaudeSettingsEnv } from '../cep/claudeSettingsImport';
+import { readCodexCliConfig, resolveCodexProviderApiKey } from '../cep/codexConfig';
 import { reduceEvent } from '../lib/chatEntries';
 import { DEFAULT_MODEL, FALLBACK_MODEL } from '../lib/anthropic';
-import { byokStaticDescriptor, mergeByokModels, codexDescriptorFromModels, openCodeDescriptorFromModels, descriptorWithCustomModel } from '../lib/backendCapabilities';
+import { descriptorWithCustomModel } from '../lib/backendCapabilities';
+import { selectDescriptor, isClaudeApiBackend, reconcileModelPref } from '../lib/descriptorSelect';
+import { readCachedZcodeProbedModels, writeCachedZcodeProbedModels } from '../lib/zcodeModelCache';
 import { baseDescriptorFor } from '../cep/backends/index.js';
 import { cachedByokModels } from '../cep/modelsApi';
 import { costBadge } from '../lib/composerOptions';
 import { anthropicEndpoint, normalizeProviderProfile } from '../lib/providerProfile.js';
 import { useActivity } from '../cep/useActivity';
-import { isWizardDone, markWizardDone } from '../cep/firstRun';
+import { isWizardDone, markWizardDone, clearWizardDone } from '../cep/firstRun';
 import { useWizardWiring } from './wizardWiring';
 import { runDiagnostics } from '../cep/diagnostics';
 import { copyText } from '../lib/clipboard';
 import { copyWizardConfig } from '../lib/wizardCopy.js';
-import { zcodeUnavailableHint } from '../lib/settingsState.js';
 import { createHostController, loadSavedPort, savePort, DEFAULT_PORT, buildMcpConfig, isValidPort } from '../cep/hostBridge';
 import { loadExpertGuidance, saveExpertGuidance } from '../lib/expertGuidance.js';
+import pkg from '../../package.json';
+import { buildLogExport, exportFileName, keepLogLine } from '../lib/logExport.js';
+import { writeLogExport, revealInExplorer } from '../cep/logExportFs.js';
+import { reconcileStableJsonValue } from '../lib/stableValue.js';
 
 // Re-export so app code has a single import surface; the helpers themselves live
 // in lib/ so the test suite (node --test, which cannot parse JSX) can import them.
@@ -59,18 +71,6 @@ const T = {
     regenBody: '所有已连接的 AI 客户端会立即失去访问权限，需要重启它们才能重新连接。',
     regenConfirm: '重新生成',
     cancel: '取消',
-    noKeyHint: '先在设置里配置 Anthropic API Key',
-    probingHint: '正在检测 Claude 登录态…',
-    notLoggedInHint: 'Claude 未登录：在终端运行 claude /login，再到设置里重新检测',
-    codexProbingHint: '正在检测 Codex 登录态…',
-    codexNotLoggedInHint: 'Codex 未登录：在终端运行 codex 登录后重新检测',
-    codexRuntimeHint: 'Codex 运行时不可用：请确认 codex CLI 可用后重新检测',
-    openCodeProbingHint: '正在检测 OpenCode 登录态…',
-    openCodeNotLoggedInHint: 'OpenCode 未登录：在终端完成登录后重新检测',
-    zcodeProbingHint: '正在检测 ZCode 运行时…',
-    zcodeNotLoggedInHint: 'ZCode 当前不可用：请打开 ZCode 或完成登录后重新检测',
-    zcodeRuntimeHint: 'ZCode 运行时不可用：请安装 ZCode，确认 Node 可用，或设置 AE_MCP_ZCODE_CLI 后重新检测',
-    noNodeHint: '内嵌对话需要系统 Node 18+',
     pausedHint: '已暂停 — 恢复后才能发送',
     goSettings: '去设置',
   },
@@ -92,22 +92,12 @@ const T = {
     regenBody: 'Every connected AI client loses access immediately and must be restarted to reconnect.',
     regenConfirm: 'Regenerate',
     cancel: 'Cancel',
-    noKeyHint: 'Set your Anthropic API key in Settings first',
-    probingHint: 'Checking Claude login…',
-    notLoggedInHint: 'Not logged in: run claude /login in a terminal, then re-check in Settings',
-    codexProbingHint: 'Checking Codex login…',
-    codexNotLoggedInHint: 'Codex is not logged in: log in with codex, then re-check',
-    codexRuntimeHint: 'Codex runtime unavailable: confirm the codex CLI is available, then re-check',
-    openCodeProbingHint: 'Checking OpenCode login…',
-    openCodeNotLoggedInHint: 'OpenCode is not logged in: sign in with opencode, then re-check',
-    zcodeProbingHint: 'Checking ZCode runtime…',
-    zcodeNotLoggedInHint: 'ZCode is not available: open ZCode or sign in, then re-check',
-    zcodeRuntimeHint: 'ZCode runtime unavailable: install ZCode, confirm Node is available, or set AE_MCP_ZCODE_CLI, then re-check',
-    noNodeHint: 'Embedded chat needs system Node 18+',
     pausedHint: 'Paused — resume to send',
     goSettings: 'Open Settings',
   },
 };
+
+const pkgVersion = pkg.version;
 
 function readPref(key, fallback) {
   try {
@@ -120,7 +110,6 @@ function writePref(key, value) {
 }
 
 const CODEX_MODELS_CACHE_KEY = 'ae_mcp_codex_models';
-const OPENCODE_MODELS_CACHE_KEY = 'ae_mcp_opencode_models';
 const CODEX_MODELS_CACHE_MS = 24 * 60 * 60 * 1000;
 
 function readCachedCodexModels(storage) {
@@ -139,27 +128,6 @@ function readCachedCodexModels(storage) {
 function writeCachedCodexModels(storage, models) {
   try {
     storage.setItem(CODEX_MODELS_CACHE_KEY, JSON.stringify({ ts: Date.now(), models }));
-  } catch (e) {
-    // best-effort
-  }
-}
-
-function readCachedOpenCodeModels(storage) {
-  try {
-    const raw = storage.getItem(OPENCODE_MODELS_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || !parsed.models) return null;
-    if (Date.now() - Number(parsed.ts || 0) > CODEX_MODELS_CACHE_MS) return null;
-    return parsed.models;
-  } catch (e) {
-    return null;
-  }
-}
-
-function writeCachedOpenCodeModels(storage, models) {
-  try {
-    storage.setItem(OPENCODE_MODELS_CACHE_KEY, JSON.stringify({ ts: Date.now(), models }));
   } catch (e) {
     // best-effort
   }
@@ -245,42 +213,50 @@ function Shell({ cs }) {
   const [codexBaseUrl, setCodexBaseUrl] = React.useState(() => readPref('ae_mcp_codex_base_url', ''));
   const [customModel, setCustomModel] = React.useState(() => readPref('ae_mcp_custom_model', ''));
   const [model, setModel] = React.useState(() => readPref('ae_mcp_model', DEFAULT_MODEL));
+  const [logLevel, setLogLevel] = React.useState(() => readPref('ae_mcp_log_level', 'info'));
+  const logLevelRef = React.useRef(logLevel);
+  logLevelRef.current = logLevel;
   const [sessionModel, setSessionModel] = React.useState(null);
   const [sessionEffort, setSessionEffort] = React.useState(null);
   const [sessionFast, setSessionFast] = React.useState(null);
   const [permissionMode, setPermissionMode] = React.useState(() => readPref('ae_mcp_perm_mode', 'manual'));
-  const [backendPref, setBackendPref] = React.useState(() => readPref('ae_mcp_backend', 'subscription'));
+  const backendMigration = React.useMemo(() => migrateBackendPref(window.localStorage), []);
+  const [backendPref, setBackendPref] = React.useState(() => backendMigration.pref);
+  const [channelLock, setChannelLock] = React.useState(() => backendMigration.lockedChannel);
+  const providerStore = React.useMemo(() => {
+    try {
+      const store = createProviderStore();
+      store.migrateLegacy({
+        readKey: (name) => { try { return keyStore ? keyStore.readKey(name) : ''; } catch (e) { return ''; } },
+        readPref: (key) => readPref(key, ''),
+      });
+      return store;
+    } catch (e) { return null; }
+  }, [keyStore]);
+  const [providers, setProviders] = React.useState(() => (providerStore ? providerStore.list() : []));
+  const [claudeProviderId, setClaudeProviderId] = React.useState(() => readPref('ae_mcp_claude_provider', ''));
+  const [codexProviderId, setCodexProviderId] = React.useState(() => readPref('ae_mcp_codex_provider', ''));
   const [expertGuidance, setExpertGuidance] = React.useState(() => loadExpertGuidance(window.localStorage));
   const [probe, setProbe] = React.useState(null);
   const [codexProbe, setCodexProbe] = React.useState(null);
   const [codexModels, setCodexModels] = React.useState(() => readCachedCodexModels(window.localStorage));
-  const [openCodeProbe, setOpenCodeProbe] = React.useState(null);
-  const [openCodeModels, setOpenCodeModels] = React.useState(() => readCachedOpenCodeModels(window.localStorage));
   const [zcodeProbe, setZcodeProbe] = React.useState(null);
+  // Populated from the 'zcode-session-created' chat event (session/create's
+  // result), used by selectDescriptor to build a live model list for the
+  // zcode backend. See zcodeDescriptorFromModels in backendCapabilities.js.
+  const [zcodeSessionModels, setZcodeSessionModels] = React.useState(null);
+  // Probe-driven fallback (spec A2 applied to zcode): when session/create's
+  // settings.model.available is empty (custom openai-compatible providers
+  // have no session-side model enumeration), actively probe the CLI provider's
+  // /v1/models endpoint. Seeded from the 1h localStorage cache so a fresh
+  // panel load doesn't need to re-probe immediately. See lib/zcodeModelCache.js.
+  const [zcodeProbedModels, setZcodeProbedModels] = React.useState(() => readCachedZcodeProbedModels(window.localStorage));
   const [chatEntries, setChatEntries] = React.useState([]);
   const [chatStreaming, setChatStreaming] = React.useState(false);
   const [thinkingActive, setThinkingActive] = React.useState(false);
-  const customModelForBackend = (backendPref === 'byok' || backendPref === 'codex') ? customModel : '';
-  const baseDescriptor = React.useMemo(() => descriptorWithCustomModel(baseDescriptorFor(backendPref), customModelForBackend), [backendPref, customModelForBackend]);
+  const customModelForBackend = backendPref === 'codex' ? customModel : '';
+  const baseDescriptor = React.useMemo(() => descriptorWithCustomModel(baseDescriptorFor(backendPref, (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {}), customModelForBackend), [backendPref, customModelForBackend]);
   const [descriptor, setDescriptor] = React.useState(() => baseDescriptor);
-  React.useEffect(() => {
-    let alive = true;
-    setDescriptor(baseDescriptor);
-    if (backendPref === 'byok' && apiKey) {
-      cachedByokModels({ apiKey, baseUrl: anthropicBaseUrl }).then((list) => {
-        if (alive) setDescriptor(descriptorWithCustomModel(mergeByokModels(byokStaticDescriptor(), list), customModelForBackend));
-      }).catch(() => {});
-    }
-    if (backendPref === 'codex') {
-      const cached = codexModels || readCachedCodexModels(window.localStorage);
-      if (cached) setDescriptor(descriptorWithCustomModel(codexDescriptorFromModels({ models: cached }), customModelForBackend));
-    }
-    if (backendPref === 'opencode') {
-      const cached = openCodeModels || readCachedOpenCodeModels(window.localStorage);
-      if (cached) setDescriptor(openCodeDescriptorFromModels(cached));
-    }
-    return () => { alive = false; };
-  }, [anthropicBaseUrl, apiKey, backendPref, baseDescriptor, codexModels, customModelForBackend, openCodeModels]);
   const requestedModel = sessionModel || model;
   const effectiveModel = descriptor.models.some((m) => m.id === requestedModel)
     ? requestedModel
@@ -288,23 +264,97 @@ function Shell({ cs }) {
   const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
   const effectiveEffort = sessionEffort || (modelMeta.effortLevels && modelMeta.effortLevels.length ? descriptor.defaultEffort : null);
   const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
+  const claudeApiProvider = React.useMemo(() => {
+    const fromStore = providers.find((p) => p.id === claudeProviderId) || null;
+    if (fromStore && fromStore.baseUrl && fromStore.apiKey) return fromStore;
+    if (apiKey) return { id: 'legacy-anthropic', name: 'Claude API', protocol: 'anthropic', baseUrl: anthropicBaseUrl || 'https://api.anthropic.com', apiKey, probedModels: [], probedAt: 0 };
+    return fromStore;
+  }, [providers, claudeProviderId, apiKey, anthropicBaseUrl]);
+  const codexCustomProvider = React.useMemo(() => {
+    const fromStore = providers.find((p) => p.id === codexProviderId) || null;
+    if (fromStore && fromStore.baseUrl && fromStore.apiKey) return fromStore;
+    if (codexBaseUrl) return { id: 'legacy-codex', name: 'Codex custom', protocol: 'openai-compatible', baseUrl: codexBaseUrl, apiKey: codexApiKey, probedModels: [], probedAt: 0 };
+    return fromStore;
+  }, [providers, codexProviderId, codexBaseUrl, codexApiKey]);
+
+  const [providerProbing, setProviderProbing] = React.useState('');
+  const [providerProbeErrors, setProviderProbeErrors] = React.useState({});
+  const ccSwitchFound = React.useMemo(() => {
+    try { return detectCcSwitch({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {} }); } catch (e) { return null; }
+  }, []);
+  const providerManager = (
+    <ProviderManagerSection
+      lang={lang}
+      providers={providers}
+      probing={providerProbing}
+      probeErrors={providerProbeErrors}
+      ccSwitch={ccSwitchFound}
+      onImportCcSwitch={() => {
+        if (!ccSwitchFound || !providerStore) return;
+        for (const entry of ccSwitchFound.providers) providerStore.upsert(entry);
+        setProviders(providerStore.list());
+      }}
+      onUpsert={(entry) => {
+        if (!providerStore) return;
+        const existing = providerStore.get(entry.id);
+        providerStore.upsert({ ...entry, probedModels: existing ? existing.probedModels : [], probedAt: existing ? existing.probedAt : 0 });
+        setProviders(providerStore.list());
+      }}
+      onRemove={(id) => {
+        if (!providerStore) return;
+        providerStore.remove(id);
+        setProviders(providerStore.list());
+        if (claudeProviderId === id) { setClaudeProviderId(''); writePref('ae_mcp_claude_provider', ''); }
+        if (codexProviderId === id) { setCodexProviderId(''); writePref('ae_mcp_codex_provider', ''); }
+      }}
+      onProbe={async (p) => {
+        setProviderProbing(p.id);
+        const result = await probeProviderModels({ baseUrl: p.baseUrl, apiKey: p.apiKey, protocol: p.protocol });
+        setProviderProbing('');
+        if (result.ok && providerStore) {
+          providerStore.upsert({ ...p, probedModels: result.models, probedAt: Date.now() });
+          setProviders(providerStore.list());
+          setProviderProbeErrors((errs) => ({ ...errs, [p.id]: '' }));
+        } else {
+          setProviderProbeErrors((errs) => ({ ...errs, [p.id]: result.detail || ('HTTP ' + result.status) }));
+        }
+      }}
+    />
+  );
+  const zcodeConfigSummary = React.useMemo(() => {
+    try { return summarizeZcodeConfig({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {}, storedKey: (() => { try { return keyStore ? keyStore.readKey('zcode') : ''; } catch (e) { return ''; } })() }); } catch (e) { return null; }
+    // zcodeProbe in deps: re-summarize after each re-check so pasted keys reflect immediately.
+  }, [keyStore, zcodeProbe]);
+  const codexCliConfigStableRef = React.useRef(null);
+  // Spec A extension: inherit a custom model_provider declared in
+  // ~/.codex/config.toml (mirrors zcodeConfigSummary above).
+  const codexCliConfig = React.useMemo(() => {
+    let next;
+    try { next = readCodexCliConfig({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {} }); } catch (e) { next = null; }
+    // Probe state re-reads config.toml, but equal content must not recreate
+    // process-owning backends through referential churn.
+    codexCliConfigStableRef.current = reconcileStableJsonValue(codexCliConfigStableRef.current, next);
+    return codexCliConfigStableRef.current.value;
+  }, [codexProbe]);
+  const codexCliConfigApiKey = React.useMemo(() => {
+    const env = (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {};
+    const storedKey = (() => { try { return keyStore ? keyStore.readKey('codex') : ''; } catch (e) { return ''; } })();
+    return resolveCodexProviderApiKey({ provider: codexCliConfig && codexCliConfig.provider, env, storedKey });
+  }, [codexCliConfig, keyStore, codexApiKey]);
+  const channels = React.useMemo(() => ({
+    claude: claudeChannels({ probe, apiProvider: claudeApiProvider }),
+    codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, cliConfig: codexCliConfig, cliConfigApiKey: codexCliConfigApiKey }),
+    zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary }),
+  }), [probe, claudeApiProvider, codexProbe, codexCustomProvider, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliConfigApiKey]);
+  const claudeSettingsHint = React.useMemo(() => {
+    try { return readClaudeSettingsEnv({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {} }); } catch (e) { return null; }
+  }, []);
   const providerProfile = React.useMemo(() => normalizeProviderProfile({
-    anthropicBaseUrl,
-    codexApiKey,
-    codexBaseUrl,
-  }), [anthropicBaseUrl, codexApiKey, codexBaseUrl]);
-  const hasCodexCustomProvider = Boolean(providerProfile.codexBaseUrl);
-  const runtimeRef = React.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast });
-  runtimeRef.current = {
-    apiKey,
-    apiBaseUrl: providerProfile.anthropicBaseUrl,
-    providerProfile,
-    model: effectiveModel,
-    permissionMode,
-    effort: effectiveEffort,
-    thinking: modelMeta.adaptive === true ? 'adaptive' : null,
-    fast: effectiveFast,
-  };
+    anthropicBaseUrl: claudeApiProvider ? claudeApiProvider.baseUrl : anthropicBaseUrl,
+    codexApiKey: codexCustomProvider ? codexCustomProvider.apiKey : codexApiKey,
+    codexBaseUrl: codexCustomProvider ? codexCustomProvider.baseUrl : codexBaseUrl,
+  }), [claudeApiProvider, anthropicBaseUrl, codexCustomProvider, codexApiKey, codexBaseUrl]);
+  const runtimeRef = React.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: 'subscription', claudeApiProvider: null, codexCliConfigProvider: null });
   const extRoot = cs && cs.getSystemPath ? cs.getSystemPath('extension') : '';
   const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
   const mcp = React.useMemo(() => createMcpClient({
@@ -318,6 +368,7 @@ function Shell({ cs }) {
       setChatStreaming(false);
       setThinkingActive(false);
     }
+    if (evt.type === 'zcode-session-created') setZcodeSessionModels(evt.result || null);
     setChatEntries((entries) => reduceEvent(entries, evt));
   }, []);
 
@@ -350,6 +401,8 @@ function Shell({ cs }) {
     getPermissionMode: () => runtimeRef.current.permissionMode,
     getEffort: () => runtimeRef.current.effort,
     getThinking: () => runtimeRef.current.thinking,
+    getChannel: () => runtimeRef.current.claudeChannel || 'subscription',
+    getApiProvider: () => runtimeRef.current.claudeApiProvider || null,
     lang,
     onEvent: handleChatEvent,
   }), [extRoot, sidecarPath, mcp, handleChatEvent]);
@@ -364,10 +417,15 @@ function Shell({ cs }) {
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     getServerInstructions: () => mcp.getServerInstructions(),
     getProviderProfile: () => runtimeRef.current.providerProfile,
+    getCliConfigProvider: () => runtimeRef.current.codexCliConfigProvider,
     lang,
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
   }), [extRoot, mcp, handleChatEvent]);
+
+  React.useEffect(() => () => {
+    codexBackend.reset();
+  }, [codexBackend]);
 
   const openCodeBackend = React.useMemo(() => createOpenCodeBackend({
     getMcpSpec: () => resolveMcpCommand({ extRoot }),
@@ -391,16 +449,111 @@ function Shell({ cs }) {
     onEvent: handleChatEvent,
   }), [extRoot, mcp, handleChatEvent]);
 
-  const selectedEffective = pickBackend({ pref: backendPref, probe, hasApiKey: !!apiKey, codexProbe, hasCodexCustomProvider, zcodeProbe });
-  const effective = backendPref === 'opencode'
-    ? openCodeProbe === null ? { backend: 'none', reason: 'opencode-probing' }
-      : !openCodeProbe || !openCodeProbe.loggedIn ? { backend: 'none', reason: 'opencode-not-logged-in' }
-      : { backend: 'opencode', reason: 'ok' }
-    : selectedEffective;
+  React.useEffect(() => () => {
+    zcodeBackend.reset();
+  }, [zcodeBackend]);
+
+  const nodeOk = !(probe && probe.nodeOk === false);
+  const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock, nodeOk });
+  runtimeRef.current = {
+    apiKey: claudeApiProvider ? claudeApiProvider.apiKey : apiKey,
+    apiBaseUrl: providerProfile.anthropicBaseUrl,
+    providerProfile,
+    model: effectiveModel,
+    permissionMode,
+    effort: effectiveEffort,
+    thinking: modelMeta.adaptive === true ? 'adaptive' : null,
+    fast: effectiveFast,
+    claudeChannel: effective.backend === 'claude-api' ? 'api' : 'subscription',
+    claudeApiProvider,
+    codexCliConfigProvider: codexCliConfig && codexCliConfig.provider ? { provider: codexCliConfig.provider, apiKey: codexCliConfigApiKey } : null,
+  };
   // Map real-backend id -> instance.
-  const backendInstances = { subscription: claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };
+  const backendInstances = { subscription: claudeBackend, 'claude-api': claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };
   const activeBackend = backendInstances[effective.backend] || byokLoop;
+
+  // Descriptor selection is keyed on the EFFECTIVE backend from pickBackend,
+  // not backendPref: 'byok' never appears as a pref (migrateBackendPref maps
+  // it away), only as an effective backend when Node is broken.
+  React.useEffect(() => {
+    let alive = true;
+    const facts = {
+      effectiveBackend: effective.backend,
+      backendPref,
+      baseDescriptor,
+      customModel,
+      claudeApiProvider,
+      codexCustomProvider,
+      byokApiModels: null,
+      codexCachedModels: codexModels || readCachedCodexModels(window.localStorage),
+      zcodeSessionModels,
+      zcodeProbedModels,
+    };
+    const nextDescriptor = selectDescriptor(facts);
+    setDescriptor(nextDescriptor);
+    // Bug 2: a stale localStorage model id (from an older backend/session)
+    // can silently outrank the descriptor's current defaultModelId. Reset it
+    // when the current model isn't in the new descriptor's model list, but
+    // exempt the codex custom-model path (customModel is intentionally not
+    // in the curated list there).
+    const isCustomModelPath = backendPref === 'codex' && customModelForBackend && model === customModelForBackend;
+    const reconciled = reconcileModelPref(model, nextDescriptor, { isCustom: isCustomModelPath });
+    if (reconciled !== model) {
+      setModel(reconciled);
+      writePref('ae_mcp_model', reconciled);
+    }
+    const hasProbed = Boolean(claudeApiProvider && claudeApiProvider.probedModels && claudeApiProvider.probedModels.length);
+    const claudeKey = claudeApiProvider ? claudeApiProvider.apiKey : apiKey;
+    if (isClaudeApiBackend(effective.backend) && claudeKey && !hasProbed) {
+      cachedByokModels({ apiKey: claudeKey, baseUrl: claudeApiProvider ? claudeApiProvider.baseUrl : anthropicBaseUrl }).then((list) => {
+        if (alive) setDescriptor(selectDescriptor({ ...facts, byokApiModels: list }));
+      }).catch(() => {});
+    }
+    return () => { alive = false; };
+  }, [effective.backend, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, apiKey, anthropicBaseUrl, zcodeSessionModels, zcodeProbedModels]);
   const activeBackendRef = React.useRef(null);
+
+  // Probe the CLI-configured zcode provider's /v1/models when session data
+  // hasn't supplied a usable model list yet. Only runs for custom providers
+  // that expose a baseUrl and a resolved API key (summarizeZcodeConfig gives
+  // us both facts); a stale/expired cache entry re-triggers a fresh probe.
+  React.useEffect(() => {
+    if (backendPref !== 'zcode') return undefined;
+    // Only a session result that actually enumerates a choice (>1 model)
+    // makes probing unnecessary. probeAccount's session/create on custom
+    // providers returns a truthy result whose available list is empty or
+    // only names the current model — that must NOT suppress the probe.
+    const sessionAvailable = zcodeSessionModels && zcodeSessionModels.settings && zcodeSessionModels.settings.model && Array.isArray(zcodeSessionModels.settings.model.available)
+      ? zcodeSessionModels.settings.model.available
+      : [];
+    if (sessionAvailable.length > 1) return undefined;
+    const cli = zcodeConfigSummary && zcodeConfigSummary.cli;
+    if (!cli || !cli.model || !cli.baseUrl || !cli.hasCredential) return undefined;
+    const cached = readCachedZcodeProbedModels(window.localStorage);
+    if (cached && cached.cliModel === cli.model) {
+      // Reference-compare fails (fresh object per read), so compare identity
+      // facts to avoid a setState loop between this effect and the descriptor
+      // effect (which now depends on zcodeSessionModels changes too).
+      const same = zcodeProbedModels
+        && zcodeProbedModels.cliModel === cached.cliModel
+        && Array.isArray(zcodeProbedModels.probedModels)
+        && zcodeProbedModels.probedModels.length === cached.probedModels.length;
+      if (!same) setZcodeProbedModels(cached);
+      return undefined;
+    }
+    let alive = true;
+    const providerId = cli.providerId || '';
+    const apiKeyValue = (() => { try { return keyStore ? keyStore.readKey('zcode') : ''; } catch (e) { return ''; } })();
+    probeProviderModels({ baseUrl: cli.baseUrl, apiKey: apiKeyValue, protocol: cli.protocol }).then((result) => {
+      if (!alive) return;
+      if (result.ok && result.models && result.models.length) {
+        const entry = { cliModel: cli.model, providerId, probedModels: result.models };
+        writeCachedZcodeProbedModels(window.localStorage, entry);
+        setZcodeProbedModels(entry);
+      }
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [backendPref, zcodeSessionModels, zcodeConfigSummary, keyStore]);
 
   const runClaudeProbe = React.useCallback(() => {
     let alive = true;
@@ -442,26 +595,24 @@ function Shell({ cs }) {
     return runCodexProbe();
   }, [backendPref, runCodexProbe]);
 
-  const runOpenCodeProbe = React.useCallback(() => {
-    let alive = true;
-    setOpenCodeProbe(null);
-    openCodeBackend.probeAccount().then((result) => {
-      if (!alive) return;
-      setOpenCodeProbe(result);
-      if (result && result.models) {
-        setOpenCodeModels(result.models);
-        writeCachedOpenCodeModels(window.localStorage, result.models);
-      }
-    }).catch((e) => {
-      if (alive) setOpenCodeProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
-    });
-    return () => { alive = false; };
-  }, [openCodeBackend]);
-
+  // Spec A extension: when the cli-config channel is active (custom provider
+  // via inherited config.toml), probe its /v1/models the same way zcode's
+  // cli-config channel does (same probeProviderModels entry point).
   React.useEffect(() => {
-    if (backendPref !== 'opencode') return undefined;
-    return runOpenCodeProbe();
-  }, [backendPref, runOpenCodeProbe]);
+    if (backendPref !== 'codex') return undefined;
+    if (!codexCliConfig || !codexCliConfig.provider || !codexCliConfigApiKey) return undefined;
+    if (codexCustomProvider && codexCustomProvider.baseUrl) return undefined; // explicit custom provider wins
+    if (codexModels && codexModels.length > 1) return undefined;
+    let alive = true;
+    probeProviderModels({ baseUrl: codexCliConfig.provider.baseUrl, apiKey: codexCliConfigApiKey, protocol: 'openai-compatible' }).then((result) => {
+      if (!alive) return;
+      if (result.ok && result.models && result.models.length) {
+        setCodexModels(result.models);
+        writeCachedCodexModels(window.localStorage, result.models);
+      }
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [backendPref, codexCliConfig, codexCliConfigApiKey, codexCustomProvider, codexModels]);
 
   const runZcodeProbe = React.useCallback(() => {
     let alive = true;
@@ -500,6 +651,7 @@ function Shell({ cs }) {
     setSessionModel(null);
     setSessionEffort(null);
     setSessionFast(null);
+    if (decision.nextReal !== 'zcode') setZcodeSessionModels(null);
   }, [effective.backend, byokLoop, claudeBackend, codexBackend, openCodeBackend, zcodeBackend]);
 
   const sendChat = (text) => {
@@ -515,9 +667,27 @@ function Shell({ cs }) {
     setChatEntries([]);
   };
 
+  // Note: the log-level filter is intentionally applied at append time only; existing buffered lines are unaffected by later level changes.
   const pushLog = React.useCallback((m) => {
+    if (!keepLogLine(logLevelRef.current, m)) return;
     setLogs((xs) => [...xs.slice(-199), `[${new Date().toLocaleTimeString()}] ${m}`]);
   }, []);
+
+  const exportLogs = React.useCallback(() => {
+    try {
+      const text = buildLogExport({
+        panelLogs: logs,
+        hostInfo: { hostVersion: (connInfo && connInfo.hostVersion) || '-', pythonVersion: (connInfo && connInfo.pythonVersion) || '-' },
+        sidecarTail: claudeBackend.getStderrTail ? claudeBackend.getStderrTail() : '',
+        version: pkgVersion,
+      });
+      const file = writeLogExport({ text, fileName: exportFileName() });
+      revealInExplorer(file, undefined, (err) => pushLog('Log export reveal failed: ' + (err && err.message ? err.message : String(err))));
+      pushLog('Log exported: ' + file);
+    } catch (e) {
+      pushLog('Log export failed: ' + (e && e.message ? e.message : String(e)));
+    }
+  }, [logs, connInfo, claudeBackend, pushLog]);
 
   const undoToPreviousCheckpoint = React.useCallback(async () => {
     try {
@@ -618,18 +788,6 @@ function Shell({ cs }) {
     : probe.nodeOk === false ? { state: 'no-node', detail: probe.detail }
     : probe.loggedIn === false ? { state: 'not-logged-in', detail: probe.detail }
     : { state: 'ready', nodeVersion: probe.nodeVersion };
-  const codexStatus = codexProbe === null ? { state: 'checking' }
-    : hasCodexCustomProvider && codexProbe.runtimeOk !== false ? { state: 'ready', planType: 'Custom API', detail: codexProbe.detail }
-    : hasCodexCustomProvider && codexProbe.runtimeOk === false ? { state: 'runtime-error', detail: codexProbe.detail }
-    : codexProbe.loggedIn === false ? { state: 'not-logged-in', detail: codexProbe.detail }
-    : { state: 'ready', email: codexProbe.email, planType: codexProbe.planType };
-  const openCodeStatus = openCodeProbe === null ? { state: 'checking' }
-    : openCodeProbe.loggedIn === false ? { state: 'not-logged-in', detail: openCodeProbe.detail }
-    : { state: 'ready' };
-  const zcodeStatus = zcodeProbe === null ? { state: 'checking' }
-    : zcodeProbe.runtimeOk === false ? { state: 'runtime-error', provider: zcodeProbe.provider, detail: zcodeProbe.detail }
-    : zcodeProbe.loggedIn === false ? { state: 'not-logged-in', provider: zcodeProbe.provider, detail: zcodeProbe.detail }
-    : { state: 'ready', provider: zcodeProbe.provider };
   const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
 
   if (!wizardDone) {
@@ -644,6 +802,8 @@ function Shell({ cs }) {
         mcpConfig={mcpConfigStr}
         port={status.port}
         expertGuidance={expertGuidance}
+        channels={channels}
+        activeChannel={effective.channel || ''}
         onNext={() => setWizStep((s) => Math.min(3, s + 1))}
         onBack={() => setWizStep((s) => Math.max(1, s - 1))}
         onCopy={(text) => copyWizardConfig(copyText, mcpConfigStr, text)}
@@ -660,19 +820,10 @@ function Shell({ cs }) {
     { id: 'activity', icon: 'list-checks', label: t.activity },
     { id: 'settings', icon: 'settings', label: t.settings },
   ];
-  const backendDisabledHint = effective.reason === 'probing' ? t.probingHint
-    : effective.reason === 'not-logged-in' ? t.notLoggedInHint
-    : effective.reason === 'codex-probing' ? t.codexProbingHint
-    : effective.reason === 'codex-not-logged-in' ? t.codexNotLoggedInHint
-    : effective.reason === 'codex-runtime-unavailable' ? t.codexRuntimeHint
-    : effective.reason === 'opencode-probing' ? t.openCodeProbingHint
-    : effective.reason === 'opencode-not-logged-in' ? t.openCodeNotLoggedInHint
-    : effective.reason === 'zcode-probing' ? t.zcodeProbingHint
-    : effective.reason === 'zcode-not-logged-in' ? t.zcodeNotLoggedInHint
-    : effective.reason === 'zcode-runtime-unavailable' ? zcodeUnavailableHint(zcodeStatus, t.zcodeRuntimeHint)
-    : effective.reason === 'no-node' ? t.noNodeHint
-    : effective.reason === 'no-key' ? t.noKeyHint
-    : '';
+  const backendDisabledHint = (effective.fixHint && (effective.fixHint[lang] || effective.fixHint.zh))
+    || (effective.reason && effective.reason.endsWith('-probing')
+      ? (lang === 'zh' ? '正在检测凭据通道…' : 'Checking credential channels…')
+      : '');
   const composerDisabled = paused || effective.backend === 'none';
   const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
 
@@ -747,32 +898,46 @@ function Shell({ cs }) {
             onRegenToken={() => setConfirmRegen(true)}
             hostVersion={(connInfo && connInfo.hostVersion) || '-'}
             pythonVersion={(connInfo && connInfo.pythonVersion) || '-'}
-            apiKey={apiKey}
-            onSaveApiKey={(k) => { if (keyStore) keyStore.writeKey(k); setApiKey(k); }}
-            onClearApiKey={() => { if (keyStore) keyStore.clearKey(); setApiKey(''); }}
-            anthropicBaseUrl={anthropicBaseUrl}
-            onAnthropicBaseUrlChange={(v) => { setAnthropicBaseUrl(v); writePref('ae_mcp_anthropic_base_url', v); }}
-            codexApiKey={codexApiKey}
-            codexBaseUrl={codexBaseUrl}
-            onCodexBaseUrlChange={(v) => {
-              setCodexBaseUrl(v);
-              writePref('ae_mcp_codex_base_url', v);
-              setCodexProbe(null);
-              codexBackend.reset();
+            channels={channels}
+            activeChannel={effective.channel || ''}
+            lockedChannel={channelLock}
+            onLockChannel={(c) => { setChannelLock(c); writePref('ae_mcp_channel_lock', c); }}
+            onRecheckBackend={() => {
+              if (backendPref === 'codex') runCodexProbe();
+              else if (backendPref === 'zcode') runZcodeProbe();
+              else runClaudeProbe();
             }}
-            onSaveCodexApiKey={(k) => {
+            recheckDisabled={backendPref === 'codex' ? codexProbe === null : backendPref === 'zcode' ? zcodeProbe === null : probe === null}
+            providers={providers}
+            providerManager={providerManager}
+            claudeProviderId={claudeProviderId}
+            onClaudeProviderChange={(id) => { setClaudeProviderId(id); writePref('ae_mcp_claude_provider', id); }}
+            codexProviderId={codexProviderId}
+            onCodexProviderChange={(id) => { setCodexProviderId(id); writePref('ae_mcp_codex_provider', id); setCodexProbe(null); codexBackend.reset(); }}
+            claudeSettingsImportAvailable={Boolean(claudeSettingsHint)}
+            onImportClaudeSettings={() => {
+              if (!claudeSettingsHint || !providerStore) return;
+              const entry = providerStore.upsert({ id: 'claude-settings-import', name: 'Claude Code 配置', protocol: 'anthropic', baseUrl: claudeSettingsHint.baseUrl, apiKey: claudeSettingsHint.authToken });
+              setProviders(providerStore.list());
+              setClaudeProviderId(entry.id);
+              writePref('ae_mcp_claude_provider', entry.id);
+            }}
+            onSaveZcodeKey={(k) => {
+              if (keyStore) keyStore.writeKey(k, 'zcode');
+              setZcodeProbe(null);
+              zcodeBackend.reset();
+              runZcodeProbe();
+            }}
+            zcodeKeyStored={(() => { try { return Boolean(keyStore && keyStore.readKey('zcode')); } catch (e) { return false; } })()}
+            onSaveCodexKey={(k) => {
               if (keyStore) keyStore.writeKey(k, 'codex');
               setCodexApiKey(k);
               setCodexProbe(null);
               codexBackend.reset();
+              runCodexProbe();
             }}
-            onClearCodexApiKey={() => {
-              if (keyStore) keyStore.clearKey('codex');
-              setCodexApiKey('');
-              setCodexProbe(null);
-              codexBackend.reset();
-            }}
-            validateKey={validateAnthropicKey}
+            codexKeyStored={Boolean(codexApiKey)}
+            codexCliConfig={codexCliConfig}
             model={effectiveModel}
             modelOptions={modelOptions}
             modelSwitchable={descriptor.perTurnModelSwitch !== false}
@@ -790,14 +955,14 @@ function Shell({ cs }) {
             onBackendChange={(m) => { setBackendPref(m); writePref('ae_mcp_backend', m); }}
             expertGuidance={expertGuidance}
             onExpertGuidance={(v) => { setExpertGuidance(v); saveExpertGuidance(window.localStorage, v); }}
-            claudeStatus={claudeStatus}
-            onRecheckClaude={runClaudeProbe}
-            codexStatus={codexStatus}
-            onRecheckCodex={runCodexProbe}
-            openCodeStatus={openCodeStatus}
-            onRecheckOpenCode={runOpenCodeProbe}
-            zcodeStatus={zcodeStatus}
-            onRecheckZcode={runZcodeProbe}
+            logLevel={logLevel}
+            onLogLevel={(v) => { setLogLevel(v); writePref('ae_mcp_log_level', v); }}
+            onExportLogs={exportLogs}
+            onRerunWizard={() => {
+              clearWizardDone(window.localStorage);
+              setWizStep(1);
+              setWizardDone(false);
+            }}
           />
         ) : null}
       </div>

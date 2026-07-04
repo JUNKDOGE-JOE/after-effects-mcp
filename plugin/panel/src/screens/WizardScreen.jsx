@@ -5,6 +5,7 @@ import { IconButton } from '../components/core/IconButton';
 import { Segmented } from '../components/core/Segmented';
 import { Spinner } from '../components/core/Spinner';
 import { AIAvatar } from '../components/chat/AIAvatar';
+import { ChannelCard } from '../components/settings/ChannelCard';
 import { EXTERNAL_CLIENTS, mcpConfigFor } from '../cep/externalClients';
 import { initialStepStates, LOCAL_STEPS, SUBSCRIPTION_STEPS } from '../lib/wizardSteps';
 
@@ -131,7 +132,7 @@ function InstallStepRow({ label, state, commandPreview, t, onDetect, onInstall, 
   );
 }
 
-/* Full-screen 4-step first-run wizard. Render inside PanelFrame chrome={false}. */
+/* Full-screen 3-step first-run wizard, rendered without the app shell chrome. */
 export function WizardScreen({
   step = 1,
   lang = 'zh',
@@ -152,6 +153,8 @@ export function WizardScreen({
   onInstall,
   onOpenLogin,
   commandPreviews = {},
+  channels = { claude: [], codex: [], zcode: [] },
+  activeChannel = '',
 }) {
   const t = W[lang] || W.zh;
   const clientOptions = [{ id: 'builtin', name: 'builtin' }, ...EXTERNAL_CLIENTS];
@@ -246,6 +249,7 @@ export function WizardScreen({
                     onInstall={() => (id === 'login' ? onOpenLogin && onOpenLogin() : onInstall && onInstall(id))}
                   />
                 ))}
+                <ChannelCard lang={lang} channels={channels.claude} activeChannel={activeChannel} readOnly />
               </div>
             ) : null}
           </React.Fragment>

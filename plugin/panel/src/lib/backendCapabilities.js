@@ -6,6 +6,7 @@
 // - effort levels: low/medium/high/xhigh/max; Sonnet 5 supports xhigh;
 //   Sonnet 4.6 has no xhigh; Haiku hides unsupported tiers.
 // - fast mode: direct API only (BYOK), Opus 4.x only, 3x price.
+import { readZcodeDesktopModel } from '../cep/zcodeBackend.js';
 
 export const CLAUDE_PRICE_USD_PER_MTOK = {
   'claude-fable-5': { input: 10, output: 50 },
@@ -241,6 +242,38 @@ export function zcodeStaticDescriptor() {
   };
 }
 
+// Bug fix: before session/create returns a real model list, the descriptor
+// used to fall back to zcodeStaticDescriptor()'s hardcoded
+// 'builtin:bigmodel-start-plan/GLM-5.2' defaultModelId. That builtin id is
+// NOT what actually gets sent to the ZCode app-server (zcodeBackend's
+// currentModelRef falls through to the CLI config / ZCODE_BUILTIN_DEFAULT_MODEL
+// when no explicit ref is chosen), so the settings display and the real
+// send-time model could disagree, and a stale/invalid stored pref would get
+// reconciled to the wrong (builtin) model instead of the CLI-configured one.
+//
+// While CLI inheritance is active (~/.zcode/cli/config.json names a model
+// whose provider exists in the merged config), the single source of truth
+// for "what will actually be sent" IS that CLI-configured model. Build a
+// descriptor around it so display and reconciliation agree with send-time
+// behavior. Only fall back to the static/builtin descriptor when there is
+// truly no CLI-configured model available.
+export function zcodeDynamicDescriptor({ env, fsImpl } = {}) {
+  let cliModel = '';
+  try { cliModel = String(readZcodeDesktopModel({ env, fsImpl }) || '').trim(); } catch (e) { /* ignore unreadable CLI config */ }
+  if (!cliModel) return zcodeStaticDescriptor();
+  const label = cliModel.includes('/') ? cliModel.slice(cliModel.indexOf('/') + 1) : cliModel;
+  return {
+    id: 'zcode',
+    label: 'ZCode',
+    models: [{ id: cliModel, label, effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false }],
+    defaultModelId: cliModel,
+    defaultEffort: 'high',
+    supportsFast: () => false,
+    approvalModes: APPROVAL_MODES,
+    perTurnModelSwitch: false,
+  };
+}
+
 export function zcodeDescriptorFromModels(sessionCreateResult) {
   const available = sessionCreateResult && sessionCreateResult.settings && sessionCreateResult.settings.model && Array.isArray(sessionCreateResult.settings.model.available)
     ? sessionCreateResult.settings.model.available
@@ -270,4 +303,59 @@ export function zcodeDescriptorFromModels(sessionCreateResult) {
     approvalModes: APPROVAL_MODES,
     perTurnModelSwitch: false,
   };
+}
+
+// Probe-driven ZCode descriptor: when session/create's settings.model.available
+// is empty (true for custom openai-compatible providers with no session-side
+// enumeration), fall back to actively probing the CLI-configured provider's
+// /v1/models endpoint (see cep/modelProbe.js's probeProviderModels, wired in
+// App.jsx). The CLI-configured model (the one actually sent on the wire, per
+// zcodeDynamicDescriptor's comment above) is pinned first and marked default;
+// duplicate ids from the probe are dropped in favor of that pinned entry.
+export function zcodeDescriptorFromProbedModels({ cliModel, providerId, probedModels } = {}) {
+  const cli = String(cliModel || '').trim();
+  if (!cli || !Array.isArray(probedModels) || !probedModels.length) return null;
+
+  const pid = String(providerId || '').trim();
+  const cliLabel = cli.includes('/') ? cli.slice(cli.indexOf('/') + 1) : cli;
+  const rest = probedModels
+    .map((m) => {
+      const rawId = String((m && m.id) || '').trim();
+      if (!rawId) return null;
+      const id = pid ? pid + '/' + rawId : rawId;
+      if (id === cli) return null;
+      return { id, label: (m && m.label) || rawId, effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false };
+    })
+    .filter(Boolean);
+
+  const models = [
+    { id: cli, label: cliLabel, effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false },
+    ...rest,
+  ];
+
+  return {
+    id: 'zcode',
+    label: 'ZCode',
+    models,
+    defaultModelId: cli,
+    defaultEffort: 'high',
+    supportsFast: () => false,
+    approvalModes: APPROVAL_MODES,
+    perTurnModelSwitch: false,
+  };
+}
+
+// Spec A2: custom-provider channels list what /v1/models actually returned;
+// curated metadata (effort levels, cost) is reused when ids overlap. An
+// empty/failed probe keeps the descriptor unchanged so the manual custom
+// model id path still works.
+export function descriptorFromProbedModels(descriptor, probedModels) {
+  if (!Array.isArray(probedModels) || !probedModels.length) return descriptor;
+  const curated = new Map(descriptor.models.map((m) => [m.id, m]));
+  const models = probedModels.map((m) => {
+    const known = curated.get(m.id);
+    if (known) return known;
+    return { id: m.id, label: m.label || m.id, effortLevels: [], cost: costTier(m.id), adaptive: false };
+  });
+  return { ...descriptor, models, defaultModelId: models[0].id };
 }

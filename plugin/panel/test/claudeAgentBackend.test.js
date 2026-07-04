@@ -386,3 +386,83 @@ test('resolveSystemNode returns ok false when every candidate is below Node 18',
   assert.equal(result.ok, false);
   assert.match(result.detail, /Node 18/);
 });
+
+test('api channel spawns the sidecar with injected base URL/token and --channel api', async () => {
+  const spawned = makeSpawn();
+  const backend = createClaudeAgentBackend({
+    resolveNode: async () => ({ ok: true, nodePath: 'C:\node.exe', version: 'v20.0.0' }),
+    sidecarPath: 'C:\ext\sidecar\agent-sidecar.mjs',
+    getMcpSpec: async () => ({ command: 'uv', args: [], env: {} }),
+    getToolMeta: async () => ({ allowedTools: [], annotations: {} }),
+    getModel: () => 'claude-sonnet-5',
+    getPermissionMode: () => 'manual',
+    getChannel: () => 'api',
+    getApiProvider: () => ({ baseUrl: 'https://relay.example/anthropic', apiKey: 'sk-relay' }),
+    spawnImpl: spawned.spawn,
+    env: { PATH: 'C:\bin', ANTHROPIC_API_KEY: 'leak' },
+  });
+  const run = backend.sendUser('hi');
+  await flush();
+  const proc = spawned.procs[0];
+  proc.pushStdout(JSON.stringify({ t: 'ready' }) + '\n');
+  await flush();
+  const call = spawned.calls[0];
+  assert.equal(call.options.env.ANTHROPIC_BASE_URL, 'https://relay.example/anthropic');
+  assert.equal(call.options.env.ANTHROPIC_AUTH_TOKEN, 'sk-relay');
+  assert.equal(call.options.env.ANTHROPIC_API_KEY, undefined);
+  const flagIndex = call.args.indexOf('--channel');
+  assert.ok(flagIndex > -1, '--channel flag passed to sidecar');
+  assert.equal(call.args[flagIndex + 1], 'api');
+  backend.reset();
+  await run;
+});
+
+test('default subscription channel keeps current sanitize behavior and passes --channel subscription', async () => {
+  const spawned = makeSpawn();
+  const backend = createClaudeAgentBackend({
+    resolveNode: async () => ({ ok: true, nodePath: 'C:\node.exe', version: 'v20.0.0' }),
+    sidecarPath: 'C:\ext\sidecar\agent-sidecar.mjs',
+    getMcpSpec: async () => ({ command: 'uv', args: [], env: {} }),
+    getToolMeta: async () => ({ allowedTools: [], annotations: {} }),
+    getModel: () => 'claude-sonnet-5',
+    getPermissionMode: () => 'manual',
+    spawnImpl: spawned.spawn,
+    env: { PATH: 'C:\bin', ANTHROPIC_API_KEY: 'leak', ANTHROPIC_BASE_URL: 'https://stale' },
+  });
+  const run = backend.sendUser('hi');
+  await flush();
+  const proc = spawned.procs[0];
+  proc.pushStdout(JSON.stringify({ t: 'ready' }) + '\n');
+  await flush();
+  const call = spawned.calls[0];
+  assert.equal(call.options.env.ANTHROPIC_API_KEY, undefined);
+  assert.equal(call.options.env.ANTHROPIC_BASE_URL, undefined);
+  assert.equal(call.args[call.args.indexOf('--channel') + 1], 'subscription');
+  backend.reset();
+  await run;
+});
+
+
+test('getStderrTail exposes the sidecar stderr buffer for log export', async () => {
+  const spawned = makeSpawn();
+  const backend = createClaudeAgentBackend({
+    resolveNode: async () => ({ ok: true, nodePath: 'C:\node.exe', version: 'v20.0.0' }),
+    sidecarPath: 'C:\ext\sidecar\agent-sidecar.mjs',
+    getMcpSpec: async () => ({ command: 'uv', args: [], env: {} }),
+    getToolMeta: async () => ({ allowedTools: [], annotations: {} }),
+    getModel: () => 'claude-sonnet-5',
+    getPermissionMode: () => 'manual',
+    spawnImpl: spawned.spawn,
+    env: { PATH: 'C:\bin' },
+  });
+  assert.equal(backend.getStderrTail(), '');
+  const run = backend.sendUser('hi');
+  await flush();
+  const proc = spawned.procs[0];
+  proc.pushStderr('sidecar warn: something');
+  proc.pushStdout(JSON.stringify({ t: 'ready' }) + '\n');
+  await flush();
+  assert.match(backend.getStderrTail(), /sidecar warn/);
+  backend.reset();
+  await run;
+});

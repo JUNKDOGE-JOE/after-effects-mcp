@@ -51,7 +51,7 @@ uv tool install --force --from packages/core ae-mcp --with packages/bridge --wit
 发布 tag 安装命令：
 
 ```powershell
-uv tool install --force --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.3#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.3#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.3#subdirectory=packages/snapshot-mss
+uv tool install --force --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.0#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.0#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.0#subdirectory=packages/snapshot-mss
 ```
 
 安装后确认 launcher 可被外部客户端找到。不要把公共 PyPI 同名包写成用户安装路径。
@@ -113,7 +113,7 @@ node scripts/live-model-matrix.mjs
 4. 确认 host 监听 `127.0.0.1:11488`。
 5. 跑面板连接诊断：host、token、Python signal、AE project、ExtendScript ping、`uv` / `node` / `claude`。
 6. 内嵌 Claude 订阅：用已登录 `claude` 发起一轮只读请求。
-7. BYOK：用 Anthropic API key 发起一轮只读请求。
+7. Claude API 直连通道：用 Anthropic API key 发起一轮只读请求。
 8. Codex：用已登录 `codex` 发起一轮只读请求。
 9. 外部 MCP 客户端：复制 MCP config，运行 `ae_ping` 和 `ae_overview`。
 10. 在简单 comp 中运行 `ae_previewFrame`、`ae_createRig`、`ae_validateExpressions`。
@@ -184,7 +184,7 @@ uv tool install --force --from packages/core ae-mcp --with packages/bridge --wit
 Release-tag install:
 
 ```powershell
-uv tool install --force --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.3#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.3#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.8.3#subdirectory=packages/snapshot-mss
+uv tool install --force --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.0#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.0#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.0#subdirectory=packages/snapshot-mss
 ```
 
 After install, confirm the launcher is visible to external clients. Do not document the public PyPI name as the user install path.
@@ -246,7 +246,7 @@ The script:
 4. Confirm the host listens on `127.0.0.1:11488`.
 5. Run panel diagnostics: host, token, Python signal, AE project, ExtendScript ping, `uv` / `node` / `claude`.
 6. Built-in Claude subscription: send one read-only request with logged-in `claude`.
-7. BYOK: send one read-only request with an Anthropic API key.
+7. Claude API direct channel: send one read-only request with an Anthropic API key.
 8. Codex: send one read-only request with logged-in `codex`.
 9. External MCP client: copy MCP config and run `ae_ping` plus `ae_overview`.
 10. In a simple comp, run `ae_previewFrame`, `ae_createRig`, and `ae_validateExpressions`.

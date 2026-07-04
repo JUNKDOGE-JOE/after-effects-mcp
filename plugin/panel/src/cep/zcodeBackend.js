@@ -24,6 +24,8 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
 import { resolveSystemNode } from './claudeAgentBackend.js';
 import { expertGuidanceEnv } from './externalClients.js';
+import { createApiKeyStore } from './apiKey.js';
+import { localizeZcodeError } from '../lib/zcodeErrors.js';
 
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -222,10 +224,17 @@ function zcodePreferredModelId(provider) {
   return ids.find((id) => id === 'GLM-5.2') || ids.find((id) => /GLM-5\.2/i.test(id)) || ids[0];
 }
 
-function zcodeProviderScore(providerId, provider, family) {
+export function hasZcodeProviderCredential(provider, env = {}) {
+  const options = provider && provider.options && typeof provider.options === 'object' ? provider.options : {};
+  if (options.apiKey || (provider && provider.apiKey)) return true;
+  const keyEnv = String(options.apiKeyEnv || '').trim();
+  return Boolean(keyEnv && env[keyEnv]);
+}
+
+function zcodeProviderScore(providerId, provider, family, env = {}, { allowEmptyModels = false } = {}) {
   if (!provider || typeof provider !== 'object') return -1;
   if (provider.enabled === false || provider.systemDisabledReason) return -1;
-  if (!zcodeModelIds(provider).length) return -1;
+  if (!zcodeModelIds(provider).length && !allowEmptyModels) return -1;
 
   const id = String(providerId || '');
   let score = 0;
@@ -235,11 +244,14 @@ function zcodeProviderScore(providerId, provider, family) {
   if (family && id === 'builtin:' + family) score += 40;
   if (/-start-plan$/.test(id)) score += 30;
   if (/-coding-plan$/.test(id)) score += 20;
-  if (provider.options && provider.options.apiKey) score += 10;
+  // Spec B1: usable credentials MUST outrank the fixed family/start-plan
+  // bonuses. Max keyless total is 100+80+30 = 210, so credentials add 300 —
+  // a keyed custom provider always beats a keyless builtin start-plan.
+  if (hasZcodeProviderCredential(provider, env)) score += 300;
   return score;
 }
 
-function zcodeDesktopProviderEntry({ config, setting, modelRef }) {
+function zcodeDesktopProviderEntry({ config, setting, modelRef, env = {} }) {
   const providers = config && config.provider && typeof config.provider === 'object' ? config.provider : {};
   const entries = Object.entries(providers);
   if (!entries.length) return null;
@@ -248,13 +260,13 @@ function zcodeDesktopProviderEntry({ config, setting, modelRef }) {
   const requested = zcodeProtocolModelFromRef(modelRef);
   if (requested && providers[requested.providerId]) {
     const provider = providers[requested.providerId];
-    const score = zcodeProviderScore(requested.providerId, provider, family);
+    const score = zcodeProviderScore(requested.providerId, provider, family, env, { allowEmptyModels: true });
     if (score >= 0) return { providerId: requested.providerId, provider, modelId: requested.modelId, score };
   }
 
   let best = null;
   for (const [providerId, provider] of entries) {
-    const score = zcodeProviderScore(providerId, provider, family);
+    const score = zcodeProviderScore(providerId, provider, family, env);
     if (score < 0) continue;
     if (!best || score > best.score) best = { providerId, provider, score };
   }
@@ -264,8 +276,8 @@ function zcodeDesktopProviderEntry({ config, setting, modelRef }) {
   return modelId ? { ...best, modelId } : null;
 }
 
-export function zcodeModelFromDesktopConfig({ config, setting }) {
-  const entry = zcodeDesktopProviderEntry({ config, setting });
+export function zcodeModelFromDesktopConfig({ config, setting, env = {} }) {
+  const entry = zcodeDesktopProviderEntry({ config, setting, env });
   return entry ? entry.providerId + '/' + entry.modelId : '';
 }
 
@@ -315,14 +327,24 @@ function zcodeProtocolModels(provider, selectedModelId) {
   return result;
 }
 
-export function zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef, thoughtLevel } = {}) {
-  const entry = zcodeDesktopProviderEntry({ config, setting, modelRef });
+export function resolveZcodeProviderApiKey({ provider, env = {}, storedKey = '' } = {}) {
+  const options = provider && provider.options && typeof provider.options === 'object' ? provider.options : {};
+  const inline = options.apiKey || (provider && provider.apiKey);
+  if (inline) return { key: String(inline), source: 'config' };
+  const keyEnv = String(options.apiKeyEnv || '').trim();
+  if (keyEnv && env[keyEnv]) return { key: String(env[keyEnv]), source: 'env' };
+  if (storedKey) return { key: String(storedKey), source: 'panel' };
+  return { key: '', source: '' };
+}
+
+export function zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef, thoughtLevel, env = {}, storedKey = '' } = {}) {
+  const entry = zcodeDesktopProviderEntry({ config, setting, modelRef, env });
   if (!entry) return null;
 
   const provider = entry.provider || {};
   const options = provider.options && typeof provider.options === 'object' ? provider.options : {};
   const kind = zcodeProtocolProviderKind(provider.kind);
-  const apiKey = options.apiKey || provider.apiKey;
+  const apiKey = resolveZcodeProviderApiKey({ provider, env, storedKey }).key;
   const protocolProvider = {
     providerId: entry.providerId,
     kind,
@@ -357,22 +379,72 @@ function readJsonFile(fsImpl, path) {
   }
 }
 
-function readZcodeDesktopModel({ env, fsImpl } = {}) {
-  const base = zcodeDesktopBasePath(env || {});
-  if (!base) return '';
-  const fs = fsImpl || getCepRequire()('fs');
-  const config = readJsonFile(fs, base + '\\config.json');
-  const setting = readJsonFile(fs, base + '\\setting.json');
-  return zcodeModelFromDesktopConfig({ config, setting });
+function zcodeCliBasePath(env) {
+  const home = env && (env.USERPROFILE || env.HOME || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : ''));
+  return home ? String(home).replace(/[\\/]+$/, '') + '\\.zcode\\cli' : '';
 }
 
-function readZcodeDesktopRuntimeModel({ env, fsImpl, modelRef, thoughtLevel } = {}) {
-  const base = zcodeDesktopBasePath(env || {});
-  if (!base) return null;
+export function mergeZcodeConfigs({ cliConfig, desktopConfig } = {}) {
+  const desktopProviders = desktopConfig && desktopConfig.provider && typeof desktopConfig.provider === 'object' ? desktopConfig.provider : {};
+  const cliProviders = cliConfig && cliConfig.provider && typeof cliConfig.provider === 'object' ? cliConfig.provider : {};
+  const provider = Object.assign({}, desktopProviders, cliProviders);
+  return Object.keys(provider).length ? { provider } : null;
+}
+
+function readZcodeConfigs({ env, fsImpl } = {}) {
   const fs = fsImpl || getCepRequire()('fs');
-  const config = readJsonFile(fs, base + '\\config.json');
-  const setting = readJsonFile(fs, base + '\\setting.json');
-  return zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef, thoughtLevel });
+  const desktopBase = zcodeDesktopBasePath(env || {});
+  const cliBase = zcodeCliBasePath(env || {});
+  const desktopConfig = desktopBase ? readJsonFile(fs, desktopBase + '\\config.json') : null;
+  const setting = desktopBase ? readJsonFile(fs, desktopBase + '\\setting.json') : null;
+  const cliConfig = cliBase ? readJsonFile(fs, cliBase + '\\config.json') : null;
+  const cliModel = cliConfig && typeof cliConfig.model === 'string' ? cliConfig.model.trim() : '';
+  return { config: mergeZcodeConfigs({ cliConfig, desktopConfig }), setting, cliModel, cliConfig, desktopConfig };
+}
+
+export function readZcodeDesktopModel({ env, fsImpl } = {}) {
+  const { config, setting, cliModel } = readZcodeConfigs({ env, fsImpl });
+  if (cliModel) {
+    const requested = zcodeProtocolModelFromRef(cliModel);
+    if (requested && config && config.provider && config.provider[requested.providerId]) return cliModel;
+  }
+  return zcodeModelFromDesktopConfig({ config, setting, env: env || {} });
+}
+
+export function readZcodeDesktopRuntimeModel({ env, fsImpl, modelRef, thoughtLevel, storedKey = '' } = {}) {
+  const { config, setting, cliModel } = readZcodeConfigs({ env, fsImpl });
+  const ref = modelRef || cliModel || '';
+  return zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef: ref, thoughtLevel, env: env || {}, storedKey });
+}
+
+export function summarizeZcodeConfig({ env = {}, fsImpl, storedKey = '' } = {}) {
+  const { cliConfig, desktopConfig, cliModel } = readZcodeConfigs({ env, fsImpl });
+  const cliProviders = (cliConfig && cliConfig.provider) || {};
+  const cliProviderId = zcodeProviderId(cliModel) || Object.keys(cliProviders)[0] || '';
+  const cliProvider = cliProviderId ? cliProviders[cliProviderId] : null;
+  const cliResolved = cliProvider ? resolveZcodeProviderApiKey({ provider: cliProvider, env, storedKey }) : { key: '', source: '' };
+  const desktopIds = Object.keys((desktopConfig && desktopConfig.provider) || {});
+  const startPlanId = desktopIds.find((id) => /-start-plan$/.test(id)) || '';
+  const startPlanProvider = startPlanId ? desktopConfig.provider[startPlanId] : null;
+  return {
+    cli: cliProvider ? {
+      providerId: cliProviderId,
+      model: cliModel,
+      apiKeyEnv: String((cliProvider.options && cliProvider.options.apiKeyEnv) || ''),
+      hasCredential: Boolean(cliResolved.key),
+      keySource: cliResolved.source,
+      // Probe-driven model discovery (spec A2 applied to zcode): baseUrl +
+      // protocol let the panel call probeProviderModels against /v1/models
+      // when session/create's settings.model.available comes back empty.
+      baseUrl: String((cliProvider.options && cliProvider.options.baseURL) || cliProvider.baseURL || ''),
+      protocol: zcodeProtocolProviderKind(cliProvider.kind),
+    } : null,
+    desktop: desktopIds.length ? { providerId: desktopIds[0] } : null,
+    startPlan: startPlanId ? {
+      providerId: startPlanId,
+      hasCredential: hasZcodeProviderCredential(startPlanProvider, env),
+    } : null,
+  };
 }
 
 function zcodeProviderFamily(providerId) {
@@ -618,24 +690,28 @@ function zcodeRepairHint(message) {
   return zcodeProviderAuthenticationHint(zcodeMissingModelConfigHint(zcodeMissingApiKeyHint(message)));
 }
 
-function zcodeErrorMessage(value, fallback = 'ZCode turn failed') {
-  if (!value) return zcodeRepairHint(fallback);
-  if (typeof value === 'string') return zcodeRepairHint(value);
+function zcodeErrorMessage(value, fallback = 'ZCode turn failed', lang = 'en') {
+  if (!value) return localizeZcodeError(zcodeRepairHint(fallback), lang);
+  if (typeof value === 'string') return localizeZcodeError(zcodeRepairHint(value), lang);
   if (typeof value === 'object') {
     const direct = value.message || value.detail || value.reason || value.error;
-    if (direct && direct !== value) return zcodeErrorMessage(direct, fallback);
+    if (direct && direct !== value) return zcodeErrorMessage(direct, fallback, lang);
     try {
       const text = JSON.stringify(value);
-      return zcodeRepairHint(text && text !== '{}' ? text : fallback);
+      return localizeZcodeError(zcodeRepairHint(text && text !== '{}' ? text : fallback), lang);
     } catch (e) {
-      return zcodeRepairHint(fallback);
+      return localizeZcodeError(zcodeRepairHint(fallback), lang);
     }
   }
-  return zcodeRepairHint(String(value));
+  return localizeZcodeError(zcodeRepairHint(String(value)), lang);
 }
 
 function zcodeErrorKind(message) {
   return /\b(model|provider|api[-\s_]*key|credential|auth)\b/i.test(String(message || '')) ? 'model' : 'mcp';
+}
+
+function defaultReadStoredZcodeKey() {
+  try { return createApiKeyStore().readKey('zcode'); } catch (e) { return ''; }
 }
 
 export function createZcodeBackend({
@@ -656,12 +732,14 @@ export function createZcodeBackend({
   resolveCodingPlanApiKey = resolveZcodeCodingPlanApiKey,
   resolveCli = resolveZcodeCli,
   resolveNode = resolveSystemNode,
+  readStoredZcodeKey = defaultReadStoredZcodeKey,
 }) {
   let proc = null;
   let rpc = null;
   let startPromise = null;
   let sessionPromise = null;
   let sessionId = null;
+  let sessionModelRef = null;
   let subscribed = false;
   let activeRuntimeModel = null;
   let stopping = false;
@@ -689,7 +767,7 @@ export function createZcodeBackend({
     const next = Object.assign({}, getCepEnv(), env || {});
     const panelModel = next.AE_MCP_ZCODE_MODEL && String(next.AE_MCP_ZCODE_MODEL).trim();
     if (!next.ZCODE_MODEL && panelModel) next.ZCODE_MODEL = panelModel;
-    const panelApiKey = next.AE_MCP_ZCODE_API_KEY && String(next.AE_MCP_ZCODE_API_KEY).trim();
+    const panelApiKey = (next.AE_MCP_ZCODE_API_KEY && String(next.AE_MCP_ZCODE_API_KEY).trim()) || String(readStoredZcodeKey() || '').trim();
     if (panelApiKey) {
       if (!next.ZCODE_API_KEY) next.ZCODE_API_KEY = panelApiKey;
       const providerEnv = zcodeProviderApiKeyEnv(zcodeProviderId(next.ZCODE_MODEL));
@@ -715,7 +793,7 @@ export function createZcodeBackend({
   function currentRuntimeModel(spawnEnv, modelRef, thoughtLevel) {
     if (!readDesktopRuntimeModel) return null;
     try {
-      return readDesktopRuntimeModel({ env: spawnEnv, modelRef, thoughtLevel }) || null;
+      return readDesktopRuntimeModel({ env: spawnEnv, modelRef, thoughtLevel, storedKey: String(readStoredZcodeKey() || '').trim() }) || null;
     } catch (e) {
       return null;
     }
@@ -810,7 +888,7 @@ export function createZcodeBackend({
       activeRuntimeModel = refreshedRuntimeModel;
       if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: true, providerRevision: refreshedRuntimeModel.revision });
     } catch (e) {
-      const message = zcodeErrorMessage(e, 'ZCode desktop OAuth header refresh failed.');
+      const message = zcodeErrorMessage(e, 'ZCode desktop OAuth header refresh failed.', lang);
       if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: message });
     }
   }
@@ -960,7 +1038,7 @@ export function createZcodeBackend({
     }
     if (type === 'turn.failed') {
       const payload = params.payload || {};
-      const message = zcodePlanRuntimeFailureHint(zcodeErrorMessage(payload.error || payload.message), activeRuntimeModel);
+      const message = zcodePlanRuntimeFailureHint(zcodeErrorMessage(payload.error || payload.message, 'ZCode turn failed', lang), activeRuntimeModel);
       emit({ type: 'error', kind: zcodeErrorKind(message), message });
       finishActive();
       return;
@@ -1012,6 +1090,7 @@ export function createZcodeBackend({
     startPromise = null;
     sessionPromise = null;
     sessionId = null;
+    sessionModelRef = null;
     subscribed = false;
     if (wasStopping) return;
     if (activeRun) {
@@ -1028,6 +1107,7 @@ export function createZcodeBackend({
     startPromise = null;
     sessionPromise = null;
     sessionId = null;
+    sessionModelRef = null;
     subscribed = false;
     if (activeRun) {
       emit({ type: 'error', kind: 'mcp', message: err.message });
@@ -1113,6 +1193,23 @@ export function createZcodeBackend({
   }
 
   async function ensureSession() {
+    // If a session already exists but the caller's preferred model has
+    // changed since that session was created (e.g. the user flipped
+    // "默认模型" in Settings), invalidate it here so the next call below
+    // establishes a fresh session/create bound to the new model. Kept inside
+    // ensureSession (rather than requiring App.jsx to call reset()/stop()
+    // explicitly) so this is robust regardless of call site.
+    if (sessionId && !sessionPromise) {
+      const desiredModelRef = currentModelRef(currentEnv());
+      if (desiredModelRef && sessionModelRef && desiredModelRef !== sessionModelRef) {
+        if (rpc && sessionId) {
+          try { rpc.fireRequest('session/stop', { sessionId }); } catch (e) { /* best effort */ }
+        }
+        sessionId = null;
+        sessionModelRef = null;
+        subscribed = false;
+      }
+    }
     if (sessionId) return sessionId;
     if (sessionPromise) return sessionPromise;
     sessionPromise = (async () => {
@@ -1135,8 +1232,7 @@ export function createZcodeBackend({
       // Inject the ae MCP server into the session. ZCode app-server does NOT
       // auto-load mcp.servers from ~/.zcode/cli/config.json (that file is for
       // the CLI TUI); session/create accepts mcpServers on its input params
-      // (che schema, Eht entries), so we pass it here — same pattern codex/
-      // opencode use. env is [{name,value}] (the app-server's wire format).
+      // and each server env value is encoded as a {name, value} entry.
       if (getMcpSpec) {
         const spec = await getMcpSpec();
         if (spec && spec.command) {
@@ -1157,6 +1253,12 @@ export function createZcodeBackend({
       const nextSessionId = (result && result.session && result.session.sessionId) || null;
       if (!nextSessionId) throw new Error('ZCode session/create returned no sessionId');
 
+      // Surface the raw session/create result so the panel can build a live
+      // model-chip descriptor from settings.model.available (see
+      // zcodeDescriptorFromModels in lib/backendCapabilities.js). Without this
+      // the composer's model chip has no data and disappears entirely.
+      emit({ type: 'zcode-session-created', result: result });
+
       // Subscribe to the event stream. desktop-continuous streams turn events
       // as notifications for the life of the subscription. Use request() (not
       // fireRequest) so we wait for the ack and know the subscription is live
@@ -1166,6 +1268,7 @@ export function createZcodeBackend({
         subscribed = true;
       }
       sessionId = nextSessionId;
+      sessionModelRef = modelRef;
       return sessionId;
     })();
     try {
@@ -1197,12 +1300,12 @@ export function createZcodeBackend({
 
       // session/send resolves on acceptance, long before turn.completed.
       rpc.request('session/send', { sessionId, content: turnText }, 180000).catch((e) => {
-        const message = zcodeErrorMessage(e, 'Failed to start ZCode turn.');
+        const message = zcodeErrorMessage(e, 'Failed to start ZCode turn.', lang);
         emit({ type: 'error', kind: zcodeErrorKind(message), message });
         finishActive();
       });
     } catch (e) {
-      const message = zcodeErrorMessage(e, 'Failed to start ZCode turn.');
+      const message = zcodeErrorMessage(e, 'Failed to start ZCode turn.', lang);
       emit({ type: 'error', kind: zcodeErrorKind(message), message });
       finishActive();
     }
@@ -1288,6 +1391,7 @@ export function createZcodeBackend({
     startPromise = null;
     sessionPromise = null;
     sessionId = null;
+    sessionModelRef = null;
     subscribed = false;
     activeRuntimeModel = null;
     transcript = [];
@@ -1329,7 +1433,7 @@ export function createZcodeBackend({
         loggedIn: true,
         runtimeOk: false,
         provider: 'zcode',
-        detail: zcodeErrorMessage(e, 'ZCode runtime unavailable.'),
+        detail: zcodeErrorMessage(e, 'ZCode runtime unavailable.', lang),
       };
     }
   }
