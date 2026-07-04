@@ -59,7 +59,7 @@ export function probeProviderModels({ baseUrl, apiKey, protocol = 'openai-compat
       res.on('data', (chunk) => { body += chunk; });
       res.on('end', () => {
         if (res.statusCode !== 200) {
-          resolve({ ok: false, status: res.statusCode, models: [], detail: 'HTTP ' + res.statusCode + ': ' + body.slice(0, 200) });
+          resolve({ ok: false, status: res.statusCode, models: [], detail: 'HTTP ' + res.statusCode + ' from provider' });
           return;
         }
         try {

@@ -1232,8 +1232,7 @@ export function createZcodeBackend({
       // Inject the ae MCP server into the session. ZCode app-server does NOT
       // auto-load mcp.servers from ~/.zcode/cli/config.json (that file is for
       // the CLI TUI); session/create accepts mcpServers on its input params
-      // (che schema, Eht entries), so we pass it here — same pattern codex/
-      // opencode use. env is [{name,value}] (the app-server's wire format).
+      // and each server env value is encoded as a {name, value} entry.
       if (getMcpSpec) {
         const spec = await getMcpSpec();
         if (spec && spec.command) {
