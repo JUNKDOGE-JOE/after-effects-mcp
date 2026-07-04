@@ -104,7 +104,7 @@ async def test_probe_host_sends_python_identity_header(respx_mock):
             200,
             json={
                 "ok": True,
-                "pluginVersion": "0.8.3",
+                "pluginVersion": "0.9.0",
                 "port": 11488,
                 "pythonVersion": captured["python"],
                 "pythonLastSeenAt": 1719000000000,

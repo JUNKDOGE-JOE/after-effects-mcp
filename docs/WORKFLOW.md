@@ -2,13 +2,13 @@
 
 ## 中文
 
-这份文档描述 v0.7.0 的两条使用路径：面板内嵌 AI 对话，以及外部 MCP 客户端接入。安装和发布细节分别见根目录 README 与 [docs/RELEASE.md](RELEASE.md)。
+这份文档描述 v0.9.0 的两条使用路径：面板内嵌 AI 对话，以及外部 MCP 客户端接入。安装和发布细节分别见根目录 README 与 [docs/RELEASE.md](RELEASE.md)。
 
 ## 1. 架构同步
 
 ```text
 MCP 客户端或面板内嵌 AI
-  -> packages/core (ae_mcp, Python stdio MCP server, 31 ae_ tools)
+  -> packages/core (ae_mcp, Python stdio MCP server, 32 ae_ tools)
   -> backend (packages/bridge, httpx)
   -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
   -> CSInterface.evalScript
@@ -18,7 +18,7 @@ MCP 客户端或面板内嵌 AI
 
 ```mermaid
 flowchart LR
-    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>31 ae_ tools"]
+    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>32 ae_ tools"]
     B --> C["ae-mcp bridge<br/>httpx backend"]
     C --> D["127.0.0.1:11488"]
     D --> E["CEP panel host<br/>Express"]
@@ -38,17 +38,18 @@ flowchart LR
 
 ## 2. 面板内嵌对话
 
-v0.7.0 面板已经是完整产品，不只是 MCP config 面板。
+v0.9.0 面板已经是完整产品，不只是 MCP config 面板。
 
-内嵌后端：
+内嵌后端与凭证通道：
 
-- Claude 订阅：默认后端。面板 spawn 系统 Node，运行 Claude Agent SDK sidecar，复用 `claude` 登录态；不落盘 API key 或 token。
-- BYOK：用户提供 Anthropic API key，由面板侧 agent loop 调 Anthropic API；需要代理或兼容服务时可配置 Base URL 与自定义模型 ID。
-- Codex：面板 spawn `codex app-server`。默认复用 Codex CLI 登录态；填写 Base URL / API Key / 模型 ID 后走 OpenAI-compatible 自定义 provider。
+- Claude：默认后端。订阅通道会 spawn 系统 Node，运行 Claude Agent SDK sidecar，复用 `claude` 登录态；API 直连通道使用 Anthropic API key 或兼容 provider。原 BYOK 偏好会自动迁移到 Claude API 直连通道。
+- Codex：面板 spawn `codex app-server`。可复用 Codex CLI 登录态，也可继承 `~/.codex/config.toml` 里的自定义 model provider，或使用 Provider 管理器中的 OpenAI-compatible provider。
+- ZCode：通过已安装应用携带的 `zcode.cjs app-server` 接入，面板驱动的是 app-server 协议，不做桌面 UI 自动化；API key 或 OAuth coding-plan provider 可在面板中使用。
+- 设置页以 Claude / Codex / ZCode 三路分段控件组织后端，每路后端显示凭证通道卡；可自动按优先级选择，也可手动锁定某条通道。Provider 管理器负责本机 `~/.ae-mcp/providers.json` 中的 OpenAI-compatible 与 Anthropic provider。
 
 桌面端边界：
 
-- ZCode 通过已安装应用携带的 `zcode.cjs app-server` 接入，面板驱动的是 app-server 协议，不做桌面 UI 自动化；`*-start-plan` 订阅 provider 所需 captcha/runtime headers 只在桌面 Electron renderer 内生成，桌面应用不暴露本地 API，面板会快速失败并提示改用桌面端，API key 或 OAuth coding-plan provider 仍可在面板中使用。
+- ZCode `*-start-plan` 官方托管计划所需 captcha/runtime headers 只在桌面 Electron renderer 内生成，桌面应用不暴露本地 API，面板检测到有效凭据前不可选。
 - Codex 通过 `codex app-server` 接入；当前没有额外的 Codex Desktop attach 协议。
 - Claude 订阅通过 Claude Agent SDK sidecar 接入；Claude Desktop 仍作为外部 MCP 客户端使用。
 - MCP 或面板通道不可用时，面板内 agent 应报告失败，不应切到系统截图、桌面自动化或临时 JSX 文件绕路。
@@ -60,7 +61,7 @@ Composer 选择条：
 - 快速模式：后端支持时显示。
 - 审批档：只读 / 手动 / 自动 / 免审。
 
-审批语义由工具 annotations 驱动，跨 Claude 订阅、BYOK、Codex 保持一致。活动流会记录工具运行过程；kill switch 会熔断所有 AI 操作。
+审批语义由工具 annotations 驱动，跨 Claude、Codex、ZCode 保持一致。活动流会记录工具运行过程；kill switch 会熔断所有 AI 操作。
 
 ## 3. 首跑路径
 
@@ -69,7 +70,7 @@ Composer 选择条：
 1. 安装 ZXP，并打开 `Window -> Extensions -> ae-mcp`。
 2. 在首跑向导中检测 `uv` 和 ae-mcp；缺失时先看命令原文，再一键安装。
 3. 使用内嵌 Claude 订阅时，检测 Node >= 18、Claude CLI，并通过可见终端完成 `claude` 登录。
-4. 使用内嵌 BYOK 或 Codex 自定义 provider 时，在设置里填写 API Base URL、API Key 和模型 ID。
+4. 使用 Claude API 直连、Codex 自定义 provider 或 ZCode API key provider 时，在 Provider 管理器或对应通道卡中填写 Base URL、API Key 和模型 ID。
 5. 使用内嵌 Codex 官方账号时，确认 Codex CLI 已登录（`codex login`）。
 6. 使用外部 MCP 客户端时，复制面板生成的 MCP config。
 7. 运行连接诊断；如果外部客户端已连入，再从 `ae_ping` / `ae_overview` 开始。
@@ -80,7 +81,7 @@ flowchart TD
     B --> C["First-run wizard checks uv + ae-mcp"]
     C --> D{ "Built-in chat?" }
     D -- "Claude subscription" --> E["Check Node + Claude CLI + login"]
-    D -- "BYOK / custom provider" --> F["Enter Base URL + key + model when needed"]
+    D -- "API direct / custom provider" --> F["Enter Base URL + key + model when needed"]
     D -- "Codex official" --> G["Check Codex CLI login"]
     D -- "External MCP" --> H["Copy MCP config"]
     E --> I["Run diagnostics"]
@@ -154,7 +155,7 @@ flowchart TD
 
 ## 7. 能力边界
 
-v0.7.0 适合：
+v0.9.0 适合：
 
 - 项目检查和图层分析。
 - 属性修改、效果应用、表达式写入与校验。
@@ -171,13 +172,13 @@ v0.7.0 适合：
 
 ## English
 
-This document describes the two v0.7.0 usage paths: built-in AI chat inside the panel, and external MCP clients. For install and release details, see the root README and [docs/RELEASE.md](RELEASE.md).
+This document describes the two v0.9.0 usage paths: built-in AI chat inside the panel, and external MCP clients. For install and release details, see the root README and [docs/RELEASE.md](RELEASE.md).
 
 ## 1. Shared Architecture
 
 ```text
 MCP client or panel-embedded AI
-  -> packages/core (ae_mcp, Python stdio MCP server, 31 ae_ tools)
+  -> packages/core (ae_mcp, Python stdio MCP server, 32 ae_ tools)
   -> backend (packages/bridge, httpx)
   -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
   -> CSInterface.evalScript
@@ -187,7 +188,7 @@ MCP client or panel-embedded AI
 
 ```mermaid
 flowchart LR
-    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>31 ae_ tools"]
+    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>32 ae_ tools"]
     B --> C["ae-mcp bridge<br/>httpx backend"]
     C --> D["127.0.0.1:11488"]
     D --> E["CEP panel host<br/>Express"]
@@ -207,17 +208,18 @@ Each layer is responsible for:
 
 ## 2. Built-In Chat
 
-The v0.7.0 panel is a full product, not just an MCP config panel.
+The v0.9.0 panel is a full product, not just an MCP config panel.
 
-Embedded backends:
+Embedded backends and credential channels:
 
-- Claude subscription: the default. The panel spawns system Node, runs a Claude Agent SDK sidecar, and reuses the local `claude` login without storing API keys or tokens.
-- BYOK: the user provides an Anthropic API key; the panel runs its own agent loop against the Anthropic API. Compatible proxies/providers can be configured with a base URL and custom model ID.
-- Codex: the panel spawns `codex app-server`. By default it reuses the Codex CLI login; with a base URL, API key, and model ID it uses an OpenAI-compatible custom provider.
+- Claude: the default backend. The subscription channel spawns system Node, runs a Claude Agent SDK sidecar, and reuses the local `claude` login; the API direct channel uses an Anthropic API key or compatible provider. Legacy BYOK preferences migrate to the Claude API direct channel.
+- Codex: the panel spawns `codex app-server`. It can reuse the Codex CLI login, inherit custom model providers from `~/.codex/config.toml`, or use an OpenAI-compatible provider from Provider Manager.
+- ZCode: connects through the installed app's bundled `zcode.cjs app-server`; the panel drives the app-server protocol, not desktop UI automation. API-key and OAuth coding-plan providers work in the panel.
+- Settings organize the built-in AI service as Claude / Codex / ZCode. Each backend displays credential-channel cards with priority-based automatic selection and optional manual channel locking. Provider Manager owns local OpenAI-compatible and Anthropic providers in `~/.ae-mcp/providers.json`.
 
 Desktop boundary:
 
-- ZCode connects through the installed app's bundled `zcode.cjs app-server`; the panel drives the app-server protocol, not desktop UI automation. `*-start-plan` subscription providers need captcha/runtime headers generated only inside the desktop Electron renderer, and the desktop app exposes no local API for them, so the panel fails fast with a desktop-app-only hint; API key or OAuth coding-plan providers still work in the panel.
+- ZCode `*-start-plan` official hosted plans need captcha/runtime headers generated only inside the desktop Electron renderer, and the desktop app exposes no local API for them, so they stay unavailable until the panel detects valid credentials.
 - Codex connects through `codex app-server`; there is no separate Codex Desktop attach protocol in this plugin.
 - Claude subscription connects through the Claude Agent SDK sidecar; Claude Desktop remains an external MCP client path.
 - If MCP or the panel channel is unavailable, the in-panel agent should report the failure instead of falling back to OS screenshots, desktop automation, or ad-hoc JSX files.
@@ -229,7 +231,7 @@ Composer controls:
 - Fast mode: shown when supported.
 - Approval mode: read-only / manual / auto / bypass.
 
-Tool annotations drive approval behavior consistently across Claude subscription, BYOK, and Codex. The activity stream records tool execution, and the kill switch stops all AI operations.
+Tool annotations drive approval behavior consistently across Claude, Codex, and ZCode. The activity stream records tool execution, and the kill switch stops all AI operations.
 
 ## 3. First Run
 
@@ -238,7 +240,7 @@ Recommended first-run order:
 1. Install the ZXP and open `Window -> Extensions -> ae-mcp`.
 2. In the first-run wizard, check `uv` and ae-mcp; when missing, inspect the command preview before one-click install.
 3. For built-in Claude subscription, check Node >= 18 and Claude CLI, then complete `claude` login in the visible terminal.
-4. For built-in BYOK or Codex custom providers, enter API Base URL, API key, and model ID in Settings.
+4. For Claude API direct, Codex custom providers, or ZCode API-key providers, enter Base URL, API key, and model ID in Provider Manager or the relevant channel card.
 5. For built-in Codex official account mode, confirm Codex CLI login (`codex login`).
 6. For external MCP clients, copy the MCP config generated by the panel.
 7. Run diagnostics; once an external client is connected, start with `ae_ping` / `ae_overview`.
@@ -249,7 +251,7 @@ flowchart TD
     B --> C["First-run wizard checks uv + ae-mcp"]
     C --> D{ "Built-in chat?" }
     D -- "Claude subscription" --> E["Check Node + Claude CLI + login"]
-    D -- "BYOK / custom provider" --> F["Enter Base URL + key + model when needed"]
+    D -- "API direct / custom provider" --> F["Enter Base URL + key + model when needed"]
     D -- "Codex official" --> G["Check Codex CLI login"]
     D -- "External MCP" --> H["Copy MCP config"]
     E --> I["Run diagnostics"]
@@ -323,7 +325,7 @@ If `ae_ping` fails, stop there and fix the connection before testing higher-leve
 
 ## 7. Capability Boundaries
 
-v0.7.0 is a good fit for:
+v0.9.0 is a good fit for:
 
 - project inspection and layer analysis
 - property edits, effect application, expression writes, and validation

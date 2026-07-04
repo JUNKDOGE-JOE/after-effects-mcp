@@ -5,15 +5,15 @@ import { buildLogExport, exportFileName, keepLogLine, redactSecrets } from '../s
 test('buildLogExport aggregates panel logs, host info, and sidecar tail', () => {
   const text = buildLogExport({
     panelLogs: ['[10:00:00] Host ready on 127.0.0.1:11488', '[10:00:05] Error: boom'],
-    hostInfo: { hostVersion: '0.8.3', pythonVersion: '0.8.3' },
+    hostInfo: { hostVersion: '0.9.0', pythonVersion: '0.9.0' },
     sidecarTail: 'sidecar stderr line',
-    version: '0.8.3',
+    version: '0.9.0',
     now: new Date('2026-07-03T10:00:00Z'),
   });
   assert.match(text, /# ae-mcp panel log export/);
   assert.match(text, /exported-at: 2026-07-03T10:00:00/);
-  assert.match(text, /panel-version: 0\.8\.3/);
-  assert.match(text, /host-version: 0\.8\.3/);
+  assert.match(text, /panel-version: 0\.9\.0/);
+  assert.match(text, /host-version: 0\.9\.0/);
   assert.match(text, /## panel logs \(2\)/);
   assert.match(text, /Error: boom/);
   assert.match(text, /## sidecar stderr tail/);
@@ -81,7 +81,7 @@ test('buildLogExport applies redaction to panel logs and sidecar tail', () => {
   const text = buildLogExport({
     panelLogs: ['[t] using key sk-abcdef1234567890'],
     sidecarTail: 'env ANTHROPIC_API_KEY=sk-zyxwvu9876543210',
-    version: '0.8.3',
+    version: '0.9.0',
   });
   assert.ok(!text.includes('sk-abcdef1234567890'));
   assert.ok(!text.includes('sk-zyxwvu9876543210'));

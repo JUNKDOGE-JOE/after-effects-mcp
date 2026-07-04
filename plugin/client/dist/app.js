@@ -8266,7 +8266,7 @@
   // package.json
   var package_default = {
     name: "ae-mcp-panel",
-    version: "0.8.3",
+    version: "0.9.0",
     private: true,
     type: "module",
     scripts: {
@@ -13789,7 +13789,7 @@
   // src/cep/mcpClient.js
   var DEFAULT_TIMEOUT_MS = 3e4;
   var MCP_PROTOCOL_VERSION = "2025-06-18";
-  var PANEL_VERSION = "0.8.3";
+  var PANEL_VERSION = "0.9.0";
   function getCepRequire3() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
@@ -15629,7 +15629,7 @@
         });
         res.on("end", () => {
           if (res.statusCode !== 200) {
-            resolve({ ok: false, status: res.statusCode, models: [], detail: "HTTP " + res.statusCode + ": " + body.slice(0, 200) });
+            resolve({ ok: false, status: res.statusCode, models: [], detail: "HTTP " + res.statusCode + " from provider" });
             return;
           }
           try {
