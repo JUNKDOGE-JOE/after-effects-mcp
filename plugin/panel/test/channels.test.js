@@ -25,7 +25,11 @@ test('codexChannels: cli login state + custom provider channel', () => {
   assert.equal(list[2].channel, 'custom');
   assert.equal(list[2].ok, false);
   const custom = codexChannels({ codexProbe: { loggedIn: false, runtimeOk: true }, customProvider: { baseUrl: 'https://r', apiKey: 'k' } });
-  assert.equal(custom.find((c) => c.channel === 'custom').ok, true);
+  assert.equal(custom.find((c) => c.channel === 'custom').ok, false);
+  const openAiCustom = codexChannels({ codexProbe: { loggedIn: false, runtimeOk: true }, customProvider: { protocol: 'openai-compatible', baseUrl: 'https://r', apiKey: 'k' } });
+  assert.equal(openAiCustom.find((c) => c.channel === 'custom').ok, true);
+  const anthropicCustom = codexChannels({ codexProbe: { loggedIn: false, runtimeOk: true }, customProvider: { protocol: 'anthropic', baseUrl: 'https://r', apiKey: 'k' } });
+  assert.equal(anthropicCustom.find((c) => c.channel === 'custom').ok, false);
   assert.match(codexChannels({ codexProbe: { loggedIn: false } }).find((c) => c.channel === 'cli').fixHint.zh, /AE_MCP_CODEX_CLI/);
 });
 
@@ -68,7 +72,7 @@ test('codexChannels: cli-config channel is positioned between cli and custom', (
 test('codexChannels: custom provider outranks cli-config in pickChannel when both are ok', () => {
   const list = codexChannels({
     codexProbe: { loggedIn: false, runtimeOk: true },
-    customProvider: { baseUrl: 'https://custom.example/v1', apiKey: 'ck' },
+    customProvider: { protocol: 'openai-compatible', baseUrl: 'https://custom.example/v1', apiKey: 'ck' },
     cliConfig: { model: 'gpt-5.5', providerId: 'mediastorm_glm', provider: { name: 'MediaStorm GLM', baseUrl: 'https://api.example.com/v1', envKey: 'MEDIASTORM_GLM_API_KEY', wireApi: 'responses' } },
     cliConfigApiKey: 'k',
   });

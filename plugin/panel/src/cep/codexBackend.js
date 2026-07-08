@@ -1,6 +1,7 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
 import { codexAppServerArgs, codexSpawnEnv, ensureUserEnv, normalizeProviderProfile } from '../lib/providerProfile.js';
 import { PANEL_VERSION } from './mcpClient.js';
+import { createCodexResponsesRoute } from './codexResponsesRoute.js';
 import { expertGuidanceEnv } from './externalClients.js';
 
 const RPC_TIMEOUT_MS = 30000;
@@ -246,6 +247,7 @@ export function createCodexBackend({
   // panel only supplies the missing API key env var the provider needs (no
   // `-c model_provider=...` override).
   getCliConfigProvider = () => null,
+  createResponsesRoute = createCodexResponsesRoute,
   resolveCli = resolveCodexCli,
   onEvent,
   lang = 'zh',
@@ -270,8 +272,15 @@ export function createCodexBackend({
   let activeAssistantText = '';
   let toolMeta = { allowedTools: [], annotations: {} };
   let lastCliInfo = null;
+  let providerRoute = null;
   const pendingApprovals = new Map();
   const sessionAllowedTools = new Set();
+
+  function closeProviderRoute() {
+    const route = providerRoute;
+    providerRoute = null;
+    if (route && route.close) Promise.resolve(route.close()).catch(() => {});
+  }
 
   function emit(evt) {
     if (onEvent) onEvent(evt);
@@ -429,6 +438,7 @@ export function createCodexBackend({
     initialized = false;
     threadId = null;
     preambleSent = false;
+    closeProviderRoute();
     if (wasStopping) return;
     if (activeRun) {
       emit({ type: 'error', kind: 'mcp', message: 'codex app-server exited: ' + detail });
@@ -446,6 +456,7 @@ export function createCodexBackend({
     initialized = false;
     threadId = null;
     preambleSent = false;
+    closeProviderRoute();
     if (activeRun) {
       emit({ type: 'error', kind: 'mcp', message: err.message });
       finishActive();
@@ -459,12 +470,28 @@ export function createCodexBackend({
       const spawn = getSpawn();
       const spawnEnv = ensureUserEnv(currentEnv(), { homedir: getHomedir() });
       const providerProfile = normalizeProviderProfile(getProviderProfile ? getProviderProfile() : {}, spawnEnv);
+      let runtimeProviderProfile = providerProfile;
+      if (providerProfile.codexBaseUrl && providerProfile.codexWireApi === 'chat') {
+        closeProviderRoute();
+        providerRoute = createResponsesRoute({
+          upstreamBaseUrl: providerProfile.codexBaseUrl,
+          apiKey: providerProfile.codexApiKey,
+          authScheme: providerProfile.codexAuthScheme,
+        });
+        const routeInfo = await providerRoute.start();
+        runtimeProviderProfile = {
+          ...providerProfile,
+          codexBaseUrl: routeInfo.baseUrl,
+          codexApiKey: routeInfo.apiKey,
+          codexWireApi: 'responses',
+        };
+      }
       stderrTail = '';
       stopping = false;
       const cliOverride = spawnEnv.AE_MCP_CODEX_CLI ? { ok: true, cliPath: String(spawnEnv.AE_MCP_CODEX_CLI), version: '' } : null;
       lastCliInfo = cliOverride || lastCliInfo;
       const command = cliOverride ? cliOverride.cliPath : 'codex';
-      let spawnEnvWithCreds = codexSpawnEnv(providerProfile, spawnEnv);
+      let spawnEnvWithCreds = codexSpawnEnv(runtimeProviderProfile, spawnEnv);
       // Only inherit cli-config's provider env var when the panel has no
       // explicit custom provider (codexBaseUrl) configured — an explicit
       // custom provider always wins.
@@ -475,7 +502,7 @@ export function createCodexBackend({
           spawnEnvWithCreds = Object.assign({}, spawnEnvWithCreds, { [envKey]: cliConfig.apiKey });
         }
       }
-      proc = spawn(command, codexAppServerArgs(providerProfile), {
+      proc = spawn(command, codexAppServerArgs(runtimeProviderProfile), {
         stdio: 'pipe',
         windowsHide: true,
         shell: true,
@@ -630,6 +657,7 @@ export function createCodexBackend({
 
   function reset() {
     stopping = true;
+    closeProviderRoute();
     drainApprovals();
     if (rpc) rpc.close(new Error('Codex backend reset'));
     if (proc) {
@@ -729,3 +757,5 @@ export function createCodexBackend({
     probeAccount,
   };
 }
+
+

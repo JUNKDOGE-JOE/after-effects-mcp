@@ -222,7 +222,7 @@ test('createCodexBackend starts app-server with custom provider config when supp
       codexBaseUrl: 'https://proxy.example/openai',
       codexApiKey: 'sk-proxy',
       codexProviderId: 'my-provider',
-      codexWireApi: 'chat',
+      codexWireApi: 'responses',
     }),
   });
 
@@ -235,7 +235,7 @@ test('createCodexBackend starts app-server with custom provider config when supp
     '-c', 'model_providers.my-provider.name="AE MCP Custom"',
     '-c', 'model_providers.my-provider.base_url="https://proxy.example/openai"',
     '-c', 'model_providers.my-provider.env_key="AE_MCP_CODEX_API_KEY"',
-    '-c', 'model_providers.my-provider.wire_api="chat"',
+    '-c', 'model_providers.my-provider.wire_api="responses"',
     '-c', 'model_providers.my-provider.requires_openai_auth=false',
   ]);
   assert.equal(spawned.calls[0].options.env.AE_MCP_CODEX_API_KEY, 'sk-proxy');
@@ -244,6 +244,50 @@ test('createCodexBackend starts app-server with custom provider config when supp
   await pending;
 });
 
+test('createCodexBackend routes chat-wire custom providers through a local Responses facade', async () => {
+  const routeCalls = [];
+  let closed = 0;
+  const { backend, spawned } = makeBackend({
+    createResponsesRoute: (input) => {
+      routeCalls.push(input);
+      return {
+        start: async () => ({ baseUrl: 'http://127.0.0.1:49123', apiKey: 'local-route-key' }),
+        close: async () => { closed += 1; },
+      };
+    },
+    getProviderProfile: () => ({
+      codexBaseUrl: 'https://proxy.example/openai',
+      codexApiKey: 'sk-proxy',
+      codexProviderId: 'my-provider',
+      codexWireApi: 'chat',
+      codexAuthScheme: 'bearer',
+    }),
+  });
+
+  const { pending, proc } = await startTurn(backend, spawned, 'custom provider');
+
+  assert.equal(routeCalls.length, 1);
+  assert.deepEqual(routeCalls[0], {
+    upstreamBaseUrl: 'https://proxy.example/openai',
+    apiKey: 'sk-proxy',
+    authScheme: 'bearer',
+  });
+  assert.deepEqual(spawned.calls[0].args, [
+    'app-server',
+    '-c', 'model_provider="my-provider"',
+    '-c', 'model_providers.my-provider.name="AE MCP Custom"',
+    '-c', 'model_providers.my-provider.base_url="http://127.0.0.1:49123"',
+    '-c', 'model_providers.my-provider.env_key="AE_MCP_CODEX_API_KEY"',
+    '-c', 'model_providers.my-provider.wire_api="responses"',
+    '-c', 'model_providers.my-provider.requires_openai_auth=false',
+  ]);
+  assert.equal(spawned.calls[0].options.env.AE_MCP_CODEX_API_KEY, 'local-route-key');
+
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+  backend.reset();
+  assert.equal(closed, 1);
+});
 test('createCodexBackend injects cli-config provider env var when no custom provider is configured', async () => {
   const { backend, spawned } = makeBackend({
     getCliConfigProvider: () => ({
@@ -763,3 +807,4 @@ test('probeAccount resolves within bounds and kills the process when initialize 
   assert.match(result.detail, /timeout/i);
   assert.equal(proc.killed, true);
 });
+

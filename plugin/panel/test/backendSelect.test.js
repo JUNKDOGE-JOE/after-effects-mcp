@@ -18,6 +18,12 @@ test('pickBackend: claude api channel routes to claude-api with node, byok witho
   assert.equal(pickBackend({ pref: 'subscription', channels, nodeOk: false }).backend, 'byok');
 });
 
+test('pickBackend: third-party claude api providers use byok even when node is available', () => {
+  const channels = { claude: [ch('subscription', false), ch('api', true)] };
+  const apiProvider = { protocol: 'anthropic', baseUrl: 'https://relay.example/v1', apiKey: 'k' };
+  assert.equal(pickBackend({ pref: 'subscription', channels, nodeOk: true, apiProvider }).backend, 'byok');
+});
+
 test('pickBackend: probing and no-channel states carry reason + fixHint', () => {
   const probing = pickBackend({ pref: 'codex', channels: { codex: [ch('cli', false, undefined, true)] } });
   assert.deepEqual(probing, { backend: 'none', reason: 'codex-probing', channel: null, fixHint: null });
@@ -82,3 +88,4 @@ test('shouldResetOnBackendChange ignores none and resets only on real backend ch
   assert.deepEqual(run(['none', 'subscription']), []);
   assert.deepEqual(run(['none', 'byok', 'subscription']), ['subscription']);
 });
+

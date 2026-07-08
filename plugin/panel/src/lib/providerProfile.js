@@ -26,6 +26,11 @@ function normalizeCodexWireApi(value) {
   return text === 'responses' || text === 'chat' ? text : DEFAULT_CODEX_WIRE_API;
 }
 
+function normalizeCodexAuthScheme(value) {
+  const text = String(value || '').trim();
+  return text === 'x-api-key' || text === 'none' || text === 'bearer' ? text : 'bearer';
+}
+
 function tomlString(value) {
   return JSON.stringify(String(value || ''));
 }
@@ -38,6 +43,7 @@ export function normalizeProviderProfile(input = {}, env = {}) {
     codexBaseUrl,
     codexProviderId: normalizeProviderId(firstValue(input.codexProviderId, env.AE_MCP_CODEX_PROVIDER_ID)),
     codexWireApi: normalizeCodexWireApi(firstValue(input.codexWireApi, env.AE_MCP_CODEX_WIRE_API)),
+    codexAuthScheme: normalizeCodexAuthScheme(firstValue(input.codexAuthScheme, env.AE_MCP_CODEX_AUTH_SCHEME)),
     anthropicBaseUrl,
   };
 }
@@ -91,3 +97,5 @@ export function ensureUserEnv(env = {}, { homedir = '', appData = '' } = {}) {
   if (!next.APPDATA) next.APPDATA = appData || anchor + '\\AppData\\Roaming';
   return next;
 }
+
+

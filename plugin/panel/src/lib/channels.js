@@ -54,7 +54,13 @@ export function codexChannels({ codexProbe, customProvider, cliConfig, cliConfig
     channel: 'custom',
     source: { zh: '自定义 provider', en: 'Custom provider' },
     checking: false,
-    ok: Boolean(customProvider && customProvider.baseUrl && customProvider.apiKey && (!codexProbe || codexProbe.runtimeOk !== false)),
+    ok: Boolean(
+      customProvider
+      && customProvider.protocol === 'openai-compatible'
+      && customProvider.baseUrl
+      && customProvider.apiKey
+      && (!codexProbe || codexProbe.runtimeOk !== false)
+    ),
     detail: customProvider && customProvider.baseUrl ? customProvider.baseUrl : '',
     fixHint: { zh: '在「Provider 管理」新增/选择一个 OpenAI 兼容 provider（Base URL + Key）。', en: 'Add or pick an OpenAI-compatible provider (base URL + key) in Provider Manager.' },
   };

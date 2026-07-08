@@ -267,15 +267,24 @@ function Shell({ cs }) {
   const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
   const claudeApiProvider = React.useMemo(() => {
     const fromStore = providers.find((p) => p.id === claudeProviderId) || null;
-    if (fromStore && fromStore.baseUrl && fromStore.apiKey) return fromStore;
+    if (fromStore && fromStore.protocol === 'anthropic' && fromStore.baseUrl && fromStore.apiKey) return fromStore;
     if (apiKey) return { id: 'legacy-anthropic', name: 'Claude API', protocol: 'anthropic', baseUrl: anthropicBaseUrl || 'https://api.anthropic.com', apiKey, probedModels: [], probedAt: 0 };
-    return fromStore;
+    return null;
   }, [providers, claudeProviderId, apiKey, anthropicBaseUrl]);
   const codexCustomProvider = React.useMemo(() => {
     const fromStore = providers.find((p) => p.id === codexProviderId) || null;
-    if (fromStore && fromStore.baseUrl && fromStore.apiKey) return fromStore;
-    if (codexBaseUrl) return { id: 'legacy-codex', name: 'Codex custom', protocol: 'openai-compatible', baseUrl: codexBaseUrl, apiKey: codexApiKey, probedModels: [], probedAt: 0 };
-    return fromStore;
+    if (fromStore && fromStore.protocol === 'openai-compatible' && fromStore.baseUrl && fromStore.apiKey) return fromStore;
+    if (codexBaseUrl) return {
+      id: 'legacy-codex',
+      name: 'Codex custom',
+      protocol: 'openai-compatible',
+      baseUrl: codexBaseUrl,
+      apiKey: codexApiKey,
+      dialect: { wireApi: 'chat', authScheme: 'bearer', source: 'manual', updatedAt: 0 },
+      probedModels: [],
+      probedAt: 0,
+    };
+    return null;
   }, [providers, codexProviderId, codexBaseUrl, codexApiKey]);
 
   const [providerProbing, setProviderProbing] = React.useState('');
@@ -313,9 +322,14 @@ function Shell({ cs }) {
         const result = await runProviderManagerProbe(p, options);
         setProviderProbing('');
         if (result.ok && providerStore) {
+          const prev = providerStore.get(p.id);
           providerStore.upsert(result.entry);
           setProviders(providerStore.list());
           setProviderProbeErrors((errs) => ({ ...errs, [p.id]: '' }));
+          // Dialect/auth changes must rebuild Codex app-server; an already-running
+          // process still points at the old upstream wire API.
+          const dialectChanged = JSON.stringify(prev && prev.dialect) !== JSON.stringify(result.entry.dialect);
+          if (dialectChanged && codexProviderId === p.id) codexBackend.reset();
         } else {
           setProviderProbeErrors((errs) => ({ ...errs, [p.id]: result.detail || 'Provider probe failed' }));
         }
@@ -356,9 +370,22 @@ function Shell({ cs }) {
       codexApiKey: codexCustomProvider ? codexCustomProvider.apiKey : codexApiKey,
       codexBaseUrl: codexCustomProvider ? codexCustomProvider.baseUrl : codexBaseUrl,
     };
-    if (codexCustomProvider && codexCustomProvider.dialect) input.codexWireApi = codexCustomProvider.dialect.wireApi;
+    if (codexCustomProvider && codexCustomProvider.protocol === 'openai-compatible') {
+      // Only route when dialect says chat. Missing dialect stays on Codex's
+      // native responses path until Provider Manager probe writes a dialect.
+      if (codexCustomProvider.dialect && codexCustomProvider.dialect.wireApi) {
+        input.codexWireApi = codexCustomProvider.dialect.wireApi;
+      }
+      if (codexCustomProvider.dialect && codexCustomProvider.dialect.authScheme) {
+        input.codexAuthScheme = codexCustomProvider.dialect.authScheme;
+      }
+    }
     return normalizeProviderProfile(input);
   }, [claudeApiProvider, anthropicBaseUrl, codexCustomProvider, codexApiKey, codexBaseUrl]);
+  const codexDialectKey = codexCustomProvider && codexCustomProvider.dialect
+    ? JSON.stringify(codexCustomProvider.dialect)
+    : '';
+
   const runtimeRef = React.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: 'subscription', claudeApiProvider: null, codexCliConfigProvider: null });
   const extRoot = cs && cs.getSystemPath ? cs.getSystemPath('extension') : '';
   const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
@@ -432,6 +459,12 @@ function Shell({ cs }) {
     codexBackend.reset();
   }, [codexBackend]);
 
+  React.useEffect(() => {
+    if (!codexCustomProvider) return undefined;
+    codexBackend.reset();
+    return undefined;
+  }, [codexDialectKey, codexCustomProvider && codexCustomProvider.id]);
+
   const openCodeBackend = React.useMemo(() => createOpenCodeBackend({
     getMcpSpec: () => resolveMcpCommand({ extRoot }),
     getModel: () => runtimeRef.current.model,
@@ -459,7 +492,7 @@ function Shell({ cs }) {
   }, [zcodeBackend]);
 
   const nodeOk = !(probe && probe.nodeOk === false);
-  const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock, nodeOk });
+  const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock, nodeOk, apiProvider: claudeApiProvider });
   runtimeRef.current = {
     apiKey: claudeApiProvider ? claudeApiProvider.apiKey : apiKey,
     apiBaseUrl: providerProfile.anthropicBaseUrl,
@@ -1008,3 +1041,6 @@ function Shell({ cs }) {
 export function App({ cs }) {
   return <LangProvider><Shell cs={cs} /></LangProvider>;
 }
+
+
+
