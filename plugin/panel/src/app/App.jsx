@@ -308,9 +308,9 @@ function Shell({ cs }) {
         if (claudeProviderId === id) { setClaudeProviderId(''); writePref('ae_mcp_claude_provider', ''); }
         if (codexProviderId === id) { setCodexProviderId(''); writePref('ae_mcp_codex_provider', ''); }
       }}
-      onProbe={async (p) => {
+      onProbe={async (p, options = {}) => {
         setProviderProbing(p.id);
-        const result = await runProviderManagerProbe(p);
+        const result = await runProviderManagerProbe(p, options);
         setProviderProbing('');
         if (result.ok && providerStore) {
           providerStore.upsert(result.entry);

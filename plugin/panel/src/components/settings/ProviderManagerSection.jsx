@@ -5,10 +5,11 @@ import { Input } from '../forms/Input';
 import { Select } from '../forms/Select';
 import { Field } from '../forms/Field';
 import { emptyDraft, draftFromEntry, validateDraft, draftToEntry } from '../../lib/providerManagerState';
+import { providerDialectBadge } from '../../lib/providerDialectBadge';
 
 const L = {
-  zh: { title: 'Provider 管理', add: '新增', edit: '编辑', del: '删除', probe: '探测模型', probing: '探测中…', save: '保存', cancel: '取消', name: '名称', protocol: '协议', baseUrl: 'Base URL', apiKey: 'API Key', keyCap: '仅保存在本机 ~/.ae-mcp/providers.json', models: (n) => `${n} 个模型`, probeFailed: '探测失败（可手填模型 ID 继续使用）：', importCc: '从 cc-switch 导入' },
-  en: { title: 'Provider manager', add: 'Add', edit: 'Edit', del: 'Delete', probe: 'Probe models', probing: 'Probing…', save: 'Save', cancel: 'Cancel', name: 'Name', protocol: 'Protocol', baseUrl: 'Base URL', apiKey: 'API Key', keyCap: 'Stored locally in ~/.ae-mcp/providers.json', models: (n) => `${n} models`, probeFailed: 'Probe failed (manual model id still works): ', importCc: 'Import from cc-switch' },
+  zh: { title: 'Provider 管理', add: '新增', edit: '编辑', del: '删除', probe: '探测模型', redetect: '重新检测', probing: '探测中…', save: '保存', cancel: '取消', name: '名称', protocol: '协议', baseUrl: 'Base URL', apiKey: 'API Key', keyCap: '仅保存在本机 ~/.ae-mcp/providers.json', models: (n) => `${n} 个模型`, probeFailed: '探测失败（可手填模型 ID 继续使用）：', importCc: '从 cc-switch 导入', dialectSource: { 'ccswitch-import': { zh: '来自 cc-switch' }, detected: { zh: '自动检测' }, manual: { zh: '手动设置' } } },
+  en: { title: 'Provider manager', add: 'Add', edit: 'Edit', del: 'Delete', probe: 'Probe models', redetect: 'Re-detect', probing: 'Probing…', save: 'Save', cancel: 'Cancel', name: 'Name', protocol: 'Protocol', baseUrl: 'Base URL', apiKey: 'API Key', keyCap: 'Stored locally in ~/.ae-mcp/providers.json', models: (n) => `${n} models`, probeFailed: 'Probe failed (manual model id still works): ', importCc: 'Import from cc-switch', dialectSource: { 'ccswitch-import': { en: 'from cc-switch' }, detected: { en: 'auto-detected' }, manual: { en: 'manual' } } },
 };
 
 export function ProviderManagerSection({ lang = 'zh', providers = [], onUpsert, onRemove, onProbe, probing = '', probeErrors = {}, ccSwitch = null, onImportCcSwitch }) {
@@ -32,20 +33,25 @@ export function ProviderManagerSection({ lang = 'zh', providers = [], onUpsert, 
         {ccSwitch && onImportCcSwitch ? (
           <Button variant="secondary" size="sm" icon="download" onClick={onImportCcSwitch}>{t.importCc}</Button>
         ) : null}
-        {providers.map((p) => (
-          <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 8px', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-panel)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ flex: 1, minWidth: 0, font: '500 12px/1.35 var(--font-ui)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-              <Badge status="neutral">{p.protocol}</Badge>
-              {p.probedModels.length ? <Badge status="ok">{t.models(p.probedModels.length)}</Badge> : null}
-              <Button variant="ghost" size="sm" disabled={probing === p.id} onClick={() => onProbe(p)}>{probing === p.id ? t.probing : t.probe}</Button>
-              <Button variant="ghost" size="sm" onClick={() => { setDraft(draftFromEntry(p)); setError(''); }}>{t.edit}</Button>
-              <Button variant="ghost" size="sm" onClick={() => onRemove(p.id)}>{t.del}</Button>
+        {providers.map((p) => {
+          const dialectBadge = providerDialectBadge(p.dialect, lang, t.dialectSource);
+          return (
+            <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 8px', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-panel)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ flex: 1, minWidth: 0, font: '500 12px/1.35 var(--font-ui)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                <Badge status="neutral">{p.protocol}</Badge>
+                {dialectBadge ? <span title={dialectBadge.title}><Badge status="neutral">{dialectBadge.label}</Badge></span> : null}
+                {p.probedModels.length ? <Badge status="ok">{t.models(p.probedModels.length)}</Badge> : null}
+                <Button variant="ghost" size="sm" disabled={probing === p.id} onClick={() => onProbe(p)}>{probing === p.id ? t.probing : t.probe}</Button>
+                {p.dialect ? <Button variant="ghost" size="sm" disabled={probing === p.id} onClick={() => onProbe(p, { forceDetect: true })}>{probing === p.id ? t.probing : t.redetect}</Button> : null}
+                <Button variant="ghost" size="sm" onClick={() => { setDraft(draftFromEntry(p)); setError(''); }}>{t.edit}</Button>
+                <Button variant="ghost" size="sm" onClick={() => onRemove(p.id)}>{t.del}</Button>
+              </div>
+              <div style={{ font: '400 10px/1.35 var(--font-mono)', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.baseUrl}</div>
+              {probeErrors[p.id] ? <div style={{ font: '400 10px/1.4 var(--font-ui)', color: 'var(--warn)' }}>{t.probeFailed}{probeErrors[p.id]}</div> : null}
             </div>
-            <div style={{ font: '400 10px/1.35 var(--font-mono)', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.baseUrl}</div>
-            {probeErrors[p.id] ? <div style={{ font: '400 10px/1.4 var(--font-ui)', color: 'var(--warn)' }}>{t.probeFailed}{probeErrors[p.id]}</div> : null}
-          </div>
-        ))}
+          );
+        })}
         {draft ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-panel)' }}>
             <Field label={t.name}><Input value={draft.name} onChange={(v) => setDraft({ ...draft, name: v })} /></Field>

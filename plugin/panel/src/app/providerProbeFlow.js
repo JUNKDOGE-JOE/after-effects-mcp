@@ -39,9 +39,18 @@ export async function runProviderManagerProbe(provider, {
   probeProviderModelsImpl = probeProviderModels,
   detectProviderDialectImpl = detectProviderDialect,
   now = Date.now,
+  forceDetect = false,
 } = {}) {
   const p = provider || {};
   const canDetect = p.protocol === 'openai-compatible';
+
+  if (forceDetect && canDetect) {
+    const detectResult = await detectProviderDialectImpl({ baseUrl: p.baseUrl, apiKey: p.apiKey, protocol: p.protocol, now });
+    if (detectResult.ok) return { ok: true, entry: detectedEntry(p, detectResult, now), result: detectResult };
+    const result = await probeProviderModelsImpl({ baseUrl: p.baseUrl, apiKey: p.apiKey, protocol: p.protocol, dialect: p.dialect });
+    if (result.ok) return { ok: true, entry: probedEntry(p, result, now), result, detectResult };
+    return { ok: false, detail: probeFailureDetail(result, detectResult), result, detectResult };
+  }
 
   if (p.dialect) {
     const result = await probeProviderModelsImpl({ baseUrl: p.baseUrl, apiKey: p.apiKey, protocol: p.protocol, dialect: p.dialect });

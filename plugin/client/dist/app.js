@@ -11254,8 +11254,9 @@
     const safe = raw.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || DEFAULT_CODEX_PROVIDER_ID;
     return RESERVED_CODEX_PROVIDER_IDS.has(safe) ? safe + "-custom" : safe;
   }
-  function normalizeCodexWireApi() {
-    return DEFAULT_CODEX_WIRE_API;
+  function normalizeCodexWireApi(value) {
+    const text = String(value || "").trim();
+    return text === "responses" || text === "chat" ? text : DEFAULT_CODEX_WIRE_API;
   }
   function tomlString(value) {
     return JSON.stringify(String(value || ""));
@@ -11267,7 +11268,7 @@
       codexApiKey: firstValue(input.codexApiKey, env.AE_MCP_CODEX_API_KEY),
       codexBaseUrl,
       codexProviderId: normalizeProviderId(firstValue(input.codexProviderId, env.AE_MCP_CODEX_PROVIDER_ID)),
-      codexWireApi: normalizeCodexWireApi(),
+      codexWireApi: normalizeCodexWireApi(firstValue(input.codexWireApi, env.AE_MCP_CODEX_WIRE_API)),
       anthropicBaseUrl
     };
   }
@@ -12368,6 +12369,9 @@
   function zcodeProtocolApiFormat(provider, kind) {
     const direct = provider && (provider.apiFormat || provider.api_format);
     if (direct) return direct;
+    const dialect = provider && provider.dialect && typeof provider.dialect === "object" ? provider.dialect : null;
+    if (kind === "openai-compatible" && dialect && dialect.wireApi === "responses") return "openai-responses";
+    if (kind === "openai-compatible" && dialect && dialect.wireApi === "chat") return "openai-chat-completions";
     if (kind === "openai") return "openai-responses";
     if (kind === "openai-compatible") return "openai-chat-completions";
     return "anthropic-messages";
@@ -15361,6 +15365,9 @@
 
   // src/cep/providerStore.js
   var PROTOCOLS = /* @__PURE__ */ new Set(["anthropic", "openai-compatible"]);
+  var DIALECT_WIRE_APIS = /* @__PURE__ */ new Set(["responses", "chat"]);
+  var DIALECT_AUTH_SCHEMES = /* @__PURE__ */ new Set(["bearer", "x-api-key", "none"]);
+  var DIALECT_SOURCES = /* @__PURE__ */ new Set(["ccswitch-import", "detected", "manual"]);
   var FILE_NAME = "providers.json";
   function cepRequire3() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) return globalThis.window.cep_node.require;
@@ -15383,7 +15390,7 @@
     if (!id) throw new Error("Provider entry needs an id");
     const protocol = String(input.protocol || "openai-compatible");
     if (!PROTOCOLS.has(protocol)) throw new Error("Unsupported provider protocol: " + protocol);
-    return {
+    const entry = {
       id,
       name: String(input.name || "").trim() || id,
       protocol,
@@ -15392,6 +15399,19 @@
       probedModels: Array.isArray(input.probedModels) ? input.probedModels : [],
       probedAt: Number(input.probedAt) || 0
     };
+    const dialect = input.dialect && typeof input.dialect === "object" ? input.dialect : null;
+    const wireApi = dialect ? String(dialect.wireApi || "").trim() : "";
+    const authScheme = dialect ? String(dialect.authScheme || "").trim() : "";
+    if (DIALECT_WIRE_APIS.has(wireApi) && DIALECT_AUTH_SCHEMES.has(authScheme)) {
+      const source = String(dialect.source || "").trim();
+      entry.dialect = {
+        wireApi,
+        authScheme,
+        source: DIALECT_SOURCES.has(source) ? source : "manual",
+        updatedAt: typeof dialect.updatedAt === "number" && Number.isFinite(dialect.updatedAt) ? dialect.updatedAt : 0
+      };
+    }
+    return entry;
   }
   function createProviderStore(deps = defaultDeps2()) {
     const { fs, os, path } = deps;
@@ -15508,11 +15528,29 @@
     return { id, name, protocol: draft.protocol, baseUrl: draft.baseUrl, apiKey: draft.apiKey };
   }
 
+  // src/lib/providerDialectBadge.js
+  var DEFAULT_DIALECT_SOURCE_LABELS = {
+    "ccswitch-import": { zh: "\u6765\u81EA cc-switch", en: "from cc-switch" },
+    detected: { zh: "\u81EA\u52A8\u68C0\u6D4B", en: "auto-detected" },
+    manual: { zh: "\u624B\u52A8\u8BBE\u7F6E", en: "manual" }
+  };
+  function providerDialectBadge(dialect, lang = "zh", sourceLabels = DEFAULT_DIALECT_SOURCE_LABELS) {
+    if (!dialect || typeof dialect !== "object") return null;
+    const wireApi = String(dialect.wireApi || "").trim();
+    const authScheme = String(dialect.authScheme || "").trim();
+    if (!wireApi || !authScheme) return null;
+    const source = sourceLabels[dialect.source] || sourceLabels.manual || DEFAULT_DIALECT_SOURCE_LABELS.manual;
+    return {
+      label: wireApi + " \xB7 " + authScheme,
+      title: source[lang] || source.zh || source.en || ""
+    };
+  }
+
   // src/components/settings/ProviderManagerSection.jsx
   var import_jsx_runtime35 = __toESM(require_jsx_runtime(), 1);
   var L2 = {
-    zh: { title: "Provider \u7BA1\u7406", add: "\u65B0\u589E", edit: "\u7F16\u8F91", del: "\u5220\u9664", probe: "\u63A2\u6D4B\u6A21\u578B", probing: "\u63A2\u6D4B\u4E2D\u2026", save: "\u4FDD\u5B58", cancel: "\u53D6\u6D88", name: "\u540D\u79F0", protocol: "\u534F\u8BAE", baseUrl: "Base URL", apiKey: "API Key", keyCap: "\u4EC5\u4FDD\u5B58\u5728\u672C\u673A ~/.ae-mcp/providers.json", models: (n) => `${n} \u4E2A\u6A21\u578B`, probeFailed: "\u63A2\u6D4B\u5931\u8D25\uFF08\u53EF\u624B\u586B\u6A21\u578B ID \u7EE7\u7EED\u4F7F\u7528\uFF09\uFF1A", importCc: "\u4ECE cc-switch \u5BFC\u5165" },
-    en: { title: "Provider manager", add: "Add", edit: "Edit", del: "Delete", probe: "Probe models", probing: "Probing\u2026", save: "Save", cancel: "Cancel", name: "Name", protocol: "Protocol", baseUrl: "Base URL", apiKey: "API Key", keyCap: "Stored locally in ~/.ae-mcp/providers.json", models: (n) => `${n} models`, probeFailed: "Probe failed (manual model id still works): ", importCc: "Import from cc-switch" }
+    zh: { title: "Provider \u7BA1\u7406", add: "\u65B0\u589E", edit: "\u7F16\u8F91", del: "\u5220\u9664", probe: "\u63A2\u6D4B\u6A21\u578B", redetect: "\u91CD\u65B0\u68C0\u6D4B", probing: "\u63A2\u6D4B\u4E2D\u2026", save: "\u4FDD\u5B58", cancel: "\u53D6\u6D88", name: "\u540D\u79F0", protocol: "\u534F\u8BAE", baseUrl: "Base URL", apiKey: "API Key", keyCap: "\u4EC5\u4FDD\u5B58\u5728\u672C\u673A ~/.ae-mcp/providers.json", models: (n) => `${n} \u4E2A\u6A21\u578B`, probeFailed: "\u63A2\u6D4B\u5931\u8D25\uFF08\u53EF\u624B\u586B\u6A21\u578B ID \u7EE7\u7EED\u4F7F\u7528\uFF09\uFF1A", importCc: "\u4ECE cc-switch \u5BFC\u5165", dialectSource: { "ccswitch-import": { zh: "\u6765\u81EA cc-switch" }, detected: { zh: "\u81EA\u52A8\u68C0\u6D4B" }, manual: { zh: "\u624B\u52A8\u8BBE\u7F6E" } } },
+    en: { title: "Provider manager", add: "Add", edit: "Edit", del: "Delete", probe: "Probe models", redetect: "Re-detect", probing: "Probing\u2026", save: "Save", cancel: "Cancel", name: "Name", protocol: "Protocol", baseUrl: "Base URL", apiKey: "API Key", keyCap: "Stored locally in ~/.ae-mcp/providers.json", models: (n) => `${n} models`, probeFailed: "Probe failed (manual model id still works): ", importCc: "Import from cc-switch", dialectSource: { "ccswitch-import": { en: "from cc-switch" }, detected: { en: "auto-detected" }, manual: { en: "manual" } } }
   };
   function ProviderManagerSection({ lang = "zh", providers = [], onUpsert, onRemove, onProbe, probing = "", probeErrors = {}, ccSwitch = null, onImportCcSwitch }) {
     const t = L2[lang] || L2.zh;
@@ -15538,24 +15576,29 @@
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
         ccSwitch && onImportCcSwitch ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "secondary", size: "sm", icon: "download", onClick: onImportCcSwitch, children: t.importCc }) : null,
-        providers.map((p) => /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: "6px 8px", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { flex: 1, minWidth: 0, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: p.name }),
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Badge, { status: "neutral", children: p.protocol }),
-            p.probedModels.length ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Badge, { status: "ok", children: t.models(p.probedModels.length) }) : null,
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", disabled: probing === p.id, onClick: () => onProbe(p), children: probing === p.id ? t.probing : t.probe }),
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => {
-              setDraft(draftFromEntry(p));
-              setError("");
-            }, children: t.edit }),
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => onRemove(p.id), children: t.del })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: p.baseUrl }),
-          probeErrors[p.id] ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: [
-            t.probeFailed,
-            probeErrors[p.id]
-          ] }) : null
-        ] }, p.id)),
+        providers.map((p) => {
+          const dialectBadge = providerDialectBadge(p.dialect, lang, t.dialectSource);
+          return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: "6px 8px", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { flex: 1, minWidth: 0, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: p.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Badge, { status: "neutral", children: p.protocol }),
+              dialectBadge ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { title: dialectBadge.title, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Badge, { status: "neutral", children: dialectBadge.label }) }) : null,
+              p.probedModels.length ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Badge, { status: "ok", children: t.models(p.probedModels.length) }) : null,
+              /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", disabled: probing === p.id, onClick: () => onProbe(p), children: probing === p.id ? t.probing : t.probe }),
+              p.dialect ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", disabled: probing === p.id, onClick: () => onProbe(p, { forceDetect: true }), children: probing === p.id ? t.probing : t.redetect }) : null,
+              /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => {
+                setDraft(draftFromEntry(p));
+                setError("");
+              }, children: t.edit }),
+              /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => onRemove(p.id), children: t.del })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: p.baseUrl }),
+            probeErrors[p.id] ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: [
+              t.probeFailed,
+              probeErrors[p.id]
+            ] }) : null
+          ] }, p.id);
+        }),
         draft ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, padding: "8px", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Input, { value: draft.name, onChange: (v) => setDraft({ ...draft, name: v }) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.protocol, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Select, { value: draft.protocol, onChange: (v) => setDraft({ ...draft, protocol: v }), options: [
@@ -15586,10 +15629,18 @@
     if (globalThis.require) return globalThis.require;
     throw new Error("CEP Node require is unavailable");
   }
-  function probeHeaders(protocol, apiKey) {
+  function authSchemeFromDialect(dialect) {
+    if (!dialect) return "";
+    if (typeof dialect === "string") return dialect;
+    return String(dialect.authScheme || "").trim();
+  }
+  function probeHeaders(protocol, apiKey, dialect) {
     if (protocol === "anthropic") {
       return { "x-api-key": String(apiKey || ""), "anthropic-version": "2023-06-01" };
     }
+    const authScheme = authSchemeFromDialect(dialect);
+    if (authScheme === "x-api-key") return { "x-api-key": String(apiKey || "") };
+    if (authScheme === "none") return {};
     return { Authorization: "Bearer " + String(apiKey || "") };
   }
   function parseModelsList(json) {
@@ -15600,7 +15651,7 @@
       return { id: String(id), label: String(m.display_name || m.displayName || id) };
     }).filter(Boolean);
   }
-  function probeProviderModels({ baseUrl, apiKey, protocol = "openai-compatible", httpsImpl, timeoutMs = 8e3 } = {}) {
+  function probeProviderModels({ baseUrl, apiKey, protocol = "openai-compatible", dialect, authScheme, httpsImpl, timeoutMs = 8e3 } = {}) {
     let endpoint;
     try {
       const root = String(baseUrl || "").replace(/\/+$/, "").replace(/\/v1$/, "");
@@ -15621,7 +15672,7 @@
         protocol: endpoint.protocol,
         path: endpoint.pathname + endpoint.search,
         method: "GET",
-        headers: probeHeaders(protocol, apiKey)
+        headers: probeHeaders(protocol, apiKey, dialect || authScheme)
       }, (res) => {
         let body = "";
         res.on("data", (chunk) => {
@@ -15652,9 +15703,302 @@
     });
   }
 
+  // src/cep/providerDetect.js
+  function getCepRequire8() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
+      return globalThis.window.cep_node.require;
+    }
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function normalizeRoot(baseUrl) {
+    return String(baseUrl || "").replace(/\/+$/, "").replace(/\/v1$/, "");
+  }
+  function authHeaders(authScheme, apiKey) {
+    if (authScheme === "bearer") return { Authorization: "Bearer " + String(apiKey || "") };
+    if (authScheme === "x-api-key") return { "x-api-key": String(apiKey || "") };
+    return {};
+  }
+  function authCandidates(apiKey) {
+    return String(apiKey || "") ? ["bearer", "x-api-key", "none"] : ["none"];
+  }
+  function safeDetail(message) {
+    return String(message || "request failed");
+  }
+  function parseJson(value) {
+    try {
+      return { ok: true, value: JSON.parse(value || "") };
+    } catch (e) {
+      return { ok: false, value: null };
+    }
+  }
+  function isJsonErrorObject(body) {
+    const parsed = parseJson(body);
+    return parsed.ok && parsed.value && typeof parsed.value === "object" && parsed.value.error && typeof parsed.value.error === "object" && !Array.isArray(parsed.value.error);
+  }
+  function requestProvider({ url, method, headers, body, httpsImpl, timeoutMs }) {
+    return new Promise((resolve) => {
+      let endpoint;
+      try {
+        endpoint = new URL(url);
+      } catch (e) {
+        resolve({ ok: false, network: true, status: 0, body: "", detail: "Invalid base URL" });
+        return;
+      }
+      let https;
+      try {
+        https = httpsImpl || getCepRequire8()(endpoint.protocol === "http:" ? "http" : "https");
+      } catch (e) {
+        resolve({ ok: false, network: true, status: 0, body: "", detail: safeDetail(e.message) });
+        return;
+      }
+      const payload = body === void 0 ? null : JSON.stringify(body);
+      const reqHeaders = Object.assign({}, headers || {});
+      if (payload !== null) {
+        reqHeaders["Content-Type"] = "application/json";
+      }
+      let settled = false;
+      function finish(result) {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      }
+      const req = https.request({
+        hostname: endpoint.hostname,
+        port: endpoint.port || void 0,
+        protocol: endpoint.protocol,
+        path: endpoint.pathname + endpoint.search,
+        method,
+        headers: reqHeaders
+      }, (res) => {
+        let responseBody = "";
+        res.on("data", (chunk) => {
+          responseBody += chunk;
+        });
+        res.on("end", () => finish({
+          ok: true,
+          network: false,
+          status: res.statusCode || 0,
+          body: responseBody,
+          detail: ""
+        }));
+      });
+      req.on("error", (err) => finish({
+        ok: false,
+        network: true,
+        status: 0,
+        body: "",
+        detail: err && err.message ? err.message : "request failed"
+      }));
+      if (req.setTimeout) {
+        req.setTimeout(timeoutMs, () => {
+          try {
+            req.destroy();
+          } catch (e) {
+          }
+          finish({ ok: false, network: true, status: 0, body: "", detail: "timeout" });
+        });
+      }
+      if (payload !== null && req.write) req.write(payload);
+      req.end();
+    });
+  }
+  async function detectAuth({ root, apiKey, httpsImpl, timeoutMs, tried }) {
+    let saw200WithoutModels = false;
+    let sawNonAuthStatus = false;
+    for (const candidate of authCandidates(apiKey)) {
+      const result = await requestProvider({
+        url: root + "/v1/models",
+        method: "GET",
+        headers: authHeaders(candidate, apiKey),
+        httpsImpl,
+        timeoutMs
+      });
+      if (result.network) {
+        tried.push({ step: "auth", candidate, status: 0, outcome: "network" });
+        return { ok: false, reason: "network", detail: "Network error while probing provider models" };
+      }
+      if (result.status === 200) {
+        const parsed = parseJson(result.body);
+        const models = parsed.ok ? parseModelsList(parsed.value) : [];
+        if (models.length) {
+          tried.push({ step: "auth", candidate, status: 200, outcome: "accepted" });
+          return { ok: true, authScheme: candidate, models };
+        }
+        saw200WithoutModels = true;
+        tried.push({ step: "auth", candidate, status: 200, outcome: "no-models" });
+      } else if (result.status === 401 || result.status === 403) {
+        tried.push({ step: "auth", candidate, status: result.status, outcome: "rejected" });
+      } else {
+        sawNonAuthStatus = true;
+        tried.push({ step: "auth", candidate, status: result.status, outcome: "rejected" });
+      }
+    }
+    if (saw200WithoutModels) {
+      return { ok: false, reason: "no-models", detail: "Provider model endpoint did not return a usable model list" };
+    }
+    return {
+      ok: false,
+      reason: "auth",
+      detail: sawNonAuthStatus ? "No authentication scheme returned a usable provider model list" : "Provider rejected all applicable authentication schemes"
+    };
+  }
+  function wireRequest(wireApi, model) {
+    if (wireApi === "responses") {
+      return {
+        path: "/v1/responses",
+        body: { model, input: "ping", max_output_tokens: 16, stream: false }
+      };
+    }
+    return {
+      path: "/v1/chat/completions",
+      body: { model, messages: [{ role: "user", content: "ping" }], max_tokens: 16, stream: false }
+    };
+  }
+  async function detectWire({ root, apiKey, authScheme, model, httpsImpl, timeoutMs, tried }) {
+    for (const candidate of ["responses", "chat"]) {
+      const wire = wireRequest(candidate, model);
+      const result = await requestProvider({
+        url: root + wire.path,
+        method: "POST",
+        headers: authHeaders(authScheme, apiKey),
+        body: wire.body,
+        httpsImpl,
+        timeoutMs
+      });
+      if (result.network) {
+        tried.push({ step: "wire", candidate, status: 0, outcome: "network" });
+        return { ok: false, reason: "network", detail: "Network error while probing provider wire API" };
+      }
+      if (result.status === 200 || result.status === 400 && isJsonErrorObject(result.body)) {
+        tried.push({ step: "wire", candidate, status: result.status, outcome: "accepted" });
+        return { ok: true, wireApi: candidate };
+      }
+      if (result.status === 401 || result.status === 403) {
+        tried.push({ step: "wire", candidate, status: result.status, outcome: "auth-mismatch" });
+        return { ok: false, reason: "auth-mismatch", detail: "Provider wire API rejected the authentication scheme accepted by the model endpoint" };
+      }
+      tried.push({ step: "wire", candidate, status: result.status, outcome: "rejected" });
+    }
+    return { ok: false, reason: "wire-undetected", detail: "Provider did not accept the supported Responses or Chat wire APIs" };
+  }
+  async function detectProviderDialect({
+    baseUrl,
+    apiKey,
+    protocol = "openai-compatible",
+    httpsImpl,
+    timeoutMs = 8e3,
+    now = Date.now
+  } = {}) {
+    const tried = [];
+    try {
+      if (protocol === "anthropic") {
+        return { ok: false, reason: "not-applicable", tried, detail: "Anthropic providers use a fixed dialect and do not need detection" };
+      }
+      let root;
+      try {
+        root = normalizeRoot(baseUrl);
+        new URL(root + "/v1/models");
+      } catch (e) {
+        return { ok: false, reason: "network", tried, detail: "Invalid base URL" };
+      }
+      const auth = await detectAuth({ root, apiKey, httpsImpl, timeoutMs, tried });
+      if (!auth.ok) return Object.assign({ tried }, auth);
+      const model = auth.models[0] && auth.models[0].id;
+      if (!model) {
+        return { ok: false, reason: "no-models", tried, detail: "Provider model endpoint did not return a usable model list" };
+      }
+      const wire = await detectWire({ root, apiKey, authScheme: auth.authScheme, model, httpsImpl, timeoutMs, tried });
+      if (!wire.ok) return Object.assign({ tried }, wire);
+      return {
+        ok: true,
+        dialect: {
+          wireApi: wire.wireApi,
+          authScheme: auth.authScheme,
+          source: "detected",
+          updatedAt: now()
+        },
+        models: auth.models,
+        tried
+      };
+    } catch (e) {
+      return { ok: false, reason: "network", tried, detail: safeDetail(e && e.message ? e.message : "Provider detection failed") };
+    }
+  }
+
+  // src/app/providerProbeFlow.js
+  function isAuthFailure(result) {
+    return result && (result.status === 401 || result.status === 403);
+  }
+  function detectionDetail(result) {
+    if (!result) return "";
+    const reason = result.reason ? String(result.reason) : "failed";
+    const detail = result.detail ? ": " + String(result.detail) : "";
+    return "dialect detection " + reason + detail;
+  }
+  function probeFailureDetail(result, detectResult) {
+    const primary = result && result.detail ? String(result.detail) : "HTTP " + (result && result.status ? result.status : 0);
+    const detected = detectionDetail(detectResult);
+    return detected ? primary + " (" + detected + ")" : primary;
+  }
+  function probedEntry(provider, result, now) {
+    return {
+      ...provider,
+      probedModels: result.models || [],
+      probedAt: now()
+    };
+  }
+  function detectedEntry(provider, result, now) {
+    return {
+      ...provider,
+      dialect: result.dialect,
+      probedModels: result.models || [],
+      probedAt: now()
+    };
+  }
+  async function runProviderManagerProbe(provider, {
+    probeProviderModelsImpl = probeProviderModels,
+    detectProviderDialectImpl = detectProviderDialect,
+    now = Date.now,
+    forceDetect = false
+  } = {}) {
+    const p = provider || {};
+    const canDetect = p.protocol === "openai-compatible";
+    if (forceDetect && canDetect) {
+      const detectResult2 = await detectProviderDialectImpl({ baseUrl: p.baseUrl, apiKey: p.apiKey, protocol: p.protocol, now });
+      if (detectResult2.ok) return { ok: true, entry: detectedEntry(p, detectResult2, now), result: detectResult2 };
+      const result2 = await probeProviderModelsImpl({ baseUrl: p.baseUrl, apiKey: p.apiKey, protocol: p.protocol, dialect: p.dialect });
+      if (result2.ok) return { ok: true, entry: probedEntry(p, result2, now), result: result2, detectResult: detectResult2 };
+      return { ok: false, detail: probeFailureDetail(result2, detectResult2), result: result2, detectResult: detectResult2 };
+    }
+    if (p.dialect) {
+      const result2 = await probeProviderModelsImpl({ baseUrl: p.baseUrl, apiKey: p.apiKey, protocol: p.protocol, dialect: p.dialect });
+      if (result2.ok) return { ok: true, entry: probedEntry(p, result2, now), result: result2 };
+      if (canDetect && isAuthFailure(result2)) {
+        const detected = await detectProviderDialectImpl({ baseUrl: p.baseUrl, apiKey: p.apiKey, protocol: p.protocol, now });
+        if (detected.ok) return { ok: true, entry: detectedEntry(p, detected, now), result: detected };
+        return { ok: false, detail: probeFailureDetail(result2, detected), result: result2, detectResult: detected };
+      }
+      return { ok: false, detail: probeFailureDetail(result2), result: result2 };
+    }
+    let detectResult = null;
+    if (canDetect) {
+      detectResult = await detectProviderDialectImpl({ baseUrl: p.baseUrl, apiKey: p.apiKey, protocol: p.protocol, now });
+      if (detectResult.ok) return { ok: true, entry: detectedEntry(p, detectResult, now), result: detectResult };
+    }
+    const result = await probeProviderModelsImpl({ baseUrl: p.baseUrl, apiKey: p.apiKey, protocol: p.protocol });
+    if (result.ok) return { ok: true, entry: probedEntry(p, result, now), result };
+    return { ok: false, detail: probeFailureDetail(result, detectResult), result, detectResult };
+  }
+
   // src/cep/ccSwitch.js
   var CONFIG_NAMES = ["config.json", "providers.json"];
-  function getCepRequire8() {
+  var API_FORMAT_TO_WIRE_API = {
+    openai_responses: "responses",
+    openai_chat: "chat"
+  };
+  function getCepRequire9() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -15680,7 +16024,49 @@
     if (parsed.providers && typeof parsed.providers === "object") return Object.values(parsed.providers);
     return [];
   }
-  function ccSwitchProviderEntries(list) {
+  function objectValue(value) {
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  }
+  function hasOwn(obj, key) {
+    return Object.prototype.hasOwnProperty.call(obj, key);
+  }
+  function wireApiFromApiFormat(value) {
+    return API_FORMAT_TO_WIRE_API[String(value || "").trim().toLowerCase()] || "";
+  }
+  function wireApiFromConfig(config) {
+    if (typeof config !== "string") return "";
+    const match = config.match(/(?:^|\n)\s*wire_api\s*=\s*["'](responses|chat)["']/i);
+    return match ? match[1].toLowerCase() : "";
+  }
+  function inferWireApi(p, settingsConfig) {
+    const meta = objectValue(p.meta);
+    return wireApiFromApiFormat(meta.apiFormat || meta.api_format) || wireApiFromApiFormat(p.apiFormat || p.api_format) || wireApiFromConfig(settingsConfig.config);
+  }
+  function authSchemeFromApiKeyField(value) {
+    const field = String(value || "").trim();
+    if (field === "ANTHROPIC_API_KEY") return "x-api-key";
+    if (/x[-_]?api[-_]?key/i.test(field)) return "x-api-key";
+    return "";
+  }
+  function inferAuthScheme(p, settingsConfig) {
+    const meta = objectValue(p.meta);
+    const fromApiKeyField = authSchemeFromApiKeyField(meta.apiKeyField || meta.api_key_field);
+    if (fromApiKeyField) return fromApiKeyField;
+    const env = objectValue(settingsConfig.env);
+    const auth = objectValue(settingsConfig.auth);
+    if (hasOwn(env, "ANTHROPIC_AUTH_TOKEN")) return "bearer";
+    if (hasOwn(env, "ANTHROPIC_API_KEY")) return "x-api-key";
+    if (hasOwn(auth, "OPENAI_API_KEY") || hasOwn(env, "OPENAI_API_KEY")) return "bearer";
+    return "";
+  }
+  function inferDialect(p, now) {
+    const settingsConfig = objectValue(p.settingsConfig || p.settings_config);
+    const wireApi = inferWireApi(p, settingsConfig);
+    const authScheme = inferAuthScheme(p, settingsConfig);
+    if (!wireApi || !authScheme) return null;
+    return { wireApi, authScheme, source: "ccswitch-import", updatedAt: now() };
+  }
+  function ccSwitchProviderEntries(list, { now = Date.now } = {}) {
     return (Array.isArray(list) ? list : []).map((p) => {
       if (!p || typeof p !== "object") return null;
       const name = String(p.name || p.title || p.id || "").trim();
@@ -15688,13 +16074,16 @@
       const apiKey = String(p.apiKey || p.api_key || p.key || p.token || "").trim();
       if (!name || !baseUrl) return null;
       const protocol = /anthropic/i.test(String(p.type || p.protocol || p.kind || "")) ? "anthropic" : "openai-compatible";
-      return { id: "ccswitch-" + name.replace(/[^A-Za-z0-9_-]+/g, "-").toLowerCase(), name, protocol, baseUrl, apiKey };
+      const entry = { id: "ccswitch-" + name.replace(/[^A-Za-z0-9_-]+/g, "-").toLowerCase(), name, protocol, baseUrl, apiKey };
+      const dialect = inferDialect(p, now);
+      if (dialect) entry.dialect = dialect;
+      return entry;
     }).filter(Boolean);
   }
   function detectCcSwitch({ env = {}, fsImpl } = {}) {
     let fs;
     try {
-      fs = fsImpl || getCepRequire8()("fs");
+      fs = fsImpl || getCepRequire9()("fs");
     } catch (e) {
       return null;
     }
@@ -15714,7 +16103,7 @@
   }
 
   // src/cep/claudeSettingsImport.js
-  function getCepRequire9() {
+  function getCepRequire10() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -15727,7 +16116,7 @@
     if (!home) return null;
     let fs;
     try {
-      fs = fsImpl || getCepRequire9()("fs");
+      fs = fsImpl || getCepRequire10()("fs");
     } catch (e) {
       return null;
     }
@@ -15745,7 +16134,7 @@
   }
 
   // src/cep/codexConfig.js
-  function getCepRequire10() {
+  function getCepRequire11() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -15800,7 +16189,7 @@
     if (!home) return null;
     let fs;
     try {
-      fs = fsImpl || getCepRequire10()("fs");
+      fs = fsImpl || getCepRequire11()("fs");
     } catch (e) {
       return null;
     }
@@ -16025,7 +16414,7 @@
   // src/cep/modelsApi.js
   var CACHE_KEY = "ae_mcp_byok_models";
   var TTL_MS = 24 * 60 * 60 * 1e3;
-  function getCepRequire11() {
+  function getCepRequire12() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -16034,7 +16423,7 @@
     throw new Error("CEP Node require is unavailable");
   }
   function fetchAnthropicModels({ apiKey, baseUrl = "", httpsImpl, timeoutMs = 8e3 } = {}) {
-    const https = httpsImpl || getCepRequire11()("https");
+    const https = httpsImpl || getCepRequire12()("https");
     return new Promise((resolve) => {
       let endpoint;
       try {
@@ -16150,7 +16539,7 @@
 
   // src/cep/wizardActions.js
   var OUTPUT_TAIL = 8192;
-  function getCepRequire12() {
+  function getCepRequire13() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -16175,7 +16564,7 @@
     return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
   }
   async function detectAeMcp({ execFileImpl, env, fsImpl }) {
-    const execFile = execFileImpl || getCepRequire12()("child_process").execFile;
+    const execFile = execFileImpl || getCepRequire13()("child_process").execFile;
     const whereHit = await new Promise((resolve) => {
       execFile("where", ["ae-mcp"], { windowsHide: true, env }, (err, stdout) => {
         resolve(err ? "" : String(stdout || "").split(/\r?\n/).map((l) => l.trim()).find(Boolean) || "");
@@ -16185,7 +16574,7 @@
     const profile = (env || getCepEnvSafe()).USERPROFILE || "";
     if (profile) {
       const shim = profile.replace(/[\\/]+$/, "") + "\\.local\\bin\\ae-mcp.exe";
-      const fs = fsImpl || getCepRequire12()("fs");
+      const fs = fsImpl || getCepRequire13()("fs");
       if (fs.existsSync(shim)) return { ok: true, version: shim };
     }
     return { ok: false };
@@ -16193,7 +16582,7 @@
   async function detectTool(id, { execFileImpl, env, fsImpl } = {}) {
     if (id === "aeMcp") return detectAeMcp({ execFileImpl, env, fsImpl });
     const spec = DETECT[id];
-    const execFile = execFileImpl || getCepRequire12()("child_process").execFile;
+    const execFile = execFileImpl || getCepRequire13()("child_process").execFile;
     return execVersion(execFile, spec.file, spec.args, env, spec.shell);
   }
   var REPO = "https://github.com/JUNKDOGE-JOE/after-effects-mcp";
@@ -16208,7 +16597,7 @@
     };
   }
   function runAction({ file, args, spawnImpl, env, onChunk }) {
-    const spawn = spawnImpl || getCepRequire12()("child_process").spawn;
+    const spawn = spawnImpl || getCepRequire13()("child_process").spawn;
     return new Promise((resolve) => {
       let output = "";
       const push = (chunk) => {
@@ -16232,11 +16621,11 @@
     return [file, ...args.map((a) => /\s/.test(a) ? `"${a}"` : a)].join(" ");
   }
   function detectRepoRoot({ extRoot, fsImpl }) {
-    return findProjectRoot({ extRoot, repoRoot: "", fsImpl: fsImpl || getCepRequire12()("fs") });
+    return findProjectRoot({ extRoot, repoRoot: "", fsImpl: fsImpl || getCepRequire13()("fs") });
   }
   var LOGIN_COMMANDS = { claude: "claude", codex: "codex login" };
   function openLoginTerminal({ tool, spawnImpl } = {}) {
-    const spawn = spawnImpl || getCepRequire12()("child_process").spawn;
+    const spawn = spawnImpl || getCepRequire13()("child_process").spawn;
     const command = LOGIN_COMMANDS[tool] || LOGIN_COMMANDS.claude;
     const child = spawn("cmd", ["/c", "start", "ae-mcp login", "pwsh", "-NoExit", "-Command", command], {
       detached: true,
@@ -16554,7 +16943,7 @@
       }
     };
   }
-  function getCepRequire13() {
+  function getCepRequire14() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -16567,7 +16956,7 @@
     function start(port) {
       onStatus("starting", port);
       try {
-        const cepRequire5 = getCepRequire13();
+        const cepRequire5 = getCepRequire14();
         const path = cepRequire5("path");
         const extRoot = normalizeCepPath(cs2.getSystemPath("extension"));
         const hostPath = path.join(extRoot, "host", "server.js");
@@ -16651,7 +17040,7 @@
   }
 
   // src/cep/logExportFs.js
-  function getCepRequire14() {
+  function getCepRequire15() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -16660,7 +17049,7 @@
     throw new Error("CEP Node require is unavailable");
   }
   function writeLogExport({ text, fileName, deps }) {
-    const req = deps ? null : getCepRequire14();
+    const req = deps ? null : getCepRequire15();
     const fs = deps ? deps.fs : req("fs");
     const os = deps ? deps.os : req("os");
     const path = deps ? deps.path : req("path");
@@ -16671,7 +17060,7 @@
     return file;
   }
   function revealInExplorer(filePath, execImpl, onError) {
-    const exec = execImpl || getCepRequire14()("child_process").exec;
+    const exec = execImpl || getCepRequire15()("child_process").exec;
     const winPath = String(filePath).replace(/\//g, "\\");
     exec('explorer.exe /select,"' + winPath + '"', { windowsHide: true }, (err) => {
       if (err && onError) onError(err);
@@ -16923,16 +17312,16 @@
             writePref("ae_mcp_codex_provider", "");
           }
         },
-        onProbe: async (p) => {
+        onProbe: async (p, options = {}) => {
           setProviderProbing(p.id);
-          const result = await probeProviderModels({ baseUrl: p.baseUrl, apiKey: p.apiKey, protocol: p.protocol });
+          const result = await runProviderManagerProbe(p, options);
           setProviderProbing("");
           if (result.ok && providerStore) {
-            providerStore.upsert({ ...p, probedModels: result.models, probedAt: Date.now() });
+            providerStore.upsert(result.entry);
             setProviders(providerStore.list());
             setProviderProbeErrors((errs) => ({ ...errs, [p.id]: "" }));
           } else {
-            setProviderProbeErrors((errs) => ({ ...errs, [p.id]: result.detail || "HTTP " + result.status }));
+            setProviderProbeErrors((errs) => ({ ...errs, [p.id]: result.detail || "Provider probe failed" }));
           }
         }
       }
@@ -16984,11 +17373,15 @@
         return null;
       }
     }, []);
-    const providerProfile = import_react40.default.useMemo(() => normalizeProviderProfile({
-      anthropicBaseUrl: claudeApiProvider ? claudeApiProvider.baseUrl : anthropicBaseUrl,
-      codexApiKey: codexCustomProvider ? codexCustomProvider.apiKey : codexApiKey,
-      codexBaseUrl: codexCustomProvider ? codexCustomProvider.baseUrl : codexBaseUrl
-    }), [claudeApiProvider, anthropicBaseUrl, codexCustomProvider, codexApiKey, codexBaseUrl]);
+    const providerProfile = import_react40.default.useMemo(() => {
+      const input = {
+        anthropicBaseUrl: claudeApiProvider ? claudeApiProvider.baseUrl : anthropicBaseUrl,
+        codexApiKey: codexCustomProvider ? codexCustomProvider.apiKey : codexApiKey,
+        codexBaseUrl: codexCustomProvider ? codexCustomProvider.baseUrl : codexBaseUrl
+      };
+      if (codexCustomProvider && codexCustomProvider.dialect) input.codexWireApi = codexCustomProvider.dialect.wireApi;
+      return normalizeProviderProfile(input);
+    }, [claudeApiProvider, anthropicBaseUrl, codexCustomProvider, codexApiKey, codexBaseUrl]);
     const runtimeRef = import_react40.default.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: "subscription", claudeApiProvider: null, codexCliConfigProvider: null });
     const extRoot = cs2 && cs2.getSystemPath ? cs2.getSystemPath("extension") : "";
     const sidecarPath = import_react40.default.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);

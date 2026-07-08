@@ -84,3 +84,75 @@ test('runProviderManagerProbe re-detects stale dialect after auth failure', asyn
   assert.deepEqual(result.entry.dialect, { wireApi: 'chat', authScheme: 'x-api-key', source: 'detected', updatedAt: 456 });
   assert.deepEqual(result.entry.probedModels, [{ id: 'm2', label: 'm2' }]);
 });
+
+test('runProviderManagerProbe forceDetect overwrites an existing dialect on success', async () => {
+  const provider = {
+    ...PROVIDER,
+    dialect: { wireApi: 'responses', authScheme: 'bearer', source: 'manual', updatedAt: 1 },
+  };
+  const calls = [];
+  const result = await runProviderManagerProbe(provider, {
+    now: () => 789,
+    forceDetect: true,
+    probeProviderModelsImpl: async () => {
+      calls.push('probe');
+      return { ok: true, status: 200, models: [{ id: 'old', label: 'old' }] };
+    },
+    detectProviderDialectImpl: async () => {
+      calls.push('detect');
+      return {
+        ok: true,
+        dialect: { wireApi: 'chat', authScheme: 'none', source: 'detected', updatedAt: 789 },
+        models: [{ id: 'new', label: 'new' }],
+        tried: [],
+      };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls, ['detect']);
+  assert.deepEqual(result.entry.dialect, { wireApi: 'chat', authScheme: 'none', source: 'detected', updatedAt: 789 });
+  assert.deepEqual(result.entry.probedModels, [{ id: 'new', label: 'new' }]);
+});
+
+test('runProviderManagerProbe forceDetect falls back to the existing dialect probe when detection fails', async () => {
+  const provider = {
+    ...PROVIDER,
+    dialect: { wireApi: 'responses', authScheme: 'bearer', source: 'manual', updatedAt: 1 },
+  };
+  const calls = [];
+  const result = await runProviderManagerProbe(provider, {
+    forceDetect: true,
+    probeProviderModelsImpl: async (args) => {
+      calls.push(['probe', args.dialect]);
+      return { ok: true, status: 200, models: [{ id: 'fallback', label: 'fallback' }] };
+    },
+    detectProviderDialectImpl: async () => {
+      calls.push(['detect']);
+      return { ok: false, reason: 'auth-undetected', detail: 'No supported auth scheme worked', tried: [] };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls, [['detect'], ['probe', provider.dialect]]);
+  assert.deepEqual(result.entry.dialect, provider.dialect);
+  assert.deepEqual(result.entry.probedModels, [{ id: 'fallback', label: 'fallback' }]);
+  assert.match(result.detectResult.detail, /No supported auth scheme worked/);
+});
+
+test('runProviderManagerProbe forceDetect failure detail includes detection reason after fallback probe fails', async () => {
+  const provider = {
+    ...PROVIDER,
+    dialect: { wireApi: 'responses', authScheme: 'bearer', source: 'manual', updatedAt: 1 },
+  };
+  const result = await runProviderManagerProbe(provider, {
+    forceDetect: true,
+    probeProviderModelsImpl: async () => ({ ok: false, status: 401, models: [], detail: 'HTTP 401 from provider' }),
+    detectProviderDialectImpl: async () => ({ ok: false, reason: 'wire-undetected', detail: 'Provider did not accept supported wire APIs', tried: [] }),
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.detail, /HTTP 401 from provider/);
+  assert.match(result.detail, /wire-undetected/);
+  assert.match(result.detail, /Provider did not accept supported wire APIs/);
+});
