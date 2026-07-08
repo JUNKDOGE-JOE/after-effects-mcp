@@ -1,11 +1,14 @@
 // Unified custom-provider store: ~/.ae-mcp/providers.json (spec A2).
 // Entry: {id, name, protocol: 'anthropic'|'openai-compatible', baseUrl,
-// apiKey, probedModels: [{id,label}], probedAt: ms}. Atomic write + chmod
-// 600 mirrors apiKey.js.
+// apiKey, probedModels: [{id,label}], probedAt: ms, dialect?}. Atomic
+// write + chmod 600 mirrors apiKey.js.
 // providers.json consolidates multiple provider keys in one file by design
 // (spec A2); chmod 600 is best-effort on Windows -- the single-file blast
 // radius is accepted in exchange for unified management and migration.
 const PROTOCOLS = new Set(['anthropic', 'openai-compatible']);
+const DIALECT_WIRE_APIS = new Set(['responses', 'chat']);
+const DIALECT_AUTH_SCHEMES = new Set(['bearer', 'x-api-key', 'none']);
+const DIALECT_SOURCES = new Set(['ccswitch-import', 'detected', 'manual']);
 const FILE_NAME = 'providers.json';
 
 function cepRequire() {
@@ -31,7 +34,7 @@ export function normalizeProviderEntry(input = {}) {
   if (!id) throw new Error('Provider entry needs an id');
   const protocol = String(input.protocol || 'openai-compatible');
   if (!PROTOCOLS.has(protocol)) throw new Error('Unsupported provider protocol: ' + protocol);
-  return {
+  const entry = {
     id,
     name: String(input.name || '').trim() || id,
     protocol,
@@ -40,6 +43,19 @@ export function normalizeProviderEntry(input = {}) {
     probedModels: Array.isArray(input.probedModels) ? input.probedModels : [],
     probedAt: Number(input.probedAt) || 0,
   };
+  const dialect = input.dialect && typeof input.dialect === 'object' ? input.dialect : null;
+  const wireApi = dialect ? String(dialect.wireApi || '').trim() : '';
+  const authScheme = dialect ? String(dialect.authScheme || '').trim() : '';
+  if (DIALECT_WIRE_APIS.has(wireApi) && DIALECT_AUTH_SCHEMES.has(authScheme)) {
+    const source = String(dialect.source || '').trim();
+    entry.dialect = {
+      wireApi,
+      authScheme,
+      source: DIALECT_SOURCES.has(source) ? source : 'manual',
+      updatedAt: typeof dialect.updatedAt === 'number' && Number.isFinite(dialect.updatedAt) ? dialect.updatedAt : 0,
+    };
+  }
+  return entry;
 }
 
 export function createProviderStore(deps = defaultDeps()) {

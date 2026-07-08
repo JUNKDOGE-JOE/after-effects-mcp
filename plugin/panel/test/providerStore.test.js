@@ -64,6 +64,47 @@ test('normalizeProviderEntry fills defaults and rejects bad protocol', () => {
   assert.throws(() => normalizeProviderEntry({ id: 'y', protocol: 'grpc', baseUrl: 'https://h' }));
 });
 
+test('normalizeProviderEntry preserves a complete dialect', () => {
+  const e = normalizeProviderEntry({
+    id: 'relay',
+    baseUrl: 'https://h/v1',
+    dialect: { wireApi: 'chat', authScheme: 'x-api-key', source: 'ccswitch-import', updatedAt: 123 },
+  });
+  assert.deepEqual(e.dialect, { wireApi: 'chat', authScheme: 'x-api-key', source: 'ccswitch-import', updatedAt: 123 });
+});
+
+test('normalizeProviderEntry drops invalid or partial dialect input', () => {
+  assert.equal(normalizeProviderEntry({
+    id: 'bad-wire',
+    baseUrl: 'https://h/v1',
+    dialect: { wireApi: 'grpc', authScheme: 'bearer', source: 'manual', updatedAt: 1 },
+  }).dialect, undefined);
+  assert.equal(normalizeProviderEntry({
+    id: 'missing-auth',
+    baseUrl: 'https://h/v1',
+    dialect: { wireApi: 'responses', source: 'manual', updatedAt: 1 },
+  }).dialect, undefined);
+});
+
+test('normalizeProviderEntry normalizes dialect source and updatedAt fallbacks', () => {
+  const e = normalizeProviderEntry({
+    id: 'fallbacks',
+    baseUrl: 'https://h/v1',
+    dialect: { wireApi: 'responses', authScheme: 'none', source: 'unknown', updatedAt: '123' },
+  });
+  assert.deepEqual(e.dialect, { wireApi: 'responses', authScheme: 'none', source: 'manual', updatedAt: 0 });
+});
+
+test('old provider entries round-trip without dialect', () => {
+  const deps = makeDeps();
+  const store = createProviderStore(deps);
+  store.upsert({ id: 'old', name: 'Old', protocol: 'openai-compatible', baseUrl: 'https://old.example.com', apiKey: 'k' });
+  const listed = store.list()[0];
+  assert.equal(listed.dialect, undefined);
+  const raw = JSON.parse(deps.files.get('/home/user/.ae-mcp/providers.json'));
+  assert.equal(raw.providers[0].dialect, undefined);
+});
+
 test('migrateLegacy imports anthropic-key/codex-key + base URL prefs once', () => {
   const deps = makeDeps();
   const store = createProviderStore(deps);

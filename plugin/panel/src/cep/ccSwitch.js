@@ -1,6 +1,10 @@
 // Optional cc-switch inheritance (spec A2): detect-only, never a wizard
 // dependency. Third-party format is unstable -> tolerant field mapping.
 const CONFIG_NAMES = ['config.json', 'providers.json'];
+const API_FORMAT_TO_WIRE_API = {
+  openai_responses: 'responses',
+  openai_chat: 'chat',
+};
 
 function getCepRequire() {
   if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
@@ -31,7 +35,59 @@ function rawProviders(parsed) {
   return [];
 }
 
-export function ccSwitchProviderEntries(list) {
+function objectValue(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function hasOwn(obj, key) {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function wireApiFromApiFormat(value) {
+  return API_FORMAT_TO_WIRE_API[String(value || '').trim().toLowerCase()] || '';
+}
+
+function wireApiFromConfig(config) {
+  if (typeof config !== 'string') return '';
+  const match = config.match(/(?:^|\n)\s*wire_api\s*=\s*["'](responses|chat)["']/i);
+  return match ? match[1].toLowerCase() : '';
+}
+
+function inferWireApi(p, settingsConfig) {
+  const meta = objectValue(p.meta);
+  return wireApiFromApiFormat(meta.apiFormat || meta.api_format)
+    || wireApiFromApiFormat(p.apiFormat || p.api_format)
+    || wireApiFromConfig(settingsConfig.config);
+}
+
+function authSchemeFromApiKeyField(value) {
+  const field = String(value || '').trim();
+  if (field === 'ANTHROPIC_API_KEY') return 'x-api-key';
+  if (/x[-_]?api[-_]?key/i.test(field)) return 'x-api-key';
+  return '';
+}
+
+function inferAuthScheme(p, settingsConfig) {
+  const meta = objectValue(p.meta);
+  const fromApiKeyField = authSchemeFromApiKeyField(meta.apiKeyField || meta.api_key_field);
+  if (fromApiKeyField) return fromApiKeyField;
+  const env = objectValue(settingsConfig.env);
+  const auth = objectValue(settingsConfig.auth);
+  if (hasOwn(env, 'ANTHROPIC_AUTH_TOKEN')) return 'bearer';
+  if (hasOwn(env, 'ANTHROPIC_API_KEY')) return 'x-api-key';
+  if (hasOwn(auth, 'OPENAI_API_KEY') || hasOwn(env, 'OPENAI_API_KEY')) return 'bearer';
+  return '';
+}
+
+function inferDialect(p, now) {
+  const settingsConfig = objectValue(p.settingsConfig || p.settings_config);
+  const wireApi = inferWireApi(p, settingsConfig);
+  const authScheme = inferAuthScheme(p, settingsConfig);
+  if (!wireApi || !authScheme) return null;
+  return { wireApi, authScheme, source: 'ccswitch-import', updatedAt: now() };
+}
+
+export function ccSwitchProviderEntries(list, { now = Date.now } = {}) {
   return (Array.isArray(list) ? list : [])
     .map((p) => {
       if (!p || typeof p !== 'object') return null;
@@ -40,7 +96,10 @@ export function ccSwitchProviderEntries(list) {
       const apiKey = String(p.apiKey || p.api_key || p.key || p.token || '').trim();
       if (!name || !baseUrl) return null;
       const protocol = /anthropic/i.test(String(p.type || p.protocol || p.kind || '')) ? 'anthropic' : 'openai-compatible';
-      return { id: 'ccswitch-' + name.replace(/[^A-Za-z0-9_-]+/g, '-').toLowerCase(), name, protocol, baseUrl, apiKey };
+      const entry = { id: 'ccswitch-' + name.replace(/[^A-Za-z0-9_-]+/g, '-').toLowerCase(), name, protocol, baseUrl, apiKey };
+      const dialect = inferDialect(p, now);
+      if (dialect) entry.dialect = dialect;
+      return entry;
     })
     .filter(Boolean);
 }
