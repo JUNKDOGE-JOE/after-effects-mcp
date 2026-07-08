@@ -11,10 +11,19 @@ function getCepRequire() {
   throw new Error('CEP Node require is unavailable');
 }
 
-export function probeHeaders(protocol, apiKey) {
+function authSchemeFromDialect(dialect) {
+  if (!dialect) return '';
+  if (typeof dialect === 'string') return dialect;
+  return String(dialect.authScheme || '').trim();
+}
+
+export function probeHeaders(protocol, apiKey, dialect) {
   if (protocol === 'anthropic') {
     return { 'x-api-key': String(apiKey || ''), 'anthropic-version': '2023-06-01' };
   }
+  const authScheme = authSchemeFromDialect(dialect);
+  if (authScheme === 'x-api-key') return { 'x-api-key': String(apiKey || '') };
+  if (authScheme === 'none') return {};
   return { Authorization: 'Bearer ' + String(apiKey || '') };
 }
 
@@ -32,7 +41,7 @@ export function parseModelsList(json) {
     .filter(Boolean);
 }
 
-export function probeProviderModels({ baseUrl, apiKey, protocol = 'openai-compatible', httpsImpl, timeoutMs = 8000 } = {}) {
+export function probeProviderModels({ baseUrl, apiKey, protocol = 'openai-compatible', dialect, authScheme, httpsImpl, timeoutMs = 8000 } = {}) {
   let endpoint;
   try {
     const root = String(baseUrl || '').replace(/\/+$/, '').replace(/\/v1$/, '');
@@ -53,7 +62,7 @@ export function probeProviderModels({ baseUrl, apiKey, protocol = 'openai-compat
       protocol: endpoint.protocol,
       path: endpoint.pathname + endpoint.search,
       method: 'GET',
-      headers: probeHeaders(protocol, apiKey),
+      headers: probeHeaders(protocol, apiKey, dialect || authScheme),
     }, (res) => {
       let body = '';
       res.on('data', (chunk) => { body += chunk; });

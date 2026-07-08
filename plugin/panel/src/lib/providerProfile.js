@@ -21,8 +21,9 @@ function normalizeProviderId(value) {
   return RESERVED_CODEX_PROVIDER_IDS.has(safe) ? safe + '-custom' : safe;
 }
 
-function normalizeCodexWireApi() {
-  return DEFAULT_CODEX_WIRE_API;
+function normalizeCodexWireApi(value) {
+  const text = String(value || '').trim();
+  return text === 'responses' || text === 'chat' ? text : DEFAULT_CODEX_WIRE_API;
 }
 
 function tomlString(value) {
@@ -36,7 +37,7 @@ export function normalizeProviderProfile(input = {}, env = {}) {
     codexApiKey: firstValue(input.codexApiKey, env.AE_MCP_CODEX_API_KEY),
     codexBaseUrl,
     codexProviderId: normalizeProviderId(firstValue(input.codexProviderId, env.AE_MCP_CODEX_PROVIDER_ID)),
-    codexWireApi: normalizeCodexWireApi(),
+    codexWireApi: normalizeCodexWireApi(firstValue(input.codexWireApi, env.AE_MCP_CODEX_WIRE_API)),
     anthropicBaseUrl,
   };
 }

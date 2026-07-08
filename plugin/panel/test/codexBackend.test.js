@@ -235,7 +235,7 @@ test('createCodexBackend starts app-server with custom provider config when supp
     '-c', 'model_providers.my-provider.name="AE MCP Custom"',
     '-c', 'model_providers.my-provider.base_url="https://proxy.example/openai"',
     '-c', 'model_providers.my-provider.env_key="AE_MCP_CODEX_API_KEY"',
-    '-c', 'model_providers.my-provider.wire_api="responses"',
+    '-c', 'model_providers.my-provider.wire_api="chat"',
     '-c', 'model_providers.my-provider.requires_openai_auth=false',
   ]);
   assert.equal(spawned.calls[0].options.env.AE_MCP_CODEX_API_KEY, 'sk-proxy');

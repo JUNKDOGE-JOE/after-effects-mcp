@@ -26,10 +26,15 @@ test('codexAppServerArgs builds explicit custom provider config for app-server',
     '-c', 'model_providers.my-provider.name="AE MCP Custom"',
     '-c', 'model_providers.my-provider.base_url="https://proxy.example/openai"',
     '-c', 'model_providers.my-provider.env_key="AE_MCP_CODEX_API_KEY"',
-    '-c', 'model_providers.my-provider.wire_api="responses"',
+    '-c', 'model_providers.my-provider.wire_api="chat"',
     '-c', 'model_providers.my-provider.requires_openai_auth=false',
   ]);
   assert.equal(codexSpawnEnv(profile, { PATH: 'C:\\Node' }).AE_MCP_CODEX_API_KEY, 'sk-proxy');
+});
+
+test('normalizeProviderProfile falls back to responses for missing or invalid codex wire API', () => {
+  assert.equal(normalizeProviderProfile({ codexWireApi: 'bogus' }).codexWireApi, 'responses');
+  assert.equal(normalizeProviderProfile({}).codexWireApi, 'responses');
 });
 
 test('anthropicEndpoint appends API paths without dropping a proxy prefix', () => {

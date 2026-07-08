@@ -19,6 +19,9 @@ test('parseModelsList handles Anthropic-style display_name and bare arrays', () 
 
 test('probeHeaders picks auth scheme by protocol', () => {
   assert.deepEqual(probeHeaders('openai-compatible', 'sk-x'), { Authorization: 'Bearer sk-x' });
+  assert.deepEqual(probeHeaders('openai-compatible', 'sk-x', { authScheme: 'bearer' }), { Authorization: 'Bearer sk-x' });
+  assert.deepEqual(probeHeaders('openai-compatible', 'sk-x', { authScheme: 'x-api-key' }), { 'x-api-key': 'sk-x' });
+  assert.deepEqual(probeHeaders('openai-compatible', 'sk-x', { authScheme: 'none' }), {});
   assert.deepEqual(probeHeaders('anthropic', 'sk-a'), { 'x-api-key': 'sk-a', 'anthropic-version': '2023-06-01' });
 });
 
@@ -49,6 +52,26 @@ test('probeProviderModels returns ok with parsed models on 200', async () => {
   const result = await probeProviderModels({ baseUrl: 'https://api.example.com/v1/', apiKey: 'sk-x', protocol: 'openai-compatible', httpsImpl: https });
   assert.equal(result.ok, true);
   assert.deepEqual(result.models, [{ id: 'glm-5.2', label: 'glm-5.2' }]);
+});
+
+test('probeProviderModels respects openai-compatible dialect auth schemes', async () => {
+  const seen = [];
+  const https = makeHttps((options, res, onRes) => {
+    seen.push(options.headers);
+    onRes(Object.assign(res, { statusCode: 200 }));
+    res.handlers.data(JSON.stringify({ data: [{ id: 'm' }] }));
+    res.handlers.end();
+  });
+
+  await probeProviderModels({ baseUrl: 'https://h/v1', apiKey: 'sk', dialect: { authScheme: 'bearer' }, httpsImpl: https });
+  await probeProviderModels({ baseUrl: 'https://h/v1', apiKey: 'sk', dialect: { authScheme: 'x-api-key' }, httpsImpl: https });
+  await probeProviderModels({ baseUrl: 'https://h/v1', apiKey: 'sk', authScheme: 'none', httpsImpl: https });
+
+  assert.deepEqual(seen, [
+    { Authorization: 'Bearer sk' },
+    { 'x-api-key': 'sk' },
+    {},
+  ]);
 });
 
 test('probeProviderModels degrades to ok:false on 401 and network error', async () => {

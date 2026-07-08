@@ -1000,12 +1000,30 @@ test('zcodeRuntimeModelFromDesktopConfig injects the resolved apiKeyEnv key for 
   const config = { provider: { mediastorm_glm: CLI_PROVIDER } };
   const fromEnv = zcodeRuntimeModelFromDesktopConfig({ config, setting: {}, modelRef: 'mediastorm_glm/glm-5.2', env: { MEDIASTORM_GLM_API_KEY: 'sk-env' } });
   assert.equal(fromEnv.model.modelId, 'glm-5.2');
+  assert.equal(fromEnv.provider.apiFormat, 'openai-chat-completions');
   assert.deepEqual(fromEnv.provider.apiKey, { source: 'inline', value: 'sk-env' });
   assert.deepEqual(fromEnv.provider.models, [{ modelId: 'glm-5.2' }]);
   const fromPanel = zcodeRuntimeModelFromDesktopConfig({ config, setting: {}, modelRef: 'mediastorm_glm/glm-5.2', env: {}, storedKey: 'sk-panel' });
   assert.deepEqual(fromPanel.provider.apiKey, { source: 'inline', value: 'sk-panel' });
   const none = zcodeRuntimeModelFromDesktopConfig({ config, setting: {}, modelRef: 'mediastorm_glm/glm-5.2', env: {} });
   assert.equal(none.provider.apiKey, undefined);
+});
+
+test('zcodeRuntimeModelFromDesktopConfig maps openai-compatible dialect responses to openai-responses', () => {
+  const config = {
+    provider: {
+      mediastorm_glm: {
+        ...CLI_PROVIDER,
+        dialect: { wireApi: 'responses', authScheme: 'bearer', source: 'detected', updatedAt: 123 },
+        models: { 'glm-5.2': {} },
+      },
+    },
+  };
+
+  const runtimeModel = zcodeRuntimeModelFromDesktopConfig({ config, setting: {}, modelRef: 'mediastorm_glm/glm-5.2', storedKey: 'sk-panel' });
+
+  assert.equal(runtimeModel.provider.kind, 'openai-compatible');
+  assert.equal(runtimeModel.provider.apiFormat, 'openai-responses');
 });
 
 test('readZcodeDesktopModel merges ~/.zcode/cli/config.json and prefers its top-level model', () => {

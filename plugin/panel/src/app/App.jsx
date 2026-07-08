@@ -23,6 +23,7 @@ import { claudeChannels, codexChannels, zcodeChannels, migrateBackendPref } from
 import { createProviderStore } from '../cep/providerStore';
 import { ProviderManagerSection } from '../components/settings/ProviderManagerSection';
 import { probeProviderModels } from '../cep/modelProbe';
+import { runProviderManagerProbe } from './providerProbeFlow.js';
 import { detectCcSwitch } from '../cep/ccSwitch';
 import { readClaudeSettingsEnv } from '../cep/claudeSettingsImport';
 import { readCodexCliConfig, resolveCodexProviderApiKey } from '../cep/codexConfig';
@@ -309,14 +310,14 @@ function Shell({ cs }) {
       }}
       onProbe={async (p) => {
         setProviderProbing(p.id);
-        const result = await probeProviderModels({ baseUrl: p.baseUrl, apiKey: p.apiKey, protocol: p.protocol });
+        const result = await runProviderManagerProbe(p);
         setProviderProbing('');
         if (result.ok && providerStore) {
-          providerStore.upsert({ ...p, probedModels: result.models, probedAt: Date.now() });
+          providerStore.upsert(result.entry);
           setProviders(providerStore.list());
           setProviderProbeErrors((errs) => ({ ...errs, [p.id]: '' }));
         } else {
-          setProviderProbeErrors((errs) => ({ ...errs, [p.id]: result.detail || ('HTTP ' + result.status) }));
+          setProviderProbeErrors((errs) => ({ ...errs, [p.id]: result.detail || 'Provider probe failed' }));
         }
       }}
     />
@@ -349,11 +350,15 @@ function Shell({ cs }) {
   const claudeSettingsHint = React.useMemo(() => {
     try { return readClaudeSettingsEnv({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {} }); } catch (e) { return null; }
   }, []);
-  const providerProfile = React.useMemo(() => normalizeProviderProfile({
-    anthropicBaseUrl: claudeApiProvider ? claudeApiProvider.baseUrl : anthropicBaseUrl,
-    codexApiKey: codexCustomProvider ? codexCustomProvider.apiKey : codexApiKey,
-    codexBaseUrl: codexCustomProvider ? codexCustomProvider.baseUrl : codexBaseUrl,
-  }), [claudeApiProvider, anthropicBaseUrl, codexCustomProvider, codexApiKey, codexBaseUrl]);
+  const providerProfile = React.useMemo(() => {
+    const input = {
+      anthropicBaseUrl: claudeApiProvider ? claudeApiProvider.baseUrl : anthropicBaseUrl,
+      codexApiKey: codexCustomProvider ? codexCustomProvider.apiKey : codexApiKey,
+      codexBaseUrl: codexCustomProvider ? codexCustomProvider.baseUrl : codexBaseUrl,
+    };
+    if (codexCustomProvider && codexCustomProvider.dialect) input.codexWireApi = codexCustomProvider.dialect.wireApi;
+    return normalizeProviderProfile(input);
+  }, [claudeApiProvider, anthropicBaseUrl, codexCustomProvider, codexApiKey, codexBaseUrl]);
   const runtimeRef = React.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: 'subscription', claudeApiProvider: null, codexCliConfigProvider: null });
   const extRoot = cs && cs.getSystemPath ? cs.getSystemPath('extension') : '';
   const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);

@@ -290,6 +290,9 @@ function zcodeProtocolProviderKind(kind) {
 function zcodeProtocolApiFormat(provider, kind) {
   const direct = provider && (provider.apiFormat || provider.api_format);
   if (direct) return direct;
+  const dialect = provider && provider.dialect && typeof provider.dialect === 'object' ? provider.dialect : null;
+  if (kind === 'openai-compatible' && dialect && dialect.wireApi === 'responses') return 'openai-responses';
+  if (kind === 'openai-compatible' && dialect && dialect.wireApi === 'chat') return 'openai-chat-completions';
   if (kind === 'openai') return 'openai-responses';
   if (kind === 'openai-compatible') return 'openai-chat-completions';
   return 'anthropic-messages';
