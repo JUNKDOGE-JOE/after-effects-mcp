@@ -22,4 +22,5 @@ Thumbs.db
 
 # Local-only artifacts
 .rnd
+.worktrees/
 plugin/panel/ae_viewer_*.png
