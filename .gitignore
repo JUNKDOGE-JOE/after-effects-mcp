@@ -23,4 +23,5 @@ Thumbs.db
 # Local-only artifacts
 .rnd
 .worktrees/
+.superpowers/sdd/
 plugin/panel/ae_viewer_*.png
