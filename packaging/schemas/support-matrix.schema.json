@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SupportMatrixV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "platforms", "afterEffects"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "platforms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["macos-arm64", "windows-x64"],
+      "properties": {
+        "macos-arm64": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minOsVersion", "arch", "rosetta"],
+          "properties": {
+            "minOsVersion": { "const": "14.0" },
+            "arch": { "const": "arm64" },
+            "rosetta": { "const": false }
+          }
+        },
+        "windows-x64": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minOsVersion", "arch"],
+          "properties": {
+            "minOsVersion": { "const": "11.0.26100" },
+            "arch": { "const": "x64" }
+          }
+        }
+      }
+    },
+    "afterEffects": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["majors", "manifestRange"],
+      "properties": {
+        "majors": { "const": [25, 26] },
+        "manifestRange": { "const": "[25.0,26.9]" }
+      }
+    }
+  }
+}

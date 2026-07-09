@@ -8,6 +8,14 @@ The MCP server is the core. Outside the MCP layer, ae-mcp also ships a CEP panel
 
 The current release line is **v0.9.0**.
 
+## Supported Platforms
+
+ae-mcp supports only the following platform and host matrix:
+
+- macOS 14.0 Sonoma or newer on native Apple Silicon arm64. Intel Macs and Rosetta are not supported.
+- Windows 11 24H2 (11.0.26100) or newer on x64. Windows on ARM is not supported.
+- After Effects 25.x and 26.x, represented by the CEP host range `[25.0,26.9]`.
+
 ## Architecture
 
 ```text
@@ -145,8 +153,6 @@ npm run build
 cd ..\..
 .\scripts\install-plugin-dev.ps1
 ```
-
-The macOS development script exists, but v0.9.0 validation is primarily Windows + AE live.
 
 ## Test
 
