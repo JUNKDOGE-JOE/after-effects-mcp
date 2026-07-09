@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "platforms": {
+    "macos-arm64": { "minOsVersion": "14.0", "arch": "arm64", "rosetta": false },
+    "windows-x64": { "minOsVersion": "11.0.26100", "arch": "x64" }
+  },
+  "afterEffects": {
+    "majors": [25, 26],
+    "manifestRange": "[25.0,26.9]"
+  }
+}
