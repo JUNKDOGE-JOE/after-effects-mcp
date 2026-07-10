@@ -243,7 +243,7 @@ test('createClaudeAgentBackend reports missing system Node without spawning', as
   assert.deepEqual(events, [{
     type: 'error',
     kind: 'mcp',
-    message: 'Embedded chat needs system Node 18+. Install Node.js LTS and retry.',
+    message: 'The embedded chat runtime is missing or damaged. Repair the offline runtime in Settings.',
   }]);
 });
 
@@ -347,44 +347,26 @@ test('createClaudeAgentBackend reports exactly one immediate error when sidecar 
   assert.equal(events.length, 1);
 });
 
-test('resolveSystemNode returns first Node 18+ candidate from where output', async () => {
+test('resolveSystemNode delegates bundled-runtime-first resolution to the platform adapter', async () => {
   const calls = [];
-  const execFileImpl = (file, args, options, callback) => {
-    calls.push({ file, args, options });
-    if (file === 'where') {
-      callback(null, 'C:\\Old\\node.exe\r\nC:\\New\\node.exe\r\n');
-      return;
-    }
-    if (file === 'C:\\Old\\node.exe') {
-      callback(null, 'v17.9.1\n');
-      return;
-    }
-    if (file === 'C:\\New\\node.exe') {
-      callback(null, 'v22.2.0\n');
-      return;
-    }
-    callback(null, 'v20.0.0\n');
-  };
+  const executable = { ok: true, id: 'node', path: '/Users/a/.ae-mcp/runtime/current/bin/node', argsPrefix: [], source: 'runtime', version: '24.17.0', arch: 'arm64' };
+  const result = await resolveSystemNode({
+    platform: { id: 'macos-arm64', resolveExecutable: async (id, options) => { calls.push({ id, options }); return executable; } },
+  });
 
-  const result = await resolveSystemNode({ execFileImpl, env: { PATH: 'x' } });
-
-  assert.deepEqual(result, { ok: true, nodePath: 'C:\\New\\node.exe', version: 'v22.2.0' });
-  assert.deepEqual(calls.map((call) => call.options.windowsHide), [true, true, true]);
+  assert.equal(result.ok, true);
+  assert.equal(result.nodePath, executable.path);
+  assert.equal(result.executable, executable);
+  assert.deepEqual(calls, [{ id: 'node', options: { minimumVersion: '18.0.0', requiredArch: 'arm64' } }]);
 });
 
-test('resolveSystemNode returns ok false when every candidate is below Node 18', async () => {
-  const execFileImpl = (file, args, options, callback) => {
-    if (file === 'where') {
-      callback(null, 'C:\\Old\\node.exe\r\n');
-      return;
-    }
-    callback(null, 'v17.9.1\n');
-  };
-
-  const result = await resolveSystemNode({ execFileImpl, env: {} });
+test('resolveSystemNode returns the structured adapter failure', async () => {
+  const result = await resolveSystemNode({
+    platform: { resolveExecutable: async () => ({ ok: false, id: 'node', code: 'VERSION_TOO_OLD', attempts: [] }) },
+  });
 
   assert.equal(result.ok, false);
-  assert.match(result.detail, /Node 18/);
+  assert.match(result.detail, /VERSION_TOO_OLD/);
 });
 
 test('api channel spawns the sidecar with injected base URL/token and --channel api', async () => {

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildLogExport, exportFileName, keepLogLine, redactSecrets } from '../src/lib/logExport.js';
+import { revealLogExport, writeLogExport } from '../src/cep/logExportFs.js';
 
 test('buildLogExport aggregates panel logs, host info, and sidecar tail', () => {
   const text = buildLogExport({
@@ -87,4 +88,28 @@ test('buildLogExport applies redaction to panel logs and sidecar tail', () => {
   assert.ok(!text.includes('sk-zyxwvu9876543210'));
   assert.match(text, /sk-abc\.\.\.\[redacted\]/);
   assert.match(text, /ANTHROPIC_API_KEY=sk-zyx\.\.\.\[redacted\]/);
+});
+
+test('writeLogExport uses the platform log catalog and reveal delegates to the adapter', async () => {
+  const writes = [];
+  const reveals = [];
+  const fsImpl = {
+    existsSync: () => false,
+    mkdirSync: (dir, options) => writes.push({ dir, options }),
+    writeFileSync: (file, text, encoding) => writes.push({ file, text, encoding }),
+  };
+  const platform = {
+    paths: { logsRoot: '/Users/a/.ae-mcp/logs', join: (parts) => parts.join('/'), basename: (value) => String(value).split(/[\\/]/).pop() },
+    fs: fsImpl,
+    revealFile: async (file) => { reveals.push(file); return { exitCode: 0 }; },
+  };
+  const file = writeLogExport({ text: 'safe', fileName: 'export.txt', platform, fsImpl });
+  assert.equal(file, '/Users/a/.ae-mcp/logs/export.txt');
+  assert.equal(writes[1].file, file);
+  assert.deepEqual(await revealLogExport(file, platform), { exitCode: 0 });
+  assert.deepEqual(reveals, [file]);
+  assert.throws(
+    () => writeLogExport({ text: 'unsafe', fileName: '../outside.txt', platform, fsImpl }),
+    /file name/i,
+  );
 });

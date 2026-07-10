@@ -29,6 +29,9 @@ case "$evidence" in
 esac
 [[ -n "${AE_MCP_APPLE_SIGNING_IDENTITY-}" ]] \
   || fail 'SIGNING_CREDENTIAL_MISSING: AE_MCP_APPLE_SIGNING_IDENTITY is required'
+[[ "${AE_MCP_APPLE_CERT_FINGERPRINT_SHA256-}" =~ ^[a-f0-9]{64}$ \
+   && "${AE_MCP_APPLE_TEAM_ID-}" =~ ^[A-Z0-9]{10}$ ]] \
+  || fail 'SIGNING_IDENTITY_INVALID: protected Apple certificate fingerprint and team ID are required'
 
 manifest="$root/platform/macos-arm64/helper-manifest.json"
 [[ -f "$manifest" ]] || fail 'SIGNING_HELPER_MANIFEST_MISSING: helper manifest is required'
@@ -129,9 +132,13 @@ details="$(/usr/bin/codesign -d --verbose=4 "$helper_path" 2>&1)"
 team_id="$(printf '%s\n' "$details" | /usr/bin/sed -n 's/^TeamIdentifier=//p' | /usr/bin/head -1)"
 [[ "$team_id" =~ ^[A-Z0-9]{10}$ ]] \
   || fail 'SIGNING_IDENTITY_INVALID: Developer ID Team ID was not verified'
+[[ "$team_id" = "$AE_MCP_APPLE_TEAM_ID" ]] \
+  || fail 'SIGNING_IDENTITY_INVALID: Developer ID Team ID does not match the protected identity'
 certificate_prefix="$temporary/certificate"
 /usr/bin/codesign -d --extract-certificates "$certificate_prefix" "$helper_path" >/dev/null 2>&1
 certificate_fingerprint="$(/usr/bin/shasum -a 256 "${certificate_prefix}0" | /usr/bin/awk '{print $1}')"
+[[ "$certificate_fingerprint" = "$AE_MCP_APPLE_CERT_FINGERPRINT_SHA256" ]] \
+  || fail 'SIGNING_IDENTITY_INVALID: Developer ID certificate does not match the protected fingerprint'
 
 export AE_MCP_E_PLATFORM='macos-arm64'
 export AE_MCP_E_STAGE_SHA="$source_stage_sha"

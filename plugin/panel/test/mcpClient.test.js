@@ -55,61 +55,46 @@ test('_createRpc rejects JSON-RPC error responses', async () => {
   await assert.rejects(pending, /nope/);
 });
 
+function fakeCommandPlatform({ launcher = '/Users/a/.ae-mcp/bin/ae-mcp', resolved = null, exists = () => false } = {}) {
+  return {
+    id: launcher.includes('\\') ? 'windows-x64' : 'macos-arm64',
+    paths: {
+      launcher,
+      join: (parts) => parts.join(launcher.includes('\\') ? '\\' : '/'),
+      dirname: (value) => value.slice(0, Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'))),
+      resolve: (parts) => parts.join(launcher.includes('\\') ? '\\' : '/').replace(/\//g, launcher.includes('\\') ? '\\' : '/'),
+    },
+    fs: { existsSync: exists },
+    resolveExecutable: async () => resolved || ({ ok: true, id: 'ae-mcp', path: launcher, argsPrefix: [], source: 'runtime', version: null, arch: null }),
+  };
+}
+
 test('resolveMcpCommand prefers an explicit executable path', async () => {
   const result = await resolveMcpCommand({
     explicitPath: 'C:/tools/ae-mcp.exe',
-    whereImpl: () => { throw new Error('should not call where'); },
+    platform: fakeCommandPlatform(),
   });
 
   assert.deepEqual(result, { command: 'C:/tools/ae-mcp.exe', args: [], source: 'explicit' });
 });
 
-test('resolveMcpCommand uses where ae-mcp when no explicit path is configured', async () => {
-  const result = await resolveMcpCommand({
-    whereImpl: async () => 'C:\\Tools\\ae-mcp.exe\r\n',
+test('resolveMcpCommand prefers the installed stable launcher on both platforms', async () => {
+  const mac = fakeCommandPlatform({ launcher: '/Users/a/.ae-mcp/bin/ae-mcp' });
+  const win = fakeCommandPlatform({ launcher: 'C:\\Users\\a\\.ae-mcp\\bin\\ae-mcp.exe' });
+  assert.deepEqual(await resolveMcpCommand({ platform: mac }), {
+    command: '/Users/a/.ae-mcp/bin/ae-mcp', args: [], source: 'runtime',
   });
-
-  assert.deepEqual(result, { command: 'C:\\Tools\\ae-mcp.exe', args: [], source: 'where' });
-});
-
-test('resolveMcpCommand falls back to uv project command in development mode', async () => {
-  const result = await resolveMcpCommand({
-    whereImpl: async () => '',
-    extRoot: 'E:/Code/ae-mcp-codex-p5a/plugin/panel',
-    fsImpl: { existsSync: (p) => p === 'E:\\Code\\ae-mcp-codex-p5a\\pyproject.toml' },
+  assert.deepEqual(await resolveMcpCommand({ platform: win }), {
+    command: 'C:\\Users\\a\\.ae-mcp\\bin\\ae-mcp.exe', args: [], source: 'runtime',
   });
-
-  assert.equal(result.command, 'uv');
-  assert.deepEqual(result.args.slice(0, 3), ['run', '--project', 'E:\\Code\\ae-mcp-codex-p5a']);
-  assert.equal(result.args[3], 'ae-mcp');
-  assert.equal(result.source, 'uv');
-});
-
-test('resolveMcpCommand uses the uv tool shim without an AE restart', async () => {
-  const result = await resolveMcpCommand({
-    whereImpl: async () => '',
-    envImpl: { USERPROFILE: 'C:\\Users\\X' },
-    fsImpl: { existsSync: (p) => p === 'C:\\Users\\X\\.local\\bin\\ae-mcp.exe' },
-  });
-
-  assert.deepEqual(result, { command: 'C:\\Users\\X\\.local\\bin\\ae-mcp.exe', args: [], source: 'uv-tool' });
-});
-
-test('resolveMcpCommand falls through to checkout when uv tool shim is absent', async () => {
-  const result = await resolveMcpCommand({
-    whereImpl: async () => '',
-    envImpl: {},
-    extRoot: 'E:/repo/plugin/panel',
-    fsImpl: { existsSync: (p) => p === 'E:\\repo\\pyproject.toml' },
-  });
-
-  assert.deepEqual(result, { command: 'uv', args: ['run', '--project', 'E:\\repo', 'ae-mcp'], source: 'uv' });
 });
 
 test('findProjectRoot is exported for wizard repo probing', () => {
+  const platform = fakeCommandPlatform({ launcher: 'E:\\Users\\a\\.ae-mcp\\bin\\ae-mcp.exe' });
   const root = findProjectRoot({
     extRoot: 'E:/repo/plugin/panel',
     repoRoot: '',
+    platform,
     fsImpl: { existsSync: (p) => p === 'E:\\repo\\pyproject.toml' },
   });
 
@@ -119,9 +104,7 @@ test('findProjectRoot is exported for wizard repo probing', () => {
 test('resolveMcpCommand reports a repair hint when no executable can be found', async () => {
   await assert.rejects(
     resolveMcpCommand({
-      whereImpl: async () => '',
-      extRoot: 'E:/missing/plugin/panel',
-      fsImpl: { existsSync: () => false },
+      platform: fakeCommandPlatform({ resolved: { ok: false, id: 'ae-mcp', code: 'NOT_FOUND', attempts: [] } }),
     }),
     /Unable to find ae-mcp/,
   );

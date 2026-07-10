@@ -14,6 +14,7 @@ import { copyText } from '../lib/clipboard';
 import { zcodeDefaultModelLocked as shouldLockZcodeDefaultModel, zcodeManagedModelLabel } from '../lib/settingsState';
 import { Icon } from '../components/core/Icon';
 import { loadSectionState, saveSectionState, toggleSection } from '../lib/settingsSections';
+import { createPlatformAdapter } from '../cep/platform/index';
 
 const REPO_URL = 'https://github.com/JUNKDOGE-JOE/after-effects-mcp';
 const DOCS_URL = 'https://github.com/JUNKDOGE-JOE/after-effects-mcp#readme';
@@ -224,22 +225,11 @@ function maskToken(value) {
   return v.slice(0, 7) + '*'.repeat(Math.min(10, v.length - 11)) + v.slice(-4);
 }
 
-function cepRequire() {
-  if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) return globalThis.window.cep_node.require;
-  if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-  if (globalThis.require) return globalThis.require;
-  return null;
-}
-
 function readTokenValue() {
   try {
-    const req = cepRequire();
-    if (!req) return '';
-    const fs = req('fs');
-    const path = req('path');
-    const os = req('os');
-    const tokenPath = path.join(os.homedir(), '.ae-mcp', 'auth-token');
-    return fs.readFileSync(tokenPath, 'utf8').trim();
+    const platform = createPlatformAdapter();
+    const tokenPath = platform.paths.join([platform.paths.configRoot, 'auth-token']);
+    return platform.fs.readFileSync(tokenPath, 'utf8').trim();
   } catch (e) {
     return '';
   }

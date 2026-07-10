@@ -707,6 +707,31 @@ test('Claude CLI payload requires the locked package, binary hash, mode, and ver
   );
 });
 
+test('portable runtime copies the reviewed sidecar entrypoints beside its locked dependencies', async (t) => {
+  const { copySidecarEntrypoints } = await import('../build-portable-runtime.mjs');
+  const root = await makeTempDir(t);
+  const repoRoot = path.join(root, 'repo');
+  const runtimeRoot = path.join(root, 'runtime');
+  const sourceRoot = path.join(repoRoot, 'plugin/sidecar');
+  const destinationRoot = path.join(runtimeRoot, 'node/sidecar');
+  await fs.promises.mkdir(sourceRoot, { recursive: true });
+  await fs.promises.mkdir(path.join(destinationRoot, 'node_modules'), { recursive: true });
+  await fs.promises.writeFile(path.join(sourceRoot, 'agent-sidecar.mjs'), 'export const agent = true;\n');
+  await fs.promises.writeFile(path.join(sourceRoot, 'lib.mjs'), 'export const library = true;\n');
+
+  await copySidecarEntrypoints({ repoRoot, runtimeRoot });
+
+  assert.equal(
+    await fs.promises.readFile(path.join(destinationRoot, 'agent-sidecar.mjs'), 'utf8'),
+    'export const agent = true;\n',
+  );
+  assert.equal(
+    await fs.promises.readFile(path.join(destinationRoot, 'lib.mjs'), 'utf8'),
+    'export const library = true;\n',
+  );
+  assert.equal(fs.existsSync(path.join(destinationRoot, 'current')), false);
+});
+
 test('portable runtime pruning removes bundled package managers but keeps runtime payloads', async (t) => {
   const { pruneBundledRuntimeTools } = await import('../build-portable-runtime.mjs');
   const runtimeRoot = await makeTempDir(t);

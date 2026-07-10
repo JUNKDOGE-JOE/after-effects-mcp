@@ -1,0 +1,1897 @@
+name: Promote verified RC
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact protected-main candidate SHA
+        required: true
+        type: string
+      build_run_id:
+        description: Exact successful Build signed RC workflow run ID
+        required: true
+        type: string
+      version:
+        description: Release version without the v prefix
+        required: true
+        default: 0.9.1
+        type: string
+
+permissions:
+  actions: read
+  checks: read
+  contents: write
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: release-v0.9.1
+  queue: max
+  cancel-in-progress: false
+
+env:
+  RELEASE_VERSION: 0.9.1
+  RELEASE_TAG: v0.9.1
+
+jobs:
+  promote:
+    name: Promote immutable dual-platform RC
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: release-promotion
+    steps:
+      - name: Validate immutable promotion inputs
+        shell: bash
+        env:
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$VERSION" == "$RELEASE_VERSION" ]]
+
+      - name: Checkout the exact candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ inputs.candidate_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install locked validation Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.17.0
+
+      - name: Require protected main and trusted promotion workflow
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$(node --version)" == 'v24.17.0' ]]
+          [[ "$GITHUB_WORKFLOW_SHA" == "$CANDIDATE_SHA" ]]
+          auth_header="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w 0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header" \
+            fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          unset auth_header
+          [[ "$(git rev-parse HEAD)" == "$CANDIDATE_SHA" ]]
+          [[ "$(git rev-parse origin/main)" == "$CANDIDATE_SHA" ]]
+          git show "$GITHUB_WORKFLOW_SHA:.github/workflows/release.yml" \
+            > "$RUNNER_TEMP/dispatched-release.yml"
+          git show "origin/main:.github/workflows/release.yml" \
+            > "$RUNNER_TEMP/main-release.yml"
+          cmp -s "$RUNNER_TEMP/dispatched-release.yml" "$RUNNER_TEMP/main-release.yml"
+
+      - name: Require repository immutable releases
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          AE_MCP_RELEASE_ADMIN_TOKEN: ${{ secrets.AE_MCP_RELEASE_ADMIN_TOKEN }}
+          PROMOTION_ROOT: ${{ runner.temp }}/ae-mcp-promotion
+        with:
+          script: |
+            const fs = require('node:fs/promises');
+            const path = require('node:path');
+            const token = process.env.AE_MCP_RELEASE_ADMIN_TOKEN;
+            if (!token) throw new Error('immutable releases admin-read token is missing');
+            await fs.mkdir(process.env.PROMOTION_ROOT, { recursive: false });
+            const responsePath = path.join(process.env.PROMOTION_ROOT, 'immutable-settings.json');
+            const endpoint = `${process.env.GITHUB_API_URL}/repos/${context.repo.owner}/${context.repo.repo}/immutable-releases`;
+            const code = await exec.exec('curl', [
+              '--fail', '--silent', '--show-error',
+              '--header', 'Accept: application/vnd.github+json',
+              '--header', `Authorization: Bearer ${token}`,
+              '--header', 'X-GitHub-Api-Version: 2026-03-10',
+              '--output', responsePath,
+              endpoint,
+            ], { silent: true });
+            if (code !== 0) throw new Error('repository immutable releases are not enabled');
+            const immutable = JSON.parse(await fs.readFile(responsePath, 'utf8'));
+            if (immutable?.enabled !== true) {
+              throw new Error('repository immutable releases are not enabled');
+            }
+
+      - name: Resolve one successful build run and four exact artifact IDs
+        id: resolve
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        with:
+          script: |
+            const candidateSha = process.env.CANDIDATE_SHA;
+            const buildRunId = process.env.BUILD_RUN_ID;
+            const expectedNames = new Map([
+              ['ae-mcp-panel-v0.9.1-macos-arm64.dmg', 'mac_dmg_artifact_id'],
+              ['ae-mcp-panel-v0.9.1-macos-arm64.zxp', 'mac_zxp_artifact_id'],
+              ['ae-mcp-panel-v0.9.1-windows-x64.zxp', 'windows_zxp_artifact_id'],
+              ['artifact-manifest-v0.9.1.json', 'manifest_artifact_id'],
+            ]);
+            const allowedPreflightNames = new Set([
+              'ae-mcp-zxpsigncmd-4.1.3-macos-x86_64',
+              'ae-mcp-zxpsigncmd-4.1.3-windows-x64',
+            ]);
+            const { owner, repo } = context.repo;
+            const { data: branch } = await github.rest.repos.getBranch({
+              owner, repo, branch: 'main',
+            });
+            if (branch.protected !== true || branch.commit.sha !== candidateSha) {
+              throw new Error('candidate is not current protected main');
+            }
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              owner, repo, run_id: Number(buildRunId),
+            });
+            const { data: workflow } = await github.rest.actions.getWorkflow({
+              owner, repo, workflow_id: run.workflow_id,
+            });
+            const runPath = String(run.path || '').split('@')[0];
+            if (String(run.id) !== buildRunId
+                || run.event !== 'workflow_dispatch'
+                || run.head_sha !== candidateSha
+                || run.head_branch !== 'main'
+                || run.run_attempt !== 1
+                || run.status !== 'completed'
+                || run.conclusion !== 'success'
+                || runPath !== '.github/workflows/build-rc.yml'
+                || workflow.path !== '.github/workflows/build-rc.yml'
+                || workflow.state !== 'active'
+                || String(run.repository?.full_name || '').toLowerCase()
+                  !== `${owner}/${repo}`.toLowerCase()
+                || String(run.head_repository?.full_name || '').toLowerCase()
+                  !== `${owner}/${repo}`.toLowerCase()) {
+              throw new Error('build run identity is not trusted');
+            }
+            const artifacts = await github.paginate(
+              github.rest.actions.listWorkflowRunArtifacts,
+              { owner, repo, run_id: Number(buildRunId), per_page: 100 },
+            );
+            if (artifacts.length < expectedNames.size
+                || artifacts.length > expectedNames.size + allowedPreflightNames.size) {
+              throw new Error('build run artifact count is outside the locked inventory');
+            }
+            const seenNames = new Set();
+            const releaseNames = new Set();
+            for (const artifact of artifacts) {
+              if (seenNames.has(artifact.name)) {
+                throw new Error('build artifact inventory contains a duplicate name');
+              }
+              seenNames.add(artifact.name);
+              if (!Number.isSafeInteger(artifact.id) || artifact.id <= 0
+                  || !Number.isSafeInteger(artifact.size_in_bytes)
+                  || artifact.size_in_bytes <= 0
+                  || typeof artifact.expired !== 'boolean') {
+                throw new Error('build artifact inventory is invalid');
+              }
+              const outputName = expectedNames.get(artifact.name);
+              if (outputName) {
+                if (artifact.expired === true) {
+                  throw new Error('release artifact is expired');
+                }
+                releaseNames.add(artifact.name);
+                core.setOutput(outputName, String(artifact.id));
+              } else if (!allowedPreflightNames.has(artifact.name)) {
+                throw new Error('build artifact inventory contains an unknown name');
+              }
+            }
+            if (releaseNames.size !== expectedNames.size) {
+              throw new Error('build artifact inventory is incomplete');
+            }
+            core.setOutput('build_run_id', buildRunId);
+
+      - name: Download exact macOS DMG artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.resolve.outputs.build_run_id }}
+          artifact-ids: ${{ steps.resolve.outputs.mac_dmg_artifact_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/ae-mcp-promotion/download/mac-dmg
+
+      - name: Download exact macOS ZXP artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.resolve.outputs.build_run_id }}
+          artifact-ids: ${{ steps.resolve.outputs.mac_zxp_artifact_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/ae-mcp-promotion/download/mac-zxp
+
+      - name: Download exact Windows ZXP artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.resolve.outputs.build_run_id }}
+          artifact-ids: ${{ steps.resolve.outputs.windows_zxp_artifact_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/ae-mcp-promotion/download/windows-zxp
+
+      - name: Download exact canonical manifest artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.resolve.outputs.build_run_id }}
+          artifact-ids: ${{ steps.resolve.outputs.manifest_artifact_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/ae-mcp-promotion/download/manifest
+
+      - name: Verify canonical manifest and all original RC bytes
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          BUILD_RUN_ID: ${{ steps.resolve.outputs.build_run_id }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          MAC_DMG_ARTIFACT_ID: ${{ steps.resolve.outputs.mac_dmg_artifact_id }}
+          MAC_ZXP_ARTIFACT_ID: ${{ steps.resolve.outputs.mac_zxp_artifact_id }}
+          MANIFEST_ARTIFACT_ID: ${{ steps.resolve.outputs.manifest_artifact_id }}
+          PROMOTION_ROOT: ${{ runner.temp }}/ae-mcp-promotion
+          WINDOWS_ZXP_ARTIFACT_ID: ${{ steps.resolve.outputs.windows_zxp_artifact_id }}
+        with:
+          script: |
+            const { constants } = require('node:fs');
+            const fs = require('node:fs/promises');
+            const path = require('node:path');
+            const { pathToFileURL } = require('node:url');
+            const moduleUrl = (name) => pathToFileURL(path.join(
+              process.env.GITHUB_WORKSPACE, 'scripts', 'release', name,
+            )).href;
+            const {
+              canonicalStringify, MAX_ARTIFACT_MANIFEST_BYTES, sha256File,
+              serializeArtifactManifest, verifyArtifactManifest,
+            } = await import(moduleUrl('artifact-manifest.mjs'));
+            const root = process.env.PROMOTION_ROOT;
+            const downloadRoot = path.join(root, 'download');
+            const releaseRoot = path.join(root, 'release-assets');
+            const names = {
+              macDmg: 'ae-mcp-panel-v0.9.1-macos-arm64.dmg',
+              macZxp: 'ae-mcp-panel-v0.9.1-macos-arm64.zxp',
+              windowsZxp: 'ae-mcp-panel-v0.9.1-windows-x64.zxp',
+              manifest: 'artifact-manifest-v0.9.1.json',
+            };
+            const sources = new Map([
+              [names.macDmg, path.join(downloadRoot, 'mac-dmg', names.macDmg)],
+              [names.macZxp, path.join(downloadRoot, 'mac-zxp', names.macZxp)],
+              [names.windowsZxp, path.join(downloadRoot, 'windows-zxp', names.windowsZxp)],
+              [names.manifest, path.join(downloadRoot, 'manifest', names.manifest)],
+            ]);
+
+            async function assertRegularFile(file, maximum = Number.MAX_SAFE_INTEGER) {
+              const stat = await fs.lstat(file);
+              if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1
+                  || stat.size <= 0 || stat.size > maximum) {
+                throw new Error(`download is not one bounded regular file: ${path.basename(file)}`);
+              }
+              return stat;
+            }
+
+            await fs.mkdir(releaseRoot, { recursive: false });
+            for (const [name, source] of sources) {
+              await assertRegularFile(
+                source,
+                name === names.manifest ? MAX_ARTIFACT_MANIFEST_BYTES : undefined,
+              );
+              const before = await sha256File(source);
+              const destination = path.join(releaseRoot, name);
+              await fs.copyFile(source, destination, constants.COPYFILE_EXCL);
+              const [after, copied] = await Promise.all([
+                sha256File(source), sha256File(destination),
+              ]);
+              if (before !== after || after !== copied) {
+                throw new Error(`artifact changed while copying: ${name}`);
+              }
+            }
+
+            const manifestPath = path.join(releaseRoot, names.manifest);
+            const manifestBytes = await fs.readFile(manifestPath);
+            const manifestText = new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes);
+            const manifest = JSON.parse(manifestText);
+            if (!serializeArtifactManifest(manifest).equals(manifestBytes)
+                || manifest.version !== '0.9.1'
+                || manifest.candidateSha !== process.env.CANDIDATE_SHA
+                || String(manifest.workflowRunId) !== process.env.BUILD_RUN_ID) {
+              throw new Error('canonical manifest identity mismatch');
+            }
+            const expectedArtifacts = [
+              [names.macDmg, 'macos-arm64', 'install', process.env.MAC_DMG_ARTIFACT_ID],
+              [names.macZxp, 'macos-arm64', 'payload', process.env.MAC_ZXP_ARTIFACT_ID],
+              [names.windowsZxp, 'windows-x64', 'install', process.env.WINDOWS_ZXP_ARTIFACT_ID],
+            ].map(([name, platform, role, artifactId]) => ({
+              artifactId, name, platform, role,
+            })).sort((left, right) => left.name.localeCompare(right.name, 'en'));
+            const actualArtifacts = Array.isArray(manifest.artifacts)
+              ? manifest.artifacts.map((item) => ({
+                artifactId: String(item?.artifactId),
+                name: item?.name,
+                platform: item?.platform,
+                role: item?.role,
+              })).sort((left, right) => String(left.name).localeCompare(String(right.name), 'en'))
+              : [];
+            if (JSON.stringify(actualArtifacts) !== JSON.stringify(expectedArtifacts)) {
+              throw new Error('manifest does not bind the exact three artifact IDs');
+            }
+            const errors = await verifyArtifactManifest(manifest, releaseRoot);
+            if (errors.length) {
+              throw new Error(`original RC byte verification failed: ${errors.join(', ')}`);
+            }
+
+            const artifactGroups = {
+              [names.macDmg]: process.env.MAC_DMG_ARTIFACT_ID,
+              [names.macZxp]: process.env.MAC_ZXP_ARTIFACT_ID,
+              [names.windowsZxp]: process.env.WINDOWS_ZXP_ARTIFACT_ID,
+              [names.manifest]: process.env.MANIFEST_ARTIFACT_ID,
+            };
+            const assets = [];
+            for (const name of Object.values(names).sort()) {
+              const stat = await fs.lstat(path.join(releaseRoot, name));
+              assets.push({
+                name,
+                sha256: await sha256File(path.join(releaseRoot, name)),
+                size: stat.size,
+              });
+            }
+            const expected = {
+              schemaVersion: 1,
+              candidateSha: process.env.CANDIDATE_SHA,
+              buildRunId: process.env.BUILD_RUN_ID,
+              artifactGroups,
+              assets,
+            };
+            await fs.writeFile(
+              path.join(root, 'expected-digests.json'),
+              canonicalStringify(expected),
+              { flag: 'wx' },
+            );
+
+      - name: Revalidate active evidence and create or verify annotated tag
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          AE_MCP_RC_ATTESTORS: ${{ vars.AE_MCP_RC_ATTESTORS }}
+          AE_MCP_RELEASE_ADMIN_TOKEN: ${{ secrets.AE_MCP_RELEASE_ADMIN_TOKEN }}
+          BUILD_RUN_ID: ${{ steps.resolve.outputs.build_run_id }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          PROMOTION_ROOT: ${{ runner.temp }}/ae-mcp-promotion
+        with:
+          script: |
+            const { createHash } = require('node:crypto');
+            const fs = require('node:fs/promises');
+            const path = require('node:path');
+            const { pathToFileURL } = require('node:url');
+            const moduleUrl = (name) => pathToFileURL(path.join(
+              process.env.GITHUB_WORKSPACE, 'scripts', 'release', name,
+            )).href;
+            const {
+              canonicalStringify, MAX_ARTIFACT_MANIFEST_BYTES, serializeArtifactManifest,
+            } = await import(moduleUrl('artifact-manifest.mjs'));
+            const { validateAttestation } = await import(moduleUrl('attestation.mjs'));
+            const { decodeAttestationComment } = await import(moduleUrl('comment-marker.mjs'));
+            const { assertActiveAttestationRunProvenance } = await import(
+              moduleUrl('check-provenance.mjs')
+            );
+            const {
+              listAllCheckRunsForRef, listAllWorkflowRunsForWorkflow,
+            } = await import(moduleUrl('github-inventory.mjs'));
+            const { reconcileAttestationState } = await import(
+              moduleUrl('verify-release-inputs.mjs')
+            );
+            const candidateSha = process.env.CANDIDATE_SHA;
+            const buildRunId = process.env.BUILD_RUN_ID;
+            const promotionRoot = process.env.PROMOTION_ROOT;
+            const manifestPath = path.join(
+              promotionRoot, 'release-assets', 'artifact-manifest-v0.9.1.json',
+            );
+            const manifestStat = await fs.lstat(manifestPath);
+            if (!manifestStat.isFile() || manifestStat.isSymbolicLink()
+                || manifestStat.nlink !== 1 || manifestStat.size <= 0
+                || manifestStat.size > MAX_ARTIFACT_MANIFEST_BYTES) {
+              throw new Error('tag manifest is not one bounded regular file');
+            }
+            const manifestBytes = await fs.readFile(manifestPath);
+            const manifest = JSON.parse(
+              new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes),
+            );
+            if (!serializeArtifactManifest(manifest).equals(manifestBytes)) {
+              throw new Error('tag manifest is not canonical or structurally valid');
+            }
+            const expected = JSON.parse(await fs.readFile(
+              path.join(promotionRoot, 'expected-digests.json'), 'utf8',
+            ));
+            const { owner, repo } = context.repo;
+            const SHA = /^[a-f0-9]{40}$/;
+            const DIGEST = /^[a-f0-9]{64}$/;
+            const DECIMAL_ID = /^\d+$/;
+            const TAG = 'v0.9.1';
+            const TAG_MESSAGE = 'AE MCP v0.9.1 immutable RC promotion';
+            const STATE_MARKER = 'ae-mcp-attestation-state:v1:';
+            const COMMENT_MARKER = '<!-- ae-mcp-rc-attestation:v1 -->';
+            const appId = 15368;
+
+            const configuredAttestors = String(process.env.AE_MCP_RC_ATTESTORS || '')
+              .split(',').map((item) => item.trim().toLowerCase()).filter(Boolean);
+            if (configuredAttestors.length === 0
+                || configuredAttestors.some((item) => (
+                  !/^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$/.test(item)
+                ))
+                || new Set(configuredAttestors).size !== configuredAttestors.length) {
+              throw new Error('RC attestor allowlist is invalid');
+            }
+            const attestors = new Set(configuredAttestors);
+
+            function decodeState(summary, platform, artifact) {
+              const matches = [...String(summary || '').matchAll(
+                /<!-- ae-mcp-attestation-state:v1:([A-Za-z0-9_-]+) -->/g,
+              )];
+              if (matches.length !== 1 || String(summary).split(STATE_MARKER).length !== 2) {
+                throw new Error('deterministic attestation state is missing or ambiguous');
+              }
+              const encoded = matches[0][1];
+              const bytes = Buffer.from(encoded, 'base64url');
+              if (bytes.length === 0 || bytes.length > 8192
+                  || bytes.toString('base64url') !== encoded) {
+                throw new Error('deterministic attestation state encoding is invalid');
+              }
+              const text = bytes.toString('utf8');
+              const state = JSON.parse(text);
+              const fields = [
+                'activeCommentId', 'activeRunAttempt', 'activeRunId', 'activeUpdatedAt',
+                'artifactId', 'artifactSha256',
+                'candidateRejected', 'candidateSha', 'conclusion', 'freshEvidenceAfter',
+                'platform', 'schemaVersion',
+              ];
+              if (JSON.stringify(Object.keys(state).sort()) !== JSON.stringify(fields.sort())
+                  || canonicalStringify(state).trimEnd() !== text
+                  || state.schemaVersion !== 1
+                  || state.candidateSha !== candidateSha
+                  || state.platform !== platform
+                  || String(state.artifactId) !== String(artifact.artifactId)
+                  || state.artifactSha256 !== artifact.sha256
+                  || !DIGEST.test(String(state.artifactSha256 || ''))
+                  || !DECIMAL_ID.test(String(state.activeCommentId || ''))
+                  || typeof state.activeRunId !== 'string'
+                  || !/^[1-9]\d*$/.test(state.activeRunId)
+                  || !Number.isSafeInteger(state.activeRunAttempt)
+                  || state.activeRunAttempt < 1
+                  || !Number.isSafeInteger(state.activeUpdatedAt)
+                  || !Number.isSafeInteger(state.freshEvidenceAfter)
+                  || state.activeUpdatedAt <= state.freshEvidenceAfter
+                  || state.candidateRejected !== false
+                  || state.conclusion !== 'success') {
+                throw new Error('deterministic attestation state is invalid');
+              }
+              const expectedSummary = [
+                `artifact-sha256: ${state.artifactSha256}`,
+                '',
+                `<!-- ae-mcp-attestation-state:v1:${encoded} -->`,
+              ].join('\n');
+              if (summary !== expectedSummary) {
+                throw new Error('deterministic attestation Check summary is not canonical');
+              }
+              return state;
+            }
+
+            async function verifyActiveComment(check, state, platform, artifact) {
+              let response;
+              try {
+                response = await github.rest.issues.getComment({
+                  owner, repo, comment_id: Number(state.activeCommentId),
+                });
+              } catch (error) {
+                if (error?.status === 404) {
+                  throw new Error('active attestation comment was deleted or is unavailable');
+                }
+                throw error;
+              }
+              const comment = response.data;
+              const updatedAt = Date.parse(String(comment.updated_at || ''));
+              if (!Number.isSafeInteger(updatedAt) || updatedAt !== state.activeUpdatedAt) {
+                throw new Error('active attestation comment timestamp mismatch');
+              }
+              const author = String(comment.user?.login || '').toLowerCase();
+              if (!attestors.has(author)) {
+                throw new Error('active attestation comment author mismatch');
+              }
+              const body = String(comment.body || '');
+              if (body.split(COMMENT_MARKER).length !== 2) {
+                throw new Error('active attestation comment body mismatch');
+              }
+              let report;
+              try {
+                report = decodeAttestationComment(body);
+              } catch {
+                throw new Error('active attestation comment body mismatch');
+              }
+              const reportErrors = validateAttestation(report, {
+                platform,
+                result: 'PASS',
+                candidateSha,
+                workflowRunId: buildRunId,
+                artifactId: artifact.artifactId,
+                artifactName: artifact.name,
+                artifactSha256: artifact.sha256,
+              });
+              if (reportErrors.length !== 0) {
+                throw new Error('active attestation comment body mismatch');
+              }
+              const apiUrl = new URL(process.env.GITHUB_API_URL);
+              const issueUrl = new URL(String(comment.issue_url || ''));
+              const issuePrefix = `/repos/${owner}/${repo}/issues/`;
+              const prNumber = issueUrl.pathname.startsWith(issuePrefix)
+                ? issueUrl.pathname.slice(issuePrefix.length)
+                : '';
+              if (issueUrl.protocol !== apiUrl.protocol || issueUrl.host !== apiUrl.host
+                  || !DECIMAL_ID.test(prNumber) || String(comment.id) !== String(state.activeCommentId)) {
+                throw new Error('active attestation comment is not on the attested PR');
+              }
+              const { data: pr } = await github.rest.pulls.get({
+                owner, repo, pull_number: Number(prNumber),
+              });
+              if (pr.merged !== true || pr.base?.ref !== 'main'
+                  || pr.merge_commit_sha !== candidateSha) {
+                throw new Error('active attestation comment PR is not the candidate merge');
+              }
+
+              // GitHub Actions is a shared App identity, so App id/slug alone is not
+              // provenance. Fail closed unless the Check points at the exact successful
+              // attestation workflow run and attempt that can be independently fetched.
+              const { runId, runAttempt } = assertActiveAttestationRunProvenance(
+                state,
+                check.details_url,
+                {
+                  serverUrl: process.env.GITHUB_SERVER_URL,
+                  repository: process.env.GITHUB_REPOSITORY,
+                },
+              );
+              const { data: run } = await github.rest.actions.getWorkflowRun({
+                owner, repo, run_id: Number(runId),
+              });
+              const { data: workflow } = await github.rest.actions.getWorkflow({
+                owner, repo, workflow_id: run.workflow_id,
+              });
+              const runPath = String(run.path || '').split('@')[0];
+              if (String(run.id) !== runId || run.run_attempt !== runAttempt
+                  || runPath !== '.github/workflows/attestation.yml'
+                  || run.head_sha !== candidateSha || run.head_branch !== 'main'
+                  || run.event !== 'issue_comment' || run.status !== 'completed'
+                  || run.conclusion !== 'success'
+                  || workflow.path !== '.github/workflows/attestation.yml'
+                  || workflow.state !== 'active'
+                  || String(run.repository?.full_name || '').toLowerCase()
+                    !== `${owner}/${repo}`.toLowerCase()
+                  || String(run.head_repository?.full_name || '').toLowerCase()
+                    !== `${owner}/${repo}`.toLowerCase()) {
+                throw new Error('attestation workflow run provenance is invalid');
+              }
+              const { data: workflowFile } = await github.rest.repos.getContent({
+                owner, repo, path: '.github/workflows/attestation.yml', ref: run.head_sha,
+              });
+              if (Array.isArray(workflowFile) || workflowFile.type !== 'file'
+                  || !/^[a-f0-9]{40}$/.test(String(workflowFile.sha || ''))) {
+                throw new Error('attestation workflow revision provenance is invalid');
+              }
+              return {
+                comment: {
+                  id: String(comment.id),
+                  prNumber,
+                  updatedAt,
+                  author,
+                  bodySha256: createHash('sha256').update(body).digest('hex'),
+                },
+                provenance: {
+                  runId,
+                  runAttempt,
+                  workflowId: String(run.workflow_id),
+                  workflowPath: runPath,
+                  workflowSha: run.head_sha,
+                  workflowBlobSha: workflowFile.sha,
+                  event: run.event,
+                  headBranch: run.head_branch,
+                  repository: `${owner}/${repo}`,
+                },
+              };
+            }
+
+            async function requireAttestation(platform, name) {
+              const artifacts = manifest.artifacts.filter((item) => (
+                item?.platform === platform && item?.role === 'install'
+              ));
+              if (artifacts.length !== 1) throw new Error('manifest install identity is ambiguous');
+              const artifact = artifacts[0];
+              const externalId = `ae-mcp-rc:${candidateSha}:${platform}`;
+              const rows = await listAllCheckRunsForRef(github, {
+                owner, repo, ref: candidateSha,
+              });
+              const matches = rows.filter((check) => check.name === name
+                && check.external_id === externalId && check.head_sha === candidateSha);
+              if (matches.length !== 1) {
+                throw new Error('duplicate deterministic attestation Check or Check is missing');
+              }
+              const check = matches[0];
+              if (check.app?.id !== 15368 || check.app?.slug !== 'github-actions'
+                  || check.status !== 'completed' || check.conclusion !== 'success') {
+                throw new Error('attestation Check ownership or conclusion is invalid');
+              }
+              const state = decodeState(check.output?.summary, platform, artifact);
+              const { comment, provenance } = await verifyActiveComment(
+                check, state, platform, artifact
+              );
+              return {
+                id: String(check.id),
+                name,
+                externalId,
+                updatedAt: check.updated_at,
+                detailsUrl: check.details_url,
+                summarySha256: createHash('sha256')
+                  .update(String(check.output?.summary || '')).digest('hex'),
+                state,
+                comment,
+                provenance,
+              };
+            }
+
+            async function auditCurrentAttestationHistory(checks) {
+              const prNumbers = new Set(checks.map((item) => item.comment.prNumber));
+              if (prNumbers.size !== 1) throw new Error('attestations must use one candidate PR');
+              const [prNumber] = prNumbers;
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner, repo, issue_number: Number(prNumber), per_page: 100,
+              });
+              const events = [];
+              for (const comment of comments) {
+                const author = String(comment.user?.login || '').toLowerCase();
+                if (!attestors.has(author)) continue;
+                let report;
+                try { report = decodeAttestationComment(String(comment.body || '')); } catch { continue; }
+                const check = checks.find((item) => item.state.platform === report.platform);
+                const artifact = manifest.artifacts.find((item) => (
+                  item.platform === report.platform && item.role === 'install'
+                ));
+                if (!check || !artifact) continue;
+                const errors = validateAttestation(report, {
+                  platform: report.platform, candidateSha, workflowRunId: buildRunId,
+                  artifactId: artifact.artifactId, artifactName: artifact.name,
+                  artifactSha256: artifact.sha256,
+                });
+                const updatedAt = Date.parse(String(comment.updated_at || ''));
+                if (errors.length !== 0 || !Number.isSafeInteger(updatedAt)) continue;
+                events.push({
+                  action: 'created',
+                  commentId: String(comment.id),
+                  updatedAt,
+                  candidateSha,
+                  platform: report.platform,
+                  artifactId: String(artifact.artifactId),
+                  artifactSha256: artifact.sha256,
+                  report,
+                });
+              }
+              events.sort((left, right) => (
+                left.updatedAt - right.updatedAt
+                || (BigInt(left.commentId) < BigInt(right.commentId) ? -1 : 1)
+              ));
+              const states = [];
+              for (const check of checks) {
+                let liveState = null;
+                for (const event of events.filter((item) => item.platform === check.state.platform)) {
+                  liveState = reconcileAttestationState(liveState, event);
+                }
+                if (!liveState || liveState.candidateRejected === true) {
+                  throw new Error('current valid FAIL comment blocks promotion');
+                }
+                if (liveState.conclusion !== 'success'
+                    || liveState.activeCommentId !== check.state.activeCommentId
+                    || liveState.activeUpdatedAt !== check.state.activeUpdatedAt
+                    || String(liveState.artifactId) !== String(check.state.artifactId)
+                    || liveState.artifactSha256 !== check.state.artifactSha256) {
+                  throw new Error('independent attestation comment reconciliation disagrees with Check');
+                }
+                states.push({
+                  platform: liveState.platform,
+                  activeCommentId: liveState.activeCommentId,
+                  activeUpdatedAt: liveState.activeUpdatedAt,
+                  candidateRejected: liveState.candidateRejected,
+                  conclusion: liveState.conclusion,
+                });
+              }
+              const records = comments.map((comment) => ({
+                id: String(comment.id), updatedAt: comment.updated_at,
+                author: String(comment.user?.login || '').toLowerCase(),
+                bodySha256: createHash('sha256').update(String(comment.body || '')).digest('hex'),
+              })).sort((left, right) => left.id.localeCompare(right.id, 'en'));
+              return {
+                prNumber,
+                count: records.length,
+                sha256: createHash('sha256').update(canonicalStringify(records)).digest('hex'),
+                states: states.sort((left, right) => left.platform.localeCompare(right.platform, 'en')),
+              };
+            }
+
+            async function requireLatestAttestationAttemptsSuccessful(checks) {
+              const runs = await listAllWorkflowRunsForWorkflow(github, {
+                owner, repo, workflowId: 'attestation.yml',
+              });
+              const latestByRun = new Map();
+              for (const run of runs) {
+                if (run.head_sha !== candidateSha) continue;
+                const runId = String(run.id || '');
+                const attempt = run.run_attempt;
+                if (!DECIMAL_ID.test(runId) || !Number.isSafeInteger(attempt) || attempt < 1
+                    || run.event !== 'issue_comment'
+                    || String(run.path || '').split('@')[0]
+                      !== '.github/workflows/attestation.yml') {
+                  throw new Error('candidate attestation workflow run identity is invalid');
+                }
+                const prior = latestByRun.get(runId);
+                if (!prior || attempt > prior.run_attempt) {
+                  latestByRun.set(runId, run);
+                } else if (attempt === prior.run_attempt
+                    && (run.status !== prior.status || run.conclusion !== prior.conclusion)) {
+                  throw new Error('candidate attestation latest attempt is ambiguous');
+                }
+              }
+              const requiredRunIds = new Set(checks.map((check) => (
+                String(check.provenance?.runId || '')
+              )));
+              if (requiredRunIds.size !== checks.length
+                  || [...requiredRunIds].some((runId) => !latestByRun.has(runId))) {
+                throw new Error('active attestation runs are missing from the run inventory');
+              }
+              for (const run of latestByRun.values()) {
+                if (run.status !== 'completed' || run.conclusion !== 'success') {
+                  throw new Error(
+                    'candidate attestation latest attempt must complete successfully; rerun it',
+                  );
+                }
+              }
+            }
+
+            async function requireBuildRunAndLock() {
+              const { data: branch } = await github.rest.repos.getBranch({
+                owner, repo, branch: 'main',
+              });
+              if (branch.protected !== true || branch.commit.sha !== candidateSha) {
+                throw new Error('candidate is not current protected main');
+              }
+              const { data: run } = await github.rest.actions.getWorkflowRun({
+                owner, repo, run_id: Number(buildRunId),
+              });
+              if (String(run.id) !== buildRunId || run.event !== 'workflow_dispatch'
+                  || run.head_sha !== candidateSha || run.head_branch !== 'main'
+                  || run.run_attempt !== 1 || run.status !== 'completed'
+                  || run.conclusion !== 'success'
+                  || String(run.path || '').split('@')[0] !== '.github/workflows/build-rc.yml') {
+                throw new Error('build run changed before tag creation');
+              }
+              const artifacts = await github.paginate(
+                github.rest.actions.listWorkflowRunArtifacts,
+                { owner, repo, run_id: Number(buildRunId), per_page: 100 },
+              );
+              const allowedPreflightNames = new Set([
+                'ae-mcp-zxpsigncmd-4.1.3-macos-x86_64',
+                'ae-mcp-zxpsigncmd-4.1.3-windows-x64',
+              ]);
+              const expectedArtifactEntries = Object.entries(expected.artifactGroups);
+              if (artifacts.length < expectedArtifactEntries.length
+                  || artifacts.length
+                    > expectedArtifactEntries.length + allowedPreflightNames.size) {
+                throw new Error('build artifact count changed before tag creation');
+              }
+              const seenNames = new Set();
+              const releaseArtifacts = [];
+              for (const artifact of artifacts) {
+                if (seenNames.has(artifact.name)) {
+                  throw new Error('build artifact inventory contains a duplicate name');
+                }
+                seenNames.add(artifact.name);
+                if (!Number.isSafeInteger(artifact.id) || artifact.id <= 0
+                    || !Number.isSafeInteger(artifact.size_in_bytes)
+                    || artifact.size_in_bytes <= 0
+                    || typeof artifact.expired !== 'boolean') {
+                  throw new Error('build artifact inventory changed before tag creation');
+                }
+                const expectedArtifactId = expected.artifactGroups[artifact.name];
+                if (expectedArtifactId) {
+                  if (artifact.expired === true) {
+                    throw new Error('release artifact expired before tag creation');
+                  }
+                  releaseArtifacts.push({
+                    id: String(artifact.id), name: artifact.name, expired: false,
+                  });
+                } else if (!allowedPreflightNames.has(artifact.name)) {
+                  throw new Error('build artifact inventory contains an unknown name');
+                }
+              }
+              releaseArtifacts.sort((left, right) => left.name.localeCompare(right.name, 'en'));
+              const wanted = Object.entries(expected.artifactGroups).map(([name, id]) => ({
+                id: String(id), name, expired: false,
+              })).sort((left, right) => left.name.localeCompare(right.name, 'en'));
+              if (JSON.stringify(releaseArtifacts) !== JSON.stringify(wanted)) {
+                throw new Error('build artifact IDs changed before tag creation');
+              }
+              const externalId = `ae-mcp-build-lock:${candidateSha}`;
+              const locks = await listAllCheckRunsForRef(github, {
+                owner, repo, ref: candidateSha,
+              });
+              const matches = locks.filter((check) => check.name === 'signed-rc-build'
+                && check.external_id === externalId && check.head_sha === candidateSha);
+              if (matches.length !== 1 || matches[0].app?.id !== appId
+                  || matches[0].app?.slug !== 'github-actions'
+                  || matches[0].status !== 'completed' || matches[0].conclusion !== 'success') {
+                throw new Error('signed-rc-build Check is not a trusted success');
+              }
+            }
+
+            let immutableAuditSequence = 0;
+            async function requireImmutableReleases() {
+              const token = process.env.AE_MCP_RELEASE_ADMIN_TOKEN;
+              if (!token) throw new Error('immutable releases admin-read token is missing');
+              immutableAuditSequence += 1;
+              const responsePath = path.join(
+                promotionRoot, `immutable-tag-${immutableAuditSequence}.json`,
+              );
+              const endpoint = `${process.env.GITHUB_API_URL}/repos/${owner}/${repo}/immutable-releases`;
+              const code = await exec.exec('curl', [
+                '--fail', '--silent', '--show-error',
+                '--header', 'Accept: application/vnd.github+json',
+                '--header', `Authorization: Bearer ${token}`,
+                '--header', 'X-GitHub-Api-Version: 2026-03-10',
+                '--output', responsePath,
+                endpoint,
+              ], { silent: true });
+              if (code !== 0) throw new Error('repository immutable releases are not enabled');
+              const immutable = JSON.parse(await fs.readFile(responsePath, 'utf8'));
+              if (immutable?.enabled !== true) {
+                throw new Error('repository immutable releases are not enabled');
+              }
+            }
+
+            async function revalidateTagGate(expectedGate = null) {
+              await requireBuildRunAndLock();
+              const checks = [
+                await requireAttestation('macos-arm64', 'macos-rc-attestation'),
+                await requireAttestation('windows-x64', 'windows-rc-attestation'),
+              ];
+              const commentAudit = await auditCurrentAttestationHistory(checks);
+              await requireLatestAttestationAttemptsSuccessful(checks);
+              await requireImmutableReleases();
+              const gate = { checks, commentAudit };
+              if (expectedGate
+                  && canonicalStringify(gate) !== canonicalStringify(expectedGate)) {
+                throw new Error('promotion gate changed immediately before tag reference creation');
+              }
+              return gate;
+            }
+
+            async function getVerifiedTag() {
+              let reference;
+              try {
+                ({ data: reference } = await github.rest.git.getRef({
+                  owner, repo, ref: `tags/${TAG}`,
+                }));
+              } catch (error) {
+                if (error?.status === 404) return null;
+                throw error;
+              }
+              if (reference.object?.type !== 'tag') {
+                throw new Error('existing release tag is not annotated');
+              }
+              const { data: tag } = await github.rest.git.getTag({
+                owner, repo, tag_sha: reference.object.sha,
+              });
+              if (tag.tag !== TAG || tag.message !== TAG_MESSAGE
+                  || tag.object?.type !== 'commit' || tag.object?.sha !== candidateSha) {
+                throw new Error('existing annotated tag points to different bytes');
+              }
+              return tag;
+            }
+
+            if (!SHA.test(candidateSha) || !DECIMAL_ID.test(buildRunId)) {
+              throw new Error('promotion identity is invalid');
+            }
+            const gate = await revalidateTagGate();
+            await fs.writeFile(
+              path.join(promotionRoot, 'attestation-snapshot.json'),
+              canonicalStringify({
+                schemaVersion: 1, candidateSha, buildRunId,
+                checks: gate.checks, commentAudit: gate.commentAudit,
+              }),
+              { flag: 'wx' },
+            );
+
+            let tag = await getVerifiedTag();
+            if (!tag) {
+              const { data: created } = await github.rest.git.createTag({
+                owner, repo, tag: TAG, message: TAG_MESSAGE,
+                object: candidateSha, type: 'commit',
+              });
+              try {
+                await revalidateTagGate(gate);
+                await github.rest.git.createRef({
+                  owner, repo, ref: 'refs/tags/v0.9.1', sha: created.sha,
+                });
+              } catch (error) {
+                if (error?.status !== 422) throw error;
+              }
+              tag = await getVerifiedTag();
+              if (!tag) throw new Error('annotated tag creation did not complete');
+            }
+
+      - name: Create or reuse the exact draft release
+        id: release
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          PROMOTION_ROOT: ${{ runner.temp }}/ae-mcp-promotion
+        with:
+          script: |
+            const fs = require('node:fs/promises');
+            const path = require('node:path');
+            const { pathToFileURL } = require('node:url');
+            const { canonicalStringify } = await import(pathToFileURL(path.join(
+              process.env.GITHUB_WORKSPACE, 'scripts', 'release', 'artifact-manifest.mjs',
+            )).href);
+            const { owner, repo } = context.repo;
+            const candidateSha = process.env.CANDIDATE_SHA;
+            const releaseBody = 'Immutable Mac arm64 and Windows x64 release promoted from one verified RC.';
+            const expectedNames = new Set([
+              'ae-mcp-panel-v0.9.1-macos-arm64.dmg',
+              'ae-mcp-panel-v0.9.1-macos-arm64.zxp',
+              'ae-mcp-panel-v0.9.1-windows-x64.zxp',
+              'artifact-manifest-v0.9.1.json',
+            ]);
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner, repo, per_page: 100,
+            });
+            const matchingReleases = releases.filter((item) => item.tag_name === 'v0.9.1');
+            if (matchingReleases.length > 1) {
+              throw new Error('release tag identifies multiple draft or published releases');
+            }
+            let release = matchingReleases[0];
+            if (!release) {
+              ({ data: release } = await github.rest.repos.createRelease({
+                owner,
+                repo,
+                tag_name: 'v0.9.1',
+                target_commitish: candidateSha,
+                name: 'v0.9.1',
+                body: releaseBody,
+                draft: true,
+                prerelease: false,
+                generate_release_notes: false,
+                make_latest: 'false',
+              }));
+            }
+            const refreshedReleases = await github.paginate(github.rest.repos.listReleases, {
+              owner, repo, per_page: 100,
+            });
+            const persisted = refreshedReleases.filter((item) => item.tag_name === 'v0.9.1');
+            if (persisted.length !== 1 || String(persisted[0].id) !== String(release.id)) {
+              throw new Error('draft release ID was not persisted uniquely');
+            }
+            [release] = persisted;
+            if (release.tag_name !== 'v0.9.1'
+                || release.name !== 'v0.9.1'
+                || release.body !== releaseBody
+                || release.prerelease === true) {
+              throw new Error('existing release identity is incompatible with this promotion');
+            }
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, {
+              owner, repo, release_id: release.id, per_page: 100,
+            });
+            const seen = new Set();
+            for (const asset of assets) {
+              if (!expectedNames.has(asset.name) || seen.has(asset.name)
+                  || asset.state !== 'uploaded' || asset.size <= 0) {
+                throw new Error('existing release contains an unexpected or incomplete asset');
+              }
+              seen.add(asset.name);
+            }
+            if (!release.draft && seen.size !== expectedNames.size) {
+              throw new Error('missing assets cannot be added to a published release');
+            }
+            if (!release.draft) core.notice('release already published; entering audit-only rerun');
+            await fs.writeFile(
+              path.join(process.env.PROMOTION_ROOT, 'existing-release.json'),
+              canonicalStringify({
+                schemaVersion: 1,
+                releaseId: String(release.id),
+                draft: release.draft,
+                assets: assets.map((asset) => ({
+                  id: String(asset.id), name: asset.name, size: asset.size,
+                })).sort((left, right) => left.name.localeCompare(right.name, 'en')),
+              }),
+              { flag: 'wx' },
+            );
+            core.setOutput('asset_count', String(assets.length));
+            core.setOutput('already_published', String(!release.draft));
+            core.setOutput('release_id', String(release.id));
+
+      - name: Download pre-existing release assets without replacement
+        if: steps.release.outputs.asset_count != '0'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROMOTION_ROOT: ${{ runner.temp }}/ae-mcp-promotion
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+        with:
+          script: |
+            const fs = require('node:fs/promises');
+            const path = require('node:path');
+            const root = process.env.PROMOTION_ROOT;
+            const inventory = JSON.parse(await fs.readFile(
+              path.join(root, 'existing-release.json'), 'utf8',
+            ));
+            if (inventory.releaseId !== process.env.RELEASE_ID) {
+              throw new Error('persisted release ID changed before download');
+            }
+            const existingRoot = path.join(root, 'existing-assets');
+            await fs.mkdir(existingRoot, { recursive: false });
+            for (const asset of inventory.assets) {
+              if (!/^\d+$/.test(String(asset.id))
+                  || !/^(?:ae-mcp-panel-v0\.9\.1-(?:macos-arm64\.(?:dmg|zxp)|windows-x64\.zxp)|artifact-manifest-v0\.9\.1\.json)$/.test(asset.name)) {
+                throw new Error('existing release asset identity is invalid');
+              }
+              const endpoint = `${process.env.GITHUB_API_URL}/repos/${context.repo.owner}/${context.repo.repo}/releases/assets/${asset.id}`;
+              const code = await exec.exec('curl', [
+                '--fail', '--silent', '--show-error', '--location',
+                '--header', 'Accept: application/octet-stream',
+                '--header', `Authorization: Bearer ${process.env.GH_TOKEN}`,
+                '--header', 'X-GitHub-Api-Version: 2026-03-10',
+                '--output', path.join(existingRoot, asset.name),
+                endpoint,
+              ], { silent: true });
+              if (code !== 0) throw new Error('release asset download failed');
+            }
+
+      - name: Verify every pre-existing release asset
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          PROMOTION_ROOT: ${{ runner.temp }}/ae-mcp-promotion
+        with:
+          script: |
+            const fs = require('node:fs/promises');
+            const path = require('node:path');
+            const { pathToFileURL } = require('node:url');
+            const { canonicalStringify, sha256File } = await import(pathToFileURL(path.join(
+              process.env.GITHUB_WORKSPACE, 'scripts', 'release', 'artifact-manifest.mjs',
+            )).href);
+            const root = process.env.PROMOTION_ROOT;
+            const inventoryText = await fs.readFile(path.join(root, 'existing-release.json'), 'utf8');
+            const inventory = JSON.parse(inventoryText);
+            if (canonicalStringify(inventory) !== inventoryText) {
+              throw new Error('existing release inventory is not canonical');
+            }
+            const expected = JSON.parse(await fs.readFile(
+              path.join(root, 'expected-digests.json'), 'utf8',
+            ));
+            const digests = new Map(expected.assets.map((asset) => [asset.name, asset.sha256]));
+            const existingRoot = path.join(root, 'existing-assets');
+            await fs.mkdir(existingRoot, { recursive: true });
+            const entries = (await fs.readdir(existingRoot)).sort();
+            const names = inventory.assets.map((asset) => asset.name).sort();
+            if (JSON.stringify(entries) !== JSON.stringify(names)) {
+              throw new Error('downloaded existing release inventory is incomplete');
+            }
+            for (const name of names) {
+              const stat = await fs.lstat(path.join(existingRoot, name));
+              if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1
+                  || await sha256File(path.join(existingRoot, name)) !== digests.get(name)) {
+                throw new Error(`release asset digest mismatch: ${name}`);
+              }
+            }
+
+      - name: Upload only missing verified bytes to the draft
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          ALREADY_PUBLISHED: ${{ steps.release.outputs.already_published }}
+          GH_TOKEN: ${{ github.token }}
+          PROMOTION_ROOT: ${{ runner.temp }}/ae-mcp-promotion
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+        with:
+          script: |
+            const fs = require('node:fs/promises');
+            const path = require('node:path');
+            const root = process.env.PROMOTION_ROOT;
+            const releaseId = process.env.RELEASE_ID;
+            const inventory = JSON.parse(await fs.readFile(
+              path.join(root, 'existing-release.json'), 'utf8',
+            ));
+            if (!/^\d+$/.test(releaseId) || inventory.releaseId !== releaseId
+                || !['true', 'false'].includes(process.env.ALREADY_PUBLISHED)) {
+              throw new Error('persisted release identity is invalid');
+            }
+            const names = [
+              'ae-mcp-panel-v0.9.1-macos-arm64.dmg',
+              'ae-mcp-panel-v0.9.1-macos-arm64.zxp',
+              'ae-mcp-panel-v0.9.1-windows-x64.zxp',
+              'artifact-manifest-v0.9.1.json',
+            ];
+            const existingNames = new Set(inventory.assets.map((asset) => asset.name));
+            const responses = path.join(root, 'upload-responses');
+            await fs.mkdir(responses, { recursive: false });
+            for (const name of names) {
+              if (existingNames.has(name)) continue;
+              if (process.env.ALREADY_PUBLISHED === 'true') {
+                throw new Error('missing assets cannot be added to a published release');
+              }
+              const source = path.join(root, 'release-assets', name);
+              const stat = await fs.lstat(source);
+              if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size <= 0) {
+                throw new Error('verified release source is no longer a regular file');
+              }
+              const endpoint = `https://uploads.github.com/repos/${context.repo.owner}/${context.repo.repo}/releases/${releaseId}/assets?name=${name}`;
+              const responsePath = path.join(responses, `${name}.json`);
+              const code = await exec.exec('curl', [
+                '--fail-with-body', '--silent', '--show-error', '--request', 'POST',
+                '--header', 'Accept: application/vnd.github+json',
+                '--header', `Authorization: Bearer ${process.env.GH_TOKEN}`,
+                '--header', 'X-GitHub-Api-Version: 2026-03-10',
+                '--header', 'Content-Type: application/octet-stream',
+                '--data-binary', `@${source}`,
+                '--output', responsePath,
+                endpoint,
+              ], { silent: true });
+              if (code !== 0) throw new Error('release asset upload failed');
+              const uploaded = JSON.parse(await fs.readFile(responsePath, 'utf8'));
+              if (!Number.isSafeInteger(uploaded.id) || uploaded.name !== name
+                  || uploaded.state !== 'uploaded' || uploaded.size !== stat.size) {
+                throw new Error('release asset upload response is invalid');
+              }
+            }
+
+      - name: Snapshot the complete release asset inventory
+        id: inventory
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          EXPECTED_PUBLISHED: ${{ steps.release.outputs.already_published }}
+          PROMOTION_ROOT: ${{ runner.temp }}/ae-mcp-promotion
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+        with:
+          script: |
+            const fs = require('node:fs/promises');
+            const path = require('node:path');
+            const { pathToFileURL } = require('node:url');
+            const { canonicalStringify } = await import(pathToFileURL(path.join(
+              process.env.GITHUB_WORKSPACE, 'scripts', 'release', 'artifact-manifest.mjs',
+            )).href);
+            const { owner, repo } = context.repo;
+            const releaseBody = 'Immutable Mac arm64 and Windows x64 release promoted from one verified RC.';
+            const expectedNames = [
+              'ae-mcp-panel-v0.9.1-macos-arm64.dmg',
+              'ae-mcp-panel-v0.9.1-macos-arm64.zxp',
+              'ae-mcp-panel-v0.9.1-windows-x64.zxp',
+              'artifact-manifest-v0.9.1.json',
+            ].sort();
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner, repo, per_page: 100,
+            });
+            const matches = releases.filter((item) => item.tag_name === 'v0.9.1');
+            if (matches.length !== 1 || String(matches[0].id) !== process.env.RELEASE_ID) {
+              throw new Error('persisted draft release is missing or ambiguous');
+            }
+            const [release] = matches;
+            if (release.tag_name !== 'v0.9.1'
+                || String(release.id) !== process.env.RELEASE_ID
+                || release.name !== 'v0.9.1'
+                || release.body !== releaseBody
+                || release.prerelease === true
+                || String(!release.draft) !== process.env.EXPECTED_PUBLISHED) {
+              throw new Error('release state changed during promotion');
+            }
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, {
+              owner, repo, release_id: release.id, per_page: 100,
+            });
+            const actualNames = assets.map((asset) => asset.name).sort();
+            if (JSON.stringify(actualNames) !== JSON.stringify(expectedNames)
+                || new Set(actualNames).size !== expectedNames.length
+                || assets.some((asset) => asset.state !== 'uploaded' || asset.size <= 0)) {
+              throw new Error('release does not contain the exact complete asset set');
+            }
+            const inventory = {
+              schemaVersion: 1,
+              candidateSha: process.env.CANDIDATE_SHA,
+              releaseId: String(release.id),
+              draft: release.draft,
+              assets: assets.map((asset) => ({
+                id: String(asset.id),
+                name: asset.name,
+                size: asset.size,
+                state: asset.state,
+                updatedAt: asset.updated_at,
+              })).sort((left, right) => left.name.localeCompare(right.name, 'en')),
+            };
+            await fs.writeFile(
+              path.join(process.env.PROMOTION_ROOT, 'release-inventory.json'),
+              canonicalStringify(inventory),
+              { flag: 'wx' },
+            );
+
+      - name: Download the complete draft assets for post-upload verification
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROMOTION_ROOT: ${{ runner.temp }}/ae-mcp-promotion
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+        with:
+          script: |
+            const fs = require('node:fs/promises');
+            const path = require('node:path');
+            const root = process.env.PROMOTION_ROOT;
+            const inventory = JSON.parse(await fs.readFile(
+              path.join(root, 'release-inventory.json'), 'utf8',
+            ));
+            if (inventory.releaseId !== process.env.RELEASE_ID) {
+              throw new Error('persisted release ID changed after upload');
+            }
+            const downloaded = path.join(root, 'release-download');
+            await fs.mkdir(downloaded, { recursive: false });
+            for (const asset of inventory.assets) {
+              if (!/^\d+$/.test(String(asset.id)) || typeof asset.name !== 'string') {
+                throw new Error('release asset snapshot identity is invalid');
+              }
+              const endpoint = `${process.env.GITHUB_API_URL}/repos/${context.repo.owner}/${context.repo.repo}/releases/assets/${asset.id}`;
+              const code = await exec.exec('curl', [
+                '--fail', '--silent', '--show-error', '--location',
+                '--header', 'Accept: application/octet-stream',
+                '--header', `Authorization: Bearer ${process.env.GH_TOKEN}`,
+                '--header', 'X-GitHub-Api-Version: 2026-03-10',
+                '--output', path.join(downloaded, asset.name),
+                endpoint,
+              ], { silent: true });
+              if (code !== 0) throw new Error('post-upload release asset download failed');
+            }
+
+      - name: Revalidate comments, Checks, tag, and downloaded assets before publication
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          AE_MCP_RC_ATTESTORS: ${{ vars.AE_MCP_RC_ATTESTORS }}
+          AE_MCP_RELEASE_ADMIN_TOKEN: ${{ secrets.AE_MCP_RELEASE_ADMIN_TOKEN }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          PROMOTION_ROOT: ${{ runner.temp }}/ae-mcp-promotion
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+        with:
+          script: |
+            const { createHash } = require('node:crypto');
+            const fs = require('node:fs/promises');
+            const path = require('node:path');
+            const { pathToFileURL } = require('node:url');
+            const moduleUrl = (name) => pathToFileURL(path.join(
+              process.env.GITHUB_WORKSPACE, 'scripts', 'release', name,
+            )).href;
+            const {
+              canonicalStringify, MAX_ARTIFACT_MANIFEST_BYTES, serializeArtifactManifest,
+              sha256File, verifyArtifactManifest,
+            } = await import(moduleUrl('artifact-manifest.mjs'));
+            const { validateAttestation } = await import(moduleUrl('attestation.mjs'));
+            const { decodeAttestationComment } = await import(moduleUrl('comment-marker.mjs'));
+            const { assertActiveAttestationRunProvenance } = await import(
+              moduleUrl('check-provenance.mjs')
+            );
+            const {
+              listAllCheckRunsForRef, listAllWorkflowRunsForWorkflow,
+            } = await import(moduleUrl('github-inventory.mjs'));
+            const { reconcileAttestationState } = await import(
+              moduleUrl('verify-release-inputs.mjs')
+            );
+            const root = process.env.PROMOTION_ROOT;
+            const candidateSha = process.env.CANDIDATE_SHA;
+            const { owner, repo } = context.repo;
+            const releaseBody = 'Immutable Mac arm64 and Windows x64 release promoted from one verified RC.';
+
+            async function readCanonical(name) {
+              const text = await fs.readFile(path.join(root, name), 'utf8');
+              const value = JSON.parse(text);
+              if (canonicalStringify(value) !== text) throw new Error(`${name} is not canonical`);
+              return value;
+            }
+            const expected = await readCanonical('expected-digests.json');
+            const inventory = await readCanonical('release-inventory.json');
+            const snapshot = await readCanonical('attestation-snapshot.json');
+            const downloadRoot = path.join(root, 'release-download');
+            const expectedNames = expected.assets.map((asset) => asset.name).sort();
+            const downloadedNames = (await fs.readdir(downloadRoot)).sort();
+            if (JSON.stringify(downloadedNames) !== JSON.stringify(expectedNames)) {
+              throw new Error('downloaded release asset inventory changed');
+            }
+            for (const asset of expected.assets) {
+              const file = path.join(downloadRoot, asset.name);
+              const stat = await fs.lstat(file);
+              if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1
+                  || stat.size !== asset.size || await sha256File(file) !== asset.sha256) {
+                throw new Error(`release asset digest mismatch: ${asset.name}`);
+              }
+            }
+            const manifestPath = path.join(downloadRoot, 'artifact-manifest-v0.9.1.json');
+            const manifestStat = await fs.lstat(manifestPath);
+            if (!manifestStat.isFile() || manifestStat.isSymbolicLink()
+                || manifestStat.nlink !== 1 || manifestStat.size <= 0
+                || manifestStat.size > MAX_ARTIFACT_MANIFEST_BYTES) {
+              throw new Error('release manifest is not one bounded regular file');
+            }
+            const manifestBytes = await fs.readFile(manifestPath);
+            const manifestText = new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes);
+            const manifest = JSON.parse(manifestText);
+            if (!serializeArtifactManifest(manifest).equals(manifestBytes)
+                || manifest.candidateSha !== candidateSha
+                || String(manifest.workflowRunId) !== expected.buildRunId) {
+              throw new Error('release manifest identity mismatch');
+            }
+            const byteErrors = await verifyArtifactManifest(manifest, downloadRoot);
+            if (byteErrors.length) {
+              throw new Error(`release byte verification failed: ${byteErrors.join(', ')}`);
+            }
+
+            const currentReleases = await github.paginate(github.rest.repos.listReleases, {
+              owner, repo, per_page: 100,
+            });
+            const currentMatches = currentReleases.filter((item) => item.tag_name === 'v0.9.1');
+            if (currentMatches.length !== 1
+                || String(currentMatches[0].id) !== process.env.RELEASE_ID) {
+              throw new Error('persisted release is missing or ambiguous');
+            }
+            const [release] = currentMatches;
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, {
+              owner, repo, release_id: release.id, per_page: 100,
+            });
+            const currentInventory = {
+              schemaVersion: 1,
+              candidateSha,
+              releaseId: String(release.id),
+              draft: release.draft,
+              assets: assets.map((asset) => ({
+                id: String(asset.id), name: asset.name, size: asset.size,
+                state: asset.state, updatedAt: asset.updated_at,
+              })).sort((left, right) => left.name.localeCompare(right.name, 'en')),
+            };
+            if (canonicalStringify(currentInventory) !== canonicalStringify(inventory)) {
+              throw new Error('release asset inventory changed');
+            }
+            if (release.tag_name !== 'v0.9.1'
+                || String(release.id) !== process.env.RELEASE_ID
+                || release.name !== 'v0.9.1'
+                || release.body !== releaseBody
+                || release.prerelease === true) {
+              throw new Error('release identity changed');
+            }
+
+            const { data: branch } = await github.rest.repos.getBranch({
+              owner, repo, branch: 'main',
+            });
+            if (branch.protected !== true || branch.commit.sha !== candidateSha) {
+              throw new Error('candidate is no longer current protected main');
+            }
+            const { data: reference } = await github.rest.git.getRef({
+              owner, repo, ref: 'tags/v0.9.1',
+            });
+            if (reference.object?.type !== 'tag') throw new Error('release tag is not annotated');
+            const { data: tag } = await github.rest.git.getTag({
+              owner, repo, tag_sha: reference.object.sha,
+            });
+            if (tag.tag !== 'v0.9.1'
+                || tag.message !== 'AE MCP v0.9.1 immutable RC promotion'
+                || tag.object?.type !== 'commit' || tag.object?.sha !== candidateSha) {
+              throw new Error('release tag changed');
+            }
+
+            const attestors = new Set(String(process.env.AE_MCP_RC_ATTESTORS || '')
+              .split(',').map((item) => item.trim().toLowerCase()).filter(Boolean));
+            if (attestors.size === 0) throw new Error('RC attestor allowlist is empty');
+
+            async function reconcileCurrentCommentAudit() {
+              const prNumber = String(snapshot.commentAudit?.prNumber || '');
+              if (!/^\d+$/.test(prNumber)) throw new Error('attested PR identity is invalid');
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner, repo, issue_number: Number(prNumber), per_page: 100,
+              });
+              const events = [];
+              for (const comment of comments) {
+                const author = String(comment.user?.login || '').toLowerCase();
+                if (!attestors.has(author)) continue;
+                let report;
+                try { report = decodeAttestationComment(String(comment.body || '')); } catch { continue; }
+                const prior = snapshot.checks.find((item) => item.state.platform === report.platform);
+                const artifact = manifest.artifacts.find((item) => (
+                  item.platform === report.platform && item.role === 'install'
+                ));
+                if (!prior || !artifact) continue;
+                const errors = validateAttestation(report, {
+                  platform: report.platform, candidateSha, workflowRunId: expected.buildRunId,
+                  artifactId: artifact.artifactId, artifactName: artifact.name,
+                  artifactSha256: artifact.sha256,
+                });
+                const updatedAt = Date.parse(String(comment.updated_at || ''));
+                if (errors.length !== 0 || !Number.isSafeInteger(updatedAt)) continue;
+                events.push({
+                  action: 'created', commentId: String(comment.id), updatedAt,
+                  candidateSha, platform: report.platform,
+                  artifactId: String(artifact.artifactId),
+                  artifactSha256: artifact.sha256, report,
+                });
+              }
+              events.sort((left, right) => (
+                left.updatedAt - right.updatedAt
+                || (BigInt(left.commentId) < BigInt(right.commentId) ? -1 : 1)
+              ));
+              const states = [];
+              for (const prior of snapshot.checks) {
+                let liveState = null;
+                for (const event of events.filter((item) => item.platform === prior.state.platform)) {
+                  liveState = reconcileAttestationState(liveState, event);
+                }
+                if (!liveState || liveState.candidateRejected === true
+                    || liveState.conclusion !== 'success'
+                    || liveState.activeCommentId !== prior.state.activeCommentId
+                    || liveState.activeUpdatedAt !== prior.state.activeUpdatedAt
+                    || String(liveState.artifactId) !== String(prior.state.artifactId)
+                    || liveState.artifactSha256 !== prior.state.artifactSha256) {
+                  throw new Error('independent attestation comment reconciliation changed');
+                }
+                states.push({
+                  platform: liveState.platform,
+                  activeCommentId: liveState.activeCommentId,
+                  activeUpdatedAt: liveState.activeUpdatedAt,
+                  candidateRejected: liveState.candidateRejected,
+                  conclusion: liveState.conclusion,
+                });
+              }
+              const records = comments.map((comment) => ({
+                id: String(comment.id), updatedAt: comment.updated_at,
+                author: String(comment.user?.login || '').toLowerCase(),
+                bodySha256: createHash('sha256').update(String(comment.body || '')).digest('hex'),
+              })).sort((left, right) => left.id.localeCompare(right.id, 'en'));
+              return {
+                prNumber,
+                count: records.length,
+                sha256: createHash('sha256').update(canonicalStringify(records)).digest('hex'),
+                states: states.sort((left, right) => left.platform.localeCompare(right.platform, 'en')),
+              };
+            }
+
+            async function requireLatestAttestationAttemptsSuccessful(checks) {
+              const runs = await listAllWorkflowRunsForWorkflow(github, {
+                owner, repo, workflowId: 'attestation.yml',
+              });
+              const latestByRun = new Map();
+              for (const run of runs) {
+                if (run.head_sha !== candidateSha) continue;
+                const runId = String(run.id || '');
+                const attempt = run.run_attempt;
+                if (!DECIMAL_ID.test(runId) || !Number.isSafeInteger(attempt) || attempt < 1
+                    || run.event !== 'issue_comment'
+                    || String(run.path || '').split('@')[0]
+                      !== '.github/workflows/attestation.yml') {
+                  throw new Error('candidate attestation workflow run identity is invalid');
+                }
+                const prior = latestByRun.get(runId);
+                if (!prior || attempt > prior.run_attempt) {
+                  latestByRun.set(runId, run);
+                } else if (attempt === prior.run_attempt
+                    && (run.status !== prior.status || run.conclusion !== prior.conclusion)) {
+                  throw new Error('candidate attestation latest attempt is ambiguous');
+                }
+              }
+              const requiredRunIds = new Set(checks.map((check) => (
+                String(check.provenance?.runId || '')
+              )));
+              if (requiredRunIds.size !== checks.length
+                  || [...requiredRunIds].some((runId) => !latestByRun.has(runId))) {
+                throw new Error('active attestation runs are missing from the run inventory');
+              }
+              for (const run of latestByRun.values()) {
+                if (run.status !== 'completed' || run.conclusion !== 'success') {
+                  throw new Error(
+                    'candidate attestation latest attempt must complete successfully; rerun it',
+                  );
+                }
+              }
+            }
+
+            for (const prior of snapshot.checks) {
+              const { data: check } = await github.rest.checks.get({
+                owner, repo, check_run_id: Number(prior.id),
+              });
+              const current = {
+                id: String(check.id),
+                name: check.name,
+                externalId: check.external_id,
+                updatedAt: check.updated_at,
+                detailsUrl: check.details_url,
+                summarySha256: createHash('sha256')
+                  .update(String(check.output?.summary || '')).digest('hex'),
+                state: prior.state,
+                comment: prior.comment,
+                provenance: prior.provenance,
+              };
+              if (check.head_sha !== candidateSha || check.app?.id !== 15368
+                  || check.app?.slug !== 'github-actions' || check.status !== 'completed'
+                  || check.conclusion !== 'success'
+                  || canonicalStringify(current) !== canonicalStringify(prior)) {
+                throw new Error('attestation Check changed after tag validation');
+              }
+              const activeRun = assertActiveAttestationRunProvenance(
+                prior.state,
+                check.details_url,
+                {
+                  serverUrl: process.env.GITHUB_SERVER_URL,
+                  repository: process.env.GITHUB_REPOSITORY,
+                },
+              );
+              if (activeRun.runId !== prior.provenance?.runId
+                  || activeRun.runAttempt !== prior.provenance?.runAttempt) {
+                throw new Error('active attestation snapshot provenance changed');
+              }
+              const { data: provenanceRun } = await github.rest.actions.getWorkflowRun({
+                owner, repo, run_id: Number(activeRun.runId),
+              });
+              const { data: provenanceWorkflow } = await github.rest.actions.getWorkflow({
+                owner, repo, workflow_id: provenanceRun.workflow_id,
+              });
+              const provenancePath = String(provenanceRun.path || '').split('@')[0];
+              const { data: provenanceFile } = await github.rest.repos.getContent({
+                owner, repo, path: '.github/workflows/attestation.yml',
+                ref: provenanceRun.head_sha,
+              });
+              const currentProvenance = {
+                runId: String(provenanceRun.id),
+                runAttempt: provenanceRun.run_attempt,
+                workflowId: String(provenanceRun.workflow_id),
+                workflowPath: provenancePath,
+                workflowSha: provenanceRun.head_sha,
+                workflowBlobSha: Array.isArray(provenanceFile) ? null : provenanceFile.sha,
+                event: provenanceRun.event,
+                headBranch: provenanceRun.head_branch,
+                repository: `${owner}/${repo}`,
+              };
+              if (provenanceRun.status !== 'completed'
+                  || provenanceRun.conclusion !== 'success'
+                  || provenanceWorkflow.path !== '.github/workflows/attestation.yml'
+                  || provenanceWorkflow.state !== 'active'
+                  || canonicalStringify(currentProvenance)
+                    !== canonicalStringify(prior.provenance)) {
+                throw new Error('attestation workflow run provenance changed');
+              }
+              let response;
+              try {
+                response = await github.rest.issues.getComment({
+                  owner, repo, comment_id: Number(prior.state.activeCommentId),
+                });
+              } catch (error) {
+                if (error?.status === 404) {
+                  throw new Error('active attestation comment was deleted or is unavailable');
+                }
+                throw error;
+              }
+              const comment = response.data;
+              const body = String(comment.body || '');
+              const author = String(comment.user?.login || '').toLowerCase();
+              if (Date.parse(String(comment.updated_at || '')) !== prior.state.activeUpdatedAt) {
+                throw new Error('active attestation comment timestamp mismatch');
+              }
+              if (!attestors.has(author) || author !== prior.comment.author) {
+                throw new Error('active attestation comment author mismatch');
+              }
+              if (createHash('sha256').update(body).digest('hex') !== prior.comment.bodySha256) {
+                throw new Error('active attestation comment body mismatch');
+              }
+              let report;
+              try {
+                report = decodeAttestationComment(body);
+              } catch {
+                throw new Error('active attestation comment body mismatch');
+              }
+              const artifact = manifest.artifacts.find((item) => (
+                item.platform === prior.state.platform && item.role === 'install'
+              ));
+              const reportErrors = validateAttestation(report, {
+                platform: prior.state.platform,
+                result: 'PASS',
+                candidateSha,
+                workflowRunId: expected.buildRunId,
+                artifactId: prior.state.artifactId,
+                artifactName: artifact?.name,
+                artifactSha256: prior.state.artifactSha256,
+              });
+              if (reportErrors.length !== 0) {
+                throw new Error('active attestation comment body mismatch');
+              }
+              const issueNumber = String(comment.issue_url || '').split('/').at(-1);
+              if (issueNumber !== prior.comment.prNumber || String(comment.id) !== prior.comment.id) {
+                throw new Error('active attestation comment is not on the attested PR');
+              }
+              const { data: pr } = await github.rest.pulls.get({
+                owner, repo, pull_number: Number(issueNumber),
+              });
+              if (pr.merged !== true || pr.base?.ref !== 'main'
+                  || pr.merge_commit_sha !== candidateSha) {
+                throw new Error('active attestation comment PR is not the candidate merge');
+              }
+            }
+
+            const currentCommentAudit = await reconcileCurrentCommentAudit();
+            if (canonicalStringify(currentCommentAudit)
+                !== canonicalStringify(snapshot.commentAudit)) {
+              throw new Error('candidate PR comment history changed after tag validation');
+            }
+            await requireLatestAttestationAttemptsSuccessful(snapshot.checks);
+
+            const locks = await listAllCheckRunsForRef(github, {
+              owner, repo, ref: candidateSha,
+            });
+            const lockId = `ae-mcp-build-lock:${candidateSha}`;
+            const trustedLocks = locks.filter((check) => check.name === 'signed-rc-build'
+              && check.external_id === lockId && check.head_sha === candidateSha);
+            if (trustedLocks.length !== 1 || trustedLocks[0].app?.id !== 15368
+                || trustedLocks[0].app?.slug !== 'github-actions'
+                || trustedLocks[0].status !== 'completed'
+                || trustedLocks[0].conclusion !== 'success') {
+              throw new Error('signed-rc-build Check changed before publication');
+            }
+
+            const immutableResponse = path.join(root, 'immutable-settings-final.json');
+            const immutableEndpoint = `${process.env.GITHUB_API_URL}/repos/${owner}/${repo}/immutable-releases`;
+            const immutableCode = await exec.exec('curl', [
+              '--fail', '--silent', '--show-error',
+              '--header', 'Accept: application/vnd.github+json',
+              '--header', `Authorization: Bearer ${process.env.AE_MCP_RELEASE_ADMIN_TOKEN}`,
+              '--header', 'X-GitHub-Api-Version: 2026-03-10',
+              '--output', immutableResponse,
+              immutableEndpoint,
+            ], { silent: true });
+            if (immutableCode !== 0) {
+              throw new Error('repository immutable releases changed before publication');
+            }
+            const immutable = JSON.parse(await fs.readFile(immutableResponse, 'utf8'));
+            if (immutable?.enabled !== true) {
+              throw new Error('repository immutable releases changed before publication');
+            }
+
+            const finalReleases = await github.paginate(github.rest.repos.listReleases, {
+              owner, repo, per_page: 100,
+            });
+            const finalMatches = finalReleases.filter((item) => item.tag_name === 'v0.9.1');
+            if (finalMatches.length !== 1
+                || String(finalMatches[0].id) !== process.env.RELEASE_ID) {
+              throw new Error('persisted release disappeared before publication');
+            }
+            const [prePublicationRelease] = finalMatches;
+            if (String(prePublicationRelease.id) !== process.env.RELEASE_ID
+                || prePublicationRelease.tag_name !== 'v0.9.1'
+                || prePublicationRelease.name !== 'v0.9.1'
+                || prePublicationRelease.body !== releaseBody
+                || prePublicationRelease.prerelease === true
+                || (!prePublicationRelease.draft && prePublicationRelease.immutable !== true)) {
+              throw new Error('release identity changed immediately before publication');
+            }
+            const finalAssets = await github.paginate(github.rest.repos.listReleaseAssets, {
+              owner, repo, release_id: prePublicationRelease.id, per_page: 100,
+            });
+            const finalInventory = {
+              schemaVersion: 1,
+              candidateSha,
+              releaseId: String(prePublicationRelease.id),
+              draft: prePublicationRelease.draft,
+              assets: finalAssets.map((asset) => ({
+                id: String(asset.id), name: asset.name, size: asset.size,
+                state: asset.state, updatedAt: asset.updated_at,
+              })).sort((left, right) => left.name.localeCompare(right.name, 'en')),
+            };
+            if (canonicalStringify(finalInventory) !== canonicalStringify(inventory)) {
+              throw new Error('release asset inventory changed immediately before publication');
+            }
+
+            async function revalidatePublicationGate(expectedDraft) {
+              if (typeof expectedDraft !== 'boolean') {
+                throw new Error('publication gate requires an exact draft state');
+              }
+              const { data: currentBranch } = await github.rest.repos.getBranch({
+                owner, repo, branch: 'main',
+              });
+              if (currentBranch.protected !== true || currentBranch.commit.sha !== candidateSha) {
+                throw new Error('candidate changed immediately before publication');
+              }
+              const { data: currentReference } = await github.rest.git.getRef({
+                owner, repo, ref: 'tags/v0.9.1',
+              });
+              if (currentReference.object?.type !== 'tag') {
+                throw new Error('release tag changed immediately before publication');
+              }
+              const { data: currentTag } = await github.rest.git.getTag({
+                owner, repo, tag_sha: currentReference.object.sha,
+              });
+              if (currentTag.tag !== 'v0.9.1'
+                  || currentTag.message !== 'AE MCP v0.9.1 immutable RC promotion'
+                  || currentTag.object?.type !== 'commit'
+                  || currentTag.object?.sha !== candidateSha) {
+                throw new Error('release tag changed immediately before publication');
+              }
+
+              for (const prior of snapshot.checks) {
+                const { data: check } = await github.rest.checks.get({
+                  owner, repo, check_run_id: Number(prior.id),
+                });
+                const currentCheck = {
+                  id: String(check.id),
+                  name: check.name,
+                  externalId: check.external_id,
+                  updatedAt: check.updated_at,
+                  detailsUrl: check.details_url,
+                  summarySha256: createHash('sha256')
+                    .update(String(check.output?.summary || '')).digest('hex'),
+                  state: prior.state,
+                  comment: prior.comment,
+                  provenance: prior.provenance,
+                };
+                if (check.head_sha !== candidateSha || check.app?.id !== 15368
+                    || check.app?.slug !== 'github-actions' || check.status !== 'completed'
+                    || check.conclusion !== 'success'
+                    || canonicalStringify(currentCheck) !== canonicalStringify(prior)) {
+                  throw new Error('attestation Check changed immediately before publication');
+                }
+                const activeRun = assertActiveAttestationRunProvenance(
+                  prior.state,
+                  check.details_url,
+                  {
+                    serverUrl: process.env.GITHUB_SERVER_URL,
+                    repository: process.env.GITHUB_REPOSITORY,
+                  },
+                );
+                if (activeRun.runId !== prior.provenance?.runId
+                    || activeRun.runAttempt !== prior.provenance?.runAttempt) {
+                  throw new Error('active attestation provenance changed before publication');
+                }
+                const { data: run } = await github.rest.actions.getWorkflowRun({
+                  owner, repo, run_id: Number(activeRun.runId),
+                });
+                const { data: workflow } = await github.rest.actions.getWorkflow({
+                  owner, repo, workflow_id: run.workflow_id,
+                });
+                const workflowPath = String(run.path || '').split('@')[0];
+                const { data: workflowFile } = await github.rest.repos.getContent({
+                  owner, repo, path: '.github/workflows/attestation.yml', ref: run.head_sha,
+                });
+                const provenance = {
+                  runId: String(run.id),
+                  runAttempt: run.run_attempt,
+                  workflowId: String(run.workflow_id),
+                  workflowPath,
+                  workflowSha: run.head_sha,
+                  workflowBlobSha: Array.isArray(workflowFile) ? null : workflowFile.sha,
+                  event: run.event,
+                  headBranch: run.head_branch,
+                  repository: `${owner}/${repo}`,
+                };
+                if (run.status !== 'completed' || run.conclusion !== 'success'
+                    || workflow.path !== '.github/workflows/attestation.yml'
+                    || workflow.state !== 'active'
+                    || canonicalStringify(provenance) !== canonicalStringify(prior.provenance)) {
+                  throw new Error('attestation provenance changed immediately before publication');
+                }
+              }
+
+              const commentAudit = await reconcileCurrentCommentAudit();
+              if (canonicalStringify(commentAudit)
+                  !== canonicalStringify(snapshot.commentAudit)) {
+                throw new Error('candidate PR comments changed immediately before publication');
+              }
+              await requireLatestAttestationAttemptsSuccessful(snapshot.checks);
+
+              const currentLocks = await listAllCheckRunsForRef(github, {
+                owner, repo, ref: candidateSha,
+              });
+              const expectedLockId = `ae-mcp-build-lock:${candidateSha}`;
+              const currentTrustedLocks = currentLocks.filter((check) => (
+                check.name === 'signed-rc-build' && check.external_id === expectedLockId
+                && check.head_sha === candidateSha
+              ));
+              if (currentTrustedLocks.length !== 1
+                  || currentTrustedLocks[0].app?.id !== 15368
+                  || currentTrustedLocks[0].app?.slug !== 'github-actions'
+                  || currentTrustedLocks[0].status !== 'completed'
+                  || currentTrustedLocks[0].conclusion !== 'success') {
+                throw new Error('signed-rc-build Check changed immediately before publication');
+              }
+
+              const adminToken = process.env.AE_MCP_RELEASE_ADMIN_TOKEN;
+              if (!adminToken) throw new Error('immutable releases admin-read token is missing');
+              const immutablePath = path.join(root, 'immutable-settings-mutation.json');
+              const immutableUrl = `${process.env.GITHUB_API_URL}/repos/${owner}/${repo}/immutable-releases`;
+              const immutableStatus = await exec.exec('curl', [
+                '--fail', '--silent', '--show-error',
+                '--header', 'Accept: application/vnd.github+json',
+                '--header', `Authorization: Bearer ${adminToken}`,
+                '--header', 'X-GitHub-Api-Version: 2026-03-10',
+                '--output', immutablePath,
+                immutableUrl,
+              ], { silent: true });
+              if (immutableStatus !== 0) {
+                throw new Error('repository immutable releases changed immediately before publication');
+              }
+              const immutable = JSON.parse(await fs.readFile(immutablePath, 'utf8'));
+              if (immutable?.enabled !== true) {
+                throw new Error('repository immutable releases changed immediately before publication');
+              }
+
+              const releases = await github.paginate(github.rest.repos.listReleases, {
+                owner, repo, per_page: 100,
+              });
+              const matches = releases.filter((item) => item.tag_name === 'v0.9.1');
+              if (matches.length !== 1 || String(matches[0].id) !== process.env.RELEASE_ID) {
+                throw new Error('persisted release changed immediately before publication');
+              }
+              const [release] = matches;
+              if (String(release.id) !== process.env.RELEASE_ID
+                  || release.tag_name !== 'v0.9.1'
+                  || release.name !== 'v0.9.1' || release.body !== releaseBody
+                  || release.prerelease === true
+                  || release.draft !== expectedDraft
+                  || (!release.draft && release.immutable !== true)) {
+                throw new Error('release identity changed immediately before publication');
+              }
+              const assets = await github.paginate(github.rest.repos.listReleaseAssets, {
+                owner, repo, release_id: release.id, per_page: 100,
+              });
+              const currentInventory = {
+                schemaVersion: 1,
+                candidateSha,
+                releaseId: String(release.id),
+                draft: release.draft,
+                assets: assets.map((asset) => ({
+                  id: String(asset.id), name: asset.name, size: asset.size,
+                  state: asset.state, updatedAt: asset.updated_at,
+                })).sort((left, right) => left.name.localeCompare(right.name, 'en')),
+              };
+              const expectedInventory = { ...inventory, draft: expectedDraft };
+              if (canonicalStringify(currentInventory) !== canonicalStringify(expectedInventory)) {
+                throw new Error('release assets changed immediately before publication');
+              }
+              return release;
+            }
+
+            if (release.draft) {
+              const publishableRelease = await revalidatePublicationGate(true);
+              const { data: published } = await github.rest.repos.updateRelease({
+                owner, repo, release_id: publishableRelease.id, draft: false,
+              });
+              if (String(published.id) !== process.env.RELEASE_ID
+                  || published.tag_name !== 'v0.9.1'
+                  || published.name !== 'v0.9.1'
+                  || published.body !== releaseBody
+                  || published.prerelease === true
+                  || published.draft !== false || published.immutable !== true) {
+                throw new Error('release publication did not become immutable');
+              }
+              const publishedRelease = await revalidatePublicationGate(false);
+              if (String(publishedRelease.id) !== process.env.RELEASE_ID
+                  || publishedRelease.draft !== false
+                  || publishedRelease.immutable !== true) {
+                throw new Error('published release immutability could not be reverified');
+              }
+            } else {
+              const publishedRelease = await revalidatePublicationGate(false);
+              if (String(publishedRelease.id) !== process.env.RELEASE_ID
+                  || publishedRelease.immutable !== true) {
+                throw new Error('published release immutability could not be reverified');
+              }
+              core.notice('release already published and all immutable bytes still match');
+            }

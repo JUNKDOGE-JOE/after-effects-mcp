@@ -32,8 +32,14 @@ if (-not (Test-Path -LiteralPath $resolvedRoot -PathType Container)) {
   Fail-Signing 'SIGNING_ROOT_MISSING: signing root does not exist'
 }
 if ([string]::IsNullOrWhiteSpace($env:AE_MCP_WINDOWS_SIGNING_CERT_SHA1) -or
-    [string]::IsNullOrWhiteSpace($env:AE_MCP_WINDOWS_TIMESTAMP_URL)) {
-  Fail-Signing 'SIGNING_CREDENTIAL_MISSING: Windows signing certificate and timestamp URL are required'
+    [string]::IsNullOrWhiteSpace($env:AE_MCP_WINDOWS_TIMESTAMP_URL) -or
+    [string]::IsNullOrWhiteSpace($env:AE_MCP_WINDOWS_SIGNTOOL_PATH)) {
+  Fail-Signing 'SIGNING_CREDENTIAL_MISSING: Windows signing certificate, timestamp URL, and SignTool are required'
+}
+if ($env:AE_MCP_WINDOWS_SIGNING_CERT_SHA1 -notmatch '^[0-9A-F]{40}$' -or
+    -not [IO.Path]::IsPathFullyQualified($env:AE_MCP_WINDOWS_SIGNTOOL_PATH) -or
+    -not (Test-Path -LiteralPath $env:AE_MCP_WINDOWS_SIGNTOOL_PATH -PathType Leaf)) {
+  Fail-Signing 'SIGNING_CREDENTIAL_PATH_INVALID: reviewed SignTool path or signer identity is invalid'
 }
 if (Test-Path -LiteralPath $resolvedEvidence) {
   Fail-Signing 'SIGNING_OUTPUT_EXISTS: evidence already exists'
@@ -79,13 +85,13 @@ function Test-PeFile([string]$FilePath) {
 }
 
 function Invoke-Sign([string]$FilePath) {
-  & signtool.exe sign /sha1 $env:AE_MCP_WINDOWS_SIGNING_CERT_SHA1 /fd SHA256 `
+  & $env:AE_MCP_WINDOWS_SIGNTOOL_PATH sign /sha1 $env:AE_MCP_WINDOWS_SIGNING_CERT_SHA1 /fd SHA256 `
     /tr $env:AE_MCP_WINDOWS_TIMESTAMP_URL /td SHA256 $FilePath 2>$null | Out-Null
   if ($LASTEXITCODE -ne 0) { Fail-Signing 'SIGNING_COMMAND_FAILED: Authenticode signing failed' }
 }
 
 function Invoke-Verify([string]$FilePath) {
-  & signtool.exe verify /pa /all $FilePath 2>$null | Out-Null
+  & $env:AE_MCP_WINDOWS_SIGNTOOL_PATH verify /pa /all $FilePath 2>$null | Out-Null
   if ($LASTEXITCODE -ne 0) { Fail-Signing 'SIGNING_VERIFY_FAILED: Authenticode verification failed' }
 }
 
@@ -139,7 +145,8 @@ assertNestedNativeCoverage({ nativePaths: values, verifiedPaths: values });
     Fail-Signing 'SIGNING_IDENTITY_INVALID: signer or RFC 3161 timestamp was not verified'
   }
   $thumbprint = $signature.SignerCertificate.Thumbprint.ToUpperInvariant()
-  if ($thumbprint -notmatch '^[0-9A-F]{40}$') {
+  if ($thumbprint -notmatch '^[0-9A-F]{40}$' -or
+      $thumbprint -ne $env:AE_MCP_WINDOWS_SIGNING_CERT_SHA1) {
     Fail-Signing 'SIGNING_IDENTITY_INVALID: Authenticode thumbprint is invalid'
   }
 

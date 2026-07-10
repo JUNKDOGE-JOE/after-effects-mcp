@@ -22,10 +22,10 @@
 // Message format: {method, params, id?} — NO jsonrpc field (server rejects it).
 
 import { createNdjsonReader } from '../lib/ndjson.js';
-import { resolveSystemNode } from './claudeAgentBackend.js';
 import { expertGuidanceEnv } from './externalClients.js';
 import { createApiKeyStore } from './apiKey.js';
 import { localizeZcodeError } from '../lib/zcodeErrors.js';
+import { createPlatformAdapter } from './platform/index.js';
 
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -33,11 +33,6 @@ const DELIVERY_KIND = 'desktop-continuous';
 const ZCODE_BUILTIN_DEFAULT_MODEL = 'builtin:bigmodel-start-plan/GLM-5.2';
 const LEGACY_ZCODE_MODEL_REFS = new Set(['mediastorm_glm/glm-5.2']);
 const ZCODE_THOUGHT_LEVELS = new Set(['nothink', 'high', 'max', 'low', 'medium']);
-const ZCODE_CREDENTIAL_PREFIX = 'enc:v1:';
-const ZCODE_API_KEY_NAME = 'zcode-api-key';
-const BIGMODEL_API_ORIGIN = 'https://bigmodel.cn';
-const ZAI_BIZ_API_ORIGIN = 'https://api.z.ai';
-const JSON_CONTENT_TYPE = 'application/json';
 
 // ZCode permission modes map onto the panel's four approval tiers.
 const MODE_BY_TIER = {
@@ -46,19 +41,6 @@ const MODE_BY_TIER = {
   auto: 'edit',
   none: 'yolo',
 };
-
-function getCepRequire() {
-  if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-    return globalThis.window.cep_node.require;
-  }
-  if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-  if (globalThis.require) return globalThis.require;
-  throw new Error('CEP Node require is unavailable');
-}
-
-function getCepEnv() {
-  return (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env) || {};
-}
 
 function appendTail(tail, chunk) {
   const next = tail + String(chunk || '');
@@ -69,45 +51,12 @@ function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
 
-// Resolve the ZCode CLI bundle. Checks the env override first, then the
-// standard install path under LOCALAPPDATA, then `where zcode` on PATH.
-async function resolveZcodeCli({ env, execFileImpl }) {
-  const override = env && env.AE_MCP_ZCODE_CLI;
-  if (override) return { ok: true, cliPath: override };
-
-  const localAppData = env && (env.LOCALAPPDATA || env.LocalAppData);
-  if (localAppData) {
-    const path = localAppData + '\\Programs\\ZCode\\resources\\glm\\zcode.cjs';
-    try {
-      await statFile(path);
-      return { ok: true, cliPath: path };
-    } catch (e) { /* not installed here, fall through */ }
-  }
-
-  // Last resort: a `zcode` shim on PATH (rare; the installer is Electron-only).
-  const execFile = execFileImpl || getCepRequire()('child_process').execFile;
-  try {
-    const where = await execFileAsync(execFile, 'where', ['zcode'], env || {});
-    if (!where.err && where.stdout) {
-      const exe = String(where.stdout).split(/\r?\n/)[0].trim();
-      if (exe) return { ok: true, cliPath: exe, isExe: true };
-    }
-  } catch (e) { /* ignore */ }
-
-  return { ok: false, detail: 'ZCode CLI not found. Install ZCode or set AE_MCP_ZCODE_CLI to the zcode.cjs path.' };
-}
-
-function statFile(path) {
-  const fs = getCepRequire()('fs');
-  return new Promise((resolve, reject) => fs.stat(path, (err) => (err ? reject(err) : resolve())));
-}
-
-function execFileAsync(execFile, cmd, args, env) {
-  return new Promise((resolve) => {
-    execFile(cmd, args, { env, windowsHide: true }, (err, stdout, stderr) => {
-      resolve({ err, stdout: String(stdout || ''), stderr: String(stderr || '') });
-    });
-  });
+async function resolveZcodeCli({ env, platform }) {
+  const adapter = platform || createPlatformAdapter();
+  const requiredArch = adapter.id === 'macos-arm64' ? 'arm64' : (adapter.id === 'windows-x64' ? 'x64' : undefined);
+  const executable = await adapter.resolveExecutable('zcode', { env: env || {}, ...(requiredArch ? { requiredArch } : {}) });
+  if (!executable.ok) return { ok: false, detail: 'ZCode CLI resolution failed: ' + executable.code, resolution: executable };
+  return { ok: true, cliPath: executable.path, executable };
 }
 
 // Minimal RPC for ZCode's stripped protocol (no jsonrpc field).
@@ -162,6 +111,7 @@ function createRpc({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEO
     const limit = timeoutOverrideMs || timeoutMs;
     const promise = new Promise((resolve, reject) => {
       const timer = setTimeout(() => rejectPending(id, new Error(method + ' timed out after ' + limit + 'ms')), limit);
+      if (timer && timer.unref) timer.unref();
       pending.set(id, { resolve, reject, timer });
     });
     writeMessage(message);
@@ -366,22 +316,12 @@ export function zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef, 
   };
 }
 
-function zcodeDesktopBasePath(env) {
-  const home = env && (env.USERPROFILE || env.HOME || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : ''));
-  return home ? String(home).replace(/[\\/]+$/, '') + '\\.zcode\\v2' : '';
-}
-
 function readJsonFile(fsImpl, path) {
   try {
     return JSON.parse(fsImpl.readFileSync(path, 'utf8'));
   } catch (e) {
     return null;
   }
-}
-
-function zcodeCliBasePath(env) {
-  const home = env && (env.USERPROFILE || env.HOME || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : ''));
-  return home ? String(home).replace(/[\\/]+$/, '') + '\\.zcode\\cli' : '';
 }
 
 export function mergeZcodeConfigs({ cliConfig, desktopConfig } = {}) {
@@ -391,19 +331,20 @@ export function mergeZcodeConfigs({ cliConfig, desktopConfig } = {}) {
   return Object.keys(provider).length ? { provider } : null;
 }
 
-function readZcodeConfigs({ env, fsImpl } = {}) {
-  const fs = fsImpl || getCepRequire()('fs');
-  const desktopBase = zcodeDesktopBasePath(env || {});
-  const cliBase = zcodeCliBasePath(env || {});
-  const desktopConfig = desktopBase ? readJsonFile(fs, desktopBase + '\\config.json') : null;
-  const setting = desktopBase ? readJsonFile(fs, desktopBase + '\\setting.json') : null;
-  const cliConfig = cliBase ? readJsonFile(fs, cliBase + '\\config.json') : null;
+function readZcodeConfigs({ fsImpl, platform } = {}) {
+  const adapter = platform || createPlatformAdapter();
+  const fs = fsImpl || adapter.fs;
+  const desktopBase = adapter.paths.join([adapter.paths.home, '.zcode', 'v2']);
+  const cliBase = adapter.paths.join([adapter.paths.home, '.zcode', 'cli']);
+  const desktopConfig = readJsonFile(fs, adapter.paths.join([desktopBase, 'config.json']));
+  const setting = readJsonFile(fs, adapter.paths.join([desktopBase, 'setting.json']));
+  const cliConfig = readJsonFile(fs, adapter.paths.join([cliBase, 'config.json']));
   const cliModel = cliConfig && typeof cliConfig.model === 'string' ? cliConfig.model.trim() : '';
   return { config: mergeZcodeConfigs({ cliConfig, desktopConfig }), setting, cliModel, cliConfig, desktopConfig };
 }
 
-export function readZcodeDesktopModel({ env, fsImpl } = {}) {
-  const { config, setting, cliModel } = readZcodeConfigs({ env, fsImpl });
+export function readZcodeDesktopModel({ env, fsImpl, platform } = {}) {
+  const { config, setting, cliModel } = readZcodeConfigs({ fsImpl, platform });
   if (cliModel) {
     const requested = zcodeProtocolModelFromRef(cliModel);
     if (requested && config && config.provider && config.provider[requested.providerId]) return cliModel;
@@ -411,14 +352,14 @@ export function readZcodeDesktopModel({ env, fsImpl } = {}) {
   return zcodeModelFromDesktopConfig({ config, setting, env: env || {} });
 }
 
-export function readZcodeDesktopRuntimeModel({ env, fsImpl, modelRef, thoughtLevel, storedKey = '' } = {}) {
-  const { config, setting, cliModel } = readZcodeConfigs({ env, fsImpl });
+export function readZcodeDesktopRuntimeModel({ env, fsImpl, platform, modelRef, thoughtLevel, storedKey = '' } = {}) {
+  const { config, setting, cliModel } = readZcodeConfigs({ fsImpl, platform });
   const ref = modelRef || cliModel || '';
   return zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef: ref, thoughtLevel, env: env || {}, storedKey });
 }
 
-export function summarizeZcodeConfig({ env = {}, fsImpl, storedKey = '' } = {}) {
-  const { cliConfig, desktopConfig, cliModel } = readZcodeConfigs({ env, fsImpl });
+export function summarizeZcodeConfig({ env = {}, fsImpl, platform, storedKey = '' } = {}) {
+  const { cliConfig, desktopConfig, cliModel } = readZcodeConfigs({ fsImpl, platform });
   const cliProviders = (cliConfig && cliConfig.provider) || {};
   const cliProviderId = zcodeProviderId(cliModel) || Object.keys(cliProviders)[0] || '';
   const cliProvider = cliProviderId ? cliProviders[cliProviderId] : null;
@@ -445,188 +386,6 @@ export function summarizeZcodeConfig({ env = {}, fsImpl, storedKey = '' } = {}) 
       hasCredential: hasZcodeProviderCredential(startPlanProvider, env),
     } : null,
   };
-}
-
-function zcodeProviderFamily(providerId) {
-  const text = String(providerId || '').trim();
-  const id = text.startsWith('builtin:') ? text.slice('builtin:'.length) : text;
-  return id.replace(/-(?:start|coding)-plan$/i, '').split(/[/:]/)[0];
-}
-
-function getNodeBuffer() {
-  return globalThis.Buffer || getCepRequire()('buffer').Buffer;
-}
-
-function zcodeCredentialSecret(env, osImpl) {
-  const explicit = env && env.ZCODE_CREDENTIAL_SECRET && String(env.ZCODE_CREDENTIAL_SECRET).trim();
-  if (explicit) return explicit;
-  const os = osImpl || getCepRequire()('os');
-  let username = 'unknown';
-  try { username = os.userInfo().username; } catch (e) { /* keep fallback username */ }
-  return 'zcode-credential-fallback:' + os.platform() + ':' + os.homedir() + ':' + username;
-}
-
-function decryptZcodeCredentialValue(value, { env, cryptoImpl, osImpl } = {}) {
-  const text = String(value || '');
-  if (!text.startsWith(ZCODE_CREDENTIAL_PREFIX)) return text;
-  const crypto = cryptoImpl || getCepRequire()('crypto');
-  const BufferImpl = getNodeBuffer();
-  const parts = text.slice(ZCODE_CREDENTIAL_PREFIX.length).split('.');
-  if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) {
-    throw new Error('Credential decrypt failed: invalid ciphertext format');
-  }
-  const key = crypto.createHash('sha256').update(zcodeCredentialSecret(env || {}, osImpl)).digest();
-  const iv = BufferImpl.from(parts[0], 'base64url');
-  const authTag = BufferImpl.from(parts[1], 'base64url');
-  const cipherText = BufferImpl.from(parts[2], 'base64url');
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-  decipher.setAuthTag(authTag);
-  return BufferImpl.concat([decipher.update(cipherText), decipher.final()]).toString('utf8');
-}
-
-function readZcodeOAuthAccessToken({ env, fsImpl, providerId } = {}) {
-  const base = zcodeDesktopBasePath(env || {});
-  if (!base) return '';
-  const fs = fsImpl || getCepRequire()('fs');
-  const credentials = readJsonFile(fs, base + '\\credentials.json');
-  if (!credentials || typeof credentials !== 'object') return '';
-
-  const providers = [];
-  const family = zcodeProviderFamily(providerId);
-  if (family) providers.push(family);
-  const active = credentials['oauth:active_provider'];
-  if (active) {
-    try {
-      const activeProvider = decryptZcodeCredentialValue(active, { env });
-      if (activeProvider && !providers.includes(activeProvider)) providers.push(activeProvider);
-    } catch (e) { /* ignore unreadable active provider and try explicit provider */ }
-  }
-
-  for (const provider of providers) {
-    const raw = credentials['oauth:' + provider + ':access_token'];
-    if (!raw) continue;
-    return decryptZcodeCredentialValue(raw, { env });
-  }
-  return '';
-}
-
-function resolveBigModelApiOrigin(env = {}) {
-  const explicit = env.BIGMODEL_API_BASE_URL || env.BIGMODEL_PRODUCTION_API_BASE_URL;
-  return String(explicit || BIGMODEL_API_ORIGIN).replace(/\/+$/, '');
-}
-
-function remoteCodeOk(code) {
-  return code === undefined || code === null || code === 0 || code === 200 || code === '0' || code === '200';
-}
-
-async function defaultHttpRequestJson({ url, method = 'GET', headers = {}, body }) {
-  const target = new URL(url);
-  const moduleName = target.protocol === 'http:' ? 'http' : 'https';
-  const http = getCepRequire()(moduleName);
-  const BufferImpl = getNodeBuffer();
-  const payload = body === undefined ? null : (typeof body === 'string' ? body : JSON.stringify(body));
-  const requestHeaders = Object.assign({}, headers);
-  if (payload !== null && requestHeaders['Content-Length'] === undefined) {
-    requestHeaders['Content-Length'] = String(BufferImpl.byteLength(payload));
-  }
-  return new Promise((resolve, reject) => {
-    const req = http.request(target, { method, headers: requestHeaders }, (res) => {
-      const chunks = [];
-      res.on('data', (chunk) => chunks.push(chunk));
-      res.on('end', () => {
-        const text = BufferImpl.concat(chunks).toString('utf8');
-        if (res.statusCode < 200 || res.statusCode >= 300) {
-          reject(new Error('ZCode OAuth request failed with HTTP ' + res.statusCode + ': ' + text.slice(0, 300)));
-          return;
-        }
-        try {
-          resolve(text ? JSON.parse(text) : {});
-        } catch (e) {
-          reject(new Error('ZCode OAuth response was not valid JSON'));
-        }
-      });
-    });
-    req.on('error', reject);
-    if (payload !== null) req.write(payload);
-    req.end();
-  });
-}
-
-async function requestRemoteData(requestJson, options) {
-  const json = await requestJson(options);
-  if (!json || typeof json !== 'object') throw new Error('ZCode OAuth response was empty');
-  if (!remoteCodeOk(json.code)) throw new Error(json.msg || ('Remote business error ' + json.code));
-  return json.data ?? null;
-}
-
-function pickOrgAndProject(customerInfo) {
-  const organizations = customerInfo && Array.isArray(customerInfo.organizations) ? customerInfo.organizations : [];
-  const org = organizations.find((item) => String(item.organizationName || '').includes('\u9ED8\u8BA4\u673A\u6784')) || organizations[0];
-  const projects = org && Array.isArray(org.projects) ? org.projects : [];
-  const project = projects.find((item) => String(item.projectName || '').includes('\u9ED8\u8BA4\u9879\u76EE')) || projects[0];
-  if (!org || !project || !org.organizationId || !project.projectId) return null;
-  return { organizationId: org.organizationId, projectId: project.projectId };
-}
-
-async function resolveBizApiKey({ authorization, host, requestJson, requireSecretKey = false }) {
-  const headers = { Authorization: authorization, 'Content-Type': JSON_CONTENT_TYPE };
-  const customer = await requestRemoteData(requestJson, {
-    method: 'GET',
-    url: host + '/api/biz/customer/getCustomerInfo',
-    headers,
-  });
-  const orgProject = pickOrgAndProject(customer);
-  if (!orgProject) throw new Error('Unable to resolve ZCode OAuth organization and project.');
-
-  const apiKeysUrl = host + '/api/biz/v1/organization/' + encodeURIComponent(orgProject.organizationId)
-    + '/projects/' + encodeURIComponent(orgProject.projectId) + '/api_keys';
-  const apiKeys = await requestRemoteData(requestJson, { method: 'GET', url: apiKeysUrl, headers });
-  const existing = Array.isArray(apiKeys) ? apiKeys.find((item) => item && item.name === ZCODE_API_KEY_NAME) : null;
-  const created = existing || await requestRemoteData(requestJson, {
-    method: 'POST',
-    url: apiKeysUrl,
-    headers,
-    body: { name: ZCODE_API_KEY_NAME },
-  });
-  const apiKey = String((created && (created.apiKey || created.api_key)) || '').trim();
-  if (!apiKey) throw new Error('ZCode OAuth API key response is missing apiKey.');
-
-  const copied = await requestRemoteData(requestJson, {
-    method: 'GET',
-    url: apiKeysUrl + '/copy/' + encodeURIComponent(apiKey),
-    headers,
-  });
-  const secretKey = String((copied && (copied.secretKey || copied.secret_key)) || '').trim();
-  if (!secretKey && requireSecretKey) throw new Error('ZCode OAuth API key copy response is missing secretKey.');
-  return secretKey ? apiKey + '.' + secretKey : apiKey;
-}
-
-async function resolveZcodeCodingPlanApiKey({ accessToken, providerId, env, requestJson = defaultHttpRequestJson } = {}) {
-  const token = String(accessToken || '').trim();
-  if (!token) throw new Error('ZCode desktop OAuth token is unavailable.');
-  const family = zcodeProviderFamily(providerId);
-  if (family === 'zai') {
-    const data = await requestRemoteData(requestJson, {
-      method: 'POST',
-      url: ZAI_BIZ_API_ORIGIN + '/api/auth/z/login',
-      headers: { 'Content-Type': JSON_CONTENT_TYPE },
-      body: { token },
-    });
-    const bizToken = String((data && (data.access_token || data.accessToken)) || '').trim();
-    if (!bizToken) throw new Error('ZCode OAuth biz token response is missing access_token.');
-    return resolveBizApiKey({ authorization: 'Bearer ' + bizToken, host: ZAI_BIZ_API_ORIGIN, requestJson, requireSecretKey: true });
-  }
-  return resolveBizApiKey({ authorization: token, host: resolveBigModelApiOrigin(env || {}), requestJson });
-}
-
-function runtimeModelWithApiKey(runtimeModel, apiKey) {
-  const next = clone(runtimeModel);
-  next.revision = (runtimeModel.revision || 'runtime-model') + ':oauth:' + Date.now();
-  next.generatedAt = Date.now();
-  next.provider = Object.assign({}, next.provider || {}, {
-    apiKey: { source: 'inline', value: String(apiKey) },
-  });
-  return next;
 }
 
 function isZcodePlanRuntimeModel(runtimeModel, providerId) {
@@ -715,7 +474,7 @@ function defaultReadStoredZcodeKey() {
 }
 
 export function createZcodeBackend({
-  spawnImpl,
+  platform,
   getModel,
   getPermissionMode,
   getEffort = () => null,
@@ -728,12 +487,10 @@ export function createZcodeBackend({
   env,
   readDesktopModel = readZcodeDesktopModel,
   readDesktopRuntimeModel = readZcodeDesktopRuntimeModel,
-  readOAuthAccessToken = readZcodeOAuthAccessToken,
-  resolveCodingPlanApiKey = resolveZcodeCodingPlanApiKey,
   resolveCli = resolveZcodeCli,
-  resolveNode = resolveSystemNode,
   readStoredZcodeKey = defaultReadStoredZcodeKey,
 }) {
+  const adapter = platform || createPlatformAdapter();
   let proc = null;
   let rpc = null;
   let startPromise = null;
@@ -758,13 +515,8 @@ export function createZcodeBackend({
     if (onEvent) onEvent(evt);
   }
 
-  function getSpawn() {
-    if (spawnImpl) return spawnImpl;
-    return getCepRequire()('child_process').spawn;
-  }
-
   function currentEnv() {
-    const next = Object.assign({}, getCepEnv(), env || {});
+    const next = adapter.completeSpawnEnv(env || {});
     const panelModel = next.AE_MCP_ZCODE_MODEL && String(next.AE_MCP_ZCODE_MODEL).trim();
     if (!next.ZCODE_MODEL && panelModel) next.ZCODE_MODEL = panelModel;
     const panelApiKey = (next.AE_MCP_ZCODE_API_KEY && String(next.AE_MCP_ZCODE_API_KEY).trim()) || String(readStoredZcodeKey() || '').trim();
@@ -784,7 +536,7 @@ export function createZcodeBackend({
     if (selectedModel.includes('/') && !isLegacyZcodeModelRef(selectedModel)) return selectedModel;
 
     let desktopModel = '';
-    try { desktopModel = readDesktopModel ? String(readDesktopModel({ env: spawnEnv }) || '').trim() : ''; } catch (e) { /* ignore unreadable desktop config */ }
+    try { desktopModel = readDesktopModel ? String(readDesktopModel({ env: spawnEnv, platform: adapter }) || '').trim() : ''; } catch (e) { /* ignore unreadable desktop config */ }
     if (desktopModel) return desktopModel;
     if (selectedModel.includes('/')) return selectedModel;
     return ZCODE_BUILTIN_DEFAULT_MODEL;
@@ -793,7 +545,7 @@ export function createZcodeBackend({
   function currentRuntimeModel(spawnEnv, modelRef, thoughtLevel) {
     if (!readDesktopRuntimeModel) return null;
     try {
-      return readDesktopRuntimeModel({ env: spawnEnv, modelRef, thoughtLevel, storedKey: String(readStoredZcodeKey() || '').trim() }) || null;
+      return readDesktopRuntimeModel({ env: spawnEnv, platform: adapter, modelRef, thoughtLevel, storedKey: String(readStoredZcodeKey() || '').trim() }) || null;
     } catch (e) {
       return null;
     }
@@ -865,32 +617,8 @@ export function createZcodeBackend({
     if (rpc) rpc.respondError(message.id, -32601, 'Method not found: ' + method);
   }
 
-  async function handleProviderRuntimeHeaders(params, rpcId) {
-    try {
-      const spawnEnv = currentEnv();
-      const providerId = String(params.providerId || (params.modelRef && params.modelRef.providerId) || (activeRuntimeModel && activeRuntimeModel.model && activeRuntimeModel.model.providerId) || '').trim();
-      const modelId = String((params.modelRef && params.modelRef.modelId) || (activeRuntimeModel && activeRuntimeModel.model && activeRuntimeModel.model.modelId) || '').trim();
-      const modelRef = providerId && modelId ? providerId + '/' + modelId : currentModelRef(spawnEnv);
-      const runtimeModel = activeRuntimeModel || currentRuntimeModel(spawnEnv, modelRef, thoughtLevelFromEffort());
-      if (!providerId || !runtimeModel) throw new Error('ZCode runtime model is unavailable for OAuth header refresh.');
-      if (isZcodePlanRuntimeModel(runtimeModel, providerId)) {
-        if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: zcodePlanRuntimeHeadersMessage() });
-        return;
-      }
-      const accessToken = await readOAuthAccessToken({ env: spawnEnv, providerId, modelRef });
-      if (!accessToken) throw new Error('ZCode desktop OAuth token is unavailable. Open ZCode, sign in again, then retry from the panel.');
-      const apiKey = await resolveCodingPlanApiKey({ accessToken, providerId, env: spawnEnv });
-      const refreshedRuntimeModel = runtimeModelWithApiKey(runtimeModel, apiKey);
-      await rpc.request('session/updateRuntimeModelConfig', {
-        sessionId: params.sessionId || sessionId,
-        runtimeModel: refreshedRuntimeModel,
-      }, RPC_TIMEOUT_MS);
-      activeRuntimeModel = refreshedRuntimeModel;
-      if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: true, providerRevision: refreshedRuntimeModel.revision });
-    } catch (e) {
-      const message = zcodeErrorMessage(e, 'ZCode desktop OAuth header refresh failed.', lang);
-      if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: message });
-    }
+  function handleProviderRuntimeHeaders(_params, rpcId) {
+    if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: zcodePlanRuntimeHeadersMessage() });
   }
 
   // AskUserQuestion via interaction/requestUserInput. params shape:
@@ -1119,33 +847,16 @@ export function createZcodeBackend({
     if (proc && rpc) return true;
     if (startPromise) return startPromise;
     startPromise = (async () => {
-      // execFileImpl is resolved lazily so tests can inject resolveCli without
-      // a CEP Node environment being present (getCepRequire would throw).
-      let execFileImpl = null;
-      try { execFileImpl = getCepRequire()('child_process').execFile; } catch (e) { /* non-CEP env */ }
-      const cli = await resolveCli({ env: currentEnv(), execFileImpl });
-      if (!cli.ok) throw new Error(cli.detail);
-
-      const spawn = getSpawn();
       const spawnEnv = currentEnv();
+      const cli = await resolveCli({ env: spawnEnv, platform: adapter });
+      if (!cli.ok) throw new Error(cli.detail);
       stderrTail = '';
       stopping = false;
-
-      let cmd;
-      let cmdArgs;
-      if (cli.isExe) {
-        // A real `zcode` executable on PATH.
-        cmd = cli.cliPath;
-        cmdArgs = ['app-server'];
-      } else {
-        // zcode.cjs — spawn via system Node (matches the claudeAgentBackend pattern).
-        const node = await resolveNode({ env: spawnEnv });
-        if (!node.ok) throw new Error(node.detail);
-        cmd = node.nodePath;
-        cmdArgs = [cli.cliPath, 'app-server'];
-      }
-
-      proc = spawn(cmd, cmdArgs, {
+      const executable = cli.executable || (cli.isExe ? {
+        ok: true, id: 'zcode', path: cli.cliPath, argsPrefix: [], source: 'path', version: null, arch: null,
+      } : null);
+      if (!executable) throw new Error('ZCode CLI resolver did not return an executable command');
+      proc = adapter.spawn(executable, ['app-server'], {
         stdio: 'pipe',
         windowsHide: true,
         env: spawnEnv,
@@ -1174,8 +885,8 @@ export function createZcodeBackend({
   function workspaceFromEnv(spawnEnv) {
     // ZCode keys sessions by workspace; derive from the panel extension root.
     const extRoot = spawnEnv && (spawnEnv.AE_MCP_PANEL_EXT_ROOT || spawnEnv.EXTENSION_ROOT);
-    const path = extRoot ? String(extRoot).replace(/\//g, '\\').replace(/\\+$/, '') : (spawnEnv && (spawnEnv.TEMP || spawnEnv.TMP) || '.');
-    const key = path.replace(/\\/g, '\\');
+    const path = extRoot ? adapter.paths.resolve([extRoot]) : adapter.paths.tempRoot;
+    const key = path;
     return { workspacePath: path, workspaceKey: key };
   }
 

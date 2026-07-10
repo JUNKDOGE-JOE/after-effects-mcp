@@ -11,12 +11,21 @@
 | 入口 | `ae-mcp` |
 | Backend | `AE_MCP_BACKEND=ae-mcp` |
 | Plugin URL | `AE_MCP_PLUGIN_URL=http://127.0.0.1:11488` |
-| Handler count | 30 verbs，按 backend `supported_verbs()` 过滤 |
+| Handler count | 32 verbs，按 backend `supported_verbs()` 过滤 |
 | Skill storage | `~/.ae-mcp/skills/<name>.json` |
-| Preview output | 默认 `%TEMP%/ae_mcp_previews/<session>/...png`，可用 `out_dir` 覆盖 |
-| Checkpoint store | `%TEMP%/ae_mcp_checkpoints/<basename>/<id>.aep + .json` |
-| 非 live 验证 | `203 passed, 24 deselected` |
-| live 验证 | AE 打开且面板绿灯时 `24 passed` |
+| Preview output | 默认位于操作系统临时目录的 `ae_mcp_previews/<session>/...png`，可用 `out_dir` 覆盖 |
+| Checkpoint store | 操作系统临时目录下的 `ae_mcp_checkpoints/<basename>/<id>.aep + .json` |
+
+### v0.9.1 平台与分发契约
+
+v0.9.1 当前是未发布候选；下面是最终 RC 契约，不表示 helper、provider route、Tool Library 或实机矩阵已经验收：
+
+| 平台 | 安装资产 | 审计载荷 |
+|---|---|---|
+| macOS 14+ Apple Silicon arm64 | `ae-mcp-panel-v0.9.1-macos-arm64.dmg` | `ae-mcp-panel-v0.9.1-macos-arm64.zxp` |
+| Windows 11 24H2+ x64 | `ae-mcp-panel-v0.9.1-windows-x64.zxp` | 同一个 ZXP |
+
+两端的最终目标均为 AE 25.x–26.x（CEP `[25.0,26.9]`），并由 `artifact-manifest-v0.9.1.json` 绑定同一个 candidate SHA。在最终契约中，Panel 将从资产内离线安装 runtime，普通用户不依赖系统 Python/Node/uv。Claude Code CLI、Codex CLI 与 ZCode CLI/app-server 都是对应 AI 通道的**可选**依赖，不是 core 前置。Provider 配置与凭据不可导出；signed helper、RuntimeManager 和系统凭据库的最终实现仍受明确审批与 Phase 0 证据门禁。
 
 ### 环境变量
 
@@ -54,6 +63,8 @@ MCP client
 | Verb | Args | 说明 |
 |---|---|---|
 | `ae.init` | `refresh_only?` | 初始化/刷新项目状态 |
+| `ae.status` | none | 检查 backend 选择、已安装 backend 与 snapshotter 状态 |
+| `ae.diagnose` | none | 端到端检查 host、Python 握手、token 与 AE 响应 |
 | `ae.overview` | none | 项目和 comp 概览 |
 | `ae.layers` | `comp_id?`, `offset?`, `limit?`, `format?` | 获取图层列表（分页 + 可选紧凑文本） |
 | `ae.readProps` | `code` | 执行只读 JSX |
@@ -122,7 +133,7 @@ MCP client
 
 `source: "comp"` 表示拿到的是合成帧像素；`source: "viewer"` 表示使用了兼容 fallback。`ae.snapshot` 仍然是底层诊断截图。
 
-默认输出目录是 `%TEMP%/ae_mcp_previews/<session>/`。服务进程内首次使用默认目录时会清理超过 24 小时未更新的旧 session 目录；显式传入 `out_dir` 时不做清理，调用方负责管理该目录。
+默认输出目录是操作系统临时目录下的 `ae_mcp_previews/<session>/`。服务进程内首次使用默认目录时会清理超过 24 小时未更新的旧 session 目录；显式传入 `out_dir` 时不做清理，调用方负责管理该目录。
 
 ### Skill System
 
@@ -181,7 +192,7 @@ MVP 不生成任意二进制 `.ffx` 文件。
 
 ### Atom-Parity 状态
 
-已实现并 live 验证：
+以下是 v0.9.0 历史基线曾覆盖的能力清单，不是 v0.9.1 双平台或四格实机验收证据：
 
 - CEP panel 到 AE bridge
 - 30 个公开 `ae.*` verbs
@@ -216,12 +227,21 @@ ae-mcp 是独立实现，参考了 Atom 风格 AE 操作面和 FX Console 风格
 | Entry point | `ae-mcp` |
 | Backend | `AE_MCP_BACKEND=ae-mcp` |
 | Plugin URL | `AE_MCP_PLUGIN_URL=http://127.0.0.1:11488` |
-| Handler count | 30 verbs, filtered by backend `supported_verbs()` |
+| Handler count | 32 verbs, filtered by backend `supported_verbs()` |
 | Skill storage | `~/.ae-mcp/skills/<name>.json` |
-| Preview output | `%TEMP%/ae_mcp_previews/<session>/...png` unless `out_dir` is set |
-| Checkpoint store | `%TEMP%/ae_mcp_checkpoints/<basename>/<id>.aep + .json` |
-| Current non-live verification | `203 passed, 24 deselected` |
-| Current live verification | `24 passed` with AE open and panel green |
+| Preview output | `ae_mcp_previews/<session>/...png` in the operating-system temporary directory unless `out_dir` is set |
+| Checkpoint store | `ae_mcp_checkpoints/<basename>/<id>.aep + .json` under the operating-system temporary directory |
+
+### v0.9.1 Platform and Distribution Contract
+
+v0.9.1 is currently an unreleased candidate. This is the final RC contract, not a claim that the helper, provider route, Tool Library, or hardware matrix has passed:
+
+| Platform | Install asset | Audit payload |
+|---|---|---|
+| macOS 14+ Apple Silicon arm64 | `ae-mcp-panel-v0.9.1-macos-arm64.dmg` | `ae-mcp-panel-v0.9.1-macos-arm64.zxp` |
+| Windows 11 24H2+ x64 | `ae-mcp-panel-v0.9.1-windows-x64.zxp` | the same ZXP |
+
+Both target AE 25.x–26.x (CEP `[25.0,26.9]`) and are bound to one candidate SHA by `artifact-manifest-v0.9.1.json`. Under the final contract, the Panel will install the bundled runtime offline so normal users do not depend on system Python/Node/uv. Claude Code CLI, Codex CLI, and the ZCode CLI/app-server are **optional** dependencies for their corresponding AI channels, not core prerequisites. Provider configuration and credentials are not exportable; the final signed-helper, RuntimeManager, and system-credential implementation remains gated by explicit approval and Phase 0 evidence.
 
 ### Environment Variables
 
@@ -259,6 +279,8 @@ All tools return JSON with `ok: true` on success, or `ok: false` plus `error` on
 | Verb | Args | Notes |
 |---|---|---|
 | `ae.init` | `refresh_only?` | initialize/refresh project state |
+| `ae.status` | none | inspect backend selection, installed backends, and snapshotter status |
+| `ae.diagnose` | none | end-to-end host, Python handshake, token, and AE responsiveness check |
 | `ae.overview` | none | project and comp overview |
 | `ae.layers` | `comp_id?`, `offset?`, `limit?`, `format?` | list layers (paginated + optional compact text) |
 | `ae.readProps` | `code` | run read-only JSX |
@@ -333,7 +355,7 @@ The implementation opens the target comp, sets the requested time, then prefers 
 
 `source: "comp"` means the preview contains comp-frame pixels; `source: "viewer"` means the compatibility fallback was used. `ae.snapshot` remains the lower-level diagnostic capture primitive.
 
-The default output directory is `%TEMP%/ae_mcp_previews/<session>/`. On the first use of that default root in a service process, stale session directories not updated for 24 hours are pruned. Explicit `out_dir` values are never pruned by ae-mcp; the caller owns that directory.
+The default output directory is `ae_mcp_previews/<session>/` under the operating-system temporary directory. On the first use of that default root in a service process, stale session directories not updated for 24 hours are pruned. Explicit `out_dir` values are never pruned by ae-mcp; the caller owns that directory.
 
 ### Skill System
 
@@ -380,7 +402,7 @@ The MVP does not generate arbitrary binary `.ffx` files.
 
 ### Atom-Parity Status
 
-Implemented and live-verified:
+The following capability list belongs to the historical v0.9.0 baseline; it is not v0.9.1 dual-platform or four-cell hardware-acceptance evidence:
 
 - CEP panel to AE bridge
 - 30 public `ae.*` verbs

@@ -28,3 +28,24 @@ test('api channel without a usable provider behaves like subscription', () => {
   assert.equal(env.ANTHROPIC_BASE_URL, undefined);
   assert.equal(env.ANTHROPIC_AUTH_TOKEN, undefined);
 });
+
+test('credential channel sanitization removes every Windows case variant before injection', () => {
+  const inherited = {
+    Path: 'C:\\bin',
+    anthropic_api_key: 'lower-key',
+    Anthropic_Base_Url: 'https://stale.example',
+    ANTHROPIC_auth_TOKEN: 'stale-token',
+  };
+  const subscription = claudeChannelEnv(inherited, { channel: 'subscription' });
+  assert.deepEqual(Object.keys(subscription), ['Path']);
+
+  const api = claudeChannelEnv(inherited, {
+    channel: 'api',
+    provider: { baseUrl: 'https://relay.example/anthropic', apiKey: 'new-token' },
+  });
+  assert.deepEqual(api, {
+    Path: 'C:\\bin',
+    ANTHROPIC_BASE_URL: 'https://relay.example/anthropic',
+    ANTHROPIC_AUTH_TOKEN: 'new-token',
+  });
+});

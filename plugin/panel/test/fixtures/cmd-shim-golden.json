@@ -1,0 +1,26 @@
+[
+  {
+    "name": "cmd-shim-6-local",
+    "source": "https://github.com/npm/cmd-shim/blob/v6.0.3/lib/index.js",
+    "shim": "C:\\project\\node_modules\\.bin\\codex.cmd",
+    "entry": "C:\\project\\node_modules\\@openai\\codex\\bin\\codex.js",
+    "path": "C:\\project\\node_modules\\.bin;C:\\Tools",
+    "content": "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n\r\nIF EXIST \"%dp0%\\node.exe\" (\r\n  SET \"_prog=%dp0%\\node.exe\"\r\n) ELSE (\r\n  SET \"_prog=node\"\r\n  SET PATHEXT=%PATHEXT:;.JS;=;%\r\n)\r\n\r\nendLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & \"%_prog%\"  \"%dp0%\\..\\@openai\\codex\\bin\\codex.js\" %*\r\n"
+  },
+  {
+    "name": "cmd-shim-7-global",
+    "source": "https://github.com/npm/cmd-shim/blob/v7.0.0/lib/index.js",
+    "shim": "C:\\Users\\a\\AppData\\Roaming\\npm\\codex.cmd",
+    "entry": "C:\\Users\\a\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\bin\\codex.cjs",
+    "path": "C:\\Users\\a\\AppData\\Roaming\\npm;C:\\Tools",
+    "content": "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n\r\nIF EXIST \"%dp0%\\node.exe\" (\r\n  SET \"_prog=%dp0%\\node.exe\"\r\n) ELSE (\r\n  SET \"_prog=node\"\r\n  SET PATHEXT=%PATHEXT:;.JS;=;%\r\n)\r\n\r\nendLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & \"%_prog%\"  \"%dp0%\\node_modules\\@openai\\codex\\bin\\codex.cjs\" %*\r\n"
+  },
+  {
+    "name": "cmd-shim-main-local",
+    "source": "https://github.com/npm/cmd-shim/blob/main/lib/index.js",
+    "shim": "C:\\workspace\\node_modules\\.bin\\codex.cmd",
+    "entry": "C:\\workspace\\node_modules\\@openai\\codex\\bin\\codex.mjs",
+    "path": "C:\\workspace\\node_modules\\.bin;C:\\Tools",
+    "content": "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n\r\nIF EXIST \"%dp0%\\node.exe\" (\r\n  SET \"_prog=%dp0%\\node.exe\"\r\n) ELSE (\r\n  SET \"_prog=node\"\r\n)\r\n\r\nendLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & set PATHEXT=%PATHEXT:;.JS;=;% & \"%_prog%\"  \"%dp0%\\..\\@openai\\codex\\bin\\codex.mjs\" %*\r\n"
+  }
+]

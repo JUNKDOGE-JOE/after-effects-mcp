@@ -6,11 +6,11 @@ ae-mcp is a backend-agnostic automation tool that keeps Adobe After Effects and 
 
 The MCP server is the core. Outside the MCP layer, ae-mcp also ships a CEP panel that wraps built-in agent chat, backend configuration, approval controls, diagnostics, and first-run setup. You can use ae-mcp from an external agent backend through MCP, or configure Claude / Codex / ZCode directly inside the AE panel.
 
-The current release line is **v0.9.0**.
+The next release candidate is **v0.9.1 (unreleased)**. Version sources are synchronized for candidate construction; this is not a claim that the signed artifacts or four-cell AE acceptance matrix have passed.
 
-## Supported Platforms
+## v0.9.1 Target Support Matrix
 
-ae-mcp supports only the following platform and host matrix:
+The unreleased v0.9.1 candidate targets only the following platform and host matrix. None of these cells is a release-accepted support claim until the four-cell hardware gate passes:
 
 - macOS 14.0 Sonoma or newer on native Apple Silicon arm64. Intel Macs and Rosetta are not supported.
 - Windows 11 24H2 (11.0.26100) or newer on x64. Windows on ARM is not supported.
@@ -30,48 +30,35 @@ Embedded panel chat or external MCP client
 
 `ae_previewFrame` renders real comp pixels through `CompItem.saveFrameToPng`, with viewer snapshot only as a fallback. `packages/snapshot-mss` provides the cross-platform `mss` screenshot backend for `ae_snapshot` screen capture.
 
-The MCP core is backend-agnostic: external clients can talk to AE through the stdio server, while the CEP panel can also host built-in agent chat. The panel layer handles backend setup, approvals, diagnostics, activity history, and first-run dependency installation. Claude, Codex, and ZCode are built-in panel backends; OpenCode and other tools can still connect as external MCP clients.
+The MCP core is backend-agnostic: external clients can talk to AE through the stdio server, while the CEP panel can also host built-in agent chat. The existing panel layer handles backend setup, approvals, diagnostics, and activity history. The final v0.9.1 contract additionally requires first-run bundled-runtime verification, but that RuntimeManager behavior remains gated and is not claimed as delivered. Claude, Codex, and ZCode are built-in panel backends; OpenCode and other tools can still connect as external MCP clients.
 
-## v0.9.0 Update
+## v0.9.1 Release Candidate Scope
 
-- Added a unified Provider Manager for custom model providers instead of scattering provider setup across backend-specific settings.
-- Provider Manager can add, edit, delete, and probe OpenAI-compatible and Anthropic providers. Provider config is stored locally at `~/.ae-mcp/providers.json`.
-- Redesigned Settings around backend credential channels and editable provider records. Editable items can expand for details and collapse back into compact status rows, keeping the settings page easier to scan.
-- Claude API direct, Codex OpenAI-compatible providers, and ZCode provider configuration now share the same provider-management model where applicable. Legacy Claude BYOK preferences migrate automatically.
-- OpenCode remains an **external MCP client**. Embedded OpenCode is implemented but not exposed yet, pending approval-gating verification.
+- One protected `main` candidate SHA produces both native platform payloads; a failed or changed candidate must be rebuilt under a new SHA.
+- Core operation is designed to be offline and self-contained in the signed release payload. System Python, system Node, `uv`, PyPI, and npm resolution are development inputs, not normal-user install prerequisites.
+- Publishing remains gated on the approved signed-helper/provider/Tool Library milestones, per-file native-signature and product-acceptance coverage, signing and redistribution prerequisites, AE 25/26 smoke on both platforms, and valid Mac/Windows attestations. The native coverage policy is intentionally fail-closed, so landing a helper build or synchronizing v0.9.1 metadata cannot bypass those gates.
+- UXP, Intel Mac, Windows ARM, provider-config export, and ZCode desktop captcha/runtime-header bridging are outside the v0.9.1 support scope.
 
 ## Install and First Run
 
-For normal users, install the panel first and let the first-run wizard install the local dependencies.
+Normal users install one immutable asset from the v0.9.1 release set. Do not use source archives or an online `uv`/PyPI install as a substitute for a signed release asset:
 
-1. Install the ZXP package with aescripts ZXP Installer or ExMan Cmd.
-2. Restart After Effects after installing the ZXP.
-3. Open `Window -> Extensions -> ae-mcp`.
-4. Follow the first-run wizard.
+| Platform | Install asset | Auditable payload |
+|---|---|---|
+| macOS 14+ Apple Silicon arm64 | `ae-mcp-panel-v0.9.1-macos-arm64.dmg` | `ae-mcp-panel-v0.9.1-macos-arm64.zxp` |
+| Windows 11 24H2+ x64 | `ae-mcp-panel-v0.9.1-windows-x64.zxp` | same ZXP |
 
-The wizard detects and installs the required local tools: `uv`, Node, Claude CLI, and `ae-mcp`. Every install command is shown verbatim before it runs. Login actions open a visible terminal window. After the wizard installs Python-side dependencies, AE does not need another restart.
+The macOS DMG contains only the exact signed ZXP in a signed/notarized distribution container; it is not itself a ZXP installer. Both platforms require a separately supplied supported ZXP installer. Verify each download against `artifact-manifest-v0.9.1.json`, install the Mac ZXP from the DMG or the Windows ZXP, restart After Effects, and open `Window -> Extensions -> ae-mcp`. Under the final gated contract, the panel then installs the bundled runtime offline and exposes the stable `ae-mcp` launcher after verification.
 
-ae-mcp is not on PyPI. Do not use the public PyPI name as the install source.
-
-If you need the Python packages directly from a release tag:
-
-```powershell
-uv tool install --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.0#subdirectory=packages/core ae-mcp --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.0#subdirectory=packages/bridge --with git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.0#subdirectory=packages/snapshot-mss
-```
-
-For a development checkout:
-
-```powershell
-uv tool install --from packages/core ae-mcp --with packages/bridge --with packages/snapshot-mss
-```
+These filenames describe the v0.9.1 contract. They are not available for general use until both attestation checks pass and the no-rebuild promotion workflow publishes them. See [Install](docs/INSTALL.md) and [Release](docs/RELEASE.md).
 
 ## Built-in Backends
 
 | Backend | What it is for | Setup |
 |---|---|---|
-| Claude | Use Claude from the panel through subscription login or API direct mode. | Install Node >= 18 and log in with Claude Code CLI (`claude`). API direct mode needs an Anthropic API key or compatible provider. |
-| Codex | Use Codex from the panel through CLI login, inherited config, or an OpenAI-compatible provider. | Install Codex CLI and run `codex login`, inherit `~/.codex/config.toml`, or configure a provider in Provider Manager. |
-| ZCode | Use ZCode providers from the panel. | Install ZCode desktop. API-key or OAuth coding-plan providers can be used in the panel. |
+| Claude | Use Claude from the panel through subscription login or API direct mode. | Optional channel dependency: Claude Code CLI (`claude`) and its login. API direct mode instead needs an Anthropic API key or compatible provider. |
+| Codex | Use Codex from the panel through CLI login, inherited config, or an OpenAI-compatible provider. | Optional channel dependency: Codex CLI and `codex login`; provider mode does not require that CLI. |
+| ZCode | Use ZCode providers from the panel. | Optional channel dependency: the ZCode CLI/app-server supplied by a supported ZCode installation. API-key providers remain separate. |
 
 Claude Code CLI is separate from Claude Desktop. Claude Desktop MCP configuration is not reused by the embedded Claude backend. Codex has the same distinction: the panel either talks to Codex CLI state or to providers configured for ae-mcp.
 
@@ -83,7 +70,7 @@ Claude Code CLI is separate from Claude Desktop. Claude Desktop MCP configuratio
 - Unified Provider Manager with expandable editable records for OpenAI-compatible and Anthropic providers.
 - Activity stream for agent operations.
 - Kill switch to stop all AI operations immediately.
-- Diagnostics for host status, access token, Python client signal, AE project state, ExtendScript ping, and local `uv` / `node` / `claude` availability.
+- Current diagnostics cover host status, access token, Python client signal, AE project state, ExtendScript ping, and optional channel CLIs. Installed-runtime diagnostics belong to the gated RuntimeManager contract.
 - Log export for issue reports and debugging.
 - AE expert guidance injection. This optional setting adds AE command and data-structure guidance to reduce scripting mistakes at the cost of extra prompt tokens.
 
@@ -91,20 +78,20 @@ Claude Code CLI is separate from Claude Desktop. Claude Desktop MCP configuratio
 
 <table>
   <tr><td><img src="docs/images/en/settings-provider-manager-collapsed.png" width="380"><br>Settings: backend channels and compact Provider Manager rows</td><td><img src="docs/images/en/settings-provider-manager-expanded.png" width="380"><br>Settings: expanded provider editor with local API key storage</td></tr>
-  <tr><td><img src="docs/images/en/settings-general-language.png" width="380"><br>Settings: general options, language switch, logs, and About</td><td><img src="docs/images/en/wizard-install.png" width="380"><br>First-run wizard: local service install with uv / ae-mcp checks</td></tr>
+  <tr><td><img src="docs/images/en/settings-general-language.png" width="380"><br>Settings: general options, language switch, logs, and About</td><td><img src="docs/images/en/wizard-install.png" width="380"><br>Historical v0.9.0 development wizard: online `uv` and PATH launcher setup; not the v0.9.1 bundled-runtime UX</td></tr>
   <tr><td><img src="docs/images/en/wizard-connect-clients.png" width="380"><br>First-run wizard: built-in chat and external MCP client setup</td><td><img src="docs/images/en/chat-home.png" width="380"><br>Chat home: starter suggestions and composer controls</td></tr>
   <tr><td><img src="docs/images/en/chat-approval.png" width="380"><br>Tool approval card for gated high-risk operations</td><td><img src="docs/images/en/activity-stream.png" width="380"><br>Activity stream: agent operation history</td></tr>
 </table>
 
 ## External MCP Clients
 
-Use the panel-generated MCP config for external clients. A minimal config looks like this:
+The final v0.9.1 panel-generated MCP config for external clients has this shape:
 
 ```json
 {
   "mcpServers": {
     "ae": {
-      "command": "ae-mcp",
+      "command": "/Users/<USER>/.ae-mcp/bin/ae-mcp",
       "env": {
         "AE_MCP_BACKEND": "ae-mcp",
         "AE_MCP_PLUGIN_URL": "http://127.0.0.1:11488"
@@ -113,6 +100,8 @@ Use the panel-generated MCP config for external clients. A minimal config looks 
   }
 }
 ```
+
+This is the final stable-launcher contract. Replace `<USER>` with the actual macOS account name; the final Panel generator must emit that expanded absolute path. On Windows, use the expanded absolute path for `%USERPROFILE%\.ae-mcp\bin\ae-mcp.exe`. The approved RuntimeManager implementation must replace the current Panel generator's bare PATH `ae-mcp`; the fail-closed native/product-acceptance build guard prevents publishing v0.9.1 while that mismatch remains.
 
 External clients must run on the same machine as After Effects, or otherwise be able to reach `127.0.0.1:11488` on the AE machine. This matters for long-running or Dockerized IM-bot frameworks such as OpenClaw and AstrBot.
 
@@ -139,7 +128,19 @@ For visual work, ask the agent to preview frames and verify intermediate results
 
 ## Development
 
-Repository development setup:
+Close every After Effects / AfterFX process before a development deployment. Each installer preflights the source, copies and verifies a unique same-parent staging directory, atomically retains the old panel as a backup, and prints an absolute restore command.
+
+macOS development setup:
+
+```bash
+uv sync --all-packages --group dev
+(cd plugin/host && npm ci)
+(cd plugin/sidecar && npm ci)
+(cd plugin/panel && npm ci && npm run build)
+./scripts/install-plugin-dev-macos.sh
+```
+
+Windows development setup:
 
 ```powershell
 uv sync --all-packages --group dev
@@ -177,15 +178,9 @@ Model-matrix smoke for Claude sidecar + Codex app-server:
 node scripts/live-model-matrix.mjs
 ```
 
-## Package
+## Package and Release
 
-Packaging a release ZXP requires Adobe `ZXPSignCmd` and a certificate password:
-
-```powershell
-.\scripts\package-zxp.ps1 -ZxpSignCmd C:\Tools\ZXPSignCmd.exe -CertPassword <pw>
-```
-
-The script stages `plugin/`, strips development debug files and panel source, installs host/sidecar production dependencies, signs the package, and writes `release/ae-mcp-panel.zxp`. See [docs/RELEASE.md](docs/RELEASE.md) for the full release checklist.
+Maintainers create v0.9.1 artifacts only through the protected `build-rc.yml` workflow. The exact Mac arm64 and Windows x64 bytes are bound to `artifact-manifest-v0.9.1.json`, validated by `macos-rc-attestation` and `windows-rc-attestation`, then promoted by `release.yml` without rebuilding. Signing credentials, redistribution approvals, AE 25/26 installations, and a Windows x64 verifier are external prerequisites; see [docs/RELEASE.md](docs/RELEASE.md).
 
 ## Implementation Notes
 

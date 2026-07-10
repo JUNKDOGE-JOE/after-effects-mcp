@@ -257,7 +257,16 @@ export async function writeBytesAtomically(destination, value, options = {}) {
 }
 
 export async function writeJsonAtomically(destination, value) {
-  const bytes = Buffer.from(`${JSON.stringify(value, null, 2)}\n`, 'utf8');
+  const sortValue = (candidate) => {
+    if (Array.isArray(candidate)) return candidate.map(sortValue);
+    if (candidate && typeof candidate === 'object') {
+      return Object.fromEntries(
+        Object.keys(candidate).sort().map((key) => [key, sortValue(candidate[key])]),
+      );
+    }
+    return candidate;
+  };
+  const bytes = Buffer.from(`${JSON.stringify(sortValue(value), null, 2)}\n`, 'utf8');
   await writeBytesAtomically(destination, bytes);
 }
 

@@ -23,12 +23,16 @@ const PLANS = Object.freeze({
   'macos-arm64': Object.freeze({
     platform: 'macos-arm64',
     steps: Object.freeze([
-      freezeStep('sign-helper', ['platform/macos-arm64/helper']),
+      freezeStep('sign-helper', ['platform/macos-arm64/bin/ae-mcp-platform-helper']),
       // Reserved category slots. The CEP architecture has no XPC or native addon today.
       freezeStep('sign-xpc', []),
       freezeStep('sign-addon', []),
-      freezeStep('sign-launcher', ['platform/macos-arm64/launcher']),
+      freezeStep('sign-launcher', ['platform/macos-arm64/bin/ae-mcp']),
       freezeStep('verify-nested', []),
+      freezeStep('freeze-signed-manifests', [
+        'platform/macos-arm64/helper-manifest.json',
+        'bundle-manifest.json',
+      ]),
       freezeStep('sign-zxp', ['artifact/zxp']),
       freezeStep('verify-zxp', []),
       freezeStep('build-dmg', ['artifact/dmg']),
@@ -41,11 +45,15 @@ const PLANS = Object.freeze({
   'windows-x64': Object.freeze({
     platform: 'windows-x64',
     steps: Object.freeze([
-      freezeStep('sign-helper', ['platform/windows-x64/helper']),
+      freezeStep('sign-helper', ['platform/windows-x64/bin/ae-mcp-platform-helper.exe']),
       // Fixed compatibility slot; a native addon is forbidden by the current architecture.
       freezeStep('sign-addon', []),
-      freezeStep('sign-launcher', ['platform/windows-x64/launcher']),
+      freezeStep('sign-launcher', ['platform/windows-x64/bin/ae-mcp.exe']),
       freezeStep('verify-authenticode', []),
+      freezeStep('freeze-signed-manifests', [
+        'platform/windows-x64/helper-manifest.json',
+        'bundle-manifest.json',
+      ]),
       freezeStep('sign-zxp', ['artifact/zxp']),
       freezeStep('verify-zxp', []),
     ]),
@@ -58,6 +66,7 @@ export const SIGNING_STEP_IDS = Object.freeze([
   'sign-addon',
   'sign-launcher',
   'verify-nested',
+  'freeze-signed-manifests',
   'sign-zxp',
   'verify-zxp',
   'build-dmg',
@@ -253,8 +262,16 @@ function sliceKind(platform, ids) {
 
 function validateVerifiedIdentity(platform, kind, identity) {
   if (kind === 'zxp') {
-    if (!exactKeys(identity, ['zxpVerified']) || identity.zxpVerified !== true) {
-      throw signingError('SIGNING_IDENTITY_INVALID', 'ZXP identity must record successful verification');
+    if (!exactKeys(identity, [
+      'zxpCertificateFingerprint', 'zxpPayloadSha256', 'zxpVerified',
+    ])
+        || !/^[a-f0-9]{64}$/.test(identity.zxpCertificateFingerprint || '')
+        || !/^[a-f0-9]{64}$/.test(identity.zxpPayloadSha256 || '')
+        || identity.zxpVerified !== true) {
+      throw signingError(
+        'SIGNING_IDENTITY_INVALID',
+        'ZXP identity must bind the audited certificate and payload',
+      );
     }
     return;
   }

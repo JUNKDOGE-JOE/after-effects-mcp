@@ -17,33 +17,57 @@ async function nextTick() {
   await Promise.resolve();
 }
 
-test('resolveSidecarPath returns deployed sidecar when present', () => {
-  const hits = new Set(['C:\\ext\\sidecar\\agent-sidecar.mjs']);
+function windowsPaths() {
+  return {
+    join: (parts) => parts.join('\\').replace(/\\+/g, '\\'),
+    resolve: (parts) => {
+      const raw = parts.join('\\').replace(/\//g, '\\');
+      const drive = raw.match(/^[A-Za-z]:/)?.[0] || '';
+      const stack = [];
+      for (const part of raw.slice(drive.length).split('\\').filter(Boolean)) {
+        if (part === '..') stack.pop();
+        else if (part !== '.') stack.push(part);
+      }
+      return drive + '\\' + stack.join('\\');
+    },
+  };
+}
+
+function windowsPlatform() {
+  return { id: 'windows-x64', paths: windowsPaths() };
+}
+
+test('resolveSidecarPath returns the local sidecar only for a .debug development extension', () => {
+  const hits = new Set(['C:\\ext\\.debug', 'C:\\ext\\sidecar\\agent-sidecar.mjs']);
   const result = resolveSidecarPath({
-    extRoot: 'C:/ext/',
+    extRoot: 'C:\\ext',
+    platform: windowsPlatform(),
     fsImpl: { existsSync: (p) => hits.has(p) },
   });
 
   assert.equal(result, 'C:\\ext\\sidecar\\agent-sidecar.mjs');
 });
 
-test('resolveSidecarPath returns repo sidecar when deployed path is missing', () => {
-  const hits = new Set(['C:\\repo\\plugin\\panel\\..\\sidecar\\agent-sidecar.mjs']);
+test('resolveSidecarPath returns the bundled runtime sidecar in production', () => {
+  const runtime = 'C:\\ext\\runtime\\windows-x64\\node\\sidecar\\agent-sidecar.mjs';
+  const hits = new Set([runtime, 'C:\\ext\\sidecar\\agent-sidecar.mjs']);
   const result = resolveSidecarPath({
-    extRoot: 'C:/repo/plugin/panel',
+    extRoot: 'C:\\ext',
+    platform: windowsPlatform(),
     fsImpl: { existsSync: (p) => hits.has(p) },
   });
 
-  assert.equal(result, 'C:\\repo\\plugin\\panel\\..\\sidecar\\agent-sidecar.mjs');
+  assert.equal(result, runtime);
 });
 
-test('resolveSidecarPath returns deployed candidate when neither exists', () => {
+test('resolveSidecarPath returns a diagnostic runtime candidate without throwing when payload is missing', () => {
   const result = resolveSidecarPath({
-    extRoot: 'C:/missing',
+    extRoot: 'C:\\missing',
+    platform: windowsPlatform(),
     fsImpl: { existsSync: () => false },
   });
 
-  assert.equal(result, 'C:\\missing\\sidecar\\agent-sidecar.mjs');
+  assert.equal(result, 'C:\\missing\\runtime\\windows-x64\\node\\sidecar\\agent-sidecar.mjs');
 });
 
 test('probeClaudeLogin resolves logged in probe-result', async () => {
@@ -68,6 +92,23 @@ test('probeClaudeLogin resolves logged in probe-result', async () => {
   assert.equal(spawnArgs.opts.windowsHide, true);
   assert.equal(spawnArgs.opts.env.ANTHROPIC_API_KEY, undefined);
   assert.equal(spawnArgs.opts.env.KEEP, 'yes');
+});
+
+test('probeClaudeLogin spawns the resolved Node through the platform adapter', async () => {
+  const proc = makeProc();
+  const executable = { ok: true, id: 'node', path: '/Users/a/.ae-mcp/runtime/current/bin/node', argsPrefix: [], source: 'runtime', version: '24.17.0', arch: 'arm64' };
+  const calls = [];
+  const platform = {
+    resolveExecutable: async () => executable,
+    completeSpawnEnv: (base, additions) => ({ ...base, ...additions }),
+    spawn: (resolved, args, options) => { calls.push({ resolved, args, options }); return proc; },
+  };
+  const resultPromise = probeClaudeLogin({ platform, sidecarPath: '/ext/sidecar/agent-sidecar.mjs', env: { KEEP: 'yes' } });
+  await nextTick();
+  proc.stdout.emit('data', '{"t":"probe-result","loggedIn":true}\n');
+  assert.equal((await resultPromise).loggedIn, true);
+  assert.equal(calls[0].resolved, executable);
+  assert.equal(calls[0].options.shell, undefined);
 });
 
 test('probeClaudeLogin resolves not logged in probe-result', async () => {

@@ -8266,7 +8266,7 @@
   // package.json
   var package_default = {
     name: "ae-mcp-panel",
-    version: "0.9.0",
+    version: "0.9.1",
     private: true,
     type: "module",
     scripts: {
@@ -8829,6 +8829,832 @@
     return { ...state, [id]: !state[id] };
   }
 
+  // src/cep/platform/paths.js
+  function assertAbsoluteHome(home, separator) {
+    const value = String(home || "").trim();
+    const absolute = separator === "\\" ? /^(?:[A-Za-z]:\\|\\\\)/.test(value) : value.startsWith("/");
+    if (!absolute) throw new Error("A non-empty absolute home path is required");
+    return trimTrailing(nativeSeparators(value, separator), separator);
+  }
+  function nativeSeparators(value, separator) {
+    const text = String(value || "");
+    return separator === "\\" ? text.replace(/\//g, "\\") : text;
+  }
+  function trimTrailing(value, separator) {
+    if (separator === "\\" && /^[A-Za-z]:\\$/.test(value)) return value;
+    if (value === "/") return value;
+    while (value.endsWith(separator)) value = value.slice(0, -1);
+    return value;
+  }
+  function splitRoot(value, separator) {
+    if (separator === "/") return { root: value.startsWith("/") ? "/" : "", rest: value.replace(/^\/+/, "") };
+    const normalized = value.replace(/\//g, "\\");
+    const drive = normalized.match(/^([A-Za-z]:)\\/);
+    if (drive) return { root: drive[1] + "\\", rest: normalized.slice(drive[0].length) };
+    const unc = normalized.match(/^(\\\\[^\\]+\\[^\\]+)\\?/);
+    if (unc) return { root: unc[1] + "\\", rest: normalized.slice(unc[0].length) };
+    return { root: "", rest: normalized.replace(/^\\+/, "") };
+  }
+  function normalizePath(value, separator) {
+    const input = nativeSeparators(value, separator);
+    const { root, rest } = splitRoot(input, separator);
+    const parts = [];
+    for (const part of rest.split(separator)) {
+      if (!part || part === ".") continue;
+      if (part === "..") {
+        if (parts.length && parts[parts.length - 1] !== "..") parts.pop();
+        else if (!root) parts.push(part);
+        continue;
+      }
+      parts.push(part);
+    }
+    const body = parts.join(separator);
+    if (!root) return body || ".";
+    return body ? root + body : root;
+  }
+  function normalizeCepSystemPath(value, platform) {
+    var _a;
+    let normalized = String(value || "");
+    const fileUrl = normalized.match(/^file:\/\/(.*)$/i);
+    const legacyFilePath = !fileUrl && /^file:\\+/i.test(normalized);
+    if (fileUrl) {
+      const body = fileUrl[1];
+      normalized = body.startsWith("/") || /^[A-Za-z]:[\\/]/.test(body) ? body : "//" + body;
+    } else if (legacyFilePath) {
+      const body = normalized.slice("file:".length);
+      normalized = /^\\+[A-Za-z]:\\/.test(body) ? body.replace(/^\\+/, "") : body;
+    }
+    if (fileUrl || legacyFilePath) {
+      try {
+        normalized = decodeURIComponent(normalized);
+      } catch (cause) {
+        const error = new Error("CEP file URL contains invalid percent encoding");
+        error.code = "CEP_PATH_INVALID";
+        error.cause = cause;
+        throw error;
+      }
+    }
+    if (/^\/[A-Za-z]:/.test(normalized)) normalized = normalized.slice(1);
+    if ((_a = platform == null ? void 0 : platform.paths) == null ? void 0 : _a.resolve) return platform.paths.resolve([normalized]);
+    return normalized;
+  }
+  function readCepSystemPath({ cs: cs2, cep, platform, pathType = "extension" } = {}) {
+    var _a;
+    const rawCep = cep === void 0 ? (_a = globalThis.window) == null ? void 0 : _a.__adobe_cep__ : cep;
+    const value = rawCep && typeof rawCep.getSystemPath === "function" ? rawCep.getSystemPath(pathType) : cs2 && typeof cs2.getSystemPath === "function" ? cs2.getSystemPath(pathType) : "";
+    if (!value) throw new Error("CEP system path is unavailable: " + pathType);
+    return normalizeCepSystemPath(value, platform);
+  }
+  function createPathCatalog({ home, temp, platform }) {
+    const windows = platform === "win32";
+    const separator = windows ? "\\" : "/";
+    const normalizedHome = assertAbsoluteHome(home, separator);
+    const normalizedTemp = normalizePath(String(temp || ""), separator);
+    const join = (parts) => {
+      const values = Array.from(parts || []).map((part) => String(part || "")).filter(Boolean);
+      if (!values.length) return ".";
+      return normalizePath(values.join(separator), separator);
+    };
+    const resolve = (parts) => {
+      const values = Array.from(parts || []).map((part) => String(part || "")).filter(Boolean);
+      if (!values.length) return normalizedHome;
+      let combined = "";
+      for (const value of values) {
+        const normalized = nativeSeparators(value, separator);
+        const absolute = separator === "\\" ? /^(?:[A-Za-z]:\\|\\\\)/.test(normalized) : normalized.startsWith("/");
+        if (absolute) {
+          combined = normalized;
+          continue;
+        }
+        if (windows) {
+          const driveRelative = normalized.match(/^([A-Za-z]:)(?!\\)(.*)$/);
+          if (driveRelative) {
+            const drive = driveRelative[1];
+            const combinedDrive = String(combined).match(/^([A-Za-z]:)\\/);
+            const homeDrive = normalizedHome.match(/^([A-Za-z]:)\\/);
+            const base = combinedDrive && combinedDrive[1].toLowerCase() === drive.toLowerCase() ? combined : homeDrive && homeDrive[1].toLowerCase() === drive.toLowerCase() ? normalizedHome : drive + "\\";
+            const rest = driveRelative[2];
+            combined = rest ? trimTrailing(base, separator) + separator + rest : base;
+            continue;
+          }
+          if (/^\\(?!\\)/.test(normalized)) {
+            const currentRoot = splitRoot(String(combined || normalizedHome), separator).root;
+            const currentDrive = currentRoot.match(/^([A-Za-z]:)\\$/);
+            combined = currentDrive ? currentDrive[1] + normalized : trimTrailing(currentRoot, separator) + normalized;
+            continue;
+          }
+        }
+        combined = combined ? combined + separator + normalized : normalized;
+      }
+      if (!(separator === "\\" ? /^(?:[A-Za-z]:\\|\\\\)/.test(combined) : combined.startsWith("/"))) {
+        combined = normalizedHome + separator + combined;
+      }
+      return normalizePath(combined, separator);
+    };
+    const dirname = (value) => {
+      const normalized = normalizePath(value, separator);
+      const { root } = splitRoot(normalized, separator);
+      const end = trimTrailing(normalized, separator).lastIndexOf(separator);
+      if (end < 0) return ".";
+      if (end < root.length) return root || separator;
+      return normalized.slice(0, end) || root || separator;
+    };
+    const basename = (value) => {
+      const normalized = trimTrailing(normalizePath(value, separator), separator);
+      const end = normalized.lastIndexOf(separator);
+      return end < 0 ? normalized : normalized.slice(end + 1);
+    };
+    const isAbsolute = (value) => separator === "\\" ? /^(?:[A-Za-z]:\\|\\\\)/.test(String(value || "").replace(/\//g, "\\")) : String(value || "").startsWith("/");
+    const canonical = (value) => {
+      const resolved = resolve([value]);
+      return windows ? resolved.toLowerCase() : resolved;
+    };
+    const contains = (root, candidate) => {
+      const normalizedRoot = trimTrailing(canonical(root), separator);
+      const normalizedCandidate = canonical(candidate);
+      const childPrefix = normalizedRoot.endsWith(separator) ? normalizedRoot : normalizedRoot + separator;
+      return normalizedCandidate === normalizedRoot || normalizedCandidate.startsWith(childPrefix);
+    };
+    const same = (left, right) => canonical(left) === canonical(right);
+    const configRoot = join([normalizedHome, ".ae-mcp"]);
+    const runtimeRoot = join([configRoot, "runtime"]);
+    const binRoot = join([configRoot, "bin"]);
+    return Object.freeze({
+      home: normalizedHome,
+      tempRoot: normalizedTemp,
+      configRoot,
+      toolsRoot: join([configRoot, "tools"]),
+      legacySkillsRoot: join([configRoot, "skills"]),
+      migrationRoot: join([configRoot, "migrations"]),
+      logsRoot: join([configRoot, "logs"]),
+      captureSpool: join([configRoot, "capture-spool"]),
+      runtimeRoot,
+      currentPointer: join([runtimeRoot, "current"]),
+      previousPointer: join([runtimeRoot, "previous"]),
+      binRoot,
+      launcher: join([binRoot, windows ? "ae-mcp.exe" : "ae-mcp"]),
+      join,
+      dirname,
+      basename,
+      resolve,
+      isAbsolute,
+      contains,
+      same
+    });
+  }
+
+  // src/cep/platform/process.js
+  var DEFAULT_TIMEOUT_MS = 2500;
+  var DEFAULT_OUTPUT_LIMIT = 8192;
+  var TERMINATE_GRACE_MS = 50;
+  var FORCE_CLOSE_GRACE_MS = 250;
+  var EXECUTABLE_IDS = /* @__PURE__ */ new Set(["ae-mcp", "node", "claude", "codex", "zcode", "uv", "npm", "opencode", "brew", "winget", "powershell"]);
+  var WINDOWS_COMMAND_SCRIPT = /\.(?:cmd|bat)$/i;
+  function environmentKey(environment, name, caseInsensitive) {
+    if (!caseInsensitive) return Object.prototype.hasOwnProperty.call(environment, name) ? name : null;
+    const normalized = String(name).toLowerCase();
+    return Object.keys(environment).find((key) => key.toLowerCase() === normalized) || null;
+  }
+  function environmentValue(environment, name, caseInsensitive) {
+    const key = environmentKey(environment, name, caseInsensitive);
+    return key === null ? void 0 : environment[key];
+  }
+  function setEnvironmentDefault(environment, name, value, caseInsensitive) {
+    const existing = environmentKey(environment, name, caseInsensitive);
+    if (existing === null || !environment[existing]) environment[existing || name] = String(value);
+  }
+  function definedEnvironment(caseInsensitive, ...sources) {
+    const result = {};
+    for (const source of sources) {
+      for (const [key, value] of Object.entries(source || {})) {
+        if (value === void 0 || value === null) continue;
+        const existing = environmentKey(result, key, caseInsensitive);
+        if (existing !== null && existing !== key) delete result[existing];
+        result[key] = String(value);
+      }
+    }
+    return result;
+  }
+  function appendBytes(current, chunk, remaining) {
+    if (remaining <= 0) return current;
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk || ""));
+    let decoded = buffer.subarray(0, remaining).toString("utf8");
+    while (Buffer.byteLength(decoded, "utf8") > remaining) decoded = decoded.slice(0, -1);
+    return current + decoded;
+  }
+  function byteLength(value) {
+    return Buffer.byteLength(String(value || ""), "utf8");
+  }
+  function compareVersions(actual, minimum) {
+    const left = String(actual || "").match(/\d+(?:\.\d+){0,3}/);
+    const right = String(minimum || "").match(/\d+(?:\.\d+){0,3}/);
+    if (!left || !right) return null;
+    const a = left[0].split(".").map(Number);
+    const b = right[0].split(".").map(Number);
+    for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+      const delta = (a[index] || 0) - (b[index] || 0);
+      if (delta) return delta;
+    }
+    return 0;
+  }
+  function reportedArch(output) {
+    if (/\b(?:arm64|aarch64)\b/i.test(output)) return "arm64";
+    if (/\b(?:x64|amd64|x86_64)\b/i.test(output)) return "x64";
+    return null;
+  }
+  function cpuArchitecture(cpuType) {
+    if (cpuType === 16777228) return "arm64";
+    if (cpuType === 16777223) return "x64";
+    return null;
+  }
+  function inspectNativeArchitectures(bytes) {
+    if (!Buffer.isBuffer(bytes) || bytes.length < 8) return [];
+    const architectures = /* @__PURE__ */ new Set();
+    const littleMagic = bytes.readUInt32LE(0);
+    const bigMagic = bytes.readUInt32BE(0);
+    if (littleMagic === 4277009103 || littleMagic === 4277009102) {
+      const arch = cpuArchitecture(bytes.readUInt32LE(4));
+      if (arch) architectures.add(arch);
+    } else if (bigMagic === 4277009103 || bigMagic === 4277009102) {
+      const arch = cpuArchitecture(bytes.readUInt32BE(4));
+      if (arch) architectures.add(arch);
+    } else if ([3405691582, 3405691583].includes(bigMagic)) {
+      const entryBytes = bigMagic === 3405691583 ? 32 : 20;
+      const count = bytes.readUInt32BE(4);
+      if (count <= 64 && 8 + count * entryBytes <= bytes.length) {
+        for (let index = 0; index < count; index += 1) {
+          const arch = cpuArchitecture(bytes.readUInt32BE(8 + index * entryBytes));
+          if (arch) architectures.add(arch);
+        }
+      }
+    } else if ([3199925962, 3216703178].includes(littleMagic)) {
+      const entryBytes = littleMagic === 3216703178 ? 32 : 20;
+      const count = bytes.readUInt32LE(4);
+      if (count <= 64 && 8 + count * entryBytes <= bytes.length) {
+        for (let index = 0; index < count; index += 1) {
+          const arch = cpuArchitecture(bytes.readUInt32LE(8 + index * entryBytes));
+          if (arch) architectures.add(arch);
+        }
+      }
+    } else if (bytes[0] === 77 && bytes[1] === 90 && bytes.length >= 64) {
+      const peOffset = bytes.readUInt32LE(60);
+      if (peOffset <= bytes.length - 6 && bytes.toString("binary", peOffset, peOffset + 4) === "PE\0\0") {
+        const machine = bytes.readUInt16LE(peOffset + 4);
+        if (machine === 34404) architectures.add("x64");
+        if (machine === 43620) architectures.add("arm64");
+      }
+    }
+    return [...architectures];
+  }
+  function isNodeScript(path, bytes) {
+    if (/\.(?:cjs|mjs|js)$/i.test(path)) return true;
+    if (!Buffer.isBuffer(bytes) || bytes.length < 2) return false;
+    const firstLine = bytes.toString("utf8", 0, Math.min(bytes.length, 512)).split(/\r?\n/, 1)[0];
+    return /^#!.*\bnode(?:\.exe)?(?:\s|$)/i.test(firstLine);
+  }
+  function createProcessBoundary({ deps, paths, platform }) {
+    const windows = platform === "win32";
+    const separator = windows ? ";" : ":";
+    function completeEnvironment(...sources) {
+      const result = definedEnvironment(windows, ...sources);
+      if (windows) {
+        setEnvironmentDefault(result, "USERPROFILE", paths.home, true);
+        setEnvironmentDefault(result, "HOME", paths.home, true);
+        setEnvironmentDefault(result, "APPDATA", paths.join([paths.home, "AppData", "Roaming"]), true);
+        setEnvironmentDefault(result, "LOCALAPPDATA", paths.join([paths.home, "AppData", "Local"]), true);
+        setEnvironmentDefault(result, "TEMP", paths.tempRoot, true);
+        setEnvironmentDefault(result, "TMP", paths.tempRoot, true);
+        const pathKey = environmentKey(result, "PATH", true) || "Path";
+        const inherited = String(result[pathKey] || "").split(separator).filter((entry) => entry && entry.toLowerCase() !== paths.binRoot.toLowerCase());
+        result[pathKey] = [paths.binRoot, ...inherited].join(separator);
+      } else {
+        setEnvironmentDefault(result, "HOME", paths.home, false);
+        const inherited = String(result.PATH || "").split(separator).filter((entry) => entry && entry !== paths.binRoot);
+        result.PATH = [paths.binRoot, ...inherited].join(separator);
+      }
+      return result;
+    }
+    function completeSpawnEnv(base = {}, additions = {}) {
+      return completeEnvironment(deps.env, base, additions);
+    }
+    function spawn(executable, args = [], options = {}) {
+      if (!executable || executable.ok !== true || !executable.path) throw new TypeError("A successful executable resolution is required");
+      if (windows && WINDOWS_COMMAND_SCRIPT.test(executable.path)) {
+        throw new TypeError("Windows command scripts must be materialized through a verified native Node executable");
+      }
+      const hasExplicitEnv = Object.prototype.hasOwnProperty.call(options, "env");
+      const environment = hasExplicitEnv ? completeEnvironment(options.env || {}) : completeSpawnEnv();
+      const commandArgs = [...executable.argsPrefix || [], ...args];
+      return deps.spawnImpl(executable.path, commandArgs, {
+        ...options,
+        shell: false,
+        env: environment
+      });
+    }
+    function run(request) {
+      const started = deps.now();
+      const timeoutMs = request.timeoutMs === void 0 ? DEFAULT_TIMEOUT_MS : Math.max(0, Number(request.timeoutMs));
+      const maxOutputBytes = request.maxOutputBytes === void 0 ? DEFAULT_OUTPUT_LIMIT : Math.max(0, Number(request.maxOutputBytes));
+      let stdout = "";
+      let stderr = "";
+      let settled = false;
+      let timedOut = false;
+      let aborted = false;
+      let timer = null;
+      let killTimer = null;
+      let forceCloseTimer = null;
+      return new Promise((resolve) => {
+        var _a, _b, _c, _d, _e, _f, _g, _h;
+        let proc;
+        const finish = (exitCode, signal) => {
+          if (settled) return;
+          settled = true;
+          if (timer) clearTimeout(timer);
+          if (killTimer) clearTimeout(killTimer);
+          if (forceCloseTimer) clearTimeout(forceCloseTimer);
+          if (request.signal) request.signal.removeEventListener("abort", onAbort);
+          resolve({
+            exitCode: typeof exitCode === "number" ? exitCode : null,
+            signal: signal || null,
+            stdout,
+            stderr,
+            durationMs: Math.max(0, deps.now() - started),
+            timedOut,
+            aborted
+          });
+        };
+        const armForceClose = (signal) => {
+          if (forceCloseTimer) clearTimeout(forceCloseTimer);
+          forceCloseTimer = setTimeout(() => finish(null, signal), FORCE_CLOSE_GRACE_MS);
+        };
+        const terminate = (reason) => {
+          if (settled) return;
+          if (reason === "timeout") timedOut = true;
+          if (reason === "abort") aborted = true;
+          try {
+            if (!proc) {
+              armForceClose("SIGTERM");
+              return;
+            }
+            proc.kill("SIGTERM");
+            killTimer = setTimeout(() => {
+              if (settled) return;
+              try {
+                proc.kill("SIGKILL");
+              } catch (error) {
+              }
+              armForceClose("SIGKILL");
+            }, TERMINATE_GRACE_MS);
+          } catch (error) {
+            armForceClose("SIGTERM");
+          }
+        };
+        const onAbort = () => terminate("abort");
+        if ((_a = request.signal) == null ? void 0 : _a.aborted) {
+          aborted = true;
+          finish(null, null);
+          return;
+        }
+        try {
+          const spawnOptions = {
+            cwd: request.cwd,
+            stdio: "pipe",
+            windowsHide: true
+          };
+          if (Object.prototype.hasOwnProperty.call(request, "env")) spawnOptions.env = request.env || {};
+          proc = spawn(request.executable, request.args || [], spawnOptions);
+        } catch (error) {
+          stderr = String(error && error.message ? error.message : error);
+          finish(null, null);
+          return;
+        }
+        (_c = (_b = proc.stdout) == null ? void 0 : _b.on) == null ? void 0 : _c.call(_b, "data", (chunk) => {
+          const remaining = maxOutputBytes - byteLength(stdout) - byteLength(stderr);
+          stdout = appendBytes(stdout, chunk, remaining);
+        });
+        (_e = (_d = proc.stderr) == null ? void 0 : _d.on) == null ? void 0 : _e.call(_d, "data", (chunk) => {
+          const remaining = maxOutputBytes - byteLength(stdout) - byteLength(stderr);
+          stderr = appendBytes(stderr, chunk, remaining);
+        });
+        (_f = proc.on) == null ? void 0 : _f.call(proc, "error", (error) => {
+          const remaining = maxOutputBytes - byteLength(stdout) - byteLength(stderr);
+          stderr = appendBytes(stderr, error && error.message ? error.message : error, remaining);
+        });
+        (_g = proc.on) == null ? void 0 : _g.call(proc, "close", finish);
+        if (request.stdin !== void 0 && ((_h = proc.stdin) == null ? void 0 : _h.end)) proc.stdin.end(String(request.stdin));
+        if (request.signal) request.signal.addEventListener("abort", onAbort, { once: true });
+        if (timeoutMs > 0) timer = setTimeout(() => terminate("timeout"), timeoutMs);
+      });
+    }
+    function readCandidatePrefix(path) {
+      try {
+        if (deps.fs.openSync && deps.fs.readSync && deps.fs.closeSync) {
+          const fd = deps.fs.openSync(path, "r");
+          try {
+            const buffer = Buffer.alloc(64 * 1024);
+            const bytesRead = deps.fs.readSync(fd, buffer, 0, buffer.length, 0);
+            return buffer.subarray(0, bytesRead);
+          } finally {
+            deps.fs.closeSync(fd);
+          }
+        }
+        if (deps.fs.readFileSync) {
+          const value = deps.fs.readFileSync(path);
+          return Buffer.from(value).subarray(0, 64 * 1024);
+        }
+      } catch (error) {
+        return null;
+      }
+      return null;
+    }
+    function fileCandidate(path, source, environment = deps.env, readableScript = false) {
+      var _a, _b, _c, _d;
+      try {
+        if (!deps.fs.existsSync(path)) return null;
+        const resolved = deps.fs.realpathSync ? deps.fs.realpathSync(path) : path;
+        if (deps.fs.statSync && !deps.fs.statSync(resolved).isFile()) return null;
+        const bytes = readCandidatePrefix(resolved);
+        const nodeScript = readableScript && isNodeScript(resolved, bytes);
+        if (deps.fs.accessSync) {
+          const posixMode = nodeScript ? (_b = (_a = deps.fs.constants) == null ? void 0 : _a.R_OK) != null ? _b : 4 : (_d = (_c = deps.fs.constants) == null ? void 0 : _c.X_OK) != null ? _d : 1;
+          deps.fs.accessSync(resolved, windows ? void 0 : posixMode);
+        }
+        return {
+          path: resolved,
+          argsPrefix: [],
+          displayPath: resolved,
+          source,
+          architectureInspected: Boolean(bytes && bytes.length),
+          nativeArchitectures: inspectNativeArchitectures(bytes),
+          nodeScript,
+          windowsCommandScript: windows && WINDOWS_COMMAND_SCRIPT.test(resolved),
+          prefixBytes: bytes
+        };
+      } catch (error) {
+        return null;
+      }
+    }
+    function runtimeCandidates(id) {
+      if (id === "ae-mcp") return [paths.launcher];
+      return [];
+    }
+    function pathCandidates(id, env) {
+      const raw = windows ? environmentValue(env, "PATH", true) || "" : env.PATH || "";
+      const extensions = windows ? ["", ".exe", ".com", ".cmd", ".bat"] : [""];
+      const result = [];
+      for (const directory of String(raw).split(separator).filter(Boolean)) {
+        for (const extension of extensions) result.push(paths.join([directory, id + extension]));
+      }
+      return result;
+    }
+    function standardCandidates(id, env) {
+      if (!windows) {
+        const values2 = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"].map((root) => paths.join([root, id]));
+        if (id === "zcode") values2.unshift("/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs");
+        return values2;
+      }
+      const values = [];
+      const systemRoot = String(environmentValue(env, "SystemRoot", true) || environmentValue(env, "WINDIR", true) || "C:\\Windows");
+      if (id === "node") values.push(paths.join([environmentValue(env, "ProgramFiles", true) || "C:\\Program Files", "nodejs", "node.exe"]));
+      const appData = environmentValue(env, "APPDATA", true) || paths.join([paths.home, "AppData", "Roaming"]);
+      values.push(paths.join([appData, "npm", id + ".cmd"]));
+      const local = environmentValue(env, "LOCALAPPDATA", true) || paths.join([paths.home, "AppData", "Local"]);
+      if (id === "zcode") values.unshift(paths.join([local, "Programs", "ZCode", "resources", "glm", "zcode.cjs"]));
+      if (id === "winget") values.unshift(paths.join([local, "Microsoft", "WindowsApps", "winget.exe"]));
+      if (id === "powershell") values.unshift(paths.join([systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"]));
+      values.push(paths.join([local, "Programs", id, id + ".exe"]));
+      return values;
+    }
+    function windowsPathInside(root, candidate) {
+      const normalizedRoot = String(paths.resolve([root])).replace(/\\+$/, "").toLowerCase();
+      const normalizedCandidate = String(paths.resolve([candidate])).toLowerCase();
+      return normalizedCandidate === normalizedRoot || normalizedCandidate.startsWith(normalizedRoot + "\\");
+    }
+    function strictNpmCmdEntry(candidate) {
+      var _a, _b, _c, _d, _e;
+      if (!/\.cmd$/i.test(candidate.path) || !Buffer.isBuffer(candidate.prefixBytes)) return null;
+      const text = candidate.prefixBytes.toString("utf8");
+      if (text.includes("\0") || /\r(?!\n)/.test(text)) return null;
+      const lines = text.replace(/\r\n/g, "\n").split("\n");
+      if (lines.at(-1) === "") lines.pop();
+      const common = [
+        "@ECHO off",
+        "GOTO start",
+        ":find_dp0",
+        "SET dp0=%~dp0",
+        "EXIT /b",
+        ":start",
+        "SETLOCAL",
+        "CALL :find_dp0",
+        "",
+        'IF EXIST "%dp0%\\node.exe" (',
+        '  SET "_prog=%dp0%\\node.exe"',
+        ") ELSE (",
+        '  SET "_prog=node"'
+      ];
+      if (common.some((line, index) => lines[index] !== line)) return null;
+      let invocation = null;
+      if (lines.length === common.length + 3 && lines[common.length] === ")" && lines[common.length + 1] === "") {
+        invocation = lines[common.length + 2].match(
+          /^endLocal & goto #_undefined_# 2>NUL \|\| title %COMSPEC% & set PATHEXT=%PATHEXT:;\.JS;=;% & "%_prog%" {1,2}"%dp0%\\([^"\r\n]+?\.(?:cjs|mjs|js))" %\*$/
+        );
+      } else if (lines.length === common.length + 4 && lines[common.length] === "  SET PATHEXT=%PATHEXT:;.JS;=;%" && lines[common.length + 1] === ")" && lines[common.length + 2] === "") {
+        invocation = lines[common.length + 3].match(
+          /^endLocal & goto #_undefined_# 2>NUL \|\| title %COMSPEC% & "%_prog%" {1,2}"%dp0%\\([^"\r\n]+?\.(?:cjs|mjs|js))" %\*$/
+        );
+      }
+      if (!invocation || /[%:*?"<>|]/.test(invocation[1])) return null;
+      const shimDirectory = paths.dirname(candidate.displayPath);
+      const localNodeModules = paths.basename(shimDirectory).toLowerCase() === ".bin" && paths.basename(paths.dirname(shimDirectory)).toLowerCase() === "node_modules" ? paths.dirname(shimDirectory) : null;
+      const globalNodeModules = invocation[1].toLowerCase().startsWith("node_modules\\") ? paths.join([shimDirectory, "node_modules"]) : null;
+      const allowedRoot = localNodeModules || globalNodeModules;
+      if (!allowedRoot) return null;
+      const lexicalEntry = paths.resolve([shimDirectory, invocation[1]]);
+      if (!windowsPathInside(allowedRoot, lexicalEntry) || !deps.fs.existsSync(lexicalEntry)) return null;
+      try {
+        const entryInfo = (deps.fs.lstatSync || deps.fs.statSync).call(deps.fs, lexicalEntry);
+        if (!entryInfo || !entryInfo.isFile() || ((_a = entryInfo.isSymbolicLink) == null ? void 0 : _a.call(entryInfo))) return null;
+        (_e = (_d = deps.fs).accessSync) == null ? void 0 : _e.call(_d, lexicalEntry, (_c = (_b = deps.fs.constants) == null ? void 0 : _b.R_OK) != null ? _c : 4);
+        const realEntry = deps.fs.realpathSync ? deps.fs.realpathSync(lexicalEntry) : lexicalEntry;
+        const realRoot = deps.fs.realpathSync ? deps.fs.realpathSync(allowedRoot) : allowedRoot;
+        if (!windowsPathInside(realRoot, realEntry)) return null;
+        return realEntry;
+      } catch (error) {
+        return null;
+      }
+    }
+    async function materializeScriptCandidate(candidate, id, options, attempts) {
+      if (candidate.windowsCommandScript && id === "node") {
+        attempts.push({ path: candidate.displayPath, source: candidate.source, detail: "Node command wrappers are not trusted interpreters" });
+        return { candidate: null, failure: "NOT_FOUND" };
+      }
+      if (!candidate.nodeScript && !candidate.windowsCommandScript) {
+        return { candidate, failure: null };
+      }
+      let scriptEntry = candidate.displayPath;
+      if (candidate.windowsCommandScript) {
+        scriptEntry = strictNpmCmdEntry(candidate);
+        if (!scriptEntry) {
+          attempts.push({ path: candidate.displayPath, source: candidate.source, detail: "command wrapper is not a strict in-root npm cmd-shim" });
+          return { candidate: null, failure: "NOT_FOUND" };
+        }
+      }
+      const node = await resolveExecutable("node", {
+        env: options.env,
+        minimumVersion: "18.0.0",
+        requiredArch: options.requiredArch
+      });
+      if (!node.ok) {
+        attempts.push({ path: candidate.displayPath, source: candidate.source, detail: "bundled script requires Node: " + node.code });
+        return { candidate: null, failure: node.code || "NOT_FOUND" };
+      }
+      return {
+        failure: null,
+        candidate: {
+          ...candidate,
+          path: node.path,
+          argsPrefix: [...node.argsPrefix || [], scriptEntry],
+          forcedArch: node.arch,
+          windowsCommandScript: false
+        }
+      };
+    }
+    async function probe(candidate, id, options, attempts) {
+      var _a, _b;
+      const executable = { ok: true, id, path: candidate.path, argsPrefix: candidate.argsPrefix, source: candidate.source, version: null, arch: null };
+      let verifiedArch = candidate.forcedArch || null;
+      if (options.requiredArch && ((_a = candidate.nativeArchitectures) == null ? void 0 : _a.length)) {
+        if (!candidate.nativeArchitectures.includes(options.requiredArch)) {
+          attempts.push({ path: candidate.displayPath, source: candidate.source, detail: "native architecture does not match " + options.requiredArch });
+          return { failure: "ARCH_MISMATCH" };
+        }
+        verifiedArch = options.requiredArch;
+      } else if (options.requiredArch && candidate.architectureInspected && !verifiedArch) {
+        attempts.push({ path: candidate.displayPath, source: candidate.source, detail: "native or interpreter architecture could not be verified" });
+        return { failure: "ARCH_MISMATCH" };
+      }
+      if (options.requiredArch && verifiedArch && verifiedArch !== options.requiredArch) {
+        attempts.push({ path: candidate.displayPath, source: candidate.source, detail: "architecture " + verifiedArch + " does not match " + options.requiredArch });
+        return { failure: "ARCH_MISMATCH" };
+      }
+      if (id === "ae-mcp") return { success: executable };
+      const args = id === "node" ? ["-p", 'process.version + " " + process.arch'] : id === "powershell" ? ["-NoProfile", "-Command", "$PSVersionTable.PSVersion.ToString()"] : ["--version"];
+      const result = await run({ executable, args, env: options.env, timeoutMs: DEFAULT_TIMEOUT_MS, maxOutputBytes: DEFAULT_OUTPUT_LIMIT });
+      const output = (result.stdout + "\n" + result.stderr).trim();
+      if (result.exitCode !== 0 || result.timedOut || result.aborted) {
+        attempts.push({ path: candidate.displayPath, source: candidate.source, detail: result.timedOut ? "probe timed out" : output || "probe failed" });
+        return { failure: "PROBE_FAILED" };
+      }
+      const versionMatch = output.match(/\d+(?:\.\d+){0,3}/);
+      const version = versionMatch ? versionMatch[0] : null;
+      if (options.minimumVersion) {
+        const compared = compareVersions(version, options.minimumVersion);
+        if (compared === null || compared < 0) {
+          attempts.push({ path: candidate.displayPath, source: candidate.source, detail: "version " + (version || "unknown") + " is below " + options.minimumVersion });
+          return { failure: "VERSION_TOO_OLD" };
+        }
+      }
+      const arch = verifiedArch || (((_b = candidate.nativeArchitectures) == null ? void 0 : _b.length) === 1 ? candidate.nativeArchitectures[0] : reportedArch(output));
+      if (options.requiredArch && arch !== options.requiredArch) {
+        attempts.push({ path: candidate.displayPath, source: candidate.source, detail: "architecture " + arch + " does not match " + options.requiredArch });
+        return { failure: "ARCH_MISMATCH" };
+      }
+      return { success: { ...executable, version, arch } };
+    }
+    async function loginShellCandidate(id, env, attempts) {
+      if (windows || !["claude", "codex", "zcode", "uv", "npm", "opencode", "node", "ae-mcp"].includes(id)) return null;
+      const shell = fileCandidate("/bin/zsh", "standard", env);
+      if (!shell) return null;
+      const begin = "__AE_MCP_PATH_BEGIN__";
+      const end = "__AE_MCP_PATH_END__";
+      const fixedName = id;
+      const command = 'p="$(command -v -- ' + fixedName + ' 2>/dev/null)"; printf "' + begin + "%s" + end + '\\n" "$p"';
+      const result = await run({
+        executable: { ok: true, id, path: shell.path, argsPrefix: [], source: "login-shell", version: null, arch: null },
+        args: ["-lc", command],
+        env,
+        timeoutMs: DEFAULT_TIMEOUT_MS,
+        maxOutputBytes: DEFAULT_OUTPUT_LIMIT
+      });
+      const lines = result.stdout.split(/\r?\n/).filter(Boolean);
+      const match = lines.length === 1 && !result.stderr.trim() ? lines[0].match(/^__AE_MCP_PATH_BEGIN__(.+)__AE_MCP_PATH_END__$/) : null;
+      if (!match) {
+        if (result.stdout || result.stderr) attempts.push({ path: "/bin/zsh", source: "login-shell", detail: "login shell output was polluted or empty" });
+        return null;
+      }
+      return fileCandidate(match[1], "login-shell", env, id === "zcode");
+    }
+    async function resolveExecutable(id, options = {}) {
+      if (!EXECUTABLE_IDS.has(id)) throw new TypeError("Unsupported executable id: " + id);
+      const hasExplicitEnv = Object.prototype.hasOwnProperty.call(options, "env");
+      const env = hasExplicitEnv ? completeEnvironment(options.env || {}) : completeSpawnEnv();
+      const envKey = "AE_MCP_" + id.toUpperCase().replace("-", "_") + "_CLI";
+      const override = String(options.overridePath || environmentValue(env, envKey, windows) || "").trim();
+      const attempts = [];
+      let strongestFailure = "NOT_FOUND";
+      const groups = [
+        { source: "override", values: override ? [override] : [] },
+        { source: "runtime", values: runtimeCandidates(id) },
+        { source: "path", values: pathCandidates(id, env) }
+      ];
+      for (const group of groups) {
+        for (const path of group.values) {
+          const rawCandidate = fileCandidate(path, group.source, env, id !== "node");
+          if (!rawCandidate) continue;
+          const materialized = await materializeScriptCandidate(rawCandidate, id, { ...options, env }, attempts);
+          const candidate = materialized.candidate;
+          if (!candidate) {
+            if (materialized.failure === "ARCH_MISMATCH") strongestFailure = "ARCH_MISMATCH";
+            else if (materialized.failure === "VERSION_TOO_OLD" && strongestFailure !== "ARCH_MISMATCH") strongestFailure = "VERSION_TOO_OLD";
+            continue;
+          }
+          const result = await probe(candidate, id, { ...options, env }, attempts);
+          if (result.success) return result.success;
+          strongestFailure = result.failure === "ARCH_MISMATCH" ? result.failure : strongestFailure === "NOT_FOUND" || strongestFailure === "PROBE_FAILED" && result.failure === "VERSION_TOO_OLD" ? result.failure : strongestFailure;
+        }
+      }
+      const shellCandidate = await loginShellCandidate(id, env, attempts);
+      if (shellCandidate) {
+        const result = await probe(shellCandidate, id, { ...options, env }, attempts);
+        if (result.success) return result.success;
+        strongestFailure = result.failure;
+      }
+      for (const path of standardCandidates(id, env)) {
+        const rawCandidate = fileCandidate(path, "standard", env, id !== "node");
+        if (!rawCandidate) continue;
+        const materialized = await materializeScriptCandidate(rawCandidate, id, { ...options, env }, attempts);
+        const candidate = materialized.candidate;
+        if (!candidate) {
+          if (materialized.failure === "ARCH_MISMATCH") strongestFailure = "ARCH_MISMATCH";
+          else if (materialized.failure === "VERSION_TOO_OLD" && strongestFailure !== "ARCH_MISMATCH") strongestFailure = "VERSION_TOO_OLD";
+          continue;
+        }
+        const result = await probe(candidate, id, { ...options, env }, attempts);
+        if (result.success) return result.success;
+        strongestFailure = result.failure;
+      }
+      return { ok: false, id, code: strongestFailure, attempts };
+    }
+    return { completeSpawnEnv, resolveExecutable, run, spawn };
+  }
+
+  // src/cep/platform/macos.js
+  function createMacosAdapter(deps) {
+    if (!deps || deps.platform !== "darwin" || deps.arch !== "arm64") throw new Error("macOS arm64 dependencies are required");
+    const paths = createPathCatalog({ home: deps.home, temp: deps.temp, platform: deps.platform });
+    const boundary = createProcessBoundary({ deps, paths, platform: deps.platform });
+    const fixed = (id, path, argsPrefix = []) => ({ ok: true, id, path, argsPrefix, source: "standard", version: null, arch: "arm64" });
+    return Object.freeze({
+      id: "macos-arm64",
+      paths,
+      fs: deps.fs,
+      ...boundary,
+      revealFile(filePath) {
+        return boundary.run({ executable: fixed("ae-mcp", "/usr/bin/open"), args: ["-R", String(filePath)], timeoutMs: 5e3 });
+      },
+      openLoginTerminal(tool) {
+        if (tool !== "claude" && tool !== "codex") throw new TypeError("Unsupported login tool");
+        const command = tool === "claude" ? "claude" : "codex login";
+        const script = 'tell application "Terminal" to do script ' + JSON.stringify(command) + '\ntell application "Terminal" to activate';
+        return boundary.run({ executable: fixed(tool, "/usr/bin/osascript"), args: ["-e", script], timeoutMs: 5e3 });
+      },
+      legacyWizardInstallCommands({ panelVersion, repoRoot, repo }) {
+        const src = (sub) => repoRoot ? paths.join([repoRoot, "packages", sub]) : `git+${repo}@v${panelVersion}#subdirectory=packages/${sub}`;
+        return {
+          uv: { file: "brew", executableId: "brew", args: ["install", "uv"] },
+          uvFallback: { file: "brew", executableId: "brew", args: ["install", "uv"] },
+          node: { file: "brew", executableId: "brew", args: ["install", "node@24"] },
+          claude: { file: "npm", executableId: "npm", args: ["install", "-g", "@anthropic-ai/claude-code"] },
+          aeMcp: { file: "uv", executableId: "uv", args: ["tool", "install", "--force", "--from", src("core"), "ae-mcp", "--with", src("bridge"), "--with", src("snapshot-mss")] }
+        };
+      }
+    });
+  }
+
+  // src/cep/platform/windows.js
+  function envValue(environment, name) {
+    const key = Object.keys(environment || {}).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
+    return key === void 0 ? void 0 : environment[key];
+  }
+  function createWindowsAdapter(deps) {
+    if (!deps || deps.platform !== "win32" || deps.arch !== "x64") throw new Error("Windows x64 dependencies are required");
+    const paths = createPathCatalog({ home: deps.home, temp: deps.temp, platform: deps.platform });
+    const boundary = createProcessBoundary({ deps, paths, platform: deps.platform });
+    const systemRoot = String(envValue(deps.env, "SystemRoot") || envValue(deps.env, "WINDIR") || "C:\\Windows");
+    const fixed = (id, path, argsPrefix = []) => ({ ok: true, id, path, argsPrefix, source: "standard", version: null, arch: "x64" });
+    return Object.freeze({
+      id: "windows-x64",
+      paths,
+      fs: deps.fs,
+      ...boundary,
+      revealFile(filePath) {
+        const explorer = paths.join([systemRoot, "explorer.exe"]);
+        return boundary.run({ executable: fixed("ae-mcp", explorer), args: ["/select,", String(filePath)], timeoutMs: 5e3 });
+      },
+      openLoginTerminal(tool) {
+        if (tool !== "claude" && tool !== "codex") throw new TypeError("Unsupported login tool");
+        const cmd = paths.join([systemRoot, "System32", "cmd.exe"]);
+        const args = tool === "claude" ? ["start", "", "claude"] : ["start", "", "codex", "login"];
+        return boundary.run({ executable: fixed(tool, cmd, ["/d", "/s", "/c"]), args, timeoutMs: 5e3 });
+      },
+      legacyWizardInstallCommands({ panelVersion, repoRoot, repo }) {
+        const src = (sub) => repoRoot ? paths.join([repoRoot, "packages", sub]) : `git+${repo}@v${panelVersion}#subdirectory=packages/${sub}`;
+        return {
+          uv: { file: "winget", executableId: "winget", args: ["install", "--id", "astral-sh.uv", "-e", "--accept-source-agreements", "--accept-package-agreements"] },
+          uvFallback: { file: "powershell", executableId: "powershell", args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "irm https://astral.sh/uv/install.ps1 | iex"] },
+          node: { file: "winget", executableId: "winget", args: ["install", "--id", "OpenJS.NodeJS.LTS", "-e", "--accept-source-agreements", "--accept-package-agreements"] },
+          claude: { file: "npm", executableId: "npm", args: ["install", "-g", "@anthropic-ai/claude-code"] },
+          aeMcp: { file: "uv", executableId: "uv", args: ["tool", "install", "--force", "--from", src("core"), "ae-mcp", "--with", src("bridge"), "--with", src("snapshot-mss")] }
+        };
+      }
+    });
+  }
+
+  // src/cep/platform/index.js
+  var PlatformCapabilityError = class extends Error {
+    constructor(code, message) {
+      super(message);
+      this.name = "PlatformCapabilityError";
+      this.code = code;
+    }
+  };
+  function cepRequire() {
+    var _a, _b, _c;
+    if ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) return globalThis.window.cep_node.require;
+    if ((_c = globalThis.window) == null ? void 0 : _c.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new PlatformCapabilityError("CEP_NODE_UNAVAILABLE", "CEP Node require is unavailable");
+  }
+  function windowsEnvValue(environment, name) {
+    const key = Object.keys(environment || {}).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
+    return key === void 0 ? void 0 : environment[key];
+  }
+  function defaultPlatformDependencies() {
+    var _a, _b;
+    const require2 = cepRequire();
+    const processImpl = ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.process) || globalThis.process;
+    if (!processImpl) throw new PlatformCapabilityError("CEP_NODE_UNAVAILABLE", "CEP Node process is unavailable");
+    const os = require2("os");
+    const env = { ...processImpl.env || {} };
+    const platform = processImpl.platform;
+    const home = platform === "win32" ? windowsEnvValue(env, "USERPROFILE") || os.homedir() : env.HOME || os.homedir();
+    return {
+      platform,
+      arch: processImpl.arch,
+      home,
+      temp: os.tmpdir(),
+      env,
+      fs: require2("fs"),
+      spawnImpl: require2("child_process").spawn,
+      now: () => Date.now()
+    };
+  }
+  function createPlatformAdapter(deps = defaultPlatformDependencies()) {
+    if (deps.platform === "darwin" && deps.arch === "arm64") return createMacosAdapter(deps);
+    if (deps.platform === "win32" && deps.arch === "x64") return createWindowsAdapter(deps);
+    throw new PlatformCapabilityError("UNSUPPORTED_PLATFORM", deps.platform + "-" + deps.arch + " is not supported");
+  }
+
   // src/screens/SettingsScreen.jsx
   var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
   var REPO_URL = "https://github.com/JUNKDOGE-JOE/after-effects-mcp";
@@ -9033,21 +9859,11 @@
     if (v.length <= 10) return "*".repeat(v.length);
     return v.slice(0, 7) + "*".repeat(Math.min(10, v.length - 11)) + v.slice(-4);
   }
-  function cepRequire() {
-    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) return globalThis.window.cep_node.require;
-    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    return null;
-  }
   function readTokenValue() {
     try {
-      const req = cepRequire();
-      if (!req) return "";
-      const fs = req("fs");
-      const path = req("path");
-      const os = req("os");
-      const tokenPath2 = path.join(os.homedir(), ".ae-mcp", "auth-token");
-      return fs.readFileSync(tokenPath2, "utf8").trim();
+      const platform = createPlatformAdapter();
+      const tokenPath2 = platform.paths.join([platform.paths.configRoot, "auth-token"]);
+      return platform.fs.readFileSync(tokenPath2, "utf8").trim();
     } catch (e) {
       return "";
     }
@@ -11311,15 +12127,6 @@
     url.hash = "";
     return url.toString();
   }
-  function ensureUserEnv(env = {}, { homedir = "", appData = "" } = {}) {
-    const next = { ...env };
-    const anchor = String(next.USERPROFILE || next.HOME || homedir || "").replace(/[\\/]+$/, "");
-    if (!anchor) return next;
-    if (!next.USERPROFILE) next.USERPROFILE = anchor;
-    if (!next.HOME) next.HOME = anchor;
-    if (!next.APPDATA) next.APPDATA = appData || anchor + "\\AppData\\Roaming";
-    return next;
-  }
 
   // src/lib/anthropic.js
   var DEFAULT_MODEL = "claude-sonnet-4-6";
@@ -11727,330 +12534,6 @@
     });
   }
 
-  // src/lib/claudeChannel.js
-  function claudeChannelEnv(baseEnv = {}, { channel = "subscription", provider = null } = {}) {
-    const env = { ...baseEnv };
-    delete env.ANTHROPIC_API_KEY;
-    if (channel === "api" && provider && provider.baseUrl) {
-      env.ANTHROPIC_BASE_URL = String(provider.baseUrl);
-      if (provider.apiKey) env.ANTHROPIC_AUTH_TOKEN = String(provider.apiKey);
-      else delete env.ANTHROPIC_AUTH_TOKEN;
-      return env;
-    }
-    delete env.ANTHROPIC_BASE_URL;
-    delete env.ANTHROPIC_AUTH_TOKEN;
-    return env;
-  }
-
-  // src/cep/claudeAgentBackend.js
-  var READY_TIMEOUT_MS = 15e3;
-  var STDERR_TAIL_LIMIT = 4096;
-  var FIXED_NODE_CANDIDATE = "C:\\Program Files\\nodejs\\node.exe";
-  function getCepRequire() {
-    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-      return globalThis.window.cep_node.require;
-    }
-    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    throw new Error("CEP Node require is unavailable");
-  }
-  function getCepEnv() {
-    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
-  }
-  function execFileAsync(execFileImpl, file, args, env) {
-    return new Promise((resolve) => {
-      execFileImpl(file, args, { windowsHide: true, env }, (err, stdout, stderr) => {
-        resolve({ err, stdout: String(stdout || ""), stderr: String(stderr || "") });
-      });
-    });
-  }
-  function nodeCandidates(stdout) {
-    const seen = /* @__PURE__ */ new Set();
-    const candidates = String(stdout || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    candidates.push(FIXED_NODE_CANDIDATE);
-    return candidates.filter((candidate) => {
-      if (seen.has(candidate)) return false;
-      seen.add(candidate);
-      return true;
-    });
-  }
-  function parseMajor(version) {
-    const match = String(version || "").trim().match(/^v(\d+)/);
-    return match ? Number(match[1]) : 0;
-  }
-  async function resolveSystemNode({ execFileImpl, env } = {}) {
-    const execFile = execFileImpl || getCepRequire()("child_process").execFile;
-    const processEnv = env || getCepEnv();
-    const where = await execFileAsync(execFile, "where", ["node"], processEnv);
-    const candidates = nodeCandidates(where.err ? "" : where.stdout);
-    for (const candidate of candidates) {
-      const checked = await execFileAsync(execFile, candidate, ["--version"], processEnv);
-      if (checked.err) continue;
-      const version = String(checked.stdout || checked.stderr || "").trim();
-      if (parseMajor(version) >= 18) return { ok: true, nodePath: candidate, version };
-    }
-    return { ok: false, detail: "No system Node 18+ found." };
-  }
-  function clone2(value) {
-    return value == null ? value : JSON.parse(JSON.stringify(value));
-  }
-  function nodeMissingMessage(lang) {
-    if (lang === "zh") return "\u5185\u5D4C\u5BF9\u8BDD\u9700\u8981\u7CFB\u7EDF Node 18+\uFF08\u672A\u68C0\u6D4B\u5230\uFF09\u3002\u5B89\u88C5 Node.js LTS \u540E\u91CD\u8BD5\u3002";
-    return "Embedded chat needs system Node 18+. Install Node.js LTS and retry.";
-  }
-  function appendTail2(tail, chunk) {
-    const next = tail + String(chunk || "");
-    return next.length > STDERR_TAIL_LIMIT ? next.slice(next.length - STDERR_TAIL_LIMIT) : next;
-  }
-  function createClaudeAgentBackend({
-    resolveNode = resolveSystemNode,
-    sidecarPath,
-    getMcpSpec,
-    getToolMeta,
-    getModel,
-    getPermissionMode,
-    getEffort,
-    getThinking,
-    getChannel = () => "subscription",
-    getApiProvider = () => null,
-    onEvent,
-    lang = "zh",
-    spawnImpl,
-    env
-  }) {
-    let proc = null;
-    let startPromise = null;
-    let pendingReadyReject = null;
-    let pendingReadyTimer = null;
-    let ready = false;
-    let stopping = false;
-    let stderrTail = "";
-    let transcript = [];
-    let activeRun = null;
-    let activeResolve = null;
-    let activeAssistantText = "";
-    function emit(evt) {
-      if (onEvent) onEvent(evt);
-    }
-    function getSpawn() {
-      if (spawnImpl) return spawnImpl;
-      return getCepRequire()("child_process").spawn;
-    }
-    function writeMessage(message) {
-      if (!proc || !proc.stdin || !proc.stdin.write) return;
-      proc.stdin.write(JSON.stringify(message) + "\n");
-    }
-    function finishActive() {
-      if (!activeResolve) {
-        activeRun = null;
-        activeAssistantText = "";
-        return;
-      }
-      const resolve = activeResolve;
-      activeResolve = null;
-      activeRun = null;
-      activeAssistantText = "";
-      resolve();
-    }
-    function handleSidecarMessage(message) {
-      if (!message || message.t === "ready") return;
-      if (message.t !== "event") return;
-      const event = message.event;
-      if (!event) return;
-      if (event.type === "text-delta") activeAssistantText += String(event.text || "");
-      emit(event);
-      if (event.type === "turn-end") {
-        transcript.push({ role: "assistant", text: activeAssistantText });
-        finishActive();
-      }
-      if (event.type === "error") finishActive();
-    }
-    function exitDetail(code, signal) {
-      const suffix = signal ? String(code) + " " + signal : String(code);
-      return stderrTail ? suffix + " " + stderrTail : suffix;
-    }
-    function clearReadyWait() {
-      if (pendingReadyTimer) clearTimeout(pendingReadyTimer);
-      pendingReadyTimer = null;
-      pendingReadyReject = null;
-    }
-    function handleExit(code, signal) {
-      const wasStopping = stopping;
-      const wasReady = ready;
-      const detail = exitDetail(code, signal);
-      const rejectReady = pendingReadyReject;
-      proc = null;
-      ready = false;
-      startPromise = null;
-      stopping = false;
-      if (wasStopping) return;
-      if (!wasReady && rejectReady) {
-        clearReadyWait();
-        rejectReady(new Error("sidecar exited: " + detail));
-        return;
-      }
-      if (activeRun) {
-        emit({ type: "error", kind: "mcp", message: "sidecar exited: " + detail });
-        finishActive();
-      }
-    }
-    function handleProcError(error) {
-      const rejectReady = pendingReadyReject;
-      proc = null;
-      ready = false;
-      startPromise = null;
-      if (rejectReady) {
-        clearReadyWait();
-        rejectReady(error instanceof Error ? error : new Error("sidecar error"));
-        return;
-      }
-      if (activeRun) {
-        emit({ type: "error", kind: "mcp", message: error && error.message ? error.message : "sidecar error" });
-        finishActive();
-      }
-    }
-    async function startSidecar() {
-      if (proc && ready) return true;
-      if (startPromise) return startPromise;
-      startPromise = (async () => {
-        const node = await resolveNode();
-        if (!node || !node.ok) {
-          emit({ type: "error", kind: "mcp", message: nodeMissingMessage(lang) });
-          return false;
-        }
-        const mcpSpec = await getMcpSpec();
-        const meta = await getToolMeta();
-        const spawn = getSpawn();
-        const channel = getChannel ? getChannel() : "subscription";
-        const spawnEnv = claudeChannelEnv(env || getCepEnv(), { channel, provider: getApiProvider ? getApiProvider() : null });
-        stderrTail = "";
-        stopping = false;
-        ready = false;
-        let readyResolve;
-        let readyReject;
-        const readyPromise = new Promise((resolve, reject) => {
-          readyResolve = resolve;
-          readyReject = reject;
-        });
-        pendingReadyReject = readyReject;
-        pendingReadyTimer = setTimeout(() => {
-          pendingReadyTimer = null;
-          pendingReadyReject = null;
-          try {
-            stopping = true;
-            if (proc) proc.kill();
-          } catch (e) {
-          }
-          readyReject(new Error("sidecar ready timed out"));
-        }, READY_TIMEOUT_MS);
-        try {
-          proc = spawn(node.nodePath, [
-            sidecarPath,
-            "--mcp",
-            JSON.stringify(mcpSpec),
-            "--allowed-tools",
-            JSON.stringify(meta.allowedTools),
-            "--annotations",
-            JSON.stringify(meta.annotations),
-            "--model",
-            getModel(),
-            "--lang",
-            lang,
-            "--channel",
-            channel
-          ], {
-            stdio: "pipe",
-            windowsHide: true,
-            env: spawnEnv
-          });
-        } catch (e) {
-          clearReadyWait();
-          throw e;
-        }
-        const reader = createNdjsonReader((message) => {
-          if (message && message.t === "ready") {
-            ready = true;
-            clearReadyWait();
-            readyResolve(true);
-            return;
-          }
-          handleSidecarMessage(message);
-        });
-        if (proc.stdout && proc.stdout.on) proc.stdout.on("data", reader);
-        if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
-          stderrTail = appendTail2(stderrTail, chunk);
-        });
-        proc.on("exit", (code, signal) => handleExit(code, signal));
-        proc.on("error", (error) => {
-          handleProcError(error);
-        });
-        await readyPromise;
-        return true;
-      })();
-      try {
-        return await startPromise;
-      } catch (e) {
-        emit({ type: "error", kind: "mcp", message: e && e.message ? e.message : "Failed to start sidecar." });
-        return false;
-      } finally {
-        startPromise = null;
-      }
-    }
-    async function sendUser(text) {
-      if (activeRun) return activeRun;
-      activeAssistantText = "";
-      activeRun = new Promise((resolve) => {
-        activeResolve = resolve;
-      });
-      const ok = await startSidecar();
-      if (!ok) {
-        finishActive();
-        return activeRun;
-      }
-      const userText = String(text || "");
-      transcript.push({ role: "user", text: userText });
-      writeMessage({
-        t: "user",
-        text: userText,
-        permissionMode: getPermissionMode(),
-        model: getModel(),
-        effort: getEffort ? getEffort() : void 0,
-        thinking: getThinking ? getThinking() : void 0
-      });
-      return activeRun;
-    }
-    function approve(toolUseId, decision) {
-      writeMessage({ t: "approve", id: toolUseId, decision });
-    }
-    function stop() {
-      writeMessage({ t: "stop" });
-    }
-    function reset() {
-      stopping = true;
-      if (proc) {
-        try {
-          proc.kill();
-        } catch (e) {
-        }
-      }
-      proc = null;
-      ready = false;
-      startPromise = null;
-      transcript = [];
-      finishActive();
-      stderrTail = "";
-      stopping = false;
-    }
-    return {
-      sendUser,
-      approve,
-      stop,
-      reset,
-      getMessages: () => clone2(transcript),
-      getStderrTail: () => stderrTail
-    };
-  }
-
   // src/cep/apiKey.js
   var KEY_FILES = {
     anthropic: "anthropic-key",
@@ -12155,73 +12638,30 @@
 
   // src/cep/zcodeBackend.js
   var RPC_TIMEOUT_MS = 3e4;
-  var STDERR_TAIL_LIMIT2 = 4096;
+  var STDERR_TAIL_LIMIT = 4096;
   var DELIVERY_KIND = "desktop-continuous";
   var ZCODE_BUILTIN_DEFAULT_MODEL = "builtin:bigmodel-start-plan/GLM-5.2";
   var LEGACY_ZCODE_MODEL_REFS = /* @__PURE__ */ new Set(["mediastorm_glm/glm-5.2"]);
   var ZCODE_THOUGHT_LEVELS = /* @__PURE__ */ new Set(["nothink", "high", "max", "low", "medium"]);
-  var ZCODE_CREDENTIAL_PREFIX = "enc:v1:";
-  var ZCODE_API_KEY_NAME = "zcode-api-key";
-  var BIGMODEL_API_ORIGIN = "https://bigmodel.cn";
-  var ZAI_BIZ_API_ORIGIN = "https://api.z.ai";
-  var JSON_CONTENT_TYPE = "application/json";
   var MODE_BY_TIER = {
     readonly: "plan",
     manual: "build",
     auto: "edit",
     none: "yolo"
   };
-  function getCepRequire2() {
-    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-      return globalThis.window.cep_node.require;
-    }
-    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    throw new Error("CEP Node require is unavailable");
-  }
-  function getCepEnv2() {
-    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
-  }
-  function appendTail3(tail, chunk) {
+  function appendTail2(tail, chunk) {
     const next = tail + String(chunk || "");
-    return next.length > STDERR_TAIL_LIMIT2 ? next.slice(next.length - STDERR_TAIL_LIMIT2) : next;
+    return next.length > STDERR_TAIL_LIMIT ? next.slice(next.length - STDERR_TAIL_LIMIT) : next;
   }
-  function clone3(value) {
+  function clone2(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
   }
-  async function resolveZcodeCli({ env, execFileImpl }) {
-    const override = env && env.AE_MCP_ZCODE_CLI;
-    if (override) return { ok: true, cliPath: override };
-    const localAppData = env && (env.LOCALAPPDATA || env.LocalAppData);
-    if (localAppData) {
-      const path = localAppData + "\\Programs\\ZCode\\resources\\glm\\zcode.cjs";
-      try {
-        await statFile(path);
-        return { ok: true, cliPath: path };
-      } catch (e) {
-      }
-    }
-    const execFile = execFileImpl || getCepRequire2()("child_process").execFile;
-    try {
-      const where = await execFileAsync2(execFile, "where", ["zcode"], env || {});
-      if (!where.err && where.stdout) {
-        const exe = String(where.stdout).split(/\r?\n/)[0].trim();
-        if (exe) return { ok: true, cliPath: exe, isExe: true };
-      }
-    } catch (e) {
-    }
-    return { ok: false, detail: "ZCode CLI not found. Install ZCode or set AE_MCP_ZCODE_CLI to the zcode.cjs path." };
-  }
-  function statFile(path) {
-    const fs = getCepRequire2()("fs");
-    return new Promise((resolve, reject) => fs.stat(path, (err) => err ? reject(err) : resolve()));
-  }
-  function execFileAsync2(execFile, cmd, args, env) {
-    return new Promise((resolve) => {
-      execFile(cmd, args, { env, windowsHide: true }, (err, stdout, stderr) => {
-        resolve({ err, stdout: String(stdout || ""), stderr: String(stderr || "") });
-      });
-    });
+  async function resolveZcodeCli({ env, platform }) {
+    const adapter = platform || createPlatformAdapter();
+    const requiredArch = adapter.id === "macos-arm64" ? "arm64" : adapter.id === "windows-x64" ? "x64" : void 0;
+    const executable = await adapter.resolveExecutable("zcode", { env: env || {}, ...requiredArch ? { requiredArch } : {} });
+    if (!executable.ok) return { ok: false, detail: "ZCode CLI resolution failed: " + executable.code, resolution: executable };
+    return { ok: true, cliPath: executable.path, executable };
   }
   function createRpc({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEOUT_MS }) {
     let nextId2 = 1;
@@ -12267,6 +12707,7 @@
       const limit = timeoutOverrideMs || timeoutMs;
       const promise = new Promise((resolve, reject) => {
         const timer = setTimeout(() => rejectPending(id, new Error(method + " timed out after " + limit + "ms")), limit);
+        if (timer && timer.unref) timer.unref();
         pending.set(id, { resolve, reject, timer });
       });
       writeMessage(message);
@@ -12437,10 +12878,6 @@
       ...thoughtLevel ? { thoughtLevel } : {}
     };
   }
-  function zcodeDesktopBasePath(env) {
-    const home = env && (env.USERPROFILE || env.HOME || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : ""));
-    return home ? String(home).replace(/[\\/]+$/, "") + "\\.zcode\\v2" : "";
-  }
   function readJsonFile(fsImpl, path) {
     try {
       return JSON.parse(fsImpl.readFileSync(path, "utf8"));
@@ -12448,41 +12885,38 @@
       return null;
     }
   }
-  function zcodeCliBasePath(env) {
-    const home = env && (env.USERPROFILE || env.HOME || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : ""));
-    return home ? String(home).replace(/[\\/]+$/, "") + "\\.zcode\\cli" : "";
-  }
   function mergeZcodeConfigs({ cliConfig, desktopConfig } = {}) {
     const desktopProviders = desktopConfig && desktopConfig.provider && typeof desktopConfig.provider === "object" ? desktopConfig.provider : {};
     const cliProviders = cliConfig && cliConfig.provider && typeof cliConfig.provider === "object" ? cliConfig.provider : {};
     const provider = Object.assign({}, desktopProviders, cliProviders);
     return Object.keys(provider).length ? { provider } : null;
   }
-  function readZcodeConfigs({ env, fsImpl } = {}) {
-    const fs = fsImpl || getCepRequire2()("fs");
-    const desktopBase = zcodeDesktopBasePath(env || {});
-    const cliBase = zcodeCliBasePath(env || {});
-    const desktopConfig = desktopBase ? readJsonFile(fs, desktopBase + "\\config.json") : null;
-    const setting = desktopBase ? readJsonFile(fs, desktopBase + "\\setting.json") : null;
-    const cliConfig = cliBase ? readJsonFile(fs, cliBase + "\\config.json") : null;
+  function readZcodeConfigs({ fsImpl, platform } = {}) {
+    const adapter = platform || createPlatformAdapter();
+    const fs = fsImpl || adapter.fs;
+    const desktopBase = adapter.paths.join([adapter.paths.home, ".zcode", "v2"]);
+    const cliBase = adapter.paths.join([adapter.paths.home, ".zcode", "cli"]);
+    const desktopConfig = readJsonFile(fs, adapter.paths.join([desktopBase, "config.json"]));
+    const setting = readJsonFile(fs, adapter.paths.join([desktopBase, "setting.json"]));
+    const cliConfig = readJsonFile(fs, adapter.paths.join([cliBase, "config.json"]));
     const cliModel = cliConfig && typeof cliConfig.model === "string" ? cliConfig.model.trim() : "";
     return { config: mergeZcodeConfigs({ cliConfig, desktopConfig }), setting, cliModel, cliConfig, desktopConfig };
   }
-  function readZcodeDesktopModel({ env, fsImpl } = {}) {
-    const { config, setting, cliModel } = readZcodeConfigs({ env, fsImpl });
+  function readZcodeDesktopModel({ env, fsImpl, platform } = {}) {
+    const { config, setting, cliModel } = readZcodeConfigs({ fsImpl, platform });
     if (cliModel) {
       const requested = zcodeProtocolModelFromRef(cliModel);
       if (requested && config && config.provider && config.provider[requested.providerId]) return cliModel;
     }
     return zcodeModelFromDesktopConfig({ config, setting, env: env || {} });
   }
-  function readZcodeDesktopRuntimeModel({ env, fsImpl, modelRef, thoughtLevel, storedKey = "" } = {}) {
-    const { config, setting, cliModel } = readZcodeConfigs({ env, fsImpl });
+  function readZcodeDesktopRuntimeModel({ env, fsImpl, platform, modelRef, thoughtLevel, storedKey = "" } = {}) {
+    const { config, setting, cliModel } = readZcodeConfigs({ fsImpl, platform });
     const ref = modelRef || cliModel || "";
     return zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef: ref, thoughtLevel, env: env || {}, storedKey });
   }
-  function summarizeZcodeConfig({ env = {}, fsImpl, storedKey = "" } = {}) {
-    const { cliConfig, desktopConfig, cliModel } = readZcodeConfigs({ env, fsImpl });
+  function summarizeZcodeConfig({ env = {}, fsImpl, platform, storedKey = "" } = {}) {
+    const { cliConfig, desktopConfig, cliModel } = readZcodeConfigs({ fsImpl, platform });
     const cliProviders = cliConfig && cliConfig.provider || {};
     const cliProviderId = zcodeProviderId(cliModel) || Object.keys(cliProviders)[0] || "";
     const cliProvider = cliProviderId ? cliProviders[cliProviderId] : null;
@@ -12509,175 +12943,6 @@
         hasCredential: hasZcodeProviderCredential(startPlanProvider, env)
       } : null
     };
-  }
-  function zcodeProviderFamily(providerId) {
-    const text = String(providerId || "").trim();
-    const id = text.startsWith("builtin:") ? text.slice("builtin:".length) : text;
-    return id.replace(/-(?:start|coding)-plan$/i, "").split(/[/:]/)[0];
-  }
-  function getNodeBuffer() {
-    return globalThis.Buffer || getCepRequire2()("buffer").Buffer;
-  }
-  function zcodeCredentialSecret(env, osImpl) {
-    const explicit = env && env.ZCODE_CREDENTIAL_SECRET && String(env.ZCODE_CREDENTIAL_SECRET).trim();
-    if (explicit) return explicit;
-    const os = osImpl || getCepRequire2()("os");
-    let username = "unknown";
-    try {
-      username = os.userInfo().username;
-    } catch (e) {
-    }
-    return "zcode-credential-fallback:" + os.platform() + ":" + os.homedir() + ":" + username;
-  }
-  function decryptZcodeCredentialValue(value, { env, cryptoImpl, osImpl } = {}) {
-    const text = String(value || "");
-    if (!text.startsWith(ZCODE_CREDENTIAL_PREFIX)) return text;
-    const crypto = cryptoImpl || getCepRequire2()("crypto");
-    const BufferImpl = getNodeBuffer();
-    const parts = text.slice(ZCODE_CREDENTIAL_PREFIX.length).split(".");
-    if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) {
-      throw new Error("Credential decrypt failed: invalid ciphertext format");
-    }
-    const key = crypto.createHash("sha256").update(zcodeCredentialSecret(env || {}, osImpl)).digest();
-    const iv = BufferImpl.from(parts[0], "base64url");
-    const authTag = BufferImpl.from(parts[1], "base64url");
-    const cipherText = BufferImpl.from(parts[2], "base64url");
-    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
-    decipher.setAuthTag(authTag);
-    return BufferImpl.concat([decipher.update(cipherText), decipher.final()]).toString("utf8");
-  }
-  function readZcodeOAuthAccessToken({ env, fsImpl, providerId } = {}) {
-    const base = zcodeDesktopBasePath(env || {});
-    if (!base) return "";
-    const fs = fsImpl || getCepRequire2()("fs");
-    const credentials = readJsonFile(fs, base + "\\credentials.json");
-    if (!credentials || typeof credentials !== "object") return "";
-    const providers = [];
-    const family = zcodeProviderFamily(providerId);
-    if (family) providers.push(family);
-    const active = credentials["oauth:active_provider"];
-    if (active) {
-      try {
-        const activeProvider = decryptZcodeCredentialValue(active, { env });
-        if (activeProvider && !providers.includes(activeProvider)) providers.push(activeProvider);
-      } catch (e) {
-      }
-    }
-    for (const provider of providers) {
-      const raw = credentials["oauth:" + provider + ":access_token"];
-      if (!raw) continue;
-      return decryptZcodeCredentialValue(raw, { env });
-    }
-    return "";
-  }
-  function resolveBigModelApiOrigin(env = {}) {
-    const explicit = env.BIGMODEL_API_BASE_URL || env.BIGMODEL_PRODUCTION_API_BASE_URL;
-    return String(explicit || BIGMODEL_API_ORIGIN).replace(/\/+$/, "");
-  }
-  function remoteCodeOk(code) {
-    return code === void 0 || code === null || code === 0 || code === 200 || code === "0" || code === "200";
-  }
-  async function defaultHttpRequestJson({ url, method = "GET", headers = {}, body }) {
-    const target = new URL(url);
-    const moduleName = target.protocol === "http:" ? "http" : "https";
-    const http = getCepRequire2()(moduleName);
-    const BufferImpl = getNodeBuffer();
-    const payload = body === void 0 ? null : typeof body === "string" ? body : JSON.stringify(body);
-    const requestHeaders = Object.assign({}, headers);
-    if (payload !== null && requestHeaders["Content-Length"] === void 0) {
-      requestHeaders["Content-Length"] = String(BufferImpl.byteLength(payload));
-    }
-    return new Promise((resolve, reject) => {
-      const req = http.request(target, { method, headers: requestHeaders }, (res) => {
-        const chunks = [];
-        res.on("data", (chunk) => chunks.push(chunk));
-        res.on("end", () => {
-          const text = BufferImpl.concat(chunks).toString("utf8");
-          if (res.statusCode < 200 || res.statusCode >= 300) {
-            reject(new Error("ZCode OAuth request failed with HTTP " + res.statusCode + ": " + text.slice(0, 300)));
-            return;
-          }
-          try {
-            resolve(text ? JSON.parse(text) : {});
-          } catch (e) {
-            reject(new Error("ZCode OAuth response was not valid JSON"));
-          }
-        });
-      });
-      req.on("error", reject);
-      if (payload !== null) req.write(payload);
-      req.end();
-    });
-  }
-  async function requestRemoteData(requestJson, options) {
-    var _a;
-    const json = await requestJson(options);
-    if (!json || typeof json !== "object") throw new Error("ZCode OAuth response was empty");
-    if (!remoteCodeOk(json.code)) throw new Error(json.msg || "Remote business error " + json.code);
-    return (_a = json.data) != null ? _a : null;
-  }
-  function pickOrgAndProject(customerInfo) {
-    const organizations = customerInfo && Array.isArray(customerInfo.organizations) ? customerInfo.organizations : [];
-    const org = organizations.find((item) => String(item.organizationName || "").includes("\u9ED8\u8BA4\u673A\u6784")) || organizations[0];
-    const projects = org && Array.isArray(org.projects) ? org.projects : [];
-    const project = projects.find((item) => String(item.projectName || "").includes("\u9ED8\u8BA4\u9879\u76EE")) || projects[0];
-    if (!org || !project || !org.organizationId || !project.projectId) return null;
-    return { organizationId: org.organizationId, projectId: project.projectId };
-  }
-  async function resolveBizApiKey({ authorization, host, requestJson, requireSecretKey = false }) {
-    const headers = { Authorization: authorization, "Content-Type": JSON_CONTENT_TYPE };
-    const customer = await requestRemoteData(requestJson, {
-      method: "GET",
-      url: host + "/api/biz/customer/getCustomerInfo",
-      headers
-    });
-    const orgProject = pickOrgAndProject(customer);
-    if (!orgProject) throw new Error("Unable to resolve ZCode OAuth organization and project.");
-    const apiKeysUrl = host + "/api/biz/v1/organization/" + encodeURIComponent(orgProject.organizationId) + "/projects/" + encodeURIComponent(orgProject.projectId) + "/api_keys";
-    const apiKeys = await requestRemoteData(requestJson, { method: "GET", url: apiKeysUrl, headers });
-    const existing = Array.isArray(apiKeys) ? apiKeys.find((item) => item && item.name === ZCODE_API_KEY_NAME) : null;
-    const created = existing || await requestRemoteData(requestJson, {
-      method: "POST",
-      url: apiKeysUrl,
-      headers,
-      body: { name: ZCODE_API_KEY_NAME }
-    });
-    const apiKey = String(created && (created.apiKey || created.api_key) || "").trim();
-    if (!apiKey) throw new Error("ZCode OAuth API key response is missing apiKey.");
-    const copied = await requestRemoteData(requestJson, {
-      method: "GET",
-      url: apiKeysUrl + "/copy/" + encodeURIComponent(apiKey),
-      headers
-    });
-    const secretKey = String(copied && (copied.secretKey || copied.secret_key) || "").trim();
-    if (!secretKey && requireSecretKey) throw new Error("ZCode OAuth API key copy response is missing secretKey.");
-    return secretKey ? apiKey + "." + secretKey : apiKey;
-  }
-  async function resolveZcodeCodingPlanApiKey({ accessToken, providerId, env, requestJson = defaultHttpRequestJson } = {}) {
-    const token = String(accessToken || "").trim();
-    if (!token) throw new Error("ZCode desktop OAuth token is unavailable.");
-    const family = zcodeProviderFamily(providerId);
-    if (family === "zai") {
-      const data = await requestRemoteData(requestJson, {
-        method: "POST",
-        url: ZAI_BIZ_API_ORIGIN + "/api/auth/z/login",
-        headers: { "Content-Type": JSON_CONTENT_TYPE },
-        body: { token }
-      });
-      const bizToken = String(data && (data.access_token || data.accessToken) || "").trim();
-      if (!bizToken) throw new Error("ZCode OAuth biz token response is missing access_token.");
-      return resolveBizApiKey({ authorization: "Bearer " + bizToken, host: ZAI_BIZ_API_ORIGIN, requestJson, requireSecretKey: true });
-    }
-    return resolveBizApiKey({ authorization: token, host: resolveBigModelApiOrigin(env || {}), requestJson });
-  }
-  function runtimeModelWithApiKey(runtimeModel, apiKey) {
-    const next = clone3(runtimeModel);
-    next.revision = (runtimeModel.revision || "runtime-model") + ":oauth:" + Date.now();
-    next.generatedAt = Date.now();
-    next.provider = Object.assign({}, next.provider || {}, {
-      apiKey: { source: "inline", value: String(apiKey) }
-    });
-    return next;
   }
   function isZcodePlanRuntimeModel(runtimeModel, providerId) {
     const provider = runtimeModel && runtimeModel.provider ? runtimeModel.provider : {};
@@ -12755,7 +13020,7 @@
     }
   }
   function createZcodeBackend({
-    spawnImpl,
+    platform,
     getModel,
     getPermissionMode,
     getEffort = () => null,
@@ -12768,12 +13033,10 @@
     env,
     readDesktopModel = readZcodeDesktopModel,
     readDesktopRuntimeModel = readZcodeDesktopRuntimeModel,
-    readOAuthAccessToken = readZcodeOAuthAccessToken,
-    resolveCodingPlanApiKey = resolveZcodeCodingPlanApiKey,
     resolveCli = resolveZcodeCli,
-    resolveNode = resolveSystemNode,
     readStoredZcodeKey = defaultReadStoredZcodeKey
   }) {
+    const adapter = platform || createPlatformAdapter();
     let proc = null;
     let rpc = null;
     let startPromise = null;
@@ -12796,12 +13059,8 @@
     function emit(evt) {
       if (onEvent) onEvent(evt);
     }
-    function getSpawn() {
-      if (spawnImpl) return spawnImpl;
-      return getCepRequire2()("child_process").spawn;
-    }
     function currentEnv() {
-      const next = Object.assign({}, getCepEnv2(), env || {});
+      const next = adapter.completeSpawnEnv(env || {});
       const panelModel = next.AE_MCP_ZCODE_MODEL && String(next.AE_MCP_ZCODE_MODEL).trim();
       if (!next.ZCODE_MODEL && panelModel) next.ZCODE_MODEL = panelModel;
       const panelApiKey = next.AE_MCP_ZCODE_API_KEY && String(next.AE_MCP_ZCODE_API_KEY).trim() || String(readStoredZcodeKey() || "").trim();
@@ -12819,7 +13078,7 @@
       if (selectedModel.includes("/") && !isLegacyZcodeModelRef(selectedModel)) return selectedModel;
       let desktopModel = "";
       try {
-        desktopModel = readDesktopModel ? String(readDesktopModel({ env: spawnEnv }) || "").trim() : "";
+        desktopModel = readDesktopModel ? String(readDesktopModel({ env: spawnEnv, platform: adapter }) || "").trim() : "";
       } catch (e) {
       }
       if (desktopModel) return desktopModel;
@@ -12829,7 +13088,7 @@
     function currentRuntimeModel(spawnEnv, modelRef, thoughtLevel) {
       if (!readDesktopRuntimeModel) return null;
       try {
-        return readDesktopRuntimeModel({ env: spawnEnv, modelRef, thoughtLevel, storedKey: String(readStoredZcodeKey() || "").trim() }) || null;
+        return readDesktopRuntimeModel({ env: spawnEnv, platform: adapter, modelRef, thoughtLevel, storedKey: String(readStoredZcodeKey() || "").trim() }) || null;
       } catch (e) {
         return null;
       }
@@ -12884,32 +13143,8 @@
       }
       if (rpc) rpc.respondError(message.id, -32601, "Method not found: " + method);
     }
-    async function handleProviderRuntimeHeaders(params, rpcId) {
-      try {
-        const spawnEnv = currentEnv();
-        const providerId = String(params.providerId || params.modelRef && params.modelRef.providerId || activeRuntimeModel && activeRuntimeModel.model && activeRuntimeModel.model.providerId || "").trim();
-        const modelId = String(params.modelRef && params.modelRef.modelId || activeRuntimeModel && activeRuntimeModel.model && activeRuntimeModel.model.modelId || "").trim();
-        const modelRef = providerId && modelId ? providerId + "/" + modelId : currentModelRef(spawnEnv);
-        const runtimeModel = activeRuntimeModel || currentRuntimeModel(spawnEnv, modelRef, thoughtLevelFromEffort());
-        if (!providerId || !runtimeModel) throw new Error("ZCode runtime model is unavailable for OAuth header refresh.");
-        if (isZcodePlanRuntimeModel(runtimeModel, providerId)) {
-          if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: zcodePlanRuntimeHeadersMessage() });
-          return;
-        }
-        const accessToken = await readOAuthAccessToken({ env: spawnEnv, providerId, modelRef });
-        if (!accessToken) throw new Error("ZCode desktop OAuth token is unavailable. Open ZCode, sign in again, then retry from the panel.");
-        const apiKey = await resolveCodingPlanApiKey({ accessToken, providerId, env: spawnEnv });
-        const refreshedRuntimeModel = runtimeModelWithApiKey(runtimeModel, apiKey);
-        await rpc.request("session/updateRuntimeModelConfig", {
-          sessionId: params.sessionId || sessionId,
-          runtimeModel: refreshedRuntimeModel
-        }, RPC_TIMEOUT_MS);
-        activeRuntimeModel = refreshedRuntimeModel;
-        if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: true, providerRevision: refreshedRuntimeModel.revision });
-      } catch (e) {
-        const message = zcodeErrorMessage(e, "ZCode desktop OAuth header refresh failed.", lang);
-        if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: message });
-      }
+    function handleProviderRuntimeHeaders(_params, rpcId) {
+      if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: zcodePlanRuntimeHeadersMessage() });
     }
     function handleUserInput(params, rpcId) {
       const input = params.input || params;
@@ -13096,29 +13331,22 @@
       if (proc && rpc) return true;
       if (startPromise) return startPromise;
       startPromise = (async () => {
-        let execFileImpl = null;
-        try {
-          execFileImpl = getCepRequire2()("child_process").execFile;
-        } catch (e) {
-        }
-        const cli = await resolveCli({ env: currentEnv(), execFileImpl });
-        if (!cli.ok) throw new Error(cli.detail);
-        const spawn = getSpawn();
         const spawnEnv = currentEnv();
+        const cli = await resolveCli({ env: spawnEnv, platform: adapter });
+        if (!cli.ok) throw new Error(cli.detail);
         stderrTail = "";
         stopping = false;
-        let cmd;
-        let cmdArgs;
-        if (cli.isExe) {
-          cmd = cli.cliPath;
-          cmdArgs = ["app-server"];
-        } else {
-          const node = await resolveNode({ env: spawnEnv });
-          if (!node.ok) throw new Error(node.detail);
-          cmd = node.nodePath;
-          cmdArgs = [cli.cliPath, "app-server"];
-        }
-        proc = spawn(cmd, cmdArgs, {
+        const executable = cli.executable || (cli.isExe ? {
+          ok: true,
+          id: "zcode",
+          path: cli.cliPath,
+          argsPrefix: [],
+          source: "path",
+          version: null,
+          arch: null
+        } : null);
+        if (!executable) throw new Error("ZCode CLI resolver did not return an executable command");
+        proc = adapter.spawn(executable, ["app-server"], {
           stdio: "pipe",
           windowsHide: true,
           env: spawnEnv
@@ -13131,7 +13359,7 @@
         const reader = createNdjsonReader((message) => rpc && rpc.handleMessage(message));
         if (proc.stdout && proc.stdout.on) proc.stdout.on("data", reader);
         if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
-          stderrTail = appendTail3(stderrTail, chunk);
+          stderrTail = appendTail2(stderrTail, chunk);
         });
         proc.on("exit", (code, signal) => handleExit(code, signal));
         proc.on("error", (error) => handleError(error));
@@ -13145,8 +13373,8 @@
     }
     function workspaceFromEnv(spawnEnv) {
       const extRoot = spawnEnv && (spawnEnv.AE_MCP_PANEL_EXT_ROOT || spawnEnv.EXTENSION_ROOT);
-      const path = extRoot ? String(extRoot).replace(/\//g, "\\").replace(/\\+$/, "") : spawnEnv && (spawnEnv.TEMP || spawnEnv.TMP) || ".";
-      const key = path.replace(/\\/g, "\\");
+      const path = extRoot ? adapter.paths.resolve([extRoot]) : adapter.paths.tempRoot;
+      const key = path;
       return { workspacePath: path, workspaceKey: key };
     }
     function modeFromTier() {
@@ -13361,7 +13589,7 @@
       stop,
       reset,
       setThoughtLevel,
-      getMessages: () => clone3(transcript),
+      getMessages: () => clone2(transcript),
       probeAccount
     };
   }
@@ -13524,10 +13752,10 @@
       perTurnModelSwitch: false
     };
   }
-  function zcodeDynamicDescriptor({ env, fsImpl } = {}) {
+  function zcodeDynamicDescriptor({ env, fsImpl, platform } = {}) {
     let cliModel = "";
     try {
-      cliModel = String(readZcodeDesktopModel({ env, fsImpl }) || "").trim();
+      cliModel = String(readZcodeDesktopModel({ env, fsImpl, platform }) || "").trim();
     } catch (e) {
     }
     if (!cliModel) return zcodeStaticDescriptor();
@@ -13787,54 +14015,16 @@
   }
 
   // src/cep/mcpClient.js
-  var DEFAULT_TIMEOUT_MS = 3e4;
+  var DEFAULT_TIMEOUT_MS2 = 3e4;
   var MCP_PROTOCOL_VERSION = "2025-06-18";
-  var PANEL_VERSION = "0.9.0";
-  function getCepRequire3() {
-    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-      return globalThis.window.cep_node.require;
-    }
-    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    throw new Error("CEP Node require is unavailable");
-  }
-  function getCepEnv3() {
-    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
-  }
-  function normalizeFsPath(value) {
-    let text = String(value || "").replace(/\//g, "\\");
-    text = text.replace(/\\+$/, "");
-    return text;
-  }
-  function dirname(value) {
-    const normalized = normalizeFsPath(value);
-    const index = normalized.lastIndexOf("\\");
-    if (index <= 0) return "";
-    return normalized.slice(0, index);
-  }
-  function joinPath(base, leaf) {
-    return normalizeFsPath(base) + "\\" + leaf;
-  }
-  function firstWhereHit(stdout) {
-    return String(stdout || "").split(/\r?\n/).map((line) => line.trim()).find(Boolean) || "";
-  }
-  function defaultWhereImpl() {
-    const childProcess = getCepRequire3()("child_process");
-    return new Promise((resolve) => {
-      childProcess.execFile("where", ["ae-mcp"], { windowsHide: true }, (err, stdout) => {
-        resolve(err ? "" : stdout);
-      });
-    });
-  }
-  function defaultFs() {
-    return getCepRequire3()("fs");
-  }
-  function findProjectRoot({ extRoot, repoRoot, fsImpl }) {
-    if (repoRoot && fsImpl.existsSync(joinPath(repoRoot, "pyproject.toml"))) return normalizeFsPath(repoRoot);
-    let current = normalizeFsPath(extRoot);
+  var PANEL_VERSION = "0.9.1";
+  function findProjectRoot({ extRoot, repoRoot, fsImpl, platform }) {
+    const adapter = platform || createPlatformAdapter();
+    if (repoRoot && fsImpl.existsSync(adapter.paths.join([repoRoot, "pyproject.toml"]))) return adapter.paths.resolve([repoRoot]);
+    let current = adapter.paths.resolve([extRoot]);
     while (current) {
-      if (fsImpl.existsSync(joinPath(current, "pyproject.toml"))) return current;
-      const parent = dirname(current);
+      if (fsImpl.existsSync(adapter.paths.join([current, "pyproject.toml"]))) return current;
+      const parent = adapter.paths.dirname(current);
       if (!parent || parent === current) break;
       current = parent;
     }
@@ -13842,30 +14032,17 @@
   }
   async function resolveMcpCommand({
     explicitPath,
-    whereImpl = defaultWhereImpl,
-    fsImpl,
-    envImpl = null,
-    extRoot = "",
-    repoRoot = ""
+    platform
   } = {}) {
     const configured = String(explicitPath || "").trim();
     if (configured) return { command: configured, args: [], source: "explicit" };
-    const found = firstWhereHit(await whereImpl("ae-mcp"));
-    if (found) return { command: found, args: [], source: "where" };
-    const fs = fsImpl || defaultFs();
-    const profile = (envImpl || getCepEnv3()).USERPROFILE || "";
-    if (profile) {
-      const shim = joinPath(joinPath(joinPath(normalizeFsPath(profile), ".local"), "bin"), "ae-mcp.exe");
-      if (fs.existsSync(shim)) return { command: shim, args: [], source: "uv-tool" };
-    }
-    const projectRoot = findProjectRoot({ extRoot, repoRoot, fsImpl: fs });
-    if (projectRoot) {
-      return { command: "uv", args: ["run", "--project", projectRoot, "ae-mcp"], source: "uv" };
-    }
-    throw new Error("Unable to find ae-mcp. Configure the ae-mcp executable path, add ae-mcp to PATH, or run from a checkout containing pyproject.toml for uv run --project.");
+    const adapter = platform || createPlatformAdapter();
+    const resolved = await adapter.resolveExecutable("ae-mcp");
+    if (resolved.ok) return { command: resolved.path, args: [...resolved.argsPrefix], source: resolved.source };
+    throw new Error("Unable to find ae-mcp. Repair the installed runtime launcher at " + adapter.paths.launcher + ".");
   }
   function _createRpc(stdinWrite, onLine, options = {}) {
-    const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
+    const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS2;
     let nextId2 = 1;
     const pending = /* @__PURE__ */ new Map();
     function rejectPending(id, error) {
@@ -13917,6 +14094,7 @@
     return { request, notify, handleChunk, close };
   }
   function createMcpClient({
+    platform,
     spawnImpl,
     resolveCommand = resolveMcpCommand,
     env,
@@ -13940,10 +14118,6 @@
     function currentState() {
       return { status, retryCount, error: lastError, tools };
     }
-    function getSpawn() {
-      if (spawnImpl) return spawnImpl;
-      return getCepRequire3()("child_process").spawn;
-    }
     function attachBeforeUnload() {
       if (globalThis.window && globalThis.window.addEventListener) {
         globalThis.window.addEventListener("beforeunload", () => stop());
@@ -13955,17 +14129,24 @@
       stopped = false;
       status = "starting";
       startPromise = (async () => {
-        const commandSpec = await resolveCommand({ extRoot, repoRoot });
-        const spawn = getSpawn();
-        const spawnEnv = Object.assign({}, getCepEnv3(), env || {}, {
+        const adapter = platform || (!spawnImpl ? createPlatformAdapter() : null);
+        const commandSpec = await resolveCommand({ extRoot, repoRoot, platform: adapter || void 0 });
+        const additions = {
           AE_MCP_BACKEND: "ae-mcp",
           ...expertGuidanceEnv(getExpertGuidance())
-        });
-        proc = spawn(commandSpec.command, commandSpec.args || [], {
+        };
+        const spawnEnv = adapter ? adapter.completeSpawnEnv(env || {}, additions) : Object.assign({}, env || {}, additions);
+        const options = {
           stdio: "pipe",
           windowsHide: true,
           env: spawnEnv
-        });
+        };
+        if (adapter) {
+          const executable = { ok: true, id: "ae-mcp", path: commandSpec.command, argsPrefix: [], source: commandSpec.source || "runtime", version: null, arch: null };
+          proc = adapter.spawn(executable, commandSpec.args || [], options);
+        } else {
+          proc = spawnImpl(commandSpec.command, commandSpec.args || [], { ...options, shell: false });
+        }
         rpc = _createRpc(
           (line) => proc.stdin.write(line),
           (handler) => proc.stdout.on("data", handler)
@@ -14052,49 +14233,330 @@
     return { start, listTools, callTool, stop, state: currentState, getServerInstructions: () => serverInstructions };
   }
 
-  // src/cep/claudeAuth.js
-  function getCepRequire4() {
-    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-      return globalThis.window.cep_node.require;
+  // src/lib/claudeChannel.js
+  function deleteEnvironmentKey(environment, name) {
+    const normalized = name.toUpperCase();
+    for (const key of Object.keys(environment)) {
+      if (key.toUpperCase() === normalized) delete environment[key];
     }
-    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    throw new Error("CEP Node require is unavailable");
   }
-  function getCepEnv4() {
-    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
+  function claudeChannelEnv(baseEnv = {}, { channel = "subscription", provider = null } = {}) {
+    const env = { ...baseEnv };
+    deleteEnvironmentKey(env, "ANTHROPIC_API_KEY");
+    deleteEnvironmentKey(env, "ANTHROPIC_BASE_URL");
+    deleteEnvironmentKey(env, "ANTHROPIC_AUTH_TOKEN");
+    if (channel === "api" && provider && provider.baseUrl) {
+      env.ANTHROPIC_BASE_URL = String(provider.baseUrl);
+      if (provider.apiKey) env.ANTHROPIC_AUTH_TOKEN = String(provider.apiKey);
+      return env;
+    }
+    return env;
   }
-  function normalizeFsPath2(value) {
-    let text = String(value || "").replace(/\//g, "\\");
-    text = text.replace(/\\+$/, "");
-    return text;
+
+  // src/cep/claudeAgentBackend.js
+  var READY_TIMEOUT_MS = 15e3;
+  var STDERR_TAIL_LIMIT2 = 4096;
+  async function resolveSystemNode({ platform } = {}) {
+    const adapter = platform || createPlatformAdapter();
+    const requiredArch = adapter.id === "macos-arm64" ? "arm64" : adapter.id === "windows-x64" ? "x64" : void 0;
+    const resolved = await adapter.resolveExecutable("node", { minimumVersion: "18.0.0", ...requiredArch ? { requiredArch } : {} });
+    if (!resolved.ok) return { ok: false, detail: "Node runtime resolution failed: " + resolved.code, resolution: resolved };
+    return { ok: true, nodePath: resolved.path, version: resolved.version || "", executable: resolved };
   }
-  function defaultFs2() {
-    return getCepRequire4()("fs");
+  function clone3(value) {
+    return value == null ? value : JSON.parse(JSON.stringify(value));
   }
-  function defaultSpawn() {
-    return getCepRequire4()("child_process").spawn;
+  function nodeMissingMessage(lang) {
+    if (lang === "zh") return "\u5185\u5D4C\u5BF9\u8BDD\u8FD0\u884C\u65F6\u7F3A\u5931\u6216\u635F\u574F\uFF0C\u8BF7\u5728\u8BBE\u7F6E\u4E2D\u4FEE\u590D\u79BB\u7EBF\u8FD0\u884C\u65F6\u3002";
+    return "The embedded chat runtime is missing or damaged. Repair the offline runtime in Settings.";
   }
-  function joinPath2(base, leaf) {
-    return normalizeFsPath2(base) + "\\" + leaf;
+  function appendTail3(tail, chunk) {
+    const next = tail + String(chunk || "");
+    return next.length > STDERR_TAIL_LIMIT2 ? next.slice(next.length - STDERR_TAIL_LIMIT2) : next;
   }
-  function resolveSidecarPath({ extRoot, fsImpl } = {}) {
-    const root = normalizeFsPath2(extRoot || "");
-    const deployed = joinPath2(root, "sidecar\\agent-sidecar.mjs");
-    const repo = joinPath2(root, "..\\sidecar\\agent-sidecar.mjs");
-    const fs = fsImpl || defaultFs2();
-    if (fs.existsSync(deployed)) return deployed;
-    if (fs.existsSync(repo)) return repo;
-    return deployed;
+  function createClaudeAgentBackend({
+    platform,
+    resolveNode = resolveSystemNode,
+    sidecarPath,
+    getMcpSpec,
+    getToolMeta,
+    getModel,
+    getPermissionMode,
+    getEffort,
+    getThinking,
+    getChannel = () => "subscription",
+    getApiProvider = () => null,
+    onEvent,
+    lang = "zh",
+    spawnImpl,
+    env
+  }) {
+    const adapter = platform || (spawnImpl ? {
+      completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
+      spawn: (executable, args, options) => spawnImpl(executable.path, [...executable.argsPrefix || [], ...args], options)
+    } : createPlatformAdapter());
+    let proc = null;
+    let startPromise = null;
+    let pendingReadyReject = null;
+    let pendingReadyTimer = null;
+    let ready = false;
+    let stopping = false;
+    let stderrTail = "";
+    let transcript = [];
+    let activeRun = null;
+    let activeResolve = null;
+    let activeAssistantText = "";
+    function emit(evt) {
+      if (onEvent) onEvent(evt);
+    }
+    function writeMessage(message) {
+      if (!proc || !proc.stdin || !proc.stdin.write) return;
+      proc.stdin.write(JSON.stringify(message) + "\n");
+    }
+    function finishActive() {
+      if (!activeResolve) {
+        activeRun = null;
+        activeAssistantText = "";
+        return;
+      }
+      const resolve = activeResolve;
+      activeResolve = null;
+      activeRun = null;
+      activeAssistantText = "";
+      resolve();
+    }
+    function handleSidecarMessage(message) {
+      if (!message || message.t === "ready") return;
+      if (message.t !== "event") return;
+      const event = message.event;
+      if (!event) return;
+      if (event.type === "text-delta") activeAssistantText += String(event.text || "");
+      emit(event);
+      if (event.type === "turn-end") {
+        transcript.push({ role: "assistant", text: activeAssistantText });
+        finishActive();
+      }
+      if (event.type === "error") finishActive();
+    }
+    function exitDetail(code, signal) {
+      const suffix = signal ? String(code) + " " + signal : String(code);
+      return stderrTail ? suffix + " " + stderrTail : suffix;
+    }
+    function clearReadyWait() {
+      if (pendingReadyTimer) clearTimeout(pendingReadyTimer);
+      pendingReadyTimer = null;
+      pendingReadyReject = null;
+    }
+    function handleExit(code, signal) {
+      const wasStopping = stopping;
+      const wasReady = ready;
+      const detail = exitDetail(code, signal);
+      const rejectReady = pendingReadyReject;
+      proc = null;
+      ready = false;
+      startPromise = null;
+      stopping = false;
+      if (wasStopping) return;
+      if (!wasReady && rejectReady) {
+        clearReadyWait();
+        rejectReady(new Error("sidecar exited: " + detail));
+        return;
+      }
+      if (activeRun) {
+        emit({ type: "error", kind: "mcp", message: "sidecar exited: " + detail });
+        finishActive();
+      }
+    }
+    function handleProcError(error) {
+      const rejectReady = pendingReadyReject;
+      proc = null;
+      ready = false;
+      startPromise = null;
+      if (rejectReady) {
+        clearReadyWait();
+        rejectReady(error instanceof Error ? error : new Error("sidecar error"));
+        return;
+      }
+      if (activeRun) {
+        emit({ type: "error", kind: "mcp", message: error && error.message ? error.message : "sidecar error" });
+        finishActive();
+      }
+    }
+    async function startSidecar() {
+      if (proc && ready) return true;
+      if (startPromise) return startPromise;
+      startPromise = (async () => {
+        const node = await resolveNode({ platform: adapter });
+        if (!node || !node.ok) {
+          emit({ type: "error", kind: "mcp", message: nodeMissingMessage(lang) });
+          return false;
+        }
+        const mcpSpec = await getMcpSpec();
+        const meta = await getToolMeta();
+        const channel = getChannel ? getChannel() : "subscription";
+        const spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), { channel, provider: getApiProvider ? getApiProvider() : null });
+        stderrTail = "";
+        stopping = false;
+        ready = false;
+        let readyResolve;
+        let readyReject;
+        const readyPromise = new Promise((resolve, reject) => {
+          readyResolve = resolve;
+          readyReject = reject;
+        });
+        pendingReadyReject = readyReject;
+        pendingReadyTimer = setTimeout(() => {
+          pendingReadyTimer = null;
+          pendingReadyReject = null;
+          try {
+            stopping = true;
+            if (proc) proc.kill();
+          } catch (e) {
+          }
+          readyReject(new Error("sidecar ready timed out"));
+        }, READY_TIMEOUT_MS);
+        try {
+          const executable = node.executable || { ok: true, id: "node", path: node.nodePath, argsPrefix: [], source: "runtime", version: node.version || null, arch: null };
+          proc = adapter.spawn(executable, [
+            sidecarPath,
+            "--mcp",
+            JSON.stringify(mcpSpec),
+            "--allowed-tools",
+            JSON.stringify(meta.allowedTools),
+            "--annotations",
+            JSON.stringify(meta.annotations),
+            "--model",
+            getModel(),
+            "--lang",
+            lang,
+            "--channel",
+            channel
+          ], {
+            stdio: "pipe",
+            windowsHide: true,
+            env: spawnEnv
+          });
+        } catch (e) {
+          clearReadyWait();
+          throw e;
+        }
+        const reader = createNdjsonReader((message) => {
+          if (message && message.t === "ready") {
+            ready = true;
+            clearReadyWait();
+            readyResolve(true);
+            return;
+          }
+          handleSidecarMessage(message);
+        });
+        if (proc.stdout && proc.stdout.on) proc.stdout.on("data", reader);
+        if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
+          stderrTail = appendTail3(stderrTail, chunk);
+        });
+        proc.on("exit", (code, signal) => handleExit(code, signal));
+        proc.on("error", (error) => {
+          handleProcError(error);
+        });
+        await readyPromise;
+        return true;
+      })();
+      try {
+        return await startPromise;
+      } catch (e) {
+        emit({ type: "error", kind: "mcp", message: e && e.message ? e.message : "Failed to start sidecar." });
+        return false;
+      } finally {
+        startPromise = null;
+      }
+    }
+    async function sendUser(text) {
+      if (activeRun) return activeRun;
+      activeAssistantText = "";
+      activeRun = new Promise((resolve) => {
+        activeResolve = resolve;
+      });
+      const ok = await startSidecar();
+      if (!ok) {
+        finishActive();
+        return activeRun;
+      }
+      const userText = String(text || "");
+      transcript.push({ role: "user", text: userText });
+      writeMessage({
+        t: "user",
+        text: userText,
+        permissionMode: getPermissionMode(),
+        model: getModel(),
+        effort: getEffort ? getEffort() : void 0,
+        thinking: getThinking ? getThinking() : void 0
+      });
+      return activeRun;
+    }
+    function approve(toolUseId, decision) {
+      writeMessage({ t: "approve", id: toolUseId, decision });
+    }
+    function stop() {
+      writeMessage({ t: "stop" });
+    }
+    function reset() {
+      stopping = true;
+      if (proc) {
+        try {
+          proc.kill();
+        } catch (e) {
+        }
+      }
+      proc = null;
+      ready = false;
+      startPromise = null;
+      transcript = [];
+      finishActive();
+      stderrTail = "";
+      stopping = false;
+    }
+    return {
+      sendUser,
+      approve,
+      stop,
+      reset,
+      getMessages: () => clone3(transcript),
+      getStderrTail: () => stderrTail
+    };
+  }
+
+  // src/cep/claudeAuth.js
+  function resolveSidecarPath({ extRoot, fsImpl, platform } = {}) {
+    const adapter = platform || createPlatformAdapter();
+    const root = normalizeCepSystemPath(extRoot || adapter.paths.configRoot, adapter);
+    const developmentMarker = adapter.paths.join([root, ".debug"]);
+    const developmentSidecar = adapter.paths.join([root, "sidecar", "agent-sidecar.mjs"]);
+    const runtimeSidecar = adapter.paths.join([
+      root,
+      "runtime",
+      adapter.id,
+      "node",
+      "sidecar",
+      "agent-sidecar.mjs"
+    ]);
+    const fs = fsImpl || adapter.fs;
+    if (!fs || typeof fs.existsSync !== "function") throw new Error("platform filesystem is unavailable");
+    if (fs.existsSync(developmentMarker) && fs.existsSync(developmentSidecar)) return developmentSidecar;
+    return runtimeSidecar;
   }
   async function probeClaudeLogin({
+    platform,
     resolveNode,
     sidecarPath,
     spawnImpl,
     env,
     timeoutMs = 3e4
   } = {}) {
-    const resolved = await resolveNode();
+    const adapter = platform || (spawnImpl ? {
+      completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
+      spawn: (executable, args, options) => spawnImpl(executable.path, [...executable.argsPrefix || [], ...args], options)
+    } : createPlatformAdapter());
+    const nodeResolver = resolveNode || resolveSystemNode;
+    const resolved = await nodeResolver({ platform: adapter });
     if (!resolved || resolved.ok === false) {
       return { loggedIn: false, nodeOk: false, detail: resolved && resolved.detail || "node unavailable" };
     }
@@ -14102,8 +14564,7 @@
       let settled = false;
       let stderr = "";
       let proc = null;
-      const spawn = spawnImpl || defaultSpawn();
-      const spawnEnv = claudeChannelEnv(Object.assign({}, getCepEnv4(), env || {}), { channel: "subscription" });
+      const spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), { channel: "subscription" });
       function finish(result) {
         if (settled) return;
         settled = true;
@@ -14120,7 +14581,8 @@
         finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: "probe timeout" });
       }, timeoutMs);
       try {
-        proc = spawn(resolved.nodePath, [sidecarPath, "--probe"], {
+        const executable = resolved.executable || { ok: true, id: "node", path: resolved.nodePath, argsPrefix: [], source: "runtime", version: resolved.version || null, arch: null };
+        proc = adapter.spawn(executable, [sidecarPath, "--probe"], {
           stdio: "pipe",
           windowsHide: true,
           env: spawnEnv
@@ -14163,17 +14625,6 @@
     granular: { mcp_elicitations: true, rules: false, sandbox_approval: false }
   };
   var SANDBOX_POLICY = { type: "readOnly" };
-  function getCepRequire5() {
-    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-      return globalThis.window.cep_node.require;
-    }
-    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    throw new Error("CEP Node require is unavailable");
-  }
-  function getCepEnv5() {
-    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
-  }
   function appendTail4(tail, chunk) {
     const next = tail + String(chunk || "");
     return next.length > STDERR_TAIL_LIMIT3 ? next.slice(next.length - STDERR_TAIL_LIMIT3) : next;
@@ -14181,25 +14632,11 @@
   function clone4(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
   }
-  function normalizeFsPath3(value) {
-    return String(value || "").replace(/\//g, "\\").replace(/\\+$/, "");
-  }
-  function dirname2(value) {
-    const normalized = normalizeFsPath3(value);
-    const index = normalized.lastIndexOf("\\");
-    if (index <= 0) return "";
-    return normalized.slice(0, index);
-  }
-  function defaultCwd(env) {
+  function defaultCwd(env, platform) {
     const extRoot = env && (env.AE_MCP_PANEL_EXT_ROOT || env.EXTENSION_ROOT);
-    const parent = extRoot ? dirname2(extRoot) : "";
+    const parent = extRoot ? platform.paths.dirname(extRoot) : "";
     if (parent) return parent;
-    if (env && (env.TEMP || env.TMP)) return env.TEMP || env.TMP;
-    try {
-      return getCepRequire5()("os").tmpdir();
-    } catch (e) {
-      return ".";
-    }
+    return platform.paths.tempRoot;
   }
   function responseMessage(id, result) {
     return { jsonrpc: "2.0", id, result };
@@ -14314,43 +14751,17 @@
   function threadIdFromResult(result) {
     return result && (result.threadId || result.id || result.thread && result.thread.id) || null;
   }
-  function execFileAsync3(execFile, cmd, args, env) {
-    return new Promise((resolve) => {
-      execFile(cmd, args, { env, windowsHide: true }, (err, stdout, stderr) => {
-        resolve({ err, stdout: String(stdout || ""), stderr: String(stderr || "") });
-      });
-    });
-  }
-  function getHomedir() {
-    try {
-      return getCepRequire5()("os").homedir();
-    } catch (e) {
-      return "";
+  async function resolveCodexCli({ env, platform } = {}) {
+    const adapter = platform || createPlatformAdapter();
+    const requiredArch = adapter.id === "macos-arm64" ? "arm64" : adapter.id === "windows-x64" ? "x64" : void 0;
+    const resolved = await adapter.resolveExecutable("codex", { env: env || {}, ...requiredArch ? { requiredArch } : {} });
+    if (!resolved.ok) {
+      return { ok: false, cliPath: "", version: "", detail: "codex CLI resolution failed: " + resolved.code, resolution: resolved };
     }
-  }
-  async function resolveCodexCli({ env, execFileImpl } = {}) {
-    const override = env && env.AE_MCP_CODEX_CLI;
-    if (override) return { ok: true, cliPath: String(override), version: "" };
-    let execFile = execFileImpl;
-    if (!execFile) {
-      try {
-        execFile = getCepRequire5()("child_process").execFile;
-      } catch (e) {
-        return { ok: false, cliPath: "", version: "", detail: "child_process unavailable" };
-      }
-    }
-    const where = await execFileAsync3(execFile, "where", ["codex"], env || {});
-    if (!where.err && where.stdout) {
-      const exe = String(where.stdout).split(/\r?\n/)[0].trim();
-      if (exe) {
-        const v = await execFileAsync3(execFile, exe, ["--version"], env || {});
-        return { ok: true, cliPath: exe, version: v.err ? "" : String(v.stdout || v.stderr || "").trim() };
-      }
-    }
-    return { ok: false, cliPath: "", version: "", detail: "codex CLI not found on PATH. Sign in with codex in a terminal, or set AE_MCP_CODEX_CLI to the executable." };
+    return { ok: true, cliPath: resolved.path, version: resolved.version || "", executable: resolved };
   }
   function createCodexBackend({
-    spawnImpl,
+    platform,
     getModel,
     getEffort,
     getFast,
@@ -14371,6 +14782,7 @@
     lang = "zh",
     env
   }) {
+    const adapter = platform || createPlatformAdapter();
     let proc = null;
     let rpc = null;
     let startPromise = null;
@@ -14392,12 +14804,8 @@
     function emit(evt) {
       if (onEvent) onEvent(evt);
     }
-    function getSpawn() {
-      if (spawnImpl) return spawnImpl;
-      return getCepRequire5()("child_process").spawn;
-    }
     function currentEnv() {
-      return Object.assign({}, getCepEnv5(), env || {});
+      return adapter.completeSpawnEnv(env || {});
     }
     function finishActive() {
       if (!activeResolve) {
@@ -14558,14 +14966,22 @@
       if (proc && rpc) return true;
       if (startPromise) return startPromise;
       startPromise = (async () => {
-        const spawn = getSpawn();
-        const spawnEnv = ensureUserEnv(currentEnv(), { homedir: getHomedir() });
+        const spawnEnv = currentEnv();
         const providerProfile = normalizeProviderProfile(getProviderProfile ? getProviderProfile() : {}, spawnEnv);
         stderrTail = "";
         stopping = false;
-        const cliOverride = spawnEnv.AE_MCP_CODEX_CLI ? { ok: true, cliPath: String(spawnEnv.AE_MCP_CODEX_CLI), version: "" } : null;
-        lastCliInfo = cliOverride || lastCliInfo;
-        const command = cliOverride ? cliOverride.cliPath : "codex";
+        const cliInfo = await resolveCli({ env: spawnEnv, platform: adapter });
+        if (!cliInfo || !cliInfo.ok) throw new Error(cliInfo && cliInfo.detail || "codex CLI is unavailable");
+        lastCliInfo = cliInfo;
+        const executable = cliInfo.executable || {
+          ok: true,
+          id: "codex",
+          path: cliInfo.cliPath,
+          argsPrefix: [],
+          source: "path",
+          version: cliInfo.version || null,
+          arch: null
+        };
         let spawnEnvWithCreds = codexSpawnEnv(providerProfile, spawnEnv);
         if (!providerProfile.codexBaseUrl) {
           const cliConfig = getCliConfigProvider ? getCliConfigProvider() : null;
@@ -14574,10 +14990,9 @@
             spawnEnvWithCreds = Object.assign({}, spawnEnvWithCreds, { [envKey]: cliConfig.apiKey });
           }
         }
-        proc = spawn(command, codexAppServerArgs(providerProfile), {
+        proc = adapter.spawn(executable, codexAppServerArgs(providerProfile), {
           stdio: "pipe",
           windowsHide: true,
-          shell: true,
           env: spawnEnvWithCreds
         });
         rpc = createRpc2({
@@ -14600,7 +15015,7 @@
         startPromise = null;
       }
     }
-    async function initialize() {
+    async function initialize(timeoutOverrideMs) {
       if (initialized) return true;
       if (initializePromise) return initializePromise;
       initializePromise = (async () => {
@@ -14610,7 +15025,7 @@
           // granular askForApproval (our four-tier mapping) is gated behind
           // the experimental API surface (live error without it).
           capabilities: { experimentalApi: true }
-        });
+        }, timeoutOverrideMs);
         initialized = true;
         return true;
       })();
@@ -14628,7 +15043,7 @@
       const spawnEnv = currentEnv();
       const result = await rpc.request("thread/start", {
         ephemeral: true,
-        cwd: defaultCwd(spawnEnv),
+        cwd: defaultCwd(spawnEnv, adapter),
         model: getModel(),
         approvalPolicy: APPROVAL_POLICY,
         approvalsReviewer: "user",
@@ -14739,35 +15154,36 @@
     const PROBE_INITIALIZE_TIMEOUT_MS = 1e4;
     const PROBE_ACCOUNT_READ_TIMEOUT_MS = 1e4;
     const PROBE_MODEL_LIST_TIMEOUT_MS = 4e3;
-    function withTimeout(promise, ms, label) {
-      let timer;
-      const timeout = new Promise((_, reject) => {
-        timer = setTimeout(() => reject(Object.assign(new Error("probe timeout: " + label), { probeTimeout: label })), ms);
-      });
-      return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    async function boundedProbeRequest(method, params, ms, label) {
+      try {
+        return await rpc.request(method, params, ms);
+      } catch (error) {
+        if (error && /timed out/i.test(String(error.message || ""))) error.probeTimeout = label;
+        throw error;
+      }
     }
     async function probeAccount() {
-      const spawnEnv = ensureUserEnv(currentEnv(), { homedir: getHomedir() });
+      const spawnEnv = currentEnv();
       let cliInfo = { ok: false, cliPath: "", version: "" };
       try {
-        let execFileImpl = null;
-        try {
-          execFileImpl = getCepRequire5()("child_process").execFile;
-        } catch (e) {
-        }
-        cliInfo = await resolveCli({ env: spawnEnv, execFileImpl });
+        cliInfo = lastCliInfo || await resolveCli({ env: spawnEnv, platform: adapter });
         lastCliInfo = cliInfo;
       } catch (e) {
       }
       const diag = { cliPath: cliInfo.cliPath || "", cliVersion: cliInfo.version || "" };
       let probedProc = null;
       try {
-        await withTimeout(initialize(), PROBE_INITIALIZE_TIMEOUT_MS, "initialize");
+        try {
+          await initialize(PROBE_INITIALIZE_TIMEOUT_MS);
+        } catch (error) {
+          if (error && /timed out/i.test(String(error.message || ""))) error.probeTimeout = "initialize";
+          throw error;
+        }
         probedProc = proc;
-        const accountResult = await withTimeout(rpc.request("account/read", {}), PROBE_ACCOUNT_READ_TIMEOUT_MS, "account/read");
+        const accountResult = await boundedProbeRequest("account/read", {}, PROBE_ACCOUNT_READ_TIMEOUT_MS, "account/read");
         let models = null;
         try {
-          const listed = await withTimeout(rpc.request("model/list", {}), PROBE_MODEL_LIST_TIMEOUT_MS, "model/list");
+          const listed = await boundedProbeRequest("model/list", {}, PROBE_MODEL_LIST_TIMEOUT_MS, "model/list");
           models = Array.isArray(listed) ? listed : listed && listed.models;
         } catch (e) {
           models = null;
@@ -14813,7 +15229,7 @@
   var READY_POLL_MS = 250;
   var DEFAULT_PROVIDER_ID = "opencode";
   var DEFAULT_MODEL_ID = "north-mini-code-free";
-  function getCepRequire6() {
+  function getCepRequire() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -14821,22 +15237,10 @@
     if (globalThis.require) return globalThis.require;
     throw new Error("CEP Node require is unavailable");
   }
-  function getCepEnv6() {
-    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
-  }
   function defaultFetch() {
     if (globalThis.window && globalThis.window.fetch) return globalThis.window.fetch.bind(globalThis.window);
     if (globalThis.fetch) return globalThis.fetch.bind(globalThis);
     throw new Error("fetch is unavailable");
-  }
-  function defaultFs3() {
-    return getCepRequire6()("fs");
-  }
-  function defaultOs() {
-    return getCepRequire6()("os");
-  }
-  function defaultPath() {
-    return getCepRequire6()("path");
   }
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -14853,7 +15257,7 @@
     return "ae-opencode-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
   }
   async function defaultGetPort() {
-    const net = getCepRequire6()("net");
+    const net = getCepRequire()("net");
     return new Promise((resolve, reject) => {
       const server = net.createServer();
       server.on("error", reject);
@@ -14930,12 +15334,10 @@
     return "/session/" + encodeURIComponent(sessionId) + "/permission/" + encodeURIComponent(permissionId);
   }
   function createOpenCodeBackend({
-    spawnImpl,
+    platform,
     fetchImpl,
     getPort = defaultGetPort,
     fsImpl,
-    osImpl,
-    pathImpl,
     tempDirName = randomTempName,
     getModel,
     getPermissionMode,
@@ -14945,6 +15347,7 @@
     onEvent,
     env
   } = {}) {
+    const adapter = platform || createPlatformAdapter();
     let proc = null;
     let port = null;
     let baseUrl = "";
@@ -14972,7 +15375,7 @@
       return fetchImpl || defaultFetch();
     }
     function currentEnv() {
-      return Object.assign({}, getCepEnv6(), env || {});
+      return adapter.completeSpawnEnv(env || {});
     }
     function finishActive() {
       if (!activeResolve) {
@@ -15024,11 +15427,9 @@
       throw lastError || new Error("OpenCode MCP server did not become ready.");
     }
     function writeConfig(mcpSpec) {
-      const fs = fsImpl || defaultFs3();
-      const os = osImpl || defaultOs();
-      const path = pathImpl || defaultPath();
-      configHome = path.join(os.tmpdir(), tempDirName());
-      const configDir = path.join(configHome, "opencode");
+      const fs = fsImpl || adapter.fs;
+      configHome = adapter.paths.join([adapter.paths.tempRoot, tempDirName()]);
+      const configDir = adapter.paths.join([configHome, "opencode"]);
       fs.mkdirSync(configDir, { recursive: true });
       const config = {
         $schema: "https://opencode.ai/config.json",
@@ -15045,7 +15446,7 @@
           }
         }
       };
-      fs.writeFileSync(path.join(configDir, "opencode.json"), JSON.stringify(config, null, 2));
+      fs.writeFileSync(adapter.paths.join([configDir, "opencode.json"]), JSON.stringify(config, null, 2));
     }
     function handleExit(code, signal) {
       const wasStopping = stopping;
@@ -15082,15 +15483,16 @@
         writeConfig(mcpSpec);
         port = await getPort();
         baseUrl = "http://127.0.0.1:" + port;
-        const spawn = spawnImpl || getCepRequire6()("child_process").spawn;
-        const spawnEnv = Object.assign({}, currentEnv(), { XDG_CONFIG_HOME: configHome });
+        const spawnEnv = adapter.completeSpawnEnv(currentEnv(), { XDG_CONFIG_HOME: configHome });
+        const requiredArch = adapter.id === "macos-arm64" ? "arm64" : adapter.id === "windows-x64" ? "x64" : void 0;
+        const executable = await adapter.resolveExecutable("opencode", { env: spawnEnv, ...requiredArch ? { requiredArch } : {} });
+        if (!executable.ok) throw new Error("OpenCode CLI resolution failed: " + executable.code);
         stderrTail = "";
         stopping = false;
         sseClosed = false;
-        proc = spawn("opencode", ["serve", "--port", String(port)], {
+        proc = adapter.spawn(executable, ["serve", "--port", String(port)], {
           stdio: "pipe",
           windowsHide: true,
-          shell: true,
           env: spawnEnv
         });
         if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
@@ -15338,7 +15740,7 @@
       serverPromise = null;
       try {
         if (configHome) {
-          const fs = fsImpl || defaultFs3();
+          const fs = fsImpl || adapter.fs;
           fs.rmSync(configHome, { recursive: true, force: true });
         }
       } catch (e) {
@@ -15578,7 +15980,7 @@
   }
 
   // src/cep/modelProbe.js
-  function getCepRequire7() {
+  function getCepRequire2() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -15610,7 +16012,7 @@
     }
     let https;
     try {
-      https = httpsImpl || getCepRequire7()(endpoint.protocol === "http:" ? "http" : "https");
+      https = httpsImpl || getCepRequire2()(endpoint.protocol === "http:" ? "http" : "https");
     } catch (e) {
       return Promise.resolve({ ok: false, status: 0, models: [], detail: e.message });
     }
@@ -15654,23 +16056,16 @@
 
   // src/cep/ccSwitch.js
   var CONFIG_NAMES = ["config.json", "providers.json"];
-  function getCepRequire8() {
-    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-      return globalThis.window.cep_node.require;
-    }
-    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    throw new Error("CEP Node require is unavailable");
-  }
-  function candidateDirs(env = {}) {
-    const home = String(env.USERPROFILE || env.HOME || "").replace(/[\/]+$/, "");
-    const appData = String(env.APPDATA || (home ? home + "\\AppData\\Roaming" : "")).replace(/[\/]+$/, "");
+  function candidateDirs(platform) {
+    const home = platform.paths.home;
+    const completed = platform.completeSpawnEnv ? platform.completeSpawnEnv() : {};
+    const appData = completed.APPDATA || platform.paths.join([home, "AppData", "Roaming"]);
     const dirs = [];
     if (home) {
-      dirs.push(home + "\\.cc-switch");
-      dirs.push(home + "\\.config\\cc-switch");
+      dirs.push(platform.paths.join([home, ".cc-switch"]));
+      dirs.push(platform.paths.join([home, ".config", "cc-switch"]));
     }
-    if (appData) dirs.push(appData + "\\cc-switch");
+    if (appData) dirs.push(platform.paths.join([appData, "cc-switch"]));
     return dirs;
   }
   function rawProviders(parsed) {
@@ -15691,16 +16086,13 @@
       return { id: "ccswitch-" + name.replace(/[^A-Za-z0-9_-]+/g, "-").toLowerCase(), name, protocol, baseUrl, apiKey };
     }).filter(Boolean);
   }
-  function detectCcSwitch({ env = {}, fsImpl } = {}) {
-    let fs;
-    try {
-      fs = fsImpl || getCepRequire8()("fs");
-    } catch (e) {
-      return null;
-    }
-    for (const dir of candidateDirs(env)) {
+  function detectCcSwitch({ platform, fsImpl } = {}) {
+    const adapter = platform || createPlatformAdapter();
+    const fs = fsImpl || adapter.fs;
+    if (!fs) return null;
+    for (const dir of candidateDirs(adapter)) {
       for (const name of CONFIG_NAMES) {
-        const file = dir + "\\" + name;
+        const file = adapter.paths.join([dir, name]);
         try {
           if (!fs.existsSync(file)) continue;
           const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -15714,26 +16106,15 @@
   }
 
   // src/cep/claudeSettingsImport.js
-  function getCepRequire9() {
-    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-      return globalThis.window.cep_node.require;
-    }
-    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    throw new Error("CEP Node require is unavailable");
-  }
-  function readClaudeSettingsEnv({ env = {}, fsImpl } = {}) {
-    const home = env.USERPROFILE || env.HOME || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : "");
+  function readClaudeSettingsEnv({ platform, fsImpl } = {}) {
+    const adapter = platform || createPlatformAdapter();
+    const home = adapter.paths.home;
     if (!home) return null;
-    let fs;
-    try {
-      fs = fsImpl || getCepRequire9()("fs");
-    } catch (e) {
-      return null;
-    }
+    const fs = fsImpl || adapter.fs;
+    if (!fs) return null;
     let parsed;
     try {
-      parsed = JSON.parse(fs.readFileSync(String(home).replace(/[\\/]+$/, "") + "\\.claude\\settings.json", "utf8"));
+      parsed = JSON.parse(fs.readFileSync(adapter.paths.join([home, ".claude", "settings.json"]), "utf8"));
     } catch (e) {
       return null;
     }
@@ -15745,14 +16126,6 @@
   }
 
   // src/cep/codexConfig.js
-  function getCepRequire10() {
-    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-      return globalThis.window.cep_node.require;
-    }
-    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    throw new Error("CEP Node require is unavailable");
-  }
   function stripInlineComment(line) {
     let inString = false;
     for (let i = 0; i < line.length; i++) {
@@ -15795,18 +16168,15 @@
     }
     return { root, sections };
   }
-  function readCodexCliConfig({ env = {}, fsImpl } = {}) {
-    const home = env.USERPROFILE || env.HOME || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : "");
+  function readCodexCliConfig({ platform, fsImpl } = {}) {
+    const adapter = platform || createPlatformAdapter();
+    const home = adapter.paths.home;
     if (!home) return null;
-    let fs;
-    try {
-      fs = fsImpl || getCepRequire10()("fs");
-    } catch (e) {
-      return null;
-    }
+    const fs = fsImpl || adapter.fs;
+    if (!fs) return null;
     let text;
     try {
-      text = fs.readFileSync(String(home).replace(/[\\/]+$/, "") + "\\.codex\\config.toml", "utf8");
+      text = fs.readFileSync(adapter.paths.join([home, ".codex", "config.toml"]), "utf8");
     } catch (e) {
       return null;
     }
@@ -16025,7 +16395,7 @@
   // src/cep/modelsApi.js
   var CACHE_KEY = "ae_mcp_byok_models";
   var TTL_MS = 24 * 60 * 60 * 1e3;
-  function getCepRequire11() {
+  function getCepRequire3() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -16034,7 +16404,7 @@
     throw new Error("CEP Node require is unavailable");
   }
   function fetchAnthropicModels({ apiKey, baseUrl = "", httpsImpl, timeoutMs = 8e3 } = {}) {
-    const https = httpsImpl || getCepRequire11()("https");
+    const https = httpsImpl || getCepRequire3()("https");
     return new Promise((resolve) => {
       let endpoint;
       try {
@@ -16150,67 +16520,40 @@
 
   // src/cep/wizardActions.js
   var OUTPUT_TAIL = 8192;
-  function getCepRequire12() {
-    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-      return globalThis.window.cep_node.require;
-    }
-    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    throw new Error("CEP Node require is unavailable");
-  }
-  var DETECT = {
-    uv: { file: "uv", args: ["--version"] },
-    node: { file: "node", args: ["--version"] },
-    claude: { file: "claude", args: ["--version"], shell: true }
-  };
-  function execVersion(execFile, file, args, env, shell) {
-    return new Promise((resolve) => {
-      execFile(file, args, { windowsHide: true, env, shell: shell === true }, (err, stdout, stderr) => {
-        if (err) return resolve({ ok: false });
-        resolve({ ok: true, version: String(stdout || stderr || "").trim() });
-      });
-    });
-  }
-  function getCepEnvSafe() {
-    return globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env || {};
-  }
-  async function detectAeMcp({ execFileImpl, env, fsImpl }) {
-    const execFile = execFileImpl || getCepRequire12()("child_process").execFile;
-    const whereHit = await new Promise((resolve) => {
-      execFile("where", ["ae-mcp"], { windowsHide: true, env }, (err, stdout) => {
-        resolve(err ? "" : String(stdout || "").split(/\r?\n/).map((l) => l.trim()).find(Boolean) || "");
-      });
-    });
-    if (whereHit) return { ok: true, version: whereHit };
-    const profile = (env || getCepEnvSafe()).USERPROFILE || "";
-    if (profile) {
-      const shim = profile.replace(/[\\/]+$/, "") + "\\.local\\bin\\ae-mcp.exe";
-      const fs = fsImpl || getCepRequire12()("fs");
-      if (fs.existsSync(shim)) return { ok: true, version: shim };
-    }
-    return { ok: false };
-  }
-  async function detectTool(id, { execFileImpl, env, fsImpl } = {}) {
-    if (id === "aeMcp") return detectAeMcp({ execFileImpl, env, fsImpl });
-    const spec = DETECT[id];
-    const execFile = execFileImpl || getCepRequire12()("child_process").execFile;
-    return execVersion(execFile, spec.file, spec.args, env, spec.shell);
-  }
   var REPO = "https://github.com/JUNKDOGE-JOE/after-effects-mcp";
-  function buildInstallCommands({ panelVersion, repoRoot }) {
-    const src = (sub) => repoRoot ? `${repoRoot}\\packages\\${sub}` : `git+${REPO}@v${panelVersion}#subdirectory=packages/${sub}`;
+  var TOOL_IDS = { aeMcp: "ae-mcp", uv: "uv", node: "node", claude: "claude" };
+  async function detectTool(id, { platform } = {}) {
+    const adapter = platform || createPlatformAdapter();
+    const executableId = TOOL_IDS[id];
+    if (!executableId) return { ok: false, detail: "unsupported tool id" };
+    const options = executableId === "node" ? { minimumVersion: "18.0.0" } : {};
+    const resolved = await adapter.resolveExecutable(executableId, options);
+    if (!resolved.ok) return { ok: false, detail: resolved.code, resolution: resolved };
     return {
-      uv: { file: "winget", args: ["install", "--id", "astral-sh.uv", "-e", "--accept-source-agreements", "--accept-package-agreements"] },
-      uvFallback: { file: "powershell", args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "irm https://astral.sh/uv/install.ps1 | iex"] },
-      node: { file: "winget", args: ["install", "--id", "OpenJS.NodeJS.LTS", "-e", "--accept-source-agreements", "--accept-package-agreements"] },
-      claude: { file: "npm", args: ["install", "-g", "@anthropic-ai/claude-code"] },
-      aeMcp: { file: "uv", args: ["tool", "install", "--force", "--from", src("core"), "ae-mcp", "--with", src("bridge"), "--with", src("snapshot-mss")] }
+      ok: true,
+      version: resolved.version || resolved.path,
+      path: resolved.path,
+      source: resolved.source
     };
   }
-  function runAction({ file, args, spawnImpl, env, onChunk }) {
-    const spawn = spawnImpl || getCepRequire12()("child_process").spawn;
+  function buildInstallCommands({ panelVersion, repoRoot, platform } = {}) {
+    const adapter = platform || createPlatformAdapter();
+    if (typeof adapter.legacyWizardInstallCommands !== "function") {
+      throw new Error("Legacy wizard command catalog is unavailable on this platform");
+    }
+    return adapter.legacyWizardInstallCommands({ panelVersion, repoRoot, repo: REPO });
+  }
+  async function runAction({ file, executableId, args, platform, env, onChunk }) {
+    const adapter = platform || createPlatformAdapter();
+    if (!executableId || typeof executableId !== "string") {
+      return { ok: false, code: -1, output: "Installer command is missing a platform executable id: " + String(file || "") };
+    }
+    const executable = await adapter.resolveExecutable(executableId, env === void 0 ? {} : { env });
+    if (!executable.ok) return { ok: false, code: -1, output: executableId + " resolution failed: " + executable.code };
     return new Promise((resolve) => {
+      var _a, _b, _c, _d, _e, _f;
       let output = "";
+      let spawnError = null;
       const push = (chunk) => {
         const text = String(chunk || "");
         output = (output + text).slice(-OUTPUT_TAIL);
@@ -16218,31 +16561,32 @@
       };
       let child;
       try {
-        child = spawn(file, args, { windowsHide: true, env, shell: false });
-      } catch (e) {
-        return resolve({ ok: false, code: -1, output: String(e && e.message || e) });
+        const spawnOptions = { windowsHide: true };
+        if (env !== void 0) spawnOptions.env = env;
+        child = adapter.spawn(executable, args || [], spawnOptions);
+      } catch (error) {
+        resolve({ ok: false, code: -1, output: String(error && error.message || error) });
+        return;
       }
-      if (child.stdout && child.stdout.on) child.stdout.on("data", push);
-      if (child.stderr && child.stderr.on) child.stderr.on("data", push);
-      child.on("error", (e) => resolve({ ok: false, code: -1, output: output + String(e && e.message || e) }));
-      child.on("exit", (code) => resolve({ ok: code === 0, code, output }));
+      (_b = (_a = child.stdout) == null ? void 0 : _a.on) == null ? void 0 : _b.call(_a, "data", push);
+      (_d = (_c = child.stderr) == null ? void 0 : _c.on) == null ? void 0 : _d.call(_c, "data", push);
+      (_e = child.on) == null ? void 0 : _e.call(child, "error", (error) => {
+        spawnError = error;
+        push(String(error && error.message || error));
+      });
+      (_f = child.on) == null ? void 0 : _f.call(child, "close", (code) => resolve({ ok: !spawnError && code === 0, code: spawnError ? -1 : code, output }));
     });
   }
   function commandPreview({ file, args }) {
-    return [file, ...args.map((a) => /\s/.test(a) ? `"${a}"` : a)].join(" ");
+    return [file, ...(args || []).map((value) => /\s/.test(value) ? `"${value}"` : value)].join(" ");
   }
-  function detectRepoRoot({ extRoot, fsImpl }) {
-    return findProjectRoot({ extRoot, repoRoot: "", fsImpl: fsImpl || getCepRequire12()("fs") });
+  function detectRepoRoot({ extRoot, fsImpl, platform }) {
+    const adapter = platform || createPlatformAdapter();
+    return findProjectRoot({ extRoot, repoRoot: "", fsImpl: fsImpl || adapter.fs, platform: adapter });
   }
-  var LOGIN_COMMANDS = { claude: "claude", codex: "codex login" };
-  function openLoginTerminal({ tool, spawnImpl } = {}) {
-    const spawn = spawnImpl || getCepRequire12()("child_process").spawn;
-    const command = LOGIN_COMMANDS[tool] || LOGIN_COMMANDS.claude;
-    const child = spawn("cmd", ["/c", "start", "ae-mcp login", "pwsh", "-NoExit", "-Command", command], {
-      detached: true,
-      windowsHide: false
-    });
-    if (child && child.unref) child.unref();
+  async function openLoginTerminal({ tool, platform } = {}) {
+    const adapter = platform || createPlatformAdapter();
+    await adapter.openLoginTerminal(tool === "codex" ? "codex" : "claude");
     return true;
   }
 
@@ -16382,22 +16726,25 @@
       zh: "\u91CD\u542F\u9762\u677F\u670D\u52A1\uFF1B\u5982\u679C\u4ECD\u5931\u8D25\uFF0C\u8BF7\u91CD\u542F After Effects \u540E\u518D\u8BD5\u3002",
       en: "Restart the panel service. If it still fails, restart After Effects and try again."
     },
-    uv: {
-      zh: "\u5B89\u88C5 uv\uFF1A\u4F18\u5148\u4F7F\u7528 winget install --id astral-sh.uv -e\u3002",
-      en: "Install uv: prefer winget install --id astral-sh.uv -e."
+    "ae-mcp": {
+      zh: "\u5728\u8BBE\u7F6E\u4E2D\u4FEE\u590D\u79BB\u7EBF\u8FD0\u884C\u65F6\u5E76\u91CD\u65B0\u9A8C\u8BC1\u7A33\u5B9A\u542F\u52A8\u5668\u3002",
+      en: "Repair the offline runtime in Settings, then verify the stable launcher again."
     },
     node: {
-      zh: "\u5B89\u88C5 Node.js LTS\uFF1Awinget install --id OpenJS.NodeJS.LTS -e\u3002",
-      en: "Install Node.js LTS: winget install --id OpenJS.NodeJS.LTS -e."
+      zh: "\u5728\u8BBE\u7F6E\u4E2D\u4FEE\u590D\u968F\u63D2\u4EF6\u5B89\u88C5\u7684 Node \u8FD0\u884C\u65F6\u3002",
+      en: "Repair the Node runtime bundled with the plugin in Settings."
     },
     claude: {
-      zh: "\u5B89\u88C5 Claude Code\uFF1Anpm install -g @anthropic-ai/claude-code\u3002",
-      en: "Install Claude Code: npm install -g @anthropic-ai/claude-code."
+      zh: "Claude CLI \u4E3A\u53EF\u9009\u9879\uFF1B\u5982\u9700\u8BA2\u9605\u901A\u9053\uFF0C\u8BF7\u6253\u5F00\u767B\u5F55\u7EC8\u7AEF\u5B8C\u6210\u914D\u7F6E\u3002",
+      en: "Claude CLI is optional. Open its login terminal if you want the subscription channel."
+    },
+    codex: {
+      zh: "Codex CLI \u4E3A\u53EF\u9009\u9879\uFF1B\u5982\u9700\u8BA2\u9605\u901A\u9053\uFF0C\u8BF7\u6253\u5F00\u767B\u5F55\u7EC8\u7AEF\u5B8C\u6210\u914D\u7F6E\u3002",
+      en: "Codex CLI is optional. Open its login terminal if you want the subscription channel."
     }
   };
-  function tokenPath(os) {
-    const home = os && os.homedir ? os.homedir() : "";
-    return home.replace(/[\\/]$/, "") + "/.ae-mcp/auth-token";
+  function tokenPath(platform) {
+    return platform.paths.join([platform.paths.configRoot, "auth-token"]);
   }
   async function readJson(response) {
     if (response && response.json) return response.json();
@@ -16422,7 +16769,9 @@
     });
     return { response, body: await readJson(response) };
   }
-  async function runDiagnostics({ getHost, port, fs, os, fetchImpl, execFileImpl }) {
+  async function runDiagnostics({ getHost, port, fs, fetchImpl, platform }) {
+    const adapter = platform || createPlatformAdapter();
+    const fileSystem = fs || adapter.fs;
     const fetcher = fetchImpl || globalThis.fetch;
     const items = [];
     let token = "";
@@ -16440,9 +16789,9 @@
       items.push({ id: "host-listening", ok: false, detail: e.message, fixHint: HINTS["host-listening"] });
     }
     try {
-      const file = tokenPath(os);
-      const exists = fs && fs.existsSync && fs.existsSync(file);
-      token = exists && fs.readFileSync ? String(fs.readFileSync(file, "utf8")).trim() : "";
+      const file = tokenPath(adapter);
+      const exists = fileSystem && fileSystem.existsSync && fileSystem.existsSync(file);
+      token = exists && fileSystem.readFileSync ? String(fileSystem.readFileSync(file, "utf8")).trim() : "";
       items.push({
         id: "token-file",
         ok: exists && token.length === 64,
@@ -16493,13 +16842,16 @@
     } catch (e) {
       items.push({ id: "extendscript-ping", ok: false, detail: e.message, fixHint: HINTS["extendscript-ping"] });
     }
-    for (const id of ["uv", "node", "claude"]) {
-      const result = await detectTool(id, { execFileImpl });
+    for (const id of ["ae-mcp", "node", "claude", "codex"]) {
+      const options = id === "node" ? { minimumVersion: "24.17.0", requiredArch: adapter.id === "macos-arm64" ? "arm64" : "x64" } : {};
+      const result = await adapter.resolveExecutable(id, options);
+      const action = id === "ae-mcp" || id === "node" ? { kind: "repair-runtime" } : { kind: "open-login-terminal", tool: id };
       items.push({
         id,
         ok: result.ok,
-        detail: result.ok ? result.version : HINTS[id].en,
-        fixHint: HINTS[id]
+        detail: result.ok ? [result.version, result.path].filter(Boolean).join(" \xB7 ") : result.code,
+        fixHint: HINTS[id],
+        action
       });
     }
     return items;
@@ -16512,14 +16864,8 @@
   }
 
   // src/cep/hostBridge.js
-  function normalizeCepPath(value) {
-    var normalized = String(value || "");
-    normalized = normalized.replace(/^file:\\+/i, "");
-    normalized = normalized.replace(/^file:\/\/\//i, "");
-    normalized = normalized.replace(/^file:\/\//i, "");
-    normalized = decodeURIComponent(normalized);
-    if (/^\/[A-Za-z]:/.test(normalized)) normalized = normalized.slice(1);
-    return normalized;
+  function normalizeCepPath(value, platform) {
+    return normalizeCepSystemPath(value, platform);
   }
   function isValidPort(p) {
     return isFinite(p) && p >= 1024 && p <= 65535;
@@ -16554,7 +16900,7 @@
       }
     };
   }
-  function getCepRequire13() {
+  function getCepRequire4() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -16562,25 +16908,183 @@
     if (globalThis.require) return globalThis.require;
     throw new Error("CEP Node require is unavailable");
   }
-  function createHostController({ cs: cs2, onStatus, onLog }) {
+  function loadBundledHostDependencies({ cepRequire: cepRequire5, adapter, extensionRoot }) {
+    if (typeof cepRequire5 !== "function") throw new TypeError("CEP Node require is unavailable");
+    if (!adapter || !["macos-arm64", "windows-x64"].includes(adapter.id)) {
+      throw new TypeError("A supported platform adapter is required");
+    }
+    if (!adapter.paths || typeof adapter.paths.join !== "function") {
+      throw new TypeError("A native platform path catalog is required");
+    }
+    const nativePath = adapter.paths;
+    if (typeof nativePath.resolve !== "function" || typeof nativePath.dirname !== "function" || typeof nativePath.isAbsolute !== "function" || typeof nativePath.contains !== "function" || typeof nativePath.same !== "function") {
+      throw new TypeError("A complete native platform path catalog is required");
+    }
+    const moduleApi = cepRequire5("module");
+    if (!moduleApi || typeof moduleApi.createRequire !== "function") {
+      throw new Error("CEP Node module.createRequire is unavailable");
+    }
+    const fs = adapter.fs || cepRequire5("fs");
+    if (!fs || typeof fs.existsSync !== "function" || typeof fs.lstatSync !== "function" || typeof fs.realpathSync !== "function" || typeof fs.statSync !== "function" || typeof fs.readFileSync !== "function") {
+      throw new Error("CEP Node filesystem is unavailable");
+    }
+    const unavailable = (cause) => {
+      if ((cause == null ? void 0 : cause.code) === "HOST_RUNTIME_DEPENDENCIES_UNAVAILABLE") return cause;
+      const error = new Error("host runtime dependencies are unavailable");
+      error.code = "HOST_RUNTIME_DEPENDENCIES_UNAVAILABLE";
+      error.cause = cause;
+      return error;
+    };
+    const pathInside = (root, candidate) => {
+      return nativePath.contains(root, candidate);
+    };
+    const ordinaryAnchor = (candidate) => {
+      var _a;
+      let info;
+      try {
+        info = fs.lstatSync(candidate);
+      } catch (error) {
+        if (error && (error.code === "ENOENT" || error.code === "ENOTDIR")) return false;
+        throw error;
+      }
+      if (!info.isFile() || ((_a = info.isSymbolicLink) == null ? void 0 : _a.call(info))) {
+        throw new Error("selected host package anchor is not an ordinary file");
+      }
+      return true;
+    };
+    const samePath = (left, right) => nativePath.same(left, right);
+    try {
+      const runtimePackageAnchor = adapter.paths.join([
+        extensionRoot,
+        "runtime",
+        adapter.id,
+        "node",
+        "host",
+        "package.json"
+      ]);
+      const developmentMarker = adapter.paths.join([extensionRoot, ".debug"]);
+      const developmentPackageAnchor = adapter.paths.join([extensionRoot, "host", "package.json"]);
+      let packageAnchor = "";
+      if (ordinaryAnchor(runtimePackageAnchor)) {
+        packageAnchor = runtimePackageAnchor;
+      } else if (fs.existsSync(developmentMarker) && ordinaryAnchor(developmentPackageAnchor)) {
+        packageAnchor = developmentPackageAnchor;
+      }
+      if (!packageAnchor) throw new Error("no selected host package anchor");
+      const hostRoot = nativePath.dirname(packageAnchor);
+      const lexicalExtensionRoot = nativePath.resolve([extensionRoot]);
+      const realExtensionRoot = nativePath.resolve([fs.realpathSync(extensionRoot)]);
+      const lexicalHostRoot = nativePath.resolve([hostRoot]);
+      const realHostRoot = nativePath.resolve([fs.realpathSync(hostRoot)]);
+      const realAnchor = fs.realpathSync(packageAnchor);
+      if (!pathInside(lexicalExtensionRoot, lexicalHostRoot) || !pathInside(realExtensionRoot, realHostRoot) || !pathInside(realHostRoot, realAnchor)) {
+        throw new Error("selected host root escaped the extension");
+      }
+      const lexicalExpressRoot = nativePath.resolve([hostRoot, "node_modules", "express"]);
+      const realExpressRoot = nativePath.resolve([fs.realpathSync(lexicalExpressRoot)]);
+      if (!pathInside(lexicalHostRoot, lexicalExpressRoot) || !pathInside(realHostRoot, realExpressRoot)) {
+        throw new Error("Express package root escaped the selected host root");
+      }
+      const expressPackage = nativePath.resolve([lexicalExpressRoot, "package.json"]);
+      if (!ordinaryAnchor(expressPackage)) throw new Error("Express package manifest is missing");
+      const realExpressPackage = nativePath.resolve([fs.realpathSync(expressPackage)]);
+      if (!pathInside(lexicalExpressRoot, expressPackage) || !pathInside(realExpressRoot, realExpressPackage)) {
+        throw new Error("Express package manifest escaped its exact package root");
+      }
+      const expressMetadata = JSON.parse(String(fs.readFileSync(expressPackage, "utf8")));
+      const mainEntry = expressMetadata.main === void 0 ? "index.js" : expressMetadata.main;
+      if (typeof mainEntry !== "string" || !mainEntry.trim() || mainEntry.includes("\0")) {
+        throw new Error("Express package main is invalid");
+      }
+      const lexicalExpressEntry = nativePath.resolve([lexicalExpressRoot, mainEntry]);
+      if (!pathInside(lexicalExpressRoot, lexicalExpressEntry) || !ordinaryAnchor(lexicalExpressEntry)) {
+        throw new Error("Express entry escaped its exact package root");
+      }
+      const realExpressEntry = nativePath.resolve([fs.realpathSync(lexicalExpressEntry)]);
+      if (!pathInside(realExpressRoot, realExpressEntry)) {
+        throw new Error("Express entry real path escaped its exact package root");
+      }
+      const builtins = new Set((moduleApi.builtinModules || []).map((name) => String(name).replace(/^node:/, "")));
+      const isBuiltin = (request) => {
+        const name = String(request || "").replace(/^node:/, "");
+        return typeof moduleApi.isBuiltin === "function" ? moduleApi.isBuiltin(request) : builtins.has(name);
+      };
+      const validateResolvedFile = (resolved) => {
+        if (isBuiltin(resolved)) return resolved;
+        if (typeof resolved !== "string" || !nativePath.isAbsolute(resolved)) {
+          throw new Error("non-builtin dependency did not resolve to an absolute file");
+        }
+        const lexicalResolved = nativePath.resolve([resolved]);
+        if (!pathInside(lexicalHostRoot, lexicalResolved) && !pathInside(realHostRoot, lexicalResolved)) {
+          throw new Error("dependency resolution escaped the selected host root");
+        }
+        const realResolved = nativePath.resolve([fs.realpathSync(lexicalResolved)]);
+        if (!pathInside(realHostRoot, realResolved)) {
+          throw new Error("dependency real path escaped the selected host root");
+        }
+        if (!fs.statSync(realResolved).isFile()) throw new Error("dependency is not a regular file");
+        return resolved;
+      };
+      const originalResolveFilename = moduleApi._resolveFilename;
+      if (typeof originalResolveFilename !== "function") {
+        throw new Error("CEP Node module resolver hook is unavailable");
+      }
+      moduleApi._resolveFilename = function fencedResolveFilename(request) {
+        const resolved = originalResolveFilename.apply(this, arguments);
+        if (!isBuiltin(request) && !isBuiltin(resolved)) validateResolvedFile(resolved);
+        return resolved;
+      };
+      try {
+        const anchoredRequire = moduleApi.createRequire(packageAnchor);
+        if (typeof anchoredRequire.resolve !== "function") throw new Error("anchored require.resolve is unavailable");
+        const resolvedExpressEntry = validateResolvedFile(anchoredRequire.resolve("express"));
+        const resolvedExpressPackage = validateResolvedFile(anchoredRequire.resolve("express/package.json"));
+        if (!samePath(fs.realpathSync(resolvedExpressEntry), realExpressEntry) || !samePath(fs.realpathSync(resolvedExpressPackage), realExpressPackage)) {
+          throw new Error("Express package did not resolve from selected host node_modules");
+        }
+        const express = anchoredRequire(lexicalExpressEntry);
+        if (typeof express !== "function") throw new TypeError("Bundled Express export is invalid");
+        return Object.freeze({ express });
+      } finally {
+        moduleApi._resolveFilename = originalResolveFilename;
+      }
+    } catch (cause) {
+      throw unavailable(cause);
+    }
+  }
+  function createHostController({ cs: cs2, onStatus, onLog, platform, requireImpl, addBeforeUnload, extensionRoot }) {
+    const adapter = platform || createPlatformAdapter();
     let host = null;
+    let platformRoots = null;
     function start(port) {
       onStatus("starting", port);
       try {
-        const cepRequire5 = getCepRequire13();
-        const path = cepRequire5("path");
-        const extRoot = normalizeCepPath(cs2.getSystemPath("extension"));
-        const hostPath = path.join(extRoot, "host", "server.js");
+        const cepRequire5 = requireImpl || getCepRequire4();
+        const extRoot = normalizeCepPath(extensionRoot || cs2.getSystemPath("extension"), adapter);
+        const hostPath = adapter.paths.join([extRoot, "host", "server.js"]);
+        const roots = { extensionRoot: extRoot, runtimeRoot: adapter.paths.runtimeRoot };
+        platformRoots = roots;
         onLog("host: " + hostPath);
+        const runtimeDependencies = loadBundledHostDependencies({
+          cepRequire: cepRequire5,
+          adapter,
+          extensionRoot: extRoot
+        });
         host = cepRequire5(hostPath);
+        if (!host || typeof host.setRuntimeDependencies !== "function") {
+          throw new Error("Host runtime dependency binding is unavailable");
+        }
+        host.setRuntimeDependencies(runtimeDependencies);
         host.setCSInterface(cs2);
-        window.addEventListener("beforeunload", () => {
+        if (host.setPlatformRoots) host.setPlatformRoots(roots);
+        const installBeforeUnload = addBeforeUnload || ((handler) => window.addEventListener("beforeunload", handler));
+        installBeforeUnload(() => {
           try {
             host.stop();
           } catch (e) {
           }
         });
-        host.start(port, (err) => err ? onStatus("error", port, err.message) : onStatus("ok", port));
+        host.start(port, (err) => err ? onStatus("error", port, err.message) : onStatus("ok", port), roots);
       } catch (e) {
         onStatus("error", port, e.message);
       }
@@ -16588,7 +17092,7 @@
     function restart(port) {
       if (host && host.restart) {
         onStatus("starting", port);
-        host.restart(port, (err) => err ? onStatus("error", port, err.message) : onStatus("ok", port));
+        host.restart(port, (err) => err ? onStatus("error", port, err.message) : onStatus("ok", port), platformRoots);
       }
     }
     return { start, restart, getHost: () => host };
@@ -16651,31 +17155,29 @@
   }
 
   // src/cep/logExportFs.js
-  function getCepRequire14() {
-    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-      return globalThis.window.cep_node.require;
+  function writeLogExport({ text, fileName, platform, fsImpl }) {
+    const adapter = platform || createPlatformAdapter();
+    const fs = fsImpl || adapter.fs;
+    const dir = adapter.paths.logsRoot;
+    const safeName = String(fileName || "");
+    if (!safeName || adapter.paths.basename(safeName) !== safeName || safeName === "." || safeName === "..") {
+      throw new Error("Log export file name must be a single safe path component");
     }
-    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    throw new Error("CEP Node require is unavailable");
-  }
-  function writeLogExport({ text, fileName, deps }) {
-    const req = deps ? null : getCepRequire14();
-    const fs = deps ? deps.fs : req("fs");
-    const os = deps ? deps.os : req("os");
-    const path = deps ? deps.path : req("path");
-    const dir = path.join(os.homedir(), ".ae-mcp", "logs");
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const file = path.join(dir, fileName);
+    const file = adapter.paths.join([dir, safeName]);
     fs.writeFileSync(file, text, "utf8");
     return file;
   }
-  function revealInExplorer(filePath, execImpl, onError) {
-    const exec = execImpl || getCepRequire14()("child_process").exec;
-    const winPath = String(filePath).replace(/\//g, "\\");
-    exec('explorer.exe /select,"' + winPath + '"', { windowsHide: true }, (err) => {
-      if (err && onError) onError(err);
+  function revealLogExport(filePath, platform) {
+    const adapter = platform || createPlatformAdapter();
+    return adapter.revealFile(filePath);
+  }
+  function revealInExplorer(filePath, _unused, onError) {
+    const result = revealLogExport(filePath);
+    result.catch((error) => {
+      if (onError) onError(error);
     });
+    return result;
   }
 
   // src/lib/stableValue.js
@@ -16990,12 +17492,14 @@
       codexBaseUrl: codexCustomProvider ? codexCustomProvider.baseUrl : codexBaseUrl
     }), [claudeApiProvider, anthropicBaseUrl, codexCustomProvider, codexApiKey, codexBaseUrl]);
     const runtimeRef = import_react40.default.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: "subscription", claudeApiProvider: null, codexCliConfigProvider: null });
-    const extRoot = cs2 && cs2.getSystemPath ? cs2.getSystemPath("extension") : "";
-    const sidecarPath = import_react40.default.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
+    const platform = import_react40.default.useMemo(() => createPlatformAdapter(), []);
+    const extRoot = import_react40.default.useMemo(() => readCepSystemPath({ cs: cs2, platform }), [cs2, platform]);
+    const sidecarPath = import_react40.default.useMemo(() => resolveSidecarPath({ extRoot, platform }), [extRoot, platform]);
     const mcp = import_react40.default.useMemo(() => createMcpClient({
+      platform,
       extRoot,
       getExpertGuidance: () => loadExpertGuidance(window.localStorage)
-    }), [extRoot]);
+    }), [extRoot, platform]);
     const handleChatEvent = import_react40.default.useCallback((evt) => {
       if (evt.type === "turn-start") setChatStreaming(true);
       if (evt.type === "thinking") setThinkingActive(!!evt.active);
@@ -17020,9 +17524,10 @@
       });
     }, [mcp, handleChatEvent]);
     const claudeBackend = import_react40.default.useMemo(() => createClaudeAgentBackend({
+      platform,
       resolveNode: resolveSystemNode,
       sidecarPath,
-      getMcpSpec: () => resolveMcpCommand({ extRoot }),
+      getMcpSpec: () => resolveMcpCommand({ extRoot, platform }),
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
@@ -17032,9 +17537,10 @@
       getApiProvider: () => runtimeRef.current.claudeApiProvider || null,
       lang,
       onEvent: handleChatEvent
-    }), [extRoot, sidecarPath, mcp, handleChatEvent]);
+    }), [extRoot, sidecarPath, mcp, handleChatEvent, platform]);
     const codexBackend = import_react40.default.useMemo(() => createCodexBackend({
-      getMcpSpec: () => resolveMcpCommand({ extRoot }),
+      platform,
+      getMcpSpec: () => resolveMcpCommand({ extRoot, platform }),
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
       getEffort: () => runtimeRef.current.effort,
@@ -17047,21 +17553,23 @@
       lang,
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
-    }), [extRoot, mcp, handleChatEvent]);
+    }), [extRoot, mcp, handleChatEvent, platform]);
     import_react40.default.useEffect(() => () => {
       codexBackend.reset();
     }, [codexBackend]);
     const openCodeBackend = import_react40.default.useMemo(() => createOpenCodeBackend({
-      getMcpSpec: () => resolveMcpCommand({ extRoot }),
+      platform,
+      getMcpSpec: () => resolveMcpCommand({ extRoot, platform }),
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
       getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
-    }), [extRoot, mcp, handleChatEvent]);
+    }), [extRoot, mcp, handleChatEvent, platform]);
     const zcodeBackend = import_react40.default.useMemo(() => createZcodeBackend({
-      getMcpSpec: () => resolveMcpCommand({ extRoot }),
+      platform,
+      getMcpSpec: () => resolveMcpCommand({ extRoot, platform }),
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
       getEffort: () => runtimeRef.current.effort,
@@ -17070,7 +17578,7 @@
       getServerInstructions: () => mcp.getServerInstructions(),
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
-    }), [extRoot, mcp, handleChatEvent]);
+    }), [extRoot, mcp, handleChatEvent, platform]);
     import_react40.default.useEffect(() => () => {
       zcodeBackend.reset();
     }, [zcodeBackend]);
@@ -17296,6 +17804,8 @@
       const port = loadSavedPort(window.localStorage) || DEFAULT_PORT;
       ctrl.current = createHostController({
         cs: cs2,
+        platform,
+        extensionRoot: extRoot,
         onStatus: (state, p, error) => {
           setStatus({ state, port: p, error: error || null });
           if (state === "ok") {
@@ -17307,7 +17817,7 @@
         onLog: pushLog
       });
       ctrl.current.start(port);
-    }, [cs2, pushLog]);
+    }, [cs2, extRoot, platform, pushLog]);
     import_react40.default.useEffect(() => {
       if (!drawerOpen) return void 0;
       const update = () => {
@@ -17336,7 +17846,6 @@
           getHost,
           port: status.port,
           fs: cepRequire4("fs"),
-          os: cepRequire4("os"),
           fetchImpl: window.fetch.bind(window)
         });
         setDiagnostics(items);

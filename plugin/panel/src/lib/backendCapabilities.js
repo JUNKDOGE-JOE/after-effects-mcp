@@ -257,9 +257,9 @@ export function zcodeStaticDescriptor() {
 // descriptor around it so display and reconciliation agree with send-time
 // behavior. Only fall back to the static/builtin descriptor when there is
 // truly no CLI-configured model available.
-export function zcodeDynamicDescriptor({ env, fsImpl } = {}) {
+export function zcodeDynamicDescriptor({ env, fsImpl, platform } = {}) {
   let cliModel = '';
-  try { cliModel = String(readZcodeDesktopModel({ env, fsImpl }) || '').trim(); } catch (e) { /* ignore unreadable CLI config */ }
+  try { cliModel = String(readZcodeDesktopModel({ env, fsImpl, platform }) || '').trim(); } catch (e) { /* ignore unreadable CLI config */ }
   if (!cliModel) return zcodeStaticDescriptor();
   const label = cliModel.includes('/') ? cliModel.slice(cliModel.indexOf('/') + 1) : cliModel;
   return {

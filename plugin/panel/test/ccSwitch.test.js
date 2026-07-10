@@ -2,10 +2,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { detectCcSwitch, ccSwitchProviderEntries } from '../src/cep/ccSwitch.js';
 
-const ENV = {
-  USERPROFILE: 'C:\\Users\\me',
-  APPDATA: 'C:\\Users\\me\\AppData\\Roaming',
-};
+function platform(fsImpl) {
+  return {
+    paths: { home: 'C:\\Users\\me', join: (parts) => parts.join('\\') },
+    fs: fsImpl,
+    completeSpawnEnv: () => ({ APPDATA: 'C:\\Users\\me\\AppData\\Roaming' }),
+  };
+}
 
 function fakeFs(files) {
   return {
@@ -42,7 +45,7 @@ test('detectCcSwitch finds config.json in the primary ~/.cc-switch directory', (
   const fs = fakeFs({
     [file]: JSON.stringify({ providers: [{ name: 'Found', baseUrl: 'https://found.example.com', apiKey: 'k' }] }),
   });
-  const found = detectCcSwitch({ env: ENV, fsImpl: fs });
+  const found = detectCcSwitch({ platform: platform(fs), fsImpl: fs });
   assert.ok(found);
   assert.equal(found.dir, dir);
   assert.equal(found.file, file);
@@ -56,7 +59,7 @@ test('detectCcSwitch falls back through candidate dirs and config names', () => 
   const fs = fakeFs({
     [file]: JSON.stringify({ profiles: [{ name: 'Fallback', baseUrl: 'https://fallback.example.com', apiKey: 'k2' }] }),
   });
-  const found = detectCcSwitch({ env: ENV, fsImpl: fs });
+  const found = detectCcSwitch({ platform: platform(fs), fsImpl: fs });
   assert.ok(found);
   assert.equal(found.dir, dir);
   assert.equal(found.file, file);
@@ -65,7 +68,7 @@ test('detectCcSwitch falls back through candidate dirs and config names', () => 
 
 test('detectCcSwitch returns null when nothing is present', () => {
   const fs = fakeFs({});
-  assert.equal(detectCcSwitch({ env: ENV, fsImpl: fs }), null);
+  assert.equal(detectCcSwitch({ platform: platform(fs), fsImpl: fs }), null);
 });
 
 test('detectCcSwitch tolerates unreadable/corrupt candidate files by continuing to scan', () => {
@@ -76,11 +79,11 @@ test('detectCcSwitch tolerates unreadable/corrupt candidate files by continuing 
     [badFile]: '{not valid json',
     [goodFile]: JSON.stringify({ providers: [{ name: 'Good', baseUrl: 'https://good.example.com', apiKey: 'k3' }] }),
   });
-  const found = detectCcSwitch({ env: ENV, fsImpl: fs });
+  const found = detectCcSwitch({ platform: platform(fs), fsImpl: fs });
   assert.ok(found);
   assert.equal(found.dir, goodDir);
 });
 
 test('detectCcSwitch returns null when require is unavailable and no fsImpl given', () => {
-  assert.equal(detectCcSwitch({ env: ENV }), null);
+  assert.equal(detectCcSwitch({ platform: { paths: platform(null).paths, completeSpawnEnv: () => ({}) } }), null);
 });

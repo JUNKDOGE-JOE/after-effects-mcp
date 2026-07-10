@@ -11,6 +11,10 @@ function fakeFs(files) {
   };
 }
 
+function platform(fsImpl, home = 'C:\\Users\\me') {
+  return { paths: { home, join: (parts) => parts.join('\\') }, fs: fsImpl };
+}
+
 test('reads ANTHROPIC_BASE_URL/AUTH_TOKEN from ~/.claude/settings.json env block', () => {
   const files = {
     'C:\\Users\\me\\.claude\\settings.json': JSON.stringify({
@@ -18,14 +22,16 @@ test('reads ANTHROPIC_BASE_URL/AUTH_TOKEN from ~/.claude/settings.json env block
     }),
   };
   assert.deepEqual(
-    readClaudeSettingsEnv({ env: { USERPROFILE: 'C:\\Users\\me' }, fsImpl: fakeFs(files) }),
+    readClaudeSettingsEnv({ platform: platform(fakeFs(files)), fsImpl: fakeFs(files) }),
     { baseUrl: 'https://relay.example/anthropic', authToken: 'sk-relay' }
   );
 });
 
 test('returns null for missing file, bad JSON, or no relevant env keys', () => {
-  assert.equal(readClaudeSettingsEnv({ env: { USERPROFILE: 'C:\\Users\\me' }, fsImpl: fakeFs({}) }), null);
-  assert.equal(readClaudeSettingsEnv({ env: { USERPROFILE: 'C:\\Users\\me' }, fsImpl: fakeFs({ 'C:\\Users\\me\\.claude\\settings.json': '{oops' }) }), null);
-  assert.equal(readClaudeSettingsEnv({ env: { USERPROFILE: 'C:\\Users\\me' }, fsImpl: fakeFs({ 'C:\\Users\\me\\.claude\\settings.json': JSON.stringify({ env: { OTHER: '1' } }) }) }), null);
-  assert.equal(readClaudeSettingsEnv({ env: {}, fsImpl: fakeFs({}) }), null);
+  assert.equal(readClaudeSettingsEnv({ platform: platform(fakeFs({})), fsImpl: fakeFs({}) }), null);
+  const badFs = fakeFs({ 'C:\\Users\\me\\.claude\\settings.json': '{oops' });
+  assert.equal(readClaudeSettingsEnv({ platform: platform(badFs), fsImpl: badFs }), null);
+  const emptyFs = fakeFs({ 'C:\\Users\\me\\.claude\\settings.json': JSON.stringify({ env: { OTHER: '1' } }) });
+  assert.equal(readClaudeSettingsEnv({ platform: platform(emptyFs), fsImpl: emptyFs }), null);
+  assert.equal(readClaudeSettingsEnv({ platform: platform(fakeFs({}), ''), fsImpl: fakeFs({}) }), null);
 });

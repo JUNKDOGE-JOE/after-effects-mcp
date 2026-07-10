@@ -108,8 +108,32 @@ function realElicitation(tool, params = {}) {
 function makeBackend(options = {}) {
   const events = [];
   const spawned = makeSpawn();
+  const platform = options.platform || {
+    id: 'windows-x64',
+    paths: {
+      tempRoot: 'C:\\tmp',
+      dirname: (value) => String(value).replace(/[\\/][^\\/]+$/, ''),
+    },
+    completeSpawnEnv: (base = {}, additions = {}) => ({
+      ...base,
+      USERPROFILE: base.USERPROFILE || base.HOME || 'C:\\Users\\test',
+      HOME: base.HOME || base.USERPROFILE || 'C:\\Users\\test',
+      APPDATA: base.APPDATA || 'C:\\Users\\test\\AppData\\Roaming',
+      ...additions,
+    }),
+    resolveExecutable: async (id, resolutionOptions = {}) => ({
+      ok: true,
+      id,
+      path: resolutionOptions.env?.AE_MCP_CODEX_CLI || 'C:\\Tools\\codex.exe',
+      argsPrefix: [],
+      source: resolutionOptions.env?.AE_MCP_CODEX_CLI ? 'override' : 'path',
+      version: '1.0.0',
+      arch: 'x64',
+    }),
+    spawn: (executable, args, spawnOptions) => spawned.spawn(executable.path, [...(executable.argsPrefix || []), ...args], spawnOptions),
+  };
   const backend = createCodexBackend({
-    spawnImpl: spawned.spawn,
+    platform,
     getModel: () => 'gpt-5.5',
     getEffort: () => 'high',
     getFast: () => true,
@@ -163,9 +187,9 @@ test('createCodexBackend starts codex app-server and sends thread/start with AE 
   await flush();
 
   assert.equal(spawned.calls.length, 1);
-  assert.equal(spawned.calls[0].command, 'codex');
+  assert.equal(spawned.calls[0].command, 'C:\\Tools\\codex.exe');
   assert.deepEqual(spawned.calls[0].args, ['app-server']);
-  assert.equal(spawned.calls[0].options.shell, true);
+  assert.equal(spawned.calls[0].options.shell, undefined);
   assert.equal(spawned.calls[0].options.stdio, 'pipe');
   assert.equal(spawned.calls[0].options.windowsHide, true);
 
@@ -228,7 +252,7 @@ test('createCodexBackend starts app-server with custom provider config when supp
 
   const { pending, proc } = await startTurn(backend, spawned, 'custom provider');
 
-  assert.equal(spawned.calls[0].command, 'codex');
+  assert.equal(spawned.calls[0].command, 'C:\\Tools\\codex.exe');
   assert.deepEqual(spawned.calls[0].args, [
     'app-server',
     '-c', 'model_provider="my-provider"',
@@ -254,7 +278,7 @@ test('createCodexBackend injects cli-config provider env var when no custom prov
 
   const { pending, proc } = await startTurn(backend, spawned, 'cli-config env');
 
-  assert.equal(spawned.calls[0].command, 'codex');
+  assert.equal(spawned.calls[0].command, 'C:\\Tools\\codex.exe');
   // config.toml already declares model_provider; no -c override args.
   assert.deepEqual(spawned.calls[0].args, ['app-server']);
   assert.equal(spawned.calls[0].options.env.MEDIASTORM_GLM_API_KEY, 'stored-codex-key');
@@ -641,7 +665,7 @@ test('createCodexBackend probeAccount initializes and reads account plus model l
   const probe = backend.probeAccount();
   await flush();
   const proc = spawned.procs[0];
-  assert.equal(spawned.calls[0].command, 'codex');
+  assert.equal(spawned.calls[0].command, 'C:\\Tools\\codex.exe');
   respond(proc, parseWrites(proc)[0], {});
   await flush();
   assert.equal(parseWrites(proc)[1].method, 'account/read');
@@ -656,8 +680,8 @@ test('createCodexBackend probeAccount initializes and reads account plus model l
     email: 'a@example.com',
     planType: 'plus',
     models: [{ id: 'gpt-5.5', displayName: 'GPT-5.5', hidden: false }],
-    cliPath: '',
-    cliVersion: '',
+    cliPath: 'C:\\Tools\\codex.exe',
+    cliVersion: '1.0.0',
   });
 });
 
@@ -677,8 +701,8 @@ test('createCodexBackend probeAccount reports runtime ok when OpenAI auth is abs
     runtimeOk: true,
     detail: 'OpenAI auth required',
     models: [],
-    cliPath: '',
-    cliVersion: '',
+    cliPath: 'C:\\Tools\\codex.exe',
+    cliVersion: '1.0.0',
   });
 });
 
@@ -689,6 +713,7 @@ test('spawn env is completed with USERPROFILE/HOME/APPDATA (spec B2)', async () 
   const call = spawned.calls[0];
   assert.equal(call.options.env.USERPROFILE, 'C:\\Users\\test');
   assert.equal(call.options.env.APPDATA, 'C:\\Users\\test\\AppData\\Roaming');
+  backend.reset();
 });
 
 test('AE_MCP_CODEX_CLI overrides the spawned codex binary', async () => {
@@ -697,6 +722,7 @@ test('AE_MCP_CODEX_CLI overrides the spawned codex binary', async () => {
   await flush();
   const call = spawned.calls[0];
   assert.equal(call.command, 'D:\\tools\\codex\\codex.exe');
+  backend.reset();
 });
 
 test('probeAccount reports resolved codex cliPath and cliVersion for diagnostics', async () => {
