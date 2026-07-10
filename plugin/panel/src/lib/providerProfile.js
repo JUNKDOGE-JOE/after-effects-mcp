@@ -418,5 +418,3 @@ export function ensureUserEnv(env = {}, { homedir = '', appData = '' } = {}) {
   if (!next.APPDATA) next.APPDATA = appData || anchor + '\\AppData\\Roaming';
   return next;
 }
-
-

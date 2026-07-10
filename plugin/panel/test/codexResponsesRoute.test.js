@@ -97,7 +97,6 @@ test('createCodexResponsesRoute adapts streaming Responses requests to chat comp
   }
 });
 
-
 test('responsesBodyToChatBody maps function tools and tool history', () => {
   assert.deepEqual(responsesBodyToChatBody({
     model: 'gpt-5.4',
@@ -169,4 +168,3 @@ test('createCodexResponsesRoute adapts streaming tool_calls to Responses functio
     await close(upstream);
   }
 });
-

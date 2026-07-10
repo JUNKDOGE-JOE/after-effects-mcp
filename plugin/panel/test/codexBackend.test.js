@@ -833,4 +833,3 @@ test('probeAccount resolves within bounds and kills the process when initialize 
   assert.match(result.detail, /timeout/i);
   assert.equal(proc.killed, true);
 });
-
