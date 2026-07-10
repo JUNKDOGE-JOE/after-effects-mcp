@@ -75,7 +75,7 @@ class HttpBridge(Backend):
     async def health_check(self, timeout_sec: float = 5.0) -> bool:
         # /health is unauthenticated (it executes no code), so no token needed.
         try:
-            async with httpx.AsyncClient(timeout=timeout_sec) as http:
+            async with httpx.AsyncClient(timeout=timeout_sec, trust_env=False) as http:
                 r = await http.get(
                     f"{self.url}/health",
                     headers={_PY_VERSION_HEADER: _PY_VERSION},
@@ -106,7 +106,10 @@ class HttpBridge(Backend):
             _PY_VERSION_HEADER: _PY_VERSION,
         }
         try:
-            async with httpx.AsyncClient(timeout=timeout_sec + 5.0) as http:
+            async with httpx.AsyncClient(
+                timeout=timeout_sec + 5.0,
+                trust_env=False,
+            ) as http:
                 r = await http.post(
                     f"{self.url}/exec", json=payload, headers=headers
                 )
