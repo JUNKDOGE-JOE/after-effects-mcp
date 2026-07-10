@@ -20,6 +20,11 @@ test('support matrix and CEP manifest promise only the verified matrix', () => {
       manifestRange: '[25.0,26.9]',
     },
   });
-  assert.match(manifest, /<Host Name="AEFT" Version="\[25\.0,26\.9\]" \/>/);
-  assert.doesNotMatch(manifest, /99\.9/);
+  const hostList = manifest.match(/<HostList\b[^>]*>([\s\S]*?)<\/HostList>/);
+  assert.ok(hostList, 'manifest must contain a HostList');
+  assert.equal(
+    hostList[1].trim(),
+    '<Host Name="AEFT" Version="[25.0,26.9]" />',
+    'HostList must contain only the supported AE host range',
+  );
 });
