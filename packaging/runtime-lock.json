@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "node": {
+    "version": "24.17.0",
+    "headers": {
+      "url": "https://nodejs.org/dist/v24.17.0/node-v24.17.0-headers.tar.gz",
+      "sha256": "ac60c4ba92204658efaac112efea5d3597348b011be679af0eec324d8c08915e"
+    },
+    "assets": {
+      "macos-arm64": {
+        "url": "https://nodejs.org/dist/v24.17.0/node-v24.17.0-darwin-arm64.tar.gz",
+        "sha256": "4fc3266a3702eebc39cc37661cf4eeceeade307e242ab64e4d7ce7949197e11f"
+      },
+      "windows-x64": {
+        "url": "https://nodejs.org/dist/v24.17.0/node-v24.17.0-win-x64.zip",
+        "sha256": "f2aa33b35b75aca5f3f7b85675a6f6423201053e9381911e64961f3bda2528ab"
+      }
+    }
+  },
+  "python": {
+    "version": "3.13.14",
+    "distributionRelease": "20260610",
+    "assets": {
+      "macos-arm64": {
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        "sha256": "79daa8e9dea1e64ad50aebb05a807289023a474c2020b72361eb44d67fa2401e"
+      },
+      "windows-x64": {
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        "sha256": "2933d50847057b9131ff89578a220b9206c40fd6bc34d0c12afb716bd9bf8fc9"
+      }
+    }
+  }
+}
