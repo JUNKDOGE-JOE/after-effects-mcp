@@ -1,12 +1,12 @@
 // Claude settings import follows the same preview-then-read contract as
 // cc-switch. The preview contains only availability/base URL/source digest.
 import { sha256Text } from './ccSwitch.js';
+import { createPlatformAdapter } from './platform/index.js';
 
-function settingsFile(env = {}) {
-  const home = String(env.HOME || env.USERPROFILE || '').replace(/[\\/]+$/, '');
+function settingsFile(platform) {
+  const home = platform.paths.home;
   if (!home) return '';
-  const separator = home.includes('\\') ? '\\' : '/';
-  return [home, '.claude', 'settings.json'].join(separator);
+  return platform.paths.join([home, '.claude', 'settings.json']);
 }
 
 function parseSettings(text) {
@@ -32,11 +32,13 @@ function sourceChanged() {
   return error;
 }
 
-export function inspectClaudeSettingsEnv({ env = {}, fsImpl } = {}) {
-  const file = settingsFile(env);
-  if (!file || !fsImpl?.readFileSync) return null;
+export function inspectClaudeSettingsEnv({ platform, fsImpl } = {}) {
+  const adapter = platform || createPlatformAdapter();
+  const fs = fsImpl || adapter.fs;
+  const file = settingsFile(adapter);
+  if (!file || !fs?.readFileSync) return null;
   try {
-    const text = String(fsImpl.readFileSync(file, 'utf8'));
+    const text = String(fs.readFileSync(file, 'utf8'));
     const settings = parseSettings(text);
     if (!settings) return null;
     return { available: true, baseUrl: settings.baseUrl, sourceRevision: sha256Text(text) };
@@ -45,11 +47,13 @@ export function inspectClaudeSettingsEnv({ env = {}, fsImpl } = {}) {
   }
 }
 
-export function readClaudeSettingsProviderDraft({ env = {}, expectedSourceRevision, fsImpl } = {}) {
-  const file = settingsFile(env);
-  if (!file || !expectedSourceRevision || !fsImpl?.readFileSync) throw sourceChanged();
+export function readClaudeSettingsProviderDraft({ platform, expectedSourceRevision, fsImpl } = {}) {
+  const adapter = platform || createPlatformAdapter();
+  const fs = fsImpl || adapter.fs;
+  const file = settingsFile(adapter);
+  if (!file || !expectedSourceRevision || !fs?.readFileSync) throw sourceChanged();
   let text;
-  try { text = String(fsImpl.readFileSync(file, 'utf8')); } catch { throw sourceChanged(); }
+  try { text = String(fs.readFileSync(file, 'utf8')); } catch { throw sourceChanged(); }
   if (sha256Text(text) !== expectedSourceRevision) throw sourceChanged();
   let settings;
   try { settings = parseSettings(text); } catch { throw sourceChanged(); }

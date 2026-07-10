@@ -527,7 +527,7 @@ function Shell({ cs }) {
   const nodeOk = !(probe && probe.nodeOk === false);
   const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock, nodeOk });
   const claudeSettingsHint = React.useMemo(() => {
-    try { return inspectClaudeSettingsEnv({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {}, fsImpl: platform.fs }); } catch (e) { return null; }
+    try { return inspectClaudeSettingsEnv({ platform, fsImpl: platform.fs }); } catch (e) { return null; }
   }, [platform]);
   const providerProfile = React.useMemo(() => codexRuntimeProviderProfile({
     effectiveChannel: effective.channel,
@@ -1205,7 +1205,7 @@ function Shell({ cs }) {
               let draft = null;
               try {
                 draft = readClaudeSettingsProviderDraft({
-                  env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {},
+                  platform,
                   expectedSourceRevision: claudeSettingsHint.sourceRevision,
                   fsImpl: platform.fs,
                 });

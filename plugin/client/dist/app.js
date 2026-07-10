@@ -9692,6 +9692,12 @@
       providerNone: "\uFF08\u672A\u9009\u62E9 provider\uFF09",
       importClaudeSettings: "\u4ECE ~/.claude/settings.json \u5BFC\u5165",
       claude3pNote: "Claude-3p \u684C\u9762\u7248\u7684\u51ED\u636E\u65E0\u6CD5\u81EA\u52A8\u8BFB\u53D6\uFF1B\u8BF7\u5728 Provider \u7BA1\u7406\u91CC\u624B\u52A8\u586B\u5199\u4E00\u6B21 Base URL \u4E0E Token\u3002",
+      providerHelperRepair: "Provider \u51ED\u636E\u529F\u80FD\u5DF2\u5B89\u5168\u505C\u7528\u3002\u8BF7\u4FEE\u590D\u6216\u91CD\u65B0\u5B89\u88C5\u5E73\u53F0 Helper\uFF0C\u91CD\u542F AE \u540E\u518D\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D\uFF1B\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587\u51ED\u636E\u3002",
+      providerStoreCorrupt: "Provider \u914D\u7F6E\u6587\u4EF6\u635F\u574F\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u5148\u4ECE\u5907\u4EFD\u6062\u590D providers.json\uFF0C\u518D\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D\u3002",
+      providerStoreUnavailable: "Provider \u914D\u7F6E\u6587\u4EF6\u4E0D\u53EF\u7528\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u68C0\u67E5 ~/.ae-mcp \u7684\u78C1\u76D8\u7A7A\u95F4\u4E0E\u8BFB\u5199\u6743\u9650\u3002",
+      providerMigrationConflict: "Provider \u8FC1\u79FB\u671F\u95F4\u914D\u7F6E\u53D1\u751F\u51B2\u7A81\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u5173\u95ED\u5176\u4ED6\u9762\u677F\u5B9E\u4F8B\u540E\u91CD\u65B0\u542F\u52A8 AE \u518D\u68C0\u6D4B\u3002",
+      providerSecretMismatch: "Provider \u5F15\u7528\u4E0E\u7CFB\u7EDF\u51ED\u636E\u4E0D\u4E00\u81F4\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u5728 Provider \u7BA1\u7406\u4E2D\u91CD\u65B0\u4FDD\u5B58\u5BF9\u5E94\u51ED\u636E\u3002",
+      providerInitializationFailed: "Provider \u521D\u59CB\u5316\u5931\u8D25\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u5BFC\u51FA\u65E5\u5FD7\u540E\u91CD\u65B0\u68C0\u6D4B\u3002",
       zcodeKeyPlaceholder: "\u7C98\u8D34 provider API Key\uFF08\u5B58\u672C\u673A\uFF09",
       zcodeKeyStored: "\u5DF2\u4FDD\u5B58\u5230 ~/.ae-mcp/zcode-key\uFF0C\u53EF\u7C98\u8D34\u65B0\u503C\u8986\u76D6",
       save: "\u4FDD\u5B58",
@@ -9747,6 +9753,12 @@
       providerNone: "(no provider selected)",
       importClaudeSettings: "Import from ~/.claude/settings.json",
       claude3pNote: "Claude-3p desktop credentials cannot be read automatically; fill the base URL and token once in Provider Manager.",
+      providerHelperRepair: "Provider credentials are safely disabled. Repair or reinstall the platform Helper, restart AE, then re-check. Plaintext fallback is disabled.",
+      providerStoreCorrupt: "The provider configuration is corrupt; the current list was retained. Restore providers.json from backup, then re-check.",
+      providerStoreUnavailable: "The provider configuration is unavailable; the current list was retained. Check disk space and permissions for ~/.ae-mcp.",
+      providerMigrationConflict: "The provider configuration changed during migration; the current list was retained. Close other panel instances, restart AE, then re-check.",
+      providerSecretMismatch: "A provider reference no longer matches its system credential; the current list was retained. Save that credential again in Provider Manager.",
+      providerInitializationFailed: "Provider initialization failed; the current list was retained. Export logs, then re-check.",
       zcodeKeyPlaceholder: "Paste the provider API key (stored locally)",
       zcodeKeyStored: "Saved to ~/.ae-mcp/zcode-key; paste a new value to overwrite",
       save: "Save",
@@ -9915,12 +9927,21 @@
     codexKeyStored = false,
     codexCliConfig = null,
     providerManager = null,
+    providerInit = { state: "checking", error: "" },
     logLevel = "info",
     onLogLevel,
     onExportLogs,
     onRerunWizard
   }) {
     const t = S[lang] || S.zh;
+    const providerInitMessage = {
+      PLATFORM_HELPER_REPAIR_REQUIRED: t.providerHelperRepair,
+      PROVIDER_STORE_CORRUPT: t.providerStoreCorrupt,
+      PROVIDER_STORE_UNAVAILABLE: t.providerStoreUnavailable,
+      PROVIDER_MIGRATION_CONFLICT: t.providerMigrationConflict,
+      PROVIDER_SECRET_MISMATCH: t.providerSecretMismatch,
+      PROVIDER_INITIALIZATION_FAILED: t.providerInitializationFailed
+    }[providerInit.error] || t.providerInitializationFailed;
     const zcodeModelLocked = zcodeDefaultModelLocked({ backend, models: modelOptions });
     const [customModelDraft, setCustomModelDraft] = import_react19.default.useState(customModel);
     const [draftPort, setDraftPort] = import_react19.default.useState(String(port));
@@ -9994,13 +10015,17 @@
               if (backend === "codex" && channel === "cli-config") {
                 return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
                   codexCliConfig && codexCliConfig.provider ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.5 var(--font-ui)", color: "var(--text-tertiary)" }, children: [codexCliConfig.providerId, codexCliConfig.model, codexCliConfig.provider.baseUrl].filter(Boolean).join(" \xB7 ") }) : null,
-                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(ZcodeKeyFallback, { t, stored: codexKeyStored, onSave: onSaveCodexKey })
+                  onSaveCodexKey ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(ZcodeKeyFallback, { t, stored: codexKeyStored, onSave: onSaveCodexKey }) : null
                 ] });
               }
               return null;
             }
           }
         ),
+        providerInit.state === "unavailable" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { role: "alert", style: { padding: "7px 8px", border: "1px solid var(--error-border)", borderRadius: "var(--radius-md)", background: "var(--error-bg)", color: "var(--error)", font: "400 10px/1.5 var(--font-ui)" }, children: [
+          providerInitMessage,
+          providerInit.error ? ` (${providerInit.error})` : ""
+        ] }) : null,
         providerManager,
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.modelDefault, children: zcodeModelLocked ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { minHeight: 28, display: "flex", alignItems: "center", padding: "0 8px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: zcodeManagedModelLabel(lang, backend === "zcode" ? model : "") }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || [
           { value: "claude-sonnet-5", label: "Claude Sonnet 5" },
@@ -11766,8 +11791,8 @@
   var C = {
     zh: {
       hello: "\u4F60\u597D\uFF01\u6211\u53EF\u4EE5\u76F4\u63A5\u64CD\u4F5C\u5F53\u524D\u6253\u5F00\u7684 AE \u5DE5\u7A0B\u3002\u8BD5\u8BD5\u8FD9\u4E9B\uFF1A",
-      keyTitle: "\u5728\u8BBE\u7F6E\u91CC\u7C98\u8D34 Anthropic API Key",
-      keyCaption: "\u4FDD\u5B58\u5E76\u9A8C\u8BC1\u540E\uFF0C\u5C31\u53EF\u4EE5\u5728\u8FD9\u91CC\u8BA9 AI \u64CD\u4F5C\u4F60\u7684\u5DE5\u7A0B\u3002",
+      keyTitle: "\u5728\u8BBE\u7F6E\u7684 Provider \u7BA1\u7406\u4E2D\u9009\u62E9\u53EF\u7528\u6E20\u9053",
+      keyCaption: "\u51ED\u636E\u7531\u7CFB\u7EDF\u51ED\u636E Helper \u4FDD\u7BA1\uFF1B\u5982\u4E0D\u53EF\u7528\uFF0C\u8BF7\u6309\u8BBE\u7F6E\u4E2D\u7684\u4FEE\u590D\u63D0\u793A\u5904\u7406\u3002",
       newSession: "\u65B0\u4F1A\u8BDD",
       placeholder: "\u63CF\u8FF0\u4F60\u60F3\u5728 AE \u91CC\u505A\u4EC0\u4E48\u2026",
       noticeAction: "\u65B0\u4F1A\u8BDD",
@@ -11786,8 +11811,8 @@
     },
     en: {
       hello: "Hi! I can operate the open AE project directly. Try one of these:",
-      keyTitle: "Paste an Anthropic API Key in Settings",
-      keyCaption: "After saving and validating it, AI can operate your project here.",
+      keyTitle: "Choose an available channel in Provider Manager",
+      keyCaption: "Credentials stay in the system credential helper; follow the repair guidance in Settings if it is unavailable.",
       newSession: "New session",
       placeholder: "Describe what to do in AE\u2026",
       noticeAction: "New session",
@@ -12050,11 +12075,82 @@
     return { feed };
   }
 
+  // src/cep/platform/secret-reference.js
+  var PROVIDER_UUID_SOURCE = "[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+  var PROVIDER_UUID = new RegExp(`^${PROVIDER_UUID_SOURCE}$`);
+  var SLOT = /^[a-z][a-z0-9_-]{0,31}$/;
+  var PROVIDER_REFERENCE = new RegExp(
+    `^aemcp-secret://provider/(${PROVIDER_UUID_SOURCE})/([a-z][a-z0-9_-]{0,31})/v1$`
+  );
+  function invalidReference() {
+    const error = new Error("Secret reference is invalid");
+    error.code = "INVALID_REFERENCE";
+    return error;
+  }
+  function createProviderSecretReference(input) {
+    const providerId = input == null ? void 0 : input.providerId;
+    const slot = input == null ? void 0 : input.slot;
+    if (typeof providerId !== "string" || !PROVIDER_UUID.test(providerId)) {
+      throw invalidReference();
+    }
+    if (typeof slot !== "string" || !SLOT.test(slot)) throw invalidReference();
+    return `aemcp-secret://provider/${providerId}/${slot}/v1`;
+  }
+  function parseProviderSecretReference(reference) {
+    if (typeof reference !== "string") throw invalidReference();
+    const match = PROVIDER_REFERENCE.exec(reference);
+    if (!match) throw invalidReference();
+    return {
+      namespace: "provider",
+      providerId: match[1],
+      slot: match[2],
+      version: 1
+    };
+  }
+
   // src/lib/providerProfile.js
   var DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com";
   var DEFAULT_CODEX_PROVIDER_ID = "ae_mcp_custom";
   var DEFAULT_CODEX_WIRE_API = "responses";
   var RESERVED_CODEX_PROVIDER_IDS = /* @__PURE__ */ new Set(["openai", "amazon-bedrock", "ollama", "lmstudio"]);
+  var PROVIDER_ENTRY_KEYS = [
+    "allowInsecureHttp",
+    "auth",
+    "authProfileRevision",
+    "baseUrl",
+    "credentialId",
+    "dialect",
+    "headers",
+    "id",
+    "name",
+    "probedAt",
+    "probedModels",
+    "protocol"
+  ];
+  var AUTH_KEYS = ["model", "probe"];
+  var HEADER_KEYS = ["id", "name", "scopes", "valueRef"];
+  var SECRET_VALUE_REF_KEYS = ["kind", "reference", "revision"];
+  var LITERAL_VALUE_REF_KEYS = ["kind", "value"];
+  var DIALECT_KEYS = ["detected", "override"];
+  var DIALECT_OVERRIDE_KEYS = ["source", "updatedAt", "wireApi"];
+  var DIALECT_DETECTED_KEYS = ["authProfileRevision", "baseUrl", "detectedAt", "evidence", "wireApi"];
+  var PROBED_MODEL_KEYS = ["id", "label"];
+  var PROVIDER_SCOPES = /* @__PURE__ */ new Set(["probe", "model"]);
+  var PROVIDER_PROTOCOLS = /* @__PURE__ */ new Set(["openai-compatible", "anthropic"]);
+  var WIRE_APIS = /* @__PURE__ */ new Set(["responses", "chat"]);
+  var DIALECT_SOURCES = /* @__PURE__ */ new Set(["manual", "legacy-v0.9", "ccswitch-import"]);
+  var DIALECT_EVIDENCE = /* @__PURE__ */ new Set([
+    "models-capability",
+    "responses-success-schema",
+    "responses-missing-input",
+    "chat-success-schema",
+    "chat-missing-messages"
+  ]);
+  var SENSITIVE_HEADER_NAME = /(?:^|[-_])(?:authorization|api[-_]?key|token|secret|password)(?:$|[-_])/i;
+  var SECRET_LIKE_LITERAL = /^(?:Bearer\s+\S+|Basic\s+\S+|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,})$/;
+  var SECRET_LIKE_PATH_LITERAL = /(?:Bearer\s+\S{8,}|Basic\s+\S{8,}|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,})/i;
+  var HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+  var MAX_PERCENT_DECODE_LAYERS = 3;
   function firstValue(...values) {
     for (const value of values) {
       const text = String(value || "").trim();
@@ -12065,13 +12161,246 @@
   function normalizeBaseUrl(value) {
     return String(value || "").trim().replace(/\/+$/, "");
   }
+  function isLoopbackProviderHostname(hostname) {
+    const host = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "");
+    if (host === "localhost" || host.endsWith(".localhost") || host === "::1") return true;
+    const mapped = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    const ipv4 = mapped ? mapped[1] : host;
+    return /^127(?:\.\d{1,3}){3}$/.test(ipv4);
+  }
+  function decodePercentRuns(value) {
+    return String(value).replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
+      try {
+        return decodeURIComponent(run);
+      } catch {
+        return run;
+      }
+    });
+  }
+  function pathContainsCredential(value) {
+    let current = String(value || "");
+    for (let layer = 0; layer <= MAX_PERCENT_DECODE_LAYERS; layer += 1) {
+      if (SECRET_LIKE_PATH_LITERAL.test(current)) return true;
+      const decoded = decodePercentRuns(current);
+      if (decoded === current) break;
+      current = decoded;
+    }
+    return false;
+  }
+  function validateProviderBaseUrl(value, {
+    allowInsecureHttp = false,
+    requireTransportApproval = false
+  } = {}) {
+    const raw = String(value || "").trim();
+    let url;
+    try {
+      url = new URL(raw);
+    } catch {
+      throw providerProfileError();
+    }
+    const schemeMarker = raw.indexOf("://");
+    let hasRawUserInfo = true;
+    if (schemeMarker >= 0) {
+      const authorityStart = schemeMarker + 3;
+      const delimiters = ["/", "?", "#"].map((delimiter) => raw.indexOf(delimiter, authorityStart)).filter((index) => index >= 0);
+      const authorityEnd = delimiters.length ? Math.min(...delimiters) : raw.length;
+      hasRawUserInfo = raw.slice(authorityStart, authorityEnd).includes("@");
+    }
+    if (!["http:", "https:"].includes(url.protocol) || schemeMarker < 0 || raw.includes("?") || raw.includes("#") || hasRawUserInfo || url.username || url.password || url.hash || url.search || pathContainsCredential(url.pathname)) {
+      throw providerProfileError();
+    }
+    if (requireTransportApproval && url.protocol === "http:" && !isLoopbackProviderHostname(url.hostname) && allowInsecureHttp !== true) {
+      throw providerProfileError("provider_insecure_http_forbidden");
+    }
+    url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return url.toString().replace(/\/$/, "");
+  }
+  function providerProfileError(code = "provider_profile_invalid") {
+    const error = new Error(
+      code === "provider_header_secret_reference_required" ? "Provider header requires a secret reference" : "Provider profile is invalid"
+    );
+    error.code = code;
+    return error;
+  }
+  function hasExactKeys(value, expected) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const keys = Object.keys(value).sort();
+    return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+  }
+  function requireExactObject(value, expected) {
+    if (!hasExactKeys(value, expected)) throw providerProfileError();
+    return value;
+  }
+  function requireText(value) {
+    if (typeof value !== "string") throw providerProfileError();
+    const text = value.trim();
+    if (!text) throw providerProfileError();
+    return text;
+  }
+  function requireTimestamp(value) {
+    if (!Number.isFinite(value) || value < 0) throw providerProfileError();
+    return value;
+  }
+  function requireRevision(value) {
+    if (!Number.isSafeInteger(value) || value <= 0) throw providerProfileError();
+    return value;
+  }
+  function normalizeCredentialId(value) {
+    if (typeof value !== "string") throw providerProfileError();
+    try {
+      return parseProviderSecretReference(`aemcp-secret://provider/${value}/a/v1`).providerId;
+    } catch {
+      throw providerProfileError();
+    }
+  }
+  function normalizeSecretValueRef(value, credentialId) {
+    requireExactObject(value, SECRET_VALUE_REF_KEYS);
+    if (value.kind !== "secret") throw providerProfileError();
+    let parsed;
+    try {
+      parsed = parseProviderSecretReference(value.reference);
+    } catch {
+      throw providerProfileError();
+    }
+    if (parsed.providerId !== credentialId) throw providerProfileError();
+    return {
+      kind: "secret",
+      reference: value.reference,
+      revision: requireRevision(value.revision)
+    };
+  }
+  function normalizeHeaderName(value) {
+    const name = requireText(value);
+    if (!HEADER_NAME.test(name)) throw providerProfileError();
+    return name;
+  }
+  function normalizeAuthPolicy(value, credentialId, allowInherit = false) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw providerProfileError();
+    if (allowInherit && value.kind === "inherit-model") {
+      requireExactObject(value, ["kind"]);
+      return { kind: "inherit-model" };
+    }
+    if (value.kind === "none") {
+      requireExactObject(value, ["kind"]);
+      return { kind: "none" };
+    }
+    if (value.kind === "bearer" || value.kind === "x-api-key") {
+      requireExactObject(value, ["kind", "valueRef"]);
+      return {
+        kind: value.kind,
+        valueRef: normalizeSecretValueRef(value.valueRef, credentialId)
+      };
+    }
+    if (value.kind === "custom") {
+      requireExactObject(value, ["headerName", "kind", "valueRef"]);
+      return {
+        kind: "custom",
+        headerName: normalizeHeaderName(value.headerName),
+        valueRef: normalizeSecretValueRef(value.valueRef, credentialId)
+      };
+    }
+    throw providerProfileError();
+  }
+  function normalizeHeaderValueRef(value, credentialId) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw providerProfileError();
+    if (value.kind === "literal") {
+      requireExactObject(value, LITERAL_VALUE_REF_KEYS);
+      if (typeof value.value !== "string") throw providerProfileError();
+      return { kind: "literal", value: value.value };
+    }
+    return normalizeSecretValueRef(value, credentialId);
+  }
+  function normalizeExtraHeader(value, credentialId) {
+    requireExactObject(value, HEADER_KEYS);
+    const id = requireText(value.id);
+    const name = normalizeHeaderName(value.name);
+    if (!Array.isArray(value.scopes) || value.scopes.length === 0) throw providerProfileError();
+    const scopes = value.scopes.map((scope) => {
+      if (typeof scope !== "string" || !PROVIDER_SCOPES.has(scope)) throw providerProfileError();
+      return scope;
+    });
+    if (new Set(scopes).size !== scopes.length) throw providerProfileError();
+    const valueRef = normalizeHeaderValueRef(value.valueRef, credentialId);
+    if (valueRef.kind === "literal" && (SENSITIVE_HEADER_NAME.test(name.toLowerCase()) || SECRET_LIKE_LITERAL.test(valueRef.value))) {
+      throw providerProfileError("provider_header_secret_reference_required");
+    }
+    return { id, name, scopes, valueRef };
+  }
+  function normalizeDialect(value) {
+    requireExactObject(value, DIALECT_KEYS);
+    let override = null;
+    if (value.override !== null) {
+      requireExactObject(value.override, DIALECT_OVERRIDE_KEYS);
+      if (!WIRE_APIS.has(value.override.wireApi) || !DIALECT_SOURCES.has(value.override.source)) {
+        throw providerProfileError();
+      }
+      override = {
+        wireApi: value.override.wireApi,
+        source: value.override.source,
+        updatedAt: requireTimestamp(value.override.updatedAt)
+      };
+    }
+    let detected = null;
+    if (value.detected !== null) {
+      requireExactObject(value.detected, DIALECT_DETECTED_KEYS);
+      if (!WIRE_APIS.has(value.detected.wireApi) || !DIALECT_EVIDENCE.has(value.detected.evidence)) {
+        throw providerProfileError();
+      }
+      detected = {
+        wireApi: value.detected.wireApi,
+        baseUrl: normalizeBaseUrl(requireText(value.detected.baseUrl)),
+        authProfileRevision: requireRevision(value.detected.authProfileRevision),
+        detectedAt: requireTimestamp(value.detected.detectedAt),
+        evidence: value.detected.evidence
+      };
+    }
+    return { override, detected };
+  }
+  function normalizeProbedModel(value) {
+    requireExactObject(value, PROBED_MODEL_KEYS);
+    return { id: requireText(value.id), label: requireText(value.label) };
+  }
+  function normalizeProviderEntryV2(input) {
+    requireExactObject(input, PROVIDER_ENTRY_KEYS);
+    const id = requireText(input.id);
+    const credentialId = normalizeCredentialId(input.credentialId);
+    if (!PROVIDER_PROTOCOLS.has(input.protocol)) throw providerProfileError();
+    if (typeof input.allowInsecureHttp !== "boolean") throw providerProfileError();
+    requireExactObject(input.auth, AUTH_KEYS);
+    if (!Array.isArray(input.headers) || !Array.isArray(input.probedModels)) throw providerProfileError();
+    return {
+      id,
+      credentialId,
+      name: requireText(input.name),
+      protocol: input.protocol,
+      baseUrl: validateProviderBaseUrl(requireText(input.baseUrl), {
+        allowInsecureHttp: input.allowInsecureHttp,
+        requireTransportApproval: true
+      }),
+      allowInsecureHttp: input.allowInsecureHttp,
+      authProfileRevision: requireRevision(input.authProfileRevision),
+      auth: {
+        model: normalizeAuthPolicy(input.auth.model, credentialId),
+        probe: normalizeAuthPolicy(input.auth.probe, credentialId, true)
+      },
+      headers: input.headers.map((header) => normalizeExtraHeader(header, credentialId)),
+      dialect: normalizeDialect(input.dialect),
+      probedModels: input.probedModels.map(normalizeProbedModel),
+      probedAt: requireTimestamp(input.probedAt)
+    };
+  }
   function normalizeProviderId(value) {
     const raw = String(value || "").trim() || DEFAULT_CODEX_PROVIDER_ID;
     const safe = raw.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || DEFAULT_CODEX_PROVIDER_ID;
     return RESERVED_CODEX_PROVIDER_IDS.has(safe) ? safe + "-custom" : safe;
   }
-  function normalizeCodexWireApi() {
-    return DEFAULT_CODEX_WIRE_API;
+  function normalizeCodexWireApi(value) {
+    const text = String(value || "").trim();
+    return text === "responses" || text === "chat" ? text : DEFAULT_CODEX_WIRE_API;
+  }
+  function normalizeCodexAuthScheme(value) {
+    const text = String(value || "").trim();
+    return text === "x-api-key" || text === "none" || text === "bearer" ? text : "bearer";
   }
   function tomlString(value) {
     return JSON.stringify(String(value || ""));
@@ -12083,9 +12412,21 @@
       codexApiKey: firstValue(input.codexApiKey, env.AE_MCP_CODEX_API_KEY),
       codexBaseUrl,
       codexProviderId: normalizeProviderId(firstValue(input.codexProviderId, env.AE_MCP_CODEX_PROVIDER_ID)),
-      codexWireApi: normalizeCodexWireApi(),
+      codexWireApi: normalizeCodexWireApi(firstValue(input.codexWireApi, env.AE_MCP_CODEX_WIRE_API)),
+      codexAuthScheme: normalizeCodexAuthScheme(firstValue(input.codexAuthScheme, env.AE_MCP_CODEX_AUTH_SCHEME)),
       anthropicBaseUrl
     };
+  }
+  function codexRuntimeProviderProfile({
+    effectiveChannel,
+    customProvider,
+    customProviderCredentialResolverReady = false
+  } = {}) {
+    if (effectiveChannel !== "custom" || customProviderCredentialResolverReady !== true || !customProvider || customProvider.protocol !== "openai-compatible") {
+      return normalizeProviderProfile({});
+    }
+    const normalized = normalizeProviderEntryV2(customProvider);
+    return normalizeProviderProfile({ codexBaseUrl: normalized.baseUrl });
   }
   function codexAppServerArgs(profile = {}) {
     const normalized = normalizeProviderProfile(profile);
@@ -12234,8 +12575,7 @@
     });
   }
   async function sendAnthropicMessage({
-    apiKey,
-    baseUrl = "",
+    requestProfile,
     model = DEFAULT_MODEL,
     system = buildSystemPrompt("zh"),
     messages,
@@ -12247,17 +12587,41 @@
     onTextDelta = () => {
     }
   } = {}) {
-    if (!apiKey) throw toError("auth", "Anthropic API key is missing.");
+    var _a, _b;
+    if (!requestProfile || typeof requestProfile !== "object" || typeof requestProfile.baseUrl !== "string") {
+      throw toError("auth", "Provider request profile is missing.");
+    }
     if (!fetchImpl) throw toError("network", "fetch is unavailable in this runtime.");
+    let validatedBaseUrl;
+    try {
+      validatedBaseUrl = validateProviderBaseUrl(requestProfile.baseUrl, {
+        allowInsecureHttp: requestProfile.allowInsecureHttp === true,
+        requireTransportApproval: true
+      });
+    } catch {
+      throw toError("configuration", "Provider request URL is not allowed. Reconfirm the provider transport settings.");
+    }
     let response;
     try {
-      const url = anthropicEndpoint(baseUrl, "/v1/messages");
+      const url = anthropicEndpoint(validatedBaseUrl, "/v1/messages");
       const headers = {
-        "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
         "anthropic-dangerous-direct-browser-access": "true",
         "content-type": "application/json"
       };
+      for (const header of requestProfile.extraHeaders || []) {
+        if (header && typeof header.name === "string" && typeof header.value === "string") {
+          headers[header.name] = header.value;
+        }
+      }
+      if (((_a = requestProfile.auth) == null ? void 0 : _a.kind) === "header") {
+        if (typeof requestProfile.auth.name !== "string" || typeof requestProfile.auth.value !== "string") {
+          throw toError("auth", "Provider request authentication is invalid.");
+        }
+        headers[requestProfile.auth.name] = requestProfile.auth.value;
+      } else if (((_b = requestProfile.auth) == null ? void 0 : _b.kind) !== "none") {
+        throw toError("auth", "Provider request authentication is invalid.");
+      }
       if (fast) headers["anthropic-beta"] = "fast-mode-2026-02-01";
       const body = {
         model,
@@ -12271,13 +12635,14 @@
       if (fast) body.speed = "fast";
       response = await fetchImpl(url, {
         method: "POST",
+        redirect: "manual",
         signal,
         headers,
         body: JSON.stringify(body)
       });
     } catch (e) {
       if (e && e.name === "AbortError") throw e;
-      throw toError("network", e && e.message ? e.message : "Anthropic network request failed.");
+      throw toError("network", "Anthropic network request failed.");
     }
     if (!response.ok) {
       let detail = "";
@@ -12285,7 +12650,7 @@
         detail = await response.text();
       } catch (e) {
       }
-      const classified = classifyHttpError(response.status, detail);
+      const classified = classifyHttpError(response.status, detail ? "Anthropic request failed." : "Anthropic request failed.");
       throw toError(classified.kind, classified.message);
     }
     const reader = response.body && response.body.getReader ? response.body.getReader() : null;
@@ -12345,8 +12710,7 @@
     return { type: "tool_result", tool_use_id: toolUseId, content: text, is_error: Boolean(isError) };
   }
   function createAgentLoop({
-    getApiKey,
-    getApiBaseUrl,
+    resolveRequestProfile,
     getModel,
     mcp,
     getPermissionMode,
@@ -12364,6 +12728,57 @@
     const sessionAllowedTools = /* @__PURE__ */ new Set();
     function emit(evt) {
       if (onEvent) onEvent(evt);
+    }
+    function sensitiveValues(profile) {
+      var _a;
+      const values = [];
+      if (typeof ((_a = profile == null ? void 0 : profile.auth) == null ? void 0 : _a.value) === "string" && profile.auth.value) {
+        values.push(profile.auth.value);
+        const scheme = profile.auth.value.match(/^(?:Bearer|Basic)\s+(.+)$/i);
+        if (scheme == null ? void 0 : scheme[1]) values.push(scheme[1]);
+      }
+      for (const header of (profile == null ? void 0 : profile.extraHeaders) || []) {
+        if (typeof (header == null ? void 0 : header.value) === "string" && header.value) values.push(header.value);
+      }
+      return values.sort((a, b) => b.length - a.length);
+    }
+    function redactText(value, values) {
+      let text = String(value == null ? "" : value);
+      for (const secret of values) text = text.split(secret).join("[redacted]");
+      return text;
+    }
+    function redactValue(value, values) {
+      if (typeof value === "string") return redactText(value, values);
+      if (Array.isArray(value)) return value.map((item) => redactValue(item, values));
+      if (!value || typeof value !== "object") return value;
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactValue(item, values)]));
+    }
+    function createDeltaRedactor(values, emitText) {
+      let buffer = "";
+      const keep = values.reduce((maximum, value) => Math.max(maximum, value.length - 1), 0);
+      return {
+        feed(delta) {
+          if (!values.length) {
+            emitText(String(delta || ""));
+            return;
+          }
+          buffer = redactText(buffer + String(delta || ""), values);
+          if (buffer.length > keep) {
+            emitText(buffer.slice(0, buffer.length - keep));
+            buffer = buffer.slice(buffer.length - keep);
+          }
+        },
+        flush() {
+          if (buffer) emitText(redactText(buffer, values));
+          buffer = "";
+        },
+        discard() {
+          buffer = "";
+        }
+      };
+    }
+    function safeErrorMessage(error, values) {
+      return redactText(error && error.message ? error.message : "Agent loop failed.", values);
     }
     function resetPendingApprovals() {
       for (const [id, pending] of pendingApprovals) {
@@ -12427,6 +12842,7 @@
       const controller = new AbortController();
       activeController = controller;
       activeRun = (async () => {
+        let activeSensitiveValues = [];
         try {
           const tools = await mcp.listTools();
           const toolByName = new Map((tools || []).map((tool) => [tool.name, tool]));
@@ -12438,19 +12854,38 @@
               emit({ type: "error", kind: "mcp", message: "Stopped after 25 consecutive tool rounds." });
               return;
             }
-            const result = await anthropic({
-              apiKey: getApiKey && getApiKey(),
-              baseUrl: getApiBaseUrl && getApiBaseUrl(),
-              model: getModel && getModel() || DEFAULT_MODEL,
-              system,
-              messages: clone(messages),
-              tools,
-              signal: controller.signal,
-              effort: getEffort && getEffort() || null,
-              fast: Boolean(getFast && getFast()),
-              onTextDelta: (delta) => emit({ type: "text-delta", text: delta })
-            });
-            const assistantMessage = result.assistantMessage || { role: "assistant", content: [] };
+            if (typeof resolveRequestProfile !== "function") {
+              throw Object.assign(new Error("Provider request profile is unavailable."), { kind: "auth" });
+            }
+            let requestProfile = await resolveRequestProfile();
+            activeSensitiveValues = sensitiveValues(requestProfile);
+            const deltaRedactor = createDeltaRedactor(
+              activeSensitiveValues,
+              (text2) => {
+                if (text2) emit({ type: "text-delta", text: text2 });
+              }
+            );
+            let result;
+            try {
+              result = await anthropic({
+                requestProfile,
+                model: getModel && getModel() || DEFAULT_MODEL,
+                system,
+                messages: clone(messages),
+                tools,
+                signal: controller.signal,
+                effort: getEffort && getEffort() || null,
+                fast: Boolean(getFast && getFast()),
+                onTextDelta: (delta) => deltaRedactor.feed(delta)
+              });
+              deltaRedactor.flush();
+            } catch (error) {
+              deltaRedactor.discard();
+              throw error;
+            } finally {
+              requestProfile = null;
+            }
+            const assistantMessage = redactValue(result.assistantMessage || { role: "assistant", content: [] }, activeSensitiveValues);
             messages.push(assistantMessage);
             const toolUses = getToolUses(assistantMessage);
             if (result.stopReason !== "tool_use" || toolUses.length === 0) {
@@ -12467,8 +12902,9 @@
         } catch (e) {
           const kind = normalizeErrorKind(e);
           repairDanglingToolUses();
-          emit({ type: "error", kind, message: e && e.message ? e.message : "Agent loop failed." });
+          emit({ type: "error", kind, message: safeErrorMessage(e, activeSensitiveValues) });
         } finally {
+          activeSensitiveValues = [];
           activeController = null;
           activeRun = null;
         }
@@ -12809,6 +13245,9 @@
   function zcodeProtocolApiFormat(provider, kind) {
     const direct = provider && (provider.apiFormat || provider.api_format);
     if (direct) return direct;
+    const dialect = provider && provider.dialect && typeof provider.dialect === "object" ? provider.dialect : null;
+    if (kind === "openai-compatible" && dialect && dialect.wireApi === "responses") return "openai-responses";
+    if (kind === "openai-compatible" && dialect && dialect.wireApi === "chat") return "openai-chat-completions";
     if (kind === "openai") return "openai-responses";
     if (kind === "openai-compatible") return "openai-chat-completions";
     return "anthropic-messages";
@@ -13860,7 +14299,26 @@
   }
 
   // src/lib/channels.js
-  function claudeChannels({ probe, apiProvider } = {}) {
+  function providerHasCredentialPolicy(provider) {
+    var _a, _b;
+    const policy = (_a = provider == null ? void 0 : provider.auth) == null ? void 0 : _a.model;
+    return Boolean(policy && (policy.kind === "none" || ((_b = policy.valueRef) == null ? void 0 : _b.kind) === "secret"));
+  }
+  function agentSdkCompatible(provider) {
+    var _a;
+    if (!provider) return false;
+    let url;
+    try {
+      url = new URL(provider.baseUrl);
+    } catch {
+      return false;
+    }
+    const official = url.protocol === "https:" && url.hostname.toLowerCase() === "api.anthropic.com";
+    const auth = (_a = provider.auth) == null ? void 0 : _a.model;
+    const simpleAuth = (auth == null ? void 0 : auth.kind) === "x-api-key" || (auth == null ? void 0 : auth.kind) === "bearer";
+    return official && simpleAuth && (!provider.headers || provider.headers.length === 0);
+  }
+  function claudeChannels({ probe, apiProvider, providerAvailable, providerChecking = false } = {}) {
     const sub = {
       channel: "subscription",
       source: { zh: "\u8BA2\u9605\u767B\u5F55", en: "Subscription login" },
@@ -13872,14 +14330,25 @@
     const api = {
       channel: "api",
       source: { zh: "\u9762\u677F\u914D\u7F6E \xB7 API \u76F4\u8FDE", en: "Panel config \xB7 API direct" },
-      checking: false,
-      ok: Boolean(apiProvider && apiProvider.baseUrl && apiProvider.apiKey),
+      checking: Boolean(providerChecking),
+      ok: Boolean(
+        !providerChecking && (apiProvider == null ? void 0 : apiProvider.baseUrl) && (providerAvailable === void 0 ? providerHasCredentialPolicy(apiProvider) : providerAvailable)
+      ),
       detail: apiProvider && apiProvider.baseUrl ? apiProvider.baseUrl : "",
-      fixHint: { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E/\u9009\u62E9\u4E00\u4E2A Anthropic \u534F\u8BAE provider\uFF08Base URL + Key/Token\uFF09\uFF0C\u6216\u4E00\u952E\u5BFC\u5165 ~/.claude/settings.json\u3002Claude-3p \u684C\u9762\u7248\u51ED\u636E\u65E0\u6CD5\u81EA\u52A8\u8BFB\u53D6\uFF0C\u8BF7\u624B\u52A8\u586B\u4E00\u6B21\u3002", en: "Add or pick an Anthropic-protocol provider (base URL + key/token) in Provider Manager, or import from ~/.claude/settings.json. Claude-3p desktop credentials cannot be read automatically; paste them once." }
+      fixHint: apiProvider && providerAvailable === false && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1A\u4FEE\u590D\u5E73\u53F0 Helper \u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Repair the platform Helper and re-check; plaintext provider fallback is disabled." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E/\u9009\u62E9\u4E00\u4E2A Anthropic \u534F\u8BAE provider\uFF08Base URL + Key/Token\uFF09\uFF0C\u6216\u4E00\u952E\u5BFC\u5165 ~/.claude/settings.json\u3002Claude-3p \u684C\u9762\u7248\u51ED\u636E\u65E0\u6CD5\u81EA\u52A8\u8BFB\u53D6\uFF0C\u8BF7\u624B\u52A8\u586B\u4E00\u6B21\u3002", en: "Add or pick an Anthropic-protocol provider (base URL + key/token) in Provider Manager, or import from ~/.claude/settings.json. Claude-3p desktop credentials cannot be read automatically; paste them once." }
     };
+    api.directHttp = Boolean(apiProvider && !agentSdkCompatible(apiProvider));
     return [sub, api];
   }
-  function codexChannels({ codexProbe, customProvider, cliConfig, cliConfigApiKey } = {}) {
+  function codexChannels({
+    codexProbe,
+    customProvider,
+    customProviderAvailable,
+    customProviderCredentialResolverReady = false,
+    providerChecking = false,
+    cliConfig,
+    cliCredentialAvailable
+  } = {}) {
     const cli = {
       channel: "cli",
       source: { zh: "Codex CLI \u767B\u5F55\u6001", en: "Codex CLI login" },
@@ -13890,22 +14359,24 @@
     };
     const runtimeOk = Boolean(!codexProbe || codexProbe.runtimeOk !== false);
     const hasProvider = Boolean(cliConfig && cliConfig.provider);
-    const hasKey = Boolean(cliConfigApiKey);
+    const hasKey = Boolean(cliCredentialAvailable);
     const cliConfigChannel = {
       channel: "cli-config",
       source: { zh: "\u7EE7\u627F\u81EA Codex CLI \u914D\u7F6E", en: "Inherited from Codex CLI config" },
       checking: false,
       ok: hasProvider && hasKey && runtimeOk,
       detail: hasProvider ? [cliConfig.providerId, cliConfig.model, cliConfig.provider.baseUrl].filter(Boolean).join(" \xB7 ") : "",
-      fixHint: !hasProvider ? { zh: "\u672A\u627E\u5230 ~/.codex/config.toml \u7684\u53EF\u7528 provider\uFF1A\u5148\u5728 Codex CLI \u91CC\u914D\u7F6E model_provider\u3002", en: "No usable provider in ~/.codex/config.toml: configure model_provider in the Codex CLI first." } : !hasKey ? { zh: "\u68C0\u6D4B\u5230 Codex CLI provider\u300C" + cliConfig.providerId + "\u300D\uFF0C\u4F46\u5176 API Key \u73AF\u5883\u53D8\u91CF\uFF08" + (cliConfig.provider.envKey || "-") + "\uFF09\u6CA1\u6709\u88AB\u9762\u677F\u7EE7\u627F\u3002\u5728\u4E0B\u65B9\u7C98\u8D34\u4E00\u6B21 Key\uFF08\u4FDD\u5B58\u5230\u672C\u673A ~/.ae-mcp/codex-key\uFF09\u5373\u53EF\u4F7F\u7528\u3002", en: 'Found Codex CLI provider "' + cliConfig.providerId + '", but its API key env (' + (cliConfig.provider.envKey || "-") + ") is not inherited by the panel. Paste the key once below (stored at ~/.ae-mcp/codex-key)." } : { zh: "Codex \u8FD0\u884C\u65F6\u4E0D\u53EF\u7528\uFF1A\u8BF7\u68C0\u67E5 Codex CLI \u5B89\u88C5\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "Codex runtime unavailable: check the Codex CLI install and re-check." }
+      fixHint: !hasProvider ? { zh: "\u672A\u627E\u5230 ~/.codex/config.toml \u7684\u53EF\u7528 provider\uFF1A\u5148\u5728 Codex CLI \u91CC\u914D\u7F6E model_provider\u3002", en: "No usable provider in ~/.codex/config.toml: configure model_provider in the Codex CLI first." } : !hasKey ? { zh: "\u68C0\u6D4B\u5230 Codex CLI provider\u300C" + cliConfig.providerId + "\u300D\uFF0C\u4F46\u6CA1\u6709\u53EF\u7528\u51ED\u636E\u3002\u8BF7\u8BBE\u7F6E\u5176\u73AF\u5883\u53D8\u91CF\u6216\u5728 Provider \u7BA1\u7406\u4E2D\u914D\u7F6E\u3002", en: 'Found Codex CLI provider "' + cliConfig.providerId + '", but no credential is available. Set its environment variable or configure it in Provider Manager.' } : { zh: "Codex \u8FD0\u884C\u65F6\u4E0D\u53EF\u7528\uFF1A\u8BF7\u68C0\u67E5 Codex CLI \u5B89\u88C5\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "Codex runtime unavailable: check the Codex CLI install and re-check." }
     };
     const custom = {
       channel: "custom",
       source: { zh: "\u81EA\u5B9A\u4E49 provider", en: "Custom provider" },
-      checking: false,
-      ok: Boolean(customProvider && customProvider.baseUrl && customProvider.apiKey && (!codexProbe || codexProbe.runtimeOk !== false)),
+      checking: Boolean(providerChecking),
+      ok: Boolean(
+        !providerChecking && (customProvider == null ? void 0 : customProvider.baseUrl) && (customProviderAvailable === void 0 ? providerHasCredentialPolicy(customProvider) : customProviderAvailable) && customProviderCredentialResolverReady === true && (!codexProbe || codexProbe.runtimeOk !== false)
+      ),
       detail: customProvider && customProvider.baseUrl ? customProvider.baseUrl : "",
-      fixHint: { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E/\u9009\u62E9\u4E00\u4E2A OpenAI \u517C\u5BB9 provider\uFF08Base URL + Key\uFF09\u3002", en: "Add or pick an OpenAI-compatible provider (base URL + key) in Provider Manager." }
+      fixHint: customProvider && customProviderAvailable === false && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1A\u4FEE\u590D\u5E73\u53F0 Helper \u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Repair the platform Helper and re-check; plaintext provider fallback is disabled." } : customProvider && customProviderCredentialResolverReady !== true ? { zh: "\u6B64\u7248\u672C\u5C1A\u672A\u63A5\u901A Codex \u81EA\u5B9A\u4E49 provider \u7684\u51ED\u636E\u8DEF\u7531\uFF1B\u8BF7\u5148\u4F7F\u7528 Codex CLI \u767B\u5F55\u6216 CLI provider \u914D\u7F6E\u3002", en: "Custom provider credential routing is not connected yet; use Codex CLI login or a CLI provider configuration." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E/\u9009\u62E9\u4E00\u4E2A OpenAI \u517C\u5BB9 provider\uFF08Base URL + Key\uFF09\u3002", en: "Add or pick an OpenAI-compatible provider (base URL + key) in Provider Manager." }
     };
     return custom.ok ? [cli, custom, cliConfigChannel] : [cli, cliConfigChannel, custom];
   }
@@ -13988,7 +14459,7 @@
     }
     if (group === "claude") {
       if (chosen.channel === "api") {
-        return { backend: nodeOk ? "claude-api" : "byok", reason: "ok", channel: "api", fixHint: null };
+        return { backend: "byok", reason: "ok", channel: "api", fixHint: null };
       }
       return { backend: "subscription", reason: "ok", channel: "subscription", fixHint: null };
     }
@@ -14240,14 +14711,30 @@
       if (key.toUpperCase() === normalized) delete environment[key];
     }
   }
-  function claudeChannelEnv(baseEnv = {}, { channel = "subscription", provider = null } = {}) {
+  function unsupportedProvider() {
+    const error = new Error("Claude Agent provider is unsupported");
+    error.code = "CLAUDE_AGENT_PROVIDER_UNSUPPORTED";
+    return error;
+  }
+  function claudeChannelEnv(baseEnv = {}, { channel = "subscription", requestProfile = null } = {}) {
+    var _a;
     const env = { ...baseEnv };
     deleteEnvironmentKey(env, "ANTHROPIC_API_KEY");
     deleteEnvironmentKey(env, "ANTHROPIC_BASE_URL");
     deleteEnvironmentKey(env, "ANTHROPIC_AUTH_TOKEN");
-    if (channel === "api" && provider && provider.baseUrl) {
-      env.ANTHROPIC_BASE_URL = String(provider.baseUrl);
-      if (provider.apiKey) env.ANTHROPIC_AUTH_TOKEN = String(provider.apiKey);
+    if (channel === "api" && requestProfile && requestProfile.baseUrl) {
+      if (Array.isArray(requestProfile.extraHeaders) && requestProfile.extraHeaders.length) throw unsupportedProvider();
+      if (((_a = requestProfile.auth) == null ? void 0 : _a.kind) !== "header") throw unsupportedProvider();
+      const name = String(requestProfile.auth.name || "").toLowerCase();
+      if (name !== "x-api-key" && name !== "authorization") throw unsupportedProvider();
+      let token = String(requestProfile.auth.value || "");
+      if (name === "authorization") {
+        if (!/^Bearer\s+\S+/i.test(token)) throw unsupportedProvider();
+        token = token.replace(/^Bearer\s+/i, "");
+      }
+      if (!token) throw unsupportedProvider();
+      env.ANTHROPIC_BASE_URL = String(requestProfile.baseUrl);
+      env.ANTHROPIC_AUTH_TOKEN = token;
       return env;
     }
     return env;
@@ -14285,7 +14772,7 @@
     getEffort,
     getThinking,
     getChannel = () => "subscription",
-    getApiProvider = () => null,
+    resolveApiProvider,
     onEvent,
     lang = "zh",
     spawnImpl,
@@ -14306,6 +14793,7 @@
     let activeRun = null;
     let activeResolve = null;
     let activeAssistantText = "";
+    let processChannel = "subscription";
     function emit(evt) {
       if (onEvent) onEvent(evt);
     }
@@ -14328,8 +14816,11 @@
     function handleSidecarMessage(message) {
       if (!message || message.t === "ready") return;
       if (message.t !== "event") return;
-      const event = message.event;
+      let event = message.event;
       if (!event) return;
+      if (processChannel === "api" && event.type === "error") {
+        event = { ...event, message: "Provider sidecar request failed." };
+      }
       if (event.type === "text-delta") activeAssistantText += String(event.text || "");
       emit(event);
       if (event.type === "turn-end") {
@@ -14394,7 +14885,13 @@
         const mcpSpec = await getMcpSpec();
         const meta = await getToolMeta();
         const channel = getChannel ? getChannel() : "subscription";
-        const spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), { channel, provider: getApiProvider ? getApiProvider() : null });
+        processChannel = channel;
+        let requestProfile = null;
+        if (channel === "api") {
+          if (typeof resolveApiProvider !== "function") throw new Error("Provider request profile is unavailable.");
+          requestProfile = await resolveApiProvider();
+        }
+        let spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), { channel, requestProfile });
         stderrTail = "";
         stopping = false;
         ready = false;
@@ -14439,6 +14936,10 @@
         } catch (e) {
           clearReadyWait();
           throw e;
+        } finally {
+          requestProfile = null;
+          if (spawnEnv) delete spawnEnv.ANTHROPIC_AUTH_TOKEN;
+          spawnEnv = null;
         }
         const reader = createNdjsonReader((message) => {
           if (message && message.t === "ready") {
@@ -14451,7 +14952,7 @@
         });
         if (proc.stdout && proc.stdout.on) proc.stdout.on("data", reader);
         if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
-          stderrTail = appendTail3(stderrTail, chunk);
+          stderrTail = appendTail3(stderrTail, processChannel === "api" ? "[provider-sidecar-stderr-redacted]\n" : chunk);
         });
         proc.on("exit", (code, signal) => handleExit(code, signal));
         proc.on("error", (error) => {
@@ -14512,6 +15013,7 @@
       transcript = [];
       finishActive();
       stderrTail = "";
+      processChannel = "subscription";
       stopping = false;
     }
     return {
@@ -14616,6 +15118,490 @@
         });
       }
     });
+  }
+
+  // src/cep/codexResponsesRoute.js
+  function getCepRequire() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
+      return globalThis.window.cep_node.require;
+    }
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function normalizeOpenAiRoot(baseUrl) {
+    return String(baseUrl || "").replace(/\/+$/, "").replace(/\/v1$/, "") + "/v1";
+  }
+  function authHeaders(authScheme, apiKey) {
+    if (authScheme === "x-api-key") return { "x-api-key": String(apiKey || "") };
+    if (authScheme === "none") return {};
+    return { Authorization: "Bearer " + String(apiKey || "") };
+  }
+  function textFromContent(content) {
+    if (typeof content === "string") return content;
+    if (!Array.isArray(content)) return "";
+    return content.map((part) => {
+      if (!part || typeof part !== "object") return "";
+      if (part.text !== void 0) return String(part.text || "");
+      if (part.content !== void 0) return String(part.content || "");
+      return "";
+    }).join("");
+  }
+  function toolArguments(value) {
+    if (value === void 0 || value === null) return "{}";
+    if (typeof value === "string") return value;
+    try {
+      return JSON.stringify(value);
+    } catch (e) {
+      return "{}";
+    }
+  }
+  function responsesToolToChatTool(tool) {
+    if (!tool || typeof tool !== "object") return null;
+    const type = String(tool.type || "function");
+    if (type !== "function") return null;
+    if (tool.function && typeof tool.function === "object") {
+      const fn2 = {
+        name: String(tool.function.name || tool.name || ""),
+        description: tool.function.description !== void 0 ? tool.function.description : tool.description,
+        parameters: tool.function.parameters !== void 0 ? tool.function.parameters : tool.parameters || {}
+      };
+      if (tool.function.strict !== void 0 || tool.strict !== void 0) {
+        fn2.strict = tool.function.strict !== void 0 ? tool.function.strict : tool.strict;
+      }
+      return { type: "function", function: fn2 };
+    }
+    const name = String(tool.name || "");
+    if (!name) return null;
+    const fn = {
+      name,
+      description: tool.description,
+      parameters: tool.parameters || {}
+    };
+    if (tool.strict !== void 0) fn.strict = tool.strict;
+    return { type: "function", function: fn };
+  }
+  function responsesToolsToChatTools(tools) {
+    if (!Array.isArray(tools)) return [];
+    return tools.map(responsesToolToChatTool).filter(Boolean);
+  }
+  function responsesToolChoiceToChat(toolChoice) {
+    if (!toolChoice || typeof toolChoice !== "object") return toolChoice;
+    if (toolChoice.type === "function") {
+      return { type: "function", function: { name: String(toolChoice.name || toolChoice.function && toolChoice.function.name || "") } };
+    }
+    return toolChoice;
+  }
+  function functionCallToChatToolCall(item) {
+    const callId = String(item.call_id || item.id || "");
+    return {
+      id: callId,
+      type: "function",
+      function: {
+        name: String(item.name || ""),
+        arguments: toolArguments(item.arguments)
+      }
+    };
+  }
+  function inputToMessages(input) {
+    if (typeof input === "string") return [{ role: "user", content: input }];
+    if (!Array.isArray(input)) return [{ role: "user", content: String(input || "") }];
+    const messages = [];
+    let pendingToolCalls = [];
+    function flushToolCalls() {
+      if (!pendingToolCalls.length) return;
+      messages.push({ role: "assistant", content: null, tool_calls: pendingToolCalls });
+      pendingToolCalls = [];
+    }
+    for (const item of input) {
+      if (!item || typeof item !== "object") continue;
+      const type = String(item.type || "");
+      if (type === "function_call") {
+        pendingToolCalls.push(functionCallToChatToolCall(item));
+        continue;
+      }
+      if (type === "function_call_output") {
+        flushToolCalls();
+        messages.push({
+          role: "tool",
+          tool_call_id: String(item.call_id || item.id || ""),
+          content: typeof item.output === "string" ? item.output : toolArguments(item.output)
+        });
+        continue;
+      }
+      if (type === "reasoning") continue;
+      flushToolCalls();
+      if (type === "message" || item.role || item.content !== void 0 || item.text !== void 0) {
+        const role = item.role === "assistant" || item.role === "system" ? item.role : "user";
+        const content = textFromContent(item.content !== void 0 ? item.content : item.text);
+        if (content || role === "assistant") messages.push({ role, content: content || "" });
+      }
+    }
+    flushToolCalls();
+    return messages.length ? messages : [{ role: "user", content: "" }];
+  }
+  function responsesBodyToChatBody(body = {}) {
+    const messages = [];
+    if (body.instructions) messages.push({ role: "system", content: String(body.instructions) });
+    messages.push(...inputToMessages(body.input));
+    const chat = {
+      model: body.model,
+      messages,
+      stream: body.stream !== false
+    };
+    const maxTokens = body.max_output_tokens || body.max_tokens;
+    if (maxTokens !== void 0) chat.max_tokens = maxTokens;
+    if (body.temperature !== void 0) chat.temperature = body.temperature;
+    if (body.top_p !== void 0) chat.top_p = body.top_p;
+    const tools = responsesToolsToChatTools(body.tools);
+    if (tools.length) chat.tools = tools;
+    if (body.tool_choice !== void 0 && tools.length) chat.tool_choice = responsesToolChoiceToChat(body.tool_choice);
+    if (body.parallel_tool_calls !== void 0 && tools.length) chat.parallel_tool_calls = body.parallel_tool_calls;
+    return chat;
+  }
+  function responseId() {
+    return "resp_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+  function sse(res, event, data) {
+    res.write("event: " + event + "\n");
+    res.write("data: " + JSON.stringify({ type: event, ...data }) + "\n\n");
+  }
+  function chatToolCallsToResponseOutput(message) {
+    const toolCalls = Array.isArray(message && message.tool_calls) ? message.tool_calls : [];
+    return toolCalls.map((toolCall, index) => {
+      const callId = String(toolCall && toolCall.id || "call_" + index);
+      const fn = toolCall && toolCall.function || {};
+      return {
+        type: "function_call",
+        id: "fc_" + callId,
+        call_id: callId,
+        name: String(fn.name || ""),
+        arguments: toolArguments(fn.arguments),
+        status: "completed"
+      };
+    }).filter((item) => item.name);
+  }
+  function messageOutputItem(id, text) {
+    return {
+      id: "msg_" + id.slice(5),
+      type: "message",
+      status: "completed",
+      role: "assistant",
+      content: [{ type: "output_text", text: String(text || "") }]
+    };
+  }
+  function chatMessageToResponseOutput(id, message) {
+    const output = [];
+    const text = message && typeof message.content === "string" ? message.content : "";
+    if (text) output.push(messageOutputItem(id, text));
+    output.push(...chatToolCallsToResponseOutput(message));
+    if (!output.length) output.push(messageOutputItem(id, ""));
+    return output;
+  }
+  function createStreamState(res, id, model) {
+    let started = false;
+    let nextOutputIndex = 0;
+    let textIndex = null;
+    let text = "";
+    const tools = /* @__PURE__ */ new Map();
+    const completed = [];
+    function ensureStarted() {
+      if (started) return;
+      started = true;
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive"
+      });
+      sse(res, "response.created", { response: { id, object: "response", status: "in_progress", model, output: [] } });
+    }
+    function ensureTextItem() {
+      ensureStarted();
+      if (textIndex !== null) return textIndex;
+      textIndex = nextOutputIndex++;
+      const item = { id: "msg_" + id.slice(5), type: "message", status: "in_progress", role: "assistant", content: [] };
+      sse(res, "response.output_item.added", { output_index: textIndex, item });
+      sse(res, "response.content_part.added", { output_index: textIndex, content_index: 0, part: { type: "output_text", text: "" } });
+      return textIndex;
+    }
+    function pushTextDelta(delta) {
+      if (!delta) return;
+      const outputIndex = ensureTextItem();
+      text += String(delta);
+      sse(res, "response.output_text.delta", { output_index: outputIndex, content_index: 0, delta: String(delta) });
+    }
+    function pushToolCallDelta(toolCall) {
+      ensureStarted();
+      const chatIndex = Number.isFinite(toolCall && toolCall.index) ? toolCall.index : 0;
+      const fn = toolCall && toolCall.function || {};
+      let state = tools.get(chatIndex);
+      if (!state) {
+        state = { callId: "", name: "", arguments: "", outputIndex: null, itemId: "", added: false };
+        tools.set(chatIndex, state);
+      }
+      if (toolCall && toolCall.id) state.callId = String(toolCall.id);
+      if (fn.name) state.name = String(fn.name);
+      if (fn.arguments) state.arguments += String(fn.arguments);
+      if (!state.added && state.callId && state.name) {
+        state.added = true;
+        state.outputIndex = nextOutputIndex++;
+        state.itemId = "fc_" + state.callId;
+        const item = {
+          type: "function_call",
+          id: state.itemId,
+          call_id: state.callId,
+          name: state.name,
+          arguments: "",
+          status: "in_progress"
+        };
+        sse(res, "response.output_item.added", { output_index: state.outputIndex, item });
+        if (state.arguments) {
+          sse(res, "response.function_call_arguments.delta", {
+            item_id: state.itemId,
+            output_index: state.outputIndex,
+            delta: state.arguments
+          });
+        }
+        return;
+      }
+      if (state.added && fn.arguments) {
+        sse(res, "response.function_call_arguments.delta", {
+          item_id: state.itemId,
+          output_index: state.outputIndex,
+          delta: String(fn.arguments)
+        });
+      }
+    }
+    function finish() {
+      ensureStarted();
+      if (textIndex !== null) {
+        const item = messageOutputItem(id, text);
+        sse(res, "response.output_text.done", { output_index: textIndex, content_index: 0, text });
+        sse(res, "response.content_part.done", { output_index: textIndex, content_index: 0, part: item.content[0] });
+        sse(res, "response.output_item.done", { output_index: textIndex, item });
+        completed.push(item);
+      }
+      for (const state of tools.values()) {
+        if (!state.added || !state.name) continue;
+        const item = {
+          type: "function_call",
+          id: state.itemId || "fc_" + state.callId,
+          call_id: state.callId || state.itemId,
+          name: state.name,
+          arguments: state.arguments || "{}",
+          status: "completed"
+        };
+        sse(res, "response.function_call_arguments.done", {
+          item_id: item.id,
+          output_index: state.outputIndex,
+          arguments: item.arguments
+        });
+        sse(res, "response.output_item.done", { output_index: state.outputIndex, item });
+        completed.push(item);
+      }
+      if (!completed.length) completed.push(messageOutputItem(id, ""));
+      sse(res, "response.completed", {
+        response: { id, object: "response", status: "completed", model, output: completed }
+      });
+      res.end();
+    }
+    return { pushTextDelta, pushToolCallDelta, finish, ensureStarted };
+  }
+  function sendJson(res, status, body) {
+    res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(body));
+  }
+  function readBody(req) {
+    return new Promise((resolve, reject) => {
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", () => resolve(body));
+      req.on("error", reject);
+    });
+  }
+  function requestUpstream({ requireImpl, upstreamBaseUrl, apiKey, authScheme, path, method, body, onResponse }) {
+    return new Promise((resolve, reject) => {
+      let endpoint;
+      try {
+        endpoint = new URL(normalizeOpenAiRoot(upstreamBaseUrl) + path);
+      } catch (e) {
+        reject(new Error("Invalid upstream base URL"));
+        return;
+      }
+      const reqImpl = requireImpl(endpoint.protocol === "http:" ? "http" : "https");
+      const payload = body === void 0 ? null : JSON.stringify(body);
+      const headers = { ...authHeaders(authScheme, apiKey) };
+      if (payload !== null) headers["Content-Type"] = "application/json";
+      const req = reqImpl.request({
+        hostname: endpoint.hostname,
+        port: endpoint.port || void 0,
+        protocol: endpoint.protocol,
+        path: endpoint.pathname + endpoint.search,
+        method,
+        headers
+      }, async (upstream) => {
+        try {
+          await onResponse(upstream);
+          resolve();
+        } catch (e) {
+          reject(e);
+        }
+      });
+      req.on("error", reject);
+      if (payload !== null) req.write(payload);
+      req.end();
+    });
+  }
+  function proxyModels({ req, res, requireImpl, upstreamBaseUrl, apiKey, authScheme }) {
+    return requestUpstream({
+      requireImpl,
+      upstreamBaseUrl,
+      apiKey,
+      authScheme,
+      path: "/models",
+      method: "GET",
+      onResponse: async (upstream) => {
+        res.writeHead(upstream.statusCode || 502, upstream.headers || {});
+        upstream.on("data", (chunk) => res.write(chunk));
+        upstream.on("end", () => res.end());
+      }
+    }).catch((e) => sendJson(res, 502, { error: { message: e.message || "Provider route failed" } }));
+  }
+  async function handleResponses({ req, res, requireImpl, upstreamBaseUrl, apiKey, authScheme }) {
+    let body;
+    try {
+      body = JSON.parse(await readBody(req) || "{}");
+    } catch (e) {
+      sendJson(res, 400, { error: { message: "Invalid JSON request body" } });
+      return;
+    }
+    const chatBody = responsesBodyToChatBody(body);
+    const id = responseId();
+    if (chatBody.stream === false) {
+      await requestUpstream({
+        requireImpl,
+        upstreamBaseUrl,
+        apiKey,
+        authScheme,
+        path: "/chat/completions",
+        method: "POST",
+        body: chatBody,
+        onResponse: async (upstream) => {
+          let text = "";
+          upstream.on("data", (chunk) => {
+            text += chunk;
+          });
+          upstream.on("end", () => {
+            if ((upstream.statusCode || 0) >= 300) {
+              sendJson(res, upstream.statusCode || 502, { error: { message: "Upstream chat completion failed" } });
+              return;
+            }
+            let message = { content: "" };
+            try {
+              const parsed = JSON.parse(text);
+              message = parsed.choices && parsed.choices[0] && parsed.choices[0].message || message;
+            } catch (e) {
+              message = { content: "" };
+            }
+            sendJson(res, 200, {
+              id,
+              object: "response",
+              status: "completed",
+              model: chatBody.model,
+              output: chatMessageToResponseOutput(id, message)
+            });
+          });
+        }
+      }).catch((e) => sendJson(res, 502, { error: { message: e.message || "Provider route failed" } }));
+      return;
+    }
+    const stream = createStreamState(res, id, chatBody.model);
+    await requestUpstream({
+      requireImpl,
+      upstreamBaseUrl,
+      apiKey,
+      authScheme,
+      path: "/chat/completions",
+      method: "POST",
+      body: chatBody,
+      onResponse: async (upstream) => {
+        if ((upstream.statusCode || 0) >= 300) {
+          let detail = "";
+          upstream.on("data", (chunk) => {
+            detail += chunk;
+          });
+          upstream.on("end", () => sendJson(res, upstream.statusCode || 502, { error: { message: "Upstream chat completion failed", detail: detail.slice(0, 512) } }));
+          return;
+        }
+        stream.ensureStarted();
+        let buffer = "";
+        upstream.on("data", (chunk) => {
+          buffer += String(chunk || "");
+          const lines = buffer.split(/\r?\n/);
+          buffer = lines.pop() || "";
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data:")) continue;
+            const data = trimmed.slice(5).trim();
+            if (!data || data === "[DONE]") continue;
+            try {
+              const json = JSON.parse(data);
+              const delta = json.choices && json.choices[0] && json.choices[0].delta;
+              if (!delta) continue;
+              if (delta.content) stream.pushTextDelta(delta.content);
+              if (Array.isArray(delta.tool_calls)) {
+                for (const toolCall of delta.tool_calls) stream.pushToolCallDelta(toolCall);
+              }
+            } catch (e) {
+            }
+          }
+        });
+        upstream.on("end", () => stream.finish());
+      }
+    }).catch((e) => {
+      if (!res.headersSent) sendJson(res, 502, { error: { message: e.message || "Provider route failed" } });
+      else res.end();
+    });
+  }
+  function createCodexResponsesRoute({ upstreamBaseUrl, apiKey, authScheme = "bearer", requireImpl } = {}) {
+    const reqImpl = requireImpl || getCepRequire();
+    let server = null;
+    let baseUrl = "";
+    const token = "ae-mcp-route-" + Math.random().toString(36).slice(2);
+    return {
+      async start() {
+        if (server && baseUrl) return { baseUrl, apiKey: token };
+        const http = reqImpl("http");
+        server = http.createServer((req, res) => {
+          const path = String(req.url || "").split("?")[0].replace(/^\/v1/, "") || "/";
+          if (req.method === "GET" && path === "/models") {
+            proxyModels({ req, res, requireImpl: reqImpl, upstreamBaseUrl, apiKey, authScheme });
+            return;
+          }
+          if (req.method === "POST" && (path === "/responses" || path === "/responses/compact")) {
+            handleResponses({ req, res, requireImpl: reqImpl, upstreamBaseUrl, apiKey, authScheme });
+            return;
+          }
+          sendJson(res, 404, { error: { message: "Unknown Codex provider route path" } });
+        });
+        await new Promise((resolve, reject) => {
+          server.on("error", reject);
+          server.listen(0, "127.0.0.1", () => resolve());
+        });
+        const address = server.address();
+        baseUrl = "http://127.0.0.1:" + address.port;
+        return { baseUrl, apiKey: token };
+      },
+      async close() {
+        if (!server) return;
+        const closing = server;
+        server = null;
+        baseUrl = "";
+        await new Promise((resolve) => closing.close(resolve));
+      }
+    };
   }
 
   // src/cep/codexBackend.js
@@ -14777,6 +15763,7 @@
     // panel only supplies the missing API key env var the provider needs (no
     // `-c model_provider=...` override).
     getCliConfigProvider = () => null,
+    createResponsesRoute = createCodexResponsesRoute,
     resolveCli = resolveCodexCli,
     onEvent,
     lang = "zh",
@@ -14799,8 +15786,15 @@
     let activeAssistantText = "";
     let toolMeta = { allowedTools: [], annotations: {} };
     let lastCliInfo = null;
+    let providerRoute = null;
     const pendingApprovals = /* @__PURE__ */ new Map();
     const sessionAllowedTools = /* @__PURE__ */ new Set();
+    function closeProviderRoute() {
+      const route = providerRoute;
+      providerRoute = null;
+      if (route && route.close) Promise.resolve(route.close()).catch(() => {
+      });
+    }
     function emit(evt) {
       if (onEvent) onEvent(evt);
     }
@@ -14941,6 +15935,7 @@
       initialized = false;
       threadId = null;
       preambleSent = false;
+      closeProviderRoute();
       if (wasStopping) return;
       if (activeRun) {
         emit({ type: "error", kind: "mcp", message: "codex app-server exited: " + detail });
@@ -14957,6 +15952,7 @@
       initialized = false;
       threadId = null;
       preambleSent = false;
+      closeProviderRoute();
       if (activeRun) {
         emit({ type: "error", kind: "mcp", message: err.message });
         finishActive();
@@ -14968,6 +15964,22 @@
       startPromise = (async () => {
         const spawnEnv = currentEnv();
         const providerProfile = normalizeProviderProfile(getProviderProfile ? getProviderProfile() : {}, spawnEnv);
+        let runtimeProviderProfile = providerProfile;
+        if (providerProfile.codexBaseUrl && providerProfile.codexWireApi === "chat") {
+          closeProviderRoute();
+          providerRoute = createResponsesRoute({
+            upstreamBaseUrl: providerProfile.codexBaseUrl,
+            apiKey: providerProfile.codexApiKey,
+            authScheme: providerProfile.codexAuthScheme
+          });
+          const routeInfo = await providerRoute.start();
+          runtimeProviderProfile = {
+            ...providerProfile,
+            codexBaseUrl: routeInfo.baseUrl,
+            codexApiKey: routeInfo.apiKey,
+            codexWireApi: "responses"
+          };
+        }
         stderrTail = "";
         stopping = false;
         const cliInfo = await resolveCli({ env: spawnEnv, platform: adapter });
@@ -14982,7 +15994,7 @@
           version: cliInfo.version || null,
           arch: null
         };
-        let spawnEnvWithCreds = codexSpawnEnv(providerProfile, spawnEnv);
+        let spawnEnvWithCreds = codexSpawnEnv(runtimeProviderProfile, spawnEnv);
         if (!providerProfile.codexBaseUrl) {
           const cliConfig = getCliConfigProvider ? getCliConfigProvider() : null;
           const envKey = cliConfig && cliConfig.provider && String(cliConfig.provider.envKey || "").trim();
@@ -14990,7 +16002,7 @@
             spawnEnvWithCreds = Object.assign({}, spawnEnvWithCreds, { [envKey]: cliConfig.apiKey });
           }
         }
-        proc = adapter.spawn(executable, codexAppServerArgs(providerProfile), {
+        proc = adapter.spawn(executable, codexAppServerArgs(runtimeProviderProfile), {
           stdio: "pipe",
           windowsHide: true,
           env: spawnEnvWithCreds
@@ -15127,6 +16139,7 @@
     }
     function reset() {
       stopping = true;
+      closeProviderRoute();
       drainApprovals();
       if (rpc) rpc.close(new Error("Codex backend reset"));
       if (proc) {
@@ -15229,7 +16242,7 @@
   var READY_POLL_MS = 250;
   var DEFAULT_PROVIDER_ID = "opencode";
   var DEFAULT_MODEL_ID = "north-mini-code-free";
-  function getCepRequire() {
+  function getCepRequire2() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -15257,7 +16270,7 @@
     return "ae-opencode-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
   }
   async function defaultGetPort() {
-    const net = getCepRequire()("net");
+    const net = getCepRequire2()("net");
     return new Promise((resolve, reject) => {
       const server = net.createServer();
       server.on("error", reject);
@@ -15762,125 +16775,1967 @@
   }
 
   // src/cep/providerStore.js
-  var PROTOCOLS = /* @__PURE__ */ new Set(["anthropic", "openai-compatible"]);
   var FILE_NAME = "providers.json";
+  var STATE_KEYS = ["migratedLegacy", "pendingSecretDeletes", "providers", "revision", "version"];
+  var VALUE_REF_KEYS = ["kind", "reference", "revision"];
+  var LOCK_KEYS = ["createdAt", "ownerNonce", "pid", "schemaVersion"];
+  var RELEASED_LOCK_NONCES = /* @__PURE__ */ new Set();
+  var MAX_RELEASED_LOCK_NONCES = 256;
+  var LOCK_STALE_AFTER_MS = 3e4;
   function cepRequire3() {
-    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) return globalThis.window.cep_node.require;
-    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    var _a, _b, _c;
+    if ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) return globalThis.window.cep_node.require;
+    if ((_c = globalThis.window) == null ? void 0 : _c.require) return globalThis.window.require;
     if (globalThis.require) return globalThis.require;
     return null;
   }
   function defaultDeps2() {
     const req = cepRequire3();
-    if (!req) throw new Error("CEP Node require is unavailable");
+    if (!req) throw storeError("PROVIDER_STORE_UNAVAILABLE");
+    const processApi = req("process");
     return {
       fs: req("fs"),
       os: req("os"),
       path: req("path"),
-      pid: req("process") && req("process").pid
+      crypto: req("crypto"),
+      pid: (processApi == null ? void 0 : processApi.pid) || 0,
+      now: Date.now,
+      isProcessAlive(pid) {
+        try {
+          processApi.kill(pid, 0);
+          return true;
+        } catch (error) {
+          return (error == null ? void 0 : error.code) !== "ESRCH";
+        }
+      }
     };
   }
-  function normalizeProviderEntry(input = {}) {
-    const id = String(input.id || "").trim();
-    if (!id) throw new Error("Provider entry needs an id");
-    const protocol = String(input.protocol || "openai-compatible");
-    if (!PROTOCOLS.has(protocol)) throw new Error("Unsupported provider protocol: " + protocol);
+  function storeError(code) {
+    const messages = {
+      PROVIDER_STORE_CONFLICT: "Provider store revision conflict",
+      PROVIDER_STORE_INVALID: "Provider store is invalid",
+      PROVIDER_STORE_MIGRATION_REQUIRED: "Provider store migration is required",
+      PROVIDER_STORE_UNAVAILABLE: "Provider store is unavailable"
+    };
+    const error = new Error(messages[code] || messages.PROVIDER_STORE_INVALID);
+    error.code = messages[code] ? code : "PROVIDER_STORE_INVALID";
+    return error;
+  }
+  function hasExactKeys2(value, expected) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const keys = Object.keys(value).sort();
+    return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+  }
+  function clone5(value) {
+    return value == null ? value : JSON.parse(JSON.stringify(value));
+  }
+  function normalizeValueRef(value) {
+    if (!hasExactKeys2(value, VALUE_REF_KEYS) || value.kind !== "secret") {
+      throw storeError("PROVIDER_STORE_INVALID");
+    }
+    try {
+      parseProviderSecretReference(value.reference);
+    } catch {
+      throw storeError("PROVIDER_STORE_INVALID");
+    }
+    if (!Number.isSafeInteger(value.revision) || value.revision <= 0) {
+      throw storeError("PROVIDER_STORE_INVALID");
+    }
+    return { kind: "secret", reference: value.reference, revision: value.revision };
+  }
+  function requireSafeProviderUrl(value) {
+    try {
+      validateProviderBaseUrl(value);
+    } catch {
+      throw storeError("PROVIDER_STORE_INVALID");
+    }
+  }
+  function providerSecretReferences(provider) {
+    var _a, _b, _c, _d;
+    const references = [];
+    const add = (valueRef) => {
+      if ((valueRef == null ? void 0 : valueRef.kind) === "secret") references.push(valueRef.reference);
+    };
+    add((_b = (_a = provider.auth) == null ? void 0 : _a.model) == null ? void 0 : _b.valueRef);
+    add((_d = (_c = provider.auth) == null ? void 0 : _c.probe) == null ? void 0 : _d.valueRef);
+    for (const header of provider.headers || []) add(header.valueRef);
+    return references;
+  }
+  function fileIdentity(stat) {
+    if (!stat || typeof stat !== "object") throw storeError("PROVIDER_STORE_UNAVAILABLE");
+    const identity = {
+      kind: "provider-file-identity-v1",
+      dev: stat.dev,
+      ino: stat.ino,
+      size: stat.size,
+      mtimeMs: stat.mtimeMs,
+      ctimeMs: stat.ctimeMs
+    };
+    if (!Number.isSafeInteger(identity.dev) || identity.dev < 0 || !Number.isSafeInteger(identity.ino) || identity.ino < 0 || !Number.isSafeInteger(identity.size) || identity.size < 0 || !Number.isFinite(identity.mtimeMs) || identity.mtimeMs < 0 || !Number.isFinite(identity.ctimeMs) || identity.ctimeMs < 0) {
+      throw storeError("PROVIDER_STORE_UNAVAILABLE");
+    }
+    return identity;
+  }
+  function normalizeState(value) {
+    if (!hasExactKeys2(value, STATE_KEYS)) throw storeError("PROVIDER_STORE_INVALID");
+    if (value.version !== 2 || !Number.isSafeInteger(value.revision) || value.revision < 0 || value.migratedLegacy !== true || !Array.isArray(value.pendingSecretDeletes) || !Array.isArray(value.providers)) {
+      throw storeError("PROVIDER_STORE_INVALID");
+    }
+    const pendingSecretDeletes = value.pendingSecretDeletes.map(normalizeValueRef);
+    const pendingKeys = /* @__PURE__ */ new Set();
+    for (const ref of pendingSecretDeletes) {
+      if (pendingKeys.has(ref.reference)) throw storeError("PROVIDER_STORE_INVALID");
+      pendingKeys.add(ref.reference);
+    }
+    const providers = value.providers.map((provider) => {
+      try {
+        const normalized = normalizeProviderEntryV2(provider);
+        requireSafeProviderUrl(normalized.baseUrl);
+        return normalized;
+      } catch {
+        throw storeError("PROVIDER_STORE_INVALID");
+      }
+    });
+    const ids = /* @__PURE__ */ new Set();
+    for (const provider of providers) {
+      if (ids.has(provider.id)) throw storeError("PROVIDER_STORE_INVALID");
+      ids.add(provider.id);
+      for (const reference of providerSecretReferences(provider)) {
+        if (pendingKeys.has(reference)) throw storeError("PROVIDER_STORE_INVALID");
+      }
+    }
     return {
-      id,
-      name: String(input.name || "").trim() || id,
-      protocol,
-      baseUrl: String(input.baseUrl || "").trim().replace(/\/+$/, ""),
-      apiKey: String(input.apiKey || "").trim(),
-      probedModels: Array.isArray(input.probedModels) ? input.probedModels : [],
-      probedAt: Number(input.probedAt) || 0
+      version: 2,
+      revision: value.revision,
+      migratedLegacy: true,
+      pendingSecretDeletes,
+      providers
     };
   }
-  function createProviderStore(deps = defaultDeps2()) {
+  function emptyState2() {
+    return {
+      version: 2,
+      revision: 0,
+      migratedLegacy: true,
+      pendingSecretDeletes: [],
+      providers: []
+    };
+  }
+  function appendPending(existing, additions) {
+    if (additions === void 0) return existing.slice();
+    if (!Array.isArray(additions)) throw storeError("PROVIDER_STORE_INVALID");
+    const output = existing.slice();
+    const seen = new Map(output.map((ref) => [ref.reference, ref.revision]));
+    for (const raw of additions) {
+      const ref = normalizeValueRef(raw);
+      if (seen.has(ref.reference)) {
+        if (seen.get(ref.reference) !== ref.revision) throw storeError("PROVIDER_STORE_INVALID");
+      } else {
+        seen.set(ref.reference, ref.revision);
+        output.push(ref);
+      }
+    }
+    return output;
+  }
+  function createProviderStore(inputDeps) {
+    var _a;
+    const deps = inputDeps || defaultDeps2();
     const { fs, os, path } = deps;
+    const now = typeof deps.now === "function" ? deps.now : Date.now;
+    const pid = Number.isSafeInteger(deps.pid) && deps.pid > 0 ? deps.pid : 0;
+    const randomBytes = (_a = deps.crypto) == null ? void 0 : _a.randomBytes;
+    const isProcessAlive = typeof deps.isProcessAlive === "function" ? deps.isProcessAlive : () => true;
+    let tempCounter = 0;
+    let activeLockOwner = null;
     function dir() {
       return path.join(os.homedir(), ".ae-mcp");
     }
     function filePath() {
       return path.join(dir(), FILE_NAME);
     }
-    function readState() {
+    function lockPath() {
+      return path.join(dir(), `${FILE_NAME}.lock`);
+    }
+    function ensureDirectory() {
+      const directory = dir();
+      if (!fs.existsSync(directory)) fs.mkdirSync(directory, { recursive: true });
+      return directory;
+    }
+    function normalizeLockMetadata(value) {
+      if (!hasExactKeys2(value, LOCK_KEYS) || value.schemaVersion !== 1 || typeof value.ownerNonce !== "string" || !/^[0-9a-f]{32,128}$/.test(value.ownerNonce) || !Number.isSafeInteger(value.pid) || value.pid <= 0 || !Number.isFinite(value.createdAt) || value.createdAt < 0) {
+        return null;
+      }
+      return {
+        schemaVersion: 1,
+        ownerNonce: value.ownerNonce,
+        pid: value.pid,
+        createdAt: value.createdAt
+      };
+    }
+    function readLockMetadata(lock) {
       try {
-        const parsed = JSON.parse(fs.readFileSync(filePath(), "utf8"));
-        if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.providers)) {
-          return { version: 1, migratedLegacy: false, providers: [] };
-        }
-        return { version: 1, migratedLegacy: parsed.migratedLegacy === true, providers: parsed.providers };
-      } catch (e) {
-        return { version: 1, migratedLegacy: false, providers: [] };
+        return normalizeLockMetadata(JSON.parse(String(fs.readFileSync(lock, "utf8"))));
+      } catch {
+        return null;
       }
     }
-    function writeState(state) {
-      const d = dir();
-      if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
-      const pid = deps.pid || 0;
-      const tmp = path.join(d, FILE_NAME + "." + pid + "." + Date.now() + ".tmp");
-      fs.writeFileSync(tmp, JSON.stringify(state, null, 2), "utf8");
+    function readLockSnapshot(lock) {
+      if (typeof fs.statSync !== "function") return null;
       try {
-        fs.chmodSync(tmp, 384);
-      } catch (e) {
+        const firstRaw = String(fs.readFileSync(lock, "utf8"));
+        const firstIdentity = fileIdentity(fs.statSync(lock));
+        const secondRaw = String(fs.readFileSync(lock, "utf8"));
+        const secondIdentity = fileIdentity(fs.statSync(lock));
+        if (firstRaw !== secondRaw || JSON.stringify(firstIdentity) !== JSON.stringify(secondIdentity)) {
+          return null;
+        }
+        let metadata = null;
+        try {
+          metadata = normalizeLockMetadata(JSON.parse(firstRaw));
+        } catch {
+        }
+        return { raw: firstRaw, identity: firstIdentity, metadata };
+      } catch {
+        return null;
       }
-      fs.renameSync(tmp, filePath());
-      return state;
+    }
+    function sameLockOwner(left, right) {
+      return Boolean(left && right && left.ownerNonce === right.ownerNonce && left.pid === right.pid && left.createdAt === right.createdAt);
+    }
+    function sameLockSnapshot(left, right) {
+      return Boolean(left && right && left.raw === right.raw && JSON.stringify(left.identity) === JSON.stringify(right.identity) && (left.metadata === null && right.metadata === null || sameLockOwner(left.metadata, right.metadata)));
+    }
+    function sameLockPayload(left, right) {
+      return Boolean(left && right && left.raw === right.raw && (left.metadata === null && right.metadata === null || sameLockOwner(left.metadata, right.metadata)));
+    }
+    function rememberReleasedNonce(ownerNonce) {
+      RELEASED_LOCK_NONCES.add(ownerNonce);
+      while (RELEASED_LOCK_NONCES.size > MAX_RELEASED_LOCK_NONCES) {
+        RELEASED_LOCK_NONCES.delete(RELEASED_LOCK_NONCES.values().next().value);
+      }
+    }
+    function ownerIsAlive(ownerPid) {
+      try {
+        return isProcessAlive(ownerPid) !== false;
+      } catch {
+        return true;
+      }
+    }
+    function lockLeaseExpired(snapshot) {
+      const timestamp2 = snapshot.metadata ? snapshot.metadata.createdAt : Math.max(snapshot.identity.mtimeMs, snapshot.identity.ctimeMs);
+      const age = now() - timestamp2;
+      return Number.isFinite(age) && age >= LOCK_STALE_AFTER_MS;
+    }
+    function lockSnapshotIsRecoverable(snapshot) {
+      const releasedByThisProcess = Boolean(snapshot.metadata && snapshot.metadata.pid === pid && RELEASED_LOCK_NONCES.has(snapshot.metadata.ownerNonce));
+      const deadOwner = Boolean(snapshot.metadata && !ownerIsAlive(snapshot.metadata.pid));
+      return releasedByThisProcess || deadOwner || lockLeaseExpired(snapshot);
+    }
+    function recoverQuarantinedLock(lock) {
+      var _a2, _b;
+      const recovery = `${lock}.recovering`;
+      if (!((_a2 = fs.existsSync) == null ? void 0 : _a2.call(fs, recovery)) || ((_b = fs.existsSync) == null ? void 0 : _b.call(fs, lock))) return false;
+      const observed = readLockSnapshot(recovery);
+      if (!observed || !lockSnapshotIsRecoverable(observed)) return false;
+      const confirmed = readLockSnapshot(recovery);
+      if (!sameLockSnapshot(observed, confirmed)) return false;
+      try {
+        fs.unlinkSync(recovery);
+        if (observed.metadata) RELEASED_LOCK_NONCES.delete(observed.metadata.ownerNonce);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    function restoreQuarantinedLock(lock, recovery) {
+      if (typeof fs.linkSync !== "function") return false;
+      try {
+        fs.linkSync(recovery, lock);
+        fs.unlinkSync(recovery);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    function quarantineAndRemoveLock(lock, observed) {
+      var _a2;
+      const recovery = `${lock}.recovering`;
+      if ((_a2 = fs.existsSync) == null ? void 0 : _a2.call(fs, recovery)) return false;
+      const confirmed = readLockSnapshot(lock);
+      if (!sameLockSnapshot(observed, confirmed)) return false;
+      try {
+        fs.renameSync(lock, recovery);
+      } catch {
+        return false;
+      }
+      const quarantined = readLockSnapshot(recovery);
+      if (!sameLockPayload(observed, quarantined)) {
+        restoreQuarantinedLock(lock, recovery);
+        return false;
+      }
+      try {
+        fs.unlinkSync(recovery);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    function recoverReleasedOrDeadLock(lock) {
+      const observed = readLockSnapshot(lock);
+      if (!observed) return false;
+      if (!lockSnapshotIsRecoverable(observed)) return false;
+      if (quarantineAndRemoveLock(lock, observed)) {
+        if (observed.metadata) RELEASED_LOCK_NONCES.delete(observed.metadata.ownerNonce);
+        return true;
+      }
+      return false;
+    }
+    function createLockOwner() {
+      if (pid <= 0 || typeof randomBytes !== "function") {
+        throw storeError("PROVIDER_STORE_UNAVAILABLE");
+      }
+      let ownerNonce;
+      try {
+        ownerNonce = randomBytes.call(deps.crypto, 24).toString("hex");
+      } catch {
+        throw storeError("PROVIDER_STORE_UNAVAILABLE");
+      }
+      const metadata = normalizeLockMetadata({
+        schemaVersion: 1,
+        ownerNonce,
+        pid,
+        createdAt: now()
+      });
+      if (!metadata) throw storeError("PROVIDER_STORE_UNAVAILABLE");
+      return metadata;
+    }
+    function acquireMutationLock(lock) {
+      var _a2, _b;
+      const owner = createLockOwner();
+      const recovery = `${lock}.recovering`;
+      let fd;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        if (((_a2 = fs.existsSync) == null ? void 0 : _a2.call(fs, recovery)) && !recoverQuarantinedLock(lock)) {
+          throw storeError("PROVIDER_STORE_CONFLICT");
+        }
+        try {
+          fd = fs.openSync(lock, "wx");
+          break;
+        } catch (error) {
+          if ((error == null ? void 0 : error.code) !== "EEXIST") throw storeError("PROVIDER_STORE_UNAVAILABLE");
+          if (attempt === 0 && recoverReleasedOrDeadLock(lock)) continue;
+          throw storeError("PROVIDER_STORE_CONFLICT");
+        }
+      }
+      if (fd === void 0) throw storeError("PROVIDER_STORE_CONFLICT");
+      try {
+        fs.writeFileSync(fd, `${JSON.stringify(owner)}
+`, "utf8");
+        if (typeof fs.fsyncSync === "function") fs.fsyncSync(fd);
+        try {
+          fs.chmodSync(lock, 384);
+        } catch {
+        }
+        if ((_b = fs.existsSync) == null ? void 0 : _b.call(fs, recovery)) throw storeError("PROVIDER_STORE_CONFLICT");
+      } catch (error) {
+        try {
+          fs.closeSync(fd);
+        } catch {
+        }
+        try {
+          const observed = readLockSnapshot(lock);
+          if (observed && sameLockOwner(observed.metadata, owner)) {
+            quarantineAndRemoveLock(lock, observed);
+          }
+        } catch {
+        }
+        if ((error == null ? void 0 : error.code) === "PROVIDER_STORE_CONFLICT") throw error;
+        throw storeError("PROVIDER_STORE_UNAVAILABLE");
+      }
+      return { fd, owner };
+    }
+    function withMutationLock(operation) {
+      if (typeof fs.openSync !== "function" || typeof fs.closeSync !== "function") {
+        throw storeError("PROVIDER_STORE_UNAVAILABLE");
+      }
+      ensureDirectory();
+      const lock = lockPath();
+      const { fd, owner } = acquireMutationLock(lock);
+      activeLockOwner = owner;
+      let result;
+      let operationError = null;
+      try {
+        result = operation();
+      } catch (error) {
+        operationError = error;
+      }
+      activeLockOwner = null;
+      let closed = false;
+      try {
+        fs.closeSync(fd);
+        closed = true;
+      } catch {
+      }
+      let removed = false;
+      try {
+        const observed = readLockSnapshot(lock);
+        if (observed && sameLockOwner(observed.metadata, owner)) {
+          removed = quarantineAndRemoveLock(lock, observed);
+        }
+      } catch {
+      }
+      if (removed) RELEASED_LOCK_NONCES.delete(owner.ownerNonce);
+      else if (closed) rememberReleasedNonce(owner.ownerNonce);
+      if (operationError) throw operationError;
+      return result;
+    }
+    function readRaw() {
+      var _a2;
+      let text;
+      try {
+        text = fs.readFileSync(filePath(), "utf8");
+      } catch (error) {
+        if ((error == null ? void 0 : error.code) === "ENOENT" || !((_a2 = fs.existsSync) == null ? void 0 : _a2.call(fs, filePath()))) return null;
+        throw storeError("PROVIDER_STORE_UNAVAILABLE");
+      }
+      let parsed;
+      try {
+        parsed = JSON.parse(String(text));
+      } catch {
+        throw storeError("PROVIDER_STORE_INVALID");
+      }
+      return { text: String(text), parsed };
+    }
+    function readState() {
+      var _a2;
+      const raw = readRaw();
+      if (raw === null) return emptyState2();
+      if (((_a2 = raw.parsed) == null ? void 0 : _a2.version) === 1) throw storeError("PROVIDER_STORE_MIGRATION_REQUIRED");
+      return normalizeState(raw.parsed);
+    }
+    function writeState(value) {
+      var _a2;
+      const state = normalizeState(value);
+      const directory = ensureDirectory();
+      const tmp = path.join(
+        directory,
+        `${FILE_NAME}.${deps.pid || 0}.${now()}.${tempCounter += 1}.tmp`
+      );
+      try {
+        fs.writeFileSync(tmp, `${JSON.stringify(state, null, 2)}
+`, "utf8");
+        try {
+          fs.chmodSync(tmp, 384);
+        } catch {
+        }
+        if (!sameLockOwner(readLockMetadata(lockPath()), activeLockOwner) || ((_a2 = fs.existsSync) == null ? void 0 : _a2.call(fs, `${lockPath()}.recovering`))) {
+          throw storeError("PROVIDER_STORE_CONFLICT");
+        }
+        fs.renameSync(tmp, filePath());
+      } catch (error) {
+        try {
+          fs.unlinkSync(tmp);
+        } catch {
+        }
+        if ((error == null ? void 0 : error.code) === "PROVIDER_STORE_INVALID" || (error == null ? void 0 : error.code) === "PROVIDER_STORE_CONFLICT") throw error;
+        throw storeError("PROVIDER_STORE_UNAVAILABLE");
+      }
+      return clone5(state);
+    }
+    function assertExpected(state, expectedRevision) {
+      if (expectedRevision === void 0) return;
+      if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || expectedRevision !== state.revision) {
+        throw storeError("PROVIDER_STORE_CONFLICT");
+      }
     }
     function list() {
-      return readState().providers.map((p) => normalizeProviderEntry(p));
+      var _a2;
+      const raw = readRaw();
+      if (((_a2 = raw == null ? void 0 : raw.parsed) == null ? void 0 : _a2.version) === 1) return [];
+      return clone5(raw === null ? [] : normalizeState(raw.parsed).providers);
     }
     function get(id) {
-      return list().find((p) => p.id === String(id || "").trim()) || null;
+      const wanted = String(id || "").trim();
+      return list().find((provider) => provider.id === wanted) || null;
     }
-    function upsert(entry) {
-      const next = normalizeProviderEntry(entry);
-      const state = readState();
-      const idx = state.providers.findIndex((p) => p && p.id === next.id);
-      if (idx === -1) state.providers.push(next);
-      else state.providers[idx] = next;
-      writeState(state);
-      return next;
-    }
-    function remove(id) {
-      const state = readState();
-      state.providers = state.providers.filter((p) => p && p.id !== String(id || "").trim());
-      writeState(state);
-    }
-    function migrateLegacy({ readKey, readPref: readPref2, markDone = true } = {}) {
-      const state = readState();
-      if (state.migratedLegacy) return { migrated: [] };
-      const migrated = [];
-      const anthropicKey = readKey ? String(readKey("anthropic") || "") : "";
-      const anthropicBase = readPref2 ? String(readPref2("ae_mcp_anthropic_base_url") || "") : "";
-      if (anthropicKey || anthropicBase) {
-        migrated.push(upsert({
-          id: "legacy-anthropic",
-          name: "Claude API (migrated)",
-          protocol: "anthropic",
-          baseUrl: anthropicBase || "https://api.anthropic.com",
-          apiKey: anthropicKey
-        }));
+    function upsert(entry, options = {}) {
+      let normalized;
+      try {
+        normalized = normalizeProviderEntryV2(entry);
+      } catch {
+        throw storeError("PROVIDER_STORE_INVALID");
       }
-      const codexKey = readKey ? String(readKey("codex") || "") : "";
-      const codexBase = readPref2 ? String(readPref2("ae_mcp_codex_base_url") || "") : "";
-      if (codexKey || codexBase) {
-        migrated.push(upsert({
-          id: "legacy-codex",
-          name: "Codex custom (migrated)",
-          protocol: "openai-compatible",
-          baseUrl: codexBase,
-          apiKey: codexKey
-        }));
-      }
-      if (markDone) {
-        const after = readState();
-        after.migratedLegacy = true;
-        writeState(after);
-      }
-      return { migrated };
+      return withMutationLock(() => {
+        const state = readState();
+        assertExpected(state, options.expectedRevision);
+        const index = state.providers.findIndex((provider) => provider.id === normalized.id);
+        if (index === -1) state.providers.push(normalized);
+        else state.providers[index] = normalized;
+        state.pendingSecretDeletes = appendPending(state.pendingSecretDeletes, options.pendingSecretDeletes);
+        state.revision += 1;
+        const written = writeState(state);
+        return { entry: clone5(normalized), stateRevision: written.revision };
+      });
     }
-    return { filePath, list, get, upsert, remove, migrateLegacy };
+    function remove(id, options = {}) {
+      const wanted = String(id || "").trim();
+      return withMutationLock(() => {
+        const state = readState();
+        assertExpected(state, options.expectedRevision);
+        const nextProviders = state.providers.filter((provider) => provider.id !== wanted);
+        const removed = nextProviders.length !== state.providers.length;
+        const pending = appendPending(state.pendingSecretDeletes, options.pendingSecretDeletes);
+        if (!removed && pending.length === state.pendingSecretDeletes.length) {
+          return { removed: false, stateRevision: state.revision };
+        }
+        state.providers = nextProviders;
+        state.pendingSecretDeletes = pending;
+        state.revision += 1;
+        const written = writeState(state);
+        return { removed, stateRevision: written.revision };
+      });
+    }
+    function acknowledgeSecretDelete(reference, options = {}) {
+      if (typeof reference !== "string" || !reference) throw storeError("PROVIDER_STORE_INVALID");
+      try {
+        parseProviderSecretReference(reference);
+      } catch {
+        throw storeError("PROVIDER_STORE_INVALID");
+      }
+      return withMutationLock(() => {
+        const state = readState();
+        assertExpected(state, options.expectedRevision);
+        const pending = state.pendingSecretDeletes.filter((ref) => ref.reference !== reference);
+        if (pending.length === state.pendingSecretDeletes.length) return { stateRevision: state.revision };
+        state.pendingSecretDeletes = pending;
+        state.revision += 1;
+        return { stateRevision: writeState(state).revision };
+      });
+    }
+    function replaceState(value, options = {}) {
+      const next = normalizeState(value);
+      return withMutationLock(() => {
+        const raw = readRaw();
+        if (options.expectedSourceRevision !== void 0) {
+          if (typeof options.expectedSourceRevision !== "string" || !options.expectedSourceRevision) {
+            throw storeError("PROVIDER_STORE_INVALID");
+          }
+          const currentLegacy = readLegacyMigrationInput();
+          if (!currentLegacy || currentLegacy.sourceRevision !== options.expectedSourceRevision) {
+            throw storeError("PROVIDER_STORE_CONFLICT");
+          }
+        }
+        if (options.expectedRevision !== void 0) {
+          const current = raw === null ? emptyState2() : normalizeState(raw.parsed);
+          assertExpected(current, options.expectedRevision);
+        }
+        return { stateRevision: writeState(next).revision };
+      });
+    }
+    function needsSecretMigration() {
+      var _a2;
+      const raw = readRaw();
+      return raw !== null && ((_a2 = raw.parsed) == null ? void 0 : _a2.version) === 1;
+    }
+    function readLegacyMigrationInput() {
+      var _a2;
+      const raw = readRaw();
+      if (raw === null || ((_a2 = raw.parsed) == null ? void 0 : _a2.version) !== 1) return null;
+      if (!raw.parsed || typeof raw.parsed !== "object" || !Array.isArray(raw.parsed.providers)) {
+        throw storeError("PROVIDER_STORE_INVALID");
+      }
+      for (const provider of raw.parsed.providers) {
+        if (!provider || typeof provider !== "object" || typeof provider.baseUrl !== "string") {
+          throw storeError("PROVIDER_STORE_INVALID");
+        }
+        requireSafeProviderUrl(provider.baseUrl);
+      }
+      if (typeof fs.statSync !== "function") throw storeError("PROVIDER_STORE_UNAVAILABLE");
+      let firstIdentity;
+      let secondIdentity;
+      let secondRaw;
+      try {
+        firstIdentity = fileIdentity(fs.statSync(filePath()));
+        secondRaw = readRaw();
+        secondIdentity = fileIdentity(fs.statSync(filePath()));
+      } catch (error) {
+        if ((error == null ? void 0 : error.code) === "PROVIDER_STORE_UNAVAILABLE") throw error;
+        throw storeError("PROVIDER_STORE_UNAVAILABLE");
+      }
+      if (secondRaw === null || secondRaw.text !== raw.text || JSON.stringify(firstIdentity) !== JSON.stringify(secondIdentity)) {
+        throw storeError("PROVIDER_STORE_CONFLICT");
+      }
+      const sourceRevision = JSON.stringify(firstIdentity);
+      return { sourceRevision, state: clone5(raw.parsed) };
+    }
+    async function writeRedactedBackup(value, policy = {}) {
+      const state = normalizeState(value);
+      const keep = policy.keep === void 0 ? 3 : policy.keep;
+      const maxAgeDays = policy.maxAgeDays === void 0 ? 30 : policy.maxAgeDays;
+      if (!Number.isSafeInteger(keep) || keep < 1 || !Number.isFinite(maxAgeDays) || maxAgeDays <= 0) {
+        throw storeError("PROVIDER_STORE_INVALID");
+      }
+      const backupDir = path.join(dir(), "provider-backups");
+      if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+      const stamp = now();
+      const file = path.join(backupDir, `providers-${stamp}.json`);
+      fs.writeFileSync(file, `${JSON.stringify(state, null, 2)}
+`, "utf8");
+      try {
+        fs.chmodSync(file, 384);
+      } catch {
+      }
+      if (typeof fs.readdirSync === "function") {
+        const names = fs.readdirSync(backupDir).filter((name) => /^providers-\d+\.json$/.test(name)).sort().reverse();
+        const cutoff = stamp - maxAgeDays * 24 * 60 * 60 * 1e3;
+        for (let index = 0; index < names.length; index += 1) {
+          const match = names[index].match(/^providers-(\d+)\.json$/);
+          const tooOld = match && Number(match[1]) < cutoff;
+          if (index >= keep || tooOld) {
+            try {
+              fs.unlinkSync(path.join(backupDir, names[index]));
+            } catch {
+            }
+          }
+        }
+      }
+    }
+    return Object.freeze({
+      filePath,
+      readState,
+      readLegacyMigrationInput,
+      list,
+      get,
+      upsert,
+      remove,
+      acknowledgeSecretDelete,
+      replaceState,
+      writeRedactedBackup,
+      needsSecretMigration
+    });
+  }
+
+  // src/cep/providerSecrets.js
+  var SLOT_PREFIXES = /* @__PURE__ */ new Set(["auth-model", "auth-probe", "header"]);
+  var PUBLIC_ERROR_CODES = /* @__PURE__ */ new Set([
+    "INVALID_REFERENCE",
+    "SECRET_CONFLICT",
+    "SECRET_NOT_FOUND",
+    "SECRET_STORE_UNAVAILABLE"
+  ]);
+  var HELPER_AVAILABILITY_CODES = /* @__PURE__ */ new Set([
+    "HELPER_UNAVAILABLE",
+    "HELPER_UNAUTHORIZED",
+    "PROTOCOL_VERSION_UNSUPPORTED",
+    "INVALID_REQUEST",
+    "MESSAGE_TOO_LARGE"
+  ]);
+  function providerSecretError(code) {
+    const messages = {
+      INVALID_REFERENCE: "Secret reference is invalid",
+      SECRET_CONFLICT: "Provider secret revision conflict",
+      SECRET_NOT_FOUND: "Provider secret was not found",
+      SECRET_STORE_UNAVAILABLE: "Provider secret store is unavailable",
+      SECRET_OPERATION_FAILED: "Provider secret operation failed"
+    };
+    const error = new Error(messages[code] || messages.SECRET_OPERATION_FAILED);
+    error.code = messages[code] ? code : "SECRET_OPERATION_FAILED";
+    return error;
+  }
+  function sanitizeHostError(error, fallback = "SECRET_OPERATION_FAILED") {
+    const code = HELPER_AVAILABILITY_CODES.has(error == null ? void 0 : error.code) ? "SECRET_STORE_UNAVAILABLE" : PUBLIC_ERROR_CODES.has(error == null ? void 0 : error.code) ? error.code : fallback;
+    return providerSecretError(code);
+  }
+  function hasExactKeys3(value, expected) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const keys = Object.keys(value).sort();
+    return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+  }
+  function normalizeValueRef2(valueRef) {
+    if (!hasExactKeys3(valueRef, ["kind", "reference", "revision"]) || valueRef.kind !== "secret") {
+      throw providerSecretError("INVALID_REFERENCE");
+    }
+    try {
+      parseProviderSecretReference(valueRef.reference);
+    } catch {
+      throw providerSecretError("INVALID_REFERENCE");
+    }
+    if (!Number.isSafeInteger(valueRef.revision) || valueRef.revision <= 0) {
+      throw providerSecretError("INVALID_REFERENCE");
+    }
+    return {
+      kind: "secret",
+      reference: valueRef.reference,
+      revision: valueRef.revision
+    };
+  }
+  function defaultRandomBytes(size) {
+    if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === "function") {
+      const bytes = new Uint8Array(size);
+      globalThis.crypto.getRandomValues(bytes);
+      return bytes;
+    }
+    throw providerSecretError("SECRET_STORE_UNAVAILABLE");
+  }
+  function randomSuffix(randomBytes) {
+    let bytes;
+    try {
+      bytes = randomBytes(8);
+    } catch (error) {
+      throw sanitizeHostError(error, "SECRET_STORE_UNAVAILABLE");
+    }
+    if (!bytes || typeof bytes.length !== "number" || bytes.length < 4 || bytes.length > 10) {
+      throw providerSecretError("SECRET_STORE_UNAVAILABLE");
+    }
+    return Array.from(bytes, (byte) => {
+      if (!Number.isInteger(byte) || byte < 0 || byte > 255) {
+        throw providerSecretError("SECRET_STORE_UNAVAILABLE");
+      }
+      return byte.toString(16).padStart(2, "0");
+    }).join("");
+  }
+  function validRevision(value) {
+    return Number.isSafeInteger(value) && value > 0;
+  }
+  function ambiguousCreateFailure(error) {
+    return !(error == null ? void 0 : error.code) || HELPER_AVAILABILITY_CODES.has(error.code) || error.code === "SECRET_STORE_UNAVAILABLE" || error.code === "SECRET_OPERATION_FAILED";
+  }
+  function createProviderSecretService({
+    getHost,
+    createReference = createProviderSecretReference,
+    randomBytes = defaultRandomBytes
+  } = {}) {
+    if (typeof getHost !== "function") throw new TypeError("getHost must be a function");
+    if (typeof createReference !== "function") throw new TypeError("createReference must be a function");
+    if (typeof randomBytes !== "function") throw new TypeError("randomBytes must be a function");
+    function requireHost() {
+      let host;
+      try {
+        host = getHost();
+      } catch (error) {
+        throw sanitizeHostError(error, "SECRET_STORE_UNAVAILABLE");
+      }
+      if (!host || typeof host.secretGet !== "function" || typeof host.secretSet !== "function" || typeof host.secretDelete !== "function") {
+        throw providerSecretError("SECRET_STORE_UNAVAILABLE");
+      }
+      return host;
+    }
+    async function resolve(valueRef) {
+      const normalized = normalizeValueRef2(valueRef);
+      let result;
+      try {
+        result = await requireHost().secretGet(normalized.reference);
+      } catch (error) {
+        throw sanitizeHostError(error);
+      }
+      if (!hasExactKeys3(result, ["reference", "revision", "value"]) || result.reference !== normalized.reference || result.revision !== normalized.revision || typeof result.value !== "string") {
+        throw providerSecretError("SECRET_CONFLICT");
+      }
+      return result.value;
+    }
+    async function create(input) {
+      if (!input || typeof input !== "object" || typeof input.credentialId !== "string" || !SLOT_PREFIXES.has(input.slotPrefix) || typeof input.value !== "string" || input.value.length === 0) {
+        throw providerSecretError("INVALID_REFERENCE");
+      }
+      let reference;
+      try {
+        reference = createReference({
+          providerId: input.credentialId,
+          slot: `${input.slotPrefix}-${randomSuffix(randomBytes)}`
+        });
+        parseProviderSecretReference(reference);
+      } catch (error) {
+        throw sanitizeHostError(error, "INVALID_REFERENCE");
+      }
+      const host = requireHost();
+      let created;
+      try {
+        created = await host.secretSet({ reference, value: input.value, expectedRevision: null });
+      } catch (error) {
+        if (ambiguousCreateFailure(error)) {
+          let recoveryCompleted = false;
+          let recovered;
+          try {
+            recovered = await host.secretGet(reference);
+            recoveryCompleted = true;
+          } catch {
+          }
+          if (recoveryCompleted) {
+            if (!hasExactKeys3(recovered, ["reference", "revision", "value"]) || recovered.reference !== reference || !validRevision(recovered.revision) || recovered.value !== input.value) {
+              throw providerSecretError("SECRET_CONFLICT");
+            }
+            return Object.freeze({ kind: "secret", reference, revision: recovered.revision });
+          }
+        }
+        throw sanitizeHostError(error);
+      }
+      if (!created || created.reference !== reference || !validRevision(created.revision)) {
+        throw providerSecretError("SECRET_CONFLICT");
+      }
+      let readback;
+      let readbackError = null;
+      try {
+        readback = await host.secretGet(reference);
+      } catch (error) {
+        readbackError = sanitizeHostError(error);
+      }
+      const readbackMatches = !readbackError && hasExactKeys3(readback, ["reference", "revision", "value"]) && readback.reference === reference && readback.revision === created.revision && readback.value === input.value;
+      if (!readbackMatches) {
+        try {
+          await host.secretDelete({ reference, expectedRevision: created.revision });
+        } catch {
+        }
+        if (readbackError) throw readbackError;
+        throw providerSecretError("SECRET_CONFLICT");
+      }
+      return Object.freeze({ kind: "secret", reference, revision: created.revision });
+    }
+    async function deleteSecret(valueRef) {
+      const normalized = normalizeValueRef2(valueRef);
+      let result;
+      try {
+        result = await requireHost().secretDelete({
+          reference: normalized.reference,
+          expectedRevision: normalized.revision
+        });
+      } catch (error) {
+        throw sanitizeHostError(error);
+      }
+      if (!result || typeof result.deleted !== "boolean" || result.reference !== void 0 && result.reference !== normalized.reference || result.revision !== null && !validRevision(result.revision)) {
+        throw providerSecretError("SECRET_CONFLICT");
+      }
+      return { deleted: result.deleted, revision: result.revision };
+    }
+    return Object.freeze({ resolve, create, delete: deleteSecret });
+  }
+  async function resolveAuth(policy, secretService) {
+    if (policy.kind === "none") return { kind: "none" };
+    const value = await secretService.resolve(policy.valueRef);
+    if (policy.kind === "bearer") {
+      return { kind: "header", name: "Authorization", value: `Bearer ${value}` };
+    }
+    if (policy.kind === "x-api-key") {
+      return { kind: "header", name: "x-api-key", value };
+    }
+    return { kind: "header", name: policy.headerName, value };
+  }
+  async function resolveProviderRequestProfile(provider, { scope, secretService } = {}) {
+    if (scope !== "probe" && scope !== "model") throw new TypeError("scope must be probe or model");
+    if (!secretService || typeof secretService.resolve !== "function") {
+      throw new TypeError("secretService.resolve is required");
+    }
+    const normalized = normalizeProviderEntryV2(provider);
+    const selected = scope === "probe" && normalized.auth.probe.kind === "inherit-model" ? normalized.auth.model : normalized.auth[scope];
+    const extraHeaders = [];
+    for (const header of normalized.headers) {
+      if (!header.scopes.includes(scope)) continue;
+      if (header.valueRef.kind === "literal") {
+        extraHeaders.push({ name: header.name, value: header.valueRef.value, source: "literal" });
+      } else {
+        extraHeaders.push({
+          name: header.name,
+          value: await secretService.resolve(header.valueRef),
+          source: "secret"
+        });
+      }
+    }
+    return {
+      providerId: normalized.id,
+      baseUrl: normalized.baseUrl,
+      allowInsecureHttp: normalized.allowInsecureHttp,
+      auth: await resolveAuth(selected, secretService),
+      extraHeaders,
+      authProfileRevision: normalized.authProfileRevision
+    };
+  }
+
+  // src/cep/platform/secret-migration.js
+  var PHASES = /* @__PURE__ */ new Set(["pending", "secrets-written", "state-committed", "committed"]);
+  var JOURNAL_KEYS = ["entries", "migrationId", "phase", "schemaVersion", "sourceRevision", "updatedAt"];
+  var ENTRY_KEYS = ["id", "reference", "revision"];
+  var INITIAL_PHASE_OBSERVER = Symbol.for(
+    "com.junkdoge.ae-mcp.secret-migration.initial-phase"
+  );
+  var JOURNAL_STORES_BY_RUNNER = /* @__PURE__ */ new WeakMap();
+  function migrationError(code, message) {
+    const error = new Error(message);
+    error.code = code;
+    return error;
+  }
+  function invalidPlan() {
+    return migrationError("INVALID_MIGRATION_PLAN", "Secret migration plan is invalid");
+  }
+  function invalidJournal() {
+    return migrationError("INVALID_MIGRATION_JOURNAL", "Secret migration journal is invalid");
+  }
+  function secretConflict() {
+    return migrationError("SECRET_CONFLICT", "Secret migration conflict");
+  }
+  function hasExactKeys4(value, expected) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const keys = Object.keys(value).sort();
+    return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+  }
+  function validRevision2(value) {
+    return Number.isSafeInteger(value) && value > 0;
+  }
+  function normalizeJournalShape(value, migrationId) {
+    if (!hasExactKeys4(value, JOURNAL_KEYS)) throw invalidJournal();
+    if (value.schemaVersion !== 1 || value.migrationId !== migrationId) throw invalidJournal();
+    if (typeof value.sourceRevision !== "string" || !value.sourceRevision) throw invalidJournal();
+    if (!PHASES.has(value.phase)) throw invalidJournal();
+    if (!Number.isFinite(value.updatedAt) || value.updatedAt < 0) throw invalidJournal();
+    if (!Array.isArray(value.entries)) throw invalidJournal();
+    const ids = /* @__PURE__ */ new Set();
+    const references = /* @__PURE__ */ new Set();
+    const entries = value.entries.map((entry) => {
+      if (!hasExactKeys4(entry, ENTRY_KEYS)) throw invalidJournal();
+      if (typeof entry.id !== "string" || !entry.id || !validRevision2(entry.revision)) {
+        throw invalidJournal();
+      }
+      try {
+        parseProviderSecretReference(entry.reference);
+      } catch {
+        throw invalidJournal();
+      }
+      if (ids.has(entry.id) || references.has(entry.reference)) throw invalidJournal();
+      ids.add(entry.id);
+      references.add(entry.reference);
+      return { id: entry.id, reference: entry.reference, revision: entry.revision };
+    });
+    return {
+      schemaVersion: 1,
+      migrationId: value.migrationId,
+      sourceRevision: value.sourceRevision,
+      phase: value.phase,
+      entries,
+      updatedAt: value.updatedAt
+    };
+  }
+  function normalizePlan(plan) {
+    if (!plan || typeof plan !== "object") throw invalidPlan();
+    if (typeof plan.migrationId !== "string" || !plan.migrationId) throw invalidPlan();
+    if (typeof plan.sourceRevision !== "string" || !plan.sourceRevision) throw invalidPlan();
+    if (!Array.isArray(plan.entries)) throw invalidPlan();
+    for (const callback of ["writeRedactedBackup", "commitRedactedState", "cleanupLegacyState"]) {
+      if (typeof plan[callback] !== "function") throw invalidPlan();
+    }
+    if (plan[INITIAL_PHASE_OBSERVER] !== void 0 && typeof plan[INITIAL_PHASE_OBSERVER] !== "function") {
+      throw invalidPlan();
+    }
+    const ids = /* @__PURE__ */ new Set();
+    const references = /* @__PURE__ */ new Set();
+    const entries = plan.entries.map((entry) => {
+      if (!entry || typeof entry !== "object") throw invalidPlan();
+      if (typeof entry.id !== "string" || !entry.id) throw invalidPlan();
+      if (typeof entry.reference !== "string" || typeof entry.legacyValue !== "string") throw invalidPlan();
+      parseProviderSecretReference(entry.reference);
+      if (ids.has(entry.id) || references.has(entry.reference)) throw invalidPlan();
+      ids.add(entry.id);
+      references.add(entry.reference);
+      return {
+        id: entry.id,
+        reference: entry.reference,
+        legacyValue: entry.legacyValue
+      };
+    });
+    return {
+      migrationId: plan.migrationId,
+      sourceRevision: plan.sourceRevision,
+      entries
+    };
+  }
+  function validateJournal(value, plan) {
+    const normalized = normalizeJournalShape(value, plan.migrationId);
+    if (normalized.sourceRevision !== plan.sourceRevision) throw invalidJournal();
+    if (normalized.entries.length > plan.entries.length) throw invalidJournal();
+    if (normalized.phase !== "pending" && normalized.entries.length !== plan.entries.length) {
+      throw invalidJournal();
+    }
+    const entries = normalized.entries.map((entry, index) => {
+      const planned = plan.entries[index];
+      if (!planned || entry.id !== planned.id || entry.reference !== planned.reference) {
+        throw invalidJournal();
+      }
+      return {
+        id: entry.id,
+        reference: entry.reference,
+        revision: entry.revision
+      };
+    });
+    return {
+      schemaVersion: 1,
+      migrationId: normalized.migrationId,
+      sourceRevision: normalized.sourceRevision,
+      phase: normalized.phase,
+      entries,
+      updatedAt: normalized.updatedAt
+    };
+  }
+  function timestamp(now) {
+    const value = now();
+    if (!Number.isFinite(value) || value < 0) throw invalidPlan();
+    return value;
+  }
+  async function persistJournal({ journalStore, now, plan, phase, entries }) {
+    const journal = {
+      schemaVersion: 1,
+      migrationId: plan.migrationId,
+      sourceRevision: plan.sourceRevision,
+      phase,
+      entries: entries.map((entry) => ({
+        id: entry.id,
+        reference: entry.reference,
+        revision: entry.revision
+      })),
+      updatedAt: timestamp(now)
+    };
+    await journalStore.writeAtomic(journal);
+    return journal;
+  }
+  function verifiedReadback(record, expected) {
+    if (!record || typeof record !== "object") throw secretConflict();
+    if (record.value !== expected.legacyValue || !validRevision2(record.revision)) {
+      throw secretConflict();
+    }
+    if (expected.revision !== void 0 && record.revision !== expected.revision) {
+      throw secretConflict();
+    }
+    if (record.reference !== void 0 && record.reference !== expected.reference) {
+      throw secretConflict();
+    }
+    return record.revision;
+  }
+  function publicEntries(entries) {
+    return Object.freeze(entries.map((entry) => Object.freeze({
+      id: entry.id,
+      reference: entry.reference,
+      revision: entry.revision
+    })));
+  }
+  function committedResult(plan, entries) {
+    return Object.freeze({
+      migrationId: plan.migrationId,
+      status: "committed",
+      entries: publicEntries(entries)
+    });
+  }
+  function readonlyJournal(value) {
+    const entries = Object.freeze(value.entries.map((entry) => Object.freeze({ ...entry })));
+    return Object.freeze({ ...value, entries });
+  }
+  async function readSecretMigrationJournalSnapshot(runner, migrationId) {
+    const journalStore = JOURNAL_STORES_BY_RUNNER.get(runner);
+    if (!journalStore || typeof migrationId !== "string" || !migrationId) throw invalidJournal();
+    let stored;
+    try {
+      stored = await journalStore.read(migrationId);
+    } catch {
+      throw invalidJournal();
+    }
+    if (stored === null) return null;
+    return readonlyJournal(normalizeJournalShape(stored, migrationId));
+  }
+  function createSecretMigrationRunner(input = {}) {
+    const { journalStore, secretStore, now = Date.now } = input;
+    if (!journalStore || typeof journalStore.read !== "function" || typeof journalStore.writeAtomic !== "function") {
+      throw new TypeError("An atomic journal store is required");
+    }
+    if (!secretStore || typeof secretStore.get !== "function" || typeof secretStore.set !== "function") {
+      throw new TypeError("A secret store is required");
+    }
+    if (typeof now !== "function") throw new TypeError("now must be a function");
+    const runner = Object.freeze({
+      async run(planInput) {
+        const plan = normalizePlan(planInput);
+        const writeRedactedBackup = planInput.writeRedactedBackup;
+        const commitRedactedState = planInput.commitRedactedState;
+        const cleanupLegacyState = planInput.cleanupLegacyState;
+        const initialPhaseObserver = planInput[INITIAL_PHASE_OBSERVER];
+        const stored = await journalStore.read(plan.migrationId);
+        let journal = stored === null ? null : validateJournal(stored, plan);
+        if (initialPhaseObserver) {
+          initialPhaseObserver(journal === null ? "pending" : journal.phase);
+        }
+        if (journal === null) {
+          journal = await persistJournal({
+            journalStore,
+            now,
+            plan,
+            phase: "pending",
+            entries: []
+          });
+        }
+        if (journal.phase === "committed") return committedResult(plan, journal.entries);
+        if (journal.phase === "pending") {
+          let written = journal.entries.slice();
+          for (let index = 0; index < plan.entries.length; index += 1) {
+            const entry = plan.entries[index];
+            const recorded = written[index];
+            let revision;
+            if (recorded) {
+              const existing = await secretStore.get(entry.reference);
+              revision = verifiedReadback(existing, {
+                reference: entry.reference,
+                legacyValue: entry.legacyValue,
+                revision: recorded.revision
+              });
+            } else {
+              let created = null;
+              try {
+                created = await secretStore.set({
+                  reference: entry.reference,
+                  value: entry.legacyValue,
+                  expectedRevision: null
+                });
+              } catch (error) {
+                if ((error == null ? void 0 : error.code) !== "SECRET_CONFLICT") throw error;
+              }
+              if (created === null) {
+                const existing = await secretStore.get(entry.reference);
+                revision = verifiedReadback(existing, {
+                  reference: entry.reference,
+                  legacyValue: entry.legacyValue
+                });
+              } else {
+                if (!created || created.reference !== entry.reference || !validRevision2(created.revision)) {
+                  throw secretConflict();
+                }
+                const readback = await secretStore.get(entry.reference);
+                revision = verifiedReadback(readback, {
+                  reference: entry.reference,
+                  legacyValue: entry.legacyValue,
+                  revision: created.revision
+                });
+              }
+              written = [...written, {
+                id: entry.id,
+                reference: entry.reference,
+                revision
+              }];
+              journal = await persistJournal({
+                journalStore,
+                now,
+                plan,
+                phase: "pending",
+                entries: written
+              });
+            }
+          }
+          journal = await persistJournal({
+            journalStore,
+            now,
+            plan,
+            phase: "secrets-written",
+            entries: written
+          });
+        }
+        if (journal.phase === "secrets-written") {
+          await writeRedactedBackup();
+          await commitRedactedState(publicEntries(journal.entries));
+          journal = await persistJournal({
+            journalStore,
+            now,
+            plan,
+            phase: "state-committed",
+            entries: journal.entries
+          });
+        }
+        if (journal.phase === "state-committed") {
+          await cleanupLegacyState();
+          journal = await persistJournal({
+            journalStore,
+            now,
+            plan,
+            phase: "committed",
+            entries: journal.entries
+          });
+        }
+        return committedResult(plan, journal.entries);
+      }
+    });
+    JOURNAL_STORES_BY_RUNNER.set(runner, journalStore);
+    return runner;
+  }
+
+  // src/cep/providerMigration.js
+  var DEFAULT_LEGACY_NAMESPACE = "6ba7b811-9dad-11d1-80b4-00c04fd430c8";
+  var MIGRATION_ID = "provider-store-v1-to-v2";
+  var STATE_KEYS2 = ["migratedLegacy", "pendingSecretDeletes", "providers", "revision", "version"];
+  var VALUE_REF_KEYS2 = ["kind", "reference", "revision"];
+  var MIGRATION_PHASES = /* @__PURE__ */ new Set(["pending", "secrets-written", "state-committed", "committed"]);
+  var INITIAL_PHASE_OBSERVER2 = Symbol.for(
+    "com.junkdoge.ae-mcp.secret-migration.initial-phase"
+  );
+  function migrationError2() {
+    const error = new Error("Provider secret migration is invalid");
+    error.code = "INVALID_PROVIDER_MIGRATION";
+    return error;
+  }
+  function secretConflict2() {
+    const error = new Error("Provider secret migration conflict");
+    error.code = "SECRET_CONFLICT";
+    return error;
+  }
+  function hasExactKeys5(value, expected) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const keys = Object.keys(value).sort();
+    return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+  }
+  function uuidBytes(value) {
+    if (typeof value !== "string") throw migrationError2();
+    try {
+      createProviderSecretReference({ providerId: value, slot: "namespace" });
+    } catch {
+      throw migrationError2();
+    }
+    const hex = value.replace(/-/g, "");
+    return Uint8Array.from(hex.match(/../g), (part) => Number.parseInt(part, 16));
+  }
+  function utf8Bytes(value) {
+    if (typeof TextEncoder === "function") return new TextEncoder().encode(value);
+    const encoded = unescape(encodeURIComponent(value));
+    return Uint8Array.from(encoded, (character) => character.charCodeAt(0));
+  }
+  async function sha1(value) {
+    var _a, _b, _c, _d;
+    if (((_a = globalThis.crypto) == null ? void 0 : _a.subtle) && typeof globalThis.crypto.subtle.digest === "function") {
+      return new Uint8Array(await globalThis.crypto.subtle.digest("SHA-1", value));
+    }
+    const req = ((_c = (_b = globalThis.window) == null ? void 0 : _b.cep_node) == null ? void 0 : _c.require) || ((_d = globalThis.window) == null ? void 0 : _d.require) || globalThis.require;
+    if (typeof req === "function") {
+      const cryptoImpl = req("crypto");
+      const digest = cryptoImpl.createHash("sha1").update(value).digest();
+      return Uint8Array.from(digest);
+    }
+    throw migrationError2();
+  }
+  async function uuidV5(name, namespace) {
+    const namespaceBytes = uuidBytes(namespace);
+    const nameBytes = utf8Bytes(name);
+    const input = new Uint8Array(namespaceBytes.length + nameBytes.length);
+    input.set(namespaceBytes, 0);
+    input.set(nameBytes, namespaceBytes.length);
+    const bytes = (await sha1(input)).slice(0, 16);
+    bytes[6] = bytes[6] & 15 | 80;
+    bytes[8] = bytes[8] & 63 | 128;
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  async function credentialIdFor(providerId, legacyCredentialId) {
+    const value = typeof legacyCredentialId === "function" ? await legacyCredentialId(providerId) : await uuidV5(providerId, legacyCredentialId || DEFAULT_LEGACY_NAMESPACE);
+    try {
+      createProviderSecretReference({ providerId: value, slot: "auth-model" });
+    } catch {
+      throw migrationError2();
+    }
+    return value;
+  }
+  function normalizeLegacyProvider(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw migrationError2();
+    if (typeof value.id !== "string" || !value.id.trim()) throw migrationError2();
+    const id = value.id.trim();
+    const name = typeof value.name === "string" && value.name.trim() ? value.name.trim() : id;
+    const protocol = value.protocol === void 0 ? "openai-compatible" : value.protocol;
+    if (protocol !== "openai-compatible" && protocol !== "anthropic") throw migrationError2();
+    if (typeof value.baseUrl !== "string" || !value.baseUrl.trim()) throw migrationError2();
+    if (value.apiKey !== void 0 && typeof value.apiKey !== "string") throw migrationError2();
+    if (value.probedModels !== void 0 && !Array.isArray(value.probedModels)) throw migrationError2();
+    if (value.probedAt !== void 0 && (!Number.isFinite(value.probedAt) || value.probedAt < 0)) {
+      throw migrationError2();
+    }
+    return {
+      id,
+      name,
+      protocol,
+      baseUrl: value.baseUrl,
+      apiKey: value.apiKey || "",
+      probedModels: value.probedModels || [],
+      probedAt: value.probedAt || 0
+    };
+  }
+  async function buildMigrationInputs(legacyState, legacyCredentialId) {
+    if (!legacyState || typeof legacyState !== "object" || Array.isArray(legacyState)) {
+      throw migrationError2();
+    }
+    if (legacyState.version !== 1 || !Array.isArray(legacyState.providers)) throw migrationError2();
+    const ids = /* @__PURE__ */ new Set();
+    const providers = [];
+    const entries = [];
+    for (const rawProvider of legacyState.providers) {
+      const provider = normalizeLegacyProvider(rawProvider);
+      if (ids.has(provider.id)) throw migrationError2();
+      ids.add(provider.id);
+      const credentialId = await credentialIdFor(provider.id, legacyCredentialId);
+      const entryId = `${provider.id}:auth-model`;
+      const reference = createProviderSecretReference({ providerId: credentialId, slot: "auth-model" });
+      providers.push({ provider, credentialId, entryId });
+      if (provider.apiKey) {
+        entries.push({ entryId, reference, legacyValue: provider.apiKey });
+      }
+    }
+    return { providers, entries };
+  }
+  function normalizeWrittenEntries(entries, migrationInputs) {
+    if (!Array.isArray(entries) || entries.length !== migrationInputs.entries.length) {
+      throw secretConflict2();
+    }
+    return entries.map((entry, index) => {
+      const expected = migrationInputs.entries[index];
+      if (!hasExactKeys5(entry, ["id", "reference", "revision"]) || entry.id !== expected.entryId || entry.reference !== expected.reference || !Number.isSafeInteger(entry.revision) || entry.revision <= 0) {
+        throw secretConflict2();
+      }
+      return { id: entry.id, reference: entry.reference, revision: entry.revision };
+    });
+  }
+  function buildProviderV2State(legacyState, migrationInputs, writes) {
+    const normalizedWrites = normalizeWrittenEntries(writes, migrationInputs);
+    const writesById = new Map(normalizedWrites.map((entry) => [entry.id, entry]));
+    const providers = migrationInputs.providers.map(({ provider, credentialId, entryId }) => {
+      const write = writesById.get(entryId);
+      if (Boolean(provider.apiKey) !== Boolean(write)) throw secretConflict2();
+      return normalizeProviderEntryV2({
+        id: provider.id,
+        credentialId,
+        name: provider.name,
+        protocol: provider.protocol,
+        baseUrl: provider.baseUrl,
+        allowInsecureHttp: false,
+        authProfileRevision: 1,
+        auth: {
+          model: write ? {
+            kind: provider.protocol === "anthropic" ? "x-api-key" : "bearer",
+            valueRef: { kind: "secret", reference: write.reference, revision: write.revision }
+          } : { kind: "none" },
+          probe: { kind: "inherit-model" }
+        },
+        headers: [],
+        dialect: { override: null, detected: null },
+        probedModels: provider.probedModels,
+        probedAt: provider.probedAt
+      });
+    });
+    const state = {
+      version: 2,
+      revision: Number.isSafeInteger(legacyState.revision) && legacyState.revision > 0 ? legacyState.revision : 1,
+      migratedLegacy: true,
+      pendingSecretDeletes: [],
+      providers
+    };
+    assertNoLegacySecretInPersistedFields(
+      state,
+      migrationInputs.entries.map((entry) => entry.legacyValue)
+    );
+    return state;
+  }
+  function isSecretValueRef(value) {
+    return hasExactKeys5(value, VALUE_REF_KEYS2) && value.kind === "secret" && typeof value.reference === "string" && Number.isSafeInteger(value.revision) && value.revision > 0;
+  }
+  function assertNoLegacySecretInPersistedFields(value, legacySecrets) {
+    const forbidden = legacySecrets.filter((secret) => typeof secret === "string" && secret);
+    const embeddedForbidden = forbidden.filter((secret) => utf8Bytes(secret).length >= 8);
+    const decodePercentRuns2 = (input) => String(input).replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
+      try {
+        return decodeURIComponent(run);
+      } catch {
+        return run;
+      }
+    });
+    const containsForbidden = (input) => {
+      let current = String(input);
+      for (let layer = 0; layer <= 3; layer += 1) {
+        if (forbidden.some((secret) => current === secret)) return true;
+        if (embeddedForbidden.some((secret) => current.includes(secret))) return true;
+        const decoded = decodePercentRuns2(current);
+        if (decoded === current) break;
+        current = decoded;
+      }
+      return false;
+    };
+    const visit = (current) => {
+      if (typeof current === "string") {
+        if (containsForbidden(current)) throw secretConflict2();
+        return;
+      }
+      if (!current || typeof current !== "object") return;
+      if (isSecretValueRef(current)) return;
+      if (Array.isArray(current)) {
+        current.forEach(visit);
+        return;
+      }
+      Object.values(current).forEach(visit);
+    };
+    visit(value);
+  }
+  function providerActiveReferences(provider) {
+    const references = [];
+    const add = (valueRef) => {
+      if ((valueRef == null ? void 0 : valueRef.kind) === "secret") references.push(valueRef.reference);
+    };
+    add(provider.auth.model.valueRef);
+    add(provider.auth.probe.valueRef);
+    provider.headers.forEach((header) => add(header.valueRef));
+    return references;
+  }
+  function readStrictProviderStateV2(value) {
+    if (!hasExactKeys5(value, STATE_KEYS2)) throw migrationError2();
+    if (value.version !== 2 || !Number.isSafeInteger(value.revision) || value.revision <= 0 || value.migratedLegacy !== true || !Array.isArray(value.pendingSecretDeletes) || !Array.isArray(value.providers)) {
+      throw migrationError2();
+    }
+    let providers;
+    try {
+      providers = value.providers.map((provider) => normalizeProviderEntryV2(provider));
+    } catch {
+      throw migrationError2();
+    }
+    const ids = /* @__PURE__ */ new Set();
+    const activeReferences = /* @__PURE__ */ new Set();
+    for (const provider of providers) {
+      if (ids.has(provider.id)) throw migrationError2();
+      ids.add(provider.id);
+      providerActiveReferences(provider).forEach((reference) => activeReferences.add(reference));
+    }
+    const pendingReferences = /* @__PURE__ */ new Set();
+    const pendingSecretDeletes = value.pendingSecretDeletes.map((ref) => {
+      if (!isSecretValueRef(ref)) throw migrationError2();
+      try {
+        parseProviderSecretReference(ref.reference);
+      } catch {
+        throw migrationError2();
+      }
+      if (pendingReferences.has(ref.reference) || activeReferences.has(ref.reference)) throw migrationError2();
+      pendingReferences.add(ref.reference);
+      return { kind: "secret", reference: ref.reference, revision: ref.revision };
+    });
+    return { ...value, pendingSecretDeletes, providers };
+  }
+  function validateProviderStateV2(value) {
+    const state = readStrictProviderStateV2(value);
+    if (state.pendingSecretDeletes.length !== 0) throw migrationError2();
+    return state;
+  }
+  function expectedMigrationEntriesFromV2State(value) {
+    var _a;
+    const state = validateProviderStateV2(value);
+    const entries = [];
+    for (const provider of state.providers) {
+      if (provider.allowInsecureHttp !== false || provider.authProfileRevision !== 1 || provider.auth.probe.kind !== "inherit-model" || provider.headers.length !== 0 || provider.dialect.override !== null || provider.dialect.detected !== null) {
+        throw migrationError2();
+      }
+      const model = provider.auth.model;
+      if (model.kind === "none") continue;
+      const expectedKind = provider.protocol === "anthropic" ? "x-api-key" : "bearer";
+      if (model.kind !== expectedKind || ((_a = model.valueRef) == null ? void 0 : _a.kind) !== "secret") throw migrationError2();
+      entries.push({
+        id: `${provider.id}:auth-model`,
+        reference: model.valueRef.reference,
+        revision: model.valueRef.revision
+      });
+    }
+    return entries;
+  }
+  function assertRecoveryStateMatchesJournal(state, journal) {
+    if (!journal || journal.phase === "pending") throw migrationError2();
+    const expected = expectedMigrationEntriesFromV2State(state);
+    if (expected.length !== journal.entries.length) throw migrationError2();
+    for (let index = 0; index < expected.length; index += 1) {
+      const actual = journal.entries[index];
+      const wanted = expected[index];
+      if (actual.id !== wanted.id || actual.reference !== wanted.reference || actual.revision !== wanted.revision) {
+        throw migrationError2();
+      }
+    }
+  }
+  async function recoverCommittedProviderState({ store, legacyKeyStore, runner, journal }) {
+    if (typeof store.readState !== "function") throw migrationError2();
+    const readCurrentState = () => {
+      let state;
+      try {
+        state = store.readState();
+      } catch {
+        throw migrationError2();
+      }
+      return readStrictProviderStateV2(state);
+    };
+    if (journal.phase === "committed") {
+      readCurrentState();
+      return { status: "already-committed", written: 0, resumedFrom: "committed" };
+    }
+    if (typeof (legacyKeyStore == null ? void 0 : legacyKeyStore.cleanupCommittedProviderSecrets) !== "function") throw migrationError2();
+    const validateCurrentState = () => assertRecoveryStateMatchesJournal(readCurrentState(), journal);
+    validateCurrentState();
+    let resumedFrom = null;
+    const result = await runner.run({
+      migrationId: MIGRATION_ID,
+      sourceRevision: journal.sourceRevision,
+      entries: journal.entries.map((entry) => ({
+        id: entry.id,
+        reference: entry.reference,
+        legacyValue: ""
+      })),
+      [INITIAL_PHASE_OBSERVER2](phase) {
+        if (resumedFrom !== null || phase !== "secrets-written" && phase !== "state-committed") {
+          throw migrationError2();
+        }
+        resumedFrom = phase;
+      },
+      async writeRedactedBackup() {
+        validateCurrentState();
+      },
+      async commitRedactedState(entries) {
+        if (JSON.stringify(entries) !== JSON.stringify(journal.entries)) throw migrationError2();
+        validateCurrentState();
+      },
+      async cleanupLegacyState() {
+        await legacyKeyStore.cleanupCommittedProviderSecrets();
+      }
+    });
+    if (!result || result.status !== "committed" || resumedFrom === null || result.entries.length !== journal.entries.length) {
+      throw migrationError2();
+    }
+    return { status: "committed", written: result.entries.length, resumedFrom };
+  }
+  async function readWrittenEntries(secretStore, migrationInputs) {
+    const entries = [];
+    for (const expected of migrationInputs.entries) {
+      let record;
+      try {
+        if (secretStore && typeof secretStore.secretGet === "function") {
+          record = await secretStore.secretGet(expected.reference);
+        } else if (secretStore && typeof secretStore.get === "function") {
+          record = await secretStore.get(expected.reference);
+        } else {
+          throw migrationError2();
+        }
+      } catch (error) {
+        if ((error == null ? void 0 : error.code) === "INVALID_PROVIDER_MIGRATION") throw error;
+        throw secretConflict2();
+      }
+      if (!record || !hasExactKeys5(record, ["reference", "revision", "value"]) || record.reference !== expected.reference || record.value !== expected.legacyValue || !Number.isSafeInteger(record.revision) || record.revision <= 0) {
+        throw secretConflict2();
+      }
+      entries.push({ id: expected.entryId, reference: expected.reference, revision: record.revision });
+    }
+    return entries;
+  }
+  async function migrateProviderStoreSecrets({
+    store,
+    legacyKeyStore,
+    runner,
+    secretStore,
+    now = Date.now,
+    legacyCredentialId
+  } = {}) {
+    if (!store || typeof store.readLegacyMigrationInput !== "function" || typeof (runner == null ? void 0 : runner.run) !== "function" || typeof now !== "function") {
+      throw migrationError2();
+    }
+    const legacyInput = await store.readLegacyMigrationInput();
+    if (legacyInput === null) {
+      let journal;
+      try {
+        journal = await readSecretMigrationJournalSnapshot(runner, MIGRATION_ID);
+      } catch {
+        throw migrationError2();
+      }
+      if (journal === null) {
+        return { status: "already-committed", written: 0, resumedFrom: "committed" };
+      }
+      return recoverCommittedProviderState({ store, legacyKeyStore, runner, journal });
+    }
+    if (!legacyInput || typeof legacyInput !== "object" || typeof legacyInput.sourceRevision !== "string" || !legacyInput.sourceRevision) {
+      throw migrationError2();
+    }
+    if (typeof store.writeRedactedBackup !== "function" || typeof store.replaceState !== "function" || typeof (legacyKeyStore == null ? void 0 : legacyKeyStore.cleanupCommittedProviderSecrets) !== "function") {
+      throw migrationError2();
+    }
+    const migrationInputs = await buildMigrationInputs(legacyInput.state, legacyCredentialId);
+    let backupState = null;
+    let resumedFrom = null;
+    const result = await runner.run({
+      migrationId: MIGRATION_ID,
+      sourceRevision: legacyInput.sourceRevision,
+      entries: migrationInputs.entries.map((entry) => ({
+        id: entry.entryId,
+        reference: entry.reference,
+        legacyValue: entry.legacyValue
+      })),
+      [INITIAL_PHASE_OBSERVER2](phase) {
+        if (resumedFrom !== null || !MIGRATION_PHASES.has(phase)) throw migrationError2();
+        resumedFrom = phase;
+      },
+      async writeRedactedBackup() {
+        const writes = await readWrittenEntries(secretStore, migrationInputs);
+        backupState = validateProviderStateV2(
+          buildProviderV2State(legacyInput.state, migrationInputs, writes)
+        );
+        await store.writeRedactedBackup(backupState, { keep: 3, maxAgeDays: 30 });
+      },
+      async commitRedactedState(entries) {
+        const state = validateProviderStateV2(
+          buildProviderV2State(legacyInput.state, migrationInputs, entries)
+        );
+        if (backupState === null || JSON.stringify(backupState) !== JSON.stringify(state)) {
+          throw secretConflict2();
+        }
+        await store.replaceState(state, { expectedSourceRevision: legacyInput.sourceRevision });
+      },
+      async cleanupLegacyState() {
+        await legacyKeyStore.cleanupCommittedProviderSecrets();
+      }
+    });
+    if (!result || result.status !== "committed" || !Array.isArray(result.entries) || resumedFrom === null) {
+      throw migrationError2();
+    }
+    return { status: "committed", written: result.entries.length, resumedFrom };
+  }
+
+  // src/app/providerProfileFlow.js
+  function flowError(code) {
+    const messages = {
+      provider_draft_invalid: "Provider draft is invalid",
+      provider_secret_required: "Provider secret is required",
+      provider_insecure_http_forbidden: "Insecure provider HTTP is forbidden",
+      provider_insecure_http_confirmation_required: "Insecure provider HTTP confirmation is required"
+    };
+    const error = new Error(messages[code] || messages.provider_draft_invalid);
+    error.code = messages[code] ? code : "provider_draft_invalid";
+    return error;
+  }
+  function slug(value) {
+    return String(value || "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  }
+  function normalizedBaseUrl(value) {
+    try {
+      return validateProviderBaseUrl(value);
+    } catch {
+      throw flowError("provider_draft_invalid");
+    }
+  }
+  async function enforceInsecureHttp({ baseUrl, providerId, current, allowInsecureHttp, confirmInsecureHttp }) {
+    const url = new URL(baseUrl);
+    if (url.protocol !== "http:" || isLoopbackProviderHostname(url.hostname)) return false;
+    if (!allowInsecureHttp) throw flowError("provider_insecure_http_forbidden");
+    const changed = !current || current.allowInsecureHttp !== true || normalizedBaseUrl(current.baseUrl) !== baseUrl;
+    if (changed) {
+      if (typeof confirmInsecureHttp !== "function") {
+        throw flowError("provider_insecure_http_confirmation_required");
+      }
+      const confirmed = await confirmInsecureHttp({ baseUrl, providerId });
+      if (confirmed !== true) throw flowError("provider_insecure_http_confirmation_required");
+    }
+    return true;
+  }
+  function currentSecretRef(policy) {
+    return policy && policy.kind !== "none" && policy.kind !== "inherit-model" ? policy.valueRef : null;
+  }
+  async function buildAuthPolicy({ kind, headerName, secret, currentPolicy, credentialId, slotPrefix, secretService, created }) {
+    if (kind === "none") return { kind: "none" };
+    if (!["bearer", "x-api-key", "custom"].includes(kind)) throw flowError("provider_draft_invalid");
+    let valueRef = null;
+    const rawSecret = typeof secret === "string" ? secret : "";
+    if (rawSecret) {
+      valueRef = await secretService.create({ credentialId, slotPrefix, value: rawSecret });
+      created.push(valueRef);
+    } else {
+      valueRef = currentSecretRef(currentPolicy);
+    }
+    if (!valueRef) throw flowError("provider_secret_required");
+    if (kind === "custom") {
+      const name = String(headerName || "").trim();
+      if (!name) throw flowError("provider_draft_invalid");
+      return { kind: "custom", headerName: name, valueRef };
+    }
+    return { kind, valueRef };
+  }
+  async function buildHeaders({ draftHeaders, currentHeaders, credentialId, secretService, created }) {
+    var _a, _b, _c;
+    if (!Array.isArray(draftHeaders)) throw flowError("provider_draft_invalid");
+    const currentById = new Map((currentHeaders || []).map((header) => [header.id, header]));
+    const output = [];
+    for (const raw of draftHeaders) {
+      if (!raw || typeof raw !== "object") throw flowError("provider_draft_invalid");
+      const id = String(raw.id || "").trim();
+      const name = String(raw.name || "").trim();
+      const scopes = Array.isArray(raw.scopes) ? raw.scopes.slice() : [];
+      if (!id || !name || !scopes.length) throw flowError("provider_draft_invalid");
+      const current = currentById.get(id);
+      const valueKind = raw.valueKind || ((_a = raw.valueRef) == null ? void 0 : _a.kind) || "literal";
+      if (valueKind === "literal") {
+        const value = ((_b = raw.valueRef) == null ? void 0 : _b.kind) === "literal" ? raw.valueRef.value : raw.value;
+        if (typeof value !== "string") throw flowError("provider_draft_invalid");
+        output.push({ id, name, scopes, valueRef: { kind: "literal", value } });
+        continue;
+      }
+      if (valueKind !== "secret") throw flowError("provider_draft_invalid");
+      const secret = typeof raw.secret === "string" ? raw.secret : typeof raw.value === "string" ? raw.value : "";
+      let valueRef;
+      if (secret) {
+        valueRef = await secretService.create({ credentialId, slotPrefix: "header", value: secret });
+        created.push(valueRef);
+      } else if (((_c = current == null ? void 0 : current.valueRef) == null ? void 0 : _c.kind) === "secret") {
+        valueRef = current.valueRef;
+      } else {
+        throw flowError("provider_secret_required");
+      }
+      output.push({ id, name, scopes, valueRef });
+    }
+    return output;
+  }
+  function allSecretRefs(provider) {
+    var _a, _b;
+    if (!provider) return [];
+    const refs = [];
+    const add = (ref) => {
+      if ((ref == null ? void 0 : ref.kind) !== "secret") return;
+      if (!refs.some((item) => item.reference === ref.reference && item.revision === ref.revision)) refs.push(ref);
+    };
+    add(currentSecretRef((_a = provider.auth) == null ? void 0 : _a.model));
+    add(currentSecretRef((_b = provider.auth) == null ? void 0 : _b.probe));
+    for (const header of provider.headers || []) add(header.valueRef);
+    return refs;
+  }
+  function refsRemoved(previous, next) {
+    const retained = new Set(allSecretRefs(next).map((ref) => `${ref.reference}\0${ref.revision}`));
+    return allSecretRefs(previous).filter((ref) => !retained.has(`${ref.reference}\0${ref.revision}`));
+  }
+  function requestFingerprint(provider) {
+    return JSON.stringify({
+      protocol: provider.protocol,
+      baseUrl: provider.baseUrl,
+      allowInsecureHttp: provider.allowInsecureHttp,
+      auth: provider.auth,
+      headers: provider.headers
+    });
+  }
+  async function rollbackCreated(created, secretService) {
+    for (const ref of created.slice().reverse()) {
+      try {
+        await secretService.delete(ref);
+      } catch {
+      }
+    }
+  }
+  async function bestEffortDeleteCommitted(refs, initialRevision, store, secretService) {
+    let revision = initialRevision;
+    for (const ref of refs) {
+      try {
+        const result = await secretService.delete(ref);
+        if (!result || result.deleted !== true && result.revision !== null) continue;
+        if (typeof store.acknowledgeSecretDelete === "function") {
+          const result2 = store.acknowledgeSecretDelete(ref.reference, { expectedRevision: revision });
+          revision = result2.stateRevision;
+        }
+      } catch {
+      }
+    }
+  }
+  async function saveProviderDraft({
+    draft,
+    current,
+    store,
+    secretService,
+    confirmInsecureHttp,
+    randomUUID
+  } = {}) {
+    var _a, _b, _c;
+    if (!draft || typeof draft !== "object" || !store || !secretService) throw flowError("provider_draft_invalid");
+    const id = String(draft.id || "").trim() || slug(draft.name);
+    const name = String(draft.name || "").trim() || id;
+    if (!id || !name) throw flowError("provider_draft_invalid");
+    const protocol = draft.protocol || "openai-compatible";
+    if (protocol !== "openai-compatible" && protocol !== "anthropic") throw flowError("provider_draft_invalid");
+    const baseUrl = normalizedBaseUrl(draft.baseUrl);
+    const credentialId = (current == null ? void 0 : current.credentialId) || (typeof randomUUID === "function" ? randomUUID() : "");
+    if (!credentialId) throw flowError("provider_draft_invalid");
+    const expectedRevision = store.readState().revision;
+    const allowInsecureHttp = await enforceInsecureHttp({
+      baseUrl,
+      providerId: id,
+      current,
+      allowInsecureHttp: draft.allowInsecureHttp === true,
+      confirmInsecureHttp
+    });
+    const created = [];
+    let entry;
+    try {
+      const model = await buildAuthPolicy({
+        kind: draft.modelAuthKind || "bearer",
+        headerName: draft.modelAuthHeaderName,
+        secret: draft.modelAuthSecret,
+        currentPolicy: (_a = current == null ? void 0 : current.auth) == null ? void 0 : _a.model,
+        credentialId,
+        slotPrefix: "auth-model",
+        secretService,
+        created
+      });
+      let probe;
+      if ((draft.probeAuthMode || "inherit-model") === "inherit-model") {
+        probe = { kind: "inherit-model" };
+      } else {
+        probe = await buildAuthPolicy({
+          kind: draft.probeAuthKind || "none",
+          headerName: draft.probeAuthHeaderName,
+          secret: draft.probeAuthSecret,
+          currentPolicy: (_b = current == null ? void 0 : current.auth) == null ? void 0 : _b.probe,
+          credentialId,
+          slotPrefix: "auth-probe",
+          secretService,
+          created
+        });
+      }
+      const headers = await buildHeaders({
+        draftHeaders: draft.headers || [],
+        currentHeaders: (current == null ? void 0 : current.headers) || [],
+        credentialId,
+        secretService,
+        created
+      });
+      const overrideValue = String(draft.dialectOverride || "").trim();
+      if (overrideValue && overrideValue !== "responses" && overrideValue !== "chat") {
+        throw flowError("provider_draft_invalid");
+      }
+      const override = overrideValue ? {
+        wireApi: overrideValue,
+        source: draft.dialectSource === "ccswitch-import" ? "ccswitch-import" : "manual",
+        updatedAt: Date.now()
+      } : null;
+      const candidate = {
+        id,
+        credentialId,
+        name,
+        protocol,
+        baseUrl,
+        allowInsecureHttp,
+        authProfileRevision: (current == null ? void 0 : current.authProfileRevision) || 1,
+        auth: { model, probe },
+        headers,
+        dialect: { override, detected: ((_c = current == null ? void 0 : current.dialect) == null ? void 0 : _c.detected) || null },
+        probedModels: (current == null ? void 0 : current.probedModels) || [],
+        probedAt: (current == null ? void 0 : current.probedAt) || 0
+      };
+      if (current && requestFingerprint(candidate) !== requestFingerprint(current)) {
+        candidate.authProfileRevision = current.authProfileRevision + 1;
+        candidate.dialect.detected = null;
+        candidate.probedModels = [];
+        candidate.probedAt = 0;
+      }
+      entry = normalizeProviderEntryV2(candidate);
+      const pendingSecretDeletes = refsRemoved(current, entry);
+      const committed = store.upsert(entry, {
+        expectedRevision,
+        pendingSecretDeletes
+      });
+      await bestEffortDeleteCommitted(
+        pendingSecretDeletes,
+        committed.stateRevision,
+        store,
+        secretService
+      );
+      return committed.entry;
+    } catch (error) {
+      await rollbackCreated(created, secretService);
+      throw error;
+    }
+  }
+  async function deleteProviderProfile({ provider, store, secretService } = {}) {
+    if (!provider || !store || !secretService) throw flowError("provider_draft_invalid");
+    const normalized = normalizeProviderEntryV2(provider);
+    const pendingSecretDeletes = allSecretRefs(normalized);
+    const state = store.readState();
+    const committed = store.remove(normalized.id, {
+      expectedRevision: state.revision,
+      pendingSecretDeletes
+    });
+    if (committed.removed) {
+      await bestEffortDeleteCommitted(
+        pendingSecretDeletes,
+        committed.stateRevision,
+        store,
+        secretService
+      );
+    }
+    return { removed: committed.removed };
+  }
+  async function importProviderDraft({ candidate, store, secretService, randomUUID } = {}) {
+    if (!candidate || typeof candidate !== "object") throw flowError("provider_draft_invalid");
+    let draft = {
+      id: candidate.candidateId || "",
+      name: candidate.name,
+      protocol: candidate.protocol,
+      baseUrl: candidate.baseUrl,
+      allowInsecureHttp: false,
+      modelAuthKind: candidate.modelAuthKind || "bearer",
+      modelAuthHeaderName: "",
+      modelAuthSecret: candidate.modelAuthSecret,
+      probeAuthMode: "inherit-model",
+      probeAuthKind: "none",
+      probeAuthHeaderName: "",
+      probeAuthSecret: "",
+      headers: [],
+      dialectOverride: candidate.dialectHint || "",
+      dialectSource: "ccswitch-import"
+    };
+    try {
+      const candidateId = String(draft.id || "").trim() || slug(draft.name);
+      const current = typeof (store == null ? void 0 : store.get) === "function" ? store.get(candidateId) : null;
+      return await saveProviderDraft({
+        draft,
+        current,
+        store,
+        secretService,
+        confirmInsecureHttp: async () => false,
+        randomUUID
+      });
+    } finally {
+      draft = null;
+    }
+  }
+  async function drainPendingProviderSecretDeletes({ store, secretService } = {}) {
+    if (!store || !secretService) throw flowError("provider_draft_invalid");
+    let deleted = 0;
+    const snapshot = store.readState();
+    for (const ref of snapshot.pendingSecretDeletes) {
+      try {
+        const result = await secretService.delete(ref);
+        if (!result || result.deleted !== true && result.revision !== null) continue;
+        const current = store.readState();
+        store.acknowledgeSecretDelete(ref.reference, { expectedRevision: current.revision });
+        deleted += 1;
+      } catch {
+      }
+    }
+    return { deleted, pending: store.readState().pendingSecretDeletes.length };
+  }
+
+  // src/app/providerInitState.js
+  var HELPER_FAILURE_CODES = /* @__PURE__ */ new Set([
+    "HELPER_UNAVAILABLE",
+    "HELPER_UNAUTHORIZED",
+    "PROTOCOL_VERSION_UNSUPPORTED",
+    "SECRET_STORE_UNAVAILABLE",
+    "PLATFORM_HELPER_REPAIR_REQUIRED",
+    "INVALID_REQUEST",
+    "MESSAGE_TOO_LARGE"
+  ]);
+  var MIGRATION_FAILURE_CODES = /* @__PURE__ */ new Set([
+    "PROVIDER_STORE_CONFLICT",
+    "INVALID_PROVIDER_MIGRATION",
+    "INVALID_MIGRATION_JOURNAL"
+  ]);
+  var SECRET_MISMATCH_CODES = /* @__PURE__ */ new Set([
+    "SECRET_CONFLICT",
+    "SECRET_NOT_FOUND",
+    "INVALID_REFERENCE"
+  ]);
+  function providerInitFailure(error) {
+    const code = typeof (error == null ? void 0 : error.code) === "string" ? error.code : "";
+    let failure = "PROVIDER_INITIALIZATION_FAILED";
+    if (HELPER_FAILURE_CODES.has(code)) failure = "PLATFORM_HELPER_REPAIR_REQUIRED";
+    else if (code === "PROVIDER_STORE_INVALID") failure = "PROVIDER_STORE_CORRUPT";
+    else if (code === "PROVIDER_STORE_UNAVAILABLE") failure = "PROVIDER_STORE_UNAVAILABLE";
+    else if (MIGRATION_FAILURE_CODES.has(code)) failure = "PROVIDER_MIGRATION_CONFLICT";
+    else if (SECRET_MISMATCH_CODES.has(code)) failure = "PROVIDER_SECRET_MISMATCH";
+    return { state: "unavailable", error: failure };
   }
 
   // src/components/settings/ProviderManagerSection.jsx
@@ -15888,47 +18743,147 @@
 
   // src/lib/providerManagerState.js
   function emptyDraft() {
-    return { id: "", name: "", protocol: "openai-compatible", baseUrl: "", apiKey: "" };
+    return {
+      id: "",
+      name: "",
+      protocol: "openai-compatible",
+      baseUrl: "",
+      allowInsecureHttp: false,
+      modelAuthKind: "bearer",
+      modelAuthHeaderName: "",
+      modelAuthSecret: "",
+      probeAuthMode: "inherit-model",
+      probeAuthKind: "none",
+      probeAuthHeaderName: "",
+      probeAuthSecret: "",
+      headers: [],
+      dialectOverride: ""
+    };
+  }
+  function headerDraft(header) {
+    var _a;
+    if (((_a = header == null ? void 0 : header.valueRef) == null ? void 0 : _a.kind) === "literal") {
+      return {
+        id: header.id,
+        name: header.name,
+        scopes: Array.isArray(header.scopes) ? header.scopes.slice() : [],
+        valueKind: "literal",
+        value: header.valueRef.value
+      };
+    }
+    return {
+      id: header.id,
+      name: header.name,
+      scopes: Array.isArray(header.scopes) ? header.scopes.slice() : [],
+      valueKind: "secret",
+      value: ""
+    };
   }
   function draftFromEntry(entry) {
+    var _a, _b, _c, _d;
+    const model = ((_a = entry == null ? void 0 : entry.auth) == null ? void 0 : _a.model) || { kind: "none" };
+    const probe = ((_b = entry == null ? void 0 : entry.auth) == null ? void 0 : _b.probe) || { kind: "inherit-model" };
     return {
-      id: entry.id,
-      name: entry.name,
-      protocol: entry.protocol,
-      baseUrl: entry.baseUrl,
-      apiKey: entry.apiKey
+      id: String((entry == null ? void 0 : entry.id) || ""),
+      name: String((entry == null ? void 0 : entry.name) || ""),
+      protocol: (entry == null ? void 0 : entry.protocol) || "openai-compatible",
+      baseUrl: String((entry == null ? void 0 : entry.baseUrl) || ""),
+      allowInsecureHttp: (entry == null ? void 0 : entry.allowInsecureHttp) === true,
+      modelAuthKind: model.kind || "none",
+      modelAuthHeaderName: model.kind === "custom" ? model.headerName : "",
+      modelAuthSecret: "",
+      probeAuthMode: probe.kind === "inherit-model" ? "inherit-model" : "separate",
+      probeAuthKind: probe.kind === "inherit-model" ? "none" : probe.kind,
+      probeAuthHeaderName: probe.kind === "custom" ? probe.headerName : "",
+      probeAuthSecret: "",
+      headers: Array.isArray(entry == null ? void 0 : entry.headers) ? entry.headers.map(headerDraft) : [],
+      dialectOverride: ((_d = (_c = entry == null ? void 0 : entry.dialect) == null ? void 0 : _c.override) == null ? void 0 : _d.wireApi) || ""
     };
   }
   function validateDraft(draft) {
-    if (!String(draft.name || "").trim() && !String(draft.id || "").trim()) return "\u540D\u79F0\u4E0D\u80FD\u4E3A\u7A7A / name is required";
-    if (!/^https?:\/\//i.test(String(draft.baseUrl || "").trim())) return "Base URL \u5FC5\u987B\u4EE5 http(s):// \u5F00\u5934 / must start with http(s)://";
+    if (!String((draft == null ? void 0 : draft.name) || "").trim() && !String((draft == null ? void 0 : draft.id) || "").trim()) {
+      return "\u540D\u79F0\u4E0D\u80FD\u4E3A\u7A7A / name is required";
+    }
+    let url;
+    try {
+      url = new URL(String((draft == null ? void 0 : draft.baseUrl) || "").trim());
+    } catch {
+      return "Base URL \u5FC5\u987B\u4EE5 http(s):// \u5F00\u5934 / must start with http(s)://";
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return "Base URL \u5FC5\u987B\u4EE5 http(s):// \u5F00\u5934 / must start with http(s)://";
+    }
     return "";
   }
   function draftToEntry(draft) {
-    const name = String(draft.name || draft.id || "").trim();
-    const id = String(draft.id || "").trim() || name.replace(/[^A-Za-z0-9_-]+/g, "-").toLowerCase();
-    return { id, name, protocol: draft.protocol, baseUrl: draft.baseUrl, apiKey: draft.apiKey };
+    const name = String((draft == null ? void 0 : draft.name) || (draft == null ? void 0 : draft.id) || "").trim();
+    const id = String((draft == null ? void 0 : draft.id) || "").trim() || name.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+    return {
+      ...emptyDraft(),
+      ...draft || {},
+      id,
+      name,
+      headers: Array.isArray(draft == null ? void 0 : draft.headers) ? draft.headers.map((header) => ({ ...header, scopes: [...header.scopes || []] })) : []
+    };
   }
 
   // src/components/settings/ProviderManagerSection.jsx
   var import_jsx_runtime35 = __toESM(require_jsx_runtime(), 1);
   var L2 = {
-    zh: { title: "Provider \u7BA1\u7406", add: "\u65B0\u589E", edit: "\u7F16\u8F91", del: "\u5220\u9664", probe: "\u63A2\u6D4B\u6A21\u578B", probing: "\u63A2\u6D4B\u4E2D\u2026", save: "\u4FDD\u5B58", cancel: "\u53D6\u6D88", name: "\u540D\u79F0", protocol: "\u534F\u8BAE", baseUrl: "Base URL", apiKey: "API Key", keyCap: "\u4EC5\u4FDD\u5B58\u5728\u672C\u673A ~/.ae-mcp/providers.json", models: (n) => `${n} \u4E2A\u6A21\u578B`, probeFailed: "\u63A2\u6D4B\u5931\u8D25\uFF08\u53EF\u624B\u586B\u6A21\u578B ID \u7EE7\u7EED\u4F7F\u7528\uFF09\uFF1A", importCc: "\u4ECE cc-switch \u5BFC\u5165" },
-    en: { title: "Provider manager", add: "Add", edit: "Edit", del: "Delete", probe: "Probe models", probing: "Probing\u2026", save: "Save", cancel: "Cancel", name: "Name", protocol: "Protocol", baseUrl: "Base URL", apiKey: "API Key", keyCap: "Stored locally in ~/.ae-mcp/providers.json", models: (n) => `${n} models`, probeFailed: "Probe failed (manual model id still works): ", importCc: "Import from cc-switch" }
+    zh: { title: "Provider \u7BA1\u7406", add: "\u65B0\u589E", edit: "\u7F16\u8F91", del: "\u5220\u9664", probe: "\u63A2\u6D4B\u6A21\u578B", probing: "\u63A2\u6D4B\u4E2D\u2026", save: "\u4FDD\u5B58", cancel: "\u53D6\u6D88", name: "\u540D\u79F0", protocol: "\u534F\u8BAE", baseUrl: "Base URL", secret: "\u6A21\u578B\u51ED\u636E", probeSecret: "\u63A2\u6D4B\u51ED\u636E", secretCap: "\u5199\u5165\u7CFB\u7EDF\u51ED\u636E\u5E93\uFF1B\u7F16\u8F91\u65F6\u7559\u7A7A\u8868\u793A\u4FDD\u7559\u539F\u51ED\u636E", models: (n) => `${n} \u4E2A\u6A21\u578B`, probeFailed: "\u63A2\u6D4B\u5931\u8D25\uFF08\u53EF\u624B\u586B\u6A21\u578B ID \u7EE7\u7EED\u4F7F\u7528\uFF09\uFF1A", importCc: "\u4ECE cc-switch \u5BFC\u5165", insecure: "\u5141\u8BB8\u975E\u56DE\u73AF HTTP\uFF08\u4FDD\u5B58\u65F6\u518D\u6B21\u786E\u8BA4\uFF09", dialect: "API \u65B9\u8A00", inherit: "\u7EE7\u627F\u6A21\u578B\u51ED\u636E", separate: "\u5355\u72EC\u914D\u7F6E", extraHeaders: "\u989D\u5916\u8BF7\u6C42\u5934", addHeader: "\u65B0\u589E\u8BF7\u6C42\u5934", removeHeader: "\u79FB\u9664", headerName: "Header \u540D\u79F0", literal: "\u666E\u901A\u6587\u672C", secretValue: "\u7CFB\u7EDF\u51ED\u636E", scopeProbe: "\u63A2\u6D4B", scopeModel: "\u6A21\u578B\u8BF7\u6C42" },
+    en: { title: "Provider manager", add: "Add", edit: "Edit", del: "Delete", probe: "Probe models", probing: "Probing\u2026", save: "Save", cancel: "Cancel", name: "Name", protocol: "Protocol", baseUrl: "Base URL", secret: "Model credential", probeSecret: "Probe credential", secretCap: "Stored in the system credential store; leave blank while editing to retain it", models: (n) => `${n} models`, probeFailed: "Probe failed (manual model id still works): ", importCc: "Import from cc-switch", insecure: "Allow non-loopback HTTP (confirmed again on save)", dialect: "API dialect", inherit: "Inherit model credential", separate: "Configure separately", extraHeaders: "Extra headers", addHeader: "Add header", removeHeader: "Remove", headerName: "Header name", literal: "Literal text", secretValue: "Credential store", scopeProbe: "Probe", scopeModel: "Model request" }
   };
-  function ProviderManagerSection({ lang = "zh", providers = [], onUpsert, onRemove, onProbe, probing = "", probeErrors = {}, ccSwitch = null, onImportCcSwitch }) {
+  function SecretInput({ name, disabled = false }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+      "input",
+      {
+        name,
+        type: "password",
+        autoComplete: "new-password",
+        defaultValue: "",
+        disabled,
+        style: {
+          width: "100%",
+          height: 24,
+          boxSizing: "border-box",
+          padding: "0 8px",
+          color: "var(--text-primary)",
+          background: "var(--bg-well)",
+          border: "1px solid var(--border-default)",
+          borderRadius: "var(--radius-md)",
+          outline: "none",
+          font: "var(--weight-regular) var(--text-caption)/1 var(--font-mono)"
+        }
+      }
+    );
+  }
+  function nextHeaderId(headers) {
+    let index = headers.length + 1;
+    while (headers.some((header) => header.id === `header-${index}`)) index += 1;
+    return `header-${index}`;
+  }
+  function ProviderManagerSection({ lang = "zh", providers = [], onUpsert, onRemove, onProbe, probing = "", probeErrors = {}, ccSwitch = null, onImportCcSwitch, disabled = false }) {
     const t = L2[lang] || L2.zh;
     const [draft, setDraft] = import_react37.default.useState(null);
     const [error, setError] = import_react37.default.useState("");
-    const save = () => {
+    const save = async (event) => {
+      var _a;
+      event.preventDefault();
+      const formElement = event.currentTarget;
       const message = validateDraft(draft);
       if (message) {
         setError(message);
         return;
       }
-      onUpsert(draftToEntry(draft));
-      setDraft(null);
-      setError("");
+      try {
+        await onUpsert(event, draftToEntry(draft));
+        setDraft(null);
+        setError("");
+      } catch (saveError) {
+        setError((saveError == null ? void 0 : saveError.message) || "Provider save failed");
+      } finally {
+        (_a = formElement == null ? void 0 : formElement.reset) == null ? void 0 : _a.call(formElement);
+      }
     };
     return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
@@ -15939,40 +18894,70 @@
         }, children: t.add })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
-        ccSwitch && onImportCcSwitch ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "secondary", size: "sm", icon: "download", onClick: onImportCcSwitch, children: t.importCc }) : null,
-        providers.map((p) => /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: "6px 8px", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
+        ccSwitch && onImportCcSwitch ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "secondary", size: "sm", icon: "download", disabled, onClick: onImportCcSwitch, children: t.importCc }) : null,
+        providers.map((provider) => /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: "6px 8px", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { flex: 1, minWidth: 0, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: p.name }),
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Badge, { status: "neutral", children: p.protocol }),
-            p.probedModels.length ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Badge, { status: "ok", children: t.models(p.probedModels.length) }) : null,
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", disabled: probing === p.id, onClick: () => onProbe(p), children: probing === p.id ? t.probing : t.probe }),
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => {
-              setDraft(draftFromEntry(p));
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { flex: 1, minWidth: 0, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Badge, { status: "neutral", children: provider.protocol }),
+            provider.probedModels.length ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Badge, { status: "ok", children: t.models(provider.probedModels.length) }) : null,
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", disabled: disabled || probing === provider.id, onClick: () => onProbe(provider), children: probing === provider.id ? t.probing : t.probe }),
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => {
+              setDraft(draftFromEntry(provider));
               setError("");
             }, children: t.edit }),
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => onRemove(p.id), children: t.del })
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => onRemove(provider), children: t.del })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: p.baseUrl }),
-          probeErrors[p.id] ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.baseUrl }),
+          probeErrors[provider.id] ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: [
             t.probeFailed,
-            probeErrors[p.id]
+            probeErrors[provider.id]
           ] }) : null
-        ] }, p.id)),
-        draft ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, padding: "8px", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Input, { value: draft.name, onChange: (v) => setDraft({ ...draft, name: v }) }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.protocol, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Select, { value: draft.protocol, onChange: (v) => setDraft({ ...draft, protocol: v }), options: [
-            { value: "openai-compatible", label: "OpenAI compatible" },
-            { value: "anthropic", label: "Anthropic" }
+        ] }, provider.id)),
+        draft ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("form", { onSubmit: save, style: { display: "flex", flexDirection: "column", gap: 6, padding: "8px", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Input, { value: draft.name, onChange: (value) => setDraft({ ...draft, name: value }) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.protocol, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Select, { value: draft.protocol, onChange: (value) => setDraft({ ...draft, protocol: value }), options: [{ value: "openai-compatible", label: "OpenAI compatible" }, { value: "anthropic", label: "Anthropic" }] }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.baseUrl, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Input, { mono: true, value: draft.baseUrl, onChange: (value) => setDraft({ ...draft, baseUrl: value }), placeholder: "https://api.example.com/v1" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("label", { style: { display: "flex", gap: 6, alignItems: "center", font: "400 11px/1.35 var(--font-ui)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("input", { type: "checkbox", checked: draft.allowInsecureHttp, onChange: (event) => setDraft({ ...draft, allowInsecureHttp: event.target.checked }) }),
+            t.insecure
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(Field, { label: t.secret, caption: t.secretCap, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Select, { value: draft.modelAuthKind, onChange: (value) => setDraft({ ...draft, modelAuthKind: value }), options: [{ value: "none", label: "None" }, { value: "bearer", label: "Bearer" }, { value: "x-api-key", label: "x-api-key" }, { value: "custom", label: "Custom header" }] }),
+            draft.modelAuthKind === "custom" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Input, { mono: true, value: draft.modelAuthHeaderName, onChange: (value) => setDraft({ ...draft, modelAuthHeaderName: value }), placeholder: "x-provider-token" }) : null,
+            draft.modelAuthKind !== "none" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) : null
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(Field, { label: t.probeSecret, caption: t.secretCap, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Select, { value: draft.probeAuthMode, onChange: (value) => setDraft({ ...draft, probeAuthMode: value }), options: [{ value: "inherit-model", label: t.inherit }, { value: "separate", label: t.separate }] }),
+            draft.probeAuthMode === "separate" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(import_react37.default.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Select, { value: draft.probeAuthKind, onChange: (value) => setDraft({ ...draft, probeAuthKind: value }), options: [{ value: "none", label: "None" }, { value: "bearer", label: "Bearer" }, { value: "x-api-key", label: "x-api-key" }, { value: "custom", label: "Custom header" }] }),
+              draft.probeAuthKind === "custom" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Input, { mono: true, value: draft.probeAuthHeaderName, onChange: (value) => setDraft({ ...draft, probeAuthHeaderName: value }), placeholder: "x-provider-token" }) : null,
+              draft.probeAuthKind !== "none" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(SecretInput, { name: "probeAuthSecret", disabled }) : null
+            ] }) : null
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.extraHeaders, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+            draft.headers.map((header, index) => /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: 6, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Input, { mono: true, value: header.name, onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, name: value } : item) }), placeholder: t.headerName }),
+              /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Select, { value: header.valueKind, onChange: (valueKind) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, valueKind, value: valueKind === "literal" ? item.value || "" : "" } : item) }), options: [{ value: "literal", label: t.literal }, { value: "secret", label: t.secretValue }] }),
+              header.valueKind === "secret" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(SecretInput, { name: `headerSecret:${header.id}`, disabled }) : /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Input, { mono: true, value: header.value || "", onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, value } : item) }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { display: "flex", gap: 10 }, children: ["probe", "model"].map((scope) => /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 4, font: "400 10px/1.35 var(--font-ui)" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("input", { type: "checkbox", checked: header.scopes.includes(scope), onChange: (event) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, scopes: event.target.checked ? [.../* @__PURE__ */ new Set([...item.scopes, scope])] : item.scopes.filter((value) => value !== scope) } : item) }) }),
+                scope === "probe" ? t.scopeProbe : t.scopeModel
+              ] }, scope)) }),
+              /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => setDraft({ ...draft, headers: draft.headers.filter((_, itemIndex) => itemIndex !== index) }), children: t.removeHeader })
+            ] }, header.id)),
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: () => setDraft({ ...draft, headers: [...draft.headers, { id: nextHeaderId(draft.headers), name: "", scopes: ["model"], valueKind: "literal", value: "" }] }), children: t.addHeader })
           ] }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.baseUrl, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Input, { mono: true, value: draft.baseUrl, onChange: (v) => setDraft({ ...draft, baseUrl: v }), placeholder: "https://api.example.com/v1" }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.apiKey, caption: t.keyCap, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Input, { secret: true, value: draft.apiKey, onChange: (v) => setDraft({ ...draft, apiKey: v }) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.dialect, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Select, { value: draft.dialectOverride, onChange: (value) => setDraft({ ...draft, dialectOverride: value }), options: [{ value: "", label: "Auto detect" }, { value: "responses", label: "Responses" }, { value: "chat", label: "Chat" }] }) }),
           error ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: error }) : null,
           /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", gap: 6, justifyContent: "flex-end" }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => {
               setDraft(null);
               setError("");
             }, children: t.cancel }),
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "primary", size: "sm", onClick: save, children: t.save })
+            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "primary", size: "sm", disabled, onClick: (event) => {
+              var _a;
+              return (_a = event.currentTarget.closest("form")) == null ? void 0 : _a.requestSubmit();
+            }, children: t.save })
           ] })
         ] }) : null
       ] })
@@ -15980,7 +18965,7 @@
   }
 
   // src/cep/modelProbe.js
-  function getCepRequire2() {
+  function getCepRequire3() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -15988,10 +18973,18 @@
     if (globalThis.require) return globalThis.require;
     throw new Error("CEP Node require is unavailable");
   }
-  function probeHeaders(protocol, apiKey) {
+  function authSchemeFromDialect(dialect) {
+    if (!dialect) return "";
+    if (typeof dialect === "string") return dialect;
+    return String(dialect.authScheme || "").trim();
+  }
+  function probeHeaders(protocol, apiKey, dialect) {
     if (protocol === "anthropic") {
       return { "x-api-key": String(apiKey || ""), "anthropic-version": "2023-06-01" };
     }
+    const authScheme = authSchemeFromDialect(dialect);
+    if (authScheme === "x-api-key") return { "x-api-key": String(apiKey || "") };
+    if (authScheme === "none") return {};
     return { Authorization: "Bearer " + String(apiKey || "") };
   }
   function parseModelsList(json) {
@@ -16002,17 +18995,38 @@
       return { id: String(id), label: String(m.display_name || m.displayName || id) };
     }).filter(Boolean);
   }
-  function probeProviderModels({ baseUrl, apiKey, protocol = "openai-compatible", httpsImpl, timeoutMs = 8e3 } = {}) {
+  function probeProviderModels({
+    baseUrl,
+    apiKey,
+    protocol = "openai-compatible",
+    dialect,
+    authScheme,
+    allowInsecureHttp = false,
+    httpsImpl,
+    timeoutMs = 8e3
+  } = {}) {
     let endpoint;
     try {
-      const root = String(baseUrl || "").replace(/\/+$/, "").replace(/\/v1$/, "");
+      const approvedBaseUrl = validateProviderBaseUrl(baseUrl, {
+        allowInsecureHttp,
+        requireTransportApproval: true
+      });
+      const root = approvedBaseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
       endpoint = new URL(root + "/v1/models");
     } catch (e) {
+      if ((e == null ? void 0 : e.code) === "provider_insecure_http_forbidden") {
+        return Promise.resolve({
+          ok: false,
+          status: 0,
+          models: [],
+          detail: "Insecure provider HTTP is not approved"
+        });
+      }
       return Promise.resolve({ ok: false, status: 0, models: [], detail: "Invalid base URL" });
     }
     let https;
     try {
-      https = httpsImpl || getCepRequire2()(endpoint.protocol === "http:" ? "http" : "https");
+      https = httpsImpl || getCepRequire3()(endpoint.protocol === "http:" ? "http" : "https");
     } catch (e) {
       return Promise.resolve({ ok: false, status: 0, models: [], detail: e.message });
     }
@@ -16023,7 +19037,7 @@
         protocol: endpoint.protocol,
         path: endpoint.pathname + endpoint.search,
         method: "GET",
-        headers: probeHeaders(protocol, apiKey)
+        headers: probeHeaders(protocol, apiKey, dialect || authScheme)
       }, (res) => {
         let body = "";
         res.on("data", (chunk) => {
@@ -16056,6 +19070,126 @@
 
   // src/cep/ccSwitch.js
   var CONFIG_NAMES = ["config.json", "providers.json"];
+  function rotateRight(value, count) {
+    return value >>> count | value << 32 - count;
+  }
+  function sha256Text(text) {
+    const bytes = typeof TextEncoder === "function" ? new TextEncoder().encode(String(text)) : Uint8Array.from(unescape(encodeURIComponent(String(text))), (char) => char.charCodeAt(0));
+    const bitLength = bytes.length * 8;
+    const paddedLength = Math.ceil((bytes.length + 9) / 64) * 64;
+    const padded = new Uint8Array(paddedLength);
+    padded.set(bytes);
+    padded[bytes.length] = 128;
+    const view = new DataView(padded.buffer);
+    const high = Math.floor(bitLength / 4294967296);
+    const low = bitLength >>> 0;
+    view.setUint32(paddedLength - 8, high);
+    view.setUint32(paddedLength - 4, low);
+    const constants = [
+      1116352408,
+      1899447441,
+      3049323471,
+      3921009573,
+      961987163,
+      1508970993,
+      2453635748,
+      2870763221,
+      3624381080,
+      310598401,
+      607225278,
+      1426881987,
+      1925078388,
+      2162078206,
+      2614888103,
+      3248222580,
+      3835390401,
+      4022224774,
+      264347078,
+      604807628,
+      770255983,
+      1249150122,
+      1555081692,
+      1996064986,
+      2554220882,
+      2821834349,
+      2952996808,
+      3210313671,
+      3336571891,
+      3584528711,
+      113926993,
+      338241895,
+      666307205,
+      773529912,
+      1294757372,
+      1396182291,
+      1695183700,
+      1986661051,
+      2177026350,
+      2456956037,
+      2730485921,
+      2820302411,
+      3259730800,
+      3345764771,
+      3516065817,
+      3600352804,
+      4094571909,
+      275423344,
+      430227734,
+      506948616,
+      659060556,
+      883997877,
+      958139571,
+      1322822218,
+      1537002063,
+      1747873779,
+      1955562222,
+      2024104815,
+      2227730452,
+      2361852424,
+      2428436474,
+      2756734187,
+      3204031479,
+      3329325298
+    ];
+    const hash = [1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225];
+    const words = new Uint32Array(64);
+    for (let offset = 0; offset < paddedLength; offset += 64) {
+      for (let index = 0; index < 16; index += 1) words[index] = view.getUint32(offset + index * 4);
+      for (let index = 16; index < 64; index += 1) {
+        const x = words[index - 15];
+        const y = words[index - 2];
+        const s0 = rotateRight(x, 7) ^ rotateRight(x, 18) ^ x >>> 3;
+        const s1 = rotateRight(y, 17) ^ rotateRight(y, 19) ^ y >>> 10;
+        words[index] = words[index - 16] + s0 + words[index - 7] + s1 >>> 0;
+      }
+      let [a, b, c, d, e, f, g, h] = hash;
+      for (let index = 0; index < 64; index += 1) {
+        const s1 = rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25);
+        const choose = e & f ^ ~e & g;
+        const temp1 = h + s1 + choose + constants[index] + words[index] >>> 0;
+        const s0 = rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22);
+        const majority = a & b ^ a & c ^ b & c;
+        const temp2 = s0 + majority >>> 0;
+        h = g;
+        g = f;
+        f = e;
+        e = d + temp1 >>> 0;
+        d = c;
+        c = b;
+        b = a;
+        a = temp1 + temp2 >>> 0;
+      }
+      hash[0] = hash[0] + a >>> 0;
+      hash[1] = hash[1] + b >>> 0;
+      hash[2] = hash[2] + c >>> 0;
+      hash[3] = hash[3] + d >>> 0;
+      hash[4] = hash[4] + e >>> 0;
+      hash[5] = hash[5] + f >>> 0;
+      hash[6] = hash[6] + g >>> 0;
+      hash[7] = hash[7] + h >>> 0;
+    }
+    return hash.map((word) => word.toString(16).padStart(8, "0")).join("");
+  }
   function candidateDirs(platform) {
     const home = platform.paths.home;
     const completed = platform.completeSpawnEnv ? platform.completeSpawnEnv() : {};
@@ -16075,16 +19209,48 @@
     if (parsed.providers && typeof parsed.providers === "object") return Object.values(parsed.providers);
     return [];
   }
+  function dialectHint(provider) {
+    const raw = String((provider == null ? void 0 : provider.wireApi) || (provider == null ? void 0 : provider.wire_api) || (provider == null ? void 0 : provider.dialect) || "").trim().toLowerCase();
+    if (raw === "responses") return "responses";
+    if (raw === "chat" || raw === "chat-completions" || raw === "chat_completions") return "chat";
+    return null;
+  }
+  function safeBaseUrl(value) {
+    const text = String(value || "").trim();
+    let url;
+    try {
+      url = new URL(text);
+    } catch {
+      return "";
+    }
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.hash) return "";
+    const sensitiveName = /(?:^|[-_])(?:authorization|api[-_]?key|token|secret|password|auth)(?:$|[-_])/i;
+    for (const name of url.searchParams.keys()) {
+      if (sensitiveName.test(name)) return "";
+    }
+    return text;
+  }
+  function previewEntry(provider) {
+    if (!provider || typeof provider !== "object") return null;
+    const name = String(provider.name || provider.title || provider.id || "").trim();
+    const baseUrl = safeBaseUrl(provider.baseUrl || provider.base_url || provider.url || "");
+    if (!name || !baseUrl) return null;
+    const protocol = /anthropic/i.test(String(provider.type || provider.protocol || provider.kind || "")) ? "anthropic" : "openai-compatible";
+    return {
+      candidateId: `ccswitch-${name.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase()}`,
+      name,
+      protocol,
+      baseUrl,
+      dialectHint: dialectHint(provider)
+    };
+  }
   function ccSwitchProviderEntries(list) {
-    return (Array.isArray(list) ? list : []).map((p) => {
-      if (!p || typeof p !== "object") return null;
-      const name = String(p.name || p.title || p.id || "").trim();
-      const baseUrl = String(p.baseUrl || p.base_url || p.url || "").trim();
-      const apiKey = String(p.apiKey || p.api_key || p.key || p.token || "").trim();
-      if (!name || !baseUrl) return null;
-      const protocol = /anthropic/i.test(String(p.type || p.protocol || p.kind || "")) ? "anthropic" : "openai-compatible";
-      return { id: "ccswitch-" + name.replace(/[^A-Za-z0-9_-]+/g, "-").toLowerCase(), name, protocol, baseUrl, apiKey };
-    }).filter(Boolean);
+    return (Array.isArray(list) ? list : []).map(previewEntry).filter(Boolean);
+  }
+  function importChanged() {
+    const error = new Error("Provider import source changed");
+    error.code = "provider_import_source_changed";
+    return error;
   }
   function detectCcSwitch({ platform, fsImpl } = {}) {
     const adapter = platform || createPlatformAdapter();
@@ -16094,35 +19260,107 @@
       for (const name of CONFIG_NAMES) {
         const file = adapter.paths.join([dir, name]);
         try {
-          if (!fs.existsSync(file)) continue;
-          const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
-          const providers = ccSwitchProviderEntries(rawProviders(parsed));
-          if (providers.length) return { dir, file, providers };
-        } catch (e) {
+          if (fs.existsSync && !fs.existsSync(file)) continue;
+          const text = String(fs.readFileSync(file, "utf8"));
+          const providers = ccSwitchProviderEntries(rawProviders(JSON.parse(text)));
+          if (providers.length) return { dir, file, sourceRevision: sha256Text(text), providers };
+        } catch {
         }
       }
     }
     return null;
   }
-
-  // src/cep/claudeSettingsImport.js
-  function readClaudeSettingsEnv({ platform, fsImpl } = {}) {
-    const adapter = platform || createPlatformAdapter();
-    const home = adapter.paths.home;
-    if (!home) return null;
-    const fs = fsImpl || adapter.fs;
-    if (!fs) return null;
+  function readCcSwitchProviderDrafts({ file, expectedSourceRevision, fsImpl } = {}) {
+    if (!file || !expectedSourceRevision || !(fsImpl == null ? void 0 : fsImpl.readFileSync)) throw importChanged();
+    let text;
+    try {
+      text = String(fsImpl.readFileSync(file, "utf8"));
+    } catch {
+      throw importChanged();
+    }
+    if (sha256Text(text) !== expectedSourceRevision) throw importChanged();
     let parsed;
     try {
-      parsed = JSON.parse(fs.readFileSync(adapter.paths.join([home, ".claude", "settings.json"]), "utf8"));
-    } catch (e) {
+      parsed = JSON.parse(text);
+    } catch {
+      throw importChanged();
+    }
+    return rawProviders(parsed).map((provider) => {
+      const preview = previewEntry(provider);
+      if (!preview) return null;
+      return {
+        ...preview,
+        modelAuthKind: "bearer",
+        modelAuthSecret: String(provider.apiKey || provider.api_key || provider.key || provider.token || "").trim()
+      };
+    }).filter(Boolean);
+  }
+
+  // src/cep/claudeSettingsImport.js
+  function settingsFile(platform) {
+    const home = platform.paths.home;
+    if (!home) return "";
+    return platform.paths.join([home, ".claude", "settings.json"]);
+  }
+  function parseSettings(text) {
+    const parsed = JSON.parse(text);
+    const settingsEnv = (parsed == null ? void 0 : parsed.env) && typeof parsed.env === "object" && !Array.isArray(parsed.env) ? parsed.env : {};
+    const baseUrl = String(settingsEnv.ANTHROPIC_BASE_URL || "https://api.anthropic.com").trim();
+    const secret = String(settingsEnv.ANTHROPIC_AUTH_TOKEN || "").trim();
+    if (!secret) return null;
+    const url = new URL(baseUrl);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.hash) return null;
+    const sensitiveName = /(?:^|[-_])(?:authorization|api[-_]?key|token|secret|password|auth)(?:$|[-_])/i;
+    for (const name of url.searchParams.keys()) {
+      if (sensitiveName.test(name)) return null;
+    }
+    return { baseUrl, secret };
+  }
+  function sourceChanged() {
+    const error = new Error("Provider import source changed");
+    error.code = "provider_import_source_changed";
+    return error;
+  }
+  function inspectClaudeSettingsEnv({ platform, fsImpl } = {}) {
+    const adapter = platform || createPlatformAdapter();
+    const fs = fsImpl || adapter.fs;
+    const file = settingsFile(adapter);
+    if (!file || !(fs == null ? void 0 : fs.readFileSync)) return null;
+    try {
+      const text = String(fs.readFileSync(file, "utf8"));
+      const settings = parseSettings(text);
+      if (!settings) return null;
+      return { available: true, baseUrl: settings.baseUrl, sourceRevision: sha256Text(text) };
+    } catch {
       return null;
     }
-    const settingsEnv = parsed && parsed.env && typeof parsed.env === "object" ? parsed.env : {};
-    const baseUrl = String(settingsEnv.ANTHROPIC_BASE_URL || "").trim();
-    const authToken = String(settingsEnv.ANTHROPIC_AUTH_TOKEN || "").trim();
-    if (!baseUrl && !authToken) return null;
-    return { baseUrl, authToken };
+  }
+  function readClaudeSettingsProviderDraft({ platform, expectedSourceRevision, fsImpl } = {}) {
+    const adapter = platform || createPlatformAdapter();
+    const fs = fsImpl || adapter.fs;
+    const file = settingsFile(adapter);
+    if (!file || !expectedSourceRevision || !(fs == null ? void 0 : fs.readFileSync)) throw sourceChanged();
+    let text;
+    try {
+      text = String(fs.readFileSync(file, "utf8"));
+    } catch {
+      throw sourceChanged();
+    }
+    if (sha256Text(text) !== expectedSourceRevision) throw sourceChanged();
+    let settings;
+    try {
+      settings = parseSettings(text);
+    } catch {
+      throw sourceChanged();
+    }
+    if (!settings) return null;
+    return {
+      name: "Claude Code config",
+      protocol: "anthropic",
+      baseUrl: settings.baseUrl,
+      modelAuthKind: "bearer",
+      modelAuthSecret: settings.secret
+    };
   }
 
   // src/cep/codexConfig.js
@@ -16203,11 +19441,34 @@
     }
     return result;
   }
-  function resolveCodexProviderApiKey({ provider, env = {}, storedKey = "" } = {}) {
+  function usableStoredValueRef(value) {
+    if (!value || value.kind !== "secret" || typeof value.reference !== "string" || !Number.isSafeInteger(value.revision) || value.revision <= 0) return false;
+    try {
+      parseProviderSecretReference(value.reference);
+    } catch {
+      return false;
+    }
+    return true;
+  }
+  function codexCliCredentialAvailable({ provider, env = {}, storedValueRef = null } = {}) {
     const envKey = provider && String(provider.envKey || "").trim();
-    if (envKey && env[envKey]) return String(env[envKey]);
-    if (storedKey) return String(storedKey);
-    return "";
+    if (envKey && typeof env[envKey] === "string" && env[envKey].length > 0) return true;
+    return usableStoredValueRef(storedValueRef);
+  }
+  async function resolveCodexCliCredential({
+    provider,
+    env = {},
+    storedValueRef = null,
+    secretService
+  } = {}) {
+    const envKey = provider && String(provider.envKey || "").trim();
+    if (envKey && typeof env[envKey] === "string" && env[envKey].length > 0) return env[envKey];
+    if (usableStoredValueRef(storedValueRef) && secretService && typeof secretService.resolve === "function") {
+      return await secretService.resolve(storedValueRef);
+    }
+    const error = new Error("Codex CLI credential is unavailable");
+    error.code = "CODEX_CREDENTIAL_UNAVAILABLE";
+    throw error;
   }
 
   // src/lib/chatEntries.js
@@ -16313,11 +19574,13 @@
   }
   function selectDescriptor({
     effectiveBackend = "none",
+    effectiveChannel = null,
     backendPref = "subscription",
     baseDescriptor,
     customModel = "",
     claudeApiProvider = null,
     codexCustomProvider = null,
+    customProviderCredentialResolverReady = false,
     byokApiModels = null,
     codexCachedModels = null,
     zcodeSessionModels = null,
@@ -16335,7 +19598,8 @@
       return baseDescriptor;
     }
     if (backendPref === "codex") {
-      if (codexCustomProvider && codexCustomProvider.probedModels && codexCustomProvider.probedModels.length) {
+      const customProviderFactsAllowed = effectiveChannel === "custom" && customProviderCredentialResolverReady === true;
+      if (customProviderFactsAllowed && codexCustomProvider && codexCustomProvider.probedModels && codexCustomProvider.probedModels.length) {
         return descriptorWithCustomModel(descriptorFromProbedModels(codexStaticDescriptor(), codexCustomProvider.probedModels), customId);
       }
       if (codexCachedModels) {
@@ -16395,7 +19659,27 @@
   // src/cep/modelsApi.js
   var CACHE_KEY = "ae_mcp_byok_models";
   var TTL_MS = 24 * 60 * 60 * 1e3;
-  function getCepRequire3() {
+  function containsResolvedCredential(models, requestProfile) {
+    var _a;
+    const values = [];
+    if (typeof ((_a = requestProfile == null ? void 0 : requestProfile.auth) == null ? void 0 : _a.value) === "string" && requestProfile.auth.value) {
+      values.push(requestProfile.auth.value);
+      const scheme = requestProfile.auth.value.match(/^(?:Bearer|Basic)\s+(.+)$/i);
+      if (scheme == null ? void 0 : scheme[1]) values.push(scheme[1]);
+    }
+    for (const header of (requestProfile == null ? void 0 : requestProfile.extraHeaders) || []) {
+      if (typeof (header == null ? void 0 : header.value) === "string" && header.value) values.push(header.value);
+    }
+    if (!values.length) return false;
+    let serialized;
+    try {
+      serialized = JSON.stringify(models);
+    } catch {
+      return true;
+    }
+    return values.some((value) => serialized.includes(value));
+  }
+  function getCepRequire4() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -16403,23 +19687,29 @@
     if (globalThis.require) return globalThis.require;
     throw new Error("CEP Node require is unavailable");
   }
-  function fetchAnthropicModels({ apiKey, baseUrl = "", httpsImpl, timeoutMs = 8e3 } = {}) {
-    const https = httpsImpl || getCepRequire3()("https");
+  function fetchAnthropicModels({ requestProfile, httpsImpl, timeoutMs = 8e3 } = {}) {
+    const https = httpsImpl || getCepRequire4()("https");
     return new Promise((resolve) => {
+      var _a;
       let endpoint;
       try {
-        endpoint = new URL(anthropicEndpoint(baseUrl, "/v1/models?limit=100"));
+        endpoint = new URL(anthropicEndpoint((requestProfile == null ? void 0 : requestProfile.baseUrl) || "", "/v1/models?limit=100"));
       } catch (e) {
         resolve(null);
         return;
       }
+      const headers = { "anthropic-version": "2023-06-01" };
+      for (const header of (requestProfile == null ? void 0 : requestProfile.extraHeaders) || []) {
+        if (header && typeof header.name === "string" && typeof header.value === "string") headers[header.name] = header.value;
+      }
+      if (((_a = requestProfile == null ? void 0 : requestProfile.auth) == null ? void 0 : _a.kind) === "header") headers[requestProfile.auth.name] = requestProfile.auth.value;
       const req = https.request({
         hostname: endpoint.hostname,
         port: endpoint.port || void 0,
         protocol: endpoint.protocol,
         path: endpoint.pathname + endpoint.search,
         method: "GET",
-        headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" }
+        headers
       }, (res) => {
         let body = "";
         res.on("data", (chunk) => {
@@ -16441,19 +19731,32 @@
       req.end();
     });
   }
-  async function cachedByokModels({ apiKey, baseUrl = "", fetcher, storage, now = Date.now } = {}) {
+  async function cachedByokModels({
+    providerId = "",
+    baseUrl = "",
+    authProfileRevision = 0,
+    requestProfile,
+    fetcher,
+    storage,
+    now = Date.now
+  } = {}) {
     const store = storage || globalThis.localStorage;
-    const keyTag = String(apiKey || "").slice(-6) + "|" + normalizeBaseUrl(baseUrl);
+    const keyTag = JSON.stringify([
+      String(providerId || ""),
+      normalizeBaseUrl(baseUrl),
+      Number.isSafeInteger(authProfileRevision) ? authProfileRevision : 0
+    ]);
     try {
       const raw = store.getItem(CACHE_KEY);
       if (raw) {
         const cached = JSON.parse(raw);
-        if (cached.keyTag === keyTag && now() - cached.at < TTL_MS) return cached.models;
+        if (cached.keyTag === keyTag && now() - cached.at < TTL_MS && !containsResolvedCredential(cached.models, requestProfile)) return cached.models;
       }
     } catch (e) {
     }
-    const run = fetcher || (() => fetchAnthropicModels({ apiKey, baseUrl }));
+    const run = fetcher || (() => fetchAnthropicModels({ requestProfile }));
     const models = await run();
+    if (models && containsResolvedCredential(models, requestProfile)) return null;
     if (models) {
       try {
         store.setItem(CACHE_KEY, JSON.stringify({ keyTag, at: now(), models }));
@@ -16900,7 +20203,7 @@
       }
     };
   }
-  function getCepRequire4() {
+  function getCepRequire5() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -17052,14 +20355,117 @@
       throw unavailable(cause);
     }
   }
-  function createHostController({ cs: cs2, onStatus, onLog, platform, requireImpl, addBeforeUnload, extensionRoot }) {
+  function helperUnavailableError() {
+    const error = new Error("Platform helper is unavailable");
+    error.code = "HELPER_UNAVAILABLE";
+    error.retryable = true;
+    return error;
+  }
+  function sanitizeHelperError(error) {
+    const code = typeof (error == null ? void 0 : error.code) === "string" && /^[A-Z][A-Z0-9_]{2,63}$/.test(error.code) ? error.code : "HELPER_UNAVAILABLE";
+    const sanitized = new Error(code === "HELPER_UNAVAILABLE" ? "Platform helper is unavailable" : `Platform helper request failed with ${code}`);
+    sanitized.code = code;
+    sanitized.retryable = (error == null ? void 0 : error.retryable) === true || code === "HELPER_UNAVAILABLE";
+    return sanitized;
+  }
+  function helperRuntime(platformId) {
+    return platformId === "macos-arm64" ? { platform: "darwin", arch: "arm64" } : { platform: "win32", arch: "x64" };
+  }
+  function createHostController({
+    cs: cs2,
+    onStatus,
+    onLog,
+    platform,
+    requireImpl,
+    addBeforeUnload,
+    extensionRoot,
+    createPlatformHelperTransportImpl,
+    createPlatformHelperClientImpl
+  }) {
     const adapter = platform || createPlatformAdapter();
     let host = null;
+    let helperClient = null;
     let platformRoots = null;
-    function start(port) {
-      onStatus("starting", port);
+    let beforeUnloadInstalled = false;
+    let lifecycleGeneration = 0;
+    function closeHelperClient(client, fallbackTransport = null) {
+      const closable = client && typeof client.close === "function" ? client : fallbackTransport;
+      if (!closable || typeof closable.close !== "function") return;
       try {
-        const cepRequire5 = requireImpl || getCepRequire4();
+        Promise.resolve(closable.close()).catch(() => {
+        });
+      } catch {
+      }
+    }
+    function disposeLifecycle(client, hostInstance) {
+      closeHelperClient(client);
+      try {
+        if (hostInstance && typeof hostInstance.stop === "function") hostInstance.stop();
+      } catch {
+      }
+    }
+    function bindPlatformHelperFacade({ cepRequire: cepRequire5, extRoot, hostInstance }) {
+      let transport = null;
+      let nextClient = null;
+      try {
+        const transportFactory = createPlatformHelperTransportImpl || (() => {
+          const modulePath = adapter.paths.join([extRoot, "host", "platform-helper-transport.js"]);
+          const loaded = cepRequire5(modulePath);
+          if (typeof (loaded == null ? void 0 : loaded.createPlatformHelperTransport) !== "function") throw helperUnavailableError();
+          return loaded.createPlatformHelperTransport;
+        })();
+        const clientFactory = createPlatformHelperClientImpl || (() => {
+          const modulePath = adapter.paths.join([extRoot, "host", "platform-helper-client.js"]);
+          const loaded = cepRequire5(modulePath);
+          if (typeof (loaded == null ? void 0 : loaded.createPlatformHelperClient) !== "function") throw helperUnavailableError();
+          return loaded.createPlatformHelperClient;
+        })();
+        transport = transportFactory({
+          platformId: adapter.id,
+          runtime: helperRuntime(adapter.id)
+        });
+        if (!transport || typeof transport.request !== "function" || typeof transport.close !== "function") {
+          throw helperUnavailableError();
+        }
+        nextClient = clientFactory({ transport });
+        for (const method of ["capabilities", "secretGet", "secretSet", "secretDelete", "close"]) {
+          if (typeof (nextClient == null ? void 0 : nextClient[method]) !== "function") throw helperUnavailableError();
+        }
+      } catch {
+        closeHelperClient(nextClient, transport);
+        nextClient = null;
+      }
+      helperClient = nextClient;
+      const facadeClient = nextClient;
+      const invoke = (method, value, hasValue) => {
+        const client = facadeClient;
+        if (!client) return Promise.reject(helperUnavailableError());
+        let request;
+        try {
+          request = hasValue ? client[method](value) : client[method]();
+        } catch (error) {
+          return Promise.reject(sanitizeHelperError(error));
+        }
+        return Promise.resolve(request).catch((error) => {
+          throw sanitizeHelperError(error);
+        });
+      };
+      hostInstance.capabilities = () => invoke("capabilities", void 0, false);
+      hostInstance.secretGet = (reference) => invoke("secretGet", reference, true);
+      hostInstance.secretSet = (value) => invoke("secretSet", value, true);
+      hostInstance.secretDelete = (value) => invoke("secretDelete", value, true);
+    }
+    function start(port) {
+      const generation = lifecycleGeneration += 1;
+      onStatus("starting", port);
+      const priorHost = host;
+      const priorClient = helperClient;
+      host = null;
+      helperClient = null;
+      platformRoots = null;
+      if (priorHost || priorClient) disposeLifecycle(priorClient, priorHost);
+      try {
+        const cepRequire5 = requireImpl || getCepRequire5();
         const extRoot = normalizeCepPath(extensionRoot || cs2.getSystemPath("extension"), adapter);
         const hostPath = adapter.paths.join([extRoot, "host", "server.js"]);
         const roots = { extensionRoot: extRoot, runtimeRoot: adapter.paths.runtimeRoot };
@@ -17070,29 +20476,53 @@
           adapter,
           extensionRoot: extRoot
         });
-        host = cepRequire5(hostPath);
-        if (!host || typeof host.setRuntimeDependencies !== "function") {
+        const nextHost = cepRequire5(hostPath);
+        if (!nextHost || typeof nextHost.setRuntimeDependencies !== "function") {
           throw new Error("Host runtime dependency binding is unavailable");
         }
-        host.setRuntimeDependencies(runtimeDependencies);
-        host.setCSInterface(cs2);
-        if (host.setPlatformRoots) host.setPlatformRoots(roots);
-        const installBeforeUnload = addBeforeUnload || ((handler) => window.addEventListener("beforeunload", handler));
-        installBeforeUnload(() => {
-          try {
-            host.stop();
-          } catch (e) {
-          }
-        });
-        host.start(port, (err) => err ? onStatus("error", port, err.message) : onStatus("ok", port), roots);
+        nextHost.setRuntimeDependencies(runtimeDependencies);
+        nextHost.setCSInterface(cs2);
+        if (nextHost.setPlatformRoots) nextHost.setPlatformRoots(roots);
+        host = nextHost;
+        bindPlatformHelperFacade({ cepRequire: cepRequire5, extRoot, hostInstance: nextHost });
+        if (!beforeUnloadInstalled) {
+          const installBeforeUnload = addBeforeUnload || ((handler) => window.addEventListener("beforeunload", handler));
+          installBeforeUnload(() => {
+            lifecycleGeneration += 1;
+            const closingClient = helperClient;
+            const closingHost = host;
+            helperClient = null;
+            host = null;
+            platformRoots = null;
+            disposeLifecycle(closingClient, closingHost);
+          });
+          beforeUnloadInstalled = true;
+        }
+        nextHost.start(port, (err) => {
+          if (generation !== lifecycleGeneration || host !== nextHost) return;
+          if (err) onStatus("error", port, err.message);
+          else onStatus("ok", port);
+        }, roots);
       } catch (e) {
-        onStatus("error", port, e.message);
+        const failedHost = host;
+        const failedClient = helperClient;
+        host = null;
+        helperClient = null;
+        platformRoots = null;
+        disposeLifecycle(failedClient, failedHost);
+        if (generation === lifecycleGeneration) onStatus("error", port, e.message);
       }
     }
     function restart(port) {
       if (host && host.restart) {
+        const generation = lifecycleGeneration;
+        const restartingHost = host;
         onStatus("starting", port);
-        host.restart(port, (err) => err ? onStatus("error", port, err.message) : onStatus("ok", port), platformRoots);
+        restartingHost.restart(port, (err) => {
+          if (generation !== lifecycleGeneration || host !== restartingHost) return;
+          if (err) onStatus("error", port, err.message);
+          else onStatus("ok", port);
+        }, platformRoots);
       }
     }
     return { start, restart, getHost: () => host };
@@ -17120,6 +20550,7 @@
     var mask = function(v) {
       return v.slice(0, 6) + "...[redacted]";
     };
+    s = s.replace(/aemcp-secret:\/\/provider\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[a-z0-9_-]+\/v1/g, "[secret-reference-redacted]");
     s = s.replace(/((?:ANTHROPIC_AUTH_TOKEN|[A-Z_]*API_KEY)\s*[=:]\s*)(\S+)/g, function(m, pre, v) {
       return pre + mask(v);
     });
@@ -17279,6 +20710,143 @@
     if (window.require) return window.require(mod);
     return null;
   }
+  function randomProviderCredentialId() {
+    const cryptoImpl = cepRequire4("crypto");
+    if (!cryptoImpl || typeof cryptoImpl.randomUUID !== "function") throw new Error("Secure UUID generation is unavailable");
+    return cryptoImpl.randomUUID();
+  }
+  function createProviderMigrationJournalStore(platform) {
+    const fs = platform.fs;
+    const root = platform.paths.migrationRoot;
+    const file = platform.paths.join([root, "provider-store-v1-to-v2.json"]);
+    return {
+      async read(migrationId) {
+        if (migrationId !== "provider-store-v1-to-v2") {
+          const error = new Error("Invalid provider migration id");
+          error.code = "INVALID_MIGRATION_JOURNAL";
+          throw error;
+        }
+        try {
+          return JSON.parse(String(fs.readFileSync(file, "utf8")));
+        } catch (error) {
+          if ((error == null ? void 0 : error.code) === "ENOENT" || !fs.existsSync(file)) return null;
+          const invalid = new Error("Provider migration journal is invalid");
+          invalid.code = "INVALID_MIGRATION_JOURNAL";
+          throw invalid;
+        }
+      },
+      async writeAtomic(journal) {
+        if (!fs.existsSync(root)) fs.mkdirSync(root, { recursive: true });
+        const tmp = platform.paths.join([root, `provider-store-v1-to-v2.${Date.now()}.tmp`]);
+        try {
+          fs.writeFileSync(tmp, `${JSON.stringify(journal, null, 2)}
+`, "utf8");
+          try {
+            fs.chmodSync(tmp, 384);
+          } catch {
+          }
+          fs.renameSync(tmp, file);
+        } catch (error) {
+          try {
+            fs.unlinkSync(tmp);
+          } catch {
+          }
+          const unavailable = new Error("Provider migration journal is unavailable");
+          unavailable.code = "INVALID_MIGRATION_JOURNAL";
+          throw unavailable;
+        }
+      }
+    };
+  }
+  function createHostSecretStore(host) {
+    if (!host || typeof host.secretGet !== "function" || typeof host.secretSet !== "function" || typeof host.secretDelete !== "function") {
+      const error = new Error("Provider secret store is unavailable");
+      error.code = "SECRET_STORE_UNAVAILABLE";
+      throw error;
+    }
+    return {
+      get: (reference) => host.secretGet(reference),
+      set: (input) => host.secretSet(input),
+      delete: (input) => host.secretDelete(input)
+    };
+  }
+  var PLATFORM_HELPER_METHODS = Object.freeze([
+    "capabilities",
+    "secret.get",
+    "secret.set",
+    "secret.delete",
+    "window.find",
+    "window.describe",
+    "window.capture"
+  ]);
+  var PLATFORM_CAPABILITY_KEYS = Object.freeze([
+    "authenticatedCaller",
+    "captureBackend",
+    "helperVersion",
+    "maxMessageBytes",
+    "methods",
+    "platform",
+    "protocolVersion",
+    "secretBackend"
+  ]);
+  function requireProviderHelperCapabilities(value, platformId) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw providerRuntimeUnavailableError();
+    const keys = Object.keys(value).sort();
+    if (keys.length !== PLATFORM_CAPABILITY_KEYS.length || !keys.every((key, index) => key === PLATFORM_CAPABILITY_KEYS[index])) {
+      throw providerRuntimeUnavailableError();
+    }
+    const methods = Array.isArray(value.methods) ? value.methods : [];
+    const methodSet = new Set(methods);
+    if (value.protocolVersion !== 1 || value.authenticatedCaller !== true || value.platform !== platformId || typeof value.helperVersion !== "string" || !value.helperVersion.trim() || !["keychain", "credential-manager"].includes(value.secretBackend) || !["screen-capture-kit", "windows-graphics-capture"].includes(value.captureBackend) || value.maxMessageBytes !== 65536 || methods.length !== PLATFORM_HELPER_METHODS.length || methodSet.size !== PLATFORM_HELPER_METHODS.length || !PLATFORM_HELPER_METHODS.every((method) => methodSet.has(method))) {
+      throw providerRuntimeUnavailableError();
+    }
+    return value;
+  }
+  function activeProviderSecretRefs(providers) {
+    var _a, _b, _c, _d;
+    const byReference = /* @__PURE__ */ new Map();
+    const add = (ref) => {
+      if ((ref == null ? void 0 : ref.kind) !== "secret") return;
+      const existing = byReference.get(ref.reference);
+      if (existing !== void 0 && existing !== ref.revision) {
+        const error = new Error("Provider secret reference revisions conflict.");
+        error.code = "SECRET_CONFLICT";
+        throw error;
+      }
+      byReference.set(ref.reference, ref.revision);
+    };
+    for (const provider of providers) {
+      add((_b = (_a = provider.auth) == null ? void 0 : _a.model) == null ? void 0 : _b.valueRef);
+      add((_d = (_c = provider.auth) == null ? void 0 : _c.probe) == null ? void 0 : _d.valueRef);
+      for (const header of provider.headers || []) add(header.valueRef);
+    }
+    return Array.from(byReference, ([reference, revision]) => ({ kind: "secret", reference, revision }));
+  }
+  function providerRuntimeUnavailableError() {
+    const error = new Error("Repair the platform Helper and re-check provider credentials.");
+    error.code = "PLATFORM_HELPER_REPAIR_REQUIRED";
+    return error;
+  }
+  function probeApiKeyFromProfile(profile) {
+    var _a, _b, _c;
+    if ((_a = profile == null ? void 0 : profile.extraHeaders) == null ? void 0 : _a.length) throw new Error("Provider probe requires the v2 detector");
+    if (((_b = profile == null ? void 0 : profile.auth) == null ? void 0 : _b.kind) === "none") return "";
+    if (((_c = profile == null ? void 0 : profile.auth) == null ? void 0 : _c.kind) !== "header") throw new Error("Provider probe authentication is unsupported");
+    if (String(profile.auth.name).toLowerCase() === "authorization") {
+      return String(profile.auth.value || "").replace(/^Bearer\s+/i, "");
+    }
+    if (String(profile.auth.name).toLowerCase() === "x-api-key") return String(profile.auth.value || "");
+    throw new Error("Provider probe requires the v2 detector");
+  }
+  function modelMetadataContainsCredential(models, credential) {
+    let serialized;
+    try {
+      serialized = JSON.stringify(models);
+    } catch {
+      return true;
+    }
+    return serialized.includes("aemcp-secret://") || (credential ? serialized.includes(credential) : false);
+  }
   function Shell({ cs: cs2 }) {
     const { lang, setLang } = useLang();
     const t = T[lang];
@@ -17298,6 +20866,7 @@
     const [clients, setClients] = import_react40.default.useState([]);
     const [confirmRegen, setConfirmRegen] = import_react40.default.useState(false);
     const [tokenEpoch, setTokenEpoch] = import_react40.default.useState(0);
+    const platform = import_react40.default.useMemo(() => createPlatformAdapter(), []);
     const keyStore = import_react40.default.useMemo(() => {
       try {
         return createApiKeyStore();
@@ -17305,22 +20874,6 @@
         return null;
       }
     }, []);
-    const [apiKey, setApiKey] = import_react40.default.useState(() => {
-      try {
-        return keyStore ? keyStore.readKey() : "";
-      } catch (e) {
-        return "";
-      }
-    });
-    const [anthropicBaseUrl, setAnthropicBaseUrl] = import_react40.default.useState(() => readPref("ae_mcp_anthropic_base_url", ""));
-    const [codexApiKey, setCodexApiKey] = import_react40.default.useState(() => {
-      try {
-        return keyStore ? keyStore.readKey("codex") : "";
-      } catch (e) {
-        return "";
-      }
-    });
-    const [codexBaseUrl, setCodexBaseUrl] = import_react40.default.useState(() => readPref("ae_mcp_codex_base_url", ""));
     const [customModel, setCustomModel] = import_react40.default.useState(() => readPref("ae_mcp_custom_model", ""));
     const [model, setModel] = import_react40.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
     const [logLevel, setLogLevel] = import_react40.default.useState(() => readPref("ae_mcp_log_level", "info"));
@@ -17335,23 +20888,17 @@
     const [channelLock, setChannelLock] = import_react40.default.useState(() => backendMigration.lockedChannel);
     const providerStore = import_react40.default.useMemo(() => {
       try {
-        const store = createProviderStore();
-        store.migrateLegacy({
-          readKey: (name) => {
-            try {
-              return keyStore ? keyStore.readKey(name) : "";
-            } catch (e) {
-              return "";
-            }
-          },
-          readPref: (key) => readPref(key, "")
-        });
-        return store;
+        return createProviderStore();
       } catch (e) {
         return null;
       }
-    }, [keyStore]);
-    const [providers, setProviders] = import_react40.default.useState(() => providerStore ? providerStore.list() : []);
+    }, []);
+    const providerSecretService = import_react40.default.useMemo(() => createProviderSecretService({
+      getHost,
+      randomBytes: (size) => cepRequire4("crypto").randomBytes(size)
+    }), [getHost]);
+    const [providerInit, setProviderInit] = import_react40.default.useState({ state: "checking", error: "" });
+    const [providers, setProviders] = import_react40.default.useState([]);
     const [claudeProviderId, setClaudeProviderId] = import_react40.default.useState(() => readPref("ae_mcp_claude_provider", ""));
     const [codexProviderId, setCodexProviderId] = import_react40.default.useState(() => readPref("ae_mcp_codex_provider", ""));
     const [expertGuidance, setExpertGuidance] = import_react40.default.useState(() => loadExpertGuidance(window.localStorage));
@@ -17373,26 +20920,20 @@
     const effectiveEffort = sessionEffort || (modelMeta.effortLevels && modelMeta.effortLevels.length ? descriptor.defaultEffort : null);
     const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
     const claudeApiProvider = import_react40.default.useMemo(() => {
-      const fromStore = providers.find((p) => p.id === claudeProviderId) || null;
-      if (fromStore && fromStore.baseUrl && fromStore.apiKey) return fromStore;
-      if (apiKey) return { id: "legacy-anthropic", name: "Claude API", protocol: "anthropic", baseUrl: anthropicBaseUrl || "https://api.anthropic.com", apiKey, probedModels: [], probedAt: 0 };
-      return fromStore;
-    }, [providers, claudeProviderId, apiKey, anthropicBaseUrl]);
+      return providers.find((provider) => provider.id === claudeProviderId && provider.protocol === "anthropic") || null;
+    }, [providers, claudeProviderId]);
     const codexCustomProvider = import_react40.default.useMemo(() => {
-      const fromStore = providers.find((p) => p.id === codexProviderId) || null;
-      if (fromStore && fromStore.baseUrl && fromStore.apiKey) return fromStore;
-      if (codexBaseUrl) return { id: "legacy-codex", name: "Codex custom", protocol: "openai-compatible", baseUrl: codexBaseUrl, apiKey: codexApiKey, probedModels: [], probedAt: 0 };
-      return fromStore;
-    }, [providers, codexProviderId, codexBaseUrl, codexApiKey]);
+      return providers.find((provider) => provider.id === codexProviderId && provider.protocol === "openai-compatible") || null;
+    }, [providers, codexProviderId]);
     const [providerProbing, setProviderProbing] = import_react40.default.useState("");
     const [providerProbeErrors, setProviderProbeErrors] = import_react40.default.useState({});
     const ccSwitchFound = import_react40.default.useMemo(() => {
       try {
-        return detectCcSwitch({ env: window.cep_node && window.cep_node.process && window.cep_node.process.env || {} });
+        return detectCcSwitch({ platform, fsImpl: platform.fs });
       } catch (e) {
         return null;
       }
-    }, []);
+    }, [platform]);
     const providerManager = /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
       ProviderManagerSection,
       {
@@ -17400,41 +20941,111 @@
         providers,
         probing: providerProbing,
         probeErrors: providerProbeErrors,
+        disabled: providerInit.state !== "ready",
         ccSwitch: ccSwitchFound,
-        onImportCcSwitch: () => {
+        onImportCcSwitch: async () => {
           if (!ccSwitchFound || !providerStore) return;
-          for (const entry of ccSwitchFound.providers) providerStore.upsert(entry);
-          setProviders(providerStore.list());
+          if (providerInit.state !== "ready") throw providerRuntimeUnavailableError();
+          let drafts = null;
+          try {
+            drafts = readCcSwitchProviderDrafts({
+              file: ccSwitchFound.file,
+              expectedSourceRevision: ccSwitchFound.sourceRevision,
+              fsImpl: platform.fs
+            });
+            for (let index = 0; index < drafts.length; index += 1) {
+              let draft = drafts[index];
+              try {
+                await importProviderDraft({ candidate: draft, store: providerStore, secretService: providerSecretService, randomUUID: randomProviderCredentialId });
+              } finally {
+                drafts[index] = null;
+                draft = null;
+              }
+            }
+            setProviders(providerStore.list());
+          } finally {
+            drafts = null;
+          }
         },
-        onUpsert: (entry) => {
+        onUpsert: async (event, draft) => {
+          var _a;
           if (!providerStore) return;
-          const existing = providerStore.get(entry.id);
-          providerStore.upsert({ ...entry, probedModels: existing ? existing.probedModels : [], probedAt: existing ? existing.probedAt : 0 });
-          setProviders(providerStore.list());
+          if (providerInit.state !== "ready") throw providerRuntimeUnavailableError();
+          const formElement = event.currentTarget;
+          const form = new FormData(event.currentTarget);
+          let ephemeralDraft = {
+            ...draft,
+            modelAuthSecret: String(form.get("modelAuthSecret") || ""),
+            probeAuthSecret: String(form.get("probeAuthSecret") || ""),
+            headers: (draft.headers || []).map((header) => header.valueKind === "secret" ? { ...header, secret: String(form.get(`headerSecret:${header.id}`) || "") } : { ...header })
+          };
+          form.delete("modelAuthSecret");
+          form.delete("probeAuthSecret");
+          for (const header of draft.headers || []) form.delete(`headerSecret:${header.id}`);
+          (_a = formElement == null ? void 0 : formElement.reset) == null ? void 0 : _a.call(formElement);
+          try {
+            const existing = providerStore.get(draft.id);
+            await saveProviderDraft({
+              draft: ephemeralDraft,
+              current: existing,
+              store: providerStore,
+              secretService: providerSecretService,
+              confirmInsecureHttp: async ({ baseUrl }) => window.confirm(`Allow provider requests over insecure HTTP?
+${baseUrl}`),
+              randomUUID: randomProviderCredentialId
+            });
+            setProviders(providerStore.list());
+          } finally {
+            ephemeralDraft.modelAuthSecret = "";
+            ephemeralDraft.probeAuthSecret = "";
+            ephemeralDraft.headers.forEach((header) => {
+              if (header.secret) header.secret = "";
+            });
+            ephemeralDraft = null;
+          }
         },
-        onRemove: (id) => {
+        onRemove: async (provider) => {
           if (!providerStore) return;
-          providerStore.remove(id);
+          if (providerInit.state !== "ready") throw providerRuntimeUnavailableError();
+          await deleteProviderProfile({ provider, store: providerStore, secretService: providerSecretService });
           setProviders(providerStore.list());
-          if (claudeProviderId === id) {
+          if (claudeProviderId === provider.id) {
             setClaudeProviderId("");
             writePref("ae_mcp_claude_provider", "");
           }
-          if (codexProviderId === id) {
+          if (codexProviderId === provider.id) {
             setCodexProviderId("");
             writePref("ae_mcp_codex_provider", "");
           }
         },
-        onProbe: async (p) => {
-          setProviderProbing(p.id);
-          const result = await probeProviderModels({ baseUrl: p.baseUrl, apiKey: p.apiKey, protocol: p.protocol });
-          setProviderProbing("");
-          if (result.ok && providerStore) {
-            providerStore.upsert({ ...p, probedModels: result.models, probedAt: Date.now() });
-            setProviders(providerStore.list());
-            setProviderProbeErrors((errs) => ({ ...errs, [p.id]: "" }));
-          } else {
-            setProviderProbeErrors((errs) => ({ ...errs, [p.id]: result.detail || "HTTP " + result.status }));
+        onProbe: async (provider) => {
+          if (providerInit.state !== "ready") throw providerRuntimeUnavailableError();
+          setProviderProbing(provider.id);
+          let requestProfile = null;
+          let credential = "";
+          try {
+            requestProfile = await resolveProviderRequestProfile(provider, { scope: "probe", secretService: providerSecretService });
+            credential = probeApiKeyFromProfile(requestProfile);
+            const result = await probeProviderModels({
+              baseUrl: requestProfile.baseUrl,
+              ["apiKey"]: credential,
+              protocol: provider.protocol,
+              allowInsecureHttp: requestProfile.allowInsecureHttp === true
+            });
+            if (result.ok && providerStore && !modelMetadataContainsCredential(result.models, credential)) {
+              const current = providerStore.get(provider.id);
+              if (current) providerStore.upsert({ ...current, probedModels: result.models, probedAt: Date.now() }, { expectedRevision: providerStore.readState().revision });
+              setProviders(providerStore.list());
+              setProviderProbeErrors((errors) => ({ ...errors, [provider.id]: "" }));
+            } else {
+              setProviderProbeErrors((errors) => ({ ...errors, [provider.id]: result.detail || `HTTP ${result.status}` }));
+            }
+          } catch (error) {
+            setProviderProbeErrors((errors) => ({ ...errors, [provider.id]: (error == null ? void 0 : error.message) || "Provider probe failed" }));
+          } finally {
+            credential = "";
+            requestProfile = null;
+            setProviderProbing("");
           }
         }
       }
@@ -17463,36 +21074,30 @@
       codexCliConfigStableRef.current = reconcileStableJsonValue(codexCliConfigStableRef.current, next);
       return codexCliConfigStableRef.current.value;
     }, [codexProbe]);
-    const codexCliConfigApiKey = import_react40.default.useMemo(() => {
+    const codexCliCredentialReady = import_react40.default.useMemo(() => {
       const env = window.cep_node && window.cep_node.process && window.cep_node.process.env || {};
-      const storedKey = (() => {
-        try {
-          return keyStore ? keyStore.readKey("codex") : "";
-        } catch (e) {
-          return "";
-        }
-      })();
-      return resolveCodexProviderApiKey({ provider: codexCliConfig && codexCliConfig.provider, env, storedKey });
-    }, [codexCliConfig, keyStore, codexApiKey]);
+      return codexCliCredentialAvailable({ provider: codexCliConfig && codexCliConfig.provider, env, storedValueRef: null });
+    }, [codexCliConfig]);
     const channels = import_react40.default.useMemo(() => ({
-      claude: claudeChannels({ probe, apiProvider: claudeApiProvider }),
-      codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, cliConfig: codexCliConfig, cliConfigApiKey: codexCliConfigApiKey }),
+      claude: claudeChannels({ probe, apiProvider: claudeApiProvider, providerAvailable: providerInit.state === "ready" && Boolean(claudeApiProvider), providerChecking: providerInit.state === "checking" }),
+      codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, customProviderAvailable: providerInit.state === "ready" && Boolean(codexCustomProvider), customProviderCredentialResolverReady: false, providerChecking: providerInit.state === "checking", cliConfig: codexCliConfig, cliCredentialAvailable: codexCliCredentialReady }),
       zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary })
-    }), [probe, claudeApiProvider, codexProbe, codexCustomProvider, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliConfigApiKey]);
+    }), [probe, claudeApiProvider, codexProbe, codexCustomProvider, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliCredentialReady, providerInit.state]);
+    const nodeOk = !(probe && probe.nodeOk === false);
+    const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock, nodeOk });
     const claudeSettingsHint = import_react40.default.useMemo(() => {
       try {
-        return readClaudeSettingsEnv({ env: window.cep_node && window.cep_node.process && window.cep_node.process.env || {} });
+        return inspectClaudeSettingsEnv({ platform, fsImpl: platform.fs });
       } catch (e) {
         return null;
       }
-    }, []);
-    const providerProfile = import_react40.default.useMemo(() => normalizeProviderProfile({
-      anthropicBaseUrl: claudeApiProvider ? claudeApiProvider.baseUrl : anthropicBaseUrl,
-      codexApiKey: codexCustomProvider ? codexCustomProvider.apiKey : codexApiKey,
-      codexBaseUrl: codexCustomProvider ? codexCustomProvider.baseUrl : codexBaseUrl
-    }), [claudeApiProvider, anthropicBaseUrl, codexCustomProvider, codexApiKey, codexBaseUrl]);
-    const runtimeRef = import_react40.default.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: "subscription", claudeApiProvider: null, codexCliConfigProvider: null });
-    const platform = import_react40.default.useMemo(() => createPlatformAdapter(), []);
+    }, [platform]);
+    const providerProfile = import_react40.default.useMemo(() => codexRuntimeProviderProfile({
+      effectiveChannel: effective.channel,
+      customProvider: codexCustomProvider,
+      customProviderCredentialResolverReady: false
+    }), [effective.channel, codexCustomProvider]);
+    const runtimeRef = import_react40.default.useRef({ providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: "subscription", claudeApiProvider: null });
     const extRoot = import_react40.default.useMemo(() => readCepSystemPath({ cs: cs2, platform }), [cs2, platform]);
     const sidecarPath = import_react40.default.useMemo(() => resolveSidecarPath({ extRoot, platform }), [extRoot, platform]);
     const mcp = import_react40.default.useMemo(() => createMcpClient({
@@ -17512,8 +21117,11 @@
     }, []);
     const byokLoop = import_react40.default.useMemo(() => {
       return createAgentLoop({
-        getApiKey: () => runtimeRef.current.apiKey,
-        getApiBaseUrl: () => runtimeRef.current.apiBaseUrl,
+        resolveRequestProfile: () => {
+          const provider = runtimeRef.current.claudeApiProvider;
+          if (!provider) throw new Error("Anthropic provider is unavailable");
+          return resolveProviderRequestProfile(provider, { scope: "model", secretService: providerSecretService });
+        },
         getModel: () => runtimeRef.current.model,
         getPermissionMode: () => runtimeRef.current.permissionMode,
         getEffort: () => runtimeRef.current.effort,
@@ -17522,7 +21130,7 @@
         lang,
         onEvent: handleChatEvent
       });
-    }, [mcp, handleChatEvent]);
+    }, [mcp, handleChatEvent, providerSecretService]);
     const claudeBackend = import_react40.default.useMemo(() => createClaudeAgentBackend({
       platform,
       resolveNode: resolveSystemNode,
@@ -17534,10 +21142,14 @@
       getEffort: () => runtimeRef.current.effort,
       getThinking: () => runtimeRef.current.thinking,
       getChannel: () => runtimeRef.current.claudeChannel || "subscription",
-      getApiProvider: () => runtimeRef.current.claudeApiProvider || null,
+      resolveApiProvider: () => {
+        const provider = runtimeRef.current.claudeApiProvider;
+        if (!provider) throw new Error("Anthropic provider is unavailable");
+        return resolveProviderRequestProfile(provider, { scope: "model", secretService: providerSecretService });
+      },
       lang,
       onEvent: handleChatEvent
-    }), [extRoot, sidecarPath, mcp, handleChatEvent, platform]);
+    }), [extRoot, sidecarPath, mcp, handleChatEvent, platform, providerSecretService]);
     const codexBackend = import_react40.default.useMemo(() => createCodexBackend({
       platform,
       getMcpSpec: () => resolveMcpCommand({ extRoot, platform }),
@@ -17549,7 +21161,7 @@
       getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       getServerInstructions: () => mcp.getServerInstructions(),
       getProviderProfile: () => runtimeRef.current.providerProfile,
-      getCliConfigProvider: () => runtimeRef.current.codexCliConfigProvider,
+      getCliConfigProvider: () => null,
       lang,
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
@@ -17582,11 +21194,7 @@
     import_react40.default.useEffect(() => () => {
       zcodeBackend.reset();
     }, [zcodeBackend]);
-    const nodeOk = !(probe && probe.nodeOk === false);
-    const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock, nodeOk });
     runtimeRef.current = {
-      apiKey: claudeApiProvider ? claudeApiProvider.apiKey : apiKey,
-      apiBaseUrl: providerProfile.anthropicBaseUrl,
       providerProfile,
       model: effectiveModel,
       permissionMode,
@@ -17594,8 +21202,7 @@
       thinking: modelMeta.adaptive === true ? "adaptive" : null,
       fast: effectiveFast,
       claudeChannel: effective.backend === "claude-api" ? "api" : "subscription",
-      claudeApiProvider,
-      codexCliConfigProvider: codexCliConfig && codexCliConfig.provider ? { provider: codexCliConfig.provider, apiKey: codexCliConfigApiKey } : null
+      claudeApiProvider
     };
     const backendInstances = { subscription: claudeBackend, "claude-api": claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };
     const activeBackend = backendInstances[effective.backend] || byokLoop;
@@ -17603,11 +21210,13 @@
       let alive = true;
       const facts = {
         effectiveBackend: effective.backend,
+        effectiveChannel: effective.channel,
         backendPref,
         baseDescriptor,
         customModel,
         claudeApiProvider,
         codexCustomProvider,
+        customProviderCredentialResolverReady: false,
         byokApiModels: null,
         codexCachedModels: codexModels || readCachedCodexModels(window.localStorage),
         zcodeSessionModels,
@@ -17622,17 +21231,28 @@
         writePref("ae_mcp_model", reconciled);
       }
       const hasProbed = Boolean(claudeApiProvider && claudeApiProvider.probedModels && claudeApiProvider.probedModels.length);
-      const claudeKey = claudeApiProvider ? claudeApiProvider.apiKey : apiKey;
-      if (isClaudeApiBackend(effective.backend) && claudeKey && !hasProbed) {
-        cachedByokModels({ apiKey: claudeKey, baseUrl: claudeApiProvider ? claudeApiProvider.baseUrl : anthropicBaseUrl }).then((list) => {
-          if (alive) setDescriptor(selectDescriptor({ ...facts, byokApiModels: list }));
-        }).catch(() => {
-        });
+      if (isClaudeApiBackend(effective.backend) && claudeApiProvider && !hasProbed) {
+        (async () => {
+          let requestProfile = null;
+          try {
+            requestProfile = await resolveProviderRequestProfile(claudeApiProvider, { scope: "probe", secretService: providerSecretService });
+            const list = await cachedByokModels({
+              providerId: claudeApiProvider.id,
+              baseUrl: claudeApiProvider.baseUrl,
+              authProfileRevision: claudeApiProvider.authProfileRevision,
+              requestProfile
+            });
+            if (alive) setDescriptor(selectDescriptor({ ...facts, byokApiModels: list }));
+          } catch {
+          } finally {
+            requestProfile = null;
+          }
+        })();
       }
       return () => {
         alive = false;
       };
-    }, [effective.backend, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, apiKey, anthropicBaseUrl, zcodeSessionModels, zcodeProbedModels]);
+    }, [effective.backend, effective.channel, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, zcodeSessionModels, zcodeProbedModels, providerSecretService]);
     const activeBackendRef = import_react40.default.useRef(null);
     import_react40.default.useEffect(() => {
       if (backendPref !== "zcode") return void 0;
@@ -17655,7 +21275,12 @@
           return "";
         }
       })();
-      probeProviderModels({ baseUrl: cli.baseUrl, apiKey: apiKeyValue, protocol: cli.protocol }).then((result) => {
+      probeProviderModels({
+        baseUrl: cli.baseUrl,
+        ["apiKey"]: apiKeyValue,
+        protocol: cli.protocol,
+        allowInsecureHttp: false
+      }).then((result) => {
         if (!alive) return;
         if (result.ok && result.models && result.models.length) {
           const entry = { cliModel: cli.model, providerId, probedModels: result.models };
@@ -17710,22 +21335,39 @@
     }, [backendPref, runCodexProbe]);
     import_react40.default.useEffect(() => {
       if (backendPref !== "codex") return void 0;
-      if (!codexCliConfig || !codexCliConfig.provider || !codexCliConfigApiKey) return void 0;
-      if (codexCustomProvider && codexCustomProvider.baseUrl) return void 0;
+      if (!codexCliConfig || !codexCliConfig.provider || !codexCliCredentialReady) return void 0;
+      if (effective.channel === "custom" && codexCustomProvider && codexCustomProvider.baseUrl) return void 0;
       if (codexModels && codexModels.length > 1) return void 0;
       let alive = true;
-      probeProviderModels({ baseUrl: codexCliConfig.provider.baseUrl, apiKey: codexCliConfigApiKey, protocol: "openai-compatible" }).then((result) => {
-        if (!alive) return;
-        if (result.ok && result.models && result.models.length) {
-          setCodexModels(result.models);
-          writeCachedCodexModels(window.localStorage, result.models);
+      (async () => {
+        let credential = "";
+        try {
+          credential = await resolveCodexCliCredential({
+            provider: codexCliConfig.provider,
+            env: window.cep_node && window.cep_node.process && window.cep_node.process.env || {},
+            storedValueRef: null,
+            secretService: providerSecretService
+          });
+          const result = await probeProviderModels({
+            baseUrl: codexCliConfig.provider.baseUrl,
+            ["apiKey"]: credential,
+            protocol: "openai-compatible",
+            allowInsecureHttp: false
+          });
+          if (!alive) return;
+          if (result.ok && result.models && result.models.length && !modelMetadataContainsCredential(result.models, credential)) {
+            setCodexModels(result.models);
+            writeCachedCodexModels(window.localStorage, result.models);
+          }
+        } catch {
+        } finally {
+          credential = "";
         }
-      }).catch(() => {
-      });
+      })();
       return () => {
         alive = false;
       };
-    }, [backendPref, codexCliConfig, codexCliConfigApiKey, codexCustomProvider, codexModels]);
+    }, [backendPref, effective.channel, codexCliConfig, codexCliCredentialReady, codexCustomProvider, codexModels, providerSecretService]);
     const runZcodeProbe = import_react40.default.useCallback(() => {
       let alive = true;
       setZcodeProbe(null);
@@ -17818,6 +21460,76 @@
       });
       ctrl.current.start(port);
     }, [cs2, extRoot, platform, pushLog]);
+    import_react40.default.useEffect(() => {
+      if (status.state !== "ok") return void 0;
+      let alive = true;
+      setProviderInit({ state: "checking", error: "" });
+      (async () => {
+        try {
+          if (!providerStore) {
+            const error = new Error("Provider store is unavailable");
+            error.code = "PROVIDER_STORE_UNAVAILABLE";
+            throw error;
+          }
+          const host = getHost();
+          if (!host || typeof host.capabilities !== "function") throw providerRuntimeUnavailableError();
+          const capabilities = await host.capabilities();
+          requireProviderHelperCapabilities(capabilities, platform.id);
+          const secretStore = createHostSecretStore(host);
+          const runner = createSecretMigrationRunner({
+            journalStore: createProviderMigrationJournalStore(platform),
+            secretStore
+          });
+          await migrateProviderStoreSecrets({
+            store: providerStore,
+            legacyKeyStore: {
+              readKey: (name) => {
+                try {
+                  return keyStore ? keyStore.readKey(name) : "";
+                } catch {
+                  return "";
+                }
+              },
+              async cleanupCommittedProviderSecrets() {
+                if (!keyStore) return;
+                keyStore.clearKey("anthropic");
+                keyStore.clearKey("codex");
+              }
+            },
+            runner,
+            secretStore: host
+          });
+          await drainPendingProviderSecretDeletes({ store: providerStore, secretService: providerSecretService });
+          const providerState = providerStore.readState();
+          for (const ref of activeProviderSecretRefs(providerState.providers)) {
+            let resolved = null;
+            try {
+              resolved = await providerSecretService.resolve(ref);
+              if (typeof resolved !== "string") {
+                const error = new Error("Provider secret resolution returned an invalid value.");
+                error.code = "SECRET_CONFLICT";
+                throw error;
+              }
+            } finally {
+              resolved = null;
+            }
+          }
+          if (!alive) return;
+          setProviders(providerState.providers);
+          setProviderInit({ state: "ready", error: "" });
+        } catch (error) {
+          if (!alive) return;
+          try {
+            if (providerStore) setProviders(providerStore.list());
+          } catch {
+          }
+          setProviderInit(providerInitFailure(error));
+        }
+      })();
+      return () => {
+        alive = false;
+      };
+    }, [status.state, providerStore, providerSecretService, getHost, keyStore, platform]);
     import_react40.default.useEffect(() => {
       if (!drawerOpen) return void 0;
       const update = () => {
@@ -18008,6 +21720,7 @@
             recheckDisabled: backendPref === "codex" ? codexProbe === null : backendPref === "zcode" ? zcodeProbe === null : probe === null,
             providers,
             providerManager,
+            providerInit,
             claudeProviderId,
             onClaudeProviderChange: (id) => {
               setClaudeProviderId(id);
@@ -18021,12 +21734,24 @@
               codexBackend.reset();
             },
             claudeSettingsImportAvailable: Boolean(claudeSettingsHint),
-            onImportClaudeSettings: () => {
+            onImportClaudeSettings: async () => {
               if (!claudeSettingsHint || !providerStore) return;
-              const entry = providerStore.upsert({ id: "claude-settings-import", name: "Claude Code \u914D\u7F6E", protocol: "anthropic", baseUrl: claudeSettingsHint.baseUrl, apiKey: claudeSettingsHint.authToken });
-              setProviders(providerStore.list());
-              setClaudeProviderId(entry.id);
-              writePref("ae_mcp_claude_provider", entry.id);
+              if (providerInit.state !== "ready") throw providerRuntimeUnavailableError();
+              let draft = null;
+              try {
+                draft = readClaudeSettingsProviderDraft({
+                  platform,
+                  expectedSourceRevision: claudeSettingsHint.sourceRevision,
+                  fsImpl: platform.fs
+                });
+                if (!draft) return;
+                const entry = await importProviderDraft({ candidate: draft, store: providerStore, secretService: providerSecretService, randomUUID: randomProviderCredentialId });
+                setProviders(providerStore.list());
+                setClaudeProviderId(entry.id);
+                writePref("ae_mcp_claude_provider", entry.id);
+              } finally {
+                draft = null;
+              }
             },
             onSaveZcodeKey: (k) => {
               if (keyStore) keyStore.writeKey(k, "zcode");
@@ -18041,14 +21766,8 @@
                 return false;
               }
             })(),
-            onSaveCodexKey: (k) => {
-              if (keyStore) keyStore.writeKey(k, "codex");
-              setCodexApiKey(k);
-              setCodexProbe(null);
-              codexBackend.reset();
-              runCodexProbe();
-            },
-            codexKeyStored: Boolean(codexApiKey),
+            onSaveCodexKey: void 0,
+            codexKeyStored: false,
             codexCliConfig,
             model: effectiveModel,
             modelOptions,
