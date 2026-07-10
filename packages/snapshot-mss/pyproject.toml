@@ -18,7 +18,7 @@ dev = ["pytest>=7.4", "pytest-asyncio>=0.23"]
 mss = "ae_mcp_snapshot_mss:MssSnapshotter"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling==1.31.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]

@@ -6,9 +6,12 @@ ae-mcp                = { workspace = true }
 ae-mcp-bridge         = { workspace = true }
 ae-mcp-snapshot-mss   = { workspace = true }
 
-# Workspace-level dev dependency group. Run `uv sync --group dev` to install
-# pytest etc. for running tests across all sub-packages.
+# Workspace dependency groups keep build tooling separate from production and dev.
+# Run `uv sync --group dev` to install pytest etc. across all sub-packages.
 [dependency-groups]
+build = [
+    "hatchling==1.31.0",
+]
 dev = [
     "pytest>=7.4",
     "pytest-asyncio>=0.23",
