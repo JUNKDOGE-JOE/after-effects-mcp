@@ -265,3 +265,30 @@ async def test_health_check_needs_no_token(tmp_path, monkeypatch):
             assert await b.health_check() is True
         finally:
             await b.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_loopback_requests_ignore_process_proxy_environment(token_file, monkeypatch):
+    """Local AE traffic must never leak into a configured HTTP proxy."""
+    monkeypatch.setenv("HTTP_PROXY", "http://proxy.invalid:3128")
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid:3128")
+    monkeypatch.setenv("ALL_PROXY", "http://proxy.invalid:3128")
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    real_async_client = ae_mcp_bridge.httpx.AsyncClient
+    client_options = []
+
+    def recording_async_client(*args, **kwargs):
+        client_options.append(kwargs.copy())
+        return real_async_client(*args, **kwargs)
+
+    monkeypatch.setattr(ae_mcp_bridge.httpx, "AsyncClient", recording_async_client)
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.get("/health").mock(return_value=Response(200, json={"ok": True}))
+        mock.post("/exec").mock(
+            return_value=Response(200, json={"ok": True, "result": "ok"})
+        )
+        b = HttpBridge("http://127.0.0.1:11488")
+        assert await b.health_check() is True
+        assert await b.exec("1") == "ok"
+
+    assert [options.get("trust_env") for options in client_options] == [False, False]

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import ntpath
 import os
 import secrets
 import tempfile
@@ -40,6 +41,12 @@ _id_lock = threading.Lock()
 _last_ms: int = 0
 
 
+def _is_windows_project_path(source_path: str) -> bool:
+    """Return whether *source_path* uses Windows drive or UNC path grammar."""
+    drive, _ = ntpath.splitdrive(source_path)
+    return bool(drive)
+
+
 def _resolve_for_key(source_path: str) -> str:
     """Normalize a project path so the same file always produces the same key.
 
@@ -48,6 +55,10 @@ def _resolve_for_key(source_path: str) -> str:
     path AE reported) and resolve() would not help — we only need a stable,
     case-insensitive-on-Windows canonical string for hashing.
     """
+    if _is_windows_project_path(source_path):
+        # Use Windows path semantics even while tests or migration tooling run
+        # on macOS. ntpath.normcase also makes drive/path case insensitive.
+        return ntpath.normcase(ntpath.normpath(source_path))
     try:
         resolved = str(Path(source_path).resolve())
     except (OSError, ValueError):
@@ -58,7 +69,10 @@ def _resolve_for_key(source_path: str) -> str:
 def _project_dir_key(source_path: Optional[str]) -> str:
     if not source_path:
         return "_untitled"
-    stem = Path(source_path).stem
+    if _is_windows_project_path(source_path):
+        stem = ntpath.splitext(ntpath.basename(ntpath.normpath(source_path)))[0]
+    else:
+        stem = Path(source_path).stem
     # Make the stem safe for a directory: strip path separators just in case.
     safe_stem = "".join(c if c.isalnum() or c in "._- " else "_" for c in stem)
     safe_stem = safe_stem.strip() or "project"
