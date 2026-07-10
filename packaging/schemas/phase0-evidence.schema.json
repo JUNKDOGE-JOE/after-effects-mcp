@@ -21,6 +21,7 @@
         "sign-addon",
         "sign-launcher",
         "verify-nested",
+        "freeze-signed-manifests",
         "sign-zxp",
         "verify-zxp",
         "build-dmg",
@@ -81,8 +82,8 @@
         "disposableOutputRoot": { "type": "string", "minLength": 1 },
         "steps": {
           "type": "array",
-          "minItems": 6,
-          "maxItems": 12,
+          "minItems": 7,
+          "maxItems": 13,
           "items": { "$ref": "#/$defs/step" }
         },
         "verifiedIdentity": { "type": "object" },
@@ -102,8 +103,10 @@
     "zxpIdentity": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["zxpVerified"],
+      "required": ["zxpCertificateFingerprint", "zxpPayloadSha256", "zxpVerified"],
       "properties": {
+        "zxpCertificateFingerprint": { "$ref": "#/$defs/sha256" },
+        "zxpPayloadSha256": { "$ref": "#/$defs/sha256" },
         "zxpVerified": { "const": true }
       }
     },

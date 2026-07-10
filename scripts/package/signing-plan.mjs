@@ -24,10 +24,14 @@ const PLANS = Object.freeze({
     platform: 'macos-arm64',
     steps: Object.freeze([
       freezeStep('sign-helper', ['platform/macos-arm64/bin/ae-mcp-platform-helper']),
-      // Reserved category slots. The CEP architecture has no XPC or native addon today.
-      freezeStep('sign-xpc', []),
-      freezeStep('sign-addon', []),
-      freezeStep('sign-launcher', ['platform/macos-arm64/bin/ae-mcp']),
+      freezeStep('sign-xpc', [
+        'platform/macos-arm64/xpc/com.junkdoge.ae-mcp.platform-helper.xpc/Contents/MacOS/ae-mcp-platform-helper',
+        'platform/macos-arm64/xpc/com.junkdoge.ae-mcp.platform-helper.xpc/Contents/_CodeSignature/CodeResources',
+      ]),
+      freezeStep('sign-addon', [
+        'platform/macos-arm64/lib/ae-mcp-platform-helper-transport.node',
+      ]),
+      freezeStep('sign-launcher', []),
       freezeStep('verify-nested', []),
       freezeStep('freeze-signed-manifests', [
         'platform/macos-arm64/helper-manifest.json',
@@ -46,8 +50,9 @@ const PLANS = Object.freeze({
     platform: 'windows-x64',
     steps: Object.freeze([
       freezeStep('sign-helper', ['platform/windows-x64/bin/ae-mcp-platform-helper.exe']),
-      // Fixed compatibility slot; a native addon is forbidden by the current architecture.
-      freezeStep('sign-addon', []),
+      freezeStep('sign-addon', [
+        'platform/windows-x64/lib/ae-mcp-platform-helper-transport.node',
+      ]),
       freezeStep('sign-launcher', ['platform/windows-x64/bin/ae-mcp.exe']),
       freezeStep('verify-authenticode', []),
       freezeStep('freeze-signed-manifests', [
@@ -166,12 +171,6 @@ export function assertNestedNativeCoverage({ nativePaths, verifiedPaths }) {
   }
   const native = nativePaths.map(portablePath);
   const verified = new Set(verifiedPaths.map(portablePath));
-  if (native.some((candidate) => candidate.toLowerCase().endsWith('.node'))) {
-    throw signingError(
-      'SIGNING_NATIVE_ADDON_FORBIDDEN',
-      'native addons are forbidden by the CEP platform-helper architecture',
-    );
-  }
   const unsigned = native.filter((candidate) => !verified.has(candidate));
   if (unsigned.length > 0 || verified.size !== new Set(native).size) {
     throw signingError(
@@ -217,6 +216,43 @@ function sameJson(left, right) {
     return value;
   };
   return JSON.stringify(sort(left)) === JSON.stringify(sort(right));
+}
+
+export function validateWindowsAuthenticodeObjects({ records, expectedThumbprint }) {
+  const roles = ['helper', 'addon', 'launcher'];
+  const recordKeys = [
+    'role',
+    'signerThumbprint',
+    'status',
+    'timestampCertificateThumbprint',
+    'timestampVerified',
+  ];
+  if (typeof expectedThumbprint !== 'string'
+      || !/^[0-9A-F]{40}$/.test(expectedThumbprint)
+      || !Array.isArray(records)
+      || records.length !== roles.length) {
+    throw signingError(
+      'SIGNING_IDENTITY_INVALID',
+      'every Windows signing object must have a protected Authenticode identity',
+    );
+  }
+  for (const [index, record] of records.entries()) {
+    if (!exactKeys(record, recordKeys)
+        || record.role !== roles[index]
+        || record.status !== 'Valid'
+        || record.signerThumbprint !== expectedThumbprint
+        || !/^[0-9A-F]{40}$/.test(record.timestampCertificateThumbprint || '')
+        || record.timestampVerified !== true) {
+      throw signingError(
+        'SIGNING_IDENTITY_INVALID',
+        'every Windows signing object must have a protected Authenticode identity',
+      );
+    }
+  }
+  return {
+    authenticodeSignerThumbprint: expectedThumbprint,
+    timestampVerified: true,
+  };
 }
 
 function assertSha256(value, code, field) {

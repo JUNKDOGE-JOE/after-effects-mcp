@@ -18,6 +18,7 @@ esac
 [[ ! -e "$out_root" ]] || { printf '%s\n' 'PHASE0_OUTPUT_EXISTS: disposable output already exists' >&2; exit 1; }
 
 version="$(node -e 'const fs=require("node:fs"); const p=require("node:path"); process.stdout.write(JSON.parse(fs.readFileSync(p.join(process.argv[1],"bundle-manifest.json"),"utf8")).version)' "$stage_root")"
+source_commit_sha="$(node -e 'const fs=require("node:fs"); const p=require("node:path"); process.stdout.write(JSON.parse(fs.readFileSync(p.join(process.argv[1],"bundle-manifest.json"),"utf8")).sourceCommitSha)' "$stage_root")"
 node scripts/package/verify-platform-bundle.mjs --root "$stage_root" --platform macos-arm64 --version "$version" >/dev/null
 source_stage_sha="$(/usr/bin/shasum -a 256 "$stage_root/bundle-manifest.json" | /usr/bin/awk '{print $1}')"
 mkdir -p "$out_root"
@@ -27,8 +28,13 @@ node scripts/package/verify-platform-bundle.mjs \
 
 bash scripts/package/sign-macos-nested.sh \
   --root "$out_root/work" --evidence "$out_root/nested-evidence.json"
+node scripts/package/freeze-signed-manifests.mjs \
+  --root "$out_root/work" --platform macos-arm64 --version "$version" \
+  --source-commit-sha "$source_commit_sha" --source-stage-sha256 "$source_stage_sha" \
+  --evidence "$out_root/freeze-evidence.json"
 node scripts/package/build-zxp.mjs \
   --root "$out_root/work" --platform macos-arm64 \
+  --source-stage-sha256 "$source_stage_sha" \
   --out "$out_root/ae-mcp-panel-phase0-macos-arm64.zxp" \
   --evidence "$out_root/zxp-evidence.json"
 bash scripts/package/package-macos-dmg.sh \
@@ -45,6 +51,7 @@ node --input-type=module -e '
     outputRoot: root,
     platform: "macos-arm64",
     sourceStageSha256: process.env.AE_MCP_E_STAGE_SHA,
+    freezeEvidencePath: `${root}/freeze-evidence.json`,
     sliceEvidencePaths: [
       `${root}/nested-evidence.json`, `${root}/zxp-evidence.json`, `${root}/dmg-evidence.json`,
     ],

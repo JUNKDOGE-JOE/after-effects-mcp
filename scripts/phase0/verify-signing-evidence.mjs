@@ -123,21 +123,25 @@ function assertFullPlanSteps(evidence, platform) {
       throw phase0Error('SIGNING_DIGEST_CHAIN_INVALID', 'Phase 0 signing digest chain is broken');
     }
   }
-  const definitions = platform === 'macos-arm64'
-    ? [
-      { key: 'nested', start: 0, end: 5 },
-      { key: 'zxp', start: 5, end: 7 },
-      { key: 'dmg', start: 7, end: 12 },
-    ]
-    : [
-      { key: 'nested', start: 0, end: 4 },
-      { key: 'zxp', start: 4, end: 6 },
-    ];
+  const definitions = signingSliceDefinitions(platform);
   if (!exactKeys(evidence.verifiedIdentity, definitions.map((item) => item.key))) {
     throw phase0Error('SIGNING_IDENTITY_INVALID', 'Phase 0 aggregate identity is invalid');
   }
-  for (const definition of definitions) {
-    const steps = evidence.steps.slice(definition.start, definition.end);
+  let cursor = 0;
+  for (const [index, definition] of definitions.entries()) {
+    if (index === 1) {
+      const freezeStep = evidence.steps[cursor];
+      if (!exactKeys(freezeStep, ['id', 'inputSha256', 'outputSha256', 'exitCode'])
+          || freezeStep.id !== 'freeze-signed-manifests'
+          || freezeStep.exitCode !== 0) {
+        throw phase0Error(
+          'SIGNING_STEP_INVALID',
+          'manifest-freeze evidence is missing or malformed',
+        );
+      }
+      cursor += 1;
+    }
+    const steps = evidence.steps.slice(cursor, cursor + definition.ids.length);
     validateSigningSliceEvidence({
       evidence: {
         schemaVersion: evidence.schemaVersion,
@@ -151,6 +155,10 @@ function assertFullPlanSteps(evidence, platform) {
       expectedInputSha256: steps[0].inputSha256,
       expectedStageSha256: evidence.sourceStageSha256,
     });
+    cursor += definition.ids.length;
+  }
+  if (cursor !== evidence.steps.length) {
+    throw phase0Error('PHASE0_UNSIGNED_NESTED_CODE', 'Phase 0 signing coverage is incomplete');
   }
   if (platform === 'macos-arm64') {
     const nested = evidence.verifiedIdentity.nested;
@@ -160,6 +168,28 @@ function assertFullPlanSteps(evidence, platform) {
       throw phase0Error('PHASE0_IDENTITY_MISMATCH', 'Mac nested and DMG identities do not match');
     }
   }
+}
+
+function signingSliceDefinitions(platform) {
+  return platform === 'macos-arm64'
+    ? [
+      {
+        key: 'nested',
+        ids: ['sign-helper', 'sign-xpc', 'sign-addon', 'sign-launcher', 'verify-nested'],
+      },
+      { key: 'zxp', ids: ['sign-zxp', 'verify-zxp'] },
+      {
+        key: 'dmg',
+        ids: ['build-dmg', 'sign-dmg', 'notarize-dmg', 'staple-dmg', 'verify-gatekeeper'],
+      },
+    ]
+    : [
+      {
+        key: 'nested',
+        ids: ['sign-helper', 'sign-addon', 'sign-launcher', 'verify-authenticode'],
+      },
+      { key: 'zxp', ids: ['sign-zxp', 'verify-zxp'] },
+    ];
 }
 
 function assertEvidenceLocation(evidencePath, evidence) {
@@ -186,6 +216,35 @@ async function readCanonicalEvidence(evidencePath) {
     throw error;
   }
   return evidence;
+}
+
+async function readFreezeStepEvidence({
+  evidencePath,
+  outputRoot,
+  platform,
+  sourceStageSha256,
+}) {
+  const resolvedPath = path.resolve(String(evidencePath ?? ''));
+  const expectedPath = path.join(path.resolve(outputRoot), 'freeze-evidence.json');
+  if (resolvedPath !== expectedPath) {
+    throw phase0Error(
+      'PHASE0_EVIDENCE_PATH_FORBIDDEN',
+      'freeze evidence must be the canonical file inside the disposable output root',
+    );
+  }
+  const evidence = await readCanonicalEvidence(resolvedPath);
+  if (!exactKeys(evidence, ['schemaVersion', 'platform', 'sourceStageSha256', 'step'])
+      || evidence.schemaVersion !== 1
+      || evidence.platform !== platform
+      || evidence.sourceStageSha256 !== sourceStageSha256
+      || !exactKeys(evidence.step, ['id', 'inputSha256', 'outputSha256', 'exitCode'])
+      || evidence.step.id !== 'freeze-signed-manifests'
+      || evidence.step.exitCode !== 0) {
+    throw phase0Error('SIGNING_STEP_INVALID', 'manifest-freeze evidence is malformed');
+  }
+  assertSha256(evidence.step.inputSha256, 'freeze step inputSha256');
+  assertSha256(evidence.step.outputSha256, 'freeze step outputSha256');
+  return evidence.step;
 }
 
 export async function verifyPhase0SigningEvidence({
@@ -242,6 +301,7 @@ export async function assemblePhase0SigningEvidence({
   outputRoot,
   platform,
   sliceEvidencePaths,
+  freezeEvidencePath,
   sourceStageSha256,
   verifiedAt = new Date().toISOString(),
 }) {
@@ -267,7 +327,17 @@ export async function assemblePhase0SigningEvidence({
       expectedStageSha256: sourceStageSha256,
     }));
   }
-  for (let index = 1; index < slices.length; index += 1) {
+  const freezeStep = await readFreezeStepEvidence({
+    evidencePath: freezeEvidencePath,
+    outputRoot,
+    platform,
+    sourceStageSha256,
+  });
+  if (freezeStep.inputSha256 !== slices[0].steps.at(-1).outputSha256
+      || slices[1].steps[0].inputSha256 !== freezeStep.outputSha256) {
+    throw phase0Error('SIGNING_DIGEST_CHAIN_INVALID', 'manifest-freeze evidence does not chain');
+  }
+  for (let index = 2; index < slices.length; index += 1) {
     if (slices[index].steps[0].inputSha256 !== slices[index - 1].steps.at(-1).outputSha256) {
       throw phase0Error('SIGNING_DIGEST_CHAIN_INVALID', 'reusable signing slices do not chain');
     }
@@ -277,7 +347,11 @@ export async function assemblePhase0SigningEvidence({
     platform,
     sourceStageSha256,
     disposableOutputRoot: path.resolve(outputRoot),
-    steps: slices.flatMap((slice) => slice.steps),
+    steps: [
+      ...slices[0].steps,
+      freezeStep,
+      ...slices.slice(1).flatMap((slice) => slice.steps),
+    ],
     verifiedIdentity: Object.fromEntries(
       definitions.map((definition, index) => [definition.key, slices[index].verifiedIdentity]),
     ),

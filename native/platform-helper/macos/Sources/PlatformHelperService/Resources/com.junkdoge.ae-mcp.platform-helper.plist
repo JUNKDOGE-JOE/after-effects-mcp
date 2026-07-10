@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.junkdoge.ae-mcp.platform-helper</string>
+    <key>LimitLoadToSessionType</key>
+    <string>Aqua</string>
+    <key>MachServices</key>
+    <dict>
+        <key>com.junkdoge.ae-mcp.platform-helper</key>
+        <true/>
+    </dict>
+    <key>ProcessType</key>
+    <string>Interactive</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__AE_MCP_HELPER_EXECUTABLE__</string>
+    </array>
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

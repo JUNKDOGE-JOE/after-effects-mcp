@@ -1,0 +1,428 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ae-mcp.invalid/schemas/platform-helper-v1.json",
+  "title": "PlatformHelperProtocolV1",
+  "x-maxMessageBytes": 65536,
+  "oneOf": [
+    { "$ref": "#/$defs/request" },
+    { "$ref": "#/$defs/response" }
+  ],
+  "$defs": {
+    "protocolVersion": { "const": 1 },
+    "positiveId": { "type": "integer", "minimum": 1 },
+    "helperMethod": {
+      "enum": [
+        "capabilities",
+        "secret.get",
+        "secret.set",
+        "secret.delete",
+        "window.find",
+        "window.describe",
+        "window.capture"
+      ]
+    },
+    "helperErrorCode": {
+      "enum": [
+        "HELPER_UNAUTHORIZED",
+        "HELPER_UNAVAILABLE",
+        "PROTOCOL_VERSION_UNSUPPORTED",
+        "INVALID_REQUEST",
+        "INVALID_REFERENCE",
+        "MESSAGE_TOO_LARGE",
+        "SECRET_NOT_FOUND",
+        "SECRET_CONFLICT",
+        "SECRET_STORE_UNAVAILABLE",
+        "SCREEN_RECORDING_PERMISSION_REQUIRED",
+        "AE_WINDOW_NOT_FOUND",
+        "AE_WINDOW_NOT_CAPTURABLE",
+        "CAPTURE_FAILED"
+      ]
+    },
+    "secretReference": {
+      "type": "string",
+      "pattern": "^aemcp-secret://provider/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/[a-z][a-z0-9_-]{0,31}/v1$"
+    },
+    "emptyParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "secretGetParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference"],
+      "properties": {
+        "reference": { "$ref": "#/$defs/secretReference" }
+      }
+    },
+    "secretSetParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference", "value", "expectedRevision"],
+      "properties": {
+        "reference": { "$ref": "#/$defs/secretReference" },
+        "value": { "type": "string" },
+        "expectedRevision": {
+          "anyOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "secretDeleteParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference"],
+      "properties": {
+        "reference": { "$ref": "#/$defs/secretReference" },
+        "expectedRevision": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "windowFindParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "target": { "const": "after-effects-main" }
+      }
+    },
+    "windowDescribeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference"],
+      "properties": {
+        "reference": { "type": "string", "minLength": 1 }
+      }
+    },
+    "windowCaptureParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["captureId"],
+      "anyOf": [
+        {
+          "type": "object",
+          "required": ["reference"],
+          "properties": { "reference": true }
+        },
+        {
+          "type": "object",
+          "required": ["target"],
+          "properties": { "target": true }
+        }
+      ],
+      "properties": {
+        "reference": { "type": "string", "minLength": 1 },
+        "target": { "const": "after-effects-main" },
+        "captureId": { "type": "string", "minLength": 1 },
+        "method": { "enum": ["auto", "DesktopCopy", "PrintWindow"] }
+      }
+    },
+    "requestEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "id", "method", "params"],
+      "properties": {
+        "protocolVersion": { "$ref": "#/$defs/protocolVersion" },
+        "id": { "$ref": "#/$defs/positiveId" },
+        "method": { "$ref": "#/$defs/helperMethod" },
+        "params": { "type": "object" }
+      }
+    },
+    "request": {
+      "oneOf": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/requestEnvelope" },
+            { "type": "object", "properties": { "method": { "const": "capabilities" }, "params": { "$ref": "#/$defs/emptyParams" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/requestEnvelope" },
+            { "type": "object", "properties": { "method": { "const": "secret.get" }, "params": { "$ref": "#/$defs/secretGetParams" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/requestEnvelope" },
+            { "type": "object", "properties": { "method": { "const": "secret.set" }, "params": { "$ref": "#/$defs/secretSetParams" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/requestEnvelope" },
+            { "type": "object", "properties": { "method": { "const": "secret.delete" }, "params": { "$ref": "#/$defs/secretDeleteParams" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/requestEnvelope" },
+            { "type": "object", "properties": { "method": { "const": "window.find" }, "params": { "$ref": "#/$defs/windowFindParams" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/requestEnvelope" },
+            { "type": "object", "properties": { "method": { "const": "window.describe" }, "params": { "$ref": "#/$defs/windowDescribeParams" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/requestEnvelope" },
+            { "type": "object", "properties": { "method": { "const": "window.capture" }, "params": { "$ref": "#/$defs/windowCaptureParams" } } }
+          ]
+        }
+      ]
+    },
+    "helperError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": { "$ref": "#/$defs/helperErrorCode" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "retryable": { "type": "boolean" }
+      }
+    },
+    "successResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "id", "ok", "result"],
+      "properties": {
+        "protocolVersion": { "$ref": "#/$defs/protocolVersion" },
+        "id": { "$ref": "#/$defs/positiveId" },
+        "ok": { "const": true },
+        "result": {
+          "oneOf": [
+            { "$ref": "#/$defs/platformCapabilities" },
+            { "$ref": "#/$defs/secretReadResult" },
+            { "$ref": "#/$defs/secretMutationResult" },
+            { "$ref": "#/$defs/secretDeleteResult" },
+            { "$ref": "#/$defs/windowDescriptionList" },
+            { "$ref": "#/$defs/windowDescription" },
+            { "$ref": "#/$defs/captureResult" }
+          ]
+        }
+      }
+    },
+    "failureResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "id", "ok", "error"],
+      "properties": {
+        "protocolVersion": { "$ref": "#/$defs/protocolVersion" },
+        "id": { "$ref": "#/$defs/positiveId" },
+        "ok": { "const": false },
+        "error": { "$ref": "#/$defs/helperError" }
+      }
+    },
+    "response": {
+      "oneOf": [
+        { "$ref": "#/$defs/successResponse" },
+        { "$ref": "#/$defs/failureResponse" }
+      ]
+    },
+    "platformCapabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocolVersion",
+        "platform",
+        "helperVersion",
+        "secretBackend",
+        "captureBackend",
+        "authenticatedCaller",
+        "maxMessageBytes",
+        "methods"
+      ],
+      "properties": {
+        "protocolVersion": { "$ref": "#/$defs/protocolVersion" },
+        "platform": { "enum": ["macos-arm64", "windows-x64"] },
+        "helperVersion": { "type": "string", "minLength": 1 },
+        "secretBackend": { "enum": ["keychain", "credential-manager"] },
+        "captureBackend": { "enum": ["screen-capture-kit", "windows-graphics-capture"] },
+        "authenticatedCaller": { "const": true },
+        "maxMessageBytes": { "const": 65536 },
+        "methods": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 7,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/helperMethod" }
+        }
+      }
+    },
+    "secretReadResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference", "value", "revision"],
+      "properties": {
+        "reference": { "$ref": "#/$defs/secretReference" },
+        "value": { "type": "string" },
+        "revision": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "secretMutationResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference", "revision"],
+      "properties": {
+        "reference": { "$ref": "#/$defs/secretReference" },
+        "revision": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "secretDeleteResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference", "deleted", "revision"],
+      "properties": {
+        "reference": { "$ref": "#/$defs/secretReference" },
+        "deleted": { "type": "boolean" },
+        "revision": {
+          "anyOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "windowDescription": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reference",
+        "application",
+        "ownerBundleId",
+        "ownerTeamId",
+        "processId",
+        "title",
+        "frame",
+        "scale",
+        "capturable"
+      ],
+      "properties": {
+        "reference": { "type": "string", "minLength": 1 },
+        "application": { "const": "after-effects" },
+        "ownerBundleId": { "const": "com.adobe.AfterEffects.application" },
+        "ownerTeamId": { "const": "JQ525L2MZD" },
+        "processId": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string" },
+        "frame": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["x", "y", "width", "height"],
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "width": { "type": "number", "minimum": 0 },
+            "height": { "type": "number", "minimum": 0 }
+          }
+        },
+        "scale": { "type": "number", "minimum": 0 },
+        "capturable": { "type": "boolean" }
+      }
+    },
+    "windowDescriptionList": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/windowDescription" }
+    },
+    "captureResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "captureId",
+        "reference",
+        "spoolPath",
+        "width",
+        "height",
+        "scale",
+        "method",
+        "sha256"
+      ],
+      "properties": {
+        "captureId": { "type": "string", "minLength": 1 },
+        "reference": { "type": "string", "minLength": 1 },
+        "spoolPath": { "type": "string", "minLength": 1 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "scale": { "type": "number", "minimum": 0 },
+        "method": { "enum": ["ScreenCaptureKit", "WindowsGraphicsCapture"] },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "methodContract": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method", "params", "successResult"],
+          "properties": {
+            "method": { "const": "capabilities" },
+            "params": { "$ref": "#/$defs/emptyParams" },
+            "successResult": { "$ref": "#/$defs/platformCapabilities" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method", "params", "successResult"],
+          "properties": {
+            "method": { "const": "secret.get" },
+            "params": { "$ref": "#/$defs/secretGetParams" },
+            "successResult": { "$ref": "#/$defs/secretReadResult" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method", "params", "successResult"],
+          "properties": {
+            "method": { "const": "secret.set" },
+            "params": { "$ref": "#/$defs/secretSetParams" },
+            "successResult": { "$ref": "#/$defs/secretMutationResult" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method", "params", "successResult"],
+          "properties": {
+            "method": { "const": "secret.delete" },
+            "params": { "$ref": "#/$defs/secretDeleteParams" },
+            "successResult": { "$ref": "#/$defs/secretDeleteResult" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method", "params", "successResult"],
+          "properties": {
+            "method": { "const": "window.find" },
+            "params": { "$ref": "#/$defs/windowFindParams" },
+            "successResult": { "$ref": "#/$defs/windowDescriptionList" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method", "params", "successResult"],
+          "properties": {
+            "method": { "const": "window.describe" },
+            "params": { "$ref": "#/$defs/windowDescribeParams" },
+            "successResult": { "$ref": "#/$defs/windowDescription" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method", "params", "successResult"],
+          "properties": {
+            "method": { "const": "window.capture" },
+            "params": { "$ref": "#/$defs/windowCaptureParams" },
+            "successResult": { "$ref": "#/$defs/captureResult" }
+          }
+        }
+      ]
+    }
+  }
+}

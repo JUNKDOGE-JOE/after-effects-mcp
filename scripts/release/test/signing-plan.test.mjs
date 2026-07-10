@@ -258,8 +258,8 @@ test('step evidence rejects missing, duplicate, non-zero, malformed, or secret-b
   );
 
   const noOpMutation = structuredClone(evidence);
-  noOpMutation[1].outputSha256 = 'e'.repeat(64);
-  noOpMutation[2].inputSha256 = 'e'.repeat(64);
+  noOpMutation[3].outputSha256 = 'e'.repeat(64);
+  noOpMutation[4].inputSha256 = 'e'.repeat(64);
   assert.throws(
     () => validateReleaseStepEvidence(signingPlan, noOpMutation),
     /mutation boundary/,

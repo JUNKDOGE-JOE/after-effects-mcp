@@ -31,6 +31,7 @@ if (Test-Path -LiteralPath $out) { throw 'PHASE0_OUTPUT_EXISTS: disposable outpu
 
 $manifestPath = Join-Path $stage 'bundle-manifest.json'
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+$sourceCommitSha = [string]$manifest.sourceCommitSha
 & node scripts/package/verify-platform-bundle.mjs --root $stage --platform windows-x64 --version ([string]$manifest.version) | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'PHASE0_STAGE_INVALID: unsigned stage verification failed' }
 $sourceStageSha256 = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -43,8 +44,14 @@ if ($LASTEXITCODE -gt 7) { throw 'PHASE0_COPY_FAILED: unsigned stage copy failed
 if ($LASTEXITCODE -ne 0) { throw 'PHASE0_COPY_INVALID: copied work verification failed' }
 
 & scripts/package/sign-windows-nested.ps1 -Root $work -Evidence (Join-Path $out 'nested-evidence.json')
+& node scripts/package/freeze-signed-manifests.mjs `
+  --root $work --platform windows-x64 --version ([string]$manifest.version) `
+  --source-commit-sha $sourceCommitSha --source-stage-sha256 $sourceStageSha256 `
+  --evidence (Join-Path $out 'freeze-evidence.json')
+if ($LASTEXITCODE -ne 0) { throw 'PHASE0_FREEZE_FAILED: signed manifest freeze failed' }
 & node scripts/package/build-zxp.mjs `
   --root $work --platform windows-x64 `
+  --source-stage-sha256 $sourceStageSha256 `
   --out (Join-Path $out 'ae-mcp-panel-phase0-windows-x64.zxp') `
   --evidence (Join-Path $out 'zxp-evidence.json')
 if ($LASTEXITCODE -ne 0) { throw 'PHASE0_ZXP_FAILED: ZXP probe failed' }
@@ -59,6 +66,7 @@ await assemblePhase0SigningEvidence({
   outputRoot: root,
   platform: "windows-x64",
   sourceStageSha256: process.env.AE_MCP_E_STAGE_SHA,
+  freezeEvidencePath: path.join(root, "freeze-evidence.json"),
   sliceEvidencePaths: [
     path.join(root, "nested-evidence.json"), path.join(root, "zxp-evidence.json"),
   ],

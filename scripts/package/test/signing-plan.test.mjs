@@ -95,14 +95,23 @@ test('manifest freezing is the only reviewed post-native in-tree mutation', () =
   }
 });
 
-test('reserved XPC and addon slots cannot claim a mutation', () => {
-  for (const platform of ['macos-arm64', 'windows-x64']) {
-    const plan = buildSigningPlan(platform);
-    for (const id of ['sign-xpc', 'sign-addon']) {
-      const step = plan.steps.find((candidate) => candidate.id === id);
-      if (step) assert.deepEqual(step.mutates, []);
-    }
-  }
+test('mac helper plan declares every N-API and XPC signing mutation', () => {
+  const plan = buildSigningPlan('macos-arm64');
+  assert.deepEqual(plan.steps.find((step) => step.id === 'sign-xpc').mutates, [
+    'platform/macos-arm64/xpc/com.junkdoge.ae-mcp.platform-helper.xpc/Contents/MacOS/ae-mcp-platform-helper',
+    'platform/macos-arm64/xpc/com.junkdoge.ae-mcp.platform-helper.xpc/Contents/_CodeSignature/CodeResources',
+  ]);
+  assert.deepEqual(plan.steps.find((step) => step.id === 'sign-addon').mutates, [
+    'platform/macos-arm64/lib/ae-mcp-platform-helper-transport.node',
+  ]);
+  assert.deepEqual(plan.steps.find((step) => step.id === 'sign-launcher').mutates, []);
+});
+
+test('windows helper plan declares the N-API transport signing mutation', () => {
+  const plan = buildSigningPlan('windows-x64');
+  assert.deepEqual(plan.steps.find((step) => step.id === 'sign-addon').mutates, [
+    'platform/windows-x64/lib/ae-mcp-platform-helper-transport.node',
+  ]);
 });
 
 test('verification and notarization steps cannot claim byte mutations', () => {
@@ -154,19 +163,15 @@ test('signing paths must be absolute, distinct, and non-overlapping', async (t) 
   });
 });
 
-test('native coverage rejects an unsigned nested binary and all native addons', () => {
+test('native coverage accepts a verified addon and rejects any unsigned nested binary', () => {
   assert.doesNotThrow(() => assertNestedNativeCoverage({
-    nativePaths: ['bin/helper', 'bin/launcher'],
-    verifiedPaths: ['bin/launcher', 'bin/helper'],
+    nativePaths: ['bin/helper', 'bin/launcher', 'lib/transport.node'],
+    verifiedPaths: ['lib/transport.node', 'bin/launcher', 'bin/helper'],
   }));
   assert.throws(() => assertNestedNativeCoverage({
     nativePaths: ['bin/helper', 'bin/launcher', 'transport/surprise.dylib'],
     verifiedPaths: ['bin/helper', 'bin/launcher'],
   }), { code: 'SIGNING_UNSIGNED_NESTED_CODE' });
-  assert.throws(() => assertNestedNativeCoverage({
-    nativePaths: ['bin/helper', 'transport/forbidden.node'],
-    verifiedPaths: ['bin/helper', 'transport/forbidden.node'],
-  }), { code: 'SIGNING_NATIVE_ADDON_FORBIDDEN' });
 });
 
 test('slice evidence requires exact contiguous order and digest chaining', () => {
@@ -178,9 +183,9 @@ test('slice evidence requires exact contiguous order and digest chaining', () =>
   evidence.steps[2].inputSha256 = SHA_B;
   evidence.steps[2].outputSha256 = SHA_B;
   evidence.steps[3].inputSha256 = SHA_B;
-  evidence.steps[3].outputSha256 = SHA_C;
-  evidence.steps[4].inputSha256 = SHA_C;
-  evidence.steps[4].outputSha256 = SHA_C;
+  evidence.steps[3].outputSha256 = SHA_B;
+  evidence.steps[4].inputSha256 = SHA_B;
+  evidence.steps[4].outputSha256 = SHA_B;
   assert.doesNotThrow(() => validateSigningSliceEvidence({
     evidence,
     platform: 'macos-arm64',
@@ -215,19 +220,21 @@ test('slice evidence requires exact contiguous order and digest chaining', () =>
   }), { code: 'SIGNING_DIGEST_CHAIN_INVALID' });
 });
 
-test('no-op categories and verification steps must preserve their input digest', () => {
-  const ids = ['sign-helper', 'sign-addon', 'sign-launcher', 'verify-authenticode'];
-  const evidence = chainedSlice('windows-x64', ids);
+test('verification steps must preserve their input digest', () => {
+  const ids = ['sign-helper', 'sign-xpc', 'sign-addon', 'sign-launcher', 'verify-nested'];
+  const evidence = chainedSlice('macos-arm64', ids);
   evidence.steps[0].outputSha256 = SHA_B;
   evidence.steps[1].inputSha256 = SHA_B;
   evidence.steps[1].outputSha256 = SHA_C;
   evidence.steps[2].inputSha256 = SHA_C;
-  evidence.steps[2].outputSha256 = SHA_C;
-  evidence.steps[3].inputSha256 = SHA_C;
-  evidence.steps[3].outputSha256 = SHA_C;
+  evidence.steps[2].outputSha256 = SHA_A;
+  evidence.steps[3].inputSha256 = SHA_A;
+  evidence.steps[3].outputSha256 = SHA_B;
+  evidence.steps[4].inputSha256 = SHA_B;
+  evidence.steps[4].outputSha256 = SHA_C;
   assert.throws(() => validateSigningSliceEvidence({
     evidence,
-    platform: 'windows-x64',
+    platform: 'macos-arm64',
     expectedStepIds: ids,
   }), { code: 'SIGNING_MUTATION_BOUNDARY_INVALID' });
 });
@@ -369,7 +376,7 @@ test('ZXP signing refuses a changed or symbolic signer before credentials are us
   assert.equal(executions, 0);
 });
 
-test('reusable entry points cannot stage, release, publish, or require native addons', async () => {
+test('reusable entry points cannot stage, release, or publish', async () => {
   const files = [
     'scripts/package/sign-macos-nested.sh',
     'scripts/package/sign-windows-nested.ps1',
@@ -380,8 +387,145 @@ test('reusable entry points cannot stage, release, publish, or require native ad
   ];
   for (const relative of files) {
     const source = await fs.promises.readFile(relative, 'utf8');
-    assert.doesNotMatch(source, /build-portable-runtime|stage-platform-bundle|git\s+tag|gh\s+release|\.node\b/i, relative);
+    assert.doesNotMatch(source, /build-portable-runtime|stage-platform-bundle|git\s+tag|gh\s+release/i, relative);
   }
+});
+
+test('mac nested signer uses current lipo grammar and signs helper payload bottom-up', async () => {
+  const source = await fs.promises.readFile('scripts/package/sign-macos-nested.sh', 'utf8');
+  assert.doesNotMatch(source, /lipo\s+-verify_arch\s+arm64/);
+  assert.match(source, /lipo\s+"\$candidate"\s+-verify_arch\s+arm64/);
+
+  const helperSign = source.indexOf('sign_native "$helper_path"');
+  const xpcExecutableSign = source.indexOf('sign_native "$xpc_executable"');
+  const xpcBundleSign = source.indexOf('sign_bundle "$xpc_bundle"');
+  const addonSign = source.indexOf('sign_native "$addon_path"');
+  const launcherGate = source.indexOf('sign_launcher "$launcher_path"');
+  assert.ok(helperSign >= 0, 'standalone helper is signed');
+  assert.ok(helperSign < xpcExecutableSign, 'standalone helper precedes XPC signing');
+  assert.ok(xpcExecutableSign < xpcBundleSign, 'XPC executable is signed before its bundle');
+  assert.ok(xpcBundleSign < addonSign, 'XPC bundle is sealed before the addon');
+  assert.ok(addonSign < launcherGate, 'addon is signed before launcher validation');
+  assert.doesNotMatch(source, /--sign\s+['"]?-['"]?/);
+  assert.match(source, /\[\[ "\$AE_MCP_APPLE_SIGNING_IDENTITY" != '-' \]\]/);
+  assert.match(source, /\[\[ -x "\$candidate" \]\]/);
+  assert.match(source, /grep -Eq '\^CodeDirectory \.\* flags=\.\*runtime'/);
+});
+
+test('windows nested signer signs and verifies the declared N-API transport', async () => {
+  const source = await fs.promises.readFile('scripts/package/sign-windows-nested.ps1', 'utf8');
+  assert.match(source, /ae-mcp-platform-helper-transport\.node/);
+  assert.match(source, /Invoke-Sign \$addonPath/);
+  assert.match(source, /Invoke-Verify \$addonPath/);
+  assert.match(source, /const expected = process\.argv\.slice\(2\)/);
+  assert.match(source, /\$nativeListPath \(\[string\]\$manifest\.entrypoints\.helper\) \$addonRelative/);
+  const helperSign = source.indexOf('Invoke-Sign $helperPath');
+  const addonSign = source.indexOf('Invoke-Sign $addonPath');
+  const launcherSign = source.indexOf('Invoke-Sign $launcherPath');
+  assert.ok(helperSign >= 0 && helperSign < addonSign);
+  assert.ok(addonSign < launcherSign);
+  assert.doesNotMatch(source, /sign-addon is a fixed compatibility slot/i);
+});
+
+test('windows nested signer independently binds every PE to the protected signer and RFC 3161 timestamp', async () => {
+  const source = await fs.promises.readFile('scripts/package/sign-windows-nested.ps1', 'utf8');
+  const verifier = source.match(
+    /function Get-VerifiedAuthenticodeObject[\s\S]*?^}/m,
+  )?.[0] ?? '';
+  assert.match(verifier, /Get-AuthenticodeSignature -LiteralPath \$FilePath/);
+  assert.match(verifier, /\$signature\.Status[^\n]*'Valid'/);
+  assert.match(verifier, /\$signature\.SignerCertificate/);
+  assert.match(verifier, /\$signature\.TimeStamperCertificate/);
+  assert.match(verifier, /AE_MCP_WINDOWS_SIGNING_CERT_SHA1/);
+  assert.match(source, /\/tr \$env:AE_MCP_WINDOWS_TIMESTAMP_URL \/td SHA256/);
+  for (const [role, variable] of [
+    ['helper', 'helperPath'],
+    ['addon', 'addonPath'],
+    ['launcher', 'launcherPath'],
+  ]) {
+    assert.match(
+      source,
+      new RegExp(`Get-VerifiedAuthenticodeObject\\s+-Role '${role}'\\s+-FilePath \\$${variable}`),
+    );
+  }
+  const finalObjectVerification = source.indexOf('$authenticodeObjects = @(');
+  const aggregateValidation = source.indexOf('validateWindowsAuthenticodeObjects');
+  const evidenceWrite = source.indexOf('writeSigningSliceEvidence');
+  assert.ok(finalObjectVerification >= 0);
+  assert.ok(finalObjectVerification < aggregateValidation);
+  assert.ok(aggregateValidation < evidenceWrite);
+});
+
+test('Windows Authenticode object fixtures reject any unverified nested object before aggregation', async () => {
+  const signingPlan = await import('../signing-plan.mjs');
+  assert.equal(typeof signingPlan.validateWindowsAuthenticodeObjects, 'function');
+  const thumbprint = 'A'.repeat(40);
+  const timestampThumbprint = 'B'.repeat(40);
+  const valid = ['helper', 'addon', 'launcher'].map((role) => ({
+    role,
+    status: 'Valid',
+    signerThumbprint: thumbprint,
+    timestampCertificateThumbprint: timestampThumbprint,
+    timestampVerified: true,
+  }));
+  assert.deepEqual(
+    signingPlan.validateWindowsAuthenticodeObjects({
+      records: valid,
+      expectedThumbprint: thumbprint,
+    }),
+    { authenticodeSignerThumbprint: thumbprint, timestampVerified: true },
+  );
+  for (const mutate of [
+    (records) => { records[0].status = 'HashMismatch'; },
+    (records) => { records[1].signerThumbprint = 'C'.repeat(40); },
+    (records) => { records[2].timestampVerified = false; },
+    (records) => { records[1].timestampCertificateThumbprint = ''; },
+    (records) => { records[2].role = 'helper'; },
+    (records) => { records.pop(); },
+  ]) {
+    const records = structuredClone(valid);
+    mutate(records);
+    assert.throws(
+      () => signingPlan.validateWindowsAuthenticodeObjects({
+        records,
+        expectedThumbprint: thumbprint,
+      }),
+      { code: 'SIGNING_IDENTITY_INVALID' },
+    );
+  }
+});
+
+test('mac nested signer runs the audited xattr preflight before any signing', async () => {
+  const source = await fs.promises.readFile('scripts/package/sign-macos-nested.sh', 'utf8');
+  const preflight = source.indexOf('macos-signing-xattrs.mjs --root "$helper_root"');
+  const firstSign = source.indexOf('sign_native "$helper_path"');
+  assert.ok(preflight >= 0 && preflight < firstSign);
+  assert.match(source, /SIGNING_XATTR_AUDIT/);
+  assert.doesNotMatch(source, /xattr\s+-c(?:\s|$)/);
+});
+
+test('helper security contract documents the approved N-API and XPC signing boundary', async () => {
+  const source = await fs.promises.readFile('docs/platform/PLATFORM_HELPER_SECURITY.md', 'utf8');
+  assert.match(source, /N-API/);
+  assert.match(source, /XPC/);
+  assert.match(source, /named pipe/i);
+  assert.match(source, /CodeResources/);
+  assert.match(source, /com\.apple\.provenance/);
+  assert.doesNotMatch(source, /native addon is forbidden|strict no-ops?|compatibility slots?/i);
+});
+
+test('helper security contract states xattr atomicity limits and per-object Authenticode proof', async () => {
+  const source = await fs.promises.readFile('docs/platform/PLATFORM_HELPER_SECURITY.md', 'utf8');
+  assert.match(source, /\/dev\/fd\/3/);
+  assert.match(source, /device.*inode.*link\s+count.*type/is);
+  assert.match(source, /complete entry set/is);
+  assert.match(source, /not (?:an? )?atomic transaction/is);
+  assert.match(source, /swap-and-restore|hard-?link.*same inode/is);
+  assert.match(source, /CR.*empty.*duplicate.*control/is);
+  assert.match(source, /`xattr -p`.*exact/is);
+  assert.match(source, /helper.*addon.*launcher.*each/is);
+  assert.match(source, /Status=Valid/);
+  assert.match(source, /RFC 3161/);
 });
 
 test('Phase 0 runners verify source, copied work, and unchanged source around signing', async () => {

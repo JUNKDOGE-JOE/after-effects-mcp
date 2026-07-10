@@ -59,9 +59,16 @@ if (($entrypointNames -join ',') -ne 'helper,launcher') {
 $helperRoot = Split-Path -Parent $manifestPath
 $helperPath = Join-Path $helperRoot ([string]$manifest.entrypoints.helper)
 $launcherPath = Join-Path $helperRoot ([string]$manifest.entrypoints.launcher)
+$addonRelative = 'lib/ae-mcp-platform-helper-transport.node'
+$addonRecords = @($manifest.files | Where-Object {
+  [string]$_.path -eq $addonRelative -and [string]$_.architecture -eq 'pe-x64'
+})
+$addonPath = Join-Path $helperRoot $addonRelative
 if (-not (Test-Path -LiteralPath $helperPath -PathType Leaf) -or
-    -not (Test-Path -LiteralPath $launcherPath -PathType Leaf)) {
-  Fail-Signing 'SIGNING_HELPER_MANIFEST_INVALID: entrypoint is missing'
+    -not (Test-Path -LiteralPath $launcherPath -PathType Leaf) -or
+    $addonRecords.Count -ne 1 -or
+    -not (Test-Path -LiteralPath $addonPath -PathType Leaf)) {
+  Fail-Signing 'SIGNING_HELPER_MANIFEST_INVALID: helper, addon, or launcher is missing'
 }
 
 function Get-RootDigest {
@@ -95,6 +102,29 @@ function Invoke-Verify([string]$FilePath) {
   if ($LASTEXITCODE -ne 0) { Fail-Signing 'SIGNING_VERIFY_FAILED: Authenticode verification failed' }
 }
 
+function Get-VerifiedAuthenticodeObject([string]$Role, [string]$FilePath) {
+  $signature = Get-AuthenticodeSignature -LiteralPath $FilePath
+  if ([string]$signature.Status -ne 'Valid' -or
+      $null -eq $signature.SignerCertificate -or
+      $null -eq $signature.TimeStamperCertificate) {
+    Fail-Signing 'SIGNING_IDENTITY_INVALID: signer or RFC 3161 timestamp was not verified'
+  }
+  $thumbprint = $signature.SignerCertificate.Thumbprint.ToUpperInvariant()
+  $timestampThumbprint = $signature.TimeStamperCertificate.Thumbprint.ToUpperInvariant()
+  if ($thumbprint -notmatch '^[0-9A-F]{40}$' -or
+      $thumbprint -ne $env:AE_MCP_WINDOWS_SIGNING_CERT_SHA1 -or
+      $timestampThumbprint -notmatch '^[0-9A-F]{40}$') {
+    Fail-Signing 'SIGNING_IDENTITY_INVALID: Authenticode certificate identity is invalid'
+  }
+  return [PSCustomObject]@{
+    role = $Role
+    status = [string]$signature.Status
+    signerThumbprint = $thumbprint
+    timestampCertificateThumbprint = $timestampThumbprint
+    timestampVerified = $true
+  }
+}
+
 $sourceStageSha256 = (Get-FileHash -LiteralPath (Join-Path $resolvedRoot 'bundle-manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()
 $beforeHelper = Get-RootDigest
 if (-not (Test-PeFile $helperPath)) { Fail-Signing 'SIGNING_ARCH_INVALID: helper is not a PE image' }
@@ -102,13 +132,14 @@ Invoke-Sign $helperPath
 Invoke-Verify $helperPath
 $afterHelper = Get-RootDigest
 
-# sign-addon is a fixed compatibility slot and intentionally mutates no bytes.
-$afterAddon = $afterHelper
+if (-not (Test-PeFile $addonPath)) { Fail-Signing 'SIGNING_ARCH_INVALID: addon is not a PE image' }
+Invoke-Sign $addonPath
+Invoke-Verify $addonPath
+$afterAddon = Get-RootDigest
 
-if (Test-PeFile $launcherPath) {
-  Invoke-Sign $launcherPath
-  Invoke-Verify $launcherPath
-}
+if (-not (Test-PeFile $launcherPath)) { Fail-Signing 'SIGNING_ARCH_INVALID: launcher is not a PE image' }
+Invoke-Sign $launcherPath
+Invoke-Verify $launcherPath
 $afterLauncher = Get-RootDigest
 
 $nativeFiles = @(
@@ -129,26 +160,45 @@ try {
 import fs from "node:fs";
 import { assertNestedNativeCoverage } from "./scripts/package/signing-plan.mjs";
 const values = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const expected = process.argv.slice(2).map((value) => value.replaceAll("\\", "/")).sort();
+if (JSON.stringify(values.toSorted()) !== JSON.stringify(expected)) process.exit(42);
 assertNestedNativeCoverage({ nativePaths: values, verifiedPaths: values });
 '@
-  & node --input-type=module -e $coverageScript $nativeListPath
+  & node --input-type=module -e $coverageScript $nativeListPath ([string]$manifest.entrypoints.helper) $addonRelative ([string]$manifest.entrypoints.launcher)
   if ($LASTEXITCODE -ne 0) { Fail-Signing 'SIGNING_UNSIGNED_NESTED_CODE: native coverage failed' }
+
+  $authenticodeObjects = @(
+    Get-VerifiedAuthenticodeObject -Role 'helper' -FilePath $helperPath
+    Get-VerifiedAuthenticodeObject -Role 'addon' -FilePath $addonPath
+    Get-VerifiedAuthenticodeObject -Role 'launcher' -FilePath $launcherPath
+  )
+  $authenticodeListPath = Join-Path $temporary 'authenticode-objects.json'
+  [IO.File]::WriteAllText(
+    $authenticodeListPath,
+    ($authenticodeObjects | ConvertTo-Json -Compress)
+  )
+  $identityScript = @'
+import fs from "node:fs";
+import { validateWindowsAuthenticodeObjects } from "./scripts/package/signing-plan.mjs";
+const records = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const verifiedIdentity = validateWindowsAuthenticodeObjects({
+  records,
+  expectedThumbprint: process.argv[2],
+});
+process.stdout.write(JSON.stringify(verifiedIdentity));
+'@
+  $verifiedIdentityJson = & node --input-type=module -e $identityScript `
+    $authenticodeListPath $env:AE_MCP_WINDOWS_SIGNING_CERT_SHA1
+  if ($LASTEXITCODE -ne 0) {
+    Fail-Signing 'SIGNING_IDENTITY_INVALID: nested Authenticode identity validation failed'
+  }
+  $verifiedIdentity = $verifiedIdentityJson | ConvertFrom-Json
 
   $afterVerify = Get-RootDigest
   if ($afterVerify -ne $afterLauncher) {
     Fail-Signing 'SIGNING_OUTPUT_CHANGED: verification changed the signing root'
   }
-  $signature = Get-AuthenticodeSignature -LiteralPath $helperPath
-  if ([string]$signature.Status -ne 'Valid' -or
-      $null -eq $signature.SignerCertificate -or
-      $null -eq $signature.TimeStamperCertificate) {
-    Fail-Signing 'SIGNING_IDENTITY_INVALID: signer or RFC 3161 timestamp was not verified'
-  }
-  $thumbprint = $signature.SignerCertificate.Thumbprint.ToUpperInvariant()
-  if ($thumbprint -notmatch '^[0-9A-F]{40}$' -or
-      $thumbprint -ne $env:AE_MCP_WINDOWS_SIGNING_CERT_SHA1) {
-    Fail-Signing 'SIGNING_IDENTITY_INVALID: Authenticode thumbprint is invalid'
-  }
+  $thumbprint = [string]$verifiedIdentity.authenticodeSignerThumbprint
 
   $env:AE_MCP_E_STAGE_SHA = $sourceStageSha256
   $env:AE_MCP_E_BEFORE_HELPER = $beforeHelper

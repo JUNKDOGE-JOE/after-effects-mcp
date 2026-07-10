@@ -1,0 +1,1 @@
+PlatformHelperServiceMain.run()

@@ -1,0 +1,18 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": 4,
+    "method": "secret.list",
+    "params": {}
+  },
+  "response": {
+    "protocolVersion": 1,
+    "id": 4,
+    "ok": false,
+    "error": {
+      "code": "INVALID_REQUEST",
+      "message": "unknown helper method",
+      "retryable": false
+    }
+  }
+}
