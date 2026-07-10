@@ -1,10 +1,16 @@
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { generateRuntimeInventory } from './generate-runtime-inventory.mjs';
+import {
+  assertNodeLicenseNoticeLock,
+  generateRuntimeInventory,
+} from './generate-runtime-inventory.mjs';
 import { parsePortableRuntimeArgs, SUPPORTED_PLATFORMS } from './lib/args.mjs';
+import { inspectLockedArchive, verifyExtractedArchive } from './lib/archive-preflight.mjs';
 import {
   createSiblingTempDirectory,
   pathExists,
@@ -13,6 +19,11 @@ import {
   sha256File,
 } from './lib/files.mjs';
 import { downloadLockedAsset } from './lib/locked-download.mjs';
+import {
+  loadPythonStandaloneEvidence,
+  stagePythonStandaloneNotices,
+  verifyPythonStandalonePayloadEvidence,
+} from './lib/python-standalone-evidence.mjs';
 
 const PACKAGE_PROJECTS = [
   'packages/core/pyproject.toml',
@@ -102,6 +113,26 @@ export function assertWorkspaceBuildBackendsLocked(repoRoot) {
   return [...closure.values()].sort((left, right) => left.name.localeCompare(right.name, 'en'));
 }
 
+export async function assertUvLockCurrent(repoRoot, options = {}) {
+  const uv = options.uv ?? process.env.UV ?? 'uv';
+  const cacheDir = options.cacheDir
+    ?? process.env.UV_CACHE_DIR
+    ?? path.join(os.tmpdir(), 'ae-mcp-runtime-uv-cache');
+  try {
+    await run(uv, [
+      'lock',
+      '--check',
+      '--offline',
+      '--cache-dir', cacheDir,
+    ], { cwd: repoRoot, capture: true });
+  } catch (error) {
+    throw codedError(
+      'UV_LOCK_STALE',
+      `uv.lock is stale or cannot be verified offline: ${error.message}`,
+    );
+  }
+}
+
 async function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -152,19 +183,169 @@ async function writeBuildConstraints(buildRoot, buildPackages) {
   return filePath;
 }
 
-async function extractSingleRoot({ archive, extractionRoot, expectedName, destination }) {
-  await fs.promises.mkdir(extractionRoot, { recursive: true });
-  await run('tar', ['-xf', archive, '-C', extractionRoot]);
-  const entries = (await fs.promises.readdir(extractionRoot)).filter((name) => name !== '__MACOSX');
-  if (entries.length !== 1 || entries[0] !== expectedName) {
-    throw codedError(
-      'INVALID_RUNTIME_ARCHIVE',
-      `expected ${archive} to contain only ${expectedName}, received ${entries.join(', ')}`,
-    );
+function archiveInspectionLimits(contract) {
+  const requiredNumbers = [
+    'archiveBytes',
+    'rawEntryCount',
+    'regularBytes',
+    'maxEntryBytes',
+    'decompressedBytes',
+  ];
+  if (
+    !contract
+    || !['ustar-gzip', 'zip'].includes(contract.format)
+    || typeof contract.root !== 'string'
+    || !contract.root
+    || !/^[a-f0-9]{64}$/.test(contract.sha256 ?? '')
+    || !/^[a-f0-9]{64}$/.test(contract.manifestSha256 ?? '')
+    || requiredNumbers.some((name) => (
+      !Number.isSafeInteger(contract[name]) || contract[name] < 0
+    ))
+  ) {
+    throw codedError('INVALID_RUNTIME_LOCK', 'runtime archive contract is incomplete or invalid');
   }
-  await fs.promises.rename(path.join(extractionRoot, expectedName), destination);
+  return {
+    maxArchiveBytes: contract.archiveBytes,
+    maxDecompressedBytes: contract.decompressedBytes,
+    maxEntries: Math.max(1, contract.rawEntryCount),
+    maxEntryBytes: Math.max(1, contract.maxEntryBytes),
+    maxTotalBytes: Math.max(1, contract.regularBytes),
+    expectedArchiveBytes: contract.archiveBytes,
+    expectedDecompressedBytes: contract.decompressedBytes,
+    expectedManifestSha256: contract.manifestSha256,
+    expectedMaxEntryBytes: contract.maxEntryBytes,
+    expectedRawEntryCount: contract.rawEntryCount,
+    expectedRegularBytes: contract.regularBytes,
+  };
 }
 
+function systemTarCommand() {
+  if (process.platform !== 'win32') return '/usr/bin/tar';
+  const systemRoot = process.env.SystemRoot ?? process.env.WINDIR;
+  if (!systemRoot || !path.win32.isAbsolute(systemRoot)) {
+    throw codedError('SYSTEM_TAR_UNAVAILABLE', 'SystemRoot is required for absolute system tar');
+  }
+  return path.win32.join(systemRoot, 'System32', 'tar.exe');
+}
+
+function sanitizedTarEnvironment() {
+  if (process.platform !== 'win32') {
+    return { LANG: 'C', LC_ALL: 'C', PATH: '/usr/bin:/bin' };
+  }
+  const systemRoot = process.env.SystemRoot ?? process.env.WINDIR;
+  const environment = {
+    PATH: path.win32.join(systemRoot, 'System32'),
+    SystemRoot: systemRoot,
+    WINDIR: process.env.WINDIR ?? systemRoot,
+  };
+  for (const name of ['TEMP', 'TMP']) {
+    if (process.env[name]) environment[name] = process.env[name];
+  }
+  return environment;
+}
+
+export async function extractSingleRoot({
+  archive,
+  extractionRoot,
+  destination,
+  contract,
+}) {
+  const resolvedArchive = path.resolve(archive);
+  const resolvedExtractionRoot = path.resolve(extractionRoot);
+  const resolvedDestination = path.resolve(destination);
+  const limits = archiveInspectionLimits(contract);
+
+  if (await pathExists(resolvedExtractionRoot)) {
+    throw codedError(
+      'INVALID_RUNTIME_ARCHIVE',
+      `archive staging directory already exists: ${resolvedExtractionRoot}`,
+    );
+  }
+  if (await pathExists(resolvedDestination)) {
+    throw codedError(
+      'INVALID_RUNTIME_ARCHIVE',
+      `archive destination already exists: ${resolvedDestination}`,
+    );
+  }
+
+  const snapshotDirectory = await createSiblingTempDirectory(
+    `${resolvedExtractionRoot}.locked-archive`,
+  );
+  const snapshotArchive = path.join(snapshotDirectory, 'archive');
+  if (process.platform !== 'win32') await fs.promises.chmod(snapshotDirectory, 0o700);
+  let published = false;
+
+  try {
+    await fs.promises.copyFile(
+      resolvedArchive,
+      snapshotArchive,
+      fs.constants.COPYFILE_EXCL,
+    );
+    if (process.platform !== 'win32') await fs.promises.chmod(snapshotArchive, 0o600);
+    const snapshotStats = await fs.promises.lstat(snapshotArchive);
+    if (
+      !snapshotStats.isFile()
+      || snapshotStats.isSymbolicLink()
+      || snapshotStats.size !== contract.archiveBytes
+    ) {
+      throw codedError(
+        'INVALID_RUNTIME_ARCHIVE',
+        `archive byte length mismatch: expected ${contract.archiveBytes}, received ${snapshotStats.size}`,
+      );
+    }
+    const archiveSha256 = await sha256File(snapshotArchive);
+    if (archiveSha256 !== contract.sha256) {
+      throw codedError(
+        'INVALID_RUNTIME_ARCHIVE',
+        `archive SHA-256 mismatch: expected ${contract.sha256}, received ${archiveSha256}`,
+      );
+    }
+    const inspection = await inspectLockedArchive({
+      archivePath: snapshotArchive,
+      format: contract.format,
+      expectedRoot: contract.root,
+      limits,
+    });
+
+    await fs.promises.mkdir(path.dirname(resolvedExtractionRoot), { recursive: true });
+    await fs.promises.mkdir(resolvedExtractionRoot, { mode: 0o700 });
+    if (process.platform !== 'win32') await fs.promises.chmod(resolvedExtractionRoot, 0o700);
+    await run(
+      systemTarCommand(),
+      ['-xf', snapshotArchive, '-C', resolvedExtractionRoot],
+      { env: sanitizedTarEnvironment() },
+    );
+    await verifyExtractedArchive({ extractionRoot: resolvedExtractionRoot, inspection });
+    await fs.promises.rename(
+      path.join(resolvedExtractionRoot, contract.root),
+      resolvedDestination,
+    );
+    published = true;
+    await fs.promises.rmdir(resolvedExtractionRoot);
+    await fs.promises.rm(snapshotDirectory, { recursive: true, force: true });
+    return inspection;
+  } catch (error) {
+    const cleanupErrors = [];
+    for (const cleanupPath of [
+      ...(published ? [resolvedDestination] : []),
+      resolvedExtractionRoot,
+      snapshotDirectory,
+    ]) {
+      try {
+        await fs.promises.rm(cleanupPath, { recursive: true, force: true });
+      } catch (cleanupError) {
+        cleanupErrors.push(cleanupError);
+      }
+    }
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError(
+        [error, ...cleanupErrors],
+        `archive extraction failed and cleanup was incomplete: ${error.message}`,
+      );
+    }
+    throw error;
+  }
+}
 function runtimeExecutables(runtimeRoot, platform) {
   if (platform === 'windows-x64') {
     return {
@@ -180,6 +361,154 @@ function runtimeExecutables(runtimeRoot, platform) {
     python: path.join(runtimeRoot, 'python', 'bin', 'python3'),
     nodePath: path.join(runtimeRoot, 'node', 'bin'),
   };
+}
+
+export async function copyNodeRuntimeLicenseNotices({ repoRoot, runtimeRoot }) {
+  const bom = await readJson(path.join(repoRoot, 'packaging/node-runtime-bom.json'));
+  if (!Array.isArray(bom.licenseNotices) || bom.licenseNotices.length === 0) {
+    throw codedError('NODE_LICENSE_NOTICE_INVALID', 'Node license notice lock is empty');
+  }
+  await fs.promises.mkdir(runtimeRoot, { recursive: true });
+
+  async function assertNoSymlinkAncestors(root, filePath, label, allowMissing) {
+    const rootStats = await fs.promises.lstat(root);
+    if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) {
+      throw codedError(
+        'NODE_LICENSE_NOTICE_INVALID',
+        `Node license notice ${label} root is not a real directory: ${root}`,
+      );
+    }
+    const relative = path.relative(root, filePath);
+    const parts = relative.split(path.sep).filter(Boolean).slice(0, -1);
+    let current = root;
+    for (const part of parts) {
+      current = path.join(current, part);
+      let stats;
+      try {
+        stats = await fs.promises.lstat(current);
+      } catch (error) {
+        if (allowMissing && error.code === 'ENOENT') return;
+        throw error;
+      }
+      if (stats.isSymbolicLink()) {
+        throw codedError(
+          'NODE_LICENSE_NOTICE_INVALID',
+          `Node license notice ${label} has a symlink ancestor: ${current}`,
+        );
+      }
+      if (!stats.isDirectory()) {
+        throw codedError(
+          'NODE_LICENSE_NOTICE_INVALID',
+          `Node license notice ${label} ancestor is not a directory: ${current}`,
+        );
+      }
+    }
+  }
+
+  async function readNoticeWithoutFollowingLinks(source, expectedStats) {
+    let handle;
+    try {
+      handle = await fs.promises.open(
+        source,
+        fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0),
+      );
+    } catch (error) {
+      if (error.code === 'ELOOP') {
+        throw codedError(
+          'NODE_LICENSE_NOTICE_INVALID',
+          `Node license notice source is a symbolic link: ${source}`,
+        );
+      }
+      throw error;
+    }
+    try {
+      const before = await handle.stat();
+      if (
+        !before.isFile()
+        || before.dev !== expectedStats.dev
+        || before.ino !== expectedStats.ino
+        || before.size !== expectedStats.size
+      ) {
+        throw codedError(
+          'NODE_LICENSE_NOTICE_INVALID',
+          `Node license notice source changed before reading: ${source}`,
+        );
+      }
+      const bytes = await handle.readFile();
+      const after = await handle.stat();
+      if (
+        before.dev !== after.dev
+        || before.ino !== after.ino
+        || before.size !== after.size
+        || before.mtimeMs !== after.mtimeMs
+        || before.ctimeMs !== after.ctimeMs
+        || bytes.length !== before.size
+      ) {
+        throw codedError(
+          'NODE_LICENSE_NOTICE_INVALID',
+          `Node license notice source changed while reading: ${source}`,
+        );
+      }
+      return bytes;
+    } finally {
+      await handle.close();
+    }
+  }
+
+  for (const notice of bom.licenseNotices) {
+    assertNodeLicenseNoticeLock(notice);
+    const source = path.resolve(repoRoot, ...notice.sourcePath.split('/'));
+    const sourceRelative = path.relative(repoRoot, source);
+    if (sourceRelative.startsWith('..') || path.isAbsolute(sourceRelative)) {
+      throw codedError(
+        'NODE_LICENSE_NOTICE_INVALID',
+        `Node license notice source escapes repository: ${notice.sourcePath}`,
+      );
+    }
+    const destination = path.resolve(runtimeRoot, ...notice.payloadPath.split('/'));
+    const destinationRelative = path.relative(runtimeRoot, destination);
+    if (destinationRelative.startsWith('..') || path.isAbsolute(destinationRelative)) {
+      throw codedError(
+        'NODE_LICENSE_NOTICE_INVALID',
+        `Node license notice payload escapes runtime: ${notice.payloadPath}`,
+      );
+    }
+    await assertNoSymlinkAncestors(repoRoot, source, 'source', false);
+    const sourceStats = await fs.promises.lstat(source);
+    if (!sourceStats.isFile() || sourceStats.isSymbolicLink()) {
+      throw codedError(
+        'NODE_LICENSE_NOTICE_INVALID',
+        `Node license notice source is not a regular file: ${notice.sourcePath}`,
+      );
+    }
+    const sourceBytes = await readNoticeWithoutFollowingLinks(source, sourceStats);
+    const actualSha256 = createHash('sha256').update(sourceBytes).digest('hex');
+    if (actualSha256 !== notice.sha256) {
+      throw codedError(
+        'NODE_LICENSE_NOTICE_MISMATCH',
+        `Node license notice SHA-256 mismatch for ${notice.package}@${notice.version}`,
+      );
+    }
+    await assertNoSymlinkAncestors(runtimeRoot, destination, 'destination', true);
+    await fs.promises.mkdir(path.dirname(destination), { recursive: true });
+    await assertNoSymlinkAncestors(runtimeRoot, destination, 'destination', false);
+    const destinationHandle = await fs.promises.open(
+      destination,
+      fs.constants.O_WRONLY
+        | fs.constants.O_CREAT
+        | fs.constants.O_EXCL
+        | (fs.constants.O_NOFOLLOW ?? 0),
+      0o644,
+    );
+    try {
+      await destinationHandle.writeFile(sourceBytes);
+    } catch (error) {
+      await destinationHandle.close();
+      await fs.promises.rm(destination, { force: true });
+      throw error;
+    }
+    await destinationHandle.close();
+  }
 }
 
 function prependPath(environment, value) {
@@ -216,6 +545,167 @@ async function installNodePayload({ runtimeRoot, repoRoot, buildRoot, platform }
       '--no-fund',
     ], { cwd: destination, env: environment });
   }
+}
+
+async function removeMatchingDirectories(parent, pattern) {
+  if (!(await pathExists(parent))) return;
+  const entries = await fs.promises.readdir(parent, { withFileTypes: true });
+  await Promise.all(entries
+    .filter((entry) => entry.isDirectory() && pattern.test(entry.name))
+    .map((entry) => fs.promises.rm(path.join(parent, entry.name), { recursive: true, force: true })));
+}
+
+export async function pruneBundledRuntimeTools({ runtimeRoot, platform }) {
+  const nodeRoot = path.join(runtimeRoot, 'node');
+  const pythonRoot = path.join(runtimeRoot, 'python');
+  const nodePaths = platform === 'windows-x64'
+    ? [
+      'node_modules/npm',
+      'node_modules/corepack',
+      'npm', 'npm.cmd', 'npm.ps1',
+      'npx', 'npx.cmd', 'npx.ps1',
+      'corepack', 'corepack.cmd', 'corepack.ps1',
+      'pnpm', 'pnpm.cmd', 'pnpm.ps1',
+      'pnpx', 'pnpx.cmd', 'pnpx.ps1',
+      'yarn', 'yarn.cmd', 'yarn.ps1',
+      'yarnpkg', 'yarnpkg.cmd', 'yarnpkg.ps1',
+    ]
+    : [
+      'lib/node_modules/npm',
+      'lib/node_modules/corepack',
+      'bin/npm', 'bin/npx', 'bin/corepack',
+      'bin/pnpm', 'bin/pnpx', 'bin/yarn', 'bin/yarnpkg',
+    ];
+  await Promise.all(nodePaths.map((relative) => (
+    fs.promises.rm(path.join(nodeRoot, relative), { recursive: true, force: true })
+  )));
+
+  const pythonLib = platform === 'windows-x64'
+    ? path.join(pythonRoot, 'Lib')
+    : path.join(pythonRoot, 'lib', 'python3.13');
+  const sitePackages = path.join(pythonLib, 'site-packages');
+  const scriptRoot = platform === 'windows-x64'
+    ? path.join(pythonRoot, 'Scripts')
+    : path.join(pythonRoot, 'bin');
+  if (await pathExists(scriptRoot)) {
+    const scripts = await fs.promises.readdir(scriptRoot);
+    await Promise.all(scripts
+      .filter((name) => /^(pip|easy_install)(?:\d+(?:\.\d+)?)?(?:\.exe)?$/i.test(name))
+      .map((name) => fs.promises.rm(path.join(scriptRoot, name), { force: true })));
+  }
+  await fs.promises.rm(path.join(pythonLib, 'ensurepip'), { recursive: true, force: true });
+  await fs.promises.rm(path.join(sitePackages, 'pip'), { recursive: true, force: true });
+  await fs.promises.rm(path.join(sitePackages, 'setuptools'), { recursive: true, force: true });
+  await fs.promises.rm(path.join(sitePackages, '_distutils_hack'), { recursive: true, force: true });
+  await fs.promises.rm(path.join(sitePackages, 'distutils-precedence.pth'), { force: true });
+  await removeMatchingDirectories(sitePackages, /^pip-.*\.dist-info$/i);
+  await removeMatchingDirectories(sitePackages, /^setuptools-.*\.dist-info$/i);
+}
+
+async function assertPeX64(filePath) {
+  const handle = await fs.promises.open(filePath, 'r');
+  try {
+    const dos = Buffer.alloc(64);
+    const dosRead = await handle.read(dos, 0, dos.length, 0);
+    if (dosRead.bytesRead !== dos.length || dos.toString('ascii', 0, 2) !== 'MZ') {
+      throw codedError('CLAUDE_CLI_INVALID', 'Claude CLI is not a PE executable');
+    }
+    const peOffset = dos.readUInt32LE(0x3c);
+    const pe = Buffer.alloc(6);
+    const peRead = await handle.read(pe, 0, pe.length, peOffset);
+    if (
+      peRead.bytesRead !== pe.length
+      || pe.toString('ascii', 0, 4) !== 'PE\0\0'
+      || pe.readUInt16LE(4) !== 0x8664
+    ) {
+      throw codedError('CLAUDE_CLI_INVALID', 'Claude CLI is not a PE x64 executable');
+    }
+  } finally {
+    await handle.close();
+  }
+}
+
+export async function assertClaudeCliPayload({ platform, repoRoot, runtimeRoot, runtimeLock }) {
+  const cliLock = runtimeLock.claudeCli;
+  const contract = cliLock?.assets?.[platform];
+  if (!cliLock || !contract) {
+    throw codedError('CLAUDE_CLI_INVALID', `Claude CLI lock is missing ${platform}`);
+  }
+  const sidecarLock = await readJson(path.join(repoRoot, 'plugin/sidecar/package-lock.json'));
+  const sdkLock = sidecarLock.packages?.['node_modules/@anthropic-ai/claude-agent-sdk'];
+  const platformLock = sidecarLock.packages?.[`node_modules/${contract.package}`];
+  if (
+    sdkLock?.version !== cliLock.sdkVersion
+    || sdkLock.optionalDependencies?.[contract.package] !== cliLock.sdkVersion
+    || platformLock?.version !== cliLock.sdkVersion
+    || platformLock.optional !== true
+  ) {
+    throw codedError(
+      'CLAUDE_CLI_INVALID',
+      `required Claude CLI package ${contract.package}@${cliLock.sdkVersion} is missing from lock`,
+    );
+  }
+
+  const sidecarModules = path.join(runtimeRoot, 'node', 'sidecar', 'node_modules');
+  const sdkPackagePath = path.join(sidecarModules, '@anthropic-ai', 'claude-agent-sdk', 'package.json');
+  const platformPackageRoot = path.join(sidecarModules, ...contract.package.split('/'));
+  const platformPackagePath = path.join(platformPackageRoot, 'package.json');
+  const binaryPath = path.join(platformPackageRoot, contract.binary);
+  if (
+    !(await pathExists(sdkPackagePath))
+    || !(await pathExists(platformPackagePath))
+    || !(await pathExists(binaryPath))
+  ) {
+    throw codedError(
+      'CLAUDE_CLI_INVALID',
+      `required Claude CLI package or binary is missing: ${contract.package}/${contract.binary}`,
+    );
+  }
+  const sdkPackage = await readJson(sdkPackagePath);
+  const platformPackage = await readJson(platformPackagePath);
+  if (
+    sdkPackage.name !== '@anthropic-ai/claude-agent-sdk'
+    || sdkPackage.version !== cliLock.sdkVersion
+    || platformPackage.name !== contract.package
+    || platformPackage.version !== cliLock.sdkVersion
+  ) {
+    throw codedError('CLAUDE_CLI_INVALID', 'installed Claude CLI package identity does not match lock');
+  }
+
+  const stats = await fs.promises.lstat(binaryPath);
+  if (!stats.isFile()) {
+    throw codedError('CLAUDE_CLI_INVALID', `Claude CLI binary is not a regular file: ${binaryPath}`);
+  }
+  if (platform === 'macos-arm64') {
+    const mode = (stats.mode & 0o777).toString(8).padStart(4, '0');
+    if (contract.mode !== '0755' || mode !== contract.mode) {
+      throw codedError(
+        'CLAUDE_CLI_INVALID',
+        `Claude CLI mode mismatch: expected ${contract.mode}, received ${mode}`,
+      );
+    }
+  } else {
+    if (contract.mode !== 'regular-pe-x64' || path.extname(binaryPath).toLowerCase() !== '.exe') {
+      throw codedError('CLAUDE_CLI_INVALID', 'Windows Claude CLI mode must be regular-pe-x64');
+    }
+    await assertPeX64(binaryPath);
+  }
+  const digest = await sha256File(binaryPath);
+  if (digest !== contract.sha256) {
+    throw codedError(
+      'CLAUDE_CLI_INVALID',
+      `Claude CLI SHA-256 mismatch: expected ${contract.sha256}, received ${digest}`,
+    );
+  }
+  const version = (await run(binaryPath, ['--version'], { capture: true })).stdout.trim();
+  const expectedVersion = `${cliLock.version} (Claude Code)`;
+  if (version !== expectedVersion) {
+    throw codedError(
+      'CLAUDE_CLI_INVALID',
+      `Claude CLI version mismatch: expected ${expectedVersion}, received ${version}`,
+    );
+  }
+  return version;
 }
 
 function validateExportedRequirements(contents) {
@@ -311,7 +801,7 @@ async function buildAndInstallPython({
   }
 }
 
-async function smokeRuntime({ runtimeRoot, platform, runtimeLock }) {
+async function smokeRuntime({ runtimeRoot, repoRoot, platform, runtimeLock }) {
   const executables = runtimeExecutables(runtimeRoot, platform);
   const nodeVersion = (await run(executables.node, ['--version'], { capture: true })).stdout.trim();
   if (nodeVersion !== `v${runtimeLock.node.version}`) {
@@ -326,6 +816,12 @@ async function smokeRuntime({ runtimeRoot, platform, runtimeLock }) {
     '-e',
     "const value=await import('@anthropic-ai/claude-agent-sdk'); if(!value) process.exit(1)",
   ], { cwd: path.join(runtimeRoot, 'node', 'sidecar') });
+  await assertClaudeCliPayload({
+    platform,
+    repoRoot,
+    runtimeRoot,
+    runtimeLock,
+  });
   await run(executables.python, [
     '-I',
     '-c',
@@ -340,6 +836,7 @@ export async function buildPortableRuntime({ platform, outDir, repoRoot }) {
 
   // This gate intentionally precedes host checks, downloads, and temporary-directory creation.
   const buildPackages = assertWorkspaceBuildBackendsLocked(resolvedRepoRoot);
+  await assertUvLockCurrent(resolvedRepoRoot);
   assertNativeBuildHost(platform);
   if (await pathExists(resolvedOutDir)) {
     throw codedError('RUNTIME_OUTPUT_EXISTS', `runtime output already exists: ${resolvedOutDir}`);
@@ -355,27 +852,26 @@ export async function buildPortableRuntime({ platform, outDir, repoRoot }) {
     await fs.promises.mkdir(downloads, { recursive: true });
     await downloadLockedAsset({
       ...runtimeLock.node.assets[platform],
+      expectedBytes: runtimeLock.node.assets[platform].archiveBytes,
       destination: nodeArchive,
     });
     await downloadLockedAsset({
       ...runtimeLock.python.assets[platform],
+      expectedBytes: runtimeLock.python.assets[platform].archiveBytes,
       destination: pythonArchive,
     });
 
-    const nodeRootName = platform === 'windows-x64'
-      ? `node-v${runtimeLock.node.version}-win-x64`
-      : `node-v${runtimeLock.node.version}-darwin-arm64`;
     await extractSingleRoot({
       archive: nodeArchive,
       extractionRoot: path.join(buildRoot, 'extract-node'),
-      expectedName: nodeRootName,
       destination: path.join(temporary, 'node'),
+      contract: runtimeLock.node.assets[platform],
     });
     await extractSingleRoot({
       archive: pythonArchive,
       extractionRoot: path.join(buildRoot, 'extract-python'),
-      expectedName: 'python',
       destination: path.join(temporary, 'python'),
+      contract: runtimeLock.python.assets[platform],
     });
 
     await installNodePayload({
@@ -384,6 +880,29 @@ export async function buildPortableRuntime({ platform, outDir, repoRoot }) {
       buildRoot,
       platform,
     });
+    await pruneBundledRuntimeTools({ runtimeRoot: temporary, platform });
+    await copyNodeRuntimeLicenseNotices({
+      repoRoot: resolvedRepoRoot,
+      runtimeRoot: temporary,
+    });
+    const pythonEvidence = loadPythonStandaloneEvidence({
+      bundle: path.join(
+        resolvedRepoRoot,
+        'packaging/evidence/python-standalone/evidence-bundle.json',
+      ),
+      runtimeLock,
+      bom: path.join(resolvedRepoRoot, 'packaging/python-standalone-bom.json'),
+    });
+    stagePythonStandaloneNotices({
+      runtimeRoot: temporary,
+      platform,
+      evidence: pythonEvidence,
+    });
+    verifyPythonStandalonePayloadEvidence({
+      runtimeRoot: temporary,
+      platform,
+      bom: path.join(resolvedRepoRoot, 'packaging/python-standalone-bom.json'),
+    });
     await buildAndInstallPython({
       runtimeRoot: temporary,
       repoRoot: resolvedRepoRoot,
@@ -391,7 +910,12 @@ export async function buildPortableRuntime({ platform, outDir, repoRoot }) {
       buildPackages,
       platform,
     });
-    await smokeRuntime({ runtimeRoot: temporary, platform, runtimeLock });
+    await smokeRuntime({
+      runtimeRoot: temporary,
+      repoRoot: resolvedRepoRoot,
+      platform,
+      runtimeLock,
+    });
     await fs.promises.rm(buildRoot, { recursive: true, force: true });
     const manifest = await generateRuntimeInventory({
       platform,

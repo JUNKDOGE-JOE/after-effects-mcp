@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RuntimeSpdx23Document",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "SPDXID",
+    "creationInfo",
+    "dataLicense",
+    "documentNamespace",
+    "hasExtractedLicensingInfos",
+    "name",
+    "packages",
+    "relationships",
+    "spdxVersion"
+  ],
+  "properties": {
+    "SPDXID": { "const": "SPDXRef-DOCUMENT" },
+    "creationInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["created", "creators"],
+      "properties": {
+        "created": { "const": "1970-01-01T00:00:00.000Z" },
+        "creators": {
+          "type": "array",
+          "prefixItems": [{ "const": "Tool: ae-mcp-runtime-inventory" }],
+          "items": false,
+          "minItems": 1,
+          "maxItems": 1
+        }
+      }
+    },
+    "dataLicense": { "const": "CC0-1.0" },
+    "documentNamespace": {
+      "type": "string",
+      "pattern": "^https://github\\.com/JUNKDOGE-JOE/after-effects-mcp/spdx/runtime/(macos-arm64|windows-x64)/[a-f0-9]{64}$"
+    },
+    "hasExtractedLicensingInfos": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/extractedLicensingInfo" }
+    },
+    "name": {
+      "enum": ["ae-mcp-runtime-macos-arm64", "ae-mcp-runtime-windows-x64"]
+    },
+    "packages": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/package" }
+    },
+    "relationships": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/relationship" }
+    },
+    "spdxVersion": { "const": "SPDX-2.3" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "checksum": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "checksumValue"],
+      "properties": {
+        "algorithm": { "const": "SHA256" },
+        "checksumValue": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "SPDXID",
+        "checksums",
+        "downloadLocation",
+        "filesAnalyzed",
+        "licenseConcluded",
+        "licenseDeclared",
+        "name",
+        "sourceInfo",
+        "versionInfo"
+      ],
+      "properties": {
+        "SPDXID": { "type": "string", "pattern": "^SPDXRef-Package-[0-9]{6}$" },
+        "checksums": {
+          "type": "array",
+          "prefixItems": [{ "$ref": "#/$defs/checksum" }],
+          "items": false,
+          "minItems": 1,
+          "maxItems": 1
+        },
+        "downloadLocation": { "const": "NOASSERTION" },
+        "filesAnalyzed": { "const": false },
+        "licenseConcluded": { "type": "string", "minLength": 1 },
+        "licenseDeclared": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "sourceInfo": { "type": "string", "minLength": 1 },
+        "versionInfo": { "type": "string", "minLength": 1 }
+      }
+    },
+    "relationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relatedSpdxElement", "relationshipType", "spdxElementId"],
+      "properties": {
+        "relatedSpdxElement": { "type": "string", "pattern": "^SPDXRef-Package-[0-9]{6}$" },
+        "relationshipType": { "const": "DESCRIBES" },
+        "spdxElementId": { "const": "SPDXRef-DOCUMENT" }
+      }
+    },
+    "extractedLicensingInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["licenseId", "extractedText", "name", "comment"],
+      "properties": {
+        "licenseId": {
+          "type": "string",
+          "pattern": "^LicenseRef-[A-Za-z0-9.-]+$"
+        },
+        "extractedText": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "comment": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

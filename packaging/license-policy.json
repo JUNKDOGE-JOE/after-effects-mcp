@@ -3,9 +3,47 @@
   "forbidden": [
     "UNKNOWN"
   ],
-  "restrictedLicenseRefs": [
-    "LicenseRef-Anthropic-Commercial"
+  "allowedSpdxLicenses": [
+    "0BSD",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BlueOak-1.0.0",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "PSF-2.0",
+    "Python-2.0",
+    "TCL",
+    "Unlicense",
+    "Zlib",
+    "bzip2-1.0.6"
   ],
+  "allowedSpdxExceptions": [],
+  "allowedLicenseRefs": [
+    "LicenseRef-Anthropic-Commercial",
+    "LicenseRef-Itcl-4.3.5",
+    "LicenseRef-Microsoft-Visual-Cpp-Runtime",
+    "LicenseRef-Node-ICU-Bundle",
+    "LicenseRef-Node-V8-Bundle",
+    "LicenseRef-SQLite-Public-Domain",
+    "LicenseRef-Tcl-Thread-3.0.4",
+    "LicenseRef-Tix-8.4.3.6"
+  ],
+  "restrictedLicenseRefs": [
+    "LicenseRef-Anthropic-Commercial",
+    "LicenseRef-Itcl-4.3.5",
+    "LicenseRef-Microsoft-Visual-Cpp-Runtime",
+    "LicenseRef-Node-ICU-Bundle",
+    "LicenseRef-Node-V8-Bundle",
+    "LicenseRef-Tcl-Thread-3.0.4",
+    "LicenseRef-Tix-8.4.3.6"
+  ],
+  "reviewedNonRestrictedLicenseRefs": [
+    "LicenseRef-SQLite-Public-Domain"
+  ],
+  "trustedApprovals": [],
   "classifications": {
     "npm:@anthropic-ai/claude-agent-sdk": "LicenseRef-Anthropic-Commercial",
     "npm:@anthropic-ai/claude-agent-sdk-darwin-arm64": "LicenseRef-Anthropic-Commercial",

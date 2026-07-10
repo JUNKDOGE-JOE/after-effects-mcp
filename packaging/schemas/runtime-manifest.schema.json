@@ -65,7 +65,23 @@
             "not": { "const": "UNKNOWN" }
           },
           "source": { "type": "string", "minLength": 1 },
-          "sha256": { "$ref": "#/$defs/sha256" }
+          "sha256": { "$ref": "#/$defs/sha256" },
+          "relationship": { "enum": ["STATIC_LINK", "DYNAMIC_LINK", "CONTAINS"] },
+          "disposition": { "const": "payload" },
+          "licenseEvidence": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "path", "sha256"],
+              "properties": {
+                "kind": { "enum": ["metadata-file", "source-file", "payload-file"] },
+                "path": { "type": "string", "minLength": 1 },
+                "sha256": { "$ref": "#/$defs/sha256" }
+              }
+            }
+          }
         }
       }
     },

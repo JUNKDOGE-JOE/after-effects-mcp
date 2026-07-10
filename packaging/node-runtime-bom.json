@@ -1,0 +1,175 @@
+{
+  "schemaVersion": 1,
+  "nodeVersion": "24.17.0",
+  "sourceAsset": {
+    "url": "https://nodejs.org/dist/v24.17.0/node-v24.17.0.tar.xz",
+    "sha256": "a7ab562ed2369a29c68b72fa00e3103bcdfe37063dff799c6acc8e404e275fcd",
+    "license": {
+      "path": "LICENSE",
+      "sha256": "4573185d56580da2b890ba34a85a409257640f1c5632eade4300137266194d18"
+    }
+  },
+  "platforms": {
+    "macos-arm64": {
+      "licenseFile": {
+        "path": "node/LICENSE",
+        "sha256": "4573185d56580da2b890ba34a85a409257640f1c5632eade4300137266194d18"
+      },
+      "processVersions": {
+        "node": "24.17.0",
+        "acorn": "8.16.0",
+        "ada": "3.4.4",
+        "amaro": "1.1.9",
+        "ares": "1.34.6",
+        "brotli": "1.2.0",
+        "cldr": "48.0",
+        "icu": "78.3",
+        "llhttp": "9.4.2",
+        "merve": "1.2.2",
+        "modules": "137",
+        "napi": "10",
+        "nbytes": "0.1.4",
+        "ncrypto": "0.0.1",
+        "nghttp2": "1.69.0",
+        "nghttp3": "",
+        "ngtcp2": "",
+        "openssl": "3.5.7",
+        "simdjson": "4.6.1",
+        "simdutf": "6.4.0",
+        "sqlite": "3.53.0",
+        "tz": "2026b",
+        "undici": "7.28.0",
+        "unicode": "17.0",
+        "uv": "1.52.1",
+        "uvwasi": "0.0.23",
+        "v8": "13.6.233.17-node.49",
+        "zlib": "1.3.1-e00f703",
+        "zstd": "1.5.7"
+      },
+      "verification": "verified-native"
+    },
+    "windows-x64": {
+      "licenseFile": {
+        "path": "node/LICENSE",
+        "sha256": "8efdacdc1cfa3460aeb7fe98e3c54337b971d5da70e6eee292b73b981acb220c"
+      },
+      "processVersions": {
+        "node": "24.17.0",
+        "acorn": "8.16.0",
+        "ada": "3.4.4",
+        "amaro": "1.1.9",
+        "ares": "1.34.6",
+        "brotli": "1.2.0",
+        "cldr": "48.0",
+        "icu": "78.3",
+        "llhttp": "9.4.2",
+        "merve": "1.2.2",
+        "modules": "137",
+        "napi": "10",
+        "nbytes": "0.1.4",
+        "ncrypto": "0.0.1",
+        "nghttp2": "1.69.0",
+        "nghttp3": "",
+        "ngtcp2": "",
+        "openssl": "3.5.7",
+        "simdjson": "4.6.1",
+        "simdutf": "6.4.0",
+        "sqlite": "3.53.0",
+        "tz": "2026b",
+        "undici": "7.28.0",
+        "unicode": "17.0",
+        "uv": "1.52.1",
+        "uvwasi": "0.0.23",
+        "v8": "13.6.233.17-node.49",
+        "zlib": "1.3.1-e00f703",
+        "zstd": "1.5.7"
+      },
+      "verification": "pending-native"
+    }
+  },
+  "licenseNotices": [
+    {
+      "package": "brace-expansion",
+      "version": "5.0.5",
+      "tarball": {
+        "url": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.5.tgz",
+        "integrity": "sha512-VZznLgtwhn+Mact9tfiwx64fA9erHH/MCXEUfB/0bX/6Fz6ny5EGTXYltMocqg4xFAQZtnO3DHWWXi8RiuN7cQ==",
+        "sha256": "e919c0ac902f05c2b3bbd31fd71af6c8ddfd74fadc85321231184d39ca990f31",
+        "bytes": 7894
+      },
+      "archivePath": "package/LICENSE",
+      "sourcePath": "packaging/licenses/node-runtime/brace-expansion-5.0.5-LICENSE.txt",
+      "payloadPath": "licenses/node-runtime/brace-expansion-5.0.5-LICENSE.txt",
+      "sha256": "9c63a23124d68cd30cd316a94a1a0bca34f032786df6df69fc4b5f136bac8d2e"
+    },
+    {
+      "package": "balanced-match",
+      "version": "4.0.4",
+      "tarball": {
+        "url": "https://registry.npmjs.org/balanced-match/-/balanced-match-4.0.4.tgz",
+        "integrity": "sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==",
+        "sha256": "9025508d9125eee531bbc49ce3ae560183975ad595f058c378bd56af4152fb16",
+        "bytes": 4199
+      },
+      "archivePath": "package/LICENSE.md",
+      "sourcePath": "packaging/licenses/node-runtime/balanced-match-4.0.4-LICENSE.txt",
+      "payloadPath": "licenses/node-runtime/balanced-match-4.0.4-LICENSE.txt",
+      "sha256": "d408f38ffa3355c5faec517153295338892eb0f1ea43f57874bb23c6075979b5"
+    }
+  ],
+  "payloadComponents": [
+    { "name": "node-core", "version": "24.17.0", "relationship": "CONTAINS", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": ".", "processVersionKey": "node", "licenseEvidence": { "kind": "license-preamble" } },
+    { "name": "acorn", "version": "8.16.0", "relationship": "CONTAINS", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "deps/acorn", "processVersionKey": "acorn", "licenseEvidence": { "kind": "license-section", "heading": "Acorn", "sourceSubpath": "deps/acorn" } },
+    { "name": "acorn-walk", "version": "8.3.5", "relationship": "CONTAINS", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "deps/acorn/acorn-walk", "licenseEvidence": { "kind": "source-file", "path": "deps/acorn/acorn-walk/LICENSE", "sha256": "c2d8184ea9becd063aa40be243e8c6ec2c4f72828fdfe4b0752664ef73e96ed3" } },
+    { "name": "c-ares", "version": "1.34.6", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "deps/cares", "processVersionKey": "ares", "licenseEvidence": { "kind": "license-section", "heading": "c-ares", "sourceSubpath": "deps/cares" } },
+    { "name": "merve", "version": "1.2.2", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "deps/merve", "processVersionKey": "merve", "licenseEvidence": { "kind": "license-section", "heading": "merve", "sourceSubpath": "deps/merve" } },
+    { "name": "amaro", "version": "1.1.9", "relationship": "CONTAINS", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "deps/amaro", "processVersionKey": "amaro", "licenseEvidence": { "kind": "license-section", "heading": "amaro", "sourceSubpath": "deps/amaro" } },
+    { "name": "swc", "version": "1.15.30", "relationship": "CONTAINS", "disposition": "payload", "licenseDeclared": "Apache-2.0", "sourceSubpath": "deps/amaro/dist", "licenseEvidence": { "kind": "license-section", "heading": "swc", "sourceSubpath": "deps/amaro/dist" } },
+    { "name": "icu", "version": "78.3", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "LicenseRef-Node-ICU-Bundle", "sourceSubpath": "deps/icu-small", "processVersionKey": "icu", "licenseEvidence": { "kind": "license-section", "heading": "ICU", "sourceSubpath": "deps/icu-small" } },
+    { "name": "libuv", "version": "1.52.1", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "MIT AND BSD-2-Clause AND ISC", "sourceSubpath": "deps/uv", "processVersionKey": "uv", "licenseEvidence": { "kind": "license-section", "heading": "libuv", "sourceSubpath": "deps/uv" } },
+    { "name": "llhttp", "version": "9.4.2", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "deps/llhttp", "processVersionKey": "llhttp", "licenseEvidence": { "kind": "license-section", "heading": "llhttp", "sourceSubpath": "deps/llhttp" } },
+    { "name": "undici", "version": "7.28.0", "relationship": "CONTAINS", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "deps/undici", "processVersionKey": "undici", "licenseEvidence": { "kind": "license-section", "heading": "undici", "sourceSubpath": "deps/undici" } },
+    { "name": "openssl", "version": "3.5.7", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "Apache-2.0", "sourceSubpath": "deps/openssl", "processVersionKey": "openssl", "licenseEvidence": { "kind": "license-section", "heading": "OpenSSL", "sourceSubpath": "deps/openssl" } },
+    { "name": "punycode", "version": "2.1.0", "relationship": "CONTAINS", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "lib/punycode.js", "licenseEvidence": { "kind": "license-section", "heading": "Punycode.js", "sourceSubpath": "lib/punycode.js" } },
+    { "name": "v8", "version": "13.6.233.17-node.49", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "LicenseRef-Node-V8-Bundle", "sourceSubpath": "deps/v8", "processVersionKey": "v8", "licenseEvidence": { "kind": "license-section", "heading": "V8", "sourceSubpath": "deps/v8" } },
+    { "name": "siphash", "version": "vendored-24.17.0", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "CC0-1.0", "sourceSubpath": "deps/v8/src/third_party/siphash", "licenseEvidence": { "kind": "license-section", "heading": "SipHash", "sourceSubpath": "deps/v8/src/third_party/siphash" } },
+    { "name": "zlib", "version": "1.3.1-e00f703", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "Zlib", "sourceSubpath": "deps/zlib", "processVersionKey": "zlib", "licenseEvidence": { "kind": "license-section", "heading": "zlib", "sourceSubpath": "deps/zlib" } },
+    { "name": "simdjson", "version": "4.6.1", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "Apache-2.0", "sourceSubpath": "deps/simdjson", "processVersionKey": "simdjson", "licenseEvidence": { "kind": "license-section", "heading": "simdjson", "sourceSubpath": "deps/simdjson" } },
+    { "name": "simdutf", "version": "6.4.0", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "deps/v8/third_party/simdutf", "processVersionKey": "simdutf", "licenseEvidence": { "kind": "license-section", "heading": "simdutf", "sourceSubpath": "deps/v8/third_party/simdutf" } },
+    { "name": "ada", "version": "3.4.4", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "deps/ada", "processVersionKey": "ada", "licenseEvidence": { "kind": "license-section", "heading": "ada", "sourceSubpath": "deps/ada" } },
+    { "name": "minimatch", "version": "10.2.5", "relationship": "CONTAINS", "disposition": "payload", "licenseDeclared": "BlueOak-1.0.0", "sourceSubpath": "deps/minimatch", "licenseEvidence": [{ "kind": "license-section", "heading": "minimatch", "sourceSubpath": "deps/minimatch" }, { "kind": "source-file", "path": "deps/minimatch/index.js", "sha256": "23f1e425aa0813670574fe2c0241f591ef5463aacf2a23e3284654a49245fd4c" }, { "kind": "source-file", "path": "deps/minimatch/package-lock.json", "sha256": "6e435625a4a49c45ab3174604f308f7e1d2a961da3af6ef63508dc317b982b23" }] },
+    { "name": "brace-expansion", "version": "5.0.5", "relationship": "CONTAINS", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "deps/minimatch/index.js", "licenseEvidence": [{ "kind": "source-file", "path": "deps/minimatch/index.js", "sha256": "23f1e425aa0813670574fe2c0241f591ef5463aacf2a23e3284654a49245fd4c" }, { "kind": "source-file", "path": "deps/minimatch/package-lock.json", "sha256": "6e435625a4a49c45ab3174604f308f7e1d2a961da3af6ef63508dc317b982b23" }, { "kind": "payload-file", "path": "licenses/node-runtime/brace-expansion-5.0.5-LICENSE.txt", "sha256": "9c63a23124d68cd30cd316a94a1a0bca34f032786df6df69fc4b5f136bac8d2e" }] },
+    { "name": "balanced-match", "version": "4.0.4", "relationship": "CONTAINS", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "deps/minimatch/index.js", "licenseEvidence": [{ "kind": "source-file", "path": "deps/minimatch/index.js", "sha256": "23f1e425aa0813670574fe2c0241f591ef5463aacf2a23e3284654a49245fd4c" }, { "kind": "source-file", "path": "deps/minimatch/package-lock.json", "sha256": "6e435625a4a49c45ab3174604f308f7e1d2a961da3af6ef63508dc317b982b23" }, { "kind": "payload-file", "path": "licenses/node-runtime/balanced-match-4.0.4-LICENSE.txt", "sha256": "d408f38ffa3355c5faec517153295338892eb0f1ea43f57874bb23c6075979b5" }] },
+    { "name": "nghttp2", "version": "1.69.0", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "deps/nghttp2", "processVersionKey": "nghttp2", "licenseEvidence": { "kind": "license-section", "heading": "nghttp2", "sourceSubpath": "deps/nghttp2" } },
+    { "name": "inspector-protocol", "version": "0+rev.1b1bcbbe060e8c8cd8704f00f78978c50991b307", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "BSD-3-Clause", "sourceSubpath": "deps/inspector_protocol", "licenseEvidence": { "kind": "license-section", "heading": "inspector_protocol", "sourceSubpath": "deps/inspector_protocol" } },
+    { "name": "large-pages", "version": "vendored-24.17.0", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "src/large_pages", "licenseEvidence": { "kind": "license-section", "heading": "large_pages", "sourceSubpath": "src/large_pages" } },
+    { "name": "caja", "version": "vendored-24.17.0", "relationship": "CONTAINS", "disposition": "payload", "licenseDeclared": "Apache-2.0", "sourceSubpath": "lib/internal/freeze_intrinsics.js", "licenseEvidence": { "kind": "license-section", "heading": "caja", "sourceSubpath": "lib/internal/freeze_intrinsics.js" } },
+    { "name": "brotli", "version": "1.2.0", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "deps/brotli", "processVersionKey": "brotli", "licenseEvidence": { "kind": "license-section", "heading": "brotli", "sourceSubpath": "deps/brotli" } },
+    { "name": "zstd", "version": "1.5.7", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "BSD-3-Clause", "sourceSubpath": "deps/zstd", "processVersionKey": "zstd", "licenseEvidence": { "kind": "license-section", "heading": "zstd", "sourceSubpath": "deps/zstd" } },
+    { "name": "hdr-histogram", "version": "0.11.9", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "CC0-1.0 OR BSD-2-Clause", "sourceSubpath": "deps/histogram", "licenseEvidence": { "kind": "license-section", "heading": "HdrHistogram", "sourceSubpath": "deps/histogram" } },
+    { "name": "node-heapdump", "version": "vendored-24.17.0", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "ISC", "sourceSubpath": "src/heap_utils.cc", "licenseEvidence": { "kind": "license-section", "heading": "node-heapdump", "sourceSubpath": "src/heap_utils.cc" } },
+    { "name": "rimraf", "version": "vendored-24.17.0", "relationship": "CONTAINS", "disposition": "payload", "licenseDeclared": "ISC", "sourceSubpath": "lib/internal/fs/rimraf.js", "licenseEvidence": { "kind": "license-section", "heading": "rimraf", "sourceSubpath": "lib/internal/fs/rimraf.js" } },
+    { "name": "uvwasi", "version": "0.0.23", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "deps/uvwasi", "processVersionKey": "uvwasi", "licenseEvidence": { "kind": "license-section", "heading": "uvwasi", "sourceSubpath": "deps/uvwasi" } },
+    { "name": "node-fs-extra", "version": "vendored-24.17.0", "relationship": "CONTAINS", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "lib/internal/fs/cp", "licenseEvidence": { "kind": "license-section", "heading": "node-fs-extra", "sourceSubpath": "lib/internal/fs/cp" } },
+    { "name": "on-exit-leak-free", "version": "vendored-24.17.0", "relationship": "CONTAINS", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "lib/internal/process/finalization", "licenseEvidence": { "kind": "license-section", "heading": "on-exit-leak-free", "sourceSubpath": "lib/internal/process/finalization" } },
+    { "name": "sonic-boom", "version": "vendored-24.17.0", "relationship": "CONTAINS", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "lib/internal/streams/fast-utf8-stream.js", "licenseEvidence": { "kind": "license-section", "heading": "sonic-boom", "sourceSubpath": "lib/internal/streams/fast-utf8-stream.js" } },
+    { "name": "nbytes", "version": "0.1.4", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "deps/nbytes", "processVersionKey": "nbytes", "licenseEvidence": { "kind": "source-file", "path": "deps/nbytes/LICENSE", "sha256": "782ab5b8ae1540c1a2b102fdd00990ed268d4a3a98e90ad7fe724b489d7bb0f2" } },
+    { "name": "ncrypto", "version": "0.0.1", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "MIT", "sourceSubpath": "deps/ncrypto", "processVersionKey": "ncrypto", "licenseEvidence": { "kind": "license-preamble" } },
+    { "name": "sqlite", "version": "3.53.0", "relationship": "STATIC_LINK", "disposition": "payload", "licenseDeclared": "LicenseRef-SQLite-Public-Domain", "sourceSubpath": "deps/sqlite", "processVersionKey": "sqlite", "licenseEvidence": { "kind": "source-file", "path": "deps/sqlite/sqlite3.c", "sha256": "c94657c2a08ed5f3f61a25f0018eb2f64ec42fd053da26d741db9e52e6ffaa77" } }
+  ],
+  "excludedLicenseSections": [
+    { "heading": "ittapi", "sourceSubpath": "deps/v8/third_party/ittapi", "disposition": "disabled", "reason": "V8 system instrumentation is disabled in the locked release build." },
+    { "heading": "LIEF", "sourceSubpath": "deps/LIEF", "disposition": "build-only", "reason": "Executable inspection tooling is not linked into the Node runtime payload." },
+    { "heading": "corepack", "sourceSubpath": "deps/corepack", "disposition": "pruned", "reason": "The package-manager bootstrap payload is deterministically removed after npm ci." },
+    { "heading": "postject", "sourceSubpath": "test/fixtures/postject-copy", "disposition": "build-only", "reason": "The vendored copy is a source test fixture and is absent from the binary runtime payload." },
+    { "heading": "npm", "sourceSubpath": "deps/npm", "disposition": "pruned", "reason": "npm and npx are deterministically removed after installing locked application packages." },
+    { "heading": "GYP", "sourceSubpath": "tools/gyp", "disposition": "build-only", "reason": "GYP is used to generate build files and is not linked into the runtime." },
+    { "heading": "jinja2", "sourceSubpath": "tools/inspector_protocol/jinja2", "disposition": "build-only", "reason": "The template engine is used only by protocol code generation." },
+    { "heading": "markupsafe", "sourceSubpath": "tools/inspector_protocol/markupsafe", "disposition": "build-only", "reason": "The template helper is used only by protocol code generation." },
+    { "heading": "cpplint.py", "sourceSubpath": "tools/cpplint.py", "disposition": "build-only", "reason": "The lint tool is absent from the binary runtime payload." },
+    { "heading": "gypi_to_gn.py", "sourceSubpath": "tools/gypi_to_gn.py", "disposition": "build-only", "reason": "The GN conversion script is absent from the binary runtime payload." },
+    { "heading": "gtest", "sourceSubpath": "deps/googletest", "disposition": "build-only", "reason": "The test framework is not linked into the release runtime." },
+    { "heading": "ngtcp2", "sourceSubpath": "deps/ngtcp2/ngtcp2/", "disposition": "disabled", "reason": "The locked Node release reports an empty ngtcp2 version because QUIC is disabled." },
+    { "heading": "nghttp3", "sourceSubpath": "deps/ngtcp2/nghttp3/", "disposition": "disabled", "reason": "The locked Node release reports an empty nghttp3 version because QUIC is disabled." }
+  ]
+}
