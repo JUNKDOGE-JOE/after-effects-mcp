@@ -2,6 +2,11 @@
   "schemaVersion": 1,
   "node": {
     "version": "24.17.0",
+    "sourceAsset": {
+      "url": "https://nodejs.org/dist/v24.17.0/node-v24.17.0.tar.xz",
+      "sha256": "a7ab562ed2369a29c68b72fa00e3103bcdfe37063dff799c6acc8e404e275fcd",
+      "licenseSha256": "4573185d56580da2b890ba34a85a409257640f1c5632eade4300137266194d18"
+    },
     "headers": {
       "url": "https://nodejs.org/dist/v24.17.0/node-v24.17.0-headers.tar.gz",
       "sha256": "ac60c4ba92204658efaac112efea5d3597348b011be679af0eec324d8c08915e"
@@ -9,25 +14,94 @@
     "assets": {
       "macos-arm64": {
         "url": "https://nodejs.org/dist/v24.17.0/node-v24.17.0-darwin-arm64.tar.gz",
-        "sha256": "4fc3266a3702eebc39cc37661cf4eeceeade307e242ab64e4d7ce7949197e11f"
+        "sha256": "4fc3266a3702eebc39cc37661cf4eeceeade307e242ab64e4d7ce7949197e11f",
+        "format": "ustar-gzip",
+        "root": "node-v24.17.0-darwin-arm64",
+        "archiveBytes": 51886390,
+        "rawEntryCount": 5729,
+        "regularBytes": 192431586,
+        "maxEntryBytes": 120591840,
+        "decompressedBytes": 196613120,
+        "manifestSha256": "784602bc5dab71a90be876c3893eab618a757c4a479ac61dc85f2186f066f8c8"
       },
       "windows-x64": {
         "url": "https://nodejs.org/dist/v24.17.0/node-v24.17.0-win-x64.zip",
-        "sha256": "f2aa33b35b75aca5f3f7b85675a6f6423201053e9381911e64961f3bda2528ab"
+        "sha256": "f2aa33b35b75aca5f3f7b85675a6f6423201053e9381911e64961f3bda2528ab",
+        "format": "zip",
+        "root": "node-v24.17.0-win-x64",
+        "archiveBytes": 36948900,
+        "rawEntryCount": 2404,
+        "regularBytes": 104985270,
+        "maxEntryBytes": 92299080,
+        "decompressedBytes": 104985270,
+        "manifestSha256": "b37b79e3f9c13a9802b7fe46e6073a5990c9b258a7155b8f33ca2e36fccd2415"
       }
     }
   },
   "python": {
     "version": "3.13.14",
     "distributionRelease": "20260610",
+    "releaseCommit": "f1d7b92301235781d4de2493578773aaa413c0a5",
     "assets": {
       "macos-arm64": {
         "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-aarch64-apple-darwin-install_only_stripped.tar.gz",
-        "sha256": "79daa8e9dea1e64ad50aebb05a807289023a474c2020b72361eb44d67fa2401e"
+        "sha256": "79daa8e9dea1e64ad50aebb05a807289023a474c2020b72361eb44d67fa2401e",
+        "format": "ustar-gzip",
+        "root": "python",
+        "archiveBytes": 25135839,
+        "rawEntryCount": 1643,
+        "regularBytes": 64244039,
+        "maxEntryBytes": 17456704,
+        "decompressedBytes": 65515520,
+        "manifestSha256": "6f4457ec5be9050f3f591def19e54552a95e1a2a77037d6c43a67b90d0386776"
       },
       "windows-x64": {
         "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
-        "sha256": "2933d50847057b9131ff89578a220b9206c40fd6bc34d0c12afb716bd9bf8fc9"
+        "sha256": "2933d50847057b9131ff89578a220b9206c40fd6bc34d0c12afb716bd9bf8fc9",
+        "format": "ustar-gzip",
+        "root": "python",
+        "archiveBytes": 21877900,
+        "rawEntryCount": 3283,
+        "regularBytes": 62502912,
+        "maxEntryBytes": 7981568,
+        "decompressedBytes": 65049600,
+        "manifestSha256": "edb2d56f243af22ccebed5fc43ae736e584775c4290316b48a5deddb08b33d1d"
+      }
+    },
+    "metadataAssets": {
+      "macos-arm64": {
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-aarch64-apple-darwin-pgo%2Blto-full.tar.zst",
+        "sha256": "f8b07ffcaf10b1e3586665a848ad295a7d58453a248beac9da2f5f15861dad65",
+        "size": 58342192,
+        "expandedTarBytes": 260812800,
+        "expandedTarSha256": "bd12df8109d84004fc606b6ad31eb290435c28f3bc1cb8d0a04a05b2a3af315a",
+        "pythonJsonSha256": "0b1dea1de856d336bf9fde9a290b971ee808f53067dff5ac5ed5f755a4c6ae43"
+      },
+      "windows-x64": {
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+        "sha256": "df646d34e8a0b4aca87b8a253053c7e4994ba94fe2aebd9beb74697cc8e7516b",
+        "size": 45399670,
+        "expandedTarBytes": 317552640,
+        "expandedTarSha256": "f7baeba65d611c545a0911dc433ff46cb655df4779c77f1dfe9ad81854f180d0",
+        "pythonJsonSha256": "8eefa76eb09fcfa66cf15970536e3c2501f84e3a834bd3b5e3c688649db723f7"
+      }
+    }
+  },
+  "claudeCli": {
+    "version": "2.1.174",
+    "sdkVersion": "0.3.174",
+    "assets": {
+      "macos-arm64": {
+        "package": "@anthropic-ai/claude-agent-sdk-darwin-arm64",
+        "binary": "claude",
+        "mode": "0755",
+        "sha256": "20c5380b4423be9963c510f5464cc1f443235a9b4423179f9c01f28021b81bad"
+      },
+      "windows-x64": {
+        "package": "@anthropic-ai/claude-agent-sdk-win32-x64",
+        "binary": "claude.exe",
+        "mode": "regular-pe-x64",
+        "sha256": "6e18f7a62a5046606d84c875e2dcc01aa90950e002acf8d5994e2f214c1ab861"
       }
     }
   }
