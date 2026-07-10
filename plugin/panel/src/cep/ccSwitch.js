@@ -3,6 +3,16 @@
 import { createPlatformAdapter } from './platform/index.js';
 
 const CONFIG_NAMES = ['config.json', 'providers.json'];
+const API_FORMAT_TO_WIRE_API = {
+  openai_responses: 'responses',
+  'openai-responses': 'responses',
+  responses: 'responses',
+  openai_chat: 'chat',
+  'openai-chat': 'chat',
+  chat: 'chat',
+  'chat-completions': 'chat',
+  chat_completions: 'chat',
+};
 
 function rotateRight(value, count) {
   return (value >>> count) | (value << (32 - count));
@@ -88,10 +98,71 @@ function rawProviders(parsed) {
   return [];
 }
 
+function objectValue(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function hasOwn(value, key) {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function wireApiFromValue(value) {
+  return API_FORMAT_TO_WIRE_API[String(value || '').trim().toLowerCase()] || '';
+}
+
+function wireApiFromConfig(value) {
+  if (typeof value !== 'string') return '';
+  const match = value.match(/(?:^|\n)\s*wire_api\s*=\s*["'](responses|chat)["']/i);
+  return match ? match[1].toLowerCase() : '';
+}
+
 function dialectHint(provider) {
-  const raw = String(provider?.wireApi || provider?.wire_api || provider?.dialect || '').trim().toLowerCase();
-  if (raw === 'responses') return 'responses';
-  if (raw === 'chat' || raw === 'chat-completions' || raw === 'chat_completions') return 'chat';
+  const meta = objectValue(provider?.meta);
+  const settingsConfig = objectValue(provider?.settingsConfig || provider?.settings_config);
+  const dialect = objectValue(provider?.dialect);
+  return wireApiFromValue(meta.apiFormat || meta.api_format)
+    || wireApiFromValue(provider?.apiFormat || provider?.api_format)
+    || wireApiFromConfig(settingsConfig.config)
+    || wireApiFromValue(provider?.wireApi || provider?.wire_api || dialect.wireApi || dialect.wire_api)
+    || null;
+}
+
+function authSchemeFromValue(value) {
+  const text = String(value || '').trim().toLowerCase();
+  if (text === 'none' || text === 'no-auth' || text === 'no_auth') return 'none';
+  if (text === 'bearer' || text === 'authorization' || text === 'openai_api_key') return 'bearer';
+  if (text === 'x-api-key' || text === 'x_api_key' || text === 'anthropic_api_key') return 'x-api-key';
+  return '';
+}
+
+function authSchemeFromKeyField(value) {
+  const field = String(value || '').trim();
+  const direct = authSchemeFromValue(field);
+  if (direct) return direct;
+  if (/x[-_]?api[-_]?key/i.test(field) || field === 'ANTHROPIC_API_KEY') return 'x-api-key';
+  if (/authorization/i.test(field) || field === 'OPENAI_API_KEY' || field === 'ANTHROPIC_AUTH_TOKEN') return 'bearer';
+  return '';
+}
+
+function authHint(provider) {
+  const meta = objectValue(provider?.meta);
+  const settingsConfig = objectValue(provider?.settingsConfig || provider?.settings_config);
+  const auth = objectValue(settingsConfig.auth);
+  const env = objectValue(settingsConfig.env);
+  const explicit = authSchemeFromValue(
+    provider?.authScheme
+    || provider?.auth_scheme
+    || meta.authScheme
+    || meta.auth_scheme
+    || auth.type
+    || auth.scheme,
+  );
+  if (explicit) return explicit;
+  const keyField = authSchemeFromKeyField(meta.apiKeyField || meta.api_key_field);
+  if (keyField) return keyField;
+  if (hasOwn(auth, 'OPENAI_API_KEY') || hasOwn(env, 'OPENAI_API_KEY')) return 'bearer';
+  if (hasOwn(auth, 'ANTHROPIC_AUTH_TOKEN') || hasOwn(env, 'ANTHROPIC_AUTH_TOKEN')) return 'bearer';
+  if (hasOwn(auth, 'ANTHROPIC_API_KEY') || hasOwn(env, 'ANTHROPIC_API_KEY')) return 'x-api-key';
   return null;
 }
 
@@ -120,7 +191,8 @@ function previewEntry(provider) {
     name,
     protocol,
     baseUrl,
-    dialectHint: dialectHint(provider),
+    dialectHint: protocol === 'openai-compatible' ? dialectHint(provider) : null,
+    authHint: protocol === 'openai-compatible' ? authHint(provider) : null,
   };
 }
 
@@ -166,7 +238,7 @@ export function readCcSwitchProviderDrafts({ file, expectedSourceRevision, fsImp
     if (!preview) return null;
     return {
       ...preview,
-      modelAuthKind: 'bearer',
+      modelAuthKind: preview.authHint || 'bearer',
       modelAuthSecret: String(provider.apiKey || provider.api_key || provider.key || provider.token || '').trim(),
     };
   }).filter(Boolean);

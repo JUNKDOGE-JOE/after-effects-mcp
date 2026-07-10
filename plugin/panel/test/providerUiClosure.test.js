@@ -33,6 +33,17 @@ test('provider manager exposes model/probe auth, custom headers, scoped extra he
     /scopeModel/,
     /dialectOverride/,
   ]) assert.match(manager, pattern);
+  assert.match(manager, /providerDialectBadge\s*\(\s*provider\s*,\s*lang\s*\)/);
+  assert.match(manager, /onProbe\s*\(\s*provider\s*,\s*\{\s*forceDetect:\s*true\s*\}\s*\)/);
+});
+
+test('App routes provider probing through the V2 profile resolver and CAS flow', () => {
+  const app = source('../src/app/App.jsx');
+  assert.match(app, /runProviderManagerProbe\s*\(\s*provider\s*,\s*\{/);
+  assert.match(app, /store:\s*providerStore/);
+  assert.match(app, /resolveProviderRequestProfile\s*\(\s*entry\s*,\s*\{/);
+  assert.match(app, /forceDetect:\s*options\.forceDetect\s*===\s*true/);
+  assert.doesNotMatch(app, /function\s+probeApiKeyFromProfile/);
 });
 
 test('App requires authenticated helper capabilities before migration and preserves providers on repairable failure', () => {
@@ -62,11 +73,18 @@ test('App requires authenticated helper capabilities before migration and preser
 test('Codex app-server profile follows effective.channel and cannot inherit a closed custom-provider gate', () => {
   const app = source('../src/app/App.jsx');
   assert.match(app, /codexRuntimeProviderProfile\s*\(\s*\{[\s\S]*effectiveChannel:\s*effective\.channel/);
-  assert.match(app, /customProviderCredentialResolverReady:\s*false/);
+  assert.match(app, /const codexProviderCredentialResolverReady\s*=\s*providerInit\.state\s*===\s*'ready'/);
+  assert.match(app, /customProviderCredentialResolverReady:\s*codexProviderCredentialResolverReady/);
+  assert.match(app, /customProviderDialect:\s*codexCustomProviderDialect/);
+  assert.match(app, /resolveRequestProfile:\s*\(provider,\s*\{\s*scope\s*\}\)\s*=>\s*resolveProviderRequestProfile/);
+  assert.match(app, /recoverProviderProfile:\s*async\s*\(provider\)[\s\S]*runProviderManagerProbe\s*\(provider,[\s\S]*forceDetect:\s*true/);
+  assert.match(app, /onProviderProfileRecovered:[\s\S]*setProviders\(providerStore\.list\(\)\)/);
+  assert.match(app, /previousCodexProviderProfileRef\.current\s*===\s*providerProfile/);
+  assert.match(app, /previousCodexProviderProfileRef\.current\s*=\s*providerProfile;\s*codexBackend\.reset\(\)/);
   assert.doesNotMatch(app, /codexBaseUrl:\s*codexCustomProvider\s*\?/);
   assert.doesNotMatch(app, /if\s*\(codexCustomProvider\s*&&\s*codexCustomProvider\.baseUrl\)\s*return undefined/);
   assert.match(app, /const facts\s*=\s*\{[\s\S]*effectiveChannel:\s*effective\.channel/);
-  assert.match(app, /const facts\s*=\s*\{[\s\S]*customProviderCredentialResolverReady:\s*false/);
+  assert.match(app, /const facts\s*=\s*\{[\s\S]*customProviderCredentialResolverReady:\s*codexProviderCredentialResolverReady/);
 });
 
 test('provider initialization retains the last provider list and renders distinct actionable failure classes', () => {

@@ -2,34 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createCodexResponsesRoute, responsesBodyToChatBody } from '../src/cep/codexResponsesRoute.js';
-
-function listen(server) {
-  return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server.address().port)));
-}
-
-function close(server) {
-  return new Promise((resolve) => server.close(resolve));
-}
-
-function requestText(url, { method = 'GET', headers = {}, body } = {}) {
-  return new Promise((resolve, reject) => {
-    const endpoint = new URL(url);
-    const req = http.request({
-      hostname: endpoint.hostname,
-      port: endpoint.port,
-      path: endpoint.pathname + endpoint.search,
-      method,
-      headers,
-    }, (res) => {
-      let text = '';
-      res.on('data', (chunk) => { text += chunk; });
-      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: text }));
-    });
-    req.on('error', reject);
-    if (body !== undefined) req.write(typeof body === 'string' ? body : JSON.stringify(body));
-    req.end();
-  });
-}
+import {
+  closeServer,
+  deterministicCrypto,
+  listen,
+  providerFixture,
+  requestText,
+  resolvedModelProfile,
+  routeHeaders,
+} from './helpers/providerRouteFixtures.js';
 
 test('responsesBodyToChatBody maps text-only Responses input to chat completions', () => {
   assert.deepEqual(responsesBodyToChatBody({
@@ -57,24 +38,34 @@ test('createCodexResponsesRoute adapts streaming Responses requests to chat comp
     req.on('end', () => {
       upstreamCalls.push({ path: req.url, headers: req.headers, body: JSON.parse(body || '{}') });
       res.writeHead(200, { 'Content-Type': 'text/event-stream' });
-      res.write('data: {"choices":[{"delta":{"content":"CODEX_"}}]}\n\n');
-      res.write('data: {"choices":[{"delta":{"content":"ROUTE_OK"}}]}\n\n');
+      res.write('data: {"id":"chatcmpl_route","object":"chat.completion.chunk","created":1,"model":"gpt-5.4","choices":[{"index":0,"delta":{"role":"assistant","content":"CODEX_"},"finish_reason":null}]}\n\n');
+      res.write('data: {"id":"chatcmpl_route","object":"chat.completion.chunk","created":1,"model":"gpt-5.4","choices":[{"index":0,"delta":{"content":"ROUTE_OK"},"finish_reason":null}]}\n\n');
+      res.write('data: {"id":"chatcmpl_route","object":"chat.completion.chunk","created":1,"model":"gpt-5.4","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n');
       res.end('data: [DONE]\n\n');
     });
   });
-  const upstreamPort = await listen(upstream);
-  const route = createCodexResponsesRoute({
-    requireImpl: (name) => { if (name === 'http') return http; throw new Error('unexpected module ' + name); },
-    upstreamBaseUrl: `http://127.0.0.1:${upstreamPort}/v1`,
-    apiKey: 'sk-upstream',
-    authScheme: 'bearer',
-  });
-
+  let route = null;
+  let upstreamListening = false;
   try {
+    const upstreamPort = await listen(upstream);
+    upstreamListening = true;
+    const baseUrl = `http://127.0.0.1:${upstreamPort}/v1`;
+    route = createCodexResponsesRoute({
+      provider: providerFixture({ baseUrl }),
+      resolveRequestProfile: async (_provider, { scope }) => {
+        assert.equal(scope, 'model');
+        return resolvedModelProfile({
+          baseUrl,
+          auth: { kind: 'header', name: 'authorization', value: 'Bearer sk-upstream' },
+        });
+      },
+      requireImpl: (name) => { if (name === 'http') return http; throw new Error('unexpected module ' + name); },
+      cryptoImpl: deterministicCrypto(),
+    });
     const local = await route.start();
     const result = await requestText(`${local.baseUrl}/responses`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
       body: {
         model: 'gpt-5.4',
         input: 'reply ok',
@@ -92,8 +83,8 @@ test('createCodexResponsesRoute adapts streaming Responses requests to chat comp
     assert.match(result.body, /CODEX_ROUTE_OK/);
     assert.match(result.body, /event: response.completed/);
   } finally {
-    await route.close();
-    await close(upstream);
+    if (route) await route.close();
+    if (upstreamListening) await closeServer(upstream);
   }
 });
 
@@ -129,24 +120,31 @@ test('createCodexResponsesRoute adapts streaming tool_calls to Responses functio
     req.on('end', () => {
       upstreamCalls.push({ path: req.url, body: JSON.parse(body || '{}') });
       res.writeHead(200, { 'Content-Type': 'text/event-stream' });
-      res.write('data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_9","function":{"name":"ae_status","arguments":"{"}}]}}]}\n\n');
-      res.write('data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"}"}}]}}]}\n\n');
+      res.write('data: {"id":"chatcmpl_tool","object":"chat.completion.chunk","created":1,"model":"gpt-5.4","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_9","type":"function","function":{"name":"ae_status","arguments":"{"}}]},"finish_reason":null}]}\n\n');
+      res.write('data: {"id":"chatcmpl_tool","object":"chat.completion.chunk","created":1,"model":"gpt-5.4","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"}"}}]},"finish_reason":null}]}\n\n');
+      res.write('data: {"id":"chatcmpl_tool","object":"chat.completion.chunk","created":1,"model":"gpt-5.4","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}\n\n');
       res.end('data: [DONE]\n\n');
     });
   });
-  const upstreamPort = await listen(upstream);
-  const route = createCodexResponsesRoute({
-    requireImpl: (name) => { if (name === 'http') return http; throw new Error('unexpected module ' + name); },
-    upstreamBaseUrl: `http://127.0.0.1:${upstreamPort}/v1`,
-    apiKey: 'sk-upstream',
-    authScheme: 'bearer',
-  });
-
+  let route = null;
+  let upstreamListening = false;
   try {
+    const upstreamPort = await listen(upstream);
+    upstreamListening = true;
+    const baseUrl = `http://127.0.0.1:${upstreamPort}/v1`;
+    route = createCodexResponsesRoute({
+      provider: providerFixture({ baseUrl }),
+      resolveRequestProfile: async (_provider, { scope }) => {
+        assert.equal(scope, 'model');
+        return resolvedModelProfile({ baseUrl });
+      },
+      requireImpl: (name) => { if (name === 'http') return http; throw new Error('unexpected module ' + name); },
+      cryptoImpl: deterministicCrypto(),
+    });
     const local = await route.start();
     const result = await requestText(`${local.baseUrl}/responses`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
       body: {
         model: 'gpt-5.4',
         input: 'use tool',
@@ -164,7 +162,7 @@ test('createCodexResponsesRoute adapts streaming tool_calls to Responses functio
     assert.match(result.body, /event: response.function_call_arguments.delta/);
     assert.match(result.body, /event: response.completed/);
   } finally {
-    await route.close();
-    await close(upstream);
+    if (route) await route.close();
+    if (upstreamListening) await closeServer(upstream);
   }
 });

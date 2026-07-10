@@ -87,7 +87,71 @@ test('probeProviderModels degrades to ok:false on 401 and network error', async 
   const httpsErr = makeHttps((options, res, onRes, req) => { req.handlers.error(new Error('ECONNREFUSED')); });
   const down = await probeProviderModels({ baseUrl: 'https://h/v1', apiKey: 'k', httpsImpl: httpsErr });
   assert.equal(down.ok, false);
-  assert.match(down.detail, /ECONNREFUSED/);
+  assert.equal(down.detail, 'Network error while probing provider models');
+});
+
+test('probeProviderModels sends a resolved probe profile without collapsing auth or scoped headers', async () => {
+  const probeSecret = 'resolved-probe-secret';
+  const extraSecret = 'resolved-extra-secret';
+  const calls = [];
+  const requestImpl = async (input) => {
+    calls.push(input);
+    return {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ data: [{ id: 'resolved-model' }] }),
+    };
+  };
+  const result = await probeProviderModels({
+    requestProfile: {
+      providerId: 'provider-1',
+      baseUrl: 'https://provider.example/openai/v1',
+      allowInsecureHttp: false,
+      auth: { kind: 'header', name: 'x-probe-token', value: probeSecret },
+      extraHeaders: [
+        { name: 'x-provider-feature', value: 'enabled', source: 'literal' },
+        { name: 'x-provider-session', value: extraSecret, source: 'secret' },
+      ],
+      authProfileRevision: 4,
+    },
+    protocol: 'openai-compatible',
+    requestImpl,
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.models, [{ id: 'resolved-model', label: 'resolved-model' }]);
+  assert.equal(calls.length, 1);
+  assert.equal(new URL(calls[0].url).pathname, '/openai/v1/models');
+  assert.deepEqual(calls[0].headers, {
+    'x-provider-feature': 'enabled',
+    'x-provider-session': extraSecret,
+    'x-probe-token': probeSecret,
+  });
+  assert.equal(Object.hasOwn(calls[0], 'apiKey'), false);
+  assert.equal(JSON.stringify(result).includes(probeSecret), false);
+  assert.equal(JSON.stringify(result).includes(extraSecret), false);
+});
+
+test('probeProviderModels converts injected request failures into a non-secret network result', async () => {
+  const secret = 'request-error-secret';
+  const result = await probeProviderModels({
+    requestProfile: {
+      providerId: 'provider-1',
+      baseUrl: 'https://provider.example/v1',
+      allowInsecureHttp: false,
+      auth: { kind: 'header', name: 'Authorization', value: `Bearer ${secret}` },
+      extraHeaders: [],
+      authProfileRevision: 1,
+    },
+    requestImpl: async () => { throw new Error(`socket failed ${secret}`); },
+  });
+  assert.deepEqual(result, {
+    ok: false,
+    status: 0,
+    models: [],
+    detail: 'Network error while probing provider models',
+  });
+  assert.equal(JSON.stringify(result).includes(secret), false);
 });
 
 test('probeProviderModels does not include secret-bearing error bodies in detail', async () => {

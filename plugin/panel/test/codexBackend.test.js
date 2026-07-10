@@ -59,7 +59,13 @@ function makeSpawn() {
   const procs = [];
   function spawn(command, args, options) {
     const proc = makeProc();
-    calls.push({ command, args, options, proc });
+    calls.push({
+      command,
+      args,
+      options: { ...options, env: { ...(options.env || {}) } },
+      sourceOptions: options,
+      proc,
+    });
     procs.push(proc);
     return proc;
   }
@@ -74,6 +80,20 @@ async function flush() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+async function waitFor(check, message = 'condition was not reached') {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (check()) return;
+    await flush();
+  }
+  assert.fail(message);
+}
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((next) => { resolve = next; });
+  return { promise, resolve };
+}
+
 function respond(proc, request, result = {}) {
   proc.pushStdout({ id: request.id, result });
 }
@@ -86,6 +106,24 @@ const TOOL_META = {
     mcp__ae__ae_exec: { readOnly: false, destructive: true },
   },
 };
+
+const CUSTOM_PROVIDER = Object.freeze({
+  id: 'my-provider',
+  protocol: 'openai-compatible',
+  baseUrl: 'https://proxy.example/openai/v1',
+});
+
+function resolvedModelProfile(overrides = {}) {
+  return {
+    providerId: CUSTOM_PROVIDER.id,
+    baseUrl: CUSTOM_PROVIDER.baseUrl,
+    allowInsecureHttp: false,
+    auth: { kind: 'header', name: 'Authorization', value: 'Bearer resolved-model-secret' },
+    extraHeaders: [{ name: 'x-provider-feature', value: 'enabled-secret', source: 'secret' }],
+    authProfileRevision: 1,
+    ...overrides,
+  };
+}
 
 function realElicitation(tool, params = {}) {
   return {
@@ -172,6 +210,19 @@ async function startTurn(backend, spawned, text = 'hello') {
   return { pending, proc, init, threadStart, turnStart };
 }
 
+async function startTurnRequest(backend, spawned, text = 'hello', processIndex = 0, threadId = 'thread_1') {
+  const pending = backend.sendUser(text);
+  await flush();
+  const proc = spawned.procs[processIndex];
+  const init = parseWrites(proc)[0];
+  respond(proc, init, {});
+  await flush();
+  const threadStart = parseWrites(proc)[1];
+  respond(proc, threadStart, { threadId });
+  await flush();
+  return { pending, proc, turnStart: parseWrites(proc)[2] };
+}
+
 function pushElicitation(proc, id, params) {
   proc.pushStdout({
     jsonrpc: '2.0',
@@ -241,13 +292,15 @@ test('createCodexBackend starts codex app-server and sends thread/start with AE 
 });
 
 test('createCodexBackend starts app-server with custom provider config when supplied', async () => {
+  let resolveCalls = 0;
   const { backend, spawned } = makeBackend({
-    getProviderProfile: () => ({
-      codexBaseUrl: 'https://proxy.example/openai',
-      codexApiKey: 'sk-proxy',
-      codexProviderId: 'my-provider',
-      codexWireApi: 'responses',
-    }),
+    getProviderProfile: () => ({ provider: CUSTOM_PROVIDER, dialect: 'responses' }),
+    resolveRequestProfile: async (provider, { scope }) => {
+      resolveCalls += 1;
+      assert.equal(provider, CUSTOM_PROVIDER);
+      assert.equal(scope, 'model');
+      return resolvedModelProfile();
+    },
   });
 
   const { pending, proc } = await startTurn(backend, spawned, 'custom provider');
@@ -257,12 +310,18 @@ test('createCodexBackend starts app-server with custom provider config when supp
     'app-server',
     '-c', 'model_provider="my-provider"',
     '-c', 'model_providers.my-provider.name="AE MCP Custom"',
-    '-c', 'model_providers.my-provider.base_url="https://proxy.example/openai"',
-    '-c', 'model_providers.my-provider.env_key="AE_MCP_CODEX_API_KEY"',
+    '-c', 'model_providers.my-provider.base_url="https://proxy.example/openai/v1"',
+    '-c', 'model_providers.my-provider.env_http_headers."x-provider-feature"="AE_MCP_PROVIDER_HEADER_00"',
+    '-c', 'model_providers.my-provider.env_http_headers."authorization"="AE_MCP_PROVIDER_HEADER_01"',
     '-c', 'model_providers.my-provider.wire_api="responses"',
     '-c', 'model_providers.my-provider.requires_openai_auth=false',
   ]);
-  assert.equal(spawned.calls[0].options.env.AE_MCP_CODEX_API_KEY, 'sk-proxy');
+  assert.equal(resolveCalls, 1);
+  assert.equal(spawned.calls[0].options.env.AE_MCP_PROVIDER_HEADER_00, 'enabled-secret');
+  assert.equal(spawned.calls[0].options.env.AE_MCP_PROVIDER_HEADER_01, 'Bearer resolved-model-secret');
+  assert.equal(Object.hasOwn(spawned.calls[0].sourceOptions.env, 'AE_MCP_PROVIDER_HEADER_00'), false);
+  assert.equal(Object.hasOwn(spawned.calls[0].sourceOptions.env, 'AE_MCP_PROVIDER_HEADER_01'), false);
+  assert.doesNotMatch(spawned.calls[0].args.join('\n'), /enabled-secret|resolved-model-secret|env_key|wire_api="chat"/);
 
   proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
   await pending;
@@ -271,46 +330,90 @@ test('createCodexBackend starts app-server with custom provider config when supp
 test('createCodexBackend routes chat-wire custom providers through a local Responses facade', async () => {
   const routeCalls = [];
   let closed = 0;
+  let resolveCalls = 0;
+  const resolveRequestProfile = async () => {
+    resolveCalls += 1;
+    return resolvedModelProfile();
+  };
   const { backend, spawned } = makeBackend({
     createResponsesRoute: (input) => {
       routeCalls.push(input);
       return {
-        start: async () => ({ baseUrl: 'http://127.0.0.1:49123', apiKey: 'local-route-key' }),
+        start: async () => ({ baseUrl: 'http://127.0.0.1:49123/v1', routeToken: 'local-route-key' }),
         close: async () => { closed += 1; },
       };
     },
-    getProviderProfile: () => ({
-      codexBaseUrl: 'https://proxy.example/openai',
-      codexApiKey: 'sk-proxy',
-      codexProviderId: 'my-provider',
-      codexWireApi: 'chat',
-      codexAuthScheme: 'bearer',
-    }),
+    getProviderProfile: () => ({ provider: CUSTOM_PROVIDER, dialect: 'chat' }),
+    resolveRequestProfile,
   });
 
   const { pending, proc } = await startTurn(backend, spawned, 'custom provider');
 
   assert.equal(routeCalls.length, 1);
-  assert.deepEqual(routeCalls[0], {
-    upstreamBaseUrl: 'https://proxy.example/openai',
-    apiKey: 'sk-proxy',
-    authScheme: 'bearer',
-  });
+  assert.equal(routeCalls[0].provider, CUSTOM_PROVIDER);
+  assert.equal(routeCalls[0].resolveRequestProfile, resolveRequestProfile);
+  assert.equal(resolveCalls, 0, 'chat provider secrets must remain lazy until an authenticated route request');
   assert.deepEqual(spawned.calls[0].args, [
     'app-server',
     '-c', 'model_provider="my-provider"',
     '-c', 'model_providers.my-provider.name="AE MCP Custom"',
-    '-c', 'model_providers.my-provider.base_url="http://127.0.0.1:49123"',
-    '-c', 'model_providers.my-provider.env_key="AE_MCP_CODEX_API_KEY"',
+    '-c', 'model_providers.my-provider.base_url="http://127.0.0.1:49123/v1"',
+    '-c', 'model_providers.my-provider.env_http_headers."Authorization"="AE_MCP_PROVIDER_HEADER_00"',
     '-c', 'model_providers.my-provider.wire_api="responses"',
     '-c', 'model_providers.my-provider.requires_openai_auth=false',
   ]);
-  assert.equal(spawned.calls[0].options.env.AE_MCP_CODEX_API_KEY, 'local-route-key');
+  assert.equal(spawned.calls[0].options.env.AE_MCP_PROVIDER_HEADER_00, 'Bearer local-route-key');
+  assert.equal(Object.hasOwn(spawned.calls[0].sourceOptions.env, 'AE_MCP_PROVIDER_HEADER_00'), false);
+  assert.doesNotMatch(spawned.calls[0].args.join('\n'), /local-route-key|wire_api="chat"|env_key/);
 
   proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
   await pending;
   backend.reset();
   assert.equal(closed, 1);
+});
+
+test('createCodexBackend refuses a custom provider without an effective dialect', async () => {
+  const { backend, events, spawned } = makeBackend({
+    getProviderProfile: () => ({ provider: CUSTOM_PROVIDER, dialect: null }),
+    resolveRequestProfile: async () => { throw new Error('resolver must not run'); },
+  });
+  await backend.sendUser('unconfirmed provider');
+  assert.equal(spawned.calls.length, 0);
+  assert.equal(events.some((event) => event.type === 'error' && /dialect/i.test(event.message)), true);
+});
+
+test('createCodexBackend redacts provider secrets split across Codex deltas and transcript', async () => {
+  const { backend, events, spawned } = makeBackend({
+    getProviderProfile: () => ({ provider: CUSTOM_PROVIDER, dialect: 'responses' }),
+    resolveRequestProfile: async () => resolvedModelProfile({
+      auth: { kind: 'header', name: 'x-api-key', value: 'split-secret-marker' },
+      extraHeaders: [],
+    }),
+  });
+  const { pending, proc } = await startTurn(backend, spawned, 'redact provider output');
+  proc.pushStdout({ jsonrpc: '2.0', method: 'item/agentMessage/delta', params: { delta: 'split-secret-' } });
+  proc.pushStdout({ jsonrpc: '2.0', method: 'item/agentMessage/delta', params: { delta: 'marker' } });
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+  assert.equal(JSON.stringify(events).includes('split-secret-marker'), false);
+  assert.equal(JSON.stringify(backend.getMessages()).includes('split-secret-marker'), false);
+});
+
+test('createCodexBackend redacts the local route token from stderr failures', async () => {
+  const { backend, events, spawned } = makeBackend({
+    createResponsesRoute: () => ({
+      start: async () => ({ baseUrl: 'http://127.0.0.1:49123/v1', routeToken: 'local-route-secret' }),
+      close: async () => {},
+    }),
+    getProviderProfile: () => ({ provider: CUSTOM_PROVIDER, dialect: 'chat' }),
+    resolveRequestProfile: async () => resolvedModelProfile(),
+  });
+  const { pending, proc } = await startTurn(backend, spawned, 'redact route stderr');
+  proc.pushStderr('route failed with local-route-');
+  proc.pushStderr('secret');
+  proc.exit(1);
+  await pending;
+  assert.equal(JSON.stringify(events).includes('local-route-secret'), false);
 });
 test('createCodexBackend injects cli-config provider env var when no custom provider is configured', async () => {
   const { backend, spawned } = makeBackend({
@@ -326,6 +429,7 @@ test('createCodexBackend injects cli-config provider env var when no custom prov
   // config.toml already declares model_provider; no -c override args.
   assert.deepEqual(spawned.calls[0].args, ['app-server']);
   assert.equal(spawned.calls[0].options.env.MEDIASTORM_GLM_API_KEY, 'stored-codex-key');
+  assert.equal(Object.hasOwn(spawned.calls[0].sourceOptions.env, 'MEDIASTORM_GLM_API_KEY'), false);
 
   proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
   await pending;
@@ -367,10 +471,10 @@ test('createCodexBackend reads cli-config provider lazily for each spawn', async
 
 test('createCodexBackend prefers an explicit custom provider over cli-config inheritance', async () => {
   const { backend, spawned } = makeBackend({
-    getProviderProfile: () => ({
-      codexBaseUrl: 'https://proxy.example/openai',
-      codexApiKey: 'sk-proxy',
-      codexProviderId: 'my-provider',
+    getProviderProfile: () => ({ provider: CUSTOM_PROVIDER, dialect: 'responses' }),
+    resolveRequestProfile: async () => resolvedModelProfile({
+      auth: { kind: 'header', name: 'x-api-key', value: 'resolved-model-secret' },
+      extraHeaders: [],
     }),
     getCliConfigProvider: () => ({
       provider: { envKey: 'MEDIASTORM_GLM_API_KEY', baseUrl: 'https://api.example.com/v1' },
@@ -384,12 +488,12 @@ test('createCodexBackend prefers an explicit custom provider over cli-config inh
     'app-server',
     '-c', 'model_provider="my-provider"',
     '-c', 'model_providers.my-provider.name="AE MCP Custom"',
-    '-c', 'model_providers.my-provider.base_url="https://proxy.example/openai"',
-    '-c', 'model_providers.my-provider.env_key="AE_MCP_CODEX_API_KEY"',
+    '-c', 'model_providers.my-provider.base_url="https://proxy.example/openai/v1"',
+    '-c', 'model_providers.my-provider.env_http_headers."x-api-key"="AE_MCP_PROVIDER_HEADER_00"',
     '-c', 'model_providers.my-provider.wire_api="responses"',
     '-c', 'model_providers.my-provider.requires_openai_auth=false',
   ]);
-  assert.equal(spawned.calls[0].options.env.AE_MCP_CODEX_API_KEY, 'sk-proxy');
+  assert.equal(spawned.calls[0].options.env.AE_MCP_PROVIDER_HEADER_00, 'resolved-model-secret');
   assert.equal(Object.hasOwn(spawned.calls[0].options.env, 'MEDIASTORM_GLM_API_KEY'), false);
 
   proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
@@ -494,6 +598,189 @@ test('createCodexBackend treats non-reconnect app-server errors as terminal', as
 
   assert.deepEqual(events.at(-1), { type: 'error', kind: 'mcp', message: 'MCP server failed' });
   assert.equal(settled, true);
+});
+
+test('createCodexBackend re-detects a recoverable provider once and retries the same turn', async () => {
+  const recoveredProvider = { ...CUSTOM_PROVIDER, baseUrl: 'https://recovered.example/v1' };
+  const recoveryCalls = [];
+  let refreshed = 0;
+  const { backend, events, spawned } = makeBackend({
+    getProviderProfile: () => ({ provider: CUSTOM_PROVIDER, dialect: 'responses' }),
+    resolveRequestProfile: async (provider) => resolvedModelProfile({ baseUrl: provider.baseUrl }),
+    recoverProviderProfile: async (provider, facts) => {
+      recoveryCalls.push({ provider, facts });
+      return { provider: recoveredProvider, dialect: 'responses' };
+    },
+    onProviderProfileRecovered: () => { refreshed += 1; },
+  });
+  const { pending, proc } = await startTurn(backend, spawned, 'retry this turn');
+
+  proc.pushStdout({ jsonrpc: '2.0', method: 'error', params: { error: { status: 404, message: 'HTTP status 404' } } });
+  for (let index = 0; index < 20 && spawned.procs.length < 2; index += 1) await flush();
+  assert.equal(spawned.procs.length, 2);
+  assert.equal(proc.killed, true);
+  assert.equal(recoveryCalls.length, 1);
+  assert.equal(recoveryCalls[0].provider, CUSTOM_PROVIDER);
+  assert.deepEqual(recoveryCalls[0].facts, { status: 404, code: '' });
+
+  const proc2 = spawned.procs[1];
+  assert.match(spawned.calls[1].args.join('\n'), /https:\/\/recovered\.example\/v1/);
+  let settled = false;
+  pending.then(() => { settled = true; });
+  proc.pushStdout({ jsonrpc: '2.0', method: 'item/agentMessage/delta', params: { delta: 'stale' } });
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  proc.exit(1);
+  await flush();
+  assert.equal(settled, false);
+
+  const init = parseWrites(proc2)[0];
+  respond(proc2, init, {});
+  await flush();
+  const threadStart = parseWrites(proc2)[1];
+  respond(proc2, threadStart, { threadId: 'thread_recovered' });
+  await flush();
+  const retriedTurn = parseWrites(proc2)[2];
+  assert.equal(retriedTurn.params.input[0].text, 'retry this turn');
+  respond(proc2, retriedTurn, {});
+  proc2.pushStdout({ jsonrpc: '2.0', method: 'item/agentMessage/delta', params: { delta: 'recovered' } });
+  proc2.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+  await flush();
+
+  assert.equal(events.some((event) => event.type === 'error'), false);
+  assert.equal(backend.getMessages().filter((message) => message.role === 'user').length, 1);
+  assert.equal(backend.getMessages().at(-1).text, 'recovered');
+  assert.equal(refreshed, 1);
+});
+
+test('createCodexBackend never retries a recoverable provider failure more than once per turn', async () => {
+  let recoveryCalls = 0;
+  const recoveredProvider = { ...CUSTOM_PROVIDER, baseUrl: 'https://recovered.example/v1' };
+  const { backend, events, spawned } = makeBackend({
+    getProviderProfile: () => ({ provider: CUSTOM_PROVIDER, dialect: 'responses' }),
+    resolveRequestProfile: async (provider) => resolvedModelProfile({ baseUrl: provider.baseUrl }),
+    recoverProviderProfile: async () => {
+      recoveryCalls += 1;
+      return { provider: recoveredProvider, dialect: 'responses' };
+    },
+  });
+  const { pending, proc } = await startTurn(backend, spawned, 'retry only once');
+  proc.pushStdout({ jsonrpc: '2.0', method: 'error', params: { error: { statusCode: 404, message: 'HTTP status 404' } } });
+  for (let index = 0; index < 20 && spawned.procs.length < 2; index += 1) await flush();
+  const proc2 = spawned.procs[1];
+  respond(proc2, parseWrites(proc2)[0], {});
+  await flush();
+  respond(proc2, parseWrites(proc2)[1], { threadId: 'thread_retry_once' });
+  await flush();
+  respond(proc2, parseWrites(proc2)[2], {});
+  proc2.pushStdout({ jsonrpc: '2.0', method: 'error', params: { error: { httpStatus: 404, message: 'HTTP status 404' } } });
+  await pending;
+  await flush();
+  assert.equal(recoveryCalls, 1);
+  assert.equal(spawned.procs.length, 2);
+  assert.equal(events.at(-1).type, 'error');
+});
+
+test('createCodexBackend keeps the original provider error redacted when re-detection fails', async () => {
+  const { backend, events, spawned } = makeBackend({
+    getProviderProfile: () => ({ provider: CUSTOM_PROVIDER, dialect: 'responses' }),
+    resolveRequestProfile: async () => resolvedModelProfile({
+      auth: { kind: 'header', name: 'x-api-key', value: 'recovery-secret-marker' },
+      extraHeaders: [],
+    }),
+    recoverProviderProfile: async () => null,
+  });
+  const { pending, proc } = await startTurn(backend, spawned, 'failed re-detect');
+  proc.pushStdout({
+    jsonrpc: '2.0',
+    method: 'error',
+    params: { error: { status: 404, message: 'HTTP status 404 echoed recovery-secret-marker' } },
+  });
+  await pending;
+  assert.equal(JSON.stringify(events).includes('recovery-secret-marker'), false);
+  assert.equal(spawned.procs.length, 1);
+});
+
+test('createCodexBackend never re-detects the exact compact unsupported contract', async () => {
+  let recoveryCalls = 0;
+  const { backend, events, spawned } = makeBackend({
+    getProviderProfile: () => ({ provider: CUSTOM_PROVIDER, dialect: 'chat' }),
+    resolveRequestProfile: async () => resolvedModelProfile(),
+    createResponsesRoute: () => ({
+      start: async () => ({ baseUrl: 'http://127.0.0.1:49123/v1', routeToken: 'local-route-secret' }),
+      close: async () => {},
+    }),
+    recoverProviderProfile: async () => {
+      recoveryCalls += 1;
+      return { provider: CUSTOM_PROVIDER, dialect: 'chat' };
+    },
+  });
+  const { pending, proc } = await startTurn(backend, spawned, 'compact contract');
+  proc.pushStdout({
+    jsonrpc: '2.0',
+    method: 'error',
+    params: {
+      error: {
+        code: 'provider_compaction_unsupported',
+        status: 501,
+        message: 'unsupported endpoint request',
+      },
+    },
+  });
+  await pending;
+  assert.equal(recoveryCalls, 0);
+  assert.equal(spawned.procs.length, 1);
+  assert.equal(events.at(-1).type, 'error');
+});
+
+test('createCodexBackend reset prevents an in-flight provider recovery from reviving runtime', async () => {
+  let releaseRecovery;
+  let recoveryCalls = 0;
+  let refreshed = 0;
+  const recovery = new Promise((resolve) => { releaseRecovery = resolve; });
+  const { backend, spawned } = makeBackend({
+    getProviderProfile: () => ({ provider: CUSTOM_PROVIDER, dialect: 'responses' }),
+    resolveRequestProfile: async () => resolvedModelProfile(),
+    recoverProviderProfile: async () => {
+      recoveryCalls += 1;
+      return recovery;
+    },
+    onProviderProfileRecovered: () => { refreshed += 1; },
+  });
+  const { pending, proc } = await startTurn(backend, spawned, 'reset during recovery');
+  proc.pushStdout({ jsonrpc: '2.0', method: 'error', params: { error: { code: 'unsupported_endpoint', message: 'unsupported endpoint' } } });
+  for (let index = 0; index < 20 && recoveryCalls < 1; index += 1) await flush();
+  assert.equal(recoveryCalls, 1);
+  backend.reset();
+  releaseRecovery({ provider: { ...CUSTOM_PROVIDER, baseUrl: 'https://late.example/v1' }, dialect: 'responses' });
+  await pending;
+  await flush();
+  await flush();
+  assert.equal(spawned.procs.length, 1);
+  assert.equal(refreshed, 0);
+  assert.deepEqual(backend.getMessages(), []);
+});
+
+test('createCodexBackend reset prevents an in-flight secret resolution from spawning later', async () => {
+  let releaseProfile;
+  let resolveCalls = 0;
+  const profile = new Promise((resolve) => { releaseProfile = resolve; });
+  const { backend, spawned } = makeBackend({
+    getProviderProfile: () => ({ provider: CUSTOM_PROVIDER, dialect: 'responses' }),
+    resolveRequestProfile: async () => {
+      resolveCalls += 1;
+      return profile;
+    },
+  });
+  const pending = backend.sendUser('reset before spawn');
+  for (let index = 0; index < 20 && resolveCalls < 1; index += 1) await flush();
+  assert.equal(resolveCalls, 1);
+  backend.reset();
+  releaseProfile(resolvedModelProfile());
+  await pending;
+  await flush();
+  assert.equal(spawned.calls.length, 0);
+  assert.deepEqual(backend.getMessages(), []);
 });
 
 test('codex approval adapter applies four tiers and annotations', async () => {

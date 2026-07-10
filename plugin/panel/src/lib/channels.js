@@ -51,6 +51,7 @@ export function codexChannels({
   customProvider,
   customProviderAvailable,
   customProviderCredentialResolverReady = false,
+  customProviderDialect = null,
   providerChecking = false,
   cliConfig,
   cliCredentialAvailable,
@@ -89,6 +90,7 @@ export function codexChannels({
       && customProvider?.baseUrl
       && (customProviderAvailable === undefined ? providerHasCredentialPolicy(customProvider) : customProviderAvailable)
       && customProviderCredentialResolverReady === true
+      && (customProviderDialect === 'responses' || customProviderDialect === 'chat')
       && (!codexProbe || codexProbe.runtimeOk !== false),
     ),
     detail: customProvider && customProvider.baseUrl ? customProvider.baseUrl : '',
@@ -96,6 +98,8 @@ export function codexChannels({
       ? { zh: '系统凭据库不可用：修复平台 Helper 后重新检测；不会回退读取明文 provider 文件。', en: 'The system credential store is unavailable. Repair the platform Helper and re-check; plaintext provider fallback is disabled.' }
       : customProvider && customProviderCredentialResolverReady !== true
         ? { zh: '此版本尚未接通 Codex 自定义 provider 的凭据路由；请先使用 Codex CLI 登录或 CLI provider 配置。', en: 'Custom provider credential routing is not connected yet; use Codex CLI login or a CLI provider configuration.' }
+        : customProvider && customProviderDialect !== 'responses' && customProviderDialect !== 'chat'
+          ? { zh: 'Provider API 方言尚未确认或已过期：请先在 Provider 管理中重新探测。', en: 'The provider API dialect is unconfirmed or stale. Re-detect it in Provider Manager first.' }
         : { zh: '在「Provider 管理」新增/选择一个 OpenAI 兼容 provider（Base URL + Key）。', en: 'Add or pick an OpenAI-compatible provider (base URL + key) in Provider Manager.' },
   };
   // An explicitly-configured custom provider always outranks the inherited

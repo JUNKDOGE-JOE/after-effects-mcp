@@ -25,6 +25,7 @@ import { createProviderSecretService, resolveProviderRequestProfile } from '../c
 import { migrateProviderStoreSecrets } from '../cep/providerMigration';
 import { createSecretMigrationRunner } from '../cep/platform/secret-migration';
 import { deleteProviderProfile, drainPendingProviderSecretDeletes, importProviderDraft, saveProviderDraft } from './providerProfileFlow';
+import { runProviderManagerProbe } from './providerProbeFlow.js';
 import { providerInitFailure } from './providerInitState';
 import { ProviderManagerSection } from '../components/settings/ProviderManagerSection';
 import { probeProviderModels } from '../cep/modelProbe';
@@ -39,7 +40,7 @@ import { readCachedZcodeProbedModels, writeCachedZcodeProbedModels } from '../li
 import { baseDescriptorFor } from '../cep/backends/index.js';
 import { cachedByokModels } from '../cep/modelsApi';
 import { costBadge } from '../lib/composerOptions';
-import { codexRuntimeProviderProfile } from '../lib/providerProfile.js';
+import { codexRuntimeProviderProfile, effectiveProviderDialect } from '../lib/providerProfile.js';
 import { useActivity } from '../cep/useActivity';
 import { isWizardDone, markWizardDone, clearWizardDone } from '../cep/firstRun';
 import { useWizardWiring } from './wizardWiring';
@@ -279,17 +280,6 @@ function providerRuntimeUnavailableError() {
   return error;
 }
 
-function probeApiKeyFromProfile(profile) {
-  if (profile?.extraHeaders?.length) throw new Error('Provider probe requires the v2 detector');
-  if (profile?.auth?.kind === 'none') return '';
-  if (profile?.auth?.kind !== 'header') throw new Error('Provider probe authentication is unsupported');
-  if (String(profile.auth.name).toLowerCase() === 'authorization') {
-    return String(profile.auth.value || '').replace(/^Bearer\s+/i, '');
-  }
-  if (String(profile.auth.name).toLowerCase() === 'x-api-key') return String(profile.auth.value || '');
-  throw new Error('Provider probe requires the v2 detector');
-}
-
 function modelMetadataContainsCredential(models, credential) {
   let serialized;
   try { serialized = JSON.stringify(models); } catch { return true; }
@@ -468,33 +458,27 @@ function Shell({ cs }) {
         if (claudeProviderId === provider.id) { setClaudeProviderId(''); writePref('ae_mcp_claude_provider', ''); }
         if (codexProviderId === provider.id) { setCodexProviderId(''); writePref('ae_mcp_codex_provider', ''); }
       }}
-      onProbe={async (provider) => {
+      onProbe={async (provider, options = {}) => {
         if (providerInit.state !== 'ready') throw providerRuntimeUnavailableError();
         setProviderProbing(provider.id);
-        let requestProfile = null;
-        let credential = '';
         try {
-          requestProfile = await resolveProviderRequestProfile(provider, { scope: 'probe', secretService: providerSecretService });
-          credential = probeApiKeyFromProfile(requestProfile);
-          const result = await probeProviderModels({
-            baseUrl: requestProfile.baseUrl,
-            ['apiKey']: credential,
-            protocol: provider.protocol,
-            allowInsecureHttp: requestProfile.allowInsecureHttp === true,
+          const result = await runProviderManagerProbe(provider, {
+            store: providerStore,
+            resolveRequestProfile: (entry, { scope }) => resolveProviderRequestProfile(entry, {
+              scope,
+              secretService: providerSecretService,
+            }),
+            forceDetect: options.forceDetect === true,
           });
-          if (result.ok && providerStore && !modelMetadataContainsCredential(result.models, credential)) {
-            const current = providerStore.get(provider.id);
-            if (current) providerStore.upsert({ ...current, probedModels: result.models, probedAt: Date.now() }, { expectedRevision: providerStore.readState().revision });
+          if (result.ok && providerStore) {
             setProviders(providerStore.list());
             setProviderProbeErrors((errors) => ({ ...errors, [provider.id]: '' }));
           } else {
-            setProviderProbeErrors((errors) => ({ ...errors, [provider.id]: result.detail || (`HTTP ${result.status}`) }));
+            setProviderProbeErrors((errors) => ({ ...errors, [provider.id]: result.detail || 'Provider probe failed' }));
           }
         } catch (error) {
           setProviderProbeErrors((errors) => ({ ...errors, [provider.id]: error?.message || 'Provider probe failed' }));
         } finally {
-          credential = '';
-          requestProfile = null;
           setProviderProbing('');
         }
       }}
@@ -519,11 +503,13 @@ function Shell({ cs }) {
     const env = (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {};
     return codexCliCredentialAvailable({ provider: codexCliConfig && codexCliConfig.provider, env, storedValueRef: null });
   }, [codexCliConfig]);
+  const codexProviderCredentialResolverReady = providerInit.state === 'ready';
+  const codexCustomProviderDialect = effectiveProviderDialect(codexCustomProvider);
   const channels = React.useMemo(() => ({
     claude: claudeChannels({ probe, apiProvider: claudeApiProvider, providerAvailable: providerInit.state === 'ready' && Boolean(claudeApiProvider), providerChecking: providerInit.state === 'checking' }),
-    codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, customProviderAvailable: providerInit.state === 'ready' && Boolean(codexCustomProvider), customProviderCredentialResolverReady: false, providerChecking: providerInit.state === 'checking', cliConfig: codexCliConfig, cliCredentialAvailable: codexCliCredentialReady }),
+    codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, customProviderAvailable: providerInit.state === 'ready' && Boolean(codexCustomProvider), customProviderCredentialResolverReady: codexProviderCredentialResolverReady, customProviderDialect: codexCustomProviderDialect, providerChecking: providerInit.state === 'checking', cliConfig: codexCliConfig, cliCredentialAvailable: codexCliCredentialReady }),
     zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary }),
-  }), [probe, claudeApiProvider, codexProbe, codexCustomProvider, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliCredentialReady, providerInit.state]);
+  }), [probe, claudeApiProvider, codexProbe, codexCustomProvider, codexCustomProviderDialect, codexProviderCredentialResolverReady, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliCredentialReady, providerInit.state]);
   const nodeOk = !(probe && probe.nodeOk === false);
   const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock, nodeOk });
   const claudeSettingsHint = React.useMemo(() => {
@@ -532,9 +518,10 @@ function Shell({ cs }) {
   const providerProfile = React.useMemo(() => codexRuntimeProviderProfile({
     effectiveChannel: effective.channel,
     customProvider: codexCustomProvider,
-    customProviderCredentialResolverReady: false,
-  }), [effective.channel, codexCustomProvider]);
+    customProviderCredentialResolverReady: codexProviderCredentialResolverReady,
+  }), [effective.channel, codexCustomProvider, codexProviderCredentialResolverReady]);
   const runtimeRef = React.useRef({ providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: 'subscription', claudeApiProvider: null });
+  const previousCodexProviderProfileRef = React.useRef(providerProfile);
   const extRoot = React.useMemo(() => readCepSystemPath({ cs, platform }), [cs, platform]);
   const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot, platform }), [extRoot, platform]);
   const mcp = React.useMemo(() => createMcpClient({
@@ -607,15 +594,42 @@ function Shell({ cs }) {
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     getServerInstructions: () => mcp.getServerInstructions(),
     getProviderProfile: () => runtimeRef.current.providerProfile,
+    resolveRequestProfile: (provider, { scope }) => resolveProviderRequestProfile(provider, {
+      scope,
+      secretService: providerSecretService,
+    }),
+    recoverProviderProfile: async (provider) => {
+      if (!providerStore) return null;
+      const result = await runProviderManagerProbe(provider, {
+        store: providerStore,
+        resolveRequestProfile: (entry, { scope }) => resolveProviderRequestProfile(entry, {
+          scope,
+          secretService: providerSecretService,
+        }),
+        forceDetect: true,
+      });
+      if (!result.ok) return null;
+      const dialect = effectiveProviderDialect(result.entry);
+      return dialect ? { provider: result.entry, dialect } : null;
+    },
+    onProviderProfileRecovered: () => {
+      if (providerStore) setProviders(providerStore.list());
+    },
     getCliConfigProvider: () => null,
     lang,
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
-  }), [extRoot, mcp, handleChatEvent, platform]);
+  }), [extRoot, mcp, handleChatEvent, platform, providerSecretService, providerStore]);
 
   React.useEffect(() => () => {
     codexBackend.reset();
   }, [codexBackend]);
+
+  React.useEffect(() => {
+    if (previousCodexProviderProfileRef.current === providerProfile) return;
+    previousCodexProviderProfileRef.current = providerProfile;
+    codexBackend.reset();
+  }, [codexBackend, providerProfile]);
 
   const openCodeBackend = React.useMemo(() => createOpenCodeBackend({
     platform,
@@ -672,7 +686,7 @@ function Shell({ cs }) {
       customModel,
       claudeApiProvider,
       codexCustomProvider,
-      customProviderCredentialResolverReady: false,
+      customProviderCredentialResolverReady: codexProviderCredentialResolverReady,
       byokApiModels: null,
       codexCachedModels: codexModels || readCachedCodexModels(window.localStorage),
       zcodeSessionModels,
@@ -710,7 +724,7 @@ function Shell({ cs }) {
       })();
     }
     return () => { alive = false; };
-  }, [effective.backend, effective.channel, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, zcodeSessionModels, zcodeProbedModels, providerSecretService]);
+  }, [effective.backend, effective.channel, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, zcodeSessionModels, zcodeProbedModels, providerSecretService, codexProviderCredentialResolverReady]);
   const activeBackendRef = React.useRef(null);
 
   // Probe the CLI-configured zcode provider's /v1/models when session data

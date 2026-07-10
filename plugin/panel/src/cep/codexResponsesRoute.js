@@ -1,504 +1,851 @@
+import {
+  chatCompletionToResponse,
+  createChatSseToResponses,
+  responsesBodyToChatBody,
+} from '../lib/codexResponsesCodec.js';
+import {
+  collectCodexHeaders,
+  filterUpstreamResponseHeaders,
+  mergeUpstreamHeaders,
+  validateProviderRequestConfiguration,
+} from '../lib/providerHeaders.js';
+import { buildProviderEndpoint } from '../lib/providerUrl.js';
+import { redactText } from '../lib/exactSecretRedaction.js';
+import {
+  generateRouteToken,
+  parseRouteAuthorization,
+  routeTokenMatches,
+} from './providerRouteAuth.js';
+
+export { responsesBodyToChatBody } from '../lib/codexResponsesCodec.js';
+
+export const DEFAULT_ROUTE_LIMITS = Object.freeze({
+  requestBodyBytes: 16 * 1024 * 1024,
+  sseFrameBytes: 1024 * 1024,
+  concurrent: 4,
+  connectTimeoutMs: 15_000,
+  idleTimeoutMs: 120_000,
+  totalTimeoutMs: 30 * 60_000,
+  errorBodyBytes: 64 * 1024,
+  headerValueBytes: 8 * 1024,
+  headerTotalBytes: 32 * 1024,
+  headerCount: 64,
+});
+
+const LOCAL_ORIGIN = 'http://127.0.0.1';
+
 function getCepRequire() {
-  if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-    return globalThis.window.cep_node.require;
-  }
-  if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+  if (globalThis.window?.cep_node?.require) return globalThis.window.cep_node.require;
+  if (globalThis.window?.require) return globalThis.window.require;
   if (globalThis.require) return globalThis.require;
   throw new Error('CEP Node require is unavailable');
 }
 
-function normalizeOpenAiRoot(baseUrl) {
-  return String(baseUrl || '').replace(/\/+$/, '').replace(/\/v1$/, '') + '/v1';
-}
-
-function authHeaders(authScheme, apiKey) {
-  if (authScheme === 'x-api-key') return { 'x-api-key': String(apiKey || '') };
-  if (authScheme === 'none') return {};
-  return { Authorization: 'Bearer ' + String(apiKey || '') };
-}
-
-function textFromContent(content) {
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return '';
-  return content.map((part) => {
-    if (!part || typeof part !== 'object') return '';
-    if (part.text !== undefined) return String(part.text || '');
-    if (part.content !== undefined) return String(part.content || '');
-    return '';
-  }).join('');
-}
-
-function toolArguments(value) {
-  if (value === undefined || value === null) return '{}';
-  if (typeof value === 'string') return value;
-  try { return JSON.stringify(value); } catch (e) { return '{}'; }
-}
-
-function responsesToolToChatTool(tool) {
-  if (!tool || typeof tool !== 'object') return null;
-  const type = String(tool.type || 'function');
-  if (type !== 'function') return null;
-  if (tool.function && typeof tool.function === 'object') {
-    const fn = {
-      name: String(tool.function.name || tool.name || ''),
-      description: tool.function.description !== undefined ? tool.function.description : tool.description,
-      parameters: tool.function.parameters !== undefined ? tool.function.parameters : (tool.parameters || {}),
-    };
-    if (tool.function.strict !== undefined || tool.strict !== undefined) {
-      fn.strict = tool.function.strict !== undefined ? tool.function.strict : tool.strict;
-    }
-    return { type: 'function', function: fn };
+function routeLimits(overrides = {}) {
+  const limits = {};
+  for (const [name, maximum] of Object.entries(DEFAULT_ROUTE_LIMITS)) {
+    const value = Number(overrides[name]);
+    limits[name] = Number.isFinite(value) && value > 0 ? Math.min(maximum, Math.floor(value)) : maximum;
   }
-  const name = String(tool.name || '');
-  if (!name) return null;
-  const fn = {
-    name,
-    description: tool.description,
-    parameters: tool.parameters || {},
-  };
-  if (tool.strict !== undefined) fn.strict = tool.strict;
-  return { type: 'function', function: fn };
+  return Object.freeze(limits);
 }
 
-function responsesToolsToChatTools(tools) {
-  if (!Array.isArray(tools)) return [];
-  return tools.map(responsesToolToChatTool).filter(Boolean);
-}
-
-function responsesToolChoiceToChat(toolChoice) {
-  if (!toolChoice || typeof toolChoice !== 'object') return toolChoice;
-  if (toolChoice.type === 'function') {
-    return { type: 'function', function: { name: String(toolChoice.name || (toolChoice.function && toolChoice.function.name) || '') } };
-  }
-  return toolChoice;
-}
-
-function functionCallToChatToolCall(item) {
-  const callId = String(item.call_id || item.id || '');
+function headerLimits(limits) {
   return {
-    id: callId,
-    type: 'function',
-    function: {
-      name: String(item.name || ''),
-      arguments: toolArguments(item.arguments),
-    },
+    maxValueBytes: limits.headerValueBytes,
+    maxTotalBytes: limits.headerTotalBytes,
+    maxCount: limits.headerCount,
   };
 }
 
-function inputToMessages(input) {
-  if (typeof input === 'string') return [{ role: 'user', content: input }];
-  if (!Array.isArray(input)) return [{ role: 'user', content: String(input || '') }];
-  const messages = [];
-  let pendingToolCalls = [];
-
-  function flushToolCalls() {
-    if (!pendingToolCalls.length) return;
-    messages.push({ role: 'assistant', content: null, tool_calls: pendingToolCalls });
-    pendingToolCalls = [];
-  }
-
-  for (const item of input) {
-    if (!item || typeof item !== 'object') continue;
-    const type = String(item.type || '');
-    if (type === 'function_call') {
-      pendingToolCalls.push(functionCallToChatToolCall(item));
-      continue;
-    }
-    if (type === 'function_call_output') {
-      flushToolCalls();
-      messages.push({
-        role: 'tool',
-        tool_call_id: String(item.call_id || item.id || ''),
-        content: typeof item.output === 'string' ? item.output : toolArguments(item.output),
-      });
-      continue;
-    }
-    if (type === 'reasoning') continue;
-    flushToolCalls();
-    if (type === 'message' || item.role || item.content !== undefined || item.text !== undefined) {
-      const role = item.role === 'assistant' || item.role === 'system' ? item.role : 'user';
-      const content = textFromContent(item.content !== undefined ? item.content : item.text);
-      if (content || role === 'assistant') messages.push({ role, content: content || '' });
-    }
-  }
-  flushToolCalls();
-  return messages.length ? messages : [{ role: 'user', content: '' }];
+function envelope(type, code, message, extra = {}) {
+  return { error: { type, code, message, ...extra } };
 }
 
-export function responsesBodyToChatBody(body = {}) {
-  const messages = [];
-  if (body.instructions) messages.push({ role: 'system', content: String(body.instructions) });
-  messages.push(...inputToMessages(body.input));
-  const chat = {
-    model: body.model,
-    messages,
-    stream: body.stream !== false,
-  };
-  const maxTokens = body.max_output_tokens || body.max_tokens;
-  if (maxTokens !== undefined) chat.max_tokens = maxTokens;
-  if (body.temperature !== undefined) chat.temperature = body.temperature;
-  if (body.top_p !== undefined) chat.top_p = body.top_p;
-  const tools = responsesToolsToChatTools(body.tools);
-  if (tools.length) chat.tools = tools;
-  if (body.tool_choice !== undefined && tools.length) chat.tool_choice = responsesToolChoiceToChat(body.tool_choice);
-  if (body.parallel_tool_calls !== undefined && tools.length) chat.parallel_tool_calls = body.parallel_tool_calls;
-  return chat;
-}
-
-function responseId() {
-  return 'resp_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-
-function sse(res, event, data) {
-  res.write('event: ' + event + '\n');
-  res.write('data: ' + JSON.stringify({ type: event, ...data }) + '\n\n');
-}
-
-function chatToolCallsToResponseOutput(message) {
-  const toolCalls = Array.isArray(message && message.tool_calls) ? message.tool_calls : [];
-  return toolCalls.map((toolCall, index) => {
-    const callId = String((toolCall && toolCall.id) || ('call_' + index));
-    const fn = (toolCall && toolCall.function) || {};
-    return {
-      type: 'function_call',
-      id: 'fc_' + callId,
-      call_id: callId,
-      name: String(fn.name || ''),
-      arguments: toolArguments(fn.arguments),
-      status: 'completed',
-    };
-  }).filter((item) => item.name);
-}
-
-function messageOutputItem(id, text) {
-  return {
-    id: 'msg_' + id.slice(5),
-    type: 'message',
-    status: 'completed',
-    role: 'assistant',
-    content: [{ type: 'output_text', text: String(text || '') }],
-  };
-}
-
-function chatMessageToResponseOutput(id, message) {
-  const output = [];
-  const text = message && typeof message.content === 'string' ? message.content : '';
-  if (text) output.push(messageOutputItem(id, text));
-  output.push(...chatToolCallsToResponseOutput(message));
-  if (!output.length) output.push(messageOutputItem(id, ''));
-  return output;
-}
-
-function createStreamState(res, id, model) {
-  let started = false;
-  let nextOutputIndex = 0;
-  let textIndex = null;
-  let text = '';
-  const tools = new Map();
-  const completed = [];
-
-  function ensureStarted() {
-    if (started) return;
-    started = true;
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-    });
-    sse(res, 'response.created', { response: { id, object: 'response', status: 'in_progress', model, output: [] } });
-  }
-
-  function ensureTextItem() {
-    ensureStarted();
-    if (textIndex !== null) return textIndex;
-    textIndex = nextOutputIndex++;
-    const item = { id: 'msg_' + id.slice(5), type: 'message', status: 'in_progress', role: 'assistant', content: [] };
-    sse(res, 'response.output_item.added', { output_index: textIndex, item });
-    sse(res, 'response.content_part.added', { output_index: textIndex, content_index: 0, part: { type: 'output_text', text: '' } });
-    return textIndex;
-  }
-
-  function pushTextDelta(delta) {
-    if (!delta) return;
-    const outputIndex = ensureTextItem();
-    text += String(delta);
-    sse(res, 'response.output_text.delta', { output_index: outputIndex, content_index: 0, delta: String(delta) });
-  }
-
-  function pushToolCallDelta(toolCall) {
-    ensureStarted();
-    const chatIndex = Number.isFinite(toolCall && toolCall.index) ? toolCall.index : 0;
-    const fn = (toolCall && toolCall.function) || {};
-    let state = tools.get(chatIndex);
-    if (!state) {
-      state = { callId: '', name: '', arguments: '', outputIndex: null, itemId: '', added: false };
-      tools.set(chatIndex, state);
-    }
-    if (toolCall && toolCall.id) state.callId = String(toolCall.id);
-    if (fn.name) state.name = String(fn.name);
-    if (fn.arguments) state.arguments += String(fn.arguments);
-
-    if (!state.added && state.callId && state.name) {
-      state.added = true;
-      state.outputIndex = nextOutputIndex++;
-      state.itemId = 'fc_' + state.callId;
-      const item = {
-        type: 'function_call',
-        id: state.itemId,
-        call_id: state.callId,
-        name: state.name,
-        arguments: '',
-        status: 'in_progress',
-      };
-      sse(res, 'response.output_item.added', { output_index: state.outputIndex, item });
-      if (state.arguments) {
-        sse(res, 'response.function_call_arguments.delta', {
-          item_id: state.itemId,
-          output_index: state.outputIndex,
-          delta: state.arguments,
-        });
-      }
-      return;
-    }
-
-    if (state.added && fn.arguments) {
-      sse(res, 'response.function_call_arguments.delta', {
-        item_id: state.itemId,
-        output_index: state.outputIndex,
-        delta: String(fn.arguments),
-      });
-    }
-  }
-
-  function finish() {
-    ensureStarted();
-    if (textIndex !== null) {
-      const item = messageOutputItem(id, text);
-      sse(res, 'response.output_text.done', { output_index: textIndex, content_index: 0, text });
-      sse(res, 'response.content_part.done', { output_index: textIndex, content_index: 0, part: item.content[0] });
-      sse(res, 'response.output_item.done', { output_index: textIndex, item });
-      completed.push(item);
-    }
-    for (const state of tools.values()) {
-      if (!state.added || !state.name) continue;
-      const item = {
-        type: 'function_call',
-        id: state.itemId || ('fc_' + state.callId),
-        call_id: state.callId || state.itemId,
-        name: state.name,
-        arguments: state.arguments || '{}',
-        status: 'completed',
-      };
-      sse(res, 'response.function_call_arguments.done', {
-        item_id: item.id,
-        output_index: state.outputIndex,
-        arguments: item.arguments,
-      });
-      sse(res, 'response.output_item.done', { output_index: state.outputIndex, item });
-      completed.push(item);
-    }
-    if (!completed.length) completed.push(messageOutputItem(id, ''));
-    sse(res, 'response.completed', {
-      response: { id, object: 'response', status: 'completed', model, output: completed },
-    });
-    res.end();
-  }
-
-  return { pushTextDelta, pushToolCallDelta, finish, ensureStarted };
-}
-
-function sendJson(res, status, body) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+function sendJson(res, status, body, headers = {}) {
+  if (res.writableEnded || res.destroyed) return;
+  res.writeHead(status, { ...headers, 'content-type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(body));
 }
 
-function readBody(req) {
-  return new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', (chunk) => { body += chunk; });
-    req.on('end', () => resolve(body));
-    req.on('error', reject);
-  });
+function writeSse(res, name, payload) {
+  if (res.writableEnded || res.destroyed) return;
+  res.write(`event: ${name}\n`);
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
-function requestUpstream({ requireImpl, upstreamBaseUrl, apiKey, authScheme, path, method, body, onResponse }) {
-  return new Promise((resolve, reject) => {
-    let endpoint;
-    try {
-      endpoint = new URL(normalizeOpenAiRoot(upstreamBaseUrl) + path);
-    } catch (e) {
-      reject(new Error('Invalid upstream base URL'));
-      return;
+function localPathHasTraversal(rawUrl) {
+  const path = String(rawUrl || '').split(/[?#]/, 1)[0];
+  let current = path;
+  for (let layer = 0; layer < 4; layer += 1) {
+    if (current.split('/').some((segment) => segment === '.' || segment === '..')) return true;
+    let decoded;
+    try { decoded = decodeURIComponent(current); } catch { return true; }
+    if (decoded === current) return false;
+    current = decoded;
+  }
+  return current.split('/').some((segment) => segment === '.' || segment === '..');
+}
+
+function parseLocalUrl(rawUrl) {
+  const raw = String(rawUrl || '');
+  if (!raw.startsWith('/') || raw.includes('#') || localPathHasTraversal(raw)) {
+    const error = new Error('Local provider route URL is invalid.');
+    error.code = 'invalid_route_url';
+    throw error;
+  }
+  let parsed;
+  try { parsed = new URL(raw, LOCAL_ORIGIN); } catch {
+    const error = new Error('Local provider route URL is invalid.');
+    error.code = 'invalid_route_url';
+    throw error;
+  }
+  if (parsed.origin !== LOCAL_ORIGIN) {
+    const error = new Error('Local provider route URL is invalid.');
+    error.code = 'invalid_route_url';
+    throw error;
+  }
+  return parsed;
+}
+
+function rawResponseHeaders(upstream) {
+  if (Array.isArray(upstream?.rawHeaders)) return upstream.rawHeaders;
+  const raw = [];
+  for (const [name, value] of Object.entries(upstream?.headers || {})) {
+    if (Array.isArray(value)) {
+      for (const item of value) raw.push(name, String(item));
+    } else if (value !== undefined) raw.push(name, String(value));
+  }
+  return raw;
+}
+
+function destroyOnce(context) {
+  if (context.upstreamDestroyed) return;
+  context.upstreamDestroyed = true;
+  for (const stream of [context.upstreamRequest, context.upstreamResponse]) {
+    if (stream && typeof stream.destroy === 'function' && !stream.destroyed) {
+      try { stream.destroy(); } catch { /* destruction is best effort after ownership is fenced */ }
     }
-    const reqImpl = requireImpl(endpoint.protocol === 'http:' ? 'http' : 'https');
-    const payload = body === undefined ? null : JSON.stringify(body);
-    const headers = { ...authHeaders(authScheme, apiKey) };
-    if (payload !== null) headers['Content-Type'] = 'application/json';
-    const req = reqImpl.request({
-      hostname: endpoint.hostname,
-      port: endpoint.port || undefined,
-      protocol: endpoint.protocol,
-      path: endpoint.pathname + endpoint.search,
-      method,
-      headers,
-    }, async (upstream) => {
-      try {
-        await onResponse(upstream);
-        resolve();
-      } catch (e) {
-        reject(e);
-      }
-    });
-    req.on('error', reject);
-    if (payload !== null) req.write(payload);
-    req.end();
+  }
+}
+
+function finishOnce(context) {
+  if (context.finished) return false;
+  context.finished = true;
+  if (context.cancelBodyRead) context.cancelBodyRead();
+  clearTimeout(context.connectTimer);
+  clearTimeout(context.idleTimer);
+  clearTimeout(context.totalTimer);
+  context.req.off('aborted', context.onClientAbort);
+  context.res.off('close', context.onClientClose);
+  context.gate.release();
+  context.owner.delete(context);
+  return true;
+}
+
+function streamFailure(context, error) {
+  if (context.finished) return;
+  destroyOnce(context);
+  const code = String(error?.code || 'provider_error');
+  const message = String(error?.message || 'Provider stream failed.');
+  if (!context.res.headersSent) {
+    finishOnce(context);
+    sendJson(context.res, Number(error?.status) || 502, envelope('provider_protocol_error', code, message));
+    return;
+  }
+  writeSse(context.res, 'error', {
+    type: 'error',
+    error: { type: 'provider_protocol_error', code, message },
   });
+  finishOnce(context);
+  context.res.end();
 }
 
-function proxyModels({ req, res, requireImpl, upstreamBaseUrl, apiKey, authScheme }) {
-  return requestUpstream({
-    requireImpl,
-    upstreamBaseUrl,
-    apiKey,
-    authScheme,
-    path: '/models',
-    method: 'GET',
-    onResponse: async (upstream) => {
-      res.writeHead(upstream.statusCode || 502, upstream.headers || {});
-      upstream.on('data', (chunk) => res.write(chunk));
-      upstream.on('end', () => res.end());
-    },
-  }).catch((e) => sendJson(res, 502, { error: { message: e.message || 'Provider route failed' } }));
+function timeoutRequest(context, code, message) {
+  if (context.finished) return;
+  destroyOnce(context);
+  if (context.res.headersSent) {
+    streamFailure(context, { status: 504, code, message });
+    return;
+  }
+  finishOnce(context);
+  sendJson(context.res, 504, envelope('provider_timeout_error', code, message));
 }
 
-async function handleResponses({ req, res, requireImpl, upstreamBaseUrl, apiKey, authScheme }) {
-  let body;
-  try {
-    body = JSON.parse(await readBody(req) || '{}');
-  } catch (e) {
-    sendJson(res, 400, { error: { message: 'Invalid JSON request body' } });
-    return;
-  }
-  const chatBody = responsesBodyToChatBody(body);
-  const id = responseId();
+function resetIdleTimer(context) {
+  clearTimeout(context.idleTimer);
+  context.idleTimer = setTimeout(() => timeoutRequest(
+    context,
+    'provider_idle_timeout',
+    'Provider response became idle.',
+  ), context.limits.idleTimeoutMs);
+}
 
-  if (chatBody.stream === false) {
-    await requestUpstream({
-      requireImpl,
-      upstreamBaseUrl,
-      apiKey,
-      authScheme,
-      path: '/chat/completions',
-      method: 'POST',
-      body: chatBody,
-      onResponse: async (upstream) => {
-        let text = '';
-        upstream.on('data', (chunk) => { text += chunk; });
-        upstream.on('end', () => {
-          if ((upstream.statusCode || 0) >= 300) {
-            sendJson(res, upstream.statusCode || 502, { error: { message: 'Upstream chat completion failed' } });
-            return;
-          }
-          let message = { content: '' };
-          try {
-            const parsed = JSON.parse(text);
-            message = (parsed.choices && parsed.choices[0] && parsed.choices[0].message) || message;
-          } catch (e) { message = { content: '' }; }
-          sendJson(res, 200, {
-            id,
-            object: 'response',
-            status: 'completed',
-            model: chatBody.model,
-            output: chatMessageToResponseOutput(id, message),
-          });
-        });
-      },
-    }).catch((e) => sendJson(res, 502, { error: { message: e.message || 'Provider route failed' } }));
-    return;
-  }
+function requestIdFromHeaders(headers) {
+  const item = headers.find((header) => header.name === 'x-client-request-id' || header.name === 'x-request-id');
+  return item ? item.value : `route-${Date.now().toString(36)}`;
+}
 
-  const stream = createStreamState(res, id, chatBody.model);
-  await requestUpstream({
-    requireImpl,
-    upstreamBaseUrl,
-    apiKey,
-    authScheme,
-    path: '/chat/completions',
-    method: 'POST',
-    body: chatBody,
-    onResponse: async (upstream) => {
-      if ((upstream.statusCode || 0) >= 300) {
-        let detail = '';
-        upstream.on('data', (chunk) => { detail += chunk; });
-        upstream.on('end', () => sendJson(res, upstream.statusCode || 502, { error: { message: 'Upstream chat completion failed', detail: detail.slice(0, 512) } }));
+function readRequestBody(req, maximum, context) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let bytes = 0;
+    let settled = false;
+    const cleanup = () => {
+      req.off('data', onData);
+      req.off('end', onEnd);
+      req.off('error', onError);
+      if (context.cancelBodyRead === cancel) context.cancelBodyRead = null;
+    };
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const onData = (chunk) => {
+      const value = Buffer.from(chunk);
+      bytes += value.length;
+      if (bytes > maximum) {
+        const error = new Error('Request body is too large.');
+        error.code = 'request_body_too_large';
+        fail(error);
+        req.resume();
         return;
       }
-      stream.ensureStarted();
-      let buffer = '';
-      upstream.on('data', (chunk) => {
-        buffer += String(chunk || '');
-        const lines = buffer.split(/\r?\n/);
-        buffer = lines.pop() || '';
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith('data:')) continue;
-          const data = trimmed.slice(5).trim();
-          if (!data || data === '[DONE]') continue;
-          try {
-            const json = JSON.parse(data);
-            const delta = json.choices && json.choices[0] && json.choices[0].delta;
-            if (!delta) continue;
-            if (delta.content) stream.pushTextDelta(delta.content);
-            if (Array.isArray(delta.tool_calls)) {
-              for (const toolCall of delta.tool_calls) stream.pushToolCallDelta(toolCall);
-            }
-          } catch (e) { /* ignore malformed upstream SSE frames */ }
-        }
-      });
-      upstream.on('end', () => stream.finish());
-    },
-  }).catch((e) => {
-    if (!res.headersSent) sendJson(res, 502, { error: { message: e.message || 'Provider route failed' } });
-    else res.end();
+      chunks.push(value);
+    };
+    const onEnd = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(Buffer.concat(chunks));
+    };
+    const onError = () => {
+      const error = new Error('Request body could not be read.');
+      error.code = 'invalid_request_body';
+      fail(error);
+    };
+    const cancel = () => {
+      const error = new Error('Request body was cancelled.');
+      error.code = 'request_body_cancelled';
+      fail(error);
+    };
+    context.cancelBodyRead = cancel;
+    req.on('data', onData);
+    req.on('end', onEnd);
+    req.on('error', onError);
   });
 }
 
-export function createCodexResponsesRoute({ upstreamBaseUrl, apiKey, authScheme = 'bearer', requireImpl } = {}) {
-  const reqImpl = requireImpl || getCepRequire();
+function parseJsonBody(buffer) {
+  try { return JSON.parse(buffer.length ? buffer.toString('utf8') : '{}'); } catch {
+    const error = new Error('Request body must be valid JSON.');
+    error.code = 'invalid_json';
+    throw error;
+  }
+}
+
+function secretValues(profile) {
+  const values = [];
+  if (profile?.auth?.kind === 'header' && profile.auth.value) {
+    const value = String(profile.auth.value);
+    values.push(value);
+    const match = value.match(/^(?:Bearer|Basic)\s+(.+)$/i);
+    if (match) values.push(match[1]);
+  }
+  for (const header of profile?.extraHeaders || []) {
+    if (header?.value) values.push(String(header.value));
+  }
+  return [...new Set(values.filter(Boolean))].sort((left, right) => right.length - left.length);
+}
+
+function sanitizedProviderMessage(buffer, truncated, secrets) {
+  if (truncated) return 'Provider request failed with a bounded error response.';
+  let parsed;
+  try { parsed = JSON.parse(buffer.toString('utf8')); } catch { return 'Provider request failed.'; }
+  let message = parsed?.error?.message ?? parsed?.message;
+  if (typeof message !== 'string' || !message) return 'Provider request failed.';
+  message = redactText(message, secrets);
+  return message.replace(/[\r\n\0]+/g, ' ').slice(0, 256);
+}
+
+function withoutSecretBearingHeaders(headers, secrets) {
+  const output = {};
+  for (const [name, value] of Object.entries(headers)) {
+    const text = String(value);
+    if (secrets.some((secret) => text.includes(secret))) continue;
+    output[name] = text;
+  }
+  return output;
+}
+
+function readProviderError(context, upstream, status, responseHeaders, secrets) {
+  const chunks = [];
+  let bytes = 0;
+  let settled = false;
+  const finish = (truncated) => {
+    if (settled || context.finished) return;
+    settled = true;
+    const buffer = Buffer.concat(chunks);
+    const message = sanitizedProviderMessage(buffer, truncated, secrets);
+    const requestId = responseHeaders['x-request-id']
+      || responseHeaders['request-id']
+      || responseHeaders['openai-request-id'];
+    const extra = requestId ? { request_id: requestId } : {};
+    finishOnce(context);
+    sendJson(
+      context.res,
+      status >= 400 && status < 500 ? status : 502,
+      envelope('provider_error', 'provider_error', message, extra),
+      requestId ? { 'x-request-id': requestId } : {},
+    );
+  };
+  upstream.on('data', (chunk) => {
+    if (settled) return;
+    resetIdleTimer(context);
+    const value = Buffer.from(chunk);
+    const remaining = context.limits.errorBodyBytes + 1 - bytes;
+    if (remaining > 0) chunks.push(value.subarray(0, remaining));
+    bytes += value.length;
+    if (bytes > context.limits.errorBodyBytes) {
+      if (typeof upstream.destroy === 'function') upstream.destroy();
+      finish(true);
+    }
+  });
+  upstream.on('end', () => finish(false));
+  upstream.on('error', () => finish(bytes > context.limits.errorBodyBytes));
+}
+
+function pipeModels(context, upstream, status, headers) {
+  context.res.writeHead(status, headers);
+  upstream.on('data', (chunk) => {
+    if (context.finished) return;
+    resetIdleTimer(context);
+    context.res.write(chunk);
+  });
+  upstream.on('end', () => {
+    if (!finishOnce(context)) return;
+    context.res.end();
+  });
+  upstream.on('error', () => streamFailure(context, {
+    status: 502,
+    code: 'provider_error',
+    message: 'Provider response stream failed.',
+  }));
+}
+
+function readNonStreamingResponse(context, upstream, status, headers, chatBody) {
+  const chunks = [];
+  let bytes = 0;
+  upstream.on('data', (chunk) => {
+    if (context.finished) return;
+    resetIdleTimer(context);
+    const value = Buffer.from(chunk);
+    bytes += value.length;
+    if (bytes > context.limits.requestBodyBytes) {
+      streamFailure(context, {
+        status: 502,
+        code: 'provider_response_too_large',
+        message: 'Provider response body is too large.',
+      });
+      return;
+    }
+    chunks.push(value);
+  });
+  upstream.on('end', () => {
+    if (context.finished) return;
+    let parsed;
+    let response;
+    try {
+      parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      response = chatCompletionToResponse(parsed, { id: context.responseId, model: String(chatBody.model || '') });
+    } catch (error) {
+      streamFailure(context, {
+        status: Number(error?.status) || 502,
+        code: error?.code || 'invalid_chat_completion',
+        message: error?.message || 'Provider returned an invalid Chat Completion.',
+      });
+      return;
+    }
+    finishOnce(context);
+    sendJson(context.res, status, response, headers);
+  });
+  upstream.on('error', () => streamFailure(context, {
+    status: 502,
+    code: 'provider_error',
+    message: 'Provider response body failed.',
+  }));
+}
+
+function streamChatResponse(context, upstream, status, headers, chatBody) {
+  context.res.writeHead(status, {
+    ...headers,
+    'content-type': 'text/event-stream; charset=utf-8',
+    'cache-control': headers['cache-control'] || 'no-cache',
+  });
+  const adapter = createChatSseToResponses({
+    id: context.responseId,
+    model: String(chatBody.model || ''),
+    maxFrameBytes: context.limits.sseFrameBytes,
+    writeEvent: (name, payload) => writeSse(context.res, name, payload),
+    fail: (error) => streamFailure(context, error),
+  });
+  upstream.on('data', (chunk) => {
+    if (context.finished) return;
+    resetIdleTimer(context);
+    try { adapter.feed(chunk); } catch (error) { streamFailure(context, error); }
+  });
+  upstream.on('end', () => {
+    if (context.finished) return;
+    try { adapter.end(); } catch (error) { streamFailure(context, error); }
+    if (!finishOnce(context)) return;
+    context.res.end();
+  });
+  upstream.on('error', () => streamFailure(context, {
+    status: 502,
+    code: 'provider_error',
+    message: 'Provider response stream failed.',
+  }));
+}
+
+function handleUpstreamResponse(context, upstream, kind, profile, chatBody) {
+  if (context.finished) {
+    if (typeof upstream.destroy === 'function') upstream.destroy();
+    return;
+  }
+  context.upstreamResponse = upstream;
+  clearTimeout(context.connectTimer);
+  resetIdleTimer(context);
+  const status = Number(upstream.statusCode) || 502;
+  const secrets = secretValues(profile);
+  const headers = withoutSecretBearingHeaders(
+    filterUpstreamResponseHeaders(rawResponseHeaders(upstream)),
+    secrets,
+  );
+  if (status >= 300 && status < 400) {
+    destroyOnce(context);
+    finishOnce(context);
+    sendJson(context.res, 502, envelope(
+      'provider_protocol_error',
+      'provider_redirect_blocked',
+      'Provider redirects are not followed.',
+    ));
+    return;
+  }
+  if (status >= 400) {
+    readProviderError(context, upstream, status, headers, secrets);
+    return;
+  }
+  if (kind === 'models') {
+    pipeModels(context, upstream, status, headers);
+    return;
+  }
+  if (chatBody.stream === false) {
+    readNonStreamingResponse(context, upstream, status, headers, chatBody);
+    return;
+  }
+  streamChatResponse(context, upstream, status, headers, chatBody);
+}
+
+function openUpstream(context, {
+  endpoint,
+  method,
+  headers,
+  payload,
+  kind,
+  profile,
+  chatBody,
+  requireImpl,
+  createUpstreamRequest,
+  lookupImpl,
+}) {
+  if (context.finished) return;
+  const options = {
+    protocol: endpoint.protocol,
+    hostname: endpoint.hostname,
+    port: endpoint.port || undefined,
+    path: endpoint.pathname + endpoint.search,
+    method,
+    headers,
+  };
+  if (lookupImpl) options.lookup = lookupImpl;
+  context.connectTimer = setTimeout(() => timeoutRequest(
+    context,
+    'provider_connect_timeout',
+    'Provider connection timed out.',
+  ), context.limits.connectTimeoutMs);
+
+  let request;
+  try {
+    const requestFactory = createUpstreamRequest
+      || requireImpl(endpoint.protocol === 'http:' ? 'http' : 'https').request.bind(
+        requireImpl(endpoint.protocol === 'http:' ? 'http' : 'https'),
+      );
+    request = requestFactory(options, (upstream) => handleUpstreamResponse(
+      context,
+      upstream,
+      kind,
+      profile,
+      chatBody,
+    ));
+    context.upstreamRequest = request;
+    request.on('error', () => {
+      if (context.finished || context.upstreamResponse) return;
+      clearTimeout(context.connectTimer);
+      finishOnce(context);
+      sendJson(context.res, 502, envelope('provider_error', 'provider_error', 'Provider request failed.'));
+    });
+    if (payload) request.write(payload);
+    request.end();
+  } catch {
+    clearTimeout(context.connectTimer);
+    finishOnce(context);
+    sendJson(context.res, 502, envelope('provider_error', 'provider_error', 'Provider request failed.'));
+  }
+}
+
+function createGate(maximum) {
+  let active = 0;
+  return {
+    acquire() {
+      if (active >= maximum) return false;
+      active += 1;
+      return true;
+    },
+    release() {
+      if (active > 0) active -= 1;
+    },
+  };
+}
+
+function compactResponse(res) {
+  sendJson(res, 501, envelope(
+    'provider_compaction_unsupported',
+    'provider_compaction_unsupported',
+    'This chat-only provider cannot compact Responses context.',
+  ));
+}
+
+function methodNotAllowed(res, method, pathname, allowed) {
+  sendJson(res, 405, envelope(
+    'invalid_request_error',
+    'method_not_allowed',
+    `Method ${method} is not allowed for ${pathname}.`,
+  ), { allow: allowed });
+}
+
+export function createCodexResponsesRoute({
+  provider,
+  resolveRequestProfile,
+  requireImpl = getCepRequire(),
+  createUpstreamRequest,
+  lookupImpl,
+  cryptoImpl,
+  limits: limitOverrides,
+  onAudit = () => {},
+} = {}) {
+  if (!provider || typeof provider !== 'object') throw new TypeError('provider is required');
+  if (typeof resolveRequestProfile !== 'function') throw new TypeError('resolveRequestProfile is required');
+  const crypto = cryptoImpl || requireImpl('crypto');
+  if (
+    !crypto
+    || typeof crypto.randomBytes !== 'function'
+    || typeof crypto.createHash !== 'function'
+    || typeof crypto.timingSafeEqual !== 'function'
+  ) throw new TypeError('crypto implementation is required');
+
+  const limits = routeLimits(limitOverrides);
+  const headersLimit = headerLimits(limits);
+  const gate = createGate(limits.concurrent);
+  const contexts = new Set();
   let server = null;
   let baseUrl = '';
-  const token = 'ae-mcp-route-' + Math.random().toString(36).slice(2);
+  let routeToken = null;
+  let startPromise = null;
+  let responseSequence = 0;
+
+  const admit = (req, res) => {
+    if (!gate.acquire()) {
+      sendJson(res, 429, envelope(
+        'rate_limit_error',
+        'route_concurrency_limit',
+        'Local provider route concurrency limit reached.',
+      ));
+      return null;
+    }
+    const context = {
+      req,
+      res,
+      gate,
+      owner: contexts,
+      limits,
+      finished: false,
+      upstreamDestroyed: false,
+      upstreamRequest: null,
+      upstreamResponse: null,
+      connectTimer: null,
+      idleTimer: null,
+      totalTimer: null,
+      responseId: `resp_route_${Date.now().toString(36)}_${(responseSequence += 1).toString(36)}`,
+      cancelBodyRead: null,
+      onClientAbort: null,
+      onClientClose: null,
+    };
+    context.onClientAbort = () => {
+      if (context.finished) return;
+      destroyOnce(context);
+      finishOnce(context);
+    };
+    context.onClientClose = () => {
+      if (context.finished) return;
+      destroyOnce(context);
+      finishOnce(context);
+    };
+    req.on('aborted', context.onClientAbort);
+    res.on('close', context.onClientClose);
+    context.totalTimer = setTimeout(() => timeoutRequest(
+      context,
+      'provider_total_timeout',
+      'Provider request exceeded the total time limit.',
+    ), limits.totalTimeoutMs);
+    contexts.add(context);
+    return context;
+  };
+
+  const resolveProfile = async (scope) => {
+    validateProviderRequestConfiguration(provider, scope, headersLimit);
+    return resolveRequestProfile(provider, { scope });
+  };
+
+  const prepareHeaders = (req, profile, contentType) => {
+    const merged = mergeUpstreamHeaders({
+      rawHeaders: req.rawHeaders || [],
+      providerHeaders: profile.extraHeaders,
+      auth: profile.auth,
+      contentType,
+      limits: headersLimit,
+    });
+    const codex = collectCodexHeaders(req.rawHeaders || [], headersLimit);
+    const requestId = requestIdFromHeaders(codex);
+    onAudit({
+      event: 'provider_headers',
+      requestId,
+      forwardedNames: codex.map((header) => header.name),
+      providerNames: (profile.extraHeaders || []).map((header) => String(header.name).toLowerCase()),
+      authName: profile.auth?.kind === 'header' ? String(profile.auth.name).toLowerCase() : null,
+      decision: 'allowed',
+    });
+    return merged;
+  };
+
+  const handleModels = async (req, res, localUrl) => {
+    try { collectCodexHeaders(req.rawHeaders || [], headersLimit); } catch (error) {
+      sendJson(res, 400, envelope('invalid_request_error', error.code, error.message));
+      return;
+    }
+    try { validateProviderRequestConfiguration(provider, 'probe', headersLimit); } catch (error) {
+      sendJson(res, 400, envelope('invalid_request_error', error.code, error.message));
+      return;
+    }
+    const context = admit(req, res);
+    if (!context) return;
+    let profile;
+    let endpoint;
+    let headers;
+    try {
+      profile = await resolveProfile('probe');
+      if (context.finished) return;
+      endpoint = buildProviderEndpoint({
+        baseUrl: profile.baseUrl,
+        resource: 'models',
+        inboundSearch: localUrl.search,
+        allowInsecureHttp: profile.allowInsecureHttp,
+      });
+      headers = prepareHeaders(req, profile);
+    } catch (error) {
+      if (context.finished) return;
+      finishOnce(context);
+      sendJson(res, error?.code?.startsWith('provider_header_') ? 400 : 502, envelope(
+        'provider_configuration_error',
+        error?.code || 'provider_configuration_error',
+        'Provider request configuration is invalid.',
+      ));
+      return;
+    }
+    openUpstream(context, {
+      endpoint,
+      method: 'GET',
+      headers,
+      payload: null,
+      kind: 'models',
+      profile,
+      chatBody: null,
+      requireImpl,
+      createUpstreamRequest,
+      lookupImpl,
+    });
+  };
+
+  const handleResponses = async (req, res, localUrl) => {
+    try { collectCodexHeaders(req.rawHeaders || [], headersLimit); } catch (error) {
+      sendJson(res, 400, envelope('invalid_request_error', error.code, error.message));
+      return;
+    }
+    try { validateProviderRequestConfiguration(provider, 'model', headersLimit); } catch (error) {
+      sendJson(res, 400, envelope('invalid_request_error', error.code, error.message));
+      return;
+    }
+    const context = admit(req, res);
+    if (!context) return;
+
+    let requestBody;
+    let chatBody;
+    try {
+      requestBody = await readRequestBody(req, limits.requestBodyBytes, context);
+      if (context.finished) return;
+      chatBody = responsesBodyToChatBody(parseJsonBody(requestBody));
+    } catch (error) {
+      if (context.finished) return;
+      finishOnce(context);
+      const status = error?.code === 'request_body_too_large' ? 413 : Number(error?.status) || 400;
+      sendJson(res, status, envelope(
+        'invalid_request_error',
+        error?.code || 'invalid_request_body',
+        error?.message || 'Request body is invalid.',
+        error?.param ? { param: error.param } : {},
+      ));
+      return;
+    }
+
+    let profile;
+    let endpoint;
+    let headers;
+    let payload;
+    try {
+      profile = await resolveProfile('model');
+      if (context.finished) return;
+      endpoint = buildProviderEndpoint({
+        baseUrl: profile.baseUrl,
+        resource: 'chat-completions',
+        inboundSearch: localUrl.search,
+        allowInsecureHttp: profile.allowInsecureHttp,
+      });
+      headers = prepareHeaders(req, profile, 'application/json');
+      payload = Buffer.from(JSON.stringify(chatBody), 'utf8');
+    } catch (error) {
+      if (context.finished) return;
+      finishOnce(context);
+      sendJson(res, error?.code?.startsWith('provider_header_') ? 400 : 502, envelope(
+        'provider_configuration_error',
+        error?.code || 'provider_configuration_error',
+        'Provider request configuration is invalid.',
+      ));
+      return;
+    }
+    openUpstream(context, {
+      endpoint,
+      method: 'POST',
+      headers,
+      payload,
+      kind: 'responses',
+      profile,
+      chatBody,
+      requireImpl,
+      createUpstreamRequest,
+      lookupImpl,
+    });
+  };
+
+  const handleLocalRequest = (req, res) => {
+    const candidate = parseRouteAuthorization(req.rawHeaders || []);
+    const authorized = routeTokenMatches(candidate || '', routeToken || '', crypto);
+    if (!candidate || !routeToken || !authorized) {
+      sendJson(res, 401, envelope(
+        'authentication_error',
+        'invalid_route_token',
+        'Invalid local provider route token.',
+      ));
+      return;
+    }
+
+    let localUrl;
+    try { localUrl = parseLocalUrl(req.url); } catch (error) {
+      sendJson(res, 400, envelope('invalid_request_error', error.code, error.message));
+      return;
+    }
+    const method = String(req.method || 'GET').toUpperCase();
+    const pathname = localUrl.pathname;
+    if (pathname === '/v1/responses/compact') {
+      if (method !== 'POST') methodNotAllowed(res, method, pathname, 'POST');
+      else compactResponse(res);
+      return;
+    }
+    if (pathname === '/v1/models') {
+      if (method !== 'GET') methodNotAllowed(res, method, pathname, 'GET');
+      else void handleModels(req, res, localUrl);
+      return;
+    }
+    if (pathname === '/v1/responses') {
+      if (method !== 'POST') methodNotAllowed(res, method, pathname, 'POST');
+      else void handleResponses(req, res, localUrl);
+      return;
+    }
+    sendJson(res, 404, envelope(
+      'invalid_request_error',
+      'not_found',
+      'Unknown local provider route endpoint.',
+    ));
+  };
 
   return {
     async start() {
-      if (server && baseUrl) return { baseUrl, apiKey: token };
-      const http = reqImpl('http');
-      server = http.createServer((req, res) => {
-        const path = String(req.url || '').split('?')[0].replace(/^\/v1/, '') || '/';
-        if (req.method === 'GET' && path === '/models') {
-          proxyModels({ req, res, requireImpl: reqImpl, upstreamBaseUrl, apiKey, authScheme });
-          return;
-        }
-        if (req.method === 'POST' && (path === '/responses' || path === '/responses/compact')) {
-          handleResponses({ req, res, requireImpl: reqImpl, upstreamBaseUrl, apiKey, authScheme });
-          return;
-        }
-        sendJson(res, 404, { error: { message: 'Unknown Codex provider route path' } });
-      });
-      await new Promise((resolve, reject) => {
-        server.on('error', reject);
-        server.listen(0, '127.0.0.1', () => resolve());
-      });
-      const address = server.address();
-      baseUrl = 'http://127.0.0.1:' + address.port;
-      return { baseUrl, apiKey: token };
+      if (server && baseUrl && routeToken) return { baseUrl, routeToken };
+      if (startPromise) return startPromise;
+      startPromise = new Promise((resolve, reject) => {
+        const http = requireImpl('http');
+        const nextServer = http.createServer(handleLocalRequest);
+        const onError = (error) => {
+          nextServer.off('listening', onListening);
+          server = null;
+          baseUrl = '';
+          routeToken = null;
+          reject(error);
+        };
+        const onListening = () => {
+          nextServer.off('error', onError);
+          const address = nextServer.address();
+          server = nextServer;
+          routeToken = generateRouteToken(crypto);
+          baseUrl = `http://127.0.0.1:${address.port}/v1`;
+          resolve({ baseUrl, routeToken });
+        };
+        nextServer.once('error', onError);
+        nextServer.once('listening', onListening);
+        nextServer.listen(0, '127.0.0.1');
+      }).finally(() => { startPromise = null; });
+      return startPromise;
     },
+
     async close() {
-      if (!server) return;
+      if (startPromise) {
+        try { await startPromise; } catch { return; }
+      }
+      if (!server) {
+        routeToken = null;
+        baseUrl = '';
+        return;
+      }
       const closing = server;
       server = null;
       baseUrl = '';
+      for (const context of [...contexts]) {
+        destroyOnce(context);
+        finishOnce(context);
+        if (!context.res.writableEnded) context.res.end();
+      }
       await new Promise((resolve) => closing.close(resolve));
+      routeToken = null;
     },
   };
 }

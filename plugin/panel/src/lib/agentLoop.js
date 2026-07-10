@@ -1,4 +1,10 @@
 import { DEFAULT_MODEL, buildSystemPrompt, sendAnthropicMessage } from './anthropic.js';
+import {
+  createDeltaRedactor,
+  redactValue,
+  safeErrorMessage,
+  sensitiveValues,
+} from './exactSecretRedaction.js';
 
 const MAX_TOOL_ROUNDS = 25;
 
@@ -68,59 +74,6 @@ export function createAgentLoop({
 
   function emit(evt) {
     if (onEvent) onEvent(evt);
-  }
-
-  function sensitiveValues(profile) {
-    const values = [];
-    if (typeof profile?.auth?.value === 'string' && profile.auth.value) {
-      values.push(profile.auth.value);
-      const scheme = profile.auth.value.match(/^(?:Bearer|Basic)\s+(.+)$/i);
-      if (scheme?.[1]) values.push(scheme[1]);
-    }
-    for (const header of profile?.extraHeaders || []) {
-      if (typeof header?.value === 'string' && header.value) values.push(header.value);
-    }
-    return values.sort((a, b) => b.length - a.length);
-  }
-
-  function redactText(value, values) {
-    let text = String(value == null ? '' : value);
-    for (const secret of values) text = text.split(secret).join('[redacted]');
-    return text;
-  }
-
-  function redactValue(value, values) {
-    if (typeof value === 'string') return redactText(value, values);
-    if (Array.isArray(value)) return value.map((item) => redactValue(item, values));
-    if (!value || typeof value !== 'object') return value;
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactValue(item, values)]));
-  }
-
-  function createDeltaRedactor(values, emitText) {
-    let buffer = '';
-    const keep = values.reduce((maximum, value) => Math.max(maximum, value.length - 1), 0);
-    return {
-      feed(delta) {
-        if (!values.length) {
-          emitText(String(delta || ''));
-          return;
-        }
-        buffer = redactText(buffer + String(delta || ''), values);
-        if (buffer.length > keep) {
-          emitText(buffer.slice(0, buffer.length - keep));
-          buffer = buffer.slice(buffer.length - keep);
-        }
-      },
-      flush() {
-        if (buffer) emitText(redactText(buffer, values));
-        buffer = '';
-      },
-      discard() { buffer = ''; },
-    };
-  }
-
-  function safeErrorMessage(error, values) {
-    return redactText(error && error.message ? error.message : 'Agent loop failed.', values);
   }
 
   function resetPendingApprovals() {
