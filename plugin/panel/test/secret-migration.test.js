@@ -7,6 +7,9 @@ const MIGRATION_ID = 'provider-secrets-v2';
 const SOURCE_REVISION = '4f15f251b51f06e4b449afd6558f8d47e7721f48ca578e8cbcc8f641f17703c4';
 const PROVIDER_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const REFERENCE = `aemcp-secret://provider/${PROVIDER_ID}/api-key/v1`;
+const INITIAL_PHASE_OBSERVER = Symbol.for(
+  'com.junkdoge.ae-mcp.secret-migration.initial-phase',
+);
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -30,6 +33,7 @@ function makeMigrationHarness({
   initialSecret,
   readbackValue,
   initialJournal = null,
+  initialPhaseObserver = null,
 } = {}) {
   let journal = initialJournal ? clone(initialJournal) : null;
   let failed = false;
@@ -141,6 +145,7 @@ function makeMigrationHarness({
       logs.push(deleted ? 'legacy state deleted' : 'legacy state already absent');
     },
   };
+  if (initialPhaseObserver) plan[INITIAL_PHASE_OBSERVER] = initialPhaseObserver;
 
   const runner = createSecretMigrationRunner({
     journalStore,
@@ -201,7 +206,18 @@ function assertNoSecretPersistence(harness, ...secrets) {
 test('migration resumes every persisted phase without serializing a secret or secret hash', async () => {
   for (const phase of ['pending', 'secrets-written', 'state-committed', 'committed']) {
     const secret = `never-write-this-${phase}`;
-    const harness = makeMigrationHarness({ failAfterPhase: phase, secret });
+    const observerSecret = `observer-secret-${phase}`;
+    const observedInitialPhases = [];
+    const harness = makeMigrationHarness({
+      failAfterPhase: phase,
+      secret,
+      initialPhaseObserver: (initialPhase) => {
+        assert.equal(observerSecret.startsWith('observer-secret-'), true);
+        observedInitialPhases.push(initialPhase);
+      },
+    });
+
+    assert.deepEqual(Reflect.ownKeys(harness.runner), ['run']);
 
     await assert.rejects(harness.firstRun(), { code: 'SIMULATED_CRASH' });
     const resumed = await harness.secondRun();
@@ -217,7 +233,9 @@ test('migration resumes every persisted phase without serializing a secret or se
     assert.equal(harness.backupCalls.every((call) => call.argumentCount === 0), true);
     assert.equal(harness.stateCalls.every((call) => call.argumentCount === 1), true);
     assert.equal(harness.cleanupCalls.every((call) => call.argumentCount === 0), true);
-    assertNoSecretPersistence(harness, secret);
+    assert.deepEqual(observedInitialPhases, ['pending', phase]);
+    assert.deepEqual(Object.getOwnPropertySymbols(harness.currentJournal()), []);
+    assertNoSecretPersistence(harness, secret, observerSecret);
   }
 });
 
