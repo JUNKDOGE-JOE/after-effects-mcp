@@ -5,8 +5,47 @@ import {
   codexAppServerArgs,
   codexSpawnEnv,
   ensureUserEnv,
+  normalizeProviderEntryV2,
   normalizeProviderProfile,
 } from '../src/lib/providerProfile.js';
+
+const CREDENTIAL_ID = '5eb75f05-5d9e-5d9c-85af-f0893e8b90c2';
+
+function secretRef(slot, revision = 1) {
+  return {
+    kind: 'secret',
+    reference: `aemcp-secret://provider/${CREDENTIAL_ID}/${slot}/v1`,
+    revision,
+  };
+}
+
+function providerFixture(overrides = {}) {
+  return Object.assign({
+    id: 'provider-1',
+    credentialId: CREDENTIAL_ID,
+    name: 'Provider 1',
+    protocol: 'openai-compatible',
+    baseUrl: 'https://provider.example/v1',
+    allowInsecureHttp: false,
+    authProfileRevision: 1,
+    auth: { model: { kind: 'none' }, probe: { kind: 'inherit-model' } },
+    headers: [],
+    dialect: { override: null, detected: null },
+    probedModels: [],
+    probedAt: 0,
+  }, overrides);
+}
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function assertInvalidProvider(value) {
+  assert.throws(
+    () => normalizeProviderEntryV2(value),
+    (error) => error instanceof Error && error.code === 'provider_profile_invalid',
+  );
+}
 
 test('codexAppServerArgs keeps official Codex login path when no custom base URL is configured', () => {
   assert.deepEqual(codexAppServerArgs(normalizeProviderProfile({})), ['app-server']);
@@ -58,4 +97,128 @@ test('ensureUserEnv fills USERPROFILE/HOME/APPDATA from whichever anchor exists'
   assert.equal(untouched.APPDATA, 'C:\\A');
 
   assert.deepEqual(ensureUserEnv({ PATH: 'x' }), { PATH: 'x' });
+});
+
+test('normalizeProviderEntryV2 accepts only the exact v2 schema and returns a detached value', () => {
+  const input = providerFixture({
+    auth: {
+      model: { kind: 'bearer', valueRef: secretRef('auth-model', 2) },
+      probe: { kind: 'inherit-model' },
+    },
+    headers: [
+      { id: 'feature', name: 'x-provider-feature', scopes: ['probe', 'model'], valueRef: { kind: 'literal', value: 'enabled' } },
+      { id: 'secret', name: 'x-provider-token', scopes: ['model'], valueRef: secretRef('header', 3) },
+    ],
+    dialect: {
+      override: { wireApi: 'chat', source: 'legacy-v0.9', updatedAt: 1783612800000 },
+      detected: {
+        wireApi: 'chat',
+        baseUrl: 'https://provider.example/v1',
+        authProfileRevision: 1,
+        detectedAt: 1783612800100,
+        evidence: 'chat-success-schema',
+      },
+    },
+    probedModels: [{ id: 'model-1', label: 'Model 1' }],
+    probedAt: 1783612800200,
+  });
+
+  const normalized = normalizeProviderEntryV2(input);
+  assert.deepEqual(normalized, input);
+  assert.notEqual(normalized, input);
+  assert.notEqual(normalized.auth, input.auth);
+  assert.notEqual(normalized.headers, input.headers);
+  assert.deepEqual(Object.keys(normalized).sort(), [
+    'allowInsecureHttp',
+    'auth',
+    'authProfileRevision',
+    'baseUrl',
+    'credentialId',
+    'dialect',
+    'headers',
+    'id',
+    'name',
+    'probedAt',
+    'probedModels',
+    'protocol',
+  ]);
+});
+
+test('normalizeProviderEntryV2 rejects extra, missing, or malformed nested schema fields', () => {
+  const extraTopLevel = { ...providerFixture(), apiKey: 'must-never-be-v2' };
+  const missingTopLevel = providerFixture();
+  delete missingTopLevel.dialect;
+  const extraAuth = providerFixture({ auth: { model: { kind: 'none', valueRef: secretRef('auth-model') }, probe: { kind: 'inherit-model' } } });
+  const wrongCredentialReference = providerFixture({
+    auth: {
+      model: {
+        kind: 'bearer',
+        valueRef: {
+          kind: 'secret',
+          reference: 'aemcp-secret://provider/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/auth-model/v1',
+          revision: 1,
+        },
+      },
+      probe: { kind: 'inherit-model' },
+    },
+  });
+  const badRevision = providerFixture({
+    auth: { model: { kind: 'bearer', valueRef: secretRef('auth-model', 0) }, probe: { kind: 'inherit-model' } },
+  });
+  const duplicateScope = providerFixture({
+    headers: [{ id: 'feature', name: 'x-feature', scopes: ['model', 'model'], valueRef: { kind: 'literal', value: 'on' } }],
+  });
+  const extraModelField = providerFixture({ probedModels: [{ id: 'model-1', label: 'Model 1', secret: false }] });
+  const badEvidence = providerFixture({
+    dialect: {
+      override: null,
+      detected: {
+        wireApi: 'responses',
+        baseUrl: 'https://provider.example/v1',
+        authProfileRevision: 1,
+        detectedAt: 1,
+        evidence: 'http-200',
+      },
+    },
+  });
+
+  for (const value of [
+    extraTopLevel,
+    missingTopLevel,
+    extraAuth,
+    wrongCredentialReference,
+    badRevision,
+    duplicateScope,
+    extraModelField,
+    badEvidence,
+    providerFixture({ protocol: 'grpc' }),
+  ]) {
+    assertInvalidProvider(value);
+  }
+
+  const nonCanonical = clone(providerFixture());
+  nonCanonical.credentialId = nonCanonical.credentialId.toUpperCase();
+  assertInvalidProvider(nonCanonical);
+});
+
+test('normalizeProviderEntryV2 requires SecretValueRef for sensitive names and exact credential literals', () => {
+  const rejectedHeaders = [
+    { id: 'named-token', name: 'x-provider-token', scopes: ['model'], valueRef: { kind: 'literal', value: 'enabled' } },
+    { id: 'secret-value', name: 'x-feature', scopes: ['model'], valueRef: { kind: 'literal', value: 'sk-test-secret-1234' } },
+    { id: 'jwt-value', name: 'x-feature', scopes: ['probe'], valueRef: { kind: 'literal', value: `${'a'.repeat(16)}.${'b'.repeat(16)}.${'c'.repeat(8)}` } },
+  ];
+
+  for (const header of rejectedHeaders) {
+    assert.throws(
+      () => normalizeProviderEntryV2(providerFixture({ headers: [header] })),
+      (error) => error instanceof Error && error.code === 'provider_header_secret_reference_required',
+    );
+  }
+
+  assert.deepEqual(
+    normalizeProviderEntryV2(providerFixture({
+      headers: [{ id: 'feature', name: 'x-provider-feature', scopes: ['model'], valueRef: { kind: 'literal', value: 'enabled' } }],
+    })).headers,
+    [{ id: 'feature', name: 'x-provider-feature', scopes: ['model'], valueRef: { kind: 'literal', value: 'enabled' } }],
+  );
 });

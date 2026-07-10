@@ -3,6 +3,9 @@ import { parseProviderSecretReference } from './secret-reference.js';
 const PHASES = new Set(['pending', 'secrets-written', 'state-committed', 'committed']);
 const JOURNAL_KEYS = ['entries', 'migrationId', 'phase', 'schemaVersion', 'sourceRevision', 'updatedAt'];
 const ENTRY_KEYS = ['id', 'reference', 'revision'];
+const INITIAL_PHASE_OBSERVER = Symbol.for(
+  'com.junkdoge.ae-mcp.secret-migration.initial-phase',
+);
 
 function migrationError(code, message) {
   const error = new Error(message);
@@ -39,6 +42,12 @@ function normalizePlan(plan) {
   if (!Array.isArray(plan.entries)) throw invalidPlan();
   for (const callback of ['writeRedactedBackup', 'commitRedactedState', 'cleanupLegacyState']) {
     if (typeof plan[callback] !== 'function') throw invalidPlan();
+  }
+  if (
+    plan[INITIAL_PHASE_OBSERVER] !== undefined
+    && typeof plan[INITIAL_PHASE_OBSERVER] !== 'function'
+  ) {
+    throw invalidPlan();
   }
 
   const ids = new Set();
@@ -170,9 +179,13 @@ export function createSecretMigrationRunner(input = {}) {
       const writeRedactedBackup = planInput.writeRedactedBackup;
       const commitRedactedState = planInput.commitRedactedState;
       const cleanupLegacyState = planInput.cleanupLegacyState;
+      const initialPhaseObserver = planInput[INITIAL_PHASE_OBSERVER];
       const stored = await journalStore.read(plan.migrationId);
-      let journal;
-      if (stored === null) {
+      let journal = stored === null ? null : validateJournal(stored, plan);
+      if (initialPhaseObserver) {
+        initialPhaseObserver(journal === null ? 'pending' : journal.phase);
+      }
+      if (journal === null) {
         journal = await persistJournal({
           journalStore,
           now,
@@ -180,8 +193,6 @@ export function createSecretMigrationRunner(input = {}) {
           phase: 'pending',
           entries: [],
         });
-      } else {
-        journal = validateJournal(stored, plan);
       }
 
       if (journal.phase === 'committed') return committedResult(plan, journal.entries);
