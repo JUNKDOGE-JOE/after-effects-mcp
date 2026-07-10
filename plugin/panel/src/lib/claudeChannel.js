@@ -11,14 +11,30 @@ function deleteEnvironmentKey(environment, name) {
   }
 }
 
-export function claudeChannelEnv(baseEnv = {}, { channel = 'subscription', provider = null } = {}) {
+function unsupportedProvider() {
+  const error = new Error('Claude Agent provider is unsupported');
+  error.code = 'CLAUDE_AGENT_PROVIDER_UNSUPPORTED';
+  return error;
+}
+
+export function claudeChannelEnv(baseEnv = {}, { channel = 'subscription', requestProfile = null } = {}) {
   const env = { ...baseEnv };
   deleteEnvironmentKey(env, 'ANTHROPIC_API_KEY');
   deleteEnvironmentKey(env, 'ANTHROPIC_BASE_URL');
   deleteEnvironmentKey(env, 'ANTHROPIC_AUTH_TOKEN');
-  if (channel === 'api' && provider && provider.baseUrl) {
-    env.ANTHROPIC_BASE_URL = String(provider.baseUrl);
-    if (provider.apiKey) env.ANTHROPIC_AUTH_TOKEN = String(provider.apiKey);
+  if (channel === 'api' && requestProfile && requestProfile.baseUrl) {
+    if (Array.isArray(requestProfile.extraHeaders) && requestProfile.extraHeaders.length) throw unsupportedProvider();
+    if (requestProfile.auth?.kind !== 'header') throw unsupportedProvider();
+    const name = String(requestProfile.auth.name || '').toLowerCase();
+    if (name !== 'x-api-key' && name !== 'authorization') throw unsupportedProvider();
+    let token = String(requestProfile.auth.value || '');
+    if (name === 'authorization') {
+      if (!/^Bearer\s+\S+/i.test(token)) throw unsupportedProvider();
+      token = token.replace(/^Bearer\s+/i, '');
+    }
+    if (!token) throw unsupportedProvider();
+    env.ANTHROPIC_BASE_URL = String(requestProfile.baseUrl);
+    env.ANTHROPIC_AUTH_TOKEN = token;
     return env;
   }
   return env;

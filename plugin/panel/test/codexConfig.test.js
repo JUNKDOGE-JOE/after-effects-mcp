@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readCodexCliConfig, resolveCodexProviderApiKey } from '../src/cep/codexConfig.js';
+import {
+  codexCliCredentialAvailable,
+  readCodexCliConfig,
+  resolveCodexCliCredential,
+} from '../src/cep/codexConfig.js';
 
 function fakeFs(files) {
   return {
@@ -93,10 +97,34 @@ test('readCodexCliConfig returns null when there is no model_provider and no mod
   assert.equal(readCodexCliConfig({ platform: platform(fsImpl), fsImpl }), null);
 });
 
-test('resolveCodexProviderApiKey prefers env var, then stored key, then empty', () => {
+test('codexCliCredentialAvailable returns only a Boolean and never resolves a stored reference', () => {
   const provider = { envKey: 'MEDIASTORM_GLM_API_KEY' };
-  assert.equal(resolveCodexProviderApiKey({ provider, env: { MEDIASTORM_GLM_API_KEY: 'from-env' }, storedKey: 'from-store' }), 'from-env');
-  assert.equal(resolveCodexProviderApiKey({ provider, env: {}, storedKey: 'from-store' }), 'from-store');
-  assert.equal(resolveCodexProviderApiKey({ provider, env: {}, storedKey: '' }), '');
-  assert.equal(resolveCodexProviderApiKey({ provider: null, env: { MEDIASTORM_GLM_API_KEY: 'x' }, storedKey: 'from-store' }), 'from-store');
+  const storedValueRef = {
+    kind: 'secret',
+    reference: 'aemcp-secret://provider/5eb75f05-5d9e-5d9c-85af-f0893e8b90c2/auth-model/v1',
+    revision: 1,
+  };
+  assert.equal(codexCliCredentialAvailable({ provider, env: { MEDIASTORM_GLM_API_KEY: 'from-env' }, storedValueRef: null }), true);
+  assert.equal(codexCliCredentialAvailable({ provider, env: {}, storedValueRef }), true);
+  assert.equal(codexCliCredentialAvailable({ provider, env: {}, storedValueRef: null }), false);
+  assert.equal(typeof codexCliCredentialAvailable({ provider, env: {}, storedValueRef }), 'boolean');
+});
+
+test('resolveCodexCliCredential resolves exactly once at request/spawn time', async () => {
+  const provider = { envKey: 'MEDIASTORM_GLM_API_KEY' };
+  const storedValueRef = {
+    kind: 'secret',
+    reference: 'aemcp-secret://provider/5eb75f05-5d9e-5d9c-85af-f0893e8b90c2/auth-model/v1',
+    revision: 1,
+  };
+  let calls = 0;
+  const secretService = { resolve: async () => { calls += 1; return 'resolved-only-for-spawn'; } };
+  assert.equal(await resolveCodexCliCredential({ provider, env: { MEDIASTORM_GLM_API_KEY: 'from-env' }, storedValueRef, secretService }), 'from-env');
+  assert.equal(calls, 0);
+  assert.equal(await resolveCodexCliCredential({ provider, env: {}, storedValueRef, secretService }), 'resolved-only-for-spawn');
+  assert.equal(calls, 1);
+  await assert.rejects(
+    resolveCodexCliCredential({ provider, env: {}, storedValueRef: null, secretService }),
+    (error) => error.code === 'CODEX_CREDENTIAL_UNAVAILABLE',
+  );
 });

@@ -43,6 +43,7 @@ function unquote(value) {
 // escaped-quote edge cases beyond a naive backslash check, dotted keys
 // within a single line (`a.b = 1`), or non-TOML-standard shapes.
 import { createPlatformAdapter } from './platform/index.js';
+import { parseProviderSecretReference } from './platform/secret-reference.js';
 function parseToml(text) {
   const root = {};
   const sections = {};
@@ -103,9 +104,36 @@ export function readCodexCliConfig({ platform, fsImpl } = {}) {
   return result;
 }
 
-export function resolveCodexProviderApiKey({ provider, env = {}, storedKey = '' } = {}) {
+function usableStoredValueRef(value) {
+  if (
+    !value
+    || value.kind !== 'secret'
+    || typeof value.reference !== 'string'
+    || !Number.isSafeInteger(value.revision)
+    || value.revision <= 0
+  ) return false;
+  try { parseProviderSecretReference(value.reference); } catch { return false; }
+  return true;
+}
+
+export function codexCliCredentialAvailable({ provider, env = {}, storedValueRef = null } = {}) {
   const envKey = provider && String(provider.envKey || '').trim();
-  if (envKey && env[envKey]) return String(env[envKey]);
-  if (storedKey) return String(storedKey);
-  return '';
+  if (envKey && typeof env[envKey] === 'string' && env[envKey].length > 0) return true;
+  return usableStoredValueRef(storedValueRef);
+}
+
+export async function resolveCodexCliCredential({
+  provider,
+  env = {},
+  storedValueRef = null,
+  secretService,
+} = {}) {
+  const envKey = provider && String(provider.envKey || '').trim();
+  if (envKey && typeof env[envKey] === 'string' && env[envKey].length > 0) return env[envKey];
+  if (usableStoredValueRef(storedValueRef) && secretService && typeof secretService.resolve === 'function') {
+    return await secretService.resolve(storedValueRef);
+  }
+  const error = new Error('Codex CLI credential is unavailable');
+  error.code = 'CODEX_CREDENTIAL_UNAVAILABLE';
+  throw error;
 }

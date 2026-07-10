@@ -49,6 +49,12 @@ const S = {
     providerNone: '（未选择 provider）',
     importClaudeSettings: '从 ~/.claude/settings.json 导入',
     claude3pNote: 'Claude-3p 桌面版的凭据无法自动读取；请在 Provider 管理里手动填写一次 Base URL 与 Token。',
+    providerHelperRepair: 'Provider 凭据功能已安全停用。请修复或重新安装平台 Helper，重启 AE 后再点「重新检测」；不会回退读取明文凭据。',
+    providerStoreCorrupt: 'Provider 配置文件损坏；当前列表已保留。请先从备份恢复 providers.json，再点「重新检测」。',
+    providerStoreUnavailable: 'Provider 配置文件不可用；当前列表已保留。请检查 ~/.ae-mcp 的磁盘空间与读写权限。',
+    providerMigrationConflict: 'Provider 迁移期间配置发生冲突；当前列表已保留。请关闭其他面板实例后重新启动 AE 再检测。',
+    providerSecretMismatch: 'Provider 引用与系统凭据不一致；当前列表已保留。请在 Provider 管理中重新保存对应凭据。',
+    providerInitializationFailed: 'Provider 初始化失败；当前列表已保留。请导出日志后重新检测。',
     zcodeKeyPlaceholder: '粘贴 provider API Key（存本机）',
     zcodeKeyStored: '已保存到 ~/.ae-mcp/zcode-key，可粘贴新值覆盖',
     save: '保存',
@@ -104,6 +110,12 @@ const S = {
     providerNone: '(no provider selected)',
     importClaudeSettings: 'Import from ~/.claude/settings.json',
     claude3pNote: 'Claude-3p desktop credentials cannot be read automatically; fill the base URL and token once in Provider Manager.',
+    providerHelperRepair: 'Provider credentials are safely disabled. Repair or reinstall the platform Helper, restart AE, then re-check. Plaintext fallback is disabled.',
+    providerStoreCorrupt: 'The provider configuration is corrupt; the current list was retained. Restore providers.json from backup, then re-check.',
+    providerStoreUnavailable: 'The provider configuration is unavailable; the current list was retained. Check disk space and permissions for ~/.ae-mcp.',
+    providerMigrationConflict: 'The provider configuration changed during migration; the current list was retained. Close other panel instances, restart AE, then re-check.',
+    providerSecretMismatch: 'A provider reference no longer matches its system credential; the current list was retained. Save that credential again in Provider Manager.',
+    providerInitializationFailed: 'Provider initialization failed; the current list was retained. Export logs, then re-check.',
     zcodeKeyPlaceholder: 'Paste the provider API key (stored locally)',
     zcodeKeyStored: 'Saved to ~/.ae-mcp/zcode-key; paste a new value to overwrite',
     save: 'Save',
@@ -283,12 +295,21 @@ export function SettingsScreen({
   codexKeyStored = false,
   codexCliConfig = null,
   providerManager = null,
+  providerInit = { state: 'checking', error: '' },
   logLevel = 'info',
   onLogLevel,
   onExportLogs,
   onRerunWizard,
 }) {
   const t = S[lang] || S.zh;
+  const providerInitMessage = {
+    PLATFORM_HELPER_REPAIR_REQUIRED: t.providerHelperRepair,
+    PROVIDER_STORE_CORRUPT: t.providerStoreCorrupt,
+    PROVIDER_STORE_UNAVAILABLE: t.providerStoreUnavailable,
+    PROVIDER_MIGRATION_CONFLICT: t.providerMigrationConflict,
+    PROVIDER_SECRET_MISMATCH: t.providerSecretMismatch,
+    PROVIDER_INITIALIZATION_FAILED: t.providerInitializationFailed,
+  }[providerInit.error] || t.providerInitializationFailed;
   const zcodeModelLocked = shouldLockZcodeDefaultModel({ backend, models: modelOptions });
   const [customModelDraft, setCustomModelDraft] = React.useState(customModel);
   const [draftPort, setDraftPort] = React.useState(String(port));
@@ -375,13 +396,18 @@ export function SettingsScreen({
                       {[codexCliConfig.providerId, codexCliConfig.model, codexCliConfig.provider.baseUrl].filter(Boolean).join(' · ')}
                     </div>
                   ) : null}
-                  <ZcodeKeyFallback t={t} stored={codexKeyStored} onSave={onSaveCodexKey} />
+                  {onSaveCodexKey ? <ZcodeKeyFallback t={t} stored={codexKeyStored} onSave={onSaveCodexKey} /> : null}
                 </div>
               );
             }
             return null;
           }}
         />
+        {providerInit.state === 'unavailable' ? (
+          <div role="alert" style={{ padding: '7px 8px', border: '1px solid var(--error-border)', borderRadius: 'var(--radius-md)', background: 'var(--error-bg)', color: 'var(--error)', font: '400 10px/1.5 var(--font-ui)' }}>
+            {providerInitMessage}{providerInit.error ? ` (${providerInit.error})` : ''}
+          </div>
+        ) : null}
         {providerManager}
         <Field label={t.modelDefault}>
           {zcodeModelLocked ? (

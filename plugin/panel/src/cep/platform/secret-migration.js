@@ -6,6 +6,7 @@ const ENTRY_KEYS = ['id', 'reference', 'revision'];
 const INITIAL_PHASE_OBSERVER = Symbol.for(
   'com.junkdoge.ae-mcp.secret-migration.initial-phase',
 );
+const JOURNAL_STORES_BY_RUNNER = new WeakMap();
 
 function migrationError(code, message) {
   const error = new Error(message);
@@ -33,6 +34,38 @@ function hasExactKeys(value, expected) {
 
 function validRevision(value) {
   return Number.isSafeInteger(value) && value > 0;
+}
+
+function normalizeJournalShape(value, migrationId) {
+  if (!hasExactKeys(value, JOURNAL_KEYS)) throw invalidJournal();
+  if (value.schemaVersion !== 1 || value.migrationId !== migrationId) throw invalidJournal();
+  if (typeof value.sourceRevision !== 'string' || !value.sourceRevision) throw invalidJournal();
+  if (!PHASES.has(value.phase)) throw invalidJournal();
+  if (!Number.isFinite(value.updatedAt) || value.updatedAt < 0) throw invalidJournal();
+  if (!Array.isArray(value.entries)) throw invalidJournal();
+
+  const ids = new Set();
+  const references = new Set();
+  const entries = value.entries.map((entry) => {
+    if (!hasExactKeys(entry, ENTRY_KEYS)) throw invalidJournal();
+    if (typeof entry.id !== 'string' || !entry.id || !validRevision(entry.revision)) {
+      throw invalidJournal();
+    }
+    try { parseProviderSecretReference(entry.reference); } catch { throw invalidJournal(); }
+    if (ids.has(entry.id) || references.has(entry.reference)) throw invalidJournal();
+    ids.add(entry.id);
+    references.add(entry.reference);
+    return { id: entry.id, reference: entry.reference, revision: entry.revision };
+  });
+
+  return {
+    schemaVersion: 1,
+    migrationId: value.migrationId,
+    sourceRevision: value.sourceRevision,
+    phase: value.phase,
+    entries,
+    updatedAt: value.updatedAt,
+  };
 }
 
 function normalizePlan(plan) {
@@ -75,24 +108,18 @@ function normalizePlan(plan) {
 }
 
 function validateJournal(value, plan) {
-  if (!hasExactKeys(value, JOURNAL_KEYS)) throw invalidJournal();
-  if (value.schemaVersion !== 1) throw invalidJournal();
-  if (value.migrationId !== plan.migrationId || value.sourceRevision !== plan.sourceRevision) {
+  const normalized = normalizeJournalShape(value, plan.migrationId);
+  if (normalized.sourceRevision !== plan.sourceRevision) throw invalidJournal();
+  if (normalized.entries.length > plan.entries.length) throw invalidJournal();
+  if (normalized.phase !== 'pending' && normalized.entries.length !== plan.entries.length) {
     throw invalidJournal();
   }
-  if (!PHASES.has(value.phase)) throw invalidJournal();
-  if (!Number.isFinite(value.updatedAt) || value.updatedAt < 0) throw invalidJournal();
-  if (!Array.isArray(value.entries) || value.entries.length > plan.entries.length) throw invalidJournal();
-  if (value.phase !== 'pending' && value.entries.length !== plan.entries.length) throw invalidJournal();
 
-  const entries = value.entries.map((entry, index) => {
-    if (!hasExactKeys(entry, ENTRY_KEYS)) throw invalidJournal();
-    if (!validRevision(entry.revision)) throw invalidJournal();
+  const entries = normalized.entries.map((entry, index) => {
     const planned = plan.entries[index];
     if (!planned || entry.id !== planned.id || entry.reference !== planned.reference) {
       throw invalidJournal();
     }
-    parseProviderSecretReference(entry.reference);
     return {
       id: entry.id,
       reference: entry.reference,
@@ -102,11 +129,11 @@ function validateJournal(value, plan) {
 
   return {
     schemaVersion: 1,
-    migrationId: value.migrationId,
-    sourceRevision: value.sourceRevision,
-    phase: value.phase,
+    migrationId: normalized.migrationId,
+    sourceRevision: normalized.sourceRevision,
+    phase: normalized.phase,
     entries,
-    updatedAt: value.updatedAt,
+    updatedAt: normalized.updatedAt,
   };
 }
 
@@ -163,6 +190,24 @@ function committedResult(plan, entries) {
   });
 }
 
+function readonlyJournal(value) {
+  const entries = Object.freeze(value.entries.map((entry) => Object.freeze({ ...entry })));
+  return Object.freeze({ ...value, entries });
+}
+
+export async function readSecretMigrationJournalSnapshot(runner, migrationId) {
+  const journalStore = JOURNAL_STORES_BY_RUNNER.get(runner);
+  if (!journalStore || typeof migrationId !== 'string' || !migrationId) throw invalidJournal();
+  let stored;
+  try {
+    stored = await journalStore.read(migrationId);
+  } catch {
+    throw invalidJournal();
+  }
+  if (stored === null) return null;
+  return readonlyJournal(normalizeJournalShape(stored, migrationId));
+}
+
 export function createSecretMigrationRunner(input = {}) {
   const { journalStore, secretStore, now = Date.now } = input;
   if (!journalStore || typeof journalStore.read !== 'function' || typeof journalStore.writeAtomic !== 'function') {
@@ -173,7 +218,7 @@ export function createSecretMigrationRunner(input = {}) {
   }
   if (typeof now !== 'function') throw new TypeError('now must be a function');
 
-  return Object.freeze({
+  const runner = Object.freeze({
     async run(planInput) {
       const plan = normalizePlan(planInput);
       const writeRedactedBackup = planInput.writeRedactedBackup;
@@ -295,4 +340,6 @@ export function createSecretMigrationRunner(input = {}) {
       return committedResult(plan, journal.entries);
     },
   });
+  JOURNAL_STORES_BY_RUNNER.set(runner, journalStore);
+  return runner;
 }

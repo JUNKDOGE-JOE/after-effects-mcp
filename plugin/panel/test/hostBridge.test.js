@@ -474,3 +474,313 @@ test('host controller keeps the same native roots when restarting', () => {
   assert.deepEqual(calls[0], { method: 'start', port: 11488, roots: expectedRoots });
   assert.deepEqual(calls[1], { method: 'restart', port: 11489, roots: expectedRoots });
 });
+
+test('real host controller exposes in-process Foundation helper pass-through methods', async () => {
+  const calls = [];
+  const reference = 'aemcp-secret://provider/5eb75f05-5d9e-5d9c-85af-f0893e8b90c2/auth-model/v1';
+  const transport = { request() {}, close() {} };
+  const helperClient = {
+    async capabilities() { calls.push(['capabilities']); return { authenticatedCaller: true }; },
+    async secretGet(value) { calls.push(['secretGet', value]); return { reference: value, value: 'secret', revision: 1 }; },
+    async secretSet(value) { calls.push(['secretSet', value]); return { reference: value.reference, revision: 1 }; },
+    async secretDelete(value) { calls.push(['secretDelete', value]); return { reference: value.reference, deleted: true, revision: 1 }; },
+    async close() { calls.push(['close']); },
+  };
+  const host = {
+    setRuntimeDependencies() {},
+    setCSInterface() {},
+    setPlatformRoots() {},
+    start(_port, callback) { callback(null); },
+    stop() {},
+  };
+  const runtime = fakeHostDependencyRuntime({
+    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
+    express: function bundledExpress() {},
+  });
+  const controller = createHostController({
+    cs: { getSystemPath: () => '/Applications/AE MCP' },
+    extensionRoot: '/Applications/AE MCP',
+    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
+    requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
+    createPlatformHelperTransportImpl(options) {
+      calls.push(['createTransport', options.platformId]);
+      return transport;
+    },
+    createPlatformHelperClientImpl(options) {
+      calls.push(['createClient', options.transport]);
+      return helperClient;
+    },
+    onStatus: () => {}, onLog: () => {}, addBeforeUnload: () => {},
+  });
+
+  controller.start(11488);
+  const inProcessHost = controller.getHost();
+  assert.equal(typeof inProcessHost.capabilities, 'function');
+  assert.equal(typeof inProcessHost.secretGet, 'function');
+  assert.equal(typeof inProcessHost.secretSet, 'function');
+  assert.equal(typeof inProcessHost.secretDelete, 'function');
+  assert.deepEqual(await inProcessHost.capabilities(), { authenticatedCaller: true });
+  assert.equal((await inProcessHost.secretGet(reference)).value, 'secret');
+  await inProcessHost.secretSet({ reference, value: 'secret', expectedRevision: null });
+  await inProcessHost.secretDelete({ reference, expectedRevision: 1 });
+  assert.deepEqual(calls.slice(0, 2), [
+    ['createTransport', 'macos-arm64'],
+    ['createClient', transport],
+  ]);
+  assert.deepEqual(calls.slice(2), [
+    ['capabilities'],
+    ['secretGet', reference],
+    ['secretSet', { reference, value: 'secret', expectedRevision: null }],
+    ['secretDelete', { reference, expectedRevision: 1 }],
+  ]);
+});
+
+test('host controller loads the bundled helper client and transport modules by exact extension paths', async () => {
+  const loaded = [];
+  const transport = { request() {}, close() {} };
+  const helperClient = {
+    async capabilities() { return { authenticatedCaller: true }; },
+    async secretGet() {}, async secretSet() {}, async secretDelete() {}, async close() {},
+  };
+  const host = {
+    setRuntimeDependencies() {}, setCSInterface() {},
+    start(_port, callback) { callback(null); }, stop() {},
+  };
+  const runtime = fakeHostDependencyRuntime({
+    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
+    express: function bundledExpress() {},
+  });
+  const controller = createHostController({
+    cs: { getSystemPath: () => '/Applications/AE MCP' },
+    extensionRoot: '/Applications/AE MCP',
+    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
+    requireImpl(request) {
+      if (request === 'module') return runtime.moduleApi;
+      if (request === 'path') return path;
+      loaded.push(request);
+      if (request.endsWith('/platform-helper-transport.js')) {
+        return { createPlatformHelperTransport: () => transport };
+      }
+      if (request.endsWith('/platform-helper-client.js')) {
+        return { createPlatformHelperClient: ({ transport: actual }) => {
+          assert.equal(actual, transport);
+          return helperClient;
+        } };
+      }
+      return host;
+    },
+    onStatus: () => {}, onLog: () => {}, addBeforeUnload: () => {},
+  });
+
+  controller.start(11488);
+  assert.deepEqual(loaded, [
+    '/Applications/AE MCP/host/server.js',
+    '/Applications/AE MCP/host/platform-helper-transport.js',
+    '/Applications/AE MCP/host/platform-helper-client.js',
+  ]);
+  assert.deepEqual(await controller.getHost().capabilities(), { authenticatedCaller: true });
+});
+
+test('host controller helper facade fails closed when the native addon is unavailable', async () => {
+  const host = {
+    setRuntimeDependencies() {}, setCSInterface() {},
+    start(_port, callback) { callback(null); }, stop() {},
+  };
+  const runtime = fakeHostDependencyRuntime({
+    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
+    express: function bundledExpress() {},
+  });
+  const controller = createHostController({
+    cs: { getSystemPath: () => '/Applications/AE MCP' },
+    extensionRoot: '/Applications/AE MCP',
+    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
+    requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
+    createPlatformHelperTransportImpl() {
+      const error = new Error('sensitive addon path');
+      error.code = 'HELPER_UNAVAILABLE';
+      throw error;
+    },
+    createPlatformHelperClientImpl() { throw new Error('must not create a client'); },
+    onStatus: () => {}, onLog: () => {}, addBeforeUnload: () => {},
+  });
+  controller.start(11488);
+
+  await assert.rejects(
+    controller.getHost().capabilities(),
+    (error) => {
+      assert.equal(error.code, 'HELPER_UNAVAILABLE');
+      assert.equal(error.message.includes('/Applications'), false);
+      assert.equal(error.message.includes('addon path'), false);
+      return true;
+    },
+  );
+});
+
+test('host controller closes a created transport when the helper client is invalid', async () => {
+  let transportCloses = 0;
+  const transport = {
+    request() {},
+    close() { transportCloses += 1; },
+  };
+  const host = {
+    setRuntimeDependencies() {}, setCSInterface() {},
+    start(_port, callback) { callback(null); }, stop() {},
+  };
+  const runtime = fakeHostDependencyRuntime({
+    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
+    express: function bundledExpress() {},
+  });
+  const controller = createHostController({
+    cs: { getSystemPath: () => '/Applications/AE MCP' },
+    extensionRoot: '/Applications/AE MCP',
+    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
+    requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
+    createPlatformHelperTransportImpl: () => transport,
+    createPlatformHelperClientImpl: () => ({ capabilities() {} }),
+    onStatus: () => {}, onLog: () => {}, addBeforeUnload: () => {},
+  });
+
+  controller.start(11488);
+  await Promise.resolve();
+  await assert.rejects(controller.getHost().capabilities(), { code: 'HELPER_UNAVAILABLE' });
+  assert.equal(transportCloses, 1);
+});
+
+test('host controller start reentry disposes the prior lifecycle and queued calls keep their client snapshot', async () => {
+  const reference = 'aemcp-secret://provider/5eb75f05-5d9e-5d9c-85af-f0893e8b90c2/auth-model/v1';
+  const lifecycle = [];
+  const beforeUnloadHandlers = [];
+  let generation = 0;
+  const host = {
+    setRuntimeDependencies() {}, setCSInterface() {},
+    start(port, callback) { lifecycle.push(['host-start', port]); callback(null); },
+    stop() { lifecycle.push(['host-stop']); },
+  };
+  const clients = [1, 2].map((id) => ({
+    async capabilities() { return { id }; },
+    async secretGet(value) { lifecycle.push(['secretGet', id, value]); return { reference: value, value: `secret-${id}`, revision: 1 }; },
+    async secretSet() {},
+    async secretDelete() {},
+    async close() { lifecycle.push(['client-close', id]); },
+  }));
+  const runtime = fakeHostDependencyRuntime({
+    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
+    express: function bundledExpress() {},
+  });
+  const controller = createHostController({
+    cs: { getSystemPath: () => '/Applications/AE MCP' },
+    extensionRoot: '/Applications/AE MCP',
+    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
+    requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
+    createPlatformHelperTransportImpl: () => ({ request() {}, close() {} }),
+    createPlatformHelperClientImpl: () => clients[generation++],
+    onStatus: () => {}, onLog: () => {},
+    addBeforeUnload: (handler) => { beforeUnloadHandlers.push(handler); },
+  });
+
+  controller.start(11488);
+  const queued = controller.getHost().secretGet(reference);
+  controller.start(11489);
+  const result = await queued;
+  await Promise.resolve();
+
+  assert.equal(result.value, 'secret-1');
+  assert.equal(lifecycle.filter(([name]) => name === 'host-stop').length, 1);
+  assert.deepEqual(lifecycle.filter(([name]) => name === 'client-close'), [['client-close', 1]]);
+  assert.ok(
+    lifecycle.findIndex(([name, value]) => name === 'client-close' && value === 1)
+      < lifecycle.findIndex(([name, value]) => name === 'host-start' && value === 11489),
+    'the prior client close must start before the replacement host starts',
+  );
+  assert.equal(beforeUnloadHandlers.length, 1);
+});
+
+test('host controller ignores callbacks from a superseded start lifecycle', () => {
+  const callbacks = [];
+  const statuses = [];
+  const host = {
+    setRuntimeDependencies() {}, setCSInterface() {},
+    start(port, callback) { callbacks.push({ port, callback }); },
+    stop() {},
+  };
+  const client = () => ({
+    async capabilities() {}, async secretGet() {}, async secretSet() {}, async secretDelete() {}, async close() {},
+  });
+  const runtime = fakeHostDependencyRuntime({
+    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
+    express: function bundledExpress() {},
+  });
+  const controller = createHostController({
+    cs: { getSystemPath: () => '/Applications/AE MCP' },
+    extensionRoot: '/Applications/AE MCP',
+    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
+    requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
+    createPlatformHelperTransportImpl: () => ({ request() {}, close() {} }),
+    createPlatformHelperClientImpl: client,
+    onStatus: (...args) => { statuses.push(args); }, onLog: () => {}, addBeforeUnload: () => {},
+  });
+
+  controller.start(11488);
+  controller.start(11489);
+  callbacks[0].callback(new Error('stale start failure'));
+  callbacks[1].callback(null);
+
+  assert.deepEqual(statuses, [
+    ['starting', 11488],
+    ['starting', 11489],
+    ['ok', 11489],
+  ]);
+});
+
+test('a stale host facade cannot dispatch through the replacement helper client', async () => {
+  const reference = 'aemcp-secret://provider/5eb75f05-5d9e-5d9c-85af-f0893e8b90c2/auth-model/v1';
+  let hostIndex = 0;
+  let clientIndex = 0;
+  let replacementReads = 0;
+  const hosts = [1, 2].map(() => ({
+    setRuntimeDependencies() {}, setCSInterface() {},
+    start(_port, callback) { callback(null); }, stop() {},
+  }));
+  const clients = [1, 2].map((id) => {
+    let closed = false;
+    return {
+      async capabilities() {},
+      async secretGet(value) {
+        if (id === 2) replacementReads += 1;
+        if (closed) {
+          const error = new Error('closed client');
+          error.code = 'HELPER_UNAVAILABLE';
+          throw error;
+        }
+        return { reference: value, value: `secret-${id}`, revision: 1 };
+      },
+      async secretSet() {}, async secretDelete() {},
+      async close() { closed = true; },
+    };
+  });
+  const runtime = fakeHostDependencyRuntime({
+    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
+    express: function bundledExpress() {},
+  });
+  const controller = createHostController({
+    cs: { getSystemPath: () => '/Applications/AE MCP' },
+    extensionRoot: '/Applications/AE MCP',
+    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
+    requireImpl(request) {
+      if (request === 'module') return runtime.moduleApi;
+      if (request === 'path') return path;
+      return hosts[hostIndex++];
+    },
+    createPlatformHelperTransportImpl: () => ({ request() {}, close() {} }),
+    createPlatformHelperClientImpl: () => clients[clientIndex++],
+    onStatus: () => {}, onLog: () => {}, addBeforeUnload: () => {},
+  });
+
+  controller.start(11488);
+  const staleHost = controller.getHost();
+  controller.start(11489);
+
+  await assert.rejects(staleHost.secretGet(reference), { code: 'HELPER_UNAVAILABLE' });
+  assert.equal(replacementReads, 0);
+  assert.equal((await controller.getHost().secretGet(reference)).value, 'secret-2');
+});

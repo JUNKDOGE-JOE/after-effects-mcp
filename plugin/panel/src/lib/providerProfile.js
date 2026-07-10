@@ -39,7 +39,9 @@ const DIALECT_EVIDENCE = new Set([
 ]);
 const SENSITIVE_HEADER_NAME = /(?:^|[-_])(?:authorization|api[-_]?key|token|secret|password)(?:$|[-_])/i;
 const SECRET_LIKE_LITERAL = /^(?:Bearer\s+\S+|Basic\s+\S+|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,})$/;
+const SECRET_LIKE_PATH_LITERAL = /(?:Bearer\s+\S{8,}|Basic\s+\S{8,}|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,})/i;
 const HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+const MAX_PERCENT_DECODE_LAYERS = 3;
 
 function firstValue(...values) {
   for (const value of values) {
@@ -51,6 +53,74 @@ function firstValue(...values) {
 
 export function normalizeBaseUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '');
+}
+
+export function isLoopbackProviderHostname(hostname) {
+  const host = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.localhost') || host === '::1') return true;
+  const mapped = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  const ipv4 = mapped ? mapped[1] : host;
+  return /^127(?:\.\d{1,3}){3}$/.test(ipv4);
+}
+
+function decodePercentRuns(value) {
+  return String(value).replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
+    try { return decodeURIComponent(run); } catch { return run; }
+  });
+}
+
+function pathContainsCredential(value) {
+  let current = String(value || '');
+  for (let layer = 0; layer <= MAX_PERCENT_DECODE_LAYERS; layer += 1) {
+    if (SECRET_LIKE_PATH_LITERAL.test(current)) return true;
+    const decoded = decodePercentRuns(current);
+    if (decoded === current) break;
+    current = decoded;
+  }
+  return false;
+}
+
+export function validateProviderBaseUrl(value, {
+  allowInsecureHttp = false,
+  requireTransportApproval = false,
+} = {}) {
+  const raw = String(value || '').trim();
+  let url;
+  try { url = new URL(raw); } catch { throw providerProfileError(); }
+  const schemeMarker = raw.indexOf('://');
+  let hasRawUserInfo = true;
+  if (schemeMarker >= 0) {
+    const authorityStart = schemeMarker + 3;
+    const delimiters = ['/', '?', '#']
+      .map((delimiter) => raw.indexOf(delimiter, authorityStart))
+      .filter((index) => index >= 0);
+    const authorityEnd = delimiters.length ? Math.min(...delimiters) : raw.length;
+    hasRawUserInfo = raw.slice(authorityStart, authorityEnd).includes('@');
+  }
+  if (
+    !['http:', 'https:'].includes(url.protocol)
+    || schemeMarker < 0
+    || raw.includes('?')
+    || raw.includes('#')
+    || hasRawUserInfo
+    || url.username
+    || url.password
+    || url.hash
+    || url.search
+    || pathContainsCredential(url.pathname)
+  ) {
+    throw providerProfileError();
+  }
+  if (
+    requireTransportApproval
+    && url.protocol === 'http:'
+    && !isLoopbackProviderHostname(url.hostname)
+    && allowInsecureHttp !== true
+  ) {
+    throw providerProfileError('provider_insecure_http_forbidden');
+  }
+  url.pathname = url.pathname.replace(/\/+$/, '') || '/';
+  return url.toString().replace(/\/$/, '');
 }
 
 function providerProfileError(code = 'provider_profile_invalid') {
@@ -232,7 +302,10 @@ export function normalizeProviderEntryV2(input) {
     credentialId,
     name: requireText(input.name),
     protocol: input.protocol,
-    baseUrl: normalizeBaseUrl(requireText(input.baseUrl)),
+    baseUrl: validateProviderBaseUrl(requireText(input.baseUrl), {
+      allowInsecureHttp: input.allowInsecureHttp,
+      requireTransportApproval: true,
+    }),
     allowInsecureHttp: input.allowInsecureHttp,
     authProfileRevision: requireRevision(input.authProfileRevision),
     auth: {
@@ -277,6 +350,23 @@ export function normalizeProviderProfile(input = {}, env = {}) {
     codexAuthScheme: normalizeCodexAuthScheme(firstValue(input.codexAuthScheme, env.AE_MCP_CODEX_AUTH_SCHEME)),
     anthropicBaseUrl,
   };
+}
+
+export function codexRuntimeProviderProfile({
+  effectiveChannel,
+  customProvider,
+  customProviderCredentialResolverReady = false,
+} = {}) {
+  if (
+    effectiveChannel !== 'custom'
+    || customProviderCredentialResolverReady !== true
+    || !customProvider
+    || customProvider.protocol !== 'openai-compatible'
+  ) {
+    return normalizeProviderProfile({});
+  }
+  const normalized = normalizeProviderEntryV2(customProvider);
+  return normalizeProviderProfile({ codexBaseUrl: normalized.baseUrl });
 }
 
 export function codexAppServerArgs(profile = {}) {

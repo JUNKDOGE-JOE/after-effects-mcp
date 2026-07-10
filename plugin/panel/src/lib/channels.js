@@ -2,7 +2,22 @@
 // ChannelProbe: { channel, source:{zh,en}, checking, ok, detail, fixHint:{zh,en} }
 // Order in each array IS the priority order (channel (1) first).
 
-export function claudeChannels({ probe, apiProvider } = {}) {
+function providerHasCredentialPolicy(provider) {
+  const policy = provider?.auth?.model;
+  return Boolean(policy && (policy.kind === 'none' || policy.valueRef?.kind === 'secret'));
+}
+
+function agentSdkCompatible(provider) {
+  if (!provider) return false;
+  let url;
+  try { url = new URL(provider.baseUrl); } catch { return false; }
+  const official = url.protocol === 'https:' && url.hostname.toLowerCase() === 'api.anthropic.com';
+  const auth = provider.auth?.model;
+  const simpleAuth = auth?.kind === 'x-api-key' || auth?.kind === 'bearer';
+  return official && simpleAuth && (!provider.headers || provider.headers.length === 0);
+}
+
+export function claudeChannels({ probe, apiProvider, providerAvailable, providerChecking = false } = {}) {
   const sub = {
     channel: 'subscription',
     source: { zh: '订阅登录', en: 'Subscription login' },
@@ -16,15 +31,30 @@ export function claudeChannels({ probe, apiProvider } = {}) {
   const api = {
     channel: 'api',
     source: { zh: '面板配置 · API 直连', en: 'Panel config · API direct' },
-    checking: false,
-    ok: Boolean(apiProvider && apiProvider.baseUrl && apiProvider.apiKey),
+    checking: Boolean(providerChecking),
+    ok: Boolean(
+      !providerChecking
+      && apiProvider?.baseUrl
+      && (providerAvailable === undefined ? providerHasCredentialPolicy(apiProvider) : providerAvailable),
+    ),
     detail: apiProvider && apiProvider.baseUrl ? apiProvider.baseUrl : '',
-    fixHint: { zh: '在「Provider 管理」新增/选择一个 Anthropic 协议 provider（Base URL + Key/Token），或一键导入 ~/.claude/settings.json。Claude-3p 桌面版凭据无法自动读取，请手动填一次。', en: 'Add or pick an Anthropic-protocol provider (base URL + key/token) in Provider Manager, or import from ~/.claude/settings.json. Claude-3p desktop credentials cannot be read automatically; paste them once.' },
+    fixHint: apiProvider && providerAvailable === false && !providerChecking
+      ? { zh: '系统凭据库不可用：修复平台 Helper 后重新检测；不会回退读取明文 provider 文件。', en: 'The system credential store is unavailable. Repair the platform Helper and re-check; plaintext provider fallback is disabled.' }
+      : { zh: '在「Provider 管理」新增/选择一个 Anthropic 协议 provider（Base URL + Key/Token），或一键导入 ~/.claude/settings.json。Claude-3p 桌面版凭据无法自动读取，请手动填一次。', en: 'Add or pick an Anthropic-protocol provider (base URL + key/token) in Provider Manager, or import from ~/.claude/settings.json. Claude-3p desktop credentials cannot be read automatically; paste them once.' },
   };
+  api.directHttp = Boolean(apiProvider && !agentSdkCompatible(apiProvider));
   return [sub, api];
 }
 
-export function codexChannels({ codexProbe, customProvider, cliConfig, cliConfigApiKey } = {}) {
+export function codexChannels({
+  codexProbe,
+  customProvider,
+  customProviderAvailable,
+  customProviderCredentialResolverReady = false,
+  providerChecking = false,
+  cliConfig,
+  cliCredentialAvailable,
+} = {}) {
   const cli = {
     channel: 'cli',
     source: { zh: 'Codex CLI 登录态', en: 'Codex CLI login' },
@@ -37,7 +67,7 @@ export function codexChannels({ codexProbe, customProvider, cliConfig, cliConfig
   // ~/.codex/config.toml (mirrors zcodeChannels' 'cli-config' pattern).
   const runtimeOk = Boolean(!codexProbe || codexProbe.runtimeOk !== false);
   const hasProvider = Boolean(cliConfig && cliConfig.provider);
-  const hasKey = Boolean(cliConfigApiKey);
+  const hasKey = Boolean(cliCredentialAvailable);
   const cliConfigChannel = {
     channel: 'cli-config',
     source: { zh: '继承自 Codex CLI 配置', en: 'Inherited from Codex CLI config' },
@@ -47,22 +77,26 @@ export function codexChannels({ codexProbe, customProvider, cliConfig, cliConfig
     fixHint: !hasProvider
       ? { zh: '未找到 ~/.codex/config.toml 的可用 provider：先在 Codex CLI 里配置 model_provider。', en: 'No usable provider in ~/.codex/config.toml: configure model_provider in the Codex CLI first.' }
       : !hasKey
-        ? { zh: '检测到 Codex CLI provider「' + cliConfig.providerId + '」，但其 API Key 环境变量（' + (cliConfig.provider.envKey || '-') + '）没有被面板继承。在下方粘贴一次 Key（保存到本机 ~/.ae-mcp/codex-key）即可使用。', en: 'Found Codex CLI provider "' + cliConfig.providerId + '", but its API key env (' + (cliConfig.provider.envKey || '-') + ') is not inherited by the panel. Paste the key once below (stored at ~/.ae-mcp/codex-key).' }
+        ? { zh: '检测到 Codex CLI provider「' + cliConfig.providerId + '」，但没有可用凭据。请设置其环境变量或在 Provider 管理中配置。', en: 'Found Codex CLI provider "' + cliConfig.providerId + '", but no credential is available. Set its environment variable or configure it in Provider Manager.' }
         : { zh: 'Codex 运行时不可用：请检查 Codex CLI 安装后重新检测。', en: 'Codex runtime unavailable: check the Codex CLI install and re-check.' },
   };
   const custom = {
     channel: 'custom',
     source: { zh: '自定义 provider', en: 'Custom provider' },
-    checking: false,
+    checking: Boolean(providerChecking),
     ok: Boolean(
-      customProvider
-      && customProvider.protocol === 'openai-compatible'
-      && customProvider.baseUrl
-      && customProvider.apiKey
-      && (!codexProbe || codexProbe.runtimeOk !== false)
+      !providerChecking
+      && customProvider?.baseUrl
+      && (customProviderAvailable === undefined ? providerHasCredentialPolicy(customProvider) : customProviderAvailable)
+      && customProviderCredentialResolverReady === true
+      && (!codexProbe || codexProbe.runtimeOk !== false),
     ),
     detail: customProvider && customProvider.baseUrl ? customProvider.baseUrl : '',
-    fixHint: { zh: '在「Provider 管理」新增/选择一个 OpenAI 兼容 provider（Base URL + Key）。', en: 'Add or pick an OpenAI-compatible provider (base URL + key) in Provider Manager.' },
+    fixHint: customProvider && customProviderAvailable === false && !providerChecking
+      ? { zh: '系统凭据库不可用：修复平台 Helper 后重新检测；不会回退读取明文 provider 文件。', en: 'The system credential store is unavailable. Repair the platform Helper and re-check; plaintext provider fallback is disabled.' }
+      : customProvider && customProviderCredentialResolverReady !== true
+        ? { zh: '此版本尚未接通 Codex 自定义 provider 的凭据路由；请先使用 Codex CLI 登录或 CLI provider 配置。', en: 'Custom provider credential routing is not connected yet; use Codex CLI login or a CLI provider configuration.' }
+        : { zh: '在「Provider 管理」新增/选择一个 OpenAI 兼容 provider（Base URL + Key）。', en: 'Add or pick an OpenAI-compatible provider (base URL + key) in Provider Manager.' },
   };
   // An explicitly-configured custom provider always outranks the inherited
   // cli-config one when both are simultaneously usable (ok). zcode has no

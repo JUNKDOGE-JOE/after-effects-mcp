@@ -21,11 +21,13 @@ export function isClaudeApiBackend(effectiveBackend) {
 
 export function selectDescriptor({
   effectiveBackend = 'none',
+  effectiveChannel = null,
   backendPref = 'subscription',
   baseDescriptor,
   customModel = '',
   claudeApiProvider = null,
   codexCustomProvider = null,
+  customProviderCredentialResolverReady = false,
   byokApiModels = null,
   codexCachedModels = null,
   zcodeSessionModels = null,
@@ -43,7 +45,12 @@ export function selectDescriptor({
     return baseDescriptor;
   }
   if (backendPref === 'codex') {
-    if (codexCustomProvider && codexCustomProvider.probedModels && codexCustomProvider.probedModels.length) {
+    const customProviderFactsAllowed = effectiveChannel === 'custom'
+      && customProviderCredentialResolverReady === true;
+    if (customProviderFactsAllowed
+        && codexCustomProvider
+        && codexCustomProvider.probedModels
+        && codexCustomProvider.probedModels.length) {
       return descriptorWithCustomModel(descriptorFromProbedModels(codexStaticDescriptor(), codexCustomProvider.probedModels), customId);
     }
     if (codexCachedModels) {

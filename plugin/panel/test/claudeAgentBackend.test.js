@@ -58,7 +58,7 @@ function makeSpawn() {
   const procs = [];
   function spawn(command, args, options) {
     const proc = makeProc();
-    calls.push({ command, args, options, proc });
+    calls.push({ command, args, options: structuredClone(options), proc });
     procs.push(proc);
     return proc;
   }
@@ -369,8 +369,10 @@ test('resolveSystemNode returns the structured adapter failure', async () => {
   assert.match(result.detail, /VERSION_TOO_OLD/);
 });
 
-test('api channel spawns the sidecar with injected base URL/token and --channel api', async () => {
+test('api channel resolves once while constructing spawn env and emits no secret', async () => {
   const spawned = makeSpawn();
+  const events = [];
+  let resolveCalls = 0;
   const backend = createClaudeAgentBackend({
     resolveNode: async () => ({ ok: true, nodePath: 'C:\node.exe', version: 'v20.0.0' }),
     sidecarPath: 'C:\ext\sidecar\agent-sidecar.mjs',
@@ -379,7 +381,18 @@ test('api channel spawns the sidecar with injected base URL/token and --channel 
     getModel: () => 'claude-sonnet-5',
     getPermissionMode: () => 'manual',
     getChannel: () => 'api',
-    getApiProvider: () => ({ baseUrl: 'https://relay.example/anthropic', apiKey: 'sk-relay' }),
+    resolveApiProvider: async () => {
+      resolveCalls += 1;
+      return {
+        providerId: 'official',
+        baseUrl: 'https://api.anthropic.com',
+        allowInsecureHttp: false,
+        auth: { kind: 'header', name: 'x-api-key', value: 'resolved-only-for-spawn' },
+        extraHeaders: [],
+        authProfileRevision: 1,
+      };
+    },
+    onEvent: (event) => events.push(event),
     spawnImpl: spawned.spawn,
     env: { PATH: 'C:\bin', ANTHROPIC_API_KEY: 'leak' },
   });
@@ -389,12 +402,16 @@ test('api channel spawns the sidecar with injected base URL/token and --channel 
   proc.pushStdout(JSON.stringify({ t: 'ready' }) + '\n');
   await flush();
   const call = spawned.calls[0];
-  assert.equal(call.options.env.ANTHROPIC_BASE_URL, 'https://relay.example/anthropic');
-  assert.equal(call.options.env.ANTHROPIC_AUTH_TOKEN, 'sk-relay');
+  assert.equal(resolveCalls, 1);
+  assert.equal(call.options.env.ANTHROPIC_BASE_URL, 'https://api.anthropic.com');
+  assert.equal(call.options.env.ANTHROPIC_AUTH_TOKEN, 'resolved-only-for-spawn');
   assert.equal(call.options.env.ANTHROPIC_API_KEY, undefined);
   const flagIndex = call.args.indexOf('--channel');
   assert.ok(flagIndex > -1, '--channel flag passed to sidecar');
   assert.equal(call.args[flagIndex + 1], 'api');
+  assert.equal(JSON.stringify(events).includes('resolved-only-for-spawn'), false);
+  proc.pushStderr('provider debug resolved-only-for-spawn');
+  assert.equal(backend.getStderrTail().includes('resolved-only-for-spawn'), false);
   backend.reset();
   await run;
 });

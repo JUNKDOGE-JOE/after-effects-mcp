@@ -35,11 +35,39 @@ test('claude-api without probed models falls back to fetched /v1/models list, th
 test('probed models take precedence over cached codex list; no provider -> cached; neither -> base', () => {
   const base = codexStaticDescriptor();
   const cached = [{ id: 'gpt-5.5', displayName: 'GPT-5.5' }];
-  const probed = selectDescriptor({ effectiveBackend: 'codex', backendPref: 'codex', baseDescriptor: base, codexCustomProvider: probedProvider, codexCachedModels: cached });
+  const probed = selectDescriptor({
+    effectiveBackend: 'codex',
+    effectiveChannel: 'custom',
+    customProviderCredentialResolverReady: true,
+    backendPref: 'codex',
+    baseDescriptor: base,
+    codexCustomProvider: probedProvider,
+    codexCachedModels: cached,
+  });
   assert.equal(probed.defaultModelId, 'glm-5.2');
   const fromCache = selectDescriptor({ effectiveBackend: 'codex', backendPref: 'codex', baseDescriptor: base, codexCachedModels: cached });
   assert.deepEqual(fromCache.models.map((m) => m.id), ['gpt-5.5']);
   assert.equal(selectDescriptor({ effectiveBackend: 'codex', backendPref: 'codex', baseDescriptor: base }), base);
+});
+
+test('codex descriptor ignores custom-provider facts unless both effective channel and resolver gate are open', () => {
+  const base = codexStaticDescriptor();
+  const cached = [{ id: 'gpt-5.5', displayName: 'GPT-5.5' }];
+  for (const input of [
+    { effectiveChannel: 'cli-config', customProviderCredentialResolverReady: true },
+    { effectiveChannel: 'custom', customProviderCredentialResolverReady: false },
+    { effectiveChannel: null, customProviderCredentialResolverReady: true },
+  ]) {
+    const descriptor = selectDescriptor({
+      effectiveBackend: 'codex',
+      backendPref: 'codex',
+      baseDescriptor: base,
+      codexCustomProvider: probedProvider,
+      codexCachedModels: cached,
+      ...input,
+    });
+    assert.deepEqual(descriptor.models.map((model) => model.id), ['gpt-5.5']);
+  }
 });
 
 test('custom model id is honored on claude-api and codex paths', () => {

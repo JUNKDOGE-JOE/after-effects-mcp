@@ -25,9 +25,15 @@ function expectedUuidV5(name, namespace) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-function makeHarness({ initialPhase = null } = {}) {
-  const marker = 'sk-legacy-marker';
-  const anthropicMarker = 'sk-ant-legacy-marker';
+function makeHarness({
+  initialPhase = null,
+  failBeforeJournalPhase = null,
+  failAfterJournalPhase = null,
+  embedLegacySecretOutsideSecret = false,
+  embeddedLegacySecretValue = null,
+  marker = 'sk-legacy-marker',
+  anthropicMarker = 'sk-ant-legacy-marker',
+} = {}) {
   const legacyState = {
     version: 1,
     migratedLegacy: true,
@@ -49,6 +55,14 @@ function makeHarness({ initialPhase = null } = {}) {
       probedAt: 0,
     }],
   };
+  if (embedLegacySecretOutsideSecret) {
+    legacyState.providers[0].name = marker;
+    legacyState.providers[0].probedModels[0].label = marker;
+  }
+  if (embeddedLegacySecretValue !== null) {
+    legacyState.providers[0].name = embeddedLegacySecretValue(marker);
+    legacyState.providers[0].probedModels[0].label = embeddedLegacySecretValue(marker);
+  }
   let legacyInput = {
     sourceRevision: 'mtime:1783612800000:size:412',
     state: clone(legacyState),
@@ -75,6 +89,10 @@ function makeHarness({ initialPhase = null } = {}) {
   let cleanupCalls = 0;
   let backupCalls = 0;
   let commitCalls = 0;
+  let replaceOptions = null;
+  let failed = false;
+  const secretSetCalls = [];
+  const secretGetCalls = [];
   const records = new Map();
   if (initialPhase !== null && initialPhase !== 'pending') {
     legacyState.providers.forEach((provider, index) => {
@@ -84,11 +102,27 @@ function makeHarness({ initialPhase = null } = {}) {
 
   const journalStore = {
     async read() { return journal ? clone(journal) : null; },
-    async writeAtomic(next) { journal = clone(next); },
+    async writeAtomic(next) {
+      if (!failed && next.phase === failBeforeJournalPhase) {
+        failed = true;
+        const error = new Error(`simulated crash before ${next.phase}`);
+        error.code = 'SIMULATED_CRASH';
+        throw error;
+      }
+      journal = clone(next);
+      if (!failed && next.phase === failAfterJournalPhase) {
+        failed = true;
+        const error = new Error(`simulated crash after ${next.phase}`);
+        error.code = 'SIMULATED_CRASH';
+        throw error;
+      }
+    },
     snapshot() { return journal ? clone(journal) : null; },
+    setSnapshot(next) { journal = next ? clone(next) : null; },
   };
   const secretStore = {
     async set(input) {
+      secretSetCalls.push(clone(input));
       assert.equal(input.expectedRevision, null);
       if (records.has(input.reference)) {
         const error = new Error('already exists');
@@ -99,6 +133,7 @@ function makeHarness({ initialPhase = null } = {}) {
       return { reference: input.reference, revision: 1 };
     },
     async get(reference) {
+      secretGetCalls.push(reference);
       const record = records.get(reference);
       if (!record) {
         const error = new Error('missing');
@@ -108,6 +143,7 @@ function makeHarness({ initialPhase = null } = {}) {
       return { reference, value: record.value, revision: record.revision };
     },
     async secretGet(reference) {
+      secretGetCalls.push(reference);
       const record = records.get(reference);
       if (!record) {
         const error = new Error('missing');
@@ -119,13 +155,18 @@ function makeHarness({ initialPhase = null } = {}) {
   };
   const store = {
     readLegacyMigrationInput() { return legacyInput ? clone(legacyInput) : null; },
+    readState() {
+      if (!committedState) throw new Error('provider v2 state is unavailable');
+      return clone(committedState);
+    },
     async writeRedactedBackup(state, policy) {
       backupCalls += 1;
       redactedBackup = clone(state);
       backupPolicy = clone(policy);
     },
-    replaceState(state) {
+    replaceState(state, options) {
       commitCalls += 1;
+      replaceOptions = options === undefined ? null : clone(options);
       committedState = clone(state);
       legacyInput = null;
       return { stateRevision: state.revision };
@@ -159,6 +200,14 @@ function makeHarness({ initialPhase = null } = {}) {
     cleanupCalls: () => cleanupCalls,
     backupCalls: () => backupCalls,
     commitCalls: () => commitCalls,
+    replaceOptions: () => (replaceOptions === null ? null : clone(replaceOptions)),
+    secretSetCalls: () => clone(secretSetCalls),
+    secretGetCalls: () => clone(secretGetCalls),
+    mutateCommittedState(mutator) {
+      const next = clone(committedState);
+      mutator(next);
+      committedState = next;
+    },
   };
 }
 
@@ -189,6 +238,7 @@ test('provider migration uses UUIDv5 references and persists only redacted backu
   const markerHash = createHash('sha256').update(harness.marker).digest('hex');
 
   assert.deepEqual(harness.backupPolicy(), { keep: 3, maxAgeDays: 30 });
+  assert.deepEqual(harness.replaceOptions(), { expectedSourceRevision: 'mtime:1783612800000:size:412' });
   assert.deepEqual(harness.redactedBackup(), harness.committedState());
   assert.equal(harness.committedState().version, 2);
   assert.equal(harness.committedState().migratedLegacy, true);
@@ -273,4 +323,296 @@ test('provider migration reports every exact generic runner initial phase withou
       expectedCalls,
     );
   }
+});
+
+test('provider migration resumes cleanup when v2 state won the crash race against the generic journal', async () => {
+  for (const crash of [
+    { failBeforeJournalPhase: 'state-committed', expectedPhase: 'secrets-written' },
+    { failAfterJournalPhase: 'state-committed', expectedPhase: 'state-committed' },
+  ]) {
+    const harness = makeHarness(crash);
+    await assert.rejects(
+      migrateProviderStoreSecrets({
+        store: harness.store,
+        legacyKeyStore: harness.legacyKeyStore,
+        runner: harness.runner,
+        secretStore: harness.secretStore,
+        legacyCredentialId: NAMESPACE_ID,
+      }),
+      (error) => error.code === 'SIMULATED_CRASH',
+    );
+    assert.equal(harness.journalStore.snapshot().phase, crash.expectedPhase);
+    const secretReadsBeforeRecovery = harness.secretGetCalls().length;
+    const secretWritesBeforeRecovery = harness.secretSetCalls().length;
+    const backupCallsBeforeRecovery = harness.backupCalls();
+    const commitCallsBeforeRecovery = harness.commitCalls();
+
+    const resumed = await migrateProviderStoreSecrets({
+      store: harness.store,
+      legacyKeyStore: harness.legacyKeyStore,
+      runner: harness.runner,
+      secretStore: harness.secretStore,
+      legacyCredentialId: NAMESPACE_ID,
+    });
+
+    assert.deepEqual(resumed, {
+      status: 'committed',
+      written: 2,
+      resumedFrom: crash.expectedPhase,
+    });
+    assert.equal(harness.journalStore.snapshot().phase, 'committed');
+    assert.equal(harness.cleanupCalls(), 1);
+    assert.equal(harness.backupCalls(), backupCallsBeforeRecovery);
+    assert.equal(harness.commitCalls(), commitCallsBeforeRecovery);
+    assert.equal(harness.secretGetCalls().length, secretReadsBeforeRecovery);
+    assert.equal(harness.secretSetCalls().length, secretWritesBeforeRecovery);
+    for (const marker of [harness.marker, harness.anthropicMarker]) {
+      const serialized = JSON.stringify({
+        journal: harness.journalStore.snapshot(),
+        state: harness.committedState(),
+        resumed,
+      });
+      assert.equal(serialized.includes(marker), false);
+      assert.equal(serialized.includes(createHash('sha256').update(marker).digest('hex')), false);
+    }
+  }
+});
+
+test('provider crash recovery fails closed for pending journals and v2 reference mismatches', async () => {
+  const pending = makeHarness({ failBeforeJournalPhase: 'state-committed' });
+  await assert.rejects(migrateProviderStoreSecrets({
+    store: pending.store,
+    legacyKeyStore: pending.legacyKeyStore,
+    runner: pending.runner,
+    secretStore: pending.secretStore,
+    legacyCredentialId: NAMESPACE_ID,
+  }), { code: 'SIMULATED_CRASH' });
+  pending.journalStore.setSnapshot({
+    ...pending.journalStore.snapshot(),
+    phase: 'pending',
+    entries: [],
+  });
+  await assert.rejects(
+    migrateProviderStoreSecrets({
+      store: pending.store,
+      legacyKeyStore: pending.legacyKeyStore,
+      runner: pending.runner,
+      secretStore: pending.secretStore,
+      legacyCredentialId: NAMESPACE_ID,
+    }),
+    (error) => {
+      assert.equal(error.code, 'INVALID_PROVIDER_MIGRATION');
+      assert.equal(error.message.includes(pending.marker), false);
+      return true;
+    },
+  );
+  assert.equal(pending.cleanupCalls(), 0);
+
+  const mismatch = makeHarness({ failBeforeJournalPhase: 'state-committed' });
+  await assert.rejects(migrateProviderStoreSecrets({
+    store: mismatch.store,
+    legacyKeyStore: mismatch.legacyKeyStore,
+    runner: mismatch.runner,
+    secretStore: mismatch.secretStore,
+    legacyCredentialId: NAMESPACE_ID,
+  }), { code: 'SIMULATED_CRASH' });
+  mismatch.mutateCommittedState((state) => {
+    state.providers[0].auth.model.valueRef.revision += 1;
+  });
+  await assert.rejects(
+    migrateProviderStoreSecrets({
+      store: mismatch.store,
+      legacyKeyStore: mismatch.legacyKeyStore,
+      runner: mismatch.runner,
+      secretStore: mismatch.secretStore,
+      legacyCredentialId: NAMESPACE_ID,
+    }),
+    (error) => {
+      assert.equal(error.code, 'INVALID_PROVIDER_MIGRATION');
+      assert.equal(error.message.includes(mismatch.marker), false);
+      return true;
+    },
+  );
+  assert.equal(mismatch.journalStore.snapshot().phase, 'secrets-written');
+  assert.equal(mismatch.cleanupCalls(), 0);
+});
+
+test('a committed journal accepts any subsequently edited strict v2 state without comparing migration entries', async () => {
+  const mutations = [
+    (state) => {
+      const provider = state.providers[0];
+      const oldRef = clone(provider.auth.model.valueRef);
+      provider.name = 'Edited after migration';
+      provider.authProfileRevision += 1;
+      provider.auth.model.valueRef = {
+        kind: 'secret',
+        reference: `aemcp-secret://provider/${provider.credentialId}/auth-model-edited/v1`,
+        revision: 2,
+      };
+      state.pendingSecretDeletes = [oldRef];
+      state.revision += 1;
+    },
+    (state) => {
+      const credentialId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      state.providers.push({
+        ...clone(state.providers[0]),
+        id: 'added-after-migration',
+        credentialId,
+        name: 'Added after migration',
+        auth: {
+          model: {
+            kind: 'bearer',
+            valueRef: {
+              kind: 'secret',
+              reference: `aemcp-secret://provider/${credentialId}/auth-model-added/v1`,
+              revision: 1,
+            },
+          },
+          probe: { kind: 'inherit-model' },
+        },
+      });
+      state.revision += 1;
+    },
+    (state) => {
+      const removed = state.providers.pop();
+      state.pendingSecretDeletes = [removed.auth.model.valueRef];
+      state.revision += 1;
+    },
+  ];
+
+  for (const mutate of mutations) {
+    const harness = makeHarness();
+    await migrateProviderStoreSecrets({
+      store: harness.store,
+      legacyKeyStore: harness.legacyKeyStore,
+      runner: harness.runner,
+      secretStore: harness.secretStore,
+      legacyCredentialId: NAMESPACE_ID,
+    });
+    harness.mutateCommittedState(mutate);
+    const cleanupBeforeRestart = harness.cleanupCalls();
+    const result = await migrateProviderStoreSecrets({
+      store: harness.store,
+      legacyKeyStore: harness.legacyKeyStore,
+      runner: harness.runner,
+      secretStore: harness.secretStore,
+      legacyCredentialId: NAMESPACE_ID,
+    });
+    assert.deepEqual(result, { status: 'already-committed', written: 0, resumedFrom: 'committed' });
+    assert.equal(harness.cleanupCalls(), cleanupBeforeRestart);
+  }
+});
+
+test('a committed journal only reads strict v2 state and does not require a cleanup callback', async () => {
+  const harness = makeHarness();
+  await migrateProviderStoreSecrets({
+    store: harness.store,
+    legacyKeyStore: harness.legacyKeyStore,
+    runner: harness.runner,
+    secretStore: harness.secretStore,
+    legacyCredentialId: NAMESPACE_ID,
+  });
+  const result = await migrateProviderStoreSecrets({
+    store: harness.store,
+    legacyKeyStore: {},
+    runner: harness.runner,
+    secretStore: harness.secretStore,
+    legacyCredentialId: NAMESPACE_ID,
+  });
+  assert.deepEqual(result, { status: 'already-committed', written: 0, resumedFrom: 'committed' });
+});
+
+test('provider migration rejects an exact legacy secret copied into any non-secret persisted field', async () => {
+  const harness = makeHarness({ embedLegacySecretOutsideSecret: true });
+  await assert.rejects(
+    migrateProviderStoreSecrets({
+      store: harness.store,
+      legacyKeyStore: harness.legacyKeyStore,
+      runner: harness.runner,
+      secretStore: harness.secretStore,
+      legacyCredentialId: NAMESPACE_ID,
+    }),
+    (error) => error.code === 'SECRET_CONFLICT' || error.code === 'INVALID_PROVIDER_MIGRATION',
+  );
+  assert.equal(harness.cleanupCalls(), 0);
+  assert.equal(JSON.stringify(harness.redactedBackup()).includes(harness.marker), false);
+  assert.equal(JSON.stringify(harness.committedState()).includes(harness.marker), false);
+});
+
+test('provider migration rejects raw substring and bounded percent-encoded legacy-secret embeddings', async () => {
+  const encoders = [
+    (secret) => `display-${secret}-suffix`,
+    (secret) => `display-${Array.from(Buffer.from(secret, 'utf8'), (byte) => `%${byte.toString(16).padStart(2, '0')}`).join('')}-suffix`,
+    (secret) => `display-${Array.from(Buffer.from(encodeURIComponent(secret), 'utf8'), (byte) => `%25${byte.toString(16).padStart(2, '0')}`).join('')}-suffix`,
+  ];
+  for (const embeddedLegacySecretValue of encoders) {
+    const harness = makeHarness({ embeddedLegacySecretValue });
+    await assert.rejects(
+      migrateProviderStoreSecrets({
+        store: harness.store,
+        legacyKeyStore: harness.legacyKeyStore,
+        runner: harness.runner,
+        secretStore: harness.secretStore,
+        legacyCredentialId: NAMESPACE_ID,
+      }),
+      (error) => {
+        assert.ok(error.code === 'SECRET_CONFLICT' || error.code === 'INVALID_PROVIDER_MIGRATION');
+        assert.equal(error.message.includes(harness.marker), false);
+        return true;
+      },
+    );
+    assert.equal(harness.commitCalls(), 0);
+    assert.equal(harness.cleanupCalls(), 0);
+  }
+});
+
+test('provider migration does not treat every occurrence of a short legacy secret as an embedded credential', async () => {
+  const harness = makeHarness({ marker: 'a', anthropicMarker: 'b' });
+  const result = await migrateProviderStoreSecrets({
+    store: harness.store,
+    legacyKeyStore: harness.legacyKeyStore,
+    runner: harness.runner,
+    secretStore: harness.secretStore,
+    legacyCredentialId: NAMESPACE_ID,
+  });
+  assert.equal(result.status, 'committed');
+  assert.equal(harness.committedState().providers[0].name, 'Legacy Relay');
+  assert.equal(harness.committedState().providers[1].name, 'Legacy Anthropic');
+});
+
+test('provider migration still rejects an exact short secret copied into a persisted field', async () => {
+  const harness = makeHarness({
+    marker: 'a',
+    anthropicMarker: 'b',
+    embedLegacySecretOutsideSecret: true,
+  });
+  await assert.rejects(
+    migrateProviderStoreSecrets({
+      store: harness.store,
+      legacyKeyStore: harness.legacyKeyStore,
+      runner: harness.runner,
+      secretStore: harness.secretStore,
+      legacyCredentialId: NAMESPACE_ID,
+    }),
+    (error) => error.code === 'SECRET_CONFLICT' || error.code === 'INVALID_PROVIDER_MIGRATION',
+  );
+});
+
+test('provider migration measures the embedded-secret threshold in UTF-8 bytes', async () => {
+  const marker = '密钥密钥';
+  const harness = makeHarness({
+    marker,
+    anthropicMarker: 'another-safe-secret',
+    embeddedLegacySecretValue: (secret) => `display-${secret}-suffix`,
+  });
+  await assert.rejects(
+    migrateProviderStoreSecrets({
+      store: harness.store,
+      legacyKeyStore: harness.legacyKeyStore,
+      runner: harness.runner,
+      secretStore: harness.secretStore,
+      legacyCredentialId: NAMESPACE_ID,
+    }),
+    (error) => error.code === 'SECRET_CONFLICT' || error.code === 'INVALID_PROVIDER_MIGRATION',
+  );
 });

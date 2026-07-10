@@ -11,6 +11,13 @@ const PUBLIC_ERROR_CODES = new Set([
   'SECRET_NOT_FOUND',
   'SECRET_STORE_UNAVAILABLE',
 ]);
+const HELPER_AVAILABILITY_CODES = new Set([
+  'HELPER_UNAVAILABLE',
+  'HELPER_UNAUTHORIZED',
+  'PROTOCOL_VERSION_UNSUPPORTED',
+  'INVALID_REQUEST',
+  'MESSAGE_TOO_LARGE',
+]);
 
 function providerSecretError(code) {
   const messages = {
@@ -26,7 +33,9 @@ function providerSecretError(code) {
 }
 
 function sanitizeHostError(error, fallback = 'SECRET_OPERATION_FAILED') {
-  const code = PUBLIC_ERROR_CODES.has(error?.code) ? error.code : fallback;
+  const code = HELPER_AVAILABILITY_CODES.has(error?.code)
+    ? 'SECRET_STORE_UNAVAILABLE'
+    : PUBLIC_ERROR_CODES.has(error?.code) ? error.code : fallback;
   return providerSecretError(code);
 }
 
@@ -84,6 +93,13 @@ function randomSuffix(randomBytes) {
 
 function validRevision(value) {
   return Number.isSafeInteger(value) && value > 0;
+}
+
+function ambiguousCreateFailure(error) {
+  return !error?.code
+    || HELPER_AVAILABILITY_CODES.has(error.code)
+    || error.code === 'SECRET_STORE_UNAVAILABLE'
+    || error.code === 'SECRET_OPERATION_FAILED';
 }
 
 export function createProviderSecretService({
@@ -160,6 +176,27 @@ export function createProviderSecretService({
     try {
       created = await host.secretSet({ reference, value: input.value, expectedRevision: null });
     } catch (error) {
+      if (ambiguousCreateFailure(error)) {
+        let recoveryCompleted = false;
+        let recovered;
+        try {
+          recovered = await host.secretGet(reference);
+          recoveryCompleted = true;
+        } catch { /* retain the original sanitized set failure */ }
+        if (recoveryCompleted) {
+          if (!hasExactKeys(recovered, ['reference', 'revision', 'value'])
+              || recovered.reference !== reference
+              || !validRevision(recovered.revision)
+              || recovered.value !== input.value) {
+            throw providerSecretError('SECRET_CONFLICT');
+          }
+          return Object.freeze({ kind: 'secret', reference, revision: recovered.revision });
+        }
+        // The set may have committed, but without a returned/read-back
+        // revision there is no safe CAS delete. Never blind-delete here. Full
+        // crash recovery needs a durable create intent plus a helper-side
+        // idempotency/operation id so startup can reconcile the exact write.
+      }
       throw sanitizeHostError(error);
     }
     if (!created || created.reference !== reference || !validRevision(created.revision)) {
@@ -167,18 +204,22 @@ export function createProviderSecretService({
     }
 
     let readback;
+    let readbackError = null;
     try {
       readback = await host.secretGet(reference);
     } catch (error) {
-      throw sanitizeHostError(error);
+      readbackError = sanitizeHostError(error);
     }
-    if (
-      !readback
-      || !hasExactKeys(readback, ['reference', 'revision', 'value'])
-      || readback.reference !== reference
-      || readback.revision !== created.revision
-      || readback.value !== input.value
-    ) {
+    const readbackMatches = !readbackError
+      && hasExactKeys(readback, ['reference', 'revision', 'value'])
+      && readback.reference === reference
+      && readback.revision === created.revision
+      && readback.value === input.value;
+    if (!readbackMatches) {
+      try {
+        await host.secretDelete({ reference, expectedRevision: created.revision });
+      } catch { /* exact-revision rollback is best effort; never broaden it */ }
+      if (readbackError) throw readbackError;
       throw providerSecretError('SECRET_CONFLICT');
     }
     return Object.freeze({ kind: 'secret', reference, revision: created.revision });

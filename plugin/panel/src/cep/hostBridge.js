@@ -212,12 +212,121 @@ export function loadBundledHostDependencies({ cepRequire, adapter, extensionRoot
 }
 
 // ---- CEP side-effects (exercised in AE manual checklist) ----
-export function createHostController({ cs, onStatus, onLog, platform, requireImpl, addBeforeUnload, extensionRoot }) {
+function helperUnavailableError() {
+  const error = new Error('Platform helper is unavailable');
+  error.code = 'HELPER_UNAVAILABLE';
+  error.retryable = true;
+  return error;
+}
+
+function sanitizeHelperError(error) {
+  const code = typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]{2,63}$/.test(error.code)
+    ? error.code
+    : 'HELPER_UNAVAILABLE';
+  const sanitized = new Error(code === 'HELPER_UNAVAILABLE'
+    ? 'Platform helper is unavailable'
+    : `Platform helper request failed with ${code}`);
+  sanitized.code = code;
+  sanitized.retryable = error?.retryable === true || code === 'HELPER_UNAVAILABLE';
+  return sanitized;
+}
+
+function helperRuntime(platformId) {
+  return platformId === 'macos-arm64'
+    ? { platform: 'darwin', arch: 'arm64' }
+    : { platform: 'win32', arch: 'x64' };
+}
+
+export function createHostController({
+  cs,
+  onStatus,
+  onLog,
+  platform,
+  requireImpl,
+  addBeforeUnload,
+  extensionRoot,
+  createPlatformHelperTransportImpl,
+  createPlatformHelperClientImpl,
+}) {
   const adapter = platform || createPlatformAdapter();
   let host = null;
+  let helperClient = null;
   let platformRoots = null;
+  let beforeUnloadInstalled = false;
+  let lifecycleGeneration = 0;
+
+  function closeHelperClient(client, fallbackTransport = null) {
+    const closable = client && typeof client.close === 'function' ? client : fallbackTransport;
+    if (!closable || typeof closable.close !== 'function') return;
+    try { Promise.resolve(closable.close()).catch(() => {}); } catch { /* best effort */ }
+  }
+
+  function disposeLifecycle(client, hostInstance) {
+    closeHelperClient(client);
+    try { if (hostInstance && typeof hostInstance.stop === 'function') hostInstance.stop(); } catch { /* best effort */ }
+  }
+
+  function bindPlatformHelperFacade({ cepRequire, extRoot, hostInstance }) {
+    let transport = null;
+    let nextClient = null;
+    try {
+      const transportFactory = createPlatformHelperTransportImpl || (() => {
+        const modulePath = adapter.paths.join([extRoot, 'host', 'platform-helper-transport.js']);
+        const loaded = cepRequire(modulePath);
+        if (typeof loaded?.createPlatformHelperTransport !== 'function') throw helperUnavailableError();
+        return loaded.createPlatformHelperTransport;
+      })();
+      const clientFactory = createPlatformHelperClientImpl || (() => {
+        const modulePath = adapter.paths.join([extRoot, 'host', 'platform-helper-client.js']);
+        const loaded = cepRequire(modulePath);
+        if (typeof loaded?.createPlatformHelperClient !== 'function') throw helperUnavailableError();
+        return loaded.createPlatformHelperClient;
+      })();
+      transport = transportFactory({
+        platformId: adapter.id,
+        runtime: helperRuntime(adapter.id),
+      });
+      if (!transport || typeof transport.request !== 'function' || typeof transport.close !== 'function') {
+        throw helperUnavailableError();
+      }
+      nextClient = clientFactory({ transport });
+      for (const method of ['capabilities', 'secretGet', 'secretSet', 'secretDelete', 'close']) {
+        if (typeof nextClient?.[method] !== 'function') throw helperUnavailableError();
+      }
+    } catch {
+      closeHelperClient(nextClient, transport);
+      nextClient = null;
+    }
+    helperClient = nextClient;
+    const facadeClient = nextClient;
+
+    const invoke = (method, value, hasValue) => {
+      const client = facadeClient;
+      if (!client) return Promise.reject(helperUnavailableError());
+      let request;
+      try {
+        request = hasValue ? client[method](value) : client[method]();
+      } catch (error) {
+        return Promise.reject(sanitizeHelperError(error));
+      }
+      return Promise.resolve(request)
+        .catch((error) => { throw sanitizeHelperError(error); });
+    };
+    hostInstance.capabilities = () => invoke('capabilities', undefined, false);
+    hostInstance.secretGet = (reference) => invoke('secretGet', reference, true);
+    hostInstance.secretSet = (value) => invoke('secretSet', value, true);
+    hostInstance.secretDelete = (value) => invoke('secretDelete', value, true);
+  }
+
   function start(port) {
+    const generation = lifecycleGeneration += 1;
     onStatus('starting', port);
+    const priorHost = host;
+    const priorClient = helperClient;
+    host = null;
+    helperClient = null;
+    platformRoots = null;
+    if (priorHost || priorClient) disposeLifecycle(priorClient, priorHost);
     try {
       const cepRequire = requireImpl || getCepRequire();
       const extRoot = normalizeCepPath(extensionRoot || cs.getSystemPath('extension'), adapter);
@@ -230,28 +339,57 @@ export function createHostController({ cs, onStatus, onLog, platform, requireImp
         adapter,
         extensionRoot: extRoot,
       });
-      host = cepRequire(hostPath);
-      if (!host || typeof host.setRuntimeDependencies !== 'function') {
+      const nextHost = cepRequire(hostPath);
+      if (!nextHost || typeof nextHost.setRuntimeDependencies !== 'function') {
         throw new Error('Host runtime dependency binding is unavailable');
       }
-      host.setRuntimeDependencies(runtimeDependencies);
-      host.setCSInterface(cs);
-      if (host.setPlatformRoots) host.setPlatformRoots(roots);
+      nextHost.setRuntimeDependencies(runtimeDependencies);
+      nextHost.setCSInterface(cs);
+      if (nextHost.setPlatformRoots) nextHost.setPlatformRoots(roots);
+      host = nextHost;
+      bindPlatformHelperFacade({ cepRequire, extRoot, hostInstance: nextHost });
       // Release the port when this JS context goes away (panel close or a
       // devtools reload) — otherwise the orphaned listener keeps the port and
       // the next context fails with EADDRINUSE while requests hang on the
       // dead context's evalScript pipe.
-      const installBeforeUnload = addBeforeUnload || ((handler) => window.addEventListener('beforeunload', handler));
-      installBeforeUnload(() => { try { host.stop(); } catch (e) { /* best-effort */ } });
-      host.start(port, (err) => err ? onStatus('error', port, err.message) : onStatus('ok', port), roots);
+      if (!beforeUnloadInstalled) {
+        const installBeforeUnload = addBeforeUnload || ((handler) => window.addEventListener('beforeunload', handler));
+        installBeforeUnload(() => {
+          lifecycleGeneration += 1;
+          const closingClient = helperClient;
+          const closingHost = host;
+          helperClient = null;
+          host = null;
+          platformRoots = null;
+          disposeLifecycle(closingClient, closingHost);
+        });
+        beforeUnloadInstalled = true;
+      }
+      nextHost.start(port, (err) => {
+        if (generation !== lifecycleGeneration || host !== nextHost) return;
+        if (err) onStatus('error', port, err.message);
+        else onStatus('ok', port);
+      }, roots);
     } catch (e) {
-      onStatus('error', port, e.message);
+      const failedHost = host;
+      const failedClient = helperClient;
+      host = null;
+      helperClient = null;
+      platformRoots = null;
+      disposeLifecycle(failedClient, failedHost);
+      if (generation === lifecycleGeneration) onStatus('error', port, e.message);
     }
   }
   function restart(port) {
     if (host && host.restart) {
+      const generation = lifecycleGeneration;
+      const restartingHost = host;
       onStatus('starting', port);
-      host.restart(port, (err) => err ? onStatus('error', port, err.message) : onStatus('ok', port), platformRoots);
+      restartingHost.restart(port, (err) => {
+        if (generation !== lifecycleGeneration || host !== restartingHost) return;
+        if (err) onStatus('error', port, err.message);
+        else onStatus('ok', port);
+      }, platformRoots);
     }
   }
   return { start, restart, getHost: () => host };

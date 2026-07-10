@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   anthropicEndpoint,
   codexAppServerArgs,
+  codexRuntimeProviderProfile,
   codexSpawnEnv,
   ensureUserEnv,
   normalizeProviderEntryV2,
@@ -81,6 +82,44 @@ test('anthropicEndpoint appends API paths without dropping a proxy prefix', () =
     anthropicEndpoint('https://proxy.example/anthropic/', '/v1/messages'),
     'https://proxy.example/anthropic/v1/messages'
   );
+});
+
+test('validateProviderBaseUrl rejects raw and percent-decoded credential-like path material', () => {
+  for (const baseUrl of [
+    'https://relay.example/proxy/sk-secret-token-123456',
+    'https://relay.example/proxy/%73%6b%2dsecret-token-123456',
+    'https://relay.example/proxy/Bearer%20secret-token-123456',
+    'https://relay.example/proxy/%2542%2565%2561%2572%2565%2572%2520secret-token-123456',
+  ]) {
+    assertInvalidProvider(providerFixture({ baseUrl }));
+  }
+});
+
+test('validateProviderBaseUrl rejects even empty query, fragment, and userinfo delimiters', () => {
+  for (const baseUrl of [
+    'https://relay.example/v1?',
+    'https://relay.example/v1#',
+    'https://@relay.example/v1',
+  ]) assertInvalidProvider(providerFixture({ baseUrl }));
+});
+
+test('Codex runtime provider profile is selected only by the effective channel and resolver gate', () => {
+  const customProvider = providerFixture({ baseUrl: 'https://custom.example/v1' });
+  assert.deepEqual(codexRuntimeProviderProfile({
+    effectiveChannel: 'cli-config',
+    customProvider,
+    customProviderCredentialResolverReady: true,
+  }), normalizeProviderProfile({}));
+  assert.deepEqual(codexRuntimeProviderProfile({
+    effectiveChannel: 'custom',
+    customProvider,
+    customProviderCredentialResolverReady: false,
+  }), normalizeProviderProfile({}));
+  assert.equal(codexRuntimeProviderProfile({
+    effectiveChannel: 'custom',
+    customProvider,
+    customProviderCredentialResolverReady: true,
+  }).codexBaseUrl, 'https://custom.example/v1');
 });
 
 test('ensureUserEnv fills USERPROFILE/HOME/APPDATA from whichever anchor exists', () => {

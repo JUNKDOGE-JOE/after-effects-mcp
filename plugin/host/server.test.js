@@ -77,6 +77,11 @@ test('server requires explicit Express injection even when ambient local depende
     );
 });
 
+test('secret helper capabilities are not exposed over HTTP routes', () => {
+    const source = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
+    assert.doesNotMatch(source, /\.(?:get|post|put|delete|patch|use)\s*\(\s*['"]\/[^'"]*(?:secret|credential|helper)/i);
+});
+
 // ---- /exec auth wiring via the real Express app ----
 
 function startApp() {

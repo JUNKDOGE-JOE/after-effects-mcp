@@ -8,6 +8,8 @@
 export function redactSecrets(text) {
   var s = String(text == null ? '' : text);
   var mask = function (v) { return v.slice(0, 6) + '...[redacted]'; };
+  // Opaque references are sensitive locators and are hidden in full.
+  s = s.replace(/aemcp-secret:\/\/provider\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[a-z0-9_-]+\/v1/g, '[secret-reference-redacted]');
   // 1) env-style assignments: keep var name, redact only the value.
   s = s.replace(/((?:ANTHROPIC_AUTH_TOKEN|[A-Z_]*API_KEY)\s*[=:]\s*)(\S+)/g, function (m, pre, v) {
     return pre + mask(v);

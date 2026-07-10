@@ -78,6 +78,13 @@ test('redactSecrets leaves non-sensitive text unchanged', () => {
   assert.equal(redactSecrets(plain), plain);
 });
 
+test('redactSecrets hides opaque provider references completely', () => {
+  assert.equal(
+    redactSecrets('ref=aemcp-secret://provider/5eb75f05-5d9e-5d9c-85af-f0893e8b90c2/auth-model/v1'),
+    'ref=[secret-reference-redacted]',
+  );
+});
+
 test('buildLogExport applies redaction to panel logs and sidecar tail', () => {
   const text = buildLogExport({
     panelLogs: ['[t] using key sk-abcdef1234567890'],

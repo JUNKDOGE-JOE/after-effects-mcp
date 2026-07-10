@@ -84,10 +84,16 @@ function makeMcp({ tools, resultText = 'ok', isError = false } = {}) {
   };
 }
 
-function makeLoop({ anthropic, mcp = makeMcp(), mode = 'none', events = [], getEffort, getFast, getApiBaseUrl }) {
+function makeLoop({ anthropic, mcp = makeMcp(), mode = 'none', events = [], getEffort, getFast, resolveRequestProfile }) {
   return createAgentLoop({
-    getApiKey: () => 'sk-test',
-    getApiBaseUrl,
+    resolveRequestProfile: resolveRequestProfile || (async () => ({
+      providerId: 'test-provider',
+      baseUrl: 'https://api.anthropic.com',
+      allowInsecureHttp: false,
+      auth: { kind: 'header', name: 'x-api-key', value: 'sk-test' },
+      extraHeaders: [],
+      authProfileRevision: 1,
+    })),
     getModel: () => 'claude-sonnet-4-6',
     getPermissionMode: () => mode,
     getEffort,
@@ -306,12 +312,108 @@ test('createAgentLoop passes custom Anthropic base URL to the direct API backend
   const calls = [];
   const loop = makeLoop({
     anthropic: anthropicFromSse([textTurn('ok')], calls),
-    getApiBaseUrl: () => 'https://proxy.example/anthropic',
+    resolveRequestProfile: async () => ({
+      providerId: 'proxy',
+      baseUrl: 'https://proxy.example/anthropic',
+      allowInsecureHttp: false,
+      auth: { kind: 'header', name: 'x-api-key', value: 'resolved-only-for-request' },
+      extraHeaders: [],
+      authProfileRevision: 2,
+    }),
   });
 
   await loop.sendUser('hi');
 
-  assert.equal(calls[0].baseUrl, 'https://proxy.example/anthropic');
+  assert.equal(calls[0].requestProfile.baseUrl, 'https://proxy.example/anthropic');
+});
+
+test('createAgentLoop resolves a request profile once per model call and never emits its secret', async () => {
+  const events = [];
+  const calls = [];
+  let resolveCalls = 0;
+  const loop = makeLoop({
+    anthropic: anthropicFromSse([textTurn('ok')], calls),
+    events,
+    resolveRequestProfile: async () => {
+      resolveCalls += 1;
+      return {
+        providerId: 'relay',
+        baseUrl: 'https://relay.example',
+        allowInsecureHttp: false,
+        auth: { kind: 'header', name: 'x-api-key', value: 'resolved-only-for-request' },
+        extraHeaders: [],
+        authProfileRevision: 1,
+      };
+    },
+  });
+  await loop.sendUser('hi');
+  assert.equal(resolveCalls, 1);
+  assert.equal(calls[0].requestProfile.auth.value, 'resolved-only-for-request');
+  assert.equal(JSON.stringify(events).includes('resolved-only-for-request'), false);
+  assert.equal(JSON.stringify(loop.getMessages()).includes('resolved-only-for-request'), false);
+});
+
+test('createAgentLoop redacts resolved secret values from model errors', async () => {
+  const events = [];
+  const loop = makeLoop({
+    anthropic: async () => { throw Object.assign(new Error('upstream echoed resolved-only-for-request'), { kind: 'network' }); },
+    events,
+    resolveRequestProfile: async () => ({
+      providerId: 'relay',
+      baseUrl: 'https://relay.example',
+      allowInsecureHttp: false,
+      auth: { kind: 'header', name: 'x-api-key', value: 'resolved-only-for-request' },
+      extraHeaders: [],
+      authProfileRevision: 1,
+    }),
+  });
+  await loop.sendUser('hi');
+  assert.equal(JSON.stringify(events).includes('resolved-only-for-request'), false);
+});
+
+test('createAgentLoop also redacts the bare token from a Bearer auth value', async () => {
+  const events = [];
+  const loop = makeLoop({
+    anthropic: async () => { throw Object.assign(new Error('provider echoed bare-token-marker'), { kind: 'network' }); },
+    events,
+    resolveRequestProfile: async () => ({
+      providerId: 'relay',
+      baseUrl: 'https://relay.example',
+      allowInsecureHttp: false,
+      auth: { kind: 'header', name: 'Authorization', value: 'Bearer bare-token-marker' },
+      extraHeaders: [],
+      authProfileRevision: 1,
+    }),
+  });
+  await loop.sendUser('hi');
+  assert.equal(JSON.stringify(events).includes('bare-token-marker'), false);
+});
+
+test('createAgentLoop redacts credentials echoed in deltas and assistant history', async () => {
+  const events = [];
+  const loop = makeLoop({
+    anthropic: async ({ onTextDelta }) => {
+      onTextDelta('echoed-token-');
+      onTextDelta('marker');
+      return {
+        assistantMessage: { role: 'assistant', content: [{ type: 'text', text: 'echoed-token-marker' }] },
+        stopReason: 'end_turn',
+      };
+    },
+    events,
+    resolveRequestProfile: async () => ({
+      providerId: 'relay',
+      baseUrl: 'https://relay.example',
+      allowInsecureHttp: false,
+      auth: { kind: 'header', name: 'x-api-key', value: 'echoed-token-marker' },
+      extraHeaders: [],
+      authProfileRevision: 1,
+    }),
+  });
+  await loop.sendUser('hi');
+  assert.equal(JSON.stringify(events).includes('echoed-token-marker'), false);
+  assert.equal(events.filter((event) => event.type === 'text-delta').map((event) => event.text).join('').includes('echoed-token-marker'), false);
+  assert.equal(JSON.stringify(loop.getMessages()).includes('echoed-token-marker'), false);
 });
 
 test('createAgentLoop appends ae-mcp server instructions to the system prompt', async () => {

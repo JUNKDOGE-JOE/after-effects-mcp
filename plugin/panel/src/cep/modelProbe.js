@@ -2,6 +2,8 @@
 // openai-compatible -> Authorization: Bearer; anthropic -> x-api-key +
 // anthropic-version (Anthropic officially serves GET /v1/models too).
 // Uses cep_node https (browser fetch is CORS-blocked in CEP, see modelsApi.js).
+import { validateProviderBaseUrl } from '../lib/providerProfile.js';
+
 function getCepRequire() {
   if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
     return globalThis.window.cep_node.require;
@@ -11,19 +13,10 @@ function getCepRequire() {
   throw new Error('CEP Node require is unavailable');
 }
 
-function authSchemeFromDialect(dialect) {
-  if (!dialect) return '';
-  if (typeof dialect === 'string') return dialect;
-  return String(dialect.authScheme || '').trim();
-}
-
-export function probeHeaders(protocol, apiKey, dialect) {
+export function probeHeaders(protocol, apiKey) {
   if (protocol === 'anthropic') {
     return { 'x-api-key': String(apiKey || ''), 'anthropic-version': '2023-06-01' };
   }
-  const authScheme = authSchemeFromDialect(dialect);
-  if (authScheme === 'x-api-key') return { 'x-api-key': String(apiKey || '') };
-  if (authScheme === 'none') return {};
   return { Authorization: 'Bearer ' + String(apiKey || '') };
 }
 
@@ -41,12 +34,31 @@ export function parseModelsList(json) {
     .filter(Boolean);
 }
 
-export function probeProviderModels({ baseUrl, apiKey, protocol = 'openai-compatible', dialect, authScheme, httpsImpl, timeoutMs = 8000 } = {}) {
+export function probeProviderModels({
+  baseUrl,
+  apiKey,
+  protocol = 'openai-compatible',
+  allowInsecureHttp = false,
+  httpsImpl,
+  timeoutMs = 8000,
+} = {}) {
   let endpoint;
   try {
-    const root = String(baseUrl || '').replace(/\/+$/, '').replace(/\/v1$/, '');
+    const approvedBaseUrl = validateProviderBaseUrl(baseUrl, {
+      allowInsecureHttp,
+      requireTransportApproval: true,
+    });
+    const root = approvedBaseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
     endpoint = new URL(root + '/v1/models');
   } catch (e) {
+    if (e?.code === 'provider_insecure_http_forbidden') {
+      return Promise.resolve({
+        ok: false,
+        status: 0,
+        models: [],
+        detail: 'Insecure provider HTTP is not approved',
+      });
+    }
     return Promise.resolve({ ok: false, status: 0, models: [], detail: 'Invalid base URL' });
   }
   let https;
@@ -62,7 +74,7 @@ export function probeProviderModels({ baseUrl, apiKey, protocol = 'openai-compat
       protocol: endpoint.protocol,
       path: endpoint.pathname + endpoint.search,
       method: 'GET',
-      headers: probeHeaders(protocol, apiKey, dialect || authScheme),
+      headers: probeHeaders(protocol, apiKey),
     }, (res) => {
       let body = '';
       res.on('data', (chunk) => { body += chunk; });

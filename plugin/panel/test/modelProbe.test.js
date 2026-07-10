@@ -107,3 +107,56 @@ test('probeProviderModels does not include secret-bearing error bodies in detail
   assert.doesNotMatch(result.detail, /Authorization/i);
   assert.doesNotMatch(result.detail, /Bearer/i);
 });
+
+test('probeProviderModels blocks unapproved non-loopback HTTP before auth headers or network access', async () => {
+  const apiKey = 'sk-never-materialize-123456';
+  let requestCalls = 0;
+  let observedOptions = null;
+  const http = {
+    request(options) {
+      requestCalls += 1;
+      observedOptions = options;
+      throw new Error('network must not be reached');
+    },
+  };
+
+  const result = await probeProviderModels({
+    baseUrl: 'http://relay.example/v1',
+    apiKey,
+    allowInsecureHttp: false,
+    httpsImpl: http,
+  });
+
+  assert.deepEqual(result, {
+    ok: false,
+    status: 0,
+    models: [],
+    detail: 'Insecure provider HTTP is not approved',
+  });
+  assert.equal(requestCalls, 0);
+  assert.equal(observedOptions, null);
+  assert.equal(JSON.stringify(result).includes(apiKey), false);
+});
+
+test('probeProviderModels permits loopback HTTP and explicitly approved non-loopback HTTP', async () => {
+  for (const input of [
+    { baseUrl: 'http://127.0.0.1:11434/v1', allowInsecureHttp: false },
+    { baseUrl: 'http://relay.example/v1', allowInsecureHttp: true },
+  ]) {
+    let requestCalls = 0;
+    const http = makeHttps((options, res, onRes) => {
+      requestCalls += 1;
+      assert.equal(options.protocol, 'http:');
+      onRes(Object.assign(res, { statusCode: 200 }));
+      res.handlers.data(JSON.stringify({ data: [{ id: 'allowed-model' }] }));
+      res.handlers.end();
+    });
+    const result = await probeProviderModels({
+      ...input,
+      apiKey: 'sk-allowed-12345678',
+      httpsImpl: http,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(requestCalls, 1);
+  }
+});

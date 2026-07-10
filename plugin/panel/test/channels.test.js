@@ -11,7 +11,11 @@ test('claudeChannels: subscription reflects probe, api reflects provider entry',
   assert.equal(ready[1].channel, 'api');
   assert.equal(ready[1].ok, false);
   assert.match(ready[1].fixHint.zh, /Provider 管理/);
-  const withApi = claudeChannels({ probe: { nodeOk: true, loggedIn: false }, apiProvider: { baseUrl: 'https://r', apiKey: 'k' } });
+  const withApi = claudeChannels({
+    probe: { nodeOk: true, loggedIn: false },
+    apiProvider: { baseUrl: 'https://r', auth: { model: { kind: 'x-api-key', valueRef: { kind: 'secret', reference: 'aemcp-secret://provider/5eb75f05-5d9e-5d9c-85af-f0893e8b90c2/auth-model/v1', revision: 1 } } } },
+    providerAvailable: true,
+  });
   assert.equal(withApi[0].ok, false);
   assert.match(withApi[0].fixHint.zh, /API 直连/);
   assert.equal(withApi[1].ok, true);
@@ -24,12 +28,8 @@ test('codexChannels: cli login state + custom provider channel', () => {
   assert.match(list[0].detail, /codex\.exe/);
   assert.equal(list[2].channel, 'custom');
   assert.equal(list[2].ok, false);
-  const custom = codexChannels({ codexProbe: { loggedIn: false, runtimeOk: true }, customProvider: { baseUrl: 'https://r', apiKey: 'k' } });
-  assert.equal(custom.find((c) => c.channel === 'custom').ok, false);
-  const openAiCustom = codexChannels({ codexProbe: { loggedIn: false, runtimeOk: true }, customProvider: { protocol: 'openai-compatible', baseUrl: 'https://r', apiKey: 'k' } });
-  assert.equal(openAiCustom.find((c) => c.channel === 'custom').ok, true);
-  const anthropicCustom = codexChannels({ codexProbe: { loggedIn: false, runtimeOk: true }, customProvider: { protocol: 'anthropic', baseUrl: 'https://r', apiKey: 'k' } });
-  assert.equal(anthropicCustom.find((c) => c.channel === 'custom').ok, false);
+  const custom = codexChannels({ codexProbe: { loggedIn: false, runtimeOk: true }, customProvider: { baseUrl: 'https://r' }, customProviderAvailable: true, customProviderCredentialResolverReady: true });
+  assert.equal(custom.find((c) => c.channel === 'custom').ok, true);
   assert.match(codexChannels({ codexProbe: { loggedIn: false } }).find((c) => c.channel === 'cli').fixHint.zh, /AE_MCP_CODEX_CLI/);
 });
 
@@ -38,7 +38,7 @@ test('codexChannels: cli-config channel is positioned between cli and custom', (
     codexProbe: { loggedIn: false, runtimeOk: true },
     customProvider: null,
     cliConfig: { model: 'gpt-5.5', providerId: 'mediastorm_glm', provider: { name: 'MediaStorm GLM', baseUrl: 'https://api.example.com/v1', envKey: 'MEDIASTORM_GLM_API_KEY', wireApi: 'responses' } },
-    cliConfigApiKey: 'from-env-or-store',
+    cliCredentialAvailable: true,
   });
   assert.deepEqual(withProviderAndKey.map((c) => c.channel), ['cli', 'cli-config', 'custom']);
   const cliConfigChannel = withProviderAndKey[1];
@@ -50,13 +50,13 @@ test('codexChannels: cli-config channel is positioned between cli and custom', (
     codexProbe: { loggedIn: false, runtimeOk: true },
     customProvider: null,
     cliConfig: { model: 'gpt-5.5', providerId: 'mediastorm_glm', provider: { name: 'MediaStorm GLM', baseUrl: 'https://api.example.com/v1', envKey: 'MEDIASTORM_GLM_API_KEY', wireApi: 'responses' } },
-    cliConfigApiKey: '',
+    cliCredentialAvailable: false,
   });
   assert.equal(noKey[1].ok, false);
-  assert.match(noKey[1].fixHint.zh, /粘贴/);
-  assert.match(noKey[1].fixHint.en, /codex-key/);
+  assert.match(noKey[1].fixHint.zh, /凭据/);
+  assert.match(noKey[1].fixHint.en, /credential/i);
 
-  const noConfig = codexChannels({ codexProbe: { loggedIn: false, runtimeOk: true }, customProvider: null, cliConfig: null, cliConfigApiKey: '' });
+  const noConfig = codexChannels({ codexProbe: { loggedIn: false, runtimeOk: true }, customProvider: null, cliConfig: null, cliCredentialAvailable: false });
   assert.equal(noConfig[1].ok, false);
   assert.match(noConfig[1].fixHint.zh, /Codex CLI/);
 
@@ -64,7 +64,7 @@ test('codexChannels: cli-config channel is positioned between cli and custom', (
     codexProbe: { loggedIn: false, runtimeOk: false },
     customProvider: null,
     cliConfig: { model: 'gpt-5.5', providerId: 'mediastorm_glm', provider: { name: 'MediaStorm GLM', baseUrl: 'https://api.example.com/v1', envKey: 'MEDIASTORM_GLM_API_KEY', wireApi: 'responses' } },
-    cliConfigApiKey: 'k',
+    cliCredentialAvailable: true,
   });
   assert.equal(runtimeNotOk[1].ok, false);
 });
@@ -72,15 +72,38 @@ test('codexChannels: cli-config channel is positioned between cli and custom', (
 test('codexChannels: custom provider outranks cli-config in pickChannel when both are ok', () => {
   const list = codexChannels({
     codexProbe: { loggedIn: false, runtimeOk: true },
-    customProvider: { protocol: 'openai-compatible', baseUrl: 'https://custom.example/v1', apiKey: 'ck' },
+    customProvider: { baseUrl: 'https://custom.example/v1' },
+    customProviderAvailable: true,
+    customProviderCredentialResolverReady: true,
     cliConfig: { model: 'gpt-5.5', providerId: 'mediastorm_glm', provider: { name: 'MediaStorm GLM', baseUrl: 'https://api.example.com/v1', envKey: 'MEDIASTORM_GLM_API_KEY', wireApi: 'responses' } },
-    cliConfigApiKey: 'k',
+    cliCredentialAvailable: true,
   });
   const custom = list.find((c) => c.channel === 'custom');
   const cliConfig = list.find((c) => c.channel === 'cli-config');
   assert.equal(custom.ok, true);
   assert.equal(cliConfig.ok, true);
   assert.equal(pickChannel(list).channel, 'custom', 'explicit custom provider must outrank inherited cli-config when both are ok');
+});
+
+test('codex custom provider stays unavailable until the Task9 credential resolver is connected', () => {
+  const custom = codexChannels({
+    codexProbe: { loggedIn: false, runtimeOk: true },
+    customProvider: { baseUrl: 'https://custom.example/v1' },
+    customProviderAvailable: true,
+    customProviderCredentialResolverReady: false,
+  }).find((channel) => channel.channel === 'custom');
+  assert.equal(custom.ok, false);
+  assert.match(custom.fixHint.en, /Codex CLI|credential routing/i);
+});
+
+test('provider channels use non-secret availability and can stay checking during migration', () => {
+  const provider = { baseUrl: 'https://relay.example', auth: { model: { kind: 'bearer', valueRef: { kind: 'secret', reference: 'aemcp-secret://provider/5eb75f05-5d9e-5d9c-85af-f0893e8b90c2/auth-model/v1', revision: 1 } } } };
+  const checkingClaude = claudeChannels({ probe: { loggedIn: false }, apiProvider: provider, providerChecking: true, providerAvailable: false });
+  assert.equal(checkingClaude[1].checking, true);
+  assert.equal(checkingClaude[1].ok, false);
+  const unavailable = codexChannels({ codexProbe: { runtimeOk: true }, customProvider: provider, customProviderAvailable: false });
+  assert.equal(unavailable.find((channel) => channel.channel === 'custom').ok, false);
+  assert.equal(JSON.stringify([...checkingClaude, ...unavailable]).includes('aemcp-secret://'), false);
 });
 
 test('zcodeChannels: cli-config first, desktop second, start-plan never ok without credentials', () => {

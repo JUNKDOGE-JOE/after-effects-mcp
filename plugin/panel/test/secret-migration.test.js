@@ -1,7 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { createSecretMigrationRunner } from '../src/cep/platform/secret-migration.js';
+import {
+  createSecretMigrationRunner,
+  readSecretMigrationJournalSnapshot,
+} from '../src/cep/platform/secret-migration.js';
 
 const MIGRATION_ID = 'provider-secrets-v2';
 const SOURCE_REVISION = '4f15f251b51f06e4b449afd6558f8d47e7721f48ca578e8cbcc8f641f17703c4';
@@ -237,6 +240,33 @@ test('migration resumes every persisted phase without serializing a secret or se
     assert.deepEqual(Object.getOwnPropertySymbols(harness.currentJournal()), []);
     assertNoSecretPersistence(harness, secret, observerSecret);
   }
+});
+
+test('runner journal snapshots are strictly redacted, deeply frozen, and not exposed on the runner', async () => {
+  const secret = 'snapshot-must-not-contain-this';
+  const harness = makeMigrationHarness({
+    secret,
+    initialJournal: {
+      schemaVersion: 1,
+      migrationId: MIGRATION_ID,
+      sourceRevision: SOURCE_REVISION,
+      phase: 'secrets-written',
+      entries: [{ id: `${PROVIDER_ID}:api-key`, reference: REFERENCE, revision: 1 }],
+      updatedAt: 1783612800000,
+    },
+  });
+
+  const snapshot = await readSecretMigrationJournalSnapshot(harness.runner, MIGRATION_ID);
+  assert.deepEqual(Reflect.ownKeys(harness.runner), ['run']);
+  assert.deepEqual(snapshot, harness.currentJournal());
+  assert.equal(Object.isFrozen(snapshot), true);
+  assert.equal(Object.isFrozen(snapshot.entries), true);
+  assert.equal(Object.isFrozen(snapshot.entries[0]), true);
+  assert.throws(() => { snapshot.phase = 'pending'; }, TypeError);
+  assert.equal(harness.currentJournal().phase, 'secrets-written');
+  const serialized = JSON.stringify(snapshot);
+  assert.equal(serialized.includes(secret), false);
+  assert.equal(serialized.includes(digest(secret)), false);
 });
 
 test('a crash after create-only write resumes through exact protected-value readback', async () => {

@@ -37,7 +37,7 @@ export function createClaudeAgentBackend({
   getEffort,
   getThinking,
   getChannel = () => 'subscription',
-  getApiProvider = () => null,
+  resolveApiProvider,
   onEvent,
   lang = 'zh',
   spawnImpl,
@@ -58,6 +58,7 @@ export function createClaudeAgentBackend({
   let activeRun = null;
   let activeResolve = null;
   let activeAssistantText = '';
+  let processChannel = 'subscription';
 
   function emit(evt) {
     if (onEvent) onEvent(evt);
@@ -85,8 +86,11 @@ export function createClaudeAgentBackend({
     if (!message || message.t === 'ready') return;
     if (message.t !== 'event') return;
 
-    const event = message.event;
+    let event = message.event;
     if (!event) return;
+    if (processChannel === 'api' && event.type === 'error') {
+      event = { ...event, message: 'Provider sidecar request failed.' };
+    }
     if (event.type === 'text-delta') activeAssistantText += String(event.text || '');
     emit(event);
     if (event.type === 'turn-end') {
@@ -158,7 +162,13 @@ export function createClaudeAgentBackend({
       const mcpSpec = await getMcpSpec();
       const meta = await getToolMeta();
       const channel = getChannel ? getChannel() : 'subscription';
-      const spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), { channel, provider: getApiProvider ? getApiProvider() : null });
+      processChannel = channel;
+      let requestProfile = null;
+      if (channel === 'api') {
+        if (typeof resolveApiProvider !== 'function') throw new Error('Provider request profile is unavailable.');
+        requestProfile = await resolveApiProvider();
+      }
+      let spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), { channel, requestProfile });
       stderrTail = '';
       stopping = false;
       ready = false;
@@ -200,6 +210,10 @@ export function createClaudeAgentBackend({
       } catch (e) {
         clearReadyWait();
         throw e;
+      } finally {
+        requestProfile = null;
+        if (spawnEnv) delete spawnEnv.ANTHROPIC_AUTH_TOKEN;
+        spawnEnv = null;
       }
 
       const reader = createNdjsonReader((message) => {
@@ -213,7 +227,7 @@ export function createClaudeAgentBackend({
       });
       if (proc.stdout && proc.stdout.on) proc.stdout.on('data', reader);
       if (proc.stderr && proc.stderr.on) proc.stderr.on('data', (chunk) => {
-        stderrTail = appendTail(stderrTail, chunk);
+        stderrTail = appendTail(stderrTail, processChannel === 'api' ? '[provider-sidecar-stderr-redacted]\n' : chunk);
       });
       proc.on('exit', (code, signal) => handleExit(code, signal));
       proc.on('error', (error) => {
@@ -280,6 +294,7 @@ export function createClaudeAgentBackend({
     transcript = [];
     finishActive();
     stderrTail = '';
+    processChannel = 'subscription';
     stopping = false;
   }
 

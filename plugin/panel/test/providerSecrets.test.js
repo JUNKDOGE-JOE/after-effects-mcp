@@ -133,6 +133,7 @@ test('provider secret service fails closed on mismatched create readback without
   const requested = 'sk-create-marker';
   const returned = 'sk-wrong-readback-marker';
   let createdReference = '';
+  const deletes = [];
   const service = createProviderSecretService({
     getHost: () => ({
       async secretSet(input) {
@@ -142,7 +143,10 @@ test('provider secret service fails closed on mismatched create readback without
       async secretGet(reference) {
         return { reference, value: returned, revision: 1 };
       },
-      async secretDelete() { throw new Error('not used'); },
+      async secretDelete(input) {
+        deletes.push(input);
+        return { reference: input.reference, deleted: true, revision: null };
+      },
     }),
     randomBytes: () => Uint8Array.from([1, 2, 3, 4]),
   });
@@ -158,6 +162,95 @@ test('provider secret service fails closed on mismatched create readback without
       return true;
     },
   );
+  assert.deepEqual(deletes, [{ reference: createdReference, expectedRevision: 1 }]);
+});
+
+test('provider secret service rolls back the exact created revision when create readback throws', async () => {
+  const deletes = [];
+  let createdReference = '';
+  const service = createProviderSecretService({
+    getHost: () => ({
+      async secretSet(input) {
+        createdReference = input.reference;
+        return { reference: input.reference, revision: 7 };
+      },
+      async secretGet() {
+        const error = new Error('sensitive readback transport detail');
+        error.code = 'HELPER_UNAVAILABLE';
+        throw error;
+      },
+      async secretDelete(input) {
+        deletes.push(input);
+        return { reference: input.reference, deleted: true, revision: null };
+      },
+    }),
+    randomBytes: () => Uint8Array.from([5, 6, 7, 8]),
+  });
+
+  await assert.rejects(
+    service.create({ credentialId: CREDENTIAL_ID, slotPrefix: 'auth-model', value: 'sk-readback-failure' }),
+    (error) => error.code === 'SECRET_STORE_UNAVAILABLE'
+      && !publicErrorText(error).includes('readback transport detail'),
+  );
+  assert.deepEqual(deletes, [{ reference: createdReference, expectedRevision: 7 }]);
+});
+
+test('provider secret service resolves an ambiguous create response by exact readback without deleting', async () => {
+  const values = new Map();
+  const deletes = [];
+  const service = createProviderSecretService({
+    getHost: () => ({
+      async secretSet(input) {
+        values.set(input.reference, { value: input.value, revision: 1 });
+        const error = new Error('response was lost after commit');
+        error.code = 'HELPER_UNAVAILABLE';
+        throw error;
+      },
+      async secretGet(reference) {
+        const record = values.get(reference);
+        return { reference, value: record.value, revision: record.revision };
+      },
+      async secretDelete(input) {
+        deletes.push(input);
+        return { reference: input.reference, deleted: true, revision: null };
+      },
+    }),
+    randomBytes: () => Uint8Array.from([9, 10, 11, 12]),
+  });
+
+  const result = await service.create({
+    credentialId: CREDENTIAL_ID,
+    slotPrefix: 'header',
+    value: 'sk-ambiguous-commit',
+  });
+  assert.equal(result.revision, 1);
+  assert.deepEqual(deletes, []);
+});
+
+test('provider secret service never blind-deletes when both create response and recovery read are ambiguous', async () => {
+  const deletes = [];
+  const service = createProviderSecretService({
+    getHost: () => ({
+      async secretSet() {
+        const error = new Error('set response missing');
+        error.code = 'HELPER_UNAVAILABLE';
+        throw error;
+      },
+      async secretGet() {
+        const error = new Error('recovery read missing');
+        error.code = 'HELPER_UNAVAILABLE';
+        throw error;
+      },
+      async secretDelete(input) { deletes.push(input); },
+    }),
+    randomBytes: () => Uint8Array.from([13, 14, 15, 16]),
+  });
+
+  await assert.rejects(
+    service.create({ credentialId: CREDENTIAL_ID, slotPrefix: 'header', value: 'sk-unknown-outcome' }),
+    (error) => error.code === 'SECRET_STORE_UNAVAILABLE',
+  );
+  assert.deepEqual(deletes, []);
 });
 
 test('provider secret service rejects non-contract read results without exposing their value', async () => {
@@ -180,6 +273,28 @@ test('provider secret service rejects non-contract read results without exposing
       return true;
     },
   );
+});
+
+test('provider secret service classifies helper transport and contract failures as unavailable', async () => {
+  for (const code of ['HELPER_UNAVAILABLE', 'HELPER_UNAUTHORIZED', 'PROTOCOL_VERSION_UNSUPPORTED', 'INVALID_REQUEST', 'MESSAGE_TOO_LARGE']) {
+    const marker = `sensitive-${code}`;
+    const service = createProviderSecretService({
+      getHost: () => ({
+        async secretGet() {
+          const error = new Error(marker);
+          error.code = code;
+          throw error;
+        },
+        async secretSet() {},
+        async secretDelete() {},
+      }),
+    });
+    await assert.rejects(service.resolve(secretRef('auth-model', 1)), (error) => {
+      assert.equal(error.code, 'SECRET_STORE_UNAVAILABLE');
+      assert.equal(publicErrorText(error).includes(marker), false);
+      return true;
+    });
+  }
 });
 
 test('resolveProviderRequestProfile separates probe and model auth', async () => {
