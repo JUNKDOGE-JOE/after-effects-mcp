@@ -1,61 +1,15 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
 import { claudeChannelEnv } from '../lib/claudeChannel.js';
+import { createPlatformAdapter } from './platform/index.js';
 
 const READY_TIMEOUT_MS = 15000;
 const STDERR_TAIL_LIMIT = 4096;
-const FIXED_NODE_CANDIDATE = 'C:\\Program Files\\nodejs\\node.exe';
-
-function getCepRequire() {
-  if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-    return globalThis.window.cep_node.require;
-  }
-  if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-  if (globalThis.require) return globalThis.require;
-  throw new Error('CEP Node require is unavailable');
-}
-
-function getCepEnv() {
-  return (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env) || {};
-}
-
-function execFileAsync(execFileImpl, file, args, env) {
-  return new Promise((resolve) => {
-    execFileImpl(file, args, { windowsHide: true, env }, (err, stdout, stderr) => {
-      resolve({ err, stdout: String(stdout || ''), stderr: String(stderr || '') });
-    });
-  });
-}
-
-function nodeCandidates(stdout) {
-  const seen = new Set();
-  const candidates = String(stdout || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  candidates.push(FIXED_NODE_CANDIDATE);
-  return candidates.filter((candidate) => {
-    if (seen.has(candidate)) return false;
-    seen.add(candidate);
-    return true;
-  });
-}
-
-function parseMajor(version) {
-  const match = String(version || '').trim().match(/^v(\d+)/);
-  return match ? Number(match[1]) : 0;
-}
-
-export async function resolveSystemNode({ execFileImpl, env } = {}) {
-  const execFile = execFileImpl || getCepRequire()('child_process').execFile;
-  const processEnv = env || getCepEnv();
-  const where = await execFileAsync(execFile, 'where', ['node'], processEnv);
-  const candidates = nodeCandidates(where.err ? '' : where.stdout);
-
-  for (const candidate of candidates) {
-    const checked = await execFileAsync(execFile, candidate, ['--version'], processEnv);
-    if (checked.err) continue;
-    const version = String(checked.stdout || checked.stderr || '').trim();
-    if (parseMajor(version) >= 18) return { ok: true, nodePath: candidate, version };
-  }
-
-  return { ok: false, detail: 'No system Node 18+ found.' };
+export async function resolveSystemNode({ platform } = {}) {
+  const adapter = platform || createPlatformAdapter();
+  const requiredArch = adapter.id === 'macos-arm64' ? 'arm64' : (adapter.id === 'windows-x64' ? 'x64' : undefined);
+  const resolved = await adapter.resolveExecutable('node', { minimumVersion: '18.0.0', ...(requiredArch ? { requiredArch } : {}) });
+  if (!resolved.ok) return { ok: false, detail: 'Node runtime resolution failed: ' + resolved.code, resolution: resolved };
+  return { ok: true, nodePath: resolved.path, version: resolved.version || '', executable: resolved };
 }
 
 function clone(value) {
@@ -63,8 +17,8 @@ function clone(value) {
 }
 
 function nodeMissingMessage(lang) {
-  if (lang === 'zh') return '内嵌对话需要系统 Node 18+（未检测到）。安装 Node.js LTS 后重试。';
-  return 'Embedded chat needs system Node 18+. Install Node.js LTS and retry.';
+  if (lang === 'zh') return '内嵌对话运行时缺失或损坏，请在设置中修复离线运行时。';
+  return 'The embedded chat runtime is missing or damaged. Repair the offline runtime in Settings.';
 }
 
 function appendTail(tail, chunk) {
@@ -73,6 +27,7 @@ function appendTail(tail, chunk) {
 }
 
 export function createClaudeAgentBackend({
+  platform,
   resolveNode = resolveSystemNode,
   sidecarPath,
   getMcpSpec,
@@ -88,6 +43,10 @@ export function createClaudeAgentBackend({
   spawnImpl,
   env,
 }) {
+  const adapter = platform || (spawnImpl ? {
+    completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
+    spawn: (executable, args, options) => spawnImpl(executable.path, [...(executable.argsPrefix || []), ...args], options),
+  } : createPlatformAdapter());
   let proc = null;
   let startPromise = null;
   let pendingReadyReject = null;
@@ -102,11 +61,6 @@ export function createClaudeAgentBackend({
 
   function emit(evt) {
     if (onEvent) onEvent(evt);
-  }
-
-  function getSpawn() {
-    if (spawnImpl) return spawnImpl;
-    return getCepRequire()('child_process').spawn;
   }
 
   function writeMessage(message) {
@@ -195,7 +149,7 @@ export function createClaudeAgentBackend({
     if (startPromise) return startPromise;
 
     startPromise = (async () => {
-      const node = await resolveNode();
+      const node = await resolveNode({ platform: adapter });
       if (!node || !node.ok) {
         emit({ type: 'error', kind: 'mcp', message: nodeMissingMessage(lang) });
         return false;
@@ -203,9 +157,8 @@ export function createClaudeAgentBackend({
 
       const mcpSpec = await getMcpSpec();
       const meta = await getToolMeta();
-      const spawn = getSpawn();
       const channel = getChannel ? getChannel() : 'subscription';
-      const spawnEnv = claudeChannelEnv(env || getCepEnv(), { channel, provider: getApiProvider ? getApiProvider() : null });
+      const spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), { channel, provider: getApiProvider ? getApiProvider() : null });
       stderrTail = '';
       stopping = false;
       ready = false;
@@ -230,7 +183,8 @@ export function createClaudeAgentBackend({
       }, READY_TIMEOUT_MS);
 
       try {
-        proc = spawn(node.nodePath, [
+        const executable = node.executable || { ok: true, id: 'node', path: node.nodePath, argsPrefix: [], source: 'runtime', version: node.version || null, arch: null };
+        proc = adapter.spawn(executable, [
           sidecarPath,
           '--mcp', JSON.stringify(mcpSpec),
           '--allowed-tools', JSON.stringify(meta.allowedTools),

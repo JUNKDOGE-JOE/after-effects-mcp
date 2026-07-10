@@ -1,87 +1,45 @@
-// One-click wizard actions: detect -> show exact command -> spawn with
-// streamed output -> re-detect. All sources are official (winget ids /
-// npm packages / astral installer); commands are shown verbatim to the
-// user BEFORE running. Workers: keep getCepRequire pattern from mcpClient.
+// Legacy wizard orchestration. Task 11 replaces the online install catalog;
+// this module only keeps business code behind the shared platform boundary.
 import { findProjectRoot } from './mcpClient.js';
+import { createPlatformAdapter } from './platform/index.js';
 
 const OUTPUT_TAIL = 8192;
-
-function getCepRequire() {
-  if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-    return globalThis.window.cep_node.require;
-  }
-  if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-  if (globalThis.require) return globalThis.require;
-  throw new Error('CEP Node require is unavailable');
-}
-
-// claude is an npm .cmd shim: execFile cannot launch .cmd without a shell on
-// Windows (uv/node are real .exe), so its probe runs with shell: true.
-const DETECT = {
-  uv: { file: 'uv', args: ['--version'] },
-  node: { file: 'node', args: ['--version'] },
-  claude: { file: 'claude', args: ['--version'], shell: true },
-};
-
-function execVersion(execFile, file, args, env, shell) {
-  return new Promise((resolve) => {
-    execFile(file, args, { windowsHide: true, env, shell: shell === true }, (err, stdout, stderr) => {
-      if (err) return resolve({ ok: false });
-      resolve({ ok: true, version: String(stdout || stderr || '').trim() });
-    });
-  });
-}
-
-function getCepEnvSafe() {
-  return (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env) || {};
-}
-
-// ae-mcp is a stdio MCP server: launched with any argv it serves stdin instead
-// of exposing a version command, so presence is checked without executing it.
-// The resolved path doubles as the version detail.
-async function detectAeMcp({ execFileImpl, env, fsImpl }) {
-  const execFile = execFileImpl || getCepRequire()('child_process').execFile;
-  const whereHit = await new Promise((resolve) => {
-    execFile('where', ['ae-mcp'], { windowsHide: true, env }, (err, stdout) => {
-      resolve(err ? '' : String(stdout || '').split(/\r?\n/).map((l) => l.trim()).find(Boolean) || '');
-    });
-  });
-  if (whereHit) return { ok: true, version: whereHit };
-  const profile = (env || getCepEnvSafe()).USERPROFILE || '';
-  if (profile) {
-    const shim = profile.replace(/[\\/]+$/, '') + '\\.local\\bin\\ae-mcp.exe';
-    const fs = fsImpl || getCepRequire()('fs');
-    if (fs.existsSync(shim)) return { ok: true, version: shim };
-  }
-  return { ok: false };
-}
-
-export async function detectTool(id, { execFileImpl, env, fsImpl } = {}) {
-  if (id === 'aeMcp') return detectAeMcp({ execFileImpl, env, fsImpl });
-  const spec = DETECT[id];
-  const execFile = execFileImpl || getCepRequire()('child_process').execFile;
-  return execVersion(execFile, spec.file, spec.args, env, spec.shell);
-}
-
 const REPO = 'https://github.com/JUNKDOGE-JOE/after-effects-mcp';
+const TOOL_IDS = { aeMcp: 'ae-mcp', uv: 'uv', node: 'node', claude: 'claude' };
 
-export function buildInstallCommands({ panelVersion, repoRoot }) {
-  const src = (sub) => repoRoot
-    ? `${repoRoot}\\packages\\${sub}`
-    : `git+${REPO}@v${panelVersion}#subdirectory=packages/${sub}`;
+export async function detectTool(id, { platform } = {}) {
+  const adapter = platform || createPlatformAdapter();
+  const executableId = TOOL_IDS[id];
+  if (!executableId) return { ok: false, detail: 'unsupported tool id' };
+  const options = executableId === 'node' ? { minimumVersion: '18.0.0' } : {};
+  const resolved = await adapter.resolveExecutable(executableId, options);
+  if (!resolved.ok) return { ok: false, detail: resolved.code, resolution: resolved };
   return {
-    uv: { file: 'winget', args: ['install', '--id', 'astral-sh.uv', '-e', '--accept-source-agreements', '--accept-package-agreements'] },
-    uvFallback: { file: 'powershell', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'irm https://astral.sh/uv/install.ps1 | iex'] },
-    node: { file: 'winget', args: ['install', '--id', 'OpenJS.NodeJS.LTS', '-e', '--accept-source-agreements', '--accept-package-agreements'] },
-    claude: { file: 'npm', args: ['install', '-g', '@anthropic-ai/claude-code'] },
-    aeMcp: { file: 'uv', args: ['tool', 'install', '--force', '--from', src('core'), 'ae-mcp', '--with', src('bridge'), '--with', src('snapshot-mss')] },
+    ok: true,
+    version: resolved.version || resolved.path,
+    path: resolved.path,
+    source: resolved.source,
   };
 }
 
-export function runAction({ file, args, spawnImpl, env, onChunk }) {
-  const spawn = spawnImpl || getCepRequire()('child_process').spawn;
+export function buildInstallCommands({ panelVersion, repoRoot, platform } = {}) {
+  const adapter = platform || createPlatformAdapter();
+  if (typeof adapter.legacyWizardInstallCommands !== 'function') {
+    throw new Error('Legacy wizard command catalog is unavailable on this platform');
+  }
+  return adapter.legacyWizardInstallCommands({ panelVersion, repoRoot, repo: REPO });
+}
+
+export async function runAction({ file, executableId, args, platform, env, onChunk }) {
+  const adapter = platform || createPlatformAdapter();
+  if (!executableId || typeof executableId !== 'string') {
+    return { ok: false, code: -1, output: 'Installer command is missing a platform executable id: ' + String(file || '') };
+  }
+  const executable = await adapter.resolveExecutable(executableId, env === undefined ? {} : { env });
+  if (!executable.ok) return { ok: false, code: -1, output: executableId + ' resolution failed: ' + executable.code };
   return new Promise((resolve) => {
     let output = '';
+    let spawnError = null;
     const push = (chunk) => {
       const text = String(chunk || '');
       output = (output + text).slice(-OUTPUT_TAIL);
@@ -89,35 +47,34 @@ export function runAction({ file, args, spawnImpl, env, onChunk }) {
     };
     let child;
     try {
-      child = spawn(file, args, { windowsHide: true, env, shell: false });
-    } catch (e) {
-      return resolve({ ok: false, code: -1, output: String(e && e.message || e) });
+      const spawnOptions = { windowsHide: true };
+      if (env !== undefined) spawnOptions.env = env;
+      child = adapter.spawn(executable, args || [], spawnOptions);
+    } catch (error) {
+      resolve({ ok: false, code: -1, output: String(error && error.message || error) });
+      return;
     }
-    if (child.stdout && child.stdout.on) child.stdout.on('data', push);
-    if (child.stderr && child.stderr.on) child.stderr.on('data', push);
-    child.on('error', (e) => resolve({ ok: false, code: -1, output: output + String(e && e.message || e) }));
-    child.on('exit', (code) => resolve({ ok: code === 0, code, output }));
+    child.stdout?.on?.('data', push);
+    child.stderr?.on?.('data', push);
+    child.on?.('error', (error) => {
+      spawnError = error;
+      push(String(error && error.message || error));
+    });
+    child.on?.('close', (code) => resolve({ ok: !spawnError && code === 0, code: spawnError ? -1 : code, output }));
   });
 }
 
 export function commandPreview({ file, args }) {
-  return [file, ...args.map((a) => (/\s/.test(a) ? `"${a}"` : a))].join(' ');
+  return [file, ...(args || []).map((value) => (/\s/.test(value) ? `"${value}"` : value))].join(' ');
 }
 
-export function detectRepoRoot({ extRoot, fsImpl }) {
-  return findProjectRoot({ extRoot, repoRoot: '', fsImpl: fsImpl || getCepRequire()('fs') });
+export function detectRepoRoot({ extRoot, fsImpl, platform }) {
+  const adapter = platform || createPlatformAdapter();
+  return findProjectRoot({ extRoot, repoRoot: '', fsImpl: fsImpl || adapter.fs, platform: adapter });
 }
 
-// claude CLI does not have a login subcommand: running bare `claude`
-// interactively enters the browser OAuth flow when the user is logged out.
-const LOGIN_COMMANDS = { claude: 'claude', codex: 'codex login' };
-
-export function openLoginTerminal({ tool, spawnImpl } = {}) {
-  const spawn = spawnImpl || getCepRequire()('child_process').spawn;
-  const command = LOGIN_COMMANDS[tool] || LOGIN_COMMANDS.claude;
-  const child = spawn('cmd', ['/c', 'start', 'ae-mcp login', 'pwsh', '-NoExit', '-Command', command], {
-    detached: true, windowsHide: false,
-  });
-  if (child && child.unref) child.unref();
+export async function openLoginTerminal({ tool, platform } = {}) {
+  const adapter = platform || createPlatformAdapter();
+  await adapter.openLoginTerminal(tool === 'codex' ? 'codex' : 'claude');
   return true;
 }

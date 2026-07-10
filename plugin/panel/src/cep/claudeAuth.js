@@ -1,55 +1,40 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
 import { claudeChannelEnv } from '../lib/claudeChannel.js';
+import { createPlatformAdapter } from './platform/index.js';
+import { resolveSystemNode } from './claudeAgentBackend.js';
+import { normalizeCepSystemPath } from './platform/paths.js';
 
-function getCepRequire() {
-  if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-    return globalThis.window.cep_node.require;
-  }
-  if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-  if (globalThis.require) return globalThis.require;
-  throw new Error('CEP Node require is unavailable');
-}
-
-function getCepEnv() {
-  return (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env) || {};
-}
-
-function normalizeFsPath(value) {
-  let text = String(value || '').replace(/\//g, '\\');
-  text = text.replace(/\\+$/, '');
-  return text;
-}
-
-function defaultFs() {
-  return getCepRequire()('fs');
-}
-
-function defaultSpawn() {
-  return getCepRequire()('child_process').spawn;
-}
-
-function joinPath(base, leaf) {
-  return normalizeFsPath(base) + '\\' + leaf;
-}
-
-export function resolveSidecarPath({ extRoot, fsImpl } = {}) {
-  const root = normalizeFsPath(extRoot || '');
-  const deployed = joinPath(root, 'sidecar\\agent-sidecar.mjs');
-  const repo = joinPath(root, '..\\sidecar\\agent-sidecar.mjs');
-  const fs = fsImpl || defaultFs();
-  if (fs.existsSync(deployed)) return deployed;
-  if (fs.existsSync(repo)) return repo;
-  return deployed;
+export function resolveSidecarPath({ extRoot, fsImpl, platform } = {}) {
+  const adapter = platform || createPlatformAdapter();
+  const root = normalizeCepSystemPath(extRoot || adapter.paths.configRoot, adapter);
+  const developmentMarker = adapter.paths.join([root, '.debug']);
+  const developmentSidecar = adapter.paths.join([root, 'sidecar', 'agent-sidecar.mjs']);
+  const runtimeSidecar = adapter.paths.join([
+    root, 'runtime', adapter.id, 'node', 'sidecar', 'agent-sidecar.mjs',
+  ]);
+  const fs = fsImpl || adapter.fs;
+  if (!fs || typeof fs.existsSync !== 'function') throw new Error('platform filesystem is unavailable');
+  if (fs.existsSync(developmentMarker) && fs.existsSync(developmentSidecar)) return developmentSidecar;
+  // Returning the deterministic production candidate keeps App construction
+  // non-throwing; the login probe reports a missing/incomplete payload with the
+  // exact path.  This immutable extension path never consults runtime/current.
+  return runtimeSidecar;
 }
 
 export async function probeClaudeLogin({
+  platform,
   resolveNode,
   sidecarPath,
   spawnImpl,
   env,
   timeoutMs = 30000,
 } = {}) {
-  const resolved = await resolveNode();
+  const adapter = platform || (spawnImpl ? {
+    completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
+    spawn: (executable, args, options) => spawnImpl(executable.path, [...(executable.argsPrefix || []), ...args], options),
+  } : createPlatformAdapter());
+  const nodeResolver = resolveNode || resolveSystemNode;
+  const resolved = await nodeResolver({ platform: adapter });
   if (!resolved || resolved.ok === false) {
     return { loggedIn: false, nodeOk: false, detail: (resolved && resolved.detail) || 'node unavailable' };
   }
@@ -58,9 +43,8 @@ export async function probeClaudeLogin({
     let settled = false;
     let stderr = '';
     let proc = null;
-    const spawn = spawnImpl || defaultSpawn();
     // Subscription-channel probe: strip key/base-url overrides (spec B3).
-    const spawnEnv = claudeChannelEnv(Object.assign({}, getCepEnv(), env || {}), { channel: 'subscription' });
+    const spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), { channel: 'subscription' });
 
     function finish(result) {
       if (settled) return;
@@ -77,7 +61,8 @@ export async function probeClaudeLogin({
     }, timeoutMs);
 
     try {
-      proc = spawn(resolved.nodePath, [sidecarPath, '--probe'], {
+      const executable = resolved.executable || { ok: true, id: 'node', path: resolved.nodePath, argsPrefix: [], source: 'runtime', version: resolved.version || null, arch: null };
+      proc = adapter.spawn(executable, [sidecarPath, '--probe'], {
         stdio: 'pipe',
         windowsHide: true,
         env: spawnEnv,

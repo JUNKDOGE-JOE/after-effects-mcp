@@ -1,23 +1,17 @@
 // Spec B3: one-click inherit of Claude Code's third-party endpoint config.
 // Only reads the documented env block of ~/.claude/settings.json; the
 // Claude-3p host-creds file is intentionally NOT read (internal format).
-function getCepRequire() {
-  if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-    return globalThis.window.cep_node.require;
-  }
-  if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-  if (globalThis.require) return globalThis.require;
-  throw new Error('CEP Node require is unavailable');
-}
+import { createPlatformAdapter } from './platform/index.js';
 
-export function readClaudeSettingsEnv({ env = {}, fsImpl } = {}) {
-  const home = env.USERPROFILE || env.HOME || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : '');
+export function readClaudeSettingsEnv({ platform, fsImpl } = {}) {
+  const adapter = platform || createPlatformAdapter();
+  const home = adapter.paths.home;
   if (!home) return null;
-  let fs;
-  try { fs = fsImpl || getCepRequire()('fs'); } catch (e) { return null; }
+  const fs = fsImpl || adapter.fs;
+  if (!fs) return null;
   let parsed;
   try {
-    parsed = JSON.parse(fs.readFileSync(String(home).replace(/[\\/]+$/, '') + '\\.claude\\settings.json', 'utf8'));
+    parsed = JSON.parse(fs.readFileSync(adapter.paths.join([home, '.claude', 'settings.json']), 'utf8'));
   } catch (e) {
     return null;
   }

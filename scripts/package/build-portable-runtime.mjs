@@ -16,7 +16,9 @@ import {
   pathExists,
   publishDirectoryAtomically,
   readJson,
+  readRegularFileSnapshot,
   sha256File,
+  writeBytesAtomically,
 } from './lib/files.mjs';
 import { downloadLockedAsset } from './lib/locked-download.mjs';
 import {
@@ -517,6 +519,22 @@ function prependPath(environment, value) {
   return { ...environment, [key]: `${value}${path.delimiter}${environment[key] ?? ''}` };
 }
 
+export async function copySidecarEntrypoints({ repoRoot, runtimeRoot }) {
+  const sourceRoot = path.join(path.resolve(repoRoot), 'plugin', 'sidecar');
+  const destinationRoot = path.join(path.resolve(runtimeRoot), 'node', 'sidecar');
+  await fs.promises.mkdir(destinationRoot, { recursive: true });
+  for (const name of ['agent-sidecar.mjs', 'lib.mjs']) {
+    const source = path.join(sourceRoot, name);
+    const destination = path.join(destinationRoot, name);
+    const expectedStats = await fs.promises.lstat(source);
+    const bytes = await readRegularFileSnapshot(source, {
+      expectedStats,
+      maxBytes: 8 * 1024 * 1024,
+    });
+    await writeBytesAtomically(destination, bytes, { mode: 0o644 });
+  }
+}
+
 async function installNodePayload({ runtimeRoot, repoRoot, buildRoot, platform }) {
   const executables = runtimeExecutables(runtimeRoot, platform);
   for (const target of ['host', 'sidecar']) {
@@ -545,6 +563,7 @@ async function installNodePayload({ runtimeRoot, repoRoot, buildRoot, platform }
       '--no-fund',
     ], { cwd: destination, env: environment });
   }
+  await copySidecarEntrypoints({ repoRoot, runtimeRoot });
 }
 
 async function removeMatchingDirectories(parent, pattern) {

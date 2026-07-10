@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,13 +13,24 @@ import {
   validateSigningSliceEvidence,
 } from '../signing-plan.mjs';
 import { buildZxp } from '../build-zxp.mjs';
+import { sha256Directory } from '../lib/files.mjs';
 
 const SHA_A = 'a'.repeat(64);
 const SHA_B = 'b'.repeat(64);
 const SHA_C = 'c'.repeat(64);
 
+function sha256Bytes(value) {
+  return createHash('sha256').update(value).digest('hex');
+}
+
 function identityFor(platform, ids) {
-  if (ids[0] === 'sign-zxp') return { zxpVerified: true };
+  if (ids[0] === 'sign-zxp') {
+    return {
+      zxpCertificateFingerprint: 'f'.repeat(64),
+      zxpPayloadSha256: SHA_A,
+      zxpVerified: true,
+    };
+  }
   if (ids[0] === 'build-dmg') {
     return {
       certificateFingerprint: 'd'.repeat(64),
@@ -59,7 +71,7 @@ function chainedSlice(platform, ids, identity = identityFor(platform, ids)) {
 test('mac Phase 0 plan signs inward to outward', () => {
   assert.deepEqual(buildSigningPlan('macos-arm64').steps.map((step) => step.id), [
     'sign-helper', 'sign-xpc', 'sign-addon', 'sign-launcher',
-    'verify-nested', 'sign-zxp', 'verify-zxp', 'build-dmg',
+    'verify-nested', 'freeze-signed-manifests', 'sign-zxp', 'verify-zxp', 'build-dmg',
     'sign-dmg', 'notarize-dmg', 'staple-dmg', 'verify-gatekeeper',
   ]);
 });
@@ -67,8 +79,20 @@ test('mac Phase 0 plan signs inward to outward', () => {
 test('windows Phase 0 plan signs every shipped PE before the ZXP', () => {
   assert.deepEqual(buildSigningPlan('windows-x64').steps.map((step) => step.id), [
     'sign-helper', 'sign-addon', 'sign-launcher',
-    'verify-authenticode', 'sign-zxp', 'verify-zxp',
+    'verify-authenticode', 'freeze-signed-manifests', 'sign-zxp', 'verify-zxp',
   ]);
+});
+
+test('manifest freezing is the only reviewed post-native in-tree mutation', () => {
+  for (const platform of ['macos-arm64', 'windows-x64']) {
+    const step = buildSigningPlan(platform).steps.find(
+      (candidate) => candidate.id === 'freeze-signed-manifests',
+    );
+    assert.deepEqual(step.mutates, [
+      `platform/${platform}/helper-manifest.json`,
+      'bundle-manifest.json',
+    ]);
+  }
 });
 
 test('reserved XPC and addon slots cannot claim a mutation', () => {
@@ -237,10 +261,13 @@ test('ZXP signer failures never expose credential arguments', async (t) => {
       platform: 'macos-arm64',
       out: path.join(root, 'out.zxp'),
       evidence: path.join(root, 'zxp-evidence.json'),
+      sourceStageSha256: SHA_A,
       environment: {
         AE_MCP_ZXP_SIGN_CMD: command,
+        AE_MCP_ZXP_SIGN_CMD_SHA256: sha256Bytes('fixture'),
         AE_MCP_ZXP_CERT_PATH: certificate,
         AE_MCP_ZXP_CERT_PASSWORD: sentinel,
+        AE_MCP_ZXP_CERT_FINGERPRINT_SHA256: 'f'.repeat(64),
       },
       execFileImpl: async (_file, args) => {
         throw new Error(`simulated failure ${args.join(' ')}`);
@@ -252,6 +279,94 @@ test('ZXP signer failures never expose credential arguments', async (t) => {
       return true;
     },
   );
+});
+
+test('ZXP signing evidence records the independently audited payload and certificate', async (t) => {
+  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ae-mcp-zxp-audit-evidence-'));
+  t.after(() => fs.promises.rm(root, { recursive: true, force: true }));
+  const signingRoot = path.join(root, 'signed');
+  const command = path.join(root, 'ZXPSignCmd');
+  const certificate = path.join(root, 'certificate.p12');
+  const out = path.join(root, 'out.zxp');
+  const evidence = path.join(root, 'zxp-evidence.json');
+  const fingerprint = 'f'.repeat(64);
+  await fs.promises.mkdir(signingRoot);
+  await fs.promises.writeFile(path.join(signingRoot, 'bundle-manifest.json'), '{}\n');
+  await fs.promises.writeFile(command, 'fixture');
+  await fs.promises.writeFile(certificate, 'fixture');
+  const payloadSha256 = await sha256Directory(signingRoot);
+  let auditCalls = 0;
+  const result = await buildZxp({
+    root: signingRoot,
+    platform: 'macos-arm64',
+    out,
+    evidence,
+    sourceStageSha256: SHA_A,
+    environment: {
+      AE_MCP_ZXP_SIGN_CMD: command,
+      AE_MCP_ZXP_SIGN_CMD_SHA256: sha256Bytes('fixture'),
+      AE_MCP_ZXP_CERT_PATH: certificate,
+      AE_MCP_ZXP_CERT_PASSWORD: 'fixture-password',
+      AE_MCP_ZXP_CERT_FINGERPRINT_SHA256: fingerprint,
+    },
+    execFileImpl: async (_file, args) => {
+      if (args[0] === '-sign') await fs.promises.writeFile(out, 'signed-zxp-fixture');
+    },
+    auditZxpPayloadImpl: async (options) => {
+      auditCalls += 1;
+      assert.equal(options.signingRoot, signingRoot);
+      assert.equal(options.zxpPath, out);
+      assert.equal(options.expectedCertificateFingerprint, fingerprint);
+      return { certificateFingerprint: fingerprint, payloadSha256 };
+    },
+  });
+  assert.equal(auditCalls, 1);
+  assert.deepEqual(result.verifiedIdentity, {
+    zxpCertificateFingerprint: fingerprint,
+    zxpPayloadSha256: payloadSha256,
+    zxpVerified: true,
+  });
+  assert.equal(result.sourceStageSha256, SHA_A);
+});
+
+test('ZXP signing refuses a changed or symbolic signer before credentials are used', async (t) => {
+  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ae-mcp-zxp-tool-pin-'));
+  t.after(() => fs.promises.rm(root, { recursive: true, force: true }));
+  const signingRoot = path.join(root, 'signed');
+  const command = path.join(root, 'ZXPSignCmd');
+  const commandAlias = path.join(root, 'ZXPSignCmd-alias');
+  const certificate = path.join(root, 'certificate.p12');
+  await fs.promises.mkdir(signingRoot);
+  await fs.promises.writeFile(path.join(signingRoot, 'bundle-manifest.json'), '{}\n');
+  await fs.promises.writeFile(command, 'fixture');
+  await fs.promises.writeFile(certificate, 'fixture');
+  await fs.promises.symlink(command, commandAlias);
+  let executions = 0;
+  const input = {
+    root: signingRoot,
+    platform: 'macos-arm64',
+    out: path.join(root, 'out.zxp'),
+    evidence: path.join(root, 'zxp-evidence.json'),
+    sourceStageSha256: SHA_A,
+    environment: {
+      AE_MCP_ZXP_SIGN_CMD: command,
+      AE_MCP_ZXP_SIGN_CMD_SHA256: '0'.repeat(64),
+      AE_MCP_ZXP_CERT_PATH: certificate,
+      AE_MCP_ZXP_CERT_PASSWORD: 'fixture-password',
+      AE_MCP_ZXP_CERT_FINGERPRINT_SHA256: 'f'.repeat(64),
+    },
+    execFileImpl: async () => { executions += 1; },
+  };
+  await assert.rejects(buildZxp(input), { code: 'SIGNING_ZXP_TOOL_MISMATCH' });
+  await assert.rejects(buildZxp({
+    ...input,
+    environment: {
+      ...input.environment,
+      AE_MCP_ZXP_SIGN_CMD: commandAlias,
+      AE_MCP_ZXP_SIGN_CMD_SHA256: sha256Bytes('fixture'),
+    },
+  }), { code: 'SIGNING_ZXP_TOOL_INVALID' });
+  assert.equal(executions, 0);
 });
 
 test('reusable entry points cannot stage, release, publish, or require native addons', async () => {
@@ -284,5 +399,34 @@ test('Phase 0 runners verify source, copied work, and unchanged source around si
     assert.ok(copyOffset < verificationOffsets[1], `${relative} verifies the copied work`);
     assert.ok(verificationOffsets[1] < signingOffset, `${relative} verifies work before signing`);
     assert.ok(signingOffset < verificationOffsets[2], `${relative} re-verifies source after signing`);
+  }
+});
+
+test('macOS notarization consumes the reviewed ephemeral keychain explicitly', async () => {
+  const source = await fs.promises.readFile('scripts/package/package-macos-dmg.sh', 'utf8');
+  assert.match(source, /AE_MCP_NOTARY_KEYCHAIN_PATH/);
+  assert.match(
+    source,
+    /notarytool submit[\s\S]*--keychain-profile[\s\S]*--keychain[\s\S]*AE_MCP_NOTARY_KEYCHAIN_PATH/,
+  );
+});
+
+test('native signing scripts require absolute tools and protected signer identities', async () => {
+  const windows = await fs.promises.readFile('scripts/package/sign-windows-nested.ps1', 'utf8');
+  assert.match(windows, /AE_MCP_WINDOWS_SIGNTOOL_PATH/);
+  assert.match(windows, /IsPathFullyQualified\(\$env:AE_MCP_WINDOWS_SIGNTOOL_PATH\)/);
+  assert.match(windows, /& \$env:AE_MCP_WINDOWS_SIGNTOOL_PATH (?:sign|verify)/);
+  assert.doesNotMatch(windows, /& signtool\.exe/);
+  assert.match(windows, /\$thumbprint -ne \$env:AE_MCP_WINDOWS_SIGNING_CERT_SHA1/);
+
+  for (const relative of [
+    'scripts/package/sign-macos-nested.sh',
+    'scripts/package/package-macos-dmg.sh',
+  ]) {
+    const source = await fs.promises.readFile(relative, 'utf8');
+    assert.match(source, /AE_MCP_APPLE_CERT_FINGERPRINT_SHA256/, relative);
+    assert.match(source, /AE_MCP_APPLE_TEAM_ID/, relative);
+    assert.match(source, /certificate_fingerprint.*AE_MCP_APPLE_CERT_FINGERPRINT_SHA256|AE_MCP_APPLE_CERT_FINGERPRINT_SHA256.*certificate_fingerprint/s, relative);
+    assert.match(source, /team_id.*AE_MCP_APPLE_TEAM_ID|AE_MCP_APPLE_TEAM_ID.*team_id/s, relative);
   }
 });

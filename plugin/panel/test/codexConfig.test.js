@@ -13,14 +13,18 @@ function fakeFs(files) {
   };
 }
 
+function platform(fsImpl, home = 'C:\\Users\\test') {
+  return { paths: { home, join: (parts) => parts.join('\\') }, fs: fsImpl };
+}
+
 test('readCodexCliConfig returns null when config.toml is missing', () => {
   const fsImpl = fakeFs({});
-  assert.equal(readCodexCliConfig({ env: { USERPROFILE: 'C:\\Users\\test' }, fsImpl }), null);
+  assert.equal(readCodexCliConfig({ platform: platform(fsImpl), fsImpl }), null);
 });
 
 test('readCodexCliConfig returns null when home dir cannot be resolved', () => {
   const fsImpl = fakeFs({ 'C:\\Users\\test\\.codex\\config.toml': 'model = "gpt-5.5"' });
-  assert.equal(readCodexCliConfig({ env: {}, fsImpl }), null);
+  assert.equal(readCodexCliConfig({ platform: platform(fsImpl, ''), fsImpl }), null);
 });
 
 test('readCodexCliConfig parses top-level model/model_provider and matching provider section', () => {
@@ -35,7 +39,7 @@ test('readCodexCliConfig parses top-level model/model_provider and matching prov
     'wire_api = "responses"',
   ].join('\n');
   const fsImpl = fakeFs({ 'C:\\Users\\test\\.codex\\config.toml': toml });
-  const result = readCodexCliConfig({ env: { USERPROFILE: 'C:\\Users\\test' }, fsImpl });
+  const result = readCodexCliConfig({ platform: platform(fsImpl), fsImpl });
   assert.deepEqual(result, {
     model: 'gpt-5.5',
     providerId: 'mediastorm_glm',
@@ -51,7 +55,7 @@ test('readCodexCliConfig parses top-level model/model_provider and matching prov
 test('readCodexCliConfig omits provider when the referenced section is missing', () => {
   const toml = 'model = "gpt-5.5"\nmodel_provider = "ghost"\n';
   const fsImpl = fakeFs({ 'C:\\Users\\test\\.codex\\config.toml': toml });
-  const result = readCodexCliConfig({ env: { USERPROFILE: 'C:\\Users\\test' }, fsImpl });
+  const result = readCodexCliConfig({ platform: platform(fsImpl), fsImpl });
   assert.deepEqual(result, { model: 'gpt-5.5', providerId: 'ghost', provider: null });
 });
 
@@ -70,7 +74,7 @@ test('readCodexCliConfig ignores comments and unrelated sections', () => {
     'wire_api = "responses"',
   ].join('\n');
   const fsImpl = fakeFs({ 'C:\\Users\\test\\.codex\\config.toml': toml });
-  const result = readCodexCliConfig({ env: { USERPROFILE: 'C:\\Users\\test' }, fsImpl });
+  const result = readCodexCliConfig({ platform: platform(fsImpl), fsImpl });
   assert.equal(result.providerId, 'mediastorm_glm');
   assert.equal(result.provider.baseUrl, 'https://api.example.com/v1');
 });
@@ -80,13 +84,13 @@ test('readCodexCliConfig returns null on malformed/unparseable content', () => {
   // making readFileSync return non-string content that breaks parsing logic
   // — the parser must guard this and return null rather than throw.
   const fsImpl = { readFileSync: () => { throw new Error('boom'); } };
-  assert.equal(readCodexCliConfig({ env: { USERPROFILE: 'C:\\Users\\test' }, fsImpl }), null);
+  assert.equal(readCodexCliConfig({ platform: platform(fsImpl), fsImpl }), null);
 });
 
 test('readCodexCliConfig returns null when there is no model_provider and no model', () => {
   const toml = '[some_other_section]\nfoo = "bar"\n';
   const fsImpl = fakeFs({ 'C:\\Users\\test\\.codex\\config.toml': toml });
-  assert.equal(readCodexCliConfig({ env: { USERPROFILE: 'C:\\Users\\test' }, fsImpl }), null);
+  assert.equal(readCodexCliConfig({ platform: platform(fsImpl), fsImpl }), null);
 });
 
 test('resolveCodexProviderApiKey prefers env var, then stored key, then empty', () => {

@@ -7,15 +7,6 @@
 // TOML implementation. See module-level comment blocks near the parser for
 // exactly what is (and is not) supported.
 
-function getCepRequire() {
-  if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-    return globalThis.window.cep_node.require;
-  }
-  if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-  if (globalThis.require) return globalThis.require;
-  throw new Error('CEP Node require is unavailable');
-}
-
 function stripInlineComment(line) {
   // Simple heuristic: a `#` that appears after the value's closing quote (or
   // anywhere outside of an open string) starts a comment. We don't attempt
@@ -51,6 +42,7 @@ function unquote(value) {
 // Does NOT support: arrays, inline tables, multi-line strings/literals,
 // escaped-quote edge cases beyond a naive backslash check, dotted keys
 // within a single line (`a.b = 1`), or non-TOML-standard shapes.
+import { createPlatformAdapter } from './platform/index.js';
 function parseToml(text) {
   const root = {};
   const sections = {};
@@ -75,14 +67,15 @@ function parseToml(text) {
   return { root, sections };
 }
 
-export function readCodexCliConfig({ env = {}, fsImpl } = {}) {
-  const home = env.USERPROFILE || env.HOME || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : '');
+export function readCodexCliConfig({ platform, fsImpl } = {}) {
+  const adapter = platform || createPlatformAdapter();
+  const home = adapter.paths.home;
   if (!home) return null;
-  let fs;
-  try { fs = fsImpl || getCepRequire()('fs'); } catch (e) { return null; }
+  const fs = fsImpl || adapter.fs;
+  if (!fs) return null;
   let text;
   try {
-    text = fs.readFileSync(String(home).replace(/[\\/]+$/, '') + '\\.codex\\config.toml', 'utf8');
+    text = fs.readFileSync(adapter.paths.join([home, '.codex', 'config.toml']), 'utf8');
   } catch (e) {
     return null;
   }

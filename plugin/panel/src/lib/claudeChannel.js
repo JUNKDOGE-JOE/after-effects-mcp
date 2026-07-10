@@ -4,16 +4,22 @@
 // 'api' -> inject ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN from the chosen
 //   provider entry (Agent SDK natively supports third-party endpoints, so
 //   the panel keeps full agentic capabilities on relays).
+function deleteEnvironmentKey(environment, name) {
+  const normalized = name.toUpperCase();
+  for (const key of Object.keys(environment)) {
+    if (key.toUpperCase() === normalized) delete environment[key];
+  }
+}
+
 export function claudeChannelEnv(baseEnv = {}, { channel = 'subscription', provider = null } = {}) {
   const env = { ...baseEnv };
-  delete env.ANTHROPIC_API_KEY;
+  deleteEnvironmentKey(env, 'ANTHROPIC_API_KEY');
+  deleteEnvironmentKey(env, 'ANTHROPIC_BASE_URL');
+  deleteEnvironmentKey(env, 'ANTHROPIC_AUTH_TOKEN');
   if (channel === 'api' && provider && provider.baseUrl) {
     env.ANTHROPIC_BASE_URL = String(provider.baseUrl);
     if (provider.apiKey) env.ANTHROPIC_AUTH_TOKEN = String(provider.apiKey);
-    else delete env.ANTHROPIC_AUTH_TOKEN;
     return env;
   }
-  delete env.ANTHROPIC_BASE_URL;
-  delete env.ANTHROPIC_AUTH_TOKEN;
   return env;
 }

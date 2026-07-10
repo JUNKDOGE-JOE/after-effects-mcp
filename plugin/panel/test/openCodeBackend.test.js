@@ -141,15 +141,18 @@ function makeBackend(options = {}) {
   const spawned = makeSpawn();
   const fetched = makeFetch();
   const fsImpl = makeFs();
+  const platform = {
+    paths: { tempRoot: 'C:\\tmp', join: (parts) => parts.join('\\') },
+    fs: fsImpl,
+    completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
+    resolveExecutable: async () => ({ ok: true, id: 'opencode', path: 'C:\\Tools\\opencode.exe', argsPrefix: [], source: 'path', version: '1.0.0', arch: 'x64' }),
+    spawn: (executable, args, spawnOptions) => spawned.spawn(executable.path, [...(executable.argsPrefix || []), ...args], spawnOptions),
+  };
   const backend = createOpenCodeBackend({
-    spawnImpl: spawned.spawn,
+    platform,
     fetchImpl: fetched.fetchImpl,
     getPort: async () => 4567,
     fsImpl,
-    osImpl: { tmpdir: () => 'C:\\tmp' },
-    pathImpl: {
-      join: (...parts) => parts.join('\\'),
-    },
     tempDirName: () => 'ae-opencode-test',
     getMcpSpec: async () => ({ command: 'ae-mcp', args: ['--stdio'], env: { A: 'B' } }),
     getToolMeta: async () => TOOL_META,
@@ -168,9 +171,9 @@ test('createOpenCodeBackend starts opencode serve, writes isolated ae MCP config
   await flush();
 
   assert.equal(spawned.calls.length, 1);
-  assert.equal(spawned.calls[0].command, 'opencode');
+  assert.equal(spawned.calls[0].command, 'C:\\Tools\\opencode.exe');
   assert.deepEqual(spawned.calls[0].args, ['serve', '--port', '4567']);
-  assert.equal(spawned.calls[0].options.shell, true);
+  assert.equal(spawned.calls[0].options.shell, undefined);
   assert.equal(spawned.calls[0].options.windowsHide, true);
   assert.equal(spawned.calls[0].options.env.XDG_CONFIG_HOME, 'C:\\tmp\\ae-opencode-test');
 

@@ -10,6 +10,7 @@ import {
   encodePythonStandaloneEvidenceContent,
   TCL_LIBRARY_PATHS_OVERLAY_V1,
 } from '../lib/python-standalone-evidence.mjs';
+import { canonicalJson } from '../lib/manifest.mjs';
 
 const SHA256 = 'a'.repeat(64);
 
@@ -628,6 +629,10 @@ test('runtime inventory records every real component with a known license and SH
   assert.deepEqual(
     JSON.parse(await fs.promises.readFile(path.join(fixture.runtimeRoot, 'runtime-manifest.json'), 'utf8')),
     first,
+  );
+  assert.equal(
+    await fs.promises.readFile(path.join(fixture.runtimeRoot, 'runtime-manifest.json'), 'utf8'),
+    canonicalJson(first),
   );
 });
 

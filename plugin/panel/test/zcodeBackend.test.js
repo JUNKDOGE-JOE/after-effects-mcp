@@ -82,8 +82,24 @@ const TOOL_META = {
 function makeBackend(options = {}) {
   const events = [];
   const spawned = makeSpawn();
+  const platform = options.platform || {
+    id: 'windows-x64',
+    paths: {
+      home: 'C:\\Users\\test',
+      tempRoot: 'C:\\tmp',
+      join: (parts) => parts.join('\\'),
+      resolve: (parts) => parts.join('\\').replace(/\//g, '\\'),
+      dirname: (value) => String(value).replace(/[\\/][^\\/]+$/, ''),
+    },
+    fs: { readFileSync: () => { throw new Error('ENOENT'); } },
+    completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
+    resolveExecutable: async (id) => id === 'zcode'
+      ? { ok: true, id, path: 'C:\\Node\\node.exe', argsPrefix: ['C:\\ZCode\\zcode.cjs'], source: 'standard', version: '1.0.0', arch: 'x64' }
+      : { ok: false, id, code: 'NOT_FOUND', attempts: [] },
+    spawn: (executable, args, spawnOptions) => spawned.spawn(executable.path, [...(executable.argsPrefix || []), ...args], spawnOptions),
+  };
   const backend = createZcodeBackend({
-    spawnImpl: spawned.spawn,
+    platform,
     getModel: () => 'glm-5.2',
     getPermissionMode: () => 'manual',
     getToolMeta: async () => TOOL_META,
@@ -96,8 +112,6 @@ function makeBackend(options = {}) {
       LOCALAPPDATA: 'C:\\Users\\test\\AppData\\Local',
       AE_MCP_PANEL_EXT_ROOT: 'C:\\Repo\\plugin\\panel',
     },
-    resolveCli: async () => ({ ok: true, cliPath: 'C:\\ZCode\\zcode.cjs' }),
-    resolveNode: async () => ({ ok: true, nodePath: 'C:\\Node\\node.exe', version: 'v24.0.0' }),
     ...options,
   });
   return { backend, events, spawned };
@@ -250,23 +264,24 @@ test('interaction/requestProviderRuntimeHeaders reports the desktop OAuth plan b
   assert.match(reply.result.errorMessage, /captcha/i);
 });
 
-test('interaction/requestProviderRuntimeHeaders reports provider header failures without method errors', async () => {
+test('interaction/requestProviderRuntimeHeaders never reads unsupported desktop credentials', async () => {
+  let credentialReads = 0;
   const { backend, spawned } = makeBackend({
-    getModel: () => 'builtin:bigmodel-start-plan/GLM-5.2',
+    getModel: () => 'custom-provider/model-1',
     readDesktopRuntimeModel: () => ({
-      revision: 'desktop-v2:builtin:bigmodel-start-plan',
+      revision: 'desktop-v2:custom-provider',
       generatedAt: 1,
-      model: { providerId: 'builtin:bigmodel-start-plan', modelId: 'GLM-5.2' },
+      model: { providerId: 'custom-provider', modelId: 'model-1' },
       provider: {
-        providerId: 'builtin:bigmodel-start-plan',
-        kind: 'anthropic',
-        apiFormat: 'anthropic-messages',
+        providerId: 'custom-provider',
+        kind: 'openai-compatible',
+        apiFormat: 'openai-responses',
         source: 'custom',
-        baseURL: 'https://zcode.z.ai/api/v1/zcode-plan/anthropic',
-        models: [{ modelId: 'GLM-5.2' }],
+        baseURL: 'https://api.example.com/v1',
+        models: [{ modelId: 'model-1' }],
       },
     }),
-    readOAuthAccessToken: () => '',
+    readOAuthAccessToken: () => { credentialReads += 1; return 'must-not-be-read'; },
   });
   const { proc } = await startTurn(backend, spawned, 'hello');
 
@@ -277,8 +292,8 @@ test('interaction/requestProviderRuntimeHeaders reports provider header failures
       requestId: 'runtime_headers_2',
       sessionId: 'sess_test',
       workspace: { workspacePath: 'C:\\Repo\\plugin\\panel', workspaceKey: 'C:\\Repo\\plugin\\panel' },
-      modelRef: { providerId: 'builtin:bigmodel-start-plan', modelId: 'GLM-5.2' },
-      providerId: 'builtin:bigmodel-start-plan',
+      modelRef: { providerId: 'custom-provider', modelId: 'model-1' },
+      providerId: 'custom-provider',
       reason: 'model-request',
     },
   });
@@ -288,6 +303,7 @@ test('interaction/requestProviderRuntimeHeaders reports provider header failures
   assert.equal(reply.error, undefined);
   assert.equal(reply.result.headersApplied, false);
   assert.match(reply.result.errorMessage, /runtime headers/i);
+  assert.equal(credentialReads, 0);
 });
 
 test('zcodeModelFromDesktopConfig picks the enabled coding-plan provider from v2 settings', () => {
@@ -950,6 +966,14 @@ function fakeFs(files) {
   };
 }
 
+function zcodePlatform(fsImpl, home = 'C:\\Users\\me') {
+  return {
+    paths: { home, join: (parts) => parts.join('\\') },
+    fs: fsImpl,
+    completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
+  };
+}
+
 test('mergeZcodeConfigs lets CLI providers override desktop providers of the same id', () => {
   const merged = mergeZcodeConfigs({
     cliConfig: { provider: { shared: { kind: 'openai-compatible', options: { baseURL: 'https://cli' } }, cliOnly: {} } },
@@ -1027,13 +1051,14 @@ test('zcodeRuntimeModelFromDesktopConfig maps openai-compatible dialect response
 });
 
 test('readZcodeDesktopModel merges ~/.zcode/cli/config.json and prefers its top-level model', () => {
-  const env = { USERPROFILE: 'C:\\Users\\me' };
+  const env = {};
   const files = {
     'C:\\Users\\me\\.zcode\\cli\\config.json': JSON.stringify({ provider: { mediastorm_glm: CLI_PROVIDER }, model: 'mediastorm_glm/glm-5.2' }),
     'C:\\Users\\me\\.zcode\\v2\\config.json': JSON.stringify({ provider: { 'builtin:zai-start-plan': { enabled: true, models: { 'GLM-5.2': {} } } } }),
     'C:\\Users\\me\\.zcode\\v2\\setting.json': JSON.stringify({ providerFamilyDomain: 'zai' }),
   };
-  assert.equal(readZcodeDesktopModel({ env, fsImpl: fakeFs(files) }), 'mediastorm_glm/glm-5.2');
+  const fsImpl = fakeFs(files);
+  assert.equal(readZcodeDesktopModel({ env, fsImpl, platform: zcodePlatform(fsImpl) }), 'mediastorm_glm/glm-5.2');
 });
 
 // End-to-end regression for the "settings page shows CLI model X, but Chat
@@ -1047,7 +1072,7 @@ test('readZcodeDesktopModel merges ~/.zcode/cli/config.json and prefers its top-
 // non-legacy '<provider>/<model>' ref -- so the wrong (builtin) model shipped
 // in the session/create request.
 test('CLI config X + stale stored model Y reconcile to X, and X is what session/create actually sends', async () => {
-  const env = { USERPROFILE: 'C:\\Users\\me', PATH: 'C:\\Node', TEMP: 'C:\\tmp', LOCALAPPDATA: 'C:\\Users\\test\\AppData\\Local', AE_MCP_PANEL_EXT_ROOT: 'C:\\Repo\\plugin\\panel' };
+  const env = { PATH: 'C:\\Node', TEMP: 'C:\\tmp', AE_MCP_PANEL_EXT_ROOT: 'C:\\Repo\\plugin\\panel' };
   const files = {
     'C:\\Users\\me\\.zcode\\cli\\config.json': JSON.stringify({
       provider: { mediastorm_glm: CLI_PROVIDER },
@@ -1060,7 +1085,8 @@ test('CLI config X + stale stored model Y reconcile to X, and X is what session/
   // 1. Settings-page display source: the descriptor built while CLI
   //    inheritance is active (no live session yet) must be built around the
   //    CLI-configured model, not the static/builtin list.
-  const descriptor = zcodeDynamicDescriptor({ env, fsImpl });
+  const configPlatform = zcodePlatform(fsImpl);
+  const descriptor = zcodeDynamicDescriptor({ env, fsImpl, platform: configPlatform });
   assert.equal(descriptor.defaultModelId, cliModel);
   assert.deepEqual(descriptor.models.map((m) => m.id), [cliModel]);
 
@@ -1076,7 +1102,7 @@ test('CLI config X + stale stored model Y reconcile to X, and X is what session/
   //    send-time behavior, not just descriptor bookkeeping.
   const { backend, spawned } = makeBackend({
     getModel: () => reconciled,
-    readDesktopModel: () => readZcodeDesktopModel({ env, fsImpl }),
+    readDesktopModel: () => readZcodeDesktopModel({ env, fsImpl, platform: configPlatform }),
     env,
   });
   backend.sendUser('hello');
@@ -1090,12 +1116,14 @@ test('CLI config X + stale stored model Y reconcile to X, and X is what session/
 });
 
 test('summarizeZcodeConfig reports cli/desktop/start-plan channel facts', () => {
-  const env = { USERPROFILE: 'C:\\Users\\me' };
+  const env = {};
   const files = {
     'C:\\Users\\me\\.zcode\\cli\\config.json': JSON.stringify({ provider: { mediastorm_glm: CLI_PROVIDER }, model: 'mediastorm_glm/glm-5.2' }),
     'C:\\Users\\me\\.zcode\\v2\\config.json': JSON.stringify({ provider: { 'builtin:zai-start-plan': { enabled: true, models: { 'GLM-5.2': {} } } } }),
   };
-  const bare = summarizeZcodeConfig({ env, fsImpl: fakeFs(files) });
+  const fsImpl = fakeFs(files);
+  const configPlatform = zcodePlatform(fsImpl);
+  const bare = summarizeZcodeConfig({ env, fsImpl, platform: configPlatform });
   assert.equal(bare.cli.providerId, 'mediastorm_glm');
   assert.equal(bare.cli.model, 'mediastorm_glm/glm-5.2');
   assert.equal(bare.cli.apiKeyEnv, 'MEDIASTORM_GLM_API_KEY');
@@ -1103,10 +1131,10 @@ test('summarizeZcodeConfig reports cli/desktop/start-plan channel facts', () => 
   assert.equal(bare.desktop.providerId, 'builtin:zai-start-plan');
   assert.equal(bare.startPlan.providerId, 'builtin:zai-start-plan');
   assert.equal(bare.startPlan.hasCredential, false);
-  const withKey = summarizeZcodeConfig({ env: { ...env, MEDIASTORM_GLM_API_KEY: 'k' }, fsImpl: fakeFs(files) });
+  const withKey = summarizeZcodeConfig({ env: { ...env, MEDIASTORM_GLM_API_KEY: 'k' }, fsImpl, platform: configPlatform });
   assert.equal(withKey.cli.hasCredential, true);
   assert.equal(withKey.cli.keySource, 'env');
-  const withStored = summarizeZcodeConfig({ env, fsImpl: fakeFs(files), storedKey: 'panel-key' });
+  const withStored = summarizeZcodeConfig({ env, fsImpl, platform: configPlatform, storedKey: 'panel-key' });
   assert.equal(withStored.cli.hasCredential, true);
   assert.equal(withStored.cli.keySource, 'panel');
 });
@@ -1115,23 +1143,25 @@ test('summarizeZcodeConfig reports cli/desktop/start-plan channel facts', () => 
 // panel needs the CLI provider's baseUrl + protocol kind to call
 // probeProviderModels (cep/modelProbe.js) against /v1/models.
 test('summarizeZcodeConfig exposes cli.baseUrl and cli.protocol for probe-driven model discovery', () => {
-  const env = { USERPROFILE: 'C:\\Users\\me' };
+  const env = {};
   const files = {
     'C:\\Users\\me\\.zcode\\cli\\config.json': JSON.stringify({ provider: { mediastorm_glm: CLI_PROVIDER }, model: 'mediastorm_glm/glm-5.2' }),
     'C:\\Users\\me\\.zcode\\v2\\config.json': JSON.stringify({ provider: {} }),
   };
-  const summary = summarizeZcodeConfig({ env, fsImpl: fakeFs(files) });
+  const fsImpl = fakeFs(files);
+  const summary = summarizeZcodeConfig({ env, fsImpl, platform: zcodePlatform(fsImpl) });
   assert.equal(summary.cli.baseUrl, 'https://api.example.com/v1');
   assert.equal(summary.cli.protocol, 'openai-compatible');
 });
 
 test('summarizeZcodeConfig omits cli.baseUrl when the CLI provider has none configured', () => {
-  const env = { USERPROFILE: 'C:\\Users\\me' };
+  const env = {};
   const files = {
     'C:\\Users\\me\\.zcode\\cli\\config.json': JSON.stringify({ provider: { anthro: { kind: 'anthropic' } }, model: 'anthro/claude' }),
     'C:\\Users\\me\\.zcode\\v2\\config.json': JSON.stringify({ provider: {} }),
   };
-  const summary = summarizeZcodeConfig({ env, fsImpl: fakeFs(files) });
+  const fsImpl = fakeFs(files);
+  const summary = summarizeZcodeConfig({ env, fsImpl, platform: zcodePlatform(fsImpl) });
   assert.equal(summary.cli.baseUrl, '');
   assert.equal(summary.cli.protocol, 'anthropic');
 });

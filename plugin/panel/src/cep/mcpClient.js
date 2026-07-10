@@ -1,64 +1,19 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
 import { expertGuidanceEnv } from './externalClients.js';
+import { createPlatformAdapter } from './platform/index.js';
 
 const DEFAULT_TIMEOUT_MS = 30000;
 const MCP_PROTOCOL_VERSION = '2025-06-18';
-export const PANEL_VERSION = '0.9.0';
+export const PANEL_VERSION = '0.9.1';
 
-function getCepRequire() {
-  if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-    return globalThis.window.cep_node.require;
-  }
-  if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-  if (globalThis.require) return globalThis.require;
-  throw new Error('CEP Node require is unavailable');
-}
+export function findProjectRoot({ extRoot, repoRoot, fsImpl, platform }) {
+  const adapter = platform || createPlatformAdapter();
+  if (repoRoot && fsImpl.existsSync(adapter.paths.join([repoRoot, 'pyproject.toml']))) return adapter.paths.resolve([repoRoot]);
 
-function getCepEnv() {
-  return (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env) || {};
-}
-
-function normalizeFsPath(value) {
-  let text = String(value || '').replace(/\//g, '\\');
-  text = text.replace(/\\+$/, '');
-  return text;
-}
-
-function dirname(value) {
-  const normalized = normalizeFsPath(value);
-  const index = normalized.lastIndexOf('\\');
-  if (index <= 0) return '';
-  return normalized.slice(0, index);
-}
-
-function joinPath(base, leaf) {
-  return normalizeFsPath(base) + '\\' + leaf;
-}
-
-function firstWhereHit(stdout) {
-  return String(stdout || '').split(/\r?\n/).map((line) => line.trim()).find(Boolean) || '';
-}
-
-function defaultWhereImpl() {
-  const childProcess = getCepRequire()('child_process');
-  return new Promise((resolve) => {
-    childProcess.execFile('where', ['ae-mcp'], { windowsHide: true }, (err, stdout) => {
-      resolve(err ? '' : stdout);
-    });
-  });
-}
-
-function defaultFs() {
-  return getCepRequire()('fs');
-}
-
-export function findProjectRoot({ extRoot, repoRoot, fsImpl }) {
-  if (repoRoot && fsImpl.existsSync(joinPath(repoRoot, 'pyproject.toml'))) return normalizeFsPath(repoRoot);
-
-  let current = normalizeFsPath(extRoot);
+  let current = adapter.paths.resolve([extRoot]);
   while (current) {
-    if (fsImpl.existsSync(joinPath(current, 'pyproject.toml'))) return current;
-    const parent = dirname(current);
+    if (fsImpl.existsSync(adapter.paths.join([current, 'pyproject.toml']))) return current;
+    const parent = adapter.paths.dirname(current);
     if (!parent || parent === current) break;
     current = parent;
   }
@@ -67,31 +22,14 @@ export function findProjectRoot({ extRoot, repoRoot, fsImpl }) {
 
 export async function resolveMcpCommand({
   explicitPath,
-  whereImpl = defaultWhereImpl,
-  fsImpl,
-  envImpl = null,
-  extRoot = '',
-  repoRoot = '',
+  platform,
 } = {}) {
   const configured = String(explicitPath || '').trim();
   if (configured) return { command: configured, args: [], source: 'explicit' };
-
-  const found = firstWhereHit(await whereImpl('ae-mcp'));
-  if (found) return { command: found, args: [], source: 'where' };
-
-  const fs = fsImpl || defaultFs();
-  const profile = (envImpl || getCepEnv()).USERPROFILE || '';
-  if (profile) {
-    const shim = joinPath(joinPath(joinPath(normalizeFsPath(profile), '.local'), 'bin'), 'ae-mcp.exe');
-    if (fs.existsSync(shim)) return { command: shim, args: [], source: 'uv-tool' };
-  }
-
-  const projectRoot = findProjectRoot({ extRoot, repoRoot, fsImpl: fs });
-  if (projectRoot) {
-    return { command: 'uv', args: ['run', '--project', projectRoot, 'ae-mcp'], source: 'uv' };
-  }
-
-  throw new Error('Unable to find ae-mcp. Configure the ae-mcp executable path, add ae-mcp to PATH, or run from a checkout containing pyproject.toml for uv run --project.');
+  const adapter = platform || createPlatformAdapter();
+  const resolved = await adapter.resolveExecutable('ae-mcp');
+  if (resolved.ok) return { command: resolved.path, args: [...resolved.argsPrefix], source: resolved.source };
+  throw new Error('Unable to find ae-mcp. Repair the installed runtime launcher at ' + adapter.paths.launcher + '.');
 }
 
 export function _createRpc(stdinWrite, onLine, options = {}) {
@@ -157,6 +95,7 @@ export function _createRpc(stdinWrite, onLine, options = {}) {
 }
 
 export function createMcpClient({
+  platform,
   spawnImpl,
   resolveCommand = resolveMcpCommand,
   env,
@@ -182,11 +121,6 @@ export function createMcpClient({
     return { status, retryCount, error: lastError, tools };
   }
 
-  function getSpawn() {
-    if (spawnImpl) return spawnImpl;
-    return getCepRequire()('child_process').spawn;
-  }
-
   function attachBeforeUnload() {
     if (globalThis.window && globalThis.window.addEventListener) {
       globalThis.window.addEventListener('beforeunload', () => stop());
@@ -199,17 +133,24 @@ export function createMcpClient({
     stopped = false;
     status = 'starting';
     startPromise = (async () => {
-      const commandSpec = await resolveCommand({ extRoot, repoRoot });
-      const spawn = getSpawn();
-      const spawnEnv = Object.assign({}, getCepEnv(), env || {}, {
+      const adapter = platform || (!spawnImpl ? createPlatformAdapter() : null);
+      const commandSpec = await resolveCommand({ extRoot, repoRoot, platform: adapter || undefined });
+      const additions = {
         AE_MCP_BACKEND: 'ae-mcp',
         ...expertGuidanceEnv(getExpertGuidance()),
-      });
-      proc = spawn(commandSpec.command, commandSpec.args || [], {
+      };
+      const spawnEnv = adapter ? adapter.completeSpawnEnv(env || {}, additions) : Object.assign({}, env || {}, additions);
+      const options = {
         stdio: 'pipe',
         windowsHide: true,
         env: spawnEnv,
-      });
+      };
+      if (adapter) {
+        const executable = { ok: true, id: 'ae-mcp', path: commandSpec.command, argsPrefix: [], source: commandSpec.source || 'runtime', version: null, arch: null };
+        proc = adapter.spawn(executable, commandSpec.args || [], options);
+      } else {
+        proc = spawnImpl(commandSpec.command, commandSpec.args || [], { ...options, shell: false });
+      }
       rpc = _createRpc(
         (line) => proc.stdin.write(line),
         (handler) => proc.stdout.on('data', handler),

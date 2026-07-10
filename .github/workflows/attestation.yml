@@ -1,0 +1,1096 @@
+name: RC Attestation
+
+on:
+  issue_comment:
+    types: [created, edited, deleted]
+
+permissions:
+  actions: read
+  checks: write
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: rc-attestation-${{ github.event.issue.number }}-${{ github.event.comment.id }}
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  parse:
+    name: Parse trusted RC attestation event
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      candidate_sha: ${{ steps.parse.outputs.candidate_sha }}
+      target_macos: ${{ steps.parse.outputs.target_macos }}
+      target_windows: ${{ steps.parse.outputs.target_windows }}
+      validate_macos: ${{ steps.parse.outputs.validate_macos }}
+      validate_windows: ${{ steps.parse.outputs.validate_windows }}
+      author_allowed: ${{ steps.parse.outputs.author_allowed }}
+    steps:
+      - name: Checkout trusted default branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Parse event without exposing its payload
+        id: parse
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          ATTESTORS: ${{ vars.AE_MCP_RC_ATTESTORS }}
+        with:
+          script: |
+            const path = require('node:path');
+            const { pathToFileURL } = require('node:url');
+            const workspace = process.env.GITHUB_WORKSPACE;
+            const moduleUrl = (name) => pathToFileURL(
+              path.join(workspace, 'scripts', 'release', name),
+            ).href;
+            const { validateAttestation } = await import(moduleUrl('attestation.mjs'));
+            const { decodeAttestationComment } = await import(moduleUrl('comment-marker.mjs'));
+
+            const MARKER = '<!-- ae-mcp-rc-attestation:v1 -->';
+            const SHA = /^[a-f0-9]{40}$/;
+            const DECIMAL_ID = /^\d+$/;
+
+            function setNoTargets(candidateSha = '') {
+              core.setOutput('candidate_sha', candidateSha);
+              core.setOutput('target_macos', 'false');
+              core.setOutput('target_windows', 'false');
+              core.setOutput('validate_macos', 'false');
+              core.setOutput('validate_windows', 'false');
+              core.setOutput('author_allowed', 'false');
+            }
+
+            function decodedReport() {
+              if (context.payload.action === 'deleted') return null;
+              const body = String(context.payload.comment?.body || '');
+              const count = body.split(MARKER).length - 1;
+              if (count === 0) return null;
+              if (count !== 1) throw new Error('expected exactly one attestation marker');
+              const value = decodeAttestationComment(body);
+              if (Buffer.byteLength(JSON.stringify(value, null, 2)) > 48 * 1024) {
+                throw new Error('decoded attestation JSON is too large');
+              }
+              return value;
+            }
+
+            setNoTargets();
+            if (!context.payload.issue?.pull_request) return;
+            if (context.payload.repository?.default_branch !== 'main') {
+              throw new Error('trusted default branch must be main');
+            }
+
+            const gitResult = await exec.getExecOutput(
+              'git', ['rev-parse', 'origin/main'], { silent: true },
+            );
+            if (gitResult.exitCode !== 0) throw new Error('unable to resolve origin/main');
+            const candidateSha = gitResult.stdout.trim();
+            if (!SHA.test(candidateSha)) throw new Error('origin/main is not a full commit SHA');
+            const { data: branch } = await github.rest.repos.getBranch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch: 'main',
+            });
+            if (branch.protected !== true || branch.commit.sha !== candidateSha) {
+              throw new Error('candidate is not protected main HEAD');
+            }
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.issue.number,
+            });
+            if (pr.merged !== true || pr.base.ref !== 'main'
+                || pr.merge_commit_sha !== candidateSha) {
+              setNoTargets(candidateSha);
+              return;
+            }
+
+            const commentId = String(context.payload.comment?.id || '');
+            if (!DECIMAL_ID.test(commentId)) throw new Error('comment id is invalid');
+            let report = null;
+            try {
+              report = decodedReport();
+            } catch {
+              report = null;
+            }
+            const configuredAttestors = String(process.env.ATTESTORS || '')
+              .split(',').map((item) => item.trim().toLowerCase()).filter(Boolean);
+            if (configuredAttestors.some(
+              (item) => !/^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$/.test(item),
+            ) || new Set(configuredAttestors).size !== configuredAttestors.length) {
+              throw new Error('RC attestor allowlist is invalid');
+            }
+            const author = String(context.payload.comment?.user?.login || '').toLowerCase();
+            const authorized = new Set(configuredAttestors).has(author);
+            const reportIsEligible = authorized && report
+              && validateAttestation(report, { candidateSha }).length === 0;
+            const tombstone = ['edited', 'deleted'].includes(context.payload.action);
+            const validateMacos = reportIsEligible && report.platform === 'macos-arm64';
+            const validateWindows = reportIsEligible && report.platform === 'windows-x64';
+
+            core.setOutput('candidate_sha', candidateSha);
+            core.setOutput('target_macos', String(tombstone || validateMacos));
+            core.setOutput('target_windows', String(tombstone || validateWindows));
+            core.setOutput('validate_macos', String(validateMacos));
+            core.setOutput('validate_windows', String(validateWindows));
+            core.setOutput('author_allowed', String(authorized));
+
+  preinvalidate-macos:
+    name: Preinvalidate macOS RC attestation
+    needs: parse
+    if: ${{ needs.parse.outputs.target_macos == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      checks: write
+      contents: read
+    concurrency:
+      group: rc-attestation-state-${{ needs.parse.outputs.candidate_sha }}-macos-arm64
+      queue: max
+      cancel-in-progress: false
+    env:
+      PLATFORM: macos-arm64
+      CHECK_NAME: macos-rc-attestation
+      CANDIDATE_SHA: ${{ needs.parse.outputs.candidate_sha }}
+    steps: &preinvalidate_steps
+      - name: Checkout trusted default branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Immediately invalidate edited or deleted active evidence
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          script: |
+            const path = require('node:path');
+            const { pathToFileURL } = require('node:url');
+            const moduleUrl = (name) => pathToFileURL(path.join(
+              process.env.GITHUB_WORKSPACE, 'scripts', 'release', name,
+            )).href;
+            const { canonicalStringify } = await import(moduleUrl('artifact-manifest.mjs'));
+            const { buildActionsRunDetailsUrl } = await import(
+              moduleUrl('check-provenance.mjs')
+            );
+            const { listAllCheckRunsForRef } = await import(
+              moduleUrl('github-inventory.mjs')
+            );
+            const { reconcileAttestationState } = await import(
+              moduleUrl('verify-release-inputs.mjs')
+            );
+
+            const STATE_MARKER = 'ae-mcp-attestation-state:v1:';
+            const SHA = /^[a-f0-9]{40}$/;
+            const DIGEST = /^[a-f0-9]{64}$/;
+            const DECIMAL_ID = /^\d+$/;
+            const candidateSha = process.env.CANDIDATE_SHA;
+            const platform = process.env.PLATFORM;
+            const checkName = process.env.CHECK_NAME;
+            const externalId = `ae-mcp-rc:${candidateSha}:${platform}`;
+            const detailsUrl = buildActionsRunDetailsUrl({
+              serverUrl: process.env.GITHUB_SERVER_URL,
+              repository: process.env.GITHUB_REPOSITORY,
+              runId: process.env.GITHUB_RUN_ID,
+              runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            });
+
+            function decodeState(summary) {
+              const matches = [...String(summary || '').matchAll(
+                /<!-- ae-mcp-attestation-state:v1:([A-Za-z0-9_-]+) -->/g,
+              )];
+              if (matches.length !== 1
+                  || String(summary).split(STATE_MARKER).length !== 2) {
+                throw new Error('deterministic attestation state marker is missing or ambiguous');
+              }
+              const encoded = matches[0][1];
+              const bytes = Buffer.from(encoded, 'base64url');
+              if (bytes.length === 0 || bytes.length > 8192
+                  || bytes.toString('base64url') !== encoded) {
+                throw new Error('attestation state encoding is invalid');
+              }
+              const text = bytes.toString('utf8');
+              const state = JSON.parse(text);
+              const fields = [
+                'activeCommentId', 'activeRunAttempt', 'activeRunId', 'activeUpdatedAt',
+                'artifactId', 'artifactSha256',
+                'candidateRejected', 'candidateSha', 'conclusion', 'freshEvidenceAfter',
+                'platform', 'schemaVersion',
+              ];
+              if (JSON.stringify(Object.keys(state).sort()) !== JSON.stringify(fields.sort())
+                  || canonicalStringify(state).trimEnd() !== text
+                  || state.schemaVersion !== 1
+                  || state.candidateSha !== candidateSha
+                  || state.platform !== platform
+                  || !DECIMAL_ID.test(String(state.artifactId || ''))
+                  || !DIGEST.test(String(state.artifactSha256 || ''))
+                  || !(state.activeCommentId === null
+                    || DECIMAL_ID.test(String(state.activeCommentId)))
+                  || !(state.activeRunId === null
+                    || (typeof state.activeRunId === 'string'
+                      && /^[1-9]\d*$/.test(state.activeRunId)))
+                  || !Number.isSafeInteger(state.activeRunAttempt)
+                  || state.activeRunAttempt < 0
+                  || !Number.isSafeInteger(state.activeUpdatedAt)
+                  || state.activeUpdatedAt < 0
+                  || !Number.isSafeInteger(state.freshEvidenceAfter)
+                  || state.freshEvidenceAfter < 0
+                  || typeof state.candidateRejected !== 'boolean'
+                  || !['success', 'failure'].includes(state.conclusion)
+                  || (state.activeCommentId === null
+                    && (state.activeUpdatedAt !== 0 || state.activeRunId !== null
+                      || state.activeRunAttempt !== 0))
+                  || (state.activeCommentId !== null
+                    && (state.activeUpdatedAt <= state.freshEvidenceAfter
+                      || state.activeRunId === null || state.activeRunAttempt < 1))
+                  || (state.conclusion === 'success'
+                    && (state.candidateRejected || state.activeCommentId === null))
+                  || (state.candidateRejected && state.conclusion !== 'failure')) {
+                throw new Error('attestation state is invalid');
+              }
+              return state;
+            }
+
+            async function priorCheck() {
+              const rows = await listAllCheckRunsForRef(github, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: candidateSha,
+              });
+              const matches = rows.filter((row) => row.name === checkName
+                && row.external_id === externalId && row.head_sha === candidateSha);
+              if (matches.length > 1) {
+                throw new Error('duplicate deterministic attestation Check');
+              }
+              if (matches.length === 0) return { check: null, state: null };
+              const check = matches[0];
+              if (check.app?.id !== 15368 || check.app?.slug !== 'github-actions') {
+                throw new Error('attestation Check is owned by an unexpected GitHub App');
+              }
+              const state = decodeState(check.output?.summary);
+              if (state.conclusion !== check.conclusion) {
+                throw new Error('attestation Check conclusion does not match its state');
+              }
+              return { check, state };
+            }
+
+            function eventTimestamp() {
+              const value = context.payload.comment?.updated_at
+                || context.payload.comment?.created_at;
+              const timestamp = Date.parse(String(value || ''));
+              if (!Number.isSafeInteger(timestamp) || timestamp < 0) {
+                throw new Error('comment timestamp is invalid');
+              }
+              return timestamp;
+            }
+
+            function stateSummary(state) {
+              const encoded = Buffer.from(
+                canonicalStringify(state).trimEnd(),
+              ).toString('base64url');
+              return [
+                `artifact-sha256: ${state.artifactSha256}`,
+                '',
+                `<!-- ae-mcp-attestation-state:v1:${encoded} -->`,
+              ].join('\n');
+            }
+
+            if (!SHA.test(candidateSha)) throw new Error('candidate SHA is invalid');
+            const { data: branch } = await github.rest.repos.getBranch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch: 'main',
+            });
+            if (branch.protected !== true || branch.commit.sha !== candidateSha) {
+              throw new Error('candidate is not current protected main');
+            }
+            const commentId = String(context.payload.comment?.id || '');
+            if (!DECIMAL_ID.test(commentId)) throw new Error('comment id is invalid');
+            if (!['edited', 'deleted'].includes(context.payload.action)) return;
+
+            // This read occurs inside the same platform queue used by final reconcile.
+            const previous = await priorCheck();
+            if (!previous.state || previous.state.activeCommentId !== commentId) return;
+            const state = reconcileAttestationState(previous.state, {
+              action: context.payload.action,
+              commentId,
+              updatedAt: eventTimestamp(),
+              candidateSha,
+              platform,
+              artifactId: previous.state.artifactId,
+              artifactSha256: previous.state.artifactSha256,
+              report: null,
+            });
+            if (state.conclusion !== 'failure' || state.activeCommentId !== null) {
+              throw new Error('active evidence was not pre-invalidated');
+            }
+            await github.rest.checks.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              check_run_id: previous.check.id,
+              name: checkName,
+              external_id: externalId,
+              status: 'completed',
+              conclusion: 'failure',
+              details_url: detailsUrl,
+              output: {
+                title: 'RC attestation required',
+                summary: stateSummary(state),
+              },
+            });
+
+  preinvalidate-windows:
+    name: Preinvalidate Windows RC attestation
+    needs: parse
+    if: ${{ needs.parse.outputs.target_windows == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      checks: write
+      contents: read
+    concurrency:
+      group: rc-attestation-state-${{ needs.parse.outputs.candidate_sha }}-windows-x64
+      queue: max
+      cancel-in-progress: false
+    env:
+      PLATFORM: windows-x64
+      CHECK_NAME: windows-rc-attestation
+      CANDIDATE_SHA: ${{ needs.parse.outputs.candidate_sha }}
+    steps: *preinvalidate_steps
+
+  validate-macos:
+    name: Validate macOS RC attestation bytes
+    needs: [parse, preinvalidate-macos]
+    if: ${{ needs.parse.outputs.validate_macos == 'true' && needs['preinvalidate-macos'].result == 'success' }}
+    runs-on: ubuntu-24.04
+    environment: macos-rc
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      verified_report: ${{ steps.verify.outputs.verified_report }}
+      artifact_id: ${{ steps.verify.outputs.artifact_id }}
+      artifact_name: ${{ steps.verify.outputs.artifact_name }}
+      artifact_sha256: ${{ steps.verify.outputs.artifact_sha256 }}
+    env:
+      PLATFORM: macos-arm64
+      CANDIDATE_SHA: ${{ needs.parse.outputs.candidate_sha }}
+      AUTHOR_ALLOWED: ${{ needs.parse.outputs.author_allowed }}
+      MANIFEST_GROUP: artifact-manifest-v0.9.1.json
+      MANIFEST_NAME: artifact-manifest-v0.9.1.json
+    steps: &validation_steps
+      - name: Checkout trusted default branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Resolve immutable build artifacts
+        id: metadata
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          script: |
+            const path = require('node:path');
+            const { pathToFileURL } = require('node:url');
+            const moduleUrl = (name) => pathToFileURL(path.join(
+              process.env.GITHUB_WORKSPACE, 'scripts', 'release', name,
+            )).href;
+            const { validateAttestation } = await import(moduleUrl('attestation.mjs'));
+            const { decodeAttestationComment } = await import(moduleUrl('comment-marker.mjs'));
+
+            const MARKER = '<!-- ae-mcp-rc-attestation:v1 -->';
+            const SHA = /^[a-f0-9]{40}$/;
+            const DECIMAL_ID = /^\d+$/;
+            const candidateSha = process.env.CANDIDATE_SHA;
+            const platform = process.env.PLATFORM;
+
+            function decodedReport() {
+              if (context.payload.action === 'deleted') return null;
+              const body = String(context.payload.comment?.body || '');
+              const count = body.split(MARKER).length - 1;
+              if (count !== 1) throw new Error('expected exactly one attestation marker');
+              const value = decodeAttestationComment(body);
+              if (Buffer.byteLength(JSON.stringify(value, null, 2)) > 48 * 1024) {
+                throw new Error('decoded attestation JSON is too large');
+              }
+              return value;
+            }
+
+            if (!SHA.test(candidateSha)) throw new Error('candidate SHA is invalid');
+            if (context.payload.repository?.default_branch !== 'main') {
+              throw new Error('trusted default branch must be main');
+            }
+            const gitResult = await exec.getExecOutput(
+              'git', ['rev-parse', 'origin/main'], { silent: true },
+            );
+            if (gitResult.exitCode !== 0 || gitResult.stdout.trim() !== candidateSha) {
+              throw new Error('candidate is not origin/main');
+            }
+            const { data: branch } = await github.rest.repos.getBranch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch: 'main',
+            });
+            if (branch.protected !== true || branch.commit.sha !== candidateSha) {
+              throw new Error('candidate is not current protected main');
+            }
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.issue.number,
+            });
+            if (pr.merged !== true || pr.base.ref !== 'main'
+                || pr.merge_commit_sha !== candidateSha) {
+              throw new Error('comment PR does not identify the candidate');
+            }
+
+            const report = decodedReport();
+            if (process.env.AUTHOR_ALLOWED !== 'true' || !report
+                || validateAttestation(report, { platform, candidateSha }).length !== 0) {
+              throw new Error('attestation report is not eligible for protected validation');
+            }
+            const artifactId = String(report.artifactId || '');
+            if (!DECIMAL_ID.test(artifactId)) throw new Error('artifact id is invalid');
+            const { data: artifact } = await github.rest.actions.getArtifact({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              artifact_id: artifactId,
+            });
+            if (!Number.isSafeInteger(artifact.id) || artifact.id <= 0
+                || String(artifact.id) !== artifactId
+                || artifact.name !== report.artifactName
+                || artifact.expired !== false
+                || !Number.isSafeInteger(artifact.size_in_bytes)
+                || artifact.size_in_bytes <= 0
+                || !artifact.workflow_run?.id
+                || artifact.workflow_run.repository_id !== context.payload.repository.id
+                || artifact.workflow_run.head_repository_id !== context.payload.repository.id
+                || artifact.workflow_run.head_sha !== candidateSha) {
+              throw new Error('platform artifact metadata is invalid or expired');
+            }
+            const runId = String(artifact.workflow_run.id);
+            if (String(report.workflowRunId) !== runId) {
+              throw new Error('platform artifact belongs to a different workflow run');
+            }
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId,
+            });
+            if (run.head_sha !== candidateSha
+                || run.repository?.id !== context.payload.repository.id
+                || run.head_branch !== 'main'
+                || !/^\.github\/workflows\/build-rc\.yml(?:@main)?$/.test(String(run.path || ''))
+                || run.event !== 'workflow_dispatch'
+                || run.run_attempt !== 1
+                || run.conclusion !== 'success') {
+              throw new Error('artifact workflow run is not the trusted candidate build');
+            }
+            const artifacts = await github.paginate(
+              github.rest.actions.listWorkflowRunArtifacts,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: runId,
+                name: process.env.MANIFEST_GROUP,
+                per_page: 100,
+              },
+            );
+            const manifests = artifacts.filter(
+              (item) => item.name === process.env.MANIFEST_GROUP,
+            );
+            if (manifests.length !== 1) {
+              throw new Error('trusted run must contain exactly one manifest artifact');
+            }
+            const manifestArtifact = manifests[0];
+            if (!Number.isSafeInteger(manifestArtifact.id) || manifestArtifact.id <= 0
+                || manifestArtifact.name !== process.env.MANIFEST_GROUP
+                || manifestArtifact.expired !== false
+                || !Number.isSafeInteger(manifestArtifact.size_in_bytes)
+                || manifestArtifact.size_in_bytes <= 0) {
+              throw new Error('manifest artifact metadata is invalid or expired');
+            }
+
+            core.setOutput('run_id', runId);
+            core.setOutput('artifact_id', artifactId);
+            core.setOutput('manifest_artifact_id', String(manifestArtifact.id));
+
+      - name: Download canonical artifact manifest
+        id: download_manifest
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          artifact-ids: ${{ steps.metadata.outputs.manifest_artifact_id }}
+          path: ${{ runner.temp }}/ae-mcp-attestation/manifest
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.metadata.outputs.run_id }}
+
+      - name: Download exact platform artifact
+        id: download_platform
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          artifact-ids: ${{ steps.metadata.outputs.artifact_id }}
+          path: ${{ runner.temp }}/ae-mcp-attestation/platform
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.metadata.outputs.run_id }}
+
+      - name: Rehash exact evidence without mutating Check state
+        id: verify
+        if: ${{ always() && steps.metadata.outcome == 'success' }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          RUN_ID: ${{ steps.metadata.outputs.run_id }}
+          ARTIFACT_ID: ${{ steps.metadata.outputs.artifact_id }}
+          MANIFEST_ROOT: ${{ runner.temp }}/ae-mcp-attestation/manifest
+          PLATFORM_ROOT: ${{ runner.temp }}/ae-mcp-attestation/platform
+          MANIFEST_DOWNLOAD: ${{ steps.download_manifest.outcome }}
+          PLATFORM_DOWNLOAD: ${{ steps.download_platform.outcome }}
+        with:
+          script: |
+            const fs = require('node:fs/promises');
+            const path = require('node:path');
+            const { pathToFileURL } = require('node:url');
+            const moduleUrl = (name) => pathToFileURL(path.join(
+              process.env.GITHUB_WORKSPACE, 'scripts', 'release', name,
+            )).href;
+            const {
+              canonicalStringify, MAX_ARTIFACT_MANIFEST_BYTES, serializeArtifactManifest,
+              sha256File,
+            } = await import(moduleUrl('artifact-manifest.mjs'));
+            const { validateAttestation } = await import(moduleUrl('attestation.mjs'));
+            const { decodeAttestationComment } = await import(moduleUrl('comment-marker.mjs'));
+
+            const MARKER = '<!-- ae-mcp-rc-attestation:v1 -->';
+            const DIGEST = /^[a-f0-9]{64}$/;
+            const candidateSha = process.env.CANDIDATE_SHA;
+            const platform = process.env.PLATFORM;
+
+            function decodedReport() {
+              if (context.payload.action === 'deleted') return null;
+              const body = String(context.payload.comment?.body || '');
+              const count = body.split(MARKER).length - 1;
+              if (count !== 1) throw new Error('expected exactly one attestation marker');
+              const value = decodeAttestationComment(body);
+              if (Buffer.byteLength(JSON.stringify(value, null, 2)) > 48 * 1024) {
+                throw new Error('decoded attestation JSON is too large');
+              }
+              return value;
+            }
+
+            async function findNamedFiles(root, name) {
+              const found = [];
+              async function visit(current) {
+                const stat = await fs.lstat(current);
+                if (stat.isSymbolicLink()) throw new Error('download contains a symbolic link');
+                if (stat.isFile()) {
+                  if (path.basename(current) === name) found.push(current);
+                  return;
+                }
+                if (!stat.isDirectory()) {
+                  throw new Error('download contains an unsupported entry');
+                }
+                const entries = await fs.readdir(current);
+                entries.sort();
+                for (const entry of entries) await visit(path.join(current, entry));
+              }
+              await visit(root);
+              return found;
+            }
+
+            if (process.env.MANIFEST_DOWNLOAD !== 'success'
+                || process.env.PLATFORM_DOWNLOAD !== 'success') {
+              throw new Error('attestation artifact download did not complete');
+            }
+            const rawReport = decodedReport();
+            if (process.env.AUTHOR_ALLOWED !== 'true' || !rawReport
+                || validateAttestation(rawReport, { platform, candidateSha }).length !== 0) {
+              throw new Error('attestation report changed before byte verification');
+            }
+
+            const manifestFiles = await findNamedFiles(
+              process.env.MANIFEST_ROOT,
+              process.env.MANIFEST_NAME,
+            );
+            if (manifestFiles.length !== 1) throw new Error('manifest file is ambiguous');
+            const manifestStat = await fs.lstat(manifestFiles[0]);
+            if (!manifestStat.isFile() || manifestStat.nlink !== 1
+                || manifestStat.size <= 0
+                || manifestStat.size > MAX_ARTIFACT_MANIFEST_BYTES) {
+              throw new Error('manifest file is not one bounded regular file');
+            }
+            const manifestBytes = await fs.readFile(manifestFiles[0]);
+            const manifestText = new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes);
+            const manifest = JSON.parse(manifestText);
+            const checkedManifestBytes = serializeArtifactManifest(manifest);
+            if (!checkedManifestBytes.equals(manifestBytes)
+                || manifest.version !== '0.9.1'
+                || manifest.candidateSha !== candidateSha
+                || String(manifest.workflowRunId) !== String(process.env.RUN_ID)) {
+              throw new Error('manifest identity is invalid');
+            }
+
+            const entries = manifest.artifacts.filter((item) => (
+              item?.platform === platform && item?.role === 'install'
+            ));
+            if (entries.length !== 1) {
+              throw new Error('manifest must contain one platform install artifact');
+            }
+            const artifactEntry = entries[0];
+            if (String(artifactEntry.artifactId) !== String(process.env.ARTIFACT_ID)
+                || !DIGEST.test(String(artifactEntry.sha256 || ''))
+                || typeof artifactEntry.name !== 'string') {
+              throw new Error('manifest artifact identity is invalid');
+            }
+            const artifactFiles = await findNamedFiles(
+              process.env.PLATFORM_ROOT,
+              artifactEntry.name,
+            );
+            if (artifactFiles.length !== 1
+                || await sha256File(artifactFiles[0]) !== artifactEntry.sha256) {
+              throw new Error('downloaded artifact digest does not match the manifest');
+            }
+            const fullIdentityErrors = validateAttestation(rawReport, {
+              platform,
+              candidateSha,
+              workflowRunId: manifest.workflowRunId,
+              artifactId: artifactEntry.artifactId,
+              artifactName: artifactEntry.name,
+              artifactSha256: artifactEntry.sha256,
+            });
+            if (fullIdentityErrors.length !== 0) {
+              throw new Error('attestation evidence failed full identity verification');
+            }
+
+            const encoded = Buffer.from(
+              canonicalStringify(rawReport).trimEnd(),
+            ).toString('base64url');
+            core.setOutput('verified_report', encoded);
+            core.setOutput('artifact_id', String(artifactEntry.artifactId));
+            core.setOutput('artifact_name', artifactEntry.name);
+            core.setOutput('artifact_sha256', artifactEntry.sha256);
+
+  validate-windows:
+    name: Validate Windows RC attestation bytes
+    needs: [parse, preinvalidate-windows]
+    if: ${{ needs.parse.outputs.validate_windows == 'true' && needs['preinvalidate-windows'].result == 'success' }}
+    runs-on: ubuntu-24.04
+    environment: windows-rc
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      verified_report: ${{ steps.verify.outputs.verified_report }}
+      artifact_id: ${{ steps.verify.outputs.artifact_id }}
+      artifact_name: ${{ steps.verify.outputs.artifact_name }}
+      artifact_sha256: ${{ steps.verify.outputs.artifact_sha256 }}
+    env:
+      PLATFORM: windows-x64
+      CANDIDATE_SHA: ${{ needs.parse.outputs.candidate_sha }}
+      AUTHOR_ALLOWED: ${{ needs.parse.outputs.author_allowed }}
+      MANIFEST_GROUP: artifact-manifest-v0.9.1.json
+      MANIFEST_NAME: artifact-manifest-v0.9.1.json
+    steps: *validation_steps
+
+  reconcile-macos:
+    name: Reconcile macOS RC attestation state
+    needs: [parse, preinvalidate-macos, validate-macos]
+    if: ${{ always() && needs.parse.result == 'success' && needs.parse.outputs.target_macos == 'true' && needs['preinvalidate-macos'].result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      checks: write
+      contents: read
+      issues: read
+      pull-requests: read
+    concurrency:
+      group: rc-attestation-state-${{ needs.parse.outputs.candidate_sha }}-macos-arm64
+      queue: max
+      cancel-in-progress: false
+    env:
+      PLATFORM: macos-arm64
+      CHECK_NAME: macos-rc-attestation
+      CANDIDATE_SHA: ${{ needs.parse.outputs.candidate_sha }}
+      AUTHOR_ALLOWED: ${{ needs.parse.outputs.author_allowed }}
+      ATTESTORS: ${{ vars.AE_MCP_RC_ATTESTORS }}
+      VALIDATION_REQUESTED: ${{ needs.parse.outputs.validate_macos }}
+      VALIDATION_RESULT: ${{ needs['validate-macos'].result }}
+      VERIFIED_REPORT: ${{ needs['validate-macos'].outputs.verified_report }}
+      VERIFIED_ARTIFACT_ID: ${{ needs['validate-macos'].outputs.artifact_id }}
+      VERIFIED_ARTIFACT_NAME: ${{ needs['validate-macos'].outputs.artifact_name }}
+      VERIFIED_ARTIFACT_SHA256: ${{ needs['validate-macos'].outputs.artifact_sha256 }}
+    steps: &reconcile_steps
+      - name: Checkout trusted default branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Re-read latest state and reconcile deterministic Check
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          script: |
+            const path = require('node:path');
+            const { pathToFileURL } = require('node:url');
+            const moduleUrl = (name) => pathToFileURL(path.join(
+              process.env.GITHUB_WORKSPACE, 'scripts', 'release', name,
+            )).href;
+            const { canonicalStringify } = await import(moduleUrl('artifact-manifest.mjs'));
+            const { buildActionsRunDetailsUrl } = await import(
+              moduleUrl('check-provenance.mjs')
+            );
+            const { listAllCheckRunsForRef } = await import(
+              moduleUrl('github-inventory.mjs')
+            );
+            const { validateAttestation } = await import(moduleUrl('attestation.mjs'));
+            const { decodeAttestationComment } = await import(moduleUrl('comment-marker.mjs'));
+            const { reconcileAttestationState } = await import(
+              moduleUrl('verify-release-inputs.mjs')
+            );
+
+            const STATE_MARKER = 'ae-mcp-attestation-state:v1:';
+            const SHA = /^[a-f0-9]{40}$/;
+            const DIGEST = /^[a-f0-9]{64}$/;
+            const DECIMAL_ID = /^\d+$/;
+            const candidateSha = process.env.CANDIDATE_SHA;
+            const platform = process.env.PLATFORM;
+            const checkName = process.env.CHECK_NAME;
+            const externalId = `ae-mcp-rc:${candidateSha}:${platform}`;
+            const detailsUrl = buildActionsRunDetailsUrl({
+              serverUrl: process.env.GITHUB_SERVER_URL,
+              repository: process.env.GITHUB_REPOSITORY,
+              runId: process.env.GITHUB_RUN_ID,
+              runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            });
+
+            function decodeState(summary) {
+              const matches = [...String(summary || '').matchAll(
+                /<!-- ae-mcp-attestation-state:v1:([A-Za-z0-9_-]+) -->/g,
+              )];
+              if (matches.length !== 1
+                  || String(summary).split(STATE_MARKER).length !== 2) {
+                throw new Error('deterministic attestation state marker is missing or ambiguous');
+              }
+              const encoded = matches[0][1];
+              const bytes = Buffer.from(encoded, 'base64url');
+              if (bytes.length === 0 || bytes.length > 8192
+                  || bytes.toString('base64url') !== encoded) {
+                throw new Error('attestation state encoding is invalid');
+              }
+              const text = bytes.toString('utf8');
+              const state = JSON.parse(text);
+              const fields = [
+                'activeCommentId', 'activeRunAttempt', 'activeRunId', 'activeUpdatedAt',
+                'artifactId', 'artifactSha256',
+                'candidateRejected', 'candidateSha', 'conclusion', 'freshEvidenceAfter',
+                'platform', 'schemaVersion',
+              ];
+              if (JSON.stringify(Object.keys(state).sort()) !== JSON.stringify(fields.sort())
+                  || canonicalStringify(state).trimEnd() !== text
+                  || state.schemaVersion !== 1
+                  || state.candidateSha !== candidateSha
+                  || state.platform !== platform
+                  || !DECIMAL_ID.test(String(state.artifactId || ''))
+                  || !DIGEST.test(String(state.artifactSha256 || ''))
+                  || !(state.activeCommentId === null
+                    || DECIMAL_ID.test(String(state.activeCommentId)))
+                  || !(state.activeRunId === null
+                    || (typeof state.activeRunId === 'string'
+                      && /^[1-9]\d*$/.test(state.activeRunId)))
+                  || !Number.isSafeInteger(state.activeRunAttempt)
+                  || state.activeRunAttempt < 0
+                  || !Number.isSafeInteger(state.activeUpdatedAt)
+                  || state.activeUpdatedAt < 0
+                  || !Number.isSafeInteger(state.freshEvidenceAfter)
+                  || state.freshEvidenceAfter < 0
+                  || typeof state.candidateRejected !== 'boolean'
+                  || !['success', 'failure'].includes(state.conclusion)
+                  || (state.activeCommentId === null
+                    && (state.activeUpdatedAt !== 0 || state.activeRunId !== null
+                      || state.activeRunAttempt !== 0))
+                  || (state.activeCommentId !== null
+                    && (state.activeUpdatedAt <= state.freshEvidenceAfter
+                      || state.activeRunId === null || state.activeRunAttempt < 1))
+                  || (state.conclusion === 'success'
+                    && (state.candidateRejected || state.activeCommentId === null))
+                  || (state.candidateRejected && state.conclusion !== 'failure')) {
+                throw new Error('attestation state is invalid');
+              }
+              return state;
+            }
+
+            async function priorCheck() {
+              const rows = await listAllCheckRunsForRef(github, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: candidateSha,
+              });
+              const matches = rows.filter((row) => row.name === checkName
+                && row.external_id === externalId && row.head_sha === candidateSha);
+              if (matches.length > 1) {
+                throw new Error('duplicate deterministic attestation Check');
+              }
+              if (matches.length === 0) return { check: null, state: null };
+              const check = matches[0];
+              if (check.app?.id !== 15368 || check.app?.slug !== 'github-actions') {
+                throw new Error('attestation Check is owned by an unexpected GitHub App');
+              }
+              const state = decodeState(check.output?.summary);
+              if (state.conclusion !== check.conclusion) {
+                throw new Error('attestation Check conclusion does not match its state');
+              }
+              return { check, state };
+            }
+
+            function decodeVerifiedReport(encoded) {
+              if (typeof encoded !== 'string' || encoded.length === 0) {
+                throw new Error('verified report output is missing');
+              }
+              const bytes = Buffer.from(encoded, 'base64url');
+              if (bytes.length === 0 || bytes.length > 48 * 1024
+                  || bytes.toString('base64url') !== encoded) {
+                throw new Error('verified report output is invalid');
+              }
+              const text = bytes.toString('utf8');
+              const report = JSON.parse(text);
+              if (canonicalStringify(report).trimEnd() !== text) {
+                throw new Error('verified report output is not canonical');
+              }
+              return report;
+            }
+
+            function decodedEventReport() {
+              if (context.payload.action === 'deleted') return null;
+              return decodeAttestationComment(String(context.payload.comment?.body || ''));
+            }
+
+            function eventTimestamp() {
+              const value = context.payload.comment?.updated_at
+                || context.payload.comment?.created_at;
+              const timestamp = Date.parse(String(value || ''));
+              if (!Number.isSafeInteger(timestamp) || timestamp < 0) {
+                throw new Error('comment timestamp is invalid');
+              }
+              return timestamp;
+            }
+
+            function stateSummary(state) {
+              const encoded = Buffer.from(
+                canonicalStringify(state).trimEnd(),
+              ).toString('base64url');
+              return [
+                `artifact-sha256: ${state.artifactSha256}`,
+                '',
+                `<!-- ae-mcp-attestation-state:v1:${encoded} -->`,
+              ].join('\n');
+            }
+
+            if (!SHA.test(candidateSha)) throw new Error('candidate SHA is invalid');
+            if (context.payload.repository?.default_branch !== 'main') {
+              throw new Error('trusted default branch must be main');
+            }
+            const { data: branch } = await github.rest.repos.getBranch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch: 'main',
+            });
+            if (branch.protected !== true || branch.commit.sha !== candidateSha) {
+              throw new Error('candidate is not current protected main');
+            }
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.issue.number,
+            });
+            if (pr.merged !== true || pr.base.ref !== 'main'
+                || pr.merge_commit_sha !== candidateSha) {
+              throw new Error('comment PR does not identify the candidate');
+            }
+
+            const commentId = String(context.payload.comment?.id || '');
+            if (!DECIMAL_ID.test(commentId)) throw new Error('comment id is invalid');
+            const configuredAttestors = String(process.env.ATTESTORS || '')
+              .split(',').map((item) => item.trim().toLowerCase()).filter(Boolean);
+            if (configuredAttestors.some(
+              (item) => !/^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$/.test(item),
+            ) || new Set(configuredAttestors).size !== configuredAttestors.length) {
+              throw new Error('RC attestor allowlist is invalid');
+            }
+            const allowlist = new Set(configuredAttestors);
+            const eventAuthor = String(
+              context.payload.comment?.user?.login || '',
+            ).toLowerCase();
+            const validationRequested = process.env.VALIDATION_REQUESTED === 'true';
+            const validationSucceeded = validationRequested
+              && process.env.VALIDATION_RESULT === 'success';
+            const verificationFailed = validationRequested && !validationSucceeded;
+            let verifiedReport = null;
+
+            if (validationSucceeded) {
+              verifiedReport = decodeVerifiedReport(process.env.VERIFIED_REPORT);
+              const artifactId = String(process.env.VERIFIED_ARTIFACT_ID || '');
+              const artifactName = String(process.env.VERIFIED_ARTIFACT_NAME || '');
+              const artifactSha256 = String(process.env.VERIFIED_ARTIFACT_SHA256 || '');
+              if (!DECIMAL_ID.test(artifactId) || !DIGEST.test(artifactSha256)
+                  || path.basename(artifactName) !== artifactName) {
+                throw new Error('verified artifact output is invalid');
+              }
+              const identityErrors = validateAttestation(verifiedReport, {
+                platform,
+                candidateSha,
+                artifactId,
+                artifactName,
+                artifactSha256,
+              });
+              if (identityErrors.length !== 0
+                  || process.env.AUTHOR_ALLOWED !== 'true'
+                  || !allowlist.has(eventAuthor)
+                  || canonicalStringify(decodedEventReport())
+                    !== canonicalStringify(verifiedReport)) {
+                throw new Error('verified report no longer matches the event');
+              }
+
+              // PASS is revocable evidence: it must still be the current comment.
+              // FAIL is sticky and is reconciled from the authenticated event even
+              // when a later edit/delete has already occurred.
+              if (verifiedReport.result === 'PASS') {
+                let current;
+                try {
+                  ({ data: current } = await github.rest.issues.getComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: Number(commentId),
+                  }));
+                } catch (error) {
+                  if (error?.status === 404) {
+                    throw new Error('PASS attestation comment was deleted before reconcile');
+                  }
+                  throw error;
+                }
+                const currentAuthor = String(current.user?.login || '').toLowerCase();
+                const issueNumber = String(current.issue_url || '').split('/').at(-1);
+                let currentReport;
+                try {
+                  currentReport = decodeAttestationComment(String(current.body || ''));
+                } catch {
+                  throw new Error('PASS attestation comment changed before reconcile');
+                }
+                if (String(current.id) !== commentId
+                    || issueNumber !== String(context.payload.issue.number)
+                    || currentAuthor !== eventAuthor
+                    || !allowlist.has(currentAuthor)
+                    || Date.parse(String(current.updated_at || '')) !== eventTimestamp()
+                    || canonicalStringify(currentReport)
+                      !== canonicalStringify(verifiedReport)) {
+                  throw new Error('PASS attestation comment changed before reconcile');
+                }
+              }
+            }
+
+            // Every state writer re-reads inside the shared platform queue only
+            // after all external validation and current-comment checks finish.
+            const previous = await priorCheck();
+            if (!verifiedReport && !previous.state) {
+              if (verificationFailed) {
+                core.setFailed('attestation artifact verification did not complete');
+              }
+              return;
+            }
+            const eventArtifactId = verifiedReport
+              ? String(process.env.VERIFIED_ARTIFACT_ID)
+              : String(previous.state.artifactId);
+            const eventArtifactSha256 = verifiedReport
+              ? process.env.VERIFIED_ARTIFACT_SHA256
+              : previous.state.artifactSha256;
+            const state = reconcileAttestationState(previous.state, {
+              action: context.payload.action,
+              commentId,
+              updatedAt: eventTimestamp(),
+              candidateSha,
+              platform,
+              artifactId: eventArtifactId,
+              artifactSha256: eventArtifactSha256,
+              runId: verifiedReport ? process.env.GITHUB_RUN_ID : undefined,
+              runAttempt: verifiedReport ? Number(process.env.GITHUB_RUN_ATTEMPT) : undefined,
+              report: verifiedReport,
+            });
+            if (previous.state
+                && canonicalStringify(state) === canonicalStringify(previous.state)) {
+              if (verificationFailed) {
+                core.setFailed('attestation artifact verification did not complete');
+              }
+              return;
+            }
+            const output = {
+              title: state.conclusion === 'success'
+                ? 'RC attestation accepted'
+                : 'RC attestation required',
+              summary: stateSummary(state),
+            };
+            const request = {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: checkName,
+              external_id: externalId,
+              status: 'completed',
+              conclusion: state.conclusion,
+              details_url: detailsUrl,
+              output,
+            };
+            if (previous.check) {
+              await github.rest.checks.update({
+                ...request,
+                check_run_id: previous.check.id,
+              });
+            } else {
+              await github.rest.checks.create({
+                ...request,
+                head_sha: candidateSha,
+              });
+            }
+            if (verificationFailed) {
+              core.setFailed('attestation artifact verification did not complete');
+            }
+
+  reconcile-windows:
+    name: Reconcile Windows RC attestation state
+    needs: [parse, preinvalidate-windows, validate-windows]
+    if: ${{ always() && needs.parse.result == 'success' && needs.parse.outputs.target_windows == 'true' && needs['preinvalidate-windows'].result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      checks: write
+      contents: read
+      issues: read
+      pull-requests: read
+    concurrency:
+      group: rc-attestation-state-${{ needs.parse.outputs.candidate_sha }}-windows-x64
+      queue: max
+      cancel-in-progress: false
+    env:
+      PLATFORM: windows-x64
+      CHECK_NAME: windows-rc-attestation
+      CANDIDATE_SHA: ${{ needs.parse.outputs.candidate_sha }}
+      AUTHOR_ALLOWED: ${{ needs.parse.outputs.author_allowed }}
+      ATTESTORS: ${{ vars.AE_MCP_RC_ATTESTORS }}
+      VALIDATION_REQUESTED: ${{ needs.parse.outputs.validate_windows }}
+      VALIDATION_RESULT: ${{ needs['validate-windows'].result }}
+      VERIFIED_REPORT: ${{ needs['validate-windows'].outputs.verified_report }}
+      VERIFIED_ARTIFACT_ID: ${{ needs['validate-windows'].outputs.artifact_id }}
+      VERIFIED_ARTIFACT_NAME: ${{ needs['validate-windows'].outputs.artifact_name }}
+      VERIFIED_ARTIFACT_SHA256: ${{ needs['validate-windows'].outputs.artifact_sha256 }}
+    steps: *reconcile_steps

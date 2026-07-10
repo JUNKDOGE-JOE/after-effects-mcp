@@ -12,7 +12,7 @@ packages/core/tests/live/_artifacts/
 # Build artifacts
 dist/
 build/
-release/
+/release/
 plugin/host/node_modules/
 plugin/sidecar/node_modules/
 

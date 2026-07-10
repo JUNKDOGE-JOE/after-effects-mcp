@@ -48,6 +48,8 @@ import pkg from '../../package.json';
 import { buildLogExport, exportFileName, keepLogLine } from '../lib/logExport.js';
 import { writeLogExport, revealInExplorer } from '../cep/logExportFs.js';
 import { reconcileStableJsonValue } from '../lib/stableValue.js';
+import { createPlatformAdapter } from '../cep/platform/index.js';
+import { readCepSystemPath } from '../cep/platform/paths.js';
 
 // Re-export so app code has a single import surface; the helpers themselves live
 // in lib/ so the test suite (node --test, which cannot parse JSX) can import them.
@@ -387,12 +389,14 @@ function Shell({ cs }) {
     : '';
 
   const runtimeRef = React.useRef({ apiKey, apiBaseUrl: providerProfile.anthropicBaseUrl, providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: 'subscription', claudeApiProvider: null, codexCliConfigProvider: null });
-  const extRoot = cs && cs.getSystemPath ? cs.getSystemPath('extension') : '';
-  const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot }), [extRoot]);
+  const platform = React.useMemo(() => createPlatformAdapter(), []);
+  const extRoot = React.useMemo(() => readCepSystemPath({ cs, platform }), [cs, platform]);
+  const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot, platform }), [extRoot, platform]);
   const mcp = React.useMemo(() => createMcpClient({
+    platform,
     extRoot,
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
-  }), [extRoot]);
+  }), [extRoot, platform]);
   const handleChatEvent = React.useCallback((evt) => {
     if (evt.type === 'turn-start') setChatStreaming(true);
     if (evt.type === 'thinking') setThinkingActive(!!evt.active);
@@ -425,9 +429,10 @@ function Shell({ cs }) {
   // Same as the BYOK loop: lang only affects future system prompts, so avoid
   // recreating the backend and silently dropping its conversation on language switch.
   const claudeBackend = React.useMemo(() => createClaudeAgentBackend({
+    platform,
     resolveNode: resolveSystemNode,
     sidecarPath,
-    getMcpSpec: () => resolveMcpCommand({ extRoot }),
+    getMcpSpec: () => resolveMcpCommand({ extRoot, platform }),
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
     getModel: () => runtimeRef.current.model,
     getPermissionMode: () => runtimeRef.current.permissionMode,
@@ -437,10 +442,11 @@ function Shell({ cs }) {
     getApiProvider: () => runtimeRef.current.claudeApiProvider || null,
     lang,
     onEvent: handleChatEvent,
-  }), [extRoot, sidecarPath, mcp, handleChatEvent]);
+  }), [extRoot, sidecarPath, mcp, handleChatEvent, platform]);
 
   const codexBackend = React.useMemo(() => createCodexBackend({
-    getMcpSpec: () => resolveMcpCommand({ extRoot }),
+    platform,
+    getMcpSpec: () => resolveMcpCommand({ extRoot, platform }),
     getModel: () => runtimeRef.current.model,
     getPermissionMode: () => runtimeRef.current.permissionMode,
     getEffort: () => runtimeRef.current.effort,
@@ -453,7 +459,7 @@ function Shell({ cs }) {
     lang,
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
-  }), [extRoot, mcp, handleChatEvent]);
+  }), [extRoot, mcp, handleChatEvent, platform]);
 
   React.useEffect(() => () => {
     codexBackend.reset();
@@ -466,17 +472,19 @@ function Shell({ cs }) {
   }, [codexDialectKey, codexCustomProvider && codexCustomProvider.id]);
 
   const openCodeBackend = React.useMemo(() => createOpenCodeBackend({
-    getMcpSpec: () => resolveMcpCommand({ extRoot }),
+    platform,
+    getMcpSpec: () => resolveMcpCommand({ extRoot, platform }),
     getModel: () => runtimeRef.current.model,
     getPermissionMode: () => runtimeRef.current.permissionMode,
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
-  }), [extRoot, mcp, handleChatEvent]);
+  }), [extRoot, mcp, handleChatEvent, platform]);
 
   const zcodeBackend = React.useMemo(() => createZcodeBackend({
-    getMcpSpec: () => resolveMcpCommand({ extRoot }),
+    platform,
+    getMcpSpec: () => resolveMcpCommand({ extRoot, platform }),
     getModel: () => runtimeRef.current.model,
     getPermissionMode: () => runtimeRef.current.permissionMode,
     getEffort: () => runtimeRef.current.effort,
@@ -485,7 +493,7 @@ function Shell({ cs }) {
     getServerInstructions: () => mcp.getServerInstructions(),
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
-  }), [extRoot, mcp, handleChatEvent]);
+  }), [extRoot, mcp, handleChatEvent, platform]);
 
   React.useEffect(() => () => {
     zcodeBackend.reset();
@@ -740,6 +748,8 @@ function Shell({ cs }) {
     const port = loadSavedPort(window.localStorage) || DEFAULT_PORT;
     ctrl.current = createHostController({
       cs,
+      platform,
+      extensionRoot: extRoot,
       onStatus: (state, p, error) => {
         setStatus({ state, port: p, error: error || null });
         if (state === 'ok') {
@@ -751,7 +761,7 @@ function Shell({ cs }) {
       onLog: pushLog,
     });
     ctrl.current.start(port);
-  }, [cs, pushLog]);
+  }, [cs, extRoot, platform, pushLog]);
 
   // Keep connection info fresh while the drawer is open.
   React.useEffect(() => {
@@ -785,7 +795,6 @@ function Shell({ cs }) {
         getHost,
         port: status.port,
         fs: cepRequire('fs'),
-        os: cepRequire('os'),
         fetchImpl: window.fetch.bind(window),
       });
       setDiagnostics(items);

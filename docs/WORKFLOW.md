@@ -2,7 +2,7 @@
 
 ## 中文
 
-这份文档描述 v0.9.0 的两条使用路径：面板内嵌 AI 对话，以及外部 MCP 客户端接入。安装和发布细节分别见根目录 README 与 [docs/RELEASE.md](RELEASE.md)。
+这份文档描述 v0.9.1（未发布候选）的两条使用路径：面板内嵌 AI 对话，以及外部 MCP 客户端接入。同步候选版本不表示 helper、请求头路由、Tool Library 或双平台实机门禁已经完成；安装和发布条件见根目录 README 与 [docs/RELEASE.md](RELEASE.md)。
 
 ## 1. 架构同步
 
@@ -36,15 +36,28 @@ flowchart LR
 - ExtendScript：在 AE 里真正读取项目、改图层、写表达式、创建 rig、保存 checkpoint。
 - `ae-mcp-snapshot-mss`：提供跨平台截图 backend。
 
+v0.9.1 的普通用户路径只使用同一个 candidate SHA 生成的离线平台资产：
+
+| 平台 | 安装资产 | 同组审计载荷 |
+|---|---|---|
+| macOS arm64 | `ae-mcp-panel-v0.9.1-macos-arm64.dmg` | `ae-mcp-panel-v0.9.1-macos-arm64.zxp` |
+| Windows x64 | `ae-mcp-panel-v0.9.1-windows-x64.zxp` | 同一个 ZXP |
+
+两端最终都按 `artifact-manifest-v0.9.1.json` 验证；获批后的 RuntimeManager 契约要求 Panel 从包内安装 runtime，首跑不联网解析 Python/Node 依赖。当前 build guard 在该实现缺失时保持关闭。
+
+### Attestation Check provenance（外部前置）
+
+attestation workflow 生成的 Check 属于同仓库 workflow 共享的 GitHub Actions App（固定校验 App ID `15368` 与 slug `github-actions`），该 App 身份本身不能证明写入一定来自 `.github/workflows/attestation.yml`。因此，正式发布的外部前置条件是：组织/仓库 Actions 策略、protected `main` 评审和权限审计必须阻止不受信任的同仓库 workflow 获得 `checks:write`。新增或修改具有 `checks:write` 的 workflow 必须按发布信任边界评审；若无法证明这一限制，attestation Check 不得作为发布授权。
+
 ## 2. 面板内嵌对话
 
-v0.9.0 面板已经是完整产品，不只是 MCP config 面板。
+v0.9.1 候选沿用完整面板产品形态，不只是 MCP config 面板；这里描述最终契约，不代表未获批准或未验收的能力已经完成。
 
 内嵌后端与凭证通道：
 
-- Claude：默认后端。订阅通道会 spawn 系统 Node，运行 Claude Agent SDK sidecar，复用 `claude` 登录态；API 直连通道使用 Anthropic API key 或兼容 provider。原 BYOK 偏好会自动迁移到 Claude API 直连通道。
-- Codex：面板 spawn `codex app-server`。可复用 Codex CLI 登录态，也可继承 `~/.codex/config.toml` 里的自定义 model provider，或使用 Provider 管理器中的 OpenAI-compatible provider。
-- ZCode：通过已安装应用携带的 `zcode.cjs app-server` 接入，面板驱动的是 app-server 协议，不做桌面 UI 自动化；API key 或 OAuth coding-plan provider 可在面板中使用。
+- Claude：可选 Claude Code CLI 订阅通道复用 `claude` 登录态；API 直连通道使用 Anthropic API key 或兼容 provider，不依赖该 CLI。
+- Codex：可选 Codex CLI 通道可复用登录态或继承 `~/.codex/config.toml`；也可使用 Provider 管理器中的 OpenAI-compatible provider。
+- ZCode：可选 ZCode CLI/app-server 通道使用受支持安装携带的 `zcode.cjs`；API-key provider 与它分离，面板不做桌面 UI 自动化。
 - 设置页以 Claude / Codex / ZCode 三路分段控件组织后端，每路后端显示凭证通道卡；可自动按优先级选择，也可手动锁定某条通道。Provider 管理器负责本机 `~/.ae-mcp/providers.json` 中的 OpenAI-compatible 与 Anthropic provider。
 
 桌面端边界：
@@ -67,9 +80,9 @@ Composer 选择条：
 
 推荐第一次按这个顺序：
 
-1. 安装 ZXP，并打开 `Window -> Extensions -> ae-mcp`。
-2. 在首跑向导中检测 `uv` 和 ae-mcp；缺失时先看命令原文，再一键安装。
-3. 使用内嵌 Claude 订阅时，检测 Node >= 18、Claude CLI，并通过可见终端完成 `claude` 登录。
+1. 下载并校验当前平台的 v0.9.1 资产；Mac 挂载 DMG 并用另行提供的受支持 ZXP installer 安装其中的 ZXP，Windows 也用受支持的 ZXP installer 安装 ZXP，然后打开 `Window -> Extensions -> ae-mcp`。
+2. 最终首跑向导必须验证并离线安装包内 runtime，确认稳定 `ae-mcp` launcher 可用；普通用户不安装 `uv`、系统 Python 或系统 Node。
+3. 使用内嵌 Claude 订阅时，检测可选 Claude Code CLI，并通过可见终端完成 `claude` 登录。
 4. 使用 Claude API 直连、Codex 自定义 provider 或 ZCode API key provider 时，在 Provider 管理器或对应通道卡中填写 Base URL、API Key 和模型 ID。
 5. 使用内嵌 Codex 官方账号时，确认 Codex CLI 已登录（`codex login`）。
 6. 使用外部 MCP 客户端时，复制面板生成的 MCP config。
@@ -77,8 +90,8 @@ Composer 选择条：
 
 ```mermaid
 flowchart TD
-    A["Install ZXP panel"] --> B["Open Window -> Extensions -> ae-mcp"]
-    B --> C["First-run wizard checks uv + ae-mcp"]
+    A["Verify and install platform asset"] --> B["Open Window -> Extensions -> ae-mcp"]
+    B --> C["Verify bundled runtime + stable launcher"]
     C --> D{ "Built-in chat?" }
     D -- "Claude subscription" --> E["Check Node + Claude CLI + login"]
     D -- "API direct / custom provider" --> F["Enter Base URL + key + model when needed"]
@@ -91,7 +104,7 @@ flowchart TD
     I --> J["Start with ae_ping / ae_overview"]
 ```
 
-首跑向导的 ae-mcp 安装命令使用 `uv tool install --from ... ae-mcp --with ...`。开发 checkout 使用本地 `packages/*` 路径；发布包使用 tag 固定的 `git+https` source。
+最终首跑向导契约只解包、校验并原子激活签名资产内的 runtime。`uv`、pip/npm 解析与本地 `packages/*` 只属于开发 checkout，不是 release 用户路径；RuntimeManager 获批实现前，这不是当前完成声明。
 
 ## 4. 外部客户端
 
@@ -101,7 +114,7 @@ flowchart TD
 {
   "mcpServers": {
     "ae": {
-      "command": "ae-mcp",
+      "command": "/Users/<USER>/.ae-mcp/bin/ae-mcp",
       "env": {
         "AE_MCP_BACKEND": "ae-mcp",
         "AE_MCP_PLUGIN_URL": "http://127.0.0.1:11488"
@@ -110,6 +123,8 @@ flowchart TD
   }
 }
 ```
+
+上例是最终稳定 launcher 契约；macOS 必须把 `<USER>` 替换为实际账户名，Windows 使用展开后的 `%USERPROFILE%\.ae-mcp\bin\ae-mcp.exe` 绝对路径。RuntimeManager 获批实施后必须把当前 Panel 生成器的裸 PATH `ae-mcp` 改为该平台绝对路径；在此之前，fail-closed 原生/产品验收 build guard 不允许发布候选。
 
 已覆盖的客户端形态包括 Claude Desktop、Claude Code、Cursor、OpenCode、OpenClaw、AstrBot、Gemini Antigravity 等。OpenCode 在 v0.7.0 属于外部客户端，不是面板内嵌后端。
 
@@ -146,7 +161,7 @@ flowchart TD
 1. 面板是否打开，host 是否监听 `127.0.0.1:11488`。
 2. `AE_MCP_PLUGIN_URL` 是否和面板端口一致。
 3. 外部客户端是否能真正启动 `ae-mcp` launcher。
-4. 当前 `ae-mcp` tool install 是否包含 `packages/bridge`。
+4. 当前 runtime manifest 是否包含并校验通过 core、bridge 与 snapshot payload。
 5. 当前环境是否能加载 `ae-mcp-snapshot-mss`（影响 `ae_snapshot`）。
 6. AE 是否有模态弹窗卡住 `evalScript`。
 7. 连接诊断中的 token、Python signal、ExtendScript ping 是否通过。
@@ -155,7 +170,7 @@ flowchart TD
 
 ## 7. 能力边界
 
-v0.9.0 适合：
+v0.9.1 候选的最终能力边界适合：
 
 - 项目检查和图层分析。
 - 属性修改、效果应用、表达式写入与校验。
@@ -167,12 +182,12 @@ v0.9.0 适合：
 仍需如实标注：
 
 - ae-mcp 默认通过本机面板端口控制 AE；远端/Docker 客户端需要处理网络可达性。
-- ZXP 是面板安装面；Python 三件套是 MCP server/backend/snapshot 安装面，两者都需要。
+- 平台资产同时携带 CEP 面板与已锁定的 MCP/runtime payload；不要再把在线 Python 三件套当作普通用户的第二安装面。
 - 图像生成不属于 ae-mcp 工具范围；由模型或外部生成器完成，再由 AE 工具导入和操作。
 
 ## English
 
-This document describes the two v0.9.0 usage paths: built-in AI chat inside the panel, and external MCP clients. For install and release details, see the root README and [docs/RELEASE.md](RELEASE.md).
+This document describes the two v0.9.1 (unreleased candidate) usage paths: built-in AI chat inside the panel and external MCP clients. Candidate version synchronization does not assert that the helper, provider route, Tool Library, or dual-platform hardware gates are complete. See the root README and [docs/RELEASE.md](RELEASE.md) for install and release prerequisites.
 
 ## 1. Shared Architecture
 
@@ -206,15 +221,28 @@ Each layer is responsible for:
 - ExtendScript: performs project reads, layer edits, expression writes, rig creation, and checkpoints.
 - `ae-mcp-snapshot-mss`: provides the cross-platform screenshot backend.
 
+The normal-user v0.9.1 path uses only offline platform assets built from the same candidate SHA:
+
+| Platform | Install asset | Same-set audit payload |
+|---|---|---|
+| macOS arm64 | `ae-mcp-panel-v0.9.1-macos-arm64.dmg` | `ae-mcp-panel-v0.9.1-macos-arm64.zxp` |
+| Windows x64 | `ae-mcp-panel-v0.9.1-windows-x64.zxp` | the same ZXP |
+
+Both final assets are verified against `artifact-manifest-v0.9.1.json`. The approved RuntimeManager contract requires the Panel to install the bundled runtime without resolving Python/Node dependencies over the network. The current build guard stays closed while that implementation is absent.
+
+### Attestation Check Provenance (External Prerequisite)
+
+Checks created by the attestation workflow belong to the GitHub Actions App shared by workflows in the same repository (the workflow verifies App ID `15368` and slug `github-actions`). That shared App identity does not prove that a write came specifically from `.github/workflows/attestation.yml`. An external prerequisite for release is therefore an organization/repository Actions policy, protected-`main` review, and permission audit that prevent untrusted same-repository workflows from receiving `checks:write`. Every workflow addition or change with `checks:write` requires release-trust review; if this restriction cannot be demonstrated, an attestation Check is not release authorization.
+
 ## 2. Built-In Chat
 
-The v0.9.0 panel is a full product, not just an MCP config panel.
+The v0.9.1 candidate retains the full Panel product shape, not just MCP configuration. This section describes the final contract; it does not claim unapproved or unverified work is complete.
 
 Embedded backends and credential channels:
 
-- Claude: the default backend. The subscription channel spawns system Node, runs a Claude Agent SDK sidecar, and reuses the local `claude` login; the API direct channel uses an Anthropic API key or compatible provider. Legacy BYOK preferences migrate to the Claude API direct channel.
-- Codex: the panel spawns `codex app-server`. It can reuse the Codex CLI login, inherit custom model providers from `~/.codex/config.toml`, or use an OpenAI-compatible provider from Provider Manager.
-- ZCode: connects through the installed app's bundled `zcode.cjs app-server`; the panel drives the app-server protocol, not desktop UI automation. API-key and OAuth coding-plan providers work in the panel.
+- Claude: the optional Claude Code CLI subscription channel reuses the `claude` login; API direct uses an Anthropic API key or compatible provider without that CLI.
+- Codex: the optional Codex CLI channel can reuse login/config state; an OpenAI-compatible provider remains a separate route.
+- ZCode: the optional ZCode CLI/app-server channel uses `zcode.cjs` from a supported installation; API-key providers are separate, and the Panel does not automate desktop UI.
 - Settings organize the built-in AI service as Claude / Codex / ZCode. Each backend displays credential-channel cards with priority-based automatic selection and optional manual channel locking. Provider Manager owns local OpenAI-compatible and Anthropic providers in `~/.ae-mcp/providers.json`.
 
 Desktop boundary:
@@ -237,9 +265,9 @@ Tool annotations drive approval behavior consistently across Claude, Codex, and 
 
 Recommended first-run order:
 
-1. Install the ZXP and open `Window -> Extensions -> ae-mcp`.
-2. In the first-run wizard, check `uv` and ae-mcp; when missing, inspect the command preview before one-click install.
-3. For built-in Claude subscription, check Node >= 18 and Claude CLI, then complete `claude` login in the visible terminal.
+1. Download and verify the v0.9.1 platform asset. On Mac, mount the DMG and install its ZXP with a separately supplied supported ZXP installer; use a supported ZXP installer for the Windows ZXP too. Then open `Window -> Extensions -> ae-mcp`.
+2. The final first-run wizard must verify and install the bundled runtime offline, then confirm the stable `ae-mcp` launcher. Normal users do not install `uv`, system Python, or system Node.
+3. For built-in Claude subscription, check the optional Claude Code CLI and complete `claude` login in the visible terminal.
 4. For Claude API direct, Codex custom providers, or ZCode API-key providers, enter Base URL, API key, and model ID in Provider Manager or the relevant channel card.
 5. For built-in Codex official account mode, confirm Codex CLI login (`codex login`).
 6. For external MCP clients, copy the MCP config generated by the panel.
@@ -247,8 +275,8 @@ Recommended first-run order:
 
 ```mermaid
 flowchart TD
-    A["Install ZXP panel"] --> B["Open Window -> Extensions -> ae-mcp"]
-    B --> C["First-run wizard checks uv + ae-mcp"]
+    A["Verify and install platform asset"] --> B["Open Window -> Extensions -> ae-mcp"]
+    B --> C["Verify bundled runtime + stable launcher"]
     C --> D{ "Built-in chat?" }
     D -- "Claude subscription" --> E["Check Node + Claude CLI + login"]
     D -- "API direct / custom provider" --> F["Enter Base URL + key + model when needed"]
@@ -261,7 +289,7 @@ flowchart TD
     I --> J["Start with ae_ping / ae_overview"]
 ```
 
-The wizard installs ae-mcp with `uv tool install --from ... ae-mcp --with ...`. Development checkouts use local `packages/*` paths; release installs use tag-pinned `git+https` sources.
+The final wizard contract only unpacks, verifies, and atomically activates the runtime already inside the signed asset. `uv`, pip/npm resolution, and local `packages/*` are development-checkout concerns, not the release-user path. This is not a current completion claim before approved RuntimeManager implementation.
 
 ## 4. External Clients
 
@@ -271,7 +299,7 @@ External clients use stdio MCP config:
 {
   "mcpServers": {
     "ae": {
-      "command": "ae-mcp",
+      "command": "/Users/<USER>/.ae-mcp/bin/ae-mcp",
       "env": {
         "AE_MCP_BACKEND": "ae-mcp",
         "AE_MCP_PLUGIN_URL": "http://127.0.0.1:11488"
@@ -280,6 +308,8 @@ External clients use stdio MCP config:
   }
 }
 ```
+
+This is the final stable-launcher contract; replace `<USER>` with the actual macOS account name, while Windows uses the expanded absolute `%USERPROFILE%\.ae-mcp\bin\ae-mcp.exe` path. The approved RuntimeManager implementation must replace the current Panel generator's bare PATH `ae-mcp` with that platform path. Until then, the fail-closed native/product-acceptance build guard prevents candidate publication.
 
 Covered client shapes include Claude Desktop, Claude Code, Cursor, OpenCode, OpenClaw, AstrBot, Gemini Antigravity, and similar clients. OpenCode is external in v0.7.0; it is not an embedded panel backend.
 
@@ -316,7 +346,7 @@ If tools are visible but calls fail, check in this order:
 1. Is the panel open and is the host listening on `127.0.0.1:11488`?
 2. Does `AE_MCP_PLUGIN_URL` match the panel port?
 3. Can the external client actually launch the `ae-mcp` launcher?
-4. Does the current `ae-mcp` tool install include `packages/bridge`?
+4. Does the runtime manifest include and verify core, bridge, and snapshot payloads?
 5. Can the environment load `ae-mcp-snapshot-mss` for `ae_snapshot`?
 6. Is a modal AE dialog blocking `evalScript`?
 7. Do the diagnostics pass for token, Python signal, and ExtendScript ping?
@@ -325,7 +355,7 @@ If `ae_ping` fails, stop there and fix the connection before testing higher-leve
 
 ## 7. Capability Boundaries
 
-v0.9.0 is a good fit for:
+The final v0.9.1 candidate boundary is a good fit for:
 
 - project inspection and layer analysis
 - property edits, effect application, expression writes, and validation
@@ -337,5 +367,5 @@ v0.9.0 is a good fit for:
 Still label these honestly:
 
 - ae-mcp controls AE through a local panel port by default; remote or Dockerized clients must handle network reachability.
-- ZXP is the panel install surface; the Python trio is the MCP server/backend/snapshot install surface. Both are needed.
+- A platform asset carries both the CEP Panel and locked MCP/runtime payload; do not treat an online Python trio as a second normal-user install surface.
 - Image generation is outside ae-mcp's tool scope; the model or an external generator creates images, then AE tools import and manipulate them.

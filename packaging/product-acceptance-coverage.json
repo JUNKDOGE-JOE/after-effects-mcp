@@ -1,0 +1,12 @@
+{
+  "evidence": [],
+  "requiredScenarios": [
+    "clean-install-and-upgrade-rollback",
+    "permission-denial-and-recovery",
+    "persistence",
+    "provider-header-routing",
+    "tool-library"
+  ],
+  "schemaVersion": 1,
+  "status": "blocked"
+}

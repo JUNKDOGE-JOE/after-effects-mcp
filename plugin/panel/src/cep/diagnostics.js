@@ -1,4 +1,4 @@
-import { detectTool } from './wizardActions.js';
+import { createPlatformAdapter } from './platform/index.js';
 
 const HINTS = {
   'host-listening': {
@@ -21,23 +21,26 @@ const HINTS = {
     zh: '重启面板服务；如果仍失败，请重启 After Effects 后再试。',
     en: 'Restart the panel service. If it still fails, restart After Effects and try again.',
   },
-  uv: {
-    zh: '安装 uv：优先使用 winget install --id astral-sh.uv -e。',
-    en: 'Install uv: prefer winget install --id astral-sh.uv -e.',
+  'ae-mcp': {
+    zh: '在设置中修复离线运行时并重新验证稳定启动器。',
+    en: 'Repair the offline runtime in Settings, then verify the stable launcher again.',
   },
   node: {
-    zh: '安装 Node.js LTS：winget install --id OpenJS.NodeJS.LTS -e。',
-    en: 'Install Node.js LTS: winget install --id OpenJS.NodeJS.LTS -e.',
+    zh: '在设置中修复随插件安装的 Node 运行时。',
+    en: 'Repair the Node runtime bundled with the plugin in Settings.',
   },
   claude: {
-    zh: '安装 Claude Code：npm install -g @anthropic-ai/claude-code。',
-    en: 'Install Claude Code: npm install -g @anthropic-ai/claude-code.',
+    zh: 'Claude CLI 为可选项；如需订阅通道，请打开登录终端完成配置。',
+    en: 'Claude CLI is optional. Open its login terminal if you want the subscription channel.',
+  },
+  codex: {
+    zh: 'Codex CLI 为可选项；如需订阅通道，请打开登录终端完成配置。',
+    en: 'Codex CLI is optional. Open its login terminal if you want the subscription channel.',
   },
 };
 
-function tokenPath(os) {
-  const home = os && os.homedir ? os.homedir() : '';
-  return home.replace(/[\\/]$/, '') + '/.ae-mcp/auth-token';
+function tokenPath(platform) {
+  return platform.paths.join([platform.paths.configRoot, 'auth-token']);
 }
 
 async function readJson(response) {
@@ -66,7 +69,9 @@ async function execCode(fetchImpl, port, token, code) {
   return { response, body: await readJson(response) };
 }
 
-export async function runDiagnostics({ getHost, port, fs, os, fetchImpl, execFileImpl }) {
+export async function runDiagnostics({ getHost, port, fs, fetchImpl, platform }) {
+  const adapter = platform || createPlatformAdapter();
+  const fileSystem = fs || adapter.fs;
   const fetcher = fetchImpl || globalThis.fetch;
   const items = [];
   let token = '';
@@ -86,9 +91,9 @@ export async function runDiagnostics({ getHost, port, fs, os, fetchImpl, execFil
   }
 
   try {
-    const file = tokenPath(os);
-    const exists = fs && fs.existsSync && fs.existsSync(file);
-    token = exists && fs.readFileSync ? String(fs.readFileSync(file, 'utf8')).trim() : '';
+    const file = tokenPath(adapter);
+    const exists = fileSystem && fileSystem.existsSync && fileSystem.existsSync(file);
+    token = exists && fileSystem.readFileSync ? String(fileSystem.readFileSync(file, 'utf8')).trim() : '';
     items.push({
       id: 'token-file',
       ok: exists && token.length === 64,
@@ -143,13 +148,20 @@ export async function runDiagnostics({ getHost, port, fs, os, fetchImpl, execFil
     items.push({ id: 'extendscript-ping', ok: false, detail: e.message, fixHint: HINTS['extendscript-ping'] });
   }
 
-  for (const id of ['uv', 'node', 'claude']) {
-    const result = await detectTool(id, { execFileImpl });
+  for (const id of ['ae-mcp', 'node', 'claude', 'codex']) {
+    const options = id === 'node'
+      ? { minimumVersion: '24.17.0', requiredArch: adapter.id === 'macos-arm64' ? 'arm64' : 'x64' }
+      : {};
+    const result = await adapter.resolveExecutable(id, options);
+    const action = id === 'ae-mcp' || id === 'node'
+      ? { kind: 'repair-runtime' }
+      : { kind: 'open-login-terminal', tool: id };
     items.push({
       id,
       ok: result.ok,
-      detail: result.ok ? result.version : HINTS[id].en,
+      detail: result.ok ? [result.version, result.path].filter(Boolean).join(' · ') : result.code,
       fixHint: HINTS[id],
+      action,
     });
   }
 

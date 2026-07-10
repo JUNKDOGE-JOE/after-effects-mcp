@@ -1,8 +1,9 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
-import { codexAppServerArgs, codexSpawnEnv, ensureUserEnv, normalizeProviderProfile } from '../lib/providerProfile.js';
+import { codexAppServerArgs, codexSpawnEnv, normalizeProviderProfile } from '../lib/providerProfile.js';
 import { PANEL_VERSION } from './mcpClient.js';
 import { createCodexResponsesRoute } from './codexResponsesRoute.js';
 import { expertGuidanceEnv } from './externalClients.js';
+import { createPlatformAdapter } from './platform/index.js';
 
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -11,19 +12,6 @@ const APPROVAL_POLICY = {
 };
 // Tagged union per the protocol schema: ReadOnlySandboxPolicy.
 const SANDBOX_POLICY = { type: 'readOnly' };
-
-function getCepRequire() {
-  if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-    return globalThis.window.cep_node.require;
-  }
-  if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-  if (globalThis.require) return globalThis.require;
-  throw new Error('CEP Node require is unavailable');
-}
-
-function getCepEnv() {
-  return (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env) || {};
-}
 
 function appendTail(tail, chunk) {
   const next = tail + String(chunk || '');
@@ -34,27 +22,11 @@ function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
 
-function normalizeFsPath(value) {
-  return String(value || '').replace(/\//g, '\\').replace(/\\+$/, '');
-}
-
-function dirname(value) {
-  const normalized = normalizeFsPath(value);
-  const index = normalized.lastIndexOf('\\');
-  if (index <= 0) return '';
-  return normalized.slice(0, index);
-}
-
-function defaultCwd(env) {
+function defaultCwd(env, platform) {
   const extRoot = env && (env.AE_MCP_PANEL_EXT_ROOT || env.EXTENSION_ROOT);
-  const parent = extRoot ? dirname(extRoot) : '';
+  const parent = extRoot ? platform.paths.dirname(extRoot) : '';
   if (parent) return parent;
-  if (env && (env.TEMP || env.TMP)) return env.TEMP || env.TMP;
-  try {
-    return getCepRequire()('os').tmpdir();
-  } catch (e) {
-    return '.';
-  }
+  return platform.paths.tempRoot;
 }
 
 function responseMessage(id, result) {
@@ -198,40 +170,18 @@ function threadIdFromResult(result) {
   return (result && (result.threadId || result.id || (result.thread && result.thread.id))) || null;
 }
 
-function execFileAsync(execFile, cmd, args, env) {
-  return new Promise((resolve) => {
-    execFile(cmd, args, { env, windowsHide: true }, (err, stdout, stderr) => {
-      resolve({ err, stdout: String(stdout || ''), stderr: String(stderr || '') });
-    });
-  });
-}
-
-function getHomedir() {
-  try { return getCepRequire()('os').homedir(); } catch (e) { return ''; }
-}
-
-// Spec B2: resolve the codex binary explicitly. AE_MCP_CODEX_CLI overrides
-// (mirrors AE_MCP_ZCODE_CLI); otherwise `where codex` on the spawn PATH.
-export async function resolveCodexCli({ env, execFileImpl } = {}) {
-  const override = env && env.AE_MCP_CODEX_CLI;
-  if (override) return { ok: true, cliPath: String(override), version: '' };
-  let execFile = execFileImpl;
-  if (!execFile) {
-    try { execFile = getCepRequire()('child_process').execFile; } catch (e) { return { ok: false, cliPath: '', version: '', detail: 'child_process unavailable' }; }
+export async function resolveCodexCli({ env, platform } = {}) {
+  const adapter = platform || createPlatformAdapter();
+  const requiredArch = adapter.id === 'macos-arm64' ? 'arm64' : (adapter.id === 'windows-x64' ? 'x64' : undefined);
+  const resolved = await adapter.resolveExecutable('codex', { env: env || {}, ...(requiredArch ? { requiredArch } : {}) });
+  if (!resolved.ok) {
+    return { ok: false, cliPath: '', version: '', detail: 'codex CLI resolution failed: ' + resolved.code, resolution: resolved };
   }
-  const where = await execFileAsync(execFile, 'where', ['codex'], env || {});
-  if (!where.err && where.stdout) {
-    const exe = String(where.stdout).split(/\r?\n/)[0].trim();
-    if (exe) {
-      const v = await execFileAsync(execFile, exe, ['--version'], env || {});
-      return { ok: true, cliPath: exe, version: v.err ? '' : String(v.stdout || v.stderr || '').trim() };
-    }
-  }
-  return { ok: false, cliPath: '', version: '', detail: 'codex CLI not found on PATH. Sign in with codex in a terminal, or set AE_MCP_CODEX_CLI to the executable.' };
+  return { ok: true, cliPath: resolved.path, version: resolved.version || '', executable: resolved };
 }
 
 export function createCodexBackend({
-  spawnImpl,
+  platform,
   getModel,
   getEffort,
   getFast,
@@ -253,6 +203,7 @@ export function createCodexBackend({
   lang = 'zh',
   env,
 }) {
+  const adapter = platform || createPlatformAdapter();
   let proc = null;
   let rpc = null;
   let startPromise = null;
@@ -286,13 +237,8 @@ export function createCodexBackend({
     if (onEvent) onEvent(evt);
   }
 
-  function getSpawn() {
-    if (spawnImpl) return spawnImpl;
-    return getCepRequire()('child_process').spawn;
-  }
-
   function currentEnv() {
-    return Object.assign({}, getCepEnv(), env || {});
+    return adapter.completeSpawnEnv(env || {});
   }
 
   function finishActive() {
@@ -467,8 +413,7 @@ export function createCodexBackend({
     if (proc && rpc) return true;
     if (startPromise) return startPromise;
     startPromise = (async () => {
-      const spawn = getSpawn();
-      const spawnEnv = ensureUserEnv(currentEnv(), { homedir: getHomedir() });
+      const spawnEnv = currentEnv();
       const providerProfile = normalizeProviderProfile(getProviderProfile ? getProviderProfile() : {}, spawnEnv);
       let runtimeProviderProfile = providerProfile;
       if (providerProfile.codexBaseUrl && providerProfile.codexWireApi === 'chat') {
@@ -488,9 +433,12 @@ export function createCodexBackend({
       }
       stderrTail = '';
       stopping = false;
-      const cliOverride = spawnEnv.AE_MCP_CODEX_CLI ? { ok: true, cliPath: String(spawnEnv.AE_MCP_CODEX_CLI), version: '' } : null;
-      lastCliInfo = cliOverride || lastCliInfo;
-      const command = cliOverride ? cliOverride.cliPath : 'codex';
+      const cliInfo = await resolveCli({ env: spawnEnv, platform: adapter });
+      if (!cliInfo || !cliInfo.ok) throw new Error((cliInfo && cliInfo.detail) || 'codex CLI is unavailable');
+      lastCliInfo = cliInfo;
+      const executable = cliInfo.executable || {
+        ok: true, id: 'codex', path: cliInfo.cliPath, argsPrefix: [], source: 'path', version: cliInfo.version || null, arch: null,
+      };
       let spawnEnvWithCreds = codexSpawnEnv(runtimeProviderProfile, spawnEnv);
       // Only inherit cli-config's provider env var when the panel has no
       // explicit custom provider (codexBaseUrl) configured — an explicit
@@ -502,10 +450,9 @@ export function createCodexBackend({
           spawnEnvWithCreds = Object.assign({}, spawnEnvWithCreds, { [envKey]: cliConfig.apiKey });
         }
       }
-      proc = spawn(command, codexAppServerArgs(runtimeProviderProfile), {
+      proc = adapter.spawn(executable, codexAppServerArgs(runtimeProviderProfile), {
         stdio: 'pipe',
         windowsHide: true,
-        shell: true,
         env: spawnEnvWithCreds,
       });
       rpc = createRpc({
@@ -529,7 +476,7 @@ export function createCodexBackend({
     }
   }
 
-  async function initialize() {
+  async function initialize(timeoutOverrideMs) {
     if (initialized) return true;
     if (initializePromise) return initializePromise;
     initializePromise = (async () => {
@@ -539,7 +486,7 @@ export function createCodexBackend({
         // granular askForApproval (our four-tier mapping) is gated behind
         // the experimental API surface (live error without it).
         capabilities: { experimentalApi: true },
-      });
+      }, timeoutOverrideMs);
       initialized = true;
       return true;
     })();
@@ -558,7 +505,7 @@ export function createCodexBackend({
     const spawnEnv = currentEnv();
     const result = await rpc.request('thread/start', {
       ephemeral: true,
-      cwd: defaultCwd(spawnEnv),
+      cwd: defaultCwd(spawnEnv, adapter),
       model: getModel(),
       approvalPolicy: APPROVAL_POLICY,
       approvalsReviewer: 'user',
@@ -689,32 +636,36 @@ export function createCodexBackend({
   const PROBE_ACCOUNT_READ_TIMEOUT_MS = 10000;
   const PROBE_MODEL_LIST_TIMEOUT_MS = 4000;
 
-  function withTimeout(promise, ms, label) {
-    let timer;
-    const timeout = new Promise((_, reject) => {
-      timer = setTimeout(() => reject(Object.assign(new Error('probe timeout: ' + label), { probeTimeout: label })), ms);
-    });
-    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  async function boundedProbeRequest(method, params, ms, label) {
+    try {
+      return await rpc.request(method, params, ms);
+    } catch (error) {
+      if (error && /timed out/i.test(String(error.message || ''))) error.probeTimeout = label;
+      throw error;
+    }
   }
 
   async function probeAccount() {
-    const spawnEnv = ensureUserEnv(currentEnv(), { homedir: getHomedir() });
+    const spawnEnv = currentEnv();
     let cliInfo = { ok: false, cliPath: '', version: '' };
     try {
-      let execFileImpl = null;
-      try { execFileImpl = getCepRequire()('child_process').execFile; } catch (e) { /* non-CEP env */ }
-      cliInfo = await resolveCli({ env: spawnEnv, execFileImpl });
+      cliInfo = lastCliInfo || await resolveCli({ env: spawnEnv, platform: adapter });
       lastCliInfo = cliInfo;
     } catch (e) { /* diagnostics only, never blocks the probe */ }
     const diag = { cliPath: cliInfo.cliPath || '', cliVersion: cliInfo.version || '' };
     let probedProc = null;
     try {
-      await withTimeout(initialize(), PROBE_INITIALIZE_TIMEOUT_MS, 'initialize');
+      try {
+        await initialize(PROBE_INITIALIZE_TIMEOUT_MS);
+      } catch (error) {
+        if (error && /timed out/i.test(String(error.message || ''))) error.probeTimeout = 'initialize';
+        throw error;
+      }
       probedProc = proc;
-      const accountResult = await withTimeout(rpc.request('account/read', {}), PROBE_ACCOUNT_READ_TIMEOUT_MS, 'account/read');
+      const accountResult = await boundedProbeRequest('account/read', {}, PROBE_ACCOUNT_READ_TIMEOUT_MS, 'account/read');
       let models = null;
       try {
-        const listed = await withTimeout(rpc.request('model/list', {}), PROBE_MODEL_LIST_TIMEOUT_MS, 'model/list');
+        const listed = await boundedProbeRequest('model/list', {}, PROBE_MODEL_LIST_TIMEOUT_MS, 'model/list');
         models = Array.isArray(listed) ? listed : listed && listed.models;
       } catch (e) {
         // Non-fatal: a stuck/slow model/list (e.g. a relay whose upstream
@@ -757,5 +708,4 @@ export function createCodexBackend({
     probeAccount,
   };
 }
-
 

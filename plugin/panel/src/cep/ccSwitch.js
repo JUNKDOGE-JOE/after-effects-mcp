@@ -1,3 +1,5 @@
+import { createPlatformAdapter } from './platform/index.js';
+
 // Optional cc-switch inheritance (spec A2): detect-only, never a wizard
 // dependency. Third-party format is unstable -> tolerant field mapping.
 const CONFIG_NAMES = ['config.json', 'providers.json'];
@@ -6,24 +8,16 @@ const API_FORMAT_TO_WIRE_API = {
   openai_chat: 'chat',
 };
 
-function getCepRequire() {
-  if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-    return globalThis.window.cep_node.require;
-  }
-  if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-  if (globalThis.require) return globalThis.require;
-  throw new Error('CEP Node require is unavailable');
-}
-
-function candidateDirs(env = {}) {
-  const home = String(env.USERPROFILE || env.HOME || '').replace(/[\/]+$/, '');
-  const appData = String(env.APPDATA || (home ? home + '\\AppData\\Roaming' : '')).replace(/[\/]+$/, '');
+function candidateDirs(platform) {
+  const home = platform.paths.home;
+  const completed = platform.completeSpawnEnv ? platform.completeSpawnEnv() : {};
+  const appData = completed.APPDATA || platform.paths.join([home, 'AppData', 'Roaming']);
   const dirs = [];
   if (home) {
-    dirs.push(home + '\\.cc-switch');
-    dirs.push(home + '\\.config\\cc-switch');
+    dirs.push(platform.paths.join([home, '.cc-switch']));
+    dirs.push(platform.paths.join([home, '.config', 'cc-switch']));
   }
-  if (appData) dirs.push(appData + '\\cc-switch');
+  if (appData) dirs.push(platform.paths.join([appData, 'cc-switch']));
   return dirs;
 }
 
@@ -104,12 +98,13 @@ export function ccSwitchProviderEntries(list, { now = Date.now } = {}) {
     .filter(Boolean);
 }
 
-export function detectCcSwitch({ env = {}, fsImpl } = {}) {
-  let fs;
-  try { fs = fsImpl || getCepRequire()('fs'); } catch (e) { return null; }
-  for (const dir of candidateDirs(env)) {
+export function detectCcSwitch({ platform, fsImpl } = {}) {
+  const adapter = platform || createPlatformAdapter();
+  const fs = fsImpl || adapter.fs;
+  if (!fs) return null;
+  for (const dir of candidateDirs(adapter)) {
     for (const name of CONFIG_NAMES) {
-      const file = dir + '\\' + name;
+      const file = adapter.paths.join([dir, name]);
       try {
         if (!fs.existsSync(file)) continue;
         const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
