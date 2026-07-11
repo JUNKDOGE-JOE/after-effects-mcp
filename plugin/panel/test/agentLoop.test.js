@@ -437,3 +437,74 @@ test('createAgentLoop omits server instructions when the mcp fake lacks the meth
   // Default-safe: a fake without getServerInstructions yields the bare prompt.
   assert.equal(calls[0].system, buildSystemPrompt('zh'));
 });
+
+test('createAgentLoop delegates staged toolUse and skillUse calls directly to core', async () => {
+  const events = [];
+  const mcp = makeMcp({
+    tools: [
+      { name: 'ae_toolUse', inputSchema: {}, annotations: { destructiveHint: true } },
+      { name: 'mcp__ae__ae_skillUse', inputSchema: {}, annotations: { destructiveHint: true } },
+    ],
+  });
+  const loop = makeLoop({
+    anthropic: anthropicFromSse([
+      toolTurn({ id: 'plan', name: 'ae_toolUse', input: { action: 'prepare', artifact_id: 'user:1' } }),
+      textTurn('planned'),
+      toolTurn({ id: 'legacy', name: 'mcp__ae__ae_skillUse', input: { name: 'legacy', execute: true } }),
+      textTurn('executed'),
+    ]),
+    mcp,
+    mode: 'readonly',
+    events,
+  });
+
+  await loop.sendUser('plan');
+  await loop.sendUser('legacy');
+
+  assert.deepEqual(mcp.calls, [
+    { name: 'ae_toolUse', args: { action: 'prepare', artifact_id: 'user:1' } },
+    { name: 'mcp__ae__ae_skillUse', args: { name: 'legacy', execute: true } },
+  ]);
+  assert.equal(events.some((event) => event.type === 'approval-required'), false);
+  assert.equal(events.some((event) => event.type === 'tool-denied'), false);
+});
+
+test('dynamic delegation never creates a tool-name session allowance', async () => {
+  const events = [];
+  const mcp = makeMcp({
+    tools: [
+      { name: 'ae_toolUse', inputSchema: {}, annotations: { readOnlyHint: false } },
+    ],
+  });
+  const loop = makeLoop({
+    anthropic: anthropicFromSse([
+      toolTurn({ id: 'staged', name: 'ae_toolUse', input: { action: 'grant', plan_hash: 'b'.repeat(64) } }),
+      textTurn('granted'),
+      toolTurn({ id: 'not-staged', name: 'ae_toolUse', input: { action: 'delete' } }),
+      textTurn('denied'),
+    ]),
+    mcp,
+    mode: 'manual',
+    events,
+  });
+
+  const first = loop.sendUser('grant');
+  const firstOutcome = await Promise.race([
+    first.then(() => 'completed'),
+    waitFor(events, 'approval-required'),
+  ]);
+  if (firstOutcome !== 'completed') {
+    loop.approve(firstOutcome.toolUseId, 'deny');
+    await first;
+  }
+  assert.equal(firstOutcome, 'completed');
+  const second = loop.sendUser('delete');
+  const approval = await waitFor(events, 'approval-required');
+  assert.equal(approval.toolUseId, 'not-staged');
+  loop.approve(approval.toolUseId, 'deny');
+  await second;
+
+  assert.deepEqual(mcp.calls, [
+    { name: 'ae_toolUse', args: { action: 'grant', plan_hash: 'b'.repeat(64) } },
+  ]);
+});

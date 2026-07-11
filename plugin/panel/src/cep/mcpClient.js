@@ -34,8 +34,10 @@ export async function resolveMcpCommand({
 
 export function _createRpc(stdinWrite, onLine, options = {}) {
   const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
+  const onRequest = options.onRequest;
   let nextId = 1;
   const pending = new Map();
+  const inbound = new Map();
 
   function rejectPending(id, error) {
     const entry = pending.get(id);
@@ -45,8 +47,91 @@ export function _createRpc(stdinWrite, onLine, options = {}) {
     entry.reject(error);
   }
 
+  function writeMessage(message) {
+    stdinWrite(JSON.stringify(message) + '\n');
+  }
+
+  function hasId(message) {
+    return message && message.id !== undefined && message.id !== null;
+  }
+
+  function hasMethod(message) {
+    return message && typeof message.method === 'string' && message.method.length > 0;
+  }
+
+  function abortInbound(id) {
+    const entry = inbound.get(id);
+    if (entry) entry.controller.abort();
+  }
+
+  async function dispatchRequest(message) {
+    if (inbound.has(message.id)) {
+      writeMessage({
+        jsonrpc: '2.0',
+        id: message.id,
+        error: { code: -32600, message: 'Invalid Request' },
+      });
+      return;
+    }
+    const controller = new AbortController();
+    let settleAbort;
+    const aborted = new Promise((resolve) => { settleAbort = resolve; });
+    const abortHandler = () => settleAbort({ kind: 'abort' });
+    controller.signal.addEventListener('abort', abortHandler, { once: true });
+    inbound.set(message.id, { controller });
+    try {
+      const handled = typeof onRequest === 'function'
+        ? Promise.resolve().then(() => onRequest(message, { signal: controller.signal }))
+        : Promise.reject(Object.assign(new Error('Method not found'), { code: -32601 }));
+      const outcome = await Promise.race([
+        handled.then(
+          (result) => ({ kind: 'result', result }),
+          (error) => ({ kind: 'error', error }),
+        ),
+        aborted,
+      ]);
+      if (outcome.kind === 'abort') {
+        writeMessage({
+          jsonrpc: '2.0',
+          id: message.id,
+          result: { action: 'cancel', content: {} },
+        });
+      } else if (outcome.kind === 'error') {
+        const code = outcome.error && outcome.error.code === -32601 ? -32601 : -32603;
+        const error = {
+          code,
+          message: code === -32601 ? 'Method not found' : 'Internal error',
+        };
+        if (code === -32601 && outcome.error && outcome.error.data !== undefined) {
+          error.data = outcome.error.data;
+        }
+        writeMessage({ jsonrpc: '2.0', id: message.id, error });
+      } else {
+        writeMessage({
+          jsonrpc: '2.0',
+          id: message.id,
+          result: outcome.result === undefined ? null : outcome.result,
+        });
+      }
+    } finally {
+      controller.signal.removeEventListener('abort', abortHandler);
+      inbound.delete(message.id);
+    }
+  }
+
   function handleMessage(message) {
-    if (!message || message.id === undefined || message.id === null) return;
+    if (!message || typeof message !== 'object') return;
+    if (hasMethod(message)) {
+      if (!hasId(message)) {
+        if (message.method === 'notifications/cancelled') {
+          abortInbound(message.params && message.params.requestId);
+        }
+        return;
+      }
+      dispatchRequest(message).catch(() => {});
+      return;
+    }
+    if (!hasId(message)) return;
     const entry = pending.get(message.id);
     if (!entry) return;
     pending.delete(message.id);
@@ -64,10 +149,6 @@ export function _createRpc(stdinWrite, onLine, options = {}) {
   const handleChunk = createNdjsonReader(handleMessage);
 
   if (onLine) onLine(handleChunk);
-
-  function writeMessage(message) {
-    stdinWrite(JSON.stringify(message) + '\n');
-  }
 
   function request(method, params) {
     const id = nextId++;
@@ -89,6 +170,7 @@ export function _createRpc(stdinWrite, onLine, options = {}) {
 
   function close(reason = new Error('MCP process closed')) {
     for (const id of Array.from(pending.keys())) rejectPending(id, reason);
+    for (const entry of inbound.values()) entry.controller.abort();
   }
 
   return { request, notify, handleChunk, close };
@@ -100,6 +182,7 @@ export function createMcpClient({
   resolveCommand = resolveMcpCommand,
   env,
   onCrash,
+  onElicitation,
   extRoot,
   repoRoot,
   getExpertGuidance = () => true,
@@ -110,6 +193,7 @@ export function createMcpClient({
   let rpc = null;
   let tools = null;
   let serverInstructions = '';
+  let serverInfo = null;
   let status = 'idle';
   let startPromise = null;
   let retryCount = 0;
@@ -125,6 +209,38 @@ export function createMcpClient({
     if (globalThis.window && globalThis.window.addEventListener) {
       globalThis.window.addEventListener('beforeunload', () => stop());
     }
+  }
+
+  async function handleServerRequest(message, { signal }) {
+    if (message.method !== 'elicitation/create') {
+      throw Object.assign(new Error('Method not found'), {
+        code: -32601,
+        data: { method: message.method },
+      });
+    }
+    if (typeof onElicitation !== 'function') return { action: 'decline', content: {} };
+    const params = message.params && typeof message.params === 'object' ? message.params : {};
+    const request = {
+      serverName: serverInfo && typeof serverInfo.name === 'string' ? serverInfo.name : '',
+      message: typeof params.message === 'string' ? params.message : '',
+      requestedSchema: params.requestedSchema,
+      mode: params.mode,
+      serverInfo: serverInfo ? { ...serverInfo } : null,
+      serverInstructions,
+      meta: params._meta,
+    };
+    if (signal.aborted) return { action: 'cancel', content: {} };
+    const result = await onElicitation(request, { signal });
+    if (signal.aborted) return { action: 'cancel', content: {} };
+    if (!result || !['accept', 'decline', 'cancel'].includes(result.action)) {
+      return { action: 'decline', content: {} };
+    }
+    return {
+      action: result.action,
+      content: result.content && typeof result.content === 'object' && !Array.isArray(result.content)
+        ? result.content
+        : {},
+    };
   }
 
   async function start() {
@@ -154,6 +270,7 @@ export function createMcpClient({
       rpc = _createRpc(
         (line) => proc.stdin.write(line),
         (handler) => proc.stdout.on('data', handler),
+        { onRequest: handleServerRequest },
       );
       proc.on('exit', (code, signal) => handleExit(code, signal));
       proc.on('error', (err) => handleCrash(err));
@@ -162,9 +279,12 @@ export function createMcpClient({
       const initResult = await rpc.request('initialize', {
         protocolVersion: MCP_PROTOCOL_VERSION,
         clientInfo: { name: 'panel-chat', version: packageVersion },
-        capabilities: {},
+        capabilities: { elicitation: {} },
       });
       serverInstructions = (initResult && initResult.instructions) || '';
+      serverInfo = initResult && initResult.serverInfo && typeof initResult.serverInfo === 'object'
+        ? { ...initResult.serverInfo }
+        : null;
       rpc.notify('notifications/initialized');
       const listed = await rpc.request('tools/list', {});
       tools = listed && Array.isArray(listed.tools) ? listed.tools : [];
@@ -236,6 +356,7 @@ export function createMcpClient({
     }
     proc = null;
     rpc = null;
+    serverInfo = null;
     startPromise = null;
   }
 

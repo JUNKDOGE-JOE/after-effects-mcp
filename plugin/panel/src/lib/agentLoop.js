@@ -1,4 +1,5 @@
 import { DEFAULT_MODEL, buildSystemPrompt, sendAnthropicMessage } from './anthropic.js';
+import { isCoreAuthorizedDynamicCall } from '../../../shared/tool-approval.mjs';
 
 const MAX_TOOL_ROUNDS = 25;
 
@@ -154,6 +155,10 @@ export function createAgentLoop({
 
   async function handleToolUse(toolUse, toolByName) {
     emit({ type: 'tool-start', toolUseId: toolUse.id, name: toolUse.name, input: clone(toolUse.input || {}) });
+
+    if (isCoreAuthorizedDynamicCall(toolUse.name, toolUse.input || {})) {
+      return await executeTool(toolUse);
+    }
 
     const tool = toolByName.get(toolUse.name) || {};
     const mode = (getPermissionMode && getPermissionMode()) || 'manual';

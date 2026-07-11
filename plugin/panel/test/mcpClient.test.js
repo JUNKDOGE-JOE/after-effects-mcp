@@ -129,12 +129,15 @@ function makeFakeProc() {
 // tools/list so createMcpClient.start() resolves to ready.
 function spawnReplying(initResult) {
   let proc = null;
-  const spawnImpl = () => {
+  const spawnImpl = (_command, _args, options) => {
     proc = makeFakeProc();
+    proc.spawnOptions = options;
+    proc.clientWrites = [];
     const origWrite = proc.stdin.write;
     proc.stdin.write = (line) => {
       origWrite(line);
       const msg = JSON.parse(line);
+      proc.clientWrites.push(msg);
       if (msg.method === 'initialize') {
         proc.pushStdout({ jsonrpc: '2.0', id: msg.id, result: initResult });
       } else if (msg.method === 'tools/list') {
@@ -143,7 +146,7 @@ function spawnReplying(initResult) {
     };
     return proc;
   };
-  return { spawnImpl };
+  return { spawnImpl, getProc: () => proc };
 }
 
 test('createMcpClient captures server instructions from the initialize result', async () => {
@@ -168,5 +171,106 @@ test('createMcpClient defaults server instructions to empty when absent', async 
 
   await client.start();
   assert.equal(client.getServerInstructions(), '');
+  client.stop();
+});
+
+test('createMcpClient passes the Tool Library tier file into the direct MCP process', async () => {
+  const { spawnImpl, getProc } = spawnReplying({});
+  const client = createMcpClient({
+    spawnImpl,
+    env: { AE_MCP_TOOL_APPROVAL_TIER_FILE: '/tmp/panel.tier' },
+    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
+  });
+
+  await client.start();
+  assert.equal(
+    getProc().spawnOptions.env.AE_MCP_TOOL_APPROVAL_TIER_FILE,
+    '/tmp/panel.tier',
+  );
+  client.stop();
+});
+
+test('createMcpClient relays elicitation with server metadata and responds', async () => {
+  const initResult = {
+    instructions: 'SERVER_GUIDE',
+    serverInfo: { name: 'ae', version: '1.2.3' },
+  };
+  const { spawnImpl, getProc } = spawnReplying(initResult);
+  const seen = [];
+  const client = createMcpClient({
+    spawnImpl,
+    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
+    onElicitation: async (request, { signal }) => {
+      seen.push({ request, signal });
+      return { action: 'accept', content: { decision: 'once' } };
+    },
+  });
+  await client.start();
+  getProc().pushStdout({
+    jsonrpc: '2.0',
+    id: 77,
+    method: 'elicitation/create',
+    params: {
+      mode: 'form',
+      message: 'Approve tool?',
+      requestedSchema: { type: 'object' },
+      _meta: { progressToken: 'p1' },
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].request.message, 'Approve tool?');
+  assert.equal(seen[0].request.mode, 'form');
+  assert.deepEqual(seen[0].request.requestedSchema, { type: 'object' });
+  assert.deepEqual(seen[0].request.serverInfo, initResult.serverInfo);
+  assert.equal(seen[0].request.serverInstructions, 'SERVER_GUIDE');
+  assert.deepEqual(seen[0].request.meta, { progressToken: 'p1' });
+  assert.equal(seen[0].signal.aborted, false);
+  assert.deepEqual(getProc().clientWrites.find((message) => message.id === 77), {
+    jsonrpc: '2.0', id: 77, result: { action: 'accept', content: { decision: 'once' } },
+  });
+  client.stop();
+});
+
+test('createMcpClient declines elicitation when no callback is configured', async () => {
+  const { spawnImpl, getProc } = spawnReplying({ serverInfo: { name: 'ae', version: '1' } });
+  const client = createMcpClient({
+    spawnImpl,
+    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
+  });
+  await client.start();
+  getProc().pushStdout({
+    jsonrpc: '2.0', id: 78, method: 'elicitation/create', params: { message: 'Approve?' },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(getProc().clientWrites.find((message) => message.id === 78), {
+    jsonrpc: '2.0', id: 78, result: { action: 'decline', content: {} },
+  });
+  client.stop();
+});
+
+test('createMcpClient returns JSON-RPC method-not-found for unknown server requests', async () => {
+  const { spawnImpl, getProc } = spawnReplying({ serverInfo: { name: 'ae', version: '1' } });
+  const client = createMcpClient({
+    spawnImpl,
+    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
+  });
+  await client.start();
+  getProc().pushStdout({
+    jsonrpc: '2.0', id: 79, method: 'unknown/request', params: {},
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(getProc().clientWrites.find((message) => message.id === 79), {
+    jsonrpc: '2.0',
+    id: 79,
+    error: {
+      code: -32601,
+      message: 'Method not found',
+      data: { method: 'unknown/request' },
+    },
+  });
   client.stop();
 });
