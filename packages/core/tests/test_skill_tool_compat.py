@@ -80,4 +80,3 @@ async def test_skill_use_execute_true_none_still_elicits_destructive_jsx(
     plan = session.calls[0]["requestedSchema"]["x-ae-mcp-plan"]
     assert plan["artifactId"].startswith("legacy:")
     assert plan["risk"] == "destructive"
-

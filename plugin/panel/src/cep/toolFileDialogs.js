@@ -61,4 +61,3 @@ export function chooseToolExportPath(cepFs, {
     ? path
     : `${path}${TOOL_PACKAGE_SUFFIX}`;
 }
-

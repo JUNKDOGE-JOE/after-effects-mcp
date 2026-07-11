@@ -43,4 +43,3 @@ export function ToolArtifactRow({ artifact, selected = false, onSelect, lang = '
     </button>
   );
 }
-
