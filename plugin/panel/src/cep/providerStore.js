@@ -96,26 +96,44 @@ function providerSecretReferences(provider) {
   return references;
 }
 
-function fileIdentity(stat) {
-  if (!stat || typeof stat !== 'object') throw storeError('PROVIDER_STORE_UNAVAILABLE');
-  const identity = {
-    kind: 'provider-file-identity-v1',
-    dev: stat.dev,
-    ino: stat.ino,
-    size: stat.size,
-    mtimeMs: stat.mtimeMs,
-    ctimeMs: stat.ctimeMs,
-  };
-  if (
-    !Number.isSafeInteger(identity.dev) || identity.dev < 0
-    || !Number.isSafeInteger(identity.ino) || identity.ino < 0
-    || !Number.isSafeInteger(identity.size) || identity.size < 0
-    || !Number.isFinite(identity.mtimeMs) || identity.mtimeMs < 0
-    || !Number.isFinite(identity.ctimeMs) || identity.ctimeMs < 0
-  ) {
+function exactStatInteger(value) {
+  if (typeof value === 'bigint') {
+    if (value < BigInt(0)) throw storeError('PROVIDER_STORE_UNAVAILABLE');
+    return value <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(value) : value.toString(10);
+  }
+  if (!Number.isSafeInteger(value) || value < 0) {
     throw storeError('PROVIDER_STORE_UNAVAILABLE');
   }
-  return identity;
+  return value;
+}
+
+function statTimeMilliseconds(value) {
+  const number = typeof value === 'bigint' ? Number(value) : value;
+  if (!Number.isFinite(number) || number < 0 || !Number.isSafeInteger(Math.trunc(number))) {
+    throw storeError('PROVIDER_STORE_UNAVAILABLE');
+  }
+  return number;
+}
+
+function fileIdentity(stat) {
+  if (!stat || typeof stat !== 'object') throw storeError('PROVIDER_STORE_UNAVAILABLE');
+  return {
+    kind: 'provider-file-identity-v1',
+    dev: exactStatInteger(stat.dev),
+    ino: exactStatInteger(stat.ino),
+    size: exactStatInteger(stat.size),
+    mtimeMs: statTimeMilliseconds(stat.mtimeMs),
+    ctimeMs: statTimeMilliseconds(stat.ctimeMs),
+  };
+}
+
+function readFileIdentity(fs, file) {
+  try {
+    return fileIdentity(fs.statSync(file));
+  } catch (error) {
+    if (error?.code !== 'PROVIDER_STORE_UNAVAILABLE') throw error;
+  }
+  return fileIdentity(fs.statSync(file, { bigint: true }));
 }
 
 function normalizeState(value) {
@@ -244,9 +262,9 @@ export function createProviderStore(inputDeps) {
     if (typeof fs.statSync !== 'function') return null;
     try {
       const firstRaw = String(fs.readFileSync(lock, 'utf8'));
-      const firstIdentity = fileIdentity(fs.statSync(lock));
+      const firstIdentity = readFileIdentity(fs, lock);
       const secondRaw = String(fs.readFileSync(lock, 'utf8'));
-      const secondIdentity = fileIdentity(fs.statSync(lock));
+      const secondIdentity = readFileIdentity(fs, lock);
       if (firstRaw !== secondRaw || JSON.stringify(firstIdentity) !== JSON.stringify(secondIdentity)) {
         return null;
       }
@@ -617,9 +635,9 @@ export function createProviderStore(inputDeps) {
     let secondIdentity;
     let secondRaw;
     try {
-      firstIdentity = fileIdentity(fs.statSync(filePath()));
+      firstIdentity = readFileIdentity(fs, filePath());
       secondRaw = readRaw();
-      secondIdentity = fileIdentity(fs.statSync(filePath()));
+      secondIdentity = readFileIdentity(fs, filePath());
     } catch (error) {
       if (error?.code === 'PROVIDER_STORE_UNAVAILABLE') throw error;
       throw storeError('PROVIDER_STORE_UNAVAILABLE');

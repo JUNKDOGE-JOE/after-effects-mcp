@@ -10,6 +10,14 @@ const addon = fs.readFileSync(
   path.join(windowsRoot, '..', 'client-addon', 'src', 'addon_windows.cpp'),
   'utf8',
 );
+const delayLoadHook = fs.readFileSync(
+  path.join(windowsRoot, '..', 'client-addon', 'src', 'win_delay_load_hook.cpp'),
+  'utf8',
+);
+const addonCmake = fs.readFileSync(
+  path.join(windowsRoot, '..', 'client-addon', 'CMakeLists.txt'),
+  'utf8',
+);
 const repoRoot = path.resolve(windowsRoot, '..', '..', '..');
 const installer = fs.readFileSync(path.join(repoRoot, 'scripts', 'install-plugin-dev.ps1'), 'utf8');
 const starter = fs.readFileSync(
@@ -60,6 +68,14 @@ test('addon uses bounded overlapped named-pipe IPC without launching a helper', 
   assert.match(addon, /kRequestTimeoutMs\s*=\s*10000/);
   assert.match(addon, /json_utf8\.size\(\) > kMaxMessageBytes/);
   assert.doesNotMatch(addon, /CreateProcess|ShellExecute|system\s*\(/);
+});
+
+test('Windows addon resolves Node imports in both CEP and node.exe hosts', () => {
+  assert.match(addonCmake, /\/DELAYLOAD:node\.exe/);
+  assert.match(addonCmake, /\bdelayimp\b/);
+  assert.match(delayLoadHook, /GetModuleHandleW\(L"node\.dll"\)/);
+  assert.match(delayLoadHook, /GetModuleHandleW\(nullptr\)/);
+  assert.match(delayLoadHook, /__pfnDliNotifyHook2\s*=\s*ResolveNodeHost/);
 });
 
 test('development deployment verifies and starts the final Helper outside the addon', () => {

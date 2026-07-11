@@ -302,6 +302,43 @@ test('legacy migration fails closed when file stat identity is unavailable', () 
   );
 });
 
+test('legacy migration uses BigInt stat when CEP reports an unsafe Windows inode', () => {
+  const deps = makeDeps();
+  const legacy = {
+    version: 1,
+    migratedLegacy: false,
+    providers: [{ id: 'legacy', baseUrl: 'https://legacy.example', apiKey: 'sk-legacy-marker' }],
+  };
+  const text = JSON.stringify(legacy);
+  deps.files.set('/home/user/.ae-mcp/providers.json', text);
+  const statSync = deps.fs.statSync;
+  let bigintReads = 0;
+  deps.fs.statSync = (path, options) => {
+    if (options?.bigint === true) {
+      bigintReads += 1;
+      return {
+        dev: 2_352_244_688n,
+        ino: 93_731_167_244_702_350n,
+        size: BigInt(Buffer.byteLength(text, 'utf8')),
+        mtimeMs: 1_783_534_310_888n,
+        ctimeMs: 1_783_534_310_888n,
+      };
+    }
+    return { ...statSync(path), ino: 93_731_167_244_702_350 };
+  };
+
+  const migration = createProviderStore(deps).readLegacyMigrationInput();
+  assert.equal(bigintReads, 2);
+  assert.deepEqual(JSON.parse(migration.sourceRevision), {
+    kind: 'provider-file-identity-v1',
+    dev: 2_352_244_688,
+    ino: '93731167244702350',
+    size: Buffer.byteLength(text, 'utf8'),
+    mtimeMs: 1_783_534_310_888,
+    ctimeMs: 1_783_534_310_888,
+  });
+});
+
 test('replaceState commits a migration result and writeRedactedBackup never receives plaintext', async () => {
   const deps = makeDeps();
   const store = createProviderStore(deps);

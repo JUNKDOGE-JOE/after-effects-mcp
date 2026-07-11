@@ -43,8 +43,18 @@ elseif(WIN32)
   if(NOT EXISTS "${NODE_IMPORT_LIBRARY}")
     message(FATAL_ERROR "NODE_IMPORT_LIBRARY must name the locked Node.js 24.17.0 x64 node.lib")
   endif()
-  target_sources(ae-mcp-platform-helper-transport PRIVATE src/addon_windows.cpp)
-  target_link_libraries(ae-mcp-platform-helper-transport PRIVATE "${NODE_IMPORT_LIBRARY}")
+  target_sources(ae-mcp-platform-helper-transport PRIVATE
+    src/addon_windows.cpp
+    src/win_delay_load_hook.cpp
+  )
+  target_link_libraries(ae-mcp-platform-helper-transport PRIVATE
+    "${NODE_IMPORT_LIBRARY}"
+    delayimp
+  )
+  target_link_options(ae-mcp-platform-helper-transport PRIVATE
+    "/DELAYLOAD:node.exe"
+    "/ignore:4199"
+  )
 else()
   message(FATAL_ERROR "the platform helper transport supports only macOS arm64 and Windows x64")
 endif()
