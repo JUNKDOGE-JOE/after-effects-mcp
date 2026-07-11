@@ -15,6 +15,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from typing import Any, List
 
 from mcp.server import Server
@@ -26,13 +27,27 @@ from ae_mcp.annotations import VERB_ANNOTATIONS
 from ae_mcp.error_hints import append_hint
 from ae_mcp.handlers import HANDLERS, load_all
 from ae_mcp.instructions import SERVER_INSTRUCTIONS, build_server_instructions
+from ae_mcp.tool_history import (
+    HistoryContext,
+    capture_history_candidate,
+    extract_history_draft,
+)
+from ae_mcp.tool_secrets import RegexSecretScanner, SecretScanError
+from ae_mcp.tool_store import ToolStoreError
 
 log = logging.getLogger("ae_mcp.server")
+_history_scanner = RegexSecretScanner()
 
 # Matches a leading dotted verb token at the very start of a docstring, e.g.
 # "ae.init — bootstrap …". Only the leading token is rewritten so the rest of
 # the description (which may legitimately mention dotted names) is untouched.
 _LEADING_VERB = re.compile(r"^(ae\.[A-Za-z][A-Za-z0-9]*)")
+
+
+def default_tool_service():
+    from ae_mcp.tool_service import default_tool_service as resolve
+
+    return resolve()
 
 
 def _filtered_tool_names() -> set:
@@ -238,13 +253,14 @@ def build_server() -> Server:
         except LookupError:
             ctx = None
 
-        gated = await approval_gate.enforce(canonical, ctx)
-        if gated is not None:
-            payload = _format_result(gated)
-            return CallToolResult(
-                content=[TextContent(type="text", text=payload)],
-                isError=True,
-            )
+        if canonical not in {"ae.toolUse", "ae.skillUse"}:
+            gated = await approval_gate.enforce(canonical, ctx)
+            if gated is not None:
+                payload = _format_result(gated)
+                return CallToolResult(
+                    content=[TextContent(type="text", text=payload)],
+                    isError=True,
+                )
 
         try:
             result = await run_fn(validated, ctx)
@@ -258,6 +274,44 @@ def build_server() -> Server:
 
         if isinstance(result, dict) and result.get("ok") is False and "error" in result:
             result = {**result, "error": append_hint(str(result["error"]))}
+
+        if isinstance(result, dict) and result.get("ok") is True:
+            request_id = None
+            try:
+                if ctx is not None and getattr(ctx, "request_id", None) is not None:
+                    request_id = str(ctx.request_id)
+                history_arguments = validated.model_dump(mode="json")
+                history_context = HistoryContext(
+                    client=client_identity.get_client(),
+                    request_id=request_id,
+                    created_at=int(time.time() * 1000),
+                )
+                if extract_history_draft(
+                    canonical,
+                    history_arguments,
+                    result,
+                    history_context,
+                ) is not None:
+                    capture_history_candidate(
+                        store=default_tool_service().store,
+                        scanner=_history_scanner,
+                        verb_name=canonical,
+                        arguments=history_arguments,
+                        result=result,
+                        context=history_context,
+                    )
+            except (ToolStoreError, SecretScanError) as error:
+                log.warning(
+                    "history capture failed: %s request_id=%s",
+                    type(error).__name__,
+                    request_id or "-",
+                )
+            except Exception as error:  # noqa: BLE001
+                log.warning(
+                    "history capture failed: %s request_id=%s",
+                    type(error).__name__,
+                    request_id or "-",
+                )
 
         return CallToolResult(
             content=[TextContent(type="text", text=_format_result(result))],
