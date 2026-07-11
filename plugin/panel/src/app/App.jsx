@@ -9,10 +9,14 @@ import { ActivityScreen } from '../screens/ActivityScreen';
 import { WizardScreen } from '../screens/WizardScreen';
 import { ConnectionDrawer } from '../screens/ConnectionDrawer';
 import { ChatScreen } from '../screens/ChatScreen';
+import { ToolsScreen } from '../screens/ToolsScreen';
+import { ToolApprovalDialog } from '../components/tools/ToolApprovalDialog';
 import { createAgentLoop } from '../lib/agentLoop';
 import { revertToPreviousCheckpoint } from '../lib/activityModel';
 import { pickBackend, deriveToolMeta, shouldResetOnBackendChange } from '../lib/backendSelect';
 import { createMcpClient, resolveMcpCommand } from '../cep/mcpClient';
+import { createApprovalTierFile, withToolApprovalTier } from '../cep/approvalTierFile';
+import { createToolsApi } from '../cep/toolsApi';
 import { createApiKeyStore } from '../cep/apiKey';
 import { probeClaudeLogin, resolveSidecarPath } from '../cep/claudeAuth';
 import { createClaudeAgentBackend, resolveSystemNode } from '../cep/claudeAgentBackend';
@@ -54,6 +58,8 @@ import { writeLogExport, revealInExplorer } from '../cep/logExportFs.js';
 import { reconcileStableJsonValue } from '../lib/stableValue.js';
 import { createPlatformAdapter } from '../cep/platform/index.js';
 import { readCepSystemPath } from '../cep/platform/paths.js';
+import { createElicitationCoordinator } from '../lib/elicitationCoordinator.js';
+import { decideToolPlan } from '../../../shared/tool-approval.mjs';
 
 // Re-export so app code has a single import surface; the helpers themselves live
 // in lib/ so the test suite (node --test, which cannot parse JSX) can import them.
@@ -69,6 +75,7 @@ const T = {
     resume: '恢复',
     chat: '对话',
     activity: '活动',
+    tools: '工具',
     settings: '设置',
     chatEmptyT: '内嵌对话即将开放',
     chatEmptyB: 'P5 上线。现在可通过 Claude Desktop 等客户端连接使用。',
@@ -90,6 +97,7 @@ const T = {
     resume: 'Resume',
     chat: 'Chat',
     activity: 'Activity',
+    tools: 'Tools',
     settings: 'Settings',
     chatEmptyT: 'Built-in chat coming soon',
     chatEmptyB: 'Lands in P5. Connect via Claude Desktop etc. for now.',
@@ -339,6 +347,25 @@ function Shell({ cs }) {
   const [sessionEffort, setSessionEffort] = React.useState(null);
   const [sessionFast, setSessionFast] = React.useState(null);
   const [permissionMode, setPermissionMode] = React.useState(() => readPref('ae_mcp_perm_mode', 'manual'));
+  const permissionModeRef = React.useRef(permissionMode);
+  permissionModeRef.current = permissionMode;
+  const approvalTierFile = React.useMemo(() => createApprovalTierFile(), []);
+  const elicitationCoordinator = React.useMemo(() => createElicitationCoordinator({
+    resolveApproval: (_request, { plan }) => decideToolPlan({
+      tier: permissionModeRef.current,
+      plan,
+    }),
+    presentGenericForm: () => ({ action: 'decline', content: {} }),
+  }), []);
+  const [toolApproval, setToolApproval] = React.useState(() => elicitationCoordinator.snapshot());
+  React.useEffect(() => elicitationCoordinator.subscribe(setToolApproval), [elicitationCoordinator]);
+  React.useEffect(() => {
+    approvalTierFile.write(permissionMode);
+  }, [approvalTierFile, permissionMode]);
+  React.useEffect(() => () => {
+    elicitationCoordinator.dispose();
+    try { approvalTierFile.dispose(); } catch (error) { /* best effort on shutdown */ }
+  }, [approvalTierFile, elicitationCoordinator]);
   const backendMigration = React.useMemo(() => migrateBackendPref(window.localStorage), []);
   const [backendPref, setBackendPref] = React.useState(() => backendMigration.pref);
   const [channelLock, setChannelLock] = React.useState(() => backendMigration.lockedChannel);
@@ -537,11 +564,20 @@ function Shell({ cs }) {
   const runtimeRef = React.useRef({ providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: 'subscription', claudeApiProvider: null });
   const extRoot = React.useMemo(() => readCepSystemPath({ cs, platform }), [cs, platform]);
   const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot, platform }), [extRoot, platform]);
+  const getMcpSpec = React.useCallback(async () => withToolApprovalTier(
+    await resolveMcpCommand({ extRoot, platform }),
+    approvalTierFile,
+  ), [approvalTierFile, extRoot, platform]);
   const mcp = React.useMemo(() => createMcpClient({
     platform,
     extRoot,
+    resolveCommand: getMcpSpec,
+    env: approvalTierFile.env(),
+    onElicitation: elicitationCoordinator.handle,
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
-  }), [extRoot, platform]);
+  }), [approvalTierFile, elicitationCoordinator, extRoot, getMcpSpec, platform]);
+  const toolsApi = React.useMemo(() => createToolsApi(mcp), [mcp]);
+  React.useEffect(() => () => mcp.stop(), [mcp]);
   const handleChatEvent = React.useCallback((evt) => {
     if (evt.type === 'turn-start') setChatStreaming(true);
     if (evt.type === 'thinking') setThinkingActive(!!evt.active);
@@ -580,7 +616,7 @@ function Shell({ cs }) {
     platform,
     resolveNode: resolveSystemNode,
     sidecarPath,
-    getMcpSpec: () => resolveMcpCommand({ extRoot, platform }),
+    getMcpSpec,
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
     getModel: () => runtimeRef.current.model,
     getPermissionMode: () => runtimeRef.current.permissionMode,
@@ -594,11 +630,11 @@ function Shell({ cs }) {
     },
     lang,
     onEvent: handleChatEvent,
-  }), [extRoot, sidecarPath, mcp, handleChatEvent, platform, providerSecretService]);
+  }), [getMcpSpec, sidecarPath, mcp, handleChatEvent, platform, providerSecretService]);
 
   const codexBackend = React.useMemo(() => createCodexBackend({
     platform,
-    getMcpSpec: () => resolveMcpCommand({ extRoot, platform }),
+    getMcpSpec,
     getModel: () => runtimeRef.current.model,
     getPermissionMode: () => runtimeRef.current.permissionMode,
     getEffort: () => runtimeRef.current.effort,
@@ -611,7 +647,7 @@ function Shell({ cs }) {
     lang,
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
-  }), [extRoot, mcp, handleChatEvent, platform]);
+  }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
 
   React.useEffect(() => () => {
     codexBackend.reset();
@@ -619,18 +655,18 @@ function Shell({ cs }) {
 
   const openCodeBackend = React.useMemo(() => createOpenCodeBackend({
     platform,
-    getMcpSpec: () => resolveMcpCommand({ extRoot, platform }),
+    getMcpSpec,
     getModel: () => runtimeRef.current.model,
     getPermissionMode: () => runtimeRef.current.permissionMode,
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
-  }), [extRoot, mcp, handleChatEvent, platform]);
+  }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
 
   const zcodeBackend = React.useMemo(() => createZcodeBackend({
     platform,
-    getMcpSpec: () => resolveMcpCommand({ extRoot, platform }),
+    getMcpSpec,
     getModel: () => runtimeRef.current.model,
     getPermissionMode: () => runtimeRef.current.permissionMode,
     getEffort: () => runtimeRef.current.effort,
@@ -639,7 +675,7 @@ function Shell({ cs }) {
     getServerInstructions: () => mcp.getServerInstructions(),
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
-  }), [extRoot, mcp, handleChatEvent, platform]);
+  }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
 
   React.useEffect(() => () => {
     zcodeBackend.reset();
@@ -1101,6 +1137,7 @@ function Shell({ cs }) {
   const tabs = [
     { id: 'chat', icon: 'message-square', label: t.chat },
     { id: 'activity', icon: 'list-checks', label: t.activity },
+    { id: 'tools', icon: 'wrench', label: t.tools },
     { id: 'settings', icon: 'settings', label: t.settings },
   ];
   const backendDisabledHint = (effective.fixHint && (effective.fixHint[lang] || effective.fixHint.zh))
@@ -1158,6 +1195,14 @@ function Shell({ cs }) {
             onUndoCheckpoint={undoToPreviousCheckpoint}
             emptyTitle={t.actEmptyT}
             emptyCaption={t.actEmptyB}
+          />
+        ) : null}
+        {tab === 'tools' ? (
+          <ToolsScreen
+            api={toolsApi}
+            lang={lang}
+            cepFs={window.cep && window.cep.fs}
+            initialPath={extRoot}
           />
         ) : null}
         {tab === 'settings' ? (
@@ -1285,6 +1330,11 @@ function Shell({ cs }) {
           setConfirmRegen(false);
           setTokenEpoch((n) => n + 1);
         }}
+      />
+      <ToolApprovalDialog
+        record={toolApproval && toolApproval.plan ? toolApproval : null}
+        lang={lang}
+        onResolve={(result) => elicitationCoordinator.resolveVisible(result)}
       />
     </React.Fragment>
   );

@@ -84,10 +84,10 @@
       var I = Array.isArray;
       var J = Object.prototype.hasOwnProperty;
       var K = { current: null };
-      var L3 = { key: true, ref: true, __self: true, __source: true };
+      var L5 = { key: true, ref: true, __self: true, __source: true };
       function M(a, b, e) {
         var d, c = {}, k = null, h = null;
-        if (null != b) for (d in void 0 !== b.ref && (h = b.ref), void 0 !== b.key && (k = "" + b.key), b) J.call(b, d) && !L3.hasOwnProperty(d) && (c[d] = b[d]);
+        if (null != b) for (d in void 0 !== b.ref && (h = b.ref), void 0 !== b.key && (k = "" + b.key), b) J.call(b, d) && !L5.hasOwnProperty(d) && (c[d] = b[d]);
         var g = arguments.length - 2;
         if (1 === g) c.children = e;
         else if (1 < g) {
@@ -205,7 +205,7 @@
           void 0 !== b.ref && (k = b.ref, h = K.current);
           void 0 !== b.key && (c = "" + b.key);
           if (a.type && a.type.defaultProps) var g = a.type.defaultProps;
-          for (f in b) J.call(b, f) && !L3.hasOwnProperty(f) && (d[f] = void 0 === b[f] && void 0 !== g ? g[f] : b[f]);
+          for (f in b) J.call(b, f) && !L5.hasOwnProperty(f) && (d[f] = void 0 === b[f] && void 0 !== g ? g[f] : b[f]);
         }
         var f = arguments.length - 2;
         if (1 === f) d.children = e;
@@ -389,7 +389,7 @@
       }
       function J(a, b) {
         A2 = false;
-        B && (B = false, E(L3), L3 = -1);
+        B && (B = false, E(L5), L5 = -1);
         z = true;
         var c = y;
         try {
@@ -419,7 +419,7 @@
       }
       var N = false;
       var O = null;
-      var L3 = -1;
+      var L5 = -1;
       var P = 5;
       var Q = -1;
       function M() {
@@ -457,7 +457,7 @@
         N || (N = true, S2());
       }
       function K(a, b) {
-        L3 = D2(function() {
+        L5 = D2(function() {
           a(exports.unstable_now());
         }, b);
       }
@@ -544,7 +544,7 @@
         }
         e = c + e;
         a = { id: u++, callback: b, priorityLevel: a, startTime: c, expirationTime: e, sortIndex: -1 };
-        c > d ? (a.sortIndex = c, f(t, a), null === h(r) && a === h(t) && (B ? (E(L3), L3 = -1) : B = true, K(H, c - d))) : (a.sortIndex = e, f(r, a), A2 || z || (A2 = true, I(J)));
+        c > d ? (a.sortIndex = c, f(t, a), null === h(r) && a === h(t) && (B ? (E(L5), L5 = -1) : B = true, K(H, c - d))) : (a.sortIndex = e, f(r, a), A2 || z || (A2 = true, I(J)));
         return a;
       };
       exports.unstable_shouldYield = M;
@@ -3495,7 +3495,7 @@
       function Bh(a) {
         vh.current === a && (E(uh), E(vh));
       }
-      var L3 = Uf(0);
+      var L5 = Uf(0);
       function Ch(a) {
         for (var b = a; null !== b; ) {
           if (13 === b.tag) {
@@ -4285,11 +4285,11 @@
         return { baseLanes: a, cachePool: null, transitions: null };
       }
       function oj(a, b, c) {
-        var d = b.pendingProps, e = L3.current, f = false, g = 0 !== (b.flags & 128), h;
+        var d = b.pendingProps, e = L5.current, f = false, g = 0 !== (b.flags & 128), h;
         (h = g) || (h = null !== a && null === a.memoizedState ? false : 0 !== (e & 2));
         if (h) f = true, b.flags &= -129;
         else if (null === a || null !== a.memoizedState) e |= 1;
-        G(L3, e & 1);
+        G(L5, e & 1);
         if (null === a) {
           Eg(b);
           a = b.memoizedState;
@@ -4443,7 +4443,7 @@
       function xj(a, b, c) {
         var d = b.pendingProps, e = d.revealOrder, f = d.tail;
         Xi(a, b, d.children, c);
-        d = L3.current;
+        d = L5.current;
         if (0 !== (d & 2)) d = d & 1 | 2, b.flags |= 128;
         else {
           if (null !== a && 0 !== (a.flags & 128)) a: for (a = b.child; null !== a; ) {
@@ -4464,7 +4464,7 @@
           }
           d &= 1;
         }
-        G(L3, d);
+        G(L5, d);
         if (0 === (b.mode & 1)) b.memoizedState = null;
         else switch (e) {
           case "forwards":
@@ -4538,13 +4538,13 @@
           case 13:
             d = b.memoizedState;
             if (null !== d) {
-              if (null !== d.dehydrated) return G(L3, L3.current & 1), b.flags |= 128, null;
+              if (null !== d.dehydrated) return G(L5, L5.current & 1), b.flags |= 128, null;
               if (0 !== (c & b.child.childLanes)) return oj(a, b, c);
-              G(L3, L3.current & 1);
+              G(L5, L5.current & 1);
               a = Zi(a, b, c);
               return null !== a ? a.sibling : null;
             }
-            G(L3, L3.current & 1);
+            G(L5, L5.current & 1);
             break;
           case 19:
             d = 0 !== (c & b.childLanes);
@@ -4554,7 +4554,7 @@
             }
             e = b.memoizedState;
             null !== e && (e.rendering = null, e.tail = null, e.lastEffect = null);
-            G(L3, L3.current);
+            G(L5, L5.current);
             if (d) break;
             else return null;
           case 22:
@@ -4916,7 +4916,7 @@
             S2(b);
             return null;
           case 13:
-            E(L3);
+            E(L5);
             d = b.memoizedState;
             if (null === a || null !== a.memoizedState && null !== a.memoizedState.dehydrated) {
               if (I && null !== yg && 0 !== (b.mode & 1) && 0 === (b.flags & 128)) Hg(), Ig(), b.flags |= 98560, f = false;
@@ -4935,7 +4935,7 @@
             }
             if (0 !== (b.flags & 128)) return b.lanes = c, b;
             d = null !== d;
-            d !== (null !== a && null !== a.memoizedState) && d && (b.child.flags |= 8192, 0 !== (b.mode & 1) && (null === a || 0 !== (L3.current & 1) ? 0 === T2 && (T2 = 3) : tj()));
+            d !== (null !== a && null !== a.memoizedState) && d && (b.child.flags |= 8192, 0 !== (b.mode & 1) && (null === a || 0 !== (L5.current & 1) ? 0 === T2 && (T2 = 3) : tj()));
             null !== b.updateQueue && (b.flags |= 4);
             S2(b);
             return null;
@@ -4946,7 +4946,7 @@
           case 17:
             return Zf(b.type) && $f(), S2(b), null;
           case 19:
-            E(L3);
+            E(L5);
             f = b.memoizedState;
             if (null === f) return S2(b), null;
             d = 0 !== (b.flags & 128);
@@ -4963,7 +4963,7 @@
                   b.subtreeFlags = 0;
                   d = c;
                   for (c = b.child; null !== c; ) f = c, a = d, f.flags &= 14680066, g = f.alternate, null === g ? (f.childLanes = 0, f.lanes = a, f.child = null, f.subtreeFlags = 0, f.memoizedProps = null, f.memoizedState = null, f.updateQueue = null, f.dependencies = null, f.stateNode = null) : (f.childLanes = g.childLanes, f.lanes = g.lanes, f.child = g.child, f.subtreeFlags = 0, f.deletions = null, f.memoizedProps = g.memoizedProps, f.memoizedState = g.memoizedState, f.updateQueue = g.updateQueue, f.type = g.type, a = g.dependencies, f.dependencies = null === a ? null : { lanes: a.lanes, firstContext: a.firstContext }), c = c.sibling;
-                  G(L3, L3.current & 1 | 2);
+                  G(L5, L5.current & 1 | 2);
                   return b.child;
                 }
                 a = a.sibling;
@@ -4976,7 +4976,7 @@
               } else 2 * B() - f.renderingStartTime > Gj && 1073741824 !== c && (b.flags |= 128, d = true, Dj(f, false), b.lanes = 4194304);
               f.isBackwards ? (g.sibling = b.child, b.child = g) : (c = f.last, null !== c ? c.sibling = g : b.child = g, f.last = g);
             }
-            if (null !== f.tail) return b = f.tail, f.rendering = b, f.tail = b.sibling, f.renderingStartTime = B(), b.sibling = null, c = L3.current, G(L3, d ? c & 1 | 2 : c & 1), b;
+            if (null !== f.tail) return b = f.tail, f.rendering = b, f.tail = b.sibling, f.renderingStartTime = B(), b.sibling = null, c = L5.current, G(L5, d ? c & 1 | 2 : c & 1), b;
             S2(b);
             return null;
           case 22:
@@ -4999,7 +4999,7 @@
           case 5:
             return Bh(b), null;
           case 13:
-            E(L3);
+            E(L5);
             a = b.memoizedState;
             if (null !== a && null !== a.dehydrated) {
               if (null === b.alternate) throw Error(p(340));
@@ -5008,7 +5008,7 @@
             a = b.flags;
             return a & 65536 ? (b.flags = a & -65537 | 128, b) : null;
           case 19:
-            return E(L3), null;
+            return E(L5), null;
           case 4:
             return zh(), null;
           case 10:
@@ -6049,10 +6049,10 @@
               zh();
               break;
             case 13:
-              E(L3);
+              E(L5);
               break;
             case 19:
-              E(L3);
+              E(L5);
               break;
             case 10:
               ah(d.type._context);
@@ -7280,11 +7280,11 @@
   });
 
   // src/main.jsx
-  var import_react41 = __toESM(require_react(), 1);
+  var import_react46 = __toESM(require_react(), 1);
   var import_client = __toESM(require_client(), 1);
 
   // src/app/App.jsx
-  var import_react40 = __toESM(require_react(), 1);
+  var import_react45 = __toESM(require_react(), 1);
 
   // src/app/i18n.jsx
   var import_react = __toESM(require_react(), 1);
@@ -7736,6 +7736,17 @@
     ["path", { d: "M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11", key: "f3b9sd" }]
   ]);
 
+  // node_modules/lucide-react/dist/esm/icons/wrench.js
+  var Wrench = createLucideIcon("Wrench", [
+    [
+      "path",
+      {
+        d: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z",
+        key: "cbrjhi"
+      }
+    ]
+  ]);
+
   // node_modules/lucide-react/dist/esm/icons/x.js
   var X = createLucideIcon("X", [
     ["path", { d: "M18 6 6 18", key: "1bl5f8" }],
@@ -7796,7 +7807,8 @@
     circle: Circle,
     box: Box,
     brain: Brain,
-    zap: Zap
+    zap: Zap,
+    wrench: Wrench
   };
   function Icon2({ name, size = 14, strokeWidth = 1.75, color = "currentColor", style }) {
     const C2 = MAP[name];
@@ -11873,7 +11885,7 @@
       return /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(ChatBubble, { role: "ai", children: entry.text });
     }
     if (entry.type === "tool-call") {
-      const highRisk = entry.risk === "destructive";
+      const highRisk = entry.risk === "destructive" || entry.risk === "external";
       return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { paddingLeft: 28, display: "flex", flexDirection: "column", gap: 6 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
           ToolCallCard,
@@ -12037,6 +12049,1345 @@
           notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : null
         }
       ) })
+    ] });
+  }
+
+  // src/screens/ToolsScreen.jsx
+  var import_react40 = __toESM(require_react(), 1);
+
+  // src/components/forms/Textarea.jsx
+  var import_react37 = __toESM(require_react(), 1);
+  var import_jsx_runtime35 = __toESM(require_jsx_runtime(), 1);
+  function Textarea({
+    value,
+    onChange,
+    placeholder,
+    mono = false,
+    disabled = false,
+    error = false,
+    rows = 5,
+    style
+  }) {
+    const [focused, setFocused] = import_react37.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+      "textarea",
+      {
+        className: "ds-focusable",
+        value,
+        placeholder,
+        disabled,
+        rows,
+        onChange: (event) => onChange && onChange(event.target.value),
+        onFocus: () => setFocused(true),
+        onBlur: () => setFocused(false),
+        style: {
+          display: "block",
+          width: "100%",
+          minWidth: 0,
+          boxSizing: "border-box",
+          resize: "vertical",
+          padding: "7px 8px",
+          background: "var(--bg-well)",
+          color: error ? "var(--error)" : "var(--text-primary)",
+          border: `1px solid ${error ? "var(--error-border)" : focused ? "var(--border-strong)" : "var(--border-default)"}`,
+          borderRadius: "var(--radius-md)",
+          boxShadow: focused ? "0 0 0 1px var(--focus-ring)" : "none",
+          outline: "none",
+          opacity: disabled ? 0.45 : 1,
+          font: `var(--weight-regular) ${mono ? "var(--text-caption)" : "var(--text-body)"}/var(--leading-normal) ${mono ? "var(--font-mono)" : "var(--font-ui)"}`,
+          transition: "border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out)",
+          ...style
+        }
+      }
+    );
+  }
+
+  // src/components/tools/ToolArtifactEditor.jsx
+  var import_react38 = __toESM(require_react(), 1);
+
+  // src/lib/toolsState.js
+  var EMPTY_SUMMARIES = Object.freeze([]);
+  var INITIAL_STATUSES = Object.freeze(["saved", "pinned"]);
+  var INITIAL_TOOLS_STATE = Object.freeze({
+    phase: "idle",
+    summaries: EMPTY_SUMMARIES,
+    total: 0,
+    selectedId: null,
+    inspected: null,
+    query: "",
+    kinds: [],
+    category: "",
+    risk: "",
+    statuses: INITIAL_STATUSES,
+    sourceType: "",
+    editor: null,
+    importPreview: null,
+    conflictResolutions: {},
+    error: ""
+  });
+  var STATUS_ORDER = { pinned: 0, saved: 1, candidate: 2, archived: 3, deprecated: 4 };
+  var SOURCE_ORDER = { bundled: 0, user: 1, legacy: 2, imported: 3, "chat-tool-call": 4 };
+  var RISK_ORDER = { read: 0, write: 1, destructive: 2, external: 3 };
+  function sourceType(artifact) {
+    return artifact && (artifact.sourceType || artifact.source && artifact.source.type) || "";
+  }
+  function sortSummaries(values) {
+    return [...values].sort((left, right) => {
+      var _a, _b, _c, _d, _e, _f;
+      const pinned = Number(right.status === "pinned") - Number(left.status === "pinned");
+      if (pinned) return pinned;
+      const verified = Number(Boolean(right.verified)) - Number(Boolean(left.verified));
+      if (verified) return verified;
+      const status = ((_a = STATUS_ORDER[left.status]) != null ? _a : 99) - ((_b = STATUS_ORDER[right.status]) != null ? _b : 99);
+      if (status) return status;
+      const risk = ((_c = RISK_ORDER[left.declaredRisk]) != null ? _c : 99) - ((_d = RISK_ORDER[right.declaredRisk]) != null ? _d : 99);
+      if (risk) return risk;
+      const source = ((_e = SOURCE_ORDER[sourceType(left)]) != null ? _e : 99) - ((_f = SOURCE_ORDER[sourceType(right)]) != null ? _f : 99);
+      if (source) return source;
+      const updated = Number(right.updatedAt || 0) - Number(left.updatedAt || 0);
+      if (updated) return updated;
+      return String(left.id || "").localeCompare(String(right.id || ""));
+    });
+  }
+  function toSummary(value) {
+    var _a;
+    if (!value || typeof value !== "object") return value;
+    return {
+      id: value.id,
+      name: value.name,
+      description: value.description,
+      kind: value.kind,
+      category: value.category,
+      tags: Array.isArray(value.tags) ? [...value.tags] : [],
+      status: value.status,
+      verified: Boolean(value.verified),
+      declaredRisk: value.declaredRisk,
+      contentHash: value.contentHash,
+      revision: value.revision,
+      updatedAt: value.updatedAt,
+      lastUsedAt: (_a = value.lastUsedAt) != null ? _a : null,
+      sourceType: value.sourceType || value.source && value.source.type || ""
+    };
+  }
+  function messageOf(error) {
+    return String(error && error.message || error || "Tool Library request failed");
+  }
+  function isRevisionConflict(error) {
+    const code = String(error && (error.code || error.payload && error.payload.code) || "");
+    return code === "tool_revision_conflict" || code === "tool_store_revision_conflict";
+  }
+  function reduceToolsState(state = INITIAL_TOOLS_STATE, event = {}) {
+    switch (event.type) {
+      case "load-start":
+        return { ...state, phase: "loading", error: "", refreshRequired: false };
+      case "load-success": {
+        const payload = event.payload || event;
+        const summaries = (payload.artifacts || payload.summaries || []).map(toSummary);
+        return {
+          ...state,
+          phase: "ready",
+          summaries: sortSummaries(summaries),
+          total: Number.isFinite(payload.total) ? payload.total : summaries.length,
+          error: "",
+          refreshRequired: false
+        };
+      }
+      case "load-error":
+        return {
+          ...state,
+          phase: "error",
+          error: messageOf(event.error),
+          refreshRequired: isRevisionConflict(event.error)
+        };
+      case "select":
+        return {
+          ...state,
+          selectedId: event.id || null,
+          inspected: null,
+          editor: null,
+          error: ""
+        };
+      case "inspect-success":
+        return {
+          ...state,
+          phase: "ready",
+          inspected: {
+            artifact: event.payload && event.payload.artifact,
+            trust: event.payload && event.payload.trust || "user-untrusted"
+          },
+          error: ""
+        };
+      case "set-query":
+        return { ...state, query: String(event.value || ""), error: "" };
+      case "set-filter":
+        return { ...state, [event.key]: event.value, error: "" };
+      case "edit-start":
+        return { ...state, editor: event.editor || event.artifact || null, error: "" };
+      case "edit-change":
+        return {
+          ...state,
+          editor: state.editor ? { ...state.editor, ...event.changes || { [event.key]: event.value } } : state.editor,
+          error: ""
+        };
+      case "edit-cancel":
+        return { ...state, editor: null, error: "" };
+      case "save-success": {
+        const artifact = event.artifact || event.payload && event.payload.artifact;
+        const summaries = artifact ? state.summaries.map((row) => row.id === artifact.id ? toSummary({ ...row, ...artifact }) : row) : state.summaries;
+        return {
+          ...state,
+          phase: "ready",
+          summaries: sortSummaries(summaries),
+          inspected: artifact ? { artifact, trust: event.trust || "user-untrusted" } : state.inspected,
+          editor: null,
+          error: "",
+          refreshRequired: false
+        };
+      }
+      case "delete-success": {
+        const id = event.id || event.artifactId;
+        return {
+          ...state,
+          summaries: state.summaries.filter((row) => row.id !== id),
+          total: Math.max(0, state.total - 1),
+          selectedId: state.selectedId === id ? null : state.selectedId,
+          inspected: state.selectedId === id ? null : state.inspected,
+          editor: null,
+          error: ""
+        };
+      }
+      case "import-preview":
+        return {
+          ...state,
+          importPreview: event.preview || event.payload || null,
+          conflictResolutions: {},
+          error: ""
+        };
+      case "import-resolution":
+        return {
+          ...state,
+          conflictResolutions: {
+            ...state.conflictResolutions,
+            [event.conflictId]: event.resolution
+          }
+        };
+      case "import-finished":
+        return {
+          ...state,
+          importPreview: null,
+          conflictResolutions: {},
+          error: ""
+        };
+      case "clear-error":
+        return { ...state, error: "", refreshRequired: false };
+      default:
+        return state;
+    }
+  }
+  function searchArgsFromState(state, { offset = 0, limit = 100 } = {}) {
+    const args = {
+      query: String(state.query || ""),
+      statuses: [...state.statuses || []],
+      offset,
+      limit
+    };
+    if (state.kinds && state.kinds.length) args.kinds = [...state.kinds];
+    if (state.category) args.categories = [state.category];
+    if (state.risk) args.risks = [state.risk];
+    if (state.sourceType) args.source_types = [state.sourceType];
+    return args;
+  }
+  function canEditArtifact(artifact) {
+    return Boolean(
+      artifact && sourceType(artifact) !== "bundled" && !["archived", "deprecated"].includes(artifact.status)
+    );
+  }
+  function canExecuteArtifact(artifact) {
+    return Boolean(artifact && ["saved", "pinned"].includes(artifact.status));
+  }
+  function toolExecutionCapabilities(artifact) {
+    const enabled = canExecuteArtifact(artifact);
+    const kind = artifact && artifact.kind;
+    return {
+      render: enabled && ["expression", "prompt-skill"].includes(kind),
+      execute: enabled && ["jsx", "diagnostic", "recipe"].includes(kind),
+      apply: enabled && kind === "expression"
+    };
+  }
+  function canPromoteArtifact(artifact) {
+    return Boolean(artifact && artifact.status === "candidate");
+  }
+  function displayArtifactContent(artifact) {
+    if (!artifact || artifact.content === void 0 || artifact.content === null) return "";
+    if (typeof artifact.content === "string") return artifact.content;
+    return JSON.stringify(artifact.content, null, 2);
+  }
+  function emptyToolRunInputs() {
+    return {
+      args: "{}",
+      target: { compId: "", layerId: "", path: "" }
+    };
+  }
+  function normalizeExpressionTarget(target) {
+    const compId = String(target && target.compId || "").trim();
+    const path = String(target && target.path || "").trim();
+    const layerId = Number(target && target.layerId);
+    if (!compId || !path || !Number.isInteger(layerId) || layerId < 1) {
+      throw new TypeError("expression target is invalid");
+    }
+    return { compId, layerId, path };
+  }
+  function canonicalizeJson(value) {
+    if (Array.isArray(value)) return value.map(canonicalizeJson);
+    if (!value || typeof value !== "object") return value;
+    return Object.keys(value).sort().reduce((result, key) => {
+      result[key] = canonicalizeJson(value[key]);
+      return result;
+    }, /* @__PURE__ */ Object.create(null));
+  }
+  function sameJsonValue(left, right) {
+    if (Object.is(left, right)) return true;
+    return JSON.stringify(canonicalizeJson(left)) === JSON.stringify(canonicalizeJson(right));
+  }
+  function buildArtifactEditChanges(artifact, editable) {
+    const legacy = sourceType(artifact) === "legacy";
+    const fields = [
+      ["name", "name"],
+      ["description", "description"],
+      ["kind", "kind"],
+      ["category", "category"],
+      ["tags", "tags"],
+      ["declared_risk", "declaredRisk"],
+      ["content", "content"],
+      ["args_schema", "argsSchema"]
+    ];
+    const changes = {};
+    for (const [requestKey, artifactKey] of fields) {
+      if (legacy && requestKey === "name") continue;
+      if (!sameJsonValue(editable[requestKey], artifact[artifactKey])) {
+        changes[requestKey] = editable[requestKey];
+      }
+    }
+    if (legacy) {
+      const skillFields = ["description", "content", "args_schema", "kind"];
+      const metadataFields = ["category", "tags", "declared_risk"];
+      const changesSkill = skillFields.some((key) => Object.prototype.hasOwnProperty.call(changes, key));
+      const changesMetadata = metadataFields.some((key) => Object.prototype.hasOwnProperty.call(changes, key));
+      if (changesSkill && changesMetadata) {
+        const error = new Error("Legacy skill fields and metadata must be saved separately");
+        error.code = "tool_legacy_transaction_required";
+        throw error;
+      }
+    }
+    return changes;
+  }
+  function confirmToolAction(confirmImpl, message) {
+    if (typeof confirmImpl !== "function") return false;
+    try {
+      return confirmImpl(message) === true;
+    } catch {
+      return false;
+    }
+  }
+
+  // src/components/tools/ToolArtifactEditor.jsx
+  var import_jsx_runtime36 = __toESM(require_jsx_runtime(), 1);
+  var COPY = {
+    zh: {
+      titleNew: "\u65B0\u5EFA\u5DE5\u5177",
+      titleEdit: "\u7F16\u8F91\u5DE5\u5177",
+      name: "\u540D\u79F0",
+      description: "\u8BF4\u660E",
+      kind: "\u7C7B\u578B",
+      category: "\u5206\u7C7B",
+      tags: "\u6807\u7B7E",
+      risk: "\u58F0\u660E\u98CE\u9669",
+      content: "\u5185\u5BB9",
+      args: "\u53C2\u6570 Schema\uFF08JSON\uFF09",
+      save: "\u4FDD\u5B58",
+      cancel: "\u53D6\u6D88",
+      invalidJson: "JSON \u683C\u5F0F\u65E0\u6548",
+      legacyName: "Legacy \u5DE5\u5177\u540D\u79F0\u4E3A\u53EA\u8BFB",
+      legacySplit: "Legacy \u5DE5\u5177\u7684\u6280\u80FD\u5185\u5BB9\u5B57\u6BB5\u4E0E\u5143\u6570\u636E\u5B57\u6BB5\u9700\u8981\u5206\u4E24\u6B21\u4FDD\u5B58\u3002",
+      noChanges: "\u6CA1\u6709\u9700\u8981\u4FDD\u5B58\u7684\u66F4\u6539\u3002"
+    },
+    en: {
+      titleNew: "New tool",
+      titleEdit: "Edit tool",
+      name: "Name",
+      description: "Description",
+      kind: "Kind",
+      category: "Category",
+      tags: "Tags",
+      risk: "Declared risk",
+      content: "Content",
+      args: "Argument schema (JSON)",
+      save: "Save",
+      cancel: "Cancel",
+      invalidJson: "Invalid JSON",
+      legacyName: "Legacy tool names are read-only",
+      legacySplit: "Save legacy skill fields and metadata fields in two separate operations.",
+      noChanges: "There are no changes to save."
+    }
+  };
+  var KIND_OPTIONS = ["jsx", "expression", "prompt-skill", "recipe", "diagnostic"].map((value) => ({ value, label: value }));
+  var RISK_OPTIONS = ["read", "write", "destructive", "external"].map((value) => ({ value, label: value }));
+  function initialDraft(artifact) {
+    return {
+      name: artifact && artifact.name || "",
+      description: artifact && artifact.description || "",
+      kind: artifact && artifact.kind || "jsx",
+      category: artifact && artifact.category || "workflow",
+      tags: artifact && Array.isArray(artifact.tags) ? artifact.tags.join(", ") : "",
+      declaredRisk: artifact && artifact.declaredRisk || "write",
+      content: artifact ? displayArtifactContent(artifact) : "",
+      argsSchema: JSON.stringify(artifact && artifact.argsSchema || {}, null, 2)
+    };
+  }
+  function parseObject(text) {
+    const parsed = JSON.parse(text || "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new TypeError("object required");
+    return parsed;
+  }
+  function ToolArtifactEditor({
+    artifact = null,
+    lang = "zh",
+    busy = false,
+    onSave,
+    onCancel
+  }) {
+    const t = COPY[lang] || COPY.zh;
+    const isLegacy = Boolean(
+      artifact && (artifact.sourceType || artifact.source && artifact.source.type) === "legacy"
+    );
+    const [draft, setDraft] = import_react38.default.useState(() => initialDraft(artifact));
+    const [error, setError] = import_react38.default.useState("");
+    import_react38.default.useEffect(() => {
+      setDraft(initialDraft(artifact));
+      setError("");
+    }, [artifact]);
+    const update = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
+    const save = async () => {
+      let argsSchema;
+      let content = draft.content;
+      try {
+        argsSchema = parseObject(draft.argsSchema);
+        if (draft.kind === "recipe" || draft.kind === "diagnostic") content = parseObject(draft.content);
+      } catch {
+        setError(t.invalidJson);
+        return;
+      }
+      const editable = {
+        name: draft.name.trim(),
+        description: draft.description,
+        kind: draft.kind,
+        category: draft.category.trim() || "workflow",
+        tags: draft.tags.split(",").map((value) => value.trim()).filter(Boolean),
+        declared_risk: draft.declaredRisk,
+        content,
+        args_schema: argsSchema
+      };
+      if (!editable.name) {
+        setError(t.name);
+        return;
+      }
+      setError("");
+      if (artifact) {
+        let changes;
+        try {
+          changes = buildArtifactEditChanges(artifact, editable);
+        } catch (editError) {
+          if (editError && editError.code === "tool_legacy_transaction_required") {
+            setError(t.legacySplit);
+            return;
+          }
+          throw editError;
+        }
+        if (!Object.keys(changes).length) {
+          setError(t.noChanges);
+          return;
+        }
+        await onSave({
+          artifact_id: artifact.id,
+          changes,
+          expected_revision: artifact.revision,
+          expected_content_hash: artifact.contentHash
+        });
+      } else {
+        await onSave({ ...editable, status: "saved" });
+      }
+    };
+    return /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { className: "tools-editor", role: "dialog", "aria-label": artifact ? t.titleEdit : t.titleNew, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { className: "tools-editor__title", children: artifact ? t.titleEdit : t.titleNew }),
+      /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { className: "tools-editor__grid", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Field, { label: t.name, caption: isLegacy ? t.legacyName : "", children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+          Input,
+          {
+            value: draft.name,
+            onChange: (value) => update("name", value),
+            disabled: isLegacy
+          }
+        ) }),
+        /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Field, { label: t.category, children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Input, { value: draft.category, onChange: (value) => update("category", value) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Field, { label: t.kind, children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Select, { value: draft.kind, onChange: (value) => update("kind", value), options: KIND_OPTIONS }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Field, { label: t.risk, children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Select, { value: draft.declaredRisk, onChange: (value) => update("declaredRisk", value), options: RISK_OPTIONS }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Field, { label: t.description, children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Textarea, { value: draft.description, onChange: (value) => update("description", value), rows: 2 }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Field, { label: t.tags, children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Input, { value: draft.tags, onChange: (value) => update("tags", value), placeholder: "animation, utility" }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Field, { label: t.content, children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Textarea, { mono: true, value: draft.content, onChange: (value) => update("content", value), rows: 9 }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Field, { label: t.args, children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Textarea, { mono: true, value: draft.argsSchema, onChange: (value) => update("argsSchema", value), rows: 6, error: Boolean(error) }) }),
+      error ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { className: "tools-inline-error", role: "alert", children: error }) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { className: "tools-editor__actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Button, { variant: "ghost", onClick: onCancel, disabled: busy, children: t.cancel }),
+        /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Button, { variant: "primary", onClick: save, disabled: busy || !draft.name.trim(), children: t.save })
+      ] })
+    ] });
+  }
+
+  // src/components/tools/ToolArtifactRow.jsx
+  var import_react39 = __toESM(require_react(), 1);
+  var import_jsx_runtime37 = __toESM(require_jsx_runtime(), 1);
+  var L2 = {
+    zh: { never: "\u672A\u4F7F\u7528", verified: "\u5DF2\u9A8C\u8BC1" },
+    en: { never: "Never used", verified: "Verified" }
+  };
+  function riskStatus(risk) {
+    if (risk === "external" || risk === "destructive") return "error";
+    if (risk === "write") return "warn";
+    return "neutral";
+  }
+  function lastUsed(value, t) {
+    if (!value) return t.never;
+    try {
+      return new Date(value).toLocaleString();
+    } catch {
+      return t.never;
+    }
+  }
+  function ToolArtifactRow({ artifact, selected = false, onSelect, lang = "zh" }) {
+    const t = L2[lang] || L2.zh;
+    return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)(
+      "button",
+      {
+        type: "button",
+        className: `tools-artifact-row ds-focusable${selected ? " is-selected" : ""}`,
+        "aria-current": selected || void 0,
+        onClick: () => onSelect && onSelect(artifact.id),
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { className: "tools-artifact-row__top", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { className: "tools-artifact-row__name", children: artifact.name }),
+            artifact.verified ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { status: "ok", icon: "check", children: t.verified }) : null
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { className: "tools-artifact-row__badges", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { children: artifact.kind }),
+            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { children: artifact.category }),
+            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { status: riskStatus(artifact.declaredRisk), children: artifact.declaredRisk }),
+            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { status: artifact.status === "candidate" ? "warn" : artifact.status === "pinned" ? "accent" : "neutral", children: artifact.status })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { className: "tools-artifact-row__meta", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { children: artifact.sourceType }),
+            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { children: lastUsed(artifact.lastUsedAt, t) })
+          ] })
+        ]
+      }
+    );
+  }
+
+  // src/cep/toolFileDialogs.js
+  var TOOL_PACKAGE_SUFFIX = ".aemcptools";
+  function selectedValue(result) {
+    if (!result || Number(result.err || 0) !== 0) return null;
+    const data = result.data;
+    if (Array.isArray(data)) return data.length === 1 ? data[0] : null;
+    return data || null;
+  }
+  function normalizeFileUrl(value) {
+    let path = String(value || "").trim();
+    if (/^file:\/\//i.test(path)) {
+      path = decodeURIComponent(path.replace(/^file:\/\//i, ""));
+      if (/^\/[A-Za-z]:[\\/]/.test(path)) path = path.slice(1);
+    }
+    return path;
+  }
+  function chooseToolPackage(cepFs, {
+    title = "Import Tool Library package",
+    initialPath = "",
+    normalizePath: normalizePath2 = normalizeFileUrl
+  } = {}) {
+    if (!cepFs || typeof cepFs.showOpenDialog !== "function") {
+      throw new TypeError("CEP file dialog is unavailable");
+    }
+    const result = cepFs.showOpenDialog(
+      false,
+      false,
+      title,
+      initialPath,
+      ["aemcptools"]
+    );
+    const selected = selectedValue(result);
+    if (!selected) return null;
+    const path = normalizePath2(normalizeFileUrl(selected));
+    if (!path.toLowerCase().endsWith(TOOL_PACKAGE_SUFFIX)) {
+      throw new Error("Select a .aemcptools package");
+    }
+    return path;
+  }
+  function chooseToolExportPath(cepFs, {
+    title = "Export Tool Library package",
+    initialPath = "",
+    normalizePath: normalizePath2 = normalizeFileUrl
+  } = {}) {
+    if (!cepFs || typeof cepFs.showSaveDialog !== "function") {
+      throw new TypeError("CEP file dialog is unavailable");
+    }
+    const result = cepFs.showSaveDialog(
+      title,
+      initialPath,
+      ["aemcptools"],
+      "tools.aemcptools"
+    );
+    const selected = selectedValue(result);
+    if (!selected) return null;
+    const path = normalizePath2(normalizeFileUrl(selected));
+    return path.toLowerCase().endsWith(TOOL_PACKAGE_SUFFIX) ? path : `${path}${TOOL_PACKAGE_SUFFIX}`;
+  }
+
+  // src/cep/toolsApi.js
+  function parseMcpPayload(result) {
+    const text = Array.isArray(result && result.content) ? result.content.filter((entry) => entry && entry.type === "text").map((entry) => String(entry.text || "")).join("") : "";
+    let payload;
+    try {
+      payload = JSON.parse(text);
+    } catch (cause) {
+      const error = new Error("Invalid Tool Library response");
+      error.code = "tool_invalid_response";
+      error.cause = cause;
+      throw error;
+    }
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      const error = new Error("Invalid Tool Library response");
+      error.code = "tool_invalid_response";
+      throw error;
+    }
+    if (result && result.isError || payload.ok === false) {
+      const message = String(payload.error || "Tool Library request failed");
+      const error = new Error(message);
+      error.code = String(payload.code || payload.error || "tool_request_failed");
+      error.payload = payload;
+      throw error;
+    }
+    return payload;
+  }
+  function createToolsApi(mcp) {
+    if (!mcp || typeof mcp.callTool !== "function") {
+      throw new TypeError("An MCP client is required");
+    }
+    const call = async (name, args) => parseMcpPayload(
+      await mcp.callTool(name, args)
+    );
+    return {
+      index: (args = {}) => call("ae_toolIndex", args),
+      search: (args = {}) => call("ae_toolSearch", args),
+      inspect: (artifactId) => call("ae_toolInspect", { artifact_id: artifactId }),
+      create: (input) => call("ae_toolCreate", input),
+      edit: (input) => call("ae_toolEdit", input),
+      delete: (input) => call("ae_toolDelete", input),
+      archive: (input) => call("ae_toolArchive", input),
+      duplicate: (input) => call("ae_toolDuplicate", input),
+      promoteFromHistory: (input) => call("ae_toolPromoteFromHistory", input),
+      use: (input) => call("ae_toolUse", input),
+      previewImport: (path) => call("ae_toolImport", { action: "preview", path }),
+      commitImport: (importId, resolutions) => call("ae_toolImport", {
+        action: "commit",
+        import_id: importId,
+        resolutions
+      }),
+      discardImport: (importId) => call("ae_toolImport", {
+        action: "discard",
+        import_id: importId
+      }),
+      exportPackage: (artifactIds, outPath) => call("ae_toolExport", {
+        artifact_ids: artifactIds,
+        out_path: outPath
+      })
+    };
+  }
+  async function executeToolPlan(api, {
+    artifactId,
+    operation,
+    args = {},
+    target = {}
+  }) {
+    const plan = await api.use({
+      artifact_id: artifactId,
+      action: "prepare",
+      operation,
+      args,
+      target
+    });
+    const grant = await api.use({
+      action: "grant",
+      plan_hash: plan.planHash,
+      grant_scope: "once"
+    });
+    return api.use({
+      action: "execute",
+      plan_hash: plan.planHash,
+      grant_id: grant.grantId
+    });
+  }
+
+  // src/screens/ToolsScreen.jsx
+  var import_jsx_runtime38 = __toESM(require_jsx_runtime(), 1);
+  var TEXT = {
+    zh: {
+      library: "\u5DE5\u5177\u5E93",
+      new: "\u65B0\u5EFA",
+      import: "\u5BFC\u5165",
+      export: "\u5BFC\u51FA",
+      search: "\u641C\u7D22\u5DE5\u5177\u2026",
+      allKinds: "\u5168\u90E8\u7C7B\u578B",
+      allRisk: "\u5168\u90E8\u98CE\u9669",
+      allSource: "\u5168\u90E8\u6765\u6E90",
+      active: "\u5DF2\u4FDD\u5B58 + \u7F6E\u9876",
+      candidates: "\u5019\u9009",
+      saved: "\u5DF2\u4FDD\u5B58",
+      pinned: "\u5DF2\u7F6E\u9876",
+      archived: "\u5DF2\u5F52\u6863",
+      deprecated: "\u5DF2\u5F03\u7528",
+      allStatuses: "\u5168\u90E8\u72B6\u6001",
+      category: "\u5206\u7C7B",
+      empty: "\u6CA1\u6709\u5339\u914D\u7684\u5DE5\u5177",
+      emptyCap: "\u65B0\u5EFA\u5DE5\u5177\uFF0C\u6216\u5BFC\u5165 .aemcptools \u5305\u3002",
+      select: "\u9009\u62E9\u4E00\u4E2A\u5DE5\u5177",
+      selectCap: "\u5148\u4ECE\u5217\u8868\u9009\u62E9\u6458\u8981\uFF0C\u518D\u6309\u9700\u8BFB\u53D6\u5B8C\u6574\u5185\u5BB9\u3002",
+      edit: "\u7F16\u8F91",
+      duplicate: "\u526F\u672C",
+      archive: "\u5F52\u6863",
+      delete: "\u5220\u9664",
+      pin: "\u7F6E\u9876",
+      unpin: "\u53D6\u6D88\u7F6E\u9876",
+      verify: "\u6807\u8BB0\u5DF2\u5BA1\u9605",
+      promote: "\u63D0\u5347\u4E3A\u5DF2\u4FDD\u5B58",
+      copy: "\u590D\u5236",
+      renderCopy: "\u6E32\u67D3\u5E76\u590D\u5236",
+      run: "\u51C6\u5907\u5E76\u8FD0\u884C",
+      metadata: "\u5143\u6570\u636E",
+      content: "\u5185\u5BB9\uFF08\u4E0D\u53EF\u4FE1\u7528\u6237\u6570\u636E\uFF09",
+      args: "\u53C2\u6570\uFF08JSON\uFF09",
+      result: "\u6267\u884C\u7ED3\u679C",
+      compId: "Comp ID",
+      layerId: "Layer ID",
+      propertyPath: "\u5C5E\u6027\u8DEF\u5F84",
+      refresh: "\u5237\u65B0",
+      importTitle: "\u5BFC\u5165\u9884\u89C8",
+      importChanges: "\u626B\u63CF\u540E\u5DEE\u5F02",
+      importConflict: "\u51B2\u7A81",
+      keep: "\u4FDD\u7559\u73B0\u6709",
+      duplicateIncoming: "\u5BFC\u5165\u526F\u672C",
+      commit: "\u786E\u8BA4\u5BFC\u5165\u4E3A\u5019\u9009",
+      cancel: "\u53D6\u6D88",
+      contentChanged: "\u5185\u5BB9 hash \u5DF2\u53D8\u5316",
+      confirmDelete: "\u6C38\u4E45\u5220\u9664\u8FD9\u4E2A\u5DE5\u5177\uFF1F",
+      confirmArchive: "\u5F52\u6863\u8FD9\u4E2A\u5DE5\u5177\uFF1F",
+      copyName: "\u526F\u672C\u540D\u79F0",
+      confirmReplace: "\u63D0\u5347\u5019\u9009\u65F6\u66FF\u6362\u73B0\u6709\u51B2\u7A81\u5DE5\u5177\uFF1F\u53D6\u6D88\u5C06\u4FDD\u7559\u4E24\u4EFD\u3002",
+      invalidArgs: "\u53C2\u6570\u5FC5\u987B\u662F JSON \u5BF9\u8C61\u3002",
+      targetRequired: "\u5E94\u7528\u8868\u8FBE\u5F0F\u9700\u8981 compId\u3001layerId \u548C\u5C5E\u6027\u8DEF\u5F84\u3002",
+      noCep: "CEP \u6587\u4EF6\u5BF9\u8BDD\u6846\u4E0D\u53EF\u7528\u3002",
+      trust: "\u4FE1\u4EFB",
+      signed: "\u7B7E\u540D\u5185\u7F6E",
+      untrusted: "\u7528\u6237\u4E0D\u53EF\u4FE1"
+    },
+    en: {
+      library: "Tool Library",
+      new: "New",
+      import: "Import",
+      export: "Export",
+      search: "Search tools\u2026",
+      allKinds: "All kinds",
+      allRisk: "All risks",
+      allSource: "All sources",
+      active: "Saved + pinned",
+      candidates: "Candidates",
+      saved: "Saved",
+      pinned: "Pinned",
+      archived: "Archived",
+      deprecated: "Deprecated",
+      allStatuses: "All statuses",
+      category: "Category",
+      empty: "No matching tools",
+      emptyCap: "Create a tool or import an .aemcptools package.",
+      select: "Select a tool",
+      selectCap: "Choose a summary first, then inspect full content on demand.",
+      edit: "Edit",
+      duplicate: "Duplicate",
+      archive: "Archive",
+      delete: "Delete",
+      pin: "Pin",
+      unpin: "Unpin",
+      verify: "Mark reviewed",
+      promote: "Promote to saved",
+      copy: "Copy",
+      renderCopy: "Render & copy",
+      run: "Prepare & run",
+      metadata: "Metadata",
+      content: "Content (untrusted user data)",
+      args: "Arguments (JSON)",
+      result: "Execution result",
+      compId: "Comp ID",
+      layerId: "Layer ID",
+      propertyPath: "Property path",
+      refresh: "Refresh",
+      importTitle: "Import preview",
+      importChanges: "Post-scan changes",
+      importConflict: "Conflict",
+      keep: "Keep existing",
+      duplicateIncoming: "Import duplicate",
+      commit: "Import as candidates",
+      cancel: "Cancel",
+      contentChanged: "Content hash changed",
+      confirmDelete: "Permanently delete this tool?",
+      confirmArchive: "Archive this tool?",
+      copyName: "Duplicate name",
+      confirmReplace: "Replace the existing conflicting tool while promoting? Cancel keeps both copies.",
+      invalidArgs: "Arguments must be a JSON object.",
+      targetRequired: "Expression apply requires compId, layerId, and property path.",
+      noCep: "CEP file dialogs are unavailable.",
+      trust: "Trust",
+      signed: "Signed bundled",
+      untrusted: "User untrusted"
+    }
+  };
+  var KIND_OPTIONS2 = ["", "jsx", "expression", "prompt-skill", "recipe", "diagnostic"];
+  var RISK_OPTIONS2 = ["", "read", "write", "destructive", "external"];
+  var SOURCE_OPTIONS = ["", "user", "legacy", "bundled", "imported", "chat-tool-call"];
+  function artifactSource(artifact) {
+    return artifact && (artifact.sourceType || artifact.source && artifact.source.type) || "";
+  }
+  function asObject(text) {
+    const value = JSON.parse(text || "{}");
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError("object required");
+    return value;
+  }
+  function confirmPanel(message) {
+    const confirmImpl = typeof globalThis.confirm === "function" ? (value) => globalThis.confirm(value) : null;
+    return confirmToolAction(confirmImpl, message);
+  }
+  function promptPanel(message, fallback) {
+    return typeof globalThis.prompt === "function" ? globalThis.prompt(message, fallback) : fallback;
+  }
+  function ImportPreview({ preview, resolutions, lang, busy, onResolve, onCommit, onCancel }) {
+    const t = TEXT[lang] || TEXT.zh;
+    const conflicts = preview.conflicts || [];
+    const complete = conflicts.every((conflict) => ["keep", "duplicate"].includes(resolutions[conflict.conflictId]));
+    return /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { className: "tools-modal__scrim" }),
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-import", role: "dialog", "aria-label": t.importTitle, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-import__heading", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("span", { children: t.importTitle }),
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Badge, { status: preview.highestRisk === "external" || preview.highestRisk === "destructive" ? "error" : "warn", children: preview.highestRisk })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-import__body", children: [
+          (preview.artifacts || []).map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-import__item", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("strong", { children: item.summary && item.summary.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("span", { children: [
+              item.summary && item.summary.kind,
+              " \xB7 ",
+              item.calculatedRisk
+            ] }),
+            item.contentChanged ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Badge, { status: "warn", children: t.contentChanged }) : null,
+            item.metadataChanges && Object.keys(item.metadataChanges).length ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("details", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("summary", { children: t.importChanges }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("pre", { children: JSON.stringify(item.metadataChanges, null, 2) })
+            ] }) : null
+          ] }, `${item.summary && item.summary.id || "artifact"}:${index}`)),
+          conflicts.map((conflict) => /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-import__conflict", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("strong", { children: t.importConflict }),
+              " \xB7 ",
+              conflict.incomingName
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-import__hashes", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("span", { children: conflict.existingContentHash }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("span", { children: conflict.incomingContentHash })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+              Select,
+              {
+                value: resolutions[conflict.conflictId] || "",
+                onChange: (value) => onResolve(conflict.conflictId, value),
+                options: [
+                  { value: "", label: "\u2014" },
+                  { value: "keep", label: t.keep },
+                  { value: "duplicate", label: t.duplicateIncoming }
+                ]
+              }
+            )
+          ] }, conflict.conflictId))
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-import__actions", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "ghost", onClick: onCancel, disabled: busy, children: t.cancel }),
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "primary", onClick: onCommit, disabled: busy || !complete, children: t.commit })
+        ] })
+      ] })
+    ] });
+  }
+  function ToolsScreen({
+    api,
+    lang = "zh",
+    cepFs = globalThis.window && globalThis.window.cep && globalThis.window.cep.fs,
+    initialPath = ""
+  }) {
+    const t = TEXT[lang] || TEXT.zh;
+    const [state, dispatch] = import_react40.default.useReducer(reduceToolsState, INITIAL_TOOLS_STATE);
+    const [busy, setBusy] = import_react40.default.useState(false);
+    const initialRunInputs = import_react40.default.useMemo(() => emptyToolRunInputs(), []);
+    const [runArgs, setRunArgs] = import_react40.default.useState(initialRunInputs.args);
+    const [target, setTarget] = import_react40.default.useState(initialRunInputs.target);
+    const [runResult, setRunResult] = import_react40.default.useState(null);
+    const loadSequence = import_react40.default.useRef(0);
+    const inspectSequence = import_react40.default.useRef(0);
+    const selectedSummary = state.summaries.find((row) => row.id === state.selectedId) || null;
+    const artifact = state.inspected && state.inspected.artifact || null;
+    const load = import_react40.default.useCallback(async () => {
+      if (!api) return;
+      const sequence = loadSequence.current + 1;
+      loadSequence.current = sequence;
+      dispatch({ type: "load-start" });
+      try {
+        const needsSearch = Boolean(
+          state.query || state.category || state.risk || state.kinds && state.kinds.length
+        );
+        const payload = needsSearch ? await api.search(searchArgsFromState(state)) : await api.index({
+          statuses: state.statuses,
+          source_types: state.sourceType ? [state.sourceType] : void 0,
+          include_candidates: state.statuses.includes("candidate"),
+          limit: 100
+        });
+        if (sequence === loadSequence.current) dispatch({ type: "load-success", payload });
+      } catch (error) {
+        if (sequence === loadSequence.current) dispatch({ type: "load-error", error });
+      }
+    }, [api, state.query, state.kinds, state.category, state.risk, state.statuses, state.sourceType]);
+    import_react40.default.useEffect(() => {
+      const timer = setTimeout(load, 120);
+      return () => clearTimeout(timer);
+    }, [load]);
+    const inspect = async (id) => {
+      const sequence = inspectSequence.current + 1;
+      inspectSequence.current = sequence;
+      const freshInputs = emptyToolRunInputs();
+      setRunArgs(freshInputs.args);
+      setTarget(freshInputs.target);
+      dispatch({ type: "select", id });
+      setRunResult(null);
+      try {
+        const payload = await api.inspect(id);
+        if (sequence === inspectSequence.current) dispatch({ type: "inspect-success", payload });
+      } catch (error) {
+        if (sequence === inspectSequence.current) dispatch({ type: "load-error", error });
+      }
+    };
+    const refreshAndInspect = async (id) => {
+      await load();
+      if (id) await inspect(id);
+    };
+    const saveEditor = async (input) => {
+      setBusy(true);
+      try {
+        const result = state.editor && state.editor.mode === "create" ? await api.create(input) : await api.edit(input);
+        dispatch({ type: "save-success", payload: result, artifact: result.artifact });
+        await refreshAndInspect(result.artifact && result.artifact.id);
+      } catch (error) {
+        dispatch({ type: "load-error", error });
+      } finally {
+        setBusy(false);
+      }
+    };
+    const mutate = async (request, id = artifact && artifact.id) => {
+      setBusy(true);
+      try {
+        const result = await request();
+        if (result && result.artifact) dispatch({ type: "save-success", artifact: result.artifact });
+        await refreshAndInspect(result && result.artifact ? result.artifact.id : id);
+        return result;
+      } catch (error) {
+        dispatch({ type: "load-error", error });
+        return null;
+      } finally {
+        setBusy(false);
+      }
+    };
+    const duplicate = () => {
+      if (!artifact) return;
+      const name = promptPanel(t.copyName, `${artifact.name} Copy`);
+      if (!name || !name.trim()) return;
+      mutate(() => api.duplicate({
+        artifact_id: artifact.id,
+        name: name.trim(),
+        expected_revision: artifact.revision,
+        expected_content_hash: artifact.contentHash
+      }));
+    };
+    const archive = () => {
+      if (!artifact || !confirmPanel(t.confirmArchive)) return;
+      mutate(() => api.archive({
+        artifact_id: artifact.id,
+        expected_revision: artifact.revision,
+        expected_content_hash: artifact.contentHash
+      }));
+    };
+    const remove = async () => {
+      if (!artifact || !confirmPanel(t.confirmDelete)) return;
+      setBusy(true);
+      try {
+        await api.delete({
+          artifact_id: artifact.id,
+          expected_revision: artifact.revision,
+          expected_content_hash: artifact.contentHash
+        });
+        dispatch({ type: "delete-success", id: artifact.id });
+        await load();
+      } catch (error) {
+        dispatch({ type: "load-error", error });
+      } finally {
+        setBusy(false);
+      }
+    };
+    const editStatus = (status) => mutate(() => api.edit({
+      artifact_id: artifact.id,
+      changes: { status },
+      expected_revision: artifact.revision,
+      expected_content_hash: artifact.contentHash
+    }));
+    const verify = () => mutate(() => api.edit({
+      artifact_id: artifact.id,
+      changes: { verification_action: "mark-reviewed" },
+      expected_revision: artifact.revision,
+      expected_content_hash: artifact.contentHash
+    }));
+    const promote = () => {
+      const input = {
+        artifact_id: artifact.id,
+        expected_revision: artifact.revision,
+        expected_content_hash: artifact.contentHash
+      };
+      if (artifactSource(artifact) === "chat-tool-call") {
+        return mutate(() => api.promoteFromHistory(input));
+      }
+      const originalId = artifact.source && artifact.source.provenance && artifact.source.provenance.originalArtifactId;
+      const replacement = typeof originalId === "string" && originalId.startsWith("user:") && originalId !== artifact.id && state.summaries.some((row) => row.id === originalId && row.sourceType !== "bundled") && confirmPanel(t.confirmReplace) ? originalId : null;
+      return mutate(() => api.edit({
+        ...input,
+        changes: { status: "saved" },
+        ...replacement ? { replace_artifact_id: replacement } : {}
+      }));
+    };
+    const renderAndCopy = async () => {
+      if (!artifact) return;
+      setBusy(true);
+      try {
+        const args = asObject(runArgs);
+        const result = await api.use({ artifact_id: artifact.id, action: "render", args });
+        const content = result.rendered || result.untrustedContext && result.untrustedContext.content || "";
+        await copyText(typeof content === "string" ? content : JSON.stringify(content, null, 2));
+        setRunResult(result);
+      } catch (error) {
+        dispatch({ type: "load-error", error: error instanceof SyntaxError ? new Error(t.invalidArgs) : error });
+      } finally {
+        setBusy(false);
+      }
+    };
+    const execute = async () => {
+      if (!artifact) return;
+      let args;
+      try {
+        args = asObject(runArgs);
+      } catch {
+        dispatch({ type: "load-error", error: new Error(t.invalidArgs) });
+        return;
+      }
+      const operation = artifact.kind === "expression" ? "apply" : "execute";
+      let normalizedTarget = {};
+      if (operation === "apply") {
+        try {
+          normalizedTarget = normalizeExpressionTarget(target);
+        } catch {
+          dispatch({ type: "load-error", error: new Error(t.targetRequired) });
+          return;
+        }
+      }
+      setBusy(true);
+      try {
+        const result = await executeToolPlan(api, {
+          artifactId: artifact.id,
+          operation,
+          args,
+          target: normalizedTarget
+        });
+        setRunResult(result);
+        await refreshAndInspect(artifact.id);
+      } catch (error) {
+        dispatch({ type: "load-error", error });
+      } finally {
+        setBusy(false);
+      }
+    };
+    const previewImport = async () => {
+      if (!cepFs) {
+        dispatch({ type: "load-error", error: new Error(t.noCep) });
+        return;
+      }
+      try {
+        const path = chooseToolPackage(cepFs, { title: t.importTitle, initialPath });
+        if (!path) return;
+        setBusy(true);
+        const preview = await api.previewImport(path);
+        dispatch({ type: "import-preview", preview });
+      } catch (error) {
+        dispatch({ type: "load-error", error });
+      } finally {
+        setBusy(false);
+      }
+    };
+    const cancelImport = async () => {
+      try {
+        if (state.importPreview) await api.discardImport(state.importPreview.importId);
+      } catch (error) {
+        dispatch({ type: "load-error", error });
+      } finally {
+        dispatch({ type: "import-finished" });
+      }
+    };
+    const commitImport = async () => {
+      if (!state.importPreview) return;
+      setBusy(true);
+      try {
+        await api.commitImport(state.importPreview.importId, state.conflictResolutions);
+        dispatch({ type: "import-finished" });
+        dispatch({ type: "set-filter", key: "statuses", value: ["candidate", "saved", "pinned"] });
+        const payload = await api.index({
+          statuses: ["candidate", "saved", "pinned"],
+          include_candidates: true,
+          limit: 100
+        });
+        dispatch({ type: "load-success", payload });
+      } catch (error) {
+        dispatch({ type: "load-error", error });
+      } finally {
+        setBusy(false);
+      }
+    };
+    const exportPackage = async () => {
+      if (!cepFs) {
+        dispatch({ type: "load-error", error: new Error(t.noCep) });
+        return;
+      }
+      try {
+        const path = chooseToolExportPath(cepFs, { title: t.export, initialPath });
+        if (!path) return;
+        const ids = state.selectedId ? [state.selectedId] : state.summaries.map((row) => row.id);
+        if (!ids.length) return;
+        setBusy(true);
+        await api.exportPackage(ids, path);
+      } catch (error) {
+        dispatch({ type: "load-error", error });
+      } finally {
+        setBusy(false);
+      }
+    };
+    const statusValue = state.statuses.join(",");
+    const source = artifactSource(artifact);
+    const editable = canEditArtifact(artifact);
+    const execution = toolExecutionCapabilities(artifact);
+    const executable = execution.render || execution.execute || execution.apply;
+    return /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-screen", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("header", { className: "tools-header", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { className: "tools-header__title", children: t.library }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-header__actions", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "primary", icon: "plus", onClick: () => dispatch({ type: "edit-start", editor: { mode: "create", artifact: null } }), children: t.new }),
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "secondary", icon: "download", onClick: previewImport, disabled: busy, children: t.import }),
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "secondary", icon: "external-link", onClick: exportPackage, disabled: busy || !state.summaries.length, children: t.export })
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-filters", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Input, { value: state.query, onChange: (value) => dispatch({ type: "set-query", value }), placeholder: t.search }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Select, { value: state.kinds[0] || "", onChange: (value) => dispatch({ type: "set-filter", key: "kinds", value: value ? [value] : [] }), options: KIND_OPTIONS2.map((value) => ({ value, label: value || t.allKinds })) }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Input, { value: state.category, onChange: (value) => dispatch({ type: "set-filter", key: "category", value }), placeholder: t.category }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Select, { value: state.risk, onChange: (value) => dispatch({ type: "set-filter", key: "risk", value }), options: RISK_OPTIONS2.map((value) => ({ value, label: value || t.allRisk })) }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Select, { value: statusValue, onChange: (value) => dispatch({ type: "set-filter", key: "statuses", value: value.split(",").filter(Boolean) }), options: [
+          { value: "saved,pinned", label: t.active },
+          { value: "candidate", label: t.candidates },
+          { value: "saved", label: t.saved },
+          { value: "pinned", label: t.pinned },
+          { value: "archived", label: t.archived },
+          { value: "deprecated", label: t.deprecated },
+          { value: "candidate,saved,pinned,archived,deprecated", label: t.allStatuses }
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Select, { value: state.sourceType, onChange: (value) => dispatch({ type: "set-filter", key: "sourceType", value }), options: SOURCE_OPTIONS.map((value) => ({ value, label: value || t.allSource })) })
+      ] }),
+      state.error ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-error", role: "alert", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("span", { children: state.error }),
+        state.refreshRequired ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "ghost", onClick: load, children: t.refresh }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("button", { type: "button", "aria-label": "Dismiss", onClick: () => dispatch({ type: "clear-error" }), children: "\xD7" })
+      ] }) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-split", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("section", { className: "tools-list", "aria-label": "Tool summaries", children: state.summaries.length ? state.summaries.map((row) => /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+          ToolArtifactRow,
+          {
+            artifact: row,
+            selected: row.id === state.selectedId,
+            onSelect: inspect,
+            lang
+          },
+          row.id
+        )) : /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(EmptyState, { icon: "box", title: t.empty, caption: t.emptyCap, compact: true }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("section", { className: "tools-detail", children: !selectedSummary ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(EmptyState, { icon: "box", title: t.select, caption: t.selectCap }) : !artifact ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(EmptyState, { icon: "rotate-cw", title: state.phase === "error" ? state.error : t.select, compact: true }) : /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)(import_react40.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-detail__heading", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h2", { children: artifact.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("p", { children: artifact.description })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Badge, { status: state.inspected.trust === "signed-bundled" ? "ok" : "warn", children: state.inspected.trust === "signed-bundled" ? t.signed : t.untrusted })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-detail__actions", children: [
+            editable ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "secondary", onClick: () => dispatch({ type: "edit-start", editor: { mode: "edit", artifact } }), children: t.edit }) : null,
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "secondary", onClick: duplicate, disabled: busy, children: t.duplicate }),
+            editable && ["saved", "pinned"].includes(artifact.status) ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "secondary", onClick: () => editStatus(artifact.status === "pinned" ? "saved" : "pinned"), disabled: busy, children: artifact.status === "pinned" ? t.unpin : t.pin }) : null,
+            editable && !artifact.verified && ["saved", "pinned"].includes(artifact.status) ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "secondary", onClick: verify, disabled: busy, children: t.verify }) : null,
+            canPromoteArtifact(artifact) ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "accent", onClick: promote, disabled: busy, children: t.promote }) : null,
+            editable && !["archived", "deprecated"].includes(artifact.status) ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "ghost", onClick: archive, disabled: busy, children: t.archive }) : null,
+            source !== "bundled" ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "danger", onClick: remove, disabled: busy, children: t.delete }) : null,
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "ghost", icon: "copy", onClick: () => copyText(displayArtifactContent(artifact)), children: t.copy })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("section", { className: "tools-detail__section", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h3", { children: t.metadata }),
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("dl", { className: "tools-kv", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dt", { children: "ID" }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dd", { children: artifact.id }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dt", { children: "Kind" }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dd", { children: artifact.kind }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dt", { children: "Category" }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dd", { children: artifact.category }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dt", { children: "Risk" }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dd", { children: artifact.declaredRisk }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dt", { children: "Status" }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dd", { children: artifact.status }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dt", { children: "Source" }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dd", { children: source }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dt", { children: "Hash" }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dd", { children: artifact.contentHash })
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("section", { className: "tools-detail__section", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h3", { children: t.content }),
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("pre", { className: "tools-content", children: displayArtifactContent(artifact) })
+          ] }),
+          executable ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("section", { className: "tools-detail__section tools-runner", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h3", { children: t.args }),
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Textarea, { mono: true, value: runArgs, onChange: setRunArgs, rows: 4 }),
+            artifact.kind === "expression" ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-runner__target", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.compId, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Input, { value: target.compId, onChange: (value) => setTarget((current) => ({ ...current, compId: value })) }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.layerId, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Input, { value: target.layerId, onChange: (value) => setTarget((current) => ({ ...current, layerId: value })) }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.propertyPath, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Input, { value: target.path, onChange: (value) => setTarget((current) => ({ ...current, path: value })) }) })
+            ] }) : null,
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-runner__actions", children: [
+              execution.render ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "secondary", onClick: renderAndCopy, disabled: busy, children: t.renderCopy }) : null,
+              execution.execute || execution.apply ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "primary", onClick: execute, disabled: busy, children: t.run }) : null
+            ] }),
+            runResult ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)(import_react40.default.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h3", { children: t.result }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("pre", { className: "tools-content", children: JSON.stringify(runResult, null, 2) })
+            ] }) : null
+          ] }) : null
+        ] }) })
+      ] }),
+      state.editor ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { className: "tools-modal__scrim", onClick: () => !busy && dispatch({ type: "edit-cancel" }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+          ToolArtifactEditor,
+          {
+            artifact: state.editor.artifact,
+            lang,
+            busy,
+            onSave: saveEditor,
+            onCancel: () => dispatch({ type: "edit-cancel" })
+          }
+        )
+      ] }) : null,
+      state.importPreview ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+        ImportPreview,
+        {
+          preview: state.importPreview,
+          resolutions: state.conflictResolutions,
+          lang,
+          busy,
+          onResolve: (conflictId, resolution) => dispatch({ type: "import-resolution", conflictId, resolution }),
+          onCommit: commitImport,
+          onCancel: cancelImport
+        }
+      ) : null
+    ] });
+  }
+
+  // src/components/tools/ToolApprovalDialog.jsx
+  var import_react41 = __toESM(require_react(), 1);
+  var import_jsx_runtime39 = __toESM(require_jsx_runtime(), 1);
+  var L3 = {
+    zh: {
+      title: "\u6279\u51C6\u5DE5\u5177\u6267\u884C\uFF1F",
+      once: "\u4EC5\u672C\u6B21\u5141\u8BB8",
+      session: "\u672C\u4F1A\u8BDD\u5141\u8BB8",
+      deny: "\u62D2\u7EDD",
+      artifact: "\u5DE5\u5177",
+      operation: "\u64CD\u4F5C",
+      risk: "\u98CE\u9669",
+      args: "\u53C2\u6570",
+      target: "\u76EE\u6807"
+    },
+    en: {
+      title: "Approve tool execution?",
+      once: "Allow once",
+      session: "Allow for session",
+      deny: "Deny",
+      artifact: "Artifact",
+      operation: "Operation",
+      risk: "Risk",
+      args: "Arguments",
+      target: "Target"
+    }
+  };
+  function ToolApprovalDialog({ record, lang = "zh", onResolve }) {
+    if (!record) return null;
+    const t = L3[lang] || L3.zh;
+    const plan = record.plan || {};
+    const resolve = (decision) => onResolve && onResolve({ id: record.id, decision });
+    return /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "tools-modal__scrim", onClick: () => resolve("deny") }),
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-approval", role: "alertdialog", "aria-label": t.title, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-approval__heading", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { children: t.title }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Badge, { status: plan.risk === "destructive" || plan.risk === "external" ? "error" : "warn", children: plan.risk })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("dl", { className: "tools-kv", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: t.artifact }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: plan.artifactId || "-" }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: t.operation }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: plan.operation || "-" }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: t.risk }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: plan.risk || "-" }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: t.args }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("pre", { children: JSON.stringify(plan.normalizedArgs || {}, null, 2) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: t.target }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("pre", { children: JSON.stringify(plan.target || {}, null, 2) }) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-approval__actions", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { variant: "ghost", onClick: () => resolve("deny"), children: t.deny }),
+          record.policy && record.policy.allowSession ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { variant: "secondary", onClick: () => resolve("session"), children: t.session }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { variant: "primary", onClick: () => resolve("once"), children: t.once })
+        ] })
+      ] })
     ] });
   }
 
@@ -12670,6 +14021,276 @@
     };
   }
 
+  // ../shared/tool-approval.mjs
+  var PLAN_SCHEMA_KEY = "x-ae-mcp-plan";
+  var HASH_PATTERN = /^[0-9a-f]{64}$/;
+  var OPERATIONS = /* @__PURE__ */ new Set(["render", "execute", "apply"]);
+  var RISKS = /* @__PURE__ */ new Set(["read", "write", "destructive", "external"]);
+  var TOOL_USE_ACTIONS = /* @__PURE__ */ new Set(["render", "prepare", "grant", "execute"]);
+  function isPlainObject(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  }
+  function cloneJson(value, seen = /* @__PURE__ */ new Set()) {
+    if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) throw new TypeError("Plan values must be finite JSON");
+      return value;
+    }
+    if (typeof value !== "object" || seen.has(value)) throw new TypeError("Plan values must be acyclic JSON");
+    seen.add(value);
+    let result;
+    if (Array.isArray(value)) {
+      result = value.map((item) => cloneJson(item, seen));
+    } else {
+      if (!isPlainObject(value)) throw new TypeError("Plan values must be plain JSON objects");
+      result = {};
+      for (const [key, item] of Object.entries(value)) {
+        Object.defineProperty(result, key, {
+          value: cloneJson(item, seen),
+          enumerable: true,
+          configurable: true,
+          writable: true
+        });
+      }
+    }
+    seen.delete(value);
+    return result;
+  }
+  function deepFreeze(value) {
+    if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+    for (const item of Object.values(value)) deepFreeze(item);
+    return Object.freeze(value);
+  }
+  function canonicalize(value) {
+    if (Array.isArray(value)) return value.map(canonicalize);
+    if (!isPlainObject(value)) return value;
+    return Object.fromEntries(
+      Object.keys(value).sort().map((key) => [key, canonicalize(value[key])])
+    );
+  }
+  function rotateRight(value, count) {
+    return value >>> count | value << 32 - count;
+  }
+  function sha256Text(text) {
+    const source = String(text);
+    const bytes = typeof TextEncoder === "function" ? new TextEncoder().encode(source) : Uint8Array.from(unescape(encodeURIComponent(source)), (character) => character.charCodeAt(0));
+    const bitLength = bytes.length * 8;
+    const paddedLength = Math.ceil((bytes.length + 9) / 64) * 64;
+    const padded = new Uint8Array(paddedLength);
+    padded.set(bytes);
+    padded[bytes.length] = 128;
+    const view = new DataView(padded.buffer);
+    view.setUint32(paddedLength - 8, Math.floor(bitLength / 4294967296));
+    view.setUint32(paddedLength - 4, bitLength >>> 0);
+    const constants = [
+      1116352408,
+      1899447441,
+      3049323471,
+      3921009573,
+      961987163,
+      1508970993,
+      2453635748,
+      2870763221,
+      3624381080,
+      310598401,
+      607225278,
+      1426881987,
+      1925078388,
+      2162078206,
+      2614888103,
+      3248222580,
+      3835390401,
+      4022224774,
+      264347078,
+      604807628,
+      770255983,
+      1249150122,
+      1555081692,
+      1996064986,
+      2554220882,
+      2821834349,
+      2952996808,
+      3210313671,
+      3336571891,
+      3584528711,
+      113926993,
+      338241895,
+      666307205,
+      773529912,
+      1294757372,
+      1396182291,
+      1695183700,
+      1986661051,
+      2177026350,
+      2456956037,
+      2730485921,
+      2820302411,
+      3259730800,
+      3345764771,
+      3516065817,
+      3600352804,
+      4094571909,
+      275423344,
+      430227734,
+      506948616,
+      659060556,
+      883997877,
+      958139571,
+      1322822218,
+      1537002063,
+      1747873779,
+      1955562222,
+      2024104815,
+      2227730452,
+      2361852424,
+      2428436474,
+      2756734187,
+      3204031479,
+      3329325298
+    ];
+    const hash = [
+      1779033703,
+      3144134277,
+      1013904242,
+      2773480762,
+      1359893119,
+      2600822924,
+      528734635,
+      1541459225
+    ];
+    const words = new Uint32Array(64);
+    for (let offset = 0; offset < paddedLength; offset += 64) {
+      for (let index = 0; index < 16; index += 1) words[index] = view.getUint32(offset + index * 4);
+      for (let index = 16; index < 64; index += 1) {
+        const x = words[index - 15];
+        const y = words[index - 2];
+        const s0 = rotateRight(x, 7) ^ rotateRight(x, 18) ^ x >>> 3;
+        const s1 = rotateRight(y, 17) ^ rotateRight(y, 19) ^ y >>> 10;
+        words[index] = words[index - 16] + s0 + words[index - 7] + s1 >>> 0;
+      }
+      let [a, b, c, d, e, f, g, h] = hash;
+      for (let index = 0; index < 64; index += 1) {
+        const s1 = rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25);
+        const choose = e & f ^ ~e & g;
+        const temporary1 = h + s1 + choose + constants[index] + words[index] >>> 0;
+        const s0 = rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22);
+        const majority = a & b ^ a & c ^ b & c;
+        const temporary2 = s0 + majority >>> 0;
+        h = g;
+        g = f;
+        f = e;
+        e = d + temporary1 >>> 0;
+        d = c;
+        c = b;
+        b = a;
+        a = temporary1 + temporary2 >>> 0;
+      }
+      hash[0] = hash[0] + a >>> 0;
+      hash[1] = hash[1] + b >>> 0;
+      hash[2] = hash[2] + c >>> 0;
+      hash[3] = hash[3] + d >>> 0;
+      hash[4] = hash[4] + e >>> 0;
+      hash[5] = hash[5] + f >>> 0;
+      hash[6] = hash[6] + g >>> 0;
+      hash[7] = hash[7] + h >>> 0;
+    }
+    return hash.map((word) => word.toString(16).padStart(8, "0")).join("");
+  }
+  function normalizeMcpToolName(name) {
+    let normalized = typeof name === "string" ? name : "";
+    if (normalized.startsWith("mcp__ae__")) normalized = normalized.slice("mcp__ae__".length);
+    if (normalized.startsWith("ae_")) normalized = "ae." + normalized.slice(3);
+    return normalized;
+  }
+  function isCoreAuthorizedDynamicCall(name, args) {
+    if (!isPlainObject(args)) return false;
+    const normalized = normalizeMcpToolName(name);
+    try {
+      if (normalized === "ae.toolUse") return TOOL_USE_ACTIONS.has(args.action);
+      if (normalized === "ae.skillUse") return typeof args.execute === "boolean";
+    } catch {
+      return false;
+    }
+    return false;
+  }
+  function extractToolPlan(requestedSchema, now = Date.now()) {
+    if (!isPlainObject(requestedSchema)) return null;
+    let raw;
+    try {
+      raw = requestedSchema[PLAN_SCHEMA_KEY];
+    } catch {
+      return null;
+    }
+    if (!isPlainObject(raw)) return null;
+    try {
+      const current = typeof now === "function" ? now() : now;
+      if (typeof raw.artifactId !== "string" || !raw.artifactId.trim()) return null;
+      if (!HASH_PATTERN.test(raw.contentHash) || !HASH_PATTERN.test(raw.planHash)) return null;
+      if (!OPERATIONS.has(raw.operation) || !RISKS.has(raw.risk)) return null;
+      if (!isPlainObject(raw.normalizedArgs) || !isPlainObject(raw.target)) return null;
+      if (!Number.isSafeInteger(raw.expiresAt) || !Number.isFinite(current) || raw.expiresAt <= current) return null;
+      return deepFreeze(cloneJson(raw));
+    } catch {
+      return null;
+    }
+  }
+  function planSessionKey(plan) {
+    const payload = {
+      artifactId: plan.artifactId,
+      contentHash: plan.contentHash,
+      operation: plan.operation,
+      normalizedTarget: cloneJson(plan.target)
+    };
+    return sha256Text(JSON.stringify(canonicalize(payload)));
+  }
+  function decideToolPlan({ tier, plan, sessionAllowed = false }) {
+    const risk = plan && plan.risk;
+    if (!RISKS.has(risk)) {
+      return { decision: "deny", risk: "unknown", allowSession: false, sessionKey: null };
+    }
+    if (!["readonly", "manual", "auto", "none"].includes(tier)) {
+      return { decision: "deny", risk, allowSession: false, sessionKey: null };
+    }
+    const high = risk === "destructive" || risk === "external";
+    if (risk === "read") {
+      return { decision: "allow", risk, allowSession: false, sessionKey: null };
+    }
+    if (tier === "readonly") {
+      return { decision: "deny", risk, allowSession: false, sessionKey: null };
+    }
+    if (sessionAllowed && risk === "write") {
+      return {
+        decision: "allow",
+        risk,
+        allowSession: true,
+        sessionKey: planSessionKey(plan)
+      };
+    }
+    if (high) {
+      return { decision: "ask", risk, allowSession: false, sessionKey: null };
+    }
+    if (tier === "manual") {
+      return {
+        decision: "ask",
+        risk,
+        allowSession: true,
+        sessionKey: planSessionKey(plan)
+      };
+    }
+    return { decision: "allow", risk, allowSession: false, sessionKey: null };
+  }
+  function approvalResult(decision, policy = {}) {
+    if (decision === "once" || decision === "allow") {
+      return { action: "accept", content: { decision: "once" } };
+    }
+    if (decision === "session" && policy.allowSession === true) {
+      return { action: "accept", content: { decision: "session" } };
+    }
+    return { action: "decline", content: {} };
+  }
+
   // src/lib/agentLoop.js
   var MAX_TOOL_ROUNDS = 25;
   function clone(value) {
@@ -12808,6 +14429,9 @@
     }
     async function handleToolUse(toolUse, toolByName) {
       emit({ type: "tool-start", toolUseId: toolUse.id, name: toolUse.name, input: clone(toolUse.input || {}) });
+      if (isCoreAuthorizedDynamicCall(toolUse.name, toolUse.input || {})) {
+        return await executeTool(toolUse);
+      }
       const tool = toolByName.get(toolUse.name) || {};
       const mode = getPermissionMode && getPermissionMode() || "manual";
       if (mode === "readonly" && !(tool.annotations && tool.annotations.readOnlyHint === true)) {
@@ -13171,6 +14795,9 @@
     const text = String(name || "");
     return text.startsWith("mcp__") ? text : "mcp__ae__" + text;
   }
+  function hasRpcId(value) {
+    return value !== void 0 && value !== null;
+  }
   function zcodeProviderId(modelRef) {
     const text = String(modelRef || "").trim();
     const slash = text.indexOf("/");
@@ -13495,6 +15122,7 @@
     const pendingElicitations = /* @__PURE__ */ new Map();
     const pendingUserInputs = /* @__PURE__ */ new Map();
     const sessionAllowedTools = /* @__PURE__ */ new Set();
+    const sessionAllowedPlans = /* @__PURE__ */ new Set();
     function emit(evt) {
       if (onEvent) onEvent(evt);
     }
@@ -13546,17 +15174,19 @@
     }
     function drainApprovals() {
       for (const [toolUseId, approval] of Array.from(pendingApprovals.entries())) {
-        if (rpc) rpc.respond(approval.rpcId, { decision: "decline" });
+        if (rpc && hasRpcId(approval.rpcId)) rpc.respond(approval.rpcId, { decision: "decline" });
         pendingApprovals.delete(toolUseId);
         emit({ type: "tool-denied", toolUseId });
       }
       for (const [toolUseId, elicit] of Array.from(pendingElicitations.entries())) {
-        if (rpc && elicit.rpcId) rpc.respond(elicit.rpcId, { action: "decline" });
+        if (rpc && hasRpcId(elicit.rpcId)) {
+          rpc.respond(elicit.rpcId, elicit.kind === "tool-plan" ? approvalResult("deny") : { action: "decline" });
+        }
         pendingElicitations.delete(toolUseId);
         emit({ type: "tool-denied", toolUseId });
       }
       for (const [toolUseId, ui] of Array.from(pendingUserInputs.entries())) {
-        if (rpc && ui.rpcId) rpc.respond(ui.rpcId, { decision: "decline", answers: {} });
+        if (rpc && hasRpcId(ui.rpcId)) rpc.respond(ui.rpcId, { decision: "decline", answers: {} });
         pendingUserInputs.delete(toolUseId);
         emit({ type: "tool-denied", toolUseId });
       }
@@ -13583,7 +15213,7 @@
       if (rpc) rpc.respondError(message.id, -32601, "Method not found: " + method);
     }
     function handleProviderRuntimeHeaders(_params, rpcId) {
-      if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: zcodePlanRuntimeHeadersMessage() });
+      if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: zcodePlanRuntimeHeadersMessage() });
     }
     function handleUserInput(params, rpcId) {
       const input = params.input || params;
@@ -13595,7 +15225,7 @@
           const opts = q2.options || [];
           answers[q2.question || q2.header || "question"] = opts.length ? opts[0].label : "";
         }
-        if (rpcId && rpc) rpc.respond(rpcId, { decision: "allow", answers });
+        if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { decision: "allow", answers });
         return;
       }
       const q = questions[0];
@@ -13618,11 +15248,46 @@
     function handleElicitation(params, rpcId) {
       const message = params.message || "";
       const schema = params.requestedSchema || {};
+      if (Object.prototype.hasOwnProperty.call(schema, PLAN_SCHEMA_KEY)) {
+        const plan = extractToolPlan(schema);
+        if (!plan) {
+          if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, approvalResult("deny"));
+          return;
+        }
+        const policy = decideToolPlan({
+          tier: getPermissionMode ? getPermissionMode() : "manual",
+          plan,
+          sessionAllowed: sessionAllowedPlans.has(planSessionKey(plan))
+        });
+        if (policy.decision === "allow") {
+          if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, approvalResult("once", policy));
+          return;
+        }
+        if (policy.decision === "deny") {
+          if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, approvalResult("deny", policy));
+          return;
+        }
+        const toolUseId2 = "elicit_" + rpcId;
+        pendingElicitations.set(toolUseId2, {
+          kind: "tool-plan",
+          rpcId,
+          plan,
+          allowSession: policy.allowSession
+        });
+        emit({
+          type: "approval-required",
+          toolUseId: toolUseId2,
+          name: "mcp__ae__ae_toolUse",
+          input: plan,
+          risk: policy.risk
+        });
+        return;
+      }
       const props = schema.properties || {};
       const required = schema.required || [];
       const fieldNames = Object.keys(props);
       if (!fieldNames.length) {
-        if (rpcId && rpc) rpc.respond(rpcId, { action: "accept", content: {} });
+        if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { action: "accept", content: {} });
         return;
       }
       const tier = getPermissionMode ? getPermissionMode() : "manual";
@@ -13632,7 +15297,7 @@
           const opts = props[fn] && props[fn].enum;
           autoContent[fn] = opts && opts.length ? opts[0] : "";
         }
-        if (rpcId && rpc) rpc.respond(rpcId, { action: "accept", content: autoContent });
+        if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { action: "accept", content: autoContent });
         return;
       }
       const primaryField = fieldNames[0];
@@ -13706,22 +15371,28 @@
       }
     }
     function handlePermissionRequest(params, rpcId) {
+      var _a, _b, _c, _d;
       const payload = params.payload || params;
-      const toolUseId = String(payload.toolCallId || payload.requestId || rpcId || "");
+      const toolUseId = String((_c = (_b = (_a = payload.toolCallId) != null ? _a : payload.requestId) != null ? _b : rpcId) != null ? _c : "");
       const name = mcpToolName(payload.toolName || payload.tool || "");
       const input = payload.input || payload.arguments || {};
       const riskLevel = payload.riskLevel || "medium";
       const annotations = toolMeta && toolMeta.annotations || {};
       const ann = annotations[name] || {};
       const tier = getPermissionMode ? getPermissionMode() : "manual";
-      const replyId = rpcId || payload.requestId || null;
+      const replyId = hasRpcId(rpcId) ? rpcId : (_d = payload.requestId) != null ? _d : null;
+      if (isCoreAuthorizedDynamicCall(name, input)) {
+        if (hasRpcId(replyId) && rpc) rpc.respond(replyId, { decision: "allow" });
+        emit({ type: "tool-allowed", toolUseId });
+        return;
+      }
       if (sessionAllowedTools.has(name) || ann.readOnly || tier === "none" || tier === "auto" && !ann.destructive && riskLevel === "low") {
-        if (replyId && rpc) rpc.respond(replyId, { decision: "allow" });
+        if (hasRpcId(replyId) && rpc) rpc.respond(replyId, { decision: "allow" });
         emit({ type: "tool-allowed", toolUseId });
         return;
       }
       if (tier === "readonly") {
-        if (replyId && rpc) rpc.respond(replyId, { decision: "decline" });
+        if (hasRpcId(replyId) && rpc) rpc.respond(replyId, { decision: "decline" });
         emit({ type: "tool-denied", toolUseId });
         return;
       }
@@ -13924,7 +15595,7 @@
       if (userInput) {
         pendingUserInputs.delete(id);
         if (decision === "deny") {
-          if (userInput.rpcId && rpc) rpc.respond(userInput.rpcId, { decision: "decline", answers: {} });
+          if (hasRpcId(userInput.rpcId) && rpc) rpc.respond(userInput.rpcId, { decision: "decline", answers: {} });
           emit({ type: "tool-denied", toolUseId: id });
         } else {
           const answers = {};
@@ -13933,7 +15604,7 @@
             const key = q.question || q.header || "question";
             answers[key] = chosen || q.options && q.options[0] && q.options[0].label || "";
           }
-          if (userInput.rpcId && rpc) rpc.respond(userInput.rpcId, { decision: "allow", answers });
+          if (hasRpcId(userInput.rpcId) && rpc) rpc.respond(userInput.rpcId, { decision: "allow", answers });
           emit({ type: "tool-allowed", toolUseId: id });
         }
         return;
@@ -13941,14 +15612,24 @@
       const elicit = pendingElicitations.get(id);
       if (elicit) {
         pendingElicitations.delete(id);
+        if (elicit.kind === "tool-plan") {
+          const requestedDecision = decision === "allow-session" ? "session" : decision === "allow" ? "once" : "deny";
+          const result = approvalResult(requestedDecision, { allowSession: elicit.allowSession });
+          if (result.action === "accept" && result.content.decision === "session") {
+            sessionAllowedPlans.add(planSessionKey(elicit.plan));
+          }
+          if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, result);
+          emit({ type: result.action === "accept" ? "tool-allowed" : "tool-denied", toolUseId: id });
+          return;
+        }
         if (decision === "deny") {
-          if (elicit.rpcId && rpc) rpc.respond(elicit.rpcId, { action: "decline" });
+          if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, { action: "decline" });
           emit({ type: "tool-denied", toolUseId: id });
         } else {
           const content = {};
           const fn = elicit.fieldNames[0];
           content[fn] = typeof decision === "string" && decision !== "allow" && decision !== "allow-session" ? decision : elicit.props[fn] && elicit.props[fn].enum && elicit.props[fn].enum[0] || "";
-          if (elicit.rpcId && rpc) rpc.respond(elicit.rpcId, { action: "accept", content });
+          if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, { action: "accept", content });
           emit({ type: "tool-allowed", toolUseId: id });
         }
         return;
@@ -13958,7 +15639,7 @@
       pendingApprovals.delete(id);
       const allow = decision !== "deny";
       if (allow && decision === "allow-session") sessionAllowedTools.add(approval.name);
-      if (approval.rpcId && rpc) rpc.respond(approval.rpcId, { decision: allow ? "allow" : "decline" });
+      if (hasRpcId(approval.rpcId) && rpc) rpc.respond(approval.rpcId, { decision: allow ? "allow" : "decline" });
       emit({ type: allow ? "tool-allowed" : "tool-denied", toolUseId: id });
     }
     function stop() {
@@ -13994,6 +15675,7 @@
       pendingElicitations.clear();
       pendingUserInputs.clear();
       sessionAllowedTools.clear();
+      sessionAllowedPlans.clear();
       toolMeta = { allowedTools: [], annotations: {} };
       finishActive();
       stderrTail = "";
@@ -14514,8 +16196,10 @@
   }
   function _createRpc(stdinWrite, onLine, options = {}) {
     const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS2;
+    const onRequest = options.onRequest;
     let nextId2 = 1;
     const pending = /* @__PURE__ */ new Map();
+    const inbound = /* @__PURE__ */ new Map();
     function rejectPending(id, error) {
       const entry = pending.get(id);
       if (!entry) return;
@@ -14523,8 +16207,87 @@
       clearTimeout(entry.timer);
       entry.reject(error);
     }
+    function writeMessage(message) {
+      stdinWrite(JSON.stringify(message) + "\n");
+    }
+    function hasId(message) {
+      return message && message.id !== void 0 && message.id !== null;
+    }
+    function hasMethod(message) {
+      return message && typeof message.method === "string" && message.method.length > 0;
+    }
+    function abortInbound(id) {
+      const entry = inbound.get(id);
+      if (entry) entry.controller.abort();
+    }
+    async function dispatchRequest(message) {
+      if (inbound.has(message.id)) {
+        writeMessage({
+          jsonrpc: "2.0",
+          id: message.id,
+          error: { code: -32600, message: "Invalid Request" }
+        });
+        return;
+      }
+      const controller = new AbortController();
+      let settleAbort;
+      const aborted = new Promise((resolve) => {
+        settleAbort = resolve;
+      });
+      const abortHandler = () => settleAbort({ kind: "abort" });
+      controller.signal.addEventListener("abort", abortHandler, { once: true });
+      inbound.set(message.id, { controller });
+      try {
+        const handled = typeof onRequest === "function" ? Promise.resolve().then(() => onRequest(message, { signal: controller.signal })) : Promise.reject(Object.assign(new Error("Method not found"), { code: -32601 }));
+        const outcome = await Promise.race([
+          handled.then(
+            (result) => ({ kind: "result", result }),
+            (error) => ({ kind: "error", error })
+          ),
+          aborted
+        ]);
+        if (outcome.kind === "abort") {
+          writeMessage({
+            jsonrpc: "2.0",
+            id: message.id,
+            result: { action: "cancel", content: {} }
+          });
+        } else if (outcome.kind === "error") {
+          const code = outcome.error && outcome.error.code === -32601 ? -32601 : -32603;
+          const error = {
+            code,
+            message: code === -32601 ? "Method not found" : "Internal error"
+          };
+          if (code === -32601 && outcome.error && outcome.error.data !== void 0) {
+            error.data = outcome.error.data;
+          }
+          writeMessage({ jsonrpc: "2.0", id: message.id, error });
+        } else {
+          writeMessage({
+            jsonrpc: "2.0",
+            id: message.id,
+            result: outcome.result === void 0 ? null : outcome.result
+          });
+        }
+      } finally {
+        controller.signal.removeEventListener("abort", abortHandler);
+        inbound.delete(message.id);
+      }
+    }
     function handleMessage(message) {
-      if (!message || message.id === void 0 || message.id === null) return;
+      if (!message || typeof message !== "object") return;
+      if (hasMethod(message)) {
+        if (!hasId(message)) {
+          if (message.method === "notifications/cancelled") {
+            abortInbound(message.params && message.params.requestId);
+          }
+          return;
+        }
+        dispatchRequest(message).catch(() => {
+        });
+        return;
+      }
+      if (!hasId(message)) return;
       const entry = pending.get(message.id);
       if (!entry) return;
       pending.delete(message.id);
@@ -14540,9 +16303,6 @@
     }
     const handleChunk = createNdjsonReader(handleMessage);
     if (onLine) onLine(handleChunk);
-    function writeMessage(message) {
-      stdinWrite(JSON.stringify(message) + "\n");
-    }
     function request(method, params) {
       const id = nextId2++;
       const message = { jsonrpc: "2.0", id, method };
@@ -14561,6 +16321,7 @@
     }
     function close(reason = new Error("MCP process closed")) {
       for (const id of Array.from(pending.keys())) rejectPending(id, reason);
+      for (const entry of inbound.values()) entry.controller.abort();
     }
     return { request, notify, handleChunk, close };
   }
@@ -14570,6 +16331,7 @@
     resolveCommand = resolveMcpCommand,
     env,
     onCrash,
+    onElicitation,
     extRoot,
     repoRoot,
     getExpertGuidance = () => true,
@@ -14580,6 +16342,7 @@
     let rpc = null;
     let tools = null;
     let serverInstructions = "";
+    let serverInfo = null;
     let status = "idle";
     let startPromise = null;
     let retryCount = 0;
@@ -14593,6 +16356,35 @@
       if (globalThis.window && globalThis.window.addEventListener) {
         globalThis.window.addEventListener("beforeunload", () => stop());
       }
+    }
+    async function handleServerRequest(message, { signal }) {
+      if (message.method !== "elicitation/create") {
+        throw Object.assign(new Error("Method not found"), {
+          code: -32601,
+          data: { method: message.method }
+        });
+      }
+      if (typeof onElicitation !== "function") return { action: "decline", content: {} };
+      const params = message.params && typeof message.params === "object" ? message.params : {};
+      const request = {
+        serverName: serverInfo && typeof serverInfo.name === "string" ? serverInfo.name : "",
+        message: typeof params.message === "string" ? params.message : "",
+        requestedSchema: params.requestedSchema,
+        mode: params.mode,
+        serverInfo: serverInfo ? { ...serverInfo } : null,
+        serverInstructions,
+        meta: params._meta
+      };
+      if (signal.aborted) return { action: "cancel", content: {} };
+      const result = await onElicitation(request, { signal });
+      if (signal.aborted) return { action: "cancel", content: {} };
+      if (!result || !["accept", "decline", "cancel"].includes(result.action)) {
+        return { action: "decline", content: {} };
+      }
+      return {
+        action: result.action,
+        content: result.content && typeof result.content === "object" && !Array.isArray(result.content) ? result.content : {}
+      };
     }
     async function start() {
       if (status === "ready") return currentState();
@@ -14620,7 +16412,8 @@
         }
         rpc = _createRpc(
           (line) => proc.stdin.write(line),
-          (handler) => proc.stdout.on("data", handler)
+          (handler) => proc.stdout.on("data", handler),
+          { onRequest: handleServerRequest }
         );
         proc.on("exit", (code, signal) => handleExit(code, signal));
         proc.on("error", (err) => handleCrash(err));
@@ -14629,9 +16422,10 @@
         const initResult = await rpc.request("initialize", {
           protocolVersion: MCP_PROTOCOL_VERSION,
           clientInfo: { name: "panel-chat", version: packageVersion },
-          capabilities: {}
+          capabilities: { elicitation: {} }
         });
         serverInstructions = initResult && initResult.instructions || "";
+        serverInfo = initResult && initResult.serverInfo && typeof initResult.serverInfo === "object" ? { ...initResult.serverInfo } : null;
         rpc.notify("notifications/initialized");
         const listed = await rpc.request("tools/list", {});
         tools = listed && Array.isArray(listed.tools) ? listed.tools : [];
@@ -14699,9 +16493,108 @@
       }
       proc = null;
       rpc = null;
+      serverInfo = null;
       startPromise = null;
     }
     return { start, listTools, callTool, stop, state: currentState, getServerInstructions: () => serverInstructions };
+  }
+
+  // src/cep/approvalTierFile.js
+  var TOOL_TIER_ENV = "AE_MCP_TOOL_APPROVAL_TIER_FILE";
+  var VALID_TIERS = /* @__PURE__ */ new Set(["readonly", "manual", "auto", "none"]);
+  function cepRequire3() {
+    var _a, _b, _c;
+    if ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) return globalThis.window.cep_node.require;
+    if ((_c = globalThis.window) == null ? void 0 : _c.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    return null;
+  }
+  function defaultDeps2() {
+    var _a, _b;
+    const require2 = cepRequire3();
+    if (!require2) throw new Error("CEP Node require is unavailable");
+    const processImpl = ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.process) || globalThis.process;
+    return {
+      fs: require2("fs"),
+      os: require2("os"),
+      path: require2("path"),
+      pid: (processImpl == null ? void 0 : processImpl.pid) || 0,
+      platform: (processImpl == null ? void 0 : processImpl.platform) || "",
+      now: () => Date.now()
+    };
+  }
+  function protect(fs, path, mode, platform) {
+    try {
+      fs.chmodSync(path, mode);
+    } catch (error) {
+      if (platform !== "win32") throw error;
+    }
+  }
+  function createApprovalTierFile(deps = defaultDeps2()) {
+    const { fs, os, path } = deps;
+    const pid = Number.isSafeInteger(deps.pid) && deps.pid >= 0 ? deps.pid : 0;
+    const now = typeof deps.now === "function" ? deps.now : () => Date.now();
+    const directory = path.join(os.homedir(), ".ae-mcp", "runtime", "approval");
+    const file = path.join(directory, `panel-${pid}.tier`);
+    let temporaryCounter = 0;
+    function ensureDirectory() {
+      fs.mkdirSync(directory, { recursive: true, mode: 448 });
+      protect(fs, directory, 448, deps.platform);
+    }
+    function temporaryPath() {
+      temporaryCounter += 1;
+      const suffix = typeof deps.nonce === "function" ? deps.nonce() : temporaryCounter;
+      return path.join(directory, `.panel-${pid}.${now()}.${suffix}.tmp`);
+    }
+    function write(tier) {
+      if (!VALID_TIERS.has(tier)) throw new TypeError("Unsupported tool approval tier");
+      ensureDirectory();
+      const temporary = temporaryPath();
+      let descriptor = null;
+      try {
+        descriptor = fs.openSync(temporary, "wx", 384);
+        fs.writeFileSync(descriptor, tier + "\n", "utf8");
+        if (typeof fs.fsyncSync !== "function") throw new Error("Filesystem fsync is unavailable");
+        fs.fsyncSync(descriptor);
+        fs.closeSync(descriptor);
+        descriptor = null;
+        protect(fs, temporary, 384, deps.platform);
+        fs.renameSync(temporary, file);
+        return tier;
+      } catch (error) {
+        if (descriptor !== null) {
+          try {
+            fs.closeSync(descriptor);
+          } catch {
+          }
+        }
+        try {
+          fs.unlinkSync(temporary);
+        } catch {
+        }
+        throw error;
+      }
+    }
+    function dispose() {
+      try {
+        fs.unlinkSync(file);
+      } catch (error) {
+        if (!error || error.code !== "ENOENT") throw error;
+      }
+    }
+    return {
+      path: () => file,
+      env: () => ({ [TOOL_TIER_ENV]: file }),
+      write,
+      dispose
+    };
+  }
+  function withToolApprovalTier(commandSpec, tierFile) {
+    return Object.assign({}, commandSpec, {
+      env: Object.assign({}, commandSpec.env || {}, {
+        [TOOL_TIER_ENV]: tierFile.path()
+      })
+    });
   }
 
   // src/lib/claudeChannel.js
@@ -15789,6 +17682,7 @@
     let providerRoute = null;
     const pendingApprovals = /* @__PURE__ */ new Map();
     const sessionAllowedTools = /* @__PURE__ */ new Set();
+    const sessionAllowedPlans = /* @__PURE__ */ new Set();
     function closeProviderRoute() {
       const route = providerRoute;
       providerRoute = null;
@@ -15897,11 +17791,52 @@
       }
       const toolUseId = String(message.id);
       const params = message.params || {};
+      const schema = params.requestedSchema;
+      if (schema && Object.prototype.hasOwnProperty.call(schema, PLAN_SCHEMA_KEY)) {
+        const plan = extractToolPlan(schema);
+        if (!plan) {
+          if (rpc) rpc.respond(message.id, approvalResult("deny"));
+          return;
+        }
+        const policy = decideToolPlan({
+          tier: getPermissionMode ? getPermissionMode() : "manual",
+          plan,
+          sessionAllowed: sessionAllowedPlans.has(planSessionKey(plan))
+        });
+        if (policy.decision === "allow") {
+          if (rpc) rpc.respond(message.id, approvalResult("once", policy));
+          return;
+        }
+        if (policy.decision === "deny") {
+          declineElicitation(message.id, toolUseId);
+          return;
+        }
+        pendingApprovals.set(toolUseId, {
+          kind: "tool-plan",
+          rpcId: message.id,
+          name: "mcp__ae__ae_toolUse",
+          input: plan,
+          plan,
+          allowSession: policy.allowSession
+        });
+        emit({
+          type: "approval-required",
+          toolUseId,
+          name: "mcp__ae__ae_toolUse",
+          input: plan,
+          risk: policy.risk
+        });
+        return;
+      }
       const name = prefixedToolName(params);
       const input = elicitationInput(params) || {};
       const annotations = toolMeta && toolMeta.annotations || {};
       const ann = annotations[name] || {};
       const tier = getPermissionMode ? getPermissionMode() : "manual";
+      if (isCoreAuthorizedDynamicCall(name, input)) {
+        acceptElicitation(message.id);
+        return;
+      }
       if (sessionAllowedTools.has(name) || ann.readOnly || tier === "none" || tier === "auto" && !ann.destructive) {
         acceptElicitation(message.id);
         return;
@@ -16121,6 +18056,16 @@
       const approval = pendingApprovals.get(id);
       if (!approval || !rpc) return;
       pendingApprovals.delete(id);
+      if (approval.kind === "tool-plan") {
+        const requestedDecision = decision === "allow-session" ? "session" : decision === "allow" ? "once" : "deny";
+        const result = approvalResult(requestedDecision, { allowSession: approval.allowSession });
+        if (result.action === "accept" && result.content.decision === "session") {
+          sessionAllowedPlans.add(planSessionKey(approval.plan));
+        }
+        rpc.respond(approval.rpcId, result);
+        emit({ type: result.action === "accept" ? "tool-allowed" : "tool-denied", toolUseId: id });
+        return;
+      }
       const action = decision === "deny" ? "decline" : "accept";
       if (action === "accept" && decision === "allow-session") sessionAllowedTools.add(approval.name);
       rpc.respond(approval.rpcId, { action, content: {} });
@@ -16159,6 +18104,7 @@
       transcript = [];
       pendingApprovals.clear();
       sessionAllowedTools.clear();
+      sessionAllowedPlans.clear();
       toolMeta = { allowedTools: [], annotations: {} };
       finishActive();
       stderrTail = "";
@@ -16782,15 +18728,15 @@
   var RELEASED_LOCK_NONCES = /* @__PURE__ */ new Set();
   var MAX_RELEASED_LOCK_NONCES = 256;
   var LOCK_STALE_AFTER_MS = 3e4;
-  function cepRequire3() {
+  function cepRequire4() {
     var _a, _b, _c;
     if ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) return globalThis.window.cep_node.require;
     if ((_c = globalThis.window) == null ? void 0 : _c.require) return globalThis.window.require;
     if (globalThis.require) return globalThis.require;
     return null;
   }
-  function defaultDeps2() {
-    const req = cepRequire3();
+  function defaultDeps3() {
+    const req = cepRequire4();
     if (!req) throw storeError("PROVIDER_STORE_UNAVAILABLE");
     const processApi = req("process");
     return {
@@ -16939,7 +18885,7 @@
   }
   function createProviderStore(inputDeps) {
     var _a;
-    const deps = inputDeps || defaultDeps2();
+    const deps = inputDeps || defaultDeps3();
     const { fs, os, path } = deps;
     const now = typeof deps.now === "function" ? deps.now : Date.now;
     const pid = Number.isSafeInteger(deps.pid) && deps.pid > 0 ? deps.pid : 0;
@@ -18739,7 +20685,7 @@
   }
 
   // src/components/settings/ProviderManagerSection.jsx
-  var import_react37 = __toESM(require_react(), 1);
+  var import_react42 = __toESM(require_react(), 1);
 
   // src/lib/providerManagerState.js
   function emptyDraft() {
@@ -18828,13 +20774,13 @@
   }
 
   // src/components/settings/ProviderManagerSection.jsx
-  var import_jsx_runtime35 = __toESM(require_jsx_runtime(), 1);
-  var L2 = {
+  var import_jsx_runtime40 = __toESM(require_jsx_runtime(), 1);
+  var L4 = {
     zh: { title: "Provider \u7BA1\u7406", add: "\u65B0\u589E", edit: "\u7F16\u8F91", del: "\u5220\u9664", probe: "\u63A2\u6D4B\u6A21\u578B", probing: "\u63A2\u6D4B\u4E2D\u2026", save: "\u4FDD\u5B58", cancel: "\u53D6\u6D88", name: "\u540D\u79F0", protocol: "\u534F\u8BAE", baseUrl: "Base URL", secret: "\u6A21\u578B\u51ED\u636E", probeSecret: "\u63A2\u6D4B\u51ED\u636E", secretCap: "\u5199\u5165\u7CFB\u7EDF\u51ED\u636E\u5E93\uFF1B\u7F16\u8F91\u65F6\u7559\u7A7A\u8868\u793A\u4FDD\u7559\u539F\u51ED\u636E", models: (n) => `${n} \u4E2A\u6A21\u578B`, probeFailed: "\u63A2\u6D4B\u5931\u8D25\uFF08\u53EF\u624B\u586B\u6A21\u578B ID \u7EE7\u7EED\u4F7F\u7528\uFF09\uFF1A", importCc: "\u4ECE cc-switch \u5BFC\u5165", insecure: "\u5141\u8BB8\u975E\u56DE\u73AF HTTP\uFF08\u4FDD\u5B58\u65F6\u518D\u6B21\u786E\u8BA4\uFF09", dialect: "API \u65B9\u8A00", inherit: "\u7EE7\u627F\u6A21\u578B\u51ED\u636E", separate: "\u5355\u72EC\u914D\u7F6E", extraHeaders: "\u989D\u5916\u8BF7\u6C42\u5934", addHeader: "\u65B0\u589E\u8BF7\u6C42\u5934", removeHeader: "\u79FB\u9664", headerName: "Header \u540D\u79F0", literal: "\u666E\u901A\u6587\u672C", secretValue: "\u7CFB\u7EDF\u51ED\u636E", scopeProbe: "\u63A2\u6D4B", scopeModel: "\u6A21\u578B\u8BF7\u6C42" },
     en: { title: "Provider manager", add: "Add", edit: "Edit", del: "Delete", probe: "Probe models", probing: "Probing\u2026", save: "Save", cancel: "Cancel", name: "Name", protocol: "Protocol", baseUrl: "Base URL", secret: "Model credential", probeSecret: "Probe credential", secretCap: "Stored in the system credential store; leave blank while editing to retain it", models: (n) => `${n} models`, probeFailed: "Probe failed (manual model id still works): ", importCc: "Import from cc-switch", insecure: "Allow non-loopback HTTP (confirmed again on save)", dialect: "API dialect", inherit: "Inherit model credential", separate: "Configure separately", extraHeaders: "Extra headers", addHeader: "Add header", removeHeader: "Remove", headerName: "Header name", literal: "Literal text", secretValue: "Credential store", scopeProbe: "Probe", scopeModel: "Model request" }
   };
   function SecretInput({ name, disabled = false }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
       "input",
       {
         name,
@@ -18863,9 +20809,9 @@
     return `header-${index}`;
   }
   function ProviderManagerSection({ lang = "zh", providers = [], onUpsert, onRemove, onProbe, probing = "", probeErrors = {}, ccSwitch = null, onImportCcSwitch, disabled = false }) {
-    const t = L2[lang] || L2.zh;
-    const [draft, setDraft] = import_react37.default.useState(null);
-    const [error, setError] = import_react37.default.useState("");
+    const t = L4[lang] || L4.zh;
+    const [draft, setDraft] = import_react42.default.useState(null);
+    const [error, setError] = import_react42.default.useState("");
     const save = async (event) => {
       var _a;
       event.preventDefault();
@@ -18885,76 +20831,76 @@
         (_a = formElement == null ? void 0 : formElement.reset) == null ? void 0 : _a.call(formElement);
       }
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { flex: 1, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.title }),
-        /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: (e) => {
+    return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { style: { flex: 1, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: (e) => {
           e.preventDefault();
           setDraft(emptyDraft());
         }, children: t.add })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
-        ccSwitch && onImportCcSwitch ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "secondary", size: "sm", icon: "download", disabled, onClick: onImportCcSwitch, children: t.importCc }) : null,
-        providers.map((provider) => /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: "6px 8px", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { flex: 1, minWidth: 0, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.name }),
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Badge, { status: "neutral", children: provider.protocol }),
-            provider.probedModels.length ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Badge, { status: "ok", children: t.models(provider.probedModels.length) }) : null,
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", disabled: disabled || probing === provider.id, onClick: () => onProbe(provider), children: probing === provider.id ? t.probing : t.probe }),
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => {
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
+        ccSwitch && onImportCcSwitch ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "secondary", size: "sm", icon: "download", disabled, onClick: onImportCcSwitch, children: t.importCc }) : null,
+        providers.map((provider) => /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: "6px 8px", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { style: { flex: 1, minWidth: 0, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: "neutral", children: provider.protocol }),
+            provider.probedModels.length ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: "ok", children: t.models(provider.probedModels.length) }) : null,
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", disabled: disabled || probing === provider.id, onClick: () => onProbe(provider), children: probing === provider.id ? t.probing : t.probe }),
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => {
               setDraft(draftFromEntry(provider));
               setError("");
             }, children: t.edit }),
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => onRemove(provider), children: t.del })
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => onRemove(provider), children: t.del })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.baseUrl }),
-          probeErrors[provider.id] ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.baseUrl }),
+          probeErrors[provider.id] ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: [
             t.probeFailed,
             probeErrors[provider.id]
           ] }) : null
         ] }, provider.id)),
-        draft ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("form", { onSubmit: save, style: { display: "flex", flexDirection: "column", gap: 6, padding: "8px", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Input, { value: draft.name, onChange: (value) => setDraft({ ...draft, name: value }) }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.protocol, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Select, { value: draft.protocol, onChange: (value) => setDraft({ ...draft, protocol: value }), options: [{ value: "openai-compatible", label: "OpenAI compatible" }, { value: "anthropic", label: "Anthropic" }] }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.baseUrl, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Input, { mono: true, value: draft.baseUrl, onChange: (value) => setDraft({ ...draft, baseUrl: value }), placeholder: "https://api.example.com/v1" }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("label", { style: { display: "flex", gap: 6, alignItems: "center", font: "400 11px/1.35 var(--font-ui)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("input", { type: "checkbox", checked: draft.allowInsecureHttp, onChange: (event) => setDraft({ ...draft, allowInsecureHttp: event.target.checked }) }),
+        draft ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("form", { onSubmit: save, style: { display: "flex", flexDirection: "column", gap: 6, padding: "8px", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { value: draft.name, onChange: (value) => setDraft({ ...draft, name: value }) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.protocol, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: draft.protocol, onChange: (value) => setDraft({ ...draft, protocol: value }), options: [{ value: "openai-compatible", label: "OpenAI compatible" }, { value: "anthropic", label: "Anthropic" }] }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.baseUrl, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { mono: true, value: draft.baseUrl, onChange: (value) => setDraft({ ...draft, baseUrl: value }), placeholder: "https://api.example.com/v1" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("label", { style: { display: "flex", gap: 6, alignItems: "center", font: "400 11px/1.35 var(--font-ui)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("input", { type: "checkbox", checked: draft.allowInsecureHttp, onChange: (event) => setDraft({ ...draft, allowInsecureHttp: event.target.checked }) }),
             t.insecure
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(Field, { label: t.secret, caption: t.secretCap, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Select, { value: draft.modelAuthKind, onChange: (value) => setDraft({ ...draft, modelAuthKind: value }), options: [{ value: "none", label: "None" }, { value: "bearer", label: "Bearer" }, { value: "x-api-key", label: "x-api-key" }, { value: "custom", label: "Custom header" }] }),
-            draft.modelAuthKind === "custom" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Input, { mono: true, value: draft.modelAuthHeaderName, onChange: (value) => setDraft({ ...draft, modelAuthHeaderName: value }), placeholder: "x-provider-token" }) : null,
-            draft.modelAuthKind !== "none" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(Field, { label: t.secret, caption: t.secretCap, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: draft.modelAuthKind, onChange: (value) => setDraft({ ...draft, modelAuthKind: value }), options: [{ value: "none", label: "None" }, { value: "bearer", label: "Bearer" }, { value: "x-api-key", label: "x-api-key" }, { value: "custom", label: "Custom header" }] }),
+            draft.modelAuthKind === "custom" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { mono: true, value: draft.modelAuthHeaderName, onChange: (value) => setDraft({ ...draft, modelAuthHeaderName: value }), placeholder: "x-provider-token" }) : null,
+            draft.modelAuthKind !== "none" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) : null
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(Field, { label: t.probeSecret, caption: t.secretCap, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Select, { value: draft.probeAuthMode, onChange: (value) => setDraft({ ...draft, probeAuthMode: value }), options: [{ value: "inherit-model", label: t.inherit }, { value: "separate", label: t.separate }] }),
-            draft.probeAuthMode === "separate" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(import_react37.default.Fragment, { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Select, { value: draft.probeAuthKind, onChange: (value) => setDraft({ ...draft, probeAuthKind: value }), options: [{ value: "none", label: "None" }, { value: "bearer", label: "Bearer" }, { value: "x-api-key", label: "x-api-key" }, { value: "custom", label: "Custom header" }] }),
-              draft.probeAuthKind === "custom" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Input, { mono: true, value: draft.probeAuthHeaderName, onChange: (value) => setDraft({ ...draft, probeAuthHeaderName: value }), placeholder: "x-provider-token" }) : null,
-              draft.probeAuthKind !== "none" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(SecretInput, { name: "probeAuthSecret", disabled }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(Field, { label: t.probeSecret, caption: t.secretCap, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: draft.probeAuthMode, onChange: (value) => setDraft({ ...draft, probeAuthMode: value }), options: [{ value: "inherit-model", label: t.inherit }, { value: "separate", label: t.separate }] }),
+            draft.probeAuthMode === "separate" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_react42.default.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: draft.probeAuthKind, onChange: (value) => setDraft({ ...draft, probeAuthKind: value }), options: [{ value: "none", label: "None" }, { value: "bearer", label: "Bearer" }, { value: "x-api-key", label: "x-api-key" }, { value: "custom", label: "Custom header" }] }),
+              draft.probeAuthKind === "custom" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { mono: true, value: draft.probeAuthHeaderName, onChange: (value) => setDraft({ ...draft, probeAuthHeaderName: value }), placeholder: "x-provider-token" }) : null,
+              draft.probeAuthKind !== "none" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(SecretInput, { name: "probeAuthSecret", disabled }) : null
             ] }) : null
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.extraHeaders, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-            draft.headers.map((header, index) => /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: 6, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Input, { mono: true, value: header.name, onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, name: value } : item) }), placeholder: t.headerName }),
-              /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Select, { value: header.valueKind, onChange: (valueKind) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, valueKind, value: valueKind === "literal" ? item.value || "" : "" } : item) }), options: [{ value: "literal", label: t.literal }, { value: "secret", label: t.secretValue }] }),
-              header.valueKind === "secret" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(SecretInput, { name: `headerSecret:${header.id}`, disabled }) : /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Input, { mono: true, value: header.value || "", onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, value } : item) }) }),
-              /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { display: "flex", gap: 10 }, children: ["probe", "model"].map((scope) => /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 4, font: "400 10px/1.35 var(--font-ui)" }, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("input", { type: "checkbox", checked: header.scopes.includes(scope), onChange: (event) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, scopes: event.target.checked ? [.../* @__PURE__ */ new Set([...item.scopes, scope])] : item.scopes.filter((value) => value !== scope) } : item) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.extraHeaders, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+            draft.headers.map((header, index) => /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: 6, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { mono: true, value: header.name, onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, name: value } : item) }), placeholder: t.headerName }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: header.valueKind, onChange: (valueKind) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, valueKind, value: valueKind === "literal" ? item.value || "" : "" } : item) }), options: [{ value: "literal", label: t.literal }, { value: "secret", label: t.secretValue }] }),
+              header.valueKind === "secret" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(SecretInput, { name: `headerSecret:${header.id}`, disabled }) : /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { mono: true, value: header.value || "", onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, value } : item) }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { style: { display: "flex", gap: 10 }, children: ["probe", "model"].map((scope) => /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 4, font: "400 10px/1.35 var(--font-ui)" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("input", { type: "checkbox", checked: header.scopes.includes(scope), onChange: (event) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, scopes: event.target.checked ? [.../* @__PURE__ */ new Set([...item.scopes, scope])] : item.scopes.filter((value) => value !== scope) } : item) }) }),
                 scope === "probe" ? t.scopeProbe : t.scopeModel
               ] }, scope)) }),
-              /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => setDraft({ ...draft, headers: draft.headers.filter((_, itemIndex) => itemIndex !== index) }), children: t.removeHeader })
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => setDraft({ ...draft, headers: draft.headers.filter((_, itemIndex) => itemIndex !== index) }), children: t.removeHeader })
             ] }, header.id)),
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: () => setDraft({ ...draft, headers: [...draft.headers, { id: nextHeaderId(draft.headers), name: "", scopes: ["model"], valueKind: "literal", value: "" }] }), children: t.addHeader })
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: () => setDraft({ ...draft, headers: [...draft.headers, { id: nextHeaderId(draft.headers), name: "", scopes: ["model"], valueKind: "literal", value: "" }] }), children: t.addHeader })
           ] }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Field, { label: t.dialect, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Select, { value: draft.dialectOverride, onChange: (value) => setDraft({ ...draft, dialectOverride: value }), options: [{ value: "", label: "Auto detect" }, { value: "responses", label: "Responses" }, { value: "chat", label: "Chat" }] }) }),
-          error ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: error }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", gap: 6, justifyContent: "flex-end" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => {
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.dialect, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: draft.dialectOverride, onChange: (value) => setDraft({ ...draft, dialectOverride: value }), options: [{ value: "", label: "Auto detect" }, { value: "responses", label: "Responses" }, { value: "chat", label: "Chat" }] }) }),
+          error ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: error }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", gap: 6, justifyContent: "flex-end" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => {
               setDraft(null);
               setError("");
             }, children: t.cancel }),
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { variant: "primary", size: "sm", disabled, onClick: (event) => {
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "primary", size: "sm", disabled, onClick: (event) => {
               var _a;
               return (_a = event.currentTarget.closest("form")) == null ? void 0 : _a.requestSubmit();
             }, children: t.save })
@@ -19070,10 +21016,10 @@
 
   // src/cep/ccSwitch.js
   var CONFIG_NAMES = ["config.json", "providers.json"];
-  function rotateRight(value, count) {
+  function rotateRight2(value, count) {
     return value >>> count | value << 32 - count;
   }
-  function sha256Text(text) {
+  function sha256Text2(text) {
     const bytes = typeof TextEncoder === "function" ? new TextEncoder().encode(String(text)) : Uint8Array.from(unescape(encodeURIComponent(String(text))), (char) => char.charCodeAt(0));
     const bitLength = bytes.length * 8;
     const paddedLength = Math.ceil((bytes.length + 9) / 64) * 64;
@@ -19158,16 +21104,16 @@
       for (let index = 16; index < 64; index += 1) {
         const x = words[index - 15];
         const y = words[index - 2];
-        const s0 = rotateRight(x, 7) ^ rotateRight(x, 18) ^ x >>> 3;
-        const s1 = rotateRight(y, 17) ^ rotateRight(y, 19) ^ y >>> 10;
+        const s0 = rotateRight2(x, 7) ^ rotateRight2(x, 18) ^ x >>> 3;
+        const s1 = rotateRight2(y, 17) ^ rotateRight2(y, 19) ^ y >>> 10;
         words[index] = words[index - 16] + s0 + words[index - 7] + s1 >>> 0;
       }
       let [a, b, c, d, e, f, g, h] = hash;
       for (let index = 0; index < 64; index += 1) {
-        const s1 = rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25);
+        const s1 = rotateRight2(e, 6) ^ rotateRight2(e, 11) ^ rotateRight2(e, 25);
         const choose = e & f ^ ~e & g;
         const temp1 = h + s1 + choose + constants[index] + words[index] >>> 0;
-        const s0 = rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22);
+        const s0 = rotateRight2(a, 2) ^ rotateRight2(a, 13) ^ rotateRight2(a, 22);
         const majority = a & b ^ a & c ^ b & c;
         const temp2 = s0 + majority >>> 0;
         h = g;
@@ -19263,7 +21209,7 @@
           if (fs.existsSync && !fs.existsSync(file)) continue;
           const text = String(fs.readFileSync(file, "utf8"));
           const providers = ccSwitchProviderEntries(rawProviders(JSON.parse(text)));
-          if (providers.length) return { dir, file, sourceRevision: sha256Text(text), providers };
+          if (providers.length) return { dir, file, sourceRevision: sha256Text2(text), providers };
         } catch {
         }
       }
@@ -19278,7 +21224,7 @@
     } catch {
       throw importChanged();
     }
-    if (sha256Text(text) !== expectedSourceRevision) throw importChanged();
+    if (sha256Text2(text) !== expectedSourceRevision) throw importChanged();
     let parsed;
     try {
       parsed = JSON.parse(text);
@@ -19330,7 +21276,7 @@
       const text = String(fs.readFileSync(file, "utf8"));
       const settings = parseSettings(text);
       if (!settings) return null;
-      return { available: true, baseUrl: settings.baseUrl, sourceRevision: sha256Text(text) };
+      return { available: true, baseUrl: settings.baseUrl, sourceRevision: sha256Text2(text) };
     } catch {
       return null;
     }
@@ -19346,7 +21292,7 @@
     } catch {
       throw sourceChanged();
     }
-    if (sha256Text(text) !== expectedSourceRevision) throw sourceChanged();
+    if (sha256Text2(text) !== expectedSourceRevision) throw sourceChanged();
     let settings;
     try {
       settings = parseSettings(text);
@@ -19767,10 +21713,10 @@
   }
 
   // src/cep/useActivity.js
-  var import_react38 = __toESM(require_react(), 1);
+  var import_react43 = __toESM(require_react(), 1);
   function useActivity(getHost) {
-    const [events, setEvents] = import_react38.default.useState([]);
-    import_react38.default.useEffect(() => {
+    const [events, setEvents] = import_react43.default.useState([]);
+    import_react43.default.useEffect(() => {
       let unsub = null;
       let retry = null;
       let disposed = false;
@@ -19792,7 +21738,7 @@
         if (retry) clearTimeout(retry);
       };
     }, [getHost]);
-    const clear = import_react38.default.useCallback(() => setEvents([]), []);
+    const clear = import_react43.default.useCallback(() => setEvents([]), []);
     return { events, clear };
   }
 
@@ -19819,7 +21765,7 @@
   }
 
   // src/app/wizardWiring.js
-  var import_react39 = __toESM(require_react(), 1);
+  var import_react44 = __toESM(require_react(), 1);
 
   // src/cep/wizardActions.js
   var OUTPUT_TAIL = 8192;
@@ -19907,31 +21853,31 @@
     return text.includes("winget") && (text.includes("not recognized") || text.includes("not found") || text.includes("enoent") || text.includes("cannot find"));
   }
   function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin } = {}) {
-    const [stepStates, dispatch] = import_react39.default.useReducer(stepReducer, null, initialStepStates);
-    const [useUvFallback, setUseUvFallback] = import_react39.default.useState(false);
-    const repoRoot = import_react39.default.useMemo(() => {
+    const [stepStates, dispatch] = import_react44.default.useReducer(stepReducer, null, initialStepStates);
+    const [useUvFallback, setUseUvFallback] = import_react44.default.useState(false);
+    const repoRoot = import_react44.default.useMemo(() => {
       try {
         return detectRepoRoot({ extRoot });
       } catch (e) {
         return "";
       }
     }, [extRoot]);
-    const cmds = import_react39.default.useMemo(() => buildInstallCommands({
+    const cmds = import_react44.default.useMemo(() => buildInstallCommands({
       panelVersion: PANEL_VERSION,
       repoRoot
     }), [repoRoot]);
-    const activeCmds = import_react39.default.useMemo(() => ({
+    const activeCmds = import_react44.default.useMemo(() => ({
       ...cmds,
       uv: useUvFallback ? cmds.uvFallback : cmds.uv
     }), [cmds, useUvFallback]);
-    const commandPreviews = import_react39.default.useMemo(() => ({
+    const commandPreviews = import_react44.default.useMemo(() => ({
       uv: commandPreview(activeCmds.uv),
       aeMcp: commandPreview(activeCmds.aeMcp),
       node: commandPreview(activeCmds.node),
       claude: commandPreview(activeCmds.claude),
       login: "claude"
     }), [activeCmds]);
-    const detect = import_react39.default.useCallback(async (id) => {
+    const detect = import_react44.default.useCallback(async (id) => {
       dispatch({ type: "detect-start", id });
       if (id === "login") {
         if (recheckLogin) {
@@ -19946,7 +21892,7 @@
       dispatch({ type: "detect-result", id, ok: result.ok, version: result.version || "" });
       return result;
     }, [claudeStatus, recheckLogin]);
-    const install = import_react39.default.useCallback(async (id) => {
+    const install = import_react44.default.useCallback(async (id) => {
       const cmd = activeCmds[id];
       if (!cmd) return { ok: false, output: "No command configured for " + id };
       if (id === "uv" && useUvFallback) {
@@ -19974,19 +21920,19 @@
       await detect(id);
       return result;
     }, [activeCmds, detect, lang, useUvFallback]);
-    const openLogin = import_react39.default.useCallback(() => {
+    const openLogin = import_react44.default.useCallback(() => {
       openLoginTerminal({ tool: "claude" });
       dispatch({ type: "detect-result", id: "login", ok: false });
     }, []);
-    const bootDetectRef = import_react39.default.useRef(false);
-    import_react39.default.useEffect(() => {
+    const bootDetectRef = import_react44.default.useRef(false);
+    import_react44.default.useEffect(() => {
       if (bootDetectRef.current) return;
       bootDetectRef.current = true;
       ["uv", "aeMcp", "node", "claude"].forEach((id) => {
         detect(id);
       });
     }, [detect]);
-    import_react39.default.useEffect(() => {
+    import_react44.default.useEffect(() => {
       if (!claudeStatus) return;
       if (claudeStatus.state === "checking") {
         dispatch({ type: "detect-start", id: "login" });
@@ -20211,8 +22157,8 @@
     if (globalThis.require) return globalThis.require;
     throw new Error("CEP Node require is unavailable");
   }
-  function loadBundledHostDependencies({ cepRequire: cepRequire5, adapter, extensionRoot }) {
-    if (typeof cepRequire5 !== "function") throw new TypeError("CEP Node require is unavailable");
+  function loadBundledHostDependencies({ cepRequire: cepRequire6, adapter, extensionRoot }) {
+    if (typeof cepRequire6 !== "function") throw new TypeError("CEP Node require is unavailable");
     if (!adapter || !["macos-arm64", "windows-x64"].includes(adapter.id)) {
       throw new TypeError("A supported platform adapter is required");
     }
@@ -20223,11 +22169,11 @@
     if (typeof nativePath.resolve !== "function" || typeof nativePath.dirname !== "function" || typeof nativePath.isAbsolute !== "function" || typeof nativePath.contains !== "function" || typeof nativePath.same !== "function") {
       throw new TypeError("A complete native platform path catalog is required");
     }
-    const moduleApi = cepRequire5("module");
+    const moduleApi = cepRequire6("module");
     if (!moduleApi || typeof moduleApi.createRequire !== "function") {
       throw new Error("CEP Node module.createRequire is unavailable");
     }
-    const fs = adapter.fs || cepRequire5("fs");
+    const fs = adapter.fs || cepRequire6("fs");
     if (!fs || typeof fs.existsSync !== "function" || typeof fs.lstatSync !== "function" || typeof fs.realpathSync !== "function" || typeof fs.statSync !== "function" || typeof fs.readFileSync !== "function") {
       throw new Error("CEP Node filesystem is unavailable");
     }
@@ -20404,19 +22350,19 @@
       } catch {
       }
     }
-    function bindPlatformHelperFacade({ cepRequire: cepRequire5, extRoot, hostInstance }) {
+    function bindPlatformHelperFacade({ cepRequire: cepRequire6, extRoot, hostInstance }) {
       let transport = null;
       let nextClient = null;
       try {
         const transportFactory = createPlatformHelperTransportImpl || (() => {
           const modulePath = adapter.paths.join([extRoot, "host", "platform-helper-transport.js"]);
-          const loaded = cepRequire5(modulePath);
+          const loaded = cepRequire6(modulePath);
           if (typeof (loaded == null ? void 0 : loaded.createPlatformHelperTransport) !== "function") throw helperUnavailableError();
           return loaded.createPlatformHelperTransport;
         })();
         const clientFactory = createPlatformHelperClientImpl || (() => {
           const modulePath = adapter.paths.join([extRoot, "host", "platform-helper-client.js"]);
-          const loaded = cepRequire5(modulePath);
+          const loaded = cepRequire6(modulePath);
           if (typeof (loaded == null ? void 0 : loaded.createPlatformHelperClient) !== "function") throw helperUnavailableError();
           return loaded.createPlatformHelperClient;
         })();
@@ -20465,18 +22411,18 @@
       platformRoots = null;
       if (priorHost || priorClient) disposeLifecycle(priorClient, priorHost);
       try {
-        const cepRequire5 = requireImpl || getCepRequire5();
+        const cepRequire6 = requireImpl || getCepRequire5();
         const extRoot = normalizeCepPath(extensionRoot || cs2.getSystemPath("extension"), adapter);
         const hostPath = adapter.paths.join([extRoot, "host", "server.js"]);
         const roots = { extensionRoot: extRoot, runtimeRoot: adapter.paths.runtimeRoot };
         platformRoots = roots;
         onLog("host: " + hostPath);
         const runtimeDependencies = loadBundledHostDependencies({
-          cepRequire: cepRequire5,
+          cepRequire: cepRequire6,
           adapter,
           extensionRoot: extRoot
         });
-        const nextHost = cepRequire5(hostPath);
+        const nextHost = cepRequire6(hostPath);
         if (!nextHost || typeof nextHost.setRuntimeDependencies !== "function") {
           throw new Error("Host runtime dependency binding is unavailable");
         }
@@ -20484,7 +22430,7 @@
         nextHost.setCSInterface(cs2);
         if (nextHost.setPlatformRoots) nextHost.setPlatformRoots(roots);
         host = nextHost;
-        bindPlatformHelperFacade({ cepRequire: cepRequire5, extRoot, hostInstance: nextHost });
+        bindPlatformHelperFacade({ cepRequire: cepRequire6, extRoot, hostInstance: nextHost });
         if (!beforeUnloadInstalled) {
           const installBeforeUnload = addBeforeUnload || ((handler) => window.addEventListener("beforeunload", handler));
           installBeforeUnload(() => {
@@ -20618,8 +22564,285 @@
     return { json, value };
   }
 
+  // src/lib/elicitationCoordinator.js
+  function isPlainObject2(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  }
+  function cloneVisible(value, seen = /* @__PURE__ */ new Set()) {
+    if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+    if (typeof value === "number") return Number.isFinite(value) ? value : null;
+    if (typeof value !== "object" || seen.has(value)) return void 0;
+    seen.add(value);
+    let result;
+    if (Array.isArray(value)) {
+      result = value.map((item) => cloneVisible(item, seen)).filter((item) => item !== void 0);
+    } else {
+      result = {};
+      for (const [key, item] of Object.entries(value)) {
+        const cloned = cloneVisible(item, seen);
+        if (cloned !== void 0) {
+          Object.defineProperty(result, key, {
+            value: cloned,
+            enumerable: true,
+            configurable: true,
+            writable: true
+          });
+        }
+      }
+    }
+    seen.delete(value);
+    return result;
+  }
+  function freezeVisible(value) {
+    if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+    for (const item of Object.values(value)) freezeVisible(item);
+    return Object.freeze(value);
+  }
+  function cancelResult() {
+    return { action: "cancel", content: {} };
+  }
+  function declineResult() {
+    return { action: "decline", content: {} };
+  }
+  function normalizeDirectResult(value) {
+    if (!isPlainObject2(value) || !["accept", "decline", "cancel"].includes(value.action)) return null;
+    const content = isPlainObject2(value.content) ? cloneVisible(value.content) : {};
+    return { action: value.action, content };
+  }
+  function decisionResult(decision, policy) {
+    if (decision === "abort" || decision === "cancel") return cancelResult();
+    if (decision === "deny" || decision === "decline") return declineResult();
+    if (decision === "allow-session") return approvalResult("session", policy);
+    return approvalResult(decision, policy);
+  }
+  function createElicitationCoordinator({
+    resolveApproval,
+    presentGenericForm,
+    now = () => Date.now()
+  } = {}) {
+    const entries = [];
+    const listeners = /* @__PURE__ */ new Set();
+    const disposeController = new AbortController();
+    let classificationTail = Promise.resolve();
+    let sequence = 0;
+    let disposed = false;
+    function snapshot() {
+      return entries.length ? entries[0].record : null;
+    }
+    function publish() {
+      const current = snapshot();
+      for (const listener of [...listeners]) {
+        try {
+          listener(current);
+        } catch {
+        }
+      }
+    }
+    function removeEntry(entry, result) {
+      const index = entries.indexOf(entry);
+      if (index < 0) return false;
+      entries.splice(index, 1);
+      if (entry.signal && entry.abortHandler) {
+        entry.signal.removeEventListener("abort", entry.abortHandler);
+      }
+      if (entry.externalSignal && entry.forwardAbort) {
+        entry.externalSignal.removeEventListener("abort", entry.forwardAbort);
+      }
+      entry.resolve(result);
+      if (index === 0) activateHead();
+      return true;
+    }
+    function activateHead() {
+      const entry = entries[0];
+      if (!entry) {
+        publish();
+        return;
+      }
+      if (entry.activated) return;
+      entry.activated = true;
+      publish();
+      if (entries[0] !== entry) return;
+      if (entry.plan || typeof presentGenericForm !== "function") return;
+      Promise.resolve().then(() => presentGenericForm(entry.record.request, {
+        ...entry.record.context,
+        signal: entry.signal
+      })).then(
+        (value) => {
+          var _a;
+          if (!entries.includes(entry) || ((_a = entry.signal) == null ? void 0 : _a.aborted)) return;
+          const direct = normalizeDirectResult(value);
+          if (direct) {
+            removeEntry(entry, direct);
+            return;
+          }
+          entry.record = freezeVisible({
+            ...entry.record,
+            presentation: cloneVisible(value)
+          });
+          if (entries[0] === entry) publish();
+        },
+        () => {
+          if (entries.includes(entry)) removeEntry(entry, declineResult());
+        }
+      );
+    }
+    function enqueue(request, context, plan, policy) {
+      var _a;
+      if (disposed || ((_a = context == null ? void 0 : context.signal) == null ? void 0 : _a.aborted)) return Promise.resolve(cancelResult());
+      sequence += 1;
+      const contextView = { ...context };
+      delete contextView.signal;
+      const record = freezeVisible({
+        id: `elicitation-${sequence}`,
+        request: cloneVisible(request) || {},
+        context: cloneVisible(contextView) || {},
+        plan,
+        policy: cloneVisible(policy),
+        presentation: void 0
+      });
+      return new Promise((resolve) => {
+        const controller = new AbortController();
+        const entry = {
+          record,
+          policy: policy || {},
+          resolve,
+          signal: controller.signal,
+          controller,
+          externalSignal: (context == null ? void 0 : context.signal) || null,
+          forwardAbort: null,
+          abortHandler: null,
+          plan,
+          activated: false
+        };
+        entry.abortHandler = () => removeEntry(entry, cancelResult());
+        entry.signal.addEventListener("abort", entry.abortHandler, { once: true });
+        if (entry.externalSignal) {
+          entry.forwardAbort = () => controller.abort();
+          entry.externalSignal.addEventListener("abort", entry.forwardAbort, { once: true });
+        }
+        const wasEmpty = entries.length === 0;
+        entries.push(entry);
+        if (wasEmpty) activateHead();
+      });
+    }
+    async function invoke(strategy, request, context, plan) {
+      if (typeof strategy !== "function") return { aborted: false, value: null };
+      const controller = new AbortController();
+      const sources = [context == null ? void 0 : context.signal, disposeController.signal].filter(Boolean);
+      const forwardAbort = () => controller.abort();
+      for (const source of sources) source.addEventListener("abort", forwardAbort, { once: true });
+      if (sources.some((source) => source.aborted)) controller.abort();
+      const signal = controller.signal;
+      if (signal.aborted) {
+        for (const source of sources) source.removeEventListener("abort", forwardAbort);
+        return { aborted: true, value: null };
+      }
+      const aborted = new Promise((resolve) => {
+        signal.addEventListener(
+          "abort",
+          () => resolve({ aborted: true, value: null }),
+          { once: true }
+        );
+      });
+      const called = Promise.resolve().then(() => strategy(request, { ...context, signal, plan })).then(
+        (value) => ({ aborted: false, value }),
+        () => ({ aborted: false, value: declineResult() })
+      );
+      const outcome = await Promise.race([called, aborted]);
+      for (const source of sources) source.removeEventListener("abort", forwardAbort);
+      return outcome;
+    }
+    async function handle(request, context = {}) {
+      var _a, _b;
+      const predecessor = classificationTail;
+      let releaseClassification;
+      classificationTail = new Promise((resolve) => {
+        releaseClassification = resolve;
+      });
+      await predecessor;
+      let released = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        releaseClassification();
+      };
+      try {
+        if (disposed || ((_a = context == null ? void 0 : context.signal) == null ? void 0 : _a.aborted)) return cancelResult();
+        const requestedSchema = isPlainObject2(request) ? request.requestedSchema : null;
+        const hasPlanMarker = isPlainObject2(requestedSchema) && Object.prototype.hasOwnProperty.call(requestedSchema, PLAN_SCHEMA_KEY);
+        const plan = hasPlanMarker ? extractToolPlan(requestedSchema, now) : null;
+        if (hasPlanMarker && !plan) return declineResult();
+        if (!plan) {
+          if (typeof presentGenericForm !== "function") return declineResult();
+          const pending = enqueue(request, context, null, null);
+          release();
+          return await pending;
+        }
+        const outcome = await invoke(resolveApproval, request, context, plan);
+        if (outcome.aborted || ((_b = context == null ? void 0 : context.signal) == null ? void 0 : _b.aborted)) return cancelResult();
+        const direct = normalizeDirectResult(outcome.value);
+        if (direct) {
+          if (plan && direct.action === "accept") {
+            return approvalResult(direct.content.decision, { allowSession: false });
+          }
+          return direct;
+        }
+        if (plan && isPlainObject2(outcome.value)) {
+          if (outcome.value.decision === "allow") return approvalResult("once", outcome.value);
+          if (outcome.value.decision === "deny") return declineResult();
+          if (outcome.value.decision !== "ask") return declineResult();
+          const pending = enqueue(request, context, plan, outcome.value);
+          release();
+          return await pending;
+        }
+        return declineResult();
+      } finally {
+        release();
+      }
+    }
+    function subscribe(listener) {
+      if (typeof listener !== "function" || disposed) return () => {
+      };
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }
+    function resolveVisible(result) {
+      var _a, _b;
+      if (!entries.length || !isPlainObject2(result)) return false;
+      const entry = entries[0];
+      const suppliedId = (_b = (_a = result.id) != null ? _a : result.requestId) != null ? _b : result.elicitationId;
+      if (suppliedId === void 0 || suppliedId !== entry.record.id) return false;
+      let direct = normalizeDirectResult(result);
+      if (direct && entry.record.plan && direct.action === "accept") {
+        direct = approvalResult(direct.content.decision, entry.policy);
+      }
+      const response = direct || decisionResult(result.decision, entry.policy);
+      return removeEntry(entry, response);
+    }
+    function dispose() {
+      if (disposed) return;
+      disposed = true;
+      disposeController.abort();
+      const pending = entries.splice(0);
+      listeners.clear();
+      for (const entry of pending) {
+        if (entry.signal && entry.abortHandler) {
+          entry.signal.removeEventListener("abort", entry.abortHandler);
+        }
+        if (entry.externalSignal && entry.forwardAbort) {
+          entry.externalSignal.removeEventListener("abort", entry.forwardAbort);
+        }
+        entry.controller.abort();
+        entry.resolve(cancelResult());
+      }
+    }
+    return { handle, snapshot, subscribe, resolveVisible, dispose };
+  }
+
   // src/app/App.jsx
-  var import_jsx_runtime36 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime41 = __toESM(require_jsx_runtime(), 1);
   var T = {
     zh: {
       connected: "\u670D\u52A1\u8FD0\u884C\u4E2D",
@@ -20630,6 +22853,7 @@
       resume: "\u6062\u590D",
       chat: "\u5BF9\u8BDD",
       activity: "\u6D3B\u52A8",
+      tools: "\u5DE5\u5177",
       settings: "\u8BBE\u7F6E",
       chatEmptyT: "\u5185\u5D4C\u5BF9\u8BDD\u5373\u5C06\u5F00\u653E",
       chatEmptyB: "P5 \u4E0A\u7EBF\u3002\u73B0\u5728\u53EF\u901A\u8FC7 Claude Desktop \u7B49\u5BA2\u6237\u7AEF\u8FDE\u63A5\u4F7F\u7528\u3002",
@@ -20651,6 +22875,7 @@
       resume: "Resume",
       chat: "Chat",
       activity: "Activity",
+      tools: "Tools",
       settings: "Settings",
       chatEmptyT: "Built-in chat coming soon",
       chatEmptyB: "Lands in P5. Connect via Claude Desktop etc. for now.",
@@ -20705,13 +22930,13 @@
     "claude-code": { zh: "Claude Code", en: "Claude Code" },
     cursor: { zh: "Cursor", en: "Cursor" }
   };
-  function cepRequire4(mod) {
+  function cepRequire5(mod) {
     if (window.cep_node && window.cep_node.require) return window.cep_node.require(mod);
     if (window.require) return window.require(mod);
     return null;
   }
   function randomProviderCredentialId() {
-    const cryptoImpl = cepRequire4("crypto");
+    const cryptoImpl = cepRequire5("crypto");
     if (!cryptoImpl || typeof cryptoImpl.randomUUID !== "function") throw new Error("Secure UUID generation is unavailable");
     return cryptoImpl.randomUUID();
   }
@@ -20850,91 +23075,113 @@
   function Shell({ cs: cs2 }) {
     const { lang, setLang } = useLang();
     const t = T[lang];
-    const [tab, setTab] = import_react40.default.useState("chat");
-    const [status, setStatus] = import_react40.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
-    const [paused, setPaused] = import_react40.default.useState(false);
-    const [logs, setLogs] = import_react40.default.useState([]);
-    const ctrl = import_react40.default.useRef(null);
-    const getHost = import_react40.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
-    const [wizardDone, setWizardDone] = import_react40.default.useState(() => isWizardDone(window.localStorage));
-    const [wizStep, setWizStep] = import_react40.default.useState(1);
-    const [wizClient, setWizClient] = import_react40.default.useState("claude-desktop");
-    const [drawerOpen, setDrawerOpen] = import_react40.default.useState(false);
-    const [connInfo, setConnInfo] = import_react40.default.useState(null);
-    const [diagnostics, setDiagnostics] = import_react40.default.useState(null);
+    const [tab, setTab] = import_react45.default.useState("chat");
+    const [status, setStatus] = import_react45.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
+    const [paused, setPaused] = import_react45.default.useState(false);
+    const [logs, setLogs] = import_react45.default.useState([]);
+    const ctrl = import_react45.default.useRef(null);
+    const getHost = import_react45.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
+    const [wizardDone, setWizardDone] = import_react45.default.useState(() => isWizardDone(window.localStorage));
+    const [wizStep, setWizStep] = import_react45.default.useState(1);
+    const [wizClient, setWizClient] = import_react45.default.useState("claude-desktop");
+    const [drawerOpen, setDrawerOpen] = import_react45.default.useState(false);
+    const [connInfo, setConnInfo] = import_react45.default.useState(null);
+    const [diagnostics, setDiagnostics] = import_react45.default.useState(null);
     const { events, clear } = useActivity(getHost);
-    const [clients, setClients] = import_react40.default.useState([]);
-    const [confirmRegen, setConfirmRegen] = import_react40.default.useState(false);
-    const [tokenEpoch, setTokenEpoch] = import_react40.default.useState(0);
-    const platform = import_react40.default.useMemo(() => createPlatformAdapter(), []);
-    const keyStore = import_react40.default.useMemo(() => {
+    const [clients, setClients] = import_react45.default.useState([]);
+    const [confirmRegen, setConfirmRegen] = import_react45.default.useState(false);
+    const [tokenEpoch, setTokenEpoch] = import_react45.default.useState(0);
+    const platform = import_react45.default.useMemo(() => createPlatformAdapter(), []);
+    const keyStore = import_react45.default.useMemo(() => {
       try {
         return createApiKeyStore();
       } catch (e) {
         return null;
       }
     }, []);
-    const [customModel, setCustomModel] = import_react40.default.useState(() => readPref("ae_mcp_custom_model", ""));
-    const [model, setModel] = import_react40.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
-    const [logLevel, setLogLevel] = import_react40.default.useState(() => readPref("ae_mcp_log_level", "info"));
-    const logLevelRef = import_react40.default.useRef(logLevel);
+    const [customModel, setCustomModel] = import_react45.default.useState(() => readPref("ae_mcp_custom_model", ""));
+    const [model, setModel] = import_react45.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
+    const [logLevel, setLogLevel] = import_react45.default.useState(() => readPref("ae_mcp_log_level", "info"));
+    const logLevelRef = import_react45.default.useRef(logLevel);
     logLevelRef.current = logLevel;
-    const [sessionModel, setSessionModel] = import_react40.default.useState(null);
-    const [sessionEffort, setSessionEffort] = import_react40.default.useState(null);
-    const [sessionFast, setSessionFast] = import_react40.default.useState(null);
-    const [permissionMode, setPermissionMode] = import_react40.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
-    const backendMigration = import_react40.default.useMemo(() => migrateBackendPref(window.localStorage), []);
-    const [backendPref, setBackendPref] = import_react40.default.useState(() => backendMigration.pref);
-    const [channelLock, setChannelLock] = import_react40.default.useState(() => backendMigration.lockedChannel);
-    const providerStore = import_react40.default.useMemo(() => {
+    const [sessionModel, setSessionModel] = import_react45.default.useState(null);
+    const [sessionEffort, setSessionEffort] = import_react45.default.useState(null);
+    const [sessionFast, setSessionFast] = import_react45.default.useState(null);
+    const [permissionMode, setPermissionMode] = import_react45.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
+    const permissionModeRef = import_react45.default.useRef(permissionMode);
+    permissionModeRef.current = permissionMode;
+    const approvalTierFile = import_react45.default.useMemo(() => createApprovalTierFile(), []);
+    const elicitationCoordinator = import_react45.default.useMemo(() => createElicitationCoordinator({
+      resolveApproval: (_request, { plan }) => decideToolPlan({
+        tier: permissionModeRef.current,
+        plan
+      }),
+      presentGenericForm: () => ({ action: "decline", content: {} })
+    }), []);
+    const [toolApproval, setToolApproval] = import_react45.default.useState(() => elicitationCoordinator.snapshot());
+    import_react45.default.useEffect(() => elicitationCoordinator.subscribe(setToolApproval), [elicitationCoordinator]);
+    import_react45.default.useEffect(() => {
+      approvalTierFile.write(permissionMode);
+    }, [approvalTierFile, permissionMode]);
+    import_react45.default.useEffect(() => () => {
+      elicitationCoordinator.dispose();
+      try {
+        approvalTierFile.dispose();
+      } catch (error) {
+      }
+    }, [approvalTierFile, elicitationCoordinator]);
+    const backendMigration = import_react45.default.useMemo(() => migrateBackendPref(window.localStorage), []);
+    const [backendPref, setBackendPref] = import_react45.default.useState(() => backendMigration.pref);
+    const [channelLock, setChannelLock] = import_react45.default.useState(() => backendMigration.lockedChannel);
+    const providerStore = import_react45.default.useMemo(() => {
       try {
         return createProviderStore();
       } catch (e) {
         return null;
       }
     }, []);
-    const providerSecretService = import_react40.default.useMemo(() => createProviderSecretService({
+    const providerSecretService = import_react45.default.useMemo(() => createProviderSecretService({
       getHost,
-      randomBytes: (size) => cepRequire4("crypto").randomBytes(size)
+      randomBytes: (size) => cepRequire5("crypto").randomBytes(size)
     }), [getHost]);
-    const [providerInit, setProviderInit] = import_react40.default.useState({ state: "checking", error: "" });
-    const [providers, setProviders] = import_react40.default.useState([]);
-    const [claudeProviderId, setClaudeProviderId] = import_react40.default.useState(() => readPref("ae_mcp_claude_provider", ""));
-    const [codexProviderId, setCodexProviderId] = import_react40.default.useState(() => readPref("ae_mcp_codex_provider", ""));
-    const [expertGuidance, setExpertGuidance] = import_react40.default.useState(() => loadExpertGuidance(window.localStorage));
-    const [probe, setProbe] = import_react40.default.useState(null);
-    const [codexProbe, setCodexProbe] = import_react40.default.useState(null);
-    const [codexModels, setCodexModels] = import_react40.default.useState(() => readCachedCodexModels(window.localStorage));
-    const [zcodeProbe, setZcodeProbe] = import_react40.default.useState(null);
-    const [zcodeSessionModels, setZcodeSessionModels] = import_react40.default.useState(null);
-    const [zcodeProbedModels, setZcodeProbedModels] = import_react40.default.useState(() => readCachedZcodeProbedModels(window.localStorage));
-    const [chatEntries, setChatEntries] = import_react40.default.useState([]);
-    const [chatStreaming, setChatStreaming] = import_react40.default.useState(false);
-    const [thinkingActive, setThinkingActive] = import_react40.default.useState(false);
+    const [providerInit, setProviderInit] = import_react45.default.useState({ state: "checking", error: "" });
+    const [providers, setProviders] = import_react45.default.useState([]);
+    const [claudeProviderId, setClaudeProviderId] = import_react45.default.useState(() => readPref("ae_mcp_claude_provider", ""));
+    const [codexProviderId, setCodexProviderId] = import_react45.default.useState(() => readPref("ae_mcp_codex_provider", ""));
+    const [expertGuidance, setExpertGuidance] = import_react45.default.useState(() => loadExpertGuidance(window.localStorage));
+    const [probe, setProbe] = import_react45.default.useState(null);
+    const [codexProbe, setCodexProbe] = import_react45.default.useState(null);
+    const [codexModels, setCodexModels] = import_react45.default.useState(() => readCachedCodexModels(window.localStorage));
+    const [zcodeProbe, setZcodeProbe] = import_react45.default.useState(null);
+    const [zcodeSessionModels, setZcodeSessionModels] = import_react45.default.useState(null);
+    const [zcodeProbedModels, setZcodeProbedModels] = import_react45.default.useState(() => readCachedZcodeProbedModels(window.localStorage));
+    const [chatEntries, setChatEntries] = import_react45.default.useState([]);
+    const [chatStreaming, setChatStreaming] = import_react45.default.useState(false);
+    const [thinkingActive, setThinkingActive] = import_react45.default.useState(false);
     const customModelForBackend = backendPref === "codex" ? customModel : "";
-    const baseDescriptor = import_react40.default.useMemo(() => descriptorWithCustomModel(baseDescriptorFor(backendPref, window.cep_node && window.cep_node.process && window.cep_node.process.env || {}), customModelForBackend), [backendPref, customModelForBackend]);
-    const [descriptor, setDescriptor] = import_react40.default.useState(() => baseDescriptor);
+    const baseDescriptor = import_react45.default.useMemo(() => descriptorWithCustomModel(baseDescriptorFor(backendPref, window.cep_node && window.cep_node.process && window.cep_node.process.env || {}), customModelForBackend), [backendPref, customModelForBackend]);
+    const [descriptor, setDescriptor] = import_react45.default.useState(() => baseDescriptor);
     const requestedModel = sessionModel || model;
     const effectiveModel = descriptor.models.some((m) => m.id === requestedModel) ? requestedModel : descriptor.defaultModelId || descriptor.models[0] && descriptor.models[0].id || requestedModel;
     const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
     const effectiveEffort = sessionEffort || (modelMeta.effortLevels && modelMeta.effortLevels.length ? descriptor.defaultEffort : null);
     const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
-    const claudeApiProvider = import_react40.default.useMemo(() => {
+    const claudeApiProvider = import_react45.default.useMemo(() => {
       return providers.find((provider) => provider.id === claudeProviderId && provider.protocol === "anthropic") || null;
     }, [providers, claudeProviderId]);
-    const codexCustomProvider = import_react40.default.useMemo(() => {
+    const codexCustomProvider = import_react45.default.useMemo(() => {
       return providers.find((provider) => provider.id === codexProviderId && provider.protocol === "openai-compatible") || null;
     }, [providers, codexProviderId]);
-    const [providerProbing, setProviderProbing] = import_react40.default.useState("");
-    const [providerProbeErrors, setProviderProbeErrors] = import_react40.default.useState({});
-    const ccSwitchFound = import_react40.default.useMemo(() => {
+    const [providerProbing, setProviderProbing] = import_react45.default.useState("");
+    const [providerProbeErrors, setProviderProbeErrors] = import_react45.default.useState({});
+    const ccSwitchFound = import_react45.default.useMemo(() => {
       try {
         return detectCcSwitch({ platform, fsImpl: platform.fs });
       } catch (e) {
         return null;
       }
     }, [platform]);
-    const providerManager = /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+    const providerManager = /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
       ProviderManagerSection,
       {
         lang,
@@ -21050,7 +23297,7 @@ ${baseUrl}`),
         }
       }
     );
-    const zcodeConfigSummary = import_react40.default.useMemo(() => {
+    const zcodeConfigSummary = import_react45.default.useMemo(() => {
       try {
         return summarizeZcodeConfig({ env: window.cep_node && window.cep_node.process && window.cep_node.process.env || {}, storedKey: (() => {
           try {
@@ -21063,8 +23310,8 @@ ${baseUrl}`),
         return null;
       }
     }, [keyStore, zcodeProbe]);
-    const codexCliConfigStableRef = import_react40.default.useRef(null);
-    const codexCliConfig = import_react40.default.useMemo(() => {
+    const codexCliConfigStableRef = import_react45.default.useRef(null);
+    const codexCliConfig = import_react45.default.useMemo(() => {
       let next;
       try {
         next = readCodexCliConfig({ env: window.cep_node && window.cep_node.process && window.cep_node.process.env || {} });
@@ -21074,38 +23321,47 @@ ${baseUrl}`),
       codexCliConfigStableRef.current = reconcileStableJsonValue(codexCliConfigStableRef.current, next);
       return codexCliConfigStableRef.current.value;
     }, [codexProbe]);
-    const codexCliCredentialReady = import_react40.default.useMemo(() => {
+    const codexCliCredentialReady = import_react45.default.useMemo(() => {
       const env = window.cep_node && window.cep_node.process && window.cep_node.process.env || {};
       return codexCliCredentialAvailable({ provider: codexCliConfig && codexCliConfig.provider, env, storedValueRef: null });
     }, [codexCliConfig]);
-    const channels = import_react40.default.useMemo(() => ({
+    const channels = import_react45.default.useMemo(() => ({
       claude: claudeChannels({ probe, apiProvider: claudeApiProvider, providerAvailable: providerInit.state === "ready" && Boolean(claudeApiProvider), providerChecking: providerInit.state === "checking" }),
       codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, customProviderAvailable: providerInit.state === "ready" && Boolean(codexCustomProvider), customProviderCredentialResolverReady: false, providerChecking: providerInit.state === "checking", cliConfig: codexCliConfig, cliCredentialAvailable: codexCliCredentialReady }),
       zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary })
     }), [probe, claudeApiProvider, codexProbe, codexCustomProvider, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliCredentialReady, providerInit.state]);
     const nodeOk = !(probe && probe.nodeOk === false);
     const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock, nodeOk });
-    const claudeSettingsHint = import_react40.default.useMemo(() => {
+    const claudeSettingsHint = import_react45.default.useMemo(() => {
       try {
         return inspectClaudeSettingsEnv({ platform, fsImpl: platform.fs });
       } catch (e) {
         return null;
       }
     }, [platform]);
-    const providerProfile = import_react40.default.useMemo(() => codexRuntimeProviderProfile({
+    const providerProfile = import_react45.default.useMemo(() => codexRuntimeProviderProfile({
       effectiveChannel: effective.channel,
       customProvider: codexCustomProvider,
       customProviderCredentialResolverReady: false
     }), [effective.channel, codexCustomProvider]);
-    const runtimeRef = import_react40.default.useRef({ providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: "subscription", claudeApiProvider: null });
-    const extRoot = import_react40.default.useMemo(() => readCepSystemPath({ cs: cs2, platform }), [cs2, platform]);
-    const sidecarPath = import_react40.default.useMemo(() => resolveSidecarPath({ extRoot, platform }), [extRoot, platform]);
-    const mcp = import_react40.default.useMemo(() => createMcpClient({
+    const runtimeRef = import_react45.default.useRef({ providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: "subscription", claudeApiProvider: null });
+    const extRoot = import_react45.default.useMemo(() => readCepSystemPath({ cs: cs2, platform }), [cs2, platform]);
+    const sidecarPath = import_react45.default.useMemo(() => resolveSidecarPath({ extRoot, platform }), [extRoot, platform]);
+    const getMcpSpec = import_react45.default.useCallback(async () => withToolApprovalTier(
+      await resolveMcpCommand({ extRoot, platform }),
+      approvalTierFile
+    ), [approvalTierFile, extRoot, platform]);
+    const mcp = import_react45.default.useMemo(() => createMcpClient({
       platform,
       extRoot,
+      resolveCommand: getMcpSpec,
+      env: approvalTierFile.env(),
+      onElicitation: elicitationCoordinator.handle,
       getExpertGuidance: () => loadExpertGuidance(window.localStorage)
-    }), [extRoot, platform]);
-    const handleChatEvent = import_react40.default.useCallback((evt) => {
+    }), [approvalTierFile, elicitationCoordinator, extRoot, getMcpSpec, platform]);
+    const toolsApi = import_react45.default.useMemo(() => createToolsApi(mcp), [mcp]);
+    import_react45.default.useEffect(() => () => mcp.stop(), [mcp]);
+    const handleChatEvent = import_react45.default.useCallback((evt) => {
       if (evt.type === "turn-start") setChatStreaming(true);
       if (evt.type === "thinking") setThinkingActive(!!evt.active);
       if (evt.type === "turn-end" || evt.type === "error") {
@@ -21115,7 +23371,7 @@ ${baseUrl}`),
       if (evt.type === "zcode-session-created") setZcodeSessionModels(evt.result || null);
       setChatEntries((entries) => reduceEvent(entries, evt));
     }, []);
-    const byokLoop = import_react40.default.useMemo(() => {
+    const byokLoop = import_react45.default.useMemo(() => {
       return createAgentLoop({
         resolveRequestProfile: () => {
           const provider = runtimeRef.current.claudeApiProvider;
@@ -21131,11 +23387,11 @@ ${baseUrl}`),
         onEvent: handleChatEvent
       });
     }, [mcp, handleChatEvent, providerSecretService]);
-    const claudeBackend = import_react40.default.useMemo(() => createClaudeAgentBackend({
+    const claudeBackend = import_react45.default.useMemo(() => createClaudeAgentBackend({
       platform,
       resolveNode: resolveSystemNode,
       sidecarPath,
-      getMcpSpec: () => resolveMcpCommand({ extRoot, platform }),
+      getMcpSpec,
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
@@ -21149,10 +23405,10 @@ ${baseUrl}`),
       },
       lang,
       onEvent: handleChatEvent
-    }), [extRoot, sidecarPath, mcp, handleChatEvent, platform, providerSecretService]);
-    const codexBackend = import_react40.default.useMemo(() => createCodexBackend({
+    }), [getMcpSpec, sidecarPath, mcp, handleChatEvent, platform, providerSecretService]);
+    const codexBackend = import_react45.default.useMemo(() => createCodexBackend({
       platform,
-      getMcpSpec: () => resolveMcpCommand({ extRoot, platform }),
+      getMcpSpec,
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
       getEffort: () => runtimeRef.current.effort,
@@ -21165,23 +23421,23 @@ ${baseUrl}`),
       lang,
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
-    }), [extRoot, mcp, handleChatEvent, platform]);
-    import_react40.default.useEffect(() => () => {
+    }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
+    import_react45.default.useEffect(() => () => {
       codexBackend.reset();
     }, [codexBackend]);
-    const openCodeBackend = import_react40.default.useMemo(() => createOpenCodeBackend({
+    const openCodeBackend = import_react45.default.useMemo(() => createOpenCodeBackend({
       platform,
-      getMcpSpec: () => resolveMcpCommand({ extRoot, platform }),
+      getMcpSpec,
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
       getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
-    }), [extRoot, mcp, handleChatEvent, platform]);
-    const zcodeBackend = import_react40.default.useMemo(() => createZcodeBackend({
+    }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
+    const zcodeBackend = import_react45.default.useMemo(() => createZcodeBackend({
       platform,
-      getMcpSpec: () => resolveMcpCommand({ extRoot, platform }),
+      getMcpSpec,
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
       getEffort: () => runtimeRef.current.effort,
@@ -21190,8 +23446,8 @@ ${baseUrl}`),
       getServerInstructions: () => mcp.getServerInstructions(),
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
-    }), [extRoot, mcp, handleChatEvent, platform]);
-    import_react40.default.useEffect(() => () => {
+    }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
+    import_react45.default.useEffect(() => () => {
       zcodeBackend.reset();
     }, [zcodeBackend]);
     runtimeRef.current = {
@@ -21206,7 +23462,7 @@ ${baseUrl}`),
     };
     const backendInstances = { subscription: claudeBackend, "claude-api": claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };
     const activeBackend = backendInstances[effective.backend] || byokLoop;
-    import_react40.default.useEffect(() => {
+    import_react45.default.useEffect(() => {
       let alive = true;
       const facts = {
         effectiveBackend: effective.backend,
@@ -21253,8 +23509,8 @@ ${baseUrl}`),
         alive = false;
       };
     }, [effective.backend, effective.channel, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, zcodeSessionModels, zcodeProbedModels, providerSecretService]);
-    const activeBackendRef = import_react40.default.useRef(null);
-    import_react40.default.useEffect(() => {
+    const activeBackendRef = import_react45.default.useRef(null);
+    import_react45.default.useEffect(() => {
       if (backendPref !== "zcode") return void 0;
       const sessionAvailable = zcodeSessionModels && zcodeSessionModels.settings && zcodeSessionModels.settings.model && Array.isArray(zcodeSessionModels.settings.model.available) ? zcodeSessionModels.settings.model.available : [];
       if (sessionAvailable.length > 1) return void 0;
@@ -21293,7 +23549,7 @@ ${baseUrl}`),
         alive = false;
       };
     }, [backendPref, zcodeSessionModels, zcodeConfigSummary, keyStore]);
-    const runClaudeProbe = import_react40.default.useCallback(() => {
+    const runClaudeProbe = import_react45.default.useCallback(() => {
       let alive = true;
       setProbe(null);
       probeClaudeLogin({
@@ -21308,11 +23564,11 @@ ${baseUrl}`),
         alive = false;
       };
     }, [sidecarPath]);
-    import_react40.default.useEffect(() => {
+    import_react45.default.useEffect(() => {
       if (backendPref !== "subscription") return void 0;
       return runClaudeProbe();
     }, [backendPref, runClaudeProbe]);
-    const runCodexProbe = import_react40.default.useCallback(() => {
+    const runCodexProbe = import_react45.default.useCallback(() => {
       let alive = true;
       setCodexProbe(null);
       codexBackend.probeAccount().then((result) => {
@@ -21329,11 +23585,11 @@ ${baseUrl}`),
         alive = false;
       };
     }, [codexBackend]);
-    import_react40.default.useEffect(() => {
+    import_react45.default.useEffect(() => {
       if (backendPref !== "codex") return void 0;
       return runCodexProbe();
     }, [backendPref, runCodexProbe]);
-    import_react40.default.useEffect(() => {
+    import_react45.default.useEffect(() => {
       if (backendPref !== "codex") return void 0;
       if (!codexCliConfig || !codexCliConfig.provider || !codexCliCredentialReady) return void 0;
       if (effective.channel === "custom" && codexCustomProvider && codexCustomProvider.baseUrl) return void 0;
@@ -21368,7 +23624,7 @@ ${baseUrl}`),
         alive = false;
       };
     }, [backendPref, effective.channel, codexCliConfig, codexCliCredentialReady, codexCustomProvider, codexModels, providerSecretService]);
-    const runZcodeProbe = import_react40.default.useCallback(() => {
+    const runZcodeProbe = import_react45.default.useCallback(() => {
       let alive = true;
       setZcodeProbe(null);
       zcodeBackend.probeAccount().then((result) => {
@@ -21380,15 +23636,15 @@ ${baseUrl}`),
         alive = false;
       };
     }, [zcodeBackend]);
-    import_react40.default.useEffect(() => {
+    import_react45.default.useEffect(() => {
       if (backendPref !== "zcode") return void 0;
       return runZcodeProbe();
     }, [backendPref, runZcodeProbe]);
-    import_react40.default.useEffect(() => {
+    import_react45.default.useEffect(() => {
       if (effective.backend !== "zcode" || !effectiveEffort) return;
       zcodeBackend.setThoughtLevel(effectiveEffort);
     }, [effective.backend, effectiveEffort, zcodeBackend]);
-    import_react40.default.useEffect(() => {
+    import_react45.default.useEffect(() => {
       const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
       activeBackendRef.current = decision.nextReal;
       if (!decision.reset) return;
@@ -21415,11 +23671,11 @@ ${baseUrl}`),
       setChatStreaming(false);
       setChatEntries([]);
     };
-    const pushLog = import_react40.default.useCallback((m) => {
+    const pushLog = import_react45.default.useCallback((m) => {
       if (!keepLogLine(logLevelRef.current, m)) return;
       setLogs((xs) => [...xs.slice(-199), `[${(/* @__PURE__ */ new Date()).toLocaleTimeString()}] ${m}`]);
     }, []);
-    const exportLogs = import_react40.default.useCallback(() => {
+    const exportLogs = import_react45.default.useCallback(() => {
       try {
         const text = buildLogExport({
           panelLogs: logs,
@@ -21434,7 +23690,7 @@ ${baseUrl}`),
         pushLog("Log export failed: " + (e && e.message ? e.message : String(e)));
       }
     }, [logs, connInfo, claudeBackend, pushLog]);
-    const undoToPreviousCheckpoint = import_react40.default.useCallback(async () => {
+    const undoToPreviousCheckpoint = import_react45.default.useCallback(async () => {
       try {
         await revertToPreviousCheckpoint(mcp);
         pushLog("Reverted to previous checkpoint");
@@ -21442,7 +23698,7 @@ ${baseUrl}`),
         pushLog("Checkpoint revert failed: " + (e && e.message ? e.message : String(e)));
       }
     }, [mcp, pushLog]);
-    import_react40.default.useEffect(() => {
+    import_react45.default.useEffect(() => {
       const port = loadSavedPort(window.localStorage) || DEFAULT_PORT;
       ctrl.current = createHostController({
         cs: cs2,
@@ -21460,7 +23716,7 @@ ${baseUrl}`),
       });
       ctrl.current.start(port);
     }, [cs2, extRoot, platform, pushLog]);
-    import_react40.default.useEffect(() => {
+    import_react45.default.useEffect(() => {
       if (status.state !== "ok") return void 0;
       let alive = true;
       setProviderInit({ state: "checking", error: "" });
@@ -21530,7 +23786,7 @@ ${baseUrl}`),
         alive = false;
       };
     }, [status.state, providerStore, providerSecretService, getHost, keyStore, platform]);
-    import_react40.default.useEffect(() => {
+    import_react45.default.useEffect(() => {
       if (!drawerOpen) return void 0;
       const update = () => {
         const h = getHost();
@@ -21540,7 +23796,7 @@ ${baseUrl}`),
       const i = setInterval(update, 3e3);
       return () => clearInterval(i);
     }, [drawerOpen, getHost]);
-    import_react40.default.useEffect(() => {
+    import_react45.default.useEffect(() => {
       if (tab !== "settings") return void 0;
       const update = () => {
         const h = getHost();
@@ -21551,13 +23807,13 @@ ${baseUrl}`),
       const i = setInterval(update, 4e3);
       return () => clearInterval(i);
     }, [tab, getHost]);
-    const runDiag = import_react40.default.useCallback(async () => {
+    const runDiag = import_react45.default.useCallback(async () => {
       setDiagnostics("running");
       try {
         const items = await runDiagnostics({
           getHost,
           port: status.port,
-          fs: cepRequire4("fs"),
+          fs: cepRequire5("fs"),
           fetchImpl: window.fetch.bind(window)
         });
         setDiagnostics(items);
@@ -21593,7 +23849,7 @@ ${baseUrl}`),
     const claudeStatus = probe === null ? { state: "checking" } : probe.nodeOk === false ? { state: "no-node", detail: probe.detail } : probe.loggedIn === false ? { state: "not-logged-in", detail: probe.detail } : { state: "ready", nodeVersion: probe.nodeVersion };
     const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
     if (!wizardDone) {
-      return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
         WizardScreen,
         {
           step: wizStep,
@@ -21620,13 +23876,14 @@ ${baseUrl}`),
     const tabs = [
       { id: "chat", icon: "message-square", label: t.chat },
       { id: "activity", icon: "list-checks", label: t.activity },
+      { id: "tools", icon: "wrench", label: t.tools },
       { id: "settings", icon: "settings", label: t.settings }
     ];
     const backendDisabledHint = effective.fixHint && (effective.fixHint[lang] || effective.fixHint.zh) || (effective.reason && effective.reason.endsWith("-probing") ? lang === "zh" ? "\u6B63\u5728\u68C0\u6D4B\u51ED\u636E\u901A\u9053\u2026" : "Checking credential channels\u2026" : "");
     const composerDisabled = paused || effective.backend === "none";
     const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
-    return /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)(import_react40.default.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)(import_react45.default.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
         StatusBar,
         {
           status: statusForBar,
@@ -21641,8 +23898,8 @@ ${baseUrl}`),
           settingsTitle: t.settings
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }, children: [
-        tab === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }, children: [
+        tab === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
           ChatScreen,
           {
             lang,
@@ -21673,7 +23930,7 @@ ${baseUrl}`),
             }
           }
         ) : null,
-        tab === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+        tab === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
           ActivityScreen,
           {
             events,
@@ -21684,7 +23941,16 @@ ${baseUrl}`),
             emptyCaption: t.actEmptyB
           }
         ) : null,
-        tab === "settings" ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+        tab === "tools" ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+          ToolsScreen,
+          {
+            api: toolsApi,
+            lang,
+            cepFs: window.cep && window.cep.fs,
+            initialPath: extRoot
+          }
+        ) : null,
+        tab === "settings" ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
           SettingsScreen,
           {
             lang,
@@ -21810,8 +24076,8 @@ ${baseUrl}`),
           tokenEpoch
         ) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(TabBar, { tabs, active: tab, onChange: setTab }),
-      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(TabBar, { tabs, active: tab, onChange: setTab }),
+      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
         ConnectionDrawer,
         {
           open: drawerOpen,
@@ -21824,7 +24090,7 @@ ${baseUrl}`),
           onRestart: () => applyPort(status.port)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
         ConfirmDialog,
         {
           open: confirmRegen,
@@ -21845,17 +24111,25 @@ ${baseUrl}`),
             setTokenEpoch((n) => n + 1);
           }
         }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+        ToolApprovalDialog,
+        {
+          record: toolApproval && toolApproval.plan ? toolApproval : null,
+          lang,
+          onResolve: (result) => elicitationCoordinator.resolveVisible(result)
+        }
       )
     ] });
   }
   function App({ cs: cs2 }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(LangProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Shell, { cs: cs2 }) });
+    return /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(LangProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Shell, { cs: cs2 }) });
   }
 
   // src/main.jsx
-  var import_jsx_runtime37 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime42 = __toESM(require_jsx_runtime(), 1);
   var cs = new window.CSInterface();
-  (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime37.jsx)(App, { cs }));
+  (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime42.jsx)(App, { cs }));
 })();
 /*! Bundled license information:
 
@@ -22240,6 +24514,14 @@ lucide-react/dist/esm/icons/triangle-alert.js:
    *)
 
 lucide-react/dist/esm/icons/undo-2.js:
+  (**
+   * @license lucide-react v0.453.0 - ISC
+   *
+   * This source code is licensed under the ISC license.
+   * See the LICENSE file in the root directory of this source tree.
+   *)
+
+lucide-react/dist/esm/icons/wrench.js:
   (**
    * @license lucide-react v0.453.0 - ISC
    *
