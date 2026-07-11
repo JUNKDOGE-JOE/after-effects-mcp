@@ -3,8 +3,8 @@ import pytest
 from ae_mcp.backends.base import Backend, ALL_VERBS
 
 
-def test_all_verbs_constant_has_30_entries():
-    assert len(ALL_VERBS) == 30
+def test_all_verbs_constant_has_42_entries():
+    assert len(ALL_VERBS) == 42
     assert "ae.exec" in ALL_VERBS
     assert "ae.ping" in ALL_VERBS
     assert "ae.previewFrame" in ALL_VERBS
@@ -12,6 +12,8 @@ def test_all_verbs_constant_has_30_entries():
     assert "ae.createRig" in ALL_VERBS
     assert "ae.validateExpressions" in ALL_VERBS
     assert "ae.searchProject" in ALL_VERBS
+    assert "ae.toolIndex" in ALL_VERBS
+    assert "ae.toolExport" in ALL_VERBS
     assert "ae.isolateToggle" not in ALL_VERBS
     assert "ae.toastQuery" not in ALL_VERBS
 

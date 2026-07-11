@@ -9,12 +9,17 @@ canUseTool tiers), so semantics match across backends.
 from __future__ import annotations
 
 import os
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Mapping
 
 from ae_mcp.annotations import VERB_ANNOTATIONS
 
+if TYPE_CHECKING:
+    from ae_mcp.tool_execution import ExecutionPlan
+
 Tier = Literal["readonly", "manual", "auto", "none"]
 Decision = Literal["allow", "deny-readonly", "elicit"]
+PlanDecision = Literal["allow", "deny", "elicit"]
+PlanAuthorization = Literal["once", "session"]
 
 _VALID_TIERS: set[str] = {"readonly", "manual", "auto", "none"}
 _TIER_CACHE: dict[str, tuple[int | None, str]] = {}
@@ -38,6 +43,15 @@ _ELICIT_SCHEMA: dict[str, Any] = {
     },
     "required": ["approve"],
 }
+
+
+class PlanAuthorizationDenied(PermissionError):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+    def public_dict(self) -> dict[str, object]:
+        return {"ok": False, "error": self.code, "message": str(self)}
 
 
 def read_tier(path: str) -> str:
@@ -81,6 +95,94 @@ def gate_decision(tier: str, verb_name: str) -> Decision:
     if tier == "none":
         return "allow"
     return gate_decision("manual", verb_name)
+
+
+def current_tool_tier() -> Tier:
+    path = os.environ.get("AE_MCP_TOOL_APPROVAL_TIER_FILE")
+    if not path:
+        return "manual"
+    return read_tier(path)  # type: ignore[return-value]
+
+
+def plan_decision(tier: str, risk: str) -> PlanDecision:
+    if tier not in _VALID_TIERS:
+        tier = "manual"
+    if risk not in {"read", "write", "destructive", "external"}:
+        return "deny"
+    if tier == "readonly":
+        return "allow" if risk == "read" else "deny"
+    if tier == "manual":
+        return "allow" if risk == "read" else "elicit"
+    if risk in {"destructive", "external"}:
+        return "elicit"
+    return "allow"
+
+
+def build_plan_elicitation_schema(plan: "ExecutionPlan") -> dict[str, object]:
+    decisions = ["once", "deny"]
+    if plan.risk == "write":
+        decisions.insert(1, "session")
+    return {
+        "type": "object",
+        "properties": {
+            "decision": {
+                "type": "string",
+                "enum": decisions,
+                "title": "Approval",
+            }
+        },
+        "required": ["decision"],
+        "additionalProperties": False,
+        "x-ae-mcp-plan": plan.public_dict(),
+    }
+
+
+async def authorize_plan(plan: "ExecutionPlan", ctx: Any) -> PlanAuthorization:
+    decision = plan_decision(current_tool_tier(), plan.risk)
+    if decision == "allow":
+        return "once"
+    if decision == "deny":
+        raise PlanAuthorizationDenied(
+            "tool_plan_readonly",
+            "The current approval tier does not permit this tool plan.",
+        )
+
+    session = getattr(ctx, "session", None)
+    elicit = getattr(session, "elicit_form", None) or getattr(session, "elicit", None)
+    if elicit is None:
+        raise PlanAuthorizationDenied(
+            "tool_plan_elicitation_unavailable",
+            "This tool plan requires approval, but the client cannot prompt.",
+        )
+    try:
+        result = await elicit(
+            message=f"Approve Tool Library action for {plan.artifact_id} ({plan.risk})?",
+            requestedSchema=build_plan_elicitation_schema(plan),
+            related_request_id=getattr(ctx, "request_id", None),
+        )
+    except Exception as exc:
+        raise PlanAuthorizationDenied(
+            "tool_plan_elicitation_failed",
+            "Tool plan approval could not be completed.",
+        ) from exc
+    if getattr(result, "action", None) != "accept":
+        raise PlanAuthorizationDenied(
+            "tool_plan_denied", "The user denied this tool plan."
+        )
+    content = getattr(result, "content", None)
+    selected = content.get("decision") if isinstance(content, Mapping) else None
+    if selected == "once":
+        return "once"
+    if selected == "session" and plan.risk == "write":
+        return "session"
+    if selected == "deny":
+        raise PlanAuthorizationDenied(
+            "tool_plan_denied", "The user denied this tool plan."
+        )
+    raise PlanAuthorizationDenied(
+        "tool_plan_invalid_approval",
+        "The client returned an invalid tool plan approval.",
+    )
 
 
 async def enforce(name: str, ctx: Any) -> dict[str, Any] | None:
