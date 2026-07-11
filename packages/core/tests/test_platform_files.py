@@ -17,11 +17,23 @@ from ae_mcp.platform_files import (
 )
 
 
+def _symlink_or_skip(
+    link: Path, target: Path, *, target_is_directory: bool = False
+) -> None:
+    try:
+        link.symlink_to(target, target_is_directory=target_is_directory)
+    except OSError as error:
+        if os.name == "nt" and getattr(error, "winerror", None) == 1314:
+            pytest.skip("Windows symlink privilege is unavailable")
+        raise
+
+
 def test_private_temp_dir_is_private_and_removed_on_return(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
     with private_temp_dir(prefix="tool-import-") as directory:
         assert directory.parent == tmp_path
-        assert stat.S_IMODE(directory.stat().st_mode) == 0o700
+        if os.name != "nt":
+            assert stat.S_IMODE(directory.stat().st_mode) == 0o700
         (directory / "data").write_text("ok", encoding="utf-8")
         (directory / "nested").mkdir()
         (directory / "nested" / "data").write_text("ok", encoding="utf-8")
@@ -46,7 +58,7 @@ def test_private_temp_dir_cleanup_never_follows_a_replaced_symlink(
     marker.write_text("keep", encoding="utf-8")
     with private_temp_dir(prefix="tool-import-") as directory:
         directory.rmdir()
-        directory.symlink_to(victim, target_is_directory=True)
+        _symlink_or_skip(directory, victim, target_is_directory=True)
     assert marker.read_text(encoding="utf-8") == "keep"
     assert not directory.exists()
 
@@ -59,6 +71,9 @@ def test_private_temp_dir_cleanup_uses_an_open_directory_when_root_is_raced_to_a
     victim.mkdir()
     marker = victim / "keep.txt"
     marker.write_text("keep", encoding="utf-8")
+    probe = tmp_path / "symlink-probe"
+    _symlink_or_skip(probe, victim, target_is_directory=True)
+    probe.unlink()
     real_scandir = os.scandir
     state: dict[str, object] = {"root": None, "raced": False}
 
@@ -94,6 +109,9 @@ def test_windows_cleanup_opens_reparse_points_and_never_scans_their_target(
     marker.write_text("keep", encoding="utf-8")
     root = tmp_path / "windows-root"
     root.mkdir()
+    probe = tmp_path / "windows-symlink-probe"
+    _symlink_or_skip(probe, victim, target_is_directory=True)
+    probe.unlink()
     observed_flags: list[int] = []
 
     class FakeHandle:
@@ -274,7 +292,7 @@ def test_windows_cleanup_clears_readonly_file_reparse_by_handle_without_touching
     target = tmp_path / "target.bin"
     target.write_bytes(b"keep")
     link = root / "payload-link"
-    link.symlink_to(target)
+    _symlink_or_skip(link, target)
     readonly_entries = {link}
     updated_handles: list[Path] = []
 
@@ -385,7 +403,7 @@ def test_atomic_replace_bytes_uses_a_sibling_and_preserves_old_file_on_replace_f
         observed.append(Path(source))
         raise OSError("replace failed")
 
-    monkeypatch.setattr(os, "replace", fail_replace)
+    monkeypatch.setattr(platform_files, "_replace_write_through", fail_replace)
     with pytest.raises(OSError, match="replace failed"):
         atomic_replace_bytes(destination, b"new")
 
@@ -400,7 +418,7 @@ def test_atomic_replace_bytes_flushes_before_replacement_and_applies_mode(
     destination = tmp_path / "state.bin"
     events: list[str] = []
     real_fsync = os.fsync
-    real_replace = os.replace
+    real_replace = platform_files._replace_write_through
 
     def record_fsync(fd: int) -> None:
         events.append("fsync")
@@ -411,11 +429,12 @@ def test_atomic_replace_bytes_flushes_before_replacement_and_applies_mode(
         real_replace(source, target)
 
     monkeypatch.setattr(os, "fsync", record_fsync)
-    monkeypatch.setattr(os, "replace", record_replace)
+    monkeypatch.setattr(platform_files, "_replace_write_through", record_replace)
     atomic_replace_bytes(destination, b"new", mode=0o640)
 
     assert destination.read_bytes() == b"new"
-    assert stat.S_IMODE(destination.stat().st_mode) == 0o640
+    if os.name != "nt":
+        assert stat.S_IMODE(destination.stat().st_mode) == 0o640
     assert events.index("fsync") < events.index("replace")
 
 
@@ -444,7 +463,8 @@ def test_atomic_replace_file_copies_cross_volume_style_source_into_a_sibling(tmp
 
     assert source.read_bytes() == b"payload"
     assert destination.read_bytes() == b"payload"
-    assert stat.S_IMODE(destination.stat().st_mode) == 0o600
+    if os.name != "nt":
+        assert stat.S_IMODE(destination.stat().st_mode) == 0o600
     assert list(destination_root.iterdir()) == [destination]
 
 
@@ -460,7 +480,8 @@ def test_atomic_replace_file_opens_source_and_destination_in_binary_mode(
 
     def record_open(path: object, flags: int, *args: object) -> int:
         observed.append((Path(path), flags))
-        return real_open(path, flags & ~binary_flag, *args)
+        actual_flags = flags if os.name == "nt" else flags & ~binary_flag
+        return real_open(path, actual_flags, *args)
 
     monkeypatch.setattr(os, "O_BINARY", binary_flag, raising=False)
     monkeypatch.setattr(os, "open", record_open)
@@ -491,7 +512,7 @@ def test_atomic_replace_file_rejects_a_symlink_source(tmp_path: Path) -> None:
     payload = tmp_path / "payload"
     payload.write_bytes(b"secret")
     link = tmp_path / "payload-link"
-    link.symlink_to(payload)
+    _symlink_or_skip(link, payload)
     with pytest.raises(ValueError, match="regular file"):
         atomic_replace_file(link, tmp_path / "installed")
 
@@ -559,10 +580,13 @@ def test_private_temp_dir_windows_dacl_has_one_current_user_full_control_ace() -
         ace = dacl.GetAce(0)
         token = win32security.OpenProcessToken(win32api.GetCurrentProcess(), win32con.TOKEN_QUERY)
         sid = win32security.GetTokenInformation(token, win32security.TokenUser)[0]
-        assert win32security.EqualSid(ace[2], sid)
+        assert platform_files._windows_sids_equal(  # noqa: SLF001
+            win32security, ace[2], sid
+        )
         assert (ace[1] & ntsecuritycon.FILE_ALL_ACCESS) == ntsecuritycon.FILE_ALL_ACCESS
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows directory fsync is a no-op")
 def test_fsync_parent_opens_the_directory_where_supported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     opened: list[object] = []
     real_open = os.open

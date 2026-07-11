@@ -148,6 +148,14 @@ def _windows_error_code(error: BaseException) -> int | None:
     return getattr(error, "winerror", None) or getattr(error, "errno", None)
 
 
+def _windows_sids_equal(win32security: object, left: object, right: object) -> bool:
+    equal_sid = getattr(win32security, "EqualSid", None)
+    if callable(equal_sid):
+        return bool(equal_sid(left, right))
+    convert = getattr(win32security, "ConvertSidToStringSid")
+    return str(convert(left)) == str(convert(right))
+
+
 def _remove_windows_tree_without_following_links(
     root: Path,
     *,
@@ -164,6 +172,10 @@ def _remove_windows_tree_without_following_links(
     win32con = win32con_module
     missing_codes = {2, 3}
     retry_codes = {5, 32, 145, 267}
+    write_attributes = getattr(win32con, "FILE_WRITE_ATTRIBUTES", 0x00000100)
+    open_reparse_point = getattr(
+        win32con, "FILE_FLAG_OPEN_REPARSE_POINT", 0x00200000
+    )
 
     def remove_entry(path: Path) -> None:
         last_error: BaseException | None = None
@@ -171,11 +183,11 @@ def _remove_windows_tree_without_following_links(
             try:
                 handle = win32file.CreateFile(
                     str(path),
-                    win32con.FILE_WRITE_ATTRIBUTES,
+                    write_attributes,
                     win32con.FILE_SHARE_READ | win32con.FILE_SHARE_WRITE,
                     None,
                     win32con.OPEN_EXISTING,
-                    win32con.FILE_FLAG_BACKUP_SEMANTICS | win32con.FILE_FLAG_OPEN_REPARSE_POINT,
+                    win32con.FILE_FLAG_BACKUP_SEMANTICS | open_reparse_point,
                     None,
                 )
             except Exception as error:
@@ -272,7 +284,9 @@ def _windows_private_mkdir(path: Path) -> None:
     if actual_dacl is None or actual_dacl.GetAceCount() != 1:
         raise PermissionError("private temporary directory DACL is not exclusive")
     ace = actual_dacl.GetAce(0)
-    if not win32security.EqualSid(ace[2], sid) or (ace[1] & ntsecuritycon.FILE_ALL_ACCESS) != ntsecuritycon.FILE_ALL_ACCESS:
+    if not _windows_sids_equal(win32security, ace[2], sid) or (
+        ace[1] & ntsecuritycon.FILE_ALL_ACCESS
+    ) != ntsecuritycon.FILE_ALL_ACCESS:
         raise PermissionError("private temporary directory DACL does not grant the current user full control")
 
 
