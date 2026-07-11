@@ -36,6 +36,28 @@ function macHostAdapter(fsImpl = fs, runtimeRoot = '/Users/a/.ae-mcp/runtime') {
   };
 }
 
+function nativeHostAdapter(fsImpl = fs) {
+  const platformId = process.platform === 'win32' ? 'windows-x64' : 'macos-arm64';
+  return {
+    id: platformId,
+    fs: fsImpl,
+    paths: testPathCatalog(platformId, path.join(os.homedir(), '.ae-mcp', 'runtime')),
+  };
+}
+
+function createSymlinkOrSkip(t, target, destination, type) {
+  try {
+    fs.symlinkSync(target, destination, type);
+    return true;
+  } catch (error) {
+    if (process.platform === 'win32' && error?.code === 'EPERM') {
+      t.skip('Windows symbolic-link privilege is unavailable');
+      return false;
+    }
+    throw error;
+  }
+}
+
 function expectHostDependenciesUnavailable(callback) {
   assert.throws(
     callback,
@@ -145,7 +167,8 @@ test('port persistence round-trip with fake storage', () => {
 test('host Express resolves from the platform-specific bundle runtime without NODE_PATH mutation', (t) => {
   const extensionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-host-resolution-'));
   t.after(() => fs.rmSync(extensionRoot, { recursive: true, force: true }));
-  const runtimeHost = path.join(extensionRoot, 'runtime', 'macos-arm64', 'node', 'host');
+  const adapter = nativeHostAdapter();
+  const runtimeHost = path.join(extensionRoot, 'runtime', adapter.id, 'node', 'host');
   const extensionHost = path.join(extensionRoot, 'host');
   fs.mkdirSync(path.join(runtimeHost, 'node_modules', 'express'), { recursive: true });
   fs.mkdirSync(extensionHost, { recursive: true });
@@ -168,7 +191,7 @@ test('host Express resolves from the platform-specific bundle runtime without NO
 
   const dependencies = loadBundledHostDependencies({
     cepRequire,
-    adapter: macHostAdapter(),
+    adapter,
     extensionRoot,
   });
 
@@ -182,6 +205,7 @@ test('host Express resolves from the platform-specific bundle runtime without NO
 test('host Express resolves from the extension host only for an explicit .debug development install', (t) => {
   const extensionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-host-dev-resolution-'));
   t.after(() => fs.rmSync(extensionRoot, { recursive: true, force: true }));
+  const adapter = nativeHostAdapter();
   const extensionHost = path.join(extensionRoot, 'host');
   fs.mkdirSync(path.join(extensionHost, 'node_modules', 'express'), { recursive: true });
   fs.writeFileSync(path.join(extensionRoot, '.debug'), '<ExtensionList />\n');
@@ -194,7 +218,7 @@ test('host Express resolves from the extension host only for an explicit .debug 
 
   const dependencies = loadBundledHostDependencies({
     cepRequire: createRequire(import.meta.url),
-    adapter: macHostAdapter(),
+    adapter,
     extensionRoot,
   });
 
@@ -277,7 +301,7 @@ test('host dependency loading rejects selected package anchors that are symlinks
     fs.mkdirSync(hostRoot, { recursive: true });
     if (development) fs.writeFileSync(path.join(extensionRoot, '.debug'), '<ExtensionList />\n');
     fs.writeFileSync(outsideAnchor, '{"private":true}\n');
-    fs.symlinkSync(outsideAnchor, path.join(hostRoot, 'package.json'));
+    if (!createSymlinkOrSkip(t, outsideAnchor, path.join(hostRoot, 'package.json'))) return;
     writeCommonJsPackage(
       path.join(hostRoot, 'node_modules', 'express'),
       'module.exports = function linkedAnchorExpress() {};\n',
@@ -298,7 +322,7 @@ test('host dependency loading rejects an Express package symlink that escapes th
   fs.mkdirSync(path.join(runtimeHost, 'node_modules'), { recursive: true });
   fs.writeFileSync(path.join(runtimeHost, 'package.json'), '{"private":true}\n');
   writeCommonJsPackage(outsideRoot, 'module.exports = function escapedPackageExpress() {};\n');
-  fs.symlinkSync(outsideRoot, path.join(runtimeHost, 'node_modules', 'express'));
+  if (!createSymlinkOrSkip(t, outsideRoot, path.join(runtimeHost, 'node_modules', 'express'))) return;
 
   expectHostDependenciesUnavailable(() => loadBundledHostDependencies({
     cepRequire: createRequire(import.meta.url), adapter: macHostAdapter(), extensionRoot,
@@ -317,7 +341,7 @@ test('host dependency loading rejects an Express entry symlink that escapes the 
   fs.writeFileSync(path.join(expressRoot, 'package.json'), '{"name":"express","main":"index.js"}\n');
   const outsideEntry = path.join(outsideRoot, 'index.js');
   fs.writeFileSync(outsideEntry, 'module.exports = function escapedEntryExpress() {};\n');
-  fs.symlinkSync(outsideEntry, path.join(expressRoot, 'index.js'));
+  if (!createSymlinkOrSkip(t, outsideEntry, path.join(expressRoot, 'index.js'))) return;
 
   expectHostDependenciesUnavailable(() => loadBundledHostDependencies({
     cepRequire: createRequire(import.meta.url), adapter: macHostAdapter(), extensionRoot,
@@ -362,7 +386,7 @@ test('host dependency loading rejects production and development host roots syml
       path.join(outsideHost, 'node_modules', 'express'),
       'module.exports = function escapedHostRootExpress() {};\n',
     );
-    fs.symlinkSync(outsideHost, hostRoot, 'dir');
+    if (!createSymlinkOrSkip(t, outsideHost, hostRoot, 'dir')) return;
     if (development) fs.writeFileSync(path.join(extensionRoot, '.debug'), '<ExtensionList />\n');
 
     expectHostDependenciesUnavailable(() => loadBundledHostDependencies({
@@ -396,7 +420,7 @@ test('host dependency loading rejects an in-root Express entry symlink', (t) => 
   fs.writeFileSync(path.join(expressRoot, 'package.json'), '{"name":"express","main":"index.js"}\n');
   const inRootTarget = path.join(hostRoot, 'other.js');
   fs.writeFileSync(inRootTarget, 'module.exports = function linkedMainExpress() {};\n');
-  fs.symlinkSync(inRootTarget, path.join(expressRoot, 'index.js'));
+  if (!createSymlinkOrSkip(t, inRootTarget, path.join(expressRoot, 'index.js'))) return;
 
   expectHostDependenciesUnavailable(() => loadBundledHostDependencies({
     cepRequire: createRequire(import.meta.url), adapter: macHostAdapter(), extensionRoot,
