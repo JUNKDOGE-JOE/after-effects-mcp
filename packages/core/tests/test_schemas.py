@@ -9,7 +9,7 @@ from ae_mcp import schemas as S
 
 
 def test_registry_has_all_verbs():
-    assert len(S.SCHEMAS) == 32, f"expected 32 verbs, got {len(S.SCHEMAS)}"
+    assert len(S.SCHEMAS) == 44, f"expected 44 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.layers", "ae.readProps", "ae.exec",
         "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.previewFrame",
@@ -22,6 +22,10 @@ def test_registry_has_all_verbs():
         "ae.skillList", "ae.skillCreate", "ae.skillEdit",
         "ae.skillDelete", "ae.skillUse",
         "ae.createRig",
+        "ae.toolIndex", "ae.toolSearch", "ae.toolInspect", "ae.toolUse",
+        "ae.toolCreate", "ae.toolEdit", "ae.toolDelete", "ae.toolArchive",
+        "ae.toolDuplicate", "ae.toolPromoteFromHistory",
+        "ae.toolImport", "ae.toolExport",
     }
 
 
@@ -313,6 +317,45 @@ def test_skill_use_defaults():
     args = S.AeSkillUseArgs(name="wiggle-position")
     assert args.args == {}
     assert args.execute is False
+
+
+def test_tool_use_enforces_the_staged_protocol():
+    assert S.AeToolUseArgs(action="render", artifact_id="user:1").operation == "render"
+    S.AeToolUseArgs(
+        action="prepare", artifact_id="user:1", operation="execute"
+    )
+    S.AeToolUseArgs(action="grant", plan_hash="p", grant_scope="once")
+    S.AeToolUseArgs(action="execute", plan_hash="p", grant_id="g")
+
+    invalid = [
+        {"action": "render"},
+        {"action": "prepare", "artifact_id": "user:1"},
+        {"action": "grant", "plan_hash": "p"},
+        {"action": "execute", "plan_hash": "p"},
+        {"action": "execute", "plan_hash": "p", "grant_id": "g", "artifact_id": "user:1"},
+    ]
+    for value in invalid:
+        with pytest.raises(ValidationError):
+            S.AeToolUseArgs(**value)
+
+
+def test_tool_mutations_require_cas_and_import_export_are_bounded():
+    with pytest.raises(ValidationError):
+        S.AeToolDeleteArgs(artifact_id="user:1")
+    with pytest.raises(ValidationError):
+        S.AeToolExportArgs(artifact_ids=[], out_path="x")
+    assert len(
+        S.AeToolExportArgs(
+            artifact_ids=[str(i) for i in range(511)], out_path="x"
+        ).artifact_ids
+    ) == 511
+    with pytest.raises(ValidationError):
+        S.AeToolExportArgs(artifact_ids=[str(i) for i in range(512)], out_path="x")
+    with pytest.raises(ValidationError):
+        S.AeToolImportArgs(action="preview")
+    with pytest.raises(ValidationError):
+        S.AeToolImportArgs(action="commit", path="x")
+
 
 
 def test_create_rig_defaults():

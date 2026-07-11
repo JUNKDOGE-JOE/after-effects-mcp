@@ -42,6 +42,18 @@ VERB_ANNOTATIONS: dict[str, ToolAnnotations] = {
     # skillUse can execute stored arbitrary JSX (execute=true) — ae.exec by
     # proxy, so it carries the same worst-path destructive hint.
     "ae.skillUse": _ann(False, True, False),
+    "ae.toolIndex": _ann(True, False, True),
+    "ae.toolSearch": _ann(True, False, True),
+    "ae.toolInspect": _ann(True, False, True),
+    "ae.toolUse": _ann(False, True, False),
+    "ae.toolCreate": _ann(False, False, False),
+    "ae.toolEdit": _ann(False, False, True),
+    "ae.toolDelete": _ann(False, True, False),
+    "ae.toolArchive": _ann(False, False, True),
+    "ae.toolDuplicate": _ann(False, False, False),
+    "ae.toolPromoteFromHistory": _ann(False, False, True),
+    "ae.toolImport": _ann(False, False, False),
+    "ae.toolExport": _ann(False, True, True),
     "ae.status": _ann(True, False, True),
     "ae.diagnose": _ann(True, False, True),
     "ae.createLayer": _ann(False, False, False),
