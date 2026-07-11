@@ -95,6 +95,15 @@ _VERIFICATION_KEYS = frozenset({"method", "verifiedAt", "evidenceHash"})
 _RECIPE_STEP_KEYS = frozenset(
     {"refType", "ref", "operation", "args", "target"}
 )
+_ARGS_SCHEMA_ROOT_KEYS = frozenset(
+    {"type", "properties", "required", "additionalProperties"}
+)
+_ARGS_SCHEMA_VALUE_KEYS = frozenset(
+    {"type", "enum", "default", "minimum", "maximum", "minLength", "maxLength"}
+)
+_ARGS_SCHEMA_TYPES = frozenset(
+    {"string", "number", "integer", "boolean", "object", "array", "null"}
+)
 
 
 def _exact_keys(value: Mapping[str, Any], expected: frozenset[str], label: str) -> None:
@@ -183,6 +192,95 @@ def compute_content_hash(
         "argsSchema": _mapping(args_schema, label="argsSchema"),
     }
     return hashlib.sha256(canonical_json_bytes(body)).hexdigest()
+
+
+def validate_args_schema(
+    value: Mapping[str, JsonValue],
+) -> dict[str, JsonValue]:
+    schema = _mapping(value, label="argsSchema")
+    canonical_shape = (
+        "properties" in schema
+        or "required" in schema
+        or "additionalProperties" in schema
+        or schema.get("type") == "object"
+    )
+    if canonical_shape:
+        unknown = sorted(set(schema) - _ARGS_SCHEMA_ROOT_KEYS)
+        if unknown:
+            raise ValueError(
+                "argsSchema contains unsupported keywords: " + ", ".join(unknown)
+            )
+        if schema.get("type", "object") != "object":
+            raise ValueError("argsSchema root type must be object")
+        raw_properties = schema.get("properties", {})
+        if not isinstance(raw_properties, Mapping):
+            raise ValueError("argsSchema properties must be an object")
+        raw_required = schema.get("required", [])
+        if not isinstance(raw_required, list) or not all(
+            isinstance(item, str) for item in raw_required
+        ):
+            raise ValueError("argsSchema required must be an array of strings")
+        if len(set(raw_required)) != len(raw_required):
+            raise ValueError("argsSchema required entries must be unique")
+        missing = sorted(set(raw_required) - set(raw_properties))
+        if missing:
+            raise ValueError(
+                "argsSchema required references unknown properties: "
+                + ", ".join(missing)
+            )
+        additional = schema.get("additionalProperties", True)
+        if type(additional) is not bool:
+            raise ValueError("argsSchema additionalProperties must be a boolean")
+        properties = raw_properties
+    else:
+        properties = schema
+
+    for name, raw_rule in properties.items():
+        if not isinstance(name, str) or not name:
+            raise ValueError("argsSchema property names must be non-empty strings")
+        if not isinstance(raw_rule, Mapping):
+            raise ValueError(f"argsSchema property {name} must be an object")
+        unknown = sorted(set(raw_rule) - _ARGS_SCHEMA_VALUE_KEYS)
+        if unknown:
+            raise ValueError(
+                f"argsSchema property {name} contains unsupported keywords: "
+                + ", ".join(unknown)
+            )
+        rule_type = raw_rule.get("type")
+        if rule_type is not None and rule_type not in _ARGS_SCHEMA_TYPES:
+            raise ValueError(f"argsSchema property {name} has unsupported type")
+        if "enum" in raw_rule:
+            enum = raw_rule["enum"]
+            if not isinstance(enum, list) or not enum:
+                raise ValueError(f"argsSchema property {name} enum must be non-empty")
+            _json_value(enum, label=f"argsSchema property {name} enum")
+        if "default" in raw_rule:
+            _json_value(raw_rule["default"], label=f"argsSchema property {name} default")
+        for bound in ("minimum", "maximum"):
+            item = raw_rule.get(bound)
+            if item is not None and (
+                isinstance(item, bool) or not isinstance(item, (int, float))
+            ):
+                raise ValueError(
+                    f"argsSchema property {name} {bound} must be a number"
+                )
+        for bound in ("minLength", "maxLength"):
+            item = raw_rule.get(bound)
+            if item is not None and (
+                isinstance(item, bool) or not isinstance(item, int) or item < 0
+            ):
+                raise ValueError(
+                    f"argsSchema property {name} {bound} must be a non-negative integer"
+                )
+        minimum = raw_rule.get("minimum")
+        maximum = raw_rule.get("maximum")
+        if minimum is not None and maximum is not None and minimum > maximum:
+            raise ValueError(f"argsSchema property {name} has inverted numeric bounds")
+        min_length = raw_rule.get("minLength")
+        max_length = raw_rule.get("maxLength")
+        if min_length is not None and max_length is not None and min_length > max_length:
+            raise ValueError(f"argsSchema property {name} has inverted length bounds")
+    return schema
 
 
 def new_user_artifact_id(uuid_value: UUID) -> str:
@@ -452,7 +550,9 @@ class ToolArtifact:
         if not verified and verification is not None:
             raise ValueError("unverified artifact cannot carry verification")
         content = _validate_content(cast(ArtifactKind, kind), data["content"])
-        args_schema = _mapping(data["argsSchema"], label="argsSchema")
+        args_schema = validate_args_schema(
+            _mapping(data["argsSchema"], label="argsSchema")
+        )
         content_hash = data["contentHash"]
         if not isinstance(content_hash, str) or not _HEX_64.fullmatch(content_hash):
             raise ValueError("artifact contentHash must be a lowercase SHA-256 digest")
@@ -598,7 +698,9 @@ class ToolArtifactDraft:
             raise ValueError("draft status must be candidate or saved")
         object.__setattr__(self, "content", _validate_content(self.kind, self.content))
         object.__setattr__(
-            self, "args_schema", _mapping(self.args_schema, label="argsSchema")
+            self,
+            "args_schema",
+            validate_args_schema(_mapping(self.args_schema, label="argsSchema")),
         )
 
 
@@ -641,4 +743,5 @@ __all__ = [
     "legacy_artifact_id",
     "max_risk",
     "new_user_artifact_id",
+    "validate_args_schema",
 ]
