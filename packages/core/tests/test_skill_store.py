@@ -165,7 +165,9 @@ _EXPECTED_BUNDLED = {
 
 def _real_bundled_names():
     from ae_mcp.skill_store import _bundled_root
-    return sorted(p.stem for p in _bundled_root().glob("*.json"))
+    return sorted(
+        p.stem for p in _bundled_root().glob("*.json") if p.name != "manifest.json"
+    )
 
 
 def test_all_expected_bundled_skills_present():
@@ -194,3 +196,42 @@ def test_bundled_skills_surface_with_empty_user_dir(monkeypatch, tmp_path):
     from ae_mcp.skill_store import SkillStore
     names = {s.name for s in SkillStore().list()}
     assert _EXPECTED_BUNDLED.issubset(names)
+
+
+def test_bundled_manifest_is_not_a_loadable_skill(tmp_path):
+    from ae_mcp.skill_store import SkillError, SkillStore
+
+    store = SkillStore(root=tmp_path / "user")
+    with pytest.raises(SkillError, match="skill not found: manifest"):
+        store.load("manifest")
+    with pytest.raises(SkillError, match="skill not found: manifest"):
+        store.delete("manifest")
+
+
+def test_list_records_preserves_old_resolution_and_can_show_shadowed(tmp_path):
+    bundled = _bundled(tmp_path)
+    user = tmp_path / "user"
+    store = SkillStore(root=user, bundled_root=bundled)
+    store.create(
+        Skill(
+            name="extendscript-cookbook",
+            description="user",
+            template_type="prompt",
+            template="USER",
+            args_schema={},
+        )
+    )
+
+    assert store.load("extendscript-cookbook").template == "USER"
+    assert store.resolve("extendscript-cookbook").source == "user"
+    visible = store.list_records()
+    all_records = store.list_records(include_shadowed=True)
+    assert [record.skill for record in visible] == store.list()
+    assert len(
+        [record for record in visible if record.skill.name == "extendscript-cookbook"]
+    ) == 1
+    assert {
+        record.source
+        for record in all_records
+        if record.skill.name == "extendscript-cookbook"
+    } == {"user", "bundled"}

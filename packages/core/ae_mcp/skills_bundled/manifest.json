@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "productVersion": "0.9.0",
+  "artifacts": [
+    {"path":"ease-and-timing.json","sha256":"2fad50c0f4692086dac92d9aae2503e64f25f54abe68f63ba752fe305e38868b"},
+    {"path":"extendscript-cookbook.json","sha256":"097db4672538a38b6714256af1fd2af7a26cc378a081cb4c75dd8e111109295d"},
+    {"path":"glow-recipes.json","sha256":"54b9632d802167a5ab53132122c8030ae037dac418abc97faa23a4cb7376c213"},
+    {"path":"grade-stack.json","sha256":"846d728e9265d68a9449055bd866ec0c6baa74195ba55f59ed0f86e17b5f5056"},
+    {"path":"kinetic-typography.json","sha256":"a910e02852952552bd003a4c8569cbe2f9210e6d12c56a144d77f1700559cdd5"},
+    {"path":"project-organization.json","sha256":"c6c3dc680b16d77a4571a71a94cb55de4a8adf290f03596ee2215afef2c8fcd2"},
+    {"path":"render-order.json","sha256":"4961a82cc6de3b3646394a41507258de02f7a352cf62f2a9fae289be1f7e82b3"}
+  ]
+}
