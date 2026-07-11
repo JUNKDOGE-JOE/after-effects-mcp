@@ -87,6 +87,14 @@ Windows 开发机在完成相同依赖同步后运行：
 
 开发安装启用 CEP debug 并部署工作区文件，不具有正式 ZXP/DMG 的签名、公证或不可变 artifact 身份，不能用于 release attestation。
 
+### Tool Library 首次升级与回滚
+
+首次 Tool Library 初始化时，当前 migrator 会先扫描全部现有数据，再在默认的 `~/.ae-mcp/tools/backups/migration-<timestamp>-<nonce>/` 建立带 SHA-256 manifest 的备份；设置 `AE_MCP_TOOL_DIR` 时，位置相应改为 `<tool-root>/backups/...`。最后才提交新 index 和 `migration-v1.json` marker。备份包含 native index/artifacts 和 legacy metadata；`~/.ae-mcp/skills/*.json` 仍是原来的规范副本，不会复制进 native artifact 目录。崩溃后的下一次初始化会复用 prepared backup 并幂等完成 marker，不会把半迁移状态当成成功。
+
+默认保留最新 3 份且处于 30 天保留窗口内的迁移备份；清理只处理校验过的 backup 目录。需要回退 Tool Library schema 时，使用当前安装版本的 `ToolDataMigrator.rollback(backup_id)`，让它先校验 manifest 再原子恢复；不要手工拼接 index 与 artifact 文件。普通 runtime/panel 回滚和卸载不会删除 `~/.ae-mcp/tools` 或 legacy skills。
+
+`.aemcptools` 导入先进入隔离 preview；commit 后仍是 candidate，不会自动提升或执行。处理冲突后应先 Inspect，再调用 `ae_toolEdit` 并传 `{"changes":{"status":"saved"}}`；只有 saved/pinned 制品可执行。
+
 ### 排障与恢复
 
 - Panel 不在菜单中：确认安装的是正确平台资产，重启 AE；开发模式才重新运行开发安装脚本。
@@ -183,6 +191,14 @@ After the same dependency synchronization on Windows, run:
 ```
 
 Development install enables CEP debug and deploys workspace files. It does not carry the signed/notarized, immutable artifact identity required for release attestation.
+
+### First Tool Library Upgrade and Rollback
+
+On the first Tool Library initialization, the current migrator scans all existing data before creating a SHA-256-manifested backup under the default `~/.ae-mcp/tools/backups/migration-<timestamp>-<nonce>/`; when `AE_MCP_TOOL_DIR` is set, the location becomes `<tool-root>/backups/...`. Only then does it commit the new index and `migration-v1.json` marker. The backup contains the native index/artifacts and legacy metadata. Existing `~/.ae-mcp/skills/*.json` files remain the canonical copies and are not duplicated into the native artifact directory. After a crash, the next initialization reuses the prepared backup and completes the marker idempotently; a partial migration is never accepted as success.
+
+Retention keeps the newest three migration backups within the 30-day policy window, and pruning touches only validated backup directories. To roll back the Tool Library schema, use the currently installed version's `ToolDataMigrator.rollback(backup_id)` so the manifest is verified before atomic restoration; do not hand-assemble index and artifact files. Ordinary runtime/panel rollback and uninstall do not remove `~/.ae-mcp/tools` or legacy skills.
+
+`.aemcptools` imports first enter a quarantined preview. Committed artifacts remain candidates and are never auto-promoted or executed. After resolving conflicts, Inspect them and call `ae_toolEdit` with `{"changes":{"status":"saved"}}`; only saved/pinned artifacts can execute.
 
 ### Troubleshooting and Recovery
 

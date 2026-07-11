@@ -8,7 +8,7 @@
 
 ```text
 MCP 客户端或面板内嵌 AI
-  -> packages/core (ae_mcp, Python stdio MCP server, 32 ae_ tools)
+  -> packages/core (ae_mcp, Python stdio MCP server, 44 ae_ tools)
   -> backend (packages/bridge, httpx)
   -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
   -> CSInterface.evalScript
@@ -18,7 +18,7 @@ MCP 客户端或面板内嵌 AI
 
 ```mermaid
 flowchart LR
-    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>32 ae_ tools"]
+    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>44 ae_ tools"]
     B --> C["ae-mcp bridge<br/>httpx backend"]
     C --> D["127.0.0.1:11488"]
     D --> E["CEP panel host<br/>Express"]
@@ -154,7 +154,22 @@ flowchart TD
 - 表达式错误能在视觉检查前被机器发现。
 - checkpoint undo 和 `emptyResult` 语义已在 v0.7.0 补齐，适合作为常规安全网。
 
-## 6. 常见故障定位
+## 6. Tool Library 渐进工作流
+
+不要把完整制品库一次塞进模型上下文。execute/apply 操作使用固定顺序：
+
+```text
+ae_toolIndex
+  -> ae_toolSearch
+  -> ae_toolInspect
+  -> ae_toolUse(action="prepare")
+  -> ae_toolUse(action="grant")
+  -> ae_toolUse(action="execute")
+```
+
+Index/Search 只含摘要；Inspect 才读取完整、按 user-untrusted 处理的 content。只渲染、不执行时，在 Inspect 后调用 `ae_toolUse(action="render")`，不需要 grant。candidate、archived、deprecated 不能执行；history candidate 用 `ae_toolPromoteFromHistory` 保存，imported candidate 用 `ae_toolEdit` 将 status 改为 saved，操作前都应检查内容。Prepare 后不要改制品、参数 schema、target 或 recipe/handler 依赖；任何变化都会让旧 `planHash`/grant 失效。grant 只能消费一次，destructive/external 不提供 session 放行。
+
+## 7. 常见故障定位
 
 如果工具可见但调用失败，按这个顺序排：
 
@@ -168,7 +183,7 @@ flowchart TD
 
 如果 `ae_ping` 不通，就不要继续测高阶工具，先把链路打通。
 
-## 7. 能力边界
+## 8. 能力边界
 
 v0.9.1 候选的最终能力边界适合：
 
@@ -193,7 +208,7 @@ This document describes the two v0.9.1 (unreleased candidate) usage paths: built
 
 ```text
 MCP client or panel-embedded AI
-  -> packages/core (ae_mcp, Python stdio MCP server, 32 ae_ tools)
+  -> packages/core (ae_mcp, Python stdio MCP server, 44 ae_ tools)
   -> backend (packages/bridge, httpx)
   -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
   -> CSInterface.evalScript
@@ -203,7 +218,7 @@ MCP client or panel-embedded AI
 
 ```mermaid
 flowchart LR
-    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>32 ae_ tools"]
+    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>44 ae_ tools"]
     B --> C["ae-mcp bridge<br/>httpx backend"]
     C --> D["127.0.0.1:11488"]
     D --> E["CEP panel host<br/>Express"]
@@ -339,7 +354,22 @@ This helps because:
 - Expression failures are caught before visual QA.
 - Checkpoint undo and `emptyResult` semantics are delivered in v0.7.0 and are suitable as a regular safety net.
 
-## 6. Common Failure Isolation
+## 6. Progressive Tool Library Workflow
+
+Do not inject the full artifact library into model context. Execute/apply operations use this fixed sequence:
+
+```text
+ae_toolIndex
+  -> ae_toolSearch
+  -> ae_toolInspect
+  -> ae_toolUse(action="prepare")
+  -> ae_toolUse(action="grant")
+  -> ae_toolUse(action="execute")
+```
+
+Index/Search contain summaries only; Inspect is the first call that reads full content, which remains user-untrusted. For rendering without execution, call `ae_toolUse(action="render")` after Inspect; no grant is required. Candidate, archived, and deprecated artifacts cannot execute. Save history candidates with `ae_toolPromoteFromHistory`; save imported candidates by changing status to saved with `ae_toolEdit`, inspecting content before either operation. After Prepare, do not change content, argument schema, target, or recipe/handler dependencies: any change invalidates the old `planHash` and grant. Grants are one-time, and destructive/external plans never offer session approval.
+
+## 7. Common Failure Isolation
 
 If tools are visible but calls fail, check in this order:
 
@@ -353,7 +383,7 @@ If tools are visible but calls fail, check in this order:
 
 If `ae_ping` fails, stop there and fix the connection before testing higher-level tools.
 
-## 7. Capability Boundaries
+## 8. Capability Boundaries
 
 The final v0.9.1 candidate boundary is a good fit for:
 

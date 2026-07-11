@@ -20,7 +20,7 @@ The unreleased v0.9.1 candidate targets only the following platform and host mat
 
 ```text
 Embedded panel chat or external MCP client
-  -> packages/core (ae_mcp, Python stdio MCP server, 32 ae_ tools)
+  -> packages/core (ae_mcp, Python stdio MCP server, 44 ae_ tools)
   -> backend (packages/bridge, httpx)
   -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
   -> CSInterface.evalScript
@@ -66,9 +66,10 @@ Claude Code CLI is separate from Claude Desktop. Claude Desktop MCP configuratio
 
 - Built-in chat with Claude, Codex, and ZCode.
 - Composer controls for model selection, reasoning effort, fast mode, and approval mode. Model switching is session-local and does not clear the conversation.
-- Four approval modes: read-only, manual, auto, and bypass. Tool annotations drive consistent behavior across backends.
+- Four approval modes: read-only, manual, auto, and bypass. Tool annotations drive consistent behavior across backends; destructive/external Tool Library plans remain interactive even in bypass mode.
 - Unified Provider Manager with expandable editable records for OpenAI-compatible and Anthropic providers.
 - Activity stream for agent operations.
+- Local Tools library for generated JSX, expressions, prompt skills, recipes, and diagnostics. Index/search responses stay summary-only; full content appears only after Inspect.
 - Kill switch to stop all AI operations immediately.
 - Current diagnostics cover host status, access token, Python client signal, AE project state, ExtendScript ping, and optional channel CLIs. Installed-runtime diagnostics belong to the gated RuntimeManager contract.
 - Log export for issue reports and debugging.
@@ -115,10 +116,17 @@ External clients must run on the same machine as After Effects, or otherwise be 
 | Preview / capture | `ae_previewFrame`, `ae_snapshot` |
 | Rigging | `ae_createRig` |
 | Skill | `ae_skillList`, `ae_skillCreate`, `ae_skillEdit`, `ae_skillDelete`, `ae_skillUse` |
+| Tools library | `ae_toolIndex`, `ae_toolSearch`, `ae_toolInspect`, `ae_toolUse`, `ae_toolCreate`, `ae_toolEdit`, `ae_toolDelete`, `ae_toolArchive`, `ae_toolDuplicate`, `ae_toolPromoteFromHistory`, `ae_toolImport`, `ae_toolExport` |
 | Checkpoint | `ae_checkpoint`, `ae_revert` |
 | Diagnostic | `ae_ping`, `ae_status`, `ae_diagnose` |
 
 Expression workflows should run `ae_validateExpressions` before visual review. For risky edits, use `ae_checkpoint` or pass `checkpoint_label` to `ae_exec`.
+
+### Local Tools library
+
+The Tools tab stores native artifacts under `~/.ae-mcp/tools` and indexes existing `ae.skill*` files in place; it does not copy legacy skills or provide cloud sync. User and bundled same-name skills keep distinct Tool Library IDs, while `ae_skillUse` preserves its existing user-first resolution order. Successful generated JSX/expression calls may appear as non-executable history candidates. Imported `.aemcptools` packages also enter candidate state after quarantine, bounds, hash, schema, and secret scanning. Inspect candidate content before changing its status: history candidates use `ae_toolPromoteFromHistory`, while imported candidates use `ae_toolEdit` with `{"changes":{"status":"saved"}}`.
+
+Discovery is progressive: call `ae_toolIndex`, then `ae_toolSearch`, then `ae_toolInspect`. Non-executing rendering uses `ae_toolUse(action="render")`; execute/apply operations use the content-bound prepare → grant → execute sequence. The plan binds the artifact and dependency hashes, normalized arguments, operation, target, risk, and expiry; grants are short-lived and one-time. Read-only denies writes, manual asks for writes, auto allows ordinary writes, and destructive/external plans always require a fresh decision even in bypass mode. Session approval is available only for write-risk plans and is bound to artifact content, operation, and normalized target rather than the tool name.
 
 ## Usage Notes
 
