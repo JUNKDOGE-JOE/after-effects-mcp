@@ -80,6 +80,9 @@ $requiredFiles = @(
     'client\dist\app.js',
     'host\server.js',
     'jsx\runtime.jsx',
+    'platform\windows-x64\helper-manifest.json',
+    'platform\windows-x64\bin\ae-mcp-platform-helper.exe',
+    'platform\windows-x64\lib\ae-mcp-platform-helper-transport.node',
     '.debug'
 )
 foreach ($relative in $requiredFiles) {
@@ -118,6 +121,7 @@ foreach ($generated in @($staging, $backup, $failedInstall, $restoreReplaced)) {
 $completed = $false
 $oldMoved = $false
 $stageMoveStarted = $false
+$oldHelperStopped = $false
 
 try {
     Write-Host '[1/5] Staging the complete plugin tree beside the final target...'
@@ -143,6 +147,17 @@ try {
 
     Write-Host '[4/5] Atomically replacing the CEP panel while retaining the old install...'
     try {
+        $installedHelper = Join-Path $cepDir 'platform\windows-x64\bin\ae-mcp-platform-helper.exe'
+        foreach ($process in @(Get-Process | Where-Object {
+            $_.ProcessName -ceq 'ae-mcp-platform-helper'
+        })) {
+            if (-not $process.Path -or
+                [IO.Path]::GetFullPath($process.Path) -ne [IO.Path]::GetFullPath($installedHelper)) {
+                Fail-DevInstall "another Platform Helper is running outside the deployed panel: $($process.Path)"
+            }
+            Stop-Process -Id $process.Id -Force
+            $oldHelperStopped = $true
+        }
         if (Test-Path -LiteralPath $cepDir) {
             Move-Item -LiteralPath $cepDir -Destination $backup
             $oldMoved = $true
@@ -150,6 +165,8 @@ try {
         $stageMoveStarted = $true
         Move-Item -LiteralPath $staging -Destination $cepDir
         Assert-TreeEqual $pluginSrc $cepDir
+        & (Join-Path $PSScriptRoot 'start-platform-helper-dev.ps1') `
+            -HelperRoot (Join-Path $cepDir 'platform\windows-x64')
     } catch {
         $original = $_
         $rollbackErrors = [System.Collections.Generic.List[string]]::new()
@@ -163,6 +180,14 @@ try {
                 catch { $rollbackErrors.Add($_.Exception.Message) }
             } else {
                 $rollbackErrors.Add("backup disappeared before rollback: $backup")
+            }
+        }
+        if ($oldHelperStopped -and (Test-Path -LiteralPath $cepDir -PathType Container)) {
+            try {
+                & (Join-Path $PSScriptRoot 'start-platform-helper-dev.ps1') `
+                    -HelperRoot (Join-Path $cepDir 'platform\windows-x64')
+            } catch {
+                $rollbackErrors.Add($_.Exception.Message)
             }
         }
         if ($rollbackErrors.Count -ne 0) {
@@ -179,9 +204,10 @@ try {
     if ($oldMoved) {
         Write-Host "Backup retained at: $backup"
         Write-Host 'Restore command (run only while After Effects is closed):'
-        $restoreCommand = ('& {{ $ErrorActionPreference = ''Stop''; ' +
+        $restoreTemplate = ('& {{ $ErrorActionPreference = ''Stop''; ' +
             'Move-Item -LiteralPath {0} -Destination {1}; ' +
-            'Move-Item -LiteralPath {2} -Destination {3}; }}' -f
+            'Move-Item -LiteralPath {2} -Destination {3}; }}')
+        $restoreCommand = ($restoreTemplate -f
             (Quote-PowerShellLiteral $cepDir),
             (Quote-PowerShellLiteral $restoreReplaced),
             (Quote-PowerShellLiteral $backup),

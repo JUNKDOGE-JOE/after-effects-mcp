@@ -15,6 +15,7 @@ build/
 /release/
 plugin/host/node_modules/
 plugin/sidecar/node_modules/
+plugin/platform/
 
 # OS
 .DS_Store

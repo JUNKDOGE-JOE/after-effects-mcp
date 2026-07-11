@@ -31,5 +31,29 @@
         "com.adobe.cep.CEPHtmlEngine"
       ]
     }
+  },
+  "windows": {
+    "platform": "windows-x64",
+    "minimumOsVersion": "11.0.26100",
+    "architecture": "x64",
+    "pipeName": "\\\\.\\pipe\\com.junkdoge.ae-mcp.platform-helper",
+    "credentialTargetPrefix": "com.junkdoge.ae-mcp/provider:",
+    "authorization": {
+      "currentUserOnly": true,
+      "nativeExecutionOnly": true,
+      "processGenerationDoubleRead": true,
+      "wholeChainFinalRead": true,
+      "authenticodeChainRequired": true,
+      "rejectionBackendAccessCount": 0
+    },
+    "caller": {
+      "publisherOrganization": "Adobe Inc.",
+      "directImage": "CEPHtmlEngine.exe",
+      "ancestorImage": "AfterFX.exe",
+      "afterEffectsMajors": [
+        25,
+        26
+      ]
+    }
   }
 }

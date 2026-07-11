@@ -10,8 +10,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const execFileAsync = promisify(execFile);
 const NODE_HEADERS_SHA256 = 'ac60c4ba92204658efaac112efea5d3597348b011be679af0eec324d8c08915e';
+const NODE_IMPORT_LIBRARY_SHA256 = '4ab42af597bc4f0957e9e2dcd5db18bdf223406a0c8e0b6be0f28e57977b808b';
 const NODE_HEADERS_ROOT = 'node-v24.17.0';
-const SUPPORTED_PLATFORMS = new Set(['macos-arm64']);
+const SUPPORTED_PLATFORMS = new Set(['macos-arm64', 'windows-x64']);
 const HELPER_ID = 'com.junkdoge.ae-mcp.platform-helper';
 const KEYCHAIN_ACCOUNT_PATTERN = '^provider:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:[a-z][a-z0-9_-]{0,31}:v1$';
 
@@ -53,31 +54,49 @@ export function parseBuildPlatformHelperArgs(argv) {
 
 export function validateHelperIdentityPolicy(policy, platform) {
   const mac = policy?.macos;
-  if (policy?.schemaVersion !== 1
-      || policy.helperId !== HELPER_ID
-      || policy.protocolVersion !== 1
-      || policy.maxMessageBytes !== 65536
-      || platform !== 'macos-arm64'
-      || mac?.platform !== platform
-      || mac.minimumOsVersion !== '14.0'
-      || mac.architecture !== 'arm64'
-      || mac.machServiceName !== HELPER_ID
-      || mac.keychainService !== 'com.junkdoge.ae-mcp'
-      || mac.keychainAccountPattern !== KEYCHAIN_ACCOUNT_PATTERN
-      || mac.authorization?.publicConnectionIdentityOnly !== true
-      || mac.authorization?.processGenerationDoubleRead !== true
-      || mac.authorization?.positiveAuditSessionBinding !== true
-      || mac.authorization?.ancestrySnapshotCodeSnapshot !== true
-      || mac.authorization?.wholeChainFinalRead !== true
-      || mac.authorization?.currentUserOnly !== true
-      || mac.authorization?.nativeExecutionOnly !== true
-      || mac.authorization?.rejectionBackendAccessCount !== 0
-      || mac.caller?.adobeTeamId !== 'JQ525L2MZD'
-      || mac.caller?.afterEffectsBundleId !== 'com.adobe.AfterEffects.application'
-      || JSON.stringify(mac.caller?.afterEffectsMajors) !== JSON.stringify([25, 26])
-      || JSON.stringify(mac.caller?.directSigningIdentifiers) !== JSON.stringify([
+  const windows = policy?.windows;
+  const commonValid = policy?.schemaVersion === 1
+    && policy.helperId === HELPER_ID
+    && policy.protocolVersion === 1
+    && policy.maxMessageBytes === 65536;
+  const macValid = platform === 'macos-arm64'
+      && mac?.platform === platform
+      && mac.minimumOsVersion === '14.0'
+      && mac.architecture === 'arm64'
+      && mac.machServiceName === HELPER_ID
+      && mac.keychainService === 'com.junkdoge.ae-mcp'
+      && mac.keychainAccountPattern === KEYCHAIN_ACCOUNT_PATTERN
+      && mac.authorization?.publicConnectionIdentityOnly === true
+      && mac.authorization?.processGenerationDoubleRead === true
+      && mac.authorization?.positiveAuditSessionBinding === true
+      && mac.authorization?.ancestrySnapshotCodeSnapshot === true
+      && mac.authorization?.wholeChainFinalRead === true
+      && mac.authorization?.currentUserOnly === true
+      && mac.authorization?.nativeExecutionOnly === true
+      && mac.authorization?.rejectionBackendAccessCount === 0
+      && mac.caller?.adobeTeamId === 'JQ525L2MZD'
+      && mac.caller?.afterEffectsBundleId === 'com.adobe.AfterEffects.application'
+      && JSON.stringify(mac.caller?.afterEffectsMajors) === JSON.stringify([25, 26])
+      && JSON.stringify(mac.caller?.directSigningIdentifiers) === JSON.stringify([
         'com.adobe.cep.CEPHtmlEngine',
-      ])) {
+      ]);
+  const windowsValid = platform === 'windows-x64'
+      && windows?.platform === platform
+      && windows.minimumOsVersion === '11.0.26100'
+      && windows.architecture === 'x64'
+      && windows.pipeName === '\\\\.\\pipe\\com.junkdoge.ae-mcp.platform-helper'
+      && windows.credentialTargetPrefix === 'com.junkdoge.ae-mcp/provider:'
+      && windows.authorization?.currentUserOnly === true
+      && windows.authorization?.nativeExecutionOnly === true
+      && windows.authorization?.processGenerationDoubleRead === true
+      && windows.authorization?.wholeChainFinalRead === true
+      && windows.authorization?.authenticodeChainRequired === true
+      && windows.authorization?.rejectionBackendAccessCount === 0
+      && windows.caller?.publisherOrganization === 'Adobe Inc.'
+      && windows.caller?.directImage === 'CEPHtmlEngine.exe'
+      && windows.caller?.ancestorImage === 'AfterFX.exe'
+      && JSON.stringify(windows.caller?.afterEffectsMajors) === JSON.stringify([25, 26]);
+  if (!commonValid || (!macValid && !windowsValid)) {
     throw helperError('HELPER_IDENTITY_POLICY_INVALID', 'helper identity policy is invalid');
   }
   return policy;
@@ -139,8 +158,10 @@ export async function buildHelperManifest(root, platform, definitions) {
     platform,
     helperId: HELPER_ID,
     entrypoints: {
-      helper: 'bin/ae-mcp-platform-helper',
-      launcher: 'bin/ae-mcp',
+      helper: platform === 'windows-x64'
+        ? 'bin/ae-mcp-platform-helper.exe'
+        : 'bin/ae-mcp-platform-helper',
+      launcher: platform === 'windows-x64' ? 'bin/ae-mcp.exe' : 'bin/ae-mcp',
     },
     files,
   };
@@ -189,13 +210,78 @@ export async function snapshotNodeHeadersArchive({ archivePath, scratchRoot }) {
   return snapshotArchive;
 }
 
+export async function snapshotNodeImportLibrary({ libraryPath, scratchRoot }) {
+  const snapshotRoot = path.join(scratchRoot, 'node-import-library');
+  const snapshotLibrary = path.join(snapshotRoot, 'node.lib');
+  await fs.promises.mkdir(snapshotRoot, { recursive: true, mode: 0o700 });
+  await fs.promises.copyFile(
+    path.resolve(libraryPath),
+    snapshotLibrary,
+    fs.constants.COPYFILE_EXCL,
+  );
+  await fs.promises.chmod(snapshotLibrary, 0o600);
+  const stats = await fs.promises.lstat(snapshotLibrary);
+  const digest = await sha256File(snapshotLibrary).catch(() => null);
+  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1
+      || digest !== NODE_IMPORT_LIBRARY_SHA256) {
+    throw helperError(
+      'HELPER_NODE_IMPORT_LIBRARY_INVALID',
+      'Node.js 24.17.0 x64 import library is missing or does not match runtime-lock.json',
+    );
+  }
+  return snapshotLibrary;
+}
+
 async function extractNodeHeaders(archivePath, scratchRoot) {
   const extractionRoot = path.join(scratchRoot, 'node-headers');
   await fs.promises.mkdir(extractionRoot, { mode: 0o700 });
   const snapshotArchive = await snapshotNodeHeadersArchive({ archivePath, scratchRoot });
   await validateNodeHeadersArchive({ archivePath: snapshotArchive });
-  await run('/usr/bin/tar', ['-xzf', snapshotArchive, '-C', extractionRoot]);
+  const tar = process.platform === 'win32' ? 'tar.exe' : '/usr/bin/tar';
+  await run(tar, ['-xzf', snapshotArchive, '-C', extractionRoot]);
   return validateNodeHeadersArchive({ archivePath: snapshotArchive, extractedRoot: extractionRoot });
+}
+
+async function verifyPeX64(filePath) {
+  const bytes = await fs.promises.readFile(filePath);
+  if (bytes.length < 0x40 || bytes.readUInt16LE(0) !== 0x5a4d) {
+    throw helperError('HELPER_WINDOWS_OUTPUT_INVALID', 'Windows helper output is not a PE file');
+  }
+  const peOffset = bytes.readUInt32LE(0x3c);
+  if (peOffset + 6 > bytes.length
+      || bytes.readUInt32LE(peOffset) !== 0x00004550
+      || bytes.readUInt16LE(peOffset + 4) !== 0x8664) {
+    throw helperError('HELPER_WINDOWS_OUTPUT_INVALID', 'Windows helper output is not PE x64');
+  }
+}
+
+async function buildWindowsPayload({
+  repoRoot,
+  scratchRoot,
+  includeDir,
+  importLibrary,
+  temporary,
+  environment,
+}) {
+  const sourceRoot = path.join(repoRoot, 'native/platform-helper/windows');
+  const buildRoot = path.join(scratchRoot, 'windows-build');
+  const cmake = environment.CMAKE ?? 'cmake.exe';
+  await run(cmake, [
+    '-S', sourceRoot,
+    '-B', buildRoot,
+    '-A', 'x64',
+    `-DNODE_INCLUDE_DIR=${includeDir}`,
+    `-DNODE_IMPORT_LIBRARY=${importLibrary}`,
+    `-DCMAKE_INSTALL_PREFIX=${temporary}`,
+  ], { cwd: repoRoot, env: environment });
+  await run(cmake, ['--build', buildRoot, '--config', 'Release'], {
+    cwd: repoRoot,
+    env: environment,
+  });
+  await run(cmake, ['--install', buildRoot, '--config', 'Release'], {
+    cwd: repoRoot,
+    env: environment,
+  });
 }
 
 function swiftEnvironment(scratchRoot, environment) {
@@ -293,8 +379,14 @@ export async function buildPlatformHelper({
   repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'),
   environment = process.env,
 }) {
-  if (platform !== 'macos-arm64' || process.platform !== 'darwin' || process.arch !== 'arm64') {
-    throw helperError('HELPER_BUILD_HOST_UNSUPPORTED', 'macos-arm64 helper requires a native Apple Silicon host');
+  const hostSupported = platform === 'macos-arm64'
+    ? process.platform === 'darwin' && process.arch === 'arm64'
+    : platform === 'windows-x64' && process.platform === 'win32' && process.arch === 'x64';
+  if (!hostSupported) {
+    throw helperError(
+      'HELPER_BUILD_HOST_UNSUPPORTED',
+      `${platform} helper requires its native build host`,
+    );
   }
   const destination = path.resolve(outDir);
   if (fs.existsSync(destination)) {
@@ -312,6 +404,15 @@ export async function buildPlatformHelper({
       'AE_MCP_NODE_HEADERS_ARCHIVE must name the locked Node.js 24.17.0 headers archive',
     );
   }
+  const importLibraryPath = platform === 'windows-x64'
+    ? environment.AE_MCP_NODE_IMPORT_LIBRARY
+    : null;
+  if (platform === 'windows-x64' && !importLibraryPath) {
+    throw helperError(
+      'HELPER_NODE_IMPORT_LIBRARY_REQUIRED',
+      'AE_MCP_NODE_IMPORT_LIBRARY must name the locked Node.js 24.17.0 x64 node.lib',
+    );
+  }
 
   const parent = path.dirname(destination);
   await fs.promises.mkdir(parent, { recursive: true });
@@ -320,6 +421,37 @@ export async function buildPlatformHelper({
   let published = false;
   try {
     const includeDir = await extractNodeHeaders(archivePath, scratchRoot);
+    if (platform === 'windows-x64') {
+      const importLibrary = await snapshotNodeImportLibrary({
+        libraryPath: importLibraryPath,
+        scratchRoot,
+      });
+      await buildWindowsPayload({
+        repoRoot,
+        scratchRoot,
+        includeDir,
+        importLibrary,
+        temporary,
+        environment,
+      });
+      const definitions = [
+        { path: 'bin/ae-mcp-platform-helper.exe', architecture: 'pe-x64' },
+        { path: 'bin/ae-mcp.exe', architecture: 'pe-x64' },
+        { path: 'lib/ae-mcp-platform-helper-transport.node', architecture: 'pe-x64' },
+      ];
+      for (const definition of definitions) {
+        await verifyPeX64(path.join(temporary, ...definition.path.split('/')));
+      }
+      const manifest = await buildHelperManifest(temporary, platform, definitions);
+      await fs.promises.writeFile(
+        path.join(temporary, 'helper-manifest.json'),
+        `${JSON.stringify(manifest, null, 2)}\n`,
+        { mode: 0o644, flag: 'wx' },
+      );
+      await fs.promises.rename(temporary, destination);
+      published = true;
+      return manifest;
+    }
     const swiftBinary = await buildSwiftHelper({ repoRoot, scratchRoot, environment });
     const helperPath = path.join(temporary, 'bin/ae-mcp-platform-helper');
     await copyFile(swiftBinary, helperPath, 0o755);

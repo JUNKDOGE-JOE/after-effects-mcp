@@ -18,6 +18,12 @@ const EXPECTED_RUNTIME_LOCK = {
       url: 'https://nodejs.org/dist/v24.17.0/node-v24.17.0-headers.tar.gz',
       sha256: 'ac60c4ba92204658efaac112efea5d3597348b011be679af0eec324d8c08915e',
     },
+    importLibraries: {
+      'windows-x64': {
+        url: 'https://nodejs.org/dist/v24.17.0/win-x64/node.lib',
+        sha256: '4ab42af597bc4f0957e9e2dcd5db18bdf223406a0c8e0b6be0f28e57977b808b',
+      },
+    },
     assets: {
       'macos-arm64': {
         url: 'https://nodejs.org/dist/v24.17.0/node-v24.17.0-darwin-arm64.tar.gz',
@@ -133,6 +139,7 @@ test('runtime lock pins exact redistributable bytes', () => {
   for (const asset of [
     lock.node.sourceAsset,
     lock.node.headers,
+    ...Object.values(lock.node.importLibraries),
     ...Object.values(lock.node.assets),
     ...Object.values(lock.python.assets),
     ...Object.values(lock.python.metadataAssets),

@@ -10,6 +10,7 @@ import {
   parseBuildPlatformHelperArgs,
   prepareEmptyOutput,
   snapshotNodeHeadersArchive,
+  snapshotNodeImportLibrary,
   validateHelperIdentityPolicy,
   validateNodeHeadersArchive,
 } from '../../../../scripts/package/build-platform-helper.mjs';
@@ -23,12 +24,44 @@ test('build CLI accepts only the exact platform and output arguments', () => {
     platform: 'macos-arm64',
     outDir: 'build/helper/macos-arm64',
   });
+  assert.deepEqual(parseBuildPlatformHelperArgs([
+    '--platform', 'windows-x64', '--out', 'build/helper/windows-x64',
+  ]), {
+    platform: 'windows-x64',
+    outDir: 'build/helper/windows-x64',
+  });
   assert.throws(() => parseBuildPlatformHelperArgs([
     '--platform', 'macos-arm64', '--out', 'out', '--force', '1',
   ]), /unknown argument/);
   assert.throws(() => parseBuildPlatformHelperArgs([
     '--platform', 'linux-x64', '--out', 'out',
   ]), /unsupported platform/);
+});
+
+test('Windows identity policy locks pipe, signer, ancestry, and Credential Manager boundaries', () => {
+  const policy = JSON.parse(fs.readFileSync(
+    path.join(repoRoot, 'packaging/helper-identity-policy.json'),
+    'utf8',
+  ));
+  assert.doesNotThrow(() => validateHelperIdentityPolicy(policy, 'windows-x64'));
+  assert.equal(policy.windows.pipeName, '\\\\.\\pipe\\com.junkdoge.ae-mcp.platform-helper');
+  assert.equal(policy.windows.credentialTargetPrefix, 'com.junkdoge.ae-mcp/provider:');
+  assert.equal(policy.windows.caller.publisherOrganization, 'Adobe Inc.');
+  assert.equal(policy.windows.caller.directImage, 'CEPHtmlEngine.exe');
+  assert.equal(policy.windows.caller.ancestorImage, 'AfterFX.exe');
+  assert.deepEqual(policy.windows.caller.afterEffectsMajors, [25, 26]);
+  assert.equal(policy.windows.authorization.currentUserOnly, true);
+  assert.equal(policy.windows.authorization.processGenerationDoubleRead, true);
+  assert.equal(policy.windows.authorization.wholeChainFinalRead, true);
+  assert.equal(policy.windows.authorization.authenticodeChainRequired, true);
+  assert.equal(policy.windows.authorization.rejectionBackendAccessCount, 0);
+
+  const loose = structuredClone(policy);
+  loose.windows.caller.publisherOrganization = 'Any Publisher';
+  assert.throws(
+    () => validateHelperIdentityPolicy(loose, 'windows-x64'),
+    { code: 'HELPER_IDENTITY_POLICY_INVALID' },
+  );
 });
 
 test('mac identity policy locks public connection, signer, version, and Keychain boundaries', () => {
@@ -102,6 +135,25 @@ test('helper manifest declares helper, launcher, XPC executable, and N-API addon
   assert.ok(manifest.files.every((item) => /^[0-9a-f]{64}$/.test(item.sha256)));
 });
 
+test('Windows helper manifest uses executable entrypoints', async (t) => {
+  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ae-mcp-helper-win-manifest-'));
+  t.after(() => fs.promises.rm(root, { recursive: true, force: true }));
+  const definitions = [
+    { path: 'bin/ae-mcp-platform-helper.exe', architecture: 'pe-x64' },
+    { path: 'bin/ae-mcp.exe', architecture: 'pe-x64' },
+    { path: 'lib/ae-mcp-platform-helper-transport.node', architecture: 'pe-x64' },
+  ];
+  for (const definition of definitions) {
+    const target = path.join(root, ...definition.path.split('/'));
+    await fs.promises.mkdir(path.dirname(target), { recursive: true });
+    await fs.promises.writeFile(target, definition.path);
+  }
+
+  const manifest = await buildHelperManifest(root, 'windows-x64', definitions);
+  assert.equal(manifest.entrypoints.helper, 'bin/ae-mcp-platform-helper.exe');
+  assert.equal(manifest.entrypoints.launcher, 'bin/ae-mcp.exe');
+});
+
 test('helper build refuses an existing output without changing it', async (t) => {
   const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ae-mcp-helper-output-'));
   t.after(() => fs.promises.rm(root, { recursive: true, force: true }));
@@ -132,8 +184,8 @@ test('locked archive digest is verified before tar sees attacker-controlled byte
   const block = script.slice(start, end);
   assert.ok(block.indexOf('snapshotNodeHeadersArchive') < block.indexOf('validateNodeHeadersArchive'));
   assert.match(block, /validateNodeHeadersArchive\(\{ archivePath: snapshotArchive \}\)/);
-  assert.match(block, /run\('\/usr\/bin\/tar', \['-xzf', snapshotArchive/);
-  const tarLine = block.split('\n').find((line) => line.includes("run('/usr/bin/tar'"));
+  assert.match(block, /run\(tar, \['-xzf', snapshotArchive/);
+  const tarLine = block.split('\n').find((line) => line.includes('run(tar'));
   assert.doesNotMatch(tarLine, /\barchivePath\b/);
 });
 
@@ -152,6 +204,18 @@ test('Node headers are copied to a private build snapshot before validation', as
   assert.equal(stats.isFile(), true);
   assert.equal(stats.isSymbolicLink(), false);
   assert.equal(stats.nlink, 1);
-  assert.equal(stats.mode & 0o777, 0o600);
+  if (process.platform !== 'win32') assert.equal(stats.mode & 0o777, 0o600);
   assert.notEqual(path.dirname(snapshot), path.dirname(original));
+});
+
+test('Windows node.lib is copied privately and rejected unless its bytes are locked', async (t) => {
+  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ae-mcp-node-lib-'));
+  t.after(() => fs.promises.rm(root, { recursive: true, force: true }));
+  const original = path.join(root, 'node.lib');
+  await fs.promises.writeFile(original, 'not-the-locked-library');
+
+  await assert.rejects(
+    snapshotNodeImportLibrary({ libraryPath: original, scratchRoot: path.join(root, 'scratch') }),
+    { code: 'HELPER_NODE_IMPORT_LIBRARY_INVALID' },
+  );
 });
