@@ -2,7 +2,7 @@ import { parseProviderSecretReference } from '../cep/platform/secret-reference.j
 
 const DEFAULT_ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
 const DEFAULT_CODEX_PROVIDER_ID = 'ae_mcp_custom';
-const DEFAULT_CODEX_WIRE_API = 'responses';
+export const PROVIDER_DIALECT_MAX_AGE_MS = 86_400_000;
 const RESERVED_CODEX_PROVIDER_IDS = new Set(['openai', 'amazon-bedrock', 'ollama', 'lmstudio']);
 const PROVIDER_ENTRY_KEYS = [
   'allowInsecureHttp',
@@ -42,14 +42,6 @@ const SECRET_LIKE_LITERAL = /^(?:Bearer\s+\S+|Basic\s+\S+|sk-[A-Za-z0-9_-]{8,}|[
 const SECRET_LIKE_PATH_LITERAL = /(?:Bearer\s+\S{8,}|Basic\s+\S{8,}|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,})/i;
 const HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const MAX_PERCENT_DECODE_LAYERS = 3;
-
-function firstValue(...values) {
-  for (const value of values) {
-    const text = String(value || '').trim();
-    if (text) return text;
-  }
-  return '';
-}
 
 export function normalizeBaseUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '');
@@ -274,7 +266,7 @@ function normalizeDialect(value) {
     }
     detected = {
       wireApi: value.detected.wireApi,
-      baseUrl: normalizeBaseUrl(requireText(value.detected.baseUrl)),
+      baseUrl: validateProviderBaseUrl(requireText(value.detected.baseUrl)),
       authProfileRevision: requireRevision(value.detected.authProfileRevision),
       detectedAt: requireTimestamp(value.detected.detectedAt),
       evidence: value.detected.evidence,
@@ -319,37 +311,38 @@ export function normalizeProviderEntryV2(input) {
   };
 }
 
+export function effectiveProviderDialect(provider, {
+  now = Date.now,
+  maxAgeMs = PROVIDER_DIALECT_MAX_AGE_MS,
+} = {}) {
+  if (!provider || provider.protocol !== 'openai-compatible') return null;
+  const state = provider.dialect;
+  if (!state || typeof state !== 'object' || Array.isArray(state)) return null;
+  const override = state.override;
+  if (override && WIRE_APIS.has(override.wireApi)) return override.wireApi;
+
+  const detected = state.detected;
+  if (!detected || !WIRE_APIS.has(detected.wireApi)) return null;
+  if (normalizeBaseUrl(provider.baseUrl) !== normalizeBaseUrl(detected.baseUrl)) return null;
+  if (provider.authProfileRevision !== detected.authProfileRevision) return null;
+
+  const currentTime = typeof now === 'function' ? now() : Date.now();
+  const ageLimit = Number.isFinite(maxAgeMs) && maxAgeMs >= 0
+    ? maxAgeMs
+    : PROVIDER_DIALECT_MAX_AGE_MS;
+  if (!Number.isFinite(currentTime) || detected.detectedAt > currentTime) return null;
+  if (currentTime - detected.detectedAt > ageLimit) return null;
+  return detected.wireApi;
+}
+
 function normalizeProviderId(value) {
   const raw = String(value || '').trim() || DEFAULT_CODEX_PROVIDER_ID;
   const safe = raw.replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || DEFAULT_CODEX_PROVIDER_ID;
   return RESERVED_CODEX_PROVIDER_IDS.has(safe) ? safe + '-custom' : safe;
 }
 
-function normalizeCodexWireApi(value) {
-  const text = String(value || '').trim();
-  return text === 'responses' || text === 'chat' ? text : DEFAULT_CODEX_WIRE_API;
-}
-
-function normalizeCodexAuthScheme(value) {
-  const text = String(value || '').trim();
-  return text === 'x-api-key' || text === 'none' || text === 'bearer' ? text : 'bearer';
-}
-
 function tomlString(value) {
   return JSON.stringify(String(value || ''));
-}
-
-export function normalizeProviderProfile(input = {}, env = {}) {
-  const codexBaseUrl = normalizeBaseUrl(firstValue(input.codexBaseUrl, env.AE_MCP_CODEX_BASE_URL));
-  const anthropicBaseUrl = normalizeBaseUrl(firstValue(input.anthropicBaseUrl, env.AE_MCP_ANTHROPIC_BASE_URL));
-  return {
-    codexApiKey: firstValue(input.codexApiKey, env.AE_MCP_CODEX_API_KEY),
-    codexBaseUrl,
-    codexProviderId: normalizeProviderId(firstValue(input.codexProviderId, env.AE_MCP_CODEX_PROVIDER_ID)),
-    codexWireApi: normalizeCodexWireApi(firstValue(input.codexWireApi, env.AE_MCP_CODEX_WIRE_API)),
-    codexAuthScheme: normalizeCodexAuthScheme(firstValue(input.codexAuthScheme, env.AE_MCP_CODEX_AUTH_SCHEME)),
-    anthropicBaseUrl,
-  };
 }
 
 export function codexRuntimeProviderProfile({
@@ -363,31 +356,74 @@ export function codexRuntimeProviderProfile({
     || !customProvider
     || customProvider.protocol !== 'openai-compatible'
   ) {
-    return normalizeProviderProfile({});
+    return null;
   }
   const normalized = normalizeProviderEntryV2(customProvider);
-  return normalizeProviderProfile({ codexBaseUrl: normalized.baseUrl });
+  const dialect = effectiveProviderDialect(normalized);
+  return dialect ? { provider: normalized, dialect } : null;
 }
 
-export function codexAppServerArgs(profile = {}) {
-  const normalized = normalizeProviderProfile(profile);
-  if (!normalized.codexBaseUrl) return ['app-server'];
-  const provider = normalized.codexProviderId;
-  return [
+function normalizeCodexRuntimeConfig(runtimeConfig) {
+  if (!runtimeConfig || !runtimeConfig.baseUrl) return null;
+  if (!Array.isArray(runtimeConfig.envHeaders) || runtimeConfig.envHeaders.length > 64) {
+    throw providerProfileError();
+  }
+  const names = new Set();
+  const envNames = new Set();
+  const envHeaders = runtimeConfig.envHeaders.map((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw providerProfileError();
+    const name = normalizeHeaderName(entry.name);
+    const envName = requireText(entry.envName);
+    if (!/^AE_MCP_PROVIDER_HEADER_[0-9]{2}$/.test(envName)) throw providerProfileError();
+    const lower = name.toLowerCase();
+    if (names.has(lower) || envNames.has(envName)) throw providerProfileError();
+    names.add(lower);
+    envNames.add(envName);
+    return {
+      name,
+      envName,
+      value: entry.value === undefined ? undefined : String(entry.value),
+    };
+  });
+  return {
+    providerId: normalizeProviderId(runtimeConfig.providerId),
+    baseUrl: normalizeBaseUrl(requireText(runtimeConfig.baseUrl)),
+    envHeaders,
+  };
+}
+
+export function codexAppServerArgs(runtimeConfig = null) {
+  const runtime = normalizeCodexRuntimeConfig(runtimeConfig);
+  if (!runtime) return ['app-server'];
+  const provider = runtime.providerId;
+  const args = [
     'app-server',
     '-c', `model_provider=${tomlString(provider)}`,
     '-c', `model_providers.${provider}.name="AE MCP Custom"`,
-    '-c', `model_providers.${provider}.base_url=${tomlString(normalized.codexBaseUrl)}`,
-    '-c', `model_providers.${provider}.env_key="AE_MCP_CODEX_API_KEY"`,
-    '-c', `model_providers.${provider}.wire_api=${tomlString(normalized.codexWireApi)}`,
-    '-c', `model_providers.${provider}.requires_openai_auth=false`,
+    '-c', `model_providers.${provider}.base_url=${tomlString(runtime.baseUrl)}`,
   ];
+  for (const header of runtime.envHeaders) {
+    args.push('-c', `model_providers.${provider}.env_http_headers.${tomlString(header.name)}=${tomlString(header.envName)}`);
+  }
+  args.push(
+    '-c', `model_providers.${provider}.wire_api="responses"`,
+    '-c', `model_providers.${provider}.requires_openai_auth=false`,
+  );
+  return args;
 }
 
-export function codexSpawnEnv(profile = {}, baseEnv = {}) {
-  const normalized = normalizeProviderProfile(profile, baseEnv);
+export function codexSpawnEnv(runtimeConfig = null, baseEnv = {}) {
+  const runtime = normalizeCodexRuntimeConfig(runtimeConfig);
   const env = { ...(baseEnv || {}) };
-  if (normalized.codexApiKey) env.AE_MCP_CODEX_API_KEY = normalized.codexApiKey;
+  if (!runtime) return env;
+  delete env.AE_MCP_CODEX_API_KEY;
+  for (const key of Object.keys(env)) {
+    if (/^AE_MCP_PROVIDER_HEADER_[0-9]{2}$/.test(key)) delete env[key];
+  }
+  for (const header of runtime.envHeaders) {
+    if (header.value === undefined) throw providerProfileError();
+    env[header.envName] = header.value;
+  }
   return env;
 }
 

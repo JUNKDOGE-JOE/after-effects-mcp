@@ -1,228 +1,278 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { detectProviderDialect } from '../src/cep/providerDetect.js';
+import { detectProviderDialect, effectiveProviderDialect } from '../src/cep/providerDetect.js';
 
-function makeHttps(responses) {
+function providerFixture(overrides = {}) {
+  return Object.assign({
+    id: 'provider-1',
+    credentialId: '5eb75f05-5d9e-5d9c-85af-f0893e8b90c2',
+    name: 'Provider 1',
+    protocol: 'openai-compatible',
+    baseUrl: 'https://provider.example/v1',
+    allowInsecureHttp: false,
+    authProfileRevision: 1,
+    auth: { model: { kind: 'none' }, probe: { kind: 'inherit-model' } },
+    headers: [],
+    dialect: { override: null, detected: null },
+    probedModels: [],
+    probedAt: 0,
+  }, overrides);
+}
+
+function jsonResult(status, value, headers = { 'content-type': 'application/json' }) {
+  return { status, headers, body: JSON.stringify(value) };
+}
+
+function sequenceRequest(results) {
+  const queue = results.slice();
   const calls = [];
-  return {
-    calls,
-    request(options, onRes) {
-      const req = {
-        handlers: {},
-        body: '',
-        on(ev, fn) { this.handlers[ev] = fn; return this; },
-        setTimeout() {},
-        destroy() {},
-        write(chunk) { this.body += chunk; },
-        end() {
-          const response = responses.shift();
-          calls.push({ options, body: this.body });
-          if (!response) throw new Error('Unexpected request: ' + options.method + ' ' + options.path);
-          if (response.error) {
-            this.handlers.error(new Error(response.error));
-            return;
-          }
-          const res = {
-            handlers: {},
-            on(ev, fn) { this.handlers[ev] = fn; },
-          };
-          onRes(Object.assign(res, { statusCode: response.status }));
-          if (response.body !== undefined) res.handlers.data(response.body);
-          res.handlers.end();
-        },
-      };
-      return req;
-    },
+  const request = async (input) => {
+    calls.push(input);
+    if (queue.length === 0) throw new Error('unexpected provider request');
+    const next = queue.shift();
+    if (next instanceof Error) throw next;
+    return next;
   };
+  request.calls = calls;
+  return request;
 }
 
-function modelBody(id = 'glm-5.2') {
-  return JSON.stringify({ data: [{ id }] });
+function resolvedProfiles({ probeSecret = 'probe-value', modelSecret = 'model-value' } = {}) {
+  return async (provider, { scope }) => ({
+    providerId: provider.id,
+    baseUrl: provider.baseUrl,
+    allowInsecureHttp: provider.allowInsecureHttp,
+    auth: scope === 'probe'
+      ? { kind: 'header', name: 'x-probe-token', value: probeSecret }
+      : { kind: 'header', name: 'Authorization', value: `Bearer ${modelSecret}` },
+    extraHeaders: scope === 'probe'
+      ? [{ name: 'x-probe-feature', value: 'probe-enabled', source: 'literal' }]
+      : [{ name: 'x-model-feature', value: 'model-enabled', source: 'literal' }],
+    authProfileRevision: provider.authProfileRevision,
+  });
 }
 
-test('detectProviderDialect accepts bearer auth and responses wire API', async () => {
-  const https = makeHttps([
-    { status: 200, body: modelBody('glm-5.2') },
-    { status: 200, body: '{}' },
+test('generic JSON 400 is not Responses evidence', async () => {
+  const requestImpl = sequenceRequest([
+    jsonResult(200, { data: [{ id: 'model-1' }] }),
+    jsonResult(400, { error: { message: 'unsupported parameter' } }),
+    jsonResult(422, { error: { param: 'messages', code: 'missing_required_parameter' } }),
   ]);
-
   const result = await detectProviderDialect({
-    baseUrl: 'https://api.example.com/v1/',
-    apiKey: 'sk-good',
-    httpsImpl: https,
-    now: () => 123,
+    provider: providerFixture(),
+    resolveRequestProfile: resolvedProfiles(),
+    requestImpl,
+    now: () => 1000,
   });
 
   assert.equal(result.ok, true);
-  assert.deepEqual(result.dialect, { wireApi: 'responses', authScheme: 'bearer', source: 'detected', updatedAt: 123 });
-  assert.deepEqual(result.models, [{ id: 'glm-5.2', label: 'glm-5.2' }]);
-  assert.deepEqual(result.tried, [
-    { step: 'auth', candidate: 'bearer', status: 200, outcome: 'accepted' },
-    { step: 'wire', candidate: 'responses', status: 200, outcome: 'accepted' },
-  ]);
-  assert.equal(https.calls[0].options.path, '/v1/models');
-  assert.equal(https.calls[0].options.headers.Authorization, 'Bearer sk-good');
-  assert.equal(https.calls[1].options.path, '/v1/responses');
-  assert.deepEqual(JSON.parse(https.calls[1].body), { model: 'glm-5.2', input: 'ping', max_output_tokens: 16, stream: false });
+  assert.deepEqual(result.dialect, {
+    wireApi: 'chat',
+    baseUrl: 'https://provider.example/v1',
+    authProfileRevision: 1,
+    detectedAt: 1000,
+    evidence: 'chat-missing-messages',
+  });
+  assert.equal(requestImpl.calls.length, 3);
 });
 
-test('detectProviderDialect falls through bearer to x-api-key and chat', async () => {
-  const https = makeHttps([
-    { status: 401, body: 'no' },
-    { status: 200, body: modelBody('chat-model') },
-    { status: 404, body: 'missing' },
-    { status: 200, body: '{}' },
+test('accepts only schema-specific Responses and Chat success objects', async () => {
+  const responsesRequest = sequenceRequest([
+    jsonResult(200, { data: [{ id: 'model-r' }] }),
+    jsonResult(200, { id: 'resp_1', object: 'response', output: [] }),
   ]);
+  const responses = await detectProviderDialect({
+    provider: providerFixture(),
+    resolveRequestProfile: resolvedProfiles(),
+    requestImpl: responsesRequest,
+    now: () => 2000,
+  });
+  assert.equal(responses.ok, true);
+  assert.equal(responses.dialect.wireApi, 'responses');
+  assert.equal(responses.dialect.evidence, 'responses-success-schema');
 
+  const chatRequest = sequenceRequest([
+    jsonResult(200, { data: [{ id: 'model-c' }] }),
+    jsonResult(404, { error: { message: 'missing' } }),
+    jsonResult(200, { id: 'chatcmpl_1', object: 'chat.completion', choices: [] }),
+  ]);
+  const chat = await detectProviderDialect({
+    provider: providerFixture(),
+    resolveRequestProfile: resolvedProfiles(),
+    requestImpl: chatRequest,
+    now: () => 3000,
+  });
+  assert.equal(chat.ok, true);
+  assert.equal(chat.dialect.wireApi, 'chat');
+  assert.equal(chat.dialect.evidence, 'chat-success-schema');
+});
+
+test('recognizes only endpoint-specific missing input and messages errors', async () => {
+  const responsesRequest = sequenceRequest([
+    jsonResult(200, { data: [{ id: 'model-r' }] }),
+    jsonResult(400, { error: { param: 'input', code: 'missing_required_parameter' } }),
+  ]);
+  const responses = await detectProviderDialect({
+    provider: providerFixture(),
+    resolveRequestProfile: resolvedProfiles(),
+    requestImpl: responsesRequest,
+  });
+  assert.equal(responses.ok, true);
+  assert.equal(responses.dialect.evidence, 'responses-missing-input');
+
+  const chatRequest = sequenceRequest([
+    jsonResult(200, { data: [{ id: 'model-c' }] }),
+    jsonResult(400, { error: { param: 'other' } }),
+    jsonResult(400, { error: { param: 'messages', code: 'missing_required_parameter' } }),
+  ]);
+  const chat = await detectProviderDialect({
+    provider: providerFixture(),
+    resolveRequestProfile: resolvedProfiles(),
+    requestImpl: chatRequest,
+  });
+  assert.equal(chat.ok, true);
+  assert.equal(chat.dialect.evidence, 'chat-missing-messages');
+});
+
+test('HTML, WAF-shaped errors, and redirects remain dialect-incompatible', async () => {
+  for (const endpointResults of [
+    [
+      { status: 400, headers: { 'content-type': 'text/html' }, body: '<html>bad request</html>' },
+      { status: 404, headers: { 'content-type': 'text/plain' }, body: 'missing' },
+    ],
+    [
+      jsonResult(400, { error: { message: 'request blocked by policy' } }),
+      jsonResult(503, { error: { message: 'upstream unavailable' } }),
+    ],
+    [
+      { status: 302, headers: { location: 'https://login.example/' }, body: '' },
+      { status: 307, headers: { location: 'https://login.example/' }, body: '' },
+    ],
+  ]) {
+    const requestImpl = sequenceRequest([
+      jsonResult(200, { data: [{ id: 'model-1' }] }),
+      ...endpointResults,
+    ]);
+    const result = await detectProviderDialect({
+      provider: providerFixture(),
+      resolveRequestProfile: resolvedProfiles(),
+      requestImpl,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'dialect-incompatible');
+  }
+});
+
+test('classifies model authentication, path, configuration, and network failures', async () => {
+  for (const status of [401, 403]) {
+    const requestImpl = sequenceRequest([jsonResult(status, { error: { message: 'denied' } })]);
+    const result = await detectProviderDialect({
+      provider: providerFixture(),
+      resolveRequestProfile: resolvedProfiles(),
+      requestImpl,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'authentication');
+    assert.equal(requestImpl.calls.length, 1);
+  }
+
+  const missing = await detectProviderDialect({
+    provider: providerFixture(),
+    resolveRequestProfile: resolvedProfiles(),
+    requestImpl: sequenceRequest([jsonResult(404, { error: { message: 'missing' } })]),
+  });
+  assert.equal(missing.ok, false);
+  assert.equal(missing.reason, 'path-unsupported');
+
+  const networkSecret = 'network-secret-that-must-not-escape';
+  const network = await detectProviderDialect({
+    provider: providerFixture(),
+    resolveRequestProfile: resolvedProfiles(),
+    requestImpl: sequenceRequest([new Error(`ECONNRESET ${networkSecret}`)]),
+  });
+  assert.equal(network.ok, false);
+  assert.equal(network.reason, 'network');
+  assert.equal(JSON.stringify(network).includes(networkSecret), false);
+
+  const configurationSecret = 'configuration-secret-that-must-not-escape';
+  const configuration = await detectProviderDialect({
+    provider: providerFixture(),
+    resolveRequestProfile: async () => { throw new Error(configurationSecret); },
+    requestImpl: sequenceRequest([]),
+  });
+  assert.equal(configuration.ok, false);
+  assert.equal(configuration.reason, 'configuration');
+  assert.equal(JSON.stringify(configuration).includes(configurationSecret), false);
+});
+
+test('uses probe auth for models and model auth for endpoint semantics without returning values', async () => {
+  const probeSecret = 'probe-secret-exact';
+  const modelSecret = 'model-secret-exact';
+  const requestImpl = sequenceRequest([
+    jsonResult(200, { data: [{ id: 'model-1' }] }),
+    jsonResult(422, { error: { param: 'input', code: 'missing_required_parameter' } }),
+  ]);
   const result = await detectProviderDialect({
-    baseUrl: 'https://provider.example',
-    apiKey: 'sk-x',
-    httpsImpl: https,
-    now: () => 456,
+    provider: providerFixture(),
+    resolveRequestProfile: resolvedProfiles({ probeSecret, modelSecret }),
+    requestImpl,
+    now: () => 4000,
   });
 
-  assert.equal(result.ok, true);
-  assert.deepEqual(result.dialect, { wireApi: 'chat', authScheme: 'x-api-key', source: 'detected', updatedAt: 456 });
-  assert.equal(https.calls[1].options.headers['x-api-key'], 'sk-x');
-  assert.equal(https.calls[2].options.path, '/v1/responses');
-  assert.equal(https.calls[3].options.path, '/v1/chat/completions');
-  assert.deepEqual(result.tried, [
-    { step: 'auth', candidate: 'bearer', status: 401, outcome: 'rejected' },
-    { step: 'auth', candidate: 'x-api-key', status: 200, outcome: 'accepted' },
-    { step: 'wire', candidate: 'responses', status: 404, outcome: 'rejected' },
-    { step: 'wire', candidate: 'chat', status: 200, outcome: 'accepted' },
+  assert.equal(requestImpl.calls[0].headers['x-probe-token'], probeSecret);
+  assert.equal(requestImpl.calls[0].headers['x-probe-feature'], 'probe-enabled');
+  assert.equal(requestImpl.calls[1].headers.authorization, `Bearer ${modelSecret}`);
+  assert.equal(requestImpl.calls[1].headers['x-model-feature'], 'model-enabled');
+  assert.equal(JSON.stringify(result).includes(probeSecret), false);
+  assert.equal(JSON.stringify(result).includes(modelSecret), false);
+  assert.deepEqual(result.tried.map((entry) => entry.headerNames), [
+    ['x-probe-feature', 'x-probe-token'],
+    ['authorization', 'content-type', 'x-model-feature'],
   ]);
 });
 
-test('detectProviderDialect tries only none auth when apiKey is empty', async () => {
-  const https = makeHttps([
-    { status: 200, body: modelBody('public-model') },
-    { status: 200, body: '{}' },
-  ]);
-
+test('rejects non-openai-compatible providers without resolving credentials', async () => {
+  let resolves = 0;
   const result = await detectProviderDialect({
-    baseUrl: 'https://public.example',
-    apiKey: '',
-    httpsImpl: https,
-    now: () => 789,
+    provider: providerFixture({ protocol: 'anthropic' }),
+    resolveRequestProfile: async () => { resolves += 1; },
+    requestImpl: sequenceRequest([]),
   });
-
-  assert.equal(result.ok, true);
-  assert.equal(result.dialect.authScheme, 'none');
-  assert.equal(https.calls.length, 2);
-  assert.deepEqual(https.calls[0].options.headers, {});
-  assert.deepEqual(result.tried.map((t) => t.candidate), ['none', 'responses']);
-});
-
-test('detectProviderDialect reports auth when all model auth attempts are rejected', async () => {
-  const https = makeHttps([
-    { status: 401, body: 'bearer no' },
-    { status: 403, body: 'x no' },
-    { status: 401, body: 'none no' },
-  ]);
-
-  const result = await detectProviderDialect({
-    baseUrl: 'https://locked.example',
-    apiKey: 'sk-bad',
-    httpsImpl: https,
-  });
-
   assert.equal(result.ok, false);
-  assert.equal(result.reason, 'auth');
-  assert.equal(https.calls.length, 3);
-  assert.deepEqual(result.tried.map((t) => t.candidate), ['bearer', 'x-api-key', 'none']);
+  assert.equal(result.reason, 'configuration');
+  assert.equal(resolves, 0);
 });
 
-test('detectProviderDialect stops immediately on network error', async () => {
-  const https = makeHttps([
-    { error: 'ECONNREFUSED' },
-    { status: 200, body: modelBody('should-not-run') },
-  ]);
+test('effectiveProviderDialect prefers override and validates detected cache identity and age', () => {
+  const nowMs = 100_000_000;
+  const detected = {
+    wireApi: 'chat',
+    baseUrl: 'https://provider.example/v1/',
+    authProfileRevision: 1,
+    detectedAt: nowMs - 86_400_000,
+    evidence: 'chat-success-schema',
+  };
+  const base = providerFixture({ dialect: { override: null, detected } });
 
-  const result = await detectProviderDialect({
-    baseUrl: 'https://down.example',
-    apiKey: 'sk-down',
-    httpsImpl: https,
+  assert.equal(effectiveProviderDialect(base, { now: () => nowMs }), 'chat');
+  assert.equal(effectiveProviderDialect({ ...base, baseUrl: 'https://other.example/v1' }, { now: () => nowMs }), null);
+  assert.equal(effectiveProviderDialect({ ...base, authProfileRevision: 2 }, { now: () => nowMs }), null);
+  assert.equal(effectiveProviderDialect({
+    ...base,
+    dialect: { override: null, detected: { ...detected, detectedAt: nowMs + 1 } },
+  }, { now: () => nowMs }), null);
+  assert.equal(effectiveProviderDialect({
+    ...base,
+    dialect: { override: null, detected: { ...detected, detectedAt: nowMs - 86_400_001 } },
+  }, { now: () => nowMs }), null);
+
+  const overridden = providerFixture({
+    baseUrl: 'https://changed.example/v1',
+    authProfileRevision: 9,
+    dialect: {
+      override: { wireApi: 'responses', source: 'manual', updatedAt: 1 },
+      detected,
+    },
   });
-
-  assert.equal(result.ok, false);
-  assert.equal(result.reason, 'network');
-  assert.equal(https.calls.length, 1);
-  assert.deepEqual(result.tried, [{ step: 'auth', candidate: 'bearer', status: 0, outcome: 'network' }]);
-});
-
-test('detectProviderDialect accepts responses on 400 JSON error object', async () => {
-  const https = makeHttps([
-    { status: 200, body: modelBody('strict-model') },
-    { status: 400, body: JSON.stringify({ error: { message: 'unsupported parameter' } }) },
-    { status: 200, body: '{}' },
-  ]);
-
-  const result = await detectProviderDialect({
-    baseUrl: 'https://strict.example',
-    apiKey: 'sk-strict',
-    httpsImpl: https,
-  });
-
-  assert.equal(result.ok, true);
-  assert.equal(result.dialect.wireApi, 'responses');
-  assert.equal(https.calls.length, 2);
-  assert.deepEqual(result.tried.at(-1), { step: 'wire', candidate: 'responses', status: 400, outcome: 'accepted' });
-});
-
-test('detectProviderDialect reports wire-undetected when responses and chat are missing', async () => {
-  const https = makeHttps([
-    { status: 200, body: modelBody('model') },
-    { status: 404, body: 'not found' },
-    { status: 404, body: 'not found' },
-  ]);
-
-  const result = await detectProviderDialect({
-    baseUrl: 'https://models-only.example',
-    apiKey: 'sk-wire',
-    httpsImpl: https,
-  });
-
-  assert.equal(result.ok, false);
-  assert.equal(result.reason, 'wire-undetected');
-  assert.deepEqual(result.tried.slice(1), [
-    { step: 'wire', candidate: 'responses', status: 404, outcome: 'rejected' },
-    { step: 'wire', candidate: 'chat', status: 404, outcome: 'rejected' },
-  ]);
-});
-
-test('detectProviderDialect skips anthropic providers', async () => {
-  const https = makeHttps([{ status: 200, body: modelBody('unused') }]);
-
-  const result = await detectProviderDialect({
-    baseUrl: 'https://api.anthropic.com',
-    apiKey: 'sk-a',
-    protocol: 'anthropic',
-    httpsImpl: https,
-  });
-
-  assert.equal(result.ok, false);
-  assert.equal(result.reason, 'not-applicable');
-  assert.deepEqual(result.tried, []);
-  assert.equal(https.calls.length, 0);
-});
-
-test('detectProviderDialect does not include apiKey in tried or detail', async () => {
-  const apiKey = 'sk-test-secret-1234567890';
-  const https = makeHttps([
-    { status: 401, body: 'Authorization: Bearer ' + apiKey },
-    { status: 403, body: 'x-api-key=' + apiKey },
-    { status: 401, body: 'apiKey=' + apiKey },
-  ]);
-
-  const result = await detectProviderDialect({
-    baseUrl: 'https://secret.example',
-    apiKey,
-    httpsImpl: https,
-  });
-
-  assert.equal(result.ok, false);
-  assert.equal(result.reason, 'auth');
-  assert.doesNotMatch(JSON.stringify(result.tried), new RegExp(apiKey));
-  assert.doesNotMatch(result.detail, new RegExp(apiKey));
+  assert.equal(effectiveProviderDialect(overridden, { now: () => nowMs }), 'responses');
 });

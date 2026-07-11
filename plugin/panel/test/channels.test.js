@@ -28,7 +28,7 @@ test('codexChannels: cli login state + custom provider channel', () => {
   assert.match(list[0].detail, /codex\.exe/);
   assert.equal(list[2].channel, 'custom');
   assert.equal(list[2].ok, false);
-  const custom = codexChannels({ codexProbe: { loggedIn: false, runtimeOk: true }, customProvider: { baseUrl: 'https://r' }, customProviderAvailable: true, customProviderCredentialResolverReady: true });
+  const custom = codexChannels({ codexProbe: { loggedIn: false, runtimeOk: true }, customProvider: { baseUrl: 'https://r' }, customProviderAvailable: true, customProviderCredentialResolverReady: true, customProviderDialect: 'responses' });
   assert.equal(custom.find((c) => c.channel === 'custom').ok, true);
   assert.match(codexChannels({ codexProbe: { loggedIn: false } }).find((c) => c.channel === 'cli').fixHint.zh, /AE_MCP_CODEX_CLI/);
 });
@@ -75,6 +75,7 @@ test('codexChannels: custom provider outranks cli-config in pickChannel when bot
     customProvider: { baseUrl: 'https://custom.example/v1' },
     customProviderAvailable: true,
     customProviderCredentialResolverReady: true,
+    customProviderDialect: 'chat',
     cliConfig: { model: 'gpt-5.5', providerId: 'mediastorm_glm', provider: { name: 'MediaStorm GLM', baseUrl: 'https://api.example.com/v1', envKey: 'MEDIASTORM_GLM_API_KEY', wireApi: 'responses' } },
     cliCredentialAvailable: true,
   });
@@ -94,6 +95,18 @@ test('codex custom provider stays unavailable until the Task9 credential resolve
   }).find((channel) => channel.channel === 'custom');
   assert.equal(custom.ok, false);
   assert.match(custom.fixHint.en, /Codex CLI|credential routing/i);
+});
+
+test('codex custom provider stays unavailable until its effective dialect is confirmed', () => {
+  const custom = codexChannels({
+    codexProbe: { loggedIn: false, runtimeOk: true },
+    customProvider: { baseUrl: 'https://custom.example/v1' },
+    customProviderAvailable: true,
+    customProviderCredentialResolverReady: true,
+    customProviderDialect: null,
+  }).find((channel) => channel.channel === 'custom');
+  assert.equal(custom.ok, false);
+  assert.match(custom.fixHint.en, /dialect|re-detect/i);
 });
 
 test('provider channels use non-secret availability and can stay checking during migration', () => {

@@ -13462,7 +13462,7 @@
   // src/lib/providerProfile.js
   var DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com";
   var DEFAULT_CODEX_PROVIDER_ID = "ae_mcp_custom";
-  var DEFAULT_CODEX_WIRE_API = "responses";
+  var PROVIDER_DIALECT_MAX_AGE_MS = 864e5;
   var RESERVED_CODEX_PROVIDER_IDS = /* @__PURE__ */ new Set(["openai", "amazon-bedrock", "ollama", "lmstudio"]);
   var PROVIDER_ENTRY_KEYS = [
     "allowInsecureHttp",
@@ -13502,13 +13502,6 @@
   var SECRET_LIKE_PATH_LITERAL = /(?:Bearer\s+\S{8,}|Basic\s+\S{8,}|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,})/i;
   var HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
   var MAX_PERCENT_DECODE_LAYERS = 3;
-  function firstValue(...values) {
-    for (const value of values) {
-      const text = String(value || "").trim();
-      if (text) return text;
-    }
-    return "";
-  }
   function normalizeBaseUrl(value) {
     return String(value || "").trim().replace(/\/+$/, "");
   }
@@ -13699,7 +13692,7 @@
       }
       detected = {
         wireApi: value.detected.wireApi,
-        baseUrl: normalizeBaseUrl(requireText(value.detected.baseUrl)),
+        baseUrl: validateProviderBaseUrl(requireText(value.detected.baseUrl)),
         authProfileRevision: requireRevision(value.detected.authProfileRevision),
         detectedAt: requireTimestamp(value.detected.detectedAt),
         evidence: value.detected.evidence
@@ -13740,33 +13733,32 @@
       probedAt: requireTimestamp(input.probedAt)
     };
   }
+  function effectiveProviderDialect(provider, {
+    now = Date.now,
+    maxAgeMs = PROVIDER_DIALECT_MAX_AGE_MS
+  } = {}) {
+    if (!provider || provider.protocol !== "openai-compatible") return null;
+    const state = provider.dialect;
+    if (!state || typeof state !== "object" || Array.isArray(state)) return null;
+    const override = state.override;
+    if (override && WIRE_APIS.has(override.wireApi)) return override.wireApi;
+    const detected = state.detected;
+    if (!detected || !WIRE_APIS.has(detected.wireApi)) return null;
+    if (normalizeBaseUrl(provider.baseUrl) !== normalizeBaseUrl(detected.baseUrl)) return null;
+    if (provider.authProfileRevision !== detected.authProfileRevision) return null;
+    const currentTime = typeof now === "function" ? now() : Date.now();
+    const ageLimit = Number.isFinite(maxAgeMs) && maxAgeMs >= 0 ? maxAgeMs : PROVIDER_DIALECT_MAX_AGE_MS;
+    if (!Number.isFinite(currentTime) || detected.detectedAt > currentTime) return null;
+    if (currentTime - detected.detectedAt > ageLimit) return null;
+    return detected.wireApi;
+  }
   function normalizeProviderId(value) {
     const raw = String(value || "").trim() || DEFAULT_CODEX_PROVIDER_ID;
     const safe = raw.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || DEFAULT_CODEX_PROVIDER_ID;
     return RESERVED_CODEX_PROVIDER_IDS.has(safe) ? safe + "-custom" : safe;
   }
-  function normalizeCodexWireApi(value) {
-    const text = String(value || "").trim();
-    return text === "responses" || text === "chat" ? text : DEFAULT_CODEX_WIRE_API;
-  }
-  function normalizeCodexAuthScheme(value) {
-    const text = String(value || "").trim();
-    return text === "x-api-key" || text === "none" || text === "bearer" ? text : "bearer";
-  }
   function tomlString(value) {
     return JSON.stringify(String(value || ""));
-  }
-  function normalizeProviderProfile(input = {}, env = {}) {
-    const codexBaseUrl = normalizeBaseUrl(firstValue(input.codexBaseUrl, env.AE_MCP_CODEX_BASE_URL));
-    const anthropicBaseUrl = normalizeBaseUrl(firstValue(input.anthropicBaseUrl, env.AE_MCP_ANTHROPIC_BASE_URL));
-    return {
-      codexApiKey: firstValue(input.codexApiKey, env.AE_MCP_CODEX_API_KEY),
-      codexBaseUrl,
-      codexProviderId: normalizeProviderId(firstValue(input.codexProviderId, env.AE_MCP_CODEX_PROVIDER_ID)),
-      codexWireApi: normalizeCodexWireApi(firstValue(input.codexWireApi, env.AE_MCP_CODEX_WIRE_API)),
-      codexAuthScheme: normalizeCodexAuthScheme(firstValue(input.codexAuthScheme, env.AE_MCP_CODEX_AUTH_SCHEME)),
-      anthropicBaseUrl
-    };
   }
   function codexRuntimeProviderProfile({
     effectiveChannel,
@@ -13774,35 +13766,76 @@
     customProviderCredentialResolverReady = false
   } = {}) {
     if (effectiveChannel !== "custom" || customProviderCredentialResolverReady !== true || !customProvider || customProvider.protocol !== "openai-compatible") {
-      return normalizeProviderProfile({});
+      return null;
     }
     const normalized = normalizeProviderEntryV2(customProvider);
-    return normalizeProviderProfile({ codexBaseUrl: normalized.baseUrl });
+    const dialect = effectiveProviderDialect(normalized);
+    return dialect ? { provider: normalized, dialect } : null;
   }
-  function codexAppServerArgs(profile = {}) {
-    const normalized = normalizeProviderProfile(profile);
-    if (!normalized.codexBaseUrl) return ["app-server"];
-    const provider = normalized.codexProviderId;
-    return [
+  function normalizeCodexRuntimeConfig(runtimeConfig) {
+    if (!runtimeConfig || !runtimeConfig.baseUrl) return null;
+    if (!Array.isArray(runtimeConfig.envHeaders) || runtimeConfig.envHeaders.length > 64) {
+      throw providerProfileError();
+    }
+    const names = /* @__PURE__ */ new Set();
+    const envNames = /* @__PURE__ */ new Set();
+    const envHeaders = runtimeConfig.envHeaders.map((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw providerProfileError();
+      const name = normalizeHeaderName(entry.name);
+      const envName = requireText(entry.envName);
+      if (!/^AE_MCP_PROVIDER_HEADER_[0-9]{2}$/.test(envName)) throw providerProfileError();
+      const lower = name.toLowerCase();
+      if (names.has(lower) || envNames.has(envName)) throw providerProfileError();
+      names.add(lower);
+      envNames.add(envName);
+      return {
+        name,
+        envName,
+        value: entry.value === void 0 ? void 0 : String(entry.value)
+      };
+    });
+    return {
+      providerId: normalizeProviderId(runtimeConfig.providerId),
+      baseUrl: normalizeBaseUrl(requireText(runtimeConfig.baseUrl)),
+      envHeaders
+    };
+  }
+  function codexAppServerArgs(runtimeConfig = null) {
+    const runtime = normalizeCodexRuntimeConfig(runtimeConfig);
+    if (!runtime) return ["app-server"];
+    const provider = runtime.providerId;
+    const args = [
       "app-server",
       "-c",
       `model_provider=${tomlString(provider)}`,
       "-c",
       `model_providers.${provider}.name="AE MCP Custom"`,
       "-c",
-      `model_providers.${provider}.base_url=${tomlString(normalized.codexBaseUrl)}`,
+      `model_providers.${provider}.base_url=${tomlString(runtime.baseUrl)}`
+    ];
+    for (const header of runtime.envHeaders) {
+      args.push("-c", `model_providers.${provider}.env_http_headers.${tomlString(header.name)}=${tomlString(header.envName)}`);
+    }
+    args.push(
       "-c",
-      `model_providers.${provider}.env_key="AE_MCP_CODEX_API_KEY"`,
-      "-c",
-      `model_providers.${provider}.wire_api=${tomlString(normalized.codexWireApi)}`,
+      `model_providers.${provider}.wire_api="responses"`,
       "-c",
       `model_providers.${provider}.requires_openai_auth=false`
-    ];
+    );
+    return args;
   }
-  function codexSpawnEnv(profile = {}, baseEnv = {}) {
-    const normalized = normalizeProviderProfile(profile, baseEnv);
+  function codexSpawnEnv(runtimeConfig = null, baseEnv = {}) {
+    const runtime = normalizeCodexRuntimeConfig(runtimeConfig);
     const env = { ...baseEnv || {} };
-    if (normalized.codexApiKey) env.AE_MCP_CODEX_API_KEY = normalized.codexApiKey;
+    if (!runtime) return env;
+    delete env.AE_MCP_CODEX_API_KEY;
+    for (const key of Object.keys(env)) {
+      if (/^AE_MCP_PROVIDER_HEADER_[0-9]{2}$/.test(key)) delete env[key];
+    }
+    for (const header of runtime.envHeaders) {
+      if (header.value === void 0) throw providerProfileError();
+      env[header.envName] = header.value;
+    }
     return env;
   }
   function anthropicEndpoint(baseUrl, apiPath) {
@@ -14291,6 +14324,74 @@
     return { action: "decline", content: {} };
   }
 
+  // src/lib/exactSecretRedaction.js
+  function sensitiveValues(profile) {
+    var _a;
+    const values = [];
+    if (typeof ((_a = profile == null ? void 0 : profile.auth) == null ? void 0 : _a.value) === "string" && profile.auth.value) {
+      values.push(profile.auth.value);
+      const scheme = profile.auth.value.match(/^(?:Bearer|Basic)\s+(.+)$/i);
+      if (scheme == null ? void 0 : scheme[1]) values.push(scheme[1]);
+    }
+    for (const header of (profile == null ? void 0 : profile.extraHeaders) || []) {
+      if (typeof (header == null ? void 0 : header.value) === "string" && header.value) values.push(header.value);
+    }
+    return Array.from(new Set(values)).sort((a, b) => b.length - a.length);
+  }
+  function normalizedSecrets(values) {
+    return Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((a, b) => b.length - a.length);
+  }
+  function redactText(value, values = []) {
+    let text = String(value == null ? "" : value);
+    const secrets = normalizedSecrets(values);
+    const marker = secrets.some((secret) => "[redacted]".includes(secret)) ? "" : "[redacted]";
+    const maximumPasses = Math.max(1, secrets.length * 4 + 8);
+    for (let pass = 0; pass < maximumPasses; pass += 1) {
+      let changed = false;
+      for (const secret of secrets) {
+        if (!text.includes(secret)) continue;
+        text = text.split(secret).join(marker);
+        changed = true;
+      }
+      if (!changed) return text;
+    }
+    return secrets.some((secret) => text.includes(secret)) ? "" : text;
+  }
+  function redactValue(value, values = []) {
+    if (typeof value === "string") return redactText(value, values);
+    if (Array.isArray(value)) return value.map((item) => redactValue(item, values));
+    if (!value || typeof value !== "object") return value;
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactValue(item, values)]));
+  }
+  function createDeltaRedactor(values, emitText) {
+    const secrets = normalizedSecrets(values);
+    let buffer = "";
+    const keep = secrets.reduce((maximum, value) => Math.max(maximum, value.length - 1), 0);
+    return {
+      feed(delta) {
+        if (!secrets.length) {
+          emitText(String(delta || ""));
+          return;
+        }
+        buffer = redactText(buffer + String(delta || ""), secrets);
+        if (buffer.length > keep) {
+          emitText(buffer.slice(0, buffer.length - keep));
+          buffer = buffer.slice(buffer.length - keep);
+        }
+      },
+      flush() {
+        if (buffer) emitText(redactText(buffer, secrets));
+        buffer = "";
+      },
+      discard() {
+        buffer = "";
+      }
+    };
+  }
+  function safeErrorMessage(error, values = []) {
+    return redactText(error && error.message ? error.message : "Agent loop failed.", values);
+  }
+
   // src/lib/agentLoop.js
   var MAX_TOOL_ROUNDS = 25;
   function clone(value) {
@@ -14349,57 +14450,6 @@
     const sessionAllowedTools = /* @__PURE__ */ new Set();
     function emit(evt) {
       if (onEvent) onEvent(evt);
-    }
-    function sensitiveValues(profile) {
-      var _a;
-      const values = [];
-      if (typeof ((_a = profile == null ? void 0 : profile.auth) == null ? void 0 : _a.value) === "string" && profile.auth.value) {
-        values.push(profile.auth.value);
-        const scheme = profile.auth.value.match(/^(?:Bearer|Basic)\s+(.+)$/i);
-        if (scheme == null ? void 0 : scheme[1]) values.push(scheme[1]);
-      }
-      for (const header of (profile == null ? void 0 : profile.extraHeaders) || []) {
-        if (typeof (header == null ? void 0 : header.value) === "string" && header.value) values.push(header.value);
-      }
-      return values.sort((a, b) => b.length - a.length);
-    }
-    function redactText(value, values) {
-      let text = String(value == null ? "" : value);
-      for (const secret of values) text = text.split(secret).join("[redacted]");
-      return text;
-    }
-    function redactValue(value, values) {
-      if (typeof value === "string") return redactText(value, values);
-      if (Array.isArray(value)) return value.map((item) => redactValue(item, values));
-      if (!value || typeof value !== "object") return value;
-      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactValue(item, values)]));
-    }
-    function createDeltaRedactor(values, emitText) {
-      let buffer = "";
-      const keep = values.reduce((maximum, value) => Math.max(maximum, value.length - 1), 0);
-      return {
-        feed(delta) {
-          if (!values.length) {
-            emitText(String(delta || ""));
-            return;
-          }
-          buffer = redactText(buffer + String(delta || ""), values);
-          if (buffer.length > keep) {
-            emitText(buffer.slice(0, buffer.length - keep));
-            buffer = buffer.slice(buffer.length - keep);
-          }
-        },
-        flush() {
-          if (buffer) emitText(redactText(buffer, values));
-          buffer = "";
-        },
-        discard() {
-          buffer = "";
-        }
-      };
-    }
-    function safeErrorMessage(error, values) {
-      return redactText(error && error.message ? error.message : "Agent loop failed.", values);
     }
     function resetPendingApprovals() {
       for (const [id, pending] of pendingApprovals) {
@@ -16027,6 +16077,7 @@
     customProvider,
     customProviderAvailable,
     customProviderCredentialResolverReady = false,
+    customProviderDialect = null,
     providerChecking = false,
     cliConfig,
     cliCredentialAvailable
@@ -16055,10 +16106,10 @@
       source: { zh: "\u81EA\u5B9A\u4E49 provider", en: "Custom provider" },
       checking: Boolean(providerChecking),
       ok: Boolean(
-        !providerChecking && (customProvider == null ? void 0 : customProvider.baseUrl) && (customProviderAvailable === void 0 ? providerHasCredentialPolicy(customProvider) : customProviderAvailable) && customProviderCredentialResolverReady === true && (!codexProbe || codexProbe.runtimeOk !== false)
+        !providerChecking && (customProvider == null ? void 0 : customProvider.baseUrl) && (customProviderAvailable === void 0 ? providerHasCredentialPolicy(customProvider) : customProviderAvailable) && customProviderCredentialResolverReady === true && (customProviderDialect === "responses" || customProviderDialect === "chat") && (!codexProbe || codexProbe.runtimeOk !== false)
       ),
       detail: customProvider && customProvider.baseUrl ? customProvider.baseUrl : "",
-      fixHint: customProvider && customProviderAvailable === false && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1A\u4FEE\u590D\u5E73\u53F0 Helper \u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Repair the platform Helper and re-check; plaintext provider fallback is disabled." } : customProvider && customProviderCredentialResolverReady !== true ? { zh: "\u6B64\u7248\u672C\u5C1A\u672A\u63A5\u901A Codex \u81EA\u5B9A\u4E49 provider \u7684\u51ED\u636E\u8DEF\u7531\uFF1B\u8BF7\u5148\u4F7F\u7528 Codex CLI \u767B\u5F55\u6216 CLI provider \u914D\u7F6E\u3002", en: "Custom provider credential routing is not connected yet; use Codex CLI login or a CLI provider configuration." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E/\u9009\u62E9\u4E00\u4E2A OpenAI \u517C\u5BB9 provider\uFF08Base URL + Key\uFF09\u3002", en: "Add or pick an OpenAI-compatible provider (base URL + key) in Provider Manager." }
+      fixHint: customProvider && customProviderAvailable === false && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1A\u4FEE\u590D\u5E73\u53F0 Helper \u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Repair the platform Helper and re-check; plaintext provider fallback is disabled." } : customProvider && customProviderCredentialResolverReady !== true ? { zh: "\u6B64\u7248\u672C\u5C1A\u672A\u63A5\u901A Codex \u81EA\u5B9A\u4E49 provider \u7684\u51ED\u636E\u8DEF\u7531\uFF1B\u8BF7\u5148\u4F7F\u7528 Codex CLI \u767B\u5F55\u6216 CLI provider \u914D\u7F6E\u3002", en: "Custom provider credential routing is not connected yet; use Codex CLI login or a CLI provider configuration." } : customProvider && customProviderDialect !== "responses" && customProviderDialect !== "chat" ? { zh: "Provider API \u65B9\u8A00\u5C1A\u672A\u786E\u8BA4\u6216\u5DF2\u8FC7\u671F\uFF1A\u8BF7\u5148\u5728 Provider \u7BA1\u7406\u4E2D\u91CD\u65B0\u63A2\u6D4B\u3002", en: "The provider API dialect is unconfirmed or stale. Re-detect it in Provider Manager first." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E/\u9009\u62E9\u4E00\u4E2A OpenAI \u517C\u5BB9 provider\uFF08Base URL + Key\uFF09\u3002", en: "Add or pick an OpenAI-compatible provider (base URL + key) in Provider Manager." }
     };
     return custom.ok ? [cli, custom, cliConfigChannel] : [cli, cliConfigChannel, custom];
   }
@@ -17013,243 +17064,893 @@
     });
   }
 
-  // src/cep/codexResponsesRoute.js
-  function getCepRequire() {
-    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-      return globalThis.window.cep_node.require;
+  // src/lib/providerHeaders.js
+  var RFC_TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+  var INBOUND_EXACT = /* @__PURE__ */ new Set([
+    "accept",
+    "content-type",
+    "openai-beta",
+    "user-agent",
+    "x-client-request-id",
+    "x-request-id",
+    "traceparent",
+    "tracestate"
+  ]);
+  var LOCAL_ONLY = /* @__PURE__ */ new Set(["authorization", "host", "content-length", "connection", "transfer-encoding"]);
+  var FORBIDDEN_EXACT = /* @__PURE__ */ new Set([
+    "host",
+    "content-length",
+    "connection",
+    "transfer-encoding",
+    "upgrade",
+    "keep-alive",
+    "te",
+    "trailer",
+    "expect",
+    "cookie",
+    "set-cookie",
+    "forwarded",
+    "proxy-authorization",
+    "proxy-authenticate"
+  ]);
+  var RESPONSE_EXACT = /* @__PURE__ */ new Set([
+    "content-type",
+    "cache-control",
+    "retry-after",
+    "x-request-id",
+    "request-id",
+    "openai-request-id",
+    "x-goog-request-id",
+    "x-amzn-requestid"
+  ]);
+  var SENSITIVE_HEADER_NAME2 = /(?:^|[-_])(?:authorization|api[-_]?key|token|secret|password)(?:$|[-_])/i;
+  var SECRET_LIKE_LITERAL2 = /^(?:Bearer\s+\S+|Basic\s+\S+|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,})$/;
+  var JSON_MEDIA_TYPE = /^application\/(?:json|[!#$%&'*+.^_`|~0-9A-Za-z-]+\+json)(?:\s*;\s*charset=utf-8)?$/i;
+  var DEFAULT_LIMITS = Object.freeze({ maxValueBytes: 8 * 1024, maxTotalBytes: 32 * 1024, maxCount: 64 });
+  function headerError(code, message) {
+    const error = new Error(message);
+    error.code = code;
+    return error;
+  }
+  function resolvedLimits(limits = {}) {
+    const output = {};
+    for (const key of Object.keys(DEFAULT_LIMITS)) {
+      const candidate = Number(limits[key]);
+      output[key] = Number.isFinite(candidate) && candidate > 0 ? Math.min(DEFAULT_LIMITS[key], Math.floor(candidate)) : DEFAULT_LIMITS[key];
     }
-    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    throw new Error("CEP Node require is unavailable");
+    return output;
   }
-  function normalizeOpenAiRoot(baseUrl) {
-    return String(baseUrl || "").replace(/\/+$/, "").replace(/\/v1$/, "") + "/v1";
+  function isForbiddenName(name) {
+    return FORBIDDEN_EXACT.has(name) || name.startsWith("x-forwarded-") || name.startsWith("proxy-") || name.startsWith("sec-") || name.startsWith("x-ae-mcp-route-") || name === "x-ae-mcp-route-token";
   }
-  function authHeaders(authScheme, apiKey) {
-    if (authScheme === "x-api-key") return { "x-api-key": String(apiKey || "") };
-    if (authScheme === "none") return {};
-    return { Authorization: "Bearer " + String(apiKey || "") };
+  function validatesInboundName(name) {
+    return INBOUND_EXACT.has(name) || name.startsWith("x-stainless-") || name.startsWith("x-codex-");
   }
-  function textFromContent(content) {
+  function validateName(name) {
+    const value = String(name);
+    if (!RFC_TOKEN.test(value)) throw headerError("provider_header_invalid_name", "Provider header name is invalid.");
+    return value.toLowerCase();
+  }
+  function validateValue(value, limits) {
+    const text = String(value);
+    if (/[\r\n\0]/.test(text)) throw headerError("provider_header_invalid_value", "Provider header value is invalid.");
+    if (Buffer.byteLength(text, "utf8") > limits.maxValueBytes) {
+      throw headerError("provider_header_value_too_large", "Provider header value is too large.");
+    }
+    return text;
+  }
+  function fieldBytes(name, value) {
+    return Buffer.byteLength(`${name}: ${value}`, "utf8");
+  }
+  function checkAggregate(fields, limits) {
+    if (fields.length > limits.maxCount) {
+      throw headerError("provider_header_count_exceeded", "Provider header count is too large.");
+    }
+    const total = fields.reduce((sum, field) => sum + fieldBytes(field.name, field.value), 0);
+    if (total > limits.maxTotalBytes) {
+      throw headerError("provider_headers_too_large", "Provider headers are too large.");
+    }
+  }
+  function validateContentType(value) {
+    if (value && !JSON_MEDIA_TYPE.test(String(value))) {
+      throw headerError("provider_content_type_unsupported", "Provider request content type must be JSON.");
+    }
+  }
+  function collectCodexHeaders(rawHeaders = [], limits = {}) {
+    if (!Array.isArray(rawHeaders) || rawHeaders.length % 2 !== 0) {
+      throw headerError("provider_header_invalid", "Provider headers are malformed.");
+    }
+    const bounded = resolvedLimits(limits);
+    const seen = /* @__PURE__ */ new Set();
+    const all = [];
+    const forwarded = [];
+    for (let index = 0; index < rawHeaders.length; index += 2) {
+      const name = validateName(rawHeaders[index]);
+      const value = validateValue(rawHeaders[index + 1], bounded);
+      if (seen.has(name)) throw headerError("provider_header_duplicate", "Duplicate provider header is forbidden.");
+      seen.add(name);
+      all.push({ name, value });
+      if (LOCAL_ONLY.has(name)) continue;
+      if (isForbiddenName(name)) throw headerError("provider_header_forbidden", "Provider header is forbidden.");
+      if (!validatesInboundName(name)) continue;
+      if (SENSITIVE_HEADER_NAME2.test(name)) {
+        throw headerError("provider_header_forbidden", "Provider header is forbidden.");
+      }
+      if (name === "content-type") validateContentType(value);
+      forwarded.push({ name, value });
+    }
+    checkAggregate(all, bounded);
+    return forwarded;
+  }
+  function validateProviderHeaders(providerHeaders, authName, limits) {
+    if (!Array.isArray(providerHeaders)) throw headerError("provider_header_invalid", "Provider headers are invalid.");
+    const seen = /* @__PURE__ */ new Set();
+    const validated = [];
+    for (const header of providerHeaders) {
+      const name = validateName(header == null ? void 0 : header.name);
+      const value = validateValue(header == null ? void 0 : header.value, limits);
+      const source = header == null ? void 0 : header.source;
+      if (source !== "literal" && source !== "secret") {
+        throw headerError("provider_header_invalid", "Provider header source is invalid.");
+      }
+      if (seen.has(name)) throw headerError("provider_header_duplicate", "Duplicate provider header is forbidden.");
+      seen.add(name);
+      if (isForbiddenName(name) || name === "authorization" || name === "x-api-key" || name === authName) {
+        throw headerError("provider_header_forbidden", "Provider header is reserved.");
+      }
+      if (source !== "secret" && (SENSITIVE_HEADER_NAME2.test(name) || SECRET_LIKE_LITERAL2.test(value))) {
+        throw headerError("provider_header_secret_reference_required", "Provider header requires a secret reference.");
+      }
+      if (name === "content-type") validateContentType(value);
+      validated.push({ name, value });
+    }
+    return validated;
+  }
+  function validateAuth(auth, limits) {
+    if (!auth || auth.kind === "none") return { kind: "none" };
+    if (auth.kind !== "header") throw headerError("provider_header_invalid", "Provider auth header is invalid.");
+    const name = validateName(auth.name);
+    if (isForbiddenName(name)) throw headerError("provider_header_forbidden", "Provider auth header is forbidden.");
+    const value = validateValue(auth.value, limits);
+    return { kind: "header", name, value };
+  }
+  function mergeUpstreamHeaders({ rawHeaders = [], providerHeaders = [], auth = { kind: "none" }, contentType, limits } = {}) {
+    const bounded = resolvedLimits(limits);
+    const codex = collectCodexHeaders(rawHeaders, bounded);
+    const validatedAuth = validateAuth(auth, bounded);
+    const authName = validatedAuth.kind === "header" ? validatedAuth.name : "";
+    const extras = validateProviderHeaders(providerHeaders, authName, bounded);
+    const merged = {};
+    for (const field of codex) merged[field.name] = field.value;
+    if (contentType) {
+      validateContentType(contentType);
+      merged["content-type"] = String(contentType);
+    }
+    for (const field of extras) merged[field.name] = field.value;
+    if (validatedAuth.kind === "header") merged[validatedAuth.name] = validatedAuth.value;
+    if (merged["content-type"]) validateContentType(merged["content-type"]);
+    checkAggregate(Object.entries(merged).map(([name, value]) => ({ name, value })), bounded);
+    return merged;
+  }
+  function validateProviderRequestConfiguration(provider, scope, limits = {}) {
+    var _a, _b, _c, _d;
+    const bounded = resolvedLimits(limits);
+    const model = ((_a = provider == null ? void 0 : provider.auth) == null ? void 0 : _a.model) || { kind: "none" };
+    const probe = (_b = provider == null ? void 0 : provider.auth) == null ? void 0 : _b.probe;
+    const policy = scope === "probe" && (probe == null ? void 0 : probe.kind) !== "inherit-model" ? probe : model;
+    let authName = "";
+    if ((policy == null ? void 0 : policy.kind) === "bearer") authName = "authorization";
+    else if ((policy == null ? void 0 : policy.kind) === "x-api-key") authName = "x-api-key";
+    else if ((policy == null ? void 0 : policy.kind) === "custom") {
+      authName = validateName(policy.headerName);
+      if (isForbiddenName(authName)) throw headerError("provider_header_forbidden", "Provider auth header is forbidden.");
+    }
+    const relevant = [];
+    for (const header of (provider == null ? void 0 : provider.headers) || []) {
+      if (!Array.isArray(header == null ? void 0 : header.scopes) || !header.scopes.includes(scope)) continue;
+      relevant.push({
+        name: header.name,
+        value: ((_c = header.valueRef) == null ? void 0 : _c.kind) === "literal" ? header.valueRef.value : "resolved-secret",
+        source: ((_d = header.valueRef) == null ? void 0 : _d.kind) === "literal" ? "literal" : "secret"
+      });
+    }
+    const validated = validateProviderHeaders(relevant, authName, bounded);
+    checkAggregate(validated, bounded);
+  }
+  function filterUpstreamResponseHeaders(rawHeaders = []) {
+    if (!Array.isArray(rawHeaders)) return {};
+    const output = {};
+    for (let index = 0; index + 1 < rawHeaders.length; index += 2) {
+      const rawName = String(rawHeaders[index]);
+      if (!RFC_TOKEN.test(rawName)) continue;
+      const name = rawName.toLowerCase();
+      if (!RESPONSE_EXACT.has(name) && !name.startsWith("ratelimit-") && !name.startsWith("x-ratelimit-")) continue;
+      const value = String(rawHeaders[index + 1]);
+      if (/[\r\n\0]/.test(value)) continue;
+      output[name] = value;
+    }
+    return output;
+  }
+
+  // src/lib/codexResponsesCodec.js
+  var SUPPORTED_RESPONSE_FIELDS = /* @__PURE__ */ new Set([
+    "model",
+    "instructions",
+    "input",
+    "max_output_tokens",
+    "temperature",
+    "top_p",
+    "tools",
+    "tool_choice",
+    "parallel_tool_calls",
+    "stream"
+  ]);
+  var MESSAGE_FIELDS = /* @__PURE__ */ new Set(["type", "role", "content"]);
+  var TEXT_PART_FIELDS = /* @__PURE__ */ new Set(["type", "text"]);
+  var FUNCTION_CALL_FIELDS = /* @__PURE__ */ new Set(["type", "call_id", "name", "arguments"]);
+  var FUNCTION_OUTPUT_FIELDS = /* @__PURE__ */ new Set(["type", "call_id", "output"]);
+  var FUNCTION_TOOL_FIELDS = /* @__PURE__ */ new Set([
+    "type",
+    "name",
+    "description",
+    "parameters",
+    "strict"
+  ]);
+  var FUNCTION_CHOICE_FIELDS = /* @__PURE__ */ new Set(["type", "name"]);
+  var CHAT_COMPLETION_FIELDS = /* @__PURE__ */ new Set([
+    "id",
+    "object",
+    "created",
+    "model",
+    "choices",
+    "usage",
+    "system_fingerprint",
+    "service_tier"
+  ]);
+  var CHAT_CHOICE_FIELDS = /* @__PURE__ */ new Set([
+    "index",
+    "message",
+    "finish_reason",
+    "logprobs"
+  ]);
+  var CHAT_MESSAGE_FIELDS = /* @__PURE__ */ new Set(["role", "content", "tool_calls", "refusal"]);
+  var CHAT_TOOL_CALL_FIELDS = /* @__PURE__ */ new Set(["id", "type", "function"]);
+  var CHAT_FUNCTION_FIELDS = /* @__PURE__ */ new Set(["name", "arguments"]);
+  var CHAT_CHUNK_FIELDS = /* @__PURE__ */ new Set([
+    "id",
+    "object",
+    "created",
+    "model",
+    "choices",
+    "usage",
+    "system_fingerprint",
+    "service_tier"
+  ]);
+  var CHAT_STREAM_CHOICE_FIELDS = /* @__PURE__ */ new Set([
+    "index",
+    "delta",
+    "finish_reason",
+    "logprobs"
+  ]);
+  var CHAT_DELTA_FIELDS = /* @__PURE__ */ new Set(["role", "content", "tool_calls"]);
+  var CHAT_TOOL_DELTA_FIELDS = /* @__PURE__ */ new Set(["index", "id", "type", "function"]);
+  var CHAT_FUNCTION_DELTA_FIELDS = /* @__PURE__ */ new Set(["name", "arguments"]);
+  var FUNCTION_NAME = /^[A-Za-z0-9_-]{1,64}$/;
+  var ResponsesCompatibilityError = class extends Error {
+    constructor({ status, code, param, message }) {
+      super(message);
+      this.name = "ResponsesCompatibilityError";
+      this.status = status;
+      this.code = code;
+      this.param = param;
+    }
+  };
+  function unsupportedResponsesField(param) {
+    return new ResponsesCompatibilityError({
+      status: 400,
+      code: "unsupported_responses_field",
+      param,
+      message: `Unsupported Responses field: ${param}`
+    });
+  }
+  function invalidChatCompletion(param) {
+    return new ResponsesCompatibilityError({
+      status: 502,
+      code: "invalid_chat_completion",
+      param,
+      message: `Invalid Chat completion field: ${param}`
+    });
+  }
+  function invalidChatSse(param) {
+    return new ResponsesCompatibilityError({
+      status: 502,
+      code: "upstream_sse_malformed",
+      param,
+      message: `Malformed upstream Chat SSE: ${param}`
+    });
+  }
+  function oversizedChatSse() {
+    return new ResponsesCompatibilityError({
+      status: 502,
+      code: "upstream_sse_frame_too_large",
+      param: "sse",
+      message: "Upstream Chat SSE frame exceeds the configured limit."
+    });
+  }
+  function isObject(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  }
+  function unknownKey(value, allowed) {
+    return Object.keys(value).find((key) => !allowed.has(key)) || null;
+  }
+  function requestObject(value, param) {
+    if (!isObject(value)) throw unsupportedResponsesField(param);
+    return value;
+  }
+  function requestExact(value, allowed, param) {
+    const object = requestObject(value, param);
+    const key = unknownKey(object, allowed);
+    if (key !== null) throw unsupportedResponsesField(param ? `${param}.${key}` : key);
+    return object;
+  }
+  function requestString(value, param, allowEmpty = true) {
+    if (typeof value !== "string" || !allowEmpty && value.length === 0) {
+      throw unsupportedResponsesField(param);
+    }
+    return value;
+  }
+  function requestFunctionName(value, param) {
+    const name = requestString(value, param, false);
+    if (!FUNCTION_NAME.test(name)) throw unsupportedResponsesField(param);
+    return name;
+  }
+  function cloneRequestJson(value, param, seen = /* @__PURE__ */ new WeakSet()) {
+    if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) throw unsupportedResponsesField(param);
+      return value;
+    }
+    if (typeof value !== "object" || value === null || seen.has(value)) {
+      throw unsupportedResponsesField(param);
+    }
+    seen.add(value);
+    let result;
+    if (Array.isArray(value)) {
+      result = value.map((item) => cloneRequestJson(item, param, seen));
+    } else if (isObject(value)) {
+      result = {};
+      for (const [key, item] of Object.entries(value)) {
+        result[key] = cloneRequestJson(item, param, seen);
+      }
+    } else {
+      throw unsupportedResponsesField(param);
+    }
+    seen.delete(value);
+    return result;
+  }
+  function requestJsonArguments(value, param) {
+    const raw = requestString(value, param);
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw unsupportedResponsesField(param);
+    }
+    if (!isObject(parsed)) throw unsupportedResponsesField(param);
+    return raw;
+  }
+  function messageText(content, param) {
     if (typeof content === "string") return content;
-    if (!Array.isArray(content)) return "";
-    return content.map((part) => {
-      if (!part || typeof part !== "object") return "";
-      if (part.text !== void 0) return String(part.text || "");
-      if (part.content !== void 0) return String(part.content || "");
-      return "";
+    if (!Array.isArray(content)) throw unsupportedResponsesField(param);
+    return content.map((rawPart, index) => {
+      const partPath = `${param}[${index}]`;
+      const part = requestObject(rawPart, partPath);
+      if (part.type !== "input_text" && part.type !== "output_text") {
+        throw unsupportedResponsesField(`${partPath}.type`);
+      }
+      requestExact(part, TEXT_PART_FIELDS, partPath);
+      return requestString(part.text, `${partPath}.text`);
     }).join("");
   }
-  function toolArguments(value) {
-    if (value === void 0 || value === null) return "{}";
-    if (typeof value === "string") return value;
-    try {
-      return JSON.stringify(value);
-    } catch (e) {
-      return "{}";
+  function responseMessageToChat(item, path) {
+    const message = requestExact(item, MESSAGE_FIELDS, path);
+    if (message.type !== void 0 && message.type !== "message") {
+      throw unsupportedResponsesField(`${path}.type`);
     }
-  }
-  function responsesToolToChatTool(tool) {
-    if (!tool || typeof tool !== "object") return null;
-    const type = String(tool.type || "function");
-    if (type !== "function") return null;
-    if (tool.function && typeof tool.function === "object") {
-      const fn2 = {
-        name: String(tool.function.name || tool.name || ""),
-        description: tool.function.description !== void 0 ? tool.function.description : tool.description,
-        parameters: tool.function.parameters !== void 0 ? tool.function.parameters : tool.parameters || {}
-      };
-      if (tool.function.strict !== void 0 || tool.strict !== void 0) {
-        fn2.strict = tool.function.strict !== void 0 ? tool.function.strict : tool.strict;
-      }
-      return { type: "function", function: fn2 };
+    if (!["user", "assistant", "system"].includes(message.role)) {
+      throw unsupportedResponsesField(`${path}.role`);
     }
-    const name = String(tool.name || "");
-    if (!name) return null;
-    const fn = {
-      name,
-      description: tool.description,
-      parameters: tool.parameters || {}
-    };
-    if (tool.strict !== void 0) fn.strict = tool.strict;
-    return { type: "function", function: fn };
-  }
-  function responsesToolsToChatTools(tools) {
-    if (!Array.isArray(tools)) return [];
-    return tools.map(responsesToolToChatTool).filter(Boolean);
-  }
-  function responsesToolChoiceToChat(toolChoice) {
-    if (!toolChoice || typeof toolChoice !== "object") return toolChoice;
-    if (toolChoice.type === "function") {
-      return { type: "function", function: { name: String(toolChoice.name || toolChoice.function && toolChoice.function.name || "") } };
+    if (!Object.hasOwn(message, "content")) {
+      throw unsupportedResponsesField(`${path}.content`);
     }
-    return toolChoice;
-  }
-  function functionCallToChatToolCall(item) {
-    const callId = String(item.call_id || item.id || "");
     return {
-      id: callId,
+      role: message.role,
+      content: messageText(message.content, `${path}.content`)
+    };
+  }
+  function responseFunctionCallToChat(item, path) {
+    const call = requestExact(item, FUNCTION_CALL_FIELDS, path);
+    if (call.type !== "function_call") throw unsupportedResponsesField(`${path}.type`);
+    return {
+      id: requestString(call.call_id, `${path}.call_id`, false),
       type: "function",
       function: {
-        name: String(item.name || ""),
-        arguments: toolArguments(item.arguments)
+        name: requestFunctionName(call.name, `${path}.name`),
+        arguments: requestJsonArguments(call.arguments, `${path}.arguments`)
       }
     };
   }
-  function inputToMessages(input) {
+  function responseFunctionOutputToChat(item, path, knownCallIds, usedCallIds) {
+    const output = requestExact(item, FUNCTION_OUTPUT_FIELDS, path);
+    if (output.type !== "function_call_output") {
+      throw unsupportedResponsesField(`${path}.type`);
+    }
+    const callId = requestString(output.call_id, `${path}.call_id`, false);
+    if (!knownCallIds.has(callId) || usedCallIds.has(callId)) {
+      throw unsupportedResponsesField(`${path}.call_id`);
+    }
+    usedCallIds.add(callId);
+    return {
+      role: "tool",
+      tool_call_id: callId,
+      content: requestString(output.output, `${path}.output`)
+    };
+  }
+  function responsesInputToMessages(input) {
     if (typeof input === "string") return [{ role: "user", content: input }];
-    if (!Array.isArray(input)) return [{ role: "user", content: String(input || "") }];
+    if (!Array.isArray(input) || input.length === 0) {
+      throw unsupportedResponsesField("input");
+    }
     const messages = [];
-    let pendingToolCalls = [];
-    function flushToolCalls() {
-      if (!pendingToolCalls.length) return;
-      messages.push({ role: "assistant", content: null, tool_calls: pendingToolCalls });
-      pendingToolCalls = [];
+    const knownCallIds = /* @__PURE__ */ new Set();
+    const usedCallIds = /* @__PURE__ */ new Set();
+    let pendingCalls = [];
+    function flushCalls() {
+      if (pendingCalls.length === 0) return;
+      messages.push({ role: "assistant", content: null, tool_calls: pendingCalls });
+      pendingCalls = [];
     }
-    for (const item of input) {
-      if (!item || typeof item !== "object") continue;
-      const type = String(item.type || "");
-      if (type === "function_call") {
-        pendingToolCalls.push(functionCallToChatToolCall(item));
-        continue;
+    input.forEach((rawItem, index) => {
+      const path = `input[${index}]`;
+      if (!isObject(rawItem)) throw unsupportedResponsesField(path);
+      if (rawItem.type === "function_call") {
+        const call = responseFunctionCallToChat(rawItem, path);
+        if (knownCallIds.has(call.id)) throw unsupportedResponsesField(`${path}.call_id`);
+        knownCallIds.add(call.id);
+        pendingCalls.push(call);
+        return;
       }
-      if (type === "function_call_output") {
-        flushToolCalls();
-        messages.push({
-          role: "tool",
-          tool_call_id: String(item.call_id || item.id || ""),
-          content: typeof item.output === "string" ? item.output : toolArguments(item.output)
-        });
-        continue;
+      if (rawItem.type === "function_call_output") {
+        flushCalls();
+        messages.push(responseFunctionOutputToChat(
+          rawItem,
+          path,
+          knownCallIds,
+          usedCallIds
+        ));
+        return;
       }
-      if (type === "reasoning") continue;
-      flushToolCalls();
-      if (type === "message" || item.role || item.content !== void 0 || item.text !== void 0) {
-        const role = item.role === "assistant" || item.role === "system" ? item.role : "user";
-        const content = textFromContent(item.content !== void 0 ? item.content : item.text);
-        if (content || role === "assistant") messages.push({ role, content: content || "" });
+      if (rawItem.type === void 0 || rawItem.type === "message") {
+        flushCalls();
+        messages.push(responseMessageToChat(rawItem, path));
+        return;
       }
-    }
-    flushToolCalls();
-    return messages.length ? messages : [{ role: "user", content: "" }];
+      throw unsupportedResponsesField(`${path}.type`);
+    });
+    flushCalls();
+    return messages;
   }
-  function responsesBodyToChatBody(body = {}) {
-    const messages = [];
-    if (body.instructions) messages.push({ role: "system", content: String(body.instructions) });
-    messages.push(...inputToMessages(body.input));
-    const chat = {
-      model: body.model,
-      messages,
-      stream: body.stream !== false
+  function responseToolToChat(rawTool, index) {
+    const path = `tools[${index}]`;
+    const tool = requestExact(rawTool, FUNCTION_TOOL_FIELDS, path);
+    if (tool.type !== "function") throw unsupportedResponsesField(`${path}.type`);
+    const fn = {
+      name: requestFunctionName(tool.name, `${path}.name`),
+      parameters: cloneRequestJson(tool.parameters, `${path}.parameters`)
     };
-    const maxTokens = body.max_output_tokens || body.max_tokens;
-    if (maxTokens !== void 0) chat.max_tokens = maxTokens;
-    if (body.temperature !== void 0) chat.temperature = body.temperature;
-    if (body.top_p !== void 0) chat.top_p = body.top_p;
-    const tools = responsesToolsToChatTools(body.tools);
-    if (tools.length) chat.tools = tools;
-    if (body.tool_choice !== void 0 && tools.length) chat.tool_choice = responsesToolChoiceToChat(body.tool_choice);
-    if (body.parallel_tool_calls !== void 0 && tools.length) chat.parallel_tool_calls = body.parallel_tool_calls;
+    if (!isObject(fn.parameters)) throw unsupportedResponsesField(`${path}.parameters`);
+    if (tool.description !== void 0) {
+      fn.description = requestString(tool.description, `${path}.description`);
+    }
+    if (tool.strict !== void 0) {
+      if (typeof tool.strict !== "boolean") throw unsupportedResponsesField(`${path}.strict`);
+      fn.strict = tool.strict;
+    }
+    return { type: "function", function: fn };
+  }
+  function responseToolChoiceToChat(rawChoice, toolNames) {
+    if (typeof rawChoice === "string") {
+      if (!["auto", "none", "required"].includes(rawChoice)) {
+        throw unsupportedResponsesField("tool_choice");
+      }
+      return rawChoice;
+    }
+    const choice = requestExact(rawChoice, FUNCTION_CHOICE_FIELDS, "tool_choice");
+    if (choice.type !== "function") throw unsupportedResponsesField("tool_choice.type");
+    const name = requestFunctionName(choice.name, "tool_choice.name");
+    if (!toolNames.has(name)) throw unsupportedResponsesField("tool_choice.name");
+    return { type: "function", function: { name } };
+  }
+  function optionalNumber(value, param, predicate) {
+    if (typeof value !== "number" || !Number.isFinite(value) || !predicate(value)) {
+      throw unsupportedResponsesField(param);
+    }
+    return value;
+  }
+  function responsesBodyToChatBody(body) {
+    const request = requestExact(body, SUPPORTED_RESPONSE_FIELDS, "");
+    const model = requestString(request.model, "model", false);
+    if (!Object.hasOwn(request, "input")) throw unsupportedResponsesField("input");
+    const messages = [];
+    if (request.instructions !== void 0) {
+      messages.push({
+        role: "system",
+        content: requestString(request.instructions, "instructions")
+      });
+    }
+    messages.push(...responsesInputToMessages(request.input));
+    const chat = {
+      model,
+      messages,
+      stream: request.stream === true
+    };
+    if (request.stream !== void 0 && typeof request.stream !== "boolean") {
+      throw unsupportedResponsesField("stream");
+    }
+    if (request.max_output_tokens !== void 0) {
+      chat.max_tokens = optionalNumber(
+        request.max_output_tokens,
+        "max_output_tokens",
+        (value) => Number.isInteger(value) && value > 0
+      );
+    }
+    if (request.temperature !== void 0) {
+      chat.temperature = optionalNumber(
+        request.temperature,
+        "temperature",
+        (value) => value >= 0 && value <= 2
+      );
+    }
+    if (request.top_p !== void 0) {
+      chat.top_p = optionalNumber(
+        request.top_p,
+        "top_p",
+        (value) => value >= 0 && value <= 1
+      );
+    }
+    let tools;
+    if (request.tools !== void 0) {
+      if (!Array.isArray(request.tools)) throw unsupportedResponsesField("tools");
+      tools = request.tools.map(responseToolToChat);
+      const names = tools.map((tool) => tool.function.name);
+      if (new Set(names).size !== names.length) throw unsupportedResponsesField("tools");
+      chat.tools = tools;
+    }
+    if (request.tool_choice !== void 0) {
+      const toolNames = new Set((tools || []).map((tool) => tool.function.name));
+      if (toolNames.size === 0) throw unsupportedResponsesField("tool_choice");
+      chat.tool_choice = responseToolChoiceToChat(request.tool_choice, toolNames);
+    }
+    if (request.parallel_tool_calls !== void 0) {
+      if (typeof request.parallel_tool_calls !== "boolean" || !tools || tools.length === 0) {
+        throw unsupportedResponsesField("parallel_tool_calls");
+      }
+      chat.parallel_tool_calls = request.parallel_tool_calls;
+    }
     return chat;
   }
-  function responseId() {
-    return "resp_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  function chatObject(value, param) {
+    if (!isObject(value)) throw invalidChatCompletion(param);
+    return value;
   }
-  function sse(res, event, data) {
-    res.write("event: " + event + "\n");
-    res.write("data: " + JSON.stringify({ type: event, ...data }) + "\n\n");
+  function chatExact(value, allowed, param) {
+    const object = chatObject(value, param);
+    const key = unknownKey(object, allowed);
+    if (key !== null) throw invalidChatCompletion(param ? `${param}.${key}` : key);
+    return object;
   }
-  function chatToolCallsToResponseOutput(message) {
-    const toolCalls = Array.isArray(message && message.tool_calls) ? message.tool_calls : [];
-    return toolCalls.map((toolCall, index) => {
-      const callId = String(toolCall && toolCall.id || "call_" + index);
-      const fn = toolCall && toolCall.function || {};
-      return {
-        type: "function_call",
-        id: "fc_" + callId,
-        call_id: callId,
-        name: String(fn.name || ""),
-        arguments: toolArguments(fn.arguments),
-        status: "completed"
-      };
-    }).filter((item) => item.name);
+  function chatString(value, param, allowEmpty = true) {
+    if (typeof value !== "string" || !allowEmpty && value.length === 0) {
+      throw invalidChatCompletion(param);
+    }
+    return value;
   }
-  function messageOutputItem(id, text) {
+  function chatArguments(value, param) {
+    const raw = chatString(value, param);
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw invalidChatCompletion(param);
+    }
+    if (!isObject(parsed)) throw invalidChatCompletion(param);
+    return raw;
+  }
+  function messageItemId(responseId) {
+    const suffix = responseId.startsWith("resp_") ? responseId.slice(5) : responseId;
+    return `msg_${suffix}`;
+  }
+  function completedMessageItem(responseId, text) {
     return {
-      id: "msg_" + id.slice(5),
+      id: messageItemId(responseId),
       type: "message",
       status: "completed",
       role: "assistant",
-      content: [{ type: "output_text", text: String(text || "") }]
+      content: [{ type: "output_text", text }]
     };
   }
-  function chatMessageToResponseOutput(id, message) {
-    const output = [];
-    const text = message && typeof message.content === "string" ? message.content : "";
-    if (text) output.push(messageOutputItem(id, text));
-    output.push(...chatToolCallsToResponseOutput(message));
-    if (!output.length) output.push(messageOutputItem(id, ""));
-    return output;
+  function completedToolItem(rawCall, path, usedIds) {
+    const call = chatExact(rawCall, CHAT_TOOL_CALL_FIELDS, path);
+    const id = chatString(call.id, `${path}.id`, false);
+    if (usedIds.has(id)) throw invalidChatCompletion(`${path}.id`);
+    usedIds.add(id);
+    if (call.type !== "function") throw invalidChatCompletion(`${path}.type`);
+    const fn = chatExact(call.function, CHAT_FUNCTION_FIELDS, `${path}.function`);
+    const name = chatString(fn.name, `${path}.function.name`, false);
+    if (!FUNCTION_NAME.test(name)) throw invalidChatCompletion(`${path}.function.name`);
+    return {
+      type: "function_call",
+      id: `fc_${id}`,
+      call_id: id,
+      name,
+      arguments: chatArguments(fn.arguments, `${path}.function.arguments`),
+      status: "completed"
+    };
   }
-  function createStreamState(res, id, model) {
+  function validateResponseContext(context) {
+    if (!isObject(context)) throw invalidChatCompletion("context");
+    return {
+      id: chatString(context.id, "context.id", false),
+      model: chatString(context.model, "context.model", false)
+    };
+  }
+  function chatCompletionToResponse(chat, context) {
+    const completion = chatExact(chat, CHAT_COMPLETION_FIELDS, "");
+    if (completion.object !== "chat.completion") throw invalidChatCompletion("object");
+    if (!Array.isArray(completion.choices) || completion.choices.length !== 1) {
+      throw invalidChatCompletion("choices");
+    }
+    if (completion.usage !== void 0 && !isObject(completion.usage)) {
+      throw invalidChatCompletion("usage");
+    }
+    const choice = chatExact(completion.choices[0], CHAT_CHOICE_FIELDS, "choices[0]");
+    if (choice.index !== 0) throw invalidChatCompletion("choices[0].index");
+    if (choice.logprobs !== void 0 && choice.logprobs !== null) {
+      throw invalidChatCompletion("choices[0].logprobs");
+    }
+    const message = chatExact(choice.message, CHAT_MESSAGE_FIELDS, "choices[0].message");
+    if (message.role !== "assistant") throw invalidChatCompletion("choices[0].message.role");
+    if (message.refusal !== void 0 && message.refusal !== null) {
+      throw invalidChatCompletion("choices[0].message.refusal");
+    }
+    if (message.content !== null && typeof message.content !== "string") {
+      throw invalidChatCompletion("choices[0].message.content");
+    }
+    const rawCalls = message.tool_calls === void 0 ? [] : message.tool_calls;
+    if (!Array.isArray(rawCalls)) throw invalidChatCompletion("choices[0].message.tool_calls");
+    const usedIds = /* @__PURE__ */ new Set();
+    const toolItems = rawCalls.map((call, index) => completedToolItem(
+      call,
+      `choices[0].message.tool_calls[${index}]`,
+      usedIds
+    ));
+    if (choice.finish_reason === "tool_calls" && toolItems.length === 0) {
+      throw invalidChatCompletion("choices[0].finish_reason");
+    }
+    if (choice.finish_reason === "stop" && toolItems.length !== 0) {
+      throw invalidChatCompletion("choices[0].finish_reason");
+    }
+    if (!["stop", "tool_calls"].includes(choice.finish_reason)) {
+      throw invalidChatCompletion("choices[0].finish_reason");
+    }
+    const responseContext = validateResponseContext(context);
+    const output = [];
+    if (typeof message.content === "string" && message.content.length > 0) {
+      output.push(completedMessageItem(responseContext.id, message.content));
+    }
+    output.push(...toolItems);
+    if (output.length === 0) output.push(completedMessageItem(responseContext.id, ""));
+    return {
+      id: responseContext.id,
+      object: "response",
+      status: "completed",
+      model: responseContext.model,
+      output
+    };
+  }
+  function utf8ByteLength(value) {
+    let bytes = 0;
+    for (let index = 0; index < value.length; index += 1) {
+      const code = value.charCodeAt(index);
+      if (code < 128) bytes += 1;
+      else if (code < 2048) bytes += 2;
+      else if (code >= 55296 && code <= 56319 && index + 1 < value.length && value.charCodeAt(index + 1) >= 56320 && value.charCodeAt(index + 1) <= 57343) {
+        bytes += 4;
+        index += 1;
+      } else bytes += 3;
+    }
+    return bytes;
+  }
+  function sseObject(value, param) {
+    if (!isObject(value)) throw invalidChatSse(param);
+    return value;
+  }
+  function sseExact(value, allowed, param) {
+    const object = sseObject(value, param);
+    const key = unknownKey(object, allowed);
+    if (key !== null) throw invalidChatSse(param ? `${param}.${key}` : key);
+    return object;
+  }
+  function sseString(value, param, allowEmpty = true) {
+    if (typeof value !== "string" || !allowEmpty && value.length === 0) {
+      throw invalidChatSse(param);
+    }
+    return value;
+  }
+  function validateCompletedArguments(value, param) {
+    const raw = value || "{}";
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw invalidChatSse(param);
+    }
+    if (!isObject(parsed)) throw invalidChatSse(param);
+    return raw;
+  }
+  function createChatSseToResponses({
+    id,
+    model,
+    maxFrameBytes,
+    writeEvent,
+    fail
+  }) {
+    if (typeof id !== "string" || id.length === 0) throw new TypeError("id must be a non-empty string");
+    if (typeof model !== "string" || model.length === 0) throw new TypeError("model must be a non-empty string");
+    if (!Number.isInteger(maxFrameBytes) || maxFrameBytes <= 0) {
+      throw new TypeError("maxFrameBytes must be a positive integer");
+    }
+    if (typeof writeEvent !== "function") throw new TypeError("writeEvent must be a function");
+    if (typeof fail !== "function") throw new TypeError("fail must be a function");
+    if (typeof TextDecoder !== "function") throw new TypeError("TextDecoder is unavailable");
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    let buffer = "";
+    let failed = false;
+    let done = false;
+    let ended = false;
     let started = false;
+    let choiceFinished = null;
     let nextOutputIndex = 0;
-    let textIndex = null;
+    let textOutputIndex = null;
     let text = "";
     const tools = /* @__PURE__ */ new Map();
-    const completed = [];
+    const callIds = /* @__PURE__ */ new Map();
+    function failOnce(error) {
+      if (failed || done) return;
+      failed = true;
+      buffer = "";
+      fail(error);
+    }
+    function emit(event, data) {
+      writeEvent(event, { type: event, ...data });
+    }
     function ensureStarted() {
       if (started) return;
       started = true;
-      res.writeHead(200, {
-        "Content-Type": "text/event-stream; charset=utf-8",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive"
+      emit("response.created", {
+        response: {
+          id,
+          object: "response",
+          status: "in_progress",
+          model,
+          output: []
+        }
       });
-      sse(res, "response.created", { response: { id, object: "response", status: "in_progress", model, output: [] } });
     }
     function ensureTextItem() {
       ensureStarted();
-      if (textIndex !== null) return textIndex;
-      textIndex = nextOutputIndex++;
-      const item = { id: "msg_" + id.slice(5), type: "message", status: "in_progress", role: "assistant", content: [] };
-      sse(res, "response.output_item.added", { output_index: textIndex, item });
-      sse(res, "response.content_part.added", { output_index: textIndex, content_index: 0, part: { type: "output_text", text: "" } });
-      return textIndex;
+      if (textOutputIndex !== null) return textOutputIndex;
+      textOutputIndex = nextOutputIndex;
+      nextOutputIndex += 1;
+      emit("response.output_item.added", {
+        output_index: textOutputIndex,
+        item: {
+          id: messageItemId(id),
+          type: "message",
+          status: "in_progress",
+          role: "assistant",
+          content: []
+        }
+      });
+      emit("response.content_part.added", {
+        output_index: textOutputIndex,
+        content_index: 0,
+        part: { type: "output_text", text: "" }
+      });
+      return textOutputIndex;
     }
-    function pushTextDelta(delta) {
-      if (!delta) return;
+    function addTextDelta(delta) {
+      if (delta.length === 0) return;
       const outputIndex = ensureTextItem();
-      text += String(delta);
-      sse(res, "response.output_text.delta", { output_index: outputIndex, content_index: 0, delta: String(delta) });
+      text += delta;
+      emit("response.output_text.delta", {
+        output_index: outputIndex,
+        content_index: 0,
+        delta
+      });
     }
-    function pushToolCallDelta(toolCall) {
-      ensureStarted();
-      const chatIndex = Number.isFinite(toolCall && toolCall.index) ? toolCall.index : 0;
-      const fn = toolCall && toolCall.function || {};
-      let state = tools.get(chatIndex);
-      if (!state) {
-        state = { callId: "", name: "", arguments: "", outputIndex: null, itemId: "", added: false };
-        tools.set(chatIndex, state);
+    function addToolDelta(rawDelta, path) {
+      const delta = sseExact(rawDelta, CHAT_TOOL_DELTA_FIELDS, path);
+      if (!Number.isInteger(delta.index) || delta.index < 0) {
+        throw invalidChatSse(`${path}.index`);
       }
-      if (toolCall && toolCall.id) state.callId = String(toolCall.id);
-      if (fn.name) state.name = String(fn.name);
-      if (fn.arguments) state.arguments += String(fn.arguments);
-      if (!state.added && state.callId && state.name) {
-        state.added = true;
-        state.outputIndex = nextOutputIndex++;
-        state.itemId = "fc_" + state.callId;
-        const item = {
-          type: "function_call",
-          id: state.itemId,
-          call_id: state.callId,
-          name: state.name,
+      let state = tools.get(delta.index);
+      if (!state) {
+        state = {
+          chatIndex: delta.index,
+          callId: "",
+          name: "",
           arguments: "",
-          status: "in_progress"
+          outputIndex: null,
+          itemId: "",
+          added: false
         };
-        sse(res, "response.output_item.added", { output_index: state.outputIndex, item });
-        if (state.arguments) {
-          sse(res, "response.function_call_arguments.delta", {
+        tools.set(delta.index, state);
+      }
+      if (delta.id !== void 0) {
+        const callId = sseString(delta.id, `${path}.id`, false);
+        const otherIndex = callIds.get(callId);
+        if (state.callId && state.callId !== callId || otherIndex !== void 0 && otherIndex !== delta.index) {
+          throw invalidChatSse(`${path}.id`);
+        }
+        state.callId = callId;
+        callIds.set(callId, delta.index);
+      }
+      if (delta.type !== void 0 && delta.type !== "function") {
+        throw invalidChatSse(`${path}.type`);
+      }
+      let argumentDelta = "";
+      if (delta.function !== void 0) {
+        const fn = sseExact(delta.function, CHAT_FUNCTION_DELTA_FIELDS, `${path}.function`);
+        if (fn.name !== void 0) {
+          const name = sseString(fn.name, `${path}.function.name`, false);
+          if (!FUNCTION_NAME.test(name) || state.name && state.name !== name) {
+            throw invalidChatSse(`${path}.function.name`);
+          }
+          state.name = name;
+        }
+        if (fn.arguments !== void 0) {
+          argumentDelta = sseString(fn.arguments, `${path}.function.arguments`);
+          state.arguments += argumentDelta;
+        }
+        if (fn.name === void 0 && fn.arguments === void 0) {
+          throw invalidChatSse(`${path}.function`);
+        }
+      }
+      if (delta.id === void 0 && delta.type === void 0 && delta.function === void 0) {
+        throw invalidChatSse(path);
+      }
+      if (!state.added && state.callId && state.name) {
+        ensureStarted();
+        state.added = true;
+        state.outputIndex = nextOutputIndex;
+        nextOutputIndex += 1;
+        state.itemId = `fc_${state.callId}`;
+        emit("response.output_item.added", {
+          output_index: state.outputIndex,
+          item: {
+            type: "function_call",
+            id: state.itemId,
+            call_id: state.callId,
+            name: state.name,
+            arguments: "",
+            status: "in_progress"
+          }
+        });
+        if (state.arguments.length > 0) {
+          emit("response.function_call_arguments.delta", {
             item_id: state.itemId,
             output_index: state.outputIndex,
             delta: state.arguments
@@ -17257,242 +17958,1161 @@
         }
         return;
       }
-      if (state.added && fn.arguments) {
-        sse(res, "response.function_call_arguments.delta", {
+      if (state.added && argumentDelta.length > 0) {
+        emit("response.function_call_arguments.delta", {
           item_id: state.itemId,
           output_index: state.outputIndex,
-          delta: String(fn.arguments)
+          delta: argumentDelta
         });
       }
     }
-    function finish() {
-      ensureStarted();
-      if (textIndex !== null) {
-        const item = messageOutputItem(id, text);
-        sse(res, "response.output_text.done", { output_index: textIndex, content_index: 0, text });
-        sse(res, "response.content_part.done", { output_index: textIndex, content_index: 0, part: item.content[0] });
-        sse(res, "response.output_item.done", { output_index: textIndex, item });
-        completed.push(item);
-      }
-      for (const state of tools.values()) {
-        if (!state.added || !state.name) continue;
-        const item = {
-          type: "function_call",
-          id: state.itemId || "fc_" + state.callId,
-          call_id: state.callId || state.itemId,
-          name: state.name,
-          arguments: state.arguments || "{}",
-          status: "completed"
-        };
-        sse(res, "response.function_call_arguments.done", {
-          item_id: item.id,
-          output_index: state.outputIndex,
-          arguments: item.arguments
-        });
-        sse(res, "response.output_item.done", { output_index: state.outputIndex, item });
-        completed.push(item);
-      }
-      if (!completed.length) completed.push(messageOutputItem(id, ""));
-      sse(res, "response.completed", {
-        response: { id, object: "response", status: "completed", model, output: completed }
-      });
-      res.end();
-    }
-    return { pushTextDelta, pushToolCallDelta, finish, ensureStarted };
-  }
-  function sendJson(res, status, body) {
-    res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify(body));
-  }
-  function readBody(req) {
-    return new Promise((resolve, reject) => {
-      let body = "";
-      req.on("data", (chunk) => {
-        body += chunk;
-      });
-      req.on("end", () => resolve(body));
-      req.on("error", reject);
-    });
-  }
-  function requestUpstream({ requireImpl, upstreamBaseUrl, apiKey, authScheme, path, method, body, onResponse }) {
-    return new Promise((resolve, reject) => {
-      let endpoint;
-      try {
-        endpoint = new URL(normalizeOpenAiRoot(upstreamBaseUrl) + path);
-      } catch (e) {
-        reject(new Error("Invalid upstream base URL"));
+    function processChatChunk(rawChunk) {
+      const chunk = sseExact(rawChunk, CHAT_CHUNK_FIELDS, "data");
+      if (chunk.object !== "chat.completion.chunk") throw invalidChatSse("data.object");
+      if (!Array.isArray(chunk.choices)) throw invalidChatSse("data.choices");
+      if (chunk.choices.length === 0) {
+        if (!isObject(chunk.usage)) throw invalidChatSse("data.choices");
         return;
       }
-      const reqImpl = requireImpl(endpoint.protocol === "http:" ? "http" : "https");
-      const payload = body === void 0 ? null : JSON.stringify(body);
-      const headers = { ...authHeaders(authScheme, apiKey) };
-      if (payload !== null) headers["Content-Type"] = "application/json";
-      const req = reqImpl.request({
-        hostname: endpoint.hostname,
-        port: endpoint.port || void 0,
-        protocol: endpoint.protocol,
-        path: endpoint.pathname + endpoint.search,
-        method,
-        headers
-      }, async (upstream) => {
-        try {
-          await onResponse(upstream);
-          resolve();
-        } catch (e) {
-          reject(e);
+      if (chunk.choices.length !== 1 || choiceFinished !== null) {
+        throw invalidChatSse("data.choices");
+      }
+      const choice = sseExact(chunk.choices[0], CHAT_STREAM_CHOICE_FIELDS, "choices[0]");
+      if (choice.index !== 0) throw invalidChatSse("choices[0].index");
+      if (choice.logprobs !== void 0 && choice.logprobs !== null) {
+        throw invalidChatSse("choices[0].logprobs");
+      }
+      const delta = sseExact(choice.delta, CHAT_DELTA_FIELDS, "choices[0].delta");
+      if (delta.role !== void 0 && delta.role !== "assistant") {
+        throw invalidChatSse("choices[0].delta.role");
+      }
+      if (delta.content !== void 0 && delta.content !== null) {
+        addTextDelta(sseString(delta.content, "choices[0].delta.content"));
+      }
+      if (delta.tool_calls !== void 0) {
+        if (!Array.isArray(delta.tool_calls)) {
+          throw invalidChatSse("choices[0].delta.tool_calls");
+        }
+        delta.tool_calls.forEach((toolDelta, index) => addToolDelta(
+          toolDelta,
+          `choices[0].delta.tool_calls[${index}]`
+        ));
+      }
+      if (choice.finish_reason !== null) {
+        if (!["stop", "tool_calls"].includes(choice.finish_reason)) {
+          throw invalidChatSse("choices[0].finish_reason");
+        }
+        choiceFinished = choice.finish_reason;
+      }
+    }
+    function completedEntries() {
+      const entries = [];
+      if (textOutputIndex !== null) {
+        entries.push({
+          outputIndex: textOutputIndex,
+          kind: "text",
+          item: completedMessageItem(id, text)
+        });
+      }
+      for (const state of tools.values()) {
+        if (!state.added || !state.callId || !state.name || state.outputIndex === null) {
+          throw invalidChatSse(`choices[0].delta.tool_calls[${state.chatIndex}]`);
+        }
+        const argsParam = `choices[0].delta.tool_calls[${state.chatIndex}].function.arguments`;
+        const args = validateCompletedArguments(state.arguments, argsParam);
+        entries.push({
+          outputIndex: state.outputIndex,
+          kind: "tool",
+          state,
+          item: {
+            type: "function_call",
+            id: state.itemId,
+            call_id: state.callId,
+            name: state.name,
+            arguments: args,
+            status: "completed"
+          }
+        });
+      }
+      entries.sort((left, right) => left.outputIndex - right.outputIndex);
+      return entries;
+    }
+    function complete() {
+      if (choiceFinished === null) throw invalidChatSse("choices[0].finish_reason");
+      if (choiceFinished === "tool_calls" && tools.size === 0) {
+        throw invalidChatSse("choices[0].finish_reason");
+      }
+      if (choiceFinished === "stop" && tools.size !== 0) {
+        throw invalidChatSse("choices[0].finish_reason");
+      }
+      ensureStarted();
+      if (textOutputIndex === null && tools.size === 0) ensureTextItem();
+      const entries = completedEntries();
+      done = true;
+      for (const entry of entries) {
+        if (entry.kind === "text") {
+          emit("response.output_text.done", {
+            output_index: entry.outputIndex,
+            content_index: 0,
+            text
+          });
+          emit("response.content_part.done", {
+            output_index: entry.outputIndex,
+            content_index: 0,
+            part: { type: "output_text", text }
+          });
+        } else {
+          emit("response.function_call_arguments.done", {
+            item_id: entry.item.id,
+            output_index: entry.outputIndex,
+            arguments: entry.item.arguments
+          });
+        }
+        emit("response.output_item.done", {
+          output_index: entry.outputIndex,
+          item: entry.item
+        });
+      }
+      emit("response.completed", {
+        response: {
+          id,
+          object: "response",
+          status: "completed",
+          model,
+          output: entries.map((entry) => entry.item)
         }
       });
-      req.on("error", reject);
-      if (payload !== null) req.write(payload);
-      req.end();
-    });
-  }
-  function proxyModels({ req, res, requireImpl, upstreamBaseUrl, apiKey, authScheme }) {
-    return requestUpstream({
-      requireImpl,
-      upstreamBaseUrl,
-      apiKey,
-      authScheme,
-      path: "/models",
-      method: "GET",
-      onResponse: async (upstream) => {
-        res.writeHead(upstream.statusCode || 502, upstream.headers || {});
-        upstream.on("data", (chunk) => res.write(chunk));
-        upstream.on("end", () => res.end());
-      }
-    }).catch((e) => sendJson(res, 502, { error: { message: e.message || "Provider route failed" } }));
-  }
-  async function handleResponses({ req, res, requireImpl, upstreamBaseUrl, apiKey, authScheme }) {
-    let body;
-    try {
-      body = JSON.parse(await readBody(req) || "{}");
-    } catch (e) {
-      sendJson(res, 400, { error: { message: "Invalid JSON request body" } });
-      return;
     }
-    const chatBody = responsesBodyToChatBody(body);
-    const id = responseId();
-    if (chatBody.stream === false) {
-      await requestUpstream({
-        requireImpl,
-        upstreamBaseUrl,
-        apiKey,
-        authScheme,
-        path: "/chat/completions",
-        method: "POST",
-        body: chatBody,
-        onResponse: async (upstream) => {
-          let text = "";
-          upstream.on("data", (chunk) => {
-            text += chunk;
-          });
-          upstream.on("end", () => {
-            if ((upstream.statusCode || 0) >= 300) {
-              sendJson(res, upstream.statusCode || 502, { error: { message: "Upstream chat completion failed" } });
-              return;
-            }
-            let message = { content: "" };
-            try {
-              const parsed = JSON.parse(text);
-              message = parsed.choices && parsed.choices[0] && parsed.choices[0].message || message;
-            } catch (e) {
-              message = { content: "" };
-            }
-            sendJson(res, 200, {
-              id,
-              object: "response",
-              status: "completed",
-              model: chatBody.model,
-              output: chatMessageToResponseOutput(id, message)
-            });
-          });
+    function processFrame(frame) {
+      if (utf8ByteLength(frame) > maxFrameBytes) throw oversizedChatSse();
+      const dataLines = [];
+      for (const rawLine of frame.split(/\r?\n/)) {
+        if (rawLine.startsWith(":")) continue;
+        if (rawLine.startsWith("data:")) {
+          const data2 = rawLine.slice(5);
+          dataLines.push(data2.startsWith(" ") ? data2.slice(1) : data2);
+          continue;
         }
-      }).catch((e) => sendJson(res, 502, { error: { message: e.message || "Provider route failed" } }));
+        if (rawLine.trim().length !== 0) throw invalidChatSse("sse");
+      }
+      if (dataLines.length === 0) return;
+      const data = dataLines.join("\n");
+      if (data === "[DONE]") {
+        complete();
+        return;
+      }
+      if (done) throw invalidChatSse("sse");
+      let chunk;
+      try {
+        chunk = JSON.parse(data);
+      } catch {
+        throw invalidChatSse("data");
+      }
+      processChatChunk(chunk);
+    }
+    function drainFrames() {
+      while (!failed) {
+        const match = /\r?\n\r?\n/.exec(buffer);
+        if (!match) break;
+        const frame = buffer.slice(0, match.index);
+        buffer = buffer.slice(match.index + match[0].length);
+        processFrame(frame);
+      }
+      if (!failed && !done && utf8ByteLength(buffer) > maxFrameBytes) {
+        throw oversizedChatSse();
+      }
+      if (done && buffer.trim().length !== 0) throw invalidChatSse("sse");
+    }
+    function feed(chunk) {
+      if (failed || ended) return;
+      if (done) {
+        if ((typeof chunk === "string" ? chunk : "").trim().length !== 0) {
+          failOnce(invalidChatSse("sse"));
+        }
+        return;
+      }
+      try {
+        if (typeof chunk === "string") buffer += chunk;
+        else if (chunk instanceof Uint8Array) buffer += decoder.decode(chunk, { stream: true });
+        else throw invalidChatSse("chunk");
+        drainFrames();
+      } catch (error) {
+        failOnce(error instanceof ResponsesCompatibilityError ? error : invalidChatSse("chunk"));
+      }
+    }
+    function end() {
+      if (failed || ended) return;
+      ended = true;
+      try {
+        if (!done) {
+          buffer += decoder.decode();
+          drainFrames();
+        }
+        if (!done || buffer.trim().length !== 0) throw invalidChatSse("sse");
+      } catch (error) {
+        failOnce(error instanceof ResponsesCompatibilityError ? error : invalidChatSse("chunk"));
+      }
+    }
+    return { feed, end };
+  }
+
+  // src/lib/providerUrl.js
+  var RESOURCES = Object.freeze({
+    models: "models",
+    responses: "responses",
+    "chat-completions": "chat/completions"
+  });
+  function providerUrlError(code, message) {
+    const error = new Error(message);
+    error.code = code;
+    return error;
+  }
+  function decodedPathHasTraversal(raw) {
+    let current = String(raw || "");
+    for (let layer = 0; layer < 4; layer += 1) {
+      if (current.split("/").some((segment) => segment === "." || segment === "..")) return true;
+      let decoded;
+      try {
+        decoded = decodeURIComponent(current);
+      } catch {
+        return true;
+      }
+      if (decoded === current) return false;
+      current = decoded;
+    }
+    return current.split("/").some((segment) => segment === "." || segment === "..");
+  }
+  function rawPathFromAbsoluteUrl(raw) {
+    const scheme = raw.indexOf("://");
+    if (scheme < 0) return "";
+    const pathStart = raw.indexOf("/", scheme + 3);
+    if (pathStart < 0) return "/";
+    const endCandidates = [raw.indexOf("?", pathStart), raw.indexOf("#", pathStart)].filter((value) => value >= 0);
+    const end = endCandidates.length ? Math.min(...endCandidates) : raw.length;
+    return raw.slice(pathStart, end);
+  }
+  function isLoopbackHostname(hostname) {
+    const host = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "");
+    if (host === "localhost" || host.endsWith(".localhost") || host === "::1") return true;
+    const mapped = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    const ipv4 = mapped ? mapped[1] : host;
+    if (/^127(?:\.\d{1,3}){3}$/.test(ipv4)) return true;
+    return /^::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}$/i.test(host);
+  }
+  function parseBaseUrl(baseUrl, allowInsecureHttp) {
+    const raw = typeof baseUrl === "string" ? baseUrl.trim() : "";
+    if (!raw || raw.startsWith("//") || !/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(raw)) {
+      throw providerUrlError("provider_url_invalid", "Provider URL must be absolute.");
+    }
+    if (decodedPathHasTraversal(rawPathFromAbsoluteUrl(raw))) {
+      throw providerUrlError("provider_url_traversal_forbidden", "Provider URL path traversal is forbidden.");
+    }
+    let url;
+    try {
+      url = new URL(raw);
+    } catch {
+      throw providerUrlError("provider_url_invalid", "Provider URL is invalid.");
+    }
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
+      throw providerUrlError("provider_url_invalid", "Provider URL protocol is unsupported.");
+    }
+    if (url.username || url.password) {
+      throw providerUrlError("provider_url_userinfo_forbidden", "Provider URL userinfo is forbidden.");
+    }
+    if (url.hash || raw.includes("#")) {
+      throw providerUrlError("provider_url_fragment_forbidden", "Provider URL fragments are forbidden.");
+    }
+    if (url.search || raw.includes("?")) {
+      throw providerUrlError("provider_url_query_forbidden", "Provider base URL queries are forbidden.");
+    }
+    if (url.protocol === "http:" && !isLoopbackHostname(url.hostname) && allowInsecureHttp !== true) {
+      throw providerUrlError("provider_insecure_http_forbidden", "Insecure provider HTTP requires explicit approval.");
+    }
+    return url;
+  }
+  function normalizeSearch(inboundSearch) {
+    const value = inboundSearch === void 0 || inboundSearch === null ? "" : String(inboundSearch);
+    if (!value) return "";
+    if (!value.startsWith("?") || value.includes("#") || value.includes("\r") || value.includes("\n")) {
+      throw providerUrlError("provider_url_invalid_search", "Provider request query is invalid.");
+    }
+    return value;
+  }
+  function buildProviderEndpoint({
+    baseUrl,
+    resource,
+    inboundSearch = "",
+    allowInsecureHttp = false
+  } = {}) {
+    if (!Object.hasOwn(RESOURCES, resource)) {
+      throw providerUrlError("provider_url_invalid_resource", "Provider resource is invalid.");
+    }
+    const configured = parseBaseUrl(baseUrl, allowInsecureHttp);
+    const configuredOrigin = configured.origin;
+    let prefix = configured.pathname.replace(/\/+$/, "");
+    if (!prefix || prefix === "/") prefix = "";
+    if (!prefix.endsWith("/v1")) prefix += "/v1";
+    const endpoint = new URL(configured.toString());
+    endpoint.pathname = `${prefix}/${RESOURCES[resource]}`;
+    endpoint.search = normalizeSearch(inboundSearch);
+    endpoint.hash = "";
+    if (endpoint.origin !== configuredOrigin) {
+      throw providerUrlError("provider_url_origin_mismatch", "Provider endpoint origin changed unexpectedly.");
+    }
+    return endpoint;
+  }
+
+  // src/cep/providerRouteAuth.js
+  function generateRouteToken({ randomBytes } = {}) {
+    if (typeof randomBytes !== "function") throw new TypeError("randomBytes is required");
+    const bytes = randomBytes(32);
+    if (!bytes || bytes.length !== 32) throw new TypeError("randomBytes must return exactly 32 bytes");
+    return Buffer.from(bytes).toString("base64url");
+  }
+  function parseRouteAuthorization(rawHeaders = []) {
+    if (!Array.isArray(rawHeaders) || rawHeaders.length % 2 !== 0) return null;
+    const values = [];
+    for (let index = 0; index < rawHeaders.length; index += 2) {
+      if (String(rawHeaders[index]).toLowerCase() === "authorization") values.push(String(rawHeaders[index + 1]));
+    }
+    if (values.length !== 1) return null;
+    const match = values[0].match(/^Bearer ([A-Za-z0-9_-]+)$/i);
+    return match ? match[1] : null;
+  }
+  function routeTokenMatches(candidate, expected, { createHash, timingSafeEqual } = {}) {
+    if (typeof createHash !== "function" || typeof timingSafeEqual !== "function") {
+      throw new TypeError("createHash and timingSafeEqual are required");
+    }
+    const left = createHash("sha256").update(String(candidate), "utf8").digest();
+    const right = createHash("sha256").update(String(expected), "utf8").digest();
+    return timingSafeEqual(left, right);
+  }
+
+  // src/cep/codexResponsesRoute.js
+  var DEFAULT_ROUTE_LIMITS = Object.freeze({
+    requestBodyBytes: 16 * 1024 * 1024,
+    sseFrameBytes: 1024 * 1024,
+    concurrent: 4,
+    connectTimeoutMs: 15e3,
+    idleTimeoutMs: 12e4,
+    totalTimeoutMs: 30 * 6e4,
+    errorBodyBytes: 64 * 1024,
+    headerValueBytes: 8 * 1024,
+    headerTotalBytes: 32 * 1024,
+    headerCount: 64
+  });
+  var LOCAL_ORIGIN = "http://127.0.0.1";
+  function getCepRequire() {
+    var _a, _b, _c;
+    if ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) return globalThis.window.cep_node.require;
+    if ((_c = globalThis.window) == null ? void 0 : _c.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function routeLimits(overrides = {}) {
+    const limits = {};
+    for (const [name, maximum] of Object.entries(DEFAULT_ROUTE_LIMITS)) {
+      const value = Number(overrides[name]);
+      limits[name] = Number.isFinite(value) && value > 0 ? Math.min(maximum, Math.floor(value)) : maximum;
+    }
+    return Object.freeze(limits);
+  }
+  function headerLimits(limits) {
+    return {
+      maxValueBytes: limits.headerValueBytes,
+      maxTotalBytes: limits.headerTotalBytes,
+      maxCount: limits.headerCount
+    };
+  }
+  function envelope(type, code, message, extra = {}) {
+    return { error: { type, code, message, ...extra } };
+  }
+  function sendJson(res, status, body, headers = {}) {
+    if (res.writableEnded || res.destroyed) return;
+    res.writeHead(status, { ...headers, "content-type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(body));
+  }
+  function writeSse(res, name, payload) {
+    if (res.writableEnded || res.destroyed) return;
+    res.write(`event: ${name}
+`);
+    res.write(`data: ${JSON.stringify(payload)}
+
+`);
+  }
+  function localPathHasTraversal(rawUrl) {
+    const path = String(rawUrl || "").split(/[?#]/, 1)[0];
+    let current = path;
+    for (let layer = 0; layer < 4; layer += 1) {
+      if (current.split("/").some((segment) => segment === "." || segment === "..")) return true;
+      let decoded;
+      try {
+        decoded = decodeURIComponent(current);
+      } catch {
+        return true;
+      }
+      if (decoded === current) return false;
+      current = decoded;
+    }
+    return current.split("/").some((segment) => segment === "." || segment === "..");
+  }
+  function parseLocalUrl(rawUrl) {
+    const raw = String(rawUrl || "");
+    if (!raw.startsWith("/") || raw.includes("#") || localPathHasTraversal(raw)) {
+      const error = new Error("Local provider route URL is invalid.");
+      error.code = "invalid_route_url";
+      throw error;
+    }
+    let parsed;
+    try {
+      parsed = new URL(raw, LOCAL_ORIGIN);
+    } catch {
+      const error = new Error("Local provider route URL is invalid.");
+      error.code = "invalid_route_url";
+      throw error;
+    }
+    if (parsed.origin !== LOCAL_ORIGIN) {
+      const error = new Error("Local provider route URL is invalid.");
+      error.code = "invalid_route_url";
+      throw error;
+    }
+    return parsed;
+  }
+  function rawResponseHeaders(upstream) {
+    if (Array.isArray(upstream == null ? void 0 : upstream.rawHeaders)) return upstream.rawHeaders;
+    const raw = [];
+    for (const [name, value] of Object.entries((upstream == null ? void 0 : upstream.headers) || {})) {
+      if (Array.isArray(value)) {
+        for (const item of value) raw.push(name, String(item));
+      } else if (value !== void 0) raw.push(name, String(value));
+    }
+    return raw;
+  }
+  function destroyOnce(context) {
+    if (context.upstreamDestroyed) return;
+    context.upstreamDestroyed = true;
+    for (const stream of [context.upstreamRequest, context.upstreamResponse]) {
+      if (stream && typeof stream.destroy === "function" && !stream.destroyed) {
+        try {
+          stream.destroy();
+        } catch {
+        }
+      }
+    }
+  }
+  function finishOnce(context) {
+    if (context.finished) return false;
+    context.finished = true;
+    if (context.cancelBodyRead) context.cancelBodyRead();
+    clearTimeout(context.connectTimer);
+    clearTimeout(context.idleTimer);
+    clearTimeout(context.totalTimer);
+    context.req.off("aborted", context.onClientAbort);
+    context.res.off("close", context.onClientClose);
+    context.gate.release();
+    context.owner.delete(context);
+    return true;
+  }
+  function streamFailure(context, error) {
+    if (context.finished) return;
+    destroyOnce(context);
+    const code = String((error == null ? void 0 : error.code) || "provider_error");
+    const message = String((error == null ? void 0 : error.message) || "Provider stream failed.");
+    if (!context.res.headersSent) {
+      finishOnce(context);
+      sendJson(context.res, Number(error == null ? void 0 : error.status) || 502, envelope("provider_protocol_error", code, message));
       return;
     }
-    const stream = createStreamState(res, id, chatBody.model);
-    await requestUpstream({
-      requireImpl,
-      upstreamBaseUrl,
-      apiKey,
-      authScheme,
-      path: "/chat/completions",
-      method: "POST",
-      body: chatBody,
-      onResponse: async (upstream) => {
-        if ((upstream.statusCode || 0) >= 300) {
-          let detail = "";
-          upstream.on("data", (chunk) => {
-            detail += chunk;
-          });
-          upstream.on("end", () => sendJson(res, upstream.statusCode || 502, { error: { message: "Upstream chat completion failed", detail: detail.slice(0, 512) } }));
+    writeSse(context.res, "error", {
+      type: "error",
+      error: { type: "provider_protocol_error", code, message }
+    });
+    finishOnce(context);
+    context.res.end();
+  }
+  function timeoutRequest(context, code, message) {
+    if (context.finished) return;
+    destroyOnce(context);
+    if (context.res.headersSent) {
+      streamFailure(context, { status: 504, code, message });
+      return;
+    }
+    finishOnce(context);
+    sendJson(context.res, 504, envelope("provider_timeout_error", code, message));
+  }
+  function resetIdleTimer(context) {
+    clearTimeout(context.idleTimer);
+    context.idleTimer = setTimeout(() => timeoutRequest(
+      context,
+      "provider_idle_timeout",
+      "Provider response became idle."
+    ), context.limits.idleTimeoutMs);
+  }
+  function requestIdFromHeaders(headers) {
+    const item = headers.find((header) => header.name === "x-client-request-id" || header.name === "x-request-id");
+    return item ? item.value : `route-${Date.now().toString(36)}`;
+  }
+  function readRequestBody(req, maximum, context) {
+    return new Promise((resolve, reject) => {
+      const chunks = [];
+      let bytes = 0;
+      let settled = false;
+      const cleanup = () => {
+        req.off("data", onData);
+        req.off("end", onEnd);
+        req.off("error", onError);
+        if (context.cancelBodyRead === cancel) context.cancelBodyRead = null;
+      };
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(error);
+      };
+      const onData = (chunk) => {
+        const value = Buffer.from(chunk);
+        bytes += value.length;
+        if (bytes > maximum) {
+          const error = new Error("Request body is too large.");
+          error.code = "request_body_too_large";
+          fail(error);
+          req.resume();
           return;
         }
-        stream.ensureStarted();
-        let buffer = "";
-        upstream.on("data", (chunk) => {
-          buffer += String(chunk || "");
-          const lines = buffer.split(/\r?\n/);
-          buffer = lines.pop() || "";
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith("data:")) continue;
-            const data = trimmed.slice(5).trim();
-            if (!data || data === "[DONE]") continue;
-            try {
-              const json = JSON.parse(data);
-              const delta = json.choices && json.choices[0] && json.choices[0].delta;
-              if (!delta) continue;
-              if (delta.content) stream.pushTextDelta(delta.content);
-              if (Array.isArray(delta.tool_calls)) {
-                for (const toolCall of delta.tool_calls) stream.pushToolCallDelta(toolCall);
-              }
-            } catch (e) {
-            }
-          }
-        });
-        upstream.on("end", () => stream.finish());
-      }
-    }).catch((e) => {
-      if (!res.headersSent) sendJson(res, 502, { error: { message: e.message || "Provider route failed" } });
-      else res.end();
+        chunks.push(value);
+      };
+      const onEnd = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(Buffer.concat(chunks));
+      };
+      const onError = () => {
+        const error = new Error("Request body could not be read.");
+        error.code = "invalid_request_body";
+        fail(error);
+      };
+      const cancel = () => {
+        const error = new Error("Request body was cancelled.");
+        error.code = "request_body_cancelled";
+        fail(error);
+      };
+      context.cancelBodyRead = cancel;
+      req.on("data", onData);
+      req.on("end", onEnd);
+      req.on("error", onError);
     });
   }
-  function createCodexResponsesRoute({ upstreamBaseUrl, apiKey, authScheme = "bearer", requireImpl } = {}) {
-    const reqImpl = requireImpl || getCepRequire();
+  function parseJsonBody(buffer) {
+    try {
+      return JSON.parse(buffer.length ? buffer.toString("utf8") : "{}");
+    } catch {
+      const error = new Error("Request body must be valid JSON.");
+      error.code = "invalid_json";
+      throw error;
+    }
+  }
+  function secretValues(profile) {
+    var _a;
+    const values = [];
+    if (((_a = profile == null ? void 0 : profile.auth) == null ? void 0 : _a.kind) === "header" && profile.auth.value) {
+      const value = String(profile.auth.value);
+      values.push(value);
+      const match = value.match(/^(?:Bearer|Basic)\s+(.+)$/i);
+      if (match) values.push(match[1]);
+    }
+    for (const header of (profile == null ? void 0 : profile.extraHeaders) || []) {
+      if (header == null ? void 0 : header.value) values.push(String(header.value));
+    }
+    return [...new Set(values.filter(Boolean))].sort((left, right) => right.length - left.length);
+  }
+  function sanitizedProviderMessage(buffer, truncated, secrets) {
+    var _a, _b;
+    if (truncated) return "Provider request failed with a bounded error response.";
+    let parsed;
+    try {
+      parsed = JSON.parse(buffer.toString("utf8"));
+    } catch {
+      return "Provider request failed.";
+    }
+    let message = (_b = (_a = parsed == null ? void 0 : parsed.error) == null ? void 0 : _a.message) != null ? _b : parsed == null ? void 0 : parsed.message;
+    if (typeof message !== "string" || !message) return "Provider request failed.";
+    message = redactText(message, secrets);
+    return message.replace(/[\r\n\0]+/g, " ").slice(0, 256);
+  }
+  function withoutSecretBearingHeaders(headers, secrets) {
+    const output = {};
+    for (const [name, value] of Object.entries(headers)) {
+      const text = String(value);
+      if (secrets.some((secret) => text.includes(secret))) continue;
+      output[name] = text;
+    }
+    return output;
+  }
+  function readProviderError(context, upstream, status, responseHeaders, secrets) {
+    const chunks = [];
+    let bytes = 0;
+    let settled = false;
+    const finish = (truncated) => {
+      if (settled || context.finished) return;
+      settled = true;
+      const buffer = Buffer.concat(chunks);
+      const message = sanitizedProviderMessage(buffer, truncated, secrets);
+      const requestId = responseHeaders["x-request-id"] || responseHeaders["request-id"] || responseHeaders["openai-request-id"];
+      const extra = requestId ? { request_id: requestId } : {};
+      finishOnce(context);
+      sendJson(
+        context.res,
+        status >= 400 && status < 500 ? status : 502,
+        envelope("provider_error", "provider_error", message, extra),
+        requestId ? { "x-request-id": requestId } : {}
+      );
+    };
+    upstream.on("data", (chunk) => {
+      if (settled) return;
+      resetIdleTimer(context);
+      const value = Buffer.from(chunk);
+      const remaining = context.limits.errorBodyBytes + 1 - bytes;
+      if (remaining > 0) chunks.push(value.subarray(0, remaining));
+      bytes += value.length;
+      if (bytes > context.limits.errorBodyBytes) {
+        if (typeof upstream.destroy === "function") upstream.destroy();
+        finish(true);
+      }
+    });
+    upstream.on("end", () => finish(false));
+    upstream.on("error", () => finish(bytes > context.limits.errorBodyBytes));
+  }
+  function pipeModels(context, upstream, status, headers) {
+    context.res.writeHead(status, headers);
+    upstream.on("data", (chunk) => {
+      if (context.finished) return;
+      resetIdleTimer(context);
+      context.res.write(chunk);
+    });
+    upstream.on("end", () => {
+      if (!finishOnce(context)) return;
+      context.res.end();
+    });
+    upstream.on("error", () => streamFailure(context, {
+      status: 502,
+      code: "provider_error",
+      message: "Provider response stream failed."
+    }));
+  }
+  function readNonStreamingResponse(context, upstream, status, headers, chatBody) {
+    const chunks = [];
+    let bytes = 0;
+    upstream.on("data", (chunk) => {
+      if (context.finished) return;
+      resetIdleTimer(context);
+      const value = Buffer.from(chunk);
+      bytes += value.length;
+      if (bytes > context.limits.requestBodyBytes) {
+        streamFailure(context, {
+          status: 502,
+          code: "provider_response_too_large",
+          message: "Provider response body is too large."
+        });
+        return;
+      }
+      chunks.push(value);
+    });
+    upstream.on("end", () => {
+      if (context.finished) return;
+      let parsed;
+      let response;
+      try {
+        parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        response = chatCompletionToResponse(parsed, { id: context.responseId, model: String(chatBody.model || "") });
+      } catch (error) {
+        streamFailure(context, {
+          status: Number(error == null ? void 0 : error.status) || 502,
+          code: (error == null ? void 0 : error.code) || "invalid_chat_completion",
+          message: (error == null ? void 0 : error.message) || "Provider returned an invalid Chat Completion."
+        });
+        return;
+      }
+      finishOnce(context);
+      sendJson(context.res, status, response, headers);
+    });
+    upstream.on("error", () => streamFailure(context, {
+      status: 502,
+      code: "provider_error",
+      message: "Provider response body failed."
+    }));
+  }
+  function streamChatResponse(context, upstream, status, headers, chatBody) {
+    context.res.writeHead(status, {
+      ...headers,
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": headers["cache-control"] || "no-cache"
+    });
+    const adapter = createChatSseToResponses({
+      id: context.responseId,
+      model: String(chatBody.model || ""),
+      maxFrameBytes: context.limits.sseFrameBytes,
+      writeEvent: (name, payload) => writeSse(context.res, name, payload),
+      fail: (error) => streamFailure(context, error)
+    });
+    upstream.on("data", (chunk) => {
+      if (context.finished) return;
+      resetIdleTimer(context);
+      try {
+        adapter.feed(chunk);
+      } catch (error) {
+        streamFailure(context, error);
+      }
+    });
+    upstream.on("end", () => {
+      if (context.finished) return;
+      try {
+        adapter.end();
+      } catch (error) {
+        streamFailure(context, error);
+      }
+      if (!finishOnce(context)) return;
+      context.res.end();
+    });
+    upstream.on("error", () => streamFailure(context, {
+      status: 502,
+      code: "provider_error",
+      message: "Provider response stream failed."
+    }));
+  }
+  function handleUpstreamResponse(context, upstream, kind, profile, chatBody) {
+    if (context.finished) {
+      if (typeof upstream.destroy === "function") upstream.destroy();
+      return;
+    }
+    context.upstreamResponse = upstream;
+    clearTimeout(context.connectTimer);
+    resetIdleTimer(context);
+    const status = Number(upstream.statusCode) || 502;
+    const secrets = secretValues(profile);
+    const headers = withoutSecretBearingHeaders(
+      filterUpstreamResponseHeaders(rawResponseHeaders(upstream)),
+      secrets
+    );
+    if (status >= 300 && status < 400) {
+      destroyOnce(context);
+      finishOnce(context);
+      sendJson(context.res, 502, envelope(
+        "provider_protocol_error",
+        "provider_redirect_blocked",
+        "Provider redirects are not followed."
+      ));
+      return;
+    }
+    if (status >= 400) {
+      readProviderError(context, upstream, status, headers, secrets);
+      return;
+    }
+    if (kind === "models") {
+      pipeModels(context, upstream, status, headers);
+      return;
+    }
+    if (chatBody.stream === false) {
+      readNonStreamingResponse(context, upstream, status, headers, chatBody);
+      return;
+    }
+    streamChatResponse(context, upstream, status, headers, chatBody);
+  }
+  function openUpstream(context, {
+    endpoint,
+    method,
+    headers,
+    payload,
+    kind,
+    profile,
+    chatBody,
+    requireImpl,
+    createUpstreamRequest,
+    lookupImpl
+  }) {
+    if (context.finished) return;
+    const options = {
+      protocol: endpoint.protocol,
+      hostname: endpoint.hostname,
+      port: endpoint.port || void 0,
+      path: endpoint.pathname + endpoint.search,
+      method,
+      headers
+    };
+    if (lookupImpl) options.lookup = lookupImpl;
+    context.connectTimer = setTimeout(() => timeoutRequest(
+      context,
+      "provider_connect_timeout",
+      "Provider connection timed out."
+    ), context.limits.connectTimeoutMs);
+    let request;
+    try {
+      const requestFactory = createUpstreamRequest || requireImpl(endpoint.protocol === "http:" ? "http" : "https").request.bind(
+        requireImpl(endpoint.protocol === "http:" ? "http" : "https")
+      );
+      request = requestFactory(options, (upstream) => handleUpstreamResponse(
+        context,
+        upstream,
+        kind,
+        profile,
+        chatBody
+      ));
+      context.upstreamRequest = request;
+      request.on("error", () => {
+        if (context.finished || context.upstreamResponse) return;
+        clearTimeout(context.connectTimer);
+        finishOnce(context);
+        sendJson(context.res, 502, envelope("provider_error", "provider_error", "Provider request failed."));
+      });
+      if (payload) request.write(payload);
+      request.end();
+    } catch {
+      clearTimeout(context.connectTimer);
+      finishOnce(context);
+      sendJson(context.res, 502, envelope("provider_error", "provider_error", "Provider request failed."));
+    }
+  }
+  function createGate(maximum) {
+    let active = 0;
+    return {
+      acquire() {
+        if (active >= maximum) return false;
+        active += 1;
+        return true;
+      },
+      release() {
+        if (active > 0) active -= 1;
+      }
+    };
+  }
+  function compactResponse(res) {
+    sendJson(res, 501, envelope(
+      "provider_compaction_unsupported",
+      "provider_compaction_unsupported",
+      "This chat-only provider cannot compact Responses context."
+    ));
+  }
+  function methodNotAllowed(res, method, pathname, allowed) {
+    sendJson(res, 405, envelope(
+      "invalid_request_error",
+      "method_not_allowed",
+      `Method ${method} is not allowed for ${pathname}.`
+    ), { allow: allowed });
+  }
+  function createCodexResponsesRoute({
+    provider,
+    resolveRequestProfile,
+    requireImpl = getCepRequire(),
+    createUpstreamRequest,
+    lookupImpl,
+    cryptoImpl,
+    limits: limitOverrides,
+    onAudit = () => {
+    }
+  } = {}) {
+    if (!provider || typeof provider !== "object") throw new TypeError("provider is required");
+    if (typeof resolveRequestProfile !== "function") throw new TypeError("resolveRequestProfile is required");
+    const crypto = cryptoImpl || requireImpl("crypto");
+    if (!crypto || typeof crypto.randomBytes !== "function" || typeof crypto.createHash !== "function" || typeof crypto.timingSafeEqual !== "function") throw new TypeError("crypto implementation is required");
+    const limits = routeLimits(limitOverrides);
+    const headersLimit = headerLimits(limits);
+    const gate = createGate(limits.concurrent);
+    const contexts = /* @__PURE__ */ new Set();
     let server = null;
     let baseUrl = "";
-    const token = "ae-mcp-route-" + Math.random().toString(36).slice(2);
+    let routeToken = null;
+    let startPromise = null;
+    let responseSequence = 0;
+    const admit = (req, res) => {
+      if (!gate.acquire()) {
+        sendJson(res, 429, envelope(
+          "rate_limit_error",
+          "route_concurrency_limit",
+          "Local provider route concurrency limit reached."
+        ));
+        return null;
+      }
+      const context = {
+        req,
+        res,
+        gate,
+        owner: contexts,
+        limits,
+        finished: false,
+        upstreamDestroyed: false,
+        upstreamRequest: null,
+        upstreamResponse: null,
+        connectTimer: null,
+        idleTimer: null,
+        totalTimer: null,
+        responseId: `resp_route_${Date.now().toString(36)}_${(responseSequence += 1).toString(36)}`,
+        cancelBodyRead: null,
+        onClientAbort: null,
+        onClientClose: null
+      };
+      context.onClientAbort = () => {
+        if (context.finished) return;
+        destroyOnce(context);
+        finishOnce(context);
+      };
+      context.onClientClose = () => {
+        if (context.finished) return;
+        destroyOnce(context);
+        finishOnce(context);
+      };
+      req.on("aborted", context.onClientAbort);
+      res.on("close", context.onClientClose);
+      context.totalTimer = setTimeout(() => timeoutRequest(
+        context,
+        "provider_total_timeout",
+        "Provider request exceeded the total time limit."
+      ), limits.totalTimeoutMs);
+      contexts.add(context);
+      return context;
+    };
+    const resolveProfile = async (scope) => {
+      validateProviderRequestConfiguration(provider, scope, headersLimit);
+      return resolveRequestProfile(provider, { scope });
+    };
+    const prepareHeaders = (req, profile, contentType) => {
+      var _a;
+      const merged = mergeUpstreamHeaders({
+        rawHeaders: req.rawHeaders || [],
+        providerHeaders: profile.extraHeaders,
+        auth: profile.auth,
+        contentType,
+        limits: headersLimit
+      });
+      const codex = collectCodexHeaders(req.rawHeaders || [], headersLimit);
+      const requestId = requestIdFromHeaders(codex);
+      onAudit({
+        event: "provider_headers",
+        requestId,
+        forwardedNames: codex.map((header) => header.name),
+        providerNames: (profile.extraHeaders || []).map((header) => String(header.name).toLowerCase()),
+        authName: ((_a = profile.auth) == null ? void 0 : _a.kind) === "header" ? String(profile.auth.name).toLowerCase() : null,
+        decision: "allowed"
+      });
+      return merged;
+    };
+    const handleModels = async (req, res, localUrl) => {
+      var _a;
+      try {
+        collectCodexHeaders(req.rawHeaders || [], headersLimit);
+      } catch (error) {
+        sendJson(res, 400, envelope("invalid_request_error", error.code, error.message));
+        return;
+      }
+      try {
+        validateProviderRequestConfiguration(provider, "probe", headersLimit);
+      } catch (error) {
+        sendJson(res, 400, envelope("invalid_request_error", error.code, error.message));
+        return;
+      }
+      const context = admit(req, res);
+      if (!context) return;
+      let profile;
+      let endpoint;
+      let headers;
+      try {
+        profile = await resolveProfile("probe");
+        if (context.finished) return;
+        endpoint = buildProviderEndpoint({
+          baseUrl: profile.baseUrl,
+          resource: "models",
+          inboundSearch: localUrl.search,
+          allowInsecureHttp: profile.allowInsecureHttp
+        });
+        headers = prepareHeaders(req, profile);
+      } catch (error) {
+        if (context.finished) return;
+        finishOnce(context);
+        sendJson(res, ((_a = error == null ? void 0 : error.code) == null ? void 0 : _a.startsWith("provider_header_")) ? 400 : 502, envelope(
+          "provider_configuration_error",
+          (error == null ? void 0 : error.code) || "provider_configuration_error",
+          "Provider request configuration is invalid."
+        ));
+        return;
+      }
+      openUpstream(context, {
+        endpoint,
+        method: "GET",
+        headers,
+        payload: null,
+        kind: "models",
+        profile,
+        chatBody: null,
+        requireImpl,
+        createUpstreamRequest,
+        lookupImpl
+      });
+    };
+    const handleResponses = async (req, res, localUrl) => {
+      var _a;
+      try {
+        collectCodexHeaders(req.rawHeaders || [], headersLimit);
+      } catch (error) {
+        sendJson(res, 400, envelope("invalid_request_error", error.code, error.message));
+        return;
+      }
+      try {
+        validateProviderRequestConfiguration(provider, "model", headersLimit);
+      } catch (error) {
+        sendJson(res, 400, envelope("invalid_request_error", error.code, error.message));
+        return;
+      }
+      const context = admit(req, res);
+      if (!context) return;
+      let requestBody;
+      let chatBody;
+      try {
+        requestBody = await readRequestBody(req, limits.requestBodyBytes, context);
+        if (context.finished) return;
+        chatBody = responsesBodyToChatBody(parseJsonBody(requestBody));
+      } catch (error) {
+        if (context.finished) return;
+        finishOnce(context);
+        const status = (error == null ? void 0 : error.code) === "request_body_too_large" ? 413 : Number(error == null ? void 0 : error.status) || 400;
+        sendJson(res, status, envelope(
+          "invalid_request_error",
+          (error == null ? void 0 : error.code) || "invalid_request_body",
+          (error == null ? void 0 : error.message) || "Request body is invalid.",
+          (error == null ? void 0 : error.param) ? { param: error.param } : {}
+        ));
+        return;
+      }
+      let profile;
+      let endpoint;
+      let headers;
+      let payload;
+      try {
+        profile = await resolveProfile("model");
+        if (context.finished) return;
+        endpoint = buildProviderEndpoint({
+          baseUrl: profile.baseUrl,
+          resource: "chat-completions",
+          inboundSearch: localUrl.search,
+          allowInsecureHttp: profile.allowInsecureHttp
+        });
+        headers = prepareHeaders(req, profile, "application/json");
+        payload = Buffer.from(JSON.stringify(chatBody), "utf8");
+      } catch (error) {
+        if (context.finished) return;
+        finishOnce(context);
+        sendJson(res, ((_a = error == null ? void 0 : error.code) == null ? void 0 : _a.startsWith("provider_header_")) ? 400 : 502, envelope(
+          "provider_configuration_error",
+          (error == null ? void 0 : error.code) || "provider_configuration_error",
+          "Provider request configuration is invalid."
+        ));
+        return;
+      }
+      openUpstream(context, {
+        endpoint,
+        method: "POST",
+        headers,
+        payload,
+        kind: "responses",
+        profile,
+        chatBody,
+        requireImpl,
+        createUpstreamRequest,
+        lookupImpl
+      });
+    };
+    const handleLocalRequest = (req, res) => {
+      const candidate = parseRouteAuthorization(req.rawHeaders || []);
+      const authorized = routeTokenMatches(candidate || "", routeToken || "", crypto);
+      if (!candidate || !routeToken || !authorized) {
+        sendJson(res, 401, envelope(
+          "authentication_error",
+          "invalid_route_token",
+          "Invalid local provider route token."
+        ));
+        return;
+      }
+      let localUrl;
+      try {
+        localUrl = parseLocalUrl(req.url);
+      } catch (error) {
+        sendJson(res, 400, envelope("invalid_request_error", error.code, error.message));
+        return;
+      }
+      const method = String(req.method || "GET").toUpperCase();
+      const pathname = localUrl.pathname;
+      if (pathname === "/v1/responses/compact") {
+        if (method !== "POST") methodNotAllowed(res, method, pathname, "POST");
+        else compactResponse(res);
+        return;
+      }
+      if (pathname === "/v1/models") {
+        if (method !== "GET") methodNotAllowed(res, method, pathname, "GET");
+        else void handleModels(req, res, localUrl);
+        return;
+      }
+      if (pathname === "/v1/responses") {
+        if (method !== "POST") methodNotAllowed(res, method, pathname, "POST");
+        else void handleResponses(req, res, localUrl);
+        return;
+      }
+      sendJson(res, 404, envelope(
+        "invalid_request_error",
+        "not_found",
+        "Unknown local provider route endpoint."
+      ));
+    };
     return {
       async start() {
-        if (server && baseUrl) return { baseUrl, apiKey: token };
-        const http = reqImpl("http");
-        server = http.createServer((req, res) => {
-          const path = String(req.url || "").split("?")[0].replace(/^\/v1/, "") || "/";
-          if (req.method === "GET" && path === "/models") {
-            proxyModels({ req, res, requireImpl: reqImpl, upstreamBaseUrl, apiKey, authScheme });
-            return;
-          }
-          if (req.method === "POST" && (path === "/responses" || path === "/responses/compact")) {
-            handleResponses({ req, res, requireImpl: reqImpl, upstreamBaseUrl, apiKey, authScheme });
-            return;
-          }
-          sendJson(res, 404, { error: { message: "Unknown Codex provider route path" } });
+        if (server && baseUrl && routeToken) return { baseUrl, routeToken };
+        if (startPromise) return startPromise;
+        startPromise = new Promise((resolve, reject) => {
+          const http = requireImpl("http");
+          const nextServer = http.createServer(handleLocalRequest);
+          const onError = (error) => {
+            nextServer.off("listening", onListening);
+            server = null;
+            baseUrl = "";
+            routeToken = null;
+            reject(error);
+          };
+          const onListening = () => {
+            nextServer.off("error", onError);
+            const address = nextServer.address();
+            server = nextServer;
+            routeToken = generateRouteToken(crypto);
+            baseUrl = `http://127.0.0.1:${address.port}/v1`;
+            resolve({ baseUrl, routeToken });
+          };
+          nextServer.once("error", onError);
+          nextServer.once("listening", onListening);
+          nextServer.listen(0, "127.0.0.1");
+        }).finally(() => {
+          startPromise = null;
         });
-        await new Promise((resolve, reject) => {
-          server.on("error", reject);
-          server.listen(0, "127.0.0.1", () => resolve());
-        });
-        const address = server.address();
-        baseUrl = "http://127.0.0.1:" + address.port;
-        return { baseUrl, apiKey: token };
+        return startPromise;
       },
       async close() {
-        if (!server) return;
+        if (startPromise) {
+          try {
+            await startPromise;
+          } catch {
+            return;
+          }
+        }
+        if (!server) {
+          routeToken = null;
+          baseUrl = "";
+          return;
+        }
         const closing = server;
         server = null;
         baseUrl = "";
+        for (const context of [...contexts]) {
+          destroyOnce(context);
+          finishOnce(context);
+          if (!context.res.writableEnded) context.res.end();
+        }
         await new Promise((resolve) => closing.close(resolve));
+        routeToken = null;
       }
     };
   }
@@ -17526,6 +19146,39 @@
   function isTransientReconnectError(error) {
     const message = error && error.message !== void 0 ? String(error.message) : "";
     return /^reconnecting\.\.\.\s*\d+\/\d+$/i.test(message);
+  }
+  function recoverableProviderFailure(error) {
+    const values = [error, error == null ? void 0 : error.data, error == null ? void 0 : error.error, error == null ? void 0 : error.cause].filter((value) => value && typeof value === "object");
+    if (values.some((value) => ["code", "type", "kind", "reason"].some((key) => String(value[key] || "").toLowerCase() === "provider_compaction_unsupported"))) {
+      return false;
+    }
+    for (const value of values) {
+      for (const key of ["status", "statusCode", "httpStatus", "upstreamStatus"]) {
+        if ([401, 403, 404].includes(Number(value[key]))) return true;
+      }
+      for (const key of ["code", "type", "kind", "reason"]) {
+        if (key === "code" && [401, 403, 404].includes(Number(value[key]))) return true;
+        const code = String(value[key] || "").toLowerCase();
+        if (/unsupported[_-](?:endpoint|api|wire)|(?:endpoint|api|wire)[_-]unsupported/.test(code)) return true;
+      }
+    }
+    const message = String((error == null ? void 0 : error.message) || "");
+    return /\b(?:http|status(?:\s+code)?)\s*[:=]?\s*(?:401|403|404)\b/i.test(message) || /\bunsupported\s+(?:endpoint|api|wire api|request)\b/i.test(message);
+  }
+  function providerFailureFacts(error) {
+    const values = [error, error == null ? void 0 : error.data, error == null ? void 0 : error.error, error == null ? void 0 : error.cause].filter((value) => value && typeof value === "object");
+    let status = null;
+    let code = "";
+    for (const value of values) {
+      for (const key of ["status", "statusCode", "httpStatus", "upstreamStatus"]) {
+        const candidate = Number(value[key]);
+        if (Number.isInteger(candidate)) status = candidate;
+      }
+      for (const key of ["code", "type", "kind", "reason"]) {
+        if (!code && value[key] !== void 0) code = String(value[key]);
+      }
+    }
+    return { status, code };
   }
   function createRpc2({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEOUT_MS2 }) {
     let nextId2 = 1;
@@ -17649,7 +19302,11 @@
     getToolMeta,
     getExpertGuidance = () => true,
     getServerInstructions = () => "",
-    getProviderProfile = () => ({}),
+    getProviderProfile = () => null,
+    resolveRequestProfile,
+    recoverProviderProfile,
+    onProviderProfileRecovered = () => {
+    },
     // Spec A extension: when the panel has no explicit custom provider
     // configured, inherit a model_provider already declared in
     // ~/.codex/config.toml. config.toml owns model_provider selection; the
@@ -17680,6 +19337,20 @@
     let toolMeta = { allowedTools: [], annotations: {} };
     let lastCliInfo = null;
     let providerRoute = null;
+    let providerSensitiveValues = [];
+    let providerDeltaPhase = void 0;
+    let providerDeltaRedactor = createDeltaRedactor([], () => {
+    });
+    let providerStderrRedactor = createDeltaRedactor([], () => {
+    });
+    let runtimeGeneration = 0;
+    let providerProfileOverride = null;
+    let providerRecoveryAttempted = false;
+    let providerRecoveryInFlight = false;
+    let providerRecoverySequence = 0;
+    let providerRefreshPending = false;
+    let activeUserText = "";
+    let activeUserRecorded = false;
     const pendingApprovals = /* @__PURE__ */ new Map();
     const sessionAllowedTools = /* @__PURE__ */ new Set();
     const sessionAllowedPlans = /* @__PURE__ */ new Set();
@@ -17690,22 +19361,56 @@
       });
     }
     function emit(evt) {
-      if (onEvent) onEvent(evt);
+      if (onEvent) onEvent(redactValue(evt, providerSensitiveValues));
+    }
+    function resetProviderDeltaRedactor() {
+      providerDeltaRedactor.discard();
+      providerDeltaPhase = void 0;
+      providerDeltaRedactor = createDeltaRedactor(providerSensitiveValues, (text) => {
+        activeAssistantText += text;
+        emit({ type: "text-delta", text, phase: providerDeltaPhase });
+      });
+    }
+    function resetProviderStderrRedactor() {
+      providerStderrRedactor.discard();
+      providerStderrRedactor = createDeltaRedactor(providerSensitiveValues, (text) => {
+        stderrTail = appendTail4(stderrTail, text);
+      });
+    }
+    function setProviderSensitiveValues(values) {
+      providerSensitiveValues = Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((left, right) => right.length - left.length);
+      resetProviderDeltaRedactor();
+      resetProviderStderrRedactor();
+    }
+    function clearProviderSensitiveValues() {
+      providerDeltaRedactor.discard();
+      providerStderrRedactor.discard();
+      providerSensitiveValues = [];
+      providerDeltaPhase = void 0;
+      providerDeltaRedactor = createDeltaRedactor([], () => {
+      });
+      providerStderrRedactor = createDeltaRedactor([], () => {
+      });
     }
     function currentEnv() {
       return adapter.completeSpawnEnv(env || {});
     }
     function finishActive() {
-      if (!activeResolve) {
-        activeRun = null;
-        activeAssistantText = "";
-        return;
-      }
       const resolve = activeResolve;
+      const refreshProvider = providerRefreshPending;
       activeResolve = null;
       activeRun = null;
       activeAssistantText = "";
-      resolve();
+      activeUserText = "";
+      activeUserRecorded = false;
+      providerRecoveryAttempted = false;
+      providerRecoveryInFlight = false;
+      providerRefreshPending = false;
+      if (resolve) resolve();
+      if (refreshProvider) {
+        Promise.resolve().then(() => onProviderProfileRecovered()).catch(() => {
+        });
+      }
     }
     function drainApprovals() {
       for (const [toolUseId, approval] of Array.from(pendingApprovals.entries())) {
@@ -17714,10 +19419,36 @@
         emit({ type: "tool-denied", toolUseId });
       }
     }
+    function detachRuntimeForProviderRecovery() {
+      const previousProc = proc;
+      const previousRpc = rpc;
+      runtimeGeneration += 1;
+      drainApprovals();
+      closeProviderRoute();
+      if (previousRpc) previousRpc.close(new Error("Codex provider runtime is restarting"));
+      proc = null;
+      rpc = null;
+      startPromise = null;
+      initializePromise = null;
+      initialized = false;
+      threadId = null;
+      preambleSent = false;
+      currentTurnId = null;
+      activeAssistantText = "";
+      stderrTail = "";
+      clearProviderSensitiveValues();
+      if (previousProc) {
+        try {
+          previousProc.kill();
+        } catch {
+        }
+      }
+    }
     function handleNotification(message) {
       const params = message.params || {};
       if (message.method === "turn/started") {
         currentTurnId = params.turn && params.turn.id || params.turnId || null;
+        resetProviderDeltaRedactor();
         emit({ type: "turn-start" });
         return;
       }
@@ -17725,8 +19456,8 @@
         emit({ type: "thinking", active: false });
         const text = params.delta !== void 0 ? params.delta : params.text;
         if (text) {
-          activeAssistantText += String(text);
-          emit({ type: "text-delta", text: String(text), phase: params.phase });
+          providerDeltaPhase = params.phase;
+          providerDeltaRedactor.feed(String(text));
         }
         return;
       }
@@ -17764,6 +19495,14 @@
       }
       if (message.method === "turn/completed") {
         currentTurnId = null;
+        const turn = params.turn && typeof params.turn === "object" ? params.turn : params;
+        const completionFailure = turn.error || params.error || (turn.status === "failed" || turn.status === "error" ? { code: turn.status, message: "Codex turn failed." } : null);
+        if (completionFailure) {
+          providerDeltaRedactor.discard();
+          void handleTurnFailure(completionFailure);
+          return;
+        }
+        providerDeltaRedactor.flush();
         drainApprovals();
         emit({ type: "turn-end", stopReason: "end_turn" });
         transcript.push({ role: "assistant", text: activeAssistantText });
@@ -17773,8 +19512,8 @@
       if (message.method === "error") {
         const error = params.error || params;
         if (isTransientReconnectError(error)) return;
-        emit({ type: "error", kind: error.kind || "mcp", message: error.message || String(error || "Codex app-server error") });
-        finishActive();
+        providerDeltaRedactor.discard();
+        void handleTurnFailure(error);
       }
     }
     function acceptElicitation(rpcId) {
@@ -17861,6 +19600,7 @@
     }
     function handleExit(code, signal) {
       const wasStopping = stopping;
+      providerStderrRedactor.flush();
       const detail = stderrTail ? String(code) + (signal ? " " + signal : "") + " " + stderrTail : String(code) + (signal ? " " + signal : "");
       if (rpc) rpc.close(new Error("codex app-server exited: " + detail));
       proc = null;
@@ -17871,11 +19611,15 @@
       threadId = null;
       preambleSent = false;
       closeProviderRoute();
-      if (wasStopping) return;
+      if (wasStopping) {
+        clearProviderSensitiveValues();
+        return;
+      }
       if (activeRun) {
         emit({ type: "error", kind: "mcp", message: "codex app-server exited: " + detail });
         finishActive();
       }
+      clearProviderSensitiveValues();
     }
     function handleError(error) {
       const err = error instanceof Error ? error : new Error("codex app-server error");
@@ -17892,32 +19636,54 @@
         emit({ type: "error", kind: "mcp", message: err.message });
         finishActive();
       }
+      clearProviderSensitiveValues();
+    }
+    function runtimeHeadersFromRequestProfile(requestProfile) {
+      const merged = mergeUpstreamHeaders({
+        rawHeaders: [],
+        providerHeaders: (requestProfile == null ? void 0 : requestProfile.extraHeaders) || [],
+        auth: (requestProfile == null ? void 0 : requestProfile.auth) || { kind: "none" }
+      });
+      return Object.entries(merged).map(([name, value], index) => ({
+        name,
+        envName: `AE_MCP_PROVIDER_HEADER_${String(index).padStart(2, "0")}`,
+        value
+      }));
+    }
+    function clearSpawnCredentialCopies(runtimeConfig, spawnEnvironment, extraNames = []) {
+      const names = new Set(extraNames);
+      for (const header of (runtimeConfig == null ? void 0 : runtimeConfig.envHeaders) || []) {
+        names.add(header.envName);
+        header.value = void 0;
+      }
+      for (const name of names) delete spawnEnvironment[name];
+    }
+    function selectedProviderProfile() {
+      const selected = providerProfileOverride || (getProviderProfile ? getProviderProfile() : null);
+      if (!selected) return null;
+      const provider = selected.provider || selected;
+      const dialect = selected.dialect;
+      if (!provider || dialect !== "responses" && dialect !== "chat") {
+        throw new Error("Custom provider dialect is unavailable");
+      }
+      if (typeof resolveRequestProfile !== "function") {
+        throw new Error("Custom provider credential resolver is unavailable");
+      }
+      return { provider, dialect };
     }
     async function startProcess() {
       if (proc && rpc) return true;
       if (startPromise) return startPromise;
-      startPromise = (async () => {
+      const startGeneration = runtimeGeneration;
+      const assertCurrentStart = () => {
+        if (startGeneration !== runtimeGeneration) throw new Error("Codex start was cancelled");
+      };
+      const pendingStart = (async () => {
         const spawnEnv = currentEnv();
-        const providerProfile = normalizeProviderProfile(getProviderProfile ? getProviderProfile() : {}, spawnEnv);
-        let runtimeProviderProfile = providerProfile;
-        if (providerProfile.codexBaseUrl && providerProfile.codexWireApi === "chat") {
-          closeProviderRoute();
-          providerRoute = createResponsesRoute({
-            upstreamBaseUrl: providerProfile.codexBaseUrl,
-            apiKey: providerProfile.codexApiKey,
-            authScheme: providerProfile.codexAuthScheme
-          });
-          const routeInfo = await providerRoute.start();
-          runtimeProviderProfile = {
-            ...providerProfile,
-            codexBaseUrl: routeInfo.baseUrl,
-            codexApiKey: routeInfo.apiKey,
-            codexWireApi: "responses"
-          };
-        }
         stderrTail = "";
         stopping = false;
         const cliInfo = await resolveCli({ env: spawnEnv, platform: adapter });
+        assertCurrentStart();
         if (!cliInfo || !cliInfo.ok) throw new Error(cliInfo && cliInfo.detail || "codex CLI is unavailable");
         lastCliInfo = cliInfo;
         const executable = cliInfo.executable || {
@@ -17929,66 +19695,141 @@
           version: cliInfo.version || null,
           arch: null
         };
-        let spawnEnvWithCreds = codexSpawnEnv(runtimeProviderProfile, spawnEnv);
-        if (!providerProfile.codexBaseUrl) {
+        const selected = selectedProviderProfile();
+        let runtimeConfig = null;
+        if ((selected == null ? void 0 : selected.dialect) === "responses") {
+          let requestProfile = null;
+          try {
+            requestProfile = await resolveRequestProfile(selected.provider, { scope: "model" });
+            assertCurrentStart();
+            runtimeConfig = {
+              providerId: selected.provider.id,
+              baseUrl: requestProfile.baseUrl,
+              envHeaders: runtimeHeadersFromRequestProfile(requestProfile)
+            };
+            setProviderSensitiveValues(sensitiveValues(requestProfile));
+          } finally {
+            requestProfile = null;
+          }
+        } else if ((selected == null ? void 0 : selected.dialect) === "chat") {
+          closeProviderRoute();
+          providerRoute = createResponsesRoute({
+            provider: selected.provider,
+            resolveRequestProfile
+          });
+          const routeInfo = await providerRoute.start();
+          assertCurrentStart();
+          runtimeConfig = {
+            providerId: selected.provider.id,
+            baseUrl: routeInfo.baseUrl,
+            envHeaders: [{
+              name: "Authorization",
+              envName: "AE_MCP_PROVIDER_HEADER_00",
+              value: `Bearer ${routeInfo.routeToken}`
+            }]
+          };
+          setProviderSensitiveValues([`Bearer ${routeInfo.routeToken}`, routeInfo.routeToken]);
+        } else {
+          setProviderSensitiveValues([]);
+        }
+        let spawnEnvWithCreds = codexSpawnEnv(runtimeConfig, spawnEnv);
+        const extraCredentialEnvNames = [];
+        if (!selected) {
           const cliConfig = getCliConfigProvider ? getCliConfigProvider() : null;
           const envKey = cliConfig && cliConfig.provider && String(cliConfig.provider.envKey || "").trim();
           if (envKey && cliConfig.apiKey) {
             spawnEnvWithCreds = Object.assign({}, spawnEnvWithCreds, { [envKey]: cliConfig.apiKey });
+            extraCredentialEnvNames.push(envKey);
+            setProviderSensitiveValues([String(cliConfig.apiKey)]);
           }
         }
-        proc = adapter.spawn(executable, codexAppServerArgs(runtimeProviderProfile), {
-          stdio: "pipe",
-          windowsHide: true,
-          env: spawnEnvWithCreds
-        });
-        rpc = createRpc2({
-          writeLine: (line) => proc.stdin.write(line),
+        assertCurrentStart();
+        let spawnedProc;
+        try {
+          spawnedProc = adapter.spawn(executable, codexAppServerArgs(runtimeConfig), {
+            stdio: "pipe",
+            windowsHide: true,
+            env: spawnEnvWithCreds
+          });
+        } finally {
+          clearSpawnCredentialCopies(runtimeConfig, spawnEnvWithCreds, extraCredentialEnvNames);
+        }
+        proc = spawnedProc;
+        const generation = startGeneration + 1;
+        runtimeGeneration = generation;
+        const nextRpc = createRpc2({
+          writeLine: (line) => spawnedProc.stdin.write(line),
           onNotification: handleNotification,
           onRequest: handleRequest
         });
-        const reader = createNdjsonReader((message) => rpc && rpc.handleMessage(message));
-        if (proc.stdout && proc.stdout.on) proc.stdout.on("data", reader);
-        if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
-          stderrTail = appendTail4(stderrTail, chunk);
+        rpc = nextRpc;
+        const reader = createNdjsonReader((message) => {
+          if (generation === runtimeGeneration && rpc === nextRpc) nextRpc.handleMessage(message);
         });
-        proc.on("exit", (code, signal) => handleExit(code, signal));
-        proc.on("error", (error) => handleError(error));
+        if (spawnedProc.stdout && spawnedProc.stdout.on) spawnedProc.stdout.on("data", reader);
+        if (spawnedProc.stderr && spawnedProc.stderr.on) spawnedProc.stderr.on("data", (chunk) => {
+          if (generation !== runtimeGeneration || proc !== spawnedProc) return;
+          providerStderrRedactor.feed(chunk);
+        });
+        spawnedProc.on("exit", (code, signal) => {
+          if (generation === runtimeGeneration && proc === spawnedProc) handleExit(code, signal);
+        });
+        spawnedProc.on("error", (error) => {
+          if (generation === runtimeGeneration && proc === spawnedProc) handleError(error);
+        });
         return true;
-      })();
+      })().catch((error) => {
+        if (startGeneration === runtimeGeneration) {
+          closeProviderRoute();
+          clearProviderSensitiveValues();
+        }
+        throw error;
+      });
+      startPromise = pendingStart;
       try {
-        return await startPromise;
+        return await pendingStart;
       } finally {
-        startPromise = null;
+        if (startPromise === pendingStart) startPromise = null;
       }
     }
     async function initialize(timeoutOverrideMs) {
       if (initialized) return true;
       if (initializePromise) return initializePromise;
-      initializePromise = (async () => {
+      const pendingInitialize = (async () => {
         await startProcess();
-        await rpc.request("initialize", {
+        const initializingRpc = rpc;
+        const initializingGeneration = runtimeGeneration;
+        await initializingRpc.request("initialize", {
           clientInfo: { name: "ae-mcp-panel", version: PANEL_VERSION },
           // granular askForApproval (our four-tier mapping) is gated behind
           // the experimental API surface (live error without it).
           capabilities: { experimentalApi: true }
         }, timeoutOverrideMs);
+        if (initializingGeneration !== runtimeGeneration || rpc !== initializingRpc) {
+          throw new Error("Codex initialization was cancelled");
+        }
         initialized = true;
         return true;
       })();
+      initializePromise = pendingInitialize;
       try {
-        return await initializePromise;
+        return await pendingInitialize;
       } finally {
-        initializePromise = null;
+        if (initializePromise === pendingInitialize) initializePromise = null;
       }
     }
     async function ensureThread() {
       if (threadId) return threadId;
       await initialize();
+      const threadRpc = rpc;
+      const threadGeneration = runtimeGeneration;
       const mcpSpec = await getMcpSpec();
       toolMeta = getToolMeta ? await getToolMeta() : { allowedTools: [], annotations: {} };
+      if (threadGeneration !== runtimeGeneration || rpc !== threadRpc) {
+        throw new Error("Codex thread start was cancelled");
+      }
       const spawnEnv = currentEnv();
-      const result = await rpc.request("thread/start", {
+      const result = await threadRpc.request("thread/start", {
         ephemeral: true,
         cwd: defaultCwd(spawnEnv, adapter),
         model: getModel(),
@@ -18008,6 +19849,9 @@
           }
         }
       });
+      if (threadGeneration !== runtimeGeneration || rpc !== threadRpc) {
+        throw new Error("Codex thread start was cancelled");
+      }
       threadId = threadIdFromResult(result);
       return threadId;
     }
@@ -18024,32 +19868,91 @@
       if (params.effort === void 0 || params.effort === null) delete params.effort;
       return params;
     }
+    async function launchActiveTurn() {
+      await ensureThread();
+      if (!activeRun) return;
+      if (!activeUserRecorded) {
+        transcript.push({ role: "user", text: activeUserText });
+        activeUserRecorded = true;
+      }
+      let turnText = activeUserText;
+      if (!preambleSent) {
+        const instructions = (getServerInstructions() || "").trim();
+        if (instructions) turnText = instructions + "\n\n---\n\n" + activeUserText;
+        preambleSent = true;
+      }
+      rpc.request("turn/start", turnParams(turnText), 18e4).catch((error) => {
+        void handleTurnFailure(error);
+      });
+    }
+    async function attemptProviderRecovery(error) {
+      if (providerRecoveryInFlight) return true;
+      if (providerRecoveryAttempted || !activeRun || typeof recoverProviderProfile !== "function" || !recoverableProviderFailure(error)) return false;
+      let selected;
+      try {
+        selected = selectedProviderProfile();
+      } catch {
+        return false;
+      }
+      if (!selected) return false;
+      providerRecoveryAttempted = true;
+      providerRecoveryInFlight = true;
+      const sequence = providerRecoverySequence + 1;
+      providerRecoverySequence = sequence;
+      detachRuntimeForProviderRecovery();
+      let recovered;
+      try {
+        recovered = await recoverProviderProfile(selected.provider, providerFailureFacts(error));
+      } catch {
+        recovered = null;
+      }
+      if (sequence !== providerRecoverySequence || !activeRun) return true;
+      providerRecoveryInFlight = false;
+      const provider = (recovered == null ? void 0 : recovered.provider) || recovered;
+      const dialect = recovered == null ? void 0 : recovered.dialect;
+      if (!provider || dialect !== "responses" && dialect !== "chat") return false;
+      providerProfileOverride = { provider, dialect };
+      providerRefreshPending = true;
+      await launchActiveTurn();
+      return true;
+    }
+    async function handleTurnFailure(error) {
+      if (!activeRun || providerRecoveryInFlight) return;
+      let failure2 = {
+        kind: error == null ? void 0 : error.kind,
+        message: redactValue((error == null ? void 0 : error.message) || "Failed to start Codex turn.", providerSensitiveValues)
+      };
+      try {
+        if (await attemptProviderRecovery(error)) return;
+      } catch (recoveryError) {
+        failure2 = {
+          kind: recoveryError == null ? void 0 : recoveryError.kind,
+          message: redactValue((recoveryError == null ? void 0 : recoveryError.message) || "Failed to start Codex turn.", providerSensitiveValues)
+        };
+      }
+      providerDeltaRedactor.discard();
+      const message = (failure2 == null ? void 0 : failure2.message) || "Failed to start Codex turn.";
+      emit({ type: "error", kind: (failure2 == null ? void 0 : failure2.kind) || (/model/i.test(message) ? "model" : "mcp"), message });
+      finishActive();
+    }
     async function sendUser(text) {
       if (activeRun) return activeRun;
       activeAssistantText = "";
+      activeUserText = String(text || "");
+      activeUserRecorded = false;
+      providerRecoveryAttempted = false;
+      providerRecoveryInFlight = false;
+      providerRecoverySequence += 1;
       activeRun = new Promise((resolve) => {
         activeResolve = resolve;
       });
+      const run = activeRun;
       try {
-        await ensureThread();
-        const userText = String(text || "");
-        transcript.push({ role: "user", text: userText });
-        let turnText = userText;
-        if (!preambleSent) {
-          const instr = (getServerInstructions() || "").trim();
-          if (instr) turnText = instr + "\n\n---\n\n" + userText;
-          preambleSent = true;
-        }
-        rpc.request("turn/start", turnParams(turnText), 18e4).catch((e) => {
-          const message = e && e.message ? e.message : "Failed to start Codex turn.";
-          emit({ type: "error", kind: /model/i.test(message) ? "model" : "mcp", message });
-          finishActive();
-        });
-      } catch (e) {
-        emit({ type: "error", kind: "mcp", message: e && e.message ? e.message : "Failed to start Codex turn." });
-        finishActive();
+        await launchActiveTurn();
+      } catch (error) {
+        await handleTurnFailure(error);
       }
-      return activeRun;
+      return run;
     }
     function approve(toolUseId, decision) {
       const id = String(toolUseId);
@@ -18073,10 +19976,12 @@
       else emit({ type: "tool-allowed", toolUseId: id });
     }
     function stop() {
+      providerRecoverySequence += 1;
       if (rpc && threadId && currentTurnId) {
         rpc.fireRequest("turn/interrupt", { threadId, turnId: currentTurnId });
       }
       drainApprovals();
+      providerDeltaRedactor.discard();
       if (activeRun) {
         emit({ type: "error", kind: "aborted", message: "Turn aborted." });
         finishActive();
@@ -18084,6 +19989,8 @@
     }
     function reset() {
       stopping = true;
+      runtimeGeneration += 1;
+      providerRecoverySequence += 1;
       closeProviderRoute();
       drainApprovals();
       if (rpc) rpc.close(new Error("Codex backend reset"));
@@ -18106,8 +20013,10 @@
       sessionAllowedTools.clear();
       sessionAllowedPlans.clear();
       toolMeta = { allowedTools: [], annotations: {} };
+      providerProfileOverride = null;
       finishActive();
       stderrTail = "";
+      clearProviderSensitiveValues();
       stopping = false;
     }
     const PROBE_INITIALIZE_TIMEOUT_MS = 1e4;
@@ -20653,6 +22562,644 @@
     return { deleted, pending: store.readState().pendingSecretDeletes.length };
   }
 
+  // src/cep/modelProbe.js
+  function getCepRequire3() {
+    var _a, _b, _c;
+    if ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) return globalThis.window.cep_node.require;
+    if ((_c = globalThis.window) == null ? void 0 : _c.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function authSchemeFromDialect(dialect) {
+    if (!dialect) return "";
+    if (typeof dialect === "string") return dialect;
+    return String(dialect.authScheme || "").trim();
+  }
+  function probeHeaders(protocol, apiKey, dialect) {
+    if (protocol === "anthropic") {
+      return { "x-api-key": String(apiKey || ""), "anthropic-version": "2023-06-01" };
+    }
+    const authScheme = authSchemeFromDialect(dialect);
+    if (authScheme === "x-api-key") return { "x-api-key": String(apiKey || "") };
+    if (authScheme === "none") return {};
+    return { Authorization: "Bearer " + String(apiKey || "") };
+  }
+  function parseModelsList(json) {
+    const list = Array.isArray(json) ? json : json && Array.isArray(json.data) ? json.data : json && Array.isArray(json.models) ? json.models : [];
+    return list.map((model) => {
+      const id = model && (model.id || model.model || model.name);
+      if (!id) return null;
+      return { id: String(id), label: String(model.display_name || model.displayName || id) };
+    }).filter(Boolean);
+  }
+  function modelsEndpoint(baseUrl, allowInsecureHttp) {
+    const approved = validateProviderBaseUrl(baseUrl, {
+      allowInsecureHttp,
+      requireTransportApproval: true
+    });
+    const endpoint = new URL(approved);
+    let prefix = endpoint.pathname.replace(/\/+$/, "");
+    if (/\/v1$/i.test(prefix)) prefix = prefix.slice(0, -3);
+    endpoint.pathname = `${prefix === "/" ? "" : prefix}/v1/models`;
+    endpoint.search = "";
+    endpoint.hash = "";
+    return endpoint;
+  }
+  function resolvedProfileHeaders(profile) {
+    var _a;
+    const headers = {};
+    for (const header of profile.extraHeaders || []) {
+      headers[String(header.name).toLowerCase()] = String(header.value);
+    }
+    if (((_a = profile.auth) == null ? void 0 : _a.kind) === "header") {
+      headers[String(profile.auth.name).toLowerCase()] = String(profile.auth.value);
+    }
+    return headers;
+  }
+  function networkFailure() {
+    return {
+      ok: false,
+      status: 0,
+      models: [],
+      detail: "Network error while probing provider models"
+    };
+  }
+  function resultFromResponse(status, body, sensitiveValues2 = []) {
+    if (status !== 200) {
+      return { ok: false, status, models: [], detail: "HTTP " + status + " from provider" };
+    }
+    try {
+      const models = parseModelsList(JSON.parse(body));
+      const serialized = JSON.stringify(models);
+      if (sensitiveValues2.some((value) => value && serialized.includes(value))) {
+        return { ok: false, status: 200, models: [], detail: "Provider model metadata was rejected" };
+      }
+      return models.length ? { ok: true, status: 200, models, detail: "" } : { ok: false, status: 200, models: [], detail: "Empty model list" };
+    } catch {
+      return { ok: false, status: 200, models: [], detail: "Response was not valid JSON" };
+    }
+  }
+  function requestWithTransport({ endpoint, headers, sensitiveValues: sensitiveValues2, httpsImpl, timeoutMs }) {
+    let transport;
+    try {
+      transport = httpsImpl || getCepRequire3()(endpoint.protocol === "http:" ? "http" : "https");
+    } catch {
+      return Promise.resolve(networkFailure());
+    }
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      };
+      const req = transport.request({
+        hostname: endpoint.hostname,
+        port: endpoint.port || void 0,
+        protocol: endpoint.protocol,
+        path: endpoint.pathname + endpoint.search,
+        method: "GET",
+        headers
+      }, (res) => {
+        let body = "";
+        res.on("data", (chunk) => {
+          body += String(chunk);
+        });
+        res.on("end", () => finish(resultFromResponse(res.statusCode || 0, body, sensitiveValues2)));
+      });
+      req.on("error", () => finish(networkFailure()));
+      if (req.setTimeout) {
+        req.setTimeout(timeoutMs, () => {
+          try {
+            req.destroy();
+          } catch {
+          }
+          finish({ ok: false, status: 0, models: [], detail: "timeout" });
+        });
+      }
+      req.end();
+    });
+  }
+  async function probeProviderModels({
+    requestProfile,
+    baseUrl,
+    apiKey,
+    protocol = "openai-compatible",
+    dialect,
+    authScheme,
+    allowInsecureHttp = false,
+    requestImpl,
+    httpsImpl,
+    timeoutMs = 8e3
+  } = {}) {
+    var _a;
+    const profile = requestProfile && typeof requestProfile === "object" ? requestProfile : null;
+    const selectedBaseUrl = profile ? profile.baseUrl : baseUrl;
+    const selectedAllowInsecureHttp = profile ? profile.allowInsecureHttp === true : allowInsecureHttp;
+    let endpoint;
+    try {
+      endpoint = modelsEndpoint(selectedBaseUrl, selectedAllowInsecureHttp);
+    } catch (error) {
+      if ((error == null ? void 0 : error.code) === "provider_insecure_http_forbidden") {
+        return {
+          ok: false,
+          status: 0,
+          models: [],
+          detail: "Insecure provider HTTP is not approved"
+        };
+      }
+      return { ok: false, status: 0, models: [], detail: "Invalid base URL" };
+    }
+    const headers = profile ? resolvedProfileHeaders(profile) : probeHeaders(protocol, apiKey, dialect || authScheme);
+    const sensitiveValues2 = [];
+    if (((_a = profile == null ? void 0 : profile.auth) == null ? void 0 : _a.kind) === "header" && profile.auth.value) {
+      const value = String(profile.auth.value);
+      sensitiveValues2.push(value);
+      const bearer = /^Bearer\s+(.+)$/i.exec(value);
+      if (bearer == null ? void 0 : bearer[1]) sensitiveValues2.push(bearer[1]);
+    } else if (apiKey) {
+      sensitiveValues2.push(String(apiKey));
+    }
+    for (const header of (profile == null ? void 0 : profile.extraHeaders) || []) {
+      if (header.source === "secret" && header.value) sensitiveValues2.push(String(header.value));
+    }
+    if (typeof requestImpl === "function") {
+      try {
+        const response = await requestImpl({
+          url: endpoint.toString(),
+          method: "GET",
+          headers,
+          timeoutMs
+        });
+        const status = Number.isInteger(response == null ? void 0 : response.status) ? response.status : 0;
+        if (status === 0) return networkFailure();
+        return resultFromResponse(
+          status,
+          typeof (response == null ? void 0 : response.body) === "string" ? response.body : "",
+          sensitiveValues2
+        );
+      } catch {
+        return networkFailure();
+      }
+    }
+    return requestWithTransport({ endpoint, headers, sensitiveValues: sensitiveValues2, httpsImpl, timeoutMs });
+  }
+
+  // src/cep/providerDetect.js
+  var effectiveProviderDialect2 = effectiveProviderDialect;
+  function getCepRequire4() {
+    var _a, _b, _c;
+    if ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) return globalThis.window.cep_node.require;
+    if ((_c = globalThis.window) == null ? void 0 : _c.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function endpointUrl(profile, resource) {
+    return buildProviderEndpoint({
+      baseUrl: profile.baseUrl,
+      resource: resource === "chat" ? "chat-completions" : resource,
+      allowInsecureHttp: profile.allowInsecureHttp === true
+    });
+  }
+  function normalizedHeaders(value) {
+    const output = {};
+    if (!value || typeof value !== "object") return output;
+    for (const [name, headerValue] of Object.entries(value)) {
+      if (headerValue === void 0 || headerValue === null) continue;
+      output[String(name).toLowerCase()] = Array.isArray(headerValue) ? headerValue.map(String).join(", ") : String(headerValue);
+    }
+    return output;
+  }
+  function requestHeaders(profile, contentType = false) {
+    var _a;
+    const headers = {};
+    for (const header of profile.extraHeaders || []) {
+      headers[String(header.name).toLowerCase()] = String(header.value);
+    }
+    if (((_a = profile.auth) == null ? void 0 : _a.kind) === "header") {
+      headers[String(profile.auth.name).toLowerCase()] = String(profile.auth.value);
+    }
+    if (contentType) headers["content-type"] = "application/json";
+    return headers;
+  }
+  function defaultRequest({ url, method, headers, body, timeoutMs }) {
+    return new Promise((resolve, reject) => {
+      let endpoint;
+      let transport;
+      try {
+        endpoint = new URL(url);
+        transport = getCepRequire4()(endpoint.protocol === "http:" ? "http" : "https");
+      } catch {
+        reject(new Error("provider request setup failed"));
+        return;
+      }
+      const payload = body === void 0 ? null : JSON.stringify(body);
+      let settled = false;
+      const finish = (callback, value) => {
+        if (settled) return;
+        settled = true;
+        callback(value);
+      };
+      const req = transport.request({
+        hostname: endpoint.hostname,
+        port: endpoint.port || void 0,
+        protocol: endpoint.protocol,
+        path: endpoint.pathname + endpoint.search,
+        method,
+        headers
+      }, (res) => {
+        let responseBody = "";
+        res.on("data", (chunk) => {
+          responseBody += String(chunk);
+        });
+        res.on("end", () => finish(resolve, {
+          status: res.statusCode || 0,
+          headers: normalizedHeaders(res.headers),
+          body: responseBody
+        }));
+      });
+      req.on("error", () => finish(reject, new Error("provider request failed")));
+      if (req.setTimeout) {
+        req.setTimeout(timeoutMs, () => {
+          try {
+            req.destroy();
+          } catch {
+          }
+          finish(reject, new Error("provider request timed out"));
+        });
+      }
+      if (payload !== null && req.write) req.write(payload);
+      req.end();
+    });
+  }
+  function safeResult(raw) {
+    const result = raw && typeof raw === "object" ? raw : {};
+    return {
+      status: Number.isInteger(result.status) ? result.status : 0,
+      headers: normalizedHeaders(result.headers),
+      body: typeof result.body === "string" ? result.body : "",
+      redirected: result.redirected === true
+    };
+  }
+  async function requestStep({ step, profile, resource, method, body, requestImpl, timeoutMs, tried }) {
+    let url;
+    try {
+      url = endpointUrl(profile, resource);
+    } catch {
+      return { configuration: true };
+    }
+    const headers = requestHeaders(profile, body !== void 0);
+    const audit = {
+      step,
+      method,
+      path: url.pathname + url.search,
+      headerNames: Object.keys(headers).sort()
+    };
+    try {
+      const result = safeResult(await requestImpl({
+        url: url.toString(),
+        method,
+        headers,
+        ...body === void 0 ? {} : { body },
+        timeoutMs
+      }));
+      tried.push({ ...audit, status: result.status, outcome: "received" });
+      return result;
+    } catch {
+      tried.push({ ...audit, status: 0, outcome: "network" });
+      return { network: true, status: 0, headers: {}, body: "", redirected: false };
+    }
+  }
+  function isJsonContentType(headers) {
+    const value = String((headers == null ? void 0 : headers["content-type"]) || "").split(";", 1)[0].trim().toLowerCase();
+    return value === "application/json" || value.endsWith("+json");
+  }
+  function parsedJson(result) {
+    if (!isJsonContentType(result.headers)) return null;
+    try {
+      const parsed = JSON.parse(result.body || "");
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  function endpointSemantic(result, expectedParam) {
+    if (result.status !== 400 && result.status !== 422) return false;
+    const parsed = parsedJson(result);
+    return Boolean((parsed == null ? void 0 : parsed.error) && typeof parsed.error === "object" && parsed.error.param === expectedParam);
+  }
+  function responsesSuccess(result) {
+    if (result.status < 200 || result.status >= 300) return false;
+    const parsed = parsedJson(result);
+    return Boolean(
+      parsed && parsed.object === "response" && typeof parsed.id === "string" && Array.isArray(parsed.output)
+    );
+  }
+  function chatSuccess(result) {
+    if (result.status < 200 || result.status >= 300) return false;
+    const parsed = parsedJson(result);
+    return Boolean(
+      parsed && parsed.object === "chat.completion" && typeof parsed.id === "string" && Array.isArray(parsed.choices)
+    );
+  }
+  function profileMatchesProvider(profile, provider) {
+    var _a, _b;
+    return Boolean(
+      profile && profile.providerId === provider.id && normalizeBaseUrl(profile.baseUrl) === normalizeBaseUrl(provider.baseUrl) && profile.allowInsecureHttp === provider.allowInsecureHttp && profile.authProfileRevision === provider.authProfileRevision && (((_a = profile.auth) == null ? void 0 : _a.kind) === "none" || ((_b = profile.auth) == null ? void 0 : _b.kind) === "header") && Array.isArray(profile.extraHeaders)
+    );
+  }
+  function profileSensitiveValues(profile) {
+    var _a;
+    const values = [];
+    if (((_a = profile == null ? void 0 : profile.auth) == null ? void 0 : _a.kind) === "header" && profile.auth.value) {
+      const value = String(profile.auth.value);
+      values.push(value);
+      const bearer = /^Bearer\s+(.+)$/i.exec(value);
+      if (bearer == null ? void 0 : bearer[1]) values.push(bearer[1]);
+    }
+    for (const header of (profile == null ? void 0 : profile.extraHeaders) || []) {
+      if (header.source === "secret" && header.value) values.push(String(header.value));
+    }
+    return [...new Set(values.filter(Boolean))];
+  }
+  function modelsContainSensitiveValue(models, values) {
+    let serialized;
+    try {
+      serialized = JSON.stringify(models);
+    } catch {
+      return true;
+    }
+    return values.some((value) => serialized.includes(value));
+  }
+  function failure(reason, detail, tried) {
+    return { ok: false, reason, detail, tried };
+  }
+  async function detectProviderDialect({
+    provider,
+    resolveRequestProfile,
+    requestImpl = defaultRequest,
+    modelId,
+    timeoutMs = 8e3,
+    now = Date.now
+  } = {}) {
+    var _a;
+    const tried = [];
+    if (!provider || provider.protocol !== "openai-compatible" || typeof resolveRequestProfile !== "function" || typeof requestImpl !== "function") {
+      return failure("configuration", "Provider dialect detection is not configured", tried);
+    }
+    let probeProfile = null;
+    let modelProfile = null;
+    try {
+      try {
+        probeProfile = await resolveRequestProfile(provider, { scope: "probe" });
+      } catch {
+        return failure("configuration", "Provider probe profile could not be resolved", tried);
+      }
+      if (!profileMatchesProvider(probeProfile, provider)) {
+        return failure("configuration", "Provider probe profile does not match the provider", tried);
+      }
+      const modelsResult = await requestStep({
+        step: "models",
+        profile: probeProfile,
+        resource: "models",
+        method: "GET",
+        requestImpl,
+        timeoutMs,
+        tried
+      });
+      if (modelsResult.configuration) {
+        return failure("configuration", "Provider models endpoint is invalid", tried);
+      }
+      if (modelsResult.network || modelsResult.status === 0) {
+        return failure("network", "Network error while probing provider models", tried);
+      }
+      if (modelsResult.status === 401 || modelsResult.status === 403) {
+        return failure("authentication", "Provider rejected the resolved probe profile", tried);
+      }
+      if (modelsResult.redirected || modelsResult.status >= 300 && modelsResult.status < 400 || modelsResult.status === 404 || modelsResult.status === 405) {
+        return failure("path-unsupported", "Provider models endpoint is unavailable", tried);
+      }
+      const modelsJson = parsedJson(modelsResult);
+      const models = modelsJson ? parseModelsList(modelsJson) : [];
+      if (modelsResult.status !== 200 || models.length === 0) {
+        return failure("path-unsupported", "Provider models endpoint did not return a usable model list", tried);
+      }
+      if (modelsContainSensitiveValue(models, profileSensitiveValues(probeProfile))) {
+        return failure("path-unsupported", "Provider models endpoint returned unsafe metadata", tried);
+      }
+      try {
+        modelProfile = await resolveRequestProfile(provider, { scope: "model" });
+      } catch {
+        return failure("configuration", "Provider model profile could not be resolved", tried);
+      }
+      if (!profileMatchesProvider(modelProfile, provider)) {
+        return failure("configuration", "Provider model profile does not match the provider", tried);
+      }
+      const selectedModel = String(modelId || ((_a = models[0]) == null ? void 0 : _a.id) || "").trim();
+      if (!selectedModel) return failure("configuration", "Provider detection needs a model id", tried);
+      const responses = await requestStep({
+        step: "responses",
+        profile: modelProfile,
+        resource: "responses",
+        method: "POST",
+        body: { model: selectedModel },
+        requestImpl,
+        timeoutMs,
+        tried
+      });
+      if (responses.configuration) {
+        return failure("configuration", "Provider Responses endpoint is invalid", tried);
+      }
+      if (responses.network || responses.status === 0) {
+        return failure("network", "Network error while probing provider wire API", tried);
+      }
+      if (responses.status === 401 || responses.status === 403) {
+        return failure("authentication", "Provider rejected the resolved model profile", tried);
+      }
+      let wireApi = "";
+      let evidence = "";
+      if (!responses.redirected && responsesSuccess(responses)) {
+        wireApi = "responses";
+        evidence = "responses-success-schema";
+      } else if (!responses.redirected && endpointSemantic(responses, "input")) {
+        wireApi = "responses";
+        evidence = "responses-missing-input";
+      }
+      if (!wireApi) {
+        const chat = await requestStep({
+          step: "chat",
+          profile: modelProfile,
+          resource: "chat-completions",
+          method: "POST",
+          body: { model: selectedModel },
+          requestImpl,
+          timeoutMs,
+          tried
+        });
+        if (chat.configuration) return failure("configuration", "Provider Chat endpoint is invalid", tried);
+        if (chat.network || chat.status === 0) {
+          return failure("network", "Network error while probing provider wire API", tried);
+        }
+        if (chat.status === 401 || chat.status === 403) {
+          return failure("authentication", "Provider rejected the resolved model profile", tried);
+        }
+        if (!chat.redirected && chatSuccess(chat)) {
+          wireApi = "chat";
+          evidence = "chat-success-schema";
+        } else if (!chat.redirected && endpointSemantic(chat, "messages")) {
+          wireApi = "chat";
+          evidence = "chat-missing-messages";
+        }
+      }
+      if (!wireApi) {
+        return failure("dialect-incompatible", "Provider did not expose a verified Responses or Chat API", tried);
+      }
+      let detectedAt;
+      try {
+        detectedAt = now();
+      } catch {
+        detectedAt = NaN;
+      }
+      if (!Number.isFinite(detectedAt) || detectedAt < 0) {
+        return failure("configuration", "Provider detection clock is invalid", tried);
+      }
+      return {
+        ok: true,
+        dialect: {
+          wireApi,
+          baseUrl: normalizeBaseUrl(provider.baseUrl),
+          authProfileRevision: provider.authProfileRevision,
+          detectedAt,
+          evidence
+        },
+        models,
+        tried
+      };
+    } finally {
+      probeProfile = null;
+      modelProfile = null;
+    }
+  }
+
+  // src/app/providerProbeFlow.js
+  function probeFailureReason(result) {
+    if ((result == null ? void 0 : result.status) === 401 || (result == null ? void 0 : result.status) === 403) return "authentication";
+    if (!(result == null ? void 0 : result.status)) return "network";
+    return "path-unsupported";
+  }
+  function persistEntry(entry, store, expectedRevision) {
+    if (!store) return { entry, stateRevision: null };
+    return store.upsert(entry, { expectedRevision });
+  }
+  function storeConflict() {
+    const error = new Error("Provider store revision conflict");
+    error.code = "PROVIDER_STORE_CONFLICT";
+    return error;
+  }
+  async function runProviderManagerProbe(provider, {
+    store = null,
+    resolveRequestProfile,
+    probeProviderModelsImpl = probeProviderModels,
+    detectProviderDialectImpl = detectProviderDialect,
+    now = Date.now,
+    forceDetect = false,
+    maxAgeMs
+  } = {}) {
+    const normalized = normalizeProviderEntryV2(provider);
+    if (typeof resolveRequestProfile !== "function") {
+      return {
+        ok: false,
+        reason: "configuration",
+        detail: "Provider request profile resolver is unavailable"
+      };
+    }
+    if (store && (typeof store.readState !== "function" || typeof store.get !== "function" || typeof store.upsert !== "function")) {
+      return {
+        ok: false,
+        reason: "configuration",
+        detail: "Provider store is unavailable"
+      };
+    }
+    const expectedRevision = store ? store.readState().revision : void 0;
+    if (store) {
+      const rawCurrent = store.get(normalized.id);
+      const current = rawCurrent ? normalizeProviderEntryV2(rawCurrent) : null;
+      if (!current || JSON.stringify(current) !== JSON.stringify(normalized)) throw storeConflict();
+    }
+    const effectiveDialect = effectiveProviderDialect2(normalized, { now, maxAgeMs });
+    if (normalized.protocol === "openai-compatible" && (forceDetect || !effectiveDialect)) {
+      const detectResult = await detectProviderDialectImpl({
+        provider: normalized,
+        resolveRequestProfile,
+        now
+      });
+      if (!(detectResult == null ? void 0 : detectResult.ok)) {
+        return {
+          ok: false,
+          reason: (detectResult == null ? void 0 : detectResult.reason) || "configuration",
+          detail: (detectResult == null ? void 0 : detectResult.detail) || "Provider dialect detection failed",
+          detectResult
+        };
+      }
+      const detectedAt = typeof now === "function" ? now() : Date.now();
+      const entry = normalizeProviderEntryV2({
+        ...normalized,
+        dialect: {
+          override: normalized.dialect.override,
+          detected: detectResult.dialect
+        },
+        probedModels: detectResult.models || [],
+        probedAt: detectedAt
+      });
+      const persisted = persistEntry(entry, store, expectedRevision);
+      return {
+        ok: true,
+        entry: persisted.entry,
+        stateRevision: persisted.stateRevision,
+        result: detectResult
+      };
+    }
+    let requestProfile = null;
+    try {
+      try {
+        requestProfile = await resolveRequestProfile(normalized, { scope: "probe" });
+      } catch {
+        return {
+          ok: false,
+          reason: "configuration",
+          detail: "Provider probe profile could not be resolved"
+        };
+      }
+      const result = await probeProviderModelsImpl({
+        requestProfile,
+        protocol: normalized.protocol
+      });
+      if (!(result == null ? void 0 : result.ok)) {
+        return {
+          ok: false,
+          reason: probeFailureReason(result),
+          detail: (result == null ? void 0 : result.detail) || "Provider model probe failed",
+          result
+        };
+      }
+      const probedAt = typeof now === "function" ? now() : Date.now();
+      const entry = normalizeProviderEntryV2({
+        ...normalized,
+        probedModels: result.models || [],
+        probedAt
+      });
+      const persisted = persistEntry(entry, store, expectedRevision);
+      return {
+        ok: true,
+        entry: persisted.entry,
+        stateRevision: persisted.stateRevision,
+        result
+      };
+    } finally {
+      requestProfile = null;
+    }
+  }
+
   // src/app/providerInitState.js
   var HELPER_FAILURE_CODES = /* @__PURE__ */ new Set([
     "HELPER_UNAVAILABLE",
@@ -20675,13 +23222,13 @@
   ]);
   function providerInitFailure(error) {
     const code = typeof (error == null ? void 0 : error.code) === "string" ? error.code : "";
-    let failure = "PROVIDER_INITIALIZATION_FAILED";
-    if (HELPER_FAILURE_CODES.has(code)) failure = "PLATFORM_HELPER_REPAIR_REQUIRED";
-    else if (code === "PROVIDER_STORE_INVALID") failure = "PROVIDER_STORE_CORRUPT";
-    else if (code === "PROVIDER_STORE_UNAVAILABLE") failure = "PROVIDER_STORE_UNAVAILABLE";
-    else if (MIGRATION_FAILURE_CODES.has(code)) failure = "PROVIDER_MIGRATION_CONFLICT";
-    else if (SECRET_MISMATCH_CODES.has(code)) failure = "PROVIDER_SECRET_MISMATCH";
-    return { state: "unavailable", error: failure };
+    let failure2 = "PROVIDER_INITIALIZATION_FAILED";
+    if (HELPER_FAILURE_CODES.has(code)) failure2 = "PLATFORM_HELPER_REPAIR_REQUIRED";
+    else if (code === "PROVIDER_STORE_INVALID") failure2 = "PROVIDER_STORE_CORRUPT";
+    else if (code === "PROVIDER_STORE_UNAVAILABLE") failure2 = "PROVIDER_STORE_UNAVAILABLE";
+    else if (MIGRATION_FAILURE_CODES.has(code)) failure2 = "PROVIDER_MIGRATION_CONFLICT";
+    else if (SECRET_MISMATCH_CODES.has(code)) failure2 = "PROVIDER_SECRET_MISMATCH";
+    return { state: "unavailable", error: failure2 };
   }
 
   // src/components/settings/ProviderManagerSection.jsx
@@ -20773,11 +23320,41 @@
     };
   }
 
+  // src/lib/providerDialectBadge.js
+  var DEFAULT_DIALECT_SOURCE_LABELS = {
+    "ccswitch-import": { zh: "\u6765\u81EA cc-switch", en: "from cc-switch" },
+    "legacy-v0.9": { zh: "\u65E7\u7248\u8BBE\u7F6E", en: "legacy setting" },
+    detected: { zh: "\u81EA\u52A8\u68C0\u6D4B", en: "auto-detected" },
+    manual: { zh: "\u624B\u52A8\u8BBE\u7F6E", en: "manual" },
+    unconfirmed: { zh: "\u672A\u786E\u8BA4", en: "unconfirmed" }
+  };
+  function translatedLabel(source, lang, sourceLabels) {
+    const labels = sourceLabels || DEFAULT_DIALECT_SOURCE_LABELS;
+    const entry = labels[source] || DEFAULT_DIALECT_SOURCE_LABELS[source];
+    return (entry == null ? void 0 : entry[lang]) || (entry == null ? void 0 : entry.zh) || (entry == null ? void 0 : entry.en) || "";
+  }
+  function providerDialectBadge(provider, lang = "zh", sourceLabels = DEFAULT_DIALECT_SOURCE_LABELS, options = {}) {
+    var _a;
+    if (!provider || provider.protocol !== "openai-compatible") return null;
+    const wireApi = effectiveProviderDialect(provider, options);
+    if (!wireApi) {
+      return {
+        label: "unconfirmed",
+        title: translatedLabel("unconfirmed", lang, sourceLabels)
+      };
+    }
+    const source = ((_a = provider.dialect) == null ? void 0 : _a.override) ? provider.dialect.override.source : "detected";
+    return {
+      label: wireApi,
+      title: translatedLabel(source, lang, sourceLabels)
+    };
+  }
+
   // src/components/settings/ProviderManagerSection.jsx
   var import_jsx_runtime40 = __toESM(require_jsx_runtime(), 1);
   var L4 = {
-    zh: { title: "Provider \u7BA1\u7406", add: "\u65B0\u589E", edit: "\u7F16\u8F91", del: "\u5220\u9664", probe: "\u63A2\u6D4B\u6A21\u578B", probing: "\u63A2\u6D4B\u4E2D\u2026", save: "\u4FDD\u5B58", cancel: "\u53D6\u6D88", name: "\u540D\u79F0", protocol: "\u534F\u8BAE", baseUrl: "Base URL", secret: "\u6A21\u578B\u51ED\u636E", probeSecret: "\u63A2\u6D4B\u51ED\u636E", secretCap: "\u5199\u5165\u7CFB\u7EDF\u51ED\u636E\u5E93\uFF1B\u7F16\u8F91\u65F6\u7559\u7A7A\u8868\u793A\u4FDD\u7559\u539F\u51ED\u636E", models: (n) => `${n} \u4E2A\u6A21\u578B`, probeFailed: "\u63A2\u6D4B\u5931\u8D25\uFF08\u53EF\u624B\u586B\u6A21\u578B ID \u7EE7\u7EED\u4F7F\u7528\uFF09\uFF1A", importCc: "\u4ECE cc-switch \u5BFC\u5165", insecure: "\u5141\u8BB8\u975E\u56DE\u73AF HTTP\uFF08\u4FDD\u5B58\u65F6\u518D\u6B21\u786E\u8BA4\uFF09", dialect: "API \u65B9\u8A00", inherit: "\u7EE7\u627F\u6A21\u578B\u51ED\u636E", separate: "\u5355\u72EC\u914D\u7F6E", extraHeaders: "\u989D\u5916\u8BF7\u6C42\u5934", addHeader: "\u65B0\u589E\u8BF7\u6C42\u5934", removeHeader: "\u79FB\u9664", headerName: "Header \u540D\u79F0", literal: "\u666E\u901A\u6587\u672C", secretValue: "\u7CFB\u7EDF\u51ED\u636E", scopeProbe: "\u63A2\u6D4B", scopeModel: "\u6A21\u578B\u8BF7\u6C42" },
-    en: { title: "Provider manager", add: "Add", edit: "Edit", del: "Delete", probe: "Probe models", probing: "Probing\u2026", save: "Save", cancel: "Cancel", name: "Name", protocol: "Protocol", baseUrl: "Base URL", secret: "Model credential", probeSecret: "Probe credential", secretCap: "Stored in the system credential store; leave blank while editing to retain it", models: (n) => `${n} models`, probeFailed: "Probe failed (manual model id still works): ", importCc: "Import from cc-switch", insecure: "Allow non-loopback HTTP (confirmed again on save)", dialect: "API dialect", inherit: "Inherit model credential", separate: "Configure separately", extraHeaders: "Extra headers", addHeader: "Add header", removeHeader: "Remove", headerName: "Header name", literal: "Literal text", secretValue: "Credential store", scopeProbe: "Probe", scopeModel: "Model request" }
+    zh: { title: "Provider \u7BA1\u7406", add: "\u65B0\u589E", edit: "\u7F16\u8F91", del: "\u5220\u9664", probe: "\u63A2\u6D4B\u6A21\u578B", redetect: "\u91CD\u65B0\u68C0\u6D4B", probing: "\u63A2\u6D4B\u4E2D\u2026", save: "\u4FDD\u5B58", cancel: "\u53D6\u6D88", name: "\u540D\u79F0", protocol: "\u534F\u8BAE", baseUrl: "Base URL", secret: "\u6A21\u578B\u51ED\u636E", probeSecret: "\u63A2\u6D4B\u51ED\u636E", secretCap: "\u5199\u5165\u7CFB\u7EDF\u51ED\u636E\u5E93\uFF1B\u7F16\u8F91\u65F6\u7559\u7A7A\u8868\u793A\u4FDD\u7559\u539F\u51ED\u636E", models: (n) => `${n} \u4E2A\u6A21\u578B`, probeFailed: "\u63A2\u6D4B\u5931\u8D25\uFF08\u53EF\u624B\u586B\u6A21\u578B ID \u7EE7\u7EED\u4F7F\u7528\uFF09\uFF1A", importCc: "\u4ECE cc-switch \u5BFC\u5165", insecure: "\u5141\u8BB8\u975E\u56DE\u73AF HTTP\uFF08\u4FDD\u5B58\u65F6\u518D\u6B21\u786E\u8BA4\uFF09", dialect: "API \u65B9\u8A00", inherit: "\u7EE7\u627F\u6A21\u578B\u51ED\u636E", separate: "\u5355\u72EC\u914D\u7F6E", extraHeaders: "\u989D\u5916\u8BF7\u6C42\u5934", addHeader: "\u65B0\u589E\u8BF7\u6C42\u5934", removeHeader: "\u79FB\u9664", headerName: "Header \u540D\u79F0", literal: "\u666E\u901A\u6587\u672C", secretValue: "\u7CFB\u7EDF\u51ED\u636E", scopeProbe: "\u63A2\u6D4B", scopeModel: "\u6A21\u578B\u8BF7\u6C42" },
+    en: { title: "Provider manager", add: "Add", edit: "Edit", del: "Delete", probe: "Probe models", redetect: "Re-detect", probing: "Probing\u2026", save: "Save", cancel: "Cancel", name: "Name", protocol: "Protocol", baseUrl: "Base URL", secret: "Model credential", probeSecret: "Probe credential", secretCap: "Stored in the system credential store; leave blank while editing to retain it", models: (n) => `${n} models`, probeFailed: "Probe failed (manual model id still works): ", importCc: "Import from cc-switch", insecure: "Allow non-loopback HTTP (confirmed again on save)", dialect: "API dialect", inherit: "Inherit model credential", separate: "Configure separately", extraHeaders: "Extra headers", addHeader: "Add header", removeHeader: "Remove", headerName: "Header name", literal: "Literal text", secretValue: "Credential store", scopeProbe: "Probe", scopeModel: "Model request" }
   };
   function SecretInput({ name, disabled = false }) {
     return /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
@@ -20841,24 +23418,29 @@
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
         ccSwitch && onImportCcSwitch ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "secondary", size: "sm", icon: "download", disabled, onClick: onImportCcSwitch, children: t.importCc }) : null,
-        providers.map((provider) => /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: "6px 8px", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { style: { flex: 1, minWidth: 0, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.name }),
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: "neutral", children: provider.protocol }),
-            provider.probedModels.length ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: "ok", children: t.models(provider.probedModels.length) }) : null,
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", disabled: disabled || probing === provider.id, onClick: () => onProbe(provider), children: probing === provider.id ? t.probing : t.probe }),
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => {
-              setDraft(draftFromEntry(provider));
-              setError("");
-            }, children: t.edit }),
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => onRemove(provider), children: t.del })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.baseUrl }),
-          probeErrors[provider.id] ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: [
-            t.probeFailed,
-            probeErrors[provider.id]
-          ] }) : null
-        ] }, provider.id)),
+        providers.map((provider) => {
+          const dialectBadge = providerDialectBadge(provider, lang);
+          return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: "6px 8px", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { style: { flex: 1, minWidth: 0, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: "neutral", children: provider.protocol }),
+              dialectBadge ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { title: dialectBadge.title, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: dialectBadge.label === "unconfirmed" ? "warn" : "neutral", children: dialectBadge.label }) }) : null,
+              provider.probedModels.length ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: "ok", children: t.models(provider.probedModels.length) }) : null,
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", disabled: disabled || probing === provider.id, onClick: () => onProbe(provider), children: probing === provider.id ? t.probing : t.probe }),
+              provider.protocol === "openai-compatible" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", disabled: disabled || probing === provider.id, onClick: () => onProbe(provider, { forceDetect: true }), children: t.redetect }) : null,
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => {
+                setDraft(draftFromEntry(provider));
+                setError("");
+              }, children: t.edit }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => onRemove(provider), children: t.del })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.baseUrl }),
+            probeErrors[provider.id] ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: [
+              t.probeFailed,
+              probeErrors[provider.id]
+            ] }) : null
+          ] }, provider.id);
+        }),
         draft ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("form", { onSubmit: save, style: { display: "flex", flexDirection: "column", gap: 6, padding: "8px", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { value: draft.name, onChange: (value) => setDraft({ ...draft, name: value }) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.protocol, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: draft.protocol, onChange: (value) => setDraft({ ...draft, protocol: value }), options: [{ value: "openai-compatible", label: "OpenAI compatible" }, { value: "anthropic", label: "Anthropic" }] }) }),
@@ -20910,112 +23492,18 @@
     ] });
   }
 
-  // src/cep/modelProbe.js
-  function getCepRequire3() {
-    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-      return globalThis.window.cep_node.require;
-    }
-    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    throw new Error("CEP Node require is unavailable");
-  }
-  function authSchemeFromDialect(dialect) {
-    if (!dialect) return "";
-    if (typeof dialect === "string") return dialect;
-    return String(dialect.authScheme || "").trim();
-  }
-  function probeHeaders(protocol, apiKey, dialect) {
-    if (protocol === "anthropic") {
-      return { "x-api-key": String(apiKey || ""), "anthropic-version": "2023-06-01" };
-    }
-    const authScheme = authSchemeFromDialect(dialect);
-    if (authScheme === "x-api-key") return { "x-api-key": String(apiKey || "") };
-    if (authScheme === "none") return {};
-    return { Authorization: "Bearer " + String(apiKey || "") };
-  }
-  function parseModelsList(json) {
-    const list = Array.isArray(json) ? json : json && Array.isArray(json.data) ? json.data : json && Array.isArray(json.models) ? json.models : [];
-    return list.map((m) => {
-      const id = m && (m.id || m.model || m.name);
-      if (!id) return null;
-      return { id: String(id), label: String(m.display_name || m.displayName || id) };
-    }).filter(Boolean);
-  }
-  function probeProviderModels({
-    baseUrl,
-    apiKey,
-    protocol = "openai-compatible",
-    dialect,
-    authScheme,
-    allowInsecureHttp = false,
-    httpsImpl,
-    timeoutMs = 8e3
-  } = {}) {
-    let endpoint;
-    try {
-      const approvedBaseUrl = validateProviderBaseUrl(baseUrl, {
-        allowInsecureHttp,
-        requireTransportApproval: true
-      });
-      const root = approvedBaseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
-      endpoint = new URL(root + "/v1/models");
-    } catch (e) {
-      if ((e == null ? void 0 : e.code) === "provider_insecure_http_forbidden") {
-        return Promise.resolve({
-          ok: false,
-          status: 0,
-          models: [],
-          detail: "Insecure provider HTTP is not approved"
-        });
-      }
-      return Promise.resolve({ ok: false, status: 0, models: [], detail: "Invalid base URL" });
-    }
-    let https;
-    try {
-      https = httpsImpl || getCepRequire3()(endpoint.protocol === "http:" ? "http" : "https");
-    } catch (e) {
-      return Promise.resolve({ ok: false, status: 0, models: [], detail: e.message });
-    }
-    return new Promise((resolve) => {
-      const req = https.request({
-        hostname: endpoint.hostname,
-        port: endpoint.port || void 0,
-        protocol: endpoint.protocol,
-        path: endpoint.pathname + endpoint.search,
-        method: "GET",
-        headers: probeHeaders(protocol, apiKey, dialect || authScheme)
-      }, (res) => {
-        let body = "";
-        res.on("data", (chunk) => {
-          body += chunk;
-        });
-        res.on("end", () => {
-          if (res.statusCode !== 200) {
-            resolve({ ok: false, status: res.statusCode, models: [], detail: "HTTP " + res.statusCode + " from provider" });
-            return;
-          }
-          try {
-            const models = parseModelsList(JSON.parse(body));
-            resolve(models.length ? { ok: true, status: 200, models, detail: "" } : { ok: false, status: 200, models: [], detail: "Empty model list" });
-          } catch (e) {
-            resolve({ ok: false, status: 200, models: [], detail: "Response was not valid JSON" });
-          }
-        });
-      });
-      req.on("error", (err) => resolve({ ok: false, status: 0, models: [], detail: err && err.message ? err.message : "request failed" }));
-      if (req.setTimeout) req.setTimeout(timeoutMs, () => {
-        try {
-          req.destroy();
-        } catch (e) {
-        }
-        resolve({ ok: false, status: 0, models: [], detail: "timeout" });
-      });
-      req.end();
-    });
-  }
-
   // src/cep/ccSwitch.js
   var CONFIG_NAMES = ["config.json", "providers.json"];
+  var API_FORMAT_TO_WIRE_API = {
+    openai_responses: "responses",
+    "openai-responses": "responses",
+    responses: "responses",
+    openai_chat: "chat",
+    "openai-chat": "chat",
+    chat: "chat",
+    "chat-completions": "chat",
+    chat_completions: "chat"
+  };
   function rotateRight2(value, count) {
     return value >>> count | value << 32 - count;
   }
@@ -21155,10 +23643,55 @@
     if (parsed.providers && typeof parsed.providers === "object") return Object.values(parsed.providers);
     return [];
   }
+  function objectValue(value) {
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  }
+  function hasOwn(value, key) {
+    return Object.prototype.hasOwnProperty.call(value, key);
+  }
+  function wireApiFromValue(value) {
+    return API_FORMAT_TO_WIRE_API[String(value || "").trim().toLowerCase()] || "";
+  }
+  function wireApiFromConfig(value) {
+    if (typeof value !== "string") return "";
+    const match = value.match(/(?:^|\n)\s*wire_api\s*=\s*["'](responses|chat)["']/i);
+    return match ? match[1].toLowerCase() : "";
+  }
   function dialectHint(provider) {
-    const raw = String((provider == null ? void 0 : provider.wireApi) || (provider == null ? void 0 : provider.wire_api) || (provider == null ? void 0 : provider.dialect) || "").trim().toLowerCase();
-    if (raw === "responses") return "responses";
-    if (raw === "chat" || raw === "chat-completions" || raw === "chat_completions") return "chat";
+    const meta = objectValue(provider == null ? void 0 : provider.meta);
+    const settingsConfig = objectValue((provider == null ? void 0 : provider.settingsConfig) || (provider == null ? void 0 : provider.settings_config));
+    const dialect = objectValue(provider == null ? void 0 : provider.dialect);
+    return wireApiFromValue(meta.apiFormat || meta.api_format) || wireApiFromValue((provider == null ? void 0 : provider.apiFormat) || (provider == null ? void 0 : provider.api_format)) || wireApiFromConfig(settingsConfig.config) || wireApiFromValue((provider == null ? void 0 : provider.wireApi) || (provider == null ? void 0 : provider.wire_api) || dialect.wireApi || dialect.wire_api) || null;
+  }
+  function authSchemeFromValue(value) {
+    const text = String(value || "").trim().toLowerCase();
+    if (text === "none" || text === "no-auth" || text === "no_auth") return "none";
+    if (text === "bearer" || text === "authorization" || text === "openai_api_key") return "bearer";
+    if (text === "x-api-key" || text === "x_api_key" || text === "anthropic_api_key") return "x-api-key";
+    return "";
+  }
+  function authSchemeFromKeyField(value) {
+    const field = String(value || "").trim();
+    const direct = authSchemeFromValue(field);
+    if (direct) return direct;
+    if (/x[-_]?api[-_]?key/i.test(field) || field === "ANTHROPIC_API_KEY") return "x-api-key";
+    if (/authorization/i.test(field) || field === "OPENAI_API_KEY" || field === "ANTHROPIC_AUTH_TOKEN") return "bearer";
+    return "";
+  }
+  function authHint(provider) {
+    const meta = objectValue(provider == null ? void 0 : provider.meta);
+    const settingsConfig = objectValue((provider == null ? void 0 : provider.settingsConfig) || (provider == null ? void 0 : provider.settings_config));
+    const auth = objectValue(settingsConfig.auth);
+    const env = objectValue(settingsConfig.env);
+    const explicit = authSchemeFromValue(
+      (provider == null ? void 0 : provider.authScheme) || (provider == null ? void 0 : provider.auth_scheme) || meta.authScheme || meta.auth_scheme || auth.type || auth.scheme
+    );
+    if (explicit) return explicit;
+    const keyField = authSchemeFromKeyField(meta.apiKeyField || meta.api_key_field);
+    if (keyField) return keyField;
+    if (hasOwn(auth, "OPENAI_API_KEY") || hasOwn(env, "OPENAI_API_KEY")) return "bearer";
+    if (hasOwn(auth, "ANTHROPIC_AUTH_TOKEN") || hasOwn(env, "ANTHROPIC_AUTH_TOKEN")) return "bearer";
+    if (hasOwn(auth, "ANTHROPIC_API_KEY") || hasOwn(env, "ANTHROPIC_API_KEY")) return "x-api-key";
     return null;
   }
   function safeBaseUrl(value) {
@@ -21187,7 +23720,8 @@
       name,
       protocol,
       baseUrl,
-      dialectHint: dialectHint(provider)
+      dialectHint: protocol === "openai-compatible" ? dialectHint(provider) : null,
+      authHint: protocol === "openai-compatible" ? authHint(provider) : null
     };
   }
   function ccSwitchProviderEntries(list) {
@@ -21236,7 +23770,7 @@
       if (!preview) return null;
       return {
         ...preview,
-        modelAuthKind: "bearer",
+        modelAuthKind: preview.authHint || "bearer",
         modelAuthSecret: String(provider.apiKey || provider.api_key || provider.key || provider.token || "").trim()
       };
     }).filter(Boolean);
@@ -21625,7 +24159,7 @@
     }
     return values.some((value) => serialized.includes(value));
   }
-  function getCepRequire4() {
+  function getCepRequire5() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -21634,7 +24168,7 @@
     throw new Error("CEP Node require is unavailable");
   }
   function fetchAnthropicModels({ requestProfile, httpsImpl, timeoutMs = 8e3 } = {}) {
-    const https = httpsImpl || getCepRequire4()("https");
+    const https = httpsImpl || getCepRequire5()("https");
     return new Promise((resolve) => {
       var _a;
       let endpoint;
@@ -22149,7 +24683,7 @@
       }
     };
   }
-  function getCepRequire5() {
+  function getCepRequire6() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -22411,7 +24945,7 @@
       platformRoots = null;
       if (priorHost || priorClient) disposeLifecycle(priorClient, priorHost);
       try {
-        const cepRequire6 = requireImpl || getCepRequire5();
+        const cepRequire6 = requireImpl || getCepRequire6();
         const extRoot = normalizeCepPath(extensionRoot || cs2.getSystemPath("extension"), adapter);
         const hostPath = adapter.paths.join([extRoot, "host", "server.js"]);
         const roots = { extensionRoot: extRoot, runtimeRoot: adapter.paths.runtimeRoot };
@@ -23052,17 +25586,6 @@
     error.code = "PLATFORM_HELPER_REPAIR_REQUIRED";
     return error;
   }
-  function probeApiKeyFromProfile(profile) {
-    var _a, _b, _c;
-    if ((_a = profile == null ? void 0 : profile.extraHeaders) == null ? void 0 : _a.length) throw new Error("Provider probe requires the v2 detector");
-    if (((_b = profile == null ? void 0 : profile.auth) == null ? void 0 : _b.kind) === "none") return "";
-    if (((_c = profile == null ? void 0 : profile.auth) == null ? void 0 : _c.kind) !== "header") throw new Error("Provider probe authentication is unsupported");
-    if (String(profile.auth.name).toLowerCase() === "authorization") {
-      return String(profile.auth.value || "").replace(/^Bearer\s+/i, "");
-    }
-    if (String(profile.auth.name).toLowerCase() === "x-api-key") return String(profile.auth.value || "");
-    throw new Error("Provider probe requires the v2 detector");
-  }
   function modelMetadataContainsCredential(models, credential) {
     let serialized;
     try {
@@ -23265,33 +25788,27 @@ ${baseUrl}`),
             writePref("ae_mcp_codex_provider", "");
           }
         },
-        onProbe: async (provider) => {
+        onProbe: async (provider, options = {}) => {
           if (providerInit.state !== "ready") throw providerRuntimeUnavailableError();
           setProviderProbing(provider.id);
-          let requestProfile = null;
-          let credential = "";
           try {
-            requestProfile = await resolveProviderRequestProfile(provider, { scope: "probe", secretService: providerSecretService });
-            credential = probeApiKeyFromProfile(requestProfile);
-            const result = await probeProviderModels({
-              baseUrl: requestProfile.baseUrl,
-              ["apiKey"]: credential,
-              protocol: provider.protocol,
-              allowInsecureHttp: requestProfile.allowInsecureHttp === true
+            const result = await runProviderManagerProbe(provider, {
+              store: providerStore,
+              resolveRequestProfile: (entry, { scope }) => resolveProviderRequestProfile(entry, {
+                scope,
+                secretService: providerSecretService
+              }),
+              forceDetect: options.forceDetect === true
             });
-            if (result.ok && providerStore && !modelMetadataContainsCredential(result.models, credential)) {
-              const current = providerStore.get(provider.id);
-              if (current) providerStore.upsert({ ...current, probedModels: result.models, probedAt: Date.now() }, { expectedRevision: providerStore.readState().revision });
+            if (result.ok && providerStore) {
               setProviders(providerStore.list());
               setProviderProbeErrors((errors) => ({ ...errors, [provider.id]: "" }));
             } else {
-              setProviderProbeErrors((errors) => ({ ...errors, [provider.id]: result.detail || `HTTP ${result.status}` }));
+              setProviderProbeErrors((errors) => ({ ...errors, [provider.id]: result.detail || "Provider probe failed" }));
             }
           } catch (error) {
             setProviderProbeErrors((errors) => ({ ...errors, [provider.id]: (error == null ? void 0 : error.message) || "Provider probe failed" }));
           } finally {
-            credential = "";
-            requestProfile = null;
             setProviderProbing("");
           }
         }
@@ -23325,11 +25842,13 @@ ${baseUrl}`),
       const env = window.cep_node && window.cep_node.process && window.cep_node.process.env || {};
       return codexCliCredentialAvailable({ provider: codexCliConfig && codexCliConfig.provider, env, storedValueRef: null });
     }, [codexCliConfig]);
+    const codexProviderCredentialResolverReady = providerInit.state === "ready";
+    const codexCustomProviderDialect = effectiveProviderDialect(codexCustomProvider);
     const channels = import_react45.default.useMemo(() => ({
       claude: claudeChannels({ probe, apiProvider: claudeApiProvider, providerAvailable: providerInit.state === "ready" && Boolean(claudeApiProvider), providerChecking: providerInit.state === "checking" }),
-      codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, customProviderAvailable: providerInit.state === "ready" && Boolean(codexCustomProvider), customProviderCredentialResolverReady: false, providerChecking: providerInit.state === "checking", cliConfig: codexCliConfig, cliCredentialAvailable: codexCliCredentialReady }),
+      codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, customProviderAvailable: providerInit.state === "ready" && Boolean(codexCustomProvider), customProviderCredentialResolverReady: codexProviderCredentialResolverReady, customProviderDialect: codexCustomProviderDialect, providerChecking: providerInit.state === "checking", cliConfig: codexCliConfig, cliCredentialAvailable: codexCliCredentialReady }),
       zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary })
-    }), [probe, claudeApiProvider, codexProbe, codexCustomProvider, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliCredentialReady, providerInit.state]);
+    }), [probe, claudeApiProvider, codexProbe, codexCustomProvider, codexCustomProviderDialect, codexProviderCredentialResolverReady, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliCredentialReady, providerInit.state]);
     const nodeOk = !(probe && probe.nodeOk === false);
     const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock, nodeOk });
     const claudeSettingsHint = import_react45.default.useMemo(() => {
@@ -23342,9 +25861,10 @@ ${baseUrl}`),
     const providerProfile = import_react45.default.useMemo(() => codexRuntimeProviderProfile({
       effectiveChannel: effective.channel,
       customProvider: codexCustomProvider,
-      customProviderCredentialResolverReady: false
-    }), [effective.channel, codexCustomProvider]);
+      customProviderCredentialResolverReady: codexProviderCredentialResolverReady
+    }), [effective.channel, codexCustomProvider, codexProviderCredentialResolverReady]);
     const runtimeRef = import_react45.default.useRef({ providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: "subscription", claudeApiProvider: null });
+    const previousCodexProviderProfileRef = import_react45.default.useRef(providerProfile);
     const extRoot = import_react45.default.useMemo(() => readCepSystemPath({ cs: cs2, platform }), [cs2, platform]);
     const sidecarPath = import_react45.default.useMemo(() => resolveSidecarPath({ extRoot, platform }), [extRoot, platform]);
     const getMcpSpec = import_react45.default.useCallback(async () => withToolApprovalTier(
@@ -23417,14 +25937,40 @@ ${baseUrl}`),
       getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       getServerInstructions: () => mcp.getServerInstructions(),
       getProviderProfile: () => runtimeRef.current.providerProfile,
+      resolveRequestProfile: (provider, { scope }) => resolveProviderRequestProfile(provider, {
+        scope,
+        secretService: providerSecretService
+      }),
+      recoverProviderProfile: async (provider) => {
+        if (!providerStore) return null;
+        const result = await runProviderManagerProbe(provider, {
+          store: providerStore,
+          resolveRequestProfile: (entry, { scope }) => resolveProviderRequestProfile(entry, {
+            scope,
+            secretService: providerSecretService
+          }),
+          forceDetect: true
+        });
+        if (!result.ok) return null;
+        const dialect = effectiveProviderDialect(result.entry);
+        return dialect ? { provider: result.entry, dialect } : null;
+      },
+      onProviderProfileRecovered: () => {
+        if (providerStore) setProviders(providerStore.list());
+      },
       getCliConfigProvider: () => null,
       lang,
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
-    }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
+    }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform, providerSecretService, providerStore]);
     import_react45.default.useEffect(() => () => {
       codexBackend.reset();
     }, [codexBackend]);
+    import_react45.default.useEffect(() => {
+      if (previousCodexProviderProfileRef.current === providerProfile) return;
+      previousCodexProviderProfileRef.current = providerProfile;
+      codexBackend.reset();
+    }, [codexBackend, providerProfile]);
     const openCodeBackend = import_react45.default.useMemo(() => createOpenCodeBackend({
       platform,
       getMcpSpec,
@@ -23472,7 +26018,7 @@ ${baseUrl}`),
         customModel,
         claudeApiProvider,
         codexCustomProvider,
-        customProviderCredentialResolverReady: false,
+        customProviderCredentialResolverReady: codexProviderCredentialResolverReady,
         byokApiModels: null,
         codexCachedModels: codexModels || readCachedCodexModels(window.localStorage),
         zcodeSessionModels,
@@ -23508,7 +26054,7 @@ ${baseUrl}`),
       return () => {
         alive = false;
       };
-    }, [effective.backend, effective.channel, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, zcodeSessionModels, zcodeProbedModels, providerSecretService]);
+    }, [effective.backend, effective.channel, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, zcodeSessionModels, zcodeProbedModels, providerSecretService, codexProviderCredentialResolverReady]);
     const activeBackendRef = import_react45.default.useRef(null);
     import_react45.default.useEffect(() => {
       if (backendPref !== "zcode") return void 0;

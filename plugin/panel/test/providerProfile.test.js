@@ -7,7 +7,6 @@ import {
   codexSpawnEnv,
   ensureUserEnv,
   normalizeProviderEntryV2,
-  normalizeProviderProfile,
 } from '../src/lib/providerProfile.js';
 
 const CREDENTIAL_ID = '5eb75f05-5d9e-5d9c-85af-f0893e8b90c2';
@@ -49,32 +48,33 @@ function assertInvalidProvider(value) {
 }
 
 test('codexAppServerArgs keeps official Codex login path when no custom base URL is configured', () => {
-  assert.deepEqual(codexAppServerArgs(normalizeProviderProfile({})), ['app-server']);
+  assert.deepEqual(codexAppServerArgs(), ['app-server']);
 });
 
-test('codexAppServerArgs builds explicit custom provider config for app-server', () => {
-  const profile = normalizeProviderProfile({
-    codexBaseUrl: ' https://proxy.example/openai/ ',
-    codexApiKey: ' sk-proxy ',
-    codexProviderId: 'my-provider',
-    codexWireApi: 'chat',
-  });
-
-  assert.deepEqual(codexAppServerArgs(profile), [
+test('Codex custom provider values stay in env_http_headers and never enter arguments', () => {
+  const runtime = {
+    providerId: 'my-provider',
+    baseUrl: 'https://proxy.example/openai/v1',
+    envHeaders: [
+      { name: 'Authorization', envName: 'AE_MCP_PROVIDER_HEADER_00', value: 'Bearer sk-secret' },
+      { name: 'x-provider-feature', envName: 'AE_MCP_PROVIDER_HEADER_01', value: 'enabled-secret' },
+    ],
+  };
+  const args = codexAppServerArgs(runtime);
+  assert.deepEqual(args, [
     'app-server',
     '-c', 'model_provider="my-provider"',
     '-c', 'model_providers.my-provider.name="AE MCP Custom"',
-    '-c', 'model_providers.my-provider.base_url="https://proxy.example/openai"',
-    '-c', 'model_providers.my-provider.env_key="AE_MCP_CODEX_API_KEY"',
-    '-c', 'model_providers.my-provider.wire_api="chat"',
+    '-c', 'model_providers.my-provider.base_url="https://proxy.example/openai/v1"',
+    '-c', 'model_providers.my-provider.env_http_headers."Authorization"="AE_MCP_PROVIDER_HEADER_00"',
+    '-c', 'model_providers.my-provider.env_http_headers."x-provider-feature"="AE_MCP_PROVIDER_HEADER_01"',
+    '-c', 'model_providers.my-provider.wire_api="responses"',
     '-c', 'model_providers.my-provider.requires_openai_auth=false',
   ]);
-  assert.equal(codexSpawnEnv(profile, { PATH: 'C:\\Node' }).AE_MCP_CODEX_API_KEY, 'sk-proxy');
-});
-
-test('normalizeProviderProfile falls back to responses for missing or invalid codex wire API', () => {
-  assert.equal(normalizeProviderProfile({ codexWireApi: 'bogus' }).codexWireApi, 'responses');
-  assert.equal(normalizeProviderProfile({}).codexWireApi, 'responses');
+  assert.doesNotMatch(args.join('\n'), /sk-secret|enabled-secret|wire_api="chat"|env_key/);
+  const env = codexSpawnEnv(runtime, { PATH: 'C:\\Node' });
+  assert.equal(env.AE_MCP_PROVIDER_HEADER_00, 'Bearer sk-secret');
+  assert.equal(env.AE_MCP_PROVIDER_HEADER_01, 'enabled-secret');
 });
 
 test('anthropicEndpoint appends API paths without dropping a proxy prefix', () => {
@@ -104,22 +104,30 @@ test('validateProviderBaseUrl rejects even empty query, fragment, and userinfo d
 });
 
 test('Codex runtime provider profile is selected only by the effective channel and resolver gate', () => {
-  const customProvider = providerFixture({ baseUrl: 'https://custom.example/v1' });
-  assert.deepEqual(codexRuntimeProviderProfile({
+  const customProvider = providerFixture({
+    baseUrl: 'https://custom.example/v1',
+    dialect: { override: { wireApi: 'chat', source: 'manual', updatedAt: 1 }, detected: null },
+  });
+  assert.equal(codexRuntimeProviderProfile({
     effectiveChannel: 'cli-config',
     customProvider,
     customProviderCredentialResolverReady: true,
-  }), normalizeProviderProfile({}));
-  assert.deepEqual(codexRuntimeProviderProfile({
-    effectiveChannel: 'custom',
-    customProvider,
-    customProviderCredentialResolverReady: false,
-  }), normalizeProviderProfile({}));
+  }), null);
   assert.equal(codexRuntimeProviderProfile({
     effectiveChannel: 'custom',
     customProvider,
+    customProviderCredentialResolverReady: false,
+  }), null);
+  assert.deepEqual(codexRuntimeProviderProfile({
+    effectiveChannel: 'custom',
+    customProvider,
     customProviderCredentialResolverReady: true,
-  }).codexBaseUrl, 'https://custom.example/v1');
+  }), { provider: normalizeProviderEntryV2(customProvider), dialect: 'chat' });
+  assert.equal(codexRuntimeProviderProfile({
+    effectiveChannel: 'custom',
+    customProvider: providerFixture(),
+    customProviderCredentialResolverReady: true,
+  }), null);
 });
 
 test('ensureUserEnv fills USERPROFILE/HOME/APPDATA from whichever anchor exists', () => {

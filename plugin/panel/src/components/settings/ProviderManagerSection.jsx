@@ -5,10 +5,11 @@ import { Input } from '../forms/Input';
 import { Select } from '../forms/Select';
 import { Field } from '../forms/Field';
 import { emptyDraft, draftFromEntry, validateDraft, draftToEntry } from '../../lib/providerManagerState';
+import { providerDialectBadge } from '../../lib/providerDialectBadge';
 
 const L = {
-  zh: { title: 'Provider 管理', add: '新增', edit: '编辑', del: '删除', probe: '探测模型', probing: '探测中…', save: '保存', cancel: '取消', name: '名称', protocol: '协议', baseUrl: 'Base URL', secret: '模型凭据', probeSecret: '探测凭据', secretCap: '写入系统凭据库；编辑时留空表示保留原凭据', models: (n) => `${n} 个模型`, probeFailed: '探测失败（可手填模型 ID 继续使用）：', importCc: '从 cc-switch 导入', insecure: '允许非回环 HTTP（保存时再次确认）', dialect: 'API 方言', inherit: '继承模型凭据', separate: '单独配置', extraHeaders: '额外请求头', addHeader: '新增请求头', removeHeader: '移除', headerName: 'Header 名称', literal: '普通文本', secretValue: '系统凭据', scopeProbe: '探测', scopeModel: '模型请求' },
-  en: { title: 'Provider manager', add: 'Add', edit: 'Edit', del: 'Delete', probe: 'Probe models', probing: 'Probing…', save: 'Save', cancel: 'Cancel', name: 'Name', protocol: 'Protocol', baseUrl: 'Base URL', secret: 'Model credential', probeSecret: 'Probe credential', secretCap: 'Stored in the system credential store; leave blank while editing to retain it', models: (n) => `${n} models`, probeFailed: 'Probe failed (manual model id still works): ', importCc: 'Import from cc-switch', insecure: 'Allow non-loopback HTTP (confirmed again on save)', dialect: 'API dialect', inherit: 'Inherit model credential', separate: 'Configure separately', extraHeaders: 'Extra headers', addHeader: 'Add header', removeHeader: 'Remove', headerName: 'Header name', literal: 'Literal text', secretValue: 'Credential store', scopeProbe: 'Probe', scopeModel: 'Model request' },
+  zh: { title: 'Provider 管理', add: '新增', edit: '编辑', del: '删除', probe: '探测模型', redetect: '重新检测', probing: '探测中…', save: '保存', cancel: '取消', name: '名称', protocol: '协议', baseUrl: 'Base URL', secret: '模型凭据', probeSecret: '探测凭据', secretCap: '写入系统凭据库；编辑时留空表示保留原凭据', models: (n) => `${n} 个模型`, probeFailed: '探测失败（可手填模型 ID 继续使用）：', importCc: '从 cc-switch 导入', insecure: '允许非回环 HTTP（保存时再次确认）', dialect: 'API 方言', inherit: '继承模型凭据', separate: '单独配置', extraHeaders: '额外请求头', addHeader: '新增请求头', removeHeader: '移除', headerName: 'Header 名称', literal: '普通文本', secretValue: '系统凭据', scopeProbe: '探测', scopeModel: '模型请求' },
+  en: { title: 'Provider manager', add: 'Add', edit: 'Edit', del: 'Delete', probe: 'Probe models', redetect: 'Re-detect', probing: 'Probing…', save: 'Save', cancel: 'Cancel', name: 'Name', protocol: 'Protocol', baseUrl: 'Base URL', secret: 'Model credential', probeSecret: 'Probe credential', secretCap: 'Stored in the system credential store; leave blank while editing to retain it', models: (n) => `${n} models`, probeFailed: 'Probe failed (manual model id still works): ', importCc: 'Import from cc-switch', insecure: 'Allow non-loopback HTTP (confirmed again on save)', dialect: 'API dialect', inherit: 'Inherit model credential', separate: 'Configure separately', extraHeaders: 'Extra headers', addHeader: 'Add header', removeHeader: 'Remove', headerName: 'Header name', literal: 'Literal text', secretValue: 'Credential store', scopeProbe: 'Probe', scopeModel: 'Model request' },
 };
 
 function SecretInput({ name, disabled = false }) {
@@ -70,20 +71,25 @@ export function ProviderManagerSection({ lang = 'zh', providers = [], onUpsert, 
       </summary>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
         {ccSwitch && onImportCcSwitch ? <Button variant="secondary" size="sm" icon="download" disabled={disabled} onClick={onImportCcSwitch}>{t.importCc}</Button> : null}
-        {providers.map((provider) => (
+        {providers.map((provider) => {
+          const dialectBadge = providerDialectBadge(provider, lang);
+          return (
           <div key={provider.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 8px', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-panel)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ flex: 1, minWidth: 0, font: '500 12px/1.35 var(--font-ui)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{provider.name}</span>
               <Badge status="neutral">{provider.protocol}</Badge>
+              {dialectBadge ? <span title={dialectBadge.title}><Badge status={dialectBadge.label === 'unconfirmed' ? 'warn' : 'neutral'}>{dialectBadge.label}</Badge></span> : null}
               {provider.probedModels.length ? <Badge status="ok">{t.models(provider.probedModels.length)}</Badge> : null}
               <Button variant="ghost" size="sm" disabled={disabled || probing === provider.id} onClick={() => onProbe(provider)}>{probing === provider.id ? t.probing : t.probe}</Button>
+              {provider.protocol === 'openai-compatible' ? <Button variant="ghost" size="sm" disabled={disabled || probing === provider.id} onClick={() => onProbe(provider, { forceDetect: true })}>{t.redetect}</Button> : null}
               <Button variant="ghost" size="sm" disabled={disabled} onClick={() => { setDraft(draftFromEntry(provider)); setError(''); }}>{t.edit}</Button>
               <Button variant="ghost" size="sm" disabled={disabled} onClick={() => onRemove(provider)}>{t.del}</Button>
             </div>
             <div style={{ font: '400 10px/1.35 var(--font-mono)', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{provider.baseUrl}</div>
             {probeErrors[provider.id] ? <div style={{ font: '400 10px/1.4 var(--font-ui)', color: 'var(--warn)' }}>{t.probeFailed}{probeErrors[provider.id]}</div> : null}
           </div>
-        ))}
+          );
+        })}
         {draft ? (
           <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-panel)' }}>
             <Field label={t.name}><Input value={draft.name} onChange={(value) => setDraft({ ...draft, name: value })} /></Field>
