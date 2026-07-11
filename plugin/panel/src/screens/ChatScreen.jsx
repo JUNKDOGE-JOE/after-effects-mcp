@@ -105,7 +105,7 @@ function Entry({ entry, lang, onApprove }) {
     return <ChatBubble role="ai">{entry.text}</ChatBubble>;
   }
   if (entry.type === 'tool-call') {
-    const highRisk = entry.risk === 'destructive';
+    const highRisk = entry.risk === 'destructive' || entry.risk === 'external';
     return (
       <div style={{ paddingLeft: 28, display: 'flex', flexDirection: 'column', gap: 6 }}>
         <ToolCallCard

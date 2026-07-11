@@ -4,6 +4,14 @@ import { PANEL_VERSION } from './mcpClient.js';
 import { createCodexResponsesRoute } from './codexResponsesRoute.js';
 import { expertGuidanceEnv } from './externalClients.js';
 import { createPlatformAdapter } from './platform/index.js';
+import {
+  PLAN_SCHEMA_KEY,
+  approvalResult,
+  decideToolPlan,
+  extractToolPlan,
+  isCoreAuthorizedDynamicCall,
+  planSessionKey,
+} from '../../../shared/tool-approval.mjs';
 
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -226,6 +234,7 @@ export function createCodexBackend({
   let providerRoute = null;
   const pendingApprovals = new Map();
   const sessionAllowedTools = new Set();
+  const sessionAllowedPlans = new Set();
 
   function closeProviderRoute() {
     const route = providerRoute;
@@ -342,11 +351,56 @@ export function createCodexBackend({
     }
     const toolUseId = String(message.id);
     const params = message.params || {};
+    const schema = params.requestedSchema;
+    if (schema && Object.prototype.hasOwnProperty.call(schema, PLAN_SCHEMA_KEY)) {
+      const plan = extractToolPlan(schema);
+      if (!plan) {
+        if (rpc) rpc.respond(message.id, approvalResult('deny'));
+        return;
+      }
+
+      const policy = decideToolPlan({
+        tier: getPermissionMode ? getPermissionMode() : 'manual',
+        plan,
+        sessionAllowed: sessionAllowedPlans.has(planSessionKey(plan)),
+      });
+      if (policy.decision === 'allow') {
+        if (rpc) rpc.respond(message.id, approvalResult('once', policy));
+        return;
+      }
+      if (policy.decision === 'deny') {
+        declineElicitation(message.id, toolUseId);
+        return;
+      }
+
+      pendingApprovals.set(toolUseId, {
+        kind: 'tool-plan',
+        rpcId: message.id,
+        name: 'mcp__ae__ae_toolUse',
+        input: plan,
+        plan,
+        allowSession: policy.allowSession,
+      });
+      emit({
+        type: 'approval-required',
+        toolUseId,
+        name: 'mcp__ae__ae_toolUse',
+        input: plan,
+        risk: policy.risk,
+      });
+      return;
+    }
+
     const name = prefixedToolName(params);
     const input = elicitationInput(params) || {};
     const annotations = (toolMeta && toolMeta.annotations) || {};
     const ann = annotations[name] || {};
     const tier = getPermissionMode ? getPermissionMode() : 'manual';
+
+    if (isCoreAuthorizedDynamicCall(name, input)) {
+      acceptElicitation(message.id);
+      return;
+    }
 
     if (sessionAllowedTools.has(name) || ann.readOnly || tier === 'none' || (tier === 'auto' && !ann.destructive)) {
       acceptElicitation(message.id);
@@ -582,6 +636,18 @@ export function createCodexBackend({
     const approval = pendingApprovals.get(id);
     if (!approval || !rpc) return;
     pendingApprovals.delete(id);
+    if (approval.kind === 'tool-plan') {
+      const requestedDecision = decision === 'allow-session'
+        ? 'session'
+        : (decision === 'allow' ? 'once' : 'deny');
+      const result = approvalResult(requestedDecision, { allowSession: approval.allowSession });
+      if (result.action === 'accept' && result.content.decision === 'session') {
+        sessionAllowedPlans.add(planSessionKey(approval.plan));
+      }
+      rpc.respond(approval.rpcId, result);
+      emit({ type: result.action === 'accept' ? 'tool-allowed' : 'tool-denied', toolUseId: id });
+      return;
+    }
     const action = decision === 'deny' ? 'decline' : 'accept';
     if (action === 'accept' && decision === 'allow-session') sessionAllowedTools.add(approval.name);
     rpc.respond(approval.rpcId, { action, content: {} });
@@ -621,6 +687,7 @@ export function createCodexBackend({
     transcript = [];
     pendingApprovals.clear();
     sessionAllowedTools.clear();
+    sessionAllowedPlans.clear();
     toolMeta = { allowedTools: [], annotations: {} };
     finishActive();
     stderrTail = '';

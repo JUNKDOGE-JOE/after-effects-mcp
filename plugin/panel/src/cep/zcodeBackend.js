@@ -26,6 +26,14 @@ import { expertGuidanceEnv } from './externalClients.js';
 import { createApiKeyStore } from './apiKey.js';
 import { localizeZcodeError } from '../lib/zcodeErrors.js';
 import { createPlatformAdapter } from './platform/index.js';
+import {
+  PLAN_SCHEMA_KEY,
+  approvalResult,
+  decideToolPlan,
+  extractToolPlan,
+  isCoreAuthorizedDynamicCall,
+  planSessionKey,
+} from '../../../shared/tool-approval.mjs';
 
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -144,6 +152,10 @@ function createRpc({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEO
 function mcpToolName(name) {
   const text = String(name || '');
   return text.startsWith('mcp__') ? text : 'mcp__ae__' + text;
+}
+
+function hasRpcId(value) {
+  return value !== undefined && value !== null;
 }
 
 function zcodeProviderId(modelRef) {
@@ -513,6 +525,7 @@ export function createZcodeBackend({
   const pendingElicitations = new Map();
   const pendingUserInputs = new Map();
   const sessionAllowedTools = new Set();
+  const sessionAllowedPlans = new Set();
 
   function emit(evt) {
     if (onEvent) onEvent(evt);
@@ -569,17 +582,19 @@ export function createZcodeBackend({
 
   function drainApprovals() {
     for (const [toolUseId, approval] of Array.from(pendingApprovals.entries())) {
-      if (rpc) rpc.respond(approval.rpcId, { decision: 'decline' });
+      if (rpc && hasRpcId(approval.rpcId)) rpc.respond(approval.rpcId, { decision: 'decline' });
       pendingApprovals.delete(toolUseId);
       emit({ type: 'tool-denied', toolUseId });
     }
     for (const [toolUseId, elicit] of Array.from(pendingElicitations.entries())) {
-      if (rpc && elicit.rpcId) rpc.respond(elicit.rpcId, { action: 'decline' });
+      if (rpc && hasRpcId(elicit.rpcId)) {
+        rpc.respond(elicit.rpcId, elicit.kind === 'tool-plan' ? approvalResult('deny') : { action: 'decline' });
+      }
       pendingElicitations.delete(toolUseId);
       emit({ type: 'tool-denied', toolUseId });
     }
     for (const [toolUseId, ui] of Array.from(pendingUserInputs.entries())) {
-      if (rpc && ui.rpcId) rpc.respond(ui.rpcId, { decision: 'decline', answers: {} });
+      if (rpc && hasRpcId(ui.rpcId)) rpc.respond(ui.rpcId, { decision: 'decline', answers: {} });
       pendingUserInputs.delete(toolUseId);
       emit({ type: 'tool-denied', toolUseId });
     }
@@ -621,7 +636,7 @@ export function createZcodeBackend({
   }
 
   function handleProviderRuntimeHeaders(_params, rpcId) {
-    if (rpcId && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: zcodePlanRuntimeHeadersMessage() });
+    if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: zcodePlanRuntimeHeadersMessage() });
   }
 
   // AskUserQuestion via interaction/requestUserInput. params shape:
@@ -640,7 +655,7 @@ export function createZcodeBackend({
         const opts = q.options || [];
         answers[q.question || q.header || 'question'] = opts.length ? opts[0].label : '';
       }
-      if (rpcId && rpc) rpc.respond(rpcId, { decision: 'allow', answers });
+      if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { decision: 'allow', answers });
       return;
     }
 
@@ -672,13 +687,51 @@ export function createZcodeBackend({
   function handleElicitation(params, rpcId) {
     const message = params.message || '';
     const schema = params.requestedSchema || {};
+    if (Object.prototype.hasOwnProperty.call(schema, PLAN_SCHEMA_KEY)) {
+      const plan = extractToolPlan(schema);
+      if (!plan) {
+        if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, approvalResult('deny'));
+        return;
+      }
+
+      const policy = decideToolPlan({
+        tier: getPermissionMode ? getPermissionMode() : 'manual',
+        plan,
+        sessionAllowed: sessionAllowedPlans.has(planSessionKey(plan)),
+      });
+      if (policy.decision === 'allow') {
+        if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, approvalResult('once', policy));
+        return;
+      }
+      if (policy.decision === 'deny') {
+        if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, approvalResult('deny', policy));
+        return;
+      }
+
+      const toolUseId = 'elicit_' + rpcId;
+      pendingElicitations.set(toolUseId, {
+        kind: 'tool-plan',
+        rpcId,
+        plan,
+        allowSession: policy.allowSession,
+      });
+      emit({
+        type: 'approval-required',
+        toolUseId,
+        name: 'mcp__ae__ae_toolUse',
+        input: plan,
+        risk: policy.risk,
+      });
+      return;
+    }
+
     const props = schema.properties || {};
     const required = schema.required || [];
 
     // If there are no properties, this is a simple yes/no — auto-accept.
     const fieldNames = Object.keys(props);
     if (!fieldNames.length) {
-      if (rpcId && rpc) rpc.respond(rpcId, { action: 'accept', content: {} });
+      if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { action: 'accept', content: {} });
       return;
     }
 
@@ -691,7 +744,7 @@ export function createZcodeBackend({
         const opts = props[fn] && props[fn].enum;
         autoContent[fn] = opts && opts.length ? opts[0] : '';
       }
-      if (rpcId && rpc) rpc.respond(rpcId, { action: 'accept', content: autoContent });
+      if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { action: 'accept', content: autoContent });
       return;
     }
 
@@ -778,7 +831,7 @@ export function createZcodeBackend({
 
   function handlePermissionRequest(params, rpcId) {
     const payload = params.payload || params;
-    const toolUseId = String(payload.toolCallId || payload.requestId || rpcId || '');
+    const toolUseId = String(payload.toolCallId ?? payload.requestId ?? rpcId ?? '');
     const name = mcpToolName(payload.toolName || payload.tool || '');
     const input = payload.input || payload.arguments || {};
     const riskLevel = payload.riskLevel || 'medium';
@@ -788,16 +841,22 @@ export function createZcodeBackend({
 
     // rpcId comes from handleRequest (elicitation/permission as a request) or
     // from the requestId field in a permission.requested notification.
-    const replyId = rpcId || payload.requestId || null;
+    const replyId = hasRpcId(rpcId) ? rpcId : (payload.requestId ?? null);
+
+    if (isCoreAuthorizedDynamicCall(name, input)) {
+      if (hasRpcId(replyId) && rpc) rpc.respond(replyId, { decision: 'allow' });
+      emit({ type: 'tool-allowed', toolUseId });
+      return;
+    }
 
     if (sessionAllowedTools.has(name) || ann.readOnly || tier === 'none' || (tier === 'auto' && !ann.destructive && riskLevel === 'low')) {
-      if (replyId && rpc) rpc.respond(replyId, { decision: 'allow' });
+      if (hasRpcId(replyId) && rpc) rpc.respond(replyId, { decision: 'allow' });
       emit({ type: 'tool-allowed', toolUseId });
       return;
     }
 
     if (tier === 'readonly') {
-      if (replyId && rpc) rpc.respond(replyId, { decision: 'decline' });
+      if (hasRpcId(replyId) && rpc) rpc.respond(replyId, { decision: 'decline' });
       emit({ type: 'tool-denied', toolUseId });
       return;
     }
@@ -1034,7 +1093,7 @@ export function createZcodeBackend({
     if (userInput) {
       pendingUserInputs.delete(id);
       if (decision === 'deny') {
-        if (userInput.rpcId && rpc) rpc.respond(userInput.rpcId, { decision: 'decline', answers: {} });
+        if (hasRpcId(userInput.rpcId) && rpc) rpc.respond(userInput.rpcId, { decision: 'decline', answers: {} });
         emit({ type: 'tool-denied', toolUseId: id });
       } else {
         // decision carries the chosen label; map it to each question.
@@ -1044,7 +1103,7 @@ export function createZcodeBackend({
           const key = q.question || q.header || 'question';
           answers[key] = chosen || (q.options && q.options[0] && q.options[0].label) || '';
         }
-        if (userInput.rpcId && rpc) rpc.respond(userInput.rpcId, { decision: 'allow', answers });
+        if (hasRpcId(userInput.rpcId) && rpc) rpc.respond(userInput.rpcId, { decision: 'allow', answers });
         emit({ type: 'tool-allowed', toolUseId: id });
       }
       return;
@@ -1055,8 +1114,20 @@ export function createZcodeBackend({
     const elicit = pendingElicitations.get(id);
     if (elicit) {
       pendingElicitations.delete(id);
+      if (elicit.kind === 'tool-plan') {
+        const requestedDecision = decision === 'allow-session'
+          ? 'session'
+          : (decision === 'allow' ? 'once' : 'deny');
+        const result = approvalResult(requestedDecision, { allowSession: elicit.allowSession });
+        if (result.action === 'accept' && result.content.decision === 'session') {
+          sessionAllowedPlans.add(planSessionKey(elicit.plan));
+        }
+        if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, result);
+        emit({ type: result.action === 'accept' ? 'tool-allowed' : 'tool-denied', toolUseId: id });
+        return;
+      }
       if (decision === 'deny') {
-        if (elicit.rpcId && rpc) rpc.respond(elicit.rpcId, { action: 'decline' });
+        if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, { action: 'decline' });
         emit({ type: 'tool-denied', toolUseId: id });
       } else {
         // Build content from the chosen value; for single-field elicitation,
@@ -1066,7 +1137,7 @@ export function createZcodeBackend({
         content[fn] = typeof decision === 'string' && decision !== 'allow' && decision !== 'allow-session'
           ? decision
           : (elicit.props[fn] && elicit.props[fn].enum && elicit.props[fn].enum[0]) || '';
-        if (elicit.rpcId && rpc) rpc.respond(elicit.rpcId, { action: 'accept', content });
+        if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, { action: 'accept', content });
         emit({ type: 'tool-allowed', toolUseId: id });
       }
       return;
@@ -1078,7 +1149,7 @@ export function createZcodeBackend({
     pendingApprovals.delete(id);
     const allow = decision !== 'deny';
     if (allow && decision === 'allow-session') sessionAllowedTools.add(approval.name);
-    if (approval.rpcId && rpc) rpc.respond(approval.rpcId, { decision: allow ? 'allow' : 'decline' });
+    if (hasRpcId(approval.rpcId) && rpc) rpc.respond(approval.rpcId, { decision: allow ? 'allow' : 'decline' });
     emit({ type: allow ? 'tool-allowed' : 'tool-denied', toolUseId: id });
   }
 
@@ -1113,6 +1184,7 @@ export function createZcodeBackend({
     pendingElicitations.clear();
     pendingUserInputs.clear();
     sessionAllowedTools.clear();
+    sessionAllowedPlans.clear();
     toolMeta = { allowedTools: [], annotations: {} };
     finishActive();
     stderrTail = '';

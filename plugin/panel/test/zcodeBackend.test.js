@@ -79,6 +79,32 @@ const TOOL_META = {
   },
 };
 
+const WRITE_PLAN = {
+  artifactId: 'user:123',
+  contentHash: 'a'.repeat(64),
+  operation: 'execute',
+  normalizedArgs: {},
+  target: { compId: '7' },
+  planHash: 'b'.repeat(64),
+  risk: 'write',
+  expiresAt: 9999999999999,
+};
+
+function pushPlanElicitation(proc, id, plan) {
+  proc.pushStdout({
+    id,
+    method: 'elicitation/create',
+    params: {
+      mode: 'form',
+      message: 'Approve artifact plan?',
+      requestedSchema: {
+        type: 'object',
+        'x-ae-mcp-plan': plan,
+      },
+    },
+  });
+}
+
 function makeBackend(options = {}) {
   const events = [];
   const spawned = makeSpawn();
@@ -851,6 +877,175 @@ test('elicitation auto-accepts in none tier (no blocking)', async () => {
   const reply = parseWrites(proc).find((m) => m.id === 100);
   assert.equal(reply.result.action, 'accept');
   assert.equal(reply.result.content.color, 'red');
+});
+
+test('ZCode none tier still asks for an external artifact plan', async () => {
+  const externalPlan = { ...WRITE_PLAN, risk: 'external' };
+  const { backend, events, spawned } = makeBackend({ getPermissionMode: () => 'none' });
+  const { proc } = await startTurn(backend, spawned, 'publish');
+
+  pushPlanElicitation(proc, 201, externalPlan);
+  await flush();
+  assert.deepEqual(events.at(-1), {
+    type: 'approval-required',
+    toolUseId: 'elicit_201',
+    name: 'mcp__ae__ae_toolUse',
+    input: externalPlan,
+    risk: 'external',
+  });
+
+  backend.approve('elicit_201', 'allow');
+  await flush();
+  assert.deepEqual(parseWrites(proc).find((message) => message.id === 201), {
+    id: 201,
+    result: { action: 'accept', content: { decision: 'once' } },
+  });
+});
+
+test('ZCode auto accepts write plans once and declines malformed plans without cards', async () => {
+  const { events, spawned, backend } = makeBackend({ getPermissionMode: () => 'auto' });
+  const { proc } = await startTurn(backend, spawned, 'apply');
+
+  pushPlanElicitation(proc, 202, WRITE_PLAN);
+  pushPlanElicitation(proc, 203, { risk: 'write' });
+  await flush();
+
+  assert.deepEqual(parseWrites(proc).find((message) => message.id === 202), {
+    id: 202,
+    result: { action: 'accept', content: { decision: 'once' } },
+  });
+  assert.deepEqual(parseWrites(proc).find((message) => message.id === 203), {
+    id: 203,
+    result: { action: 'decline', content: {} },
+  });
+  assert.equal(events.some((event) => event.type === 'approval-required'), false);
+});
+
+test('ZCode plan approval fails closed for unknown or missing decisions', async () => {
+  const { backend, spawned } = makeBackend();
+  const { proc } = await startTurn(backend, spawned, 'decide');
+
+  for (const [id, decision] of [[211, 'unexpected'], [212, undefined]]) {
+    pushPlanElicitation(proc, id, WRITE_PLAN);
+    await flush();
+    backend.approve('elicit_' + id, decision);
+    assert.deepEqual(parseWrites(proc).find((message) => message.id === id), {
+      id,
+      result: { action: 'decline', content: {} },
+    });
+  }
+});
+
+test('ZCode responds to plan elicitations with JSON-RPC id zero', async () => {
+  let tier = 'auto';
+  const { backend, spawned } = makeBackend({ getPermissionMode: () => tier });
+  const { proc } = await startTurn(backend, spawned, 'zero');
+
+  pushPlanElicitation(proc, 0, WRITE_PLAN);
+  await flush();
+  assert.deepEqual(parseWrites(proc).filter((message) => message.id === 0).at(-1), {
+    id: 0,
+    result: { action: 'accept', content: { decision: 'once' } },
+  });
+
+  tier = 'manual';
+  pushPlanElicitation(proc, 0, WRITE_PLAN);
+  await flush();
+  backend.approve('elicit_0', 'allow');
+  assert.deepEqual(parseWrites(proc).filter((message) => message.id === 0).at(-1), {
+    id: 0,
+    result: { action: 'accept', content: { decision: 'once' } },
+  });
+
+  pushPlanElicitation(proc, 0, WRITE_PLAN);
+  await flush();
+  backend.stop();
+  assert.deepEqual(parseWrites(proc).filter((message) => message.id === 0).at(-1), {
+    id: 0,
+    result: { action: 'decline', content: {} },
+  });
+});
+
+test('ZCode plan sessions bind content and target while high risks reject session scope', async () => {
+  const changedHash = { ...WRITE_PLAN, contentHash: 'c'.repeat(64), planHash: 'd'.repeat(64) };
+  const changedTarget = { ...WRITE_PLAN, target: { compId: '8' }, planHash: 'e'.repeat(64) };
+  const destructivePlan = { ...WRITE_PLAN, risk: 'destructive' };
+  const { backend, events, spawned } = makeBackend();
+  const { proc } = await startTurn(backend, spawned, 'apply plans');
+
+  pushPlanElicitation(proc, 204, WRITE_PLAN);
+  await flush();
+  backend.approve('elicit_204', 'allow-session');
+  assert.deepEqual(parseWrites(proc).find((message) => message.id === 204), {
+    id: 204,
+    result: { action: 'accept', content: { decision: 'session' } },
+  });
+
+  const cardsAfterSession = events.filter((event) => event.type === 'approval-required').length;
+  pushPlanElicitation(proc, 205, WRITE_PLAN);
+  await flush();
+  assert.deepEqual(parseWrites(proc).find((message) => message.id === 205), {
+    id: 205,
+    result: { action: 'accept', content: { decision: 'once' } },
+  });
+  assert.equal(events.filter((event) => event.type === 'approval-required').length, cardsAfterSession);
+
+  pushPlanElicitation(proc, 206, changedHash);
+  await flush();
+  assert.equal(events.at(-1).toolUseId, 'elicit_206');
+  assert.deepEqual(events.at(-1).input, changedHash);
+  backend.approve('elicit_206', 'allow');
+
+  pushPlanElicitation(proc, 207, changedTarget);
+  await flush();
+  assert.equal(events.at(-1).toolUseId, 'elicit_207');
+  assert.deepEqual(events.at(-1).input, changedTarget);
+  backend.approve('elicit_207', 'allow');
+
+  pushPlanElicitation(proc, 208, destructivePlan);
+  await flush();
+  assert.equal(events.at(-1).risk, 'destructive');
+  backend.approve('elicit_208', 'allow-session');
+  assert.deepEqual(parseWrites(proc).find((message) => message.id === 208), {
+    id: 208,
+    result: { action: 'decline', content: {} },
+  });
+});
+
+test('ZCode delegates valid staged ae_toolUse calls without caching the tool name', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { proc } = await startTurn(backend, spawned, 'stage');
+
+  proc.pushStdout({
+    id: 209,
+    method: 'interaction/requestPermission',
+    params: { toolCallId: 'stage_valid', toolName: 'ae_toolUse', input: { action: 'prepare' } },
+  });
+  await flush();
+  assert.deepEqual(parseWrites(proc).find((message) => message.id === 209), {
+    id: 209,
+    result: { decision: 'allow' },
+  });
+
+  proc.pushStdout({
+    id: 210,
+    method: 'interaction/requestPermission',
+    params: { toolCallId: 'stage_invalid', toolName: 'ae_toolUse', input: { action: 'invalid' } },
+  });
+  await flush();
+  assert.deepEqual(events.at(-1), {
+    type: 'approval-required',
+    toolUseId: 'stage_invalid',
+    name: 'mcp__ae__ae_toolUse',
+    input: { action: 'invalid' },
+    risk: 'write',
+  });
+  backend.approve('stage_invalid', 'allow');
+  await flush();
+  assert.deepEqual(parseWrites(proc).find((message) => message.id === 210), {
+    id: 210,
+    result: { decision: 'allow' },
+  });
 });
 
 test('interaction/requestUserInput (AskUserQuestion) surfaces choices and replies with decision/answers', async () => {

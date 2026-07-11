@@ -1,3 +1,11 @@
+import {
+  approvalResult,
+  decideToolPlan,
+  extractToolPlan,
+  isCoreAuthorizedDynamicCall,
+  planSessionKey
+} from '../shared/tool-approval.mjs'
+
 const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
 
 const DISALLOWED_TOOLS = [
@@ -93,7 +101,9 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
   const options = normalizeOptions(argvOptions)
   const baseEnv = cleanEnv(env || {}, options.channel)
   const approvals = new Map()
+  const pendingElicitations = new Map()
   const sessionAllowedTools = new Set()
+  const sessionAllowedPlans = new Set()
   const toolUses = []
   const ignoredToolUseIds = new Set()
   let sessionId = null
@@ -187,6 +197,7 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
       agents: buildAgents(),
       agent: 'ae',
       canUseTool: async (toolName, input) => canUseTool(toolName, input, turn),
+      onElicitation: async (request, context = {}) => handleElicitation(request, turn, context.signal),
       env: baseEnv,
       abortController: turn.controller,
       effort: turn.effort
@@ -328,6 +339,10 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
       }
     }
 
+    if (isCoreAuthorizedDynamicCall(name, input)) {
+      return { behavior: 'allow', updatedInput: input }
+    }
+
     if (sessionAllowedTools.has(name)) {
       return { behavior: 'allow', updatedInput: input }
     }
@@ -358,6 +373,68 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
     })
   }
 
+  async function handleElicitation(request, turn, signal) {
+    const schema = request && request.requestedSchema
+    const plan = extractToolPlan(schema)
+    if (!plan) {
+      return approvalResult('deny')
+    }
+
+    const key = planSessionKey(plan)
+    const policy = decideToolPlan({
+      tier: turn.permissionMode,
+      plan,
+      sessionAllowed: sessionAllowedPlans.has(key)
+    })
+    if (policy.decision === 'allow') {
+      return approvalResult('once', policy)
+    }
+    if (policy.decision === 'deny') {
+      return approvalResult('deny', policy)
+    }
+    return await waitForElicitationApproval(plan, policy, signal)
+  }
+
+  async function waitForElicitationApproval(plan, policy, signal) {
+    if (signal && signal.aborted) {
+      return approvalResult('deny', policy)
+    }
+
+    const name = 'mcp__ae__ae_toolUse'
+    const toolUseId = claimToolUseId(name)
+    emitEvent({
+      type: 'approval-required',
+      toolUseId,
+      name,
+      input: plan,
+      risk: policy.risk
+    })
+
+    return await new Promise((resolve) => {
+      const pending = {
+        plan,
+        policy,
+        resolve: (result) => {
+          if (signal && pending.onAbort) {
+            signal.removeEventListener('abort', pending.onAbort)
+          }
+          resolve(result)
+        },
+        onAbort: null
+      }
+      if (signal) {
+        pending.onAbort = () => {
+          if (pendingElicitations.get(toolUseId) !== pending) return
+          pendingElicitations.delete(toolUseId)
+          emitEvent({ type: 'tool-denied', toolUseId })
+          pending.resolve(approvalResult('deny', policy))
+        }
+        signal.addEventListener('abort', pending.onAbort, { once: true })
+      }
+      pendingElicitations.set(toolUseId, pending)
+    })
+  }
+
   function claimToolUseId(name) {
     const toolUse = toolUses.find((item) => item.name === name && !item.claimed)
     if (toolUse) {
@@ -372,20 +449,35 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
   function handleApproval(message) {
     const id = String(message.id || '')
     const pending = approvals.get(id)
-    if (!pending) {
+    if (pending) {
+      approvals.delete(id)
+
+      if (message.decision === 'allow' || message.decision === 'allow-session') {
+        if (message.decision === 'allow-session') {
+          sessionAllowedTools.add(pending.name)
+        }
+        pending.resolve({ behavior: 'allow', updatedInput: pending.input })
+      } else {
+        emitEvent({ type: 'tool-denied', toolUseId: id })
+        pending.resolve({ behavior: 'deny', message: 'User denied this action.' })
+      }
       return
     }
-    approvals.delete(id)
 
-    if (message.decision === 'allow' || message.decision === 'allow-session') {
-      if (message.decision === 'allow-session') {
-        sessionAllowedTools.add(pending.name)
-      }
-      pending.resolve({ behavior: 'allow', updatedInput: pending.input })
-    } else {
-      emitEvent({ type: 'tool-denied', toolUseId: id })
-      pending.resolve({ behavior: 'deny', message: 'User denied this action.' })
+    const elicitation = pendingElicitations.get(id)
+    if (!elicitation) return
+    pendingElicitations.delete(id)
+    const decision = message.decision === 'allow-session'
+      ? 'session'
+      : (message.decision === 'allow' ? 'once' : 'deny')
+    const result = approvalResult(decision, elicitation.policy)
+    if (result.action === 'accept' && result.content.decision === 'session') {
+      sessionAllowedPlans.add(planSessionKey(elicitation.plan))
     }
+    if (result.action === 'decline') {
+      emitEvent({ type: 'tool-denied', toolUseId: id })
+    }
+    elicitation.resolve(result)
   }
 
   function stopTurn() {
@@ -404,6 +496,11 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
       approvals.delete(id)
       emitEvent({ type: 'tool-denied', toolUseId: id })
       pending.resolve({ behavior: 'deny', message })
+    }
+    for (const [id, pending] of pendingElicitations) {
+      pendingElicitations.delete(id)
+      emitEvent({ type: 'tool-denied', toolUseId: id })
+      pending.resolve(approvalResult('deny', pending.policy))
     }
   }
 

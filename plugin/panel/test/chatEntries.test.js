@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { reduceEvent } from '../src/lib/chatEntries.js';
 
 test('text deltas merge into one ai-text entry', () => {
@@ -58,4 +59,19 @@ test('failed tool-result marks a tool as error with returned text', () => {
 test('error event appends an error entry', () => {
   const entries = reduceEvent([], { type: 'error', kind: 'auth', message: 'Invalid key' });
   assert.deepEqual(entries, [{ id: 'error-1', type: 'error', kind: 'auth', message: 'Invalid key' }]);
+});
+
+test('external approvals render as high risk without session allowance', () => {
+  const source = readFileSync(new URL('../src/screens/ChatScreen.jsx', import.meta.url), 'utf8');
+  assert.match(source, /entry\.risk === 'destructive'\s*\|\|\s*entry\.risk === 'external'/);
+  assert.match(source, /onAllowSession=\{highRisk \? null/);
+
+  const entries = reduceEvent([], {
+    type: 'approval-required',
+    toolUseId: 'u5',
+    name: 'ae.toolUse',
+    input: {},
+    risk: 'external',
+  });
+  assert.equal(entries[0].risk, 'external');
 });

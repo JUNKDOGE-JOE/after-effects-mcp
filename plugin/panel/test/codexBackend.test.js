@@ -87,6 +87,17 @@ const TOOL_META = {
   },
 };
 
+const WRITE_PLAN = {
+  artifactId: 'user:123',
+  contentHash: 'a'.repeat(64),
+  operation: 'execute',
+  normalizedArgs: {},
+  target: { compId: '7' },
+  planHash: 'b'.repeat(64),
+  risk: 'write',
+  expiresAt: 9999999999999,
+};
+
 function realElicitation(tool, params = {}) {
   return {
     threadId: 'thread_1',
@@ -102,6 +113,20 @@ function realElicitation(tool, params = {}) {
     },
     message: `Allow the ae MCP server to run tool "${tool}"?`,
     requestedSchema: { type: 'object', properties: {} },
+  };
+}
+
+function planElicitation(plan) {
+  return {
+    threadId: 'thread_1',
+    turnId: 'turn_1',
+    serverName: 'ae',
+    mode: 'form',
+    message: 'Approve artifact plan?',
+    requestedSchema: {
+      type: 'object',
+      'x-ae-mcp-plan': plan,
+    },
   };
 }
 
@@ -583,6 +608,141 @@ test('elicitation tool name parsing supports message regex and tool_description 
     risk: 'destructive',
   });
 
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+});
+
+test('Codex none tier still asks for an external artifact plan', async () => {
+  const externalPlan = { ...WRITE_PLAN, risk: 'external' };
+  const { backend, events, spawned } = makeBackend({ getPermissionMode: () => 'none' });
+  const { pending, proc } = await startTurn(backend, spawned, 'publish');
+
+  pushElicitation(proc, 'plan_external', planElicitation(externalPlan));
+  assert.deepEqual(events.at(-1), {
+    type: 'approval-required',
+    toolUseId: 'plan_external',
+    name: 'mcp__ae__ae_toolUse',
+    input: externalPlan,
+    risk: 'external',
+  });
+
+  backend.approve('plan_external', 'allow');
+  assert.deepEqual(parseWrites(proc).at(-1), {
+    jsonrpc: '2.0',
+    id: 'plan_external',
+    result: { action: 'accept', content: { decision: 'once' } },
+  });
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+});
+
+test('Codex auto accepts write plans once and declines malformed plans without cards', async () => {
+  const { backend, events, spawned } = makeBackend({ getPermissionMode: () => 'auto' });
+  const { pending, proc } = await startTurn(backend, spawned, 'apply');
+
+  pushElicitation(proc, 'plan_auto', planElicitation(WRITE_PLAN));
+  assert.deepEqual(parseWrites(proc).at(-1), {
+    jsonrpc: '2.0',
+    id: 'plan_auto',
+    result: { action: 'accept', content: { decision: 'once' } },
+  });
+
+  pushElicitation(proc, 'plan_bad', planElicitation({ risk: 'write' }));
+  assert.deepEqual(parseWrites(proc).at(-1), {
+    jsonrpc: '2.0',
+    id: 'plan_bad',
+    result: { action: 'decline', content: {} },
+  });
+  assert.equal(events.some((event) => event.type === 'approval-required'), false);
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+});
+
+test('Codex plan approval fails closed for unknown or missing decisions', async () => {
+  const { backend, spawned } = makeBackend();
+  const { pending, proc } = await startTurn(backend, spawned, 'decide');
+
+  for (const [id, decision] of [['plan_unknown', 'unexpected'], ['plan_missing', undefined]]) {
+    pushElicitation(proc, id, planElicitation(WRITE_PLAN));
+    backend.approve(id, decision);
+    assert.deepEqual(parseWrites(proc).at(-1), {
+      jsonrpc: '2.0',
+      id,
+      result: { action: 'decline', content: {} },
+    });
+  }
+
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+});
+
+test('Codex plan sessions bind content and target while high risks reject session scope', async () => {
+  const changedHash = { ...WRITE_PLAN, contentHash: 'c'.repeat(64), planHash: 'd'.repeat(64) };
+  const changedTarget = { ...WRITE_PLAN, target: { compId: '8' }, planHash: 'e'.repeat(64) };
+  const destructivePlan = { ...WRITE_PLAN, risk: 'destructive' };
+  const { backend, events, spawned } = makeBackend();
+  const { pending, proc } = await startTurn(backend, spawned, 'apply plans');
+
+  pushElicitation(proc, 'plan_1', planElicitation(WRITE_PLAN));
+  backend.approve('plan_1', 'allow-session');
+  assert.deepEqual(parseWrites(proc).at(-1), {
+    jsonrpc: '2.0',
+    id: 'plan_1',
+    result: { action: 'accept', content: { decision: 'session' } },
+  });
+
+  const cardsAfterSession = events.filter((event) => event.type === 'approval-required').length;
+  pushElicitation(proc, 'plan_same', planElicitation(WRITE_PLAN));
+  assert.deepEqual(parseWrites(proc).at(-1), {
+    jsonrpc: '2.0',
+    id: 'plan_same',
+    result: { action: 'accept', content: { decision: 'once' } },
+  });
+  assert.equal(events.filter((event) => event.type === 'approval-required').length, cardsAfterSession);
+
+  pushElicitation(proc, 'plan_hash', planElicitation(changedHash));
+  assert.equal(events.at(-1).toolUseId, 'plan_hash');
+  assert.deepEqual(events.at(-1).input, changedHash);
+  backend.approve('plan_hash', 'allow');
+
+  pushElicitation(proc, 'plan_target', planElicitation(changedTarget));
+  assert.equal(events.at(-1).toolUseId, 'plan_target');
+  assert.deepEqual(events.at(-1).input, changedTarget);
+  backend.approve('plan_target', 'allow');
+
+  pushElicitation(proc, 'plan_high', planElicitation(destructivePlan));
+  assert.equal(events.at(-1).risk, 'destructive');
+  backend.approve('plan_high', 'allow-session');
+  assert.deepEqual(parseWrites(proc).at(-1), {
+    jsonrpc: '2.0',
+    id: 'plan_high',
+    result: { action: 'decline', content: {} },
+  });
+
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+});
+
+test('Codex delegates valid staged ae_toolUse calls without caching the tool name', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { pending, proc } = await startTurn(backend, spawned, 'stage');
+
+  pushElicitation(proc, 'stage_valid', realElicitation('ae_toolUse', { action: 'prepare' }));
+  assert.deepEqual(parseWrites(proc).at(-1), {
+    jsonrpc: '2.0',
+    id: 'stage_valid',
+    result: { action: 'accept', content: {} },
+  });
+
+  pushElicitation(proc, 'stage_invalid', realElicitation('ae_toolUse', { action: 'invalid' }));
+  assert.deepEqual(events.at(-1), {
+    type: 'approval-required',
+    toolUseId: 'stage_invalid',
+    name: 'mcp__ae__ae_toolUse',
+    input: { action: 'invalid' },
+    risk: 'write',
+  });
+  backend.approve('stage_invalid', 'allow');
   proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
   await pending;
 });
