@@ -8,9 +8,14 @@ async function classify(code) {
   return providerInitFailure(error);
 }
 
-test('provider init classifies only helper contract and availability failures as repair-required', async () => {
+test('provider init distinguishes automatic Helper startup failures from repair-required failures', async () => {
+  for (const code of ['HELPER_UNAVAILABLE', 'HELPER_START_FAILED']) {
+    assert.deepEqual(await classify(code), {
+      state: 'unavailable',
+      error: 'PLATFORM_HELPER_START_FAILED',
+    });
+  }
   for (const code of [
-    'HELPER_UNAVAILABLE',
     'HELPER_UNAUTHORIZED',
     'PROTOCOL_VERSION_UNSUPPORTED',
     'PLATFORM_HELPER_REPAIR_REQUIRED',

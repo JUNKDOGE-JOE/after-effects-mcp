@@ -1,5 +1,4 @@
 const HELPER_FAILURE_CODES = new Set([
-  'HELPER_UNAVAILABLE',
   'HELPER_UNAUTHORIZED',
   'PROTOCOL_VERSION_UNSUPPORTED',
   'SECRET_STORE_UNAVAILABLE',
@@ -23,7 +22,9 @@ const SECRET_MISMATCH_CODES = new Set([
 export function providerInitFailure(error) {
   const code = typeof error?.code === 'string' ? error.code : '';
   let failure = 'PROVIDER_INITIALIZATION_FAILED';
-  if (HELPER_FAILURE_CODES.has(code)) failure = 'PLATFORM_HELPER_REPAIR_REQUIRED';
+  if (code === 'HELPER_UNAVAILABLE' || code === 'HELPER_START_FAILED') {
+    failure = 'PLATFORM_HELPER_START_FAILED';
+  } else if (HELPER_FAILURE_CODES.has(code)) failure = 'PLATFORM_HELPER_REPAIR_REQUIRED';
   else if (code === 'PROVIDER_STORE_INVALID') failure = 'PROVIDER_STORE_CORRUPT';
   else if (code === 'PROVIDER_STORE_UNAVAILABLE') failure = 'PROVIDER_STORE_UNAVAILABLE';
   else if (MIGRATION_FAILURE_CODES.has(code)) failure = 'PROVIDER_MIGRATION_CONFLICT';

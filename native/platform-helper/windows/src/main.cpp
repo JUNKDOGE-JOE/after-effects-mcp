@@ -381,14 +381,9 @@ void RequireAdobeProcess(const ProcessSnapshot& process, const std::wstring& exp
   }
 }
 
-void AuthorizeCaller(HANDLE pipe) {
-  ULONG clientId = 0;
-  if (!GetNamedPipeClientProcessId(pipe, &clientId) || clientId <= 1) {
-    throw HelperFailure("HELPER_UNAUTHORIZED", "caller identity is unavailable", false);
-  }
+ProcessSnapshot AuthorizeAdobeAncestry(DWORD processId) {
   const std::wstring currentSid = CurrentUserSid();
   std::vector<ProcessSnapshot> ancestry;
-  DWORD processId = clientId;
   bool foundAfterEffects = false;
   for (std::size_t depth = 0; depth < kMaximumAncestryDepth && processId > 1; ++depth) {
     ProcessSnapshot process = InspectProcess(processId);
@@ -418,6 +413,74 @@ void AuthorizeCaller(HANDLE pipe) {
       throw HelperFailure("HELPER_UNAUTHORIZED", "caller process changed during authorization", false);
     }
   }
+  return ancestry.back();
+}
+
+ProcessSnapshot AuthorizeCaller(HANDLE pipe) {
+  ULONG clientId = 0;
+  if (!GetNamedPipeClientProcessId(pipe, &clientId) || clientId <= 1) {
+    throw HelperFailure("HELPER_UNAUTHORIZED", "caller identity is unavailable", false);
+  }
+  return AuthorizeAdobeAncestry(clientId);
+}
+
+struct OwnerWatch {
+  DWORD processId{};
+  HANDLE process{};
+};
+
+std::mutex ownerMutex;
+std::vector<DWORD> ownerProcessIds;
+bool ownerShutdownStarted = false;
+
+DWORD WINAPI WatchAfterEffectsOwner(void* raw) {
+  std::unique_ptr<OwnerWatch> watch(static_cast<OwnerWatch*>(raw));
+  ScopedHandle process(watch->process);
+  WaitForSingleObject(process.get(), INFINITE);
+
+  bool exitHelper = false;
+  {
+    std::lock_guard lock(ownerMutex);
+    ownerProcessIds.erase(
+        std::remove(ownerProcessIds.begin(), ownerProcessIds.end(), watch->processId),
+        ownerProcessIds.end());
+    if (ownerProcessIds.empty() && !ownerShutdownStarted) {
+      ownerShutdownStarted = true;
+      exitHelper = true;
+    }
+  }
+  if (exitHelper) ExitProcess(0);
+  return 0;
+}
+
+void RegisterAfterEffectsOwner(const ProcessSnapshot& owner) {
+  ScopedHandle process(OpenProcess(SYNCHRONIZE, FALSE, owner.processId));
+  if (!process) {
+    throw HelperFailure("HELPER_UNAUTHORIZED", "After Effects owner is unavailable", false);
+  }
+
+  auto watch = std::make_unique<OwnerWatch>();
+  watch->processId = owner.processId;
+  watch->process = process.get();
+  std::lock_guard lock(ownerMutex);
+  if (ownerShutdownStarted) {
+    throw HelperFailure("HELPER_UNAVAILABLE", "platform helper is shutting down", true);
+  }
+  if (std::find(ownerProcessIds.begin(), ownerProcessIds.end(), owner.processId)
+      != ownerProcessIds.end()) {
+    return;
+  }
+  ownerProcessIds.push_back(owner.processId);
+  HANDLE thread = CreateThread(nullptr, 0, WatchAfterEffectsOwner, watch.get(), 0, nullptr);
+  if (thread == nullptr) {
+    ownerProcessIds.erase(
+        std::remove(ownerProcessIds.begin(), ownerProcessIds.end(), owner.processId),
+        ownerProcessIds.end());
+    throw HelperFailure("HELPER_UNAVAILABLE", "After Effects owner monitor is unavailable", true);
+  }
+  process.release();
+  watch.release();
+  CloseHandle(thread);
 }
 
 struct SecretReference {
@@ -709,7 +772,7 @@ void WriteFrame(HANDLE pipe, const std::string& value) {
 
 void HandleClient(HANDLE pipe) {
   try {
-    AuthorizeCaller(pipe);
+    RegisterAfterEffectsOwner(AuthorizeCaller(pipe));
   } catch (const HelperFailure& failure) {
     std::string request;
     if (ReadFrame(pipe, request)) WriteFrame(pipe, SerializeFailure(BestEffortId(request), failure));
@@ -733,6 +796,9 @@ int RunService() {
   ScopedHandle mutex(CreateMutexW(nullptr, FALSE, kMutexName));
   if (!mutex) return 70;
   if (GetLastError() == ERROR_ALREADY_EXISTS) return 0;
+
+  const DWORD launcherProcessId = ParentProcessId(GetCurrentProcessId());
+  RegisterAfterEffectsOwner(AuthorizeAdobeAncestry(launcherProcessId));
 
   PSECURITY_DESCRIPTOR rawDescriptor = PipeSecurityDescriptor();
   std::unique_ptr<void, decltype(&LocalFree)> descriptor(rawDescriptor, LocalFree);

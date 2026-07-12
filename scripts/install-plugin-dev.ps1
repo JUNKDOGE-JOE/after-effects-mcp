@@ -121,7 +121,6 @@ foreach ($generated in @($staging, $backup, $failedInstall, $restoreReplaced)) {
 $completed = $false
 $oldMoved = $false
 $stageMoveStarted = $false
-$oldHelperStopped = $false
 
 try {
     Write-Host '[1/5] Staging the complete plugin tree beside the final target...'
@@ -156,7 +155,6 @@ try {
                 Fail-DevInstall "another Platform Helper is running outside the deployed panel: $($process.Path)"
             }
             Stop-Process -Id $process.Id -Force
-            $oldHelperStopped = $true
         }
         if (Test-Path -LiteralPath $cepDir) {
             Move-Item -LiteralPath $cepDir -Destination $backup
@@ -165,8 +163,6 @@ try {
         $stageMoveStarted = $true
         Move-Item -LiteralPath $staging -Destination $cepDir
         Assert-TreeEqual $pluginSrc $cepDir
-        & (Join-Path $PSScriptRoot 'start-platform-helper-dev.ps1') `
-            -HelperRoot (Join-Path $cepDir 'platform\windows-x64')
     } catch {
         $original = $_
         $rollbackErrors = [System.Collections.Generic.List[string]]::new()
@@ -182,14 +178,6 @@ try {
                 $rollbackErrors.Add("backup disappeared before rollback: $backup")
             }
         }
-        if ($oldHelperStopped -and (Test-Path -LiteralPath $cepDir -PathType Container)) {
-            try {
-                & (Join-Path $PSScriptRoot 'start-platform-helper-dev.ps1') `
-                    -HelperRoot (Join-Path $cepDir 'platform\windows-x64')
-            } catch {
-                $rollbackErrors.Add($_.Exception.Message)
-            }
-        }
         if ($rollbackErrors.Count -ne 0) {
             throw "Deployment failed and automatic rollback was incomplete. " +
                 "Original error: $($original.Exception.Message). " +
@@ -200,7 +188,7 @@ try {
 
     $completed = $true
     Write-Host "[5/5] Installed and verified: $cepDir"
-    Write-Host 'Restart After Effects, then open Window -> Extensions -> ae-mcp.'
+    Write-Host 'Restart After Effects, then open Window -> Extensions -> ae-mcp. The panel starts Platform Helper automatically.'
     if ($oldMoved) {
         Write-Host "Backup retained at: $backup"
         Write-Host 'Restore command (run only while After Effects is closed):'

@@ -132,6 +132,7 @@ test('provider initialization retains the last provider list and renders distinc
   assert.match(init, /providerInitFailure\s*\(\s*error\s*\)/);
   assert.doesNotMatch(init, /catch\s*\{\s*setProviders\s*\(\s*\[\s*\]\s*\)/);
   for (const code of [
+    'PLATFORM_HELPER_START_FAILED',
     'PLATFORM_HELPER_REPAIR_REQUIRED',
     'PROVIDER_STORE_CORRUPT',
     'PROVIDER_MIGRATION_CONFLICT',

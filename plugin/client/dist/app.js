@@ -9704,7 +9704,8 @@
       providerNone: "\uFF08\u672A\u9009\u62E9 provider\uFF09",
       importClaudeSettings: "\u4ECE ~/.claude/settings.json \u5BFC\u5165",
       claude3pNote: "\u540C\u4E00\u4E2A Provider \u53EF\u540C\u65F6\u7528\u4E8E Claude \u548C Codex\uFF1B\u534F\u8BAE\u4E0E\u517C\u5BB9\u8F6C\u6362\u6309\u5F53\u524D\u6A21\u578B\u81EA\u52A8\u9009\u62E9\u3002",
-      providerHelperRepair: "Provider \u51ED\u636E\u529F\u80FD\u5DF2\u5B89\u5168\u505C\u7528\u3002\u8BF7\u4FEE\u590D\u6216\u91CD\u65B0\u5B89\u88C5\u5E73\u53F0 Helper\uFF0C\u91CD\u542F AE \u540E\u518D\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D\uFF1B\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587\u51ED\u636E\u3002",
+      providerHelperStartFailed: "Provider \u51ED\u636E\u529F\u80FD\u5DF2\u5B89\u5168\u505C\u7528\u3002\u5E73\u53F0 Helper \u4F1A\u968F AE \u81EA\u52A8\u542F\u52A8\uFF0C\u4F46\u672C\u6B21\u672A\u80FD\u542F\u52A8\u6216\u8FDE\u63A5\uFF1B\u8BF7\u5148\u91CD\u65B0\u6253\u5F00\u9762\u677F\uFF0C\u4ECD\u5931\u8D25\u65F6\u91CD\u542F AE\u3002\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587\u51ED\u636E\u3002",
+      providerHelperRepair: "Provider \u51ED\u636E\u529F\u80FD\u5DF2\u5B89\u5168\u505C\u7528\u3002\u5E73\u53F0 Helper \u5DF2\u542F\u52A8\u4F46\u672A\u901A\u8FC7\u63E1\u624B\u3001\u7248\u672C\u6216\u6388\u6743\u68C0\u67E5\uFF1B\u8BF7\u91CD\u542F AE\uFF0C\u4ECD\u5931\u8D25\u65F6\u518D\u4FEE\u590D\u5F53\u524D\u5B89\u88C5\u3002\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587\u51ED\u636E\u3002",
       providerStoreCorrupt: "Provider \u914D\u7F6E\u6587\u4EF6\u635F\u574F\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u5148\u4ECE\u5907\u4EFD\u6062\u590D providers.json\uFF0C\u518D\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D\u3002",
       providerStoreUnavailable: "Provider \u914D\u7F6E\u6587\u4EF6\u4E0D\u53EF\u7528\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u68C0\u67E5 ~/.ae-mcp \u7684\u78C1\u76D8\u7A7A\u95F4\u4E0E\u8BFB\u5199\u6743\u9650\u3002",
       providerMigrationConflict: "Provider \u8FC1\u79FB\u671F\u95F4\u914D\u7F6E\u53D1\u751F\u51B2\u7A81\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u5173\u95ED\u5176\u4ED6\u9762\u677F\u5B9E\u4F8B\u540E\u91CD\u65B0\u542F\u52A8 AE \u518D\u68C0\u6D4B\u3002",
@@ -9765,7 +9766,8 @@
       providerNone: "(no provider selected)",
       importClaudeSettings: "Import from ~/.claude/settings.json",
       claude3pNote: "The same Provider can serve Claude and Codex; protocol routing and compatibility conversion are selected per model.",
-      providerHelperRepair: "Provider credentials are safely disabled. Repair or reinstall the platform Helper, restart AE, then re-check. Plaintext fallback is disabled.",
+      providerHelperStartFailed: "Provider credentials are safely disabled. Platform Helper starts with AE but could not start or connect in this session. Reopen the panel, then restart AE if it still fails. Plaintext fallback is disabled.",
+      providerHelperRepair: "Provider credentials are safely disabled. Platform Helper started but failed its handshake, version, or authorization check. Restart AE, then repair the current install if it still fails. Plaintext fallback is disabled.",
       providerStoreCorrupt: "The provider configuration is corrupt; the current list was retained. Restore providers.json from backup, then re-check.",
       providerStoreUnavailable: "The provider configuration is unavailable; the current list was retained. Check disk space and permissions for ~/.ae-mcp.",
       providerMigrationConflict: "The provider configuration changed during migration; the current list was retained. Close other panel instances, restart AE, then re-check.",
@@ -9947,6 +9949,7 @@
   }) {
     const t = S[lang] || S.zh;
     const providerInitMessage = {
+      PLATFORM_HELPER_START_FAILED: t.providerHelperStartFailed,
       PLATFORM_HELPER_REPAIR_REQUIRED: t.providerHelperRepair,
       PROVIDER_STORE_CORRUPT: t.providerStoreCorrupt,
       PROVIDER_STORE_UNAVAILABLE: t.providerStoreUnavailable,
@@ -16496,7 +16499,7 @@
       checking: Boolean(providerChecking),
       ok: canPreflight,
       detail: apiProvider && apiProvider.baseUrl ? apiProvider.baseUrl : "",
-      fixHint: apiProvider && resolverReady !== true && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1A\u4FEE\u590D\u5E73\u53F0 Helper \u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Repair the platform Helper and re-check; plaintext provider fallback is disabled." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E\u6216\u9009\u62E9\u4E00\u4E2A\u901A\u7528 Provider\uFF08Base URL + API Key\uFF09\u3002\u7CFB\u7EDF\u4F1A\u6309\u6A21\u578B\u81EA\u52A8\u9009\u62E9 Messages\u3001Responses \u6216 Chat \u8DEF\u7531\u3002", en: "Add or select a universal Provider (base URL + API key) in Provider Manager. Messages, Responses, or Chat routing is selected per model." }
+      fixHint: apiProvider && resolverReady !== true && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1AHelper \u4F1A\u968F AE \u81EA\u52A8\u542F\u52A8\uFF0C\u8BF7\u5148\u91CD\u65B0\u6253\u5F00\u9762\u677F\u6216\u91CD\u542F AE\uFF1B\u4ECD\u5931\u8D25\u65F6\u518D\u4FEE\u590D\u5F53\u524D\u5B89\u88C5\u3002\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Helper starts with AE; reopen the panel or restart AE first, then repair the current install if it still fails. Plaintext provider fallback is disabled." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E\u6216\u9009\u62E9\u4E00\u4E2A\u901A\u7528 Provider\uFF08Base URL + API Key\uFF09\u3002\u7CFB\u7EDF\u4F1A\u6309\u6A21\u578B\u81EA\u52A8\u9009\u62E9 Messages\u3001Responses \u6216 Chat \u8DEF\u7531\u3002", en: "Add or select a universal Provider (base URL + API key) in Provider Manager. Messages, Responses, or Chat routing is selected per model." }
     };
     api.directHttp = false;
     return [sub, api];
@@ -16543,7 +16546,7 @@
         customCanPreflight
       ),
       detail: customProvider && customProvider.baseUrl ? customProvider.baseUrl : "",
-      fixHint: customProvider && customProviderAvailable === false && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1A\u4FEE\u590D\u5E73\u53F0 Helper \u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Repair the platform Helper and re-check; plaintext provider fallback is disabled." } : customProvider && customProviderCredentialResolverReady !== true ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u5C1A\u672A\u5C31\u7EEA\uFF1B\u8BF7\u4FEE\u590D\u5E73\u53F0 Helper \u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "The system credential store is not ready. Repair the platform Helper and re-check." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E\u6216\u9009\u62E9\u4E00\u4E2A\u901A\u7528 Provider\uFF08Base URL + API Key\uFF09\u3002\u534F\u8BAE\u8DEF\u7531\u4F1A\u5728\u53D1\u9001\u524D\u6309\u5F53\u524D\u6A21\u578B\u9884\u68C0\u3002", en: "Add or select a universal Provider (base URL + API key) in Provider Manager. Its protocol route is preflighted for the current model before sending." }
+      fixHint: customProvider && customProviderAvailable === false && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1AHelper \u4F1A\u968F AE \u81EA\u52A8\u542F\u52A8\uFF0C\u8BF7\u5148\u91CD\u65B0\u6253\u5F00\u9762\u677F\u6216\u91CD\u542F AE\uFF1B\u4ECD\u5931\u8D25\u65F6\u518D\u4FEE\u590D\u5F53\u524D\u5B89\u88C5\u3002\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Helper starts with AE; reopen the panel or restart AE first, then repair the current install if it still fails. Plaintext provider fallback is disabled." } : customProvider && customProviderCredentialResolverReady !== true ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u5C1A\u672A\u5C31\u7EEA\uFF1BHelper \u4F1A\u968F AE \u81EA\u52A8\u542F\u52A8\uFF0C\u8BF7\u91CD\u65B0\u6253\u5F00\u9762\u677F\u6216\u91CD\u542F AE \u540E\u68C0\u6D4B\uFF0C\u6301\u7EED\u5931\u8D25\u65F6\u518D\u4FEE\u590D\u5B89\u88C5\u3002", en: "The system credential store is not ready. Helper starts with AE; reopen the panel or restart AE, and repair the install only if the failure persists." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E\u6216\u9009\u62E9\u4E00\u4E2A\u901A\u7528 Provider\uFF08Base URL + API Key\uFF09\u3002\u534F\u8BAE\u8DEF\u7531\u4F1A\u5728\u53D1\u9001\u524D\u6309\u5F53\u524D\u6A21\u578B\u9884\u68C0\u3002", en: "Add or select a universal Provider (base URL + API key) in Provider Manager. Its protocol route is preflighted for the current model before sending." }
     };
     return custom.ok ? [cli, custom, cliConfigChannel] : [cli, cliConfigChannel, custom];
   }
@@ -30344,7 +30347,6 @@ ${output}` : output
 
   // src/app/providerInitState.js
   var HELPER_FAILURE_CODES = /* @__PURE__ */ new Set([
-    "HELPER_UNAVAILABLE",
     "HELPER_UNAUTHORIZED",
     "PROTOCOL_VERSION_UNSUPPORTED",
     "SECRET_STORE_UNAVAILABLE",
@@ -30365,7 +30367,9 @@ ${output}` : output
   function providerInitFailure(error) {
     const code = typeof (error == null ? void 0 : error.code) === "string" ? error.code : "";
     let failure = "PROVIDER_INITIALIZATION_FAILED";
-    if (HELPER_FAILURE_CODES.has(code)) failure = "PLATFORM_HELPER_REPAIR_REQUIRED";
+    if (code === "HELPER_UNAVAILABLE" || code === "HELPER_START_FAILED") {
+      failure = "PLATFORM_HELPER_START_FAILED";
+    } else if (HELPER_FAILURE_CODES.has(code)) failure = "PLATFORM_HELPER_REPAIR_REQUIRED";
     else if (code === "PROVIDER_STORE_INVALID") failure = "PROVIDER_STORE_CORRUPT";
     else if (code === "PROVIDER_STORE_UNAVAILABLE") failure = "PROVIDER_STORE_UNAVAILABLE";
     else if (MIGRATION_FAILURE_CODES.has(code)) failure = "PROVIDER_MIGRATION_CONFLICT";
@@ -32046,8 +32050,8 @@ ${output}` : output
       } catch {
       }
     }
-    function disposeLifecycle(client, hostInstance) {
-      closeHelperClient(client);
+    function disposeLifecycle(client, hostInstance, { closeClient = true } = {}) {
+      if (closeClient) closeHelperClient(client);
       try {
         if (hostInstance && typeof hostInstance.stop === "function") hostInstance.stop();
       } catch {
@@ -32056,6 +32060,7 @@ ${output}` : output
     function bindPlatformHelperFacade({ cepRequire: cepRequire6, extRoot, hostInstance }) {
       let transport = null;
       let nextClient = null;
+      let bindingError = null;
       try {
         const transportFactory = createPlatformHelperTransportImpl || (() => {
           const modulePath = adapter.paths.join([extRoot, "host", "platform-helper-transport.js"]);
@@ -32080,7 +32085,8 @@ ${output}` : output
         for (const method of ["capabilities", "secretGet", "secretSet", "secretDelete", "close"]) {
           if (typeof (nextClient == null ? void 0 : nextClient[method]) !== "function") throw helperUnavailableError();
         }
-      } catch {
+      } catch (error) {
+        bindingError = sanitizeHelperError(error);
         closeHelperClient(nextClient, transport);
         nextClient = null;
       }
@@ -32088,7 +32094,7 @@ ${output}` : output
       const facadeClient = nextClient;
       const invoke = (method, value, hasValue) => {
         const client = facadeClient;
-        if (!client) return Promise.reject(helperUnavailableError());
+        if (!client) return Promise.reject(bindingError || helperUnavailableError());
         let request;
         try {
           request = hasValue ? client[method](value) : client[method]();
@@ -32143,7 +32149,7 @@ ${output}` : output
             helperClient = null;
             host = null;
             platformRoots = null;
-            disposeLifecycle(closingClient, closingHost);
+            disposeLifecycle(closingClient, closingHost, { closeClient: false });
           });
           beforeUnloadInstalled = true;
         }

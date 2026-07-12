@@ -49,7 +49,8 @@ const S = {
     providerNone: '（未选择 provider）',
     importClaudeSettings: '从 ~/.claude/settings.json 导入',
     claude3pNote: '同一个 Provider 可同时用于 Claude 和 Codex；协议与兼容转换按当前模型自动选择。',
-    providerHelperRepair: 'Provider 凭据功能已安全停用。请修复或重新安装平台 Helper，重启 AE 后再点「重新检测」；不会回退读取明文凭据。',
+    providerHelperStartFailed: 'Provider 凭据功能已安全停用。平台 Helper 会随 AE 自动启动，但本次未能启动或连接；请先重新打开面板，仍失败时重启 AE。不会回退读取明文凭据。',
+    providerHelperRepair: 'Provider 凭据功能已安全停用。平台 Helper 已启动但未通过握手、版本或授权检查；请重启 AE，仍失败时再修复当前安装。不会回退读取明文凭据。',
     providerStoreCorrupt: 'Provider 配置文件损坏；当前列表已保留。请先从备份恢复 providers.json，再点「重新检测」。',
     providerStoreUnavailable: 'Provider 配置文件不可用；当前列表已保留。请检查 ~/.ae-mcp 的磁盘空间与读写权限。',
     providerMigrationConflict: 'Provider 迁移期间配置发生冲突；当前列表已保留。请关闭其他面板实例后重新启动 AE 再检测。',
@@ -110,7 +111,8 @@ const S = {
     providerNone: '(no provider selected)',
     importClaudeSettings: 'Import from ~/.claude/settings.json',
     claude3pNote: 'The same Provider can serve Claude and Codex; protocol routing and compatibility conversion are selected per model.',
-    providerHelperRepair: 'Provider credentials are safely disabled. Repair or reinstall the platform Helper, restart AE, then re-check. Plaintext fallback is disabled.',
+    providerHelperStartFailed: 'Provider credentials are safely disabled. Platform Helper starts with AE but could not start or connect in this session. Reopen the panel, then restart AE if it still fails. Plaintext fallback is disabled.',
+    providerHelperRepair: 'Provider credentials are safely disabled. Platform Helper started but failed its handshake, version, or authorization check. Restart AE, then repair the current install if it still fails. Plaintext fallback is disabled.',
     providerStoreCorrupt: 'The provider configuration is corrupt; the current list was retained. Restore providers.json from backup, then re-check.',
     providerStoreUnavailable: 'The provider configuration is unavailable; the current list was retained. Check disk space and permissions for ~/.ae-mcp.',
     providerMigrationConflict: 'The provider configuration changed during migration; the current list was retained. Close other panel instances, restart AE, then re-check.',
@@ -303,6 +305,7 @@ export function SettingsScreen({
 }) {
   const t = S[lang] || S.zh;
   const providerInitMessage = {
+    PLATFORM_HELPER_START_FAILED: t.providerHelperStartFailed,
     PLATFORM_HELPER_REPAIR_REQUIRED: t.providerHelperRepair,
     PROVIDER_STORE_CORRUPT: t.providerStoreCorrupt,
     PROVIDER_STORE_UNAVAILABLE: t.providerStoreUnavailable,

@@ -24,6 +24,10 @@ const starter = fs.readFileSync(
   path.join(repoRoot, 'scripts', 'start-platform-helper-dev.ps1'),
   'utf8',
 );
+const hostTransport = fs.readFileSync(
+  path.join(repoRoot, 'plugin', 'host', 'platform-helper-transport.js'),
+  'utf8',
+);
 
 test('named pipe is local-user-only and remote clients are rejected', () => {
   assert.match(service, /ConvertStringSecurityDescriptorToSecurityDescriptorW/);
@@ -47,8 +51,21 @@ test('authorization completes before dispatch can access Credential Manager', ()
     service.indexOf('void HandleClient'),
     service.indexOf('PSECURITY_DESCRIPTOR PipeSecurityDescriptor'),
   );
-  assert.ok(handler.indexOf('AuthorizeCaller(pipe)') < handler.indexOf('Dispatch(request)'));
-  assert.doesNotMatch(handler.slice(0, handler.indexOf('AuthorizeCaller(pipe)')), /Cred(?:Read|Write|Delete)W/);
+  assert.ok(handler.indexOf('RegisterAfterEffectsOwner(AuthorizeCaller(pipe))')
+    < handler.indexOf('Dispatch(request)'));
+  assert.doesNotMatch(
+    handler.slice(0, handler.indexOf('RegisterAfterEffectsOwner(AuthorizeCaller(pipe))')),
+    /Cred(?:Read|Write|Delete)W/,
+  );
+});
+
+test('Helper binds startup and authenticated clients to verified AE owners', () => {
+  assert.match(service, /AuthorizeAdobeAncestry\(launcherProcessId\)/);
+  assert.match(service, /RegisterAfterEffectsOwner\(AuthorizeAdobeAncestry\(launcherProcessId\)\)/);
+  assert.match(service, /RegisterAfterEffectsOwner\(AuthorizeCaller\(pipe\)\)/);
+  assert.match(service, /OpenProcess\(SYNCHRONIZE, FALSE, owner\.processId\)/);
+  assert.match(service, /WaitForSingleObject\(process\.get\(\), INFINITE\)/);
+  assert.match(service, /ownerProcessIds\.empty\(\)[\s\S]*ExitProcess\(0\)/);
 });
 
 test('secret backend is non-enumerating, revisioned, and verifies mutations', () => {
@@ -78,11 +95,15 @@ test('Windows addon resolves Node imports in both CEP and node.exe hosts', () =>
   assert.match(delayLoadHook, /__pfnDliNotifyHook2\s*=\s*ResolveNodeHost/);
 });
 
-test('development deployment verifies and starts the final Helper outside the addon', () => {
+test('panel owns Helper startup while development deployment only verifies payloads', () => {
   assert.match(starter, /Get-FileHash[^\n]+SHA256/);
   assert.match(starter, /helperId -cne 'com\.junkdoge\.ae-mcp\.platform-helper'/);
-  assert.match(starter, /Start-Process -FilePath \$helperPath -WindowStyle Hidden/);
+  assert.doesNotMatch(starter, /Start-Process|Start-Job|&\s*\$helperPath/);
   assert.match(installer, /Stop-Process -Id \$process\.Id -Force/);
-  assert.ok(installer.indexOf('Assert-TreeEqual $pluginSrc $cepDir')
-    < installer.indexOf("start-platform-helper-dev.ps1')"));
+  assert.doesNotMatch(installer, /start-platform-helper-dev\.ps1/);
+  assert.match(installer, /panel starts Platform Helper automatically/);
+  assert.match(hostTransport, /verifyWindowsPayload/);
+  assert.match(hostTransport, /require\('child_process'\)\.spawn/);
+  assert.match(hostTransport, /windowsHide:\s*true/);
+  assert.match(hostTransport, /detached:\s*true/);
 });

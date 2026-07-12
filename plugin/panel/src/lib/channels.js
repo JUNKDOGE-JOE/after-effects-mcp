@@ -50,7 +50,7 @@ export function claudeChannels({
     ok: canPreflight,
     detail: apiProvider && apiProvider.baseUrl ? apiProvider.baseUrl : '',
     fixHint: apiProvider && resolverReady !== true && !providerChecking
-      ? { zh: '系统凭据库不可用：修复平台 Helper 后重新检测；不会回退读取明文 provider 文件。', en: 'The system credential store is unavailable. Repair the platform Helper and re-check; plaintext provider fallback is disabled.' }
+      ? { zh: '系统凭据库不可用：Helper 会随 AE 自动启动，请先重新打开面板或重启 AE；仍失败时再修复当前安装。不会回退读取明文 provider 文件。', en: 'The system credential store is unavailable. Helper starts with AE; reopen the panel or restart AE first, then repair the current install if it still fails. Plaintext provider fallback is disabled.' }
       : { zh: '在「Provider 管理」新增或选择一个通用 Provider（Base URL + API Key）。系统会按模型自动选择 Messages、Responses 或 Chat 路由。', en: 'Add or select a universal Provider (base URL + API key) in Provider Manager. Messages, Responses, or Chat routing is selected per model.' },
   };
   api.directHttp = false;
@@ -111,9 +111,9 @@ export function codexChannels({
     ),
     detail: customProvider && customProvider.baseUrl ? customProvider.baseUrl : '',
     fixHint: customProvider && customProviderAvailable === false && !providerChecking
-      ? { zh: '系统凭据库不可用：修复平台 Helper 后重新检测；不会回退读取明文 provider 文件。', en: 'The system credential store is unavailable. Repair the platform Helper and re-check; plaintext provider fallback is disabled.' }
+      ? { zh: '系统凭据库不可用：Helper 会随 AE 自动启动，请先重新打开面板或重启 AE；仍失败时再修复当前安装。不会回退读取明文 provider 文件。', en: 'The system credential store is unavailable. Helper starts with AE; reopen the panel or restart AE first, then repair the current install if it still fails. Plaintext provider fallback is disabled.' }
       : customProvider && customProviderCredentialResolverReady !== true
-        ? { zh: '系统凭据库尚未就绪；请修复平台 Helper 后重新检测。', en: 'The system credential store is not ready. Repair the platform Helper and re-check.' }
+        ? { zh: '系统凭据库尚未就绪；Helper 会随 AE 自动启动，请重新打开面板或重启 AE 后检测，持续失败时再修复安装。', en: 'The system credential store is not ready. Helper starts with AE; reopen the panel or restart AE, and repair the install only if the failure persists.' }
         : { zh: '在「Provider 管理」新增或选择一个通用 Provider（Base URL + API Key）。协议路由会在发送前按当前模型预检。', en: 'Add or select a universal Provider (base URL + API key) in Provider Manager. Its protocol route is preflighted for the current model before sending.' },
   };
   // An explicitly-configured custom provider always outranks the inherited

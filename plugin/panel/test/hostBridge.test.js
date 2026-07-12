@@ -605,7 +605,7 @@ test('host controller loads the bundled helper client and transport modules by e
   assert.deepEqual(await controller.getHost().capabilities(), { authenticatedCaller: true });
 });
 
-test('host controller helper facade fails closed when the native addon is unavailable', async () => {
+test('host controller helper facade preserves sanitized synchronous repair failures', async () => {
   const host = {
     setRuntimeDependencies() {}, setCSInterface() {},
     start(_port, callback) { callback(null); }, stop() {},
@@ -621,7 +621,7 @@ test('host controller helper facade fails closed when the native addon is unavai
     requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
     createPlatformHelperTransportImpl() {
       const error = new Error('sensitive addon path');
-      error.code = 'HELPER_UNAVAILABLE';
+      error.code = 'PLATFORM_HELPER_REPAIR_REQUIRED';
       throw error;
     },
     createPlatformHelperClientImpl() { throw new Error('must not create a client'); },
@@ -632,7 +632,7 @@ test('host controller helper facade fails closed when the native addon is unavai
   await assert.rejects(
     controller.getHost().capabilities(),
     (error) => {
-      assert.equal(error.code, 'HELPER_UNAVAILABLE');
+      assert.equal(error.code, 'PLATFORM_HELPER_REPAIR_REQUIRED');
       assert.equal(error.message.includes('/Applications'), false);
       assert.equal(error.message.includes('addon path'), false);
       return true;
@@ -717,6 +717,41 @@ test('host controller start reentry disposes the prior lifecycle and queued call
     'the prior client close must start before the replacement host starts',
   );
   assert.equal(beforeUnloadHandlers.length, 1);
+});
+
+test('beforeunload releases the host without queuing native Helper close work', async () => {
+  const lifecycle = [];
+  const beforeUnloadHandlers = [];
+  const host = {
+    setRuntimeDependencies() {}, setCSInterface() {},
+    start(_port, callback) { callback(null); },
+    stop() { lifecycle.push('host-stop'); },
+  };
+  const client = {
+    async capabilities() {}, async secretGet() {}, async secretSet() {}, async secretDelete() {},
+    async close() { lifecycle.push('client-close'); },
+  };
+  const runtime = fakeHostDependencyRuntime({
+    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
+    express: function bundledExpress() {},
+  });
+  const controller = createHostController({
+    cs: { getSystemPath: () => '/Applications/AE MCP' },
+    extensionRoot: '/Applications/AE MCP',
+    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
+    requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
+    createPlatformHelperTransportImpl: () => ({ request() {}, close() {} }),
+    createPlatformHelperClientImpl: () => client,
+    onStatus: () => {}, onLog: () => {},
+    addBeforeUnload: (handler) => { beforeUnloadHandlers.push(handler); },
+  });
+
+  controller.start(11488);
+  beforeUnloadHandlers[0]();
+  await Promise.resolve();
+
+  assert.deepEqual(lifecycle, ['host-stop']);
+  assert.equal(controller.getHost(), null);
 });
 
 test('host controller ignores callbacks from a superseded start lifecycle', () => {

@@ -329,6 +329,28 @@ test('client rejects method-specific malformed success results', async () => {
     }
 });
 
+test('client preserves sanitized lifecycle failures raised by the transport boundary', async () => {
+    for (const code of ['HELPER_START_FAILED', 'PLATFORM_HELPER_REPAIR_REQUIRED']) {
+        const client = createPlatformHelperClient({
+            transport: {
+                request: async function () {
+                    const error = new Error('sensitive native detail');
+                    error.code = code;
+                    error.retryable = code === 'HELPER_START_FAILED';
+                    throw error;
+                },
+                close: async function () {},
+            },
+        });
+        await assert.rejects(client.capabilities(), function (error) {
+            assert.equal(error.code, code);
+            assert.equal(error.retryable, code === 'HELPER_START_FAILED');
+            assert.doesNotMatch(error.message, /sensitive native detail/);
+            return true;
+        });
+    }
+});
+
 test('client errors never expose request secrets, helper messages, or transport causes', async () => {
     const sentinel = 'never-log-this-secret';
     const inputs = [

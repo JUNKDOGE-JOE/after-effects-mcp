@@ -29,6 +29,11 @@ const HELPER_ERROR_CODES = new Set([
     'AE_WINDOW_NOT_CAPTURABLE',
     'CAPTURE_FAILED',
 ]);
+const TRANSPORT_ERROR_CODES = new Set([
+    ...HELPER_ERROR_CODES,
+    'HELPER_START_FAILED',
+    'PLATFORM_HELPER_REPAIR_REQUIRED',
+]);
 
 const SECRET_REFERENCE_PATTERN = /^aemcp-secret:\/\/provider\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/[a-z][a-z0-9_-]{0,31}\/v1$/;
 const CAPTURE_METHODS = new Set(['auto', 'DesktopCopy', 'PrintWindow']);
@@ -328,7 +333,7 @@ function createPlatformHelperClient(input) {
                 timeout,
             ]);
         } catch (error) {
-            if (error && HELPER_ERROR_CODES.has(error.code)) {
+            if (error && TRANSPORT_ERROR_CODES.has(error.code)) {
                 throw makeHelperError(
                     error.code,
                     safeHelperFailureMessage(error.code),

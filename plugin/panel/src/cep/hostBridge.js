@@ -261,14 +261,15 @@ export function createHostController({
     try { Promise.resolve(closable.close()).catch(() => {}); } catch { /* best effort */ }
   }
 
-  function disposeLifecycle(client, hostInstance) {
-    closeHelperClient(client);
+  function disposeLifecycle(client, hostInstance, { closeClient = true } = {}) {
+    if (closeClient) closeHelperClient(client);
     try { if (hostInstance && typeof hostInstance.stop === 'function') hostInstance.stop(); } catch { /* best effort */ }
   }
 
   function bindPlatformHelperFacade({ cepRequire, extRoot, hostInstance }) {
     let transport = null;
     let nextClient = null;
+    let bindingError = null;
     try {
       const transportFactory = createPlatformHelperTransportImpl || (() => {
         const modulePath = adapter.paths.join([extRoot, 'host', 'platform-helper-transport.js']);
@@ -293,7 +294,8 @@ export function createHostController({
       for (const method of ['capabilities', 'secretGet', 'secretSet', 'secretDelete', 'close']) {
         if (typeof nextClient?.[method] !== 'function') throw helperUnavailableError();
       }
-    } catch {
+    } catch (error) {
+      bindingError = sanitizeHelperError(error);
       closeHelperClient(nextClient, transport);
       nextClient = null;
     }
@@ -302,7 +304,7 @@ export function createHostController({
 
     const invoke = (method, value, hasValue) => {
       const client = facadeClient;
-      if (!client) return Promise.reject(helperUnavailableError());
+      if (!client) return Promise.reject(bindingError || helperUnavailableError());
       let request;
       try {
         request = hasValue ? client[method](value) : client[method]();
@@ -361,7 +363,7 @@ export function createHostController({
           helperClient = null;
           host = null;
           platformRoots = null;
-          disposeLifecycle(closingClient, closingHost);
+          disposeLifecycle(closingClient, closingHost, { closeClient: false });
         });
         beforeUnloadInstalled = true;
       }
