@@ -63,6 +63,24 @@ def test_render_set_property_without_keyframe():
     assert "var atTime = null;" in jsx
 
 
+def test_render_set_property_expression_uses_json_literal_and_expression_setter():
+    expression = 'value + effect("Gain")(1)\n// ${not_a_template_slot}'
+    args = S.AeSetPropertyArgs(
+        layer_id=1,
+        path="Transform/Opacity",
+        expression=expression,
+    )
+
+    jsx = T.render_set_property(args)
+
+    assert "var useExpression = true;" in jsx
+    assert f"var expressionText = {json.dumps(expression)};" in jsx
+    assert "prop.expression = expressionText;" in jsx
+    expression_branch = jsx.split("if (useExpression) {", 1)[1].split("} else {", 1)[0]
+    assert "prop.value" not in expression_branch
+    assert "setValue" not in expression_branch
+
+
 @pytest.mark.parametrize("at_time", [-0.5, -1.0, 0.0, 1.5])
 def test_render_set_property_at_time_allows_negative_times(at_time):
     args = S.AeSetPropertyArgs(
@@ -130,6 +148,21 @@ async def test_set_property_dispatches(mock_backend):
         None,
     )
     assert result["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_set_property_expression_dispatches(mock_backend):
+    mock_backend.set_response('{"ok":true,"previous":"","current":"time * 2"}')
+    _, run_fn = HANDLERS["ae.setProperty"]
+    result = await run_fn(
+        S.AeSetPropertyArgs(
+            layer_id=1,
+            path="Transform/Opacity",
+            expression="time * 2",
+        ),
+        None,
+    )
+    assert result == {"ok": True, "previous": "", "current": "time * 2"}
 
 
 @pytest.mark.asyncio

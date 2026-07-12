@@ -3,21 +3,24 @@
 // Order in each array IS the priority order (channel (1) first).
 
 function providerHasCredentialPolicy(provider) {
+  const credential = provider?.credential;
+  if (credential?.preferredAuth) {
+    const scheme = credential.preferredAuth.scheme;
+    if (scheme === 'auto' || scheme === 'none') return true;
+    return Boolean(credential.valueRef?.kind === 'secret');
+  }
   const policy = provider?.auth?.model;
   return Boolean(policy && (policy.kind === 'none' || policy.valueRef?.kind === 'secret'));
 }
 
-function agentSdkCompatible(provider) {
-  if (!provider) return false;
-  let url;
-  try { url = new URL(provider.baseUrl); } catch { return false; }
-  const official = url.protocol === 'https:' && url.hostname.toLowerCase() === 'api.anthropic.com';
-  const auth = provider.auth?.model;
-  const simpleAuth = auth?.kind === 'x-api-key' || auth?.kind === 'bearer';
-  return official && simpleAuth && (!provider.headers || provider.headers.length === 0);
-}
-
-export function claudeChannels({ probe, apiProvider, providerAvailable, providerChecking = false } = {}) {
+export function claudeChannels({
+  probe,
+  apiProvider,
+  apiProviderSelected,
+  providerAvailable,
+  providerCredentialResolverReady,
+  providerChecking = false,
+} = {}) {
   const sub = {
     channel: 'subscription',
     source: { zh: '订阅登录', en: 'Subscription login' },
@@ -28,30 +31,38 @@ export function claudeChannels({ probe, apiProvider, providerAvailable, provider
       ? { zh: '内嵌对话需要系统 Node 18+：安装 Node.js LTS 后重新检测；或使用下方「API 直连」通道（无 Node 时自动降级为直连 HTTP）。', en: 'Embedded chat needs system Node 18+: install Node.js LTS and re-check, or use the API direct channel below (falls back to direct HTTP without Node).' }
       : { zh: '订阅未登录：在终端运行 claude /login 完成登录后重新检测；或改用下方「API 直连」通道。', en: 'Not logged in: run claude /login in a terminal and re-check, or switch to the API direct channel below.' },
   };
+  const selected = apiProviderSelected === undefined ? Boolean(apiProvider) : Boolean(apiProviderSelected);
+  const resolverReady = providerCredentialResolverReady === undefined
+    ? (providerAvailable === undefined ? providerHasCredentialPolicy(apiProvider) : providerAvailable)
+    : providerCredentialResolverReady;
+  const canPreflight = Boolean(
+    !providerChecking
+    && selected
+    && apiProvider?.baseUrl
+    && resolverReady,
+  );
   const api = {
     channel: 'api',
-    source: { zh: '面板配置 · API 直连', en: 'Panel config · API direct' },
+    source: { zh: '面板配置 · 通用 Provider', en: 'Panel config · Universal Provider' },
+    selected,
+    canPreflight,
     checking: Boolean(providerChecking),
-    ok: Boolean(
-      !providerChecking
-      && apiProvider?.baseUrl
-      && (providerAvailable === undefined ? providerHasCredentialPolicy(apiProvider) : providerAvailable),
-    ),
+    ok: canPreflight,
     detail: apiProvider && apiProvider.baseUrl ? apiProvider.baseUrl : '',
-    fixHint: apiProvider && providerAvailable === false && !providerChecking
+    fixHint: apiProvider && resolverReady !== true && !providerChecking
       ? { zh: '系统凭据库不可用：修复平台 Helper 后重新检测；不会回退读取明文 provider 文件。', en: 'The system credential store is unavailable. Repair the platform Helper and re-check; plaintext provider fallback is disabled.' }
-      : { zh: '在「Provider 管理」新增/选择一个 Anthropic 协议 provider（Base URL + Key/Token），或一键导入 ~/.claude/settings.json。Claude-3p 桌面版凭据无法自动读取，请手动填一次。', en: 'Add or pick an Anthropic-protocol provider (base URL + key/token) in Provider Manager, or import from ~/.claude/settings.json. Claude-3p desktop credentials cannot be read automatically; paste them once.' },
+      : { zh: '在「Provider 管理」新增或选择一个通用 Provider（Base URL + API Key）。系统会按模型自动选择 Messages、Responses 或 Chat 路由。', en: 'Add or select a universal Provider (base URL + API key) in Provider Manager. Messages, Responses, or Chat routing is selected per model.' },
   };
-  api.directHttp = Boolean(apiProvider && !agentSdkCompatible(apiProvider));
+  api.directHttp = false;
   return [sub, api];
 }
 
 export function codexChannels({
   codexProbe,
   customProvider,
+  customProviderSelected,
   customProviderAvailable,
   customProviderCredentialResolverReady = false,
-  customProviderDialect = null,
   providerChecking = false,
   cliConfig,
   cliCredentialAvailable,
@@ -81,26 +92,29 @@ export function codexChannels({
         ? { zh: '检测到 Codex CLI provider「' + cliConfig.providerId + '」，但没有可用凭据。请设置其环境变量或在 Provider 管理中配置。', en: 'Found Codex CLI provider "' + cliConfig.providerId + '", but no credential is available. Set its environment variable or configure it in Provider Manager.' }
         : { zh: 'Codex 运行时不可用：请检查 Codex CLI 安装后重新检测。', en: 'Codex runtime unavailable: check the Codex CLI install and re-check.' },
   };
+  const customCanPreflight = Boolean(
+    !providerChecking
+    && (customProviderSelected === undefined ? customProvider : customProviderSelected)
+    && customProvider?.baseUrl
+    && (customProviderAvailable === undefined ? providerHasCredentialPolicy(customProvider) : customProviderAvailable)
+    && customProviderCredentialResolverReady === true
+    && (!codexProbe || codexProbe.runtimeOk !== false),
+  );
   const custom = {
     channel: 'custom',
     source: { zh: '自定义 provider', en: 'Custom provider' },
+    selected: customProviderSelected === undefined ? Boolean(customProvider) : Boolean(customProviderSelected),
+    canPreflight: customCanPreflight,
     checking: Boolean(providerChecking),
     ok: Boolean(
-      !providerChecking
-      && customProvider?.baseUrl
-      && (customProviderAvailable === undefined ? providerHasCredentialPolicy(customProvider) : customProviderAvailable)
-      && customProviderCredentialResolverReady === true
-      && (customProviderDialect === 'responses' || customProviderDialect === 'chat')
-      && (!codexProbe || codexProbe.runtimeOk !== false),
+      customCanPreflight
     ),
     detail: customProvider && customProvider.baseUrl ? customProvider.baseUrl : '',
     fixHint: customProvider && customProviderAvailable === false && !providerChecking
       ? { zh: '系统凭据库不可用：修复平台 Helper 后重新检测；不会回退读取明文 provider 文件。', en: 'The system credential store is unavailable. Repair the platform Helper and re-check; plaintext provider fallback is disabled.' }
       : customProvider && customProviderCredentialResolverReady !== true
-        ? { zh: '此版本尚未接通 Codex 自定义 provider 的凭据路由；请先使用 Codex CLI 登录或 CLI provider 配置。', en: 'Custom provider credential routing is not connected yet; use Codex CLI login or a CLI provider configuration.' }
-        : customProvider && customProviderDialect !== 'responses' && customProviderDialect !== 'chat'
-          ? { zh: 'Provider API 方言尚未确认或已过期：请先在 Provider 管理中重新探测。', en: 'The provider API dialect is unconfirmed or stale. Re-detect it in Provider Manager first.' }
-        : { zh: '在「Provider 管理」新增/选择一个 OpenAI 兼容 provider（Base URL + Key）。', en: 'Add or pick an OpenAI-compatible provider (base URL + key) in Provider Manager.' },
+        ? { zh: '系统凭据库尚未就绪；请修复平台 Helper 后重新检测。', en: 'The system credential store is not ready. Repair the platform Helper and re-check.' }
+        : { zh: '在「Provider 管理」新增或选择一个通用 Provider（Base URL + API Key）。协议路由会在发送前按当前模型预检。', en: 'Add or select a universal Provider (base URL + API key) in Provider Manager. Its protocol route is preflighted for the current model before sending.' },
   };
   // An explicitly-configured custom provider always outranks the inherited
   // cli-config one when both are simultaneously usable (ok). zcode has no
@@ -152,6 +166,11 @@ export function pickChannel(channels, lockedChannel = '') {
     if (locked) return locked;
   }
   return list.find((c) => c && c.ok) || null;
+}
+
+export function codexProviderChannelLock(lockedChannel = '', providerId = '') {
+  if (String(providerId || '').trim()) return 'custom';
+  return lockedChannel === 'custom' ? '' : lockedChannel;
 }
 
 // Legacy pref migration: 'byok' collapses into Claude's api channel (spec:

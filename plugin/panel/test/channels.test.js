@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { claudeChannels, codexChannels, zcodeChannels, pickChannel, migrateBackendPref } from '../src/lib/channels.js';
+import {
+  claudeChannels,
+  codexChannels,
+  zcodeChannels,
+  pickChannel,
+  migrateBackendPref,
+  codexProviderChannelLock,
+} from '../src/lib/channels.js';
 
 test('claudeChannels: subscription reflects probe, api reflects provider entry', () => {
   const probing = claudeChannels({ probe: null, apiProvider: null });
@@ -19,6 +26,8 @@ test('claudeChannels: subscription reflects probe, api reflects provider entry',
   assert.equal(withApi[0].ok, false);
   assert.match(withApi[0].fixHint.zh, /API 直连/);
   assert.equal(withApi[1].ok, true);
+  assert.equal(withApi[1].canPreflight, true);
+  assert.equal(withApi[1].selected, true);
 });
 
 test('codexChannels: cli login state + custom provider channel', () => {
@@ -28,7 +37,7 @@ test('codexChannels: cli login state + custom provider channel', () => {
   assert.match(list[0].detail, /codex\.exe/);
   assert.equal(list[2].channel, 'custom');
   assert.equal(list[2].ok, false);
-  const custom = codexChannels({ codexProbe: { loggedIn: false, runtimeOk: true }, customProvider: { baseUrl: 'https://r' }, customProviderAvailable: true, customProviderCredentialResolverReady: true, customProviderDialect: 'responses' });
+  const custom = codexChannels({ codexProbe: { loggedIn: false, runtimeOk: true }, customProvider: { baseUrl: 'https://r' }, customProviderAvailable: true, customProviderCredentialResolverReady: true });
   assert.equal(custom.find((c) => c.channel === 'custom').ok, true);
   assert.match(codexChannels({ codexProbe: { loggedIn: false } }).find((c) => c.channel === 'cli').fixHint.zh, /AE_MCP_CODEX_CLI/);
 });
@@ -75,7 +84,6 @@ test('codexChannels: custom provider outranks cli-config in pickChannel when bot
     customProvider: { baseUrl: 'https://custom.example/v1' },
     customProviderAvailable: true,
     customProviderCredentialResolverReady: true,
-    customProviderDialect: 'chat',
     cliConfig: { model: 'gpt-5.5', providerId: 'mediastorm_glm', provider: { name: 'MediaStorm GLM', baseUrl: 'https://api.example.com/v1', envKey: 'MEDIASTORM_GLM_API_KEY', wireApi: 'responses' } },
     cliCredentialAvailable: true,
   });
@@ -86,7 +94,7 @@ test('codexChannels: custom provider outranks cli-config in pickChannel when bot
   assert.equal(pickChannel(list).channel, 'custom', 'explicit custom provider must outrank inherited cli-config when both are ok');
 });
 
-test('codex custom provider stays unavailable until the Task9 credential resolver is connected', () => {
+test('codex custom provider stays unavailable until the credential Helper is ready', () => {
   const custom = codexChannels({
     codexProbe: { loggedIn: false, runtimeOk: true },
     customProvider: { baseUrl: 'https://custom.example/v1' },
@@ -94,19 +102,26 @@ test('codex custom provider stays unavailable until the Task9 credential resolve
     customProviderCredentialResolverReady: false,
   }).find((channel) => channel.channel === 'custom');
   assert.equal(custom.ok, false);
-  assert.match(custom.fixHint.en, /Codex CLI|credential routing/i);
+  assert.match(custom.fixHint.en, /credential store|Helper/i);
 });
 
-test('codex custom provider stays unavailable until its effective dialect is confirmed', () => {
+test('codex custom provider can preflight before its per-model protocol route is known', () => {
   const custom = codexChannels({
     codexProbe: { loggedIn: false, runtimeOk: true },
     customProvider: { baseUrl: 'https://custom.example/v1' },
     customProviderAvailable: true,
     customProviderCredentialResolverReady: true,
-    customProviderDialect: null,
   }).find((channel) => channel.channel === 'custom');
-  assert.equal(custom.ok, false);
-  assert.match(custom.fixHint.en, /dialect|re-detect/i);
+  assert.equal(custom.ok, true);
+  assert.equal(custom.canPreflight, true);
+  assert.doesNotMatch(JSON.stringify(custom), /dialect/i);
+});
+
+test('codexProviderChannelLock binds a selected provider to custom without clearing unrelated locks', () => {
+  assert.equal(codexProviderChannelLock('', 'provider-1'), 'custom');
+  assert.equal(codexProviderChannelLock('cli', 'provider-1'), 'custom');
+  assert.equal(codexProviderChannelLock('custom', ''), '');
+  assert.equal(codexProviderChannelLock('cli', ''), 'cli');
 });
 
 test('provider channels use non-secret availability and can stay checking during migration', () => {
@@ -117,6 +132,33 @@ test('provider channels use non-secret availability and can stay checking during
   const unavailable = codexChannels({ codexProbe: { runtimeOk: true }, customProvider: provider, customProviderAvailable: false });
   assert.equal(unavailable.find((channel) => channel.channel === 'custom').ok, false);
   assert.equal(JSON.stringify([...checkingClaude, ...unavailable]).includes('aemcp-secret://'), false);
+});
+
+test('one v3 Provider is preflightable by both Claude and Codex without a Provider-level protocol', () => {
+  const provider = {
+    id: 'universal',
+    baseUrl: 'https://relay.example/root',
+    credential: {
+      preferredAuth: { scheme: 'auto', headerName: null },
+      valueRef: null,
+    },
+  };
+  assert.equal(Object.hasOwn(provider, 'protocol'), false);
+  const claude = claudeChannels({
+    probe: { loggedIn: false, nodeOk: true },
+    apiProvider: provider,
+    providerAvailable: true,
+  }).find((channel) => channel.channel === 'api');
+  const codex = codexChannels({
+    codexProbe: { loggedIn: false, runtimeOk: true },
+    customProvider: provider,
+    customProviderAvailable: true,
+    customProviderCredentialResolverReady: true,
+  }).find((channel) => channel.channel === 'custom');
+  assert.equal(claude.canPreflight, true);
+  assert.equal(claude.ok, true);
+  assert.equal(codex.canPreflight, true);
+  assert.equal(codex.ok, true);
 });
 
 test('zcodeChannels: cli-config first, desktop second, start-plan never ok without credentials', () => {

@@ -23,13 +23,32 @@ test('missing and wrong tokens return 401 before URL, secret, DNS, or upstream w
   });
   try {
     const local = await route.start();
-    for (const headers of [{}, { authorization: 'Bearer wrong-token' }]) {
+    for (const headers of [
+      {},
+      { 'x-ae-mcp-route-token': 'wrong-token' },
+      { 'x-ae-mcp-route-token': ['wrong-one', 'wrong-two'] },
+    ]) {
       const result = await requestText(local.baseUrl + '/%2e%2e/unknown', { method: 'POST', headers, body: '{}' });
       assert.equal(result.status, 401);
       assert.equal(result.headers['www-authenticate'], undefined);
       assert.equal(JSON.parse(result.body).error.code, 'invalid_route_token');
     }
     assert.deepEqual(counts, { resolve: 0, request: 0, dns: 0 });
+  } finally {
+    await route.close();
+  }
+});
+
+test('correct dedicated token ignores unrelated Authorization fields', async () => {
+  const route = routeFixture();
+  try {
+    const local = await route.start();
+    const result = await requestText(local.baseUrl + '/unknown', {
+      headers: routeHeaders(local.routeToken, {
+        authorization: ['Bearer unrelated-one', 'Bearer unrelated-two'],
+      }),
+    });
+    assert.equal(result.status, 404);
   } finally {
     await route.close();
   }

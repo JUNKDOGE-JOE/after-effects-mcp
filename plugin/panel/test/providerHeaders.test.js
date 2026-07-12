@@ -13,7 +13,9 @@ function hasCode(code) {
 test('collectCodexHeaders forwards only exact metadata and bounded prefixes', () => {
   assert.deepEqual(collectCodexHeaders([
     'Host', '127.0.0.1:1234',
-    'Authorization', 'Bearer local-route-token',
+    'Authorization', 'Bearer unrelated-login-token',
+    'Authorization', 'Bearer unrelated-provider-token',
+    'X-AE-MCP-Route-Token', 'local-route-token',
     'User-Agent', 'codex/1.2.3',
     'X-Codex-Version', '1.2.3',
     'X-Stainless-Lang', 'js',
@@ -24,6 +26,23 @@ test('collectCodexHeaders forwards only exact metadata and bounded prefixes', ()
     { name: 'x-codex-version', value: '1.2.3' },
     { name: 'x-stainless-lang', value: 'js' },
   ]);
+});
+
+test('local route tokens cannot be configured or forwarded as provider headers', () => {
+  assert.deepEqual(collectCodexHeaders([
+    'X-AE-MCP-Route-Token', 'local-route-token',
+    'X-Request-Id', 'request-1',
+  ]), [{ name: 'x-request-id', value: 'request-1' }]);
+  assert.throws(() => mergeUpstreamHeaders({
+    rawHeaders: [],
+    providerHeaders: [{ name: 'x-ae-mcp-route-token', value: 'secret', source: 'secret' }],
+    auth: { kind: 'none' },
+  }), hasCode('provider_header_forbidden'));
+  assert.throws(() => mergeUpstreamHeaders({
+    rawHeaders: [],
+    providerHeaders: [],
+    auth: { kind: 'header', name: 'x-ae-mcp-route-token', value: 'secret' },
+  }), hasCode('provider_header_forbidden'));
 });
 
 test('mergeUpstreamHeaders applies Codex, provider, then auth precedence', () => {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
   generateRouteToken,
-  parseRouteAuthorization,
+  parseRouteTokenHeader,
   routeTokenMatches,
 } from '../src/cep/providerRouteAuth.js';
 
@@ -20,18 +20,17 @@ test('generateRouteToken uses exactly 32 random bytes and base64url', () => {
   assert.equal(token.includes('='), false);
 });
 
-test('parseRouteAuthorization accepts one fixed Bearer field only', () => {
-  assert.equal(parseRouteAuthorization(['Authorization', 'Bearer token_1']), 'token_1');
-  assert.equal(parseRouteAuthorization(['authorization', 'bEaReR token-2']), 'token-2');
+test('parseRouteTokenHeader accepts one dedicated base64url field only', () => {
+  assert.equal(parseRouteTokenHeader(['X-AE-MCP-Route-Token', 'token_1']), 'token_1');
+  assert.equal(parseRouteTokenHeader(['x-ae-mcp-route-token', 'token-2']), 'token-2');
   for (const rawHeaders of [
     [],
-    ['Authorization', 'Basic abc'],
-    ['Authorization', 'Bearer  token'],
-    ['Authorization', ' Bearer token'],
-    ['Authorization', 'Bearer token '],
-    ['Authorization', 'Bearer one,two'],
-    ['Authorization', 'Bearer one', 'Authorization', 'Bearer two'],
-  ]) assert.equal(parseRouteAuthorization(rawHeaders), null);
+    ['Authorization', 'Bearer token'],
+    ['X-AE-MCP-Route-Token', ' token'],
+    ['X-AE-MCP-Route-Token', 'token '],
+    ['X-AE-MCP-Route-Token', 'one,two'],
+    ['X-AE-MCP-Route-Token', 'one', 'X-AE-MCP-Route-Token', 'two'],
+  ]) assert.equal(parseRouteTokenHeader(rawHeaders), null);
 });
 
 test('routeTokenMatches compares equal-size SHA-256 digests for every candidate length', () => {

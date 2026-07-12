@@ -92,6 +92,17 @@ export function descriptorWithCustomModel(descriptor, modelId) {
   };
 }
 
+const CODEX_OFFICIAL_LOGIN_56_MODELS = [
+  { id: 'gpt-5.6-sol', label: 'GPT-5.6-Sol', effortLevels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'], cost: 2, adaptive: false },
+  { id: 'gpt-5.6-terra', label: 'GPT-5.6-Terra', effortLevels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'], cost: 2, adaptive: false },
+  { id: 'gpt-5.6-luna', label: 'GPT-5.6-Luna', effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'], cost: 2, adaptive: false },
+];
+const CODEX_OFFICIAL_LOGIN_56_MODEL_IDS = new Set(CODEX_OFFICIAL_LOGIN_56_MODELS.map((model) => model.id));
+
+function codexOfficialLogin56Models() {
+  return CODEX_OFFICIAL_LOGIN_56_MODELS.map((model) => ({ ...model, effortLevels: [...model.effortLevels] }));
+}
+
 export function codexStaticDescriptor() {
   const models = [
     { id: 'gpt-5.5', label: 'GPT-5.5', effortLevels: ['low', 'medium', 'high', 'xhigh'], cost: 2, adaptive: false },
@@ -107,6 +118,20 @@ export function codexStaticDescriptor() {
     supportsFast: (modelId) => modelId === 'gpt-5.5',
     approvalModes: APPROVAL_MODES,
     perTurnModelSwitch: true,
+  };
+}
+
+export function mergeCodexOfficialLoginModels(descriptor) {
+  const models = Array.isArray(descriptor && descriptor.models) ? descriptor.models : [];
+  const present = new Set(models.map((model) => model && model.id).filter(Boolean));
+  const missing = codexOfficialLogin56Models().filter((model) => !present.has(model.id));
+  const supportsFast = descriptor && typeof descriptor.supportsFast === 'function'
+    ? descriptor.supportsFast
+    : () => false;
+  return {
+    ...descriptor,
+    models: missing.length ? [...models, ...missing] : models,
+    supportsFast: (modelId) => CODEX_OFFICIAL_LOGIN_56_MODEL_IDS.has(String(modelId || '')) || supportsFast(modelId),
   };
 }
 

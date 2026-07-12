@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildProviderEndpoint } from '../src/lib/providerUrl.js';
+import {
+  buildProviderApiBaseCandidates,
+  buildProviderApiBaseUrl,
+  buildProviderEndpoint,
+  buildProviderEndpointCandidates,
+} from '../src/lib/providerUrl.js';
 
 function hasCode(code) {
   return (error) => Boolean(error && error.code === code);
@@ -17,6 +22,42 @@ test('buildProviderEndpoint preserves base paths, one v1 segment, and ordered qu
     resource: 'chat-completions',
     inboundSearch: '?api-version=2026-01-01',
   }).toString(), 'https://relay.example/openai/v1/chat/completions?api-version=2026-01-01');
+});
+
+test('buildProviderApiBaseUrl gives Codex the same canonical v1 prefix used by probes', () => {
+  assert.equal(buildProviderApiBaseUrl({
+    baseUrl: 'https://relay.example',
+  }).toString(), 'https://relay.example/v1');
+  assert.equal(buildProviderApiBaseUrl({
+    baseUrl: 'https://relay.example/openai/',
+  }).toString(), 'https://relay.example/openai/v1');
+  assert.equal(buildProviderApiBaseUrl({
+    baseUrl: 'https://relay.example/openai/v1',
+  }).toString(), 'https://relay.example/openai/v1');
+  assert.equal(buildProviderApiBaseUrl({
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+  }).toString(), 'https://generativelanguage.googleapis.com/v1beta/openai');
+});
+
+test('candidate builders preserve configured roots and add at most one same-origin v1 fallback', () => {
+  assert.deepEqual(buildProviderApiBaseCandidates({
+    baseUrl: 'https://relay.example/proxy/openai',
+  }).map((entry) => [entry.id, entry.url.toString()]), [
+    ['configured-root', 'https://relay.example/proxy/openai'],
+    ['plus-v1', 'https://relay.example/proxy/openai/v1'],
+  ]);
+  assert.deepEqual(buildProviderApiBaseCandidates({
+    baseUrl: 'https://relay.example/proxy/openai/v1',
+  }).map((entry) => [entry.id, entry.url.toString()]), [
+    ['configured-root', 'https://relay.example/proxy/openai/v1'],
+  ]);
+  assert.deepEqual(buildProviderEndpointCandidates({
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    resource: 'messages',
+  }).map((entry) => entry.url.pathname), [
+    '/v1beta/openai/messages',
+    '/v1beta/openai/v1/messages',
+  ]);
 });
 
 test('buildProviderEndpoint rejects userinfo, fragments, traversal, and protocol-relative URLs', () => {

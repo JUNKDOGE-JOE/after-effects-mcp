@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -381,6 +383,60 @@ def test_legacy_metadata_compare_and_set_rejects_stale_revision(tmp_path):
             expected_revision=revision,
         )
     assert caught.value.code == "tool_store_revision_conflict"
+
+
+def test_legacy_metadata_compare_and_set_serializes_cross_instance_cas(tmp_path):
+    path = _write_skill(tmp_path / "skills", _skill("concurrent"))
+    content_hash = compute_content_hash("prompt-skill", "BODY", {})
+    metadata_path = tmp_path / "tools" / "legacy-metadata.json"
+    first = LegacyMetadataStore(metadata_path)
+    second = LegacyMetadataStore(metadata_path)
+    barrier = threading.Barrier(3)
+    successes: list[int] = []
+    failures: list[Exception] = []
+
+    def slow_read(store):
+        original = store._read
+
+        def read():
+            state = original()
+            time.sleep(0.1)
+            return state
+
+        store._read = read
+
+    slow_read(first)
+    slow_read(second)
+
+    def update(store, category):
+        barrier.wait()
+        try:
+            successes.append(
+                store.compare_and_set(
+                    path,
+                    content_hash,
+                    {"category": category},
+                    expected_revision=0,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            failures.append(exc)
+
+    threads = [
+        threading.Thread(target=update, args=(first, "one")),
+        threading.Thread(target=update, args=(second, "two")),
+    ]
+    for thread in threads:
+        thread.start()
+    barrier.wait()
+    for thread in threads:
+        thread.join(timeout=3)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert successes == [1]
+    assert len(failures) == 1
+    assert isinstance(failures[0], ToolStoreRevisionConflict)
+    assert LegacyMetadataStore(metadata_path).store_revision() == 1
 
 
 def test_real_bundled_manifest_verifies_every_virtual_artifact(tmp_path):

@@ -45,6 +45,7 @@ test('route selects one scoped profile and never forwards local route auth', asy
     assert.equal(seen[0]['x-probe-feature'], 'enabled');
     assert.equal(seen[0]['x-probe-auth'], 'probe-secret');
     assert.equal(seen[0].authorization, undefined);
+    assert.equal(seen[0]['x-ae-mcp-route-token'], undefined);
     assert.equal(seen[0]['x-unknown'], undefined);
     assert.equal(JSON.stringify(audits).includes('probe-secret'), false);
   } finally {

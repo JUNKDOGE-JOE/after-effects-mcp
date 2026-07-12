@@ -1,5 +1,8 @@
 import {
+  chatBodyWithDeveloperRoleAsSystem,
+  chatBodyWithMaxCompletionTokens,
   chatCompletionToResponse,
+  chatErrorRequestsMaxCompletionTokens,
   createChatSseToResponses,
   responsesBodyToChatBody,
 } from '../lib/codexResponsesCodec.js';
@@ -13,9 +16,10 @@ import { buildProviderEndpoint } from '../lib/providerUrl.js';
 import { redactText } from '../lib/exactSecretRedaction.js';
 import {
   generateRouteToken,
-  parseRouteAuthorization,
+  parseRouteToken,
   routeTokenMatches,
 } from './providerRouteAuth.js';
+import { createReasoningCapsule } from './reasoningCapsule.js';
 
 export { responsesBodyToChatBody } from '../lib/codexResponsesCodec.js';
 
@@ -39,6 +43,11 @@ function getCepRequire() {
   if (globalThis.window?.require) return globalThis.window.require;
   if (globalThis.require) return globalThis.require;
   throw new Error('CEP Node require is unavailable');
+}
+
+function supportsReasoningCapsule(crypto) {
+  return typeof crypto?.createCipheriv === 'function'
+    && typeof crypto?.createDecipheriv === 'function';
 }
 
 function routeLimits(overrides = {}) {
@@ -270,6 +279,22 @@ function sanitizedProviderMessage(buffer, truncated, secrets) {
   return message.replace(/[\r\n\0]+/g, ' ').slice(0, 256);
 }
 
+function explicitlyRejectsDeveloperRole(status, buffer) {
+  if (status !== 400 && status !== 422) return false;
+  let parsed;
+  try { parsed = JSON.parse(buffer.toString('utf8')); } catch { return false; }
+  const message = parsed?.error?.message ?? parsed?.message;
+  if (typeof message !== 'string') return false;
+  const normalized = message.toLowerCase();
+  if (!/(^|[^a-z])developer([^a-z]|$)/.test(normalized)) return false;
+  if (!/(^|[^a-z])roles?([^a-z]|$)/.test(normalized)) return false;
+  return /\b(unexpected|unsupported|invalid|disallowed|forbidden)\b/.test(normalized)
+    || /\bunknown\s+variant\b/.test(normalized)
+    || /\bexpected\s+one\s+of\b/.test(normalized)
+    || /\bnot\s+(?:supported|allowed|accepted)\b/.test(normalized)
+    || /\ballowed\s+roles?\b/.test(normalized);
+}
+
 function withoutSecretBearingHeaders(headers, secrets) {
   const output = {};
   for (const [name, value] of Object.entries(headers)) {
@@ -280,7 +305,14 @@ function withoutSecretBearingHeaders(headers, secrets) {
   return output;
 }
 
-function readProviderError(context, upstream, status, responseHeaders, secrets) {
+function readProviderError(
+  context,
+  upstream,
+  status,
+  responseHeaders,
+  secrets,
+  retryCompatibility,
+) {
   const chunks = [];
   let bytes = 0;
   let settled = false;
@@ -288,6 +320,11 @@ function readProviderError(context, upstream, status, responseHeaders, secrets) 
     if (settled || context.finished) return;
     settled = true;
     const buffer = Buffer.concat(chunks);
+    if (
+      !truncated
+      && typeof retryCompatibility === 'function'
+      && retryCompatibility(status, buffer)
+    ) return;
     const message = sanitizedProviderMessage(buffer, truncated, secrets);
     const requestId = responseHeaders['x-request-id']
       || responseHeaders['request-id']
@@ -359,7 +396,11 @@ function readNonStreamingResponse(context, upstream, status, headers, chatBody) 
     let response;
     try {
       parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-      response = chatCompletionToResponse(parsed, { id: context.responseId, model: String(chatBody.model || '') });
+      response = chatCompletionToResponse(
+        parsed,
+        { id: context.responseId, model: String(chatBody.model || '') },
+        { sealReasoning: context.reasoningCapsule?.seal },
+      );
     } catch (error) {
       streamFailure(context, {
         status: Number(error?.status) || 502,
@@ -390,6 +431,7 @@ function streamChatResponse(context, upstream, status, headers, chatBody) {
     maxFrameBytes: context.limits.sseFrameBytes,
     writeEvent: (name, payload) => writeSse(context.res, name, payload),
     fail: (error) => streamFailure(context, error),
+    sealReasoning: context.reasoningCapsule?.seal,
   });
   upstream.on('data', (chunk) => {
     if (context.finished) return;
@@ -409,7 +451,14 @@ function streamChatResponse(context, upstream, status, headers, chatBody) {
   }));
 }
 
-function handleUpstreamResponse(context, upstream, kind, profile, chatBody) {
+function handleUpstreamResponse(
+  context,
+  upstream,
+  kind,
+  profile,
+  chatBody,
+  retryCompatibility,
+) {
   if (context.finished) {
     if (typeof upstream.destroy === 'function') upstream.destroy();
     return;
@@ -434,7 +483,14 @@ function handleUpstreamResponse(context, upstream, kind, profile, chatBody) {
     return;
   }
   if (status >= 400) {
-    readProviderError(context, upstream, status, headers, secrets);
+    readProviderError(
+      context,
+      upstream,
+      status,
+      headers,
+      secrets,
+      retryCompatibility,
+    );
     return;
   }
   if (kind === 'models') {
@@ -459,6 +515,8 @@ function openUpstream(context, {
   requireImpl,
   createUpstreamRequest,
   lookupImpl,
+  allowDeveloperRoleRetry = false,
+  allowMaxCompletionTokensRetry = false,
 }) {
   if (context.finished) return;
   const options = {
@@ -482,13 +540,57 @@ function openUpstream(context, {
       || requireImpl(endpoint.protocol === 'http:' ? 'http' : 'https').request.bind(
         requireImpl(endpoint.protocol === 'http:' ? 'http' : 'https'),
       );
-    request = requestFactory(options, (upstream) => handleUpstreamResponse(
-      context,
-      upstream,
-      kind,
-      profile,
-      chatBody,
-    ));
+    request = requestFactory(options, (upstream) => {
+      const retryCompatibility = allowDeveloperRoleRetry || allowMaxCompletionTokensRetry
+        ? (status, buffer) => {
+          let retryBody = null;
+          let retryDeveloperRole = allowDeveloperRoleRetry;
+          let retryMaxCompletionTokens = allowMaxCompletionTokensRetry;
+          if (retryDeveloperRole && explicitlyRejectsDeveloperRole(status, buffer)) {
+            retryBody = chatBodyWithDeveloperRoleAsSystem(chatBody);
+            if (retryBody) retryDeveloperRole = false;
+          }
+          if (!retryBody && retryMaxCompletionTokens) {
+            let parsed = null;
+            try { parsed = JSON.parse(buffer.toString('utf8')); } catch {}
+            if (chatErrorRequestsMaxCompletionTokens(status, parsed)) {
+              retryBody = chatBodyWithMaxCompletionTokens(chatBody);
+              if (retryBody) retryMaxCompletionTokens = false;
+            }
+          }
+          if (!retryBody || context.finished) return false;
+          clearTimeout(context.idleTimer);
+          context.idleTimer = null;
+          context.upstreamRequest = null;
+          context.upstreamResponse = null;
+          // Each successful fallback consumes one flag and carries prior
+          // transformations forward, bounding the route to three requests.
+          openUpstream(context, {
+            endpoint,
+            method,
+            headers,
+            payload: Buffer.from(JSON.stringify(retryBody), 'utf8'),
+            kind,
+            profile,
+            chatBody: retryBody,
+            requireImpl,
+            createUpstreamRequest,
+            lookupImpl,
+            allowDeveloperRoleRetry: retryDeveloperRole,
+            allowMaxCompletionTokensRetry: retryMaxCompletionTokens,
+          });
+          return true;
+        }
+        : null;
+      handleUpstreamResponse(
+        context,
+        upstream,
+        kind,
+        profile,
+        chatBody,
+        retryCompatibility,
+      );
+    });
     context.upstreamRequest = request;
     request.on('error', () => {
       if (context.finished || context.upstreamResponse) return;
@@ -562,6 +664,7 @@ export function createCodexResponsesRoute({
   let server = null;
   let baseUrl = '';
   let routeToken = null;
+  let reasoningCapsule = null;
   let startPromise = null;
   let responseSequence = 0;
 
@@ -591,6 +694,7 @@ export function createCodexResponsesRoute({
       cancelBodyRead: null,
       onClientAbort: null,
       onClientClose: null,
+      reasoningCapsule,
     };
     context.onClientAbort = () => {
       if (context.finished) return;
@@ -613,9 +717,9 @@ export function createCodexResponsesRoute({
     return context;
   };
 
-  const resolveProfile = async (scope) => {
+  const resolveProfile = async (scope, details = {}) => {
     validateProviderRequestConfiguration(provider, scope, headersLimit);
-    return resolveRequestProfile(provider, { scope });
+    return resolveRequestProfile(provider, { scope, ...details });
   };
 
   const prepareHeaders = (req, profile, contentType) => {
@@ -704,7 +808,9 @@ export function createCodexResponsesRoute({
     try {
       requestBody = await readRequestBody(req, limits.requestBodyBytes, context);
       if (context.finished) return;
-      chatBody = responsesBodyToChatBody(parseJsonBody(requestBody));
+      chatBody = responsesBodyToChatBody(parseJsonBody(requestBody), {
+        openReasoning: reasoningCapsule?.open,
+      });
     } catch (error) {
       if (context.finished) return;
       finishOnce(context);
@@ -723,7 +829,10 @@ export function createCodexResponsesRoute({
     let headers;
     let payload;
     try {
-      profile = await resolveProfile('model');
+      profile = await resolveProfile('model', {
+        modelId: String(chatBody.model || ''),
+        protocol: 'chat',
+      });
       if (context.finished) return;
       endpoint = buildProviderEndpoint({
         baseUrl: profile.baseUrl,
@@ -754,11 +863,13 @@ export function createCodexResponsesRoute({
       requireImpl,
       createUpstreamRequest,
       lookupImpl,
+      allowDeveloperRoleRetry: true,
+      allowMaxCompletionTokensRetry: true,
     });
   };
 
   const handleLocalRequest = (req, res) => {
-    const candidate = parseRouteAuthorization(req.rawHeaders || []);
+    const candidate = parseRouteToken(req.rawHeaders || []);
     const authorized = routeTokenMatches(candidate || '', routeToken || '', crypto);
     if (!candidate || !routeToken || !authorized) {
       sendJson(res, 401, envelope(
@@ -802,6 +913,9 @@ export function createCodexResponsesRoute({
     async start() {
       if (server && baseUrl && routeToken) return { baseUrl, routeToken };
       if (startPromise) return startPromise;
+      if (!reasoningCapsule && supportsReasoningCapsule(crypto)) {
+        reasoningCapsule = createReasoningCapsule({ crypto });
+      }
       startPromise = new Promise((resolve, reject) => {
         const http = requireImpl('http');
         const nextServer = http.createServer(handleLocalRequest);
@@ -810,6 +924,8 @@ export function createCodexResponsesRoute({
           server = null;
           baseUrl = '';
           routeToken = null;
+          reasoningCapsule?.destroy();
+          reasoningCapsule = null;
           reject(error);
         };
         const onListening = () => {
@@ -834,6 +950,8 @@ export function createCodexResponsesRoute({
       if (!server) {
         routeToken = null;
         baseUrl = '';
+        reasoningCapsule?.destroy();
+        reasoningCapsule = null;
         return;
       }
       const closing = server;
@@ -846,6 +964,8 @@ export function createCodexResponsesRoute({
       }
       await new Promise((resolve) => closing.close(resolve));
       routeToken = null;
+      reasoningCapsule?.destroy();
+      reasoningCapsule = null;
     },
   };
 }

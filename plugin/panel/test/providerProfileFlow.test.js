@@ -34,6 +34,7 @@ function providerDraft(overrides = {}) {
     probeAuthSecret: '',
     headers: [],
     dialectOverride: '',
+    dialectSource: '',
     ...overrides,
   };
 }
@@ -43,18 +44,28 @@ function providerEntry(overrides = {}) {
     id: 'provider-1',
     credentialId: CREDENTIAL_ID,
     name: 'Provider 1',
-    protocol: 'openai-compatible',
     baseUrl: 'https://provider.example/v1',
     allowInsecureHttp: false,
-    authProfileRevision: 1,
-    auth: {
-      model: { kind: 'bearer', valueRef: secretRef('auth-model-old', 1) },
-      probe: { kind: 'inherit-model' },
+    requestProfileRevision: 1,
+    credential: {
+      valueRef: secretRef('auth-model-old', 1),
+      preferredAuth: { scheme: 'bearer', headerName: null },
     },
+    probeAuthOverride: null,
     headers: [],
-    dialect: { override: null, detected: null },
-    probedModels: [],
-    probedAt: 0,
+    probePreference: null,
+    modelList: {
+      revision: 0,
+      status: 'unknown',
+      apiRoot: null,
+      auth: null,
+      models: [],
+      checkedAt: 0,
+      validUntil: 0,
+      requestProfileRevision: 1,
+    },
+    modelCapabilities: [],
+    routeOverrides: [],
     ...overrides,
   };
 }
@@ -119,11 +130,125 @@ test('saveProviderDraft commits only a secret reference and never forwards raw d
   });
 
   assert.equal(result.id, 'relay');
-  assert.equal(result.auth.model.valueRef.kind, 'secret');
+  assert.equal(result.credential.valueRef.kind, 'secret');
   assert.equal(Object.hasOwn(result, 'modelAuthSecret'), false);
   assert.equal(JSON.stringify(result).includes('sk-provider-secret'), false);
   assert.equal(JSON.stringify(calls).includes('sk-provider-secret'), false);
   assert.deepEqual(calls[0].options, { expectedRevision: 3, pendingSecretDeletes: [] });
+});
+
+test('new v3 profiles create exactly one primary credential even when legacy probe fields are present', async () => {
+  const secretService = createdSecretService();
+  let committed;
+  const store = {
+    readState: () => ({ revision: 0 }),
+    upsert(entry, options) {
+      committed = { entry, options };
+      return { entry, stateRevision: 1 };
+    },
+  };
+  const result = await saveProviderDraft({
+    draft: providerDraft({
+      id: 'single-credential',
+      modelAuthSecret: 'primary-secret',
+      probeAuthMode: 'separate',
+      probeAuthKind: 'x-api-key',
+      probeAuthSecret: 'legacy-probe-secret',
+    }),
+    current: null,
+    store,
+    secretService,
+    confirmInsecureHttp: async () => true,
+    randomUUID: () => CREDENTIAL_ID,
+  });
+
+  assert.equal(secretService.created.length, 1);
+  assert.equal(secretService.created[0].slotPrefix, 'auth-model');
+  assert.equal(secretService.created[0].value, 'primary-secret');
+  assert.equal(result.probeAuthOverride, null);
+  assert.equal(Object.hasOwn(result, 'auth'), false);
+  assert.equal(Object.hasOwn(result, 'protocol'), false);
+  assert.doesNotMatch(JSON.stringify(committed), /legacy-probe-secret/);
+});
+
+test('editing a migrated profile retires its probe override without creating a replacement secret', async () => {
+  const oldProbeRef = secretRef('auth-probe-old', 2);
+  const current = providerEntry({
+    probeAuthOverride: { kind: 'x-api-key', valueRef: oldProbeRef },
+  });
+  const secretService = createdSecretService({ failDelete: true });
+  let commit;
+  const store = {
+    readState: () => ({ revision: 6 }),
+    upsert(entry, options) {
+      commit = { entry, options };
+      return { entry, stateRevision: 7 };
+    },
+  };
+  const saved = await saveProviderDraft({
+    draft: providerDraft({ id: current.id }),
+    current,
+    store,
+    secretService,
+    confirmInsecureHttp: async () => true,
+  });
+
+  assert.equal(secretService.created.length, 0);
+  assert.equal(saved.probeAuthOverride, null);
+  assert.deepEqual(commit.options.pendingSecretDeletes, [oldProbeRef]);
+  assert.deepEqual(secretService.deleted, [oldProbeRef]);
+});
+
+test('saveProviderDraft defaults a missing auth kind to automatic detection', async () => {
+  const draft = providerDraft({
+    id: 'anthropic-default',
+    protocol: 'anthropic',
+    modelAuthSecret: 'sk-anthropic-default',
+  });
+  delete draft.modelAuthKind;
+  const secretService = createdSecretService();
+  const store = {
+    readState: () => ({ revision: 0 }),
+    upsert: (entry) => ({ entry, stateRevision: 1 }),
+  };
+  const saved = await saveProviderDraft({
+    draft,
+    current: null,
+    store,
+    secretService,
+    confirmInsecureHttp: async () => true,
+    randomUUID: () => CREDENTIAL_ID,
+  });
+  assert.equal(saved.credential.preferredAuth.scheme, 'auto');
+  assert.equal(saved.probePreference, 'messages');
+});
+
+test('provider import uses automatic auth unless an explicit auth hint is present', async () => {
+  for (const [candidateId, modelAuthKind, expectedKind] of [
+    ['anthropic-api-key', undefined, 'auto'],
+    ['anthropic-auth-token', 'bearer', 'bearer'],
+  ]) {
+    const secretService = createdSecretService();
+    const store = {
+      readState: () => ({ revision: 0 }),
+      get: () => null,
+      upsert: (entry) => ({ entry, stateRevision: 1 }),
+    };
+    const imported = await importProviderDraft({
+      candidate: {
+        candidateId,
+        name: candidateId,
+        protocol: 'anthropic',
+        baseUrl: 'https://anthropic.example/v1',
+        ...(modelAuthKind ? { modelAuthKind } : {}),
+        modelAuthSecret: `sk-${candidateId}`,
+      },
+      store,
+      secretService,
+      randomUUID: () => CREDENTIAL_ID,
+    });
+    assert.equal(imported.credential.preferredAuth.scheme, expectedKind);
+  }
 });
 
 test('empty secret fields retain existing references without resolving them', async () => {
@@ -145,9 +270,55 @@ test('empty secret fields retain existing references without resolving them', as
     confirmInsecureHttp: async () => true,
     randomUUID: () => { throw new Error('must not generate a new credential id'); },
   });
-  assert.deepEqual(result.auth.model.valueRef, current.auth.model.valueRef);
+  assert.deepEqual(result.credential.valueRef, current.credential.valueRef);
   assert.equal(secretService.created.length, 0);
   assert.deepEqual(committed.options.pendingSecretDeletes, []);
+});
+
+test('changing the auth hint reuses the protected value and invalidates request metadata', async () => {
+  const current = providerEntry({
+    modelList: {
+      revision: 1,
+      status: 'supported',
+      apiRoot: 'https://provider.example/v1',
+      auth: { scheme: 'bearer', headerName: null },
+      models: [{
+        id: 'model-a',
+        label: 'Model A',
+        metadata: { task: null, inputModalities: [], outputModalities: [], capabilities: [] },
+      }],
+      checkedAt: 1,
+      validUntil: 3_600_001,
+      requestProfileRevision: 1,
+    },
+  });
+  let commit;
+  const store = {
+    readState: () => ({ revision: 4 }),
+    upsert(entry, options) {
+      commit = { entry, options };
+      return { entry, stateRevision: 5 };
+    },
+  };
+  const saved = await saveProviderDraft({
+    draft: providerDraft({
+      id: current.id,
+      protocol: 'anthropic',
+      modelAuthKind: 'x-api-key',
+    }),
+    current,
+    store,
+    secretService: createdSecretService(),
+    confirmInsecureHttp: async () => true,
+    randomUUID: () => CREDENTIAL_ID,
+  });
+  assert.equal(saved.credential.preferredAuth.scheme, 'x-api-key');
+  assert.deepEqual(saved.credential.valueRef, current.credential.valueRef);
+  assert.equal(saved.requestProfileRevision, 2);
+  assert.equal(saved.modelList.status, 'unknown');
+  assert.equal(saved.modelList.revision, 2);
+  assert.deepEqual(saved.modelCapabilities, []);
+  assert.deepEqual(commit.options.pendingSecretDeletes, []);
 });
 
 test('editing a secret queues the old reference in the same CAS write and retains it if cleanup fails', async () => {
@@ -172,12 +343,12 @@ test('editing a secret queues the old reference in the same CAS write and retain
     confirmInsecureHttp: async () => true,
     randomUUID: () => CREDENTIAL_ID,
   });
-  assert.notDeepEqual(saved.auth.model.valueRef, current.auth.model.valueRef);
+  assert.notDeepEqual(saved.credential.valueRef, current.credential.valueRef);
   assert.deepEqual(calls[0].options, {
     expectedRevision: 4,
-    pendingSecretDeletes: [current.auth.model.valueRef],
+    pendingSecretDeletes: [current.credential.valueRef],
   });
-  assert.deepEqual(secretService.deleted, [current.auth.model.valueRef]);
+  assert.deepEqual(secretService.deleted, [current.credential.valueRef]);
 });
 
 test('a successful helper delete is acknowledged immediately even when it returns the deleted revision', async () => {
@@ -205,7 +376,7 @@ test('a successful helper delete is acknowledged immediately even when it return
     randomUUID: () => CREDENTIAL_ID,
   });
   assert.deepEqual(acknowledgements, [{
-    reference: current.auth.model.valueRef.reference,
+    reference: current.credential.valueRef.reference,
     options: { expectedRevision: 5 },
   }]);
 });
@@ -229,8 +400,8 @@ test('a pre-commit failure deletes new references but never deletes or queues ol
     confirmInsecureHttp: async () => true,
     randomUUID: () => CREDENTIAL_ID,
   }), /CAS conflict/);
-  assert.deepEqual(optionsSeen.pendingSecretDeletes, [current.auth.model.valueRef]);
-  assert.equal(secretService.deleted.some((ref) => ref.reference === current.auth.model.valueRef.reference), false);
+  assert.deepEqual(optionsSeen.pendingSecretDeletes, [current.credential.valueRef]);
+  assert.equal(secretService.deleted.some((ref) => ref.reference === current.credential.valueRef.reference), false);
   assert.equal(secretService.deleted.length, 1);
 });
 
@@ -269,7 +440,7 @@ test('deleteProviderProfile commits all protected references before best-effort 
   const provider = providerEntry({
     headers: [{ id: 'h', name: 'x-feature', scopes: ['model'], valueRef: secretRef('header-old', 2) }],
   });
-  const queued = [provider.auth.model.valueRef, provider.headers[0].valueRef];
+  const queued = [provider.credential.valueRef, provider.headers[0].valueRef];
   const secretService = createdSecretService({ failDelete: true });
   const store = {
     readState: () => ({ revision: 6 }),
@@ -368,8 +539,8 @@ test('importProviderDraft consumes an ephemeral secret but never passes it to pr
   });
   assert.equal(serializedStoreCall.includes('sk-import-marker'), false);
   assert.equal(Object.hasOwn(imported, 'modelAuthSecret'), false);
-  assert.deepEqual(imported.dialect.override.wireApi, 'chat');
-  assert.equal(imported.dialect.override.source, 'ccswitch-import');
+  assert.equal(imported.probePreference, null);
+  assert.equal(JSON.stringify(imported).includes('ccswitch-import'), false);
 });
 
 test('re-importing the same candidate uses edit copy-on-write and queues the prior reference', async () => {
@@ -400,7 +571,7 @@ test('re-importing the same candidate uses edit copy-on-write and queues the pri
     randomUUID: () => { throw new Error('must retain the existing credential namespace'); },
   });
   assert.equal(committed.entry.credentialId, current.credentialId);
-  assert.deepEqual(committed.options.pendingSecretDeletes, [current.auth.model.valueRef]);
+  assert.deepEqual(committed.options.pendingSecretDeletes, [current.credential.valueRef]);
 });
 
 test('external HTTP requires the toggle and a fresh explicit confirmation on each risky change', async () => {
@@ -438,7 +609,7 @@ test('external HTTP requires the toggle and a fresh explicit confirmation on eac
     id: 'relay',
     baseUrl: 'http://relay.example/v1',
     allowInsecureHttp: true,
-    auth: { model: { kind: 'none' }, probe: { kind: 'inherit-model' } },
+    credential: { valueRef: null, preferredAuth: { scheme: 'none', headerName: null } },
   });
   let confirmed = 0;
   await saveProviderDraft({

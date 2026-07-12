@@ -360,47 +360,55 @@ class LegacyMetadataStore:
         *,
         expected_revision: int,
     ) -> int:
-        from ae_mcp.tool_store import ToolStoreRevisionConflict, atomic_write_json
+        from ae_mcp.tool_store import (
+            StoreLock,
+            ToolStoreRevisionConflict,
+            atomic_write_json,
+        )
 
         if not _HEX_64.fullmatch(content_hash):
             raise ToolLegacyError("legacy content hash is invalid")
-        state = self._read()
-        current_revision = cast(int, state["revision"])
-        if current_revision != expected_revision:
-            raise ToolStoreRevisionConflict()
-        entries = dict(cast(dict[str, Any], state["entries"]))
-        key = _metadata_key(path, content_hash)
-        current = entries.get(key)
-        current_patch: dict[str, JsonValue] = {}
-        entry_revision = 1
-        if isinstance(current, Mapping):
-            if not isinstance(current.get("metadata"), Mapping):
-                raise ToolLegacyError(
-                    "Legacy metadata is invalid.", code="tool_legacy_metadata_invalid"
+        with StoreLock(self.path.parent) as lock:
+            state = self._read()
+            current_revision = cast(int, state["revision"])
+            if current_revision != expected_revision:
+                raise ToolStoreRevisionConflict()
+            entries = dict(cast(dict[str, Any], state["entries"]))
+            key = _metadata_key(path, content_hash)
+            current = entries.get(key)
+            current_patch: dict[str, JsonValue] = {}
+            entry_revision = 1
+            if isinstance(current, Mapping):
+                if not isinstance(current.get("metadata"), Mapping):
+                    raise ToolLegacyError(
+                        "Legacy metadata is invalid.",
+                        code="tool_legacy_metadata_invalid",
+                    )
+                current_patch = _normalize_metadata_patch(current["metadata"])
+                entry_revision = _nonnegative_integer(
+                    current.get("revision"), "legacy entry revision"
                 )
-            current_patch = _normalize_metadata_patch(current["metadata"])
-            entry_revision = _nonnegative_integer(
-                current.get("revision"), "legacy entry revision"
+            merged = dict(current_patch)
+            merged.update(_normalize_metadata_patch(patch))
+            normalized = _normalize_metadata_patch(merged)
+            next_revision = current_revision + 1
+            entries[key] = {
+                "sourcePath": _source_path(path),
+                "contentHash": content_hash,
+                "revision": entry_revision + 1,
+                "updatedAt": _nonnegative_integer(self._now(), "legacy updatedAt"),
+                "metadata": normalized,
+            }
+            lock.assert_current()
+            atomic_write_json(
+                self.path,
+                {
+                    "schemaVersion": 1,
+                    "revision": next_revision,
+                    "entries": entries,
+                },
             )
-        merged = dict(current_patch)
-        merged.update(_normalize_metadata_patch(patch))
-        normalized = _normalize_metadata_patch(merged)
-        next_revision = current_revision + 1
-        entries[key] = {
-            "sourcePath": _source_path(path),
-            "contentHash": content_hash,
-            "revision": entry_revision + 1,
-            "updatedAt": _nonnegative_integer(self._now(), "legacy updatedAt"),
-            "metadata": normalized,
-        }
-        atomic_write_json(
-            self.path,
-            {
-                "schemaVersion": 1,
-                "revision": next_revision,
-                "entries": entries,
-            },
-        )
+            lock.assert_current()
         return next_revision
 
 

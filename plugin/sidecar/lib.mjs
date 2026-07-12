@@ -19,6 +19,11 @@ const DISALLOWED_TOOLS = [
 ]
 
 const AUTH_RE = /\/login|logged|credential|authentication/i
+const PROVIDER_ENV_KEYS = [
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_AUTH_TOKEN'
+]
 
 const SYSTEM_PROMPTS = {
   zh: `你是 After Effects 面板内的助手。只使用 ae_ 前缀工具操作 After Effects。回答简短，优先直接完成用户请求。
@@ -118,6 +123,13 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
     writeLine({ t: 'event', event })
   }
 
+  function emitTerminalEvent(turn, event) {
+    if (turn.terminalEventSent) return false
+    turn.terminalEventSent = true
+    emitEvent(event)
+    return true
+  }
+
   function handleLine(line) {
     const trimmed = String(line || '').trim()
     if (!trimmed) {
@@ -149,7 +161,8 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
       thinking: message.thinking === 'adaptive' ? { type: 'adaptive' } : null,
       controller,
       stopRequested: false,
-      abortedEventSent: false
+      abortedEventSent: false,
+      terminalEventSent: false
     }
     activeTurn = turn
 
@@ -167,6 +180,7 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
   }
 
   async function runTurn(message, turn) {
+    let sawResult = false
     try {
       const model = typeof message.model === 'string' && message.model ? message.model : options.model
       const queryOptions = buildTurnOptions({ model, turn })
@@ -175,14 +189,23 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
         prompt: String(message.text || ''),
         options: queryOptions
       })) {
+        if (sdkMessage && sdkMessage.type === 'result') sawResult = true
         handleSdkMessage(sdkMessage, turn)
+      }
+      if (!sawResult && !turn.stopRequested) {
+        emitTerminalEvent(turn, {
+          type: 'error',
+          kind: 'network',
+          code: 'SDK_STREAM_EOF_BEFORE_RESULT',
+          message: 'Claude Agent SDK stream closed before a result event.'
+        })
       }
     } catch (error) {
       if (turn.stopRequested) {
         emitAbortedOnce(turn)
         return
       }
-      emitEvent({ type: 'error', kind: classifyError(error), message: truncateDetail(error) })
+      emitTerminalEvent(turn, { type: 'error', kind: classifyError(error), message: truncateDetail(error) })
     }
   }
 
@@ -231,13 +254,21 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
       return {}
     }
 
+    const childEnv = {
+      ...(isPlainObject(options.mcp.env) ? options.mcp.env : {})
+    }
+    for (const key of PROVIDER_ENV_KEYS) deleteEnvironmentKey(childEnv, key)
+    // Claude Code merges its process environment into MCP children, so empty
+    // overrides are required to keep route credentials out of the AE process.
+    for (const key of PROVIDER_ENV_KEYS) childEnv[key] = ''
+
     return {
       ae: {
         type: 'stdio',
         command: options.mcp.command,
         args: Array.isArray(options.mcp.args) ? options.mcp.args : [],
         env: {
-          ...(isPlainObject(options.mcp.env) ? options.mcp.env : {}),
+          ...childEnv,
           AE_MCP_BACKEND: 'ae-mcp'
         }
       }
@@ -316,13 +347,13 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
       if (turn.stopRequested) {
         emitAbortedOnce(turn)
       } else if (message.is_error) {
-        emitEvent({
+        emitTerminalEvent(turn, {
           type: 'error',
           kind: classifyError(message.result || message),
           message: truncateDetail(message.result || message)
         })
       } else {
-        emitEvent({
+        emitTerminalEvent(turn, {
           type: 'turn-end',
           stopReason: message.subtype === 'success' ? 'end_turn' : String(message.subtype || 'end_turn')
         })
@@ -505,11 +536,11 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
   }
 
   function emitAbortedOnce(turn) {
-    if (turn.abortedEventSent) {
+    if (turn.abortedEventSent || turn.terminalEventSent) {
       return
     }
     turn.abortedEventSent = true
-    emitEvent({ type: 'error', kind: 'aborted', message: 'Turn aborted.' })
+    emitTerminalEvent(turn, { type: 'error', kind: 'aborted', message: 'Turn aborted.' })
   }
 
   async function runProbe() {
@@ -594,14 +625,68 @@ function parseJsonArg(value, name) {
 
 function cleanEnv(inputEnv, channel = 'subscription') {
   const output = { ...inputEnv }
-  // Subscription channel: the Agent SDK must self-discover login state, so a
-  // stray ANTHROPIC_API_KEY would silently reroute billing (spec B3).
-  // API-direct channel: the panel already curated the env (base URL + auth
-  // token injected); pass it through untouched.
-  if (channel !== 'api') {
-    delete output.ANTHROPIC_API_KEY
+  const routeOrigin = environmentValue(output, 'ANTHROPIC_BASE_URL')
+  const routeToken = environmentValue(output, 'ANTHROPIC_AUTH_TOKEN')
+  for (const key of PROVIDER_ENV_KEYS) deleteEnvironmentKey(output, key)
+  if (channel !== 'api') return output
+
+  const normalizedOrigin = normalizeLocalRouteOrigin(routeOrigin)
+  if (typeof routeToken !== 'string' || !routeToken || routeToken !== routeToken.trim()) {
+    throw localRouteError()
   }
+  output.ANTHROPIC_BASE_URL = normalizedOrigin
+  output.ANTHROPIC_AUTH_TOKEN = routeToken
   return output
+}
+
+function environmentValue(environment, name) {
+  const normalized = name.toUpperCase()
+  const matches = Object.keys(environment).filter((key) => key.toUpperCase() === normalized)
+  if (!matches.length) return undefined
+  const values = matches.map((key) => environment[key])
+  if (values.some((value) => value !== values[0])) throw localRouteError()
+  return values[0]
+}
+
+function deleteEnvironmentKey(environment, name) {
+  const normalized = name.toUpperCase()
+  for (const key of Object.keys(environment)) {
+    if (key.toUpperCase() === normalized) delete environment[key]
+  }
+}
+
+function normalizeLocalRouteOrigin(value) {
+  if (typeof value !== 'string') throw localRouteError()
+  let url
+  try {
+    url = new URL(value.trim())
+  } catch {
+    throw localRouteError()
+  }
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  const mapped = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
+  const loopback = host === 'localhost'
+    || host.endsWith('.localhost')
+    || host === '::1'
+    || /^127(?:\.\d{1,3}){3}$/.test(mapped ? mapped[1] : host)
+  if (
+    url.protocol !== 'http:'
+    || !loopback
+    || url.username
+    || url.password
+    || url.search
+    || url.hash
+    || (url.pathname !== '' && url.pathname !== '/')
+  ) {
+    throw localRouteError()
+  }
+  return url.origin
+}
+
+function localRouteError() {
+  const error = new Error('Claude Agent API channel requires a valid local route environment.')
+  error.code = 'CLAUDE_AGENT_LOCAL_ROUTE_INVALID'
+  return error
 }
 
 function normalizePermissionMode(mode) {

@@ -1,13 +1,16 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
-import { codexAppServerArgs, codexSpawnEnv } from '../lib/providerProfile.js';
-import { mergeUpstreamHeaders } from '../lib/providerHeaders.js';
+import {
+  codexAppServerArgs,
+  codexSpawnEnv,
+} from '../lib/providerProfile.js';
+import { LOCAL_ROUTE_TOKEN_HEADER } from '../lib/providerHeaders.js';
+import { selectProviderRoute } from '../lib/providerRouteSelection.js';
 import {
   createDeltaRedactor,
   redactValue,
-  sensitiveValues,
 } from '../lib/exactSecretRedaction.js';
 import { PANEL_VERSION } from './mcpClient.js';
-import { createCodexResponsesRoute } from './codexResponsesRoute.js';
+import { createUniversalProviderRoute } from './universalProviderRoute.js';
 import { expertGuidanceEnv } from './externalClients.js';
 import { createPlatformAdapter } from './platform/index.js';
 import {
@@ -64,18 +67,22 @@ function recoverableProviderFailure(error) {
     .some((key) => String(value[key] || '').toLowerCase() === 'provider_compaction_unsupported'))) {
     return false;
   }
+  const message = values.map((value) => String(value.message || '')).filter(Boolean).join('\n');
+  if (
+    /\bprovider_compaction_unsupported\b/i.test(message)
+    || /\bthis chat-only provider cannot compact responses context\.?/i.test(message)
+  ) return false;
   for (const value of values) {
     for (const key of ['status', 'statusCode', 'httpStatus', 'upstreamStatus']) {
-      if ([401, 403, 404].includes(Number(value[key]))) return true;
+      if ([401, 403, 404, 405, 501].includes(Number(value[key]))) return true;
     }
     for (const key of ['code', 'type', 'kind', 'reason']) {
-      if (key === 'code' && [401, 403, 404].includes(Number(value[key]))) return true;
+      if (key === 'code' && [401, 403, 404, 405, 501].includes(Number(value[key]))) return true;
       const code = String(value[key] || '').toLowerCase();
       if (/unsupported[_-](?:endpoint|api|wire)|(?:endpoint|api|wire)[_-]unsupported/.test(code)) return true;
     }
   }
-  const message = String(error?.message || '');
-  return /\b(?:http|status(?:\s+code)?)\s*[:=]?\s*(?:401|403|404)\b/i.test(message)
+  return /\b(?:http|status(?:\s+code)?)\s*[:=]?\s*(?:401|403|404|405|501)\b/i.test(message)
     || /\bunsupported\s+(?:endpoint|api|wire api|request)\b/i.test(message);
 }
 
@@ -93,6 +100,13 @@ function providerFailureFacts(error) {
     }
   }
   return { status, code };
+}
+
+function providerModelError(code, message) {
+  const error = new Error(message);
+  error.kind = 'model';
+  error.code = code;
+  return error;
 }
 
 function createRpc({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEOUT_MS }) {
@@ -242,6 +256,7 @@ export function createCodexBackend({
   getExpertGuidance = () => true,
   getServerInstructions = () => '',
   getProviderProfile = () => null,
+  getProviderCandidate = () => null,
   resolveRequestProfile,
   recoverProviderProfile,
   onProviderProfileRecovered = () => {},
@@ -251,13 +266,16 @@ export function createCodexBackend({
   // panel only supplies the missing API key env var the provider needs (no
   // `-c model_provider=...` override).
   getCliConfigProvider = () => null,
-  createResponsesRoute = createCodexResponsesRoute,
+  createProviderRoute = createUniversalProviderRoute,
+  createResponsesRoute,
+  selectRoute = selectProviderRoute,
   resolveCli = resolveCodexCli,
   onEvent,
   lang = 'zh',
   env,
 }) {
   const adapter = platform || createPlatformAdapter();
+  const providerRouteFactory = createResponsesRoute || createProviderRoute;
   let proc = null;
   let rpc = null;
   let startPromise = null;
@@ -286,6 +304,7 @@ export function createCodexBackend({
   let providerProfileOverride = null;
   let providerRecoveryAttempted = false;
   let providerRecoveryInFlight = false;
+  let turnFailureInFlight = false;
   let providerRecoverySequence = 0;
   let providerRefreshPending = false;
   let activeUserText = '';
@@ -350,6 +369,7 @@ export function createCodexBackend({
     activeUserRecorded = false;
     providerRecoveryAttempted = false;
     providerRecoveryInFlight = false;
+    turnFailureInFlight = false;
     providerRefreshPending = false;
     if (resolve) resolve();
     if (refreshProvider) {
@@ -598,19 +618,6 @@ export function createCodexBackend({
     clearProviderSensitiveValues();
   }
 
-  function runtimeHeadersFromRequestProfile(requestProfile) {
-    const merged = mergeUpstreamHeaders({
-      rawHeaders: [],
-      providerHeaders: requestProfile?.extraHeaders || [],
-      auth: requestProfile?.auth || { kind: 'none' },
-    });
-    return Object.entries(merged).map(([name, value], index) => ({
-      name,
-      envName: `AE_MCP_PROVIDER_HEADER_${String(index).padStart(2, '0')}`,
-      value,
-    }));
-  }
-
   function clearSpawnCredentialCopies(runtimeConfig, spawnEnvironment, extraNames = []) {
     const names = new Set(extraNames);
     for (const header of runtimeConfig?.envHeaders || []) {
@@ -624,14 +631,146 @@ export function createCodexBackend({
     const selected = providerProfileOverride || (getProviderProfile ? getProviderProfile() : null);
     if (!selected) return null;
     const provider = selected.provider || selected;
-    const dialect = selected.dialect;
-    if (!provider || (dialect !== 'responses' && dialect !== 'chat')) {
-      throw new Error('Custom provider dialect is unavailable');
+    const modelId = String(selected.modelId || '').trim();
+    const runtimeModelId = String(getModel ? getModel() : '').trim();
+    if (!provider) throw new Error('Custom provider is unavailable');
+    if (!modelId || modelId !== runtimeModelId) {
+      throw new Error('Custom provider model binding is unavailable');
     }
     if (typeof resolveRequestProfile !== 'function') {
       throw new Error('Custom provider credential resolver is unavailable');
     }
-    return { provider, dialect };
+    const route = selectRoute(provider, {
+      client: 'codex',
+      modelId,
+      feature: 'generate',
+    });
+    if (!route?.ok) {
+      const code = route?.reasonCode === 'needs-probe'
+        ? 'provider_preflight_required'
+        : 'provider_route_unavailable';
+      throw providerModelError(code, `Custom provider has no verified Codex route for model ${modelId}`);
+    }
+    return { provider, modelId, route };
+  }
+
+  function normalizedProviderProfile(selected) {
+    if (!selected) return null;
+    const provider = selected.provider || selected;
+    const modelId = String(selected.modelId || '').trim();
+    let route = null;
+    try {
+      route = selectRoute(provider, {
+        client: 'codex',
+        modelId,
+        feature: 'generate',
+      });
+    } catch {
+      route = null;
+    }
+    return {
+      provider,
+      modelId,
+      route,
+    };
+  }
+
+  function providerProfileMatchesCandidate(profile, candidate) {
+    if (!profile?.provider || !candidate?.provider) return false;
+    const profileProviderId = String(profile.provider.id || '').trim();
+    const candidateProviderId = String(candidate.provider.id || '').trim();
+    const profileBaseUrl = String(profile.provider.baseUrl || '').trim();
+    const candidateBaseUrl = String(candidate.provider.baseUrl || '').trim();
+    const profileRequestRevision = profile.provider.requestProfileRevision
+      ?? profile.provider.authProfileRevision
+      ?? null;
+    const candidateRequestRevision = candidate.provider.requestProfileRevision
+      ?? candidate.provider.authProfileRevision
+      ?? null;
+    const profileModelListRevision = profile.provider.modelList?.revision ?? null;
+    const candidateModelListRevision = candidate.provider.modelList?.revision ?? null;
+    return Boolean(
+      profileProviderId
+      && profileProviderId === candidateProviderId
+      && profileBaseUrl === candidateBaseUrl
+      && profileRequestRevision === candidateRequestRevision
+      && profileModelListRevision === candidateModelListRevision
+      && profile.route?.ok === true
+      && profile.modelId === candidate.modelId,
+    );
+  }
+
+  function currentProviderCandidate() {
+    const selected = getProviderCandidate ? getProviderCandidate() : null;
+    if (!selected) return null;
+    const provider = selected.provider || selected;
+    const modelId = String(selected.modelId || '').trim();
+    const runtimeModelId = String(getModel ? getModel() : '').trim();
+    if (!provider) {
+      throw providerModelError('provider_candidate_unavailable', 'Selected custom provider is unavailable');
+    }
+    if (!modelId || modelId !== runtimeModelId) {
+      throw providerModelError('provider_model_binding_unavailable', 'Selected custom provider model binding is unavailable');
+    }
+    return { provider, modelId };
+  }
+
+  async function ensureProviderProfileForSend() {
+    const candidate = currentProviderCandidate();
+    if (!candidate) return true;
+
+    const override = normalizedProviderProfile(providerProfileOverride);
+    if (providerProfileMatchesCandidate(override, candidate)) return true;
+
+    let configured = null;
+    try {
+      configured = normalizedProviderProfile(getProviderProfile ? getProviderProfile() : null);
+    } catch {
+      configured = null;
+    }
+
+    const sequence = providerRecoverySequence + 1;
+    providerRecoverySequence = sequence;
+    detachRuntimeForProviderRecovery();
+    providerProfileOverride = null;
+    if (providerProfileMatchesCandidate(configured, candidate)) {
+      providerProfileOverride = configured;
+      return true;
+    }
+    if (typeof recoverProviderProfile !== 'function') {
+      throw providerModelError(
+        'provider_preflight_unavailable',
+        `Custom provider cannot be verified for model ${candidate.modelId}`,
+      );
+    }
+
+    let recovered;
+    try {
+      recovered = await recoverProviderProfile(
+        candidate.provider,
+        { status: null, code: 'provider_preflight_required' },
+        candidate.modelId,
+      );
+    } catch (error) {
+      if (sequence !== providerRecoverySequence || !activeRun) return false;
+      throw providerModelError(
+        'provider_preflight_failed',
+        error?.message || `Custom provider could not verify model ${candidate.modelId}`,
+      );
+    }
+    if (sequence !== providerRecoverySequence || !activeRun) return false;
+
+    const profile = normalizedProviderProfile(recovered);
+    const currentModelId = String(getModel ? getModel() : '').trim();
+    if (!providerProfileMatchesCandidate(profile, candidate) || currentModelId !== candidate.modelId) {
+      throw providerModelError(
+        'provider_preflight_failed',
+        `Custom provider did not expose a verified API for model ${candidate.modelId}`,
+      );
+    }
+    providerProfileOverride = profile;
+    providerRefreshPending = true;
+    return true;
   }
 
   async function startProcess() {
@@ -654,38 +793,30 @@ export function createCodexBackend({
       };
       const selected = selectedProviderProfile();
       let runtimeConfig = null;
-      if (selected?.dialect === 'responses') {
-        let requestProfile = null;
-        try {
-          requestProfile = await resolveRequestProfile(selected.provider, { scope: 'model' });
-          assertCurrentStart();
-          runtimeConfig = {
-            providerId: selected.provider.id,
-            baseUrl: requestProfile.baseUrl,
-            envHeaders: runtimeHeadersFromRequestProfile(requestProfile),
-          };
-          setProviderSensitiveValues(sensitiveValues(requestProfile));
-        } finally {
-          requestProfile = null;
-        }
-      } else if (selected?.dialect === 'chat') {
+      if (selected) {
         closeProviderRoute();
-        providerRoute = createResponsesRoute({
+        providerRoute = providerRouteFactory({
           provider: selected.provider,
+          resolveCapability: ({ provider, modelId, clientProtocol, feature }) => selectRoute(provider, {
+            client: clientProtocol === 'messages' ? 'claude-code' : 'codex',
+            modelId,
+            feature,
+          }),
           resolveRequestProfile,
         });
         const routeInfo = await providerRoute.start();
         assertCurrentStart();
         runtimeConfig = {
           providerId: selected.provider.id,
-          baseUrl: routeInfo.baseUrl,
+          baseUrl: routeInfo.openaiBaseUrl || routeInfo.baseUrl,
+          chatCompatibility: selected.route.upstreamProtocol !== 'responses',
           envHeaders: [{
-            name: 'Authorization',
+            name: LOCAL_ROUTE_TOKEN_HEADER,
             envName: 'AE_MCP_PROVIDER_HEADER_00',
-            value: `Bearer ${routeInfo.routeToken}`,
+            value: routeInfo.routeToken,
           }],
         };
-        setProviderSensitiveValues([`Bearer ${routeInfo.routeToken}`, routeInfo.routeToken]);
+        setProviderSensitiveValues([routeInfo.routeToken]);
       } else {
         setProviderSensitiveValues([]);
       }
@@ -871,39 +1002,63 @@ export function createCodexBackend({
 
     let recovered;
     try {
-      recovered = await recoverProviderProfile(selected.provider, providerFailureFacts(error));
+      recovered = await recoverProviderProfile(
+        selected.provider,
+        providerFailureFacts(error),
+        selected.modelId,
+      );
     } catch {
       recovered = null;
     }
     if (sequence !== providerRecoverySequence || !activeRun) return true;
     providerRecoveryInFlight = false;
-    const provider = recovered?.provider || recovered;
-    const dialect = recovered?.dialect;
-    if (!provider || (dialect !== 'responses' && dialect !== 'chat')) return false;
-    providerProfileOverride = { provider, dialect };
+    const profile = normalizedProviderProfile(recovered);
+    const provider = profile?.provider;
+    const modelId = profile?.modelId || '';
+    if (
+      !provider
+      || String(provider.id || '').trim() !== String(selected.provider.id || '').trim()
+      || profile.route?.ok !== true
+      || modelId !== selected.modelId
+      || modelId !== String(getModel ? getModel() : '').trim()
+    ) return false;
+    providerProfileOverride = profile;
     providerRefreshPending = true;
     await launchActiveTurn();
     return true;
   }
 
   async function handleTurnFailure(error) {
-    if (!activeRun || providerRecoveryInFlight) return;
-    let failure = {
-      kind: error?.kind,
-      message: redactValue(error?.message || 'Failed to start Codex turn.', providerSensitiveValues),
-    };
+    if (!activeRun || providerRecoveryInFlight || turnFailureInFlight) return;
+    turnFailureInFlight = true;
     try {
-      if (await attemptProviderRecovery(error)) return;
-    } catch (recoveryError) {
-      failure = {
-        kind: recoveryError?.kind,
-        message: redactValue(recoveryError?.message || 'Failed to start Codex turn.', providerSensitiveValues),
+      let failure = {
+        kind: error?.kind,
+        code: error?.code,
+        message: redactValue(error?.message || 'Failed to start Codex turn.', providerSensitiveValues),
       };
+      try {
+        if (await attemptProviderRecovery(error)) return;
+      } catch (recoveryError) {
+        failure = {
+          kind: recoveryError?.kind,
+          code: recoveryError?.code,
+          message: redactValue(recoveryError?.message || 'Failed to start Codex turn.', providerSensitiveValues),
+        };
+      }
+      providerDeltaRedactor.discard();
+      const message = failure?.message || 'Failed to start Codex turn.';
+      const providerHttpFailure = /\bunexpected status\s+\d{3}\b.*\burl:\s*https?:\/\//i.test(message);
+      emit({
+        type: 'error',
+        kind: failure?.kind || (providerHttpFailure || /model/i.test(message) ? 'model' : 'mcp'),
+        ...(failure?.code ? { code: failure.code } : {}),
+        message,
+      });
+      finishActive();
+    } finally {
+      turnFailureInFlight = false;
     }
-    providerDeltaRedactor.discard();
-    const message = failure?.message || 'Failed to start Codex turn.';
-    emit({ type: 'error', kind: failure?.kind || (/model/i.test(message) ? 'model' : 'mcp'), message });
-    finishActive();
   }
 
   async function sendUser(text) {
@@ -913,6 +1068,7 @@ export function createCodexBackend({
     activeUserRecorded = false;
     providerRecoveryAttempted = false;
     providerRecoveryInFlight = false;
+    turnFailureInFlight = false;
     providerRecoverySequence += 1;
     activeRun = new Promise((resolve) => {
       activeResolve = resolve;
@@ -920,7 +1076,7 @@ export function createCodexBackend({
     const run = activeRun;
 
     try {
-      await launchActiveTurn();
+      if (await ensureProviderProfileForSend()) await launchActiveTurn();
     } catch (error) {
       await handleTurnFailure(error);
     }

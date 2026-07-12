@@ -1255,7 +1255,6 @@ class ToolExecutionEngine:
             skill_content_hash,
         )
         from ae_mcp.tool_artifact import (
-            ToolSource,
             builtin_artifact_id,
             legacy_artifact_id,
         )
@@ -1264,15 +1263,25 @@ class ToolExecutionEngine:
             raise ToolExecutionError(
                 "tool_legacy_invalid", "Only legacy JSX skills can execute."
             )
-        normalized_args = normalize_args(record.skill.args_schema, args)
-        rendered = render_skill(record.skill, normalized_args)
-        content_hash = skill_content_hash(record.skill)
         artifact_id = (
             builtin_artifact_id(record.skill.name)
             if record.source == "bundled"
             else legacy_artifact_id(record.path)
         )
-        risk = analyze_jsx(rendered)
+        artifact = self._get_artifact(artifact_id)
+        record_content_hash = skill_content_hash(record.skill)
+        if artifact.kind != "jsx" or artifact.content_hash != record_content_hash:
+            raise ToolExecutionError(
+                "tool_plan_stale", "Legacy skill changed before planning."
+            )
+        normalized_args = normalize_args(artifact.args_schema, args)
+        rendered = render_skill(record.skill, normalized_args)
+        content_hash = artifact.content_hash
+        risk = analyze_artifact_risk(
+            artifact,
+            "execute",
+            rendered=rendered,
+        )
         plan_hash = compute_plan_hash(
             artifact_id,
             content_hash,
@@ -1299,23 +1308,37 @@ class ToolExecutionEngine:
         )
         started_at = self._now()
         backend_name: str | None = None
-        try:
+
+        def current_legacy_skill() -> tuple[Skill, str]:
             fresh_data = json.loads(record.path.read_text(encoding="utf-8"))
             fresh = Skill.from_dict(fresh_data)
             fresh_rendered = render_skill(fresh, normalized_args)
+            current_artifact = self._get_artifact(artifact_id)
+            current_risk = analyze_artifact_risk(
+                current_artifact,
+                "execute",
+                rendered=fresh_rendered,
+            )
             if (
                 fresh.name != record.skill.name
+                or current_artifact.kind != "jsx"
                 or skill_content_hash(fresh) != content_hash
-                or analyze_jsx(fresh_rendered) != risk
+                or current_artifact.content_hash != content_hash
+                or current_risk != risk
             ):
                 raise ToolExecutionError(
                     "tool_plan_stale", "Legacy skill changed after planning."
                 )
+            return fresh, fresh_rendered
+
+        try:
+            fresh, fresh_rendered = current_legacy_skill()
             self._scan_json("legacy-tool-args.json", normalized_args)
             self._scan_text("legacy-tool-rendered.txt", fresh_rendered)
             consumed = self.grants.consume(grant.grant_id, plan)
             backend = self._backend()
             backend_name = str(getattr(backend, "name", backend.__class__.__name__))
+            fresh, fresh_rendered = current_legacy_skill()
             raw = await backend.exec(
                 code=with_prelude(fresh_rendered),
                 undo_group=f"Tool Library: {fresh.name}",

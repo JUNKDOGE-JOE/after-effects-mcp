@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from ae_mcp import schemas as S
 from ae_mcp.handlers import HANDLERS, load_all
 from ae_mcp.tool_history import (
     HistoryContext,
@@ -102,11 +103,16 @@ def test_secret_hit_does_not_persist_candidate(
     assert store.list(statuses={"candidate"}) == []
 
 
-@pytest.mark.parametrize("field", ["expression", "expression_text"])
-def test_top_level_expression_string_creates_expression_draft(field: str) -> None:
+def test_real_set_property_expression_creates_expression_draft() -> None:
+    arguments = S.AeSetPropertyArgs(
+        comp_id="42",
+        layer_id=3,
+        path="Transform/Opacity",
+        expression="time * 2",
+    ).model_dump(mode="json")
     draft = extract_history_draft(
-        "ae.setExpression",
-        {field: "time * 2", "other": "ignored"},
+        "ae.setProperty",
+        arguments,
         {"ok": True},
         context(),
     )
@@ -115,6 +121,54 @@ def test_top_level_expression_string_creates_expression_draft(field: str) -> Non
     assert draft.kind == "expression"
     assert draft.content == "time * 2"
     assert draft.status == "candidate"
+    assert draft.source.provenance["verbName"] == "ae.setProperty"
+
+
+@pytest.mark.asyncio
+async def test_real_set_property_expression_success_is_persisted_as_candidate(
+    monkeypatch: pytest.MonkeyPatch,
+    mock_backend,
+    tmp_path: Path,
+) -> None:
+    from ae_mcp import server as server_module
+    from ae_mcp.tool_service import (
+        default_tool_service,
+        reset_default_tool_service_for_tests,
+    )
+
+    async def allow(_verb_name: str, _ctx: object) -> None:
+        return None
+
+    reset_default_tool_service_for_tests()
+    monkeypatch.setenv("AE_MCP_TOOL_DIR", str(tmp_path / "tools"))
+    monkeypatch.setenv("AE_MCP_SKILL_DIR", str(tmp_path / "skills"))
+    monkeypatch.setattr(server_module.approval_gate, "enforce", allow)
+    mock_backend.set_response(
+        '{"ok":true,"previous":"","current":"time * 2"}'
+    )
+    server = server_module.build_server()
+
+    try:
+        result = await server._ae_call_tool(
+            "ae_setProperty",
+            {
+                "comp_id": "42",
+                "layer_id": 3,
+                "path": "Transform/Opacity",
+                "expression": "time * 2",
+            },
+        )
+        candidates = default_tool_service().store.list(
+            kinds={"expression"}, statuses={"candidate"}, limit=100
+        )
+
+        assert json.loads(result.content[0].text)["ok"] is True
+        assert len(candidates) == 1
+        candidate = default_tool_service().store.get(candidates[0].id)
+        assert candidate.content == "time * 2"
+        assert candidate.source.provenance["verbName"] == "ae.setProperty"
+    finally:
+        reset_default_tool_service_for_tests()
 
 
 @pytest.mark.parametrize(

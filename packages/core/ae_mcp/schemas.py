@@ -215,8 +215,13 @@ class AeSetPropertyArgs(_StrictModel):
         description="Property path like 'Transform/Position' or 'Effects/Gaussian Blur/Blurriness'.",
     )
     value: Any = Field(
-        ...,
-        description="Scalar or array. Numeric arrays are passed as-is to setValue.",
+        None,
+        description="Scalar or array passed to setValue. Exactly one of value/expression is required.",
+    )
+    expression: Optional[str] = Field(
+        None,
+        min_length=1,
+        description="AE expression text. Exactly one of value/expression is required.",
     )
     at_time: Optional[float] = Field(
         None,
@@ -225,6 +230,18 @@ class AeSetPropertyArgs(_StrictModel):
             "are legal in AE). Omit to write the constant value."
         ),
     )
+
+    @model_validator(mode="after")
+    def validate_write_shape(self) -> "AeSetPropertyArgs":
+        has_value = "value" in self.model_fields_set
+        has_expression = "expression" in self.model_fields_set
+        if has_value == has_expression:
+            raise ValueError("exactly one of value or expression is required")
+        if has_expression and self.expression is None:
+            raise ValueError("expression must be a non-empty string")
+        if has_expression and self.at_time is not None:
+            raise ValueError("expression forbids at_time")
+        return self
 
 
 class AeMoveLayerArgs(_StrictModel):

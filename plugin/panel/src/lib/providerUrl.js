@@ -2,6 +2,7 @@ const RESOURCES = Object.freeze({
   models: 'models',
   responses: 'responses',
   'chat-completions': 'chat/completions',
+  messages: 'messages',
 });
 
 function providerUrlError(code, message) {
@@ -90,18 +91,66 @@ export function buildProviderEndpoint({
   if (!Object.hasOwn(RESOURCES, resource)) {
     throw providerUrlError('provider_url_invalid_resource', 'Provider resource is invalid.');
   }
-  const configured = parseBaseUrl(baseUrl, allowInsecureHttp);
-  const configuredOrigin = configured.origin;
-  let prefix = configured.pathname.replace(/\/+$/, '');
-  if (!prefix || prefix === '/') prefix = '';
-  if (!prefix.endsWith('/v1')) prefix += '/v1';
-
-  const endpoint = new URL(configured.toString());
-  endpoint.pathname = `${prefix}/${RESOURCES[resource]}`;
+  const endpoint = buildProviderApiBaseUrl({ baseUrl, allowInsecureHttp });
+  const configuredOrigin = endpoint.origin;
+  endpoint.pathname = `${endpoint.pathname.replace(/\/+$/, '')}/${RESOURCES[resource]}`;
   endpoint.search = normalizeSearch(inboundSearch);
   endpoint.hash = '';
   if (endpoint.origin !== configuredOrigin) {
     throw providerUrlError('provider_url_origin_mismatch', 'Provider endpoint origin changed unexpectedly.');
   }
   return endpoint;
+}
+
+export function buildProviderApiBaseCandidates({
+  baseUrl,
+  allowInsecureHttp = false,
+} = {}) {
+  const configured = parseBaseUrl(baseUrl, allowInsecureHttp);
+  const configuredRoot = new URL(configured.toString());
+  configuredRoot.pathname = configuredRoot.pathname.replace(/\/+$/, '') || '/';
+  configuredRoot.search = '';
+  configuredRoot.hash = '';
+
+  const plusV1 = new URL(configuredRoot.toString());
+  const configuredPath = plusV1.pathname.replace(/\/+$/, '');
+  plusV1.pathname = /\/v1$/i.test(configuredPath)
+    ? configuredPath
+    : `${configuredPath === '/' ? '' : configuredPath}/v1`;
+
+  const candidates = [{ id: 'configured-root', url: configuredRoot }];
+  if (plusV1.toString() !== configuredRoot.toString()) {
+    candidates.push({ id: 'plus-v1', url: plusV1 });
+  }
+  return candidates;
+}
+
+export function buildProviderEndpointCandidates({
+  baseUrl,
+  resource,
+  inboundSearch = '',
+  allowInsecureHttp = false,
+} = {}) {
+  if (!Object.hasOwn(RESOURCES, resource)) {
+    throw providerUrlError('provider_url_invalid_resource', 'Provider resource is invalid.');
+  }
+  const search = normalizeSearch(inboundSearch);
+  return buildProviderApiBaseCandidates({ baseUrl, allowInsecureHttp }).map((candidate) => {
+    const endpoint = new URL(candidate.url.toString());
+    endpoint.pathname = `${endpoint.pathname.replace(/\/+$/, '')}/${RESOURCES[resource]}`;
+    endpoint.search = search;
+    endpoint.hash = '';
+    if (endpoint.origin !== candidate.url.origin) {
+      throw providerUrlError('provider_url_origin_mismatch', 'Provider endpoint origin changed unexpectedly.');
+    }
+    return { id: candidate.id, apiRoot: new URL(candidate.url.toString()), url: endpoint };
+  });
+}
+
+export function buildProviderApiBaseUrl({ baseUrl, allowInsecureHttp = false } = {}) {
+  const candidates = buildProviderApiBaseCandidates({ baseUrl, allowInsecureHttp });
+  if (/\/v\d+(?:beta)?\/openai\/?$/i.test(candidates[0].url.pathname)) {
+    return new URL(candidates[0].url.toString());
+  }
+  return new URL((candidates.find((candidate) => candidate.id === 'plus-v1') || candidates[0]).url.toString());
 }

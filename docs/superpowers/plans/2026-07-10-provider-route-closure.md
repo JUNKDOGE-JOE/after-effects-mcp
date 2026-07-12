@@ -4,7 +4,7 @@
 
 **Goal:** Close the custom-provider request path on current `main` with secret-reference-only profiles, verified dialect selection, an authenticated and bounded Responses-to-Chat facade, and a real-Codex compact/long-context gate.
 
-**Architecture:** Provider JSON stores only non-secret policy plus opaque helper references; the signed platform helper remains the only secret store and the Panel resolves values only for the lifetime of a probe, native Codex spawn, or authenticated facade request. Native Responses providers stay direct and use Codex `env_http_headers`; chat-only providers run behind a loopback facade that presents the Responses API to Codex, validates every request, and translates only an explicit supported schema. The facade is not connected to `codexBackend` until endpoint, header, token, resource, and compact tests are all green.
+**Architecture:** Provider JSON stores only non-secret policy plus opaque helper references; the signed platform helper remains the only secret store and the Panel resolves values only for the lifetime of a probe, native Codex spawn, or authenticated facade request. Dialect is selected for the exact model ID because one Provider may expose a mixture of native Responses and Chat-only models. Native Responses models stay direct and use Codex `env_http_headers`; Chat-only models run behind a loopback facade that presents the Responses API to Codex, validates every request, and translates only an explicit supported schema. The facade is not connected to `codexBackend` until endpoint, header, token, resource, and compact tests are all green.
 
 **Tech Stack:** React 18 CEP Panel, CEP Node CommonJS bridge, ESM JavaScript, Node built-ins (`http`, `https`, `crypto`, `stream`), `node:test`, `node:assert/strict`, Codex app-server.
 
@@ -18,6 +18,9 @@
 - Provider extra headers whose names indicate credentials must use `SecretValueRef`; literal values matching a credential syntax fail closed even when the header name looks non-sensitive.
 - The only persisted secret locator is `aemcp-secret://provider/<lowercase-uuid>/<slot>/v1`; never construct a Keychain service/account or Credential Manager target in Panel code.
 - The current Codex configuration reference permits only `wire_api = "responses"`. A stored dialect value of `chat` selects the local facade; it is never emitted as Codex `wire_api = "chat"`.
+- `GET /v1/models` only enumerates model IDs; it is not evidence that every model behind the Provider shares one dialect.
+- Dialect detection requires an explicit current `modelId`, sends valid minimal requests to that model, prefers a schema-valid native Responses result, and falls back to a schema-valid Chat Completion result. The verified result is cached and consumed only for that exact model ID.
+- A legacy Provider-level `detected` singleton has no safe model binding and therefore fails closed instead of being applied to every model.
 - Native Responses provider values enter Codex only through `model_providers.<id>.env_http_headers` plus the spawned process environment. Command arguments contain header names and environment variable names, never values.
 - The facade binds only `127.0.0.1`, generates a fresh 32-byte base64url route token per lifetime, and requires `Authorization: Bearer <route-token>` on every request.
 - Missing or invalid route auth returns 401 before URL parsing that could cause DNS, before secret resolution, and before any upstream call.
@@ -162,11 +165,12 @@ Use these names and shapes exactly in every task.
 
 /**
  * @typedef {{
+ *   modelId:string,
  *   wireApi:'responses'|'chat',
  *   baseUrl:string,
  *   authProfileRevision:number,
  *   detectedAt:number,
- *   evidence:'models-capability'|'responses-success-schema'|'responses-missing-input'|'chat-success-schema'|'chat-missing-messages'
+ *   evidence:'responses-success-schema'|'chat-success-schema'
  * }} DetectedProviderDialect
  */
 
@@ -177,7 +181,7 @@ Use these names and shapes exactly in every task.
  *     source:'manual'|'legacy-v0.9'|'ccswitch-import',
  *     updatedAt:number
  *   },
- *   detected:null|DetectedProviderDialect
+ *   detected:DetectedProviderDialect[]
  * }} ProviderDialectState
  */
 
@@ -198,6 +202,8 @@ Use these names and shapes exactly in every task.
  * }} ProviderEntryV2
  */
 ```
+
+Only `source:'manual'` is an effective global override. The other source values are accepted only to read older state safely; they never select a runtime dialect and are removed when that Provider is edited without an explicit manual override.
 
 Persisted state:
 
@@ -230,7 +236,7 @@ Persisted state:
       headers: [],
       dialect: {
         override: null,
-        detected: null
+        detected: []
       },
       probedModels: [],
       probedAt: 0
@@ -302,7 +308,7 @@ detectProviderDialect({provider,resolveRequestProfile,requestImpl,modelId,timeou
   | {ok:false,reason:'configuration'|'authentication'|'network'|'path-unsupported'|'dialect-incompatible',detail:string,tried:Array<object>}
 >
 
-effectiveProviderDialect(provider:ProviderEntryV2,options?:{now?:()=>number,maxAgeMs?:number}):'responses'|'chat'|null
+effectiveProviderDialect(provider:ProviderEntryV2,options:{modelId:string,now?:()=>number,maxAgeMs?:number}):'responses'|'chat'|null
 ```
 
 Header, URL, token, codec, and route signatures:
@@ -427,7 +433,7 @@ function providerFixture(overrides = {}) {
     authProfileRevision: 1,
     auth: { model: { kind: 'none' }, probe: { kind: 'inherit-model' } },
     headers: [],
-    dialect: { override: null, detected: null },
+    dialect: { override: null, detected: [] },
     probedModels: [],
     probedAt: 0
   }, overrides);
@@ -929,6 +935,8 @@ git commit -m "feat(panel): persist provider profiles without plaintext secrets"
 
 ### Task 3: Add verified dialect detection and explicit cache invalidation
 
+> **Implementation correction (2026-07-11):** A Provider may contain heterogeneous models. `/v1/models` only supplies the selectable IDs; it does not select a dialect. Detection and cache lookup are keyed by the exact, explicit current `modelId`: send a valid minimal Responses request first, then a valid minimal Chat Completions request only if Responses is not schema-valid. Cache entries for other model IDs are preserved. Legacy Provider-level `detected` objects, missing-field `{model}` probes, and examples below that couple model enumeration to dialect detection are superseded and must fail closed rather than route all models alike.
+
 **Files:**
 
 - Create: `plugin/panel/src/cep/providerDetect.js`
@@ -966,7 +974,7 @@ function providerFixture(overrides = {}) {
     authProfileRevision: 1,
     auth: { model: { kind: 'none' }, probe: { kind: 'inherit-model' } },
     headers: [],
-    dialect: { override: null, detected: null },
+    dialect: { override: null, detected: [] },
     probedModels: [],
     probedAt: 0
   }, overrides);
@@ -1054,23 +1062,13 @@ node --test test/providerDetect.test.js test/providerProbeFlow.test.js test/prov
 
 Expected: exit 1. On `main`, the new modules are absent. If the PR #51 implementation is temporarily copied as a starting point, the generic JSON 400 test fails because it incorrectly returns `responses`.
 
-- [ ] **Step 3: Implement schema-specific detection and cache selection**
+- [ ] **Step 3: Implement schema-specific per-model detection and cache selection**
 
-For Responses, send `{model}` and accept only a known success object or an endpoint-specific missing `input` error. For Chat, send `{model}` and accept only a known Chat Completion object or missing `messages` error:
+Require a non-empty explicit current `modelId`. For Responses, send a valid minimal request such as `{model,input:'OK',max_output_tokens:16,stream:false}` and accept only HTTP 200 with the known Responses success schema. Only if that fails, send a valid minimal Chat request such as `{model,messages:[{role:'user',content:'OK'}],max_tokens:4,stream:false}` and accept only HTTP 200 with the known Chat Completion success schema. Missing-field errors, generic JSON errors, and `/models` success are not dialect evidence.
 
-```js
-function isEndpointSemantic(result, expectedParam) {
-  if (result.status !== 400 && result.status !== 422) return false;
-  if (!isJsonContentType(result.headers['content-type'])) return false;
-  let parsed;
-  try { parsed = JSON.parse(result.body); } catch (error) { return false; }
-  return parsed && parsed.error && parsed.error.param === expectedParam;
-}
-```
+`effectiveProviderDialect` returns a deliberate manual override first. Otherwise it requires an exact case-sensitive `modelId` match, exact normalized base URL, equal `authProfileRevision`, non-future timestamp, and age no greater than `86_400_000` ms. Detection failure returns a reason/detail but leaves stored entries for all models untouched; the UI displays `unconfirmed` when the current model has no effective result. A successful detection replaces only the matching model entry.
 
-`effectiveProviderDialect` returns override first. Otherwise require exact normalized base URL, equal `authProfileRevision`, non-future timestamp, and age no greater than `86_400_000` ms. Detection failure returns a reason/detail but leaves both stored override and previous detected result untouched; the UI displays `unconfirmed` when no effective result exists.
-
-Treat explicit cc-switch `wire_api`/`apiFormat` as an import override only after the user confirms the import preview. Inferred or absent metadata remains a hint and cannot become a detected result.
+Treat cc-switch `wire_api`/`apiFormat` only as non-authoritative preview metadata. Import never persists it as a Provider-wide override; the user must explicitly choose the global manual override or detect each selected model.
 
 - [ ] **Step 4: Run focused tests and verify GREEN**
 
@@ -1113,12 +1111,14 @@ git commit -m "feat(panel): verify provider dialect without false positives"
 ```js
 {
   name: 'ResponsesCompatibilityError',
-  status: 400,
+  status: 501,
   code: 'unsupported_responses_field',
   param: 'input[0].content[0].type',
   message: 'Unsupported Responses field: input[0].content[0].type'
 }
 ```
+
+Malformed values for fields the facade does support remain `400 invalid_responses_field`; the `501` contract is reserved for fields or capabilities that cannot be represented without loss.
 
 - [ ] **Step 1: Write the supported request and exact conversion fixtures**
 
@@ -1368,7 +1368,7 @@ export function providerFixture(overrides = {}) {
     authProfileRevision: 1,
     auth: { model: { kind: 'none' }, probe: { kind: 'inherit-model' } },
     headers: [],
-    dialect: { override: null, detected: null },
+    dialect: { override: null, detected: [] },
     probedModels: [],
     probedAt: 0
   }, overrides);

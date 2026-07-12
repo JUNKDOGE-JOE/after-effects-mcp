@@ -1,21 +1,32 @@
-// Pure, UI-safe Provider Manager form state. Secret references and resolved
-// values never enter React state; an empty secret field means "retain current".
+// React state contains form hints only. Opaque references stay in the Provider
+// entry and an empty secret input means "retain the current protected value".
+export function defaultProviderModelAuthKind(protocol) {
+  return protocol === 'anthropic' ? 'x-api-key' : 'bearer';
+}
+
+export function draftWithProtocol(draft, protocol) {
+  const current = draft || emptyDraft();
+  const currentKind = current.modelAuthKind || defaultProviderModelAuthKind(current.protocol);
+  const followsProtocolDefault = current.modelAuthAutomatic === true;
+  return {
+    ...current,
+    protocol,
+    modelAuthKind: followsProtocolDefault ? defaultProviderModelAuthKind(protocol) : currentKind,
+  };
+}
+
 export function emptyDraft() {
   return {
     id: '',
     name: '',
-    protocol: 'openai-compatible',
     baseUrl: '',
     allowInsecureHttp: false,
-    modelAuthKind: 'bearer',
+    modelAuthKind: 'auto',
+    modelAuthAutomatic: false,
     modelAuthHeaderName: '',
     modelAuthSecret: '',
-    probeAuthMode: 'inherit-model',
-    probeAuthKind: 'none',
-    probeAuthHeaderName: '',
-    probeAuthSecret: '',
     headers: [],
-    dialectOverride: '',
+    probePreference: '',
   };
 }
 
@@ -38,24 +49,30 @@ function headerDraft(header) {
   };
 }
 
-export function draftFromEntry(entry) {
+function legacyAuth(entry) {
   const model = entry?.auth?.model || { kind: 'none' };
-  const probe = entry?.auth?.probe || { kind: 'inherit-model' };
   return {
+    scheme: model.kind || 'none',
+    headerName: model.kind === 'custom' ? model.headerName : null,
+  };
+}
+
+export function draftFromEntry(entry) {
+  const auth = entry?.credential?.preferredAuth || legacyAuth(entry);
+  const legacyProbePreference = entry?.dialect?.override?.source === 'manual'
+    ? entry.dialect.override.wireApi
+    : '';
+  return {
+    ...emptyDraft(),
     id: String(entry?.id || ''),
     name: String(entry?.name || ''),
-    protocol: entry?.protocol || 'openai-compatible',
     baseUrl: String(entry?.baseUrl || ''),
     allowInsecureHttp: entry?.allowInsecureHttp === true,
-    modelAuthKind: model.kind || 'none',
-    modelAuthHeaderName: model.kind === 'custom' ? model.headerName : '',
-    modelAuthSecret: '',
-    probeAuthMode: probe.kind === 'inherit-model' ? 'inherit-model' : 'separate',
-    probeAuthKind: probe.kind === 'inherit-model' ? 'none' : probe.kind,
-    probeAuthHeaderName: probe.kind === 'custom' ? probe.headerName : '',
-    probeAuthSecret: '',
+    modelAuthKind: auth.scheme || 'auto',
+    modelAuthAutomatic: false,
+    modelAuthHeaderName: auth.scheme === 'custom' ? String(auth.headerName || '') : '',
     headers: Array.isArray(entry?.headers) ? entry.headers.map(headerDraft) : [],
-    dialectOverride: entry?.dialect?.override?.wireApi || '',
+    probePreference: String(entry?.probePreference || legacyProbePreference || ''),
   };
 }
 
@@ -84,6 +101,8 @@ export function draftToEntry(draft) {
     ...(draft || {}),
     id,
     name,
-    headers: Array.isArray(draft?.headers) ? draft.headers.map((header) => ({ ...header, scopes: [...(header.scopes || [])] })) : [],
+    headers: Array.isArray(draft?.headers)
+      ? draft.headers.map((header) => ({ ...header, scopes: [...(header.scopes || [])] }))
+      : [],
   };
 }

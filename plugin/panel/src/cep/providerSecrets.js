@@ -2,7 +2,11 @@ import {
   createProviderSecretReference,
   parseProviderSecretReference,
 } from './platform/secret-reference.js';
-import { normalizeProviderEntryV2 } from '../lib/providerProfile.js';
+import {
+  normalizeProviderEntryV2,
+  normalizeProviderEntryV3,
+  validateProviderBaseUrl,
+} from '../lib/providerProfile.js';
 
 const SLOT_PREFIXES = new Set(['auth-model', 'auth-probe', 'header']);
 const PUBLIC_ERROR_CODES = new Set([
@@ -18,6 +22,7 @@ const HELPER_AVAILABILITY_CODES = new Set([
   'INVALID_REQUEST',
   'MESSAGE_TOO_LARGE',
 ]);
+const PROVIDER_HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 
 function providerSecretError(code) {
   const messages = {
@@ -262,10 +267,137 @@ async function resolveAuth(policy, secretService) {
   return { kind: 'header', name: policy.headerName, value };
 }
 
-export async function resolveProviderRequestProfile(provider, { scope, secretService } = {}) {
+function normalizeAuthChoice(value) {
+  if (!hasExactKeys(value, ['headerName', 'scheme'])) {
+    throw providerSecretError('INVALID_REFERENCE');
+  }
+  if (!['none', 'bearer', 'x-api-key', 'custom'].includes(value.scheme)) {
+    throw providerSecretError('INVALID_REFERENCE');
+  }
+  const headerName = value.headerName === null ? null : String(value.headerName || '').trim();
+  if ((value.scheme === 'custom') !== Boolean(headerName)
+      || (headerName !== null && !PROVIDER_HEADER_NAME.test(headerName))) {
+    throw providerSecretError('INVALID_REFERENCE');
+  }
+  return { scheme: value.scheme, headerName };
+}
+
+async function resolveCredentialAuth(choice, valueRef, secretService) {
+  if (choice.scheme === 'none') return { kind: 'none' };
+  if (!valueRef) throw providerSecretError('INVALID_REFERENCE');
+  const value = await secretService.resolve(valueRef);
+  if (choice.scheme === 'bearer') {
+    return { kind: 'header', name: 'Authorization', value: `Bearer ${value}` };
+  }
+  if (choice.scheme === 'x-api-key') {
+    return { kind: 'header', name: 'x-api-key', value };
+  }
+  return { kind: 'header', name: choice.headerName, value };
+}
+
+function capabilityTarget(provider, { modelId, protocol }) {
+  const selectedModelId = String(modelId || '').trim();
+  if (!selectedModelId || !['responses', 'chat', 'messages'].includes(protocol)) return null;
+  const model = provider.modelCapabilities.find((entry) => entry.modelId === selectedModelId);
+  const capability = model?.[protocol];
+  return capability && capability.status !== 'unknown' ? capability : null;
+}
+
+function validatedApiRoot(value, provider) {
+  if (!value) return provider.baseUrl;
+  let apiRoot;
+  try {
+    apiRoot = validateProviderBaseUrl(value, {
+      allowInsecureHttp: provider.allowInsecureHttp,
+      requireTransportApproval: true,
+    });
+  } catch {
+    throw providerSecretError('INVALID_REFERENCE');
+  }
+  if (new URL(apiRoot).origin !== new URL(provider.baseUrl).origin) {
+    throw providerSecretError('INVALID_REFERENCE');
+  }
+  return apiRoot;
+}
+
+async function resolveProviderRequestProfileV3(provider, {
+  scope,
+  secretService,
+  modelId,
+  protocol,
+  authChoice,
+  apiRoot,
+}) {
+  const target = scope === 'model' ? capabilityTarget(provider, { modelId, protocol }) : null;
+  let auth;
+  if (scope === 'probe' && provider.probeAuthOverride !== null) {
+    auth = await resolveAuth(provider.probeAuthOverride, secretService);
+  } else {
+    let selectedChoice = authChoice === undefined || authChoice === null
+      ? target?.auth || (scope === 'probe' && provider.modelList.status === 'supported'
+        ? provider.modelList.auth
+        : provider.credential.preferredAuth)
+      : normalizeAuthChoice(authChoice);
+    if (selectedChoice.scheme === 'auto') {
+      selectedChoice = provider.credential.valueRef
+        ? { scheme: 'bearer', headerName: null }
+        : { scheme: 'none', headerName: null };
+    }
+    auth = await resolveCredentialAuth(
+      normalizeAuthChoice(selectedChoice),
+      provider.credential.valueRef,
+      secretService,
+    );
+  }
+  const extraHeaders = [];
+  for (const header of provider.headers) {
+    if (!header.scopes.includes(scope)) continue;
+    if (header.valueRef.kind === 'literal') {
+      extraHeaders.push({ name: header.name, value: header.valueRef.value, source: 'literal' });
+    } else {
+      extraHeaders.push({
+        name: header.name,
+        value: await secretService.resolve(header.valueRef),
+        source: 'secret',
+      });
+    }
+  }
+  return {
+    providerId: provider.id,
+    baseUrl: validatedApiRoot(apiRoot || target?.apiRoot || (
+      scope === 'probe' && provider.modelList.status === 'supported'
+        ? provider.modelList.apiRoot
+        : provider.baseUrl
+    ), provider),
+    allowInsecureHttp: provider.allowInsecureHttp,
+    auth,
+    extraHeaders,
+    requestProfileRevision: provider.requestProfileRevision,
+  };
+}
+
+export async function resolveProviderRequestProfile(provider, {
+  scope,
+  secretService,
+  modelId,
+  protocol,
+  authChoice,
+  apiRoot,
+} = {}) {
   if (scope !== 'probe' && scope !== 'model') throw new TypeError('scope must be probe or model');
   if (!secretService || typeof secretService.resolve !== 'function') {
     throw new TypeError('secretService.resolve is required');
+  }
+  if (provider && Object.hasOwn(provider, 'credential')) {
+    const normalizedV3 = normalizeProviderEntryV3(provider);
+    return resolveProviderRequestProfileV3(normalizedV3, {
+      scope,
+      secretService,
+      modelId,
+      protocol,
+      authChoice,
+      apiRoot,
+    });
   }
   const normalized = normalizeProviderEntryV2(provider);
   const selected = scope === 'probe' && normalized.auth.probe.kind === 'inherit-model'

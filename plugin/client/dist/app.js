@@ -9703,7 +9703,7 @@
       recheck: "\u91CD\u65B0\u68C0\u6D4B",
       providerNone: "\uFF08\u672A\u9009\u62E9 provider\uFF09",
       importClaudeSettings: "\u4ECE ~/.claude/settings.json \u5BFC\u5165",
-      claude3pNote: "Claude-3p \u684C\u9762\u7248\u7684\u51ED\u636E\u65E0\u6CD5\u81EA\u52A8\u8BFB\u53D6\uFF1B\u8BF7\u5728 Provider \u7BA1\u7406\u91CC\u624B\u52A8\u586B\u5199\u4E00\u6B21 Base URL \u4E0E Token\u3002",
+      claude3pNote: "\u540C\u4E00\u4E2A Provider \u53EF\u540C\u65F6\u7528\u4E8E Claude \u548C Codex\uFF1B\u534F\u8BAE\u4E0E\u517C\u5BB9\u8F6C\u6362\u6309\u5F53\u524D\u6A21\u578B\u81EA\u52A8\u9009\u62E9\u3002",
       providerHelperRepair: "Provider \u51ED\u636E\u529F\u80FD\u5DF2\u5B89\u5168\u505C\u7528\u3002\u8BF7\u4FEE\u590D\u6216\u91CD\u65B0\u5B89\u88C5\u5E73\u53F0 Helper\uFF0C\u91CD\u542F AE \u540E\u518D\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D\uFF1B\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587\u51ED\u636E\u3002",
       providerStoreCorrupt: "Provider \u914D\u7F6E\u6587\u4EF6\u635F\u574F\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u5148\u4ECE\u5907\u4EFD\u6062\u590D providers.json\uFF0C\u518D\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D\u3002",
       providerStoreUnavailable: "Provider \u914D\u7F6E\u6587\u4EF6\u4E0D\u53EF\u7528\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u68C0\u67E5 ~/.ae-mcp \u7684\u78C1\u76D8\u7A7A\u95F4\u4E0E\u8BFB\u5199\u6743\u9650\u3002",
@@ -9764,7 +9764,7 @@
       recheck: "Re-check",
       providerNone: "(no provider selected)",
       importClaudeSettings: "Import from ~/.claude/settings.json",
-      claude3pNote: "Claude-3p desktop credentials cannot be read automatically; fill the base URL and token once in Provider Manager.",
+      claude3pNote: "The same Provider can serve Claude and Codex; protocol routing and compatibility conversion are selected per model.",
       providerHelperRepair: "Provider credentials are safely disabled. Repair or reinstall the platform Helper, restart AE, then re-check. Plaintext fallback is disabled.",
       providerStoreCorrupt: "The provider configuration is corrupt; the current list was retained. Restore providers.json from backup, then re-check.",
       providerStoreUnavailable: "The provider configuration is unavailable; the current list was retained. Check disk space and permissions for ~/.ae-mcp.",
@@ -10009,7 +10009,7 @@
                 return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
                   /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: claudeProviderId, onChange: onClaudeProviderChange, options: [
                     { value: "", label: t.providerNone },
-                    ...providers.filter((p) => p.protocol === "anthropic").map((p) => ({ value: p.id, label: p.name }))
+                    ...providers.map((p) => ({ value: p.id, label: p.name }))
                   ] }),
                   claudeSettingsImportAvailable ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", size: "sm", icon: "download", onClick: onImportClaudeSettings, children: t.importClaudeSettings }) : null,
                   /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.5 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.claude3pNote })
@@ -10018,7 +10018,7 @@
               if (backend === "codex" && channel === "custom") {
                 return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: codexProviderId, onChange: onCodexProviderChange, options: [
                   { value: "", label: t.providerNone },
-                  ...providers.filter((p) => p.protocol === "openai-compatible").map((p) => ({ value: p.id, label: p.name }))
+                  ...providers.map((p) => ({ value: p.id, label: p.name }))
                 ] });
               }
               if (backend === "zcode" && channel === "cli-config") {
@@ -13462,7 +13462,7 @@
   // src/lib/providerProfile.js
   var DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com";
   var DEFAULT_CODEX_PROVIDER_ID = "ae_mcp_custom";
-  var PROVIDER_DIALECT_MAX_AGE_MS = 864e5;
+  var CODEX_PROVIDER_API_KEY_ENV = "AE_MCP_CODEX_API_KEY";
   var RESERVED_CODEX_PROVIDER_IDS = /* @__PURE__ */ new Set(["openai", "amazon-bedrock", "ollama", "lmstudio"]);
   var PROVIDER_ENTRY_KEYS = [
     "allowInsecureHttp",
@@ -13484,18 +13484,99 @@
   var LITERAL_VALUE_REF_KEYS = ["kind", "value"];
   var DIALECT_KEYS = ["detected", "override"];
   var DIALECT_OVERRIDE_KEYS = ["source", "updatedAt", "wireApi"];
-  var DIALECT_DETECTED_KEYS = ["authProfileRevision", "baseUrl", "detectedAt", "evidence", "wireApi"];
+  var LEGACY_DIALECT_DETECTED_KEYS = ["authProfileRevision", "baseUrl", "detectedAt", "evidence", "wireApi"];
+  var DIALECT_DETECTED_KEYS = ["authProfileRevision", "baseUrl", "detectedAt", "evidence", "modelId", "wireApi"];
   var PROBED_MODEL_KEYS = ["id", "label"];
   var PROVIDER_SCOPES = /* @__PURE__ */ new Set(["probe", "model"]);
   var PROVIDER_PROTOCOLS = /* @__PURE__ */ new Set(["openai-compatible", "anthropic"]);
   var WIRE_APIS = /* @__PURE__ */ new Set(["responses", "chat"]);
+  var PROVIDER_WIRE_PROTOCOLS_V3 = /* @__PURE__ */ new Set(["responses", "chat", "messages"]);
+  var PROVIDER_CLIENTS_V3 = /* @__PURE__ */ new Set(["codex", "claude-code"]);
+  var PROVIDER_AUTH_SCHEMES_V3 = /* @__PURE__ */ new Set(["none", "bearer", "x-api-key", "custom"]);
+  var PROVIDER_PREFERRED_AUTH_SCHEMES_V3 = /* @__PURE__ */ new Set(["auto", ...PROVIDER_AUTH_SCHEMES_V3]);
+  var PROVIDER_CAPABILITY_STATUSES_V3 = /* @__PURE__ */ new Set(["unknown", "supported", "unsupported"]);
+  var PROVIDER_CAPABILITY_UNSUPPORTED_EVIDENCE_V3 = /* @__PURE__ */ new Set([
+    "endpoint-unsupported",
+    "model-protocol-unsupported",
+    "conversion-unsupported"
+  ]);
+  var PROVIDER_CAPABILITY_SUPPORTED_EVIDENCE_V3 = Object.freeze({
+    responses: /* @__PURE__ */ new Set(["responses-success-schema", "responses-incomplete-schema"]),
+    chat: /* @__PURE__ */ new Set(["chat-success-schema", "chat-length-schema"]),
+    messages: /* @__PURE__ */ new Set(["messages-success-schema", "messages-max-tokens-schema"])
+  });
+  var PROVIDER_ENTRY_KEYS_V3 = [
+    "allowInsecureHttp",
+    "baseUrl",
+    "credential",
+    "credentialId",
+    "headers",
+    "id",
+    "modelCapabilities",
+    "modelList",
+    "name",
+    "probeAuthOverride",
+    "probePreference",
+    "requestProfileRevision",
+    "routeOverrides"
+  ];
+  var PROVIDER_CREDENTIAL_KEYS_V3 = ["preferredAuth", "valueRef"];
+  var PROVIDER_AUTH_CHOICE_KEYS_V3 = ["headerName", "scheme"];
+  var PROVIDER_MODEL_LIST_KEYS_V3 = [
+    "apiRoot",
+    "auth",
+    "checkedAt",
+    "models",
+    "requestProfileRevision",
+    "revision",
+    "status",
+    "validUntil"
+  ];
+  var PROVIDER_MODEL_CAPABILITY_KEYS_V3 = ["chat", "messages", "modelId", "responses"];
+  var PROVIDER_PROTOCOL_CAPABILITY_KEYS_V3 = [
+    "agentFeatures",
+    "apiRoot",
+    "auth",
+    "checkedAt",
+    "compatibility",
+    "evidence",
+    "modelListRevision",
+    "requestProfileRevision",
+    "status",
+    "validUntil"
+  ];
+  var PROVIDER_AGENT_FEATURE_KEYS_V3 = [
+    "compact",
+    "continuation",
+    "countTokens",
+    "namespaceTools",
+    "reasoningReplay",
+    "stream",
+    "terminal",
+    "tools"
+  ];
+  var PROVIDER_AGENT_FEATURE_STATUSES_V3 = /* @__PURE__ */ new Set(["unknown", "supported", "unsupported"]);
+  var PROVIDER_COMPATIBILITY_KEYS_V3 = ["instructionMode", "tokenField"];
+  var PROVIDER_ROUTE_OVERRIDE_KEYS_V3 = ["client", "modelId", "protocol", "updatedAt"];
+  var PROVIDER_MODEL_LIST_MODEL_KEYS_V3 = ["id", "label", "metadata"];
+  var PROVIDER_MODEL_METADATA_KEYS_V3 = [
+    "capabilities",
+    "inputModalities",
+    "outputModalities",
+    "task"
+  ];
   var DIALECT_SOURCES = /* @__PURE__ */ new Set(["manual", "legacy-v0.9", "ccswitch-import"]);
-  var DIALECT_EVIDENCE = /* @__PURE__ */ new Set([
+  var VERIFIED_DIALECT_EVIDENCE = Object.freeze({
+    responses: "responses-success-schema",
+    chat: "chat-success-schema"
+  });
+  var LEGACY_DIALECT_EVIDENCE = /* @__PURE__ */ new Set([
     "models-capability",
     "responses-success-schema",
     "responses-missing-input",
     "chat-success-schema",
-    "chat-missing-messages"
+    "chat-missing-messages",
+    "chat-missing-messages-500-compat"
   ]);
   var SENSITIVE_HEADER_NAME = /(?:^|[-_])(?:authorization|api[-_]?key|token|secret|password)(?:$|[-_])/i;
   var SECRET_LIKE_LITERAL = /^(?:Bearer\s+\S+|Basic\s+\S+|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,})$/;
@@ -13588,6 +13669,9 @@
   function requireRevision(value) {
     if (!Number.isSafeInteger(value) || value <= 0) throw providerProfileError();
     return value;
+  }
+  function hasVerifiedDialectEvidence(entry) {
+    return VERIFIED_DIALECT_EVIDENCE[entry == null ? void 0 : entry.wireApi] === (entry == null ? void 0 : entry.evidence);
   }
   function normalizeCredentialId(value) {
     if (typeof value !== "string") throw providerProfileError();
@@ -13684,19 +13768,32 @@
         updatedAt: requireTimestamp(value.override.updatedAt)
       };
     }
-    let detected = null;
-    if (value.detected !== null) {
-      requireExactObject(value.detected, DIALECT_DETECTED_KEYS);
-      if (!WIRE_APIS.has(value.detected.wireApi) || !DIALECT_EVIDENCE.has(value.detected.evidence)) {
+    const normalizeDetected = (entry, { includeModelId = true } = {}) => {
+      const keys = includeModelId ? DIALECT_DETECTED_KEYS : LEGACY_DIALECT_DETECTED_KEYS;
+      requireExactObject(entry, keys);
+      if (!WIRE_APIS.has(entry.wireApi) || (includeModelId ? !hasVerifiedDialectEvidence(entry) : !LEGACY_DIALECT_EVIDENCE.has(entry.evidence))) {
         throw providerProfileError();
       }
-      detected = {
-        wireApi: value.detected.wireApi,
-        baseUrl: validateProviderBaseUrl(requireText(value.detected.baseUrl)),
-        authProfileRevision: requireRevision(value.detected.authProfileRevision),
-        detectedAt: requireTimestamp(value.detected.detectedAt),
-        evidence: value.detected.evidence
+      return {
+        ...includeModelId ? { modelId: requireText(entry.modelId) } : {},
+        wireApi: entry.wireApi,
+        baseUrl: validateProviderBaseUrl(requireText(entry.baseUrl)),
+        authProfileRevision: requireRevision(entry.authProfileRevision),
+        detectedAt: requireTimestamp(entry.detectedAt),
+        evidence: entry.evidence
       };
+    };
+    let detected = [];
+    if (Array.isArray(value.detected)) {
+      detected = value.detected.map((entry) => normalizeDetected(entry));
+      const modelIds = /* @__PURE__ */ new Set();
+      for (const entry of detected) {
+        if (modelIds.has(entry.modelId)) throw providerProfileError();
+        modelIds.add(entry.modelId);
+      }
+      detected.sort((left, right) => left.modelId < right.modelId ? -1 : left.modelId > right.modelId ? 1 : 0);
+    } else if (value.detected !== null) {
+      normalizeDetected(value.detected, { includeModelId: false });
     }
     return { override, detected };
   }
@@ -13733,24 +13830,296 @@
       probedAt: requireTimestamp(input.probedAt)
     };
   }
-  function effectiveProviderDialect(provider, {
-    now = Date.now,
-    maxAgeMs = PROVIDER_DIALECT_MAX_AGE_MS
+  function requireNonnegativeRevision(value) {
+    if (!Number.isSafeInteger(value) || value < 0) throw providerProfileError();
+    return value;
+  }
+  function normalizeAuthChoiceV3(value, { allowAuto = false } = {}) {
+    requireExactObject(value, PROVIDER_AUTH_CHOICE_KEYS_V3);
+    const allowed = allowAuto ? PROVIDER_PREFERRED_AUTH_SCHEMES_V3 : PROVIDER_AUTH_SCHEMES_V3;
+    if (!allowed.has(value.scheme)) throw providerProfileError();
+    const headerName = value.headerName === null ? null : normalizeHeaderName(value.headerName);
+    if (value.scheme === "custom" !== (headerName !== null)) throw providerProfileError();
+    return { scheme: value.scheme, headerName };
+  }
+  function authChoiceMatchesPreference(choice, preferred) {
+    if (preferred.scheme === "auto") return true;
+    if (preferred.scheme === "none") return choice.scheme === "none";
+    if (preferred.scheme === "custom") {
+      return choice.scheme === "custom" && String(choice.headerName || "").toLowerCase() === String(preferred.headerName || "").toLowerCase();
+    }
+    return choice.scheme === "bearer" || choice.scheme === "x-api-key";
+  }
+  function normalizeCredentialV3(value, credentialId) {
+    requireExactObject(value, PROVIDER_CREDENTIAL_KEYS_V3);
+    const valueRef = value.valueRef === null ? null : normalizeSecretValueRef(value.valueRef, credentialId);
+    const preferredAuth2 = normalizeAuthChoiceV3(value.preferredAuth, { allowAuto: true });
+    if (preferredAuth2.scheme === "none" && valueRef !== null) throw providerProfileError();
+    if (!["auto", "none"].includes(preferredAuth2.scheme) && valueRef === null) throw providerProfileError();
+    return { valueRef, preferredAuth: preferredAuth2 };
+  }
+  function normalizeProbeAuthOverrideV3(value, credentialId) {
+    if (value === null) return null;
+    const normalized = normalizeAuthPolicy(value, credentialId);
+    if (normalized.kind === "inherit-model") throw providerProfileError();
+    return normalized;
+  }
+  function authChoiceFromPolicyV3(policy) {
+    if (!policy || policy.kind === "none") return { scheme: "none", headerName: null };
+    return {
+      scheme: policy.kind,
+      headerName: policy.kind === "custom" ? policy.headerName : null
+    };
+  }
+  function normalizeApiRootV3(value, { baseUrl, allowInsecureHttp }) {
+    if (value === null) return null;
+    const apiRoot = validateProviderBaseUrl(requireText(value), {
+      allowInsecureHttp,
+      requireTransportApproval: true
+    });
+    if (new URL(apiRoot).origin !== new URL(baseUrl).origin) throw providerProfileError();
+    return apiRoot;
+  }
+  function normalizeMetadataStringListV3(value) {
+    if (!Array.isArray(value)) throw providerProfileError();
+    const output = value.map((entry) => requireText(entry));
+    if (new Set(output).size !== output.length) throw providerProfileError();
+    output.sort();
+    return output;
+  }
+  function normalizeModelMetadataV3(value) {
+    requireExactObject(value, PROVIDER_MODEL_METADATA_KEYS_V3);
+    return {
+      task: value.task === null ? null : requireText(value.task),
+      inputModalities: normalizeMetadataStringListV3(value.inputModalities),
+      outputModalities: normalizeMetadataStringListV3(value.outputModalities),
+      capabilities: normalizeMetadataStringListV3(value.capabilities)
+    };
+  }
+  function normalizeModelListEntryV3(value) {
+    requireExactObject(value, PROVIDER_MODEL_LIST_MODEL_KEYS_V3);
+    return {
+      id: requireText(value.id),
+      label: requireText(value.label),
+      metadata: normalizeModelMetadataV3(value.metadata)
+    };
+  }
+  function normalizeModelsV3(value) {
+    if (!Array.isArray(value)) throw providerProfileError();
+    const models = value.map(normalizeModelListEntryV3);
+    const ids = /* @__PURE__ */ new Set();
+    for (const model of models) {
+      if (ids.has(model.id)) throw providerProfileError();
+      ids.add(model.id);
+    }
+    models.sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+    return models;
+  }
+  function unknownProviderAgentFeatures() {
+    return {
+      compact: "unknown",
+      continuation: "unknown",
+      countTokens: "unknown",
+      namespaceTools: "unknown",
+      reasoningReplay: "unknown",
+      stream: "unknown",
+      terminal: "unknown",
+      tools: "unknown"
+    };
+  }
+  function normalizeAgentFeaturesV3(value, protocolStatus) {
+    requireExactObject(value, PROVIDER_AGENT_FEATURE_KEYS_V3);
+    const output = {};
+    for (const key of PROVIDER_AGENT_FEATURE_KEYS_V3) {
+      if (!PROVIDER_AGENT_FEATURE_STATUSES_V3.has(value[key])) throw providerProfileError();
+      output[key] = value[key];
+    }
+    if (protocolStatus === "unknown" && Object.values(output).some((status) => status !== "unknown")) {
+      throw providerProfileError();
+    }
+    if (protocolStatus === "unsupported" && Object.values(output).some((status) => status === "supported")) {
+      throw providerProfileError();
+    }
+    return output;
+  }
+  function unknownProviderProtocolCapability({
+    requestProfileRevision,
+    modelListRevision
   } = {}) {
-    if (!provider || provider.protocol !== "openai-compatible") return null;
-    const state = provider.dialect;
-    if (!state || typeof state !== "object" || Array.isArray(state)) return null;
-    const override = state.override;
-    if (override && WIRE_APIS.has(override.wireApi)) return override.wireApi;
-    const detected = state.detected;
-    if (!detected || !WIRE_APIS.has(detected.wireApi)) return null;
-    if (normalizeBaseUrl(provider.baseUrl) !== normalizeBaseUrl(detected.baseUrl)) return null;
-    if (provider.authProfileRevision !== detected.authProfileRevision) return null;
-    const currentTime = typeof now === "function" ? now() : Date.now();
-    const ageLimit = Number.isFinite(maxAgeMs) && maxAgeMs >= 0 ? maxAgeMs : PROVIDER_DIALECT_MAX_AGE_MS;
-    if (!Number.isFinite(currentTime) || detected.detectedAt > currentTime) return null;
-    if (currentTime - detected.detectedAt > ageLimit) return null;
-    return detected.wireApi;
+    return {
+      status: "unknown",
+      apiRoot: null,
+      auth: null,
+      compatibility: null,
+      agentFeatures: unknownProviderAgentFeatures(),
+      checkedAt: 0,
+      validUntil: 0,
+      requestProfileRevision: requireRevision(requestProfileRevision),
+      modelListRevision: requireNonnegativeRevision(modelListRevision),
+      evidence: null
+    };
+  }
+  function normalizeModelListV3(value, provider) {
+    requireExactObject(value, PROVIDER_MODEL_LIST_KEYS_V3);
+    if (value.status !== "unknown" && value.status !== "supported") throw providerProfileError();
+    const revision = requireNonnegativeRevision(value.revision);
+    const requestProfileRevision = requireRevision(value.requestProfileRevision);
+    const checkedAt = requireTimestamp(value.checkedAt);
+    const validUntil = requireTimestamp(value.validUntil);
+    const models = normalizeModelsV3(value.models);
+    const apiRoot = normalizeApiRootV3(value.apiRoot, provider);
+    const auth = value.auth === null ? null : normalizeAuthChoiceV3(value.auth);
+    if (value.status === "unknown") {
+      if (apiRoot !== null || auth !== null || checkedAt !== 0 || validUntil !== 0 || models.length !== 0) {
+        throw providerProfileError();
+      }
+    } else {
+      if (revision <= 0 || apiRoot === null || auth === null || checkedAt <= 0 || validUntil < checkedAt || models.length === 0) {
+        throw providerProfileError();
+      }
+      const configuredProbeAuth = provider.probeAuthOverride ? authChoiceFromPolicyV3(provider.probeAuthOverride) : provider.credential.preferredAuth;
+      if (!authChoiceMatchesPreference(auth, configuredProbeAuth)) throw providerProfileError();
+      if (auth.scheme !== "none" && provider.probeAuthOverride === null && provider.credential.valueRef === null) {
+        throw providerProfileError();
+      }
+    }
+    return {
+      revision,
+      status: value.status,
+      apiRoot,
+      auth,
+      models,
+      checkedAt,
+      validUntil,
+      requestProfileRevision
+    };
+  }
+  function normalizeCompatibilityV3(value, protocol) {
+    requireExactObject(value, PROVIDER_COMPATIBILITY_KEYS_V3);
+    const instructionMode = value.instructionMode;
+    const tokenField = value.tokenField;
+    const valid = protocol === "responses" ? instructionMode === "responses-instructions" && tokenField === "max_output_tokens" : protocol === "chat" ? ["chat-developer", "chat-system"].includes(instructionMode) && ["max_tokens", "max_completion_tokens"].includes(tokenField) : instructionMode === "messages-system" && tokenField === "max_tokens";
+    if (!valid) throw providerProfileError();
+    return { instructionMode, tokenField };
+  }
+  function normalizeProtocolCapabilityV3(value, protocol, provider) {
+    requireExactObject(value, PROVIDER_PROTOCOL_CAPABILITY_KEYS_V3);
+    if (!PROVIDER_CAPABILITY_STATUSES_V3.has(value.status)) throw providerProfileError();
+    const agentFeatures = normalizeAgentFeaturesV3(value.agentFeatures, value.status);
+    const apiRoot = normalizeApiRootV3(value.apiRoot, provider);
+    const auth = value.auth === null ? null : normalizeAuthChoiceV3(value.auth);
+    const compatibility2 = value.compatibility === null ? null : normalizeCompatibilityV3(value.compatibility, protocol);
+    const checkedAt = requireTimestamp(value.checkedAt);
+    const validUntil = value.validUntil === null ? null : requireTimestamp(value.validUntil);
+    const requestProfileRevision = requireRevision(value.requestProfileRevision);
+    const modelListRevision = requireNonnegativeRevision(value.modelListRevision);
+    const evidence = value.evidence === null ? null : requireText(value.evidence);
+    if (value.status === "unknown") {
+      if (apiRoot !== null || auth !== null || compatibility2 !== null || evidence !== null || checkedAt !== 0 || validUntil !== 0) {
+        throw providerProfileError();
+      }
+    } else {
+      if (apiRoot === null || auth === null || checkedAt <= 0 || value.status === "supported" && (validUntil === null || validUntil < checkedAt) || value.status === "unsupported" && validUntil !== null || provider.credential.valueRef === null && auth.scheme !== "none") {
+        throw providerProfileError();
+      }
+      if (!authChoiceMatchesPreference(auth, provider.credential.preferredAuth)) {
+        throw providerProfileError();
+      }
+      if (value.status === "supported") {
+        if (compatibility2 === null || !PROVIDER_CAPABILITY_SUPPORTED_EVIDENCE_V3[protocol].has(evidence)) {
+          throw providerProfileError();
+        }
+      } else if (compatibility2 !== null || !PROVIDER_CAPABILITY_UNSUPPORTED_EVIDENCE_V3.has(evidence)) {
+        throw providerProfileError();
+      }
+    }
+    return {
+      status: value.status,
+      apiRoot,
+      auth,
+      compatibility: compatibility2,
+      agentFeatures,
+      checkedAt,
+      validUntil,
+      requestProfileRevision,
+      modelListRevision,
+      evidence
+    };
+  }
+  function normalizeModelCapabilityV3(value, provider) {
+    requireExactObject(value, PROVIDER_MODEL_CAPABILITY_KEYS_V3);
+    return {
+      modelId: requireText(value.modelId),
+      responses: normalizeProtocolCapabilityV3(value.responses, "responses", provider),
+      chat: normalizeProtocolCapabilityV3(value.chat, "chat", provider),
+      messages: normalizeProtocolCapabilityV3(value.messages, "messages", provider)
+    };
+  }
+  function normalizeRouteOverrideV3(value) {
+    requireExactObject(value, PROVIDER_ROUTE_OVERRIDE_KEYS_V3);
+    if (!PROVIDER_CLIENTS_V3.has(value.client) || !PROVIDER_WIRE_PROTOCOLS_V3.has(value.protocol)) {
+      throw providerProfileError();
+    }
+    const updatedAt = requireTimestamp(value.updatedAt);
+    if (updatedAt <= 0) throw providerProfileError();
+    return {
+      client: value.client,
+      modelId: requireText(value.modelId),
+      protocol: value.protocol,
+      updatedAt
+    };
+  }
+  function normalizeProviderEntryV3(input) {
+    requireExactObject(input, PROVIDER_ENTRY_KEYS_V3);
+    const id = requireText(input.id);
+    const credentialId = normalizeCredentialId(input.credentialId);
+    const baseUrl = validateProviderBaseUrl(requireText(input.baseUrl), {
+      allowInsecureHttp: input.allowInsecureHttp,
+      requireTransportApproval: true
+    });
+    if (typeof input.allowInsecureHttp !== "boolean") throw providerProfileError();
+    if (!Array.isArray(input.headers) || !Array.isArray(input.modelCapabilities) || !Array.isArray(input.routeOverrides)) {
+      throw providerProfileError();
+    }
+    if (input.probePreference !== null && !PROVIDER_WIRE_PROTOCOLS_V3.has(input.probePreference)) {
+      throw providerProfileError();
+    }
+    const credential = normalizeCredentialV3(input.credential, credentialId);
+    const probeAuthOverride = normalizeProbeAuthOverrideV3(input.probeAuthOverride, credentialId);
+    const provider = {
+      id,
+      credentialId,
+      name: requireText(input.name),
+      baseUrl,
+      allowInsecureHttp: input.allowInsecureHttp,
+      requestProfileRevision: requireRevision(input.requestProfileRevision),
+      credential,
+      probeAuthOverride,
+      headers: input.headers.map((header) => normalizeExtraHeader(header, credentialId)),
+      probePreference: input.probePreference
+    };
+    const modelList = normalizeModelListV3(input.modelList, provider);
+    const modelCapabilities = input.modelCapabilities.map((entry) => normalizeModelCapabilityV3(entry, provider));
+    const modelIds = /* @__PURE__ */ new Set();
+    for (const entry of modelCapabilities) {
+      if (modelIds.has(entry.modelId)) throw providerProfileError();
+      modelIds.add(entry.modelId);
+    }
+    modelCapabilities.sort((left, right) => left.modelId < right.modelId ? -1 : left.modelId > right.modelId ? 1 : 0);
+    const routeOverrides = input.routeOverrides.map(normalizeRouteOverrideV3);
+    const overrideKeys = /* @__PURE__ */ new Set();
+    for (const entry of routeOverrides) {
+      const key = `${entry.client}\0${entry.modelId}`;
+      if (overrideKeys.has(key)) throw providerProfileError();
+      overrideKeys.add(key);
+    }
+    routeOverrides.sort((left, right) => left.client < right.client ? -1 : left.client > right.client ? 1 : left.modelId < right.modelId ? -1 : left.modelId > right.modelId ? 1 : 0);
+    return {
+      ...provider,
+      modelList,
+      modelCapabilities,
+      routeOverrides
+    };
   }
   function normalizeProviderId(value) {
     const raw = String(value || "").trim() || DEFAULT_CODEX_PROVIDER_ID;
@@ -13763,22 +14132,33 @@
   function codexRuntimeProviderProfile({
     effectiveChannel,
     customProvider,
-    customProviderCredentialResolverReady = false
+    customProviderCredentialResolverReady = false,
+    modelId
   } = {}) {
-    if (effectiveChannel !== "custom" || customProviderCredentialResolverReady !== true || !customProvider || customProvider.protocol !== "openai-compatible") {
+    if (effectiveChannel !== "custom" || customProviderCredentialResolverReady !== true || !customProvider) {
       return null;
     }
-    const normalized = normalizeProviderEntryV2(customProvider);
-    const dialect = effectiveProviderDialect(normalized);
-    return dialect ? { provider: normalized, dialect } : null;
+    const selectedModelId = String(modelId || "").trim();
+    if (!selectedModelId) return null;
+    let normalized;
+    try {
+      normalized = normalizeProviderEntryV3(customProvider);
+    } catch {
+      return null;
+    }
+    return { provider: normalized, modelId: selectedModelId };
   }
   function normalizeCodexRuntimeConfig(runtimeConfig) {
     if (!runtimeConfig || !runtimeConfig.baseUrl) return null;
+    if (runtimeConfig.chatCompatibility !== void 0 && typeof runtimeConfig.chatCompatibility !== "boolean") {
+      throw providerProfileError();
+    }
     if (!Array.isArray(runtimeConfig.envHeaders) || runtimeConfig.envHeaders.length > 64) {
       throw providerProfileError();
     }
     const names = /* @__PURE__ */ new Set();
     const envNames = /* @__PURE__ */ new Set();
+    const apiKey = runtimeConfig.apiKey === void 0 ? void 0 : requireText(runtimeConfig.apiKey);
     const envHeaders = runtimeConfig.envHeaders.map((entry) => {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw providerProfileError();
       const name = normalizeHeaderName(entry.name);
@@ -13797,7 +14177,9 @@
     return {
       providerId: normalizeProviderId(runtimeConfig.providerId),
       baseUrl: normalizeBaseUrl(requireText(runtimeConfig.baseUrl)),
-      envHeaders
+      apiKey,
+      envHeaders,
+      chatCompatibility: runtimeConfig.chatCompatibility === true
     };
   }
   function codexAppServerArgs(runtimeConfig = null) {
@@ -13813,22 +14195,44 @@
       "-c",
       `model_providers.${provider}.base_url=${tomlString(runtime.baseUrl)}`
     ];
-    for (const header of runtime.envHeaders) {
-      args.push("-c", `model_providers.${provider}.env_http_headers.${tomlString(header.name)}=${tomlString(header.envName)}`);
+    if (runtime.apiKey !== void 0) {
+      args.push("-c", `model_providers.${provider}.env_key=${tomlString(CODEX_PROVIDER_API_KEY_ENV)}`);
+    }
+    if (runtime.envHeaders.length > 0) {
+      const table = runtime.envHeaders.map((header) => `${tomlString(header.name)} = ${tomlString(header.envName)}`).join(", ");
+      args.push("-c", `model_providers.${provider}.env_http_headers={ ${table} }`);
     }
     args.push(
       "-c",
       `model_providers.${provider}.wire_api="responses"`,
       "-c",
-      `model_providers.${provider}.requires_openai_auth=false`
+      `model_providers.${provider}.requires_openai_auth=false`,
+      "-c",
+      "features.multi_agent=false",
+      "-c",
+      "features.multi_agent_v2=false",
+      "-c",
+      "features.multi_agent_v2.non_code_mode_only=false"
     );
+    if (runtime.chatCompatibility) {
+      args.push(
+        "-c",
+        'web_search="disabled"',
+        "-c",
+        "features.apps=false",
+        "-c",
+        "features.plugins=false",
+        "-c",
+        "features.remote_plugin=false"
+      );
+    }
     return args;
   }
   function codexSpawnEnv(runtimeConfig = null, baseEnv = {}) {
     const runtime = normalizeCodexRuntimeConfig(runtimeConfig);
     const env = { ...baseEnv || {} };
     if (!runtime) return env;
-    delete env.AE_MCP_CODEX_API_KEY;
+    delete env[CODEX_PROVIDER_API_KEY_ENV];
     for (const key of Object.keys(env)) {
       if (/^AE_MCP_PROVIDER_HEADER_[0-9]{2}$/.test(key)) delete env[key];
     }
@@ -13836,6 +14240,7 @@
       if (header.value === void 0) throw providerProfileError();
       env[header.envName] = header.value;
     }
+    if (runtime.apiKey !== void 0) env[CODEX_PROVIDER_API_KEY_ENV] = runtime.apiKey;
     return env;
   }
   function anthropicEndpoint(baseUrl, apiPath) {
@@ -15838,6 +16243,15 @@
       defaultModelId: id
     };
   }
+  var CODEX_OFFICIAL_LOGIN_56_MODELS = [
+    { id: "gpt-5.6-sol", label: "GPT-5.6-Sol", effortLevels: ["low", "medium", "high", "xhigh", "max", "ultra"], cost: 2, adaptive: false },
+    { id: "gpt-5.6-terra", label: "GPT-5.6-Terra", effortLevels: ["low", "medium", "high", "xhigh", "max", "ultra"], cost: 2, adaptive: false },
+    { id: "gpt-5.6-luna", label: "GPT-5.6-Luna", effortLevels: ["low", "medium", "high", "xhigh", "max"], cost: 2, adaptive: false }
+  ];
+  var CODEX_OFFICIAL_LOGIN_56_MODEL_IDS = new Set(CODEX_OFFICIAL_LOGIN_56_MODELS.map((model) => model.id));
+  function codexOfficialLogin56Models() {
+    return CODEX_OFFICIAL_LOGIN_56_MODELS.map((model) => ({ ...model, effortLevels: [...model.effortLevels] }));
+  }
   function codexStaticDescriptor() {
     const models = [
       { id: "gpt-5.5", label: "GPT-5.5", effortLevels: ["low", "medium", "high", "xhigh"], cost: 2, adaptive: false },
@@ -15853,6 +16267,17 @@
       supportsFast: (modelId) => modelId === "gpt-5.5",
       approvalModes: APPROVAL_MODES,
       perTurnModelSwitch: true
+    };
+  }
+  function mergeCodexOfficialLoginModels(descriptor) {
+    const models = Array.isArray(descriptor && descriptor.models) ? descriptor.models : [];
+    const present = new Set(models.map((model) => model && model.id).filter(Boolean));
+    const missing = codexOfficialLogin56Models().filter((model) => !present.has(model.id));
+    const supportsFast = descriptor && typeof descriptor.supportsFast === "function" ? descriptor.supportsFast : () => false;
+    return {
+      ...descriptor,
+      models: missing.length ? [...models, ...missing] : models,
+      supportsFast: (modelId) => CODEX_OFFICIAL_LOGIN_56_MODEL_IDS.has(String(modelId || "")) || supportsFast(modelId)
     };
   }
   function modelListArray(modelListResult) {
@@ -16032,25 +16457,24 @@
 
   // src/lib/channels.js
   function providerHasCredentialPolicy(provider) {
-    var _a, _b;
-    const policy = (_a = provider == null ? void 0 : provider.auth) == null ? void 0 : _a.model;
-    return Boolean(policy && (policy.kind === "none" || ((_b = policy.valueRef) == null ? void 0 : _b.kind) === "secret"));
-  }
-  function agentSdkCompatible(provider) {
-    var _a;
-    if (!provider) return false;
-    let url;
-    try {
-      url = new URL(provider.baseUrl);
-    } catch {
-      return false;
+    var _a, _b, _c;
+    const credential = provider == null ? void 0 : provider.credential;
+    if (credential == null ? void 0 : credential.preferredAuth) {
+      const scheme = credential.preferredAuth.scheme;
+      if (scheme === "auto" || scheme === "none") return true;
+      return Boolean(((_a = credential.valueRef) == null ? void 0 : _a.kind) === "secret");
     }
-    const official = url.protocol === "https:" && url.hostname.toLowerCase() === "api.anthropic.com";
-    const auth = (_a = provider.auth) == null ? void 0 : _a.model;
-    const simpleAuth = (auth == null ? void 0 : auth.kind) === "x-api-key" || (auth == null ? void 0 : auth.kind) === "bearer";
-    return official && simpleAuth && (!provider.headers || provider.headers.length === 0);
+    const policy = (_b = provider == null ? void 0 : provider.auth) == null ? void 0 : _b.model;
+    return Boolean(policy && (policy.kind === "none" || ((_c = policy.valueRef) == null ? void 0 : _c.kind) === "secret"));
   }
-  function claudeChannels({ probe, apiProvider, providerAvailable, providerChecking = false } = {}) {
+  function claudeChannels({
+    probe,
+    apiProvider,
+    apiProviderSelected,
+    providerAvailable,
+    providerCredentialResolverReady,
+    providerChecking = false
+  } = {}) {
     const sub = {
       channel: "subscription",
       source: { zh: "\u8BA2\u9605\u767B\u5F55", en: "Subscription login" },
@@ -16059,25 +16483,30 @@
       detail: probe && probe.detail || "",
       fixHint: probe && probe.nodeOk === false ? { zh: "\u5185\u5D4C\u5BF9\u8BDD\u9700\u8981\u7CFB\u7EDF Node 18+\uFF1A\u5B89\u88C5 Node.js LTS \u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u6216\u4F7F\u7528\u4E0B\u65B9\u300CAPI \u76F4\u8FDE\u300D\u901A\u9053\uFF08\u65E0 Node \u65F6\u81EA\u52A8\u964D\u7EA7\u4E3A\u76F4\u8FDE HTTP\uFF09\u3002", en: "Embedded chat needs system Node 18+: install Node.js LTS and re-check, or use the API direct channel below (falls back to direct HTTP without Node)." } : { zh: "\u8BA2\u9605\u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login \u5B8C\u6210\u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u6216\u6539\u7528\u4E0B\u65B9\u300CAPI \u76F4\u8FDE\u300D\u901A\u9053\u3002", en: "Not logged in: run claude /login in a terminal and re-check, or switch to the API direct channel below." }
     };
+    const selected = apiProviderSelected === void 0 ? Boolean(apiProvider) : Boolean(apiProviderSelected);
+    const resolverReady = providerCredentialResolverReady === void 0 ? providerAvailable === void 0 ? providerHasCredentialPolicy(apiProvider) : providerAvailable : providerCredentialResolverReady;
+    const canPreflight = Boolean(
+      !providerChecking && selected && (apiProvider == null ? void 0 : apiProvider.baseUrl) && resolverReady
+    );
     const api = {
       channel: "api",
-      source: { zh: "\u9762\u677F\u914D\u7F6E \xB7 API \u76F4\u8FDE", en: "Panel config \xB7 API direct" },
+      source: { zh: "\u9762\u677F\u914D\u7F6E \xB7 \u901A\u7528 Provider", en: "Panel config \xB7 Universal Provider" },
+      selected,
+      canPreflight,
       checking: Boolean(providerChecking),
-      ok: Boolean(
-        !providerChecking && (apiProvider == null ? void 0 : apiProvider.baseUrl) && (providerAvailable === void 0 ? providerHasCredentialPolicy(apiProvider) : providerAvailable)
-      ),
+      ok: canPreflight,
       detail: apiProvider && apiProvider.baseUrl ? apiProvider.baseUrl : "",
-      fixHint: apiProvider && providerAvailable === false && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1A\u4FEE\u590D\u5E73\u53F0 Helper \u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Repair the platform Helper and re-check; plaintext provider fallback is disabled." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E/\u9009\u62E9\u4E00\u4E2A Anthropic \u534F\u8BAE provider\uFF08Base URL + Key/Token\uFF09\uFF0C\u6216\u4E00\u952E\u5BFC\u5165 ~/.claude/settings.json\u3002Claude-3p \u684C\u9762\u7248\u51ED\u636E\u65E0\u6CD5\u81EA\u52A8\u8BFB\u53D6\uFF0C\u8BF7\u624B\u52A8\u586B\u4E00\u6B21\u3002", en: "Add or pick an Anthropic-protocol provider (base URL + key/token) in Provider Manager, or import from ~/.claude/settings.json. Claude-3p desktop credentials cannot be read automatically; paste them once." }
+      fixHint: apiProvider && resolverReady !== true && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1A\u4FEE\u590D\u5E73\u53F0 Helper \u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Repair the platform Helper and re-check; plaintext provider fallback is disabled." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E\u6216\u9009\u62E9\u4E00\u4E2A\u901A\u7528 Provider\uFF08Base URL + API Key\uFF09\u3002\u7CFB\u7EDF\u4F1A\u6309\u6A21\u578B\u81EA\u52A8\u9009\u62E9 Messages\u3001Responses \u6216 Chat \u8DEF\u7531\u3002", en: "Add or select a universal Provider (base URL + API key) in Provider Manager. Messages, Responses, or Chat routing is selected per model." }
     };
-    api.directHttp = Boolean(apiProvider && !agentSdkCompatible(apiProvider));
+    api.directHttp = false;
     return [sub, api];
   }
   function codexChannels({
     codexProbe,
     customProvider,
+    customProviderSelected,
     customProviderAvailable,
     customProviderCredentialResolverReady = false,
-    customProviderDialect = null,
     providerChecking = false,
     cliConfig,
     cliCredentialAvailable
@@ -16101,15 +16530,20 @@
       detail: hasProvider ? [cliConfig.providerId, cliConfig.model, cliConfig.provider.baseUrl].filter(Boolean).join(" \xB7 ") : "",
       fixHint: !hasProvider ? { zh: "\u672A\u627E\u5230 ~/.codex/config.toml \u7684\u53EF\u7528 provider\uFF1A\u5148\u5728 Codex CLI \u91CC\u914D\u7F6E model_provider\u3002", en: "No usable provider in ~/.codex/config.toml: configure model_provider in the Codex CLI first." } : !hasKey ? { zh: "\u68C0\u6D4B\u5230 Codex CLI provider\u300C" + cliConfig.providerId + "\u300D\uFF0C\u4F46\u6CA1\u6709\u53EF\u7528\u51ED\u636E\u3002\u8BF7\u8BBE\u7F6E\u5176\u73AF\u5883\u53D8\u91CF\u6216\u5728 Provider \u7BA1\u7406\u4E2D\u914D\u7F6E\u3002", en: 'Found Codex CLI provider "' + cliConfig.providerId + '", but no credential is available. Set its environment variable or configure it in Provider Manager.' } : { zh: "Codex \u8FD0\u884C\u65F6\u4E0D\u53EF\u7528\uFF1A\u8BF7\u68C0\u67E5 Codex CLI \u5B89\u88C5\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "Codex runtime unavailable: check the Codex CLI install and re-check." }
     };
+    const customCanPreflight = Boolean(
+      !providerChecking && (customProviderSelected === void 0 ? customProvider : customProviderSelected) && (customProvider == null ? void 0 : customProvider.baseUrl) && (customProviderAvailable === void 0 ? providerHasCredentialPolicy(customProvider) : customProviderAvailable) && customProviderCredentialResolverReady === true && (!codexProbe || codexProbe.runtimeOk !== false)
+    );
     const custom = {
       channel: "custom",
       source: { zh: "\u81EA\u5B9A\u4E49 provider", en: "Custom provider" },
+      selected: customProviderSelected === void 0 ? Boolean(customProvider) : Boolean(customProviderSelected),
+      canPreflight: customCanPreflight,
       checking: Boolean(providerChecking),
       ok: Boolean(
-        !providerChecking && (customProvider == null ? void 0 : customProvider.baseUrl) && (customProviderAvailable === void 0 ? providerHasCredentialPolicy(customProvider) : customProviderAvailable) && customProviderCredentialResolverReady === true && (customProviderDialect === "responses" || customProviderDialect === "chat") && (!codexProbe || codexProbe.runtimeOk !== false)
+        customCanPreflight
       ),
       detail: customProvider && customProvider.baseUrl ? customProvider.baseUrl : "",
-      fixHint: customProvider && customProviderAvailable === false && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1A\u4FEE\u590D\u5E73\u53F0 Helper \u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Repair the platform Helper and re-check; plaintext provider fallback is disabled." } : customProvider && customProviderCredentialResolverReady !== true ? { zh: "\u6B64\u7248\u672C\u5C1A\u672A\u63A5\u901A Codex \u81EA\u5B9A\u4E49 provider \u7684\u51ED\u636E\u8DEF\u7531\uFF1B\u8BF7\u5148\u4F7F\u7528 Codex CLI \u767B\u5F55\u6216 CLI provider \u914D\u7F6E\u3002", en: "Custom provider credential routing is not connected yet; use Codex CLI login or a CLI provider configuration." } : customProvider && customProviderDialect !== "responses" && customProviderDialect !== "chat" ? { zh: "Provider API \u65B9\u8A00\u5C1A\u672A\u786E\u8BA4\u6216\u5DF2\u8FC7\u671F\uFF1A\u8BF7\u5148\u5728 Provider \u7BA1\u7406\u4E2D\u91CD\u65B0\u63A2\u6D4B\u3002", en: "The provider API dialect is unconfirmed or stale. Re-detect it in Provider Manager first." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E/\u9009\u62E9\u4E00\u4E2A OpenAI \u517C\u5BB9 provider\uFF08Base URL + Key\uFF09\u3002", en: "Add or pick an OpenAI-compatible provider (base URL + key) in Provider Manager." }
+      fixHint: customProvider && customProviderAvailable === false && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1A\u4FEE\u590D\u5E73\u53F0 Helper \u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Repair the platform Helper and re-check; plaintext provider fallback is disabled." } : customProvider && customProviderCredentialResolverReady !== true ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u5C1A\u672A\u5C31\u7EEA\uFF1B\u8BF7\u4FEE\u590D\u5E73\u53F0 Helper \u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "The system credential store is not ready. Repair the platform Helper and re-check." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E\u6216\u9009\u62E9\u4E00\u4E2A\u901A\u7528 Provider\uFF08Base URL + API Key\uFF09\u3002\u534F\u8BAE\u8DEF\u7531\u4F1A\u5728\u53D1\u9001\u524D\u6309\u5F53\u524D\u6A21\u578B\u9884\u68C0\u3002", en: "Add or select a universal Provider (base URL + API key) in Provider Manager. Its protocol route is preflighted for the current model before sending." }
     };
     return custom.ok ? [cli, custom, cliConfigChannel] : [cli, cliConfigChannel, custom];
   }
@@ -16151,6 +16585,10 @@
     }
     return list.find((c) => c && c.ok) || null;
   }
+  function codexProviderChannelLock(lockedChannel = "", providerId = "") {
+    if (String(providerId || "").trim()) return "custom";
+    return lockedChannel === "custom" ? "" : lockedChannel;
+  }
   function migrateBackendPref(storage) {
     let pref = "subscription";
     let lockedChannel = "";
@@ -16177,10 +16615,14 @@
   function pickBackend({ pref, channels = {}, lockedChannel = "", nodeOk = true }) {
     const group = pref === "codex" || pref === "zcode" ? pref : "claude";
     const list = channels[group] || [];
-    if (list.some((c) => c && c.checking)) {
+    const selectedCustom = group === "codex" ? list.find((channel) => (channel == null ? void 0 : channel.channel) === "custom" && channel.selected === true) : null;
+    if (!selectedCustom && list.some((c) => c && c.checking) || (selectedCustom == null ? void 0 : selectedCustom.checking)) {
       return { backend: "none", reason: group + "-probing", channel: null, fixHint: null };
     }
-    const chosen = pickChannel(list, lockedChannel);
+    const chosen = selectedCustom || pickChannel(list, lockedChannel);
+    if (group === "codex" && (chosen == null ? void 0 : chosen.channel) === "custom" && chosen.canPreflight === true && !chosen.ok) {
+      return { backend: "codex", reason: "provider-preflight", channel: "custom", fixHint: null };
+    }
     if (!chosen || !chosen.ok) {
       const hintSource = chosen || list.find((c) => c && !c.ok) || list[0] || null;
       return {
@@ -16216,6 +16658,26 @@
     if (!prevReal) return { reset: false, nextReal: next };
     if (prevReal === next) return { reset: false, nextReal: prevReal };
     return { reset: true, nextReal: next };
+  }
+
+  // src/lib/backendLifecycle.js
+  function installBeforeUnloadReset(target, backend) {
+    if (!backend || typeof backend.reset !== "function") {
+      throw new TypeError("A backend with reset() is required");
+    }
+    let active = true;
+    const dispose = () => {
+      if (!active) return;
+      active = false;
+      if (target && typeof target.removeEventListener === "function") {
+        target.removeEventListener("beforeunload", dispose);
+      }
+      backend.reset();
+    };
+    if (target && typeof target.addEventListener === "function") {
+      target.addEventListener("beforeunload", dispose);
+    }
+    return dispose;
   }
 
   // src/cep/mcpClient.js
@@ -16649,419 +17111,2736 @@
   }
 
   // src/lib/claudeChannel.js
+  var UPSTREAM_ENV_KEYS = [
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_AUTH_TOKEN"
+  ];
   function deleteEnvironmentKey(environment, name) {
     const normalized = name.toUpperCase();
     for (const key of Object.keys(environment)) {
       if (key.toUpperCase() === normalized) delete environment[key];
     }
   }
-  function unsupportedProvider() {
-    const error = new Error("Claude Agent provider is unsupported");
-    error.code = "CLAUDE_AGENT_PROVIDER_UNSUPPORTED";
+  function routeError(code, message) {
+    const error = new Error(message);
+    error.code = code;
     return error;
   }
-  function claudeChannelEnv(baseEnv = {}, { channel = "subscription", requestProfile = null } = {}) {
-    var _a;
-    const env = { ...baseEnv };
-    deleteEnvironmentKey(env, "ANTHROPIC_API_KEY");
-    deleteEnvironmentKey(env, "ANTHROPIC_BASE_URL");
-    deleteEnvironmentKey(env, "ANTHROPIC_AUTH_TOKEN");
-    if (channel === "api" && requestProfile && requestProfile.baseUrl) {
-      if (Array.isArray(requestProfile.extraHeaders) && requestProfile.extraHeaders.length) throw unsupportedProvider();
-      if (((_a = requestProfile.auth) == null ? void 0 : _a.kind) !== "header") throw unsupportedProvider();
-      const name = String(requestProfile.auth.name || "").toLowerCase();
-      if (name !== "x-api-key" && name !== "authorization") throw unsupportedProvider();
-      let token = String(requestProfile.auth.value || "");
-      if (name === "authorization") {
-        if (!/^Bearer\s+\S+/i.test(token)) throw unsupportedProvider();
-        token = token.replace(/^Bearer\s+/i, "");
-      }
-      if (!token) throw unsupportedProvider();
-      env.ANTHROPIC_BASE_URL = String(requestProfile.baseUrl);
-      env.ANTHROPIC_AUTH_TOKEN = token;
-      return env;
+  function isLoopbackHostname(hostname) {
+    const host = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "");
+    if (host === "localhost" || host.endsWith(".localhost") || host === "::1") return true;
+    const mapped = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    return /^127(?:\.\d{1,3}){3}$/.test(mapped ? mapped[1] : host);
+  }
+  function normalizeLocalRoute(localRoute) {
+    if (!localRoute || typeof localRoute !== "object" || Array.isArray(localRoute)) {
+      throw routeError("CLAUDE_AGENT_LOCAL_ROUTE_REQUIRED", "Claude Agent API channel requires a local route profile.");
     }
+    const keys = Object.keys(localRoute).sort();
+    if (keys.length !== 2 || keys[0] !== "origin" || keys[1] !== "routeToken") {
+      throw routeError("CLAUDE_AGENT_LOCAL_ROUTE_INVALID", "Claude Agent local route profile is invalid.");
+    }
+    if (typeof localRoute.origin !== "string" || typeof localRoute.routeToken !== "string") {
+      throw routeError("CLAUDE_AGENT_LOCAL_ROUTE_INVALID", "Claude Agent local route profile is invalid.");
+    }
+    const origin = localRoute.origin.trim();
+    const routeToken = localRoute.routeToken.trim();
+    let url;
+    try {
+      url = new URL(origin);
+    } catch {
+      throw routeError("CLAUDE_AGENT_LOCAL_ROUTE_INVALID", "Claude Agent local route profile is invalid.");
+    }
+    if (url.protocol !== "http:" || !isLoopbackHostname(url.hostname) || url.username || url.password || url.search || url.hash || url.pathname !== "" && url.pathname !== "/" || !routeToken || routeToken !== localRoute.routeToken) {
+      throw routeError("CLAUDE_AGENT_LOCAL_ROUTE_INVALID", "Claude Agent local route profile is invalid.");
+    }
+    return { origin: url.origin, routeToken };
+  }
+  function claudeChannelEnv(baseEnv = {}, {
+    channel = "subscription",
+    localRoute = null,
+    requestProfile = null
+  } = {}) {
+    const env = { ...baseEnv };
+    for (const key of UPSTREAM_ENV_KEYS) deleteEnvironmentKey(env, key);
+    if (channel !== "api") return env;
+    if (requestProfile !== null && requestProfile !== void 0) {
+      throw routeError(
+        "CLAUDE_AGENT_UPSTREAM_PROFILE_FORBIDDEN",
+        "Claude Agent API channel cannot receive an upstream provider request profile."
+      );
+    }
+    const route = normalizeLocalRoute(localRoute);
+    env.ANTHROPIC_BASE_URL = route.origin;
+    env.ANTHROPIC_AUTH_TOKEN = route.routeToken;
     return env;
   }
 
-  // src/cep/claudeAgentBackend.js
-  var READY_TIMEOUT_MS = 15e3;
-  var STDERR_TAIL_LIMIT2 = 4096;
-  async function resolveSystemNode({ platform } = {}) {
-    const adapter = platform || createPlatformAdapter();
-    const requiredArch = adapter.id === "macos-arm64" ? "arm64" : adapter.id === "windows-x64" ? "x64" : void 0;
-    const resolved = await adapter.resolveExecutable("node", { minimumVersion: "18.0.0", ...requiredArch ? { requiredArch } : {} });
-    if (!resolved.ok) return { ok: false, detail: "Node runtime resolution failed: " + resolved.code, resolution: resolved };
-    return { ok: true, nodePath: resolved.path, version: resolved.version || "", executable: resolved };
-  }
-  function clone3(value) {
-    return value == null ? value : JSON.parse(JSON.stringify(value));
-  }
-  function nodeMissingMessage(lang) {
-    if (lang === "zh") return "\u5185\u5D4C\u5BF9\u8BDD\u8FD0\u884C\u65F6\u7F3A\u5931\u6216\u635F\u574F\uFF0C\u8BF7\u5728\u8BBE\u7F6E\u4E2D\u4FEE\u590D\u79BB\u7EBF\u8FD0\u884C\u65F6\u3002";
-    return "The embedded chat runtime is missing or damaged. Repair the offline runtime in Settings.";
-  }
-  function appendTail3(tail, chunk) {
-    const next = tail + String(chunk || "");
-    return next.length > STDERR_TAIL_LIMIT2 ? next.slice(next.length - STDERR_TAIL_LIMIT2) : next;
-  }
-  function createClaudeAgentBackend({
-    platform,
-    resolveNode = resolveSystemNode,
-    sidecarPath,
-    getMcpSpec,
-    getToolMeta,
-    getModel,
-    getPermissionMode,
-    getEffort,
-    getThinking,
-    getChannel = () => "subscription",
-    resolveApiProvider,
-    onEvent,
-    lang = "zh",
-    spawnImpl,
-    env
-  }) {
-    const adapter = platform || (spawnImpl ? {
-      completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
-      spawn: (executable, args, options) => spawnImpl(executable.path, [...executable.argsPrefix || [], ...args], options)
-    } : createPlatformAdapter());
-    let proc = null;
-    let startPromise = null;
-    let pendingReadyReject = null;
-    let pendingReadyTimer = null;
-    let ready = false;
-    let stopping = false;
-    let stderrTail = "";
-    let transcript = [];
-    let activeRun = null;
-    let activeResolve = null;
-    let activeAssistantText = "";
-    let processChannel = "subscription";
-    function emit(evt) {
-      if (onEvent) onEvent(evt);
-    }
-    function writeMessage(message) {
-      if (!proc || !proc.stdin || !proc.stdin.write) return;
-      proc.stdin.write(JSON.stringify(message) + "\n");
-    }
-    function finishActive() {
-      if (!activeResolve) {
-        activeRun = null;
-        activeAssistantText = "";
-        return;
-      }
-      const resolve = activeResolve;
-      activeResolve = null;
-      activeRun = null;
-      activeAssistantText = "";
-      resolve();
-    }
-    function handleSidecarMessage(message) {
-      if (!message || message.t === "ready") return;
-      if (message.t !== "event") return;
-      let event = message.event;
-      if (!event) return;
-      if (processChannel === "api" && event.type === "error") {
-        event = { ...event, message: "Provider sidecar request failed." };
-      }
-      if (event.type === "text-delta") activeAssistantText += String(event.text || "");
-      emit(event);
-      if (event.type === "turn-end") {
-        transcript.push({ role: "assistant", text: activeAssistantText });
-        finishActive();
-      }
-      if (event.type === "error") finishActive();
-    }
-    function exitDetail(code, signal) {
-      const suffix = signal ? String(code) + " " + signal : String(code);
-      return stderrTail ? suffix + " " + stderrTail : suffix;
-    }
-    function clearReadyWait() {
-      if (pendingReadyTimer) clearTimeout(pendingReadyTimer);
-      pendingReadyTimer = null;
-      pendingReadyReject = null;
-    }
-    function handleExit(code, signal) {
-      const wasStopping = stopping;
-      const wasReady = ready;
-      const detail = exitDetail(code, signal);
-      const rejectReady = pendingReadyReject;
-      proc = null;
-      ready = false;
-      startPromise = null;
-      stopping = false;
-      if (wasStopping) return;
-      if (!wasReady && rejectReady) {
-        clearReadyWait();
-        rejectReady(new Error("sidecar exited: " + detail));
-        return;
-      }
-      if (activeRun) {
-        emit({ type: "error", kind: "mcp", message: "sidecar exited: " + detail });
-        finishActive();
-      }
-    }
-    function handleProcError(error) {
-      const rejectReady = pendingReadyReject;
-      proc = null;
-      ready = false;
-      startPromise = null;
-      if (rejectReady) {
-        clearReadyWait();
-        rejectReady(error instanceof Error ? error : new Error("sidecar error"));
-        return;
-      }
-      if (activeRun) {
-        emit({ type: "error", kind: "mcp", message: error && error.message ? error.message : "sidecar error" });
-        finishActive();
-      }
-    }
-    async function startSidecar() {
-      if (proc && ready) return true;
-      if (startPromise) return startPromise;
-      startPromise = (async () => {
-        const node = await resolveNode({ platform: adapter });
-        if (!node || !node.ok) {
-          emit({ type: "error", kind: "mcp", message: nodeMissingMessage(lang) });
-          return false;
-        }
-        const mcpSpec = await getMcpSpec();
-        const meta = await getToolMeta();
-        const channel = getChannel ? getChannel() : "subscription";
-        processChannel = channel;
-        let requestProfile = null;
-        if (channel === "api") {
-          if (typeof resolveApiProvider !== "function") throw new Error("Provider request profile is unavailable.");
-          requestProfile = await resolveApiProvider();
-        }
-        let spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), { channel, requestProfile });
-        stderrTail = "";
-        stopping = false;
-        ready = false;
-        let readyResolve;
-        let readyReject;
-        const readyPromise = new Promise((resolve, reject) => {
-          readyResolve = resolve;
-          readyReject = reject;
-        });
-        pendingReadyReject = readyReject;
-        pendingReadyTimer = setTimeout(() => {
-          pendingReadyTimer = null;
-          pendingReadyReject = null;
-          try {
-            stopping = true;
-            if (proc) proc.kill();
-          } catch (e) {
-          }
-          readyReject(new Error("sidecar ready timed out"));
-        }, READY_TIMEOUT_MS);
-        try {
-          const executable = node.executable || { ok: true, id: "node", path: node.nodePath, argsPrefix: [], source: "runtime", version: node.version || null, arch: null };
-          proc = adapter.spawn(executable, [
-            sidecarPath,
-            "--mcp",
-            JSON.stringify(mcpSpec),
-            "--allowed-tools",
-            JSON.stringify(meta.allowedTools),
-            "--annotations",
-            JSON.stringify(meta.annotations),
-            "--model",
-            getModel(),
-            "--lang",
-            lang,
-            "--channel",
-            channel
-          ], {
-            stdio: "pipe",
-            windowsHide: true,
-            env: spawnEnv
-          });
-        } catch (e) {
-          clearReadyWait();
-          throw e;
-        } finally {
-          requestProfile = null;
-          if (spawnEnv) delete spawnEnv.ANTHROPIC_AUTH_TOKEN;
-          spawnEnv = null;
-        }
-        const reader = createNdjsonReader((message) => {
-          if (message && message.t === "ready") {
-            ready = true;
-            clearReadyWait();
-            readyResolve(true);
-            return;
-          }
-          handleSidecarMessage(message);
-        });
-        if (proc.stdout && proc.stdout.on) proc.stdout.on("data", reader);
-        if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
-          stderrTail = appendTail3(stderrTail, processChannel === "api" ? "[provider-sidecar-stderr-redacted]\n" : chunk);
-        });
-        proc.on("exit", (code, signal) => handleExit(code, signal));
-        proc.on("error", (error) => {
-          handleProcError(error);
-        });
-        await readyPromise;
-        return true;
-      })();
-      try {
-        return await startPromise;
-      } catch (e) {
-        emit({ type: "error", kind: "mcp", message: e && e.message ? e.message : "Failed to start sidecar." });
-        return false;
-      } finally {
-        startPromise = null;
-      }
-    }
-    async function sendUser(text) {
-      if (activeRun) return activeRun;
-      activeAssistantText = "";
-      activeRun = new Promise((resolve) => {
-        activeResolve = resolve;
-      });
-      const ok = await startSidecar();
-      if (!ok) {
-        finishActive();
-        return activeRun;
-      }
-      const userText = String(text || "");
-      transcript.push({ role: "user", text: userText });
-      writeMessage({
-        t: "user",
-        text: userText,
-        permissionMode: getPermissionMode(),
-        model: getModel(),
-        effort: getEffort ? getEffort() : void 0,
-        thinking: getThinking ? getThinking() : void 0
-      });
-      return activeRun;
-    }
-    function approve(toolUseId, decision) {
-      writeMessage({ t: "approve", id: toolUseId, decision });
-    }
-    function stop() {
-      writeMessage({ t: "stop" });
-    }
-    function reset() {
-      stopping = true;
-      if (proc) {
-        try {
-          proc.kill();
-        } catch (e) {
-        }
-      }
-      proc = null;
-      ready = false;
-      startPromise = null;
-      transcript = [];
-      finishActive();
-      stderrTail = "";
-      processChannel = "subscription";
-      stopping = false;
-    }
+  // src/lib/providerRouteSelection.js
+  var CLIENT_PROTOCOLS = Object.freeze({
+    codex: "responses",
+    "claude-code": "messages"
+  });
+  var AUTO_PROTOCOLS = Object.freeze({
+    codex: Object.freeze(["responses", "chat", "messages"]),
+    "claude-code": Object.freeze(["messages", "responses", "chat"])
+  });
+  var FEATURES = /* @__PURE__ */ new Set(["generate", "compact", "countTokens"]);
+  var AGENT_FEATURE_KEYS = Object.freeze([
+    "compact",
+    "continuation",
+    "countTokens",
+    "namespaceTools",
+    "reasoningReplay",
+    "stream",
+    "terminal",
+    "tools"
+  ]);
+  var GENERATE_AGENT_FEATURES = Object.freeze(["stream", "terminal", "tools"]);
+  var FEATURE_CLIENTS = Object.freeze({
+    compact: "codex",
+    countTokens: "claude-code"
+  });
+  function unknownFeatures() {
     return {
-      sendUser,
-      approve,
-      stop,
-      reset,
-      getMessages: () => clone3(transcript),
-      getStderrTail: () => stderrTail
+      generate: "unknown",
+      compact: "unknown",
+      continuation: "unknown",
+      countTokens: "unknown",
+      namespaceTools: "unknown",
+      reasoningReplay: "unknown",
+      stream: "unknown",
+      terminal: "unknown",
+      tools: "unknown"
     };
   }
-
-  // src/cep/claudeAuth.js
-  function resolveSidecarPath({ extRoot, fsImpl, platform } = {}) {
-    const adapter = platform || createPlatformAdapter();
-    const root = normalizeCepSystemPath(extRoot || adapter.paths.configRoot, adapter);
-    const developmentMarker = adapter.paths.join([root, ".debug"]);
-    const developmentSidecar = adapter.paths.join([root, "sidecar", "agent-sidecar.mjs"]);
-    const runtimeSidecar = adapter.paths.join([
-      root,
-      "runtime",
-      adapter.id,
-      "node",
-      "sidecar",
-      "agent-sidecar.mjs"
-    ]);
-    const fs = fsImpl || adapter.fs;
-    if (!fs || typeof fs.existsSync !== "function") throw new Error("platform filesystem is unavailable");
-    if (fs.existsSync(developmentMarker) && fs.existsSync(developmentSidecar)) return developmentSidecar;
-    return runtimeSidecar;
+  function capabilityFeatures(capability) {
+    const features = unknownFeatures();
+    if (!capability) return features;
+    features.generate = capability.status;
+    for (const key of AGENT_FEATURE_KEYS) features[key] = capability.agentFeatures[key];
+    return features;
   }
-  async function probeClaudeLogin({
-    platform,
-    resolveNode,
-    sidecarPath,
-    spawnImpl,
-    env,
-    timeoutMs = 3e4
+  function routeResult({
+    ok = false,
+    upstreamProtocol = null,
+    clientProtocol = null,
+    conversion = null,
+    capability = null,
+    reasonCode
   } = {}) {
-    const adapter = platform || (spawnImpl ? {
-      completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
-      spawn: (executable, args, options) => spawnImpl(executable.path, [...executable.argsPrefix || [], ...args], options)
-    } : createPlatformAdapter());
-    const nodeResolver = resolveNode || resolveSystemNode;
-    const resolved = await nodeResolver({ platform: adapter });
-    if (!resolved || resolved.ok === false) {
-      return { loggedIn: false, nodeOk: false, detail: resolved && resolved.detail || "node unavailable" };
+    return {
+      ok,
+      upstreamProtocol,
+      clientProtocol,
+      conversion,
+      apiRoot: ok ? capability.apiRoot : null,
+      auth: ok && capability.auth ? { ...capability.auth } : null,
+      compatibility: ok && capability.compatibility ? { ...capability.compatibility } : null,
+      features: capabilityFeatures(capability),
+      reasonCode
+    };
+  }
+  function currentTime(now) {
+    if (now === void 0) return Date.now();
+    const value = typeof now === "function" ? now() : now;
+    if (!Number.isFinite(value) || value < 0) throw new TypeError("now must resolve to a timestamp");
+    return value;
+  }
+  function capabilityKnowledge(provider, model, protocol, now) {
+    const capability = (model == null ? void 0 : model[protocol]) || null;
+    if (!capability || capability.status === "unknown") {
+      return { state: "unknown", capability };
     }
-    return await new Promise((resolve) => {
-      let settled = false;
-      let stderr = "";
-      let proc = null;
-      const spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), { channel: "subscription" });
-      function finish(result) {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolve(result);
+    if (capability.requestProfileRevision !== provider.requestProfileRevision || capability.modelListRevision !== provider.modelList.revision || capability.checkedAt > now || capability.validUntil !== null && capability.validUntil < now) {
+      return { state: "stale", capability };
+    }
+    return { state: "current", capability };
+  }
+  function evaluateCandidate(provider, model, protocol, feature, now, requireAgentReady) {
+    const knowledge = capabilityKnowledge(provider, model, protocol, now);
+    if (knowledge.state !== "current") return { outcome: "needs-probe", ...knowledge };
+    const { capability } = knowledge;
+    if (capability.status === "unsupported") return { outcome: "unavailable", ...knowledge };
+    const required = feature === "generate" ? requireAgentReady ? GENERATE_AGENT_FEATURES : [] : [feature];
+    const statuses = required.map((name) => capability.agentFeatures[name]);
+    if (statuses.includes("unsupported")) return { outcome: "unavailable", ...knowledge };
+    if (statuses.includes("unknown")) return { outcome: "needs-probe", ...knowledge };
+    return { outcome: "selected", ...knowledge };
+  }
+  function conversionFor(clientProtocol, upstreamProtocol) {
+    return clientProtocol === upstreamProtocol ? "native" : `${clientProtocol}-to-${upstreamProtocol}`;
+  }
+  function successfulRoute(clientProtocol, upstreamProtocol, capability, reasonCode) {
+    return routeResult({
+      ok: true,
+      upstreamProtocol,
+      clientProtocol,
+      conversion: conversionFor(clientProtocol, upstreamProtocol),
+      capability,
+      reasonCode
+    });
+  }
+  function selectProviderRoute(provider, {
+    client,
+    modelId,
+    feature = "generate",
+    now,
+    requireAgentReady = true
+  } = {}) {
+    const clientProtocol = CLIENT_PROTOCOLS[client] || null;
+    const selectedModelId = typeof modelId === "string" ? modelId.trim() : "";
+    if (!clientProtocol || !selectedModelId || !FEATURES.has(feature) || typeof requireAgentReady !== "boolean") {
+      return routeResult({ clientProtocol, reasonCode: "invalid-request" });
+    }
+    let timestamp2;
+    try {
+      timestamp2 = currentTime(now);
+    } catch {
+      return routeResult({ clientProtocol, reasonCode: "invalid-request" });
+    }
+    let normalized;
+    try {
+      normalized = normalizeProviderEntryV3(provider);
+    } catch {
+      return routeResult({ clientProtocol, reasonCode: "invalid-provider" });
+    }
+    const model = normalized.modelCapabilities.find((entry) => entry.modelId === selectedModelId);
+    const override = normalized.routeOverrides.find((entry) => entry.client === client && entry.modelId === selectedModelId);
+    if (feature !== "generate" && FEATURE_CLIENTS[feature] !== client) {
+      return routeResult({ clientProtocol, reasonCode: "unavailable" });
+    }
+    if (override) {
+      if (feature !== "generate" && override.protocol !== clientProtocol) {
+        return routeResult({
+          upstreamProtocol: override.protocol,
+          clientProtocol,
+          capability: (model == null ? void 0 : model[override.protocol]) || null,
+          reasonCode: "unavailable"
+        });
       }
-      const timer = setTimeout(() => {
-        if (proc && proc.kill) {
-          try {
-            proc.kill();
-          } catch (e) {
+      const evaluated = evaluateCandidate(
+        normalized,
+        model,
+        override.protocol,
+        feature,
+        timestamp2,
+        requireAgentReady
+      );
+      if (evaluated.outcome === "selected") {
+        return successfulRoute(
+          clientProtocol,
+          override.protocol,
+          evaluated.capability,
+          "override-selected"
+        );
+      }
+      return routeResult({
+        upstreamProtocol: override.protocol,
+        clientProtocol,
+        capability: evaluated.capability,
+        reasonCode: evaluated.outcome
+      });
+    }
+    const protocols = feature === "generate" ? AUTO_PROTOCOLS[client] : [clientProtocol];
+    let pendingProbe = null;
+    for (const protocol of protocols) {
+      const evaluated = evaluateCandidate(
+        normalized,
+        model,
+        protocol,
+        feature,
+        timestamp2,
+        requireAgentReady
+      );
+      if (evaluated.outcome === "selected") {
+        return successfulRoute(clientProtocol, protocol, evaluated.capability, "selected");
+      }
+      if (evaluated.outcome === "needs-probe" && !pendingProbe) {
+        pendingProbe = { protocol, capability: evaluated.capability };
+      }
+    }
+    if (pendingProbe) {
+      return routeResult({
+        upstreamProtocol: pendingProbe.protocol,
+        clientProtocol,
+        capability: pendingProbe.capability,
+        reasonCode: "needs-probe"
+      });
+    }
+    return routeResult({ clientProtocol, reasonCode: "unavailable" });
+  }
+  function providerRouteLabel(route, lang = "zh") {
+    if (!(route == null ? void 0 : route.ok) || !["responses", "chat", "messages"].includes(route.upstreamProtocol)) {
+      return null;
+    }
+    const direct = route.conversion === "native";
+    const names = lang === "en" ? { responses: "Responses", chat: "Chat", messages: "Messages" } : { responses: "Responses", chat: "Chat", messages: "Messages" };
+    const suffix = lang === "en" ? direct ? "direct" : "conversion" : direct ? "\u76F4\u8FDE" : "\u8F6C\u6362";
+    return `${names[route.upstreamProtocol]} ${suffix}`;
+  }
+
+  // src/lib/providerMessagesCodec.js
+  var MESSAGE_BODY_FIELDS = /* @__PURE__ */ new Set([
+    "model",
+    "max_tokens",
+    "messages",
+    "system",
+    "stream",
+    "tools",
+    "tool_choice",
+    "temperature",
+    "top_p",
+    "top_k",
+    "stop_sequences",
+    "metadata",
+    "thinking",
+    "output_config",
+    "context_management"
+  ]);
+  var MESSAGE_FIELDS = /* @__PURE__ */ new Set(["role", "content"]);
+  var TEXT_BLOCK_FIELDS = /* @__PURE__ */ new Set(["type", "text", "cache_control", "citations"]);
+  var IMAGE_BLOCK_FIELDS = /* @__PURE__ */ new Set(["type", "source", "cache_control"]);
+  var IMAGE_SOURCE_BASE64_FIELDS = /* @__PURE__ */ new Set(["type", "media_type", "data"]);
+  var IMAGE_SOURCE_URL_FIELDS = /* @__PURE__ */ new Set(["type", "url"]);
+  var TOOL_USE_FIELDS = /* @__PURE__ */ new Set(["type", "id", "name", "input", "cache_control", "caller"]);
+  var TOOL_RESULT_FIELDS = /* @__PURE__ */ new Set(["type", "tool_use_id", "content", "is_error", "cache_control"]);
+  var THINKING_BLOCK_FIELDS = /* @__PURE__ */ new Set(["type", "thinking", "signature"]);
+  var REDACTED_THINKING_FIELDS = /* @__PURE__ */ new Set(["type", "data"]);
+  var CACHE_CONTROL_FIELDS = /* @__PURE__ */ new Set(["type", "ttl"]);
+  var TOOL_FIELDS = /* @__PURE__ */ new Set(["name", "description", "input_schema", "strict", "type", "cache_control"]);
+  var TOOL_CHOICE_AUTO_FIELDS = /* @__PURE__ */ new Set(["type", "disable_parallel_tool_use"]);
+  var TOOL_CHOICE_TOOL_FIELDS = /* @__PURE__ */ new Set(["type", "name", "disable_parallel_tool_use"]);
+  var CONTEXT_MANAGEMENT_FIELDS = /* @__PURE__ */ new Set(["edits"]);
+  var CLEAR_THINKING_FIELDS = /* @__PURE__ */ new Set(["type", "keep"]);
+  var METADATA_FIELDS = /* @__PURE__ */ new Set(["user_id"]);
+  var OUTPUT_CONFIG_FIELDS = /* @__PURE__ */ new Set(["effort"]);
+  var THINKING_ADAPTIVE_FIELDS = /* @__PURE__ */ new Set(["type", "display"]);
+  var THINKING_DISABLED_FIELDS = /* @__PURE__ */ new Set(["type"]);
+  var RESPONSES_BODY_FIELDS = /* @__PURE__ */ new Set([
+    "model",
+    "instructions",
+    "input",
+    "max_output_tokens",
+    "temperature",
+    "top_p",
+    "tools",
+    "tool_choice",
+    "parallel_tool_calls",
+    "stream",
+    "reasoning",
+    "include",
+    "store",
+    "prompt_cache_key",
+    "client_metadata"
+  ]);
+  var RESPONSES_MESSAGE_FIELDS = /* @__PURE__ */ new Set(["type", "id", "status", "role", "content"]);
+  var RESPONSES_TEXT_PART_FIELDS = /* @__PURE__ */ new Set(["type", "text"]);
+  var RESPONSES_IMAGE_PART_FIELDS = /* @__PURE__ */ new Set(["type", "image_url", "file_id", "detail"]);
+  var RESPONSES_FUNCTION_CALL_FIELDS = /* @__PURE__ */ new Set(["type", "id", "call_id", "name", "arguments", "status"]);
+  var RESPONSES_FUNCTION_OUTPUT_FIELDS = /* @__PURE__ */ new Set(["type", "id", "call_id", "output", "status"]);
+  var RESPONSES_REASONING_FIELDS = /* @__PURE__ */ new Set(["type", "id", "summary", "encrypted_content", "status"]);
+  var RESPONSES_TOOL_FIELDS = /* @__PURE__ */ new Set(["type", "name", "description", "parameters", "strict"]);
+  var RESPONSES_NAMESPACE_TOOL_FIELDS = /* @__PURE__ */ new Set(["type", "name", "description", "tools"]);
+  var RESPONSES_TOOL_CHOICE_FIELDS = /* @__PURE__ */ new Set(["type", "name"]);
+  var RESPONSES_REASONING_CONFIG_FIELDS = /* @__PURE__ */ new Set(["effort", "summary"]);
+  var CHAT_COMPLETION_FIELDS = /* @__PURE__ */ new Set([
+    "id",
+    "object",
+    "created",
+    "model",
+    "choices",
+    "usage",
+    "system_fingerprint",
+    "service_tier"
+  ]);
+  var CHAT_CHOICE_FIELDS = /* @__PURE__ */ new Set(["index", "message", "finish_reason", "logprobs"]);
+  var CHAT_MESSAGE_FIELDS = /* @__PURE__ */ new Set(["role", "content", "tool_calls", "refusal", "reasoning", "reasoning_content"]);
+  var CHAT_TOOL_CALL_FIELDS = /* @__PURE__ */ new Set(["id", "type", "function"]);
+  var CHAT_FUNCTION_FIELDS = /* @__PURE__ */ new Set(["name", "arguments"]);
+  var CHAT_USAGE_FIELDS = /* @__PURE__ */ new Set([
+    "prompt_tokens",
+    "completion_tokens",
+    "total_tokens",
+    "prompt_tokens_details",
+    "completion_tokens_details",
+    "input_tokens",
+    "output_tokens",
+    "input_tokens_details",
+    "claude_cache_creation_5_m_tokens",
+    "claude_cache_creation_1_h_tokens"
+  ]);
+  var CHAT_PROMPT_DETAILS_FIELDS = /* @__PURE__ */ new Set(["cached_tokens", "text_tokens", "audio_tokens", "image_tokens"]);
+  var CHAT_COMPLETION_DETAILS_FIELDS = /* @__PURE__ */ new Set([
+    "reasoning_tokens",
+    "text_tokens",
+    "audio_tokens",
+    "image_tokens",
+    "accepted_prediction_tokens",
+    "rejected_prediction_tokens"
+  ]);
+  var CHAT_INPUT_DETAILS_FIELDS = /* @__PURE__ */ new Set(["cached_tokens"]);
+  var RESPONSE_FIELDS = /* @__PURE__ */ new Set([
+    "id",
+    "object",
+    "status",
+    "model",
+    "output",
+    "usage",
+    "incomplete_details",
+    "error",
+    "created_at",
+    "completed_at",
+    "instructions",
+    "metadata",
+    "parallel_tool_calls",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_p",
+    "max_output_tokens",
+    "previous_response_id",
+    "reasoning",
+    "service_tier",
+    "store",
+    "text",
+    "truncation",
+    "user"
+  ]);
+  var RESPONSE_MESSAGE_FIELDS = /* @__PURE__ */ new Set(["id", "type", "status", "role", "content"]);
+  var RESPONSE_OUTPUT_TEXT_FIELDS = /* @__PURE__ */ new Set(["type", "text", "annotations", "logprobs"]);
+  var RESPONSE_REFUSAL_FIELDS = /* @__PURE__ */ new Set(["type", "refusal"]);
+  var RESPONSE_REASONING_ITEM_FIELDS = /* @__PURE__ */ new Set(["type", "id", "summary", "encrypted_content", "status"]);
+  var RESPONSE_SUMMARY_FIELDS = /* @__PURE__ */ new Set(["type", "text"]);
+  var RESPONSE_FUNCTION_CALL_FIELDS = /* @__PURE__ */ new Set(["type", "id", "call_id", "name", "arguments", "status"]);
+  var RESPONSE_USAGE_FIELDS = /* @__PURE__ */ new Set([
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "input_tokens_details",
+    "output_tokens_details"
+  ]);
+  var RESPONSE_INPUT_DETAILS_FIELDS = /* @__PURE__ */ new Set(["cached_tokens"]);
+  var RESPONSE_OUTPUT_DETAILS_FIELDS = /* @__PURE__ */ new Set(["reasoning_tokens"]);
+  var RESPONSE_INCOMPLETE_FIELDS = /* @__PURE__ */ new Set(["reason"]);
+  var ANTHROPIC_RESPONSE_FIELDS = /* @__PURE__ */ new Set([
+    "id",
+    "type",
+    "role",
+    "model",
+    "content",
+    "stop_reason",
+    "stop_sequence",
+    "usage",
+    "container",
+    "context_management",
+    "diagnostics",
+    "stop_details"
+  ]);
+  var ANTHROPIC_TEXT_RESPONSE_FIELDS = /* @__PURE__ */ new Set(["type", "text", "citations"]);
+  var ANTHROPIC_TOOL_RESPONSE_FIELDS = /* @__PURE__ */ new Set(["type", "id", "name", "input", "caller"]);
+  var ANTHROPIC_USAGE_FIELDS = /* @__PURE__ */ new Set([
+    "input_tokens",
+    "output_tokens",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+    "cache_creation",
+    "inference_geo",
+    "iterations",
+    "output_tokens_details",
+    "server_tool_use",
+    "service_tier",
+    "speed"
+  ]);
+  var ANTHROPIC_CACHE_CREATION_FIELDS = /* @__PURE__ */ new Set([
+    "ephemeral_1h_input_tokens",
+    "ephemeral_5m_input_tokens"
+  ]);
+  var ANTHROPIC_OUTPUT_DETAILS_FIELDS = /* @__PURE__ */ new Set(["thinking_tokens"]);
+  var FUNCTION_NAME = /^[A-Za-z0-9_-]{1,128}$/;
+  var IMAGE_MEDIA_TYPES = /* @__PURE__ */ new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+  var DEFAULT_MESSAGES_MAX_TOKENS = 32e3;
+  var ProviderMessagesCompatibilityError = class extends Error {
+    constructor({ status, code, param, message }) {
+      super(message);
+      this.name = "ProviderMessagesCompatibilityError";
+      this.status = status;
+      this.code = code;
+      this.param = param;
+    }
+  };
+  function compatibilityError(status, code, param, label) {
+    return new ProviderMessagesCompatibilityError({
+      status,
+      code,
+      param,
+      message: `${label}: ${param || "body"}`
+    });
+  }
+  function invalidMessages(param) {
+    return compatibilityError(400, "invalid_messages_field", param, "Invalid Messages field");
+  }
+  function unsupportedMessages(param) {
+    return compatibilityError(501, "unsupported_messages_field", param, "Unsupported Messages field");
+  }
+  function invalidResponses(param) {
+    return compatibilityError(400, "invalid_responses_field", param, "Invalid Responses field");
+  }
+  function unsupportedResponses(param) {
+    return compatibilityError(501, "unsupported_responses_field", param, "Unsupported Responses field");
+  }
+  function invalidUpstream(protocol, param) {
+    return compatibilityError(502, `invalid_${protocol}_response`, param, `Invalid ${protocol} response field`);
+  }
+  function unsupportedUpstream(protocol, param) {
+    return compatibilityError(
+      501,
+      `unsupported_${protocol}_response_field`,
+      param,
+      `Unsupported ${protocol} response field`
+    );
+  }
+  function isObject(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  }
+  function unknownKey(value, allowed) {
+    return Object.keys(value).find((key) => !allowed.has(key)) || null;
+  }
+  function exactRequest(value, allowed, path, invalid, unsupported) {
+    if (!isObject(value)) throw invalid(path);
+    const key = unknownKey(value, allowed);
+    if (key !== null) throw unsupported(path ? `${path}.${key}` : key);
+    return value;
+  }
+  function exactUpstream(value, allowed, protocol, path) {
+    if (!isObject(value)) throw invalidUpstream(protocol, path);
+    const key = unknownKey(value, allowed);
+    if (key !== null) throw invalidUpstream(protocol, path ? `${path}.${key}` : key);
+    return value;
+  }
+  function nonemptyString(value, path, invalid) {
+    if (typeof value !== "string" || value.length === 0) throw invalid(path);
+    return value;
+  }
+  function finiteNumber(value, path, invalid, predicate = () => true) {
+    if (typeof value !== "number" || !Number.isFinite(value) || !predicate(value)) throw invalid(path);
+    return value;
+  }
+  function cloneJson2(value, path, invalid, seen = /* @__PURE__ */ new WeakSet()) {
+    if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) throw invalid(path);
+      return value;
+    }
+    if (!value || typeof value !== "object" || seen.has(value)) throw invalid(path);
+    seen.add(value);
+    let result;
+    if (Array.isArray(value)) {
+      result = value.map((item, index) => cloneJson2(item, `${path}[${index}]`, invalid, seen));
+    } else if (isObject(value)) {
+      result = {};
+      for (const [key, item] of Object.entries(value)) {
+        result[key] = cloneJson2(item, path ? `${path}.${key}` : key, invalid, seen);
+      }
+    } else {
+      throw invalid(path);
+    }
+    seen.delete(value);
+    return result;
+  }
+  function collector() {
+    const paths = /* @__PURE__ */ new Set();
+    return {
+      add(path) {
+        paths.add(path);
+      },
+      values() {
+        return Array.from(paths).sort();
+      }
+    };
+  }
+  function consumeCacheControl(value, path, consumed, invalid = invalidMessages, unsupported = unsupportedMessages) {
+    if (value === void 0) return;
+    if (value === null) {
+      consumed.add(path);
+      return;
+    }
+    const cache = exactRequest(value, CACHE_CONTROL_FIELDS, path, invalid, unsupported);
+    if (cache.type !== "ephemeral") throw invalid(`${path}.type`);
+    if (cache.ttl !== void 0 && cache.ttl !== "5m" && cache.ttl !== "1h") {
+      throw invalid(`${path}.ttl`);
+    }
+    consumed.add(path);
+  }
+  function validateFunctionName(value, path, invalid) {
+    const name = nonemptyString(value, path, invalid);
+    if (!FUNCTION_NAME.test(name)) throw invalid(path);
+    return name;
+  }
+  function parseContextManagement(value, consumed) {
+    if (value === void 0) return;
+    const context = exactRequest(
+      value,
+      CONTEXT_MANAGEMENT_FIELDS,
+      "context_management",
+      invalidMessages,
+      unsupportedMessages
+    );
+    if (!Array.isArray(context.edits) || context.edits.length !== 1) {
+      throw unsupportedMessages("context_management.edits");
+    }
+    const edit = exactRequest(
+      context.edits[0],
+      CLEAR_THINKING_FIELDS,
+      "context_management.edits[0]",
+      invalidMessages,
+      unsupportedMessages
+    );
+    if (typeof edit.type !== "string") throw invalidMessages("context_management.edits[0].type");
+    if (edit.type !== "clear_thinking_20251015") {
+      throw unsupportedMessages("context_management.edits[0].type");
+    }
+    if (edit.keep !== "all") throw unsupportedMessages("context_management.edits[0].keep");
+    consumed.add("context_management");
+  }
+  function parseMetadata(value, consumed) {
+    if (value === void 0) return;
+    const metadata = exactRequest(value, METADATA_FIELDS, "metadata", invalidMessages, unsupportedMessages);
+    if (metadata.user_id !== void 0 && metadata.user_id !== null && typeof metadata.user_id !== "string") {
+      throw invalidMessages("metadata.user_id");
+    }
+    consumed.add("metadata");
+  }
+  function toOpenAiEffort(value, path, invalid) {
+    if (!["low", "medium", "high", "xhigh", "max"].includes(value)) throw invalid(path);
+    return value === "max" ? "xhigh" : value;
+  }
+  function toMessagesEffort(value, path) {
+    if (!["none", "minimal", "low", "medium", "high", "xhigh"].includes(value)) {
+      throw invalidResponses(path);
+    }
+    if (value === "none") return null;
+    if (value === "minimal") return "low";
+    return value === "xhigh" ? "max" : value;
+  }
+  function parseMessagesReasoning(request) {
+    let enabled = null;
+    let effort = null;
+    if (request.thinking !== void 0) {
+      if (!isObject(request.thinking)) throw invalidMessages("thinking");
+      if (request.thinking.type === "adaptive") {
+        const thinking = exactRequest(
+          request.thinking,
+          THINKING_ADAPTIVE_FIELDS,
+          "thinking",
+          invalidMessages,
+          unsupportedMessages
+        );
+        if (thinking.display !== void 0 && thinking.display !== null && thinking.display !== "summarized") {
+          throw unsupportedMessages("thinking.display");
+        }
+        enabled = true;
+      } else if (request.thinking.type === "disabled") {
+        exactRequest(
+          request.thinking,
+          THINKING_DISABLED_FIELDS,
+          "thinking",
+          invalidMessages,
+          unsupportedMessages
+        );
+        enabled = false;
+      } else if (typeof request.thinking.type !== "string") {
+        throw invalidMessages("thinking.type");
+      } else {
+        throw unsupportedMessages("thinking.type");
+      }
+    }
+    if (request.output_config !== void 0) {
+      const config = exactRequest(
+        request.output_config,
+        OUTPUT_CONFIG_FIELDS,
+        "output_config",
+        invalidMessages,
+        unsupportedMessages
+      );
+      if (config.effort !== void 0 && config.effort !== null) {
+        effort = toOpenAiEffort(config.effort, "output_config.effort", invalidMessages);
+        if (enabled === false) throw unsupportedMessages("output_config.effort");
+        enabled = true;
+      }
+    }
+    if (enabled === null) return null;
+    return { enabled, effort: effort || (enabled ? "high" : "none") };
+  }
+  function parseAnthropicImage(block, path, consumed) {
+    const image = exactRequest(block, IMAGE_BLOCK_FIELDS, path, invalidMessages, unsupportedMessages);
+    if (image.type !== "image") throw invalidMessages(`${path}.type`);
+    consumeCacheControl(image.cache_control, `${path}.cache_control`, consumed);
+    if (!isObject(image.source)) throw invalidMessages(`${path}.source`);
+    if (image.source.type === "base64") {
+      const source = exactRequest(
+        image.source,
+        IMAGE_SOURCE_BASE64_FIELDS,
+        `${path}.source`,
+        invalidMessages,
+        unsupportedMessages
+      );
+      if (!IMAGE_MEDIA_TYPES.has(source.media_type)) throw invalidMessages(`${path}.source.media_type`);
+      const data = nonemptyString(source.data, `${path}.source.data`, invalidMessages);
+      return { kind: "image", url: `data:${source.media_type};base64,${data}` };
+    }
+    if (image.source.type === "url") {
+      const source = exactRequest(
+        image.source,
+        IMAGE_SOURCE_URL_FIELDS,
+        `${path}.source`,
+        invalidMessages,
+        unsupportedMessages
+      );
+      return { kind: "image", url: nonemptyString(source.url, `${path}.source.url`, invalidMessages) };
+    }
+    if (typeof image.source.type !== "string") throw invalidMessages(`${path}.source.type`);
+    throw unsupportedMessages(`${path}.source.type`);
+  }
+  function parseToolResultContent(value, path, consumed) {
+    if (value === void 0) return "";
+    if (typeof value === "string") return value;
+    if (!Array.isArray(value)) throw invalidMessages(path);
+    return value.map((raw, index) => {
+      const itemPath = `${path}[${index}]`;
+      if (!isObject(raw)) throw invalidMessages(itemPath);
+      if (raw.type !== "text") throw unsupportedMessages(`${itemPath}.type`);
+      const block = exactRequest(raw, TEXT_BLOCK_FIELDS, itemPath, invalidMessages, unsupportedMessages);
+      consumeCacheControl(block.cache_control, `${itemPath}.cache_control`, consumed);
+      if (block.citations !== void 0 && block.citations !== null && block.citations.length !== 0) {
+        throw unsupportedMessages(`${itemPath}.citations`);
+      }
+      if (block.citations !== void 0) consumed.add(`${itemPath}.citations`);
+      if (typeof block.text !== "string") throw invalidMessages(`${itemPath}.text`);
+      return block.text;
+    }).join("");
+  }
+  function openReasoningBlock(block, path, sourceProtocol, openReasoning) {
+    let token;
+    let visibleThinking = null;
+    if (block.type === "thinking") {
+      const thinking = exactRequest(
+        block,
+        THINKING_BLOCK_FIELDS,
+        path,
+        invalidMessages,
+        unsupportedMessages
+      );
+      visibleThinking = nonemptyString(thinking.thinking, `${path}.thinking`, invalidMessages);
+      token = nonemptyString(thinking.signature, `${path}.signature`, invalidMessages);
+    } else {
+      const redacted = exactRequest(
+        block,
+        REDACTED_THINKING_FIELDS,
+        path,
+        invalidMessages,
+        unsupportedMessages
+      );
+      token = nonemptyString(redacted.data, `${path}.data`, invalidMessages);
+    }
+    if (typeof openReasoning !== "function") throw unsupportedMessages(`${path}.type`);
+    let opened;
+    try {
+      opened = openReasoning(token, { sourceProtocol });
+    } catch {
+      throw unsupportedMessages(`${path}.${block.type === "thinking" ? "signature" : "data"}`);
+    }
+    if (!isObject(opened) || opened.sourceProtocol !== sourceProtocol) {
+      throw unsupportedMessages(`${path}.type`);
+    }
+    if (sourceProtocol === "chat") {
+      if (typeof opened.item !== "string") throw unsupportedMessages(`${path}.type`);
+      if (visibleThinking !== null && visibleThinking !== opened.item) throw invalidMessages(`${path}.thinking`);
+      return { kind: "reasoning", value: opened.item };
+    }
+    if (!isObject(opened.item) || opened.item.type !== "reasoning") {
+      throw unsupportedMessages(`${path}.type`);
+    }
+    if (visibleThinking !== null) {
+      const summary = Array.isArray(opened.item.summary) ? opened.item.summary.filter((item) => isObject(item) && item.type === "summary_text" && typeof item.text === "string").map((item) => item.text).join("\n") : "";
+      if (summary !== visibleThinking) throw invalidMessages(`${path}.thinking`);
+    }
+    return { kind: "reasoning", value: cloneJson2(opened.item, path, invalidMessages) };
+  }
+  function parseMessageContent(content, path, role, sourceProtocol, openReasoning, consumed) {
+    if (typeof content === "string") return [{ kind: "text", text: content }];
+    if (!Array.isArray(content)) throw invalidMessages(path);
+    return content.map((rawBlock, index) => {
+      const blockPath = `${path}[${index}]`;
+      if (!isObject(rawBlock)) throw invalidMessages(blockPath);
+      if (rawBlock.type === "text") {
+        const block = exactRequest(rawBlock, TEXT_BLOCK_FIELDS, blockPath, invalidMessages, unsupportedMessages);
+        consumeCacheControl(block.cache_control, `${blockPath}.cache_control`, consumed);
+        if (block.citations !== void 0 && block.citations !== null && block.citations.length !== 0) {
+          throw unsupportedMessages(`${blockPath}.citations`);
+        }
+        if (block.citations !== void 0) consumed.add(`${blockPath}.citations`);
+        return { kind: "text", text: typeof block.text === "string" ? block.text : (() => {
+          throw invalidMessages(`${blockPath}.text`);
+        })() };
+      }
+      if (rawBlock.type === "image") {
+        if (role !== "user") throw unsupportedMessages(`${blockPath}.type`);
+        return parseAnthropicImage(rawBlock, blockPath, consumed);
+      }
+      if (rawBlock.type === "tool_use") {
+        if (role !== "assistant") throw invalidMessages(`${blockPath}.type`);
+        const block = exactRequest(rawBlock, TOOL_USE_FIELDS, blockPath, invalidMessages, unsupportedMessages);
+        if (block.caller !== void 0) throw unsupportedMessages(`${blockPath}.caller`);
+        consumeCacheControl(block.cache_control, `${blockPath}.cache_control`, consumed);
+        const id = nonemptyString(block.id, `${blockPath}.id`, invalidMessages);
+        const name = validateFunctionName(block.name, `${blockPath}.name`, invalidMessages);
+        const input = cloneJson2(block.input, `${blockPath}.input`, invalidMessages);
+        if (!isObject(input)) throw invalidMessages(`${blockPath}.input`);
+        return { kind: "tool_use", id, name, input };
+      }
+      if (rawBlock.type === "tool_result") {
+        if (role !== "user") throw invalidMessages(`${blockPath}.type`);
+        const block = exactRequest(rawBlock, TOOL_RESULT_FIELDS, blockPath, invalidMessages, unsupportedMessages);
+        consumeCacheControl(block.cache_control, `${blockPath}.cache_control`, consumed);
+        const id = nonemptyString(block.tool_use_id, `${blockPath}.tool_use_id`, invalidMessages);
+        if (block.is_error !== void 0 && typeof block.is_error !== "boolean") {
+          throw invalidMessages(`${blockPath}.is_error`);
+        }
+        if (block.is_error !== void 0) consumed.add(`${blockPath}.is_error`);
+        const output = parseToolResultContent(block.content, `${blockPath}.content`, consumed);
+        return {
+          kind: "tool_result",
+          id,
+          output: block.is_error === true ? `[tool_error]
+${output}` : output
+        };
+      }
+      if (rawBlock.type === "thinking" || rawBlock.type === "redacted_thinking") {
+        if (role !== "assistant") throw invalidMessages(`${blockPath}.type`);
+        return openReasoningBlock(rawBlock, blockPath, sourceProtocol, openReasoning);
+      }
+      if (typeof rawBlock.type !== "string") throw invalidMessages(`${blockPath}.type`);
+      throw unsupportedMessages(`${blockPath}.type`);
+    });
+  }
+  function parseSystem(value, consumed) {
+    if (value === void 0) return [];
+    if (typeof value === "string") return [{ role: "system", blocks: [{ kind: "text", text: value }] }];
+    if (!Array.isArray(value)) throw invalidMessages("system");
+    return value.map((raw, index) => {
+      const path = `system[${index}]`;
+      if (!isObject(raw)) throw invalidMessages(path);
+      if (raw.type !== "text") {
+        if (typeof raw.type !== "string") throw invalidMessages(`${path}.type`);
+        throw unsupportedMessages(`${path}.type`);
+      }
+      const block = exactRequest(raw, TEXT_BLOCK_FIELDS, path, invalidMessages, unsupportedMessages);
+      consumeCacheControl(block.cache_control, `${path}.cache_control`, consumed);
+      if (block.citations !== void 0 && block.citations !== null && block.citations.length !== 0) {
+        throw unsupportedMessages(`${path}.citations`);
+      }
+      if (block.citations !== void 0) consumed.add(`${path}.citations`);
+      if (typeof block.text !== "string") throw invalidMessages(`${path}.text`);
+      return {
+        role: "system",
+        blocks: [{ kind: "text", text: block.text }]
+      };
+    });
+  }
+  function parseMessages(value, sourceProtocol, openReasoning, consumed) {
+    if (!Array.isArray(value) || value.length === 0) throw invalidMessages("messages");
+    return value.map((raw, index) => {
+      const path = `messages[${index}]`;
+      const message = exactRequest(raw, MESSAGE_FIELDS, path, invalidMessages, unsupportedMessages);
+      if (!["user", "assistant", "system"].includes(message.role)) throw invalidMessages(`${path}.role`);
+      if (!Object.hasOwn(message, "content")) throw invalidMessages(`${path}.content`);
+      return {
+        role: message.role,
+        path,
+        blocks: parseMessageContent(
+          message.content,
+          `${path}.content`,
+          message.role,
+          sourceProtocol,
+          openReasoning,
+          consumed
+        )
+      };
+    });
+  }
+  function parseTools(value, consumed) {
+    if (value === void 0) return [];
+    if (!Array.isArray(value)) throw invalidMessages("tools");
+    const names = /* @__PURE__ */ new Set();
+    return value.map((raw, index) => {
+      const path = `tools[${index}]`;
+      const tool = exactRequest(raw, TOOL_FIELDS, path, invalidMessages, unsupportedMessages);
+      if (tool.type !== void 0 && tool.type !== null && tool.type !== "custom") {
+        throw unsupportedMessages(`${path}.type`);
+      }
+      const name = validateFunctionName(tool.name, `${path}.name`, invalidMessages);
+      if (names.has(name)) throw invalidMessages(`${path}.name`);
+      names.add(name);
+      const schema = cloneJson2(tool.input_schema, `${path}.input_schema`, invalidMessages);
+      if (!isObject(schema)) throw invalidMessages(`${path}.input_schema`);
+      if (tool.description !== void 0 && typeof tool.description !== "string") {
+        throw invalidMessages(`${path}.description`);
+      }
+      if (tool.strict !== void 0 && typeof tool.strict !== "boolean") throw invalidMessages(`${path}.strict`);
+      consumeCacheControl(tool.cache_control, `${path}.cache_control`, consumed);
+      return {
+        name,
+        description: tool.description,
+        parameters: schema,
+        strict: tool.strict
+      };
+    });
+  }
+  function parseToolChoice(value, toolNames) {
+    if (value === void 0) return { choice: void 0, parallel: void 0 };
+    if (!isObject(value)) throw invalidMessages("tool_choice");
+    let choice;
+    if (value.type === "auto" || value.type === "any") {
+      const selected = exactRequest(
+        value,
+        TOOL_CHOICE_AUTO_FIELDS,
+        "tool_choice",
+        invalidMessages,
+        unsupportedMessages
+      );
+      choice = value.type === "any" ? "required" : "auto";
+      if (selected.disable_parallel_tool_use !== void 0 && typeof selected.disable_parallel_tool_use !== "boolean") {
+        throw invalidMessages("tool_choice.disable_parallel_tool_use");
+      }
+      return {
+        choice,
+        parallel: selected.disable_parallel_tool_use === void 0 ? void 0 : !selected.disable_parallel_tool_use
+      };
+    }
+    if (value.type === "none") {
+      exactRequest(value, /* @__PURE__ */ new Set(["type"]), "tool_choice", invalidMessages, unsupportedMessages);
+      return { choice: "none", parallel: void 0 };
+    }
+    if (value.type === "tool") {
+      const selected = exactRequest(
+        value,
+        TOOL_CHOICE_TOOL_FIELDS,
+        "tool_choice",
+        invalidMessages,
+        unsupportedMessages
+      );
+      const name = validateFunctionName(selected.name, "tool_choice.name", invalidMessages);
+      if (!toolNames.has(name)) throw invalidMessages("tool_choice.name");
+      if (selected.disable_parallel_tool_use !== void 0 && typeof selected.disable_parallel_tool_use !== "boolean") {
+        throw invalidMessages("tool_choice.disable_parallel_tool_use");
+      }
+      return {
+        choice: { type: "function", name },
+        parallel: selected.disable_parallel_tool_use === void 0 ? void 0 : !selected.disable_parallel_tool_use
+      };
+    }
+    if (typeof value.type !== "string") throw invalidMessages("tool_choice.type");
+    throw unsupportedMessages("tool_choice.type");
+  }
+  function normalizeMessagesRequest(body, sourceProtocol, openReasoning) {
+    const consumed = collector();
+    const request = exactRequest(body, MESSAGE_BODY_FIELDS, "", invalidMessages, unsupportedMessages);
+    const model = nonemptyString(request.model, "model", invalidMessages);
+    const maxTokens = finiteNumber(
+      request.max_tokens,
+      "max_tokens",
+      invalidMessages,
+      (value) => Number.isInteger(value) && value > 0
+    );
+    if (request.stream !== void 0 && typeof request.stream !== "boolean") throw invalidMessages("stream");
+    if (request.temperature !== void 0) finiteNumber(request.temperature, "temperature", invalidMessages, (v) => v >= 0 && v <= 2);
+    if (request.top_p !== void 0) finiteNumber(request.top_p, "top_p", invalidMessages, (v) => v >= 0 && v <= 1);
+    if (request.top_k !== void 0) throw unsupportedMessages("top_k");
+    if (request.stop_sequences !== void 0) {
+      if (!Array.isArray(request.stop_sequences)) throw invalidMessages("stop_sequences");
+      request.stop_sequences.forEach((value, index) => nonemptyString(value, `stop_sequences[${index}]`, invalidMessages));
+    }
+    parseContextManagement(request.context_management, consumed);
+    parseMetadata(request.metadata, consumed);
+    const system = parseSystem(request.system, consumed);
+    const messages = parseMessages(request.messages, sourceProtocol, openReasoning, consumed);
+    const tools = parseTools(request.tools, consumed);
+    const toolChoice = parseToolChoice(request.tool_choice, new Set(tools.map((tool) => tool.name)));
+    if (request.tool_choice !== void 0 && tools.length === 0) throw invalidMessages("tool_choice");
+    return {
+      request,
+      model,
+      maxTokens,
+      system,
+      messages,
+      tools,
+      toolChoice,
+      reasoning: parseMessagesReasoning(request),
+      consumed
+    };
+  }
+  function chatContent(blocks) {
+    const contentBlocks = blocks.filter((block) => block.kind === "text" || block.kind === "image");
+    if (!contentBlocks.some((block) => block.kind === "image")) {
+      return contentBlocks.map((block) => block.text).join("");
+    }
+    return contentBlocks.map((block) => block.kind === "text" ? { type: "text", text: block.text } : { type: "image_url", image_url: { url: block.url } });
+  }
+  function responsesMessage(role, blocks) {
+    const parts = blocks.filter((block) => block.kind === "text" || block.kind === "image").map((block) => {
+      if (block.kind === "image") return { type: "input_image", image_url: block.url };
+      return { type: role === "assistant" ? "output_text" : "input_text", text: block.text };
+    });
+    return { type: "message", role, content: parts };
+  }
+  function assertToolResultOrder(entry) {
+    let sawOrdinary = false;
+    for (let index = 0; index < entry.blocks.length; index += 1) {
+      const block = entry.blocks[index];
+      if (block.kind === "tool_result" && sawOrdinary) {
+        throw unsupportedMessages(`${entry.path}.content[${index}].type`);
+      }
+      if (block.kind !== "tool_result") sawOrdinary = true;
+    }
+  }
+  function chatToolDefinition(tool) {
+    const fn = { name: tool.name, parameters: tool.parameters };
+    if (tool.description !== void 0) fn.description = tool.description;
+    if (tool.strict !== void 0) fn.strict = tool.strict;
+    return { type: "function", function: fn };
+  }
+  function responsesToolDefinition(tool) {
+    const result = { type: "function", name: tool.name, parameters: tool.parameters };
+    if (tool.description !== void 0) result.description = tool.description;
+    if (tool.strict !== void 0) result.strict = tool.strict;
+    return result;
+  }
+  function messagesBodyToChatBody(body, { openReasoning } = {}) {
+    const normalized = normalizeMessagesRequest(body, "chat", openReasoning);
+    const messages = [];
+    const knownCalls = /* @__PURE__ */ new Set();
+    for (const system of normalized.system) {
+      messages.push({ role: "system", content: chatContent(system.blocks) });
+    }
+    for (const entry of normalized.messages) {
+      if (entry.role === "system") {
+        if (entry.blocks.some((block) => block.kind !== "text")) throw unsupportedMessages(`${entry.path}.content`);
+        messages.push({ role: "system", content: chatContent(entry.blocks) });
+        continue;
+      }
+      if (entry.role === "assistant") {
+        const reasoning = entry.blocks.filter((block) => block.kind === "reasoning");
+        if (reasoning.length > 1) throw unsupportedMessages(`${entry.path}.content`);
+        const calls = entry.blocks.filter((block) => block.kind === "tool_use").map((block) => {
+          if (knownCalls.has(block.id)) throw invalidMessages(`${entry.path}.content`);
+          knownCalls.add(block.id);
+          return {
+            id: block.id,
+            type: "function",
+            function: { name: block.name, arguments: JSON.stringify(block.input) }
+          };
+        });
+        const unsupported = entry.blocks.find((block) => !["text", "reasoning", "tool_use"].includes(block.kind));
+        if (unsupported) throw unsupportedMessages(`${entry.path}.content`);
+        const chat2 = { role: "assistant", content: chatContent(entry.blocks) || null };
+        if (reasoning.length === 1) chat2.reasoning_content = reasoning[0].value;
+        if (calls.length) chat2.tool_calls = calls;
+        messages.push(chat2);
+        continue;
+      }
+      assertToolResultOrder(entry);
+      const results = entry.blocks.filter((block) => block.kind === "tool_result");
+      for (const result of results) {
+        if (!knownCalls.has(result.id)) throw invalidMessages(`${entry.path}.content`);
+        messages.push({ role: "tool", tool_call_id: result.id, content: result.output });
+      }
+      const ordinary = entry.blocks.filter((block) => block.kind !== "tool_result");
+      if (ordinary.length) messages.push({ role: "user", content: chatContent(ordinary) });
+    }
+    const chat = {
+      model: normalized.model,
+      messages,
+      max_tokens: normalized.maxTokens,
+      stream: normalized.request.stream === true
+    };
+    if (normalized.request.temperature !== void 0) chat.temperature = normalized.request.temperature;
+    if (normalized.request.top_p !== void 0) chat.top_p = normalized.request.top_p;
+    if (normalized.request.stop_sequences !== void 0 && normalized.request.stop_sequences.length) {
+      chat.stop = [...normalized.request.stop_sequences];
+    }
+    if (normalized.tools.length) chat.tools = normalized.tools.map(chatToolDefinition);
+    if (normalized.toolChoice.choice !== void 0) {
+      chat.tool_choice = isObject(normalized.toolChoice.choice) ? { type: "function", function: { name: normalized.toolChoice.choice.name } } : normalized.toolChoice.choice;
+    }
+    if (normalized.toolChoice.parallel !== void 0) chat.parallel_tool_calls = normalized.toolChoice.parallel;
+    if (normalized.reasoning) chat.reasoning_effort = normalized.reasoning.effort;
+    return { body: chat, consumed: normalized.consumed.values() };
+  }
+  function messagesBodyToResponsesBody(body, { openReasoning } = {}) {
+    const normalized = normalizeMessagesRequest(body, "responses", openReasoning);
+    if (normalized.request.stop_sequences !== void 0 && normalized.request.stop_sequences.length) {
+      throw unsupportedMessages("stop_sequences");
+    }
+    const input = [];
+    const knownCalls = /* @__PURE__ */ new Set();
+    for (const system of normalized.system) input.push(responsesMessage("system", system.blocks));
+    for (const entry of normalized.messages) {
+      if (entry.role === "system") {
+        if (entry.blocks.some((block) => block.kind !== "text")) throw unsupportedMessages(`${entry.path}.content`);
+        input.push(responsesMessage("system", entry.blocks));
+        continue;
+      }
+      if (entry.role === "assistant") {
+        let textBlocks = [];
+        const flushText = () => {
+          if (!textBlocks.length) return;
+          input.push(responsesMessage("assistant", textBlocks));
+          textBlocks = [];
+        };
+        for (const block of entry.blocks) {
+          if (block.kind === "text") {
+            textBlocks.push(block);
+          } else if (block.kind === "reasoning") {
+            flushText();
+            input.push(block.value);
+          } else if (block.kind === "tool_use") {
+            flushText();
+            if (knownCalls.has(block.id)) throw invalidMessages(`${entry.path}.content`);
+            knownCalls.add(block.id);
+            input.push({
+              type: "function_call",
+              call_id: block.id,
+              name: block.name,
+              arguments: JSON.stringify(block.input),
+              status: "completed"
+            });
+          } else {
+            throw unsupportedMessages(`${entry.path}.content`);
           }
         }
-        finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: "probe timeout" });
-      }, timeoutMs);
-      try {
-        const executable = resolved.executable || { ok: true, id: "node", path: resolved.nodePath, argsPrefix: [], source: "runtime", version: resolved.version || null, arch: null };
-        proc = adapter.spawn(executable, [sidecarPath, "--probe"], {
-          stdio: "pipe",
-          windowsHide: true,
-          env: spawnEnv
+        flushText();
+        continue;
+      }
+      assertToolResultOrder(entry);
+      for (const block of entry.blocks.filter((item) => item.kind === "tool_result")) {
+        if (!knownCalls.has(block.id)) throw invalidMessages(`${entry.path}.content`);
+        input.push({
+          type: "function_call_output",
+          call_id: block.id,
+          output: block.output,
+          status: "completed"
         });
-      } catch (e) {
-        finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: e && e.message ? e.message : String(e) });
+      }
+      const ordinary = entry.blocks.filter((block) => block.kind !== "tool_result");
+      if (ordinary.length) input.push(responsesMessage("user", ordinary));
+    }
+    const response = {
+      model: normalized.model,
+      input,
+      max_output_tokens: normalized.maxTokens,
+      stream: normalized.request.stream === true
+    };
+    if (normalized.request.temperature !== void 0) response.temperature = normalized.request.temperature;
+    if (normalized.request.top_p !== void 0) response.top_p = normalized.request.top_p;
+    if (normalized.tools.length) response.tools = normalized.tools.map(responsesToolDefinition);
+    if (normalized.toolChoice.choice !== void 0) response.tool_choice = normalized.toolChoice.choice;
+    if (normalized.toolChoice.parallel !== void 0) response.parallel_tool_calls = normalized.toolChoice.parallel;
+    if (normalized.reasoning) response.reasoning = { effort: normalized.reasoning.effort };
+    return { body: response, consumed: normalized.consumed.values() };
+  }
+  function responseImageToAnthropic(part, path, consumed) {
+    const image = exactRequest(
+      part,
+      RESPONSES_IMAGE_PART_FIELDS,
+      path,
+      invalidResponses,
+      unsupportedResponses
+    );
+    if (image.type !== "input_image") throw invalidResponses(`${path}.type`);
+    if (image.file_id !== void 0 && image.file_id !== null) throw unsupportedResponses(`${path}.file_id`);
+    if (image.file_id !== void 0) consumed.add(`${path}.file_id`);
+    if (image.detail !== void 0 && image.detail !== null) {
+      if (!["auto", "low", "high"].includes(image.detail)) throw invalidResponses(`${path}.detail`);
+      consumed.add(`${path}.detail`);
+    }
+    const url = nonemptyString(image.image_url, `${path}.image_url`, invalidResponses);
+    const data = url.match(/^data:(image\/(?:jpeg|png|gif|webp));base64,([A-Za-z0-9+/=]+)$/);
+    if (data) {
+      return {
+        type: "image",
+        source: { type: "base64", media_type: data[1], data: data[2] }
+      };
+    }
+    return { type: "image", source: { type: "url", url } };
+  }
+  function responsesMessageContent(content, path, role, consumed) {
+    if (typeof content === "string") return [{ type: "text", text: content }];
+    if (!Array.isArray(content)) throw invalidResponses(path);
+    return content.map((raw, index) => {
+      const partPath = `${path}[${index}]`;
+      if (!isObject(raw)) throw invalidResponses(partPath);
+      if (raw.type === "input_text" || raw.type === "output_text") {
+        const part = exactRequest(
+          raw,
+          RESPONSES_TEXT_PART_FIELDS,
+          partPath,
+          invalidResponses,
+          unsupportedResponses
+        );
+        return { type: "text", text: typeof part.text === "string" ? part.text : (() => {
+          throw invalidResponses(`${partPath}.text`);
+        })() };
+      }
+      if (raw.type === "input_image") {
+        if (role !== "user") throw unsupportedResponses(`${partPath}.type`);
+        return responseImageToAnthropic(raw, partPath, consumed);
+      }
+      if (typeof raw.type !== "string") throw invalidResponses(`${partPath}.type`);
+      throw unsupportedResponses(`${partPath}.type`);
+    });
+  }
+  function openMessagesReasoning(item, path, openReasoning, consumed) {
+    const reasoning = exactRequest(
+      item,
+      RESPONSES_REASONING_FIELDS,
+      path,
+      invalidResponses,
+      unsupportedResponses
+    );
+    if (reasoning.type !== "reasoning") throw invalidResponses(`${path}.type`);
+    if (!Array.isArray(reasoning.summary)) throw invalidResponses(`${path}.summary`);
+    if (reasoning.summary.length !== 0) throw unsupportedResponses(`${path}.summary`);
+    const token = nonemptyString(reasoning.encrypted_content, `${path}.encrypted_content`, invalidResponses);
+    if (typeof openReasoning !== "function") throw unsupportedResponses(`${path}.encrypted_content`);
+    let opened;
+    try {
+      opened = openReasoning(token, { sourceProtocol: "messages" });
+    } catch {
+      throw unsupportedResponses(`${path}.encrypted_content`);
+    }
+    if (!isObject(opened) || opened.sourceProtocol !== "messages" || !isObject(opened.item)) {
+      throw unsupportedResponses(`${path}.encrypted_content`);
+    }
+    const rawBlock = cloneJson2(opened.item, path, invalidResponses);
+    if (rawBlock.type === "thinking") {
+      exactRequest(rawBlock, THINKING_BLOCK_FIELDS, path, invalidResponses, unsupportedResponses);
+      nonemptyString(rawBlock.thinking, `${path}.thinking`, invalidResponses);
+      nonemptyString(rawBlock.signature, `${path}.signature`, invalidResponses);
+    } else if (rawBlock.type === "redacted_thinking") {
+      exactRequest(rawBlock, REDACTED_THINKING_FIELDS, path, invalidResponses, unsupportedResponses);
+      nonemptyString(rawBlock.data, `${path}.data`, invalidResponses);
+    } else {
+      throw unsupportedResponses(`${path}.encrypted_content`);
+    }
+    for (const field of ["id", "status", "summary"]) {
+      if (reasoning[field] !== void 0) consumed.add(`${path}.${field}`);
+    }
+    return rawBlock;
+  }
+  function responseToolToMessages(raw, path, namespaceDescription = "") {
+    const tool = exactRequest(
+      raw,
+      RESPONSES_TOOL_FIELDS,
+      path,
+      invalidResponses,
+      unsupportedResponses
+    );
+    if (tool.type !== "function") throw unsupportedResponses(`${path}.type`);
+    const name = validateFunctionName(tool.name, `${path}.name`, invalidResponses);
+    const schema = cloneJson2(tool.parameters, `${path}.parameters`, invalidResponses);
+    if (!isObject(schema)) throw invalidResponses(`${path}.parameters`);
+    const result = { name, input_schema: schema };
+    const description = tool.description === void 0 ? "" : (() => {
+      if (typeof tool.description !== "string") throw invalidResponses(`${path}.description`);
+      return tool.description;
+    })();
+    if (namespaceDescription || description) {
+      result.description = [namespaceDescription, description].filter(Boolean).join("\n\n");
+    }
+    if (tool.strict !== void 0) {
+      if (typeof tool.strict !== "boolean") throw invalidResponses(`${path}.strict`);
+      result.strict = tool.strict;
+    }
+    return result;
+  }
+  function responsesToolsToMessages(value) {
+    if (value === void 0) return [];
+    if (!Array.isArray(value)) throw invalidResponses("tools");
+    const names = /* @__PURE__ */ new Set();
+    const converted = [];
+    const addTool = (raw, path, namespaceDescription = "") => {
+      const result = responseToolToMessages(raw, path, namespaceDescription);
+      const { name } = result;
+      if (names.has(name)) throw invalidResponses(`${path}.name`);
+      names.add(name);
+      converted.push(result);
+    };
+    value.forEach((raw, index) => {
+      const path = `tools[${index}]`;
+      if (!isObject(raw)) throw invalidResponses(path);
+      if (raw.type === "function") {
+        addTool(raw, path);
         return;
       }
-      const onMessage = createNdjsonReader((message) => {
-        if (!message || message.t !== "probe-result") return;
-        finish({
-          loggedIn: !!message.loggedIn,
-          nodeOk: true,
-          nodeVersion: resolved.version,
-          detail: message.detail || message.reason || ""
-        });
-      });
-      if (proc.stdout && proc.stdout.on) proc.stdout.on("data", onMessage);
-      if (proc.stderr && proc.stderr.on) {
-        proc.stderr.on("data", (chunk) => {
-          stderr += String(chunk || "");
-          if (stderr.length > 4e3) stderr = stderr.slice(-4e3);
-        });
+      if (raw.type !== "namespace") throw unsupportedResponses(`${path}.type`);
+      const namespace = exactRequest(
+        raw,
+        RESPONSES_NAMESPACE_TOOL_FIELDS,
+        path,
+        invalidResponses,
+        unsupportedResponses
+      );
+      const namespaceName = validateFunctionName(namespace.name, `${path}.name`, invalidResponses);
+      const namespaceDescription = namespace.description === void 0 ? namespaceName : (() => {
+        if (typeof namespace.description !== "string") throw invalidResponses(`${path}.description`);
+        return namespace.description;
+      })();
+      if (!Array.isArray(namespace.tools) || namespace.tools.length === 0) {
+        throw invalidResponses(`${path}.tools`);
       }
-      if (proc.on) {
-        proc.on("error", (err) => {
-          finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: err && err.message ? err.message : String(err) });
+      namespace.tools.forEach((child, childIndex) => addTool(
+        child,
+        `${path}.tools[${childIndex}]`,
+        namespaceDescription
+      ));
+    });
+    return converted;
+  }
+  function responsesToolChoiceToMessages(value, parallel, toolNames) {
+    let choice;
+    if (value === void 0) {
+      if (parallel === false) choice = { type: "auto", disable_parallel_tool_use: true };
+    } else if (typeof value === "string") {
+      if (!["auto", "none", "required"].includes(value)) throw invalidResponses("tool_choice");
+      choice = { type: value === "required" ? "any" : value };
+    } else {
+      const selected = exactRequest(
+        value,
+        RESPONSES_TOOL_CHOICE_FIELDS,
+        "tool_choice",
+        invalidResponses,
+        unsupportedResponses
+      );
+      if (selected.type !== "function") throw unsupportedResponses("tool_choice.type");
+      const name = validateFunctionName(selected.name, "tool_choice.name", invalidResponses);
+      if (!toolNames.has(name)) throw invalidResponses("tool_choice.name");
+      choice = { type: "tool", name };
+    }
+    if (parallel !== void 0) {
+      if (typeof parallel !== "boolean") throw invalidResponses("parallel_tool_calls");
+      if (!choice) choice = { type: "auto" };
+      choice.disable_parallel_tool_use = !parallel;
+    }
+    return choice;
+  }
+  function responsesReasoningToMessages(value, consumed) {
+    if (value === void 0 || value === null) return {};
+    const reasoning = exactRequest(
+      value,
+      RESPONSES_REASONING_CONFIG_FIELDS,
+      "reasoning",
+      invalidResponses,
+      unsupportedResponses
+    );
+    if (reasoning.summary !== void 0 && reasoning.summary !== null && reasoning.summary !== "auto") {
+      throw unsupportedResponses("reasoning.summary");
+    }
+    if (reasoning.summary !== void 0) consumed.add("reasoning.summary");
+    if (reasoning.effort === void 0 || reasoning.effort === null) {
+      return { thinking: { type: "adaptive" } };
+    }
+    const effort = toMessagesEffort(reasoning.effort, "reasoning.effort");
+    if (effort === null) return { thinking: { type: "disabled" } };
+    return {
+      thinking: { type: "adaptive" },
+      output_config: { effort }
+    };
+  }
+  function pushOrMergeMessage(messages, role, blocks) {
+    if (!blocks.length) return;
+    const previous = messages[messages.length - 1];
+    if (previous && previous.role === role && Array.isArray(previous.content)) {
+      previous.content.push(...blocks);
+    } else {
+      messages.push({ role, content: [...blocks] });
+    }
+  }
+  function responsesBodyToMessagesBody(body, { openReasoning } = {}) {
+    const consumed = collector();
+    const request = exactRequest(
+      body,
+      RESPONSES_BODY_FIELDS,
+      "",
+      invalidResponses,
+      unsupportedResponses
+    );
+    const model = nonemptyString(request.model, "model", invalidResponses);
+    if (!Object.hasOwn(request, "input")) throw invalidResponses("input");
+    if (request.stream !== void 0 && typeof request.stream !== "boolean") throw invalidResponses("stream");
+    if (request.temperature !== void 0) finiteNumber(request.temperature, "temperature", invalidResponses, (v) => v >= 0 && v <= 2);
+    if (request.top_p !== void 0) finiteNumber(request.top_p, "top_p", invalidResponses, (v) => v >= 0 && v <= 1);
+    let maxTokens = DEFAULT_MESSAGES_MAX_TOKENS;
+    if (request.max_output_tokens !== void 0) {
+      maxTokens = finiteNumber(
+        request.max_output_tokens,
+        "max_output_tokens",
+        invalidResponses,
+        (value) => Number.isInteger(value) && value > 0
+      );
+    }
+    if (request.include !== void 0) {
+      if (!Array.isArray(request.include) || request.include.some((item) => item !== "reasoning.encrypted_content")) {
+        throw unsupportedResponses("include");
+      }
+      consumed.add("include");
+    }
+    if (request.store !== void 0) {
+      if (typeof request.store !== "boolean") throw invalidResponses("store");
+      if (request.store) throw unsupportedResponses("store");
+      consumed.add("store");
+    }
+    if (request.prompt_cache_key !== void 0) {
+      nonemptyString(request.prompt_cache_key, "prompt_cache_key", invalidResponses);
+      consumed.add("prompt_cache_key");
+    }
+    if (request.client_metadata !== void 0) {
+      const metadata = cloneJson2(request.client_metadata, "client_metadata", invalidResponses);
+      if (!isObject(metadata)) throw invalidResponses("client_metadata");
+      consumed.add("client_metadata");
+    }
+    const system = [];
+    if (request.instructions !== void 0) {
+      if (typeof request.instructions !== "string") throw invalidResponses("instructions");
+      system.push({ type: "text", text: request.instructions });
+    }
+    const messages = [];
+    const knownCalls = /* @__PURE__ */ new Set();
+    let pendingAssistant = [];
+    let pendingToolResults = [];
+    const flushAssistant = () => {
+      pushOrMergeMessage(messages, "assistant", pendingAssistant);
+      pendingAssistant = [];
+    };
+    const flushToolResults = () => {
+      pushOrMergeMessage(messages, "user", pendingToolResults);
+      pendingToolResults = [];
+    };
+    const rawInput = typeof request.input === "string" ? [{ type: "message", role: "user", content: request.input }] : request.input;
+    if (!Array.isArray(rawInput) || rawInput.length === 0) throw invalidResponses("input");
+    rawInput.forEach((rawItem, index) => {
+      const path = `input[${index}]`;
+      if (!isObject(rawItem)) throw invalidResponses(path);
+      if (rawItem.type === "reasoning") {
+        flushToolResults();
+        pendingAssistant.push(openMessagesReasoning(rawItem, path, openReasoning, consumed));
+        return;
+      }
+      if (rawItem.type === "function_call") {
+        flushToolResults();
+        const call = exactRequest(
+          rawItem,
+          RESPONSES_FUNCTION_CALL_FIELDS,
+          path,
+          invalidResponses,
+          unsupportedResponses
+        );
+        if (call.status !== void 0 && call.status !== "completed") throw unsupportedResponses(`${path}.status`);
+        const id = nonemptyString(call.call_id, `${path}.call_id`, invalidResponses);
+        if (knownCalls.has(id)) throw invalidResponses(`${path}.call_id`);
+        knownCalls.add(id);
+        const name = validateFunctionName(call.name, `${path}.name`, invalidResponses);
+        const args = nonemptyString(call.arguments, `${path}.arguments`, invalidResponses);
+        let input;
+        try {
+          input = JSON.parse(args);
+        } catch {
+          throw invalidResponses(`${path}.arguments`);
+        }
+        if (!isObject(input)) throw invalidResponses(`${path}.arguments`);
+        pendingAssistant.push({ type: "tool_use", id, name, input });
+        if (call.id !== void 0) consumed.add(`${path}.id`);
+        if (call.status !== void 0) consumed.add(`${path}.status`);
+        return;
+      }
+      if (rawItem.type === "function_call_output") {
+        flushAssistant();
+        const output = exactRequest(
+          rawItem,
+          RESPONSES_FUNCTION_OUTPUT_FIELDS,
+          path,
+          invalidResponses,
+          unsupportedResponses
+        );
+        if (output.status !== void 0 && output.status !== "completed") throw unsupportedResponses(`${path}.status`);
+        const id = nonemptyString(output.call_id, `${path}.call_id`, invalidResponses);
+        if (!knownCalls.has(id)) throw invalidResponses(`${path}.call_id`);
+        pendingToolResults.push({
+          type: "tool_result",
+          tool_use_id: id,
+          content: typeof output.output === "string" ? output.output : JSON.stringify(cloneJson2(output.output, `${path}.output`, invalidResponses))
         });
-        proc.on("exit", () => {
-          finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: stderr.trim() || "probe exited without result" });
+        if (output.id !== void 0) consumed.add(`${path}.id`);
+        if (output.status !== void 0) consumed.add(`${path}.status`);
+        return;
+      }
+      if (rawItem.type === void 0 || rawItem.type === "message") {
+        flushAssistant();
+        flushToolResults();
+        const message = exactRequest(
+          rawItem,
+          RESPONSES_MESSAGE_FIELDS,
+          path,
+          invalidResponses,
+          unsupportedResponses
+        );
+        if (!["user", "assistant", "system", "developer"].includes(message.role)) {
+          throw invalidResponses(`${path}.role`);
+        }
+        if (!Object.hasOwn(message, "content")) throw invalidResponses(`${path}.content`);
+        if (message.id !== void 0) {
+          nonemptyString(message.id, `${path}.id`, invalidResponses);
+          consumed.add(`${path}.id`);
+        }
+        if (message.status !== void 0) {
+          if (!["completed", "incomplete"].includes(message.status)) throw invalidResponses(`${path}.status`);
+          if (message.status !== "completed") throw unsupportedResponses(`${path}.status`);
+          consumed.add(`${path}.status`);
+        }
+        const role = message.role === "developer" ? "system" : message.role;
+        const content = responsesMessageContent(message.content, `${path}.content`, role, consumed);
+        if (role === "system" && messages.length === 0) system.push(...content);
+        else pushOrMergeMessage(messages, role, content);
+        return;
+      }
+      if (typeof rawItem.type !== "string") throw invalidResponses(`${path}.type`);
+      throw unsupportedResponses(`${path}.type`);
+    });
+    flushAssistant();
+    flushToolResults();
+    if (messages.length === 0) throw invalidResponses("input");
+    const tools = responsesToolsToMessages(request.tools);
+    const toolChoice = responsesToolChoiceToMessages(
+      request.tool_choice,
+      request.parallel_tool_calls,
+      new Set(tools.map((tool) => tool.name))
+    );
+    if (toolChoice && tools.length === 0) throw invalidResponses("tool_choice");
+    const result = {
+      model,
+      max_tokens: maxTokens,
+      messages,
+      stream: request.stream === true
+    };
+    if (system.length) result.system = system;
+    if (request.temperature !== void 0) result.temperature = request.temperature;
+    if (request.top_p !== void 0) result.top_p = request.top_p;
+    if (tools.length) result.tools = tools;
+    if (toolChoice) result.tool_choice = toolChoice;
+    Object.assign(result, responsesReasoningToMessages(request.reasoning, consumed));
+    return { body: result, consumed: consumed.values() };
+  }
+  function sealCapsule(sealReasoning, sourceProtocol, item, protocol, path) {
+    if (typeof sealReasoning !== "function") throw unsupportedUpstream(protocol, path);
+    let token;
+    try {
+      token = sealReasoning({ sourceProtocol, item });
+    } catch {
+      throw invalidUpstream(protocol, path);
+    }
+    if (typeof token !== "string" || token.length === 0) throw invalidUpstream(protocol, path);
+    return token;
+  }
+  function integerUsage(value, path, protocol) {
+    if (!Number.isInteger(value) || value < 0) throw invalidUpstream(protocol, path);
+    return value;
+  }
+  function chatUsageToMessages(value) {
+    if (value === void 0) {
+      return {
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0
+      };
+    }
+    const usage = exactUpstream(value, CHAT_USAGE_FIELDS, "chat", "usage");
+    const prompt = integerUsage(usage.prompt_tokens, "usage.prompt_tokens", "chat");
+    const completion = integerUsage(usage.completion_tokens, "usage.completion_tokens", "chat");
+    if (usage.total_tokens !== void 0) {
+      const total = integerUsage(usage.total_tokens, "usage.total_tokens", "chat");
+      if (total !== prompt + completion) throw invalidUpstream("chat", "usage.total_tokens");
+    }
+    for (const [name, primary] of [["input_tokens", prompt], ["output_tokens", completion]]) {
+      if (usage[name] === void 0 || usage[name] === null) continue;
+      const alias = integerUsage(usage[name], `usage.${name}`, "chat");
+      if (alias !== 0 && alias !== primary) throw invalidUpstream("chat", `usage.${name}`);
+    }
+    let cached = 0;
+    let cachedObserved = false;
+    if (usage.prompt_tokens_details !== void 0 && usage.prompt_tokens_details !== null) {
+      const details = exactUpstream(
+        usage.prompt_tokens_details,
+        CHAT_PROMPT_DETAILS_FIELDS,
+        "chat",
+        "usage.prompt_tokens_details"
+      );
+      if (details.cached_tokens !== void 0) {
+        cached = integerUsage(details.cached_tokens, "usage.prompt_tokens_details.cached_tokens", "chat");
+        cachedObserved = true;
+      }
+      for (const key of ["text_tokens", "audio_tokens", "image_tokens"]) {
+        if (details[key] !== void 0 && details[key] !== null) {
+          integerUsage(details[key], `usage.prompt_tokens_details.${key}`, "chat");
+        }
+      }
+    }
+    if (usage.input_tokens_details !== void 0 && usage.input_tokens_details !== null) {
+      const details = exactUpstream(
+        usage.input_tokens_details,
+        CHAT_INPUT_DETAILS_FIELDS,
+        "chat",
+        "usage.input_tokens_details"
+      );
+      if (details.cached_tokens !== void 0 && details.cached_tokens !== null) {
+        const alias = integerUsage(details.cached_tokens, "usage.input_tokens_details.cached_tokens", "chat");
+        if (cachedObserved && alias !== 0 && alias !== cached) {
+          throw invalidUpstream("chat", "usage.input_tokens_details.cached_tokens");
+        }
+        if (!cachedObserved) cached = alias;
+      }
+    }
+    const fiveMinutes = usage.claude_cache_creation_5_m_tokens === void 0 || usage.claude_cache_creation_5_m_tokens === null ? 0 : integerUsage(usage.claude_cache_creation_5_m_tokens, "usage.claude_cache_creation_5_m_tokens", "chat");
+    const oneHour = usage.claude_cache_creation_1_h_tokens === void 0 || usage.claude_cache_creation_1_h_tokens === null ? 0 : integerUsage(usage.claude_cache_creation_1_h_tokens, "usage.claude_cache_creation_1_h_tokens", "chat");
+    const cacheCreation = fiveMinutes + oneHour;
+    if (cached + cacheCreation > prompt) throw invalidUpstream("chat", "usage.prompt_tokens");
+    let reasoningTokens;
+    if (usage.completion_tokens_details !== void 0 && usage.completion_tokens_details !== null) {
+      const details = exactUpstream(
+        usage.completion_tokens_details,
+        CHAT_COMPLETION_DETAILS_FIELDS,
+        "chat",
+        "usage.completion_tokens_details"
+      );
+      for (const [key, detail] of Object.entries(details)) {
+        if (detail !== void 0 && detail !== null) integerUsage(detail, `usage.completion_tokens_details.${key}`, "chat");
+      }
+      if (details.reasoning_tokens !== void 0 && details.reasoning_tokens !== null) {
+        reasoningTokens = details.reasoning_tokens;
+        if (reasoningTokens > completion) {
+          throw invalidUpstream("chat", "usage.completion_tokens_details.reasoning_tokens");
+        }
+      }
+    }
+    const result = {
+      input_tokens: prompt - cached - cacheCreation,
+      output_tokens: completion,
+      cache_creation_input_tokens: cacheCreation,
+      cache_read_input_tokens: cached
+    };
+    if (usage.claude_cache_creation_5_m_tokens !== void 0 || usage.claude_cache_creation_1_h_tokens !== void 0) {
+      result.cache_creation = {
+        ephemeral_5m_input_tokens: fiveMinutes,
+        ephemeral_1h_input_tokens: oneHour
+      };
+    }
+    if (reasoningTokens !== void 0) {
+      result.output_tokens_details = { thinking_tokens: reasoningTokens };
+    }
+    return result;
+  }
+  function parseChatToolCall(raw, path) {
+    const call = exactUpstream(raw, CHAT_TOOL_CALL_FIELDS, "chat", path);
+    const id = nonemptyString(call.id, `${path}.id`, (param) => invalidUpstream("chat", param));
+    if (call.type !== "function") throw invalidUpstream("chat", `${path}.type`);
+    const fn = exactUpstream(call.function, CHAT_FUNCTION_FIELDS, "chat", `${path}.function`);
+    const name = validateFunctionName(fn.name, `${path}.function.name`, (param) => invalidUpstream("chat", param));
+    const args = nonemptyString(fn.arguments, `${path}.function.arguments`, (param) => invalidUpstream("chat", param));
+    let input;
+    try {
+      input = JSON.parse(args);
+    } catch {
+      throw invalidUpstream("chat", `${path}.function.arguments`);
+    }
+    if (!isObject(input)) throw invalidUpstream("chat", `${path}.function.arguments`);
+    return { type: "tool_use", id, name, input };
+  }
+  function chatCompletionToMessages(completion, { sealReasoning } = {}) {
+    const chat = exactUpstream(completion, CHAT_COMPLETION_FIELDS, "chat", "");
+    if (chat.object !== "chat.completion") throw invalidUpstream("chat", "object");
+    const id = nonemptyString(chat.id, "id", (param) => invalidUpstream("chat", param));
+    const model = nonemptyString(chat.model, "model", (param) => invalidUpstream("chat", param));
+    if (!Array.isArray(chat.choices) || chat.choices.length !== 1) throw invalidUpstream("chat", "choices");
+    const choice = exactUpstream(chat.choices[0], CHAT_CHOICE_FIELDS, "chat", "choices[0]");
+    if (choice.index !== 0) throw invalidUpstream("chat", "choices[0].index");
+    if (choice.logprobs !== void 0 && choice.logprobs !== null) {
+      throw unsupportedUpstream("chat", "choices[0].logprobs");
+    }
+    const message = exactUpstream(choice.message, CHAT_MESSAGE_FIELDS, "chat", "choices[0].message");
+    if (message.role !== "assistant") throw invalidUpstream("chat", "choices[0].message.role");
+    if (message.content !== null && typeof message.content !== "string") {
+      throw invalidUpstream("chat", "choices[0].message.content");
+    }
+    if (message.refusal !== void 0 && message.refusal !== null && typeof message.refusal !== "string") {
+      throw invalidUpstream("chat", "choices[0].message.refusal");
+    }
+    const reasoningValues = [message.reasoning, message.reasoning_content].filter((value) => value !== void 0 && value !== null);
+    if (reasoningValues.length > 1 || reasoningValues.some((value) => typeof value !== "string")) {
+      throw invalidUpstream("chat", "choices[0].message.reasoning_content");
+    }
+    const content = [];
+    if (reasoningValues.length === 1 && reasoningValues[0].length > 0) {
+      content.push({
+        type: "thinking",
+        thinking: reasoningValues[0],
+        signature: sealCapsule(
+          sealReasoning,
+          "chat",
+          reasoningValues[0],
+          "chat",
+          "choices[0].message.reasoning_content"
+        )
+      });
+    }
+    if (typeof message.content === "string" && message.content.length > 0) {
+      content.push({ type: "text", text: message.content });
+    }
+    if (typeof message.refusal === "string" && message.refusal.length > 0) {
+      content.push({ type: "text", text: message.refusal });
+    }
+    const rawCalls = message.tool_calls === void 0 ? [] : message.tool_calls;
+    if (!Array.isArray(rawCalls)) throw invalidUpstream("chat", "choices[0].message.tool_calls");
+    const used = /* @__PURE__ */ new Set();
+    rawCalls.forEach((raw, index) => {
+      const call = parseChatToolCall(raw, `choices[0].message.tool_calls[${index}]`);
+      if (used.has(call.id)) throw invalidUpstream("chat", `choices[0].message.tool_calls[${index}].id`);
+      used.add(call.id);
+      content.push(call);
+    });
+    const stopMap = {
+      stop: "end_turn",
+      tool_calls: "tool_use",
+      function_call: "tool_use",
+      length: "max_tokens",
+      content_filter: "refusal"
+    };
+    const stopReason = stopMap[choice.finish_reason];
+    if (!stopReason) throw invalidUpstream("chat", "choices[0].finish_reason");
+    if (stopReason === "tool_use" && rawCalls.length === 0) throw invalidUpstream("chat", "choices[0].finish_reason");
+    if (stopReason !== "tool_use" && rawCalls.length !== 0) throw invalidUpstream("chat", "choices[0].finish_reason");
+    if (content.length === 0) content.push({ type: "text", text: "" });
+    return {
+      id,
+      type: "message",
+      role: "assistant",
+      model,
+      content,
+      stop_reason: stopReason,
+      stop_sequence: null,
+      usage: chatUsageToMessages(chat.usage)
+    };
+  }
+  function responseUsageToMessages(value) {
+    if (value === void 0 || value === null) {
+      return {
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0
+      };
+    }
+    const usage = exactUpstream(value, RESPONSE_USAGE_FIELDS, "responses", "usage");
+    const input = integerUsage(usage.input_tokens, "usage.input_tokens", "responses");
+    const output = integerUsage(usage.output_tokens, "usage.output_tokens", "responses");
+    if (usage.total_tokens !== void 0) integerUsage(usage.total_tokens, "usage.total_tokens", "responses");
+    let cached = 0;
+    if (usage.input_tokens_details !== void 0 && usage.input_tokens_details !== null) {
+      const details = exactUpstream(
+        usage.input_tokens_details,
+        RESPONSE_INPUT_DETAILS_FIELDS,
+        "responses",
+        "usage.input_tokens_details"
+      );
+      if (details.cached_tokens !== void 0) {
+        cached = integerUsage(details.cached_tokens, "usage.input_tokens_details.cached_tokens", "responses");
+      }
+    }
+    if (cached > input) throw invalidUpstream("responses", "usage.input_tokens_details.cached_tokens");
+    if (usage.output_tokens_details !== void 0 && usage.output_tokens_details !== null) {
+      const details = exactUpstream(
+        usage.output_tokens_details,
+        RESPONSE_OUTPUT_DETAILS_FIELDS,
+        "responses",
+        "usage.output_tokens_details"
+      );
+      if (details.reasoning_tokens !== void 0) {
+        integerUsage(details.reasoning_tokens, "usage.output_tokens_details.reasoning_tokens", "responses");
+      }
+    }
+    return {
+      input_tokens: input - cached,
+      output_tokens: output,
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: cached
+    };
+  }
+  function responseReasoningSummary(item, path) {
+    if (!Array.isArray(item.summary)) throw invalidUpstream("responses", `${path}.summary`);
+    return item.summary.map((raw, index) => {
+      const summaryPath = `${path}.summary[${index}]`;
+      const summary = exactUpstream(raw, RESPONSE_SUMMARY_FIELDS, "responses", summaryPath);
+      if (summary.type !== "summary_text") throw unsupportedUpstream("responses", `${summaryPath}.type`);
+      return nonemptyString(summary.text, `${summaryPath}.text`, (param) => invalidUpstream("responses", param));
+    }).join("\n");
+  }
+  function responseToMessages(response, { sealReasoning } = {}) {
+    const source = exactUpstream(response, RESPONSE_FIELDS, "responses", "");
+    if (source.object !== "response") throw invalidUpstream("responses", "object");
+    const id = nonemptyString(source.id, "id", (param) => invalidUpstream("responses", param));
+    const model = nonemptyString(source.model, "model", (param) => invalidUpstream("responses", param));
+    if (!["completed", "incomplete"].includes(source.status)) throw invalidUpstream("responses", "status");
+    if (source.error !== void 0 && source.error !== null) throw invalidUpstream("responses", "error");
+    if (!Array.isArray(source.output)) throw invalidUpstream("responses", "output");
+    const content = [];
+    let refusal = false;
+    let sawTool = false;
+    const usedCalls = /* @__PURE__ */ new Set();
+    source.output.forEach((rawItem, index) => {
+      const path = `output[${index}]`;
+      if (!isObject(rawItem)) throw invalidUpstream("responses", path);
+      if (rawItem.type === "message") {
+        const message = exactUpstream(rawItem, RESPONSE_MESSAGE_FIELDS, "responses", path);
+        if (message.role !== "assistant") throw invalidUpstream("responses", `${path}.role`);
+        if (message.status !== void 0 && !["completed", "incomplete"].includes(message.status)) {
+          throw invalidUpstream("responses", `${path}.status`);
+        }
+        if (!Array.isArray(message.content)) throw invalidUpstream("responses", `${path}.content`);
+        message.content.forEach((rawPart, partIndex) => {
+          const partPath = `${path}.content[${partIndex}]`;
+          if (!isObject(rawPart)) throw invalidUpstream("responses", partPath);
+          if (rawPart.type === "output_text") {
+            const part = exactUpstream(rawPart, RESPONSE_OUTPUT_TEXT_FIELDS, "responses", partPath);
+            if (part.annotations !== void 0 && part.annotations !== null && part.annotations.length !== 0) {
+              throw unsupportedUpstream("responses", `${partPath}.annotations`);
+            }
+            if (part.logprobs !== void 0 && part.logprobs !== null && part.logprobs.length !== 0) {
+              throw unsupportedUpstream("responses", `${partPath}.logprobs`);
+            }
+            content.push({
+              type: "text",
+              text: typeof part.text === "string" ? part.text : (() => {
+                throw invalidUpstream("responses", `${partPath}.text`);
+              })()
+            });
+          } else if (rawPart.type === "refusal") {
+            const part = exactUpstream(rawPart, RESPONSE_REFUSAL_FIELDS, "responses", partPath);
+            content.push({
+              type: "text",
+              text: nonemptyString(part.refusal, `${partPath}.refusal`, (param) => invalidUpstream("responses", param))
+            });
+            refusal = true;
+          } else if (typeof rawPart.type !== "string") {
+            throw invalidUpstream("responses", `${partPath}.type`);
+          } else {
+            throw unsupportedUpstream("responses", `${partPath}.type`);
+          }
         });
+        return;
+      }
+      if (rawItem.type === "reasoning") {
+        const item = exactUpstream(rawItem, RESPONSE_REASONING_ITEM_FIELDS, "responses", path);
+        const summary = responseReasoningSummary(item, path);
+        const capsule = sealCapsule(
+          sealReasoning,
+          "responses",
+          cloneJson2(item, path, (param) => invalidUpstream("responses", param)),
+          "responses",
+          path
+        );
+        content.push(summary ? { type: "thinking", thinking: summary, signature: capsule } : { type: "redacted_thinking", data: capsule });
+        return;
+      }
+      if (rawItem.type === "function_call") {
+        const call = exactUpstream(rawItem, RESPONSE_FUNCTION_CALL_FIELDS, "responses", path);
+        if (call.status !== void 0 && call.status !== "completed") {
+          throw unsupportedUpstream("responses", `${path}.status`);
+        }
+        const callId = nonemptyString(call.call_id, `${path}.call_id`, (param) => invalidUpstream("responses", param));
+        if (usedCalls.has(callId)) throw invalidUpstream("responses", `${path}.call_id`);
+        usedCalls.add(callId);
+        const name = validateFunctionName(call.name, `${path}.name`, (param) => invalidUpstream("responses", param));
+        const args = nonemptyString(call.arguments, `${path}.arguments`, (param) => invalidUpstream("responses", param));
+        let input;
+        try {
+          input = JSON.parse(args);
+        } catch {
+          throw invalidUpstream("responses", `${path}.arguments`);
+        }
+        if (!isObject(input)) throw invalidUpstream("responses", `${path}.arguments`);
+        content.push({ type: "tool_use", id: callId, name, input });
+        sawTool = true;
+        return;
+      }
+      if (typeof rawItem.type !== "string") throw invalidUpstream("responses", `${path}.type`);
+      throw unsupportedUpstream("responses", `${path}.type`);
+    });
+    if (content.length === 0) content.push({ type: "text", text: "" });
+    let stopReason;
+    if (source.status === "completed") {
+      stopReason = refusal ? "refusal" : sawTool ? "tool_use" : "end_turn";
+    } else {
+      const details = exactUpstream(source.incomplete_details, RESPONSE_INCOMPLETE_FIELDS, "responses", "incomplete_details");
+      const mapping = {
+        max_output_tokens: "max_tokens",
+        content_filter: "refusal",
+        model_context_window_exceeded: "model_context_window_exceeded"
+      };
+      stopReason = mapping[details.reason];
+      if (!stopReason) throw unsupportedUpstream("responses", "incomplete_details.reason");
+    }
+    return {
+      id,
+      type: "message",
+      role: "assistant",
+      model,
+      content,
+      stop_reason: stopReason,
+      stop_sequence: null,
+      usage: responseUsageToMessages(source.usage)
+    };
+  }
+  function anthropicUsageToResponse(value) {
+    const usage = exactUpstream(value, ANTHROPIC_USAGE_FIELDS, "messages", "usage");
+    const input = integerUsage(usage.input_tokens, "usage.input_tokens", "messages");
+    const output = integerUsage(usage.output_tokens, "usage.output_tokens", "messages");
+    const creation = usage.cache_creation_input_tokens === void 0 || usage.cache_creation_input_tokens === null ? 0 : integerUsage(usage.cache_creation_input_tokens, "usage.cache_creation_input_tokens", "messages");
+    const cached = usage.cache_read_input_tokens === void 0 || usage.cache_read_input_tokens === null ? 0 : integerUsage(usage.cache_read_input_tokens, "usage.cache_read_input_tokens", "messages");
+    if (usage.cache_creation !== void 0 && usage.cache_creation !== null) {
+      const breakdown = exactUpstream(
+        usage.cache_creation,
+        ANTHROPIC_CACHE_CREATION_FIELDS,
+        "messages",
+        "usage.cache_creation"
+      );
+      const oneHour = integerUsage(
+        breakdown.ephemeral_1h_input_tokens,
+        "usage.cache_creation.ephemeral_1h_input_tokens",
+        "messages"
+      );
+      const fiveMinutes = integerUsage(
+        breakdown.ephemeral_5m_input_tokens,
+        "usage.cache_creation.ephemeral_5m_input_tokens",
+        "messages"
+      );
+      if (oneHour + fiveMinutes !== creation) {
+        throw invalidUpstream("messages", "usage.cache_creation");
+      }
+    }
+    for (const key of ["inference_geo", "iterations", "server_tool_use", "speed"]) {
+      if (usage[key] !== void 0 && usage[key] !== null) throw unsupportedUpstream("messages", `usage.${key}`);
+    }
+    let reasoningTokens;
+    if (usage.output_tokens_details !== void 0 && usage.output_tokens_details !== null) {
+      const details = exactUpstream(
+        usage.output_tokens_details,
+        ANTHROPIC_OUTPUT_DETAILS_FIELDS,
+        "messages",
+        "usage.output_tokens_details"
+      );
+      reasoningTokens = integerUsage(details.thinking_tokens, "usage.output_tokens_details.thinking_tokens", "messages");
+    }
+    const responseUsage = {
+      input_tokens: input + creation + cached,
+      output_tokens: output,
+      total_tokens: input + creation + cached + output,
+      input_tokens_details: { cached_tokens: cached }
+    };
+    if (reasoningTokens !== void 0) responseUsage.output_tokens_details = { reasoning_tokens: reasoningTokens };
+    return responseUsage;
+  }
+  function responseIdFromMessage(messageId) {
+    const suffix = messageId.startsWith("msg_") ? messageId.slice(4) : messageId;
+    return `resp_${suffix}`;
+  }
+  function anthropicMessageToResponse(message, { id, sealReasoning } = {}) {
+    var _a;
+    const source = exactUpstream(message, ANTHROPIC_RESPONSE_FIELDS, "messages", "");
+    if (source.type !== "message") throw invalidUpstream("messages", "type");
+    if (source.role !== "assistant") throw invalidUpstream("messages", "role");
+    const messageId = nonemptyString(source.id, "id", (param) => invalidUpstream("messages", param));
+    const model = nonemptyString(source.model, "model", (param) => invalidUpstream("messages", param));
+    for (const key of ["container", "context_management", "diagnostics", "stop_details"]) {
+      if (source[key] !== void 0 && source[key] !== null) throw unsupportedUpstream("messages", key);
+    }
+    if (source.stop_sequence !== void 0 && source.stop_sequence !== null) {
+      throw unsupportedUpstream("messages", "stop_sequence");
+    }
+    if (!Array.isArray(source.content)) throw invalidUpstream("messages", "content");
+    const responseId = id === void 0 ? responseIdFromMessage(messageId) : nonemptyString(id, "context.id", (param) => invalidUpstream("messages", param));
+    const output = [];
+    const sourceIncomplete = ["max_tokens", "refusal", "model_context_window_exceeded"].includes(source.stop_reason);
+    let sawTool = false;
+    let textParts = [];
+    let outputIndex = 0;
+    const flushText = () => {
+      if (!textParts.length) return;
+      output.push({
+        id: `msg_${responseId.replace(/^resp_/, "")}_${outputIndex}`,
+        type: "message",
+        status: sourceIncomplete ? "incomplete" : "completed",
+        role: "assistant",
+        content: textParts
+      });
+      outputIndex += 1;
+      textParts = [];
+    };
+    source.content.forEach((rawBlock, index) => {
+      const path = `content[${index}]`;
+      if (!isObject(rawBlock)) throw invalidUpstream("messages", path);
+      if (rawBlock.type === "text") {
+        const block = exactUpstream(rawBlock, ANTHROPIC_TEXT_RESPONSE_FIELDS, "messages", path);
+        if (block.citations !== void 0 && block.citations !== null && block.citations.length !== 0) {
+          throw unsupportedUpstream("messages", `${path}.citations`);
+        }
+        textParts.push({
+          type: "output_text",
+          text: typeof block.text === "string" ? block.text : (() => {
+            throw invalidUpstream("messages", `${path}.text`);
+          })()
+        });
+        return;
+      }
+      if (rawBlock.type === "thinking" || rawBlock.type === "redacted_thinking") {
+        flushText();
+        const allowed = rawBlock.type === "thinking" ? THINKING_BLOCK_FIELDS : REDACTED_THINKING_FIELDS;
+        const block = exactUpstream(rawBlock, allowed, "messages", path);
+        if (block.type === "thinking") {
+          nonemptyString(block.thinking, `${path}.thinking`, (param) => invalidUpstream("messages", param));
+          nonemptyString(block.signature, `${path}.signature`, (param) => invalidUpstream("messages", param));
+        } else {
+          nonemptyString(block.data, `${path}.data`, (param) => invalidUpstream("messages", param));
+        }
+        const capsule = sealCapsule(
+          sealReasoning,
+          "messages",
+          cloneJson2(block, path, (param) => invalidUpstream("messages", param)),
+          "messages",
+          path
+        );
+        output.push({
+          id: `rs_${responseId.replace(/^resp_/, "")}_${outputIndex}`,
+          type: "reasoning",
+          summary: [],
+          encrypted_content: capsule,
+          status: "completed"
+        });
+        outputIndex += 1;
+        return;
+      }
+      if (rawBlock.type === "tool_use") {
+        flushText();
+        const block = exactUpstream(rawBlock, ANTHROPIC_TOOL_RESPONSE_FIELDS, "messages", path);
+        if (block.caller !== void 0) throw unsupportedUpstream("messages", `${path}.caller`);
+        const callId = nonemptyString(block.id, `${path}.id`, (param) => invalidUpstream("messages", param));
+        const name = validateFunctionName(block.name, `${path}.name`, (param) => invalidUpstream("messages", param));
+        const input = cloneJson2(block.input, `${path}.input`, (param) => invalidUpstream("messages", param));
+        if (!isObject(input)) throw invalidUpstream("messages", `${path}.input`);
+        output.push({
+          id: `fc_${callId}`,
+          type: "function_call",
+          call_id: callId,
+          name,
+          arguments: JSON.stringify(input),
+          status: "completed"
+        });
+        sawTool = true;
+        outputIndex += 1;
+        return;
+      }
+      if (typeof rawBlock.type !== "string") throw invalidUpstream("messages", `${path}.type`);
+      throw unsupportedUpstream("messages", `${path}.type`);
+    });
+    flushText();
+    if (output.length === 0) {
+      textParts = [{ type: "output_text", text: "" }];
+      flushText();
+    }
+    const completedReasons = /* @__PURE__ */ new Set(["end_turn", "tool_use", "stop_sequence"]);
+    const incompleteMap = {
+      max_tokens: "max_output_tokens",
+      refusal: "content_filter",
+      model_context_window_exceeded: "model_context_window_exceeded"
+    };
+    let status;
+    let incompleteReason;
+    if (completedReasons.has(source.stop_reason)) {
+      status = "completed";
+    } else if (incompleteMap[source.stop_reason]) {
+      status = "incomplete";
+      incompleteReason = incompleteMap[source.stop_reason];
+    } else {
+      throw unsupportedUpstream("messages", "stop_reason");
+    }
+    if (source.stop_reason === "tool_use" !== sawTool) {
+      throw invalidUpstream("messages", "stop_reason");
+    }
+    const response = {
+      id: responseId,
+      object: "response",
+      status,
+      model,
+      output,
+      usage: anthropicUsageToResponse(source.usage)
+    };
+    if (incompleteReason) response.incomplete_details = { reason: incompleteReason };
+    if (((_a = source.usage) == null ? void 0 : _a.service_tier) !== void 0 && source.usage.service_tier !== null) {
+      response.service_tier = source.usage.service_tier;
+    }
+    return response;
+  }
+
+  // src/lib/providerSseCodec.js
+  function streamError(code, param) {
+    const error = new Error("Provider SSE stream is invalid.");
+    error.name = "ProviderStreamError";
+    error.status = 502;
+    error.code = code;
+    error.param = param;
+    return error;
+  }
+  function isObject2(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  }
+  function byteLength2(value) {
+    return new TextEncoder().encode(value).byteLength;
+  }
+  function strictParser({ maxFrameBytes, onFrame }) {
+    if (!Number.isInteger(maxFrameBytes) || maxFrameBytes <= 0) {
+      throw new TypeError("maxFrameBytes must be a positive integer");
+    }
+    if (typeof onFrame !== "function") throw new TypeError("onFrame is required");
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    let buffer = "";
+    let ended = false;
+    function processFrame(frame) {
+      if (byteLength2(frame) > maxFrameBytes) throw streamError("upstream_sse_frame_too_large", "sse");
+      let event = "";
+      const data = [];
+      for (const rawLine of frame.split(/\r?\n/)) {
+        if (!rawLine || rawLine.startsWith(":")) continue;
+        if (rawLine.startsWith("event:")) {
+          if (event) throw streamError("upstream_sse_malformed", "sse.event");
+          event = rawLine.slice(6).replace(/^ /, "");
+          continue;
+        }
+        if (rawLine.startsWith("data:")) {
+          data.push(rawLine.slice(5).replace(/^ /, ""));
+          continue;
+        }
+        throw streamError("upstream_sse_malformed", "sse");
+      }
+      if (data.length === 0) return;
+      const rawData = data.join("\n");
+      if (rawData === "[DONE]") {
+        onFrame({ event, done: true, data: null });
+        return;
+      }
+      let value;
+      try {
+        value = JSON.parse(rawData);
+      } catch {
+        throw streamError("upstream_sse_malformed", "sse.data");
+      }
+      onFrame({ event, done: false, data: value });
+    }
+    function drain() {
+      while (true) {
+        const match = /\r?\n\r?\n/.exec(buffer);
+        if (!match) break;
+        const frame = buffer.slice(0, match.index);
+        buffer = buffer.slice(match.index + match[0].length);
+        processFrame(frame);
+      }
+      if (byteLength2(buffer) > maxFrameBytes) throw streamError("upstream_sse_frame_too_large", "sse");
+    }
+    return {
+      feed(chunk) {
+        if (ended) throw streamError("upstream_sse_malformed", "sse");
+        try {
+          if (typeof chunk === "string") buffer += chunk;
+          else if (chunk instanceof Uint8Array) buffer += decoder.decode(chunk, { stream: true });
+          else throw streamError("upstream_sse_malformed", "sse.chunk");
+          drain();
+        } catch (error) {
+          if (error == null ? void 0 : error.code) throw error;
+          throw streamError("upstream_sse_malformed", "sse.chunk");
+        }
+      },
+      end() {
+        if (ended) throw streamError("upstream_sse_malformed", "sse");
+        ended = true;
+        try {
+          buffer += decoder.decode();
+          drain();
+        } catch (error) {
+          if (error == null ? void 0 : error.code) throw error;
+          throw streamError("upstream_sse_malformed", "sse.chunk");
+        }
+        if (buffer.trim()) throw streamError("upstream_sse_truncated", "sse");
+      }
+    };
+  }
+  function createResponsesSseCollector({ maxFrameBytes = 1024 * 1024 } = {}) {
+    let terminal = null;
+    let sawDone = false;
+    const parser = strictParser({
+      maxFrameBytes,
+      onFrame({ event, done, data }) {
+        if (done) {
+          if (!terminal || sawDone) throw streamError("upstream_sse_malformed", "sse.done");
+          sawDone = true;
+          return;
+        }
+        if (!isObject2(data) || typeof data.type !== "string") {
+          throw streamError("upstream_sse_malformed", "sse.data.type");
+        }
+        if (event && event !== data.type) throw streamError("upstream_sse_malformed", "sse.event");
+        if (terminal) throw streamError("upstream_sse_malformed", "sse.after_terminal");
+        if (["response.completed", "response.incomplete", "response.failed"].includes(data.type)) {
+          if (!isObject2(data.response)) throw streamError("upstream_sse_malformed", "sse.data.response");
+          const expected = data.type.slice("response.".length);
+          if (data.response.status !== expected) {
+            throw streamError("upstream_sse_malformed", "sse.data.response.status");
+          }
+          terminal = data.response;
+        }
       }
     });
+    return {
+      feed: parser.feed,
+      end() {
+        parser.end();
+        if (!terminal) throw streamError("upstream_sse_terminal_missing", "sse");
+        return terminal;
+      }
+    };
+  }
+  var CHAT_CHUNK_FIELDS = /* @__PURE__ */ new Set([
+    "id",
+    "object",
+    "created",
+    "model",
+    "choices",
+    "usage",
+    "system_fingerprint",
+    "service_tier"
+  ]);
+  var CHAT_CHOICE_FIELDS2 = /* @__PURE__ */ new Set(["index", "delta", "finish_reason", "logprobs"]);
+  var CHAT_DELTA_FIELDS = /* @__PURE__ */ new Set(["role", "content", "reasoning", "reasoning_content", "tool_calls"]);
+  var CHAT_TOOL_DELTA_FIELDS = /* @__PURE__ */ new Set(["index", "id", "type", "function"]);
+  var CHAT_FUNCTION_DELTA_FIELDS = /* @__PURE__ */ new Set(["name", "arguments"]);
+  function exactStream(value, allowed, path) {
+    if (!isObject2(value)) throw streamError("upstream_sse_malformed", path);
+    const unknown = Object.keys(value).find((key) => !allowed.has(key));
+    if (unknown) throw streamError("upstream_sse_malformed", path ? path + "." + unknown : unknown);
+    return value;
+  }
+  function createChatSseCollector({ maxFrameBytes = 1024 * 1024 } = {}) {
+    let id = "";
+    let model = "";
+    let created = 0;
+    let content = "";
+    let reasoning = "";
+    let finishReason = null;
+    let usage;
+    let doneMarker = false;
+    const tools = /* @__PURE__ */ new Map();
+    const parser = strictParser({
+      maxFrameBytes,
+      onFrame({ done, data }) {
+        if (done) {
+          if (doneMarker || !finishReason) throw streamError("upstream_sse_malformed", "sse.done");
+          doneMarker = true;
+          return;
+        }
+        const chunk = exactStream(data, CHAT_CHUNK_FIELDS, "data");
+        if (chunk.object !== "chat.completion.chunk") throw streamError("upstream_sse_malformed", "data.object");
+        if (typeof chunk.id === "string" && chunk.id) {
+          if (id && id !== chunk.id) throw streamError("upstream_sse_malformed", "data.id");
+          id = chunk.id;
+        }
+        if (typeof chunk.model === "string" && chunk.model) {
+          if (model && model !== chunk.model) throw streamError("upstream_sse_malformed", "data.model");
+          model = chunk.model;
+        }
+        if (chunk.created !== void 0) {
+          if (!Number.isInteger(chunk.created) || chunk.created < 0) {
+            throw streamError("upstream_sse_malformed", "data.created");
+          }
+          created = chunk.created;
+        }
+        if (!Array.isArray(chunk.choices)) throw streamError("upstream_sse_malformed", "data.choices");
+        if (chunk.choices.length === 0) {
+          if (!finishReason || usage !== void 0 || !isObject2(chunk.usage)) {
+            throw streamError("upstream_sse_malformed", "data.usage");
+          }
+          usage = chunk.usage;
+          return;
+        }
+        if (finishReason) throw streamError("upstream_sse_malformed", "sse.after_terminal");
+        if (chunk.choices.length !== 1) throw streamError("upstream_sse_malformed", "data.choices");
+        const choice = exactStream(chunk.choices[0], CHAT_CHOICE_FIELDS2, "choices[0]");
+        if (choice.index !== 0) throw streamError("upstream_sse_malformed", "choices[0].index");
+        if (choice.logprobs !== void 0 && choice.logprobs !== null) {
+          throw streamError("upstream_sse_malformed", "choices[0].logprobs");
+        }
+        const delta = exactStream(choice.delta, CHAT_DELTA_FIELDS, "choices[0].delta");
+        if (delta.role !== void 0 && delta.role !== "assistant") {
+          throw streamError("upstream_sse_malformed", "choices[0].delta.role");
+        }
+        if (delta.content !== void 0 && delta.content !== null) {
+          if (typeof delta.content !== "string") throw streamError("upstream_sse_malformed", "choices[0].delta.content");
+          content += delta.content;
+        }
+        const reasoningValues = [delta.reasoning, delta.reasoning_content].filter((value) => value !== void 0 && value !== null);
+        if (reasoningValues.length > 1 || reasoningValues.some((value) => typeof value !== "string")) {
+          throw streamError("upstream_sse_malformed", "choices[0].delta.reasoning_content");
+        }
+        if (reasoningValues.length === 1) reasoning += reasoningValues[0];
+        if (delta.tool_calls !== void 0) {
+          if (!Array.isArray(delta.tool_calls)) {
+            throw streamError("upstream_sse_malformed", "choices[0].delta.tool_calls");
+          }
+          delta.tool_calls.forEach((raw, index) => {
+            const path = "choices[0].delta.tool_calls[" + index + "]";
+            const part = exactStream(raw, CHAT_TOOL_DELTA_FIELDS, path);
+            if (!Number.isInteger(part.index) || part.index < 0) {
+              throw streamError("upstream_sse_malformed", path + ".index");
+            }
+            const state = tools.get(part.index) || { id: "", name: "", arguments: "" };
+            if (part.id !== void 0) {
+              if (typeof part.id !== "string" || !part.id || state.id && state.id !== part.id) {
+                throw streamError("upstream_sse_malformed", path + ".id");
+              }
+              state.id = part.id;
+            }
+            if (part.type !== void 0 && part.type !== "function") {
+              throw streamError("upstream_sse_malformed", path + ".type");
+            }
+            if (part.function !== void 0) {
+              const fn = exactStream(part.function, CHAT_FUNCTION_DELTA_FIELDS, path + ".function");
+              if (fn.name !== void 0) {
+                if (typeof fn.name !== "string" || !fn.name || state.name && state.name !== fn.name) {
+                  throw streamError("upstream_sse_malformed", path + ".function.name");
+                }
+                state.name = fn.name;
+              }
+              if (fn.arguments !== void 0) {
+                if (typeof fn.arguments !== "string") {
+                  throw streamError("upstream_sse_malformed", path + ".function.arguments");
+                }
+                state.arguments += fn.arguments;
+              }
+            }
+            tools.set(part.index, state);
+          });
+        }
+        if (choice.finish_reason !== null) {
+          if (!["stop", "tool_calls", "function_call", "length", "content_filter"].includes(choice.finish_reason)) {
+            throw streamError("upstream_sse_malformed", "choices[0].finish_reason");
+          }
+          finishReason = choice.finish_reason;
+        }
+      }
+    });
+    return {
+      feed: parser.feed,
+      end() {
+        parser.end();
+        if (!finishReason || !id || !model) throw streamError("upstream_sse_terminal_missing", "sse");
+        const toolCalls = [...tools.entries()].sort(([left], [right]) => left - right).map(([index, state]) => {
+          if (!state.id || !state.name) {
+            throw streamError("upstream_sse_truncated", "choices[0].delta.tool_calls[" + index + "]");
+          }
+          let args;
+          try {
+            args = JSON.parse(state.arguments || "{}");
+          } catch {
+            throw streamError("upstream_sse_truncated", "choices[0].delta.tool_calls[" + index + "].function.arguments");
+          }
+          if (!isObject2(args)) {
+            throw streamError("upstream_sse_truncated", "choices[0].delta.tool_calls[" + index + "].function.arguments");
+          }
+          return {
+            id: state.id,
+            type: "function",
+            function: { name: state.name, arguments: state.arguments || "{}" }
+          };
+        });
+        if (["tool_calls", "function_call"].includes(finishReason) !== toolCalls.length > 0) {
+          throw streamError("upstream_sse_malformed", "choices[0].finish_reason");
+        }
+        const message = { role: "assistant", content: content || null };
+        if (reasoning) message.reasoning_content = reasoning;
+        if (toolCalls.length) message.tool_calls = toolCalls;
+        return {
+          id,
+          object: "chat.completion",
+          created,
+          model,
+          choices: [{
+            index: 0,
+            message,
+            finish_reason: finishReason,
+            logprobs: null
+          }],
+          ...usage === void 0 ? {} : { usage }
+        };
+      }
+    };
+  }
+  function messageBlockStart(block, index) {
+    if (!isObject2(block) || typeof block.type !== "string") {
+      throw streamError("upstream_sse_malformed", "content_block_start.content_block");
+    }
+    if (block.type === "text") return { index, type: "text", text: String(block.text || ""), stopped: false };
+    if (block.type === "tool_use") {
+      if (typeof block.id !== "string" || typeof block.name !== "string" || !isObject2(block.input || {})) {
+        throw streamError("upstream_sse_malformed", "content_block_start.content_block");
+      }
+      return {
+        index,
+        type: "tool_use",
+        id: block.id,
+        name: block.name,
+        input: block.input || {},
+        inputJson: "",
+        stopped: false
+      };
+    }
+    if (block.type === "thinking") {
+      return {
+        index,
+        type: "thinking",
+        thinking: String(block.thinking || ""),
+        signature: String(block.signature || ""),
+        stopped: false
+      };
+    }
+    if (block.type === "redacted_thinking" && typeof block.data === "string") {
+      return { index, type: "redacted_thinking", data: block.data, stopped: false };
+    }
+    throw streamError("upstream_sse_malformed", "content_block_start.content_block.type");
+  }
+  function applyMessageDelta(block, delta) {
+    if (!isObject2(delta) || typeof delta.type !== "string") {
+      throw streamError("upstream_sse_malformed", "content_block_delta.delta");
+    }
+    if (block.type === "text" && delta.type === "text_delta" && typeof delta.text === "string") {
+      block.text += delta.text;
+      return;
+    }
+    if (block.type === "tool_use" && delta.type === "input_json_delta" && typeof delta.partial_json === "string") {
+      block.inputJson += delta.partial_json;
+      return;
+    }
+    if (block.type === "thinking" && delta.type === "thinking_delta" && typeof delta.thinking === "string") {
+      block.thinking += delta.thinking;
+      return;
+    }
+    if (block.type === "thinking" && delta.type === "signature_delta" && typeof delta.signature === "string") {
+      block.signature += delta.signature;
+      return;
+    }
+    throw streamError("upstream_sse_malformed", "content_block_delta.delta.type");
+  }
+  function finalizedBlock(block) {
+    if (block.type === "tool_use") {
+      let input = block.input;
+      if (block.inputJson) {
+        try {
+          input = JSON.parse(block.inputJson);
+        } catch {
+          throw streamError("upstream_sse_malformed", "content_block_delta.delta.partial_json");
+        }
+        if (!isObject2(input)) throw streamError("upstream_sse_malformed", "content_block_delta.delta.partial_json");
+      }
+      return { type: "tool_use", id: block.id, name: block.name, input };
+    }
+    if (block.type === "thinking") {
+      return {
+        type: "thinking",
+        thinking: block.thinking,
+        signature: block.signature
+      };
+    }
+    if (block.type === "redacted_thinking") return { type: block.type, data: block.data };
+    return { type: "text", text: block.text };
+  }
+  function createMessagesSseCollector({ maxFrameBytes = 1024 * 1024 } = {}) {
+    let start = null;
+    let stopReason = null;
+    let stopSequence = null;
+    let usage = null;
+    let messageStop = false;
+    let doneMarker = false;
+    const blocks = /* @__PURE__ */ new Map();
+    const parser = strictParser({
+      maxFrameBytes,
+      onFrame({ event, done, data }) {
+        var _a;
+        if (done) {
+          if (doneMarker) throw streamError("upstream_sse_malformed", "sse.done");
+          doneMarker = true;
+          return;
+        }
+        if (!isObject2(data) || typeof data.type !== "string") {
+          throw streamError("upstream_sse_malformed", "sse.data.type");
+        }
+        if (event && event !== data.type) throw streamError("upstream_sse_malformed", "sse.event");
+        if (messageStop) throw streamError("upstream_sse_malformed", "sse.after_terminal");
+        if (data.type === "ping") return;
+        if (data.type === "error") throw streamError("upstream_stream_error", "sse.data.error");
+        if (data.type === "message_start") {
+          if (start || !isObject2(data.message)) throw streamError("upstream_sse_malformed", "message_start.message");
+          start = data.message;
+          usage = isObject2(start.usage) ? { ...start.usage } : {};
+          return;
+        }
+        if (data.type === "content_block_start") {
+          if (!Number.isInteger(data.index) || data.index < 0 || blocks.has(data.index)) {
+            throw streamError("upstream_sse_malformed", "content_block_start.index");
+          }
+          blocks.set(data.index, messageBlockStart(data.content_block, data.index));
+          return;
+        }
+        if (data.type === "content_block_delta") {
+          const block = blocks.get(data.index);
+          if (!block || block.stopped) throw streamError("upstream_sse_malformed", "content_block_delta.index");
+          applyMessageDelta(block, data.delta);
+          return;
+        }
+        if (data.type === "content_block_stop") {
+          const block = blocks.get(data.index);
+          if (!block || block.stopped) throw streamError("upstream_sse_malformed", "content_block_stop.index");
+          block.stopped = true;
+          return;
+        }
+        if (data.type === "message_delta") {
+          if (!isObject2(data.delta) || typeof data.delta.stop_reason !== "string") {
+            throw streamError("upstream_sse_malformed", "message_delta.delta.stop_reason");
+          }
+          stopReason = data.delta.stop_reason;
+          stopSequence = (_a = data.delta.stop_sequence) != null ? _a : null;
+          if (data.usage !== void 0) {
+            if (!isObject2(data.usage)) throw streamError("upstream_sse_malformed", "message_delta.usage");
+            usage = { ...usage || {}, ...data.usage };
+          }
+          return;
+        }
+        if (data.type === "message_stop") {
+          if (!start || !stopReason) throw streamError("upstream_sse_malformed", "message_stop");
+          messageStop = true;
+          return;
+        }
+        throw streamError("upstream_sse_malformed", "sse.data.type");
+      }
+    });
+    return {
+      feed: parser.feed,
+      end() {
+        parser.end();
+        if (!start || !stopReason) throw streamError("upstream_sse_terminal_missing", "sse");
+        if ([...blocks.values()].some((block) => !block.stopped)) {
+          throw streamError("upstream_sse_truncated", "content_block_stop");
+        }
+        const content = [...blocks.values()].sort((left, right) => left.index - right.index).map(finalizedBlock);
+        return {
+          message: {
+            id: String(start.id || ""),
+            type: "message",
+            role: "assistant",
+            model: String(start.model || ""),
+            content,
+            stop_reason: stopReason,
+            stop_sequence: stopSequence,
+            usage: usage || {}
+          },
+          terminalMode: messageStop ? "message_stop" : "bounded_eof"
+        };
+      }
+    };
+  }
+  function messagesSseEvents(message) {
+    var _a;
+    if (!isObject2(message) || message.type !== "message" || !Array.isArray(message.content)) {
+      throw streamError("invalid_messages_response", "message");
+    }
+    const events = [[
+      "message_start",
+      {
+        type: "message_start",
+        message: {
+          id: message.id,
+          type: "message",
+          role: "assistant",
+          model: message.model,
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: message.usage || { input_tokens: 0, output_tokens: 0 }
+        }
+      }
+    ]];
+    message.content.forEach((block, index) => {
+      if (block.type === "text") {
+        events.push(["content_block_start", {
+          type: "content_block_start",
+          index,
+          content_block: { type: "text", text: "" }
+        }]);
+        if (block.text) events.push(["content_block_delta", {
+          type: "content_block_delta",
+          index,
+          delta: { type: "text_delta", text: block.text }
+        }]);
+      } else if (block.type === "tool_use") {
+        events.push(["content_block_start", {
+          type: "content_block_start",
+          index,
+          content_block: {
+            type: "tool_use",
+            id: block.id,
+            name: block.name,
+            input: {}
+          }
+        }]);
+        events.push(["content_block_delta", {
+          type: "content_block_delta",
+          index,
+          delta: { type: "input_json_delta", partial_json: JSON.stringify(block.input || {}) }
+        }]);
+      } else if (block.type === "thinking") {
+        events.push(["content_block_start", {
+          type: "content_block_start",
+          index,
+          content_block: { type: "thinking", thinking: "", signature: "" }
+        }]);
+        if (block.thinking) events.push(["content_block_delta", {
+          type: "content_block_delta",
+          index,
+          delta: { type: "thinking_delta", thinking: block.thinking }
+        }]);
+        if (block.signature) events.push(["content_block_delta", {
+          type: "content_block_delta",
+          index,
+          delta: { type: "signature_delta", signature: block.signature }
+        }]);
+      } else if (block.type === "redacted_thinking") {
+        events.push(["content_block_start", {
+          type: "content_block_start",
+          index,
+          content_block: { type: "redacted_thinking", data: block.data }
+        }]);
+      } else {
+        throw streamError("invalid_messages_response", "message.content[" + index + "].type");
+      }
+      events.push(["content_block_stop", { type: "content_block_stop", index }]);
+    });
+    events.push(["message_delta", {
+      type: "message_delta",
+      delta: {
+        stop_reason: message.stop_reason || "end_turn",
+        stop_sequence: (_a = message.stop_sequence) != null ? _a : null
+      },
+      usage: message.usage || {}
+    }]);
+    events.push(["message_stop", { type: "message_stop" }]);
+    return events;
+  }
+  function responsesSseEvents(response) {
+    if (!isObject2(response) || response.object !== "response" || !Array.isArray(response.output)) {
+      throw streamError("invalid_responses_response", "response");
+    }
+    const created = {
+      ...response,
+      status: "in_progress",
+      output: []
+    };
+    const events = [["response.created", { type: "response.created", response: created }]];
+    response.output.forEach((item, outputIndex) => {
+      const added = { ...item };
+      if (Object.hasOwn(added, "status")) added.status = "in_progress";
+      if (item.type === "message") added.content = [];
+      if (item.type === "function_call") added.arguments = "";
+      events.push(["response.output_item.added", {
+        type: "response.output_item.added",
+        output_index: outputIndex,
+        item: added
+      }]);
+      if (item.type === "message") {
+        (item.content || []).forEach((part, contentIndex) => {
+          if (part.type !== "output_text") {
+            throw streamError("invalid_responses_response", "response.output[" + outputIndex + "].content[" + contentIndex + "]");
+          }
+          events.push(["response.content_part.added", {
+            type: "response.content_part.added",
+            output_index: outputIndex,
+            content_index: contentIndex,
+            part: { type: "output_text", text: "" }
+          }]);
+          if (part.text) events.push(["response.output_text.delta", {
+            type: "response.output_text.delta",
+            output_index: outputIndex,
+            content_index: contentIndex,
+            delta: part.text
+          }]);
+          events.push(["response.output_text.done", {
+            type: "response.output_text.done",
+            output_index: outputIndex,
+            content_index: contentIndex,
+            text: part.text
+          }]);
+          events.push(["response.content_part.done", {
+            type: "response.content_part.done",
+            output_index: outputIndex,
+            content_index: contentIndex,
+            part
+          }]);
+        });
+      } else if (item.type === "function_call") {
+        if (item.arguments) events.push(["response.function_call_arguments.delta", {
+          type: "response.function_call_arguments.delta",
+          item_id: item.id,
+          output_index: outputIndex,
+          delta: item.arguments
+        }]);
+        events.push(["response.function_call_arguments.done", {
+          type: "response.function_call_arguments.done",
+          item_id: item.id,
+          output_index: outputIndex,
+          arguments: item.arguments || "{}"
+        }]);
+      } else if (item.type !== "reasoning") {
+        throw streamError("invalid_responses_response", "response.output[" + outputIndex + "].type");
+      }
+      events.push(["response.output_item.done", {
+        type: "response.output_item.done",
+        output_index: outputIndex,
+        item
+      }]);
+    });
+    const status = response.status || "completed";
+    if (!["completed", "incomplete", "failed"].includes(status)) {
+      throw streamError("invalid_responses_response", "response.status");
+    }
+    events.push(["response." + status, { type: "response." + status, response }]);
+    return events;
   }
 
   // src/lib/providerHeaders.js
@@ -17076,7 +19855,15 @@
     "traceparent",
     "tracestate"
   ]);
-  var LOCAL_ONLY = /* @__PURE__ */ new Set(["authorization", "host", "content-length", "connection", "transfer-encoding"]);
+  var LOCAL_ROUTE_TOKEN_HEADER = "x-ae-mcp-route-token";
+  var LOCAL_ONLY = /* @__PURE__ */ new Set([
+    "authorization",
+    LOCAL_ROUTE_TOKEN_HEADER,
+    "host",
+    "content-length",
+    "connection",
+    "transfer-encoding"
+  ]);
   var FORBIDDEN_EXACT = /* @__PURE__ */ new Set([
     "host",
     "content-length",
@@ -17167,7 +19954,9 @@
     for (let index = 0; index < rawHeaders.length; index += 2) {
       const name = validateName(rawHeaders[index]);
       const value = validateValue(rawHeaders[index + 1], bounded);
-      if (seen.has(name)) throw headerError("provider_header_duplicate", "Duplicate provider header is forbidden.");
+      if (seen.has(name) && name !== "authorization") {
+        throw headerError("provider_header_duplicate", "Duplicate provider header is forbidden.");
+      }
       seen.add(name);
       all.push({ name, value });
       if (LOCAL_ONLY.has(name)) continue;
@@ -17283,12 +20072,18 @@
     "tools",
     "tool_choice",
     "parallel_tool_calls",
-    "stream"
+    "stream",
+    "reasoning",
+    "include",
+    "store",
+    "prompt_cache_key",
+    "client_metadata"
   ]);
-  var MESSAGE_FIELDS = /* @__PURE__ */ new Set(["type", "role", "content"]);
+  var MESSAGE_FIELDS2 = /* @__PURE__ */ new Set(["type", "role", "content"]);
   var TEXT_PART_FIELDS = /* @__PURE__ */ new Set(["type", "text"]);
-  var FUNCTION_CALL_FIELDS = /* @__PURE__ */ new Set(["type", "call_id", "name", "arguments"]);
-  var FUNCTION_OUTPUT_FIELDS = /* @__PURE__ */ new Set(["type", "call_id", "output"]);
+  var FUNCTION_CALL_FIELDS = /* @__PURE__ */ new Set(["type", "id", "call_id", "name", "arguments", "status"]);
+  var FUNCTION_OUTPUT_FIELDS = /* @__PURE__ */ new Set(["type", "id", "call_id", "output", "status"]);
+  var REASONING_ITEM_FIELDS = /* @__PURE__ */ new Set(["type", "id", "summary", "encrypted_content", "status"]);
   var FUNCTION_TOOL_FIELDS = /* @__PURE__ */ new Set([
     "type",
     "name",
@@ -17296,8 +20091,9 @@
     "parameters",
     "strict"
   ]);
+  var NAMESPACE_TOOL_FIELDS = /* @__PURE__ */ new Set(["type", "name", "description", "tools"]);
   var FUNCTION_CHOICE_FIELDS = /* @__PURE__ */ new Set(["type", "name"]);
-  var CHAT_COMPLETION_FIELDS = /* @__PURE__ */ new Set([
+  var CHAT_COMPLETION_FIELDS2 = /* @__PURE__ */ new Set([
     "id",
     "object",
     "created",
@@ -17307,16 +20103,16 @@
     "system_fingerprint",
     "service_tier"
   ]);
-  var CHAT_CHOICE_FIELDS = /* @__PURE__ */ new Set([
+  var CHAT_CHOICE_FIELDS3 = /* @__PURE__ */ new Set([
     "index",
     "message",
     "finish_reason",
     "logprobs"
   ]);
-  var CHAT_MESSAGE_FIELDS = /* @__PURE__ */ new Set(["role", "content", "tool_calls", "refusal"]);
-  var CHAT_TOOL_CALL_FIELDS = /* @__PURE__ */ new Set(["id", "type", "function"]);
-  var CHAT_FUNCTION_FIELDS = /* @__PURE__ */ new Set(["name", "arguments"]);
-  var CHAT_CHUNK_FIELDS = /* @__PURE__ */ new Set([
+  var CHAT_MESSAGE_FIELDS2 = /* @__PURE__ */ new Set(["role", "content", "tool_calls", "refusal", "reasoning_content"]);
+  var CHAT_TOOL_CALL_FIELDS2 = /* @__PURE__ */ new Set(["id", "type", "function"]);
+  var CHAT_FUNCTION_FIELDS2 = /* @__PURE__ */ new Set(["name", "arguments"]);
+  var CHAT_CHUNK_FIELDS2 = /* @__PURE__ */ new Set([
     "id",
     "object",
     "created",
@@ -17332,10 +20128,15 @@
     "finish_reason",
     "logprobs"
   ]);
-  var CHAT_DELTA_FIELDS = /* @__PURE__ */ new Set(["role", "content", "tool_calls"]);
-  var CHAT_TOOL_DELTA_FIELDS = /* @__PURE__ */ new Set(["index", "id", "type", "function"]);
-  var CHAT_FUNCTION_DELTA_FIELDS = /* @__PURE__ */ new Set(["name", "arguments"]);
-  var FUNCTION_NAME = /^[A-Za-z0-9_-]{1,64}$/;
+  var CHAT_DELTA_FIELDS2 = /* @__PURE__ */ new Set(["role", "content", "tool_calls", "reasoning_content"]);
+  var CHAT_TOOL_DELTA_FIELDS2 = /* @__PURE__ */ new Set(["index", "id", "type", "function"]);
+  var CHAT_FUNCTION_DELTA_FIELDS2 = /* @__PURE__ */ new Set(["name", "arguments"]);
+  var UNSUPPORTED_TOKEN_PARAMETER_CODES = /* @__PURE__ */ new Set([
+    "unsupported_parameter",
+    "unknown_parameter",
+    "unrecognized_parameter"
+  ]);
+  var FUNCTION_NAME2 = /^[A-Za-z0-9_-]{1,64}$/;
   var ResponsesCompatibilityError = class extends Error {
     constructor({ status, code, param, message }) {
       super(message);
@@ -17347,10 +20148,18 @@
   };
   function unsupportedResponsesField(param) {
     return new ResponsesCompatibilityError({
-      status: 400,
+      status: 501,
       code: "unsupported_responses_field",
       param,
       message: `Unsupported Responses field: ${param}`
+    });
+  }
+  function invalidResponsesField(param) {
+    return new ResponsesCompatibilityError({
+      status: 400,
+      code: "invalid_responses_field",
+      param,
+      message: `Invalid Responses field: ${param}`
     });
   }
   function invalidChatCompletion(param) {
@@ -17377,55 +20186,55 @@
       message: "Upstream Chat SSE frame exceeds the configured limit."
     });
   }
-  function isObject(value) {
+  function isObject3(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
     const prototype = Object.getPrototypeOf(value);
     return prototype === Object.prototype || prototype === null;
   }
-  function unknownKey(value, allowed) {
+  function unknownKey2(value, allowed) {
     return Object.keys(value).find((key) => !allowed.has(key)) || null;
   }
   function requestObject(value, param) {
-    if (!isObject(value)) throw unsupportedResponsesField(param);
+    if (!isObject3(value)) throw invalidResponsesField(param);
     return value;
   }
   function requestExact(value, allowed, param) {
     const object = requestObject(value, param);
-    const key = unknownKey(object, allowed);
+    const key = unknownKey2(object, allowed);
     if (key !== null) throw unsupportedResponsesField(param ? `${param}.${key}` : key);
     return object;
   }
   function requestString(value, param, allowEmpty = true) {
     if (typeof value !== "string" || !allowEmpty && value.length === 0) {
-      throw unsupportedResponsesField(param);
+      throw invalidResponsesField(param);
     }
     return value;
   }
   function requestFunctionName(value, param) {
     const name = requestString(value, param, false);
-    if (!FUNCTION_NAME.test(name)) throw unsupportedResponsesField(param);
+    if (!FUNCTION_NAME2.test(name)) throw invalidResponsesField(param);
     return name;
   }
   function cloneRequestJson(value, param, seen = /* @__PURE__ */ new WeakSet()) {
     if (value === null || typeof value === "string" || typeof value === "boolean") return value;
     if (typeof value === "number") {
-      if (!Number.isFinite(value)) throw unsupportedResponsesField(param);
+      if (!Number.isFinite(value)) throw invalidResponsesField(param);
       return value;
     }
     if (typeof value !== "object" || value === null || seen.has(value)) {
-      throw unsupportedResponsesField(param);
+      throw invalidResponsesField(param);
     }
     seen.add(value);
     let result;
     if (Array.isArray(value)) {
       result = value.map((item) => cloneRequestJson(item, param, seen));
-    } else if (isObject(value)) {
+    } else if (isObject3(value)) {
       result = {};
       for (const [key, item] of Object.entries(value)) {
         result[key] = cloneRequestJson(item, param, seen);
       }
     } else {
-      throw unsupportedResponsesField(param);
+      throw invalidResponsesField(param);
     }
     seen.delete(value);
     return result;
@@ -17436,14 +20245,14 @@
     try {
       parsed = JSON.parse(raw);
     } catch {
-      throw unsupportedResponsesField(param);
+      throw invalidResponsesField(param);
     }
-    if (!isObject(parsed)) throw unsupportedResponsesField(param);
+    if (!isObject3(parsed)) throw invalidResponsesField(param);
     return raw;
   }
   function messageText(content, param) {
     if (typeof content === "string") return content;
-    if (!Array.isArray(content)) throw unsupportedResponsesField(param);
+    if (!Array.isArray(content)) throw invalidResponsesField(param);
     return content.map((rawPart, index) => {
       const partPath = `${param}[${index}]`;
       const part = requestObject(rawPart, partPath);
@@ -17455,15 +20264,15 @@
     }).join("");
   }
   function responseMessageToChat(item, path) {
-    const message = requestExact(item, MESSAGE_FIELDS, path);
+    const message = requestExact(item, MESSAGE_FIELDS2, path);
     if (message.type !== void 0 && message.type !== "message") {
-      throw unsupportedResponsesField(`${path}.type`);
+      throw invalidResponsesField(`${path}.type`);
     }
-    if (!["user", "assistant", "system"].includes(message.role)) {
+    if (!["user", "assistant", "system", "developer"].includes(message.role)) {
       throw unsupportedResponsesField(`${path}.role`);
     }
     if (!Object.hasOwn(message, "content")) {
-      throw unsupportedResponsesField(`${path}.content`);
+      throw invalidResponsesField(`${path}.content`);
     }
     return {
       role: message.role,
@@ -17472,7 +20281,10 @@
   }
   function responseFunctionCallToChat(item, path) {
     const call = requestExact(item, FUNCTION_CALL_FIELDS, path);
-    if (call.type !== "function_call") throw unsupportedResponsesField(`${path}.type`);
+    if (call.type !== "function_call") throw invalidResponsesField(`${path}.type`);
+    if (call.status !== void 0 && !["completed", "incomplete"].includes(call.status)) {
+      throw invalidResponsesField(`${path}.status`);
+    }
     return {
       id: requestString(call.call_id, `${path}.call_id`, false),
       type: "function",
@@ -17485,11 +20297,14 @@
   function responseFunctionOutputToChat(item, path, knownCallIds, usedCallIds) {
     const output = requestExact(item, FUNCTION_OUTPUT_FIELDS, path);
     if (output.type !== "function_call_output") {
-      throw unsupportedResponsesField(`${path}.type`);
+      throw invalidResponsesField(`${path}.type`);
+    }
+    if (output.status !== void 0 && !["completed", "incomplete"].includes(output.status)) {
+      throw invalidResponsesField(`${path}.status`);
     }
     const callId = requestString(output.call_id, `${path}.call_id`, false);
     if (!knownCallIds.has(callId) || usedCallIds.has(callId)) {
-      throw unsupportedResponsesField(`${path}.call_id`);
+      throw invalidResponsesField(`${path}.call_id`);
     }
     usedCallIds.add(callId);
     return {
@@ -17498,26 +20313,49 @@
       content: requestString(output.output, `${path}.output`)
     };
   }
-  function responsesInputToMessages(input) {
+  function responsesInputToMessages(input, { openReasoning } = {}) {
     if (typeof input === "string") return [{ role: "user", content: input }];
     if (!Array.isArray(input) || input.length === 0) {
-      throw unsupportedResponsesField("input");
+      throw invalidResponsesField("input");
     }
     const messages = [];
     const knownCallIds = /* @__PURE__ */ new Set();
     const usedCallIds = /* @__PURE__ */ new Set();
     let pendingCalls = [];
+    let pendingReasoning = null;
     function flushCalls() {
       if (pendingCalls.length === 0) return;
-      messages.push({ role: "assistant", content: null, tool_calls: pendingCalls });
+      const assistant = { role: "assistant", content: null, tool_calls: pendingCalls };
+      if (pendingReasoning !== null) assistant.reasoning_content = pendingReasoning;
+      messages.push(assistant);
       pendingCalls = [];
+      pendingReasoning = null;
     }
     input.forEach((rawItem, index) => {
       const path = `input[${index}]`;
-      if (!isObject(rawItem)) throw unsupportedResponsesField(path);
+      if (!isObject3(rawItem)) throw invalidResponsesField(path);
+      if (rawItem.type === "reasoning") {
+        if (typeof openReasoning !== "function") throw unsupportedResponsesField(`${path}.type`);
+        if (pendingReasoning !== null || pendingCalls.length > 0) {
+          throw invalidResponsesField(path);
+        }
+        const reasoning = requestExact(rawItem, REASONING_ITEM_FIELDS, path);
+        if (!Array.isArray(reasoning.summary)) throw invalidResponsesField(`${path}.summary`);
+        if (reasoning.summary.length > 0) throw unsupportedResponsesField(`${path}.summary`);
+        const encrypted = requestString(reasoning.encrypted_content, `${path}.encrypted_content`, false);
+        let opened;
+        try {
+          opened = openReasoning(encrypted, { sourceProtocol: "chat" });
+        } catch {
+          throw unsupportedResponsesField(`${path}.encrypted_content`);
+        }
+        if (typeof (opened == null ? void 0 : opened.item) !== "string") throw unsupportedResponsesField(`${path}.encrypted_content`);
+        pendingReasoning = opened.item;
+        return;
+      }
       if (rawItem.type === "function_call") {
         const call = responseFunctionCallToChat(rawItem, path);
-        if (knownCallIds.has(call.id)) throw unsupportedResponsesField(`${path}.call_id`);
+        if (knownCallIds.has(call.id)) throw invalidResponsesField(`${path}.call_id`);
         knownCallIds.add(call.id);
         pendingCalls.push(call);
         return;
@@ -17534,55 +20372,88 @@
       }
       if (rawItem.type === void 0 || rawItem.type === "message") {
         flushCalls();
-        messages.push(responseMessageToChat(rawItem, path));
+        const message = responseMessageToChat(rawItem, path);
+        if (pendingReasoning !== null) {
+          if (message.role !== "assistant") throw invalidResponsesField(path);
+          message.reasoning_content = pendingReasoning;
+          pendingReasoning = null;
+        }
+        messages.push(message);
         return;
       }
       throw unsupportedResponsesField(`${path}.type`);
     });
     flushCalls();
+    if (pendingReasoning !== null) throw invalidResponsesField("input");
     return messages;
   }
-  function responseToolToChat(rawTool, index) {
-    const path = `tools[${index}]`;
+  function responseToolToChat(rawTool, path, namespaceDescription = "") {
     const tool = requestExact(rawTool, FUNCTION_TOOL_FIELDS, path);
     if (tool.type !== "function") throw unsupportedResponsesField(`${path}.type`);
     const fn = {
       name: requestFunctionName(tool.name, `${path}.name`),
       parameters: cloneRequestJson(tool.parameters, `${path}.parameters`)
     };
-    if (!isObject(fn.parameters)) throw unsupportedResponsesField(`${path}.parameters`);
-    if (tool.description !== void 0) {
-      fn.description = requestString(tool.description, `${path}.description`);
+    if (!isObject3(fn.parameters)) throw invalidResponsesField(`${path}.parameters`);
+    const description = tool.description === void 0 ? "" : requestString(tool.description, `${path}.description`);
+    if (namespaceDescription || description) {
+      fn.description = [namespaceDescription, description].filter(Boolean).join("\n\n");
     }
     if (tool.strict !== void 0) {
-      if (typeof tool.strict !== "boolean") throw unsupportedResponsesField(`${path}.strict`);
+      if (typeof tool.strict !== "boolean") throw invalidResponsesField(`${path}.strict`);
       fn.strict = tool.strict;
     }
     return { type: "function", function: fn };
   }
+  function responseToolsToChat(rawTools) {
+    const converted = [];
+    rawTools.forEach((rawTool, index) => {
+      const path = `tools[${index}]`;
+      const tool = requestObject(rawTool, path);
+      if (tool.type === "function") {
+        converted.push(responseToolToChat(tool, path));
+        return;
+      }
+      if (tool.type !== "namespace") throw unsupportedResponsesField(`${path}.type`);
+      const namespace = requestExact(tool, NAMESPACE_TOOL_FIELDS, path);
+      const namespaceName = requestFunctionName(namespace.name, `${path}.name`);
+      const namespaceDescription = namespace.description === void 0 ? namespaceName : requestString(namespace.description, `${path}.description`);
+      if (!Array.isArray(namespace.tools) || namespace.tools.length === 0) {
+        throw invalidResponsesField(`${path}.tools`);
+      }
+      namespace.tools.forEach((child, childIndex) => {
+        converted.push(responseToolToChat(
+          child,
+          `${path}.tools[${childIndex}]`,
+          namespaceDescription
+        ));
+      });
+    });
+    return converted;
+  }
   function responseToolChoiceToChat(rawChoice, toolNames) {
     if (typeof rawChoice === "string") {
       if (!["auto", "none", "required"].includes(rawChoice)) {
-        throw unsupportedResponsesField("tool_choice");
+        throw invalidResponsesField("tool_choice");
       }
       return rawChoice;
     }
     const choice = requestExact(rawChoice, FUNCTION_CHOICE_FIELDS, "tool_choice");
     if (choice.type !== "function") throw unsupportedResponsesField("tool_choice.type");
     const name = requestFunctionName(choice.name, "tool_choice.name");
-    if (!toolNames.has(name)) throw unsupportedResponsesField("tool_choice.name");
+    if (!toolNames.has(name)) throw invalidResponsesField("tool_choice.name");
     return { type: "function", function: { name } };
   }
   function optionalNumber(value, param, predicate) {
     if (typeof value !== "number" || !Number.isFinite(value) || !predicate(value)) {
-      throw unsupportedResponsesField(param);
+      throw invalidResponsesField(param);
     }
     return value;
   }
-  function responsesBodyToChatBody(body) {
+  function responsesBodyToChatBody(body, { openReasoning } = {}) {
     const request = requestExact(body, SUPPORTED_RESPONSE_FIELDS, "");
     const model = requestString(request.model, "model", false);
-    if (!Object.hasOwn(request, "input")) throw unsupportedResponsesField("input");
+    if (!Object.hasOwn(request, "input")) throw invalidResponsesField("input");
     const messages = [];
     if (request.instructions !== void 0) {
       messages.push({
@@ -17590,14 +20461,14 @@
         content: requestString(request.instructions, "instructions")
       });
     }
-    messages.push(...responsesInputToMessages(request.input));
+    messages.push(...responsesInputToMessages(request.input, { openReasoning }));
     const chat = {
       model,
       messages,
       stream: request.stream === true
     };
     if (request.stream !== void 0 && typeof request.stream !== "boolean") {
-      throw unsupportedResponsesField("stream");
+      throw invalidResponsesField("stream");
     }
     if (request.max_output_tokens !== void 0) {
       chat.max_tokens = optionalNumber(
@@ -17620,34 +20491,85 @@
         (value) => value >= 0 && value <= 1
       );
     }
+    if (request.reasoning !== void 0 && request.reasoning !== null) {
+      throw unsupportedResponsesField("reasoning");
+    }
+    if (request.include !== void 0) {
+      if (!Array.isArray(request.include)) throw invalidResponsesField("include");
+      const supported = typeof openReasoning === "function" && request.include.length === 1 && request.include[0] === "reasoning.encrypted_content";
+      if (request.include.length > 0 && !supported) throw unsupportedResponsesField("include");
+    }
+    if (request.store !== void 0) {
+      if (typeof request.store !== "boolean") throw invalidResponsesField("store");
+      if (request.store) throw unsupportedResponsesField("store");
+    }
+    if (request.prompt_cache_key !== void 0) {
+      chat.prompt_cache_key = requestString(request.prompt_cache_key, "prompt_cache_key", false);
+    }
+    if (request.client_metadata !== void 0) {
+      const metadata = cloneRequestJson(request.client_metadata, "client_metadata");
+      if (!isObject3(metadata)) throw invalidResponsesField("client_metadata");
+      chat.client_metadata = metadata;
+    }
     let tools;
     if (request.tools !== void 0) {
-      if (!Array.isArray(request.tools)) throw unsupportedResponsesField("tools");
-      tools = request.tools.map(responseToolToChat);
+      if (!Array.isArray(request.tools)) throw invalidResponsesField("tools");
+      tools = responseToolsToChat(request.tools);
       const names = tools.map((tool) => tool.function.name);
-      if (new Set(names).size !== names.length) throw unsupportedResponsesField("tools");
+      if (new Set(names).size !== names.length) throw invalidResponsesField("tools");
       chat.tools = tools;
     }
     if (request.tool_choice !== void 0) {
       const toolNames = new Set((tools || []).map((tool) => tool.function.name));
-      if (toolNames.size === 0) throw unsupportedResponsesField("tool_choice");
+      if (toolNames.size === 0) throw invalidResponsesField("tool_choice");
       chat.tool_choice = responseToolChoiceToChat(request.tool_choice, toolNames);
     }
     if (request.parallel_tool_calls !== void 0) {
       if (typeof request.parallel_tool_calls !== "boolean" || !tools || tools.length === 0) {
-        throw unsupportedResponsesField("parallel_tool_calls");
+        throw invalidResponsesField("parallel_tool_calls");
       }
       chat.parallel_tool_calls = request.parallel_tool_calls;
     }
     return chat;
   }
+  function chatBodyWithDeveloperRoleAsSystem(chatBody) {
+    if (!isObject3(chatBody) || !Array.isArray(chatBody.messages)) return null;
+    let changed = false;
+    const messages = chatBody.messages.map((message) => {
+      if (!isObject3(message) || message.role !== "developer") return message;
+      changed = true;
+      return { ...message, role: "system" };
+    });
+    return changed ? { ...chatBody, messages } : null;
+  }
+  function chatBodyWithMaxCompletionTokens(chatBody) {
+    if (!isObject3(chatBody) || !Object.hasOwn(chatBody, "max_tokens") || Object.hasOwn(chatBody, "max_completion_tokens")) return null;
+    const converted = {};
+    for (const [name, value] of Object.entries(chatBody)) {
+      converted[name === "max_tokens" ? "max_completion_tokens" : name] = value;
+    }
+    return converted;
+  }
+  function chatErrorRequestsMaxCompletionTokens(status, payload) {
+    if (status !== 400 && status !== 422) return false;
+    const envelope3 = isObject3(payload) ? payload : null;
+    const error = isObject3(envelope3 == null ? void 0 : envelope3.error) ? envelope3.error : envelope3;
+    if (!error) return false;
+    const param = String(error.param || "").trim().toLowerCase();
+    const code = String(error.code || "").trim().toLowerCase();
+    const message = String(error.message || "").toLowerCase();
+    const targetsMaxTokens = param === "max_tokens" || param === "body.max_tokens";
+    const explicitCode = UNSUPPORTED_TOKEN_PARAMETER_CODES.has(code);
+    const explicitMessage = message.includes("max_tokens") && (message.includes("max_completion_tokens") || /\b(?:unsupported|unrecognized|unknown|unexpected|disallowed|forbidden)\b/.test(message) || /\bnot\s+(?:supported|allowed|accepted|permitted)\b/.test(message));
+    return explicitMessage || targetsMaxTokens && explicitCode;
+  }
   function chatObject(value, param) {
-    if (!isObject(value)) throw invalidChatCompletion(param);
+    if (!isObject3(value)) throw invalidChatCompletion(param);
     return value;
   }
   function chatExact(value, allowed, param) {
     const object = chatObject(value, param);
-    const key = unknownKey(object, allowed);
+    const key = unknownKey2(object, allowed);
     if (key !== null) throw invalidChatCompletion(param ? `${param}.${key}` : key);
     return object;
   }
@@ -17665,31 +20587,53 @@
     } catch {
       throw invalidChatCompletion(param);
     }
-    if (!isObject(parsed)) throw invalidChatCompletion(param);
+    if (!isObject3(parsed)) throw invalidChatCompletion(param);
     return raw;
   }
   function messageItemId(responseId) {
     const suffix = responseId.startsWith("resp_") ? responseId.slice(5) : responseId;
     return `msg_${suffix}`;
   }
-  function completedMessageItem(responseId, text) {
+  function reasoningItemId(responseId) {
+    const suffix = responseId.startsWith("resp_") ? responseId.slice(5) : responseId;
+    return `rs_${suffix}`;
+  }
+  function sealedChatReasoning(responseId, value, sealReasoning, invalid) {
+    if (typeof value !== "string" || value.length === 0 || typeof sealReasoning !== "function") {
+      throw invalid();
+    }
+    let encrypted;
+    try {
+      encrypted = sealReasoning({ sourceProtocol: "chat", item: value });
+    } catch {
+      throw invalid();
+    }
+    if (typeof encrypted !== "string" || encrypted.length === 0) throw invalid();
+    return {
+      id: reasoningItemId(responseId),
+      type: "reasoning",
+      summary: [],
+      encrypted_content: encrypted
+    };
+  }
+  function completedMessageItem(responseId, text, status = "completed") {
     return {
       id: messageItemId(responseId),
       type: "message",
-      status: "completed",
+      status,
       role: "assistant",
       content: [{ type: "output_text", text }]
     };
   }
   function completedToolItem(rawCall, path, usedIds) {
-    const call = chatExact(rawCall, CHAT_TOOL_CALL_FIELDS, path);
+    const call = chatExact(rawCall, CHAT_TOOL_CALL_FIELDS2, path);
     const id = chatString(call.id, `${path}.id`, false);
     if (usedIds.has(id)) throw invalidChatCompletion(`${path}.id`);
     usedIds.add(id);
     if (call.type !== "function") throw invalidChatCompletion(`${path}.type`);
-    const fn = chatExact(call.function, CHAT_FUNCTION_FIELDS, `${path}.function`);
+    const fn = chatExact(call.function, CHAT_FUNCTION_FIELDS2, `${path}.function`);
     const name = chatString(fn.name, `${path}.function.name`, false);
-    if (!FUNCTION_NAME.test(name)) throw invalidChatCompletion(`${path}.function.name`);
+    if (!FUNCTION_NAME2.test(name)) throw invalidChatCompletion(`${path}.function.name`);
     return {
       type: "function_call",
       id: `fc_${id}`,
@@ -17700,33 +20644,36 @@
     };
   }
   function validateResponseContext(context) {
-    if (!isObject(context)) throw invalidChatCompletion("context");
+    if (!isObject3(context)) throw invalidChatCompletion("context");
     return {
       id: chatString(context.id, "context.id", false),
       model: chatString(context.model, "context.model", false)
     };
   }
-  function chatCompletionToResponse(chat, context) {
-    const completion = chatExact(chat, CHAT_COMPLETION_FIELDS, "");
+  function chatCompletionToResponse(chat, context, { sealReasoning } = {}) {
+    const completion = chatExact(chat, CHAT_COMPLETION_FIELDS2, "");
     if (completion.object !== "chat.completion") throw invalidChatCompletion("object");
     if (!Array.isArray(completion.choices) || completion.choices.length !== 1) {
       throw invalidChatCompletion("choices");
     }
-    if (completion.usage !== void 0 && !isObject(completion.usage)) {
+    if (completion.usage !== void 0 && !isObject3(completion.usage)) {
       throw invalidChatCompletion("usage");
     }
-    const choice = chatExact(completion.choices[0], CHAT_CHOICE_FIELDS, "choices[0]");
+    const choice = chatExact(completion.choices[0], CHAT_CHOICE_FIELDS3, "choices[0]");
     if (choice.index !== 0) throw invalidChatCompletion("choices[0].index");
     if (choice.logprobs !== void 0 && choice.logprobs !== null) {
       throw invalidChatCompletion("choices[0].logprobs");
     }
-    const message = chatExact(choice.message, CHAT_MESSAGE_FIELDS, "choices[0].message");
+    const message = chatExact(choice.message, CHAT_MESSAGE_FIELDS2, "choices[0].message");
     if (message.role !== "assistant") throw invalidChatCompletion("choices[0].message.role");
     if (message.refusal !== void 0 && message.refusal !== null) {
       throw invalidChatCompletion("choices[0].message.refusal");
     }
     if (message.content !== null && typeof message.content !== "string") {
       throw invalidChatCompletion("choices[0].message.content");
+    }
+    if (message.reasoning_content !== void 0 && message.reasoning_content !== null && typeof message.reasoning_content !== "string") {
+      throw invalidChatCompletion("choices[0].message.reasoning_content");
     }
     const rawCalls = message.tool_calls === void 0 ? [] : message.tool_calls;
     if (!Array.isArray(rawCalls)) throw invalidChatCompletion("choices[0].message.tool_calls");
@@ -17742,23 +20689,38 @@
     if (choice.finish_reason === "stop" && toolItems.length !== 0) {
       throw invalidChatCompletion("choices[0].finish_reason");
     }
-    if (!["stop", "tool_calls"].includes(choice.finish_reason)) {
+    if (choice.finish_reason === "length" && toolItems.length !== 0) {
+      throw invalidChatCompletion("choices[0].finish_reason");
+    }
+    if (!["stop", "tool_calls", "length"].includes(choice.finish_reason)) {
       throw invalidChatCompletion("choices[0].finish_reason");
     }
     const responseContext = validateResponseContext(context);
+    const incomplete = choice.finish_reason === "length";
+    const itemStatus = incomplete ? "incomplete" : "completed";
     const output = [];
+    if (typeof message.reasoning_content === "string" && message.reasoning_content.length > 0) {
+      output.push(sealedChatReasoning(
+        responseContext.id,
+        message.reasoning_content,
+        sealReasoning,
+        () => invalidChatCompletion("choices[0].message.reasoning_content")
+      ));
+    }
     if (typeof message.content === "string" && message.content.length > 0) {
-      output.push(completedMessageItem(responseContext.id, message.content));
+      output.push(completedMessageItem(responseContext.id, message.content, itemStatus));
     }
     output.push(...toolItems);
-    if (output.length === 0) output.push(completedMessageItem(responseContext.id, ""));
-    return {
+    if (output.length === 0) output.push(completedMessageItem(responseContext.id, "", itemStatus));
+    const response = {
       id: responseContext.id,
       object: "response",
-      status: "completed",
+      status: incomplete ? "incomplete" : "completed",
       model: responseContext.model,
       output
     };
+    if (incomplete) response.incomplete_details = { reason: "max_output_tokens" };
+    return response;
   }
   function utf8ByteLength(value) {
     let bytes = 0;
@@ -17774,12 +20736,12 @@
     return bytes;
   }
   function sseObject(value, param) {
-    if (!isObject(value)) throw invalidChatSse(param);
+    if (!isObject3(value)) throw invalidChatSse(param);
     return value;
   }
   function sseExact(value, allowed, param) {
     const object = sseObject(value, param);
-    const key = unknownKey(object, allowed);
+    const key = unknownKey2(object, allowed);
     if (key !== null) throw invalidChatSse(param ? `${param}.${key}` : key);
     return object;
   }
@@ -17797,7 +20759,7 @@
     } catch {
       throw invalidChatSse(param);
     }
-    if (!isObject(parsed)) throw invalidChatSse(param);
+    if (!isObject3(parsed)) throw invalidChatSse(param);
     return raw;
   }
   function createChatSseToResponses({
@@ -17805,7 +20767,8 @@
     model,
     maxFrameBytes,
     writeEvent,
-    fail
+    fail,
+    sealReasoning
   }) {
     if (typeof id !== "string" || id.length === 0) throw new TypeError("id must be a non-empty string");
     if (typeof model !== "string" || model.length === 0) throw new TypeError("model must be a non-empty string");
@@ -17825,6 +20788,8 @@
     let nextOutputIndex = 0;
     let textOutputIndex = null;
     let text = "";
+    let reasoningOutputIndex = null;
+    let reasoning = "";
     const tools = /* @__PURE__ */ new Map();
     const callIds = /* @__PURE__ */ new Map();
     function failOnce(error) {
@@ -17871,6 +20836,21 @@
       });
       return textOutputIndex;
     }
+    function ensureReasoningItem() {
+      ensureStarted();
+      if (reasoningOutputIndex !== null) return reasoningOutputIndex;
+      reasoningOutputIndex = nextOutputIndex;
+      nextOutputIndex += 1;
+      emit("response.output_item.added", {
+        output_index: reasoningOutputIndex,
+        item: {
+          id: reasoningItemId(id),
+          type: "reasoning",
+          summary: []
+        }
+      });
+      return reasoningOutputIndex;
+    }
     function addTextDelta(delta) {
       if (delta.length === 0) return;
       const outputIndex = ensureTextItem();
@@ -17881,8 +20861,13 @@
         delta
       });
     }
+    function addReasoningDelta(delta) {
+      if (delta.length === 0) return;
+      ensureReasoningItem();
+      reasoning += delta;
+    }
     function addToolDelta(rawDelta, path) {
-      const delta = sseExact(rawDelta, CHAT_TOOL_DELTA_FIELDS, path);
+      const delta = sseExact(rawDelta, CHAT_TOOL_DELTA_FIELDS2, path);
       if (!Number.isInteger(delta.index) || delta.index < 0) {
         throw invalidChatSse(`${path}.index`);
       }
@@ -17913,10 +20898,10 @@
       }
       let argumentDelta = "";
       if (delta.function !== void 0) {
-        const fn = sseExact(delta.function, CHAT_FUNCTION_DELTA_FIELDS, `${path}.function`);
+        const fn = sseExact(delta.function, CHAT_FUNCTION_DELTA_FIELDS2, `${path}.function`);
         if (fn.name !== void 0) {
           const name = sseString(fn.name, `${path}.function.name`, false);
-          if (!FUNCTION_NAME.test(name) || state.name && state.name !== name) {
+          if (!FUNCTION_NAME2.test(name) || state.name && state.name !== name) {
             throw invalidChatSse(`${path}.function.name`);
           }
           state.name = name;
@@ -17967,11 +20952,11 @@
       }
     }
     function processChatChunk(rawChunk) {
-      const chunk = sseExact(rawChunk, CHAT_CHUNK_FIELDS, "data");
+      const chunk = sseExact(rawChunk, CHAT_CHUNK_FIELDS2, "data");
       if (chunk.object !== "chat.completion.chunk") throw invalidChatSse("data.object");
       if (!Array.isArray(chunk.choices)) throw invalidChatSse("data.choices");
       if (chunk.choices.length === 0) {
-        if (!isObject(chunk.usage)) throw invalidChatSse("data.choices");
+        if (!isObject3(chunk.usage)) throw invalidChatSse("data.choices");
         return;
       }
       if (chunk.choices.length !== 1 || choiceFinished !== null) {
@@ -17982,9 +20967,15 @@
       if (choice.logprobs !== void 0 && choice.logprobs !== null) {
         throw invalidChatSse("choices[0].logprobs");
       }
-      const delta = sseExact(choice.delta, CHAT_DELTA_FIELDS, "choices[0].delta");
+      const delta = sseExact(choice.delta, CHAT_DELTA_FIELDS2, "choices[0].delta");
       if (delta.role !== void 0 && delta.role !== "assistant") {
         throw invalidChatSse("choices[0].delta.role");
+      }
+      if (delta.reasoning_content !== void 0 && delta.reasoning_content !== null) {
+        addReasoningDelta(sseString(
+          delta.reasoning_content,
+          "choices[0].delta.reasoning_content"
+        ));
       }
       if (delta.content !== void 0 && delta.content !== null) {
         addTextDelta(sseString(delta.content, "choices[0].delta.content"));
@@ -17999,7 +20990,7 @@
         ));
       }
       if (choice.finish_reason !== null) {
-        if (!["stop", "tool_calls"].includes(choice.finish_reason)) {
+        if (!["stop", "tool_calls", "length"].includes(choice.finish_reason)) {
           throw invalidChatSse("choices[0].finish_reason");
         }
         choiceFinished = choice.finish_reason;
@@ -18007,6 +20998,18 @@
     }
     function completedEntries() {
       const entries = [];
+      if (reasoningOutputIndex !== null) {
+        entries.push({
+          outputIndex: reasoningOutputIndex,
+          kind: "reasoning",
+          item: sealedChatReasoning(
+            id,
+            reasoning,
+            sealReasoning,
+            () => invalidChatSse("choices[0].delta.reasoning_content")
+          )
+        });
+      }
       if (textOutputIndex !== null) {
         entries.push({
           outputIndex: textOutputIndex,
@@ -18045,12 +21048,17 @@
       if (choiceFinished === "stop" && tools.size !== 0) {
         throw invalidChatSse("choices[0].finish_reason");
       }
+      if (choiceFinished === "length" && tools.size !== 0) {
+        throw invalidChatSse("choices[0].finish_reason");
+      }
+      const incomplete = choiceFinished === "length";
       ensureStarted();
-      if (textOutputIndex === null && tools.size === 0) ensureTextItem();
+      if (textOutputIndex === null && reasoningOutputIndex === null && tools.size === 0) ensureTextItem();
       const entries = completedEntries();
       done = true;
       for (const entry of entries) {
         if (entry.kind === "text") {
+          if (incomplete) entry.item.status = "incomplete";
           emit("response.output_text.done", {
             output_index: entry.outputIndex,
             content_index: 0,
@@ -18061,7 +21069,7 @@
             content_index: 0,
             part: { type: "output_text", text }
           });
-        } else {
+        } else if (entry.kind === "tool") {
           emit("response.function_call_arguments.done", {
             item_id: entry.item.id,
             output_index: entry.outputIndex,
@@ -18073,15 +21081,15 @@
           item: entry.item
         });
       }
-      emit("response.completed", {
-        response: {
-          id,
-          object: "response",
-          status: "completed",
-          model,
-          output: entries.map((entry) => entry.item)
-        }
-      });
+      const response = {
+        id,
+        object: "response",
+        status: incomplete ? "incomplete" : "completed",
+        model,
+        output: entries.map((entry) => entry.item)
+      };
+      if (incomplete) response.incomplete_details = { reason: "max_output_tokens" };
+      emit(incomplete ? "response.incomplete" : "response.completed", { response });
     }
     function processFrame(frame) {
       if (utf8ByteLength(frame) > maxFrameBytes) throw oversizedChatSse();
@@ -18148,6 +21156,7 @@
           buffer += decoder.decode();
           drainFrames();
         }
+        if (!done && buffer.trim().length === 0 && choiceFinished !== null) complete();
         if (!done || buffer.trim().length !== 0) throw invalidChatSse("sse");
       } catch (error) {
         failOnce(error instanceof ResponsesCompatibilityError ? error : invalidChatSse("chunk"));
@@ -18160,7 +21169,8 @@
   var RESOURCES = Object.freeze({
     models: "models",
     responses: "responses",
-    "chat-completions": "chat/completions"
+    "chat-completions": "chat/completions",
+    messages: "messages"
   });
   function providerUrlError(code, message) {
     const error = new Error(message);
@@ -18191,7 +21201,7 @@
     const end = endCandidates.length ? Math.min(...endCandidates) : raw.length;
     return raw.slice(pathStart, end);
   }
-  function isLoopbackHostname(hostname) {
+  function isLoopbackHostname2(hostname) {
     const host = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "");
     if (host === "localhost" || host.endsWith(".localhost") || host === "::1") return true;
     const mapped = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
@@ -18225,7 +21235,7 @@
     if (url.search || raw.includes("?")) {
       throw providerUrlError("provider_url_query_forbidden", "Provider base URL queries are forbidden.");
     }
-    if (url.protocol === "http:" && !isLoopbackHostname(url.hostname) && allowInsecureHttp !== true) {
+    if (url.protocol === "http:" && !isLoopbackHostname2(url.hostname) && allowInsecureHttp !== true) {
       throw providerUrlError("provider_insecure_http_forbidden", "Insecure provider HTTP requires explicit approval.");
     }
     return url;
@@ -18247,19 +21257,61 @@
     if (!Object.hasOwn(RESOURCES, resource)) {
       throw providerUrlError("provider_url_invalid_resource", "Provider resource is invalid.");
     }
-    const configured = parseBaseUrl(baseUrl, allowInsecureHttp);
-    const configuredOrigin = configured.origin;
-    let prefix = configured.pathname.replace(/\/+$/, "");
-    if (!prefix || prefix === "/") prefix = "";
-    if (!prefix.endsWith("/v1")) prefix += "/v1";
-    const endpoint = new URL(configured.toString());
-    endpoint.pathname = `${prefix}/${RESOURCES[resource]}`;
+    const endpoint = buildProviderApiBaseUrl({ baseUrl, allowInsecureHttp });
+    const configuredOrigin = endpoint.origin;
+    endpoint.pathname = `${endpoint.pathname.replace(/\/+$/, "")}/${RESOURCES[resource]}`;
     endpoint.search = normalizeSearch(inboundSearch);
     endpoint.hash = "";
     if (endpoint.origin !== configuredOrigin) {
       throw providerUrlError("provider_url_origin_mismatch", "Provider endpoint origin changed unexpectedly.");
     }
     return endpoint;
+  }
+  function buildProviderApiBaseCandidates({
+    baseUrl,
+    allowInsecureHttp = false
+  } = {}) {
+    const configured = parseBaseUrl(baseUrl, allowInsecureHttp);
+    const configuredRoot = new URL(configured.toString());
+    configuredRoot.pathname = configuredRoot.pathname.replace(/\/+$/, "") || "/";
+    configuredRoot.search = "";
+    configuredRoot.hash = "";
+    const plusV1 = new URL(configuredRoot.toString());
+    const configuredPath = plusV1.pathname.replace(/\/+$/, "");
+    plusV1.pathname = /\/v1$/i.test(configuredPath) ? configuredPath : `${configuredPath === "/" ? "" : configuredPath}/v1`;
+    const candidates = [{ id: "configured-root", url: configuredRoot }];
+    if (plusV1.toString() !== configuredRoot.toString()) {
+      candidates.push({ id: "plus-v1", url: plusV1 });
+    }
+    return candidates;
+  }
+  function buildProviderEndpointCandidates({
+    baseUrl,
+    resource,
+    inboundSearch = "",
+    allowInsecureHttp = false
+  } = {}) {
+    if (!Object.hasOwn(RESOURCES, resource)) {
+      throw providerUrlError("provider_url_invalid_resource", "Provider resource is invalid.");
+    }
+    const search = normalizeSearch(inboundSearch);
+    return buildProviderApiBaseCandidates({ baseUrl, allowInsecureHttp }).map((candidate) => {
+      const endpoint = new URL(candidate.url.toString());
+      endpoint.pathname = `${endpoint.pathname.replace(/\/+$/, "")}/${RESOURCES[resource]}`;
+      endpoint.search = search;
+      endpoint.hash = "";
+      if (endpoint.origin !== candidate.url.origin) {
+        throw providerUrlError("provider_url_origin_mismatch", "Provider endpoint origin changed unexpectedly.");
+      }
+      return { id: candidate.id, apiRoot: new URL(candidate.url.toString()), url: endpoint };
+    });
+  }
+  function buildProviderApiBaseUrl({ baseUrl, allowInsecureHttp = false } = {}) {
+    const candidates = buildProviderApiBaseCandidates({ baseUrl, allowInsecureHttp });
+    if (/\/v\d+(?:beta)?\/openai\/?$/i.test(candidates[0].url.pathname)) {
+      return new URL(candidates[0].url.toString());
+    }
+    return new URL((candidates.find((candidate) => candidate.id === "plus-v1") || candidates[0]).url.toString());
   }
 
   // src/cep/providerRouteAuth.js
@@ -18269,15 +21321,37 @@
     if (!bytes || bytes.length !== 32) throw new TypeError("randomBytes must return exactly 32 bytes");
     return Buffer.from(bytes).toString("base64url");
   }
+  function parseRouteTokenHeader(rawHeaders = []) {
+    if (!Array.isArray(rawHeaders) || rawHeaders.length % 2 !== 0) return null;
+    const values = [];
+    for (let index = 0; index < rawHeaders.length; index += 2) {
+      if (String(rawHeaders[index]).toLowerCase() === LOCAL_ROUTE_TOKEN_HEADER) {
+        values.push(String(rawHeaders[index + 1]));
+      }
+    }
+    if (values.length !== 1) return null;
+    return /^[A-Za-z0-9_-]+$/.test(values[0]) ? values[0] : null;
+  }
   function parseRouteAuthorization(rawHeaders = []) {
     if (!Array.isArray(rawHeaders) || rawHeaders.length % 2 !== 0) return null;
     const values = [];
     for (let index = 0; index < rawHeaders.length; index += 2) {
-      if (String(rawHeaders[index]).toLowerCase() === "authorization") values.push(String(rawHeaders[index + 1]));
+      if (String(rawHeaders[index]).toLowerCase() === "authorization") {
+        values.push(String(rawHeaders[index + 1]));
+      }
     }
     if (values.length !== 1) return null;
     const match = values[0].match(/^Bearer ([A-Za-z0-9_-]+)$/i);
     return match ? match[1] : null;
+  }
+  function parseRouteToken(rawHeaders = []) {
+    if (!Array.isArray(rawHeaders) || rawHeaders.length % 2 !== 0) return null;
+    let dedicatedCount = 0;
+    for (let index = 0; index < rawHeaders.length; index += 2) {
+      if (String(rawHeaders[index]).toLowerCase() === LOCAL_ROUTE_TOKEN_HEADER) dedicatedCount += 1;
+    }
+    if (dedicatedCount > 0) return parseRouteTokenHeader(rawHeaders);
+    return parseRouteAuthorization(rawHeaders);
   }
   function routeTokenMatches(candidate, expected, { createHash, timingSafeEqual } = {}) {
     if (typeof createHash !== "function" || typeof timingSafeEqual !== "function") {
@@ -18286,6 +21360,95 @@
     const left = createHash("sha256").update(String(candidate), "utf8").digest();
     const right = createHash("sha256").update(String(expected), "utf8").digest();
     return timingSafeEqual(left, right);
+  }
+
+  // src/cep/reasoningCapsule.js
+  var PREFIX = "aemcp-r1";
+  var AAD = Buffer.from("ae-mcp/provider-reasoning-capsule/v1", "utf8");
+  var MAX_PAYLOAD_BYTES = 1024 * 1024;
+  var SOURCE_PROTOCOLS = /* @__PURE__ */ new Set(["chat", "messages", "responses"]);
+  function capsuleError(code) {
+    const error = new Error("Provider reasoning capsule is invalid.");
+    error.code = code;
+    return error;
+  }
+  function base64url(value) {
+    return Buffer.from(value).toString("base64url");
+  }
+  function decode(value, maximum, code) {
+    if (typeof value !== "string" || !/^[A-Za-z0-9_-]+$/.test(value)) throw capsuleError(code);
+    const decoded = Buffer.from(value, "base64url");
+    if (decoded.length === 0 || decoded.length > maximum || base64url(decoded) !== value) {
+      throw capsuleError(code);
+    }
+    return decoded;
+  }
+  function exactPayload(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw capsuleError("reasoning_capsule_payload_invalid");
+    const keys = Object.keys(value).sort();
+    if (keys.join(",") !== "item,sourceProtocol,version" || value.version !== 1) {
+      throw capsuleError("reasoning_capsule_payload_invalid");
+    }
+    if (!SOURCE_PROTOCOLS.has(value.sourceProtocol)) throw capsuleError("reasoning_capsule_payload_invalid");
+    return value;
+  }
+  function createReasoningCapsule({ crypto, key } = {}) {
+    if (!crypto || typeof crypto.randomBytes !== "function" || typeof crypto.createCipheriv !== "function" || typeof crypto.createDecipheriv !== "function") {
+      throw new TypeError("crypto implementation is required");
+    }
+    const secret = key ? Buffer.from(key) : Buffer.from(crypto.randomBytes(32));
+    if (secret.length !== 32) throw new TypeError("reasoning capsule key must be 32 bytes");
+    function seal({ sourceProtocol, item } = {}) {
+      if (!SOURCE_PROTOCOLS.has(sourceProtocol)) throw capsuleError("reasoning_capsule_payload_invalid");
+      const payload = Buffer.from(JSON.stringify({ version: 1, sourceProtocol, item }), "utf8");
+      if (payload.length === 0 || payload.length > MAX_PAYLOAD_BYTES) {
+        throw capsuleError("reasoning_capsule_payload_too_large");
+      }
+      const iv = Buffer.from(crypto.randomBytes(12));
+      if (iv.length !== 12) throw new TypeError("crypto.randomBytes must return 12 bytes");
+      const cipher = crypto.createCipheriv("aes-256-gcm", secret, iv);
+      cipher.setAAD(AAD);
+      const ciphertext = Buffer.concat([cipher.update(payload), cipher.final()]);
+      const tag = cipher.getAuthTag();
+      payload.fill(0);
+      return [PREFIX, base64url(iv), base64url(ciphertext), base64url(tag)].join(".");
+    }
+    function open(token, { sourceProtocol } = {}) {
+      if (typeof token !== "string" || token.length > MAX_PAYLOAD_BYTES * 2) {
+        throw capsuleError("reasoning_capsule_invalid");
+      }
+      const parts = token.split(".");
+      if (parts.length !== 4 || parts[0] !== PREFIX) throw capsuleError("reasoning_capsule_invalid");
+      const iv = decode(parts[1], 12, "reasoning_capsule_invalid");
+      const ciphertext = decode(parts[2], MAX_PAYLOAD_BYTES + 256, "reasoning_capsule_invalid");
+      const tag = decode(parts[3], 16, "reasoning_capsule_invalid");
+      if (iv.length !== 12 || tag.length !== 16) throw capsuleError("reasoning_capsule_invalid");
+      let plaintext;
+      try {
+        const decipher = crypto.createDecipheriv("aes-256-gcm", secret, iv);
+        decipher.setAAD(AAD);
+        decipher.setAuthTag(tag);
+        plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+      } catch {
+        throw capsuleError("reasoning_capsule_auth_failed");
+      }
+      try {
+        const payload = exactPayload(JSON.parse(plaintext.toString("utf8")));
+        if (sourceProtocol && payload.sourceProtocol !== sourceProtocol) {
+          throw capsuleError("reasoning_capsule_protocol_mismatch");
+        }
+        return payload;
+      } catch (error) {
+        if (error == null ? void 0 : error.code) throw error;
+        throw capsuleError("reasoning_capsule_payload_invalid");
+      } finally {
+        plaintext.fill(0);
+      }
+    }
+    function destroy() {
+      secret.fill(0);
+    }
+    return { seal, open, destroy };
   }
 
   // src/cep/codexResponsesRoute.js
@@ -18308,6 +21471,9 @@
     if ((_c = globalThis.window) == null ? void 0 : _c.require) return globalThis.window.require;
     if (globalThis.require) return globalThis.require;
     throw new Error("CEP Node require is unavailable");
+  }
+  function supportsReasoningCapsule(crypto) {
+    return typeof (crypto == null ? void 0 : crypto.createCipheriv) === "function" && typeof (crypto == null ? void 0 : crypto.createDecipheriv) === "function";
   }
   function routeLimits(overrides = {}) {
     const limits = {};
@@ -18540,6 +21706,22 @@
     message = redactText(message, secrets);
     return message.replace(/[\r\n\0]+/g, " ").slice(0, 256);
   }
+  function explicitlyRejectsDeveloperRole(status, buffer) {
+    var _a, _b;
+    if (status !== 400 && status !== 422) return false;
+    let parsed;
+    try {
+      parsed = JSON.parse(buffer.toString("utf8"));
+    } catch {
+      return false;
+    }
+    const message = (_b = (_a = parsed == null ? void 0 : parsed.error) == null ? void 0 : _a.message) != null ? _b : parsed == null ? void 0 : parsed.message;
+    if (typeof message !== "string") return false;
+    const normalized = message.toLowerCase();
+    if (!/(^|[^a-z])developer([^a-z]|$)/.test(normalized)) return false;
+    if (!/(^|[^a-z])roles?([^a-z]|$)/.test(normalized)) return false;
+    return /\b(unexpected|unsupported|invalid|disallowed|forbidden)\b/.test(normalized) || /\bunknown\s+variant\b/.test(normalized) || /\bexpected\s+one\s+of\b/.test(normalized) || /\bnot\s+(?:supported|allowed|accepted)\b/.test(normalized) || /\ballowed\s+roles?\b/.test(normalized);
+  }
   function withoutSecretBearingHeaders(headers, secrets) {
     const output = {};
     for (const [name, value] of Object.entries(headers)) {
@@ -18549,7 +21731,7 @@
     }
     return output;
   }
-  function readProviderError(context, upstream, status, responseHeaders, secrets) {
+  function readProviderError(context, upstream, status, responseHeaders, secrets, retryCompatibility) {
     const chunks = [];
     let bytes = 0;
     let settled = false;
@@ -18557,6 +21739,7 @@
       if (settled || context.finished) return;
       settled = true;
       const buffer = Buffer.concat(chunks);
+      if (!truncated && typeof retryCompatibility === "function" && retryCompatibility(status, buffer)) return;
       const message = sanitizedProviderMessage(buffer, truncated, secrets);
       const requestId = responseHeaders["x-request-id"] || responseHeaders["request-id"] || responseHeaders["openai-request-id"];
       const extra = requestId ? { request_id: requestId } : {};
@@ -18619,12 +21802,17 @@
       chunks.push(value);
     });
     upstream.on("end", () => {
+      var _a;
       if (context.finished) return;
       let parsed;
       let response;
       try {
         parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-        response = chatCompletionToResponse(parsed, { id: context.responseId, model: String(chatBody.model || "") });
+        response = chatCompletionToResponse(
+          parsed,
+          { id: context.responseId, model: String(chatBody.model || "") },
+          { sealReasoning: (_a = context.reasoningCapsule) == null ? void 0 : _a.seal }
+        );
       } catch (error) {
         streamFailure(context, {
           status: Number(error == null ? void 0 : error.status) || 502,
@@ -18643,6 +21831,7 @@
     }));
   }
   function streamChatResponse(context, upstream, status, headers, chatBody) {
+    var _a;
     context.res.writeHead(status, {
       ...headers,
       "content-type": "text/event-stream; charset=utf-8",
@@ -18653,7 +21842,8 @@
       model: String(chatBody.model || ""),
       maxFrameBytes: context.limits.sseFrameBytes,
       writeEvent: (name, payload) => writeSse(context.res, name, payload),
-      fail: (error) => streamFailure(context, error)
+      fail: (error) => streamFailure(context, error),
+      sealReasoning: (_a = context.reasoningCapsule) == null ? void 0 : _a.seal
     });
     upstream.on("data", (chunk) => {
       if (context.finished) return;
@@ -18680,7 +21870,7 @@
       message: "Provider response stream failed."
     }));
   }
-  function handleUpstreamResponse(context, upstream, kind, profile, chatBody) {
+  function handleUpstreamResponse(context, upstream, kind, profile, chatBody, retryCompatibility) {
     if (context.finished) {
       if (typeof upstream.destroy === "function") upstream.destroy();
       return;
@@ -18705,7 +21895,14 @@
       return;
     }
     if (status >= 400) {
-      readProviderError(context, upstream, status, headers, secrets);
+      readProviderError(
+        context,
+        upstream,
+        status,
+        headers,
+        secrets,
+        retryCompatibility
+      );
       return;
     }
     if (kind === "models") {
@@ -18728,7 +21925,9 @@
     chatBody,
     requireImpl,
     createUpstreamRequest,
-    lookupImpl
+    lookupImpl,
+    allowDeveloperRoleRetry = false,
+    allowMaxCompletionTokensRetry = false
   }) {
     if (context.finished) return;
     const options = {
@@ -18750,13 +21949,56 @@
       const requestFactory = createUpstreamRequest || requireImpl(endpoint.protocol === "http:" ? "http" : "https").request.bind(
         requireImpl(endpoint.protocol === "http:" ? "http" : "https")
       );
-      request = requestFactory(options, (upstream) => handleUpstreamResponse(
-        context,
-        upstream,
-        kind,
-        profile,
-        chatBody
-      ));
+      request = requestFactory(options, (upstream) => {
+        const retryCompatibility = allowDeveloperRoleRetry || allowMaxCompletionTokensRetry ? (status, buffer) => {
+          let retryBody = null;
+          let retryDeveloperRole = allowDeveloperRoleRetry;
+          let retryMaxCompletionTokens = allowMaxCompletionTokensRetry;
+          if (retryDeveloperRole && explicitlyRejectsDeveloperRole(status, buffer)) {
+            retryBody = chatBodyWithDeveloperRoleAsSystem(chatBody);
+            if (retryBody) retryDeveloperRole = false;
+          }
+          if (!retryBody && retryMaxCompletionTokens) {
+            let parsed = null;
+            try {
+              parsed = JSON.parse(buffer.toString("utf8"));
+            } catch {
+            }
+            if (chatErrorRequestsMaxCompletionTokens(status, parsed)) {
+              retryBody = chatBodyWithMaxCompletionTokens(chatBody);
+              if (retryBody) retryMaxCompletionTokens = false;
+            }
+          }
+          if (!retryBody || context.finished) return false;
+          clearTimeout(context.idleTimer);
+          context.idleTimer = null;
+          context.upstreamRequest = null;
+          context.upstreamResponse = null;
+          openUpstream(context, {
+            endpoint,
+            method,
+            headers,
+            payload: Buffer.from(JSON.stringify(retryBody), "utf8"),
+            kind,
+            profile,
+            chatBody: retryBody,
+            requireImpl,
+            createUpstreamRequest,
+            lookupImpl,
+            allowDeveloperRoleRetry: retryDeveloperRole,
+            allowMaxCompletionTokensRetry: retryMaxCompletionTokens
+          });
+          return true;
+        } : null;
+        handleUpstreamResponse(
+          context,
+          upstream,
+          kind,
+          profile,
+          chatBody,
+          retryCompatibility
+        );
+      });
       context.upstreamRequest = request;
       request.on("error", () => {
         if (context.finished || context.upstreamResponse) return;
@@ -18821,6 +22063,7 @@
     let server = null;
     let baseUrl = "";
     let routeToken = null;
+    let reasoningCapsule = null;
     let startPromise = null;
     let responseSequence = 0;
     const admit = (req, res) => {
@@ -18848,7 +22091,8 @@
         responseId: `resp_route_${Date.now().toString(36)}_${(responseSequence += 1).toString(36)}`,
         cancelBodyRead: null,
         onClientAbort: null,
-        onClientClose: null
+        onClientClose: null,
+        reasoningCapsule
       };
       context.onClientAbort = () => {
         if (context.finished) return;
@@ -18870,9 +22114,9 @@
       contexts.add(context);
       return context;
     };
-    const resolveProfile = async (scope) => {
+    const resolveProfile = async (scope, details = {}) => {
       validateProviderRequestConfiguration(provider, scope, headersLimit);
-      return resolveRequestProfile(provider, { scope });
+      return resolveRequestProfile(provider, { scope, ...details });
     };
     const prepareHeaders = (req, profile, contentType) => {
       var _a;
@@ -18963,12 +22207,14 @@
       }
       const context = admit(req, res);
       if (!context) return;
-      let requestBody;
+      let requestBody2;
       let chatBody;
       try {
-        requestBody = await readRequestBody(req, limits.requestBodyBytes, context);
+        requestBody2 = await readRequestBody(req, limits.requestBodyBytes, context);
         if (context.finished) return;
-        chatBody = responsesBodyToChatBody(parseJsonBody(requestBody));
+        chatBody = responsesBodyToChatBody(parseJsonBody(requestBody2), {
+          openReasoning: reasoningCapsule == null ? void 0 : reasoningCapsule.open
+        });
       } catch (error) {
         if (context.finished) return;
         finishOnce(context);
@@ -18986,7 +22232,10 @@
       let headers;
       let payload;
       try {
-        profile = await resolveProfile("model");
+        profile = await resolveProfile("model", {
+          modelId: String(chatBody.model || ""),
+          protocol: "chat"
+        });
         if (context.finished) return;
         endpoint = buildProviderEndpoint({
           baseUrl: profile.baseUrl,
@@ -19016,11 +22265,13 @@
         chatBody,
         requireImpl,
         createUpstreamRequest,
-        lookupImpl
+        lookupImpl,
+        allowDeveloperRoleRetry: true,
+        allowMaxCompletionTokensRetry: true
       });
     };
     const handleLocalRequest = (req, res) => {
-      const candidate = parseRouteAuthorization(req.rawHeaders || []);
+      const candidate = parseRouteToken(req.rawHeaders || []);
       const authorized = routeTokenMatches(candidate || "", routeToken || "", crypto);
       if (!candidate || !routeToken || !authorized) {
         sendJson(res, 401, envelope(
@@ -19064,6 +22315,9 @@
       async start() {
         if (server && baseUrl && routeToken) return { baseUrl, routeToken };
         if (startPromise) return startPromise;
+        if (!reasoningCapsule && supportsReasoningCapsule(crypto)) {
+          reasoningCapsule = createReasoningCapsule({ crypto });
+        }
         startPromise = new Promise((resolve, reject) => {
           const http = requireImpl("http");
           const nextServer = http.createServer(handleLocalRequest);
@@ -19072,6 +22326,8 @@
             server = null;
             baseUrl = "";
             routeToken = null;
+            reasoningCapsule == null ? void 0 : reasoningCapsule.destroy();
+            reasoningCapsule = null;
             reject(error);
           };
           const onListening = () => {
@@ -19101,6 +22357,8 @@
         if (!server) {
           routeToken = null;
           baseUrl = "";
+          reasoningCapsule == null ? void 0 : reasoningCapsule.destroy();
+          reasoningCapsule = null;
           return;
         }
         const closing = server;
@@ -19113,8 +22371,1655 @@
         }
         await new Promise((resolve) => closing.close(resolve));
         routeToken = null;
+        reasoningCapsule == null ? void 0 : reasoningCapsule.destroy();
+        reasoningCapsule = null;
       }
     };
+  }
+
+  // src/cep/universalProviderRoute.js
+  var LOCAL_ORIGIN2 = "http://127.0.0.1";
+  var PROTOCOLS = /* @__PURE__ */ new Set(["responses", "chat", "messages"]);
+  var DEFAULT_LIMITS2 = Object.freeze({
+    requestBodyBytes: 16 * 1024 * 1024,
+    errorBodyBytes: 64 * 1024,
+    concurrent: 4,
+    connectTimeoutMs: 15e3,
+    totalTimeoutMs: 30 * 6e4
+  });
+  function getCepRequire2() {
+    var _a, _b, _c;
+    if ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) return globalThis.window.cep_node.require;
+    if ((_c = globalThis.window) == null ? void 0 : _c.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    throw new Error("CEP Node require is unavailable");
+  }
+  function resolvedLimits2(overrides = {}) {
+    return Object.fromEntries(Object.entries(DEFAULT_LIMITS2).map(([name, maximum]) => {
+      const value = Number(overrides[name]);
+      return [name, Number.isFinite(value) && value > 0 ? Math.min(maximum, Math.floor(value)) : maximum];
+    }));
+  }
+  function envelope2(type, code, message, extra = {}) {
+    return { error: { type, code, message, ...extra } };
+  }
+  function sendJson2(res, status, body, headers = {}) {
+    if (res.writableEnded || res.destroyed) return;
+    res.writeHead(status, { ...headers, "content-type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(body));
+  }
+  function writeSse2(res, event, data) {
+    res.write("event: " + event + "\n");
+    res.write("data: " + JSON.stringify(data) + "\n\n");
+  }
+  function parseLocalUrl2(rawUrl) {
+    const raw = String(rawUrl || "/");
+    if (/\\|%5c|%2f|%00/i.test(raw)) throw Object.assign(new Error("Invalid local path."), { code: "invalid_path" });
+    const url = new URL(raw, LOCAL_ORIGIN2);
+    if (url.origin !== LOCAL_ORIGIN2 || url.username || url.password || url.hash) {
+      throw Object.assign(new Error("Invalid local path."), { code: "invalid_path" });
+    }
+    let decoded;
+    try {
+      decoded = decodeURIComponent(url.pathname);
+    } catch {
+      throw Object.assign(new Error("Invalid local path."), { code: "invalid_path" });
+    }
+    if (decoded.split("/").some((part) => part === ".." || part === ".")) {
+      throw Object.assign(new Error("Invalid local path."), { code: "invalid_path" });
+    }
+    return url;
+  }
+  function readBody(req, maximum) {
+    return new Promise((resolve, reject) => {
+      const chunks = [];
+      let bytes = 0;
+      let settled = false;
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      };
+      req.on("data", (chunk) => {
+        if (settled) return;
+        const value = Buffer.from(chunk);
+        bytes += value.length;
+        if (bytes > maximum) {
+          fail(Object.assign(new Error("Request body is too large."), {
+            code: "request_body_too_large",
+            status: 413
+          }));
+          req.destroy();
+          return;
+        }
+        chunks.push(value);
+      });
+      req.once("end", () => {
+        if (settled) return;
+        settled = true;
+        resolve(Buffer.concat(chunks));
+      });
+      req.once("error", fail);
+    });
+  }
+  function requestEnvelope(buffer) {
+    let body;
+    try {
+      body = JSON.parse(buffer.toString("utf8"));
+    } catch {
+      throw Object.assign(new Error("Request body must be valid JSON."), {
+        code: "invalid_request_body",
+        status: 400
+      });
+    }
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      throw Object.assign(new Error("Request body must be an object."), {
+        code: "invalid_request_body",
+        status: 400
+      });
+    }
+    const modelId = typeof body.model === "string" ? body.model.trim() : "";
+    if (!modelId) throw Object.assign(new Error("Request model is required."), { code: "invalid_model", status: 400 });
+    return { body, modelId };
+  }
+  function providerEndpoint(apiRoot, suffix, search, allowInsecureHttp) {
+    const root = new URL(String(apiRoot));
+    if (root.username || root.password || root.search || root.hash) throw new Error("Invalid Provider API root.");
+    const loopback = root.protocol === "http:" && ["127.0.0.1", "::1", "localhost"].includes(root.hostname);
+    if (root.protocol !== "https:" && !(loopback || allowInsecureHttp === true)) {
+      throw new Error("Provider transport is not allowed.");
+    }
+    if (!["https:", "http:"].includes(root.protocol)) throw new Error("Provider transport is not allowed.");
+    const endpoint = new URL(root.toString());
+    endpoint.pathname = endpoint.pathname.replace(/\/+$/, "") + suffix;
+    endpoint.search = search || "";
+    if (endpoint.origin !== root.origin) throw new Error("Provider endpoint origin changed.");
+    return endpoint;
+  }
+  function oneHeader(rawHeaders, wanted) {
+    const values = [];
+    for (let index = 0; index + 1 < rawHeaders.length; index += 2) {
+      if (String(rawHeaders[index]).toLowerCase() === wanted) values.push(String(rawHeaders[index + 1]));
+    }
+    if (values.length > 1) throw Object.assign(new Error("Duplicate client header."), { code: "provider_header_duplicate" });
+    const value = values[0];
+    if (value !== void 0 && (/[\r\n\0]/.test(value) || Buffer.byteLength(value, "utf8") > 8192)) {
+      throw Object.assign(new Error("Invalid client header."), { code: "provider_header_invalid_value" });
+    }
+    return value;
+  }
+  function nativeHeaders(req, profile, clientProtocol) {
+    const headers = mergeUpstreamHeaders({
+      rawHeaders: clientProtocol === "responses" ? req.rawHeaders || [] : [],
+      providerHeaders: profile.extraHeaders || [],
+      auth: profile.auth || { kind: "none" },
+      contentType: "application/json"
+    });
+    if (clientProtocol === "messages") {
+      headers["anthropic-version"] = oneHeader(req.rawHeaders || [], "anthropic-version") || "2023-06-01";
+      const beta = oneHeader(req.rawHeaders || [], "anthropic-beta");
+      if (beta) headers["anthropic-beta"] = beta;
+    }
+    return headers;
+  }
+  function profileSecrets(profile) {
+    var _a;
+    const values = [];
+    if (((_a = profile == null ? void 0 : profile.auth) == null ? void 0 : _a.kind) === "header") {
+      const value = String(profile.auth.value || "");
+      if (value) values.push(value);
+      const match = value.match(/^(?:Bearer|Basic)\s+(.+)$/i);
+      if (match == null ? void 0 : match[1]) values.push(match[1]);
+    }
+    for (const header of (profile == null ? void 0 : profile.extraHeaders) || []) {
+      if (header == null ? void 0 : header.value) values.push(String(header.value));
+    }
+    return [...new Set(values)].sort((left, right) => right.length - left.length);
+  }
+  function sanitizedError(buffer, secrets) {
+    let parsed;
+    try {
+      parsed = JSON.parse(buffer.toString("utf8"));
+    } catch {
+      return "Provider request failed.";
+    }
+    const source = (parsed == null ? void 0 : parsed.error) && typeof parsed.error === "object" ? parsed.error : parsed;
+    const message = typeof (source == null ? void 0 : source.message) === "string" ? source.message : "Provider request failed.";
+    return redactText(message, secrets).replace(/[\r\n\0]+/g, " ").slice(0, 256);
+  }
+  function headersWithoutRejectedAnthropicBetas(headers, buffer) {
+    const current = headers["anthropic-beta"];
+    if (typeof current !== "string" || !current.trim()) return null;
+    let parsed;
+    try {
+      parsed = JSON.parse(buffer.toString("utf8"));
+    } catch {
+      return null;
+    }
+    const source = (parsed == null ? void 0 : parsed.error) && typeof parsed.error === "object" ? parsed.error : parsed;
+    const message = typeof (source == null ? void 0 : source.message) === "string" ? source.message : "";
+    const match = message.match(
+      /^Unexpected value\(s\)\s+(.+?)\s+for the `anthropic-beta` header(?:\.|$)/
+    );
+    if (!match) return null;
+    const token = "[A-Za-z0-9][A-Za-z0-9._:-]{0,127}";
+    const listPattern = new RegExp("^`" + token + "`(?:\\s*(?:,|and)\\s*`" + token + "`)*$");
+    if (!listPattern.test(match[1])) return null;
+    const rejected = [...match[1].matchAll(/`([A-Za-z0-9][A-Za-z0-9._:-]{0,127})`/g)].map((entry) => entry[1]);
+    if (rejected.length === 0 || rejected.length > 16) return null;
+    const values = current.split(",").map((value) => value.trim()).filter(Boolean);
+    const currentValues = new Set(values);
+    if (!rejected.every((value) => currentValues.has(value))) return null;
+    const rejectedValues = new Set(rejected);
+    const remaining = values.filter((value) => !rejectedValues.has(value));
+    const next = { ...headers };
+    if (remaining.length > 0) next["anthropic-beta"] = remaining.join(", ");
+    else delete next["anthropic-beta"];
+    return next;
+  }
+  function createGate2(maximum) {
+    let active = 0;
+    return {
+      acquire() {
+        if (active >= maximum) return false;
+        active += 1;
+        return true;
+      },
+      release() {
+        active = Math.max(0, active - 1);
+      }
+    };
+  }
+  function createUniversalProviderRoute({
+    provider,
+    resolveCapability,
+    resolveRequestProfile,
+    getModels = () => {
+      var _a;
+      return ((_a = provider == null ? void 0 : provider.modelList) == null ? void 0 : _a.models) || (provider == null ? void 0 : provider.probedModels) || [];
+    },
+    requireImpl = getCepRequire2(),
+    createUpstreamRequest,
+    lookupImpl,
+    createChatRoute = createCodexResponsesRoute,
+    limits: limitOverrides,
+    onAudit = () => {
+    }
+  } = {}) {
+    if (!provider || typeof provider !== "object") throw new TypeError("provider is required");
+    if (typeof resolveCapability !== "function") throw new TypeError("resolveCapability is required");
+    if (typeof resolveRequestProfile !== "function") throw new TypeError("resolveRequestProfile is required");
+    const crypto = requireImpl("crypto");
+    const http = requireImpl("http");
+    const bounded = resolvedLimits2(limitOverrides);
+    const gate = createGate2(bounded.concurrent);
+    const activeRequests = /* @__PURE__ */ new Set();
+    let server = null;
+    let routeToken = null;
+    let origin = "";
+    let startPromise = null;
+    let chatRoute = null;
+    let chatRouteInfo = null;
+    let reasoningCapsule = null;
+    let responseSequence = 0;
+    const capabilityFor = async ({ modelId, clientProtocol, feature = "generate" }) => {
+      const capability = await resolveCapability({ provider, modelId, clientProtocol, feature });
+      if (!capability || capability.ok !== true || !PROTOCOLS.has(capability.upstreamProtocol)) {
+        const error = new Error("No verified Provider route is available.");
+        error.code = "provider_route_unavailable";
+        error.status = 501;
+        throw error;
+      }
+      return capability;
+    };
+    const profileFor = (modelId, capability) => resolveRequestProfile(provider, {
+      scope: "model",
+      modelId,
+      protocol: capability.upstreamProtocol,
+      apiRoot: capability.apiRoot,
+      authChoice: capability.auth || capability.authChoice
+    });
+    const nestedProfile = async (_provider, details = {}) => {
+      const capability = await capabilityFor({
+        modelId: details.modelId,
+        clientProtocol: "responses"
+      });
+      if (capability.upstreamProtocol !== "chat") throw new Error("Provider route changed during request.");
+      return profileFor(details.modelId, capability);
+    };
+    const begin = (req, res) => {
+      if (!gate.acquire()) {
+        sendJson2(res, 429, envelope2(
+          "rate_limit_error",
+          "route_concurrency_limit",
+          "Local provider route concurrency limit reached."
+        ));
+        return null;
+      }
+      const context = {
+        req,
+        res,
+        upstream: null,
+        finished: false,
+        timer: null,
+        finish: null
+      };
+      context.finish = () => {
+        if (context.finished) return false;
+        context.finished = true;
+        clearTimeout(context.timer);
+        activeRequests.delete(context);
+        gate.release();
+        return true;
+      };
+      context.timer = setTimeout(() => {
+        var _a;
+        if (!context.finish()) return;
+        try {
+          (_a = context.upstream) == null ? void 0 : _a.destroy();
+        } catch {
+        }
+        sendJson2(res, 504, envelope2(
+          "provider_error",
+          "provider_total_timeout",
+          "Provider request exceeded the total time limit."
+        ));
+      }, bounded.totalTimeoutMs);
+      const abort = () => {
+        var _a;
+        if (!context.finish()) return;
+        try {
+          (_a = context.upstream) == null ? void 0 : _a.destroy();
+        } catch {
+        }
+      };
+      req.once("aborted", abort);
+      res.once("close", () => {
+        if (!res.writableEnded) abort();
+      });
+      activeRequests.add(context);
+      return context;
+    };
+    const convertRequest = (clientProtocol, upstreamProtocol, body, capability) => {
+      var _a;
+      const options = { openReasoning: reasoningCapsule == null ? void 0 : reasoningCapsule.open };
+      let converted;
+      if (clientProtocol === "messages" && upstreamProtocol === "chat") {
+        converted = messagesBodyToChatBody(body, options);
+        const tokenField = (_a = capability.compatibility) == null ? void 0 : _a.tokenField;
+        if (tokenField === "max_completion_tokens" && Object.hasOwn(converted.body, "max_tokens")) {
+          converted.body.max_completion_tokens = converted.body.max_tokens;
+          delete converted.body.max_tokens;
+        }
+      } else if (clientProtocol === "messages" && upstreamProtocol === "responses") {
+        converted = messagesBodyToResponsesBody(body, options);
+      } else if (clientProtocol === "responses" && upstreamProtocol === "messages") {
+        converted = responsesBodyToMessagesBody(body, options);
+      } else {
+        throw Object.assign(new Error("Provider conversion is unavailable."), {
+          status: 501,
+          code: "provider_conversion_unsupported"
+        });
+      }
+      return {
+        body: converted.body,
+        consumed: [...converted.consumed]
+      };
+    };
+    const collectorFor = (protocol) => {
+      const options = { maxFrameBytes: 1024 * 1024 };
+      if (protocol === "chat") return createChatSseCollector(options);
+      if (protocol === "responses") return createResponsesSseCollector(options);
+      if (protocol === "messages") return createMessagesSseCollector(options);
+      throw new Error("Unsupported Provider protocol.");
+    };
+    const convertCompletion = (source, upstreamProtocol, clientProtocol) => {
+      const options = { sealReasoning: reasoningCapsule == null ? void 0 : reasoningCapsule.seal };
+      if (clientProtocol === "messages" && upstreamProtocol === "chat") {
+        return chatCompletionToMessages(source, options);
+      }
+      if (clientProtocol === "messages" && upstreamProtocol === "responses") {
+        return responseToMessages(source, options);
+      }
+      if (clientProtocol === "responses" && upstreamProtocol === "messages") {
+        responseSequence += 1;
+        return anthropicMessageToResponse(source, {
+          id: "resp_route_" + Date.now().toString(36) + "_" + responseSequence.toString(36),
+          sealReasoning: reasoningCapsule == null ? void 0 : reasoningCapsule.seal
+        });
+      }
+      throw Object.assign(new Error("Provider conversion is unavailable."), {
+        status: 501,
+        code: "provider_conversion_unsupported"
+      });
+    };
+    const writeConverted = ({ context, value, clientProtocol, stream, responseHeaders }) => {
+      if (!stream) {
+        if (!context.finish()) return;
+        sendJson2(context.res, 200, value, responseHeaders);
+        return;
+      }
+      const events = clientProtocol === "messages" ? messagesSseEvents(value) : responsesSseEvents(value);
+      if (!context.finish()) return;
+      context.res.writeHead(200, {
+        ...responseHeaders,
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": responseHeaders["cache-control"] || "no-cache"
+      });
+      for (const [event, data] of events) writeSse2(context.res, event, data);
+      context.res.end();
+    };
+    const readConvertedResponse = ({
+      context,
+      upstream,
+      responseHeaders,
+      clientProtocol,
+      upstreamProtocol,
+      stream,
+      modelId,
+      consumed
+    }) => {
+      const chunks = [];
+      const collector2 = stream ? collectorFor(upstreamProtocol) : null;
+      let bytes = 0;
+      let settled = false;
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        try {
+          upstream.destroy();
+        } catch {
+        }
+        if (!context.finish()) return;
+        const status = Number(error == null ? void 0 : error.status) || 502;
+        sendJson2(context.res, status, envelope2(
+          status === 501 || status === 400 ? "invalid_request_error" : "provider_error",
+          (error == null ? void 0 : error.code) || "provider_conversion_failed",
+          (error == null ? void 0 : error.message) || "Provider response conversion failed.",
+          (error == null ? void 0 : error.param) ? { param: error.param } : {}
+        ));
+      };
+      upstream.on("data", (chunk) => {
+        if (settled) return;
+        const value = Buffer.from(chunk);
+        bytes += value.length;
+        if (bytes > bounded.requestBodyBytes) {
+          fail(Object.assign(new Error("Provider response is too large."), {
+            status: 502,
+            code: "provider_response_too_large"
+          }));
+          return;
+        }
+        try {
+          if (collector2) collector2.feed(value);
+          else chunks.push(value);
+        } catch (error) {
+          fail(error);
+        }
+      });
+      upstream.once("end", () => {
+        if (settled) return;
+        let source;
+        let converted;
+        try {
+          if (collector2) {
+            const collected = collector2.end();
+            source = upstreamProtocol === "messages" ? collected.message : collected;
+          } else {
+            source = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          }
+          converted = convertCompletion(source, upstreamProtocol, clientProtocol);
+          writeConverted({ context, value: converted, clientProtocol, stream, responseHeaders });
+          settled = true;
+          onAudit({
+            event: "provider_route",
+            modelId,
+            clientProtocol,
+            upstreamProtocol,
+            conversion: clientProtocol + "-to-" + upstreamProtocol,
+            consumed,
+            outcome: "pass"
+          });
+        } catch (error) {
+          fail(error);
+        }
+      });
+      upstream.once("error", () => fail(Object.assign(new Error("Provider response stream failed."), {
+        status: 502,
+        code: "provider_stream_error"
+      })));
+    };
+    const nativeProxy = async ({
+      context,
+      capability,
+      clientProtocol,
+      suffix,
+      search,
+      payload,
+      modelId,
+      conversion = null
+    }) => {
+      let profile;
+      let endpoint;
+      let headers;
+      try {
+        profile = await profileFor(modelId, capability);
+        if (context.finished) return;
+        endpoint = providerEndpoint(
+          profile.apiRoot || capability.apiRoot || profile.baseUrl,
+          suffix,
+          search,
+          profile.allowInsecureHttp
+        );
+        headers = nativeHeaders(context.req, profile, clientProtocol);
+        headers["content-length"] = String(payload.length);
+      } catch {
+        if (!context.finish()) return;
+        sendJson2(context.res, 502, envelope2(
+          "provider_configuration_error",
+          "provider_configuration_error",
+          "Provider request configuration is invalid."
+        ));
+        return;
+      }
+      const requestOptions = {
+        protocol: endpoint.protocol,
+        hostname: endpoint.hostname,
+        port: endpoint.port || void 0,
+        path: endpoint.pathname + endpoint.search,
+        method: "POST"
+      };
+      if (lookupImpl) requestOptions.lookup = lookupImpl;
+      const sendAttempt = (attemptHeaders, allowBetaRetry) => {
+        let connected = false;
+        let requestSettled = false;
+        let request = null;
+        const connectTimer = setTimeout(() => {
+          if (connected || context.finished) return;
+          request == null ? void 0 : request.destroy();
+        }, bounded.connectTimeoutMs);
+        try {
+          const transport = requireImpl(endpoint.protocol === "http:" ? "http" : "https");
+          const factory = createUpstreamRequest || transport.request.bind(transport);
+          request = factory({ ...requestOptions, headers: attemptHeaders }, (upstream) => {
+            connected = true;
+            requestSettled = true;
+            clearTimeout(connectTimer);
+            if (context.finished) {
+              upstream.destroy();
+              return;
+            }
+            const status = Number(upstream.statusCode || 0);
+            if (status >= 300 && status < 400) {
+              upstream.resume();
+              if (!context.finish()) return;
+              sendJson2(context.res, 502, envelope2(
+                "provider_error",
+                "provider_redirect_blocked",
+                "Provider redirects are not followed."
+              ));
+              return;
+            }
+            const responseHeaders = filterUpstreamResponseHeaders(upstream.rawHeaders || []);
+            if (status >= 400) {
+              const chunks = [];
+              let bytes = 0;
+              let responseSettled = false;
+              upstream.on("data", (chunk) => {
+                const value = Buffer.from(chunk);
+                const remaining = bounded.errorBodyBytes - bytes;
+                if (remaining > 0) chunks.push(value.subarray(0, remaining));
+                bytes += value.length;
+                if (bytes > bounded.errorBodyBytes) upstream.destroy();
+              });
+              const finishError = () => {
+                if (responseSettled || context.finished) return;
+                responseSettled = true;
+                const errorBody = Buffer.concat(chunks);
+                const retryHeaders = allowBetaRetry && status === 400 ? headersWithoutRejectedAnthropicBetas(attemptHeaders, errorBody) : null;
+                if (retryHeaders) {
+                  onAudit({
+                    event: "provider_route_compat_retry",
+                    modelId,
+                    clientProtocol,
+                    upstreamProtocol: capability.upstreamProtocol,
+                    compatibility: "anthropic-beta-rejected-values",
+                    outcome: "retry"
+                  });
+                  sendAttempt(retryHeaders, false);
+                  return;
+                }
+                if (!context.finish()) return;
+                sendJson2(
+                  context.res,
+                  status >= 400 && status < 500 ? status : 502,
+                  envelope2(
+                    "provider_error",
+                    "provider_error",
+                    sanitizedError(errorBody, profileSecrets(profile))
+                  ),
+                  responseHeaders
+                );
+              };
+              upstream.once("end", finishError);
+              upstream.once("error", finishError);
+              return;
+            }
+            if (conversion) {
+              readConvertedResponse({
+                context,
+                upstream,
+                responseHeaders,
+                clientProtocol: conversion.clientProtocol,
+                upstreamProtocol: capability.upstreamProtocol,
+                stream: conversion.stream,
+                modelId,
+                consumed: conversion.consumed
+              });
+              return;
+            }
+            context.res.writeHead(status || 200, responseHeaders);
+            upstream.on("data", (chunk) => {
+              if (!context.finished) context.res.write(chunk);
+            });
+            upstream.once("end", () => {
+              if (!context.finish()) return;
+              context.res.end();
+              onAudit({
+                event: "provider_route",
+                modelId,
+                clientProtocol,
+                upstreamProtocol: capability.upstreamProtocol,
+                conversion: "native",
+                outcome: "pass"
+              });
+            });
+            upstream.once("error", () => {
+              if (!context.finish()) return;
+              if (!context.res.headersSent) {
+                sendJson2(context.res, 502, envelope2(
+                  "provider_error",
+                  "provider_stream_error",
+                  "Provider response stream failed."
+                ));
+              } else context.res.destroy();
+            });
+          });
+          context.upstream = request;
+          request.once("error", () => {
+            clearTimeout(connectTimer);
+            if (requestSettled || !context.finish()) return;
+            sendJson2(context.res, 502, envelope2(
+              "provider_error",
+              "provider_error",
+              "Provider request failed."
+            ));
+          });
+          request.end(payload);
+        } catch {
+          clearTimeout(connectTimer);
+          if (!context.finish()) return;
+          sendJson2(context.res, 502, envelope2(
+            "provider_error",
+            "provider_error",
+            "Provider request failed."
+          ));
+        }
+      };
+      sendAttempt(headers, true);
+    };
+    const forwardChatFacade = ({ context, payload, modelId }) => {
+      const endpoint = new URL("responses", chatRouteInfo.baseUrl.replace(/\/+$/, "") + "/");
+      const forwarded = Object.fromEntries(
+        collectCodexHeaders(context.req.rawHeaders || []).map((header) => [header.name, header.value])
+      );
+      forwarded["content-type"] = "application/json";
+      forwarded["content-length"] = String(payload.length);
+      forwarded["x-ae-mcp-route-token"] = chatRouteInfo.routeToken;
+      const request = http.request({
+        hostname: endpoint.hostname,
+        port: endpoint.port,
+        path: endpoint.pathname + endpoint.search,
+        method: "POST",
+        headers: forwarded
+      }, (response) => {
+        if (context.finished) {
+          response.destroy();
+          return;
+        }
+        context.res.writeHead(
+          response.statusCode || 502,
+          filterUpstreamResponseHeaders(response.rawHeaders || [])
+        );
+        response.on("data", (chunk) => {
+          if (!context.finished) context.res.write(chunk);
+        });
+        response.once("end", () => {
+          if (!context.finish()) return;
+          context.res.end();
+          onAudit({
+            event: "provider_route",
+            modelId,
+            clientProtocol: "responses",
+            upstreamProtocol: "chat",
+            conversion: "responses-to-chat",
+            outcome: "pass"
+          });
+        });
+        response.once("error", () => {
+          if (!context.finish()) return;
+          context.res.destroy();
+        });
+      });
+      context.upstream = request;
+      request.once("error", () => {
+        if (!context.finish()) return;
+        sendJson2(context.res, 502, envelope2(
+          "provider_error",
+          "provider_error",
+          "Local Provider facade failed."
+        ));
+      });
+      request.end(payload);
+    };
+    const handleGenerate = async (req, res, localUrl, clientProtocol) => {
+      const context = begin(req, res);
+      if (!context) return;
+      let payload;
+      let body;
+      let modelId;
+      try {
+        payload = await readBody(req, bounded.requestBodyBytes);
+        ({ body, modelId } = requestEnvelope(payload));
+      } catch (error) {
+        if (!context.finish()) return;
+        sendJson2(
+          res,
+          Number(error == null ? void 0 : error.status) || 400,
+          envelope2(
+            "invalid_request_error",
+            (error == null ? void 0 : error.code) || "invalid_request_body",
+            (error == null ? void 0 : error.message) || "Request body is invalid."
+          )
+        );
+        return;
+      }
+      let capability;
+      try {
+        capability = await capabilityFor({ modelId, clientProtocol });
+      } catch (error) {
+        if (!context.finish()) return;
+        sendJson2(
+          res,
+          Number(error == null ? void 0 : error.status) || 501,
+          envelope2(
+            "invalid_request_error",
+            (error == null ? void 0 : error.code) || "provider_route_unavailable",
+            (error == null ? void 0 : error.message) || "No verified Provider route is available."
+          )
+        );
+        return;
+      }
+      if (capability.upstreamProtocol === clientProtocol) {
+        await nativeProxy({
+          context,
+          capability,
+          clientProtocol,
+          suffix: clientProtocol === "responses" ? "/responses" : "/messages",
+          search: clientProtocol === "messages" ? localUrl.search : "",
+          payload,
+          modelId
+        });
+        return;
+      }
+      if (clientProtocol === "responses" && capability.upstreamProtocol === "chat") {
+        forwardChatFacade({ context, payload, modelId });
+        return;
+      }
+      let converted;
+      try {
+        converted = convertRequest(clientProtocol, capability.upstreamProtocol, body, capability);
+      } catch (error) {
+        if (!context.finish()) return;
+        const status = Number(error == null ? void 0 : error.status) || 501;
+        sendJson2(res, status, envelope2(
+          "invalid_request_error",
+          (error == null ? void 0 : error.code) || "provider_conversion_unsupported",
+          (error == null ? void 0 : error.message) || "Provider conversion is unavailable.",
+          (error == null ? void 0 : error.param) ? { param: error.param } : {}
+        ));
+        return;
+      }
+      const upstreamProtocol = capability.upstreamProtocol;
+      await nativeProxy({
+        context,
+        capability,
+        clientProtocol: upstreamProtocol,
+        suffix: upstreamProtocol === "responses" ? "/responses" : upstreamProtocol === "messages" ? "/messages" : "/chat/completions",
+        search: "",
+        payload: Buffer.from(JSON.stringify(converted.body), "utf8"),
+        modelId,
+        conversion: {
+          clientProtocol,
+          stream: converted.body.stream === true,
+          consumed: converted.consumed
+        }
+      });
+    };
+    const handleFeature = async (req, res, localUrl, feature, clientProtocol, suffix) => {
+      var _a;
+      const context = begin(req, res);
+      if (!context) return;
+      let payload;
+      let modelId;
+      try {
+        payload = await readBody(req, bounded.requestBodyBytes);
+        ({ modelId } = requestEnvelope(payload));
+      } catch (error) {
+        if (!context.finish()) return;
+        sendJson2(
+          res,
+          Number(error == null ? void 0 : error.status) || 400,
+          envelope2(
+            "invalid_request_error",
+            (error == null ? void 0 : error.code) || "invalid_request_body",
+            (error == null ? void 0 : error.message) || "Request body is invalid."
+          )
+        );
+        return;
+      }
+      const unsupportedCode = feature === "compact" ? "provider_compaction_unsupported" : "provider_count_tokens_unsupported";
+      let capability;
+      try {
+        capability = await capabilityFor({ modelId, clientProtocol, feature });
+      } catch (error) {
+        if (!context.finish()) return;
+        sendJson2(res, 501, envelope2(
+          "invalid_request_error",
+          unsupportedCode,
+          "Provider " + feature + " is unavailable for this model."
+        ));
+        return;
+      }
+      if (capability.upstreamProtocol !== clientProtocol || ((_a = capability.features) == null ? void 0 : _a[feature]) !== "supported") {
+        if (!context.finish()) return;
+        sendJson2(res, 501, envelope2(
+          "invalid_request_error",
+          unsupportedCode,
+          "Provider " + feature + " is unavailable for this model."
+        ));
+        return;
+      }
+      await nativeProxy({
+        context,
+        capability,
+        clientProtocol,
+        suffix,
+        search: localUrl.search,
+        payload,
+        modelId
+      });
+    };
+    const handleModels = (res) => {
+      const data = (getModels() || []).map((entry) => ({
+        id: String((entry == null ? void 0 : entry.id) || "").trim(),
+        object: "model",
+        owned_by: "custom-provider"
+      })).filter((entry) => entry.id);
+      sendJson2(res, 200, { object: "list", data });
+    };
+    const handleLocalRequest = (req, res) => {
+      const candidate = parseRouteToken(req.rawHeaders || []);
+      if (!candidate || !routeToken || !routeTokenMatches(candidate, routeToken, crypto)) {
+        sendJson2(res, 401, envelope2(
+          "authentication_error",
+          "invalid_route_token",
+          "Invalid local provider route token."
+        ));
+        return;
+      }
+      let localUrl;
+      try {
+        localUrl = parseLocalUrl2(req.url);
+      } catch (error) {
+        sendJson2(res, 400, envelope2(
+          "invalid_request_error",
+          error.code || "invalid_path",
+          error.message
+        ));
+        return;
+      }
+      const method = String(req.method || "").toUpperCase();
+      const pathname = localUrl.pathname;
+      if (pathname === "/v1/models" && method === "GET") {
+        handleModels(res);
+        return;
+      }
+      if (pathname === "/v1/responses" && method === "POST") {
+        void handleGenerate(req, res, localUrl, "responses");
+        return;
+      }
+      if (pathname === "/v1/messages" && method === "POST") {
+        void handleGenerate(req, res, localUrl, "messages");
+        return;
+      }
+      if (pathname === "/v1/responses/compact" && method === "POST") {
+        void handleFeature(req, res, localUrl, "compact", "responses", "/responses/compact");
+        return;
+      }
+      if (pathname === "/v1/messages/count_tokens" && method === "POST") {
+        void handleFeature(req, res, localUrl, "countTokens", "messages", "/messages/count_tokens");
+        return;
+      }
+      const known = [
+        "/v1/models",
+        "/v1/responses",
+        "/v1/messages",
+        "/v1/responses/compact",
+        "/v1/messages/count_tokens"
+      ];
+      if (known.includes(pathname)) {
+        sendJson2(res, 405, envelope2(
+          "invalid_request_error",
+          "method_not_allowed",
+          "Method " + method + " is not allowed for " + pathname + "."
+        ));
+        return;
+      }
+      sendJson2(res, 404, envelope2(
+        "invalid_request_error",
+        "not_found",
+        "Unknown local Provider route endpoint."
+      ));
+    };
+    function routeInfo() {
+      return {
+        origin,
+        openaiBaseUrl: origin + "/v1",
+        anthropicBaseUrl: origin,
+        baseUrl: origin + "/v1",
+        routeToken
+      };
+    }
+    return {
+      async start() {
+        if (server && routeToken && origin) return routeInfo();
+        if (startPromise) return startPromise;
+        startPromise = (async () => {
+          reasoningCapsule = createReasoningCapsule({ crypto });
+          chatRoute = createChatRoute({
+            provider,
+            resolveRequestProfile: nestedProfile,
+            requireImpl,
+            createUpstreamRequest,
+            lookupImpl
+          });
+          chatRouteInfo = await chatRoute.start();
+          const next = http.createServer(handleLocalRequest);
+          await new Promise((resolve, reject) => {
+            next.once("error", reject);
+            next.listen(0, "127.0.0.1", resolve);
+          });
+          server = next;
+          routeToken = generateRouteToken(crypto);
+          origin = "http://127.0.0.1:" + server.address().port;
+          return routeInfo();
+        })().catch(async (error) => {
+          await (chatRoute == null ? void 0 : chatRoute.close().catch(() => {
+          }));
+          chatRoute = null;
+          chatRouteInfo = null;
+          reasoningCapsule == null ? void 0 : reasoningCapsule.destroy();
+          reasoningCapsule = null;
+          throw error;
+        }).finally(() => {
+          startPromise = null;
+        });
+        return startPromise;
+      },
+      async close() {
+        var _a;
+        if (startPromise) await startPromise.catch(() => {
+        });
+        for (const context of [...activeRequests]) {
+          try {
+            (_a = context.upstream) == null ? void 0 : _a.destroy();
+          } catch {
+          }
+          if (context.finish()) context.res.end();
+        }
+        const closing = server;
+        server = null;
+        routeToken = null;
+        origin = "";
+        if (closing) await new Promise((resolve) => closing.close(resolve));
+        await (chatRoute == null ? void 0 : chatRoute.close());
+        chatRoute = null;
+        chatRouteInfo = null;
+        reasoningCapsule == null ? void 0 : reasoningCapsule.destroy();
+        reasoningCapsule = null;
+      }
+    };
+  }
+
+  // src/cep/claudeAgentBackend.js
+  var READY_TIMEOUT_MS = 15e3;
+  var STDERR_TAIL_LIMIT2 = 4096;
+  async function resolveSystemNode({ platform } = {}) {
+    const adapter = platform || createPlatformAdapter();
+    const requiredArch = adapter.id === "macos-arm64" ? "arm64" : adapter.id === "windows-x64" ? "x64" : void 0;
+    const resolved = await adapter.resolveExecutable("node", { minimumVersion: "18.0.0", ...requiredArch ? { requiredArch } : {} });
+    if (!resolved.ok) return { ok: false, detail: "Node runtime resolution failed: " + resolved.code, resolution: resolved };
+    return { ok: true, nodePath: resolved.path, version: resolved.version || "", executable: resolved };
+  }
+  function clone3(value) {
+    return value == null ? value : JSON.parse(JSON.stringify(value));
+  }
+  function nodeMissingMessage(lang) {
+    if (lang === "zh") return "\u5185\u5D4C\u5BF9\u8BDD\u8FD0\u884C\u65F6\u7F3A\u5931\u6216\u635F\u574F\uFF0C\u8BF7\u5728\u8BBE\u7F6E\u4E2D\u4FEE\u590D\u79BB\u7EBF\u8FD0\u884C\u65F6\u3002";
+    return "The embedded chat runtime is missing or damaged. Repair the offline runtime in Settings.";
+  }
+  function appendTail3(tail, chunk) {
+    const next = tail + String(chunk || "");
+    return next.length > STDERR_TAIL_LIMIT2 ? next.slice(next.length - STDERR_TAIL_LIMIT2) : next;
+  }
+  function defaultResolveCapability({ provider, modelId, feature = "generate" } = {}) {
+    return selectProviderRoute(provider, {
+      client: "claude-code",
+      modelId,
+      feature
+    });
+  }
+  function runtimeIdentity({ channel, model, provider }) {
+    var _a, _b, _c, _d, _e;
+    return JSON.stringify([
+      channel,
+      model,
+      channel === "api" ? (_a = provider.id) != null ? _a : null : null,
+      channel === "api" ? (_b = provider.baseUrl) != null ? _b : null : null,
+      channel === "api" ? (_c = provider.requestProfileRevision) != null ? _c : null : null,
+      channel === "api" ? (_e = (_d = provider.modelList) == null ? void 0 : _d.revision) != null ? _e : null : null
+    ]);
+  }
+  function cancelledStartError() {
+    const error = new Error("Claude sidecar start was cancelled");
+    error.code = "CLAUDE_AGENT_START_CANCELLED";
+    return error;
+  }
+  function normalizeChannel(channel) {
+    return channel === "api" ? "api" : "subscription";
+  }
+  function providerModelError(code, message) {
+    const error = new Error(message);
+    error.kind = "model";
+    error.code = code;
+    return error;
+  }
+  function createClaudeAgentBackend({
+    platform,
+    resolveNode = resolveSystemNode,
+    sidecarPath,
+    getMcpSpec,
+    getToolMeta,
+    getModel,
+    getPermissionMode,
+    getEffort,
+    getThinking,
+    getChannel = () => "subscription",
+    resolveApiProvider,
+    resolveRequestProfile,
+    resolveCapability = defaultResolveCapability,
+    createProviderRoute = createUniversalProviderRoute,
+    recoverProviderProfile,
+    onProviderProfileRecovered = () => {
+    },
+    onEvent,
+    lang = "zh",
+    spawnImpl,
+    env
+  }) {
+    const adapter = platform || (spawnImpl ? {
+      completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
+      spawn: (executable, args, options) => spawnImpl(executable.path, [...executable.argsPrefix || [], ...args], options)
+    } : createPlatformAdapter());
+    let proc = null;
+    let startPromise = null;
+    let pendingReadyReject = null;
+    let pendingReadyTimer = null;
+    let ready = false;
+    let stderrTail = "";
+    let transcript = [];
+    let activeRun = null;
+    let activeResolve = null;
+    let activeAssistantText = "";
+    let processChannel = "subscription";
+    let processModel = "";
+    let processIdentity = null;
+    let processProvider = null;
+    let processCandidateIdentity = null;
+    let providerRoute = null;
+    let routeClosePromise = Promise.resolve();
+    let runtimeGeneration = 0;
+    function emit(evt) {
+      if (onEvent) onEvent(evt);
+    }
+    function writeMessage(message) {
+      if (!proc || !proc.stdin || !proc.stdin.write) return;
+      proc.stdin.write(JSON.stringify(message) + "\n");
+    }
+    function finishActive() {
+      if (!activeResolve) {
+        activeRun = null;
+        activeAssistantText = "";
+        return;
+      }
+      const resolve = activeResolve;
+      activeResolve = null;
+      activeRun = null;
+      activeAssistantText = "";
+      resolve();
+    }
+    function handleSidecarMessage(message) {
+      if (!message || message.t === "ready") return;
+      if (message.t !== "event") return;
+      let event = message.event;
+      if (!event) return;
+      if (processChannel === "api" && event.type === "error") {
+        event = { ...event, message: "Provider sidecar request failed." };
+      }
+      if (event.type === "text-delta") activeAssistantText += String(event.text || "");
+      emit(event);
+      if (event.type === "turn-end") {
+        transcript.push({ role: "assistant", text: activeAssistantText });
+        finishActive();
+      }
+      if (event.type === "error") finishActive();
+    }
+    function exitDetail(code, signal) {
+      const suffix = signal ? String(code) + " " + signal : String(code);
+      return stderrTail ? suffix + " " + stderrTail : suffix;
+    }
+    function clearReadyWait() {
+      if (pendingReadyTimer) clearTimeout(pendingReadyTimer);
+      pendingReadyTimer = null;
+      pendingReadyReject = null;
+    }
+    function closeProviderRoute() {
+      const route = providerRoute;
+      providerRoute = null;
+      if (!route || typeof route.close !== "function") return routeClosePromise;
+      routeClosePromise = routeClosePromise.then(() => route.close()).catch(() => {
+      });
+      return routeClosePromise;
+    }
+    async function discardRuntime({ clearTranscript = false, finishRun = false, clearStderr = false } = {}) {
+      runtimeGeneration += 1;
+      const current = proc;
+      const rejectReady = pendingReadyReject;
+      proc = null;
+      ready = false;
+      startPromise = null;
+      clearReadyWait();
+      processChannel = "subscription";
+      processModel = "";
+      processIdentity = null;
+      processProvider = null;
+      processCandidateIdentity = null;
+      if (rejectReady) rejectReady(cancelledStartError());
+      if (current) {
+        try {
+          current.kill();
+        } catch {
+        }
+      }
+      if (clearTranscript) transcript = [];
+      if (finishRun) finishActive();
+      if (clearStderr) stderrTail = "";
+      await closeProviderRoute();
+    }
+    function apiSafeErrorMessage(message) {
+      return processChannel === "api" ? "Provider sidecar request failed." : message;
+    }
+    function handleExit(target, generation, code, signal) {
+      if (generation !== runtimeGeneration || proc !== target) return;
+      const wasReady = ready;
+      const detail = exitDetail(code, signal);
+      const rejectReady = pendingReadyReject;
+      proc = null;
+      ready = false;
+      startPromise = null;
+      processIdentity = null;
+      processModel = "";
+      processProvider = null;
+      processCandidateIdentity = null;
+      runtimeGeneration += 1;
+      void closeProviderRoute();
+      if (!wasReady && rejectReady) {
+        clearReadyWait();
+        processChannel = "subscription";
+        rejectReady(new Error("sidecar exited: " + detail));
+        return;
+      }
+      if (activeRun) {
+        emit({ type: "error", kind: "mcp", message: apiSafeErrorMessage("sidecar exited: " + detail) });
+        finishActive();
+      }
+      processChannel = "subscription";
+    }
+    function handleProcError(target, generation, error) {
+      if (generation !== runtimeGeneration || proc !== target) return;
+      const rejectReady = pendingReadyReject;
+      proc = null;
+      ready = false;
+      startPromise = null;
+      processIdentity = null;
+      processModel = "";
+      processProvider = null;
+      processCandidateIdentity = null;
+      runtimeGeneration += 1;
+      void closeProviderRoute();
+      if (rejectReady) {
+        clearReadyWait();
+        processChannel = "subscription";
+        rejectReady(error instanceof Error ? error : new Error("sidecar error"));
+        return;
+      }
+      if (activeRun) {
+        const message = error && error.message ? error.message : "sidecar error";
+        emit({ type: "error", kind: "mcp", message: apiSafeErrorMessage(message) });
+        finishActive();
+      }
+      processChannel = "subscription";
+    }
+    async function selectApiRoute(provider, model) {
+      try {
+        return await resolveCapability({
+          provider,
+          modelId: model,
+          clientProtocol: "messages",
+          feature: "generate"
+        });
+      } catch {
+        return null;
+      }
+    }
+    async function desiredSession(channel) {
+      const model = String(getModel ? getModel() : "").trim();
+      let provider = null;
+      let candidateIdentity = null;
+      let recovered = false;
+      let route = null;
+      if (channel === "api") {
+        if (typeof resolveApiProvider !== "function") throw new Error("Provider is unavailable.");
+        if (typeof resolveRequestProfile !== "function") throw new Error("Provider credential resolver is unavailable.");
+        if (typeof resolveCapability !== "function") throw new Error("Provider capability resolver is unavailable.");
+        if (typeof createProviderRoute !== "function") throw new Error("Provider route factory is unavailable.");
+        provider = await resolveApiProvider();
+        if (!provider || typeof provider !== "object" || Array.isArray(provider)) {
+          throw new Error("Provider is unavailable.");
+        }
+        candidateIdentity = runtimeIdentity({ channel, model, provider });
+        if (proc && ready && processProvider && processCandidateIdentity === candidateIdentity) {
+          provider = processProvider;
+          return {
+            channel,
+            model,
+            provider,
+            candidateIdentity,
+            recovered,
+            route: null,
+            identity: runtimeIdentity({ channel, model, provider })
+          };
+        }
+        route = await selectApiRoute(provider, model);
+        if (!(route == null ? void 0 : route.ok)) {
+          if ((route == null ? void 0 : route.reasonCode) !== "needs-probe") {
+            throw providerModelError(
+              "provider_route_unavailable",
+              `Custom provider has no verified Claude route for model ${model}`
+            );
+          }
+          if (typeof recoverProviderProfile !== "function") {
+            throw providerModelError(
+              "provider_preflight_unavailable",
+              `Custom provider cannot be verified for model ${model}`
+            );
+          }
+          let recovery;
+          try {
+            recovery = await recoverProviderProfile(
+              provider,
+              { status: null, code: "provider_preflight_required" },
+              model
+            );
+          } catch {
+            throw providerModelError(
+              "provider_preflight_failed",
+              `Custom provider could not verify model ${model}`
+            );
+          }
+          const recoveredProvider = (recovery == null ? void 0 : recovery.provider) || recovery;
+          const recoveredModel = String((recovery == null ? void 0 : recovery.modelId) || model).trim();
+          if (!recoveredProvider || typeof recoveredProvider !== "object" || Array.isArray(recoveredProvider) || recoveredModel !== model) {
+            throw providerModelError(
+              "provider_preflight_failed",
+              `Custom provider did not expose a verified API for model ${model}`
+            );
+          }
+          route = await selectApiRoute(recoveredProvider, model);
+          if (!(route == null ? void 0 : route.ok)) {
+            throw providerModelError(
+              "provider_preflight_failed",
+              `Custom provider did not expose a verified API for model ${model}`
+            );
+          }
+          provider = recoveredProvider;
+          recovered = true;
+        }
+      }
+      return {
+        channel,
+        model,
+        provider,
+        candidateIdentity,
+        recovered,
+        route,
+        identity: runtimeIdentity({ channel, model, provider })
+      };
+    }
+    async function cleanupFailedStart(generation) {
+      if (generation !== runtimeGeneration) {
+        await routeClosePromise;
+        return;
+      }
+      runtimeGeneration += 1;
+      const current = proc;
+      proc = null;
+      ready = false;
+      processChannel = "subscription";
+      processModel = "";
+      processIdentity = null;
+      processProvider = null;
+      processCandidateIdentity = null;
+      clearReadyWait();
+      if (current) {
+        try {
+          current.kill();
+        } catch {
+        }
+      }
+      await closeProviderRoute();
+    }
+    async function startSidecar(session) {
+      if (proc && ready) return true;
+      if (startPromise) return startPromise;
+      const startGeneration = runtimeGeneration;
+      const assertCurrentStart = () => {
+        if (startGeneration !== runtimeGeneration) throw cancelledStartError();
+      };
+      const pendingStart = (async () => {
+        const node = await resolveNode({ platform: adapter });
+        assertCurrentStart();
+        if (!node || !node.ok) {
+          emit({ type: "error", kind: "mcp", message: nodeMissingMessage(lang) });
+          return false;
+        }
+        const mcpSpec = await getMcpSpec();
+        assertCurrentStart();
+        const meta = await getToolMeta();
+        assertCurrentStart();
+        await routeClosePromise;
+        assertCurrentStart();
+        let localRoute = null;
+        if (session.channel === "api") {
+          providerRoute = createProviderRoute({
+            provider: session.provider,
+            resolveCapability,
+            resolveRequestProfile
+          });
+          const routeInfo = await providerRoute.start();
+          assertCurrentStart();
+          localRoute = {
+            origin: routeInfo == null ? void 0 : routeInfo.origin,
+            routeToken: routeInfo == null ? void 0 : routeInfo.routeToken
+          };
+        }
+        let spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), {
+          channel: session.channel,
+          localRoute
+        });
+        stderrTail = "";
+        ready = false;
+        processChannel = session.channel;
+        processModel = session.model;
+        processIdentity = session.identity;
+        processProvider = session.provider;
+        processCandidateIdentity = session.candidateIdentity;
+        let readyResolve;
+        let readyReject;
+        const readyPromise = new Promise((resolve, reject) => {
+          readyResolve = resolve;
+          readyReject = reject;
+        });
+        pendingReadyReject = readyReject;
+        pendingReadyTimer = setTimeout(() => {
+          pendingReadyTimer = null;
+          pendingReadyReject = null;
+          try {
+            if (proc) proc.kill();
+          } catch {
+          }
+          readyReject(new Error("sidecar ready timed out"));
+        }, READY_TIMEOUT_MS);
+        let spawnedProc;
+        try {
+          const executable = node.executable || { ok: true, id: "node", path: node.nodePath, argsPrefix: [], source: "runtime", version: node.version || null, arch: null };
+          spawnedProc = adapter.spawn(executable, [
+            sidecarPath,
+            "--mcp",
+            JSON.stringify(mcpSpec),
+            "--allowed-tools",
+            JSON.stringify(meta.allowedTools),
+            "--annotations",
+            JSON.stringify(meta.annotations),
+            "--model",
+            session.model,
+            "--lang",
+            lang,
+            "--channel",
+            session.channel
+          ], {
+            stdio: "pipe",
+            windowsHide: true,
+            env: spawnEnv
+          });
+        } catch (e) {
+          clearReadyWait();
+          throw e;
+        } finally {
+          if (spawnEnv) delete spawnEnv.ANTHROPIC_AUTH_TOKEN;
+          spawnEnv = null;
+        }
+        assertCurrentStart();
+        proc = spawnedProc;
+        const reader = createNdjsonReader((message) => {
+          if (startGeneration !== runtimeGeneration || proc !== spawnedProc) return;
+          if (message && message.t === "ready") {
+            ready = true;
+            clearReadyWait();
+            readyResolve(true);
+            return;
+          }
+          handleSidecarMessage(message);
+        });
+        if (spawnedProc.stdout && spawnedProc.stdout.on) spawnedProc.stdout.on("data", reader);
+        if (spawnedProc.stderr && spawnedProc.stderr.on) spawnedProc.stderr.on("data", (chunk) => {
+          if (startGeneration !== runtimeGeneration || proc !== spawnedProc) return;
+          stderrTail = appendTail3(stderrTail, processChannel === "api" ? "[provider-sidecar-stderr-redacted]\n" : chunk);
+        });
+        spawnedProc.on("exit", (code, signal) => handleExit(spawnedProc, startGeneration, code, signal));
+        spawnedProc.on("error", (error) => {
+          handleProcError(spawnedProc, startGeneration, error);
+        });
+        await readyPromise;
+        return true;
+      })();
+      startPromise = pendingStart;
+      try {
+        return await pendingStart;
+      } catch (e) {
+        await cleanupFailedStart(startGeneration);
+        if ((e == null ? void 0 : e.code) !== "CLAUDE_AGENT_START_CANCELLED") {
+          const message = session.channel === "api" ? "Provider sidecar request failed." : e && e.message ? e.message : "Failed to start sidecar.";
+          emit({ type: "error", kind: "mcp", message });
+        }
+        return false;
+      } finally {
+        if (startPromise === pendingStart) startPromise = null;
+      }
+    }
+    async function ensureSidecar(runToken) {
+      let session;
+      let channel = "subscription";
+      const initialGeneration = runtimeGeneration;
+      try {
+        channel = normalizeChannel(getChannel ? getChannel() : "subscription");
+        session = await desiredSession(channel);
+        if (activeRun !== runToken || runtimeGeneration !== initialGeneration) {
+          throw cancelledStartError();
+        }
+        if (session.recovered) {
+          try {
+            await onProviderProfileRecovered(session.provider);
+          } catch {
+          }
+          if (activeRun !== runToken || runtimeGeneration !== initialGeneration) {
+            throw cancelledStartError();
+          }
+        }
+        if (processIdentity !== null && processIdentity !== session.identity) {
+          const replacing = discardRuntime({ clearTranscript: true, clearStderr: true });
+          const replacementGeneration = runtimeGeneration;
+          await replacing;
+          if (activeRun !== runToken || runtimeGeneration !== replacementGeneration) {
+            throw cancelledStartError();
+          }
+        }
+        if (proc && ready && processIdentity === session.identity) {
+          processProvider = session.provider;
+          processCandidateIdentity = session.candidateIdentity;
+        }
+        return await startSidecar(session);
+      } catch (error) {
+        if (activeRun === runToken) {
+          await discardRuntime({ clearTranscript: true, clearStderr: true });
+        }
+        if ((error == null ? void 0 : error.code) !== "CLAUDE_AGENT_START_CANCELLED") {
+          if ((error == null ? void 0 : error.kind) === "model") {
+            emit({ type: "error", kind: "model", code: error.code, message: error.message });
+          } else {
+            const message = channel === "api" ? "Provider sidecar request failed." : (error == null ? void 0 : error.message) || "Failed to start sidecar.";
+            emit({ type: "error", kind: "mcp", message });
+          }
+        }
+        return false;
+      }
+    }
+    async function sendUser(text) {
+      if (activeRun) return activeRun;
+      activeAssistantText = "";
+      activeRun = new Promise((resolve) => {
+        activeResolve = resolve;
+      });
+      const run = activeRun;
+      const ok = await ensureSidecar(run);
+      if (!ok || activeRun !== run || !proc || !ready) {
+        if (activeRun === run) finishActive();
+        return run;
+      }
+      const userText = String(text || "");
+      transcript.push({ role: "user", text: userText });
+      writeMessage({
+        t: "user",
+        text: userText,
+        permissionMode: getPermissionMode(),
+        model: processModel,
+        effort: getEffort ? getEffort() : void 0,
+        thinking: getThinking ? getThinking() : void 0
+      });
+      return run;
+    }
+    function approve(toolUseId, decision) {
+      writeMessage({ t: "approve", id: toolUseId, decision });
+    }
+    function stop() {
+      writeMessage({ t: "stop" });
+    }
+    function reset() {
+      void discardRuntime({ clearTranscript: true, finishRun: true, clearStderr: true });
+    }
+    return {
+      sendUser,
+      approve,
+      stop,
+      reset,
+      getMessages: () => clone3(transcript),
+      getStderrTail: () => stderrTail
+    };
+  }
+
+  // src/cep/claudeAuth.js
+  function resolveSidecarPath({ extRoot, fsImpl, platform } = {}) {
+    const adapter = platform || createPlatformAdapter();
+    const root = normalizeCepSystemPath(extRoot || adapter.paths.configRoot, adapter);
+    const developmentMarker = adapter.paths.join([root, ".debug"]);
+    const developmentSidecar = adapter.paths.join([root, "sidecar", "agent-sidecar.mjs"]);
+    const runtimeSidecar = adapter.paths.join([
+      root,
+      "runtime",
+      adapter.id,
+      "node",
+      "sidecar",
+      "agent-sidecar.mjs"
+    ]);
+    const fs = fsImpl || adapter.fs;
+    if (!fs || typeof fs.existsSync !== "function") throw new Error("platform filesystem is unavailable");
+    if (fs.existsSync(developmentMarker) && fs.existsSync(developmentSidecar)) return developmentSidecar;
+    return runtimeSidecar;
+  }
+  async function probeClaudeLogin({
+    platform,
+    resolveNode,
+    sidecarPath,
+    spawnImpl,
+    env,
+    timeoutMs = 3e4
+  } = {}) {
+    const adapter = platform || (spawnImpl ? {
+      completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
+      spawn: (executable, args, options) => spawnImpl(executable.path, [...executable.argsPrefix || [], ...args], options)
+    } : createPlatformAdapter());
+    const nodeResolver = resolveNode || resolveSystemNode;
+    const resolved = await nodeResolver({ platform: adapter });
+    if (!resolved || resolved.ok === false) {
+      return { loggedIn: false, nodeOk: false, detail: resolved && resolved.detail || "node unavailable" };
+    }
+    return await new Promise((resolve) => {
+      let settled = false;
+      let stderr = "";
+      let proc = null;
+      const spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), { channel: "subscription" });
+      function finish(result) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(result);
+      }
+      const timer = setTimeout(() => {
+        if (proc && proc.kill) {
+          try {
+            proc.kill();
+          } catch (e) {
+          }
+        }
+        finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: "probe timeout" });
+      }, timeoutMs);
+      try {
+        const executable = resolved.executable || { ok: true, id: "node", path: resolved.nodePath, argsPrefix: [], source: "runtime", version: resolved.version || null, arch: null };
+        proc = adapter.spawn(executable, [sidecarPath, "--probe"], {
+          stdio: "pipe",
+          windowsHide: true,
+          env: spawnEnv
+        });
+      } catch (e) {
+        finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: e && e.message ? e.message : String(e) });
+        return;
+      }
+      const onMessage = createNdjsonReader((message) => {
+        if (!message || message.t !== "probe-result") return;
+        finish({
+          loggedIn: !!message.loggedIn,
+          nodeOk: true,
+          nodeVersion: resolved.version,
+          detail: message.detail || message.reason || ""
+        });
+      });
+      if (proc.stdout && proc.stdout.on) proc.stdout.on("data", onMessage);
+      if (proc.stderr && proc.stderr.on) {
+        proc.stderr.on("data", (chunk) => {
+          stderr += String(chunk || "");
+          if (stderr.length > 4e3) stderr = stderr.slice(-4e3);
+        });
+      }
+      if (proc.on) {
+        proc.on("error", (err) => {
+          finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: err && err.message ? err.message : String(err) });
+        });
+        proc.on("exit", () => {
+          finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: stderr.trim() || "probe exited without result" });
+        });
+      }
+    });
   }
 
   // src/cep/codexBackend.js
@@ -19152,18 +24057,19 @@
     if (values.some((value) => ["code", "type", "kind", "reason"].some((key) => String(value[key] || "").toLowerCase() === "provider_compaction_unsupported"))) {
       return false;
     }
+    const message = values.map((value) => String(value.message || "")).filter(Boolean).join("\n");
+    if (/\bprovider_compaction_unsupported\b/i.test(message) || /\bthis chat-only provider cannot compact responses context\.?/i.test(message)) return false;
     for (const value of values) {
       for (const key of ["status", "statusCode", "httpStatus", "upstreamStatus"]) {
-        if ([401, 403, 404].includes(Number(value[key]))) return true;
+        if ([401, 403, 404, 405, 501].includes(Number(value[key]))) return true;
       }
       for (const key of ["code", "type", "kind", "reason"]) {
-        if (key === "code" && [401, 403, 404].includes(Number(value[key]))) return true;
+        if (key === "code" && [401, 403, 404, 405, 501].includes(Number(value[key]))) return true;
         const code = String(value[key] || "").toLowerCase();
         if (/unsupported[_-](?:endpoint|api|wire)|(?:endpoint|api|wire)[_-]unsupported/.test(code)) return true;
       }
     }
-    const message = String((error == null ? void 0 : error.message) || "");
-    return /\b(?:http|status(?:\s+code)?)\s*[:=]?\s*(?:401|403|404)\b/i.test(message) || /\bunsupported\s+(?:endpoint|api|wire api|request)\b/i.test(message);
+    return /\b(?:http|status(?:\s+code)?)\s*[:=]?\s*(?:401|403|404|405|501)\b/i.test(message) || /\bunsupported\s+(?:endpoint|api|wire api|request)\b/i.test(message);
   }
   function providerFailureFacts(error) {
     const values = [error, error == null ? void 0 : error.data, error == null ? void 0 : error.error, error == null ? void 0 : error.cause].filter((value) => value && typeof value === "object");
@@ -19179,6 +24085,12 @@
       }
     }
     return { status, code };
+  }
+  function providerModelError2(code, message) {
+    const error = new Error(message);
+    error.kind = "model";
+    error.code = code;
+    return error;
   }
   function createRpc2({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEOUT_MS2 }) {
     let nextId2 = 1;
@@ -19303,6 +24215,7 @@
     getExpertGuidance = () => true,
     getServerInstructions = () => "",
     getProviderProfile = () => null,
+    getProviderCandidate = () => null,
     resolveRequestProfile,
     recoverProviderProfile,
     onProviderProfileRecovered = () => {
@@ -19313,13 +24226,16 @@
     // panel only supplies the missing API key env var the provider needs (no
     // `-c model_provider=...` override).
     getCliConfigProvider = () => null,
-    createResponsesRoute = createCodexResponsesRoute,
+    createProviderRoute = createUniversalProviderRoute,
+    createResponsesRoute,
+    selectRoute = selectProviderRoute,
     resolveCli = resolveCodexCli,
     onEvent,
     lang = "zh",
     env
   }) {
     const adapter = platform || createPlatformAdapter();
+    const providerRouteFactory = createResponsesRoute || createProviderRoute;
     let proc = null;
     let rpc = null;
     let startPromise = null;
@@ -19347,6 +24263,7 @@
     let providerProfileOverride = null;
     let providerRecoveryAttempted = false;
     let providerRecoveryInFlight = false;
+    let turnFailureInFlight = false;
     let providerRecoverySequence = 0;
     let providerRefreshPending = false;
     let activeUserText = "";
@@ -19405,6 +24322,7 @@
       activeUserRecorded = false;
       providerRecoveryAttempted = false;
       providerRecoveryInFlight = false;
+      turnFailureInFlight = false;
       providerRefreshPending = false;
       if (resolve) resolve();
       if (refreshProvider) {
@@ -19638,18 +24556,6 @@
       }
       clearProviderSensitiveValues();
     }
-    function runtimeHeadersFromRequestProfile(requestProfile) {
-      const merged = mergeUpstreamHeaders({
-        rawHeaders: [],
-        providerHeaders: (requestProfile == null ? void 0 : requestProfile.extraHeaders) || [],
-        auth: (requestProfile == null ? void 0 : requestProfile.auth) || { kind: "none" }
-      });
-      return Object.entries(merged).map(([name, value], index) => ({
-        name,
-        envName: `AE_MCP_PROVIDER_HEADER_${String(index).padStart(2, "0")}`,
-        value
-      }));
-    }
     function clearSpawnCredentialCopies(runtimeConfig, spawnEnvironment, extraNames = []) {
       const names = new Set(extraNames);
       for (const header of (runtimeConfig == null ? void 0 : runtimeConfig.envHeaders) || []) {
@@ -19662,14 +24568,126 @@
       const selected = providerProfileOverride || (getProviderProfile ? getProviderProfile() : null);
       if (!selected) return null;
       const provider = selected.provider || selected;
-      const dialect = selected.dialect;
-      if (!provider || dialect !== "responses" && dialect !== "chat") {
-        throw new Error("Custom provider dialect is unavailable");
+      const modelId = String(selected.modelId || "").trim();
+      const runtimeModelId = String(getModel ? getModel() : "").trim();
+      if (!provider) throw new Error("Custom provider is unavailable");
+      if (!modelId || modelId !== runtimeModelId) {
+        throw new Error("Custom provider model binding is unavailable");
       }
       if (typeof resolveRequestProfile !== "function") {
         throw new Error("Custom provider credential resolver is unavailable");
       }
-      return { provider, dialect };
+      const route = selectRoute(provider, {
+        client: "codex",
+        modelId,
+        feature: "generate"
+      });
+      if (!(route == null ? void 0 : route.ok)) {
+        const code = (route == null ? void 0 : route.reasonCode) === "needs-probe" ? "provider_preflight_required" : "provider_route_unavailable";
+        throw providerModelError2(code, `Custom provider has no verified Codex route for model ${modelId}`);
+      }
+      return { provider, modelId, route };
+    }
+    function normalizedProviderProfile(selected) {
+      if (!selected) return null;
+      const provider = selected.provider || selected;
+      const modelId = String(selected.modelId || "").trim();
+      let route = null;
+      try {
+        route = selectRoute(provider, {
+          client: "codex",
+          modelId,
+          feature: "generate"
+        });
+      } catch {
+        route = null;
+      }
+      return {
+        provider,
+        modelId,
+        route
+      };
+    }
+    function providerProfileMatchesCandidate(profile, candidate) {
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+      if (!(profile == null ? void 0 : profile.provider) || !(candidate == null ? void 0 : candidate.provider)) return false;
+      const profileProviderId = String(profile.provider.id || "").trim();
+      const candidateProviderId = String(candidate.provider.id || "").trim();
+      const profileBaseUrl = String(profile.provider.baseUrl || "").trim();
+      const candidateBaseUrl = String(candidate.provider.baseUrl || "").trim();
+      const profileRequestRevision = (_b = (_a = profile.provider.requestProfileRevision) != null ? _a : profile.provider.authProfileRevision) != null ? _b : null;
+      const candidateRequestRevision = (_d = (_c = candidate.provider.requestProfileRevision) != null ? _c : candidate.provider.authProfileRevision) != null ? _d : null;
+      const profileModelListRevision = (_f = (_e = profile.provider.modelList) == null ? void 0 : _e.revision) != null ? _f : null;
+      const candidateModelListRevision = (_h = (_g = candidate.provider.modelList) == null ? void 0 : _g.revision) != null ? _h : null;
+      return Boolean(
+        profileProviderId && profileProviderId === candidateProviderId && profileBaseUrl === candidateBaseUrl && profileRequestRevision === candidateRequestRevision && profileModelListRevision === candidateModelListRevision && ((_i = profile.route) == null ? void 0 : _i.ok) === true && profile.modelId === candidate.modelId
+      );
+    }
+    function currentProviderCandidate() {
+      const selected = getProviderCandidate ? getProviderCandidate() : null;
+      if (!selected) return null;
+      const provider = selected.provider || selected;
+      const modelId = String(selected.modelId || "").trim();
+      const runtimeModelId = String(getModel ? getModel() : "").trim();
+      if (!provider) {
+        throw providerModelError2("provider_candidate_unavailable", "Selected custom provider is unavailable");
+      }
+      if (!modelId || modelId !== runtimeModelId) {
+        throw providerModelError2("provider_model_binding_unavailable", "Selected custom provider model binding is unavailable");
+      }
+      return { provider, modelId };
+    }
+    async function ensureProviderProfileForSend() {
+      const candidate = currentProviderCandidate();
+      if (!candidate) return true;
+      const override = normalizedProviderProfile(providerProfileOverride);
+      if (providerProfileMatchesCandidate(override, candidate)) return true;
+      let configured = null;
+      try {
+        configured = normalizedProviderProfile(getProviderProfile ? getProviderProfile() : null);
+      } catch {
+        configured = null;
+      }
+      const sequence = providerRecoverySequence + 1;
+      providerRecoverySequence = sequence;
+      detachRuntimeForProviderRecovery();
+      providerProfileOverride = null;
+      if (providerProfileMatchesCandidate(configured, candidate)) {
+        providerProfileOverride = configured;
+        return true;
+      }
+      if (typeof recoverProviderProfile !== "function") {
+        throw providerModelError2(
+          "provider_preflight_unavailable",
+          `Custom provider cannot be verified for model ${candidate.modelId}`
+        );
+      }
+      let recovered;
+      try {
+        recovered = await recoverProviderProfile(
+          candidate.provider,
+          { status: null, code: "provider_preflight_required" },
+          candidate.modelId
+        );
+      } catch (error) {
+        if (sequence !== providerRecoverySequence || !activeRun) return false;
+        throw providerModelError2(
+          "provider_preflight_failed",
+          (error == null ? void 0 : error.message) || `Custom provider could not verify model ${candidate.modelId}`
+        );
+      }
+      if (sequence !== providerRecoverySequence || !activeRun) return false;
+      const profile = normalizedProviderProfile(recovered);
+      const currentModelId = String(getModel ? getModel() : "").trim();
+      if (!providerProfileMatchesCandidate(profile, candidate) || currentModelId !== candidate.modelId) {
+        throw providerModelError2(
+          "provider_preflight_failed",
+          `Custom provider did not expose a verified API for model ${candidate.modelId}`
+        );
+      }
+      providerProfileOverride = profile;
+      providerRefreshPending = true;
+      return true;
     }
     async function startProcess() {
       if (proc && rpc) return true;
@@ -19697,38 +24715,30 @@
         };
         const selected = selectedProviderProfile();
         let runtimeConfig = null;
-        if ((selected == null ? void 0 : selected.dialect) === "responses") {
-          let requestProfile = null;
-          try {
-            requestProfile = await resolveRequestProfile(selected.provider, { scope: "model" });
-            assertCurrentStart();
-            runtimeConfig = {
-              providerId: selected.provider.id,
-              baseUrl: requestProfile.baseUrl,
-              envHeaders: runtimeHeadersFromRequestProfile(requestProfile)
-            };
-            setProviderSensitiveValues(sensitiveValues(requestProfile));
-          } finally {
-            requestProfile = null;
-          }
-        } else if ((selected == null ? void 0 : selected.dialect) === "chat") {
+        if (selected) {
           closeProviderRoute();
-          providerRoute = createResponsesRoute({
+          providerRoute = providerRouteFactory({
             provider: selected.provider,
+            resolveCapability: ({ provider, modelId, clientProtocol, feature }) => selectRoute(provider, {
+              client: clientProtocol === "messages" ? "claude-code" : "codex",
+              modelId,
+              feature
+            }),
             resolveRequestProfile
           });
           const routeInfo = await providerRoute.start();
           assertCurrentStart();
           runtimeConfig = {
             providerId: selected.provider.id,
-            baseUrl: routeInfo.baseUrl,
+            baseUrl: routeInfo.openaiBaseUrl || routeInfo.baseUrl,
+            chatCompatibility: selected.route.upstreamProtocol !== "responses",
             envHeaders: [{
-              name: "Authorization",
+              name: LOCAL_ROUTE_TOKEN_HEADER,
               envName: "AE_MCP_PROVIDER_HEADER_00",
-              value: `Bearer ${routeInfo.routeToken}`
+              value: routeInfo.routeToken
             }]
           };
-          setProviderSensitiveValues([`Bearer ${routeInfo.routeToken}`, routeInfo.routeToken]);
+          setProviderSensitiveValues([routeInfo.routeToken]);
         } else {
           setProviderSensitiveValues([]);
         }
@@ -19886,6 +24896,7 @@
       });
     }
     async function attemptProviderRecovery(error) {
+      var _a;
       if (providerRecoveryInFlight) return true;
       if (providerRecoveryAttempted || !activeRun || typeof recoverProviderProfile !== "function" || !recoverableProviderFailure(error)) return false;
       let selected;
@@ -19902,38 +24913,56 @@
       detachRuntimeForProviderRecovery();
       let recovered;
       try {
-        recovered = await recoverProviderProfile(selected.provider, providerFailureFacts(error));
+        recovered = await recoverProviderProfile(
+          selected.provider,
+          providerFailureFacts(error),
+          selected.modelId
+        );
       } catch {
         recovered = null;
       }
       if (sequence !== providerRecoverySequence || !activeRun) return true;
       providerRecoveryInFlight = false;
-      const provider = (recovered == null ? void 0 : recovered.provider) || recovered;
-      const dialect = recovered == null ? void 0 : recovered.dialect;
-      if (!provider || dialect !== "responses" && dialect !== "chat") return false;
-      providerProfileOverride = { provider, dialect };
+      const profile = normalizedProviderProfile(recovered);
+      const provider = profile == null ? void 0 : profile.provider;
+      const modelId = (profile == null ? void 0 : profile.modelId) || "";
+      if (!provider || String(provider.id || "").trim() !== String(selected.provider.id || "").trim() || ((_a = profile.route) == null ? void 0 : _a.ok) !== true || modelId !== selected.modelId || modelId !== String(getModel ? getModel() : "").trim()) return false;
+      providerProfileOverride = profile;
       providerRefreshPending = true;
       await launchActiveTurn();
       return true;
     }
     async function handleTurnFailure(error) {
-      if (!activeRun || providerRecoveryInFlight) return;
-      let failure2 = {
-        kind: error == null ? void 0 : error.kind,
-        message: redactValue((error == null ? void 0 : error.message) || "Failed to start Codex turn.", providerSensitiveValues)
-      };
+      if (!activeRun || providerRecoveryInFlight || turnFailureInFlight) return;
+      turnFailureInFlight = true;
       try {
-        if (await attemptProviderRecovery(error)) return;
-      } catch (recoveryError) {
-        failure2 = {
-          kind: recoveryError == null ? void 0 : recoveryError.kind,
-          message: redactValue((recoveryError == null ? void 0 : recoveryError.message) || "Failed to start Codex turn.", providerSensitiveValues)
+        let failure = {
+          kind: error == null ? void 0 : error.kind,
+          code: error == null ? void 0 : error.code,
+          message: redactValue((error == null ? void 0 : error.message) || "Failed to start Codex turn.", providerSensitiveValues)
         };
+        try {
+          if (await attemptProviderRecovery(error)) return;
+        } catch (recoveryError) {
+          failure = {
+            kind: recoveryError == null ? void 0 : recoveryError.kind,
+            code: recoveryError == null ? void 0 : recoveryError.code,
+            message: redactValue((recoveryError == null ? void 0 : recoveryError.message) || "Failed to start Codex turn.", providerSensitiveValues)
+          };
+        }
+        providerDeltaRedactor.discard();
+        const message = (failure == null ? void 0 : failure.message) || "Failed to start Codex turn.";
+        const providerHttpFailure = /\bunexpected status\s+\d{3}\b.*\burl:\s*https?:\/\//i.test(message);
+        emit({
+          type: "error",
+          kind: (failure == null ? void 0 : failure.kind) || (providerHttpFailure || /model/i.test(message) ? "model" : "mcp"),
+          ...(failure == null ? void 0 : failure.code) ? { code: failure.code } : {},
+          message
+        });
+        finishActive();
+      } finally {
+        turnFailureInFlight = false;
       }
-      providerDeltaRedactor.discard();
-      const message = (failure2 == null ? void 0 : failure2.message) || "Failed to start Codex turn.";
-      emit({ type: "error", kind: (failure2 == null ? void 0 : failure2.kind) || (/model/i.test(message) ? "model" : "mcp"), message });
-      finishActive();
     }
     async function sendUser(text) {
       if (activeRun) return activeRun;
@@ -19942,13 +24971,14 @@
       activeUserRecorded = false;
       providerRecoveryAttempted = false;
       providerRecoveryInFlight = false;
+      turnFailureInFlight = false;
       providerRecoverySequence += 1;
       activeRun = new Promise((resolve) => {
         activeResolve = resolve;
       });
       const run = activeRun;
       try {
-        await launchActiveTurn();
+        if (await ensureProviderProfileForSend()) await launchActiveTurn();
       } catch (error) {
         await handleTurnFailure(error);
       }
@@ -20097,7 +25127,7 @@
   var READY_POLL_MS = 250;
   var DEFAULT_PROVIDER_ID = "opencode";
   var DEFAULT_MODEL_ID = "north-mini-code-free";
-  function getCepRequire2() {
+  function getCepRequire3() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -20125,7 +25155,7 @@
     return "ae-opencode-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
   }
   async function defaultGetPort() {
-    const net = getCepRequire2()("net");
+    const net = getCepRequire3()("net");
     return new Promise((resolve, reject) => {
       const server = net.createServer();
       server.on("error", reject);
@@ -20706,13 +25736,18 @@
     }
   }
   function providerSecretReferences(provider) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e;
     const references = [];
     const add = (valueRef) => {
-      if ((valueRef == null ? void 0 : valueRef.kind) === "secret") references.push(valueRef.reference);
+      if ((valueRef == null ? void 0 : valueRef.kind) === "secret") references.push(valueRef);
     };
-    add((_b = (_a = provider.auth) == null ? void 0 : _a.model) == null ? void 0 : _b.valueRef);
-    add((_d = (_c = provider.auth) == null ? void 0 : _c.probe) == null ? void 0 : _d.valueRef);
+    if (provider.credential) {
+      add(provider.credential.valueRef);
+      add((_a = provider.probeAuthOverride) == null ? void 0 : _a.valueRef);
+    } else {
+      add((_c = (_b = provider.auth) == null ? void 0 : _b.model) == null ? void 0 : _c.valueRef);
+      add((_e = (_d = provider.auth) == null ? void 0 : _d.probe) == null ? void 0 : _e.valueRef);
+    }
     for (const header of provider.headers || []) add(header.valueRef);
     return references;
   }
@@ -20752,9 +25787,9 @@
     }
     return fileIdentity(fs.statSync(file, { bigint: true }));
   }
-  function normalizeState(value) {
+  function normalizeStateForVersion(value, version, normalizeProvider) {
     if (!hasExactKeys2(value, STATE_KEYS)) throw storeError("PROVIDER_STORE_INVALID");
-    if (value.version !== 2 || !Number.isSafeInteger(value.revision) || value.revision < 0 || value.migratedLegacy !== true || !Array.isArray(value.pendingSecretDeletes) || !Array.isArray(value.providers)) {
+    if (value.version !== version || !Number.isSafeInteger(value.revision) || value.revision < 0 || value.migratedLegacy !== true || !Array.isArray(value.pendingSecretDeletes) || !Array.isArray(value.providers)) {
       throw storeError("PROVIDER_STORE_INVALID");
     }
     const pendingSecretDeletes = value.pendingSecretDeletes.map(normalizeValueRef);
@@ -20765,7 +25800,7 @@
     }
     const providers = value.providers.map((provider) => {
       try {
-        const normalized = normalizeProviderEntryV2(provider);
+        const normalized = normalizeProvider(provider);
         requireSafeProviderUrl(normalized.baseUrl);
         return normalized;
       } catch {
@@ -20773,24 +25808,41 @@
       }
     });
     const ids = /* @__PURE__ */ new Set();
+    const activeReferences = /* @__PURE__ */ new Map();
     for (const provider of providers) {
       if (ids.has(provider.id)) throw storeError("PROVIDER_STORE_INVALID");
       ids.add(provider.id);
-      for (const reference of providerSecretReferences(provider)) {
-        if (pendingKeys.has(reference)) throw storeError("PROVIDER_STORE_INVALID");
+      for (const valueRef of providerSecretReferences(provider)) {
+        if (pendingKeys.has(valueRef.reference)) throw storeError("PROVIDER_STORE_INVALID");
+        const existingRevision = activeReferences.get(valueRef.reference);
+        if (existingRevision !== void 0 && existingRevision !== valueRef.revision) {
+          throw storeError("PROVIDER_STORE_INVALID");
+        }
+        activeReferences.set(valueRef.reference, valueRef.revision);
       }
     }
     return {
-      version: 2,
+      version,
       revision: value.revision,
       migratedLegacy: true,
       pendingSecretDeletes,
       providers
     };
   }
+  function normalizeStateV2(value) {
+    return normalizeStateForVersion(value, 2, normalizeProviderEntryV2);
+  }
+  function normalizeStateV3(value) {
+    return normalizeStateForVersion(value, 3, normalizeProviderEntryV3);
+  }
+  function normalizePersistedState(value) {
+    if ((value == null ? void 0 : value.version) === 2) return normalizeStateV2(value);
+    if ((value == null ? void 0 : value.version) === 3) return normalizeStateV3(value);
+    throw storeError("PROVIDER_STORE_INVALID");
+  }
   function emptyState2() {
     return {
-      version: 2,
+      version: 3,
       revision: 0,
       migratedLegacy: true,
       pendingSecretDeletes: [],
@@ -21083,15 +26135,21 @@
       return { text: String(text), parsed };
     }
     function readState() {
-      var _a2;
+      var _a2, _b;
       const raw = readRaw();
       if (raw === null) return emptyState2();
-      if (((_a2 = raw.parsed) == null ? void 0 : _a2.version) === 1) throw storeError("PROVIDER_STORE_MIGRATION_REQUIRED");
-      return normalizeState(raw.parsed);
+      if (((_a2 = raw.parsed) == null ? void 0 : _a2.version) === 1) {
+        throw storeError("PROVIDER_STORE_MIGRATION_REQUIRED");
+      }
+      if (((_b = raw.parsed) == null ? void 0 : _b.version) === 2) {
+        normalizeStateV2(raw.parsed);
+        throw storeError("PROVIDER_STORE_MIGRATION_REQUIRED");
+      }
+      return normalizeStateV3(raw.parsed);
     }
     function writeState(value) {
       var _a2;
-      const state = normalizeState(value);
+      const state = normalizePersistedState(value);
       const directory = ensureDirectory();
       const tmp = path.join(
         directory,
@@ -21125,10 +26183,15 @@
       }
     }
     function list() {
-      var _a2;
+      var _a2, _b;
       const raw = readRaw();
-      if (((_a2 = raw == null ? void 0 : raw.parsed) == null ? void 0 : _a2.version) === 1) return [];
-      return clone5(raw === null ? [] : normalizeState(raw.parsed).providers);
+      if (raw === null) return [];
+      if (((_a2 = raw.parsed) == null ? void 0 : _a2.version) === 1) return [];
+      if (((_b = raw.parsed) == null ? void 0 : _b.version) === 2) {
+        normalizeStateV2(raw.parsed);
+        return [];
+      }
+      return clone5(normalizeStateV3(raw.parsed).providers);
     }
     function get(id) {
       const wanted = String(id || "").trim();
@@ -21137,7 +26200,7 @@
     function upsert(entry, options = {}) {
       let normalized;
       try {
-        normalized = normalizeProviderEntryV2(entry);
+        normalized = normalizeProviderEntryV3(entry);
       } catch {
         throw storeError("PROVIDER_STORE_INVALID");
       }
@@ -21189,20 +26252,21 @@
       });
     }
     function replaceState(value, options = {}) {
-      const next = normalizeState(value);
+      const next = normalizePersistedState(value);
       return withMutationLock(() => {
         const raw = readRaw();
         if (options.expectedSourceRevision !== void 0) {
           if (typeof options.expectedSourceRevision !== "string" || !options.expectedSourceRevision) {
             throw storeError("PROVIDER_STORE_INVALID");
           }
-          const currentLegacy = readLegacyMigrationInput();
-          if (!currentLegacy || currentLegacy.sourceRevision !== options.expectedSourceRevision) {
+          const expectedSourceVersion = options.expectedSourceVersion === void 0 ? next.version - 1 : options.expectedSourceVersion;
+          const currentSource = expectedSourceVersion === 1 ? readLegacyMigrationInput() : expectedSourceVersion === 2 ? readSchemaMigrationInput() : null;
+          if (!currentSource || currentSource.sourceRevision !== options.expectedSourceRevision) {
             throw storeError("PROVIDER_STORE_CONFLICT");
           }
         }
         if (options.expectedRevision !== void 0) {
-          const current = raw === null ? emptyState2() : normalizeState(raw.parsed);
+          const current = raw === null ? emptyState2() : normalizeStateV3(raw.parsed);
           assertExpected(current, options.expectedRevision);
         }
         return { stateRevision: writeState(next).revision };
@@ -21213,19 +26277,12 @@
       const raw = readRaw();
       return raw !== null && ((_a2 = raw.parsed) == null ? void 0 : _a2.version) === 1;
     }
-    function readLegacyMigrationInput() {
+    function needsSchemaMigration() {
       var _a2;
       const raw = readRaw();
-      if (raw === null || ((_a2 = raw.parsed) == null ? void 0 : _a2.version) !== 1) return null;
-      if (!raw.parsed || typeof raw.parsed !== "object" || !Array.isArray(raw.parsed.providers)) {
-        throw storeError("PROVIDER_STORE_INVALID");
-      }
-      for (const provider of raw.parsed.providers) {
-        if (!provider || typeof provider !== "object" || typeof provider.baseUrl !== "string") {
-          throw storeError("PROVIDER_STORE_INVALID");
-        }
-        requireSafeProviderUrl(provider.baseUrl);
-      }
+      return raw !== null && ((_a2 = raw.parsed) == null ? void 0 : _a2.version) === 2;
+    }
+    function stableMigrationInput(raw, state) {
       if (typeof fs.statSync !== "function") throw storeError("PROVIDER_STORE_UNAVAILABLE");
       let firstIdentity;
       let secondIdentity;
@@ -21241,11 +26298,31 @@
       if (secondRaw === null || secondRaw.text !== raw.text || JSON.stringify(firstIdentity) !== JSON.stringify(secondIdentity)) {
         throw storeError("PROVIDER_STORE_CONFLICT");
       }
-      const sourceRevision = JSON.stringify(firstIdentity);
-      return { sourceRevision, state: clone5(raw.parsed) };
+      return { sourceRevision: JSON.stringify(firstIdentity), state: clone5(state) };
+    }
+    function readLegacyMigrationInput() {
+      var _a2;
+      const raw = readRaw();
+      if (raw === null || ((_a2 = raw.parsed) == null ? void 0 : _a2.version) !== 1) return null;
+      if (!raw.parsed || typeof raw.parsed !== "object" || !Array.isArray(raw.parsed.providers)) {
+        throw storeError("PROVIDER_STORE_INVALID");
+      }
+      for (const provider of raw.parsed.providers) {
+        if (!provider || typeof provider !== "object" || typeof provider.baseUrl !== "string") {
+          throw storeError("PROVIDER_STORE_INVALID");
+        }
+        requireSafeProviderUrl(provider.baseUrl);
+      }
+      return stableMigrationInput(raw, raw.parsed);
+    }
+    function readSchemaMigrationInput() {
+      var _a2;
+      const raw = readRaw();
+      if (raw === null || ((_a2 = raw.parsed) == null ? void 0 : _a2.version) !== 2) return null;
+      return stableMigrationInput(raw, normalizeStateV2(raw.parsed));
     }
     async function writeRedactedBackup(value, policy = {}) {
-      const state = normalizeState(value);
+      const state = normalizePersistedState(value);
       const keep = policy.keep === void 0 ? 3 : policy.keep;
       const maxAgeDays = policy.maxAgeDays === void 0 ? 30 : policy.maxAgeDays;
       if (!Number.isSafeInteger(keep) || keep < 1 || !Number.isFinite(maxAgeDays) || maxAgeDays <= 0) {
@@ -21280,6 +26357,7 @@
       filePath,
       readState,
       readLegacyMigrationInput,
+      readSchemaMigrationInput,
       list,
       get,
       upsert,
@@ -21287,7 +26365,8 @@
       acknowledgeSecretDelete,
       replaceState,
       writeRedactedBackup,
-      needsSecretMigration
+      needsSecretMigration,
+      needsSchemaMigration
     });
   }
 
@@ -21306,6 +26385,7 @@
     "INVALID_REQUEST",
     "MESSAGE_TOO_LARGE"
   ]);
+  var PROVIDER_HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
   function providerSecretError(code) {
     const messages = {
       INVALID_REFERENCE: "Secret reference is invalid",
@@ -21495,10 +26575,121 @@
     }
     return { kind: "header", name: policy.headerName, value };
   }
-  async function resolveProviderRequestProfile(provider, { scope, secretService } = {}) {
+  function normalizeAuthChoice(value) {
+    if (!hasExactKeys3(value, ["headerName", "scheme"])) {
+      throw providerSecretError("INVALID_REFERENCE");
+    }
+    if (!["none", "bearer", "x-api-key", "custom"].includes(value.scheme)) {
+      throw providerSecretError("INVALID_REFERENCE");
+    }
+    const headerName = value.headerName === null ? null : String(value.headerName || "").trim();
+    if (value.scheme === "custom" !== Boolean(headerName) || headerName !== null && !PROVIDER_HEADER_NAME.test(headerName)) {
+      throw providerSecretError("INVALID_REFERENCE");
+    }
+    return { scheme: value.scheme, headerName };
+  }
+  async function resolveCredentialAuth(choice, valueRef, secretService) {
+    if (choice.scheme === "none") return { kind: "none" };
+    if (!valueRef) throw providerSecretError("INVALID_REFERENCE");
+    const value = await secretService.resolve(valueRef);
+    if (choice.scheme === "bearer") {
+      return { kind: "header", name: "Authorization", value: `Bearer ${value}` };
+    }
+    if (choice.scheme === "x-api-key") {
+      return { kind: "header", name: "x-api-key", value };
+    }
+    return { kind: "header", name: choice.headerName, value };
+  }
+  function capabilityTarget(provider, { modelId, protocol }) {
+    const selectedModelId = String(modelId || "").trim();
+    if (!selectedModelId || !["responses", "chat", "messages"].includes(protocol)) return null;
+    const model = provider.modelCapabilities.find((entry) => entry.modelId === selectedModelId);
+    const capability = model == null ? void 0 : model[protocol];
+    return capability && capability.status !== "unknown" ? capability : null;
+  }
+  function validatedApiRoot(value, provider) {
+    if (!value) return provider.baseUrl;
+    let apiRoot;
+    try {
+      apiRoot = validateProviderBaseUrl(value, {
+        allowInsecureHttp: provider.allowInsecureHttp,
+        requireTransportApproval: true
+      });
+    } catch {
+      throw providerSecretError("INVALID_REFERENCE");
+    }
+    if (new URL(apiRoot).origin !== new URL(provider.baseUrl).origin) {
+      throw providerSecretError("INVALID_REFERENCE");
+    }
+    return apiRoot;
+  }
+  async function resolveProviderRequestProfileV3(provider, {
+    scope,
+    secretService,
+    modelId,
+    protocol,
+    authChoice: authChoice2,
+    apiRoot
+  }) {
+    const target = scope === "model" ? capabilityTarget(provider, { modelId, protocol }) : null;
+    let auth;
+    if (scope === "probe" && provider.probeAuthOverride !== null) {
+      auth = await resolveAuth(provider.probeAuthOverride, secretService);
+    } else {
+      let selectedChoice = authChoice2 === void 0 || authChoice2 === null ? (target == null ? void 0 : target.auth) || (scope === "probe" && provider.modelList.status === "supported" ? provider.modelList.auth : provider.credential.preferredAuth) : normalizeAuthChoice(authChoice2);
+      if (selectedChoice.scheme === "auto") {
+        selectedChoice = provider.credential.valueRef ? { scheme: "bearer", headerName: null } : { scheme: "none", headerName: null };
+      }
+      auth = await resolveCredentialAuth(
+        normalizeAuthChoice(selectedChoice),
+        provider.credential.valueRef,
+        secretService
+      );
+    }
+    const extraHeaders = [];
+    for (const header of provider.headers) {
+      if (!header.scopes.includes(scope)) continue;
+      if (header.valueRef.kind === "literal") {
+        extraHeaders.push({ name: header.name, value: header.valueRef.value, source: "literal" });
+      } else {
+        extraHeaders.push({
+          name: header.name,
+          value: await secretService.resolve(header.valueRef),
+          source: "secret"
+        });
+      }
+    }
+    return {
+      providerId: provider.id,
+      baseUrl: validatedApiRoot(apiRoot || (target == null ? void 0 : target.apiRoot) || (scope === "probe" && provider.modelList.status === "supported" ? provider.modelList.apiRoot : provider.baseUrl), provider),
+      allowInsecureHttp: provider.allowInsecureHttp,
+      auth,
+      extraHeaders,
+      requestProfileRevision: provider.requestProfileRevision
+    };
+  }
+  async function resolveProviderRequestProfile(provider, {
+    scope,
+    secretService,
+    modelId,
+    protocol,
+    authChoice: authChoice2,
+    apiRoot
+  } = {}) {
     if (scope !== "probe" && scope !== "model") throw new TypeError("scope must be probe or model");
     if (!secretService || typeof secretService.resolve !== "function") {
       throw new TypeError("secretService.resolve is required");
+    }
+    if (provider && Object.hasOwn(provider, "credential")) {
+      const normalizedV3 = normalizeProviderEntryV3(provider);
+      return resolveProviderRequestProfileV3(normalizedV3, {
+        scope,
+        secretService,
+        modelId,
+        protocol,
+        authChoice: authChoice2,
+        apiRoot
+      });
     }
     const normalized = normalizeProviderEntryV2(provider);
     const selected = scope === "probe" && normalized.auth.probe.kind === "inherit-model" ? normalized.auth.model : normalized.auth[scope];
@@ -21523,6 +26714,427 @@
       extraHeaders,
       authProfileRevision: normalized.authProfileRevision
     };
+  }
+
+  // src/cep/providerAcceptanceBridge.js
+  var PROTOCOLS2 = /* @__PURE__ */ new Set(["responses", "chat", "messages"]);
+  var CAPABILITY_STATUSES = /* @__PURE__ */ new Set(["unknown", "supported", "unsupported"]);
+  var AGENT_FEATURES = Object.freeze([
+    "compact",
+    "continuation",
+    "countTokens",
+    "namespaceTools",
+    "reasoningReplay",
+    "stream",
+    "terminal",
+    "tools"
+  ]);
+  var ROUTE_FEATURES = Object.freeze(["generate", ...AGENT_FEATURES]);
+  var ROUTE_REASON_CODES = /* @__PURE__ */ new Set([
+    "invalid-request",
+    "invalid-provider",
+    "needs-probe",
+    "override-selected",
+    "selected",
+    "unavailable"
+  ]);
+  var PROBE_REASONS = /* @__PURE__ */ new Set([
+    "authentication",
+    "capability-incompatible",
+    "configuration",
+    "network",
+    "path-unsupported"
+  ]);
+  var PROBE_SUPPORT = /* @__PURE__ */ new Set([
+    "authentication",
+    "invalid",
+    "supported",
+    "transient",
+    "unsupported"
+  ]);
+  var PROBE_ERROR_CLASSES = /* @__PURE__ */ new Set([
+    "authentication",
+    "configuration",
+    "endpoint-unsupported",
+    "invalid-schema",
+    "model-unsupported",
+    "network",
+    "protocol-unsupported",
+    "rate-limited",
+    "request-rejected",
+    "upstream-transient"
+  ]);
+  var CLIENTS = Object.freeze({
+    responses: "codex",
+    messages: "claude-code"
+  });
+  function bridgeError(code) {
+    const messages = {
+      PROVIDER_ACCEPTANCE_BRIDGE_DISPOSED: "Provider acceptance bridge is disposed.",
+      PROVIDER_ACCEPTANCE_CALLBACK_FAILED: "Provider acceptance state refresh failed.",
+      PROVIDER_ACCEPTANCE_INVALID_MODELS: "Provider acceptance model list is invalid.",
+      PROVIDER_ACCEPTANCE_PROVIDER_NOT_FOUND: "Provider was not found.",
+      PROVIDER_ACCEPTANCE_PROBE_FAILED: "Provider acceptance probe failed.",
+      PROVIDER_ACCEPTANCE_ROUTE_CLOSE_FAILED: "Provider acceptance route did not close cleanly.",
+      PROVIDER_ACCEPTANCE_ROUTE_FAILED: "Provider acceptance route failed.",
+      PROVIDER_ACCEPTANCE_STORE_CONFLICT: "Provider store changed during acceptance probing.",
+      PROVIDER_ACCEPTANCE_STORE_UNAVAILABLE: "Provider acceptance state is unavailable."
+    };
+    const error = new Error(messages[code] || messages.PROVIDER_ACCEPTANCE_STORE_UNAVAILABLE);
+    error.code = messages[code] ? code : "PROVIDER_ACCEPTANCE_STORE_UNAVAILABLE";
+    return error;
+  }
+  function dependency(name, value, predicate) {
+    if (!predicate(value)) throw new TypeError(`${name} is required`);
+    return value;
+  }
+  function safeRevision(value) {
+    return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  }
+  function safeStatus(value) {
+    return CAPABILITY_STATUSES.has(value) ? value : "unknown";
+  }
+  function agentFeatureSummary(value) {
+    return Object.fromEntries(AGENT_FEATURES.map((name) => [name, safeStatus(value == null ? void 0 : value[name])]));
+  }
+  function routeFeatureSummary(value) {
+    return Object.fromEntries(ROUTE_FEATURES.map((name) => [name, safeStatus(value == null ? void 0 : value[name])]));
+  }
+  function capabilitySummary(value) {
+    return {
+      status: safeStatus(value == null ? void 0 : value.status),
+      requestProfileRevision: safeRevision(value == null ? void 0 : value.requestProfileRevision),
+      modelListRevision: safeRevision(value == null ? void 0 : value.modelListRevision),
+      agentFeatures: agentFeatureSummary(value == null ? void 0 : value.agentFeatures)
+    };
+  }
+  function modelIdOf(value) {
+    const modelId = typeof value === "string" ? value : value == null ? void 0 : value.id;
+    return typeof modelId === "string" && modelId.trim() ? modelId.trim() : null;
+  }
+  function providerSummary(provider) {
+    var _a, _b, _c;
+    const modelIds = [];
+    const seen = /* @__PURE__ */ new Set();
+    const addModelId = (value) => {
+      const modelId = modelIdOf(value);
+      if (!modelId || seen.has(modelId)) return;
+      seen.add(modelId);
+      modelIds.push(modelId);
+    };
+    for (const model of ((_a = provider == null ? void 0 : provider.modelList) == null ? void 0 : _a.models) || []) addModelId(model);
+    for (const capability of (provider == null ? void 0 : provider.modelCapabilities) || []) addModelId(capability == null ? void 0 : capability.modelId);
+    return {
+      id: typeof (provider == null ? void 0 : provider.id) === "string" ? provider.id : "",
+      name: typeof (provider == null ? void 0 : provider.name) === "string" ? provider.name : "",
+      revisions: {
+        requestProfile: safeRevision(provider == null ? void 0 : provider.requestProfileRevision),
+        modelList: safeRevision((_b = provider == null ? void 0 : provider.modelList) == null ? void 0 : _b.revision)
+      },
+      modelListStatus: safeStatus((_c = provider == null ? void 0 : provider.modelList) == null ? void 0 : _c.status),
+      modelIds,
+      capabilities: ((provider == null ? void 0 : provider.modelCapabilities) || []).flatMap((entry) => {
+        const modelId = modelIdOf(entry == null ? void 0 : entry.modelId);
+        if (!modelId) return [];
+        return [{
+          modelId,
+          responses: capabilitySummary(entry.responses),
+          chat: capabilitySummary(entry.chat),
+          messages: capabilitySummary(entry.messages)
+        }];
+      })
+    };
+  }
+  function routeSummary(route, clientProtocol) {
+    const upstreamProtocol = PROTOCOLS2.has(route == null ? void 0 : route.upstreamProtocol) ? route.upstreamProtocol : null;
+    const ok = (route == null ? void 0 : route.ok) === true && upstreamProtocol !== null;
+    const reasonCode = ROUTE_REASON_CODES.has(route == null ? void 0 : route.reasonCode) ? route.reasonCode : ok ? "selected" : "unavailable";
+    return {
+      ok,
+      clientProtocol,
+      upstreamProtocol,
+      conversion: ok ? clientProtocol === upstreamProtocol ? "native" : `${clientProtocol}-to-${upstreamProtocol}` : null,
+      reasonCode,
+      features: routeFeatureSummary(route == null ? void 0 : route.features)
+    };
+  }
+  function probeReason(value) {
+    return PROBE_REASONS.has(value) ? value : "probe-failed";
+  }
+  function probeDiagnostic(value) {
+    var _a, _b;
+    const protocols = {};
+    for (const protocol of PROTOCOLS2) {
+      const capability = (_a = value == null ? void 0 : value.capabilities) == null ? void 0 : _a[protocol];
+      protocols[protocol] = {
+        support: PROBE_SUPPORT.has(capability == null ? void 0 : capability.support) ? capability.support : "invalid",
+        errorClass: PROBE_ERROR_CLASSES.has(capability == null ? void 0 : capability.errorClass) ? capability.errorClass : null,
+        nonStreaming: ["valid", "invalid", "not-tested"].includes((_b = capability == null ? void 0 : capability.schema) == null ? void 0 : _b.nonStreaming) ? capability.schema.nonStreaming : "not-tested",
+        agentFeatures: agentFeatureSummary(capability == null ? void 0 : capability.agentFeatures)
+      };
+    }
+    return {
+      protocols,
+      attempts: Array.isArray(value == null ? void 0 : value.tried) ? value.tried.flatMap((entry) => {
+        if (typeof (entry == null ? void 0 : entry.step) !== "string" || !entry.step) return [];
+        return [{
+          step: entry.step.slice(0, 80),
+          status: Number.isInteger(entry.status) ? entry.status : 0,
+          outcome: ["network", "received"].includes(entry.outcome) ? entry.outcome : "unknown"
+        }];
+      }).slice(0, 128) : []
+    };
+  }
+  function modelIdsForProbe(value) {
+    if (!Array.isArray(value) || value.length === 0) {
+      throw bridgeError("PROVIDER_ACCEPTANCE_INVALID_MODELS");
+    }
+    const output = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const raw of value) {
+      const modelId = typeof raw === "string" ? raw.trim() : "";
+      if (!modelId || modelId.length > 512 || /[\0\r\n]/.test(modelId)) {
+        throw bridgeError("PROVIDER_ACCEPTANCE_INVALID_MODELS");
+      }
+      if (!seen.has(modelId)) {
+        seen.add(modelId);
+        output.push(modelId);
+      }
+    }
+    return output;
+  }
+  function localRouteInfo(value) {
+    let parsed;
+    try {
+      parsed = new URL(value == null ? void 0 : value.origin);
+    } catch {
+      throw bridgeError("PROVIDER_ACCEPTANCE_ROUTE_FAILED");
+    }
+    const origin = parsed.origin;
+    const loopback = ["127.0.0.1", "[::1]", "::1"].includes(parsed.hostname);
+    if (parsed.protocol !== "http:" || !loopback || parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash || (value == null ? void 0 : value.origin) !== origin || (value == null ? void 0 : value.openaiBaseUrl) !== `${origin}/v1` || (value == null ? void 0 : value.anthropicBaseUrl) !== origin || typeof (value == null ? void 0 : value.routeToken) !== "string" || !/^\S{16,512}$/.test(value.routeToken)) {
+      throw bridgeError("PROVIDER_ACCEPTANCE_ROUTE_FAILED");
+    }
+    return {
+      origin,
+      openaiBaseUrl: `${origin}/v1`,
+      anthropicBaseUrl: origin,
+      routeToken: value.routeToken
+    };
+  }
+  function mappedOperationalError(error, fallbackCode) {
+    return bridgeError((error == null ? void 0 : error.code) === "PROVIDER_STORE_CONFLICT" ? "PROVIDER_ACCEPTANCE_STORE_CONFLICT" : fallbackCode);
+  }
+  function createProviderAcceptanceBridge({
+    store,
+    secretService,
+    runProviderManagerProbe: runProviderManagerProbe2,
+    createUniversalProviderRoute: createUniversalProviderRoute2,
+    selectProviderRoute: selectProviderRoute2,
+    resolveProviderRequestProfile: resolveProviderRequestProfile2,
+    onProvidersChanged = () => {
+    }
+  } = {}) {
+    dependency("store", store, (value) => value && typeof value.list === "function" && typeof value.get === "function" && typeof value.readState === "function" && typeof value.upsert === "function");
+    dependency("secretService", secretService, (value) => value && typeof value.resolve === "function");
+    dependency("runProviderManagerProbe", runProviderManagerProbe2, (value) => typeof value === "function");
+    dependency("createUniversalProviderRoute", createUniversalProviderRoute2, (value) => typeof value === "function");
+    dependency("selectProviderRoute", selectProviderRoute2, (value) => typeof value === "function");
+    dependency("resolveProviderRequestProfile", resolveProviderRequestProfile2, (value) => typeof value === "function");
+    dependency("onProvidersChanged", onProvidersChanged, (value) => typeof value === "function");
+    let activeRoute = null;
+    let disposed = false;
+    let disposePromise = null;
+    let routeQueue = Promise.resolve();
+    const readRevision = () => {
+      try {
+        return safeRevision(store.readState().revision);
+      } catch {
+        throw bridgeError("PROVIDER_ACCEPTANCE_STORE_UNAVAILABLE");
+      }
+    };
+    const readProvider = (providerId) => {
+      let provider;
+      try {
+        provider = store.get(String(providerId || "").trim());
+      } catch {
+        throw bridgeError("PROVIDER_ACCEPTANCE_STORE_UNAVAILABLE");
+      }
+      if (!provider) throw bridgeError("PROVIDER_ACCEPTANCE_PROVIDER_NOT_FOUND");
+      return provider;
+    };
+    const snapshot = () => {
+      var _a;
+      try {
+        return {
+          revision: safeRevision(store.readState().revision),
+          providers: store.list().map(providerSummary)
+        };
+      } catch (error) {
+        if ((_a = error == null ? void 0 : error.code) == null ? void 0 : _a.startsWith("PROVIDER_ACCEPTANCE_")) throw error;
+        throw bridgeError("PROVIDER_ACCEPTANCE_STORE_UNAVAILABLE");
+      }
+    };
+    const notifyProvidersChanged = async () => {
+      try {
+        await onProvidersChanged(snapshot());
+      } catch {
+        throw bridgeError("PROVIDER_ACCEPTANCE_CALLBACK_FAILED");
+      }
+    };
+    const assertUsable = () => {
+      if (disposed) throw bridgeError("PROVIDER_ACCEPTANCE_BRIDGE_DISPOSED");
+    };
+    const summarizeSelectedRoutes = (provider, modelId) => ({
+      codex: routeSummary(selectProviderRoute2(provider, {
+        client: "codex",
+        modelId,
+        feature: "generate"
+      }), "responses"),
+      claude: routeSummary(selectProviderRoute2(provider, {
+        client: "claude-code",
+        modelId,
+        feature: "generate"
+      }), "messages")
+    });
+    const routes = (providerId, rawModelIds) => {
+      assertUsable();
+      const wantedProviderId = String(providerId || "").trim();
+      const modelIds = modelIdsForProbe(rawModelIds);
+      const provider = readProvider(wantedProviderId);
+      return {
+        providerId: wantedProviderId,
+        storeRevision: readRevision(),
+        results: modelIds.map((modelId) => ({
+          modelId,
+          routes: summarizeSelectedRoutes(provider, modelId)
+        }))
+      };
+    };
+    const probeAll = async (providerId, rawModelIds) => {
+      assertUsable();
+      const wantedProviderId = String(providerId || "").trim();
+      const modelIds = modelIdsForProbe(rawModelIds);
+      readProvider(wantedProviderId);
+      const initialRevision = readRevision();
+      let changed = false;
+      const results = [];
+      try {
+        for (const modelId of modelIds) {
+          const provider = readProvider(wantedProviderId);
+          const beforeRevision = readRevision();
+          const probe = await runProviderManagerProbe2(provider, {
+            store,
+            modelId,
+            forceDetect: true,
+            resolveRequestProfile: (entry, details) => resolveProviderRequestProfile2(entry, {
+              ...details,
+              secretService
+            })
+          });
+          const afterRevision = readRevision();
+          changed = changed || beforeRevision !== afterRevision;
+          const current = readProvider(wantedProviderId);
+          const preferredProtocol = PROTOCOLS2.has(probe == null ? void 0 : probe.preferredProtocol) ? probe.preferredProtocol : null;
+          results.push({
+            modelId,
+            ok: (probe == null ? void 0 : probe.ok) === true,
+            persisted: beforeRevision !== afterRevision,
+            storeRevision: afterRevision,
+            reason: (probe == null ? void 0 : probe.ok) === true ? null : probeReason(probe == null ? void 0 : probe.reason),
+            preferredProtocol,
+            diagnostic: probeDiagnostic(probe == null ? void 0 : probe.result),
+            routes: summarizeSelectedRoutes(current, modelId)
+          });
+        }
+      } catch (error) {
+        changed = changed || readRevision() !== initialRevision;
+        if (changed) {
+          try {
+            await notifyProvidersChanged();
+          } catch {
+          }
+        }
+        throw mappedOperationalError(error, "PROVIDER_ACCEPTANCE_PROBE_FAILED");
+      }
+      if (changed) await notifyProvidersChanged();
+      return {
+        providerId: wantedProviderId,
+        storeRevision: readRevision(),
+        results
+      };
+    };
+    const enqueueRoute = (operation) => {
+      const next = routeQueue.then(operation, operation);
+      routeQueue = next.then(() => void 0, () => void 0);
+      return next;
+    };
+    const closeActiveRoute = async () => {
+      const closing = activeRoute;
+      if (!closing) return { stopped: false, providerId: null };
+      try {
+        await closing.route.close();
+      } catch {
+        throw bridgeError("PROVIDER_ACCEPTANCE_ROUTE_CLOSE_FAILED");
+      }
+      if (activeRoute === closing) activeRoute = null;
+      return { stopped: true, providerId: closing.providerId };
+    };
+    const startRoute = (providerId) => enqueueRoute(async () => {
+      var _a, _b;
+      assertUsable();
+      await closeActiveRoute();
+      const provider = readProvider(providerId);
+      let route;
+      try {
+        route = createUniversalProviderRoute2({
+          provider,
+          resolveCapability: ({ modelId, clientProtocol, feature = "generate" }) => {
+            const client = CLIENTS[clientProtocol];
+            if (!client) {
+              return {
+                ok: false,
+                upstreamProtocol: null,
+                clientProtocol,
+                reasonCode: "invalid-request"
+              };
+            }
+            return selectProviderRoute2(provider, { client, modelId, feature });
+          },
+          resolveRequestProfile: (_entry, details) => resolveProviderRequestProfile2(provider, {
+            ...details,
+            secretService
+          })
+        });
+        if (!route || typeof route.start !== "function" || typeof route.close !== "function") {
+          throw bridgeError("PROVIDER_ACCEPTANCE_ROUTE_FAILED");
+        }
+        activeRoute = { providerId: provider.id, route };
+        const info = localRouteInfo(await route.start());
+        return info;
+      } catch (error) {
+        let closed = false;
+        try {
+          await ((_a = route == null ? void 0 : route.close) == null ? void 0 : _a.call(route));
+          closed = true;
+        } catch {
+        }
+        if (closed && (activeRoute == null ? void 0 : activeRoute.route) === route) activeRoute = null;
+        if ((_b = error == null ? void 0 : error.code) == null ? void 0 : _b.startsWith("PROVIDER_ACCEPTANCE_")) throw error;
+        throw bridgeError("PROVIDER_ACCEPTANCE_ROUTE_FAILED");
+      }
+    });
+    const stopRoute = () => enqueueRoute(closeActiveRoute);
+    const dispose = () => {
+      if (disposePromise) return disposePromise;
+      disposed = true;
+      disposePromise = enqueueRoute(async () => {
+        await closeActiveRoute();
+        return { disposed: true };
+      });
+      return disposePromise;
+    };
+    return Object.freeze({ snapshot, routes, probeAll, startRoute, stopRoute, dispose });
   }
 
   // src/cep/platform/secret-migration.js
@@ -22095,7 +27707,7 @@
     const state = validateProviderStateV2(value);
     const entries = [];
     for (const provider of state.providers) {
-      if (provider.allowInsecureHttp !== false || provider.authProfileRevision !== 1 || provider.auth.probe.kind !== "inherit-model" || provider.headers.length !== 0 || provider.dialect.override !== null || provider.dialect.detected !== null) {
+      if (provider.allowInsecureHttp !== false || provider.authProfileRevision !== 1 || provider.auth.probe.kind !== "inherit-model" || provider.headers.length !== 0 || provider.dialect.override !== null || !Array.isArray(provider.dialect.detected) || provider.dialect.detected.length !== 0) {
         throw migrationError2();
       }
       const model = provider.auth.model;
@@ -22127,7 +27739,8 @@
     const readCurrentState = () => {
       let state;
       try {
-        state = store.readState();
+        const schemaInput = typeof store.readSchemaMigrationInput === "function" ? store.readSchemaMigrationInput() : null;
+        state = (schemaInput == null ? void 0 : schemaInput.state) || store.readState();
       } catch {
         throw migrationError2();
       }
@@ -22265,6 +27878,196 @@
     return { status: "committed", written: result.entries.length, resumedFrom };
   }
 
+  // src/cep/providerSchemaMigration.js
+  var STATE_KEYS3 = ["migratedLegacy", "pendingSecretDeletes", "providers", "revision", "version"];
+  var VALUE_REF_KEYS3 = ["kind", "reference", "revision"];
+  var MODEL_LIST_TTL_MS = 36e5;
+  function migrationError3() {
+    const error = new Error("Provider schema migration is invalid");
+    error.code = "INVALID_PROVIDER_MIGRATION";
+    return error;
+  }
+  function hasExactKeys6(value, expected) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const keys = Object.keys(value).sort();
+    return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+  }
+  function clone6(value) {
+    return value == null ? value : JSON.parse(JSON.stringify(value));
+  }
+  function normalizeValueRef3(value) {
+    if (!hasExactKeys6(value, VALUE_REF_KEYS3) || value.kind !== "secret" || !Number.isSafeInteger(value.revision) || value.revision <= 0) {
+      throw migrationError3();
+    }
+    try {
+      parseProviderSecretReference(value.reference);
+    } catch {
+      throw migrationError3();
+    }
+    return { kind: "secret", reference: value.reference, revision: value.revision };
+  }
+  function providerReferences(provider) {
+    const refs = [];
+    const add = (valueRef) => {
+      if ((valueRef == null ? void 0 : valueRef.kind) === "secret") refs.push(valueRef);
+    };
+    add(provider.auth.model.valueRef);
+    add(provider.auth.probe.valueRef);
+    provider.headers.forEach((header) => add(header.valueRef));
+    return refs;
+  }
+  function normalizeStateV22(value) {
+    if (!hasExactKeys6(value, STATE_KEYS3) || value.version !== 2 || !Number.isSafeInteger(value.revision) || value.revision < 0 || value.migratedLegacy !== true || !Array.isArray(value.pendingSecretDeletes) || !Array.isArray(value.providers)) {
+      throw migrationError3();
+    }
+    let providers;
+    try {
+      providers = value.providers.map(normalizeProviderEntryV2);
+    } catch {
+      throw migrationError3();
+    }
+    const providerIds = /* @__PURE__ */ new Set();
+    const activeReferences = /* @__PURE__ */ new Map();
+    for (const provider of providers) {
+      if (providerIds.has(provider.id)) throw migrationError3();
+      providerIds.add(provider.id);
+      for (const ref of providerReferences(provider)) {
+        const existingRevision = activeReferences.get(ref.reference);
+        if (existingRevision !== void 0 && existingRevision !== ref.revision) throw migrationError3();
+        activeReferences.set(ref.reference, ref.revision);
+      }
+    }
+    const pendingReferences = /* @__PURE__ */ new Set();
+    const pendingSecretDeletes = value.pendingSecretDeletes.map((entry) => {
+      const ref = normalizeValueRef3(entry);
+      if (pendingReferences.has(ref.reference) || activeReferences.has(ref.reference)) {
+        throw migrationError3();
+      }
+      pendingReferences.add(ref.reference);
+      return ref;
+    });
+    return {
+      version: 2,
+      revision: value.revision,
+      migratedLegacy: true,
+      pendingSecretDeletes,
+      providers
+    };
+  }
+  function preferredAuth(policy) {
+    if (policy.kind === "none") return { scheme: "none", headerName: null };
+    return {
+      scheme: policy.kind,
+      headerName: policy.kind === "custom" ? policy.headerName : null
+    };
+  }
+  function credentialFromV2(provider) {
+    const modelAuth = provider.auth.model;
+    return {
+      valueRef: modelAuth.kind === "none" ? null : clone6(modelAuth.valueRef),
+      preferredAuth: preferredAuth(modelAuth)
+    };
+  }
+  function probeOverrideFromV2(provider) {
+    return provider.auth.probe.kind === "inherit-model" ? null : clone6(provider.auth.probe);
+  }
+  function safeExpiry(checkedAt) {
+    return Math.min(Number.MAX_SAFE_INTEGER, checkedAt + MODEL_LIST_TTL_MS);
+  }
+  function modelListFromV2(provider) {
+    if (!provider.probedModels.length || provider.probedAt <= 0) {
+      return {
+        revision: 0,
+        status: "unknown",
+        apiRoot: null,
+        auth: null,
+        models: [],
+        checkedAt: 0,
+        validUntil: 0,
+        requestProfileRevision: provider.authProfileRevision
+      };
+    }
+    const probePolicy = provider.auth.probe.kind === "inherit-model" ? provider.auth.model : provider.auth.probe;
+    return {
+      revision: 1,
+      status: "supported",
+      apiRoot: buildProviderApiBaseUrl({
+        baseUrl: provider.baseUrl,
+        allowInsecureHttp: provider.allowInsecureHttp
+      }).toString(),
+      auth: preferredAuth(probePolicy),
+      models: provider.probedModels.map((model) => ({
+        ...clone6(model),
+        metadata: {
+          task: null,
+          inputModalities: [],
+          outputModalities: [],
+          capabilities: []
+        }
+      })),
+      checkedAt: provider.probedAt,
+      validUntil: safeExpiry(provider.probedAt),
+      requestProfileRevision: provider.authProfileRevision
+    };
+  }
+  function providerV3FromV2(rawProvider) {
+    var _a;
+    const provider = normalizeProviderEntryV2(rawProvider);
+    const probePreference = ((_a = provider.dialect.override) == null ? void 0 : _a.wireApi) || (provider.protocol === "anthropic" ? "messages" : null);
+    return normalizeProviderEntryV3({
+      id: provider.id,
+      credentialId: provider.credentialId,
+      name: provider.name,
+      baseUrl: provider.baseUrl,
+      allowInsecureHttp: provider.allowInsecureHttp,
+      requestProfileRevision: provider.authProfileRevision,
+      credential: credentialFromV2(provider),
+      probeAuthOverride: probeOverrideFromV2(provider),
+      headers: clone6(provider.headers),
+      probePreference,
+      modelList: modelListFromV2(provider),
+      // Only the full three-protocol probe can publish role and token-field capabilities.
+      modelCapabilities: [],
+      routeOverrides: []
+    });
+  }
+  function buildProviderStateV3FromV2(value) {
+    const state = normalizeStateV22(value);
+    return {
+      version: 3,
+      revision: state.revision + 1,
+      migratedLegacy: true,
+      pendingSecretDeletes: clone6(state.pendingSecretDeletes),
+      providers: state.providers.map(providerV3FromV2)
+    };
+  }
+  async function migrateProviderStoreV2ToV3({ store } = {}) {
+    if (!store || typeof store.readSchemaMigrationInput !== "function" || typeof store.writeRedactedBackup !== "function" || typeof store.replaceState !== "function") {
+      throw migrationError3();
+    }
+    const input = store.readSchemaMigrationInput();
+    if (input === null) {
+      return { status: "already-committed", migrated: 0, fromVersion: 3, toVersion: 3 };
+    }
+    if (!input || typeof input.sourceRevision !== "string" || !input.sourceRevision) {
+      throw migrationError3();
+    }
+    const source = normalizeStateV22(input.state);
+    const next = buildProviderStateV3FromV2(source);
+    await store.writeRedactedBackup(source, { keep: 3, maxAgeDays: 30 });
+    const result = store.replaceState(next, {
+      expectedSourceRevision: input.sourceRevision,
+      expectedSourceVersion: 2
+    });
+    if (!result || result.stateRevision !== next.revision) throw migrationError3();
+    return {
+      status: "committed",
+      migrated: next.providers.length,
+      fromVersion: 2,
+      toVersion: 3
+    };
+  }
+
   // src/app/providerProfileFlow.js
   function flowError(code) {
     const messages = {
@@ -22301,27 +28104,42 @@
     }
     return true;
   }
-  function currentSecretRef(policy) {
-    return policy && policy.kind !== "none" && policy.kind !== "inherit-model" ? policy.valueRef : null;
+  function currentPrimaryRef(provider) {
+    var _a, _b;
+    return ((_b = (_a = provider == null ? void 0 : provider.credential) == null ? void 0 : _a.valueRef) == null ? void 0 : _b.kind) === "secret" ? provider.credential.valueRef : null;
   }
-  async function buildAuthPolicy({ kind, headerName, secret, currentPolicy, credentialId, slotPrefix, secretService, created }) {
-    if (kind === "none") return { kind: "none" };
-    if (!["bearer", "x-api-key", "custom"].includes(kind)) throw flowError("provider_draft_invalid");
+  function preferredAuthFromDraft(draft, current) {
+    var _a, _b;
+    let scheme = String(draft.modelAuthKind || "").trim();
+    if (draft.modelAuthAutomatic === true || !scheme) {
+      scheme = ((_b = (_a = current == null ? void 0 : current.credential) == null ? void 0 : _a.preferredAuth) == null ? void 0 : _b.scheme) || "auto";
+    }
+    if (!["auto", "none", "bearer", "x-api-key", "custom"].includes(scheme)) {
+      throw flowError("provider_draft_invalid");
+    }
+    const headerName = scheme === "custom" ? String(draft.modelAuthHeaderName || "").trim() : null;
+    if (scheme === "custom" && !headerName) throw flowError("provider_draft_invalid");
+    return { scheme, headerName };
+  }
+  async function buildCredential({ draft, current, credentialId, secretService, created }) {
+    const preferredAuth2 = preferredAuthFromDraft(draft, current);
+    if (preferredAuth2.scheme === "none") return { valueRef: null, preferredAuth: preferredAuth2 };
+    const rawSecret = typeof draft.modelAuthSecret === "string" ? draft.modelAuthSecret : "";
     let valueRef = null;
-    const rawSecret = typeof secret === "string" ? secret : "";
     if (rawSecret) {
-      valueRef = await secretService.create({ credentialId, slotPrefix, value: rawSecret });
+      valueRef = await secretService.create({
+        credentialId,
+        slotPrefix: "auth-model",
+        value: rawSecret
+      });
       created.push(valueRef);
     } else {
-      valueRef = currentSecretRef(currentPolicy);
+      valueRef = currentPrimaryRef(current);
     }
-    if (!valueRef) throw flowError("provider_secret_required");
-    if (kind === "custom") {
-      const name = String(headerName || "").trim();
-      if (!name) throw flowError("provider_draft_invalid");
-      return { kind: "custom", headerName: name, valueRef };
+    if (!valueRef && preferredAuth2.scheme !== "auto") {
+      throw flowError("provider_secret_required");
     }
-    return { kind, valueRef };
+    return { valueRef, preferredAuth: preferredAuth2 };
   }
   async function buildHeaders({ draftHeaders, currentHeaders, credentialId, secretService, created }) {
     var _a, _b, _c;
@@ -22365,8 +28183,8 @@
       if ((ref == null ? void 0 : ref.kind) !== "secret") return;
       if (!refs.some((item) => item.reference === ref.reference && item.revision === ref.revision)) refs.push(ref);
     };
-    add(currentSecretRef((_a = provider.auth) == null ? void 0 : _a.model));
-    add(currentSecretRef((_b = provider.auth) == null ? void 0 : _b.probe));
+    add((_a = provider.credential) == null ? void 0 : _a.valueRef);
+    add((_b = provider.probeAuthOverride) == null ? void 0 : _b.valueRef);
     for (const header of provider.headers || []) add(header.valueRef);
     return refs;
   }
@@ -22376,12 +28194,24 @@
   }
   function requestFingerprint(provider) {
     return JSON.stringify({
-      protocol: provider.protocol,
       baseUrl: provider.baseUrl,
       allowInsecureHttp: provider.allowInsecureHttp,
-      auth: provider.auth,
+      credential: provider.credential,
+      probeAuthOverride: provider.probeAuthOverride,
       headers: provider.headers
     });
+  }
+  function unknownModelList(requestProfileRevision, revision = 0) {
+    return {
+      revision,
+      status: "unknown",
+      apiRoot: null,
+      auth: null,
+      models: [],
+      checkedAt: 0,
+      validUntil: 0,
+      requestProfileRevision
+    };
   }
   async function rollbackCreated(created, secretService) {
     for (const ref of created.slice().reverse()) {
@@ -22413,90 +28243,74 @@
     confirmInsecureHttp,
     randomUUID
   } = {}) {
-    var _a, _b, _c;
     if (!draft || typeof draft !== "object" || !store || !secretService) throw flowError("provider_draft_invalid");
     const id = String(draft.id || "").trim() || slug(draft.name);
     const name = String(draft.name || "").trim() || id;
     if (!id || !name) throw flowError("provider_draft_invalid");
-    const protocol = draft.protocol || "openai-compatible";
-    if (protocol !== "openai-compatible" && protocol !== "anthropic") throw flowError("provider_draft_invalid");
+    const protocolHint = draft.protocol || "openai-compatible";
+    if (protocolHint !== "openai-compatible" && protocolHint !== "anthropic") {
+      throw flowError("provider_draft_invalid");
+    }
+    const currentProvider = current ? normalizeProviderEntryV3(current) : null;
     const baseUrl = normalizedBaseUrl(draft.baseUrl);
-    const credentialId = (current == null ? void 0 : current.credentialId) || (typeof randomUUID === "function" ? randomUUID() : "");
+    const credentialId = (currentProvider == null ? void 0 : currentProvider.credentialId) || (typeof randomUUID === "function" ? randomUUID() : "");
     if (!credentialId) throw flowError("provider_draft_invalid");
     const expectedRevision = store.readState().revision;
     const allowInsecureHttp = await enforceInsecureHttp({
       baseUrl,
       providerId: id,
-      current,
+      current: currentProvider,
       allowInsecureHttp: draft.allowInsecureHttp === true,
       confirmInsecureHttp
     });
     const created = [];
     let entry;
     try {
-      const model = await buildAuthPolicy({
-        kind: draft.modelAuthKind || "bearer",
-        headerName: draft.modelAuthHeaderName,
-        secret: draft.modelAuthSecret,
-        currentPolicy: (_a = current == null ? void 0 : current.auth) == null ? void 0 : _a.model,
+      const credential = await buildCredential({
+        draft,
+        current: currentProvider,
         credentialId,
-        slotPrefix: "auth-model",
         secretService,
         created
       });
-      let probe;
-      if ((draft.probeAuthMode || "inherit-model") === "inherit-model") {
-        probe = { kind: "inherit-model" };
-      } else {
-        probe = await buildAuthPolicy({
-          kind: draft.probeAuthKind || "none",
-          headerName: draft.probeAuthHeaderName,
-          secret: draft.probeAuthSecret,
-          currentPolicy: (_b = current == null ? void 0 : current.auth) == null ? void 0 : _b.probe,
-          credentialId,
-          slotPrefix: "auth-probe",
-          secretService,
-          created
-        });
-      }
       const headers = await buildHeaders({
         draftHeaders: draft.headers || [],
-        currentHeaders: (current == null ? void 0 : current.headers) || [],
+        currentHeaders: (currentProvider == null ? void 0 : currentProvider.headers) || [],
         credentialId,
         secretService,
         created
       });
-      const overrideValue = String(draft.dialectOverride || "").trim();
-      if (overrideValue && overrideValue !== "responses" && overrideValue !== "chat") {
+      const hasProbePreference = Object.hasOwn(draft, "probePreference") || Object.hasOwn(draft, "dialectOverride");
+      const rawProbePreference = Object.hasOwn(draft, "probePreference") ? draft.probePreference : draft.dialectOverride;
+      const selectedProbePreference = hasProbePreference ? String(rawProbePreference || "").trim() || (currentProvider ? null : protocolHint === "anthropic" ? "messages" : null) : (currentProvider == null ? void 0 : currentProvider.probePreference) || (protocolHint === "anthropic" ? "messages" : null);
+      if (selectedProbePreference !== null && !["responses", "chat", "messages"].includes(selectedProbePreference)) {
         throw flowError("provider_draft_invalid");
       }
-      const override = overrideValue ? {
-        wireApi: overrideValue,
-        source: draft.dialectSource === "ccswitch-import" ? "ccswitch-import" : "manual",
-        updatedAt: Date.now()
-      } : null;
       const candidate = {
         id,
         credentialId,
         name,
-        protocol,
         baseUrl,
         allowInsecureHttp,
-        authProfileRevision: (current == null ? void 0 : current.authProfileRevision) || 1,
-        auth: { model, probe },
+        requestProfileRevision: (currentProvider == null ? void 0 : currentProvider.requestProfileRevision) || 1,
+        credential,
+        probeAuthOverride: null,
         headers,
-        dialect: { override, detected: ((_c = current == null ? void 0 : current.dialect) == null ? void 0 : _c.detected) || null },
-        probedModels: (current == null ? void 0 : current.probedModels) || [],
-        probedAt: (current == null ? void 0 : current.probedAt) || 0
+        probePreference: selectedProbePreference,
+        modelList: (currentProvider == null ? void 0 : currentProvider.modelList) || unknownModelList(1),
+        modelCapabilities: (currentProvider == null ? void 0 : currentProvider.modelCapabilities) || [],
+        routeOverrides: (currentProvider == null ? void 0 : currentProvider.routeOverrides) || []
       };
-      if (current && requestFingerprint(candidate) !== requestFingerprint(current)) {
-        candidate.authProfileRevision = current.authProfileRevision + 1;
-        candidate.dialect.detected = null;
-        candidate.probedModels = [];
-        candidate.probedAt = 0;
+      if (currentProvider && requestFingerprint(candidate) !== requestFingerprint(currentProvider)) {
+        candidate.requestProfileRevision = currentProvider.requestProfileRevision + 1;
+        candidate.modelList = unknownModelList(
+          candidate.requestProfileRevision,
+          currentProvider.modelList.revision + 1
+        );
+        candidate.modelCapabilities = [];
       }
-      entry = normalizeProviderEntryV2(candidate);
-      const pendingSecretDeletes = refsRemoved(current, entry);
+      entry = normalizeProviderEntryV3(candidate);
+      const pendingSecretDeletes = refsRemoved(currentProvider, entry);
       const committed = store.upsert(entry, {
         expectedRevision,
         pendingSecretDeletes
@@ -22515,7 +28329,7 @@
   }
   async function deleteProviderProfile({ provider, store, secretService } = {}) {
     if (!provider || !store || !secretService) throw flowError("provider_draft_invalid");
-    const normalized = normalizeProviderEntryV2(provider);
+    const normalized = normalizeProviderEntryV3(provider);
     const pendingSecretDeletes = allSecretRefs(normalized);
     const state = store.readState();
     const committed = store.remove(normalized.id, {
@@ -22540,7 +28354,8 @@
       protocol: candidate.protocol,
       baseUrl: candidate.baseUrl,
       allowInsecureHttp: false,
-      modelAuthKind: candidate.modelAuthKind || "bearer",
+      modelAuthKind: candidate.modelAuthKind || "auto",
+      modelAuthAutomatic: candidate.modelAuthKind === void 0,
       modelAuthHeaderName: "",
       modelAuthSecret: candidate.modelAuthSecret,
       probeAuthMode: "inherit-model",
@@ -22548,8 +28363,8 @@
       probeAuthHeaderName: "",
       probeAuthSecret: "",
       headers: [],
-      dialectOverride: candidate.dialectHint || "",
-      dialectSource: "ccswitch-import"
+      dialectOverride: "",
+      dialectSource: ""
     };
     try {
       const candidateId = String(draft.id || "").trim() || slug(draft.name);
@@ -22583,8 +28398,81 @@
     return { deleted, pending: store.readState().pendingSecretDeletes.length };
   }
 
+  // src/lib/providerProbeAuth.js
+  var AUTH_NAMES = /* @__PURE__ */ new Set(["authorization", "x-api-key"]);
+  function profileError() {
+    const error = new Error("Provider probe profile is invalid");
+    error.code = "provider_probe_profile_invalid";
+    return error;
+  }
+  function normalizedExtraHeaders(profile, protocol) {
+    var _a;
+    const headers = {};
+    for (const header of (profile == null ? void 0 : profile.extraHeaders) || []) {
+      const name = String((header == null ? void 0 : header.name) || "").trim().toLowerCase();
+      const value = String((_a = header == null ? void 0 : header.value) != null ? _a : "");
+      if (!name || /[\r\n\0]/.test(name) || /[\r\n\0]/.test(value) || Object.hasOwn(headers, name)) {
+        throw profileError();
+      }
+      if (AUTH_NAMES.has(name)) throw profileError();
+      headers[name] = value;
+    }
+    if (protocol === "messages" && !Object.hasOwn(headers, "anthropic-version")) {
+      headers["anthropic-version"] = "2023-06-01";
+    }
+    return headers;
+  }
+  function standardSecret(auth) {
+    var _a;
+    if ((auth == null ? void 0 : auth.kind) !== "header") return null;
+    const name = String(auth.name || "").trim().toLowerCase();
+    const value = String((_a = auth.value) != null ? _a : "");
+    if (name === "x-api-key" && value) return value;
+    if (name === "authorization") {
+      const match = /^Bearer[ \t]+(\S+)$/i.exec(value.trim());
+      if (match) return match[1];
+    }
+    return null;
+  }
+  function standardScheme(auth) {
+    if ((auth == null ? void 0 : auth.kind) !== "header") return null;
+    const name = String(auth.name || "").trim().toLowerCase();
+    if (name === "x-api-key") return "x-api-key";
+    if (name === "authorization" && /^Bearer[ \t]+\S+$/i.test(String(auth.value || "").trim())) {
+      return "bearer";
+    }
+    return null;
+  }
+  function authCandidate(baseHeaders, scheme, secret) {
+    const headers = { ...baseHeaders };
+    if (scheme === "bearer") headers.authorization = `Bearer ${secret}`;
+    if (scheme === "x-api-key") headers["x-api-key"] = secret;
+    return { scheme, headers };
+  }
+  function buildProtocolAuthCandidates(profile, protocol) {
+    var _a;
+    if (!["responses", "chat", "messages", "models"].includes(protocol)) throw profileError();
+    const baseHeaders = normalizedExtraHeaders(profile, protocol);
+    const auth = (profile == null ? void 0 : profile.auth) || { kind: "none" };
+    if (auth.kind === "none") return [{ scheme: "none", headers: baseHeaders }];
+    if (auth.kind !== "header") throw profileError();
+    const secret = standardSecret(auth);
+    if (secret !== null) {
+      const resolvedScheme = standardScheme(auth);
+      const fallbackScheme = resolvedScheme === "bearer" ? "x-api-key" : "bearer";
+      const preferred = [resolvedScheme, fallbackScheme];
+      return preferred.map((scheme) => authCandidate(baseHeaders, scheme, secret));
+    }
+    const name = String(auth.name || "").trim().toLowerCase();
+    const value = String((_a = auth.value) != null ? _a : "");
+    if (!name || AUTH_NAMES.has(name) || /[\r\n\0]/.test(name) || /[\r\n\0]/.test(value)) {
+      throw profileError();
+    }
+    return [{ scheme: "custom", headers: { ...baseHeaders, [name]: value } }];
+  }
+
   // src/cep/modelProbe.js
-  function getCepRequire3() {
+  function getCepRequire4() {
     var _a, _b, _c;
     if ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) return globalThis.window.cep_node.require;
     if ((_c = globalThis.window) == null ? void 0 : _c.require) return globalThis.window.require;
@@ -22605,37 +28493,25 @@
     if (authScheme === "none") return {};
     return { Authorization: "Bearer " + String(apiKey || "") };
   }
-  function parseModelsList(json) {
+  function stringList(value) {
+    return Array.isArray(value) ? value.filter((item) => typeof item === "string").map(String) : [];
+  }
+  function parseProviderModelInventory(json) {
     const list = Array.isArray(json) ? json : json && Array.isArray(json.data) ? json.data : json && Array.isArray(json.models) ? json.models : [];
     return list.map((model) => {
       const id = model && (model.id || model.model || model.name);
       if (!id) return null;
-      return { id: String(id), label: String(model.display_name || model.displayName || id) };
+      return {
+        id: String(id),
+        label: String(model.display_name || model.displayName || id),
+        metadata: {
+          task: typeof model.task === "string" ? model.task : null,
+          inputModalities: stringList(model.input_modalities || model.inputModalities),
+          outputModalities: stringList(model.output_modalities || model.outputModalities || model.modalities),
+          capabilities: stringList(model.capabilities)
+        }
+      };
     }).filter(Boolean);
-  }
-  function modelsEndpoint(baseUrl, allowInsecureHttp) {
-    const approved = validateProviderBaseUrl(baseUrl, {
-      allowInsecureHttp,
-      requireTransportApproval: true
-    });
-    const endpoint = new URL(approved);
-    let prefix = endpoint.pathname.replace(/\/+$/, "");
-    if (/\/v1$/i.test(prefix)) prefix = prefix.slice(0, -3);
-    endpoint.pathname = `${prefix === "/" ? "" : prefix}/v1/models`;
-    endpoint.search = "";
-    endpoint.hash = "";
-    return endpoint;
-  }
-  function resolvedProfileHeaders(profile) {
-    var _a;
-    const headers = {};
-    for (const header of profile.extraHeaders || []) {
-      headers[String(header.name).toLowerCase()] = String(header.value);
-    }
-    if (((_a = profile.auth) == null ? void 0 : _a.kind) === "header") {
-      headers[String(profile.auth.name).toLowerCase()] = String(profile.auth.value);
-    }
-    return headers;
   }
   function networkFailure() {
     return {
@@ -22650,12 +28526,13 @@
       return { ok: false, status, models: [], detail: "HTTP " + status + " from provider" };
     }
     try {
-      const models = parseModelsList(JSON.parse(body));
-      const serialized = JSON.stringify(models);
+      const inventory = parseProviderModelInventory(JSON.parse(body));
+      const models = inventory.map(({ id, label }) => ({ id, label }));
+      const serialized = JSON.stringify(inventory);
       if (sensitiveValues2.some((value) => value && serialized.includes(value))) {
         return { ok: false, status: 200, models: [], detail: "Provider model metadata was rejected" };
       }
-      return models.length ? { ok: true, status: 200, models, detail: "" } : { ok: false, status: 200, models: [], detail: "Empty model list" };
+      return models.length ? { ok: true, status: 200, models, inventory, detail: "" } : { ok: false, status: 200, models: [], detail: "Empty model list" };
     } catch {
       return { ok: false, status: 200, models: [], detail: "Response was not valid JSON" };
     }
@@ -22663,7 +28540,7 @@
   function requestWithTransport({ endpoint, headers, sensitiveValues: sensitiveValues2, httpsImpl, timeoutMs }) {
     let transport;
     try {
-      transport = httpsImpl || getCepRequire3()(endpoint.protocol === "http:" ? "http" : "https");
+      transport = httpsImpl || getCepRequire4()(endpoint.protocol === "http:" ? "http" : "https");
     } catch {
       return Promise.resolve(networkFailure());
     }
@@ -22717,9 +28594,17 @@
     const profile = requestProfile && typeof requestProfile === "object" ? requestProfile : null;
     const selectedBaseUrl = profile ? profile.baseUrl : baseUrl;
     const selectedAllowInsecureHttp = profile ? profile.allowInsecureHttp === true : allowInsecureHttp;
-    let endpoint;
+    let endpoints;
     try {
-      endpoint = modelsEndpoint(selectedBaseUrl, selectedAllowInsecureHttp);
+      validateProviderBaseUrl(selectedBaseUrl, {
+        allowInsecureHttp: selectedAllowInsecureHttp,
+        requireTransportApproval: true
+      });
+      endpoints = buildProviderEndpointCandidates({
+        baseUrl: selectedBaseUrl,
+        resource: "models",
+        allowInsecureHttp: selectedAllowInsecureHttp
+      });
     } catch (error) {
       if ((error == null ? void 0 : error.code) === "provider_insecure_http_forbidden") {
         return {
@@ -22731,7 +28616,15 @@
       }
       return { ok: false, status: 0, models: [], detail: "Invalid base URL" };
     }
-    const headers = profile ? resolvedProfileHeaders(profile) : probeHeaders(protocol, apiKey, dialect || authScheme);
+    let authCandidates;
+    try {
+      authCandidates = profile ? buildProtocolAuthCandidates(profile, protocol === "anthropic" ? "messages" : "models") : [{
+        scheme: authSchemeFromDialect(dialect || authScheme) || (protocol === "anthropic" ? "x-api-key" : "bearer"),
+        headers: probeHeaders(protocol, apiKey, dialect || authScheme)
+      }];
+    } catch {
+      return { ok: false, status: 0, models: [], detail: "Invalid provider request profile" };
+    }
     const sensitiveValues2 = [];
     if (((_a = profile == null ? void 0 : profile.auth) == null ? void 0 : _a.kind) === "header" && profile.auth.value) {
       const value = String(profile.auth.value);
@@ -22744,43 +28637,77 @@
     for (const header of (profile == null ? void 0 : profile.extraHeaders) || []) {
       if (header.source === "secret" && header.value) sensitiveValues2.push(String(header.value));
     }
-    if (typeof requestImpl === "function") {
-      try {
-        const response = await requestImpl({
-          url: endpoint.toString(),
-          method: "GET",
-          headers,
-          timeoutMs
-        });
-        const status = Number.isInteger(response == null ? void 0 : response.status) ? response.status : 0;
-        if (status === 0) return networkFailure();
-        return resultFromResponse(
-          status,
-          typeof (response == null ? void 0 : response.body) === "string" ? response.body : "",
-          sensitiveValues2
-        );
-      } catch {
-        return networkFailure();
+    let lastResult = null;
+    for (const endpoint of endpoints) {
+      for (let authIndex = 0; authIndex < authCandidates.length; authIndex += 1) {
+        const authCandidate2 = authCandidates[authIndex];
+        let result;
+        if (typeof requestImpl === "function") {
+          try {
+            const response = await requestImpl({
+              url: endpoint.url.toString(),
+              method: "GET",
+              headers: authCandidate2.headers,
+              timeoutMs
+            });
+            const status = Number.isInteger(response == null ? void 0 : response.status) ? response.status : 0;
+            result = status === 0 ? networkFailure() : resultFromResponse(
+              status,
+              typeof (response == null ? void 0 : response.body) === "string" ? response.body : "",
+              sensitiveValues2
+            );
+          } catch {
+            result = networkFailure();
+          }
+        } else {
+          result = await requestWithTransport({
+            endpoint: endpoint.url,
+            headers: authCandidate2.headers,
+            sensitiveValues: sensitiveValues2,
+            httpsImpl,
+            timeoutMs
+          });
+        }
+        lastResult = {
+          ...result,
+          apiRoot: endpoint.apiRoot.toString().replace(/\/$/, ""),
+          apiRootId: endpoint.id,
+          authScheme: authCandidate2.scheme
+        };
+        if (result.ok) return lastResult;
+        if ((result.status === 401 || result.status === 403) && authIndex + 1 < authCandidates.length) {
+          continue;
+        }
+        break;
       }
+      if (![0, 401, 403, 404, 405].includes(lastResult == null ? void 0 : lastResult.status) && (lastResult == null ? void 0 : lastResult.redirected) !== true) return lastResult;
     }
-    return requestWithTransport({ endpoint, headers, sensitiveValues: sensitiveValues2, httpsImpl, timeoutMs });
+    return lastResult || networkFailure();
   }
 
-  // src/cep/providerDetect.js
-  var effectiveProviderDialect2 = effectiveProviderDialect;
-  function getCepRequire4() {
+  // src/cep/providerCapabilityProbe.js
+  var OUTPUT_BUDGETS = Object.freeze([16, 64, 128]);
+  var TOOL_OUTPUT_BUDGETS = Object.freeze([...OUTPUT_BUDGETS, 256, 512]);
+  var MAX_RESPONSE_BYTES = 512 * 1024;
+  var SUCCESS_TTL_MS = 864e5;
+  var TRANSIENT_TTL_MS = 6e4;
+  var INVALID_TTL_MS = 3e5;
+  var PROTOCOL_ORDER = Object.freeze(["responses", "messages", "chat"]);
+  var TRANSIENT_STATUSES = /* @__PURE__ */ new Set([408, 425, 429, 500, 502, 503, 504]);
+  var ALWAYS_TRANSIENT_STATUSES = /* @__PURE__ */ new Set([408, 425, 429, 500, 502, 504]);
+  var UNSUPPORTED_CODES = /* @__PURE__ */ new Set([
+    "convert_request_failed",
+    "not_implemented",
+    "not_supported",
+    "unsupported_endpoint",
+    "unsupported_operation"
+  ]);
+  function getCepRequire5() {
     var _a, _b, _c;
     if ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) return globalThis.window.cep_node.require;
     if ((_c = globalThis.window) == null ? void 0 : _c.require) return globalThis.window.require;
     if (globalThis.require) return globalThis.require;
     throw new Error("CEP Node require is unavailable");
-  }
-  function endpointUrl(profile, resource) {
-    return buildProviderEndpoint({
-      baseUrl: profile.baseUrl,
-      resource: resource === "chat" ? "chat-completions" : resource,
-      allowInsecureHttp: profile.allowInsecureHttp === true
-    });
   }
   function normalizedHeaders(value) {
     const output = {};
@@ -22791,30 +28718,60 @@
     }
     return output;
   }
-  function requestHeaders(profile, contentType = false) {
-    var _a;
-    const headers = {};
-    for (const header of profile.extraHeaders || []) {
-      headers[String(header.name).toLowerCase()] = String(header.value);
+  function sseTerminalObserved(protocol, value) {
+    const normalized = String(value || "").replace(/\r\n/g, "\n");
+    const frames = normalized.split("\n\n");
+    if (!normalized.endsWith("\n\n")) frames.pop();
+    for (const frame of frames) {
+      let event = "";
+      const dataLines = [];
+      for (const line of frame.split("\n")) {
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+      }
+      const data = dataLines.join("\n").trim();
+      if (protocol === "chat" && data === "[DONE]") return true;
+      let parsed = null;
+      try {
+        parsed = data ? JSON.parse(data) : null;
+      } catch {
+      }
+      const type = String((parsed == null ? void 0 : parsed.type) || event || "");
+      if (type === "error" || (parsed == null ? void 0 : parsed.error)) return true;
+      if (protocol === "responses" && ["response.completed", "response.incomplete", "response.failed"].includes(type)) {
+        return true;
+      }
+      if (protocol === "messages" && type === "message_stop") return true;
+      if (protocol === "chat" && Array.isArray(parsed == null ? void 0 : parsed.choices) && parsed.choices.some((choice) => typeof (choice == null ? void 0 : choice.finish_reason) === "string" && choice.finish_reason)) {
+        return true;
+      }
     }
-    if (((_a = profile.auth) == null ? void 0 : _a.kind) === "header") {
-      headers[String(profile.auth.name).toLowerCase()] = String(profile.auth.value);
-    }
-    if (contentType) headers["content-type"] = "application/json";
-    return headers;
+    return false;
   }
-  function defaultRequest({ url, method, headers, body, timeoutMs }) {
+  function utf8ByteLength2(value) {
+    var _a;
+    const BufferImpl = globalThis.Buffer || ((_a = getCepRequire5()("buffer")) == null ? void 0 : _a.Buffer);
+    if (!BufferImpl || typeof BufferImpl.byteLength !== "function") {
+      throw new Error("provider request setup failed");
+    }
+    return BufferImpl.byteLength(value, "utf8");
+  }
+  function defaultRequest({ url, method, headers, body, timeoutMs, streamProtocol }) {
     return new Promise((resolve, reject) => {
       let endpoint;
       let transport;
       try {
         endpoint = new URL(url);
-        transport = getCepRequire4()(endpoint.protocol === "http:" ? "http" : "https");
+        transport = getCepRequire5()(endpoint.protocol === "http:" ? "http" : "https");
       } catch {
         reject(new Error("provider request setup failed"));
         return;
       }
       const payload = body === void 0 ? null : JSON.stringify(body);
+      const requestHeaders = { ...headers };
+      if (payload !== null && !Object.keys(requestHeaders).some((name) => name.toLowerCase() === "content-length")) {
+        requestHeaders["content-length"] = String(utf8ByteLength2(payload));
+      }
       let settled = false;
       const finish = (callback, value) => {
         if (settled) return;
@@ -22827,11 +28784,37 @@
         protocol: endpoint.protocol,
         path: endpoint.pathname + endpoint.search,
         method,
-        headers
+        headers: requestHeaders,
+        agent: false
       }, (res) => {
         let responseBody = "";
+        let responseBytes = 0;
         res.on("data", (chunk) => {
+          responseBytes += chunk.length;
+          if (responseBytes > MAX_RESPONSE_BYTES) {
+            try {
+              req.destroy();
+            } catch {
+            }
+            finish(reject, new Error("provider response too large"));
+            return;
+          }
           responseBody += String(chunk);
+          if (["responses", "chat", "messages"].includes(streamProtocol) && sseTerminalObserved(streamProtocol, responseBody)) {
+            finish(resolve, {
+              status: res.statusCode || 0,
+              headers: normalizedHeaders(res.headers),
+              body: responseBody
+            });
+            try {
+              res.destroy();
+            } catch {
+            }
+            try {
+              req.destroy();
+            } catch {
+            }
+          }
         });
         res.on("end", () => finish(resolve, {
           status: res.statusCode || 0,
@@ -22862,35 +28845,6 @@
       redirected: result.redirected === true
     };
   }
-  async function requestStep({ step, profile, resource, method, body, requestImpl, timeoutMs, tried }) {
-    let url;
-    try {
-      url = endpointUrl(profile, resource);
-    } catch {
-      return { configuration: true };
-    }
-    const headers = requestHeaders(profile, body !== void 0);
-    const audit = {
-      step,
-      method,
-      path: url.pathname + url.search,
-      headerNames: Object.keys(headers).sort()
-    };
-    try {
-      const result = safeResult(await requestImpl({
-        url: url.toString(),
-        method,
-        headers,
-        ...body === void 0 ? {} : { body },
-        timeoutMs
-      }));
-      tried.push({ ...audit, status: result.status, outcome: "received" });
-      return result;
-    } catch {
-      tried.push({ ...audit, status: 0, outcome: "network" });
-      return { network: true, status: 0, headers: {}, body: "", redirected: false };
-    }
-  }
   function isJsonContentType(headers) {
     const value = String((headers == null ? void 0 : headers["content-type"]) || "").split(";", 1)[0].trim().toLowerCase();
     return value === "application/json" || value.endsWith("+json");
@@ -22904,23 +28858,826 @@
       return null;
     }
   }
-  function endpointSemantic(result, expectedParam) {
-    if (result.status !== 400 && result.status !== 422) return false;
+  function errorFacts(result) {
     const parsed = parsedJson(result);
-    return Boolean((parsed == null ? void 0 : parsed.error) && typeof parsed.error === "object" && parsed.error.param === expectedParam);
+    const raw = (parsed == null ? void 0 : parsed.error) && typeof parsed.error === "object" ? parsed.error : parsed || {};
+    return {
+      code: String(raw.code || raw.type || "").trim().toLowerCase(),
+      param: String(raw.param || "").trim().toLowerCase(),
+      message: String(raw.message || (parsed == null ? void 0 : parsed.message) || "").trim().toLowerCase()
+    };
   }
-  function responsesSuccess(result) {
-    if (result.status < 200 || result.status >= 300) return false;
-    const parsed = parsedJson(result);
-    return Boolean(
-      parsed && parsed.object === "response" && typeof parsed.id === "string" && Array.isArray(parsed.output)
-    );
+  function explicitlyUnsupported(result) {
+    const facts = errorFacts(result);
+    if (UNSUPPORTED_CODES.has(facts.code)) return true;
+    return /\bconvert_request_failed\b|\bnot implemented\b|\boperation is unsupported\b|\bendpoint\b.{0,32}\bnot supported\b/.test(facts.message);
   }
-  function chatSuccess(result) {
-    if (result.status < 200 || result.status >= 300) return false;
+  function modelRejected(result) {
+    const facts = errorFacts(result);
+    return facts.param === "model" || /\bmodel\b.{0,32}\b(?:not found|does not exist|unavailable|unsupported)\b/.test(facts.message);
+  }
+  function pathRejected(result) {
+    if (result.redirected || result.status >= 300 && result.status < 400) return true;
+    return [404, 405, 501].includes(result.status) && !modelRejected(result);
+  }
+  function authenticationRejected(result) {
+    return result.status === 401 || result.status === 403;
+  }
+  function developerRoleRejected(result) {
+    if (![400, 422, 500].includes(result.status)) return false;
+    const facts = errorFacts(result);
+    const text = `${facts.code} ${facts.param} ${facts.message}`;
+    const roleContext = facts.param.includes("role") || /\brole\b.{0,80}\bdeveloper\b|\bunknown variant\b.{0,48}\bdeveloper\b|\bdeveloper\b.{0,80}\b(?:role|unknown variant|expected one of)\b/.test(text);
+    return roleContext && /(^|[^a-z])developer([^a-z]|$)/.test(text) && /\bunknown variant\b|\bexpected one of\b|\b(?:unsupported|invalid|disallowed|forbidden)\b|\bnot (?:supported|allowed|accepted|permitted)\b/.test(text);
+  }
+  var AGENT_FEATURE_NAMES = Object.freeze([
+    "stream",
+    "terminal",
+    "tools",
+    "compact",
+    "continuation",
+    "namespaceTools",
+    "reasoningReplay",
+    "countTokens"
+  ]);
+  function unknownAgentFeatures() {
+    return Object.fromEntries(AGENT_FEATURE_NAMES.map((name) => [name, "unknown"]));
+  }
+  function unknownAgentFeatureEvidence() {
+    return Object.fromEntries(AGENT_FEATURE_NAMES.map((name) => [name, "not-probed"]));
+  }
+  function featureResult(status, evidence) {
+    return { status, evidence };
+  }
+  function setFeature(capability, name, result) {
+    return {
+      ...capability,
+      agentFeatures: { ...capability.agentFeatures, [name]: result.status },
+      agentFeatureEvidence: { ...capability.agentFeatureEvidence, [name]: result.evidence }
+    };
+  }
+  function baseCapability(protocol) {
+    return {
+      protocol,
+      support: "invalid",
+      apiRoot: null,
+      authScheme: null,
+      schema: { nonStreaming: "not-tested", evidence: "not-tested" },
+      stream: { support: "not-probed", terminal: null, evidence: "not-probed" },
+      tool: { support: "not-probed", evidence: "not-probed" },
+      agentFeatures: unknownAgentFeatures(),
+      agentFeatureEvidence: unknownAgentFeatureEvidence(),
+      terminal: { kind: null, budgetLimited: false },
+      compatibility: {
+        instructionRole: protocol === "chat" ? "developer" : protocol === "messages" ? "system" : null,
+        tokenField: protocol === "responses" ? "max_output_tokens" : "max_tokens",
+        outputBudget: null
+      },
+      errorClass: null,
+      ttl: {
+        class: "invalid",
+        maxAgeMs: INVALID_TTL_MS,
+        evidence: "not-tested",
+        invalidatedBy: ["provider-config", "auth-profile", "model-inventory"]
+      }
+    };
+  }
+  function withEndpoint(capability, endpoint, authScheme) {
+    var _a;
+    return {
+      ...capability,
+      apiRoot: ((_a = endpoint == null ? void 0 : endpoint.apiRoot) == null ? void 0 : _a.toString().replace(/\/$/, "")) || null,
+      authScheme: authScheme || null
+    };
+  }
+  function supportedCapability(protocol, endpoint, authScheme, schema, compatibility2) {
+    const capability = withEndpoint(baseCapability(protocol), endpoint, authScheme);
+    return {
+      ...capability,
+      support: "supported",
+      schema: { nonStreaming: "valid", evidence: schema.evidence },
+      terminal: { kind: schema.terminal, budgetLimited: schema.budgetLimited },
+      compatibility: { ...capability.compatibility, ...compatibility2 },
+      ttl: {
+        class: "success",
+        maxAgeMs: SUCCESS_TTL_MS,
+        evidence: schema.budgetLimited ? "verified-valid-budget-terminal" : "verified-success-schema",
+        invalidatedBy: ["provider-config", "auth-profile", "model-inventory"]
+      }
+    };
+  }
+  function failedCapability(protocol, endpoint, authScheme, errorClass, evidence) {
+    const capability = withEndpoint(baseCapability(protocol), endpoint, authScheme);
+    let support = "invalid";
+    let ttlClass = "invalid";
+    let maxAgeMs = INVALID_TTL_MS;
+    if (errorClass === "authentication") {
+      support = "authentication";
+      ttlClass = "authentication";
+      maxAgeMs = 0;
+    } else if (errorClass === "network" || errorClass === "rate-limited" || errorClass === "upstream-transient") {
+      support = "transient";
+      ttlClass = "transient";
+      maxAgeMs = TRANSIENT_TTL_MS;
+    } else if (errorClass === "endpoint-unsupported" || errorClass === "protocol-unsupported" || errorClass === "model-unsupported") {
+      support = "unsupported";
+      ttlClass = "unsupported";
+      maxAgeMs = null;
+    }
+    return {
+      ...capability,
+      support,
+      schema: { nonStreaming: errorClass === "invalid-schema" ? "invalid" : "not-tested", evidence },
+      errorClass,
+      ttl: {
+        class: ttlClass,
+        maxAgeMs,
+        evidence,
+        invalidatedBy: ["provider-config", "auth-profile", "model-inventory"]
+      }
+    };
+  }
+  function usableResponsesOutput(output) {
+    return output.some((item) => item && item.type === "message" && Array.isArray(item.content) && item.content.some((part) => part && part.type === "output_text" && typeof part.text === "string" && part.text.length > 0));
+  }
+  function responsesSchema(result) {
+    var _a;
     const parsed = parsedJson(result);
-    return Boolean(
-      parsed && parsed.object === "chat.completion" && typeof parsed.id === "string" && Array.isArray(parsed.choices)
+    if (result.status !== 200 || !parsed || parsed.object !== "response" || typeof parsed.id !== "string" || !parsed.id || !Array.isArray(parsed.output) || !["completed", "incomplete", "failed"].includes(parsed.status)) return null;
+    if (parsed.status === "completed" && !usableResponsesOutput(parsed.output)) return null;
+    if (parsed.status === "failed") return { failed: true, terminal: "failed", budgetLimited: false, evidence: "responses-failed-schema" };
+    const budgetLimited = parsed.status === "incomplete" && ((_a = parsed.incomplete_details) == null ? void 0 : _a.reason) === "max_output_tokens";
+    return {
+      terminal: parsed.status,
+      budgetLimited,
+      evidence: parsed.status === "incomplete" ? "responses-incomplete-schema" : "responses-success-schema"
+    };
+  }
+  function chatSchema(result) {
+    const parsed = parsedJson(result);
+    if (result.status !== 200 || !parsed || parsed.object !== "chat.completion" || typeof parsed.id !== "string" || !parsed.id || !Array.isArray(parsed.choices) || parsed.choices.length === 0) return null;
+    const choice = parsed.choices[0];
+    if (!choice || !Number.isInteger(choice.index) || !choice.message || choice.message.role !== "assistant") return null;
+    if (!["stop", "length", "tool_calls", "content_filter", "function_call"].includes(choice.finish_reason)) return null;
+    const content = choice.message.content;
+    const hasContent = typeof content === "string" && content.length > 0;
+    const hasTool = Array.isArray(choice.message.tool_calls) && choice.message.tool_calls.length > 0;
+    if (!hasContent && !hasTool && choice.finish_reason !== "length" && choice.finish_reason !== "content_filter") return null;
+    return {
+      terminal: choice.finish_reason,
+      budgetLimited: choice.finish_reason === "length",
+      evidence: choice.finish_reason === "length" ? "chat-length-schema" : "chat-success-schema"
+    };
+  }
+  function messagesSchema(result) {
+    const parsed = parsedJson(result);
+    if (result.status !== 200 || !parsed || parsed.type !== "message" || typeof parsed.id !== "string" || !parsed.id || parsed.role !== "assistant" || typeof parsed.model !== "string" || !parsed.model || !Array.isArray(parsed.content) || !["end_turn", "max_tokens", "stop_sequence", "tool_use"].includes(parsed.stop_reason)) return null;
+    const hasContent = parsed.content.some((part) => part && (part.type === "tool_use" || part.type === "text" && typeof part.text === "string" && part.text.length > 0));
+    if (!hasContent && parsed.stop_reason !== "max_tokens") return null;
+    return {
+      terminal: parsed.stop_reason,
+      budgetLimited: parsed.stop_reason === "max_tokens",
+      evidence: parsed.stop_reason === "max_tokens" ? "messages-max-tokens-schema" : "messages-success-schema"
+    };
+  }
+  function requestBody(protocol, modelId, budget, compatibility2 = {}) {
+    if (protocol === "responses") {
+      return { model: modelId, input: "OK", max_output_tokens: budget, stream: false };
+    }
+    if (protocol === "messages") {
+      return {
+        model: modelId,
+        system: "Reply only OK.",
+        messages: [{ role: "user", content: "OK" }],
+        max_tokens: budget,
+        stream: false
+      };
+    }
+    const role = compatibility2.instructionRole || "developer";
+    const tokenField = compatibility2.tokenField || "max_tokens";
+    return {
+      model: modelId,
+      messages: [
+        { role, content: "Reply only OK." },
+        { role: "user", content: "OK" }
+      ],
+      [tokenField]: budget,
+      stream: false
+    };
+  }
+  function featureEndpoint(endpoint, suffix, id) {
+    const apiRoot = new URL(endpoint.apiRoot.toString());
+    apiRoot.pathname = apiRoot.pathname.replace(/\/+$/, "");
+    const url = new URL(apiRoot.toString());
+    url.pathname = apiRoot.pathname + suffix;
+    return { id: `${endpoint.id}-${id}`, apiRoot, url };
+  }
+  function featureFailure(result, evidence) {
+    if (!result || result.network || result.status === 0) {
+      return featureResult("unknown", `${evidence}-network`);
+    }
+    if (authenticationRejected(result)) {
+      return featureResult("unknown", `${evidence}-authentication`);
+    }
+    if (ALWAYS_TRANSIENT_STATUSES.has(result.status)) {
+      return featureResult("unknown", `${evidence}-transient`);
+    }
+    if (result.status === 503) {
+      if (modelRejected(result) || explicitlyUnsupported(result)) {
+        return featureResult("unsupported", `${evidence}-rejected`);
+      }
+      return featureResult("unknown", `${evidence}-transient`);
+    }
+    return featureResult("unsupported", `${evidence}-rejected`);
+  }
+  function streamCollector(protocol) {
+    if (protocol === "responses") return createResponsesSseCollector();
+    if (protocol === "messages") return createMessagesSseCollector();
+    return createChatSseCollector();
+  }
+  async function probeStreamFeature({
+    protocol,
+    modelId,
+    endpoint,
+    authCandidate: authCandidate2,
+    compatibility: compatibility2,
+    requestImpl,
+    timeoutMs,
+    tried
+  }) {
+    var _a;
+    const body = {
+      ...requestBody(protocol, modelId, OUTPUT_BUDGETS[0], compatibility2),
+      stream: true
+    };
+    const result = await requestStep({
+      step: `${protocol}-stream`,
+      endpoint,
+      authCandidate: authCandidate2,
+      body,
+      requestImpl,
+      timeoutMs,
+      tried
+    });
+    if (result.status !== 200 || !String(((_a = result.headers) == null ? void 0 : _a["content-type"]) || "").toLowerCase().includes("text/event-stream")) {
+      return featureFailure(result, `${protocol}-stream`);
+    }
+    try {
+      const collector2 = streamCollector(protocol);
+      collector2.feed(result.body);
+      collector2.end();
+      return featureResult("supported", `${protocol}-stream-terminal-valid`);
+    } catch {
+      return featureResult("unsupported", `${protocol}-stream-terminal-invalid`);
+    }
+  }
+  function toolChoiceCandidates(protocol) {
+    if (protocol === "messages") {
+      return [
+        { id: "named", value: { type: "tool", name: "noop" } },
+        { id: "any", value: { type: "any" } },
+        { id: "auto", value: { type: "auto" } },
+        { id: "implicit", value: void 0 }
+      ];
+    }
+    const named = protocol === "responses" ? { type: "function", name: "noop" } : { type: "function", function: { name: "noop" } };
+    return [
+      { id: "named", value: named },
+      { id: "required", value: "required" },
+      { id: "auto", value: "auto" },
+      { id: "implicit", value: void 0 }
+    ];
+  }
+  function toolRequestBody(protocol, modelId, compatibility2, budget, toolChoice) {
+    const parameters = {
+      type: "object",
+      properties: { value: { type: "string" } },
+      required: ["value"],
+      additionalProperties: false
+    };
+    const toolChoiceField = toolChoice === void 0 ? {} : { tool_choice: toolChoice };
+    if (protocol === "responses") {
+      return {
+        model: modelId,
+        input: 'Call the noop tool once with value "ok".',
+        max_output_tokens: budget,
+        stream: false,
+        tools: [{ type: "function", name: "noop", description: "Compatibility probe.", parameters }],
+        ...toolChoiceField
+      };
+    }
+    if (protocol === "messages") {
+      return {
+        model: modelId,
+        system: "Call the requested tool exactly once.",
+        messages: [{ role: "user", content: 'Call noop with value "ok".' }],
+        max_tokens: budget,
+        stream: false,
+        tools: [{ name: "noop", description: "Compatibility probe.", input_schema: parameters }],
+        ...toolChoiceField
+      };
+    }
+    const role = compatibility2.instructionRole || "developer";
+    const tokenField = compatibility2.tokenField || "max_tokens";
+    return {
+      model: modelId,
+      messages: [
+        { role, content: "Call the requested tool exactly once." },
+        { role: "user", content: 'Call noop with value "ok".' }
+      ],
+      [tokenField]: budget,
+      stream: false,
+      tools: [{ type: "function", function: { name: "noop", description: "Compatibility probe.", parameters } }],
+      ...toolChoiceField
+    };
+  }
+  function jsonObjectText(value) {
+    if (typeof value !== "string") return false;
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed);
+    } catch {
+      return false;
+    }
+  }
+  function validToolResponse(protocol, result) {
+    var _a;
+    const parsed = parsedJson(result);
+    if (result.status !== 200 || !parsed) return false;
+    if (protocol === "responses") {
+      return parsed.object === "response" && Array.isArray(parsed.output) && parsed.output.some((item) => (item == null ? void 0 : item.type) === "function_call" && item.name === "noop" && jsonObjectText(item.arguments));
+    }
+    if (protocol === "messages") {
+      return parsed.type === "message" && Array.isArray(parsed.content) && parsed.content.some((item) => (item == null ? void 0 : item.type) === "tool_use" && item.name === "noop" && item.input && typeof item.input === "object" && !Array.isArray(item.input));
+    }
+    const choice = Array.isArray(parsed.choices) ? parsed.choices[0] : null;
+    return parsed.object === "chat.completion" && Array.isArray((_a = choice == null ? void 0 : choice.message) == null ? void 0 : _a.tool_calls) && choice.message.tool_calls.some((item) => {
+      var _a2;
+      return (item == null ? void 0 : item.type) === "function" && ((_a2 = item.function) == null ? void 0 : _a2.name) === "noop" && jsonObjectText(item.function.arguments);
+    });
+  }
+  function retryToolBudget(protocol, schema) {
+    return (schema == null ? void 0 : schema.budgetLimited) === true || protocol === "chat" && (schema == null ? void 0 : schema.terminal) === "content_filter";
+  }
+  async function probeToolFeature({
+    protocol,
+    modelId,
+    endpoint,
+    authCandidate: authCandidate2,
+    compatibility: compatibility2,
+    requestImpl,
+    timeoutMs,
+    tried
+  }) {
+    let result = null;
+    for (const candidate of toolChoiceCandidates(protocol)) {
+      for (const budget of TOOL_OUTPUT_BUDGETS) {
+        for (let networkAttempt = 0; networkAttempt < 2; networkAttempt += 1) {
+          result = await requestStep({
+            step: candidate.id === "named" ? `${protocol}-tool` : `${protocol}-tool-${candidate.id}`,
+            endpoint,
+            authCandidate: authCandidate2,
+            body: toolRequestBody(protocol, modelId, compatibility2, budget, candidate.value),
+            requestImpl,
+            timeoutMs,
+            tried
+          });
+          if (!((result == null ? void 0 : result.network) || (result == null ? void 0 : result.status) === 0)) break;
+        }
+        if (validToolResponse(protocol, result)) {
+          return featureResult("supported", `${protocol}-tool-call-valid`);
+        }
+        const failure = featureFailure(result, `${protocol}-tool`);
+        if (failure.status === "unknown") return failure;
+        const schema = protocol === "responses" ? responsesSchema(result) : protocol === "messages" ? messagesSchema(result) : chatSchema(result);
+        if (!retryToolBudget(protocol, schema)) break;
+      }
+      if ((result == null ? void 0 : result.status) !== 200 && ![400, 422].includes(result == null ? void 0 : result.status)) break;
+    }
+    return featureFailure(result, `${protocol}-tool`);
+  }
+  async function enrichAgentFeatures({
+    capability,
+    protocol,
+    modelId,
+    endpoint,
+    authCandidate: authCandidate2,
+    requestImpl,
+    timeoutMs,
+    tried
+  }) {
+    const compatibility2 = capability.compatibility || {};
+    const stream = await probeStreamFeature({
+      protocol,
+      modelId,
+      endpoint,
+      authCandidate: authCandidate2,
+      compatibility: compatibility2,
+      requestImpl,
+      timeoutMs,
+      tried
+    });
+    let next = setFeature(capability, "stream", stream);
+    next = setFeature(next, "terminal", stream.status === "supported" ? featureResult("supported", stream.evidence) : stream);
+    next = {
+      ...next,
+      stream: {
+        support: stream.status,
+        terminal: stream.status === "supported" ? "valid" : null,
+        evidence: stream.evidence
+      }
+    };
+    const tools = await probeToolFeature({
+      protocol,
+      modelId,
+      endpoint,
+      authCandidate: authCandidate2,
+      compatibility: compatibility2,
+      requestImpl,
+      timeoutMs,
+      tried
+    });
+    next = setFeature(next, "tools", tools);
+    next = { ...next, tool: { support: tools.status, evidence: tools.evidence } };
+    if (protocol === "responses") {
+      const features = await probeResponsesFeatures({
+        modelId,
+        endpoint,
+        authCandidate: authCandidate2,
+        requestImpl,
+        timeoutMs,
+        tried
+      });
+      for (const [name, result] of Object.entries(features)) next = setFeature(next, name, result);
+    }
+    if (protocol === "messages") {
+      next = setFeature(next, "countTokens", await probeCountTokensFeature({
+        modelId,
+        endpoint,
+        authCandidate: authCandidate2,
+        requestImpl,
+        timeoutMs,
+        tried
+      }));
+    }
+    return next;
+  }
+  function validResponseObject(result, object = "response") {
+    const parsed = parsedJson(result);
+    return result.status === 200 && (parsed == null ? void 0 : parsed.object) === object && typeof parsed.id === "string" && Boolean(parsed.id);
+  }
+  async function probeResponsesFeatures({
+    modelId,
+    endpoint,
+    authCandidate: authCandidate2,
+    requestImpl,
+    timeoutMs,
+    tried
+  }) {
+    const features = {};
+    const seed = await requestStep({
+      step: "responses-continuation-seed",
+      endpoint,
+      authCandidate: authCandidate2,
+      body: {
+        model: modelId,
+        input: "Reply exactly OK.",
+        max_output_tokens: OUTPUT_BUDGETS.at(-1),
+        store: true
+      },
+      requestImpl,
+      timeoutMs,
+      tried
+    });
+    const first = parsedJson(seed);
+    if (validResponseObject(seed)) {
+      const continuation = await requestStep({
+        step: "responses-continuation",
+        endpoint,
+        authCandidate: authCandidate2,
+        body: {
+          model: modelId,
+          input: "Reply exactly OK.",
+          max_output_tokens: OUTPUT_BUDGETS.at(-1),
+          previous_response_id: first.id,
+          store: false
+        },
+        requestImpl,
+        timeoutMs,
+        tried
+      });
+      features.continuation = validResponseObject(continuation) ? featureResult("supported", "responses-continuation-valid") : featureFailure(continuation, "responses-continuation");
+    } else {
+      features.continuation = featureFailure(seed, "responses-continuation");
+    }
+    const namespace = await requestStep({
+      step: "responses-namespace-tools",
+      endpoint,
+      authCandidate: authCandidate2,
+      body: {
+        model: modelId,
+        input: "Do not call tools. Reply exactly OK.",
+        max_output_tokens: OUTPUT_BUDGETS.at(-1),
+        tools: [{
+          type: "namespace",
+          name: "probe",
+          description: "Compatibility probe.",
+          tools: [{
+            type: "function",
+            name: "noop",
+            description: "Unused compatibility probe.",
+            parameters: { type: "object", properties: {} },
+            strict: false
+          }]
+        }]
+      },
+      requestImpl,
+      timeoutMs,
+      tried
+    });
+    features.namespaceTools = validResponseObject(namespace) ? featureResult("supported", "responses-namespace-tools-valid") : featureFailure(namespace, "responses-namespace-tools");
+    const compact = await requestStep({
+      step: "responses-compact",
+      endpoint: featureEndpoint(endpoint, "/responses/compact", "responses-compact"),
+      authCandidate: authCandidate2,
+      body: { model: modelId },
+      requestImpl,
+      timeoutMs,
+      tried
+    });
+    features.compact = validResponseObject(compact, "response.compaction") ? featureResult("supported", "responses-compact-valid") : featureFailure(compact, "responses-compact");
+    return features;
+  }
+  async function probeCountTokensFeature({
+    modelId,
+    endpoint,
+    authCandidate: authCandidate2,
+    requestImpl,
+    timeoutMs,
+    tried
+  }) {
+    const result = await requestStep({
+      step: "messages-count-tokens",
+      endpoint: featureEndpoint(endpoint, "/messages/count_tokens", "messages-count-tokens"),
+      authCandidate: authCandidate2,
+      body: {
+        model: modelId,
+        system: "Reply only OK.",
+        messages: [{ role: "user", content: "OK" }]
+      },
+      requestImpl,
+      timeoutMs,
+      tried
+    });
+    const parsed = parsedJson(result);
+    if (result.status === 200 && Number.isInteger(parsed == null ? void 0 : parsed.input_tokens) && parsed.input_tokens >= 0) {
+      return featureResult("supported", "messages-count-tokens-valid");
+    }
+    return featureFailure(result, "messages-count-tokens");
+  }
+  function failureClass(result) {
+    if (result.network || result.status === 0) return "network";
+    if (authenticationRejected(result)) return "authentication";
+    if (ALWAYS_TRANSIENT_STATUSES.has(result.status)) {
+      return result.status === 429 ? "rate-limited" : "upstream-transient";
+    }
+    if (result.status === 503 && !modelRejected(result) && !explicitlyUnsupported(result)) {
+      return "upstream-transient";
+    }
+    if (modelRejected(result)) return "model-unsupported";
+    if (explicitlyUnsupported(result)) return "protocol-unsupported";
+    if (pathRejected(result)) return "endpoint-unsupported";
+    if (TRANSIENT_STATUSES.has(result.status)) return "upstream-transient";
+    if (result.status === 200) return "invalid-schema";
+    return "request-rejected";
+  }
+  function failureEvidence(errorClass) {
+    const evidence = {
+      authentication: "authentication-rejected",
+      network: "network-transient",
+      "rate-limited": "rate-limited",
+      "upstream-transient": "upstream-transient",
+      "endpoint-unsupported": "verified-endpoint-unsupported",
+      "protocol-unsupported": "verified-protocol-unsupported",
+      "model-unsupported": "verified-model-unsupported",
+      "invalid-schema": "invalid-nonstream-schema",
+      "request-rejected": "provider-request-rejected"
+    };
+    return evidence[errorClass] || "provider-request-failed";
+  }
+  async function requestStep({
+    step,
+    endpoint,
+    authCandidate: authCandidate2,
+    body,
+    requestImpl,
+    timeoutMs,
+    tried
+  }) {
+    const headers = {
+      ...authCandidate2.headers,
+      accept: (body == null ? void 0 : body.stream) === true ? "text/event-stream" : "application/json",
+      "content-type": "application/json"
+    };
+    const audit = {
+      step,
+      method: "POST",
+      path: endpoint.url.pathname + endpoint.url.search,
+      apiRootId: endpoint.id,
+      authScheme: authCandidate2.scheme,
+      headerNames: Object.keys(headers).sort()
+    };
+    try {
+      const result = safeResult(await requestImpl({
+        url: endpoint.url.toString(),
+        method: "POST",
+        headers,
+        body,
+        timeoutMs,
+        streamProtocol: (body == null ? void 0 : body.stream) === true ? String(step).split("-", 1)[0] : null
+      }));
+      tried.push({ ...audit, status: result.status, outcome: "received" });
+      return result;
+    } catch {
+      tried.push({ ...audit, status: 0, outcome: "network" });
+      return { network: true, status: 0, headers: {}, body: "", redirected: false };
+    }
+  }
+  async function probeBudgeted({
+    protocol,
+    modelId,
+    endpoint,
+    authCandidate: authCandidate2,
+    compatibility: compatibility2,
+    requestImpl,
+    timeoutMs,
+    tried
+  }) {
+    const schemaFor = protocol === "responses" ? responsesSchema : messagesSchema;
+    let lastResult = null;
+    for (const budget of OUTPUT_BUDGETS) {
+      lastResult = await requestStep({
+        step: `${protocol}-${budget}`,
+        endpoint,
+        authCandidate: authCandidate2,
+        body: requestBody(protocol, modelId, budget, compatibility2),
+        requestImpl,
+        timeoutMs,
+        tried
+      });
+      if (authenticationRejected(lastResult) || pathRejected(lastResult)) {
+        return { result: lastResult, capability: null };
+      }
+      const schema = schemaFor(lastResult);
+      if (!schema) {
+        const errorClass = failureClass(lastResult);
+        return {
+          result: lastResult,
+          capability: failedCapability(protocol, endpoint, authCandidate2.scheme, errorClass, failureEvidence(errorClass))
+        };
+      }
+      if (schema.failed) {
+        return {
+          result: lastResult,
+          capability: failedCapability(protocol, endpoint, authCandidate2.scheme, "upstream-transient", schema.evidence)
+        };
+      }
+      if (!schema.budgetLimited || budget === OUTPUT_BUDGETS.at(-1)) {
+        return {
+          result: lastResult,
+          capability: supportedCapability(protocol, endpoint, authCandidate2.scheme, schema, {
+            ...compatibility2,
+            outputBudget: budget
+          })
+        };
+      }
+    }
+    return { result: lastResult, capability: null };
+  }
+  async function probeChat({ modelId, endpoint, authCandidate: authCandidate2, requestImpl, timeoutMs, tried }) {
+    const compatibility2 = { instructionRole: "developer", tokenField: "max_tokens" };
+    let result = null;
+    let schema = null;
+    let compatibilityAttempt = 0;
+    while (compatibilityAttempt < 3) {
+      compatibilityAttempt += 1;
+      result = await requestStep({
+        step: `chat-compat-${compatibilityAttempt}`,
+        endpoint,
+        authCandidate: authCandidate2,
+        body: requestBody("chat", modelId, OUTPUT_BUDGETS[0], compatibility2),
+        requestImpl,
+        timeoutMs,
+        tried
+      });
+      if (authenticationRejected(result) || pathRejected(result)) return { result, capability: null };
+      if (compatibility2.instructionRole === "developer" && developerRoleRejected(result)) {
+        compatibility2.instructionRole = "system";
+        continue;
+      }
+      if (compatibility2.tokenField === "max_tokens" && chatErrorRequestsMaxCompletionTokens(result.status, parsedJson(result))) {
+        compatibility2.tokenField = "max_completion_tokens";
+        continue;
+      }
+      schema = chatSchema(result);
+      break;
+    }
+    if (!schema) {
+      const errorClass = failureClass(result);
+      return {
+        result,
+        capability: failedCapability("chat", endpoint, authCandidate2.scheme, errorClass, failureEvidence(errorClass))
+      };
+    }
+    let budget = OUTPUT_BUDGETS[0];
+    for (let index = 1; schema.budgetLimited && index < OUTPUT_BUDGETS.length; index += 1) {
+      budget = OUTPUT_BUDGETS[index];
+      result = await requestStep({
+        step: `chat-budget-${budget}`,
+        endpoint,
+        authCandidate: authCandidate2,
+        body: requestBody("chat", modelId, budget, compatibility2),
+        requestImpl,
+        timeoutMs,
+        tried
+      });
+      schema = chatSchema(result);
+      if (!schema) {
+        const errorClass = failureClass(result);
+        return {
+          result,
+          capability: failedCapability("chat", endpoint, authCandidate2.scheme, errorClass, failureEvidence(errorClass))
+        };
+      }
+    }
+    return {
+      result,
+      capability: supportedCapability("chat", endpoint, authCandidate2.scheme, schema, {
+        ...compatibility2,
+        outputBudget: budget
+      })
+    };
+  }
+  async function probeProtocol({ protocol, profile, modelId, requestImpl, timeoutMs, tried }) {
+    var _a, _b, _c, _d, _e, _f;
+    const resource = protocol === "chat" ? "chat-completions" : protocol;
+    let endpoints;
+    let authCandidates;
+    try {
+      endpoints = buildProviderEndpointCandidates({
+        baseUrl: profile.baseUrl,
+        resource,
+        allowInsecureHttp: profile.allowInsecureHttp
+      });
+      authCandidates = buildProtocolAuthCandidates(profile, protocol);
+    } catch {
+      return failedCapability(protocol, null, null, "configuration", "provider-configuration-invalid");
+    }
+    let last = null;
+    let lastPrimary = null;
+    for (const endpoint of endpoints) {
+      for (let authIndex = 0; authIndex < authCandidates.length; authIndex += 1) {
+        const authCandidate2 = authCandidates[authIndex];
+        let outcome;
+        for (let networkAttempt = 0; networkAttempt < 2; networkAttempt += 1) {
+          outcome = protocol === "chat" ? await probeChat({ modelId, endpoint, authCandidate: authCandidate2, requestImpl, timeoutMs, tried }) : await probeBudgeted({
+            protocol,
+            modelId,
+            endpoint,
+            authCandidate: authCandidate2,
+            compatibility: {},
+            requestImpl,
+            timeoutMs,
+            tried
+          });
+          if (authIndex !== 0 || !(((_a = outcome.result) == null ? void 0 : _a.network) || ((_b = outcome.result) == null ? void 0 : _b.status) === 0)) break;
+        }
+        last = { ...outcome, endpoint, authCandidate: authCandidate2 };
+        if (authIndex === 0) lastPrimary = last;
+        if (((_c = outcome.capability) == null ? void 0 : _c.support) === "supported") {
+          return enrichAgentFeatures({
+            capability: outcome.capability,
+            protocol,
+            modelId,
+            endpoint,
+            authCandidate: authCandidate2,
+            requestImpl,
+            timeoutMs,
+            tried
+          });
+        }
+        if ((authenticationRejected(outcome.result) || ((_d = outcome.result) == null ? void 0 : _d.network) || ((_e = outcome.result) == null ? void 0 : _e.status) === 0) && authIndex + 1 < authCandidates.length) continue;
+        break;
+      }
+    }
+    const terminal = lastPrimary || last;
+    const errorClass = failureClass((terminal == null ? void 0 : terminal.result) || { status: 0, network: true });
+    return failedCapability(
+      protocol,
+      (terminal == null ? void 0 : terminal.endpoint) || null,
+      ((_f = terminal == null ? void 0 : terminal.authCandidate) == null ? void 0 : _f.scheme) || null,
+      errorClass,
+      failureEvidence(errorClass)
     );
   }
   function profileMatchesProvider(profile, provider) {
@@ -22943,19 +29700,30 @@
     }
     return [...new Set(values.filter(Boolean))];
   }
-  function modelsContainSensitiveValue(models, values) {
+  function containsSensitiveValue(value, sensitiveValues2) {
     let serialized;
     try {
-      serialized = JSON.stringify(models);
+      serialized = JSON.stringify(value);
     } catch {
       return true;
     }
-    return values.some((value) => serialized.includes(value));
+    return sensitiveValues2.some((secret) => serialized.includes(secret));
   }
-  function failure(reason, detail, tried) {
-    return { ok: false, reason, detail, tried };
+  function capabilityFailure(reason, detail, tried, capabilities = null, modelListProbe = null) {
+    return {
+      ok: false,
+      reason,
+      detail,
+      ...capabilities ? { capabilities } : {},
+      preferredProtocol: null,
+      preferredProtocolEvidence: "none-supported",
+      models: [],
+      inventory: [],
+      modelListProbe,
+      tried
+    };
   }
-  async function detectProviderDialect({
+  async function probeProviderCapabilities({
     provider,
     resolveRequestProfile,
     requestImpl = defaultRequest,
@@ -22963,137 +29731,132 @@
     timeoutMs = 8e3,
     now = Date.now
   } = {}) {
-    var _a;
     const tried = [];
-    if (!provider || provider.protocol !== "openai-compatible" || typeof resolveRequestProfile !== "function" || typeof requestImpl !== "function") {
-      return failure("configuration", "Provider dialect detection is not configured", tried);
+    if (!provider || !["openai-compatible", "anthropic"].includes(provider.protocol) || typeof resolveRequestProfile !== "function" || typeof requestImpl !== "function") {
+      return capabilityFailure("configuration", "Provider capability detection is not configured", tried);
     }
+    const selectedModel = typeof modelId === "string" ? modelId.trim() : "";
+    if (!selectedModel) return capabilityFailure("configuration", "Provider detection needs a model id", tried);
     let probeProfile = null;
     let modelProfile = null;
+    let models = [];
+    let inventory = [];
+    let modelListProbe = null;
     try {
       try {
         probeProfile = await resolveRequestProfile(provider, { scope: "probe" });
       } catch {
-        return failure("configuration", "Provider probe profile could not be resolved", tried);
       }
-      if (!profileMatchesProvider(probeProfile, provider)) {
-        return failure("configuration", "Provider probe profile does not match the provider", tried);
-      }
-      const modelsResult = await requestStep({
-        step: "models",
-        profile: probeProfile,
-        resource: "models",
-        method: "GET",
-        requestImpl,
-        timeoutMs,
-        tried
-      });
-      if (modelsResult.configuration) {
-        return failure("configuration", "Provider models endpoint is invalid", tried);
-      }
-      if (modelsResult.network || modelsResult.status === 0) {
-        return failure("network", "Network error while probing provider models", tried);
-      }
-      if (modelsResult.status === 401 || modelsResult.status === 403) {
-        return failure("authentication", "Provider rejected the resolved probe profile", tried);
-      }
-      if (modelsResult.redirected || modelsResult.status >= 300 && modelsResult.status < 400 || modelsResult.status === 404 || modelsResult.status === 405) {
-        return failure("path-unsupported", "Provider models endpoint is unavailable", tried);
-      }
-      const modelsJson = parsedJson(modelsResult);
-      const models = modelsJson ? parseModelsList(modelsJson) : [];
-      if (modelsResult.status !== 200 || models.length === 0) {
-        return failure("path-unsupported", "Provider models endpoint did not return a usable model list", tried);
-      }
-      if (modelsContainSensitiveValue(models, profileSensitiveValues(probeProfile))) {
-        return failure("path-unsupported", "Provider models endpoint returned unsafe metadata", tried);
+      if (profileMatchesProvider(probeProfile, provider)) {
+        const recordedRequest = async (input) => {
+          const url = new URL(input.url);
+          try {
+            const result = safeResult(await requestImpl(input));
+            tried.push({
+              step: "models",
+              method: "GET",
+              path: url.pathname + url.search,
+              apiRootId: null,
+              authScheme: Object.hasOwn(input.headers || {}, "authorization") ? "bearer" : Object.hasOwn(input.headers || {}, "x-api-key") ? "x-api-key" : "custom-or-none",
+              headerNames: Object.keys(input.headers || {}).map((name) => name.toLowerCase()).sort(),
+              status: result.status,
+              outcome: "received"
+            });
+            return result;
+          } catch (error) {
+            tried.push({
+              step: "models",
+              method: "GET",
+              path: url.pathname + url.search,
+              apiRootId: null,
+              authScheme: "unknown",
+              headerNames: Object.keys(input.headers || {}).map((name) => name.toLowerCase()).sort(),
+              status: 0,
+              outcome: "network"
+            });
+            throw error;
+          }
+        };
+        const modelResult = await probeProviderModels({
+          requestProfile: probeProfile,
+          protocol: provider.protocol,
+          requestImpl: recordedRequest,
+          timeoutMs
+        });
+        if (modelResult.ok) {
+          const sensitiveValues2 = profileSensitiveValues(probeProfile);
+          const candidate = {
+            status: "supported",
+            apiRoot: modelResult.apiRoot,
+            authScheme: modelResult.authScheme,
+            models: modelResult.models,
+            inventory: modelResult.inventory || []
+          };
+          if (!containsSensitiveValue(candidate, sensitiveValues2)) {
+            models = candidate.models;
+            inventory = candidate.inventory;
+            modelListProbe = candidate;
+          }
+        }
       }
       try {
         modelProfile = await resolveRequestProfile(provider, { scope: "model" });
       } catch {
-        return failure("configuration", "Provider model profile could not be resolved", tried);
+        return capabilityFailure(
+          "configuration",
+          "Provider model profile could not be resolved",
+          tried,
+          null,
+          modelListProbe
+        );
       }
       if (!profileMatchesProvider(modelProfile, provider)) {
-        return failure("configuration", "Provider model profile does not match the provider", tried);
+        return capabilityFailure(
+          "configuration",
+          "Provider model profile does not match the provider",
+          tried,
+          null,
+          modelListProbe
+        );
       }
-      const selectedModel = String(modelId || ((_a = models[0]) == null ? void 0 : _a.id) || "").trim();
-      if (!selectedModel) return failure("configuration", "Provider detection needs a model id", tried);
-      const responses = await requestStep({
-        step: "responses",
-        profile: modelProfile,
-        resource: "responses",
-        method: "POST",
-        body: { model: selectedModel },
-        requestImpl,
-        timeoutMs,
-        tried
-      });
-      if (responses.configuration) {
-        return failure("configuration", "Provider Responses endpoint is invalid", tried);
-      }
-      if (responses.network || responses.status === 0) {
-        return failure("network", "Network error while probing provider wire API", tried);
-      }
-      if (responses.status === 401 || responses.status === 403) {
-        return failure("authentication", "Provider rejected the resolved model profile", tried);
-      }
-      let wireApi = "";
-      let evidence = "";
-      if (!responses.redirected && responsesSuccess(responses)) {
-        wireApi = "responses";
-        evidence = "responses-success-schema";
-      } else if (!responses.redirected && endpointSemantic(responses, "input")) {
-        wireApi = "responses";
-        evidence = "responses-missing-input";
-      }
-      if (!wireApi) {
-        const chat = await requestStep({
-          step: "chat",
+      const capabilities = {};
+      for (const protocol of ["responses", "chat", "messages"]) {
+        capabilities[protocol] = await probeProtocol({
+          protocol,
           profile: modelProfile,
-          resource: "chat-completions",
-          method: "POST",
-          body: { model: selectedModel },
+          modelId: selectedModel,
           requestImpl,
           timeoutMs,
           tried
         });
-        if (chat.configuration) return failure("configuration", "Provider Chat endpoint is invalid", tried);
-        if (chat.network || chat.status === 0) {
-          return failure("network", "Network error while probing provider wire API", tried);
-        }
-        if (chat.status === 401 || chat.status === 403) {
-          return failure("authentication", "Provider rejected the resolved model profile", tried);
-        }
-        if (!chat.redirected && chatSuccess(chat)) {
-          wireApi = "chat";
-          evidence = "chat-success-schema";
-        } else if (!chat.redirected && endpointSemantic(chat, "messages")) {
-          wireApi = "chat";
-          evidence = "chat-missing-messages";
-        }
       }
-      if (!wireApi) {
-        return failure("dialect-incompatible", "Provider did not expose a verified Responses or Chat API", tried);
-      }
-      let detectedAt;
+      const supported = PROTOCOL_ORDER.filter((protocol) => capabilities[protocol].support === "supported");
+      let observedAt;
       try {
-        detectedAt = now();
+        observedAt = now();
       } catch {
-        detectedAt = NaN;
+        observedAt = NaN;
       }
-      if (!Number.isFinite(detectedAt) || detectedAt < 0) {
-        return failure("configuration", "Provider detection clock is invalid", tried);
+      if (!Number.isFinite(observedAt) || observedAt < 0) {
+        return capabilityFailure(
+          "configuration",
+          "Provider detection clock is invalid",
+          tried,
+          capabilities,
+          modelListProbe
+        );
       }
       return {
-        ok: true,
-        dialect: {
-          wireApi,
-          baseUrl: normalizeBaseUrl(provider.baseUrl),
-          authProfileRevision: provider.authProfileRevision,
-          detectedAt,
-          evidence
-        },
+        ok: supported.length > 0,
+        ...supported.length === 0 ? { reason: "capability-incompatible", detail: "Provider did not expose a verified Responses, Chat, or Messages API" } : {},
+        modelId: selectedModel,
+        capabilities,
+        preferredProtocol: supported[0] || null,
+        preferredProtocolEvidence: supported.length ? "observed-supported-protocol-order" : "none-supported",
+        observedAt,
         models,
+        inventory,
+        modelListProbe,
         tried
       };
     } finally {
@@ -23103,122 +29866,480 @@
   }
 
   // src/app/providerProbeFlow.js
-  function probeFailureReason(result) {
-    if ((result == null ? void 0 : result.status) === 401 || (result == null ? void 0 : result.status) === 403) return "authentication";
-    if (!(result == null ? void 0 : result.status)) return "network";
-    return "path-unsupported";
-  }
-  function persistEntry(entry, store, expectedRevision) {
-    if (!store) return { entry, stateRevision: null };
-    return store.upsert(entry, { expectedRevision });
-  }
+  var MODEL_LIST_TTL_MS2 = 36e5;
+  var DEFAULT_CAPABILITY_TTL_MS = 864e5;
+  var PROBE_REQUEST_TIMEOUT_MS = 3e4;
+  var PROTOCOLS3 = ["responses", "chat", "messages"];
+  var SUPPORTED_EVIDENCE = Object.freeze({
+    responses: /* @__PURE__ */ new Set(["responses-success-schema", "responses-incomplete-schema"]),
+    chat: /* @__PURE__ */ new Set(["chat-success-schema", "chat-length-schema"]),
+    messages: /* @__PURE__ */ new Set(["messages-success-schema", "messages-max-tokens-schema"])
+  });
+  var AGENT_FEATURE_KEYS2 = Object.freeze([
+    "compact",
+    "continuation",
+    "countTokens",
+    "namespaceTools",
+    "reasoningReplay",
+    "stream",
+    "terminal",
+    "tools"
+  ]);
+  var AGENT_FEATURE_STATUSES = /* @__PURE__ */ new Set(["unknown", "supported", "unsupported"]);
+  var APPLICABLE_AGENT_FEATURES = Object.freeze({
+    responses: /* @__PURE__ */ new Set(["compact", "continuation", "namespaceTools", "stream", "terminal", "tools"]),
+    chat: /* @__PURE__ */ new Set(["stream", "terminal", "tools"]),
+    messages: /* @__PURE__ */ new Set(["countTokens", "stream", "terminal", "tools"])
+  });
   function storeConflict() {
     const error = new Error("Provider store revision conflict");
     error.code = "PROVIDER_STORE_CONFLICT";
     return error;
   }
+  function persistEntry(entry, store, expectedRevision) {
+    if (!store) return { entry, stateRevision: null };
+    return store.upsert(entry, { expectedRevision });
+  }
+  function effectiveProbeApiRoot(provider) {
+    var _a;
+    return ((_a = provider == null ? void 0 : provider.modelList) == null ? void 0 : _a.status) === "supported" && typeof provider.modelList.apiRoot === "string" && provider.modelList.apiRoot.trim() ? provider.modelList.apiRoot : provider.baseUrl;
+  }
+  function profileAdapter(provider) {
+    return {
+      ...provider,
+      baseUrl: effectiveProbeApiRoot(provider),
+      protocol: provider.probePreference === "messages" ? "anthropic" : "openai-compatible",
+      authProfileRevision: provider.requestProfileRevision
+    };
+  }
+  function wrappedResolver(provider, resolveRequestProfile) {
+    return async (_adapter, options) => {
+      const apiRoot = (options == null ? void 0 : options.apiRoot) || effectiveProbeApiRoot(provider);
+      const profile = await resolveRequestProfile(provider, {
+        ...options,
+        apiRoot
+      });
+      return {
+        ...profile,
+        baseUrl: apiRoot,
+        authProfileRevision: provider.requestProfileRevision
+      };
+    };
+  }
+  function safeExpiry2(checkedAt, maxAgeMs) {
+    const age = Number.isFinite(maxAgeMs) && maxAgeMs > 0 ? maxAgeMs : DEFAULT_CAPABILITY_TTL_MS;
+    return Math.min(Number.MAX_SAFE_INTEGER, checkedAt + age);
+  }
+  function metadataStringList(value) {
+    return [...new Set((Array.isArray(value) ? value : []).filter((entry) => typeof entry === "string").map((entry) => entry.trim()).filter(Boolean))].sort();
+  }
+  function modelMetadata(value) {
+    const metadata = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    const task = typeof metadata.task === "string" && metadata.task.trim() ? metadata.task.trim() : null;
+    return {
+      task,
+      inputModalities: metadataStringList(metadata.inputModalities),
+      outputModalities: metadataStringList(metadata.outputModalities),
+      capabilities: metadataStringList(metadata.capabilities)
+    };
+  }
+  function modelInventory(models, inventory) {
+    const records = /* @__PURE__ */ new Map();
+    const ingest = (raw, preferMetadata) => {
+      const id = String((raw == null ? void 0 : raw.id) || "").trim();
+      const label = String((raw == null ? void 0 : raw.label) || id).trim();
+      if (!id || !label) return;
+      const previous = records.get(id);
+      records.set(id, {
+        id,
+        label: label || (previous == null ? void 0 : previous.label) || id,
+        metadata: preferMetadata || !previous ? modelMetadata(raw.metadata) : previous.metadata
+      });
+    };
+    for (const raw of Array.isArray(models) ? models : []) ingest(raw, false);
+    for (const raw of Array.isArray(inventory) ? inventory : []) ingest(raw, true);
+    const output = Array.from(records.values());
+    output.sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+    return output;
+  }
+  function authChoice(provider, scheme, scope) {
+    if (!["none", "bearer", "x-api-key", "custom"].includes(scheme)) return null;
+    let headerName = null;
+    if (scheme === "custom") {
+      const policy = scope === "probe" && provider.probeAuthOverride ? provider.probeAuthOverride : provider.credential.preferredAuth;
+      const configuredScheme = policy.kind || policy.scheme;
+      headerName = configuredScheme === "custom" ? policy.headerName : null;
+      if (!headerName) return null;
+    }
+    return { scheme, headerName };
+  }
+  function apiRootForProvider(provider, value) {
+    if (typeof value !== "string" || !value.trim()) return null;
+    try {
+      const apiRoot = new URL(value.trim());
+      return apiRoot.origin === new URL(provider.baseUrl).origin ? apiRoot.toString().replace(/\/$/, "") : null;
+    } catch {
+      return null;
+    }
+  }
+  function modelListFromProbe(provider, result, checkedAt) {
+    if (!(result == null ? void 0 : result.ok) || !result.apiRoot || !result.authScheme || checkedAt <= 0) return null;
+    const auth = authChoice(provider, result.authScheme, "probe");
+    const apiRoot = apiRootForProvider(provider, result.apiRoot);
+    const models = modelInventory(result.models, result.inventory);
+    if (!apiRoot || !auth || models.length === 0) return null;
+    const identity = JSON.stringify({ apiRoot, auth, models });
+    const currentIdentity = provider.modelList.status === "supported" ? JSON.stringify({
+      apiRoot: provider.modelList.apiRoot,
+      auth: provider.modelList.auth,
+      models: provider.modelList.models
+    }) : "";
+    const revision = identity === currentIdentity && provider.modelList.revision > 0 ? provider.modelList.revision : provider.modelList.revision + 1;
+    return {
+      revision,
+      status: "supported",
+      apiRoot,
+      auth,
+      models,
+      checkedAt,
+      validUntil: safeExpiry2(checkedAt, MODEL_LIST_TTL_MS2),
+      requestProfileRevision: provider.requestProfileRevision
+    };
+  }
+  function modelListProbeFromMatrix(matrix) {
+    const probe = matrix == null ? void 0 : matrix.modelListProbe;
+    if (!probe || probe.status !== "supported") return null;
+    return {
+      ok: true,
+      apiRoot: probe.apiRoot,
+      authScheme: probe.authScheme,
+      models: probe.models,
+      inventory: probe.inventory
+    };
+  }
+  function compatibility(protocol, raw) {
+    var _a, _b;
+    if (protocol === "responses") {
+      return { instructionMode: "responses-instructions", tokenField: "max_output_tokens" };
+    }
+    if (protocol === "messages") {
+      return { instructionMode: "messages-system", tokenField: "max_tokens" };
+    }
+    const instructionRole = (_a = raw == null ? void 0 : raw.compatibility) == null ? void 0 : _a.instructionRole;
+    const tokenField = (_b = raw == null ? void 0 : raw.compatibility) == null ? void 0 : _b.tokenField;
+    if (!["developer", "system"].includes(instructionRole) || !["max_tokens", "max_completion_tokens"].includes(tokenField)) {
+      return null;
+    }
+    return { instructionMode: `chat-${instructionRole}`, tokenField };
+  }
+  function exactFeatureObject(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const keys = Object.keys(value).sort();
+    return keys.length === AGENT_FEATURE_KEYS2.length && keys.every((key, index) => key === AGENT_FEATURE_KEYS2[index]);
+  }
+  function featureEvidenceStem(protocol, feature) {
+    if (feature === "stream" || feature === "terminal") return `${protocol}-stream`;
+    if (feature === "tools") return `${protocol}-tool`;
+    if (feature === "namespaceTools") return `${protocol}-namespace-tools`;
+    if (feature === "countTokens") return `${protocol}-count-tokens`;
+    if (feature === "reasoningReplay") return `${protocol}-reasoning-replay`;
+    return `${protocol}-${feature}`;
+  }
+  function validAgentFeatureEvidence(protocol, feature, status, evidence) {
+    if (typeof evidence !== "string" || !evidence) return false;
+    if (status === "unknown") {
+      if (evidence === "not-probed") return true;
+      const stem2 = featureEvidenceStem(protocol, feature);
+      return [`${stem2}-network`, `${stem2}-authentication`, `${stem2}-transient`].includes(evidence);
+    }
+    if (!APPLICABLE_AGENT_FEATURES[protocol].has(feature)) return false;
+    const stem = featureEvidenceStem(protocol, feature);
+    if (status === "unsupported") {
+      return evidence === `${stem}-rejected` || (feature === "stream" || feature === "terminal") && evidence === `${protocol}-stream-terminal-invalid`;
+    }
+    if (feature === "stream" || feature === "terminal") {
+      return evidence === `${protocol}-stream-terminal-valid`;
+    }
+    if (feature === "tools") return evidence === `${protocol}-tool-call-valid`;
+    return evidence === `${stem}-valid`;
+  }
+  function mappedAgentFeatures(protocol, raw) {
+    if (!exactFeatureObject(raw == null ? void 0 : raw.agentFeatures) || !exactFeatureObject(raw == null ? void 0 : raw.agentFeatureEvidence)) return null;
+    const output = {};
+    for (const feature of AGENT_FEATURE_KEYS2) {
+      const status = raw.agentFeatures[feature];
+      const evidence = raw.agentFeatureEvidence[feature];
+      if (!AGENT_FEATURE_STATUSES.has(status) || !validAgentFeatureEvidence(protocol, feature, status, evidence)) return null;
+      output[feature] = status;
+    }
+    if (output.stream !== output.terminal || raw.agentFeatureEvidence.stream !== raw.agentFeatureEvidence.terminal) return null;
+    return output;
+  }
+  function priorCapability(provider, modelId, protocol, modelListRevision, observedAt) {
+    var _a;
+    const prior = (_a = provider.modelCapabilities.find((entry) => entry.modelId === modelId)) == null ? void 0 : _a[protocol];
+    if (!prior || prior.status === "unknown") return null;
+    if (prior.requestProfileRevision !== provider.requestProfileRevision || prior.modelListRevision !== modelListRevision || prior.checkedAt > observedAt || prior.validUntil !== null && prior.validUntil < observedAt) {
+      return null;
+    }
+    return prior;
+  }
+  function stableUnsupportedEvidence(errorClass) {
+    if (errorClass === "endpoint-unsupported") return "endpoint-unsupported";
+    if (errorClass === "protocol-unsupported" || errorClass === "model-unsupported") {
+      return "model-protocol-unsupported";
+    }
+    return null;
+  }
+  function mappedCapability(provider, modelId, protocol, raw, modelListRevision, observedAt) {
+    var _a, _b, _c;
+    const prior = priorCapability(provider, modelId, protocol, modelListRevision, observedAt);
+    if (!raw || typeof raw !== "object") {
+      return prior || unknownProviderProtocolCapability({
+        requestProfileRevision: provider.requestProfileRevision,
+        modelListRevision
+      });
+    }
+    const auth = authChoice(provider, raw.authScheme, "model");
+    const apiRoot = apiRootForProvider(provider, raw.apiRoot);
+    if (raw.support === "supported") {
+      const requestCompatibility = compatibility(protocol, raw);
+      const evidence = typeof ((_a = raw.schema) == null ? void 0 : _a.evidence) === "string" ? raw.schema.evidence : null;
+      const agentFeatures = mappedAgentFeatures(protocol, raw);
+      const effectiveAgentFeatures = agentFeatures && (prior == null ? void 0 : prior.status) === "supported" ? Object.fromEntries(AGENT_FEATURE_KEYS2.map((feature) => [
+        feature,
+        agentFeatures[feature] === "unknown" ? prior.agentFeatures[feature] : agentFeatures[feature]
+      ])) : agentFeatures;
+      const maxAgeMs = (_b = raw.ttl) == null ? void 0 : _b.maxAgeMs;
+      if (apiRoot && auth && requestCompatibility && effectiveAgentFeatures && SUPPORTED_EVIDENCE[protocol].has(evidence) && Number.isFinite(maxAgeMs) && maxAgeMs > 0) {
+        return {
+          status: "supported",
+          apiRoot,
+          auth,
+          compatibility: requestCompatibility,
+          agentFeatures: effectiveAgentFeatures,
+          checkedAt: observedAt,
+          validUntil: safeExpiry2(observedAt, maxAgeMs),
+          requestProfileRevision: provider.requestProfileRevision,
+          modelListRevision,
+          evidence
+        };
+      }
+      return null;
+    }
+    if (raw.support === "unsupported" && ((_c = raw.ttl) == null ? void 0 : _c.class) === "unsupported") {
+      const evidence = stableUnsupportedEvidence(raw.errorClass);
+      const agentFeatures = mappedAgentFeatures(protocol, raw);
+      if (apiRoot && auth && evidence && agentFeatures) {
+        return {
+          status: "unsupported",
+          apiRoot,
+          auth,
+          compatibility: null,
+          agentFeatures: unknownProviderAgentFeatures(),
+          checkedAt: observedAt,
+          validUntil: null,
+          requestProfileRevision: provider.requestProfileRevision,
+          modelListRevision,
+          evidence
+        };
+      }
+      return null;
+    }
+    return prior || unknownProviderProtocolCapability({
+      requestProfileRevision: provider.requestProfileRevision,
+      modelListRevision
+    });
+  }
+  function entryWithMatrix(provider, matrix) {
+    const observedAt = matrix.observedAt;
+    if (!Number.isFinite(observedAt) || observedAt <= 0) return null;
+    const probedModelList = modelListFromProbe(
+      provider,
+      modelListProbeFromMatrix(matrix),
+      observedAt
+    );
+    const modelList = probedModelList || provider.modelList;
+    const modelId = String(matrix.modelId || "").trim();
+    if (!modelId || !matrix.capabilities || typeof matrix.capabilities !== "object") return null;
+    const mapped = {
+      modelId,
+      responses: mappedCapability(
+        provider,
+        modelId,
+        "responses",
+        matrix.capabilities.responses,
+        modelList.revision,
+        observedAt
+      ),
+      chat: mappedCapability(
+        provider,
+        modelId,
+        "chat",
+        matrix.capabilities.chat,
+        modelList.revision,
+        observedAt
+      ),
+      messages: mappedCapability(
+        provider,
+        modelId,
+        "messages",
+        matrix.capabilities.messages,
+        modelList.revision,
+        observedAt
+      )
+    };
+    if (PROTOCOLS3.some((protocol) => mapped[protocol] === null)) return null;
+    const record = mapped;
+    const previous = provider.modelCapabilities.find((entry) => entry.modelId === modelId) || null;
+    const hasKnowledge = PROTOCOLS3.some((protocol) => record[protocol].status !== "unknown");
+    const modelCapabilities = previous || hasKnowledge ? [
+      ...provider.modelCapabilities.filter((entry) => entry.modelId !== modelId),
+      record
+    ] : provider.modelCapabilities;
+    return normalizeProviderEntryV3({
+      ...provider,
+      modelList,
+      modelCapabilities
+    });
+  }
+  function probeFailureReason(result) {
+    if ((result == null ? void 0 : result.status) === 401 || (result == null ? void 0 : result.status) === 403) return "authentication";
+    if (!(result == null ? void 0 : result.status)) return "network";
+    return "path-unsupported";
+  }
+  function retryableCapabilityMatrix(matrix) {
+    if (!matrix || !matrix.capabilities || typeof matrix.capabilities !== "object") {
+      return false;
+    }
+    const retryableClasses = /* @__PURE__ */ new Set(["network", "rate-limited", "upstream-transient"]);
+    return PROTOCOLS3.some((protocol) => {
+      const capability = matrix.capabilities[protocol];
+      if ((capability == null ? void 0 : capability.support) === "transient" && retryableClasses.has(capability.errorClass)) return true;
+      if ((capability == null ? void 0 : capability.support) !== "supported") return false;
+      return ["stream", "terminal", "tools"].some((feature) => {
+        var _a, _b;
+        return ((_a = capability.agentFeatures) == null ? void 0 : _a[feature]) === "unknown" && /-(?:network|transient)$/.test(String(((_b = capability.agentFeatureEvidence) == null ? void 0 : _b[feature]) || ""));
+      });
+    });
+  }
+  function generateCapabilityAvailable(record) {
+    return PROTOCOLS3.some((protocol) => {
+      const capability = record == null ? void 0 : record[protocol];
+      return ((capability == null ? void 0 : capability.support) || (capability == null ? void 0 : capability.status)) === "supported" && ["stream", "terminal", "tools"].every(
+        (feature) => {
+          var _a;
+          return ((_a = capability.agentFeatures) == null ? void 0 : _a[feature]) === "supported";
+        }
+      );
+    });
+  }
   async function runProviderManagerProbe(provider, {
     store = null,
+    modelId,
+    forceDetect = false,
     resolveRequestProfile,
     probeProviderModelsImpl = probeProviderModels,
-    detectProviderDialectImpl = detectProviderDialect,
-    now = Date.now,
-    forceDetect = false,
-    maxAgeMs
+    probeProviderCapabilitiesImpl = probeProviderCapabilities,
+    now = Date.now
   } = {}) {
-    const normalized = normalizeProviderEntryV2(provider);
-    if (typeof resolveRequestProfile !== "function") {
+    const normalized = normalizeProviderEntryV3(provider);
+    const selectedModelId = typeof modelId === "string" ? modelId.trim() : "";
+    if (forceDetect === true && !selectedModelId) {
       return {
         ok: false,
         reason: "configuration",
-        detail: "Provider request profile resolver is unavailable"
+        detail: "Provider capability detection needs a model id"
       };
     }
+    if (typeof resolveRequestProfile !== "function") {
+      return { ok: false, reason: "configuration", detail: "Provider request profile resolver is unavailable" };
+    }
     if (store && (typeof store.readState !== "function" || typeof store.get !== "function" || typeof store.upsert !== "function")) {
-      return {
-        ok: false,
-        reason: "configuration",
-        detail: "Provider store is unavailable"
-      };
+      return { ok: false, reason: "configuration", detail: "Provider store is unavailable" };
     }
     const expectedRevision = store ? store.readState().revision : void 0;
     if (store) {
-      const rawCurrent = store.get(normalized.id);
-      const current = rawCurrent ? normalizeProviderEntryV2(rawCurrent) : null;
-      if (!current || JSON.stringify(current) !== JSON.stringify(normalized)) throw storeConflict();
-    }
-    const effectiveDialect = effectiveProviderDialect2(normalized, { now, maxAgeMs });
-    if (normalized.protocol === "openai-compatible" && (forceDetect || !effectiveDialect)) {
-      const detectResult = await detectProviderDialectImpl({
-        provider: normalized,
-        resolveRequestProfile,
-        now
-      });
-      if (!(detectResult == null ? void 0 : detectResult.ok)) {
-        return {
-          ok: false,
-          reason: (detectResult == null ? void 0 : detectResult.reason) || "configuration",
-          detail: (detectResult == null ? void 0 : detectResult.detail) || "Provider dialect detection failed",
-          detectResult
-        };
+      const current = store.get(normalized.id);
+      if (!current || JSON.stringify(normalizeProviderEntryV3(current)) !== JSON.stringify(normalized)) {
+        throw storeConflict();
       }
-      const detectedAt = typeof now === "function" ? now() : Date.now();
-      const entry = normalizeProviderEntryV2({
-        ...normalized,
-        dialect: {
-          override: normalized.dialect.override,
-          detected: detectResult.dialect
-        },
-        probedModels: detectResult.models || [],
-        probedAt: detectedAt
-      });
-      const persisted = persistEntry(entry, store, expectedRevision);
-      return {
-        ok: true,
-        entry: persisted.entry,
-        stateRevision: persisted.stateRevision,
-        result: detectResult
-      };
     }
-    let requestProfile = null;
-    try {
+    if (!selectedModelId) {
+      let requestProfile = null;
       try {
         requestProfile = await resolveRequestProfile(normalized, { scope: "probe" });
-      } catch {
-        return {
-          ok: false,
-          reason: "configuration",
-          detail: "Provider probe profile could not be resolved"
-        };
+        const result = await probeProviderModelsImpl({
+          requestProfile,
+          protocol: normalized.probePreference === "messages" ? "anthropic" : "openai-compatible"
+        });
+        if (!(result == null ? void 0 : result.ok)) {
+          return {
+            ok: false,
+            reason: probeFailureReason(result),
+            detail: (result == null ? void 0 : result.detail) || "Provider model probe failed",
+            result
+          };
+        }
+        const checkedAt = typeof now === "function" ? now() : Date.now();
+        const modelList = modelListFromProbe(normalized, result, checkedAt);
+        if (!modelList) {
+          return { ok: false, reason: "configuration", detail: "Provider model probe result is invalid", result };
+        }
+        const entry2 = normalizeProviderEntryV3({ ...normalized, modelList });
+        const persisted2 = persistEntry(entry2, store, expectedRevision);
+        return { ok: true, entry: persisted2.entry, stateRevision: persisted2.stateRevision, result };
+      } finally {
+        requestProfile = null;
       }
-      const result = await probeProviderModelsImpl({
-        requestProfile,
-        protocol: normalized.protocol
-      });
-      if (!(result == null ? void 0 : result.ok)) {
-        return {
-          ok: false,
-          reason: probeFailureReason(result),
-          detail: (result == null ? void 0 : result.detail) || "Provider model probe failed",
-          result
-        };
-      }
-      const probedAt = typeof now === "function" ? now() : Date.now();
-      const entry = normalizeProviderEntryV2({
-        ...normalized,
-        probedModels: result.models || [],
-        probedAt
-      });
-      const persisted = persistEntry(entry, store, expectedRevision);
-      return {
-        ok: true,
-        entry: persisted.entry,
-        stateRevision: persisted.stateRevision,
-        result
-      };
-    } finally {
-      requestProfile = null;
     }
+    const probeOptions = {
+      provider: profileAdapter(normalized),
+      modelId: selectedModelId,
+      resolveRequestProfile: wrappedResolver(normalized, resolveRequestProfile),
+      timeoutMs: PROBE_REQUEST_TIMEOUT_MS,
+      now
+    };
+    let matrix = await probeProviderCapabilitiesImpl(probeOptions);
+    let matrixAttempts = 1;
+    while (matrixAttempts < 3 && String((matrix == null ? void 0 : matrix.modelId) || "").trim() === selectedModelId && retryableCapabilityMatrix(matrix)) {
+      matrix = await probeProviderCapabilitiesImpl(probeOptions);
+      matrixAttempts += 1;
+    }
+    if (String((matrix == null ? void 0 : matrix.modelId) || "").trim() !== selectedModelId) {
+      return {
+        ok: false,
+        reason: "configuration",
+        detail: "Provider capability detection returned a different model id",
+        result: matrix
+      };
+    }
+    const entry = entryWithMatrix(normalized, matrix);
+    if (!entry) {
+      return {
+        ok: false,
+        reason: (matrix == null ? void 0 : matrix.reason) || "configuration",
+        detail: (matrix == null ? void 0 : matrix.detail) || "Provider capability detection failed",
+        result: matrix
+      };
+    }
+    const changed = JSON.stringify(entry) !== JSON.stringify(normalized);
+    const persisted = changed ? persistEntry(entry, store, expectedRevision) : { entry, stateRevision: null };
+    const ready = generateCapabilityAvailable(
+      entry.modelCapabilities.find((record) => record.modelId === selectedModelId)
+    );
+    return {
+      ok: ready,
+      ...!ready ? {
+        reason: matrix.reason || "capability-incompatible",
+        detail: matrix.detail || "Provider did not expose a verified agent-ready protocol"
+      } : {},
+      entry: persisted.entry,
+      stateRevision: persisted.stateRevision,
+      result: matrix,
+      capabilities: matrix.capabilities,
+      preferredProtocol: matrix.preferredProtocol || null
+    };
   }
 
   // src/app/providerInitState.js
@@ -23243,35 +30364,34 @@
   ]);
   function providerInitFailure(error) {
     const code = typeof (error == null ? void 0 : error.code) === "string" ? error.code : "";
-    let failure2 = "PROVIDER_INITIALIZATION_FAILED";
-    if (HELPER_FAILURE_CODES.has(code)) failure2 = "PLATFORM_HELPER_REPAIR_REQUIRED";
-    else if (code === "PROVIDER_STORE_INVALID") failure2 = "PROVIDER_STORE_CORRUPT";
-    else if (code === "PROVIDER_STORE_UNAVAILABLE") failure2 = "PROVIDER_STORE_UNAVAILABLE";
-    else if (MIGRATION_FAILURE_CODES.has(code)) failure2 = "PROVIDER_MIGRATION_CONFLICT";
-    else if (SECRET_MISMATCH_CODES.has(code)) failure2 = "PROVIDER_SECRET_MISMATCH";
-    return { state: "unavailable", error: failure2 };
+    let failure = "PROVIDER_INITIALIZATION_FAILED";
+    if (HELPER_FAILURE_CODES.has(code)) failure = "PLATFORM_HELPER_REPAIR_REQUIRED";
+    else if (code === "PROVIDER_STORE_INVALID") failure = "PROVIDER_STORE_CORRUPT";
+    else if (code === "PROVIDER_STORE_UNAVAILABLE") failure = "PROVIDER_STORE_UNAVAILABLE";
+    else if (MIGRATION_FAILURE_CODES.has(code)) failure = "PROVIDER_MIGRATION_CONFLICT";
+    else if (SECRET_MISMATCH_CODES.has(code)) failure = "PROVIDER_SECRET_MISMATCH";
+    return { state: "unavailable", error: failure };
   }
 
   // src/components/settings/ProviderManagerSection.jsx
   var import_react42 = __toESM(require_react(), 1);
 
   // src/lib/providerManagerState.js
+  function defaultProviderModelAuthKind(protocol) {
+    return protocol === "anthropic" ? "x-api-key" : "bearer";
+  }
   function emptyDraft() {
     return {
       id: "",
       name: "",
-      protocol: "openai-compatible",
       baseUrl: "",
       allowInsecureHttp: false,
-      modelAuthKind: "bearer",
+      modelAuthKind: "auto",
+      modelAuthAutomatic: false,
       modelAuthHeaderName: "",
       modelAuthSecret: "",
-      probeAuthMode: "inherit-model",
-      probeAuthKind: "none",
-      probeAuthHeaderName: "",
-      probeAuthSecret: "",
       headers: [],
-      dialectOverride: ""
+      probePreference: ""
     };
   }
   function headerDraft(header) {
@@ -23293,25 +30413,29 @@
       value: ""
     };
   }
-  function draftFromEntry(entry) {
-    var _a, _b, _c, _d;
+  function legacyAuth(entry) {
+    var _a;
     const model = ((_a = entry == null ? void 0 : entry.auth) == null ? void 0 : _a.model) || { kind: "none" };
-    const probe = ((_b = entry == null ? void 0 : entry.auth) == null ? void 0 : _b.probe) || { kind: "inherit-model" };
     return {
+      scheme: model.kind || "none",
+      headerName: model.kind === "custom" ? model.headerName : null
+    };
+  }
+  function draftFromEntry(entry) {
+    var _a, _b, _c;
+    const auth = ((_a = entry == null ? void 0 : entry.credential) == null ? void 0 : _a.preferredAuth) || legacyAuth(entry);
+    const legacyProbePreference = ((_c = (_b = entry == null ? void 0 : entry.dialect) == null ? void 0 : _b.override) == null ? void 0 : _c.source) === "manual" ? entry.dialect.override.wireApi : "";
+    return {
+      ...emptyDraft(),
       id: String((entry == null ? void 0 : entry.id) || ""),
       name: String((entry == null ? void 0 : entry.name) || ""),
-      protocol: (entry == null ? void 0 : entry.protocol) || "openai-compatible",
       baseUrl: String((entry == null ? void 0 : entry.baseUrl) || ""),
       allowInsecureHttp: (entry == null ? void 0 : entry.allowInsecureHttp) === true,
-      modelAuthKind: model.kind || "none",
-      modelAuthHeaderName: model.kind === "custom" ? model.headerName : "",
-      modelAuthSecret: "",
-      probeAuthMode: probe.kind === "inherit-model" ? "inherit-model" : "separate",
-      probeAuthKind: probe.kind === "inherit-model" ? "none" : probe.kind,
-      probeAuthHeaderName: probe.kind === "custom" ? probe.headerName : "",
-      probeAuthSecret: "",
+      modelAuthKind: auth.scheme || "auto",
+      modelAuthAutomatic: false,
+      modelAuthHeaderName: auth.scheme === "custom" ? String(auth.headerName || "") : "",
       headers: Array.isArray(entry == null ? void 0 : entry.headers) ? entry.headers.map(headerDraft) : [],
-      dialectOverride: ((_d = (_c = entry == null ? void 0 : entry.dialect) == null ? void 0 : _c.override) == null ? void 0 : _d.wireApi) || ""
+      probePreference: String((entry == null ? void 0 : entry.probePreference) || legacyProbePreference || "")
     };
   }
   function validateDraft(draft) {
@@ -23342,40 +30466,128 @@
   }
 
   // src/lib/providerDialectBadge.js
-  var DEFAULT_DIALECT_SOURCE_LABELS = {
-    "ccswitch-import": { zh: "\u6765\u81EA cc-switch", en: "from cc-switch" },
-    "legacy-v0.9": { zh: "\u65E7\u7248\u8BBE\u7F6E", en: "legacy setting" },
-    detected: { zh: "\u81EA\u52A8\u68C0\u6D4B", en: "auto-detected" },
-    manual: { zh: "\u624B\u52A8\u8BBE\u7F6E", en: "manual" },
-    unconfirmed: { zh: "\u672A\u786E\u8BA4", en: "unconfirmed" }
-  };
-  function translatedLabel(source, lang, sourceLabels) {
-    const labels = sourceLabels || DEFAULT_DIALECT_SOURCE_LABELS;
-    const entry = labels[source] || DEFAULT_DIALECT_SOURCE_LABELS[source];
-    return (entry == null ? void 0 : entry[lang]) || (entry == null ? void 0 : entry.zh) || (entry == null ? void 0 : entry.en) || "";
-  }
-  function providerDialectBadge(provider, lang = "zh", sourceLabels = DEFAULT_DIALECT_SOURCE_LABELS, options = {}) {
-    var _a;
-    if (!provider || provider.protocol !== "openai-compatible") return null;
-    const wireApi = effectiveProviderDialect(provider, options);
-    if (!wireApi) {
+  var CLIENT_LABELS = Object.freeze({
+    codex: "Codex",
+    "claude-code": "Claude"
+  });
+  function providerClientRouteBadge(provider, {
+    client,
+    modelId,
+    lang = "zh",
+    now
+  } = {}) {
+    const clientLabel = CLIENT_LABELS[client];
+    if (!clientLabel) return null;
+    const selectedModelId = String(modelId || "").trim();
+    if (!selectedModelId) {
       return {
-        label: "unconfirmed",
-        title: translatedLabel("unconfirmed", lang, sourceLabels)
+        label: `${clientLabel} \xB7 ${lang === "en" ? "select model" : "\u8BF7\u9009\u6A21\u578B"}`,
+        title: lang === "en" ? "Select a model to inspect its Provider route." : "\u9009\u62E9\u6A21\u578B\u540E\u53EF\u67E5\u770B\u8BE5 Provider \u7684\u9010\u6A21\u578B\u9009\u8DEF\u3002",
+        status: "warn"
       };
     }
-    const source = ((_a = provider.dialect) == null ? void 0 : _a.override) ? provider.dialect.override.source : "detected";
+    const route = selectProviderRoute(provider, {
+      client,
+      modelId: selectedModelId,
+      feature: "generate",
+      now
+    });
+    if (route.ok) {
+      return {
+        label: `${clientLabel} \xB7 ${providerRouteLabel(route, lang)}`,
+        title: lang === "en" ? `Current route for ${selectedModelId}` : `${selectedModelId} \u7684\u5F53\u524D\u9009\u8DEF`,
+        status: "neutral"
+      };
+    }
+    if (route.reasonCode === "needs-probe") {
+      return {
+        label: `${clientLabel} \xB7 ${lang === "en" ? "probe required" : "\u9700\u63A2\u6D4B"}`,
+        title: lang === "en" ? `Probe ${selectedModelId} before selecting a protocol route.` : `\u9700\u5148\u63A2\u6D4B ${selectedModelId} \u7684\u534F\u8BAE\u4E0E Agent \u7279\u6027\u3002`,
+        status: "warn"
+      };
+    }
     return {
-      label: wireApi,
-      title: translatedLabel(source, lang, sourceLabels)
+      label: `${clientLabel} \xB7 ${lang === "en" ? "unavailable" : "\u4E0D\u53EF\u7528"}`,
+      title: lang === "en" ? `No verified route is available for ${selectedModelId}.` : `${selectedModelId} \u6682\u65E0\u5DF2\u9A8C\u8BC1\u7684\u53EF\u7528\u9009\u8DEF\u3002`,
+      status: "error"
     };
   }
 
   // src/components/settings/ProviderManagerSection.jsx
   var import_jsx_runtime40 = __toESM(require_jsx_runtime(), 1);
   var L4 = {
-    zh: { title: "Provider \u7BA1\u7406", add: "\u65B0\u589E", edit: "\u7F16\u8F91", del: "\u5220\u9664", probe: "\u63A2\u6D4B\u6A21\u578B", redetect: "\u91CD\u65B0\u68C0\u6D4B", probing: "\u63A2\u6D4B\u4E2D\u2026", save: "\u4FDD\u5B58", cancel: "\u53D6\u6D88", name: "\u540D\u79F0", protocol: "\u534F\u8BAE", baseUrl: "Base URL", secret: "\u6A21\u578B\u51ED\u636E", probeSecret: "\u63A2\u6D4B\u51ED\u636E", secretCap: "\u5199\u5165\u7CFB\u7EDF\u51ED\u636E\u5E93\uFF1B\u7F16\u8F91\u65F6\u7559\u7A7A\u8868\u793A\u4FDD\u7559\u539F\u51ED\u636E", models: (n) => `${n} \u4E2A\u6A21\u578B`, probeFailed: "\u63A2\u6D4B\u5931\u8D25\uFF08\u53EF\u624B\u586B\u6A21\u578B ID \u7EE7\u7EED\u4F7F\u7528\uFF09\uFF1A", importCc: "\u4ECE cc-switch \u5BFC\u5165", insecure: "\u5141\u8BB8\u975E\u56DE\u73AF HTTP\uFF08\u4FDD\u5B58\u65F6\u518D\u6B21\u786E\u8BA4\uFF09", dialect: "API \u65B9\u8A00", inherit: "\u7EE7\u627F\u6A21\u578B\u51ED\u636E", separate: "\u5355\u72EC\u914D\u7F6E", extraHeaders: "\u989D\u5916\u8BF7\u6C42\u5934", addHeader: "\u65B0\u589E\u8BF7\u6C42\u5934", removeHeader: "\u79FB\u9664", headerName: "Header \u540D\u79F0", literal: "\u666E\u901A\u6587\u672C", secretValue: "\u7CFB\u7EDF\u51ED\u636E", scopeProbe: "\u63A2\u6D4B", scopeModel: "\u6A21\u578B\u8BF7\u6C42" },
-    en: { title: "Provider manager", add: "Add", edit: "Edit", del: "Delete", probe: "Probe models", redetect: "Re-detect", probing: "Probing\u2026", save: "Save", cancel: "Cancel", name: "Name", protocol: "Protocol", baseUrl: "Base URL", secret: "Model credential", probeSecret: "Probe credential", secretCap: "Stored in the system credential store; leave blank while editing to retain it", models: (n) => `${n} models`, probeFailed: "Probe failed (manual model id still works): ", importCc: "Import from cc-switch", insecure: "Allow non-loopback HTTP (confirmed again on save)", dialect: "API dialect", inherit: "Inherit model credential", separate: "Configure separately", extraHeaders: "Extra headers", addHeader: "Add header", removeHeader: "Remove", headerName: "Header name", literal: "Literal text", secretValue: "Credential store", scopeProbe: "Probe", scopeModel: "Model request" }
+    zh: {
+      title: "Provider \u7BA1\u7406",
+      add: "\u65B0\u589E",
+      edit: "\u7F16\u8F91",
+      del: "\u5220\u9664",
+      probe: "\u63A2\u6D4B\u6A21\u578B",
+      redetect: "\u91CD\u65B0\u63A2\u6D4B\u5F53\u524D\u6A21\u578B",
+      probing: "\u63A2\u6D4B\u4E2D\u2026",
+      save: "\u4FDD\u5B58",
+      cancel: "\u53D6\u6D88",
+      name: "\u540D\u79F0",
+      baseUrl: "Base URL",
+      apiKey: "API Key",
+      autoAuthCap: "\u81EA\u52A8\u8BC6\u522B Authorization: Bearer\u3001x-api-key \u6216\u65E0\u8BA4\u8BC1\uFF1B\u53EA\u9700\u586B\u5199\u5E73\u53F0\u7ED9\u51FA\u7684 API Key\u3002\u5BC6\u94A5\u5199\u5165\u7CFB\u7EDF\u51ED\u636E\u5E93\uFF0C\u7F16\u8F91\u65F6\u7559\u7A7A\u8868\u793A\u4FDD\u7559\u3002",
+      overrideAuthCap: "\u5DF2\u542F\u7528\u9AD8\u7EA7\u8BA4\u8BC1\u89C4\u5219\uFF1B\u5BC6\u94A5\u5199\u5165\u7CFB\u7EDF\u51ED\u636E\u5E93\uFF0C\u7F16\u8F91\u65F6\u7559\u7A7A\u8868\u793A\u4FDD\u7559\u3002",
+      noApiKey: "\u9AD8\u7EA7\u8BBE\u7F6E\u4E3A\u65E0\u9700\u51ED\u636E\u3002",
+      advancedAuth: "\u9AD8\u7EA7\u8BA4\u8BC1\u4E0E\u8BF7\u6C42\u5934",
+      authType: "\u8BA4\u8BC1\u89C4\u5219",
+      probePreference: "\u63A2\u6D4B\u4F18\u5148\u534F\u8BAE",
+      probePreferenceCap: "\u4EC5\u8C03\u6574\u63A2\u6D4B\u987A\u5E8F\uFF1B\u5B9E\u9645\u8DEF\u7531\u6BCF\u4E2A\u6A21\u578B\u7684\u80FD\u529B\u77E9\u9635\u51B3\u5B9A\u3002",
+      auto: "\u81EA\u52A8\uFF08\u63A8\u8350\uFF09",
+      models: (n) => `${n} \u4E2A\u6A21\u578B`,
+      probeFailed: "\u63A2\u6D4B\u5931\u8D25\uFF1A",
+      importCc: "\u4ECE cc-switch \u5BFC\u5165",
+      insecure: "\u5141\u8BB8\u975E\u56DE\u73AF HTTP\uFF08\u4FDD\u5B58\u65F6\u518D\u6B21\u786E\u8BA4\uFF09",
+      extraHeaders: "\u989D\u5916\u8BF7\u6C42\u5934",
+      addHeader: "\u65B0\u589E\u8BF7\u6C42\u5934",
+      removeHeader: "\u79FB\u9664",
+      headerName: "Header \u540D\u79F0",
+      literal: "\u666E\u901A\u6587\u672C",
+      secretValue: "\u7CFB\u7EDF\u51ED\u636E",
+      scopeProbe: "\u63A2\u6D4B",
+      scopeModel: "\u6A21\u578B\u8BF7\u6C42",
+      perModel: "\u9010\u6A21\u578B",
+      selected: "\u5DF2\u9009"
+    },
+    en: {
+      title: "Provider manager",
+      add: "Add",
+      edit: "Edit",
+      del: "Delete",
+      probe: "Probe models",
+      redetect: "Re-probe current model",
+      probing: "Probing\u2026",
+      save: "Save",
+      cancel: "Cancel",
+      name: "Name",
+      baseUrl: "Base URL",
+      apiKey: "API Key",
+      autoAuthCap: "Automatically detects Authorization: Bearer, x-api-key, or no authentication. Enter the API key supplied by the platform. It is stored in the system credential store; leave blank while editing to retain it.",
+      overrideAuthCap: "An advanced authentication rule is active. The key is stored in the system credential store; leave blank while editing to retain it.",
+      noApiKey: "Advanced settings specify that no credential is required.",
+      advancedAuth: "Advanced authentication and headers",
+      authType: "Authentication rule",
+      probePreference: "Probe protocol preference",
+      probePreferenceCap: "Changes probe order only; each model's capability matrix determines its actual route.",
+      auto: "Auto (recommended)",
+      models: (n) => `${n} models`,
+      probeFailed: "Probe failed: ",
+      importCc: "Import from cc-switch",
+      insecure: "Allow non-loopback HTTP (confirmed again on save)",
+      extraHeaders: "Extra headers",
+      addHeader: "Add header",
+      removeHeader: "Remove",
+      headerName: "Header name",
+      literal: "Literal text",
+      secretValue: "Credential store",
+      scopeProbe: "Probe",
+      scopeModel: "Model request",
+      perModel: "per-model",
+      selected: "selected"
+    }
   };
   function SecretInput({ name, disabled = false }) {
     return /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
@@ -23406,10 +30618,29 @@
     while (headers.some((header) => header.id === `header-${index}`)) index += 1;
     return `header-${index}`;
   }
-  function ProviderManagerSection({ lang = "zh", providers = [], onUpsert, onRemove, onProbe, probing = "", probeErrors = {}, ccSwitch = null, onImportCcSwitch, disabled = false }) {
+  function providerModelCount(provider) {
+    var _a;
+    if (Array.isArray((_a = provider == null ? void 0 : provider.modelList) == null ? void 0 : _a.models)) return provider.modelList.models.length;
+    return Array.isArray(provider == null ? void 0 : provider.probedModels) ? provider.probedModels.length : 0;
+  }
+  function ProviderManagerSection({
+    lang = "zh",
+    providers = [],
+    activeProviderId = "",
+    activeModelId = "",
+    onUpsert,
+    onRemove,
+    onProbe,
+    probing = "",
+    probeErrors = {},
+    ccSwitch = null,
+    onImportCcSwitch,
+    disabled = false
+  }) {
     const t = L4[lang] || L4.zh;
     const [draft, setDraft] = import_react42.default.useState(null);
     const [error, setError] = import_react42.default.useState("");
+    const currentModelId = String(activeModelId || "").trim();
     const save = async (event) => {
       var _a;
       event.preventDefault();
@@ -23432,30 +30663,36 @@
     return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { style: { flex: 1, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.title }),
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: (e) => {
-          e.preventDefault();
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: (event) => {
+          event.preventDefault();
           setDraft(emptyDraft());
         }, children: t.add })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
         ccSwitch && onImportCcSwitch ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "secondary", size: "sm", icon: "download", disabled, onClick: onImportCcSwitch, children: t.importCc }) : null,
         providers.map((provider) => {
-          const dialectBadge = providerDialectBadge(provider, lang);
-          return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: "6px 8px", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { style: { flex: 1, minWidth: 0, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.name }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: "neutral", children: provider.protocol }),
-              dialectBadge ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { title: dialectBadge.title, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: dialectBadge.label === "unconfirmed" ? "warn" : "neutral", children: dialectBadge.label }) }) : null,
-              provider.probedModels.length ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: "ok", children: t.models(provider.probedModels.length) }) : null,
+          const modelCount = providerModelCount(provider);
+          const selected = provider.id === activeProviderId;
+          const routeBadges = ["codex", "claude-code"].map((client) => providerClientRouteBadge(provider, { client, modelId: currentModelId, lang })).filter(Boolean);
+          const canRedetectCurrentModel = Boolean(currentModelId && Array.isArray(provider.modelCapabilities));
+          return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { "data-provider-id": provider.id, style: { display: "flex", flexDirection: "column", gap: 4, padding: "6px 8px", border: `1px solid ${selected ? "var(--accent-border)" : "var(--border-default)"}`, borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { style: { flex: 1, minWidth: 120, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.name }),
+              selected ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: "accent", children: t.selected }) : null,
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: "neutral", children: t.perModel }),
+              modelCount ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: "ok", children: t.models(modelCount) }) : null
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { style: { display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }, children: routeBadges.map((badge) => /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { title: badge.title, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: badge.status, children: badge.label }) }, badge.label)) }),
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.baseUrl }),
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", disabled: disabled || probing === provider.id, onClick: () => onProbe(provider), children: probing === provider.id ? t.probing : t.probe }),
-              provider.protocol === "openai-compatible" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", disabled: disabled || probing === provider.id, onClick: () => onProbe(provider, { forceDetect: true }), children: t.redetect }) : null,
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", disabled: disabled || probing === provider.id || !canRedetectCurrentModel, onClick: () => onProbe(provider, { forceDetect: true, modelId: currentModelId }), children: t.redetect }),
               /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => {
                 setDraft(draftFromEntry(provider));
                 setError("");
               }, children: t.edit }),
               /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => onRemove(provider), children: t.del })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.baseUrl }),
             probeErrors[provider.id] ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: [
               t.probeFailed,
               probeErrors[provider.id]
@@ -23464,39 +30701,46 @@
         }),
         draft ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("form", { onSubmit: save, style: { display: "flex", flexDirection: "column", gap: 6, padding: "8px", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { value: draft.name, onChange: (value) => setDraft({ ...draft, name: value }) }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.protocol, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: draft.protocol, onChange: (value) => setDraft({ ...draft, protocol: value }), options: [{ value: "openai-compatible", label: "OpenAI compatible" }, { value: "anthropic", label: "Anthropic" }] }) }),
           /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.baseUrl, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { mono: true, value: draft.baseUrl, onChange: (value) => setDraft({ ...draft, baseUrl: value }), placeholder: "https://api.example.com/v1" }) }),
           /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("label", { style: { display: "flex", gap: 6, alignItems: "center", font: "400 11px/1.35 var(--font-ui)" }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("input", { type: "checkbox", checked: draft.allowInsecureHttp, onChange: (event) => setDraft({ ...draft, allowInsecureHttp: event.target.checked }) }),
             t.insecure
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(Field, { label: t.secret, caption: t.secretCap, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: draft.modelAuthKind, onChange: (value) => setDraft({ ...draft, modelAuthKind: value }), options: [{ value: "none", label: "None" }, { value: "bearer", label: "Bearer" }, { value: "x-api-key", label: "x-api-key" }, { value: "custom", label: "Custom header" }] }),
-            draft.modelAuthKind === "custom" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { mono: true, value: draft.modelAuthHeaderName, onChange: (value) => setDraft({ ...draft, modelAuthHeaderName: value }), placeholder: "x-provider-token" }) : null,
-            draft.modelAuthKind !== "none" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.apiKey, caption: draft.modelAuthKind === "auto" ? t.autoAuthCap : t.overrideAuthCap, children: draft.modelAuthKind !== "none" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) : /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.noApiKey }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("details", { "data-provider-advanced-auth": true, style: { border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", padding: "5px 6px" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("summary", { style: { cursor: "pointer", font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: t.advancedAuth }),
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(Field, { label: t.authType, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: draft.modelAuthKind, onChange: (value) => setDraft({ ...draft, modelAuthKind: value, modelAuthAutomatic: false }), options: [
+                  { value: "auto", label: t.auto },
+                  { value: "bearer", label: "Authorization: Bearer" },
+                  { value: "x-api-key", label: "x-api-key" },
+                  { value: "custom", label: "Custom header" },
+                  { value: "none", label: "None" }
+                ] }),
+                draft.modelAuthKind === "custom" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { mono: true, value: draft.modelAuthHeaderName, onChange: (value) => setDraft({ ...draft, modelAuthHeaderName: value }), placeholder: "x-provider-token" }) : null
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.probePreference, caption: t.probePreferenceCap, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: draft.probePreference, onChange: (value) => setDraft({ ...draft, probePreference: value }), options: [
+                { value: "", label: t.auto },
+                { value: "responses", label: "Responses" },
+                { value: "chat", label: "Chat Completions" },
+                { value: "messages", label: "Messages" }
+              ] }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.extraHeaders, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+                draft.headers.map((header, index) => /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: 6, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)" }, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { mono: true, value: header.name, onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, name: value } : item) }), placeholder: t.headerName }),
+                  /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: header.valueKind, onChange: (valueKind) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, valueKind, value: valueKind === "literal" ? item.value || "" : "" } : item) }), options: [{ value: "literal", label: t.literal }, { value: "secret", label: t.secretValue }] }),
+                  header.valueKind === "secret" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(SecretInput, { name: `headerSecret:${header.id}`, disabled }) : /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { mono: true, value: header.value || "", onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, value } : item) }) }),
+                  /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { style: { display: "flex", gap: 10 }, children: ["probe", "model"].map((scope) => /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 4, font: "400 10px/1.35 var(--font-ui)" }, children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("input", { type: "checkbox", checked: header.scopes.includes(scope), onChange: (event) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, scopes: event.target.checked ? [.../* @__PURE__ */ new Set([...item.scopes, scope])] : item.scopes.filter((value) => value !== scope) } : item) }) }),
+                    scope === "probe" ? t.scopeProbe : t.scopeModel
+                  ] }, scope)) }),
+                  /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => setDraft({ ...draft, headers: draft.headers.filter((_, itemIndex) => itemIndex !== index) }), children: t.removeHeader })
+                ] }, header.id)),
+                /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: () => setDraft({ ...draft, headers: [...draft.headers, { id: nextHeaderId(draft.headers), name: "", scopes: ["model"], valueKind: "literal", value: "" }] }), children: t.addHeader })
+              ] }) })
+            ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(Field, { label: t.probeSecret, caption: t.secretCap, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: draft.probeAuthMode, onChange: (value) => setDraft({ ...draft, probeAuthMode: value }), options: [{ value: "inherit-model", label: t.inherit }, { value: "separate", label: t.separate }] }),
-            draft.probeAuthMode === "separate" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_react42.default.Fragment, { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: draft.probeAuthKind, onChange: (value) => setDraft({ ...draft, probeAuthKind: value }), options: [{ value: "none", label: "None" }, { value: "bearer", label: "Bearer" }, { value: "x-api-key", label: "x-api-key" }, { value: "custom", label: "Custom header" }] }),
-              draft.probeAuthKind === "custom" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { mono: true, value: draft.probeAuthHeaderName, onChange: (value) => setDraft({ ...draft, probeAuthHeaderName: value }), placeholder: "x-provider-token" }) : null,
-              draft.probeAuthKind !== "none" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(SecretInput, { name: "probeAuthSecret", disabled }) : null
-            ] }) : null
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.extraHeaders, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-            draft.headers.map((header, index) => /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: 6, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { mono: true, value: header.name, onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, name: value } : item) }), placeholder: t.headerName }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: header.valueKind, onChange: (valueKind) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, valueKind, value: valueKind === "literal" ? item.value || "" : "" } : item) }), options: [{ value: "literal", label: t.literal }, { value: "secret", label: t.secretValue }] }),
-              header.valueKind === "secret" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(SecretInput, { name: `headerSecret:${header.id}`, disabled }) : /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { mono: true, value: header.value || "", onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, value } : item) }) }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { style: { display: "flex", gap: 10 }, children: ["probe", "model"].map((scope) => /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 4, font: "400 10px/1.35 var(--font-ui)" }, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("input", { type: "checkbox", checked: header.scopes.includes(scope), onChange: (event) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, scopes: event.target.checked ? [.../* @__PURE__ */ new Set([...item.scopes, scope])] : item.scopes.filter((value) => value !== scope) } : item) }) }),
-                scope === "probe" ? t.scopeProbe : t.scopeModel
-              ] }, scope)) }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => setDraft({ ...draft, headers: draft.headers.filter((_, itemIndex) => itemIndex !== index) }), children: t.removeHeader })
-            ] }, header.id)),
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: () => setDraft({ ...draft, headers: [...draft.headers, { id: nextHeaderId(draft.headers), name: "", scopes: ["model"], valueKind: "literal", value: "" }] }), children: t.addHeader })
-          ] }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.dialect, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: draft.dialectOverride, onChange: (value) => setDraft({ ...draft, dialectOverride: value }), options: [{ value: "", label: "Auto detect" }, { value: "responses", label: "Responses" }, { value: "chat", label: "Chat" }] }) }),
           error ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: error }) : null,
           /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", gap: 6, justifyContent: "flex-end" }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => {
@@ -23742,7 +30986,7 @@
       protocol,
       baseUrl,
       dialectHint: protocol === "openai-compatible" ? dialectHint(provider) : null,
-      authHint: protocol === "openai-compatible" ? authHint(provider) : null
+      authHint: authHint(provider)
     };
   }
   function ccSwitchProviderEntries(list) {
@@ -23791,7 +31035,7 @@
       if (!preview) return null;
       return {
         ...preview,
-        modelAuthKind: preview.authHint || "bearer",
+        modelAuthKind: preview.authHint || defaultProviderModelAuthKind(preview.protocol),
         modelAuthSecret: String(provider.apiKey || provider.api_key || provider.key || provider.token || "").trim()
       };
     }).filter(Boolean);
@@ -24073,6 +31317,13 @@
   function isClaudeApiBackend(effectiveBackend) {
     return effectiveBackend === "claude-api" || effectiveBackend === "byok";
   }
+  function providerModels(provider) {
+    var _a;
+    if (((_a = provider == null ? void 0 : provider.modelList) == null ? void 0 : _a.status) === "supported" && Array.isArray(provider.modelList.models)) {
+      return provider.modelList.models;
+    }
+    return Array.isArray(provider == null ? void 0 : provider.probedModels) ? provider.probedModels : [];
+  }
   function selectDescriptor({
     effectiveBackend = "none",
     effectiveChannel = null,
@@ -24090,8 +31341,9 @@
     const claudeApi = isClaudeApiBackend(effectiveBackend);
     const customId = claudeApi || backendPref === "codex" ? String(customModel || "").trim() : "";
     if (claudeApi) {
-      if (claudeApiProvider && claudeApiProvider.probedModels && claudeApiProvider.probedModels.length) {
-        return descriptorWithCustomModel(descriptorFromProbedModels(byokStaticDescriptor(), claudeApiProvider.probedModels), customId);
+      const models = providerModels(claudeApiProvider);
+      if (models.length) {
+        return descriptorWithCustomModel(descriptorFromProbedModels(byokStaticDescriptor(), models), customId);
       }
       if (byokApiModels) {
         return descriptorWithCustomModel(mergeByokModels(byokStaticDescriptor(), byokApiModels), customId);
@@ -24099,14 +31351,17 @@
       return baseDescriptor;
     }
     if (backendPref === "codex") {
-      const customProviderFactsAllowed = effectiveChannel === "custom" && customProviderCredentialResolverReady === true;
-      if (customProviderFactsAllowed && codexCustomProvider && codexCustomProvider.probedModels && codexCustomProvider.probedModels.length) {
-        return descriptorWithCustomModel(descriptorFromProbedModels(codexStaticDescriptor(), codexCustomProvider.probedModels), customId);
+      const customProviderFactsAllowed = customProviderCredentialResolverReady === true;
+      const models = providerModels(codexCustomProvider);
+      if (customProviderFactsAllowed && codexCustomProvider && models.length) {
+        return descriptorWithCustomModel(descriptorFromProbedModels(codexStaticDescriptor(), models), customId);
       }
       if (codexCachedModels) {
-        return descriptorWithCustomModel(codexDescriptorFromModels({ models: codexCachedModels }), customId);
+        const cachedDescriptor = codexDescriptorFromModels({ models: codexCachedModels });
+        const channelDescriptor = effectiveChannel === "cli" ? mergeCodexOfficialLoginModels(cachedDescriptor) : cachedDescriptor;
+        return descriptorWithCustomModel(channelDescriptor, customId);
       }
-      return baseDescriptor;
+      return effectiveChannel === "cli" ? descriptorWithCustomModel(mergeCodexOfficialLoginModels(baseDescriptor), customId) : baseDescriptor;
     }
     if (backendPref === "zcode" || effectiveBackend === "zcode") {
       const available = zcodeSessionModels && zcodeSessionModels.settings && zcodeSessionModels.settings.model && Array.isArray(zcodeSessionModels.settings.model.available) ? zcodeSessionModels.settings.model.available : [];
@@ -24120,8 +31375,11 @@
     }
     return baseDescriptor;
   }
-  function reconcileModelPref(model, descriptor, { isCustom = false } = {}) {
-    if (isCustom) return model;
+  function reconcileModelPref(model, descriptor, {
+    isCustom = false,
+    providerFactsPending = false
+  } = {}) {
+    if (isCustom || providerFactsPending) return model;
     const models = descriptor && Array.isArray(descriptor.models) ? descriptor.models : [];
     if (!models.length) return model;
     const trimmed = String(model || "").trim();
@@ -24155,116 +31413,6 @@
       }));
     } catch (e) {
     }
-  }
-
-  // src/cep/modelsApi.js
-  var CACHE_KEY = "ae_mcp_byok_models";
-  var TTL_MS = 24 * 60 * 60 * 1e3;
-  function containsResolvedCredential(models, requestProfile) {
-    var _a;
-    const values = [];
-    if (typeof ((_a = requestProfile == null ? void 0 : requestProfile.auth) == null ? void 0 : _a.value) === "string" && requestProfile.auth.value) {
-      values.push(requestProfile.auth.value);
-      const scheme = requestProfile.auth.value.match(/^(?:Bearer|Basic)\s+(.+)$/i);
-      if (scheme == null ? void 0 : scheme[1]) values.push(scheme[1]);
-    }
-    for (const header of (requestProfile == null ? void 0 : requestProfile.extraHeaders) || []) {
-      if (typeof (header == null ? void 0 : header.value) === "string" && header.value) values.push(header.value);
-    }
-    if (!values.length) return false;
-    let serialized;
-    try {
-      serialized = JSON.stringify(models);
-    } catch {
-      return true;
-    }
-    return values.some((value) => serialized.includes(value));
-  }
-  function getCepRequire5() {
-    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-      return globalThis.window.cep_node.require;
-    }
-    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    throw new Error("CEP Node require is unavailable");
-  }
-  function fetchAnthropicModels({ requestProfile, httpsImpl, timeoutMs = 8e3 } = {}) {
-    const https = httpsImpl || getCepRequire5()("https");
-    return new Promise((resolve) => {
-      var _a;
-      let endpoint;
-      try {
-        endpoint = new URL(anthropicEndpoint((requestProfile == null ? void 0 : requestProfile.baseUrl) || "", "/v1/models?limit=100"));
-      } catch (e) {
-        resolve(null);
-        return;
-      }
-      const headers = { "anthropic-version": "2023-06-01" };
-      for (const header of (requestProfile == null ? void 0 : requestProfile.extraHeaders) || []) {
-        if (header && typeof header.name === "string" && typeof header.value === "string") headers[header.name] = header.value;
-      }
-      if (((_a = requestProfile == null ? void 0 : requestProfile.auth) == null ? void 0 : _a.kind) === "header") headers[requestProfile.auth.name] = requestProfile.auth.value;
-      const req = https.request({
-        hostname: endpoint.hostname,
-        port: endpoint.port || void 0,
-        protocol: endpoint.protocol,
-        path: endpoint.pathname + endpoint.search,
-        method: "GET",
-        headers
-      }, (res) => {
-        let body = "";
-        res.on("data", (chunk) => {
-          body += chunk;
-        });
-        res.on("end", () => {
-          if (res.statusCode !== 200) return resolve(null);
-          try {
-            const parsed = JSON.parse(body);
-            const list = Array.isArray(parsed.data) ? parsed.data : [];
-            resolve(list.filter((m) => String(m.id || "").startsWith("claude-")));
-          } catch (e) {
-            resolve(null);
-          }
-        });
-      });
-      req.on("error", () => resolve(null));
-      if (req.setTimeout) req.setTimeout(timeoutMs, () => resolve(null));
-      req.end();
-    });
-  }
-  async function cachedByokModels({
-    providerId = "",
-    baseUrl = "",
-    authProfileRevision = 0,
-    requestProfile,
-    fetcher,
-    storage,
-    now = Date.now
-  } = {}) {
-    const store = storage || globalThis.localStorage;
-    const keyTag = JSON.stringify([
-      String(providerId || ""),
-      normalizeBaseUrl(baseUrl),
-      Number.isSafeInteger(authProfileRevision) ? authProfileRevision : 0
-    ]);
-    try {
-      const raw = store.getItem(CACHE_KEY);
-      if (raw) {
-        const cached = JSON.parse(raw);
-        if (cached.keyTag === keyTag && now() - cached.at < TTL_MS && !containsResolvedCredential(cached.models, requestProfile)) return cached.models;
-      }
-    } catch (e) {
-    }
-    const run = fetcher || (() => fetchAnthropicModels({ requestProfile }));
-    const models = await run();
-    if (models && containsResolvedCredential(models, requestProfile)) return null;
-    if (models) {
-      try {
-        store.setItem(CACHE_KEY, JSON.stringify({ keyTag, at: now(), models }));
-      } catch (e) {
-      }
-    }
-    return models;
   }
 
   // src/cep/useActivity.js
@@ -25583,7 +32731,7 @@
     return value;
   }
   function activeProviderSecretRefs(providers) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e;
     const byReference = /* @__PURE__ */ new Map();
     const add = (ref) => {
       if ((ref == null ? void 0 : ref.kind) !== "secret") return;
@@ -25596,8 +32744,13 @@
       byReference.set(ref.reference, ref.revision);
     };
     for (const provider of providers) {
-      add((_b = (_a = provider.auth) == null ? void 0 : _a.model) == null ? void 0 : _b.valueRef);
-      add((_d = (_c = provider.auth) == null ? void 0 : _c.probe) == null ? void 0 : _d.valueRef);
+      if (provider.credential) {
+        add(provider.credential.valueRef);
+        add((_a = provider.probeAuthOverride) == null ? void 0 : _a.valueRef);
+      } else {
+        add((_c = (_b = provider.auth) == null ? void 0 : _b.model) == null ? void 0 : _c.valueRef);
+        add((_e = (_d = provider.auth) == null ? void 0 : _d.probe) == null ? void 0 : _e.valueRef);
+      }
       for (const header of provider.headers || []) add(header.valueRef);
     }
     return Array.from(byReference, ([reference, revision]) => ({ kind: "secret", reference, revision }));
@@ -25676,7 +32829,10 @@
     }, [approvalTierFile, elicitationCoordinator]);
     const backendMigration = import_react45.default.useMemo(() => migrateBackendPref(window.localStorage), []);
     const [backendPref, setBackendPref] = import_react45.default.useState(() => backendMigration.pref);
-    const [channelLock, setChannelLock] = import_react45.default.useState(() => backendMigration.lockedChannel);
+    const [channelLock, setChannelLock] = import_react45.default.useState(() => codexProviderChannelLock(
+      backendMigration.lockedChannel,
+      readPref("ae_mcp_codex_provider", "")
+    ));
     const providerStore = import_react45.default.useMemo(() => {
       try {
         return createProviderStore();
@@ -25692,6 +32848,13 @@
     const [providers, setProviders] = import_react45.default.useState([]);
     const [claudeProviderId, setClaudeProviderId] = import_react45.default.useState(() => readPref("ae_mcp_claude_provider", ""));
     const [codexProviderId, setCodexProviderId] = import_react45.default.useState(() => readPref("ae_mcp_codex_provider", ""));
+    const syncCodexProviderChannelLock = import_react45.default.useCallback((providerId) => {
+      setChannelLock((current) => {
+        const next = codexProviderChannelLock(current, providerId);
+        writePref("ae_mcp_channel_lock", next);
+        return next;
+      });
+    }, []);
     const [expertGuidance, setExpertGuidance] = import_react45.default.useState(() => loadExpertGuidance(window.localStorage));
     const [probe, setProbe] = import_react45.default.useState(null);
     const [codexProbe, setCodexProbe] = import_react45.default.useState(null);
@@ -25711,10 +32874,10 @@
     const effectiveEffort = sessionEffort || (modelMeta.effortLevels && modelMeta.effortLevels.length ? descriptor.defaultEffort : null);
     const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
     const claudeApiProvider = import_react45.default.useMemo(() => {
-      return providers.find((provider) => provider.id === claudeProviderId && provider.protocol === "anthropic") || null;
+      return providers.find((provider) => provider.id === claudeProviderId) || null;
     }, [providers, claudeProviderId]);
     const codexCustomProvider = import_react45.default.useMemo(() => {
-      return providers.find((provider) => provider.id === codexProviderId && provider.protocol === "openai-compatible") || null;
+      return providers.find((provider) => provider.id === codexProviderId) || null;
     }, [providers, codexProviderId]);
     const [providerProbing, setProviderProbing] = import_react45.default.useState("");
     const [providerProbeErrors, setProviderProbeErrors] = import_react45.default.useState({});
@@ -25730,6 +32893,8 @@
       {
         lang,
         providers,
+        activeProviderId: codexProviderId,
+        activeModelId: effectiveModel,
         probing: providerProbing,
         probeErrors: providerProbeErrors,
         disabled: providerInit.state !== "ready",
@@ -25807,6 +32972,7 @@ ${baseUrl}`),
           if (codexProviderId === provider.id) {
             setCodexProviderId("");
             writePref("ae_mcp_codex_provider", "");
+            syncCodexProviderChannelLock("");
           }
         },
         onProbe: async (provider, options = {}) => {
@@ -25819,7 +32985,8 @@ ${baseUrl}`),
                 scope,
                 secretService: providerSecretService
               }),
-              forceDetect: options.forceDetect === true
+              forceDetect: options.forceDetect === true,
+              modelId: options.modelId
             });
             if (result.ok && providerStore) {
               setProviders(providerStore.list());
@@ -25864,12 +33031,11 @@ ${baseUrl}`),
       return codexCliCredentialAvailable({ provider: codexCliConfig && codexCliConfig.provider, env, storedValueRef: null });
     }, [codexCliConfig]);
     const codexProviderCredentialResolverReady = providerInit.state === "ready";
-    const codexCustomProviderDialect = effectiveProviderDialect(codexCustomProvider);
     const channels = import_react45.default.useMemo(() => ({
-      claude: claudeChannels({ probe, apiProvider: claudeApiProvider, providerAvailable: providerInit.state === "ready" && Boolean(claudeApiProvider), providerChecking: providerInit.state === "checking" }),
-      codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, customProviderAvailable: providerInit.state === "ready" && Boolean(codexCustomProvider), customProviderCredentialResolverReady: codexProviderCredentialResolverReady, customProviderDialect: codexCustomProviderDialect, providerChecking: providerInit.state === "checking", cliConfig: codexCliConfig, cliCredentialAvailable: codexCliCredentialReady }),
+      claude: claudeChannels({ probe, apiProvider: claudeApiProvider, apiProviderSelected: Boolean(claudeProviderId), providerAvailable: providerInit.state === "ready" && Boolean(claudeApiProvider), providerCredentialResolverReady: codexProviderCredentialResolverReady, providerChecking: providerInit.state === "checking" }),
+      codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, customProviderSelected: Boolean(codexProviderId), customProviderAvailable: providerInit.state === "ready" && Boolean(codexCustomProvider), customProviderCredentialResolverReady: codexProviderCredentialResolverReady, providerChecking: providerInit.state === "checking", cliConfig: codexCliConfig, cliCredentialAvailable: codexCliCredentialReady }),
       zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary })
-    }), [probe, claudeApiProvider, codexProbe, codexCustomProvider, codexCustomProviderDialect, codexProviderCredentialResolverReady, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliCredentialReady, providerInit.state]);
+    }), [probe, claudeApiProvider, claudeProviderId, codexProbe, codexCustomProvider, codexProviderCredentialResolverReady, codexProviderId, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliCredentialReady, providerInit.state]);
     const nodeOk = !(probe && probe.nodeOk === false);
     const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock, nodeOk });
     const claudeSettingsHint = import_react45.default.useMemo(() => {
@@ -25882,9 +33048,10 @@ ${baseUrl}`),
     const providerProfile = import_react45.default.useMemo(() => codexRuntimeProviderProfile({
       effectiveChannel: effective.channel,
       customProvider: codexCustomProvider,
-      customProviderCredentialResolverReady: codexProviderCredentialResolverReady
-    }), [effective.channel, codexCustomProvider, codexProviderCredentialResolverReady]);
-    const runtimeRef = import_react45.default.useRef({ providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: "subscription", claudeApiProvider: null });
+      customProviderCredentialResolverReady: codexProviderCredentialResolverReady,
+      modelId: effectiveModel
+    }), [effective.channel, codexCustomProvider, codexProviderCredentialResolverReady, effectiveModel]);
+    const runtimeRef = import_react45.default.useRef({ providerProfile, providerCandidate: null, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: "subscription", claudeApiProvider: null });
     const previousCodexProviderProfileRef = import_react45.default.useRef(providerProfile);
     const extRoot = import_react45.default.useMemo(() => readCepSystemPath({ cs: cs2, platform }), [cs2, platform]);
     const sidecarPath = import_react45.default.useMemo(() => resolveSidecarPath({ extRoot, platform }), [extRoot, platform]);
@@ -25902,7 +33069,16 @@ ${baseUrl}`),
     }), [approvalTierFile, elicitationCoordinator, extRoot, getMcpSpec, platform]);
     const toolsApi = import_react45.default.useMemo(() => createToolsApi(mcp), [mcp]);
     import_react45.default.useEffect(() => () => mcp.stop(), [mcp]);
+    const providerAcceptanceEventsRef = import_react45.default.useRef([]);
     const handleChatEvent = import_react45.default.useCallback((evt) => {
+      if (evt && typeof evt.type === "string") {
+        providerAcceptanceEventsRef.current.push({
+          type: evt.type,
+          ...typeof evt.kind === "string" ? { kind: evt.kind } : {},
+          ...typeof evt.code === "string" ? { code: evt.code } : {}
+        });
+        if (providerAcceptanceEventsRef.current.length > 256) providerAcceptanceEventsRef.current.shift();
+      }
       if (evt.type === "turn-start") setChatStreaming(true);
       if (evt.type === "thinking") setThinkingActive(!!evt.active);
       if (evt.type === "turn-end" || evt.type === "error") {
@@ -25912,6 +33088,30 @@ ${baseUrl}`),
       if (evt.type === "zcode-session-created") setZcodeSessionModels(evt.result || null);
       setChatEntries((entries) => reduceEvent(entries, evt));
     }, []);
+    const recoverRuntimeProvider = import_react45.default.useCallback(async (provider, _failureFacts, requestedModelId) => {
+      if (!providerStore) return null;
+      const modelId = String(requestedModelId || "").trim();
+      if (!modelId) return null;
+      const result = await runProviderManagerProbe(provider, {
+        store: providerStore,
+        resolveRequestProfile: (entry, details) => resolveProviderRequestProfile(entry, {
+          ...details,
+          secretService: providerSecretService
+        }),
+        forceDetect: true,
+        modelId
+      });
+      if (!result.ok) {
+        const error = new Error(result.detail || `Provider did not expose a verified API for model ${modelId}`);
+        error.kind = "model";
+        error.code = "provider_preflight_failed";
+        throw error;
+      }
+      return { provider: result.entry, modelId };
+    }, [providerSecretService, providerStore]);
+    const refreshRuntimeProviders = import_react45.default.useCallback(() => {
+      if (providerStore) setProviders(providerStore.list());
+    }, [providerStore]);
     const byokLoop = import_react45.default.useMemo(() => {
       return createAgentLoop({
         resolveRequestProfile: () => {
@@ -25941,12 +33141,18 @@ ${baseUrl}`),
       getChannel: () => runtimeRef.current.claudeChannel || "subscription",
       resolveApiProvider: () => {
         const provider = runtimeRef.current.claudeApiProvider;
-        if (!provider) throw new Error("Anthropic provider is unavailable");
-        return resolveProviderRequestProfile(provider, { scope: "model", secretService: providerSecretService });
+        if (!provider) throw new Error("Custom Provider is unavailable");
+        return provider;
       },
+      resolveRequestProfile: (provider, details) => resolveProviderRequestProfile(provider, {
+        ...details,
+        secretService: providerSecretService
+      }),
+      recoverProviderProfile: recoverRuntimeProvider,
+      onProviderProfileRecovered: refreshRuntimeProviders,
       lang,
       onEvent: handleChatEvent
-    }), [getMcpSpec, sidecarPath, mcp, handleChatEvent, platform, providerSecretService]);
+    }), [getMcpSpec, sidecarPath, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders]);
     const codexBackend = import_react45.default.useMemo(() => createCodexBackend({
       platform,
       getMcpSpec,
@@ -25958,35 +33164,127 @@ ${baseUrl}`),
       getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       getServerInstructions: () => mcp.getServerInstructions(),
       getProviderProfile: () => runtimeRef.current.providerProfile,
-      resolveRequestProfile: (provider, { scope }) => resolveProviderRequestProfile(provider, {
-        scope,
+      getProviderCandidate: () => runtimeRef.current.providerCandidate,
+      resolveRequestProfile: (provider, details) => resolveProviderRequestProfile(provider, {
+        ...details,
         secretService: providerSecretService
       }),
-      recoverProviderProfile: async (provider) => {
-        if (!providerStore) return null;
-        const result = await runProviderManagerProbe(provider, {
-          store: providerStore,
-          resolveRequestProfile: (entry, { scope }) => resolveProviderRequestProfile(entry, {
-            scope,
-            secretService: providerSecretService
-          }),
-          forceDetect: true
-        });
-        if (!result.ok) return null;
-        const dialect = effectiveProviderDialect(result.entry);
-        return dialect ? { provider: result.entry, dialect } : null;
-      },
-      onProviderProfileRecovered: () => {
-        if (providerStore) setProviders(providerStore.list());
-      },
+      recoverProviderProfile: recoverRuntimeProvider,
+      onProviderProfileRecovered: refreshRuntimeProviders,
       getCliConfigProvider: () => null,
       lang,
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
-    }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform, providerSecretService, providerStore]);
-    import_react45.default.useEffect(() => () => {
-      codexBackend.reset();
-    }, [codexBackend]);
+    }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders]);
+    import_react45.default.useEffect(() => {
+      if (providerInit.state !== "ready" || !providerStore) return void 0;
+      let debugMarker = false;
+      try {
+        debugMarker = platform.fs.existsSync(platform.paths.join([extRoot, ".debug"]));
+      } catch {
+      }
+      if (!debugMarker) return void 0;
+      const key = "__AE_MCP_PROVIDER_ACCEPTANCE__";
+      const previous = window[key];
+      if (previous == null ? void 0 : previous.dispose) Promise.resolve(previous.dispose()).catch(() => {
+      });
+      const bridge = createProviderAcceptanceBridge({
+        store: providerStore,
+        secretService: providerSecretService,
+        runProviderManagerProbe,
+        createUniversalProviderRoute,
+        selectProviderRoute,
+        resolveProviderRequestProfile,
+        onProvidersChanged: refreshRuntimeProviders
+      });
+      let panelQueue = Promise.resolve();
+      const panelTurns = (input = {}) => {
+        const run = async () => {
+          const client = input.client === "claude" ? "claude" : input.client === "codex" ? "codex" : "";
+          const providerId = typeof input.providerId === "string" ? input.providerId.trim() : "";
+          const modelId = typeof input.modelId === "string" ? input.modelId.trim() : "";
+          const prompts = Array.isArray(input.prompts) ? input.prompts.map((value) => String(value || "").trim()) : [];
+          const graceMs = Number.isInteger(input.graceMs) && input.graceMs >= 0 && input.graceMs <= 1e4 ? input.graceMs : 3e3;
+          if (!client || !providerId || !modelId || prompts.length < 1 || prompts.length > 4 || prompts.some((value) => !value || value.length > 2e3)) {
+            return { ok: false, errorCode: "PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN", turns: [] };
+          }
+          let provider = null;
+          try {
+            provider = providerStore.get(providerId);
+          } catch {
+          }
+          if (!provider) return { ok: false, errorCode: "PROVIDER_ACCEPTANCE_PROVIDER_NOT_FOUND", turns: [] };
+          const backend = client === "codex" ? codexBackend : claudeBackend;
+          const savedRuntime = runtimeRef.current;
+          const turns = [];
+          providerAcceptanceEventsRef.current = [];
+          runtimeRef.current = {
+            ...savedRuntime,
+            providerProfile: { provider, modelId },
+            providerCandidate: { provider, modelId },
+            model: modelId,
+            permissionMode: "none",
+            effort: "low",
+            thinking: input.thinking === "adaptive" ? "adaptive" : null,
+            fast: false,
+            claudeChannel: "api",
+            claudeApiProvider: provider
+          };
+          backend.reset();
+          try {
+            for (const prompt of prompts) {
+              const eventStart = providerAcceptanceEventsRef.current.length;
+              const startedAt = Date.now();
+              await backend.sendUser(prompt);
+              await new Promise((resolve) => setTimeout(resolve, graceMs));
+              const events2 = providerAcceptanceEventsRef.current.slice(eventStart);
+              const error = events2.find((event) => event.type === "error");
+              const terminal = events2.some((event) => event.type === "turn-end");
+              const transcript = backend.getMessages();
+              const hasAssistant = transcript.some((message) => (message == null ? void 0 : message.role) === "assistant" && typeof message.text === "string" && message.text.trim());
+              turns.push({
+                ok: !error && terminal && hasAssistant,
+                terminal: terminal ? "turn-end" : null,
+                durationMs: Date.now() - startedAt,
+                errorCode: (error == null ? void 0 : error.code) || (error == null ? void 0 : error.kind) || null
+              });
+              if (!turns.at(-1).ok) break;
+            }
+            return {
+              ok: turns.length === prompts.length && turns.every((turn) => turn.ok),
+              client,
+              modelId,
+              turns
+            };
+          } catch (error) {
+            return {
+              ok: false,
+              client,
+              modelId,
+              turns,
+              errorCode: typeof (error == null ? void 0 : error.code) === "string" ? error.code : "PROVIDER_ACCEPTANCE_PANEL_TURN_FAILED"
+            };
+          } finally {
+            backend.reset();
+            runtimeRef.current = savedRuntime;
+          }
+        };
+        const pending = panelQueue.then(run, run);
+        panelQueue = pending.then(() => void 0, () => void 0);
+        return pending;
+      };
+      const acceptance = Object.freeze({ ...bridge, panelTurns });
+      window[key] = acceptance;
+      return () => {
+        if (window[key] === acceptance) delete window[key];
+        Promise.resolve(bridge.dispose()).catch(() => {
+        });
+      };
+    }, [claudeBackend, codexBackend, extRoot, platform, providerInit.state, providerSecretService, providerStore, refreshRuntimeProviders]);
+    import_react45.default.useEffect(
+      () => installBeforeUnloadReset(window, codexBackend),
+      [codexBackend]
+    );
     import_react45.default.useEffect(() => {
       if (previousCodexProviderProfileRef.current === providerProfile) return;
       previousCodexProviderProfileRef.current = providerProfile;
@@ -26019,6 +33317,7 @@ ${baseUrl}`),
     }, [zcodeBackend]);
     runtimeRef.current = {
       providerProfile,
+      providerCandidate: effective.channel === "custom" && codexCustomProvider ? { provider: codexCustomProvider, modelId: effectiveModel } : null,
       model: effectiveModel,
       permissionMode,
       effort: effectiveEffort,
@@ -26030,7 +33329,6 @@ ${baseUrl}`),
     const backendInstances = { subscription: claudeBackend, "claude-api": claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };
     const activeBackend = backendInstances[effective.backend] || byokLoop;
     import_react45.default.useEffect(() => {
-      let alive = true;
       const facts = {
         effectiveBackend: effective.backend,
         effectiveChannel: effective.channel,
@@ -26048,34 +33346,16 @@ ${baseUrl}`),
       const nextDescriptor = selectDescriptor(facts);
       setDescriptor(nextDescriptor);
       const isCustomModelPath = backendPref === "codex" && customModelForBackend && model === customModelForBackend;
-      const reconciled = reconcileModelPref(model, nextDescriptor, { isCustom: isCustomModelPath });
+      const providerFactsPending = backendPref === "codex" && Boolean(codexProviderId) && providerInit.state === "checking";
+      const reconciled = reconcileModelPref(model, nextDescriptor, {
+        isCustom: isCustomModelPath,
+        providerFactsPending
+      });
       if (reconciled !== model) {
         setModel(reconciled);
         writePref("ae_mcp_model", reconciled);
       }
-      const hasProbed = Boolean(claudeApiProvider && claudeApiProvider.probedModels && claudeApiProvider.probedModels.length);
-      if (isClaudeApiBackend(effective.backend) && claudeApiProvider && !hasProbed) {
-        (async () => {
-          let requestProfile = null;
-          try {
-            requestProfile = await resolveProviderRequestProfile(claudeApiProvider, { scope: "probe", secretService: providerSecretService });
-            const list = await cachedByokModels({
-              providerId: claudeApiProvider.id,
-              baseUrl: claudeApiProvider.baseUrl,
-              authProfileRevision: claudeApiProvider.authProfileRevision,
-              requestProfile
-            });
-            if (alive) setDescriptor(selectDescriptor({ ...facts, byokApiModels: list }));
-          } catch {
-          } finally {
-            requestProfile = null;
-          }
-        })();
-      }
-      return () => {
-        alive = false;
-      };
-    }, [effective.backend, effective.channel, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, zcodeSessionModels, zcodeProbedModels, providerSecretService, codexProviderCredentialResolverReady]);
+    }, [effective.backend, effective.channel, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, zcodeSessionModels, zcodeProbedModels, providerSecretService, codexProviderCredentialResolverReady, codexProviderId, providerInit.state]);
     const activeBackendRef = import_react45.default.useRef(null);
     import_react45.default.useEffect(() => {
       if (backendPref !== "zcode") return void 0;
@@ -26298,30 +33578,35 @@ ${baseUrl}`),
           if (!host || typeof host.capabilities !== "function") throw providerRuntimeUnavailableError();
           const capabilities = await host.capabilities();
           requireProviderHelperCapabilities(capabilities, platform.id);
-          const secretStore = createHostSecretStore(host);
-          const runner = createSecretMigrationRunner({
-            journalStore: createProviderMigrationJournalStore(platform),
-            secretStore
-          });
-          await migrateProviderStoreSecrets({
-            store: providerStore,
-            legacyKeyStore: {
-              readKey: (name) => {
-                try {
-                  return keyStore ? keyStore.readKey(name) : "";
-                } catch {
-                  return "";
+          if (providerStore.needsSecretMigration() || providerStore.needsSchemaMigration()) {
+            const secretStore = createHostSecretStore(host);
+            const runner = createSecretMigrationRunner({
+              journalStore: createProviderMigrationJournalStore(platform),
+              secretStore
+            });
+            await migrateProviderStoreSecrets({
+              store: providerStore,
+              legacyKeyStore: {
+                readKey: (name) => {
+                  try {
+                    return keyStore ? keyStore.readKey(name) : "";
+                  } catch {
+                    return "";
+                  }
+                },
+                async cleanupCommittedProviderSecrets() {
+                  if (!keyStore) return;
+                  keyStore.clearKey("anthropic");
+                  keyStore.clearKey("codex");
                 }
               },
-              async cleanupCommittedProviderSecrets() {
-                if (!keyStore) return;
-                keyStore.clearKey("anthropic");
-                keyStore.clearKey("codex");
-              }
-            },
-            runner,
-            secretStore: host
-          });
+              runner,
+              secretStore: host
+            });
+          }
+          if (providerStore.needsSchemaMigration()) {
+            await migrateProviderStoreV2ToV3({ store: providerStore });
+          }
           await drainPendingProviderSecretDeletes({ store: providerStore, secretService: providerSecretService });
           const providerState = providerStore.readState();
           for (const ref of activeProviderSecretRefs(providerState.providers)) {
@@ -26541,9 +33826,10 @@ ${baseUrl}`),
             channels,
             activeChannel: effective.channel || "",
             lockedChannel: channelLock,
-            onLockChannel: (c) => {
-              setChannelLock(c);
-              writePref("ae_mcp_channel_lock", c);
+            onLockChannel: (channel) => {
+              const next = backendPref === "codex" ? codexProviderChannelLock(channel, codexProviderId) : channel;
+              setChannelLock(next);
+              writePref("ae_mcp_channel_lock", next);
             },
             onRecheckBackend: () => {
               if (backendPref === "codex") runCodexProbe();
@@ -26563,6 +33849,7 @@ ${baseUrl}`),
             onCodexProviderChange: (id) => {
               setCodexProviderId(id);
               writePref("ae_mcp_codex_provider", id);
+              syncCodexProviderChannelLock(id);
               setCodexProbe(null);
               codexBackend.reset();
             },

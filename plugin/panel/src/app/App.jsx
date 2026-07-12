@@ -14,6 +14,7 @@ import { ToolApprovalDialog } from '../components/tools/ToolApprovalDialog';
 import { createAgentLoop } from '../lib/agentLoop';
 import { revertToPreviousCheckpoint } from '../lib/activityModel';
 import { pickBackend, deriveToolMeta, shouldResetOnBackendChange } from '../lib/backendSelect';
+import { installBeforeUnloadReset } from '../lib/backendLifecycle.js';
 import { createMcpClient, resolveMcpCommand } from '../cep/mcpClient';
 import { createApprovalTierFile, withToolApprovalTier } from '../cep/approvalTierFile';
 import { createToolsApi } from '../cep/toolsApi';
@@ -23,10 +24,13 @@ import { createClaudeAgentBackend, resolveSystemNode } from '../cep/claudeAgentB
 import { createCodexBackend } from '../cep/codexBackend';
 import { createOpenCodeBackend } from '../cep/openCodeBackend';
 import { createZcodeBackend, summarizeZcodeConfig } from '../cep/zcodeBackend';
-import { claudeChannels, codexChannels, zcodeChannels, migrateBackendPref } from '../lib/channels.js';
+import { claudeChannels, codexChannels, zcodeChannels, migrateBackendPref, codexProviderChannelLock } from '../lib/channels.js';
 import { createProviderStore } from '../cep/providerStore';
 import { createProviderSecretService, resolveProviderRequestProfile } from '../cep/providerSecrets';
+import { createProviderAcceptanceBridge } from '../cep/providerAcceptanceBridge.js';
+import { createUniversalProviderRoute } from '../cep/universalProviderRoute.js';
 import { migrateProviderStoreSecrets } from '../cep/providerMigration';
+import { migrateProviderStoreV2ToV3 } from '../cep/providerSchemaMigration';
 import { createSecretMigrationRunner } from '../cep/platform/secret-migration';
 import { deleteProviderProfile, drainPendingProviderSecretDeletes, importProviderDraft, saveProviderDraft } from './providerProfileFlow';
 import { runProviderManagerProbe } from './providerProbeFlow.js';
@@ -39,12 +43,12 @@ import { codexCliCredentialAvailable, readCodexCliConfig, resolveCodexCliCredent
 import { reduceEvent } from '../lib/chatEntries';
 import { DEFAULT_MODEL } from '../lib/anthropic';
 import { descriptorWithCustomModel } from '../lib/backendCapabilities';
-import { selectDescriptor, isClaudeApiBackend, reconcileModelPref } from '../lib/descriptorSelect';
+import { selectDescriptor, reconcileModelPref } from '../lib/descriptorSelect';
 import { readCachedZcodeProbedModels, writeCachedZcodeProbedModels } from '../lib/zcodeModelCache';
 import { baseDescriptorFor } from '../cep/backends/index.js';
-import { cachedByokModels } from '../cep/modelsApi';
 import { costBadge } from '../lib/composerOptions';
-import { codexRuntimeProviderProfile, effectiveProviderDialect } from '../lib/providerProfile.js';
+import { codexRuntimeProviderProfile } from '../lib/providerProfile.js';
+import { selectProviderRoute } from '../lib/providerRouteSelection.js';
 import { useActivity } from '../cep/useActivity';
 import { isWizardDone, markWizardDone, clearWizardDone } from '../cep/firstRun';
 import { useWizardWiring } from './wizardWiring';
@@ -275,8 +279,13 @@ function activeProviderSecretRefs(providers) {
     byReference.set(ref.reference, ref.revision);
   };
   for (const provider of providers) {
-    add(provider.auth?.model?.valueRef);
-    add(provider.auth?.probe?.valueRef);
+    if (provider.credential) {
+      add(provider.credential.valueRef);
+      add(provider.probeAuthOverride?.valueRef);
+    } else {
+      add(provider.auth?.model?.valueRef);
+      add(provider.auth?.probe?.valueRef);
+    }
     for (const header of provider.headers || []) add(header.valueRef);
   }
   return Array.from(byReference, ([reference, revision]) => ({ kind: 'secret', reference, revision }));
@@ -358,7 +367,10 @@ function Shell({ cs }) {
   }, [approvalTierFile, elicitationCoordinator]);
   const backendMigration = React.useMemo(() => migrateBackendPref(window.localStorage), []);
   const [backendPref, setBackendPref] = React.useState(() => backendMigration.pref);
-  const [channelLock, setChannelLock] = React.useState(() => backendMigration.lockedChannel);
+  const [channelLock, setChannelLock] = React.useState(() => codexProviderChannelLock(
+    backendMigration.lockedChannel,
+    readPref('ae_mcp_codex_provider', ''),
+  ));
   const providerStore = React.useMemo(() => {
     try { return createProviderStore(); } catch (e) { return null; }
   }, []);
@@ -370,6 +382,13 @@ function Shell({ cs }) {
   const [providers, setProviders] = React.useState([]);
   const [claudeProviderId, setClaudeProviderId] = React.useState(() => readPref('ae_mcp_claude_provider', ''));
   const [codexProviderId, setCodexProviderId] = React.useState(() => readPref('ae_mcp_codex_provider', ''));
+  const syncCodexProviderChannelLock = React.useCallback((providerId) => {
+    setChannelLock((current) => {
+      const next = codexProviderChannelLock(current, providerId);
+      writePref('ae_mcp_channel_lock', next);
+      return next;
+    });
+  }, []);
   const [expertGuidance, setExpertGuidance] = React.useState(() => loadExpertGuidance(window.localStorage));
   const [probe, setProbe] = React.useState(null);
   const [codexProbe, setCodexProbe] = React.useState(null);
@@ -399,10 +418,10 @@ function Shell({ cs }) {
   const effectiveEffort = sessionEffort || (modelMeta.effortLevels && modelMeta.effortLevels.length ? descriptor.defaultEffort : null);
   const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
   const claudeApiProvider = React.useMemo(() => {
-    return providers.find((provider) => provider.id === claudeProviderId && provider.protocol === 'anthropic') || null;
+    return providers.find((provider) => provider.id === claudeProviderId) || null;
   }, [providers, claudeProviderId]);
   const codexCustomProvider = React.useMemo(() => {
-    return providers.find((provider) => provider.id === codexProviderId && provider.protocol === 'openai-compatible') || null;
+    return providers.find((provider) => provider.id === codexProviderId) || null;
   }, [providers, codexProviderId]);
 
   const [providerProbing, setProviderProbing] = React.useState('');
@@ -414,6 +433,8 @@ function Shell({ cs }) {
     <ProviderManagerSection
       lang={lang}
       providers={providers}
+      activeProviderId={codexProviderId}
+      activeModelId={effectiveModel}
       probing={providerProbing}
       probeErrors={providerProbeErrors}
       disabled={providerInit.state !== 'ready'}
@@ -483,7 +504,11 @@ function Shell({ cs }) {
         await deleteProviderProfile({ provider, store: providerStore, secretService: providerSecretService });
         setProviders(providerStore.list());
         if (claudeProviderId === provider.id) { setClaudeProviderId(''); writePref('ae_mcp_claude_provider', ''); }
-        if (codexProviderId === provider.id) { setCodexProviderId(''); writePref('ae_mcp_codex_provider', ''); }
+        if (codexProviderId === provider.id) {
+          setCodexProviderId('');
+          writePref('ae_mcp_codex_provider', '');
+          syncCodexProviderChannelLock('');
+        }
       }}
       onProbe={async (provider, options = {}) => {
         if (providerInit.state !== 'ready') throw providerRuntimeUnavailableError();
@@ -496,6 +521,7 @@ function Shell({ cs }) {
               secretService: providerSecretService,
             }),
             forceDetect: options.forceDetect === true,
+            modelId: options.modelId,
           });
           if (result.ok && providerStore) {
             setProviders(providerStore.list());
@@ -531,12 +557,11 @@ function Shell({ cs }) {
     return codexCliCredentialAvailable({ provider: codexCliConfig && codexCliConfig.provider, env, storedValueRef: null });
   }, [codexCliConfig]);
   const codexProviderCredentialResolverReady = providerInit.state === 'ready';
-  const codexCustomProviderDialect = effectiveProviderDialect(codexCustomProvider);
   const channels = React.useMemo(() => ({
-    claude: claudeChannels({ probe, apiProvider: claudeApiProvider, providerAvailable: providerInit.state === 'ready' && Boolean(claudeApiProvider), providerChecking: providerInit.state === 'checking' }),
-    codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, customProviderAvailable: providerInit.state === 'ready' && Boolean(codexCustomProvider), customProviderCredentialResolverReady: codexProviderCredentialResolverReady, customProviderDialect: codexCustomProviderDialect, providerChecking: providerInit.state === 'checking', cliConfig: codexCliConfig, cliCredentialAvailable: codexCliCredentialReady }),
+    claude: claudeChannels({ probe, apiProvider: claudeApiProvider, apiProviderSelected: Boolean(claudeProviderId), providerAvailable: providerInit.state === 'ready' && Boolean(claudeApiProvider), providerCredentialResolverReady: codexProviderCredentialResolverReady, providerChecking: providerInit.state === 'checking' }),
+    codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, customProviderSelected: Boolean(codexProviderId), customProviderAvailable: providerInit.state === 'ready' && Boolean(codexCustomProvider), customProviderCredentialResolverReady: codexProviderCredentialResolverReady, providerChecking: providerInit.state === 'checking', cliConfig: codexCliConfig, cliCredentialAvailable: codexCliCredentialReady }),
     zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary }),
-  }), [probe, claudeApiProvider, codexProbe, codexCustomProvider, codexCustomProviderDialect, codexProviderCredentialResolverReady, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliCredentialReady, providerInit.state]);
+  }), [probe, claudeApiProvider, claudeProviderId, codexProbe, codexCustomProvider, codexProviderCredentialResolverReady, codexProviderId, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliCredentialReady, providerInit.state]);
   const nodeOk = !(probe && probe.nodeOk === false);
   const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock, nodeOk });
   const claudeSettingsHint = React.useMemo(() => {
@@ -546,8 +571,9 @@ function Shell({ cs }) {
     effectiveChannel: effective.channel,
     customProvider: codexCustomProvider,
     customProviderCredentialResolverReady: codexProviderCredentialResolverReady,
-  }), [effective.channel, codexCustomProvider, codexProviderCredentialResolverReady]);
-  const runtimeRef = React.useRef({ providerProfile, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: 'subscription', claudeApiProvider: null });
+    modelId: effectiveModel,
+  }), [effective.channel, codexCustomProvider, codexProviderCredentialResolverReady, effectiveModel]);
+  const runtimeRef = React.useRef({ providerProfile, providerCandidate: null, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: 'subscription', claudeApiProvider: null });
   const previousCodexProviderProfileRef = React.useRef(providerProfile);
   const extRoot = React.useMemo(() => readCepSystemPath({ cs, platform }), [cs, platform]);
   const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot, platform }), [extRoot, platform]);
@@ -565,7 +591,16 @@ function Shell({ cs }) {
   }), [approvalTierFile, elicitationCoordinator, extRoot, getMcpSpec, platform]);
   const toolsApi = React.useMemo(() => createToolsApi(mcp), [mcp]);
   React.useEffect(() => () => mcp.stop(), [mcp]);
+  const providerAcceptanceEventsRef = React.useRef([]);
   const handleChatEvent = React.useCallback((evt) => {
+    if (evt && typeof evt.type === 'string') {
+      providerAcceptanceEventsRef.current.push({
+        type: evt.type,
+        ...(typeof evt.kind === 'string' ? { kind: evt.kind } : {}),
+        ...(typeof evt.code === 'string' ? { code: evt.code } : {}),
+      });
+      if (providerAcceptanceEventsRef.current.length > 256) providerAcceptanceEventsRef.current.shift();
+    }
     if (evt.type === 'turn-start') setChatStreaming(true);
     if (evt.type === 'thinking') setThinkingActive(!!evt.active);
     if (evt.type === 'turn-end' || evt.type === 'error') {
@@ -575,6 +610,32 @@ function Shell({ cs }) {
     if (evt.type === 'zcode-session-created') setZcodeSessionModels(evt.result || null);
     setChatEntries((entries) => reduceEvent(entries, evt));
   }, []);
+
+  const recoverRuntimeProvider = React.useCallback(async (provider, _failureFacts, requestedModelId) => {
+    if (!providerStore) return null;
+    const modelId = String(requestedModelId || '').trim();
+    if (!modelId) return null;
+    const result = await runProviderManagerProbe(provider, {
+      store: providerStore,
+      resolveRequestProfile: (entry, details) => resolveProviderRequestProfile(entry, {
+        ...details,
+        secretService: providerSecretService,
+      }),
+      forceDetect: true,
+      modelId,
+    });
+    if (!result.ok) {
+      const error = new Error(result.detail || `Provider did not expose a verified API for model ${modelId}`);
+      error.kind = 'model';
+      error.code = 'provider_preflight_failed';
+      throw error;
+    }
+    return { provider: result.entry, modelId };
+  }, [providerSecretService, providerStore]);
+
+  const refreshRuntimeProviders = React.useCallback(() => {
+    if (providerStore) setProviders(providerStore.list());
+  }, [providerStore]);
 
   const byokLoop = React.useMemo(() => {
     return createAgentLoop({
@@ -612,12 +673,18 @@ function Shell({ cs }) {
     getChannel: () => runtimeRef.current.claudeChannel || 'subscription',
     resolveApiProvider: () => {
       const provider = runtimeRef.current.claudeApiProvider;
-      if (!provider) throw new Error('Anthropic provider is unavailable');
-      return resolveProviderRequestProfile(provider, { scope: 'model', secretService: providerSecretService });
+      if (!provider) throw new Error('Custom Provider is unavailable');
+      return provider;
     },
+    resolveRequestProfile: (provider, details) => resolveProviderRequestProfile(provider, {
+      ...details,
+      secretService: providerSecretService,
+    }),
+    recoverProviderProfile: recoverRuntimeProvider,
+    onProviderProfileRecovered: refreshRuntimeProviders,
     lang,
     onEvent: handleChatEvent,
-  }), [getMcpSpec, sidecarPath, mcp, handleChatEvent, platform, providerSecretService]);
+  }), [getMcpSpec, sidecarPath, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders]);
 
   const codexBackend = React.useMemo(() => createCodexBackend({
     platform,
@@ -630,36 +697,129 @@ function Shell({ cs }) {
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     getServerInstructions: () => mcp.getServerInstructions(),
     getProviderProfile: () => runtimeRef.current.providerProfile,
-    resolveRequestProfile: (provider, { scope }) => resolveProviderRequestProfile(provider, {
-      scope,
+    getProviderCandidate: () => runtimeRef.current.providerCandidate,
+    resolveRequestProfile: (provider, details) => resolveProviderRequestProfile(provider, {
+      ...details,
       secretService: providerSecretService,
     }),
-    recoverProviderProfile: async (provider) => {
-      if (!providerStore) return null;
-      const result = await runProviderManagerProbe(provider, {
-        store: providerStore,
-        resolveRequestProfile: (entry, { scope }) => resolveProviderRequestProfile(entry, {
-          scope,
-          secretService: providerSecretService,
-        }),
-        forceDetect: true,
-      });
-      if (!result.ok) return null;
-      const dialect = effectiveProviderDialect(result.entry);
-      return dialect ? { provider: result.entry, dialect } : null;
-    },
-    onProviderProfileRecovered: () => {
-      if (providerStore) setProviders(providerStore.list());
-    },
+    recoverProviderProfile: recoverRuntimeProvider,
+    onProviderProfileRecovered: refreshRuntimeProviders,
     getCliConfigProvider: () => null,
     lang,
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
-  }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform, providerSecretService, providerStore]);
+  }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders]);
 
-  React.useEffect(() => () => {
-    codexBackend.reset();
-  }, [codexBackend]);
+  React.useEffect(() => {
+    if (providerInit.state !== 'ready' || !providerStore) return undefined;
+    let debugMarker = false;
+    try {
+      debugMarker = platform.fs.existsSync(platform.paths.join([extRoot, '.debug']));
+    } catch {}
+    if (!debugMarker) return undefined;
+    const key = '__AE_MCP_PROVIDER_ACCEPTANCE__';
+    const previous = window[key];
+    if (previous?.dispose) Promise.resolve(previous.dispose()).catch(() => {});
+    const bridge = createProviderAcceptanceBridge({
+      store: providerStore,
+      secretService: providerSecretService,
+      runProviderManagerProbe,
+      createUniversalProviderRoute,
+      selectProviderRoute,
+      resolveProviderRequestProfile,
+      onProvidersChanged: refreshRuntimeProviders,
+    });
+    let panelQueue = Promise.resolve();
+    const panelTurns = (input = {}) => {
+      const run = async () => {
+        const client = input.client === 'claude' ? 'claude' : input.client === 'codex' ? 'codex' : '';
+        const providerId = typeof input.providerId === 'string' ? input.providerId.trim() : '';
+        const modelId = typeof input.modelId === 'string' ? input.modelId.trim() : '';
+        const prompts = Array.isArray(input.prompts)
+          ? input.prompts.map((value) => String(value || '').trim())
+          : [];
+        const graceMs = Number.isInteger(input.graceMs) && input.graceMs >= 0 && input.graceMs <= 10000
+          ? input.graceMs
+          : 3000;
+        if (!client || !providerId || !modelId || prompts.length < 1 || prompts.length > 4
+          || prompts.some((value) => !value || value.length > 2000)) {
+          return { ok: false, errorCode: 'PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN', turns: [] };
+        }
+        let provider = null;
+        try { provider = providerStore.get(providerId); } catch {}
+        if (!provider) return { ok: false, errorCode: 'PROVIDER_ACCEPTANCE_PROVIDER_NOT_FOUND', turns: [] };
+        const backend = client === 'codex' ? codexBackend : claudeBackend;
+        const savedRuntime = runtimeRef.current;
+        const turns = [];
+        providerAcceptanceEventsRef.current = [];
+        runtimeRef.current = {
+          ...savedRuntime,
+          providerProfile: { provider, modelId },
+          providerCandidate: { provider, modelId },
+          model: modelId,
+          permissionMode: 'none',
+          effort: 'low',
+          thinking: input.thinking === 'adaptive' ? 'adaptive' : null,
+          fast: false,
+          claudeChannel: 'api',
+          claudeApiProvider: provider,
+        };
+        backend.reset();
+        try {
+          for (const prompt of prompts) {
+            const eventStart = providerAcceptanceEventsRef.current.length;
+            const startedAt = Date.now();
+            await backend.sendUser(prompt);
+            await new Promise((resolve) => setTimeout(resolve, graceMs));
+            const events = providerAcceptanceEventsRef.current.slice(eventStart);
+            const error = events.find((event) => event.type === 'error');
+            const terminal = events.some((event) => event.type === 'turn-end');
+            const transcript = backend.getMessages();
+            const hasAssistant = transcript.some((message) => message?.role === 'assistant'
+              && typeof message.text === 'string' && message.text.trim());
+            turns.push({
+              ok: !error && terminal && hasAssistant,
+              terminal: terminal ? 'turn-end' : null,
+              durationMs: Date.now() - startedAt,
+              errorCode: error?.code || error?.kind || null,
+            });
+            if (!turns.at(-1).ok) break;
+          }
+          return {
+            ok: turns.length === prompts.length && turns.every((turn) => turn.ok),
+            client,
+            modelId,
+            turns,
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            client,
+            modelId,
+            turns,
+            errorCode: typeof error?.code === 'string' ? error.code : 'PROVIDER_ACCEPTANCE_PANEL_TURN_FAILED',
+          };
+        } finally {
+          backend.reset();
+          runtimeRef.current = savedRuntime;
+        }
+      };
+      const pending = panelQueue.then(run, run);
+      panelQueue = pending.then(() => undefined, () => undefined);
+      return pending;
+    };
+    const acceptance = Object.freeze({ ...bridge, panelTurns });
+    window[key] = acceptance;
+    return () => {
+      if (window[key] === acceptance) delete window[key];
+      Promise.resolve(bridge.dispose()).catch(() => {});
+    };
+  }, [claudeBackend, codexBackend, extRoot, platform, providerInit.state, providerSecretService, providerStore, refreshRuntimeProviders]);
+
+  React.useEffect(
+    () => installBeforeUnloadReset(window, codexBackend),
+    [codexBackend],
+  );
 
   React.useEffect(() => {
     if (previousCodexProviderProfileRef.current === providerProfile) return;
@@ -697,6 +857,9 @@ function Shell({ cs }) {
 
   runtimeRef.current = {
     providerProfile,
+    providerCandidate: effective.channel === 'custom' && codexCustomProvider
+      ? { provider: codexCustomProvider, modelId: effectiveModel }
+      : null,
     model: effectiveModel,
     permissionMode,
     effort: effectiveEffort,
@@ -713,7 +876,6 @@ function Shell({ cs }) {
   // not backendPref: 'byok' never appears as a pref (migrateBackendPref maps
   // it away), only as an effective backend when Node is broken.
   React.useEffect(() => {
-    let alive = true;
     const facts = {
       effectiveBackend: effective.backend,
       effectiveChannel: effective.channel,
@@ -736,31 +898,18 @@ function Shell({ cs }) {
     // exempt the codex custom-model path (customModel is intentionally not
     // in the curated list there).
     const isCustomModelPath = backendPref === 'codex' && customModelForBackend && model === customModelForBackend;
-    const reconciled = reconcileModelPref(model, nextDescriptor, { isCustom: isCustomModelPath });
+    const providerFactsPending = backendPref === 'codex'
+      && Boolean(codexProviderId)
+      && providerInit.state === 'checking';
+    const reconciled = reconcileModelPref(model, nextDescriptor, {
+      isCustom: isCustomModelPath,
+      providerFactsPending,
+    });
     if (reconciled !== model) {
       setModel(reconciled);
       writePref('ae_mcp_model', reconciled);
     }
-    const hasProbed = Boolean(claudeApiProvider && claudeApiProvider.probedModels && claudeApiProvider.probedModels.length);
-    if (isClaudeApiBackend(effective.backend) && claudeApiProvider && !hasProbed) {
-      (async () => {
-        let requestProfile = null;
-        try {
-          requestProfile = await resolveProviderRequestProfile(claudeApiProvider, { scope: 'probe', secretService: providerSecretService });
-          const list = await cachedByokModels({
-            providerId: claudeApiProvider.id,
-            baseUrl: claudeApiProvider.baseUrl,
-            authProfileRevision: claudeApiProvider.authProfileRevision,
-            requestProfile,
-          });
-          if (alive) setDescriptor(selectDescriptor({ ...facts, byokApiModels: list }));
-        } catch { /* cache/probe is best effort */ } finally {
-          requestProfile = null;
-        }
-      })();
-    }
-    return () => { alive = false; };
-  }, [effective.backend, effective.channel, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, zcodeSessionModels, zcodeProbedModels, providerSecretService, codexProviderCredentialResolverReady]);
+  }, [effective.backend, effective.channel, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, zcodeSessionModels, zcodeProbedModels, providerSecretService, codexProviderCredentialResolverReady, codexProviderId, providerInit.state]);
   const activeBackendRef = React.useRef(null);
 
   // Probe the CLI-configured zcode provider's /v1/models when session data
@@ -1004,24 +1153,29 @@ function Shell({ cs }) {
         if (!host || typeof host.capabilities !== 'function') throw providerRuntimeUnavailableError();
         const capabilities = await host.capabilities();
         requireProviderHelperCapabilities(capabilities, platform.id);
-        const secretStore = createHostSecretStore(host);
-        const runner = createSecretMigrationRunner({
-          journalStore: createProviderMigrationJournalStore(platform),
-          secretStore,
-        });
-        await migrateProviderStoreSecrets({
-          store: providerStore,
-          legacyKeyStore: {
-            readKey: (name) => { try { return keyStore ? keyStore.readKey(name) : ''; } catch { return ''; } },
-            async cleanupCommittedProviderSecrets() {
-              if (!keyStore) return;
-              keyStore.clearKey('anthropic');
-              keyStore.clearKey('codex');
+        if (providerStore.needsSecretMigration() || providerStore.needsSchemaMigration()) {
+          const secretStore = createHostSecretStore(host);
+          const runner = createSecretMigrationRunner({
+            journalStore: createProviderMigrationJournalStore(platform),
+            secretStore,
+          });
+          await migrateProviderStoreSecrets({
+            store: providerStore,
+            legacyKeyStore: {
+              readKey: (name) => { try { return keyStore ? keyStore.readKey(name) : ''; } catch { return ''; } },
+              async cleanupCommittedProviderSecrets() {
+                if (!keyStore) return;
+                keyStore.clearKey('anthropic');
+                keyStore.clearKey('codex');
+              },
             },
-          },
-          runner,
-          secretStore: host,
-        });
+            runner,
+            secretStore: host,
+          });
+        }
+        if (providerStore.needsSchemaMigration()) {
+          await migrateProviderStoreV2ToV3({ store: providerStore });
+        }
         await drainPendingProviderSecretDeletes({ store: providerStore, secretService: providerSecretService });
         const providerState = providerStore.readState();
         for (const ref of activeProviderSecretRefs(providerState.providers)) {
@@ -1243,7 +1397,13 @@ function Shell({ cs }) {
             channels={channels}
             activeChannel={effective.channel || ''}
             lockedChannel={channelLock}
-            onLockChannel={(c) => { setChannelLock(c); writePref('ae_mcp_channel_lock', c); }}
+            onLockChannel={(channel) => {
+              const next = backendPref === 'codex'
+                ? codexProviderChannelLock(channel, codexProviderId)
+                : channel;
+              setChannelLock(next);
+              writePref('ae_mcp_channel_lock', next);
+            }}
             onRecheckBackend={() => {
               if (backendPref === 'codex') runCodexProbe();
               else if (backendPref === 'zcode') runZcodeProbe();
@@ -1256,7 +1416,13 @@ function Shell({ cs }) {
             claudeProviderId={claudeProviderId}
             onClaudeProviderChange={(id) => { setClaudeProviderId(id); writePref('ae_mcp_claude_provider', id); }}
             codexProviderId={codexProviderId}
-            onCodexProviderChange={(id) => { setCodexProviderId(id); writePref('ae_mcp_codex_provider', id); setCodexProbe(null); codexBackend.reset(); }}
+            onCodexProviderChange={(id) => {
+              setCodexProviderId(id);
+              writePref('ae_mcp_codex_provider', id);
+              syncCodexProviderChannelLock(id);
+              setCodexProbe(null);
+              codexBackend.reset();
+            }}
             claudeSettingsImportAvailable={Boolean(claudeSettingsHint)}
             onImportClaudeSettings={async () => {
               if (!claudeSettingsHint || !providerStore) return;

@@ -232,6 +232,8 @@ def test_candidate_promotion_can_atomically_replace_and_verification_clears_on_c
     store = ToolArtifactStore(root=tmp_path / "tools")
     existing = store.create(draft("Existing"))
     candidate = store.create(draft("Candidate", status="candidate"))
+    observed = []
+    unsubscribe = store.subscribe(observed.append)
 
     promoted = store.edit(
         candidate.id,
@@ -240,6 +242,7 @@ def test_candidate_promotion_can_atomically_replace_and_verification_clears_on_c
         expected_content_hash=candidate.content_hash,
         replace_artifact_id=existing.id,
     )
+    unsubscribe()
 
     assert promoted.status == "saved"
     assert promoted.verified is True
@@ -247,6 +250,8 @@ def test_candidate_promotion_can_atomically_replace_and_verification_clears_on_c
     assert promoted.verification.evidence_hash == promoted.content_hash
     with pytest.raises(ToolNotFound):
         store.get(existing.id)
+    assert observed[-1].kind == "edit"
+    assert observed[-1].artifact_ids == (candidate.id, existing.id)
 
     changed = store.edit(
         promoted.id,

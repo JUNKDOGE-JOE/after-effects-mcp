@@ -1,4 +1,6 @@
 import { validateProviderBaseUrl } from '../lib/providerProfile.js';
+import { buildProtocolAuthCandidates } from '../lib/providerProbeAuth.js';
+import { buildProviderEndpointCandidates } from '../lib/providerUrl.js';
 
 function getCepRequire() {
   if (globalThis.window?.cep_node?.require) return globalThis.window.cep_node.require;
@@ -24,6 +26,16 @@ export function probeHeaders(protocol, apiKey, dialect) {
 }
 
 export function parseModelsList(json) {
+  return parseProviderModelInventory(json).map(({ id, label }) => ({ id, label }));
+}
+
+function stringList(value) {
+  return Array.isArray(value)
+    ? value.filter((item) => typeof item === 'string').map(String)
+    : [];
+}
+
+export function parseProviderModelInventory(json) {
   const list = Array.isArray(json) ? json
     : json && Array.isArray(json.data) ? json.data
       : json && Array.isArray(json.models) ? json.models
@@ -32,34 +44,18 @@ export function parseModelsList(json) {
     .map((model) => {
       const id = model && (model.id || model.model || model.name);
       if (!id) return null;
-      return { id: String(id), label: String(model.display_name || model.displayName || id) };
+      return {
+        id: String(id),
+        label: String(model.display_name || model.displayName || id),
+        metadata: {
+          task: typeof model.task === 'string' ? model.task : null,
+          inputModalities: stringList(model.input_modalities || model.inputModalities),
+          outputModalities: stringList(model.output_modalities || model.outputModalities || model.modalities),
+          capabilities: stringList(model.capabilities),
+        },
+      };
     })
     .filter(Boolean);
-}
-
-function modelsEndpoint(baseUrl, allowInsecureHttp) {
-  const approved = validateProviderBaseUrl(baseUrl, {
-    allowInsecureHttp,
-    requireTransportApproval: true,
-  });
-  const endpoint = new URL(approved);
-  let prefix = endpoint.pathname.replace(/\/+$/, '');
-  if (/\/v1$/i.test(prefix)) prefix = prefix.slice(0, -3);
-  endpoint.pathname = `${prefix === '/' ? '' : prefix}/v1/models`;
-  endpoint.search = '';
-  endpoint.hash = '';
-  return endpoint;
-}
-
-function resolvedProfileHeaders(profile) {
-  const headers = {};
-  for (const header of profile.extraHeaders || []) {
-    headers[String(header.name).toLowerCase()] = String(header.value);
-  }
-  if (profile.auth?.kind === 'header') {
-    headers[String(profile.auth.name).toLowerCase()] = String(profile.auth.value);
-  }
-  return headers;
 }
 
 function networkFailure() {
@@ -76,13 +72,14 @@ function resultFromResponse(status, body, sensitiveValues = []) {
     return { ok: false, status, models: [], detail: 'HTTP ' + status + ' from provider' };
   }
   try {
-    const models = parseModelsList(JSON.parse(body));
-    const serialized = JSON.stringify(models);
+    const inventory = parseProviderModelInventory(JSON.parse(body));
+    const models = inventory.map(({ id, label }) => ({ id, label }));
+    const serialized = JSON.stringify(inventory);
     if (sensitiveValues.some((value) => value && serialized.includes(value))) {
       return { ok: false, status: 200, models: [], detail: 'Provider model metadata was rejected' };
     }
     return models.length
-      ? { ok: true, status: 200, models, detail: '' }
+      ? { ok: true, status: 200, models, inventory, detail: '' }
       : { ok: false, status: 200, models: [], detail: 'Empty model list' };
   } catch {
     return { ok: false, status: 200, models: [], detail: 'Response was not valid JSON' };
@@ -141,9 +138,17 @@ export async function probeProviderModels({
   const profile = requestProfile && typeof requestProfile === 'object' ? requestProfile : null;
   const selectedBaseUrl = profile ? profile.baseUrl : baseUrl;
   const selectedAllowInsecureHttp = profile ? profile.allowInsecureHttp === true : allowInsecureHttp;
-  let endpoint;
+  let endpoints;
   try {
-    endpoint = modelsEndpoint(selectedBaseUrl, selectedAllowInsecureHttp);
+    validateProviderBaseUrl(selectedBaseUrl, {
+      allowInsecureHttp: selectedAllowInsecureHttp,
+      requireTransportApproval: true,
+    });
+    endpoints = buildProviderEndpointCandidates({
+      baseUrl: selectedBaseUrl,
+      resource: 'models',
+      allowInsecureHttp: selectedAllowInsecureHttp,
+    });
   } catch (error) {
     if (error?.code === 'provider_insecure_http_forbidden') {
       return {
@@ -156,9 +161,17 @@ export async function probeProviderModels({
     return { ok: false, status: 0, models: [], detail: 'Invalid base URL' };
   }
 
-  const headers = profile
-    ? resolvedProfileHeaders(profile)
-    : probeHeaders(protocol, apiKey, dialect || authScheme);
+  let authCandidates;
+  try {
+    authCandidates = profile
+      ? buildProtocolAuthCandidates(profile, protocol === 'anthropic' ? 'messages' : 'models')
+      : [{
+        scheme: authSchemeFromDialect(dialect || authScheme) || (protocol === 'anthropic' ? 'x-api-key' : 'bearer'),
+        headers: probeHeaders(protocol, apiKey, dialect || authScheme),
+      }];
+  } catch {
+    return { ok: false, status: 0, models: [], detail: 'Invalid provider request profile' };
+  }
   const sensitiveValues = [];
   if (profile?.auth?.kind === 'header' && profile.auth.value) {
     const value = String(profile.auth.value);
@@ -171,24 +184,55 @@ export async function probeProviderModels({
   for (const header of profile?.extraHeaders || []) {
     if (header.source === 'secret' && header.value) sensitiveValues.push(String(header.value));
   }
-  if (typeof requestImpl === 'function') {
-    try {
-      const response = await requestImpl({
-        url: endpoint.toString(),
-        method: 'GET',
-        headers,
-        timeoutMs,
-      });
-      const status = Number.isInteger(response?.status) ? response.status : 0;
-      if (status === 0) return networkFailure();
-      return resultFromResponse(
-        status,
-        typeof response?.body === 'string' ? response.body : '',
-        sensitiveValues,
-      );
-    } catch {
-      return networkFailure();
+  let lastResult = null;
+  for (const endpoint of endpoints) {
+    for (let authIndex = 0; authIndex < authCandidates.length; authIndex += 1) {
+      const authCandidate = authCandidates[authIndex];
+      let result;
+      if (typeof requestImpl === 'function') {
+        try {
+          const response = await requestImpl({
+            url: endpoint.url.toString(),
+            method: 'GET',
+            headers: authCandidate.headers,
+            timeoutMs,
+          });
+          const status = Number.isInteger(response?.status) ? response.status : 0;
+          result = status === 0
+            ? networkFailure()
+            : resultFromResponse(
+              status,
+              typeof response?.body === 'string' ? response.body : '',
+              sensitiveValues,
+            );
+        } catch {
+          result = networkFailure();
+        }
+      } else {
+        result = await requestWithTransport({
+          endpoint: endpoint.url,
+          headers: authCandidate.headers,
+          sensitiveValues,
+          httpsImpl,
+          timeoutMs,
+        });
+      }
+      lastResult = {
+        ...result,
+        apiRoot: endpoint.apiRoot.toString().replace(/\/$/, ''),
+        apiRootId: endpoint.id,
+        authScheme: authCandidate.scheme,
+      };
+      if (result.ok) return lastResult;
+      if ((result.status === 401 || result.status === 403) && authIndex + 1 < authCandidates.length) {
+        continue;
+      }
+      break;
     }
+    if (
+      ![0, 401, 403, 404, 405].includes(lastResult?.status)
+      && lastResult?.redirected !== true
+    ) return lastResult;
   }
-  return requestWithTransport({ endpoint, headers, sensitiveValues, httpsImpl, timeoutMs });
+  return lastResult || networkFailure();
 }

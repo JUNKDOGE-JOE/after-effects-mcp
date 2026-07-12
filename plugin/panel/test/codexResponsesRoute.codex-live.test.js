@@ -438,10 +438,11 @@ async function startLiveStack({ codexPath, requireMetadata, observeFacade, extra
     const runtime = {
       providerId: 'ae_mcp_route_live',
       baseUrl: runtimeBaseUrl,
+      chatCompatibility: true,
       envHeaders: [{
-        name: 'Authorization',
+        name: 'x-ae-mcp-route-token',
         envName: 'AE_MCP_PROVIDER_HEADER_00',
-        value: `Bearer ${local.routeToken}`,
+        value: local.routeToken,
       }],
     };
     appServer = await startAppServer(codexPath, runtime, extraArgs);

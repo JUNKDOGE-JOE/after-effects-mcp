@@ -9,6 +9,7 @@ import {
   providerFixture,
   requestText,
   resolvedModelProfile,
+  routeFixture,
   routeHeaders,
 } from './helpers/providerRouteFixtures.js';
 
@@ -30,7 +31,7 @@ test('responsesBodyToChatBody maps text-only Responses input to chat completions
   });
 });
 
-test('createCodexResponsesRoute adapts streaming Responses requests to chat completions', async () => {
+test('the Chat facade converts /responses and forwards only /chat/completions upstream', async () => {
   const upstreamCalls = [];
   const upstream = http.createServer((req, res) => {
     let body = '';
@@ -85,6 +86,444 @@ test('createCodexResponsesRoute adapts streaming Responses requests to chat comp
   } finally {
     if (route) await route.close();
     if (upstreamListening) await closeServer(upstream);
+  }
+});
+
+test('the Chat facade retries once with developer mapped to system after an explicit role rejection', async () => {
+  const upstreamCalls = [];
+  const upstreamSecret = 'sk-role-retry-secret';
+  const upstream = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      upstreamCalls.push({ headers: req.headers, body: JSON.parse(body || '{}') });
+      if (upstreamCalls.length === 1) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          error: {
+            message: 'messages[1].role: unknown variant `developer`, expected one of `system`, `user`, `assistant`, `tool`, `latest_reminder`',
+          },
+        }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        id: 'chatcmpl_role_retry',
+        object: 'chat.completion',
+        created: 1,
+        model: 'chat-only-model',
+        choices: [{
+          index: 0,
+          message: { role: 'assistant', content: 'ROLE_RETRY_OK' },
+          finish_reason: 'stop',
+        }],
+      }));
+    });
+  });
+  let route = null;
+  let upstreamListening = false;
+  try {
+    const upstreamPort = await listen(upstream);
+    upstreamListening = true;
+    const baseUrl = `http://127.0.0.1:${upstreamPort}/v1`;
+    route = createCodexResponsesRoute({
+      provider: providerFixture({ baseUrl }),
+      resolveRequestProfile: async () => resolvedModelProfile({
+        baseUrl,
+        auth: { kind: 'header', name: 'authorization', value: `Bearer ${upstreamSecret}` },
+      }),
+      requireImpl: (name) => { if (name === 'http') return http; throw new Error('unexpected module ' + name); },
+      cryptoImpl: deterministicCrypto(),
+    });
+    const local = await route.start();
+    const result = await requestText(`${local.baseUrl}/responses`, {
+      method: 'POST',
+      headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
+      body: {
+        model: 'chat-only-model',
+        instructions: 'Global policy.',
+        input: [
+          { role: 'developer', content: 'Project policy.' },
+          { role: 'user', content: 'Continue.' },
+        ],
+        stream: false,
+      },
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(upstreamCalls.length, 2);
+    assert.equal(upstreamCalls.every((call) => call.headers.authorization === `Bearer ${upstreamSecret}`), true);
+    assert.deepEqual(upstreamCalls[0].body.messages, [
+      { role: 'system', content: 'Global policy.' },
+      { role: 'developer', content: 'Project policy.' },
+      { role: 'user', content: 'Continue.' },
+    ]);
+    assert.deepEqual(upstreamCalls[1].body.messages, [
+      { role: 'system', content: 'Global policy.' },
+      { role: 'system', content: 'Project policy.' },
+      { role: 'user', content: 'Continue.' },
+    ]);
+    assert.equal(result.body.includes('ROLE_RETRY_OK'), true);
+    assert.equal(result.body.includes(upstreamSecret), false);
+  } finally {
+    if (route) await route.close();
+    if (upstreamListening) await closeServer(upstream);
+  }
+});
+
+test('the Chat facade bounds developer-role fallback to one retry and redacts the final error', async () => {
+  const upstreamBodies = [];
+  const upstreamSecret = 'role-retry-secret-value';
+  const upstream = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      upstreamBodies.push(JSON.parse(body || '{}'));
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        error: {
+          message: `messages: Unexpected role "developer". Credential ${upstreamSecret}`,
+        },
+      }));
+    });
+  });
+  let route = null;
+  let upstreamListening = false;
+  try {
+    const upstreamPort = await listen(upstream);
+    upstreamListening = true;
+    const baseUrl = `http://127.0.0.1:${upstreamPort}/v1`;
+    route = createCodexResponsesRoute({
+      provider: providerFixture({ baseUrl }),
+      resolveRequestProfile: async () => resolvedModelProfile({
+        baseUrl,
+        auth: { kind: 'header', name: 'authorization', value: `Bearer ${upstreamSecret}` },
+      }),
+      requireImpl: (name) => { if (name === 'http') return http; throw new Error('unexpected module ' + name); },
+      cryptoImpl: deterministicCrypto(),
+    });
+    const local = await route.start();
+    const result = await requestText(`${local.baseUrl}/responses`, {
+      method: 'POST',
+      headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
+      body: {
+        model: 'chat-only-model',
+        input: [{ role: 'developer', content: 'Keep this content.' }],
+        stream: false,
+      },
+    });
+
+    assert.equal(result.status, 400);
+    assert.equal(upstreamBodies.length, 2);
+    assert.deepEqual(upstreamBodies[0].messages, [
+      { role: 'developer', content: 'Keep this content.' },
+    ]);
+    assert.deepEqual(upstreamBodies[1].messages, [
+      { role: 'system', content: 'Keep this content.' },
+    ]);
+    assert.deepEqual(JSON.parse(result.body).error, {
+      type: 'provider_error',
+      code: 'provider_error',
+      message: 'messages: Unexpected role "developer". Credential [redacted]',
+    });
+    assert.equal(result.body.includes(upstreamSecret), false);
+  } finally {
+    if (route) await route.close();
+    if (upstreamListening) await closeServer(upstream);
+  }
+});
+
+test('the Chat facade retries max_tokens once as max_completion_tokens without changing the request', async () => {
+  const upstreamBodies = [];
+  const upstream = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      upstreamBodies.push(JSON.parse(body || '{}'));
+      if (upstreamBodies.length === 1) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          error: {
+            code: 'unsupported_parameter',
+            param: 'max_tokens',
+            message: "Unsupported parameter: 'max_tokens'. Use 'max_completion_tokens' instead.",
+          },
+        }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        id: 'chatcmpl_token_retry',
+        object: 'chat.completion',
+        created: 1,
+        model: 'chat-only-model',
+        choices: [{
+          index: 0,
+          message: { role: 'assistant', content: 'TOKEN_RETRY_OK' },
+          finish_reason: 'stop',
+        }],
+      }));
+    });
+  });
+  let route = null;
+  let upstreamListening = false;
+  try {
+    const upstreamPort = await listen(upstream);
+    upstreamListening = true;
+    const baseUrl = `http://127.0.0.1:${upstreamPort}/v1`;
+    route = createCodexResponsesRoute({
+      provider: providerFixture({ baseUrl }),
+      resolveRequestProfile: async () => resolvedModelProfile({ baseUrl }),
+      requireImpl: (name) => { if (name === 'http') return http; throw new Error('unexpected module ' + name); },
+      cryptoImpl: deterministicCrypto(),
+    });
+    const local = await route.start();
+    const result = await requestText(`${local.baseUrl}/responses`, {
+      method: 'POST',
+      headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
+      body: {
+        model: 'chat-only-model',
+        instructions: 'Global policy.',
+        input: [
+          { role: 'developer', content: 'Project policy.' },
+          { role: 'user', content: 'Use the tools in order.' },
+        ],
+        max_output_tokens: 32,
+        temperature: 0.2,
+        tools: [
+          { type: 'function', name: 'first_tool', parameters: { type: 'object', properties: {} } },
+          { type: 'function', name: 'second_tool', parameters: { type: 'object', properties: {} } },
+        ],
+        tool_choice: 'auto',
+        parallel_tool_calls: false,
+        prompt_cache_key: 'cache-token-retry',
+        client_metadata: { session_id: 'session-token-retry' },
+        stream: false,
+      },
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.body.includes('TOKEN_RETRY_OK'), true);
+    assert.equal(upstreamBodies.length, 2);
+    const [initial, retried] = upstreamBodies;
+    assert.equal(initial.max_tokens, 32);
+    assert.equal(Object.hasOwn(initial, 'max_completion_tokens'), false);
+    assert.equal(Object.hasOwn(retried, 'max_tokens'), false);
+    assert.equal(retried.max_completion_tokens, 32);
+    assert.deepEqual(
+      Object.keys(retried),
+      Object.keys(initial).map((name) => (name === 'max_tokens' ? 'max_completion_tokens' : name)),
+    );
+    const withoutTokenLimit = (body) => Object.fromEntries(
+      Object.entries(body).filter(([name]) => name !== 'max_tokens' && name !== 'max_completion_tokens'),
+    );
+    assert.deepEqual(withoutTokenLimit(retried), withoutTokenLimit(initial));
+    assert.deepEqual(retried.messages.map((message) => message.role), ['system', 'developer', 'user']);
+    assert.deepEqual(retried.tools.map((tool) => tool.function.name), ['first_tool', 'second_tool']);
+  } finally {
+    if (route) await route.close();
+    if (upstreamListening) await closeServer(upstream);
+  }
+});
+
+test('the Chat facade does not retry a max_tokens validation error that is not a field rejection', async () => {
+  const upstreamBodies = [];
+  const upstream = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      upstreamBodies.push(JSON.parse(body || '{}'));
+      res.writeHead(422, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        error: {
+          code: 'invalid_value',
+          param: 'max_tokens',
+          message: 'max_tokens must be less than or equal to 16.',
+        },
+      }));
+    });
+  });
+  let route = null;
+  let upstreamListening = false;
+  try {
+    const upstreamPort = await listen(upstream);
+    upstreamListening = true;
+    const baseUrl = `http://127.0.0.1:${upstreamPort}/v1`;
+    route = createCodexResponsesRoute({
+      provider: providerFixture({ baseUrl }),
+      resolveRequestProfile: async () => resolvedModelProfile({ baseUrl }),
+      requireImpl: (name) => { if (name === 'http') return http; throw new Error('unexpected module ' + name); },
+      cryptoImpl: deterministicCrypto(),
+    });
+    const local = await route.start();
+    const result = await requestText(`${local.baseUrl}/responses`, {
+      method: 'POST',
+      headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
+      body: {
+        model: 'chat-only-model',
+        input: 'Keep the validation error.',
+        max_output_tokens: 32,
+        stream: false,
+      },
+    });
+
+    assert.equal(result.status, 422);
+    assert.equal(upstreamBodies.length, 1);
+    assert.equal(upstreamBodies[0].max_tokens, 32);
+    assert.equal(Object.hasOwn(upstreamBodies[0], 'max_completion_tokens'), false);
+    assert.equal(JSON.parse(result.body).error.message, 'max_tokens must be less than or equal to 16.');
+  } finally {
+    if (route) await route.close();
+    if (upstreamListening) await closeServer(upstream);
+  }
+});
+
+test('the Chat facade composes its two compatibility fallbacks and stops after three requests', async () => {
+  const upstreamBodies = [];
+  const upstream = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      upstreamBodies.push(JSON.parse(body || '{}'));
+      res.writeHead(upstreamBodies.length === 2 ? 422 : 400, { 'Content-Type': 'application/json' });
+      if (upstreamBodies.length === 1) {
+        res.end(JSON.stringify({ error: { message: 'Unexpected developer role in messages.' } }));
+        return;
+      }
+      res.end(JSON.stringify({
+        error: {
+          code: 'unsupported_parameter',
+          param: 'max_tokens',
+          message: "Unsupported parameter: 'max_tokens'. Use 'max_completion_tokens' instead.",
+        },
+      }));
+    });
+  });
+  let route = null;
+  let upstreamListening = false;
+  try {
+    const upstreamPort = await listen(upstream);
+    upstreamListening = true;
+    const baseUrl = `http://127.0.0.1:${upstreamPort}/v1`;
+    route = createCodexResponsesRoute({
+      provider: providerFixture({ baseUrl }),
+      resolveRequestProfile: async () => resolvedModelProfile({ baseUrl }),
+      requireImpl: (name) => { if (name === 'http') return http; throw new Error('unexpected module ' + name); },
+      cryptoImpl: deterministicCrypto(),
+    });
+    const local = await route.start();
+    const result = await requestText(`${local.baseUrl}/responses`, {
+      method: 'POST',
+      headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
+      body: {
+        model: 'chat-only-model',
+        input: [
+          { role: 'developer', content: 'Keep policy first.' },
+          { role: 'user', content: 'Continue.' },
+        ],
+        max_output_tokens: 32,
+        tools: [{ type: 'function', name: 'ordered_tool', parameters: { type: 'object', properties: {} } }],
+        stream: false,
+      },
+    });
+
+    assert.equal(result.status, 400);
+    assert.equal(upstreamBodies.length, 3);
+    assert.deepEqual(upstreamBodies.map((body) => body.messages[0].role), ['developer', 'system', 'system']);
+    assert.deepEqual(upstreamBodies.map((body) => Object.hasOwn(body, 'max_tokens')), [true, true, false]);
+    assert.deepEqual(upstreamBodies.map((body) => Object.hasOwn(body, 'max_completion_tokens')), [false, false, true]);
+    assert.deepEqual(upstreamBodies.map((body) => body.tools[0].function.name), [
+      'ordered_tool',
+      'ordered_tool',
+      'ordered_tool',
+    ]);
+  } finally {
+    if (route) await route.close();
+    if (upstreamListening) await closeServer(upstream);
+  }
+});
+
+test('the Chat facade does not retry a provider error that merely mentions developer', async () => {
+  let upstreamCalls = 0;
+  const upstream = http.createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      upstreamCalls += 1;
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'Developer quota is exhausted.' } }));
+    });
+  });
+  let route = null;
+  let upstreamListening = false;
+  try {
+    const upstreamPort = await listen(upstream);
+    upstreamListening = true;
+    const baseUrl = `http://127.0.0.1:${upstreamPort}/v1`;
+    route = createCodexResponsesRoute({
+      provider: providerFixture({ baseUrl }),
+      resolveRequestProfile: async () => resolvedModelProfile({ baseUrl }),
+      requireImpl: (name) => { if (name === 'http') return http; throw new Error('unexpected module ' + name); },
+      cryptoImpl: deterministicCrypto(),
+    });
+    const local = await route.start();
+    const result = await requestText(`${local.baseUrl}/responses`, {
+      method: 'POST',
+      headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
+      body: {
+        model: 'chat-only-model',
+        input: [{ role: 'developer', content: 'Keep this content.' }],
+      },
+    });
+
+    assert.equal(result.status, 400);
+    assert.equal(upstreamCalls, 1);
+    assert.equal(JSON.parse(result.body).error.message, 'Developer quota is exhausted.');
+  } finally {
+    if (route) await route.close();
+    if (upstreamListening) await closeServer(upstream);
+  }
+});
+
+test('the Chat facade returns a structured 501 before credentials or upstream for unsupported Responses features', async () => {
+  let resolveCalls = 0;
+  let upstreamCalls = 0;
+  const route = routeFixture({
+    resolveRequestProfile: async () => {
+      resolveCalls += 1;
+      return resolvedModelProfile();
+    },
+    createUpstreamRequest: () => {
+      upstreamCalls += 1;
+      throw new Error('unsupported Responses features must not reach upstream');
+    },
+  });
+  try {
+    const local = await route.start();
+    const result = await requestText(`${local.baseUrl}/responses`, {
+      method: 'POST',
+      headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
+      body: {
+        model: 'gpt-5.4',
+        input: [{ role: 'developer', content: 'continue under policy' }],
+        previous_response_id: 'response-secret-must-not-escape',
+      },
+    });
+
+    assert.equal(result.status, 501);
+    assert.match(String(result.headers['content-type']), /^application\/json\b/);
+    assert.deepEqual(JSON.parse(result.body), {
+      error: {
+        type: 'invalid_request_error',
+        code: 'unsupported_responses_field',
+        message: 'Unsupported Responses field: previous_response_id',
+        param: 'previous_response_id',
+      },
+    });
+    assert.equal(result.body.includes('response-secret-must-not-escape'), false);
+    assert.equal(resolveCalls, 0);
+    assert.equal(upstreamCalls, 0);
+  } finally {
+    await route.close();
   }
 });
 

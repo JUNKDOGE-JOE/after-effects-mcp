@@ -1,6 +1,6 @@
 import {
   isLoopbackProviderHostname,
-  normalizeProviderEntryV2,
+  normalizeProviderEntryV3,
   validateProviderBaseUrl,
 } from '../lib/providerProfile.js';
 
@@ -45,30 +45,44 @@ async function enforceInsecureHttp({ baseUrl, providerId, current, allowInsecure
   return true;
 }
 
-function currentSecretRef(policy) {
-  return policy && policy.kind !== 'none' && policy.kind !== 'inherit-model'
-    ? policy.valueRef
+function currentPrimaryRef(provider) {
+  return provider?.credential?.valueRef?.kind === 'secret'
+    ? provider.credential.valueRef
     : null;
 }
 
-async function buildAuthPolicy({ kind, headerName, secret, currentPolicy, credentialId, slotPrefix, secretService, created }) {
-  if (kind === 'none') return { kind: 'none' };
-  if (!['bearer', 'x-api-key', 'custom'].includes(kind)) throw flowError('provider_draft_invalid');
+function preferredAuthFromDraft(draft, current) {
+  let scheme = String(draft.modelAuthKind || '').trim();
+  if (draft.modelAuthAutomatic === true || !scheme) {
+    scheme = current?.credential?.preferredAuth?.scheme || 'auto';
+  }
+  if (!['auto', 'none', 'bearer', 'x-api-key', 'custom'].includes(scheme)) {
+    throw flowError('provider_draft_invalid');
+  }
+  const headerName = scheme === 'custom' ? String(draft.modelAuthHeaderName || '').trim() : null;
+  if (scheme === 'custom' && !headerName) throw flowError('provider_draft_invalid');
+  return { scheme, headerName };
+}
+
+async function buildCredential({ draft, current, credentialId, secretService, created }) {
+  const preferredAuth = preferredAuthFromDraft(draft, current);
+  if (preferredAuth.scheme === 'none') return { valueRef: null, preferredAuth };
+  const rawSecret = typeof draft.modelAuthSecret === 'string' ? draft.modelAuthSecret : '';
   let valueRef = null;
-  const rawSecret = typeof secret === 'string' ? secret : '';
   if (rawSecret) {
-    valueRef = await secretService.create({ credentialId, slotPrefix, value: rawSecret });
+    valueRef = await secretService.create({
+      credentialId,
+      slotPrefix: 'auth-model',
+      value: rawSecret,
+    });
     created.push(valueRef);
   } else {
-    valueRef = currentSecretRef(currentPolicy);
+    valueRef = currentPrimaryRef(current);
   }
-  if (!valueRef) throw flowError('provider_secret_required');
-  if (kind === 'custom') {
-    const name = String(headerName || '').trim();
-    if (!name) throw flowError('provider_draft_invalid');
-    return { kind: 'custom', headerName: name, valueRef };
+  if (!valueRef && preferredAuth.scheme !== 'auto') {
+    throw flowError('provider_secret_required');
   }
-  return { kind, valueRef };
+  return { valueRef, preferredAuth };
 }
 
 async function buildHeaders({ draftHeaders, currentHeaders, credentialId, secretService, created }) {
@@ -112,8 +126,8 @@ function allSecretRefs(provider) {
     if (ref?.kind !== 'secret') return;
     if (!refs.some((item) => item.reference === ref.reference && item.revision === ref.revision)) refs.push(ref);
   };
-  add(currentSecretRef(provider.auth?.model));
-  add(currentSecretRef(provider.auth?.probe));
+  add(provider.credential?.valueRef);
+  add(provider.probeAuthOverride?.valueRef);
   for (const header of provider.headers || []) add(header.valueRef);
   return refs;
 }
@@ -125,12 +139,25 @@ function refsRemoved(previous, next) {
 
 function requestFingerprint(provider) {
   return JSON.stringify({
-    protocol: provider.protocol,
     baseUrl: provider.baseUrl,
     allowInsecureHttp: provider.allowInsecureHttp,
-    auth: provider.auth,
+    credential: provider.credential,
+    probeAuthOverride: provider.probeAuthOverride,
     headers: provider.headers,
   });
+}
+
+function unknownModelList(requestProfileRevision, revision = 0) {
+  return {
+    revision,
+    status: 'unknown',
+    apiRoot: null,
+    auth: null,
+    models: [],
+    checkedAt: 0,
+    validUntil: 0,
+    requestProfileRevision,
+  };
 }
 
 async function rollbackCreated(created, secretService) {
@@ -167,10 +194,13 @@ export async function saveProviderDraft({
   const id = String(draft.id || '').trim() || slug(draft.name);
   const name = String(draft.name || '').trim() || id;
   if (!id || !name) throw flowError('provider_draft_invalid');
-  const protocol = draft.protocol || 'openai-compatible';
-  if (protocol !== 'openai-compatible' && protocol !== 'anthropic') throw flowError('provider_draft_invalid');
+  const protocolHint = draft.protocol || 'openai-compatible';
+  if (protocolHint !== 'openai-compatible' && protocolHint !== 'anthropic') {
+    throw flowError('provider_draft_invalid');
+  }
+  const currentProvider = current ? normalizeProviderEntryV3(current) : null;
   const baseUrl = normalizedBaseUrl(draft.baseUrl);
-  const credentialId = current?.credentialId || (typeof randomUUID === 'function' ? randomUUID() : '');
+  const credentialId = currentProvider?.credentialId || (typeof randomUUID === 'function' ? randomUUID() : '');
   if (!credentialId) throw flowError('provider_draft_invalid');
   // Bind copy-on-write to the state observed before any confirmation/helper
   // await. A concurrent save must fail CAS and roll back this save's new refs.
@@ -178,7 +208,7 @@ export async function saveProviderDraft({
   const allowInsecureHttp = await enforceInsecureHttp({
     baseUrl,
     providerId: id,
-    current,
+    current: currentProvider,
     allowInsecureHttp: draft.allowInsecureHttp === true,
     confirmInsecureHttp,
   });
@@ -186,71 +216,58 @@ export async function saveProviderDraft({
   const created = [];
   let entry;
   try {
-    const model = await buildAuthPolicy({
-      kind: draft.modelAuthKind || 'bearer',
-      headerName: draft.modelAuthHeaderName,
-      secret: draft.modelAuthSecret,
-      currentPolicy: current?.auth?.model,
+    const credential = await buildCredential({
+      draft,
+      current: currentProvider,
       credentialId,
-      slotPrefix: 'auth-model',
       secretService,
       created,
     });
-    let probe;
-    if ((draft.probeAuthMode || 'inherit-model') === 'inherit-model') {
-      probe = { kind: 'inherit-model' };
-    } else {
-      probe = await buildAuthPolicy({
-        kind: draft.probeAuthKind || 'none',
-        headerName: draft.probeAuthHeaderName,
-        secret: draft.probeAuthSecret,
-        currentPolicy: current?.auth?.probe,
-        credentialId,
-        slotPrefix: 'auth-probe',
-        secretService,
-        created,
-      });
-    }
     const headers = await buildHeaders({
       draftHeaders: draft.headers || [],
-      currentHeaders: current?.headers || [],
+      currentHeaders: currentProvider?.headers || [],
       credentialId,
       secretService,
       created,
     });
-    const overrideValue = String(draft.dialectOverride || '').trim();
-    if (overrideValue && overrideValue !== 'responses' && overrideValue !== 'chat') {
+    const hasProbePreference = Object.hasOwn(draft, 'probePreference')
+      || Object.hasOwn(draft, 'dialectOverride');
+    const rawProbePreference = Object.hasOwn(draft, 'probePreference')
+      ? draft.probePreference
+      : draft.dialectOverride;
+    const selectedProbePreference = hasProbePreference
+      ? String(rawProbePreference || '').trim()
+        || (currentProvider ? null : protocolHint === 'anthropic' ? 'messages' : null)
+      : currentProvider?.probePreference || (protocolHint === 'anthropic' ? 'messages' : null);
+    if (selectedProbePreference !== null
+        && !['responses', 'chat', 'messages'].includes(selectedProbePreference)) {
       throw flowError('provider_draft_invalid');
     }
-    const override = overrideValue
-      ? {
-        wireApi: overrideValue,
-        source: draft.dialectSource === 'ccswitch-import' ? 'ccswitch-import' : 'manual',
-        updatedAt: Date.now(),
-      }
-      : null;
     const candidate = {
       id,
       credentialId,
       name,
-      protocol,
       baseUrl,
       allowInsecureHttp,
-      authProfileRevision: current?.authProfileRevision || 1,
-      auth: { model, probe },
+      requestProfileRevision: currentProvider?.requestProfileRevision || 1,
+      credential,
+      probeAuthOverride: null,
       headers,
-      dialect: { override, detected: current?.dialect?.detected || null },
-      probedModels: current?.probedModels || [],
-      probedAt: current?.probedAt || 0,
+      probePreference: selectedProbePreference,
+      modelList: currentProvider?.modelList || unknownModelList(1),
+      modelCapabilities: currentProvider?.modelCapabilities || [],
+      routeOverrides: currentProvider?.routeOverrides || [],
     };
-    if (current && requestFingerprint(candidate) !== requestFingerprint(current)) {
-      candidate.authProfileRevision = current.authProfileRevision + 1;
-      candidate.dialect.detected = null;
-      candidate.probedModels = [];
-      candidate.probedAt = 0;
+    if (currentProvider && requestFingerprint(candidate) !== requestFingerprint(currentProvider)) {
+      candidate.requestProfileRevision = currentProvider.requestProfileRevision + 1;
+      candidate.modelList = unknownModelList(
+        candidate.requestProfileRevision,
+        currentProvider.modelList.revision + 1,
+      );
+      candidate.modelCapabilities = [];
     }
-    entry = normalizeProviderEntryV2(candidate);
-    const pendingSecretDeletes = refsRemoved(current, entry);
+    entry = normalizeProviderEntryV3(candidate);
+    const pendingSecretDeletes = refsRemoved(currentProvider, entry);
     const committed = store.upsert(entry, {
       expectedRevision,
       pendingSecretDeletes,
@@ -270,7 +287,7 @@ export async function saveProviderDraft({
 
 export async function deleteProviderProfile({ provider, store, secretService } = {}) {
   if (!provider || !store || !secretService) throw flowError('provider_draft_invalid');
-  const normalized = normalizeProviderEntryV2(provider);
+  const normalized = normalizeProviderEntryV3(provider);
   const pendingSecretDeletes = allSecretRefs(normalized);
   const state = store.readState();
   const committed = store.remove(normalized.id, {
@@ -296,7 +313,8 @@ export async function importProviderDraft({ candidate, store, secretService, ran
     protocol: candidate.protocol,
     baseUrl: candidate.baseUrl,
     allowInsecureHttp: false,
-    modelAuthKind: candidate.modelAuthKind || 'bearer',
+    modelAuthKind: candidate.modelAuthKind || 'auto',
+    modelAuthAutomatic: candidate.modelAuthKind === undefined,
     modelAuthHeaderName: '',
     modelAuthSecret: candidate.modelAuthSecret,
     probeAuthMode: 'inherit-model',
@@ -304,8 +322,8 @@ export async function importProviderDraft({ candidate, store, secretService, ran
     probeAuthHeaderName: '',
     probeAuthSecret: '',
     headers: [],
-    dialectOverride: candidate.dialectHint || '',
-    dialectSource: 'ccswitch-import',
+    dialectOverride: '',
+    dialectSource: '',
   };
   try {
     const candidateId = String(draft.id || '').trim() || slug(draft.name);

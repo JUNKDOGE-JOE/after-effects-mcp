@@ -938,7 +938,12 @@ class ToolArtifactStore:
                 writes={self._artifact_path(artifact_id): data},
                 deletes=(() if replacement_path is None else (replacement_path,)),
             )
-        self._publish(StoreMutation("edit", (artifact_id,), next_revision))
+        mutation_ids = (
+            (artifact_id,)
+            if replace_artifact_id is None
+            else (artifact_id, replace_artifact_id)
+        )
+        self._publish(StoreMutation("edit", mutation_ids, next_revision))
         return updated
 
     def delete(

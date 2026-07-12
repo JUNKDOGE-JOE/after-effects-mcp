@@ -142,6 +142,33 @@ def test_set_property_required():
     assert ok.path == "Transform/Position"
 
 
+def test_set_property_requires_exactly_one_value_or_expression():
+    expression = S.AeSetPropertyArgs(
+        layer_id=1,
+        path="Transform/Opacity",
+        expression="time * 10",
+    )
+    assert expression.expression == "time * 10"
+    assert expression.value is None
+
+    with pytest.raises(ValidationError):
+        S.AeSetPropertyArgs(layer_id=1, path="Transform/Opacity")
+    with pytest.raises(ValidationError):
+        S.AeSetPropertyArgs(
+            layer_id=1,
+            path="Transform/Opacity",
+            value=50,
+            expression="time * 10",
+        )
+    with pytest.raises(ValidationError):
+        S.AeSetPropertyArgs(
+            layer_id=1,
+            path="Transform/Opacity",
+            expression="time * 10",
+            at_time=1.0,
+        )
+
+
 def test_move_layer_positive_indices():
     with pytest.raises(ValidationError):
         S.AeMoveLayerArgs(layer_id=0, to_index=1)

@@ -9,7 +9,15 @@ const INBOUND_EXACT = new Set([
   'traceparent',
   'tracestate',
 ]);
-const LOCAL_ONLY = new Set(['authorization', 'host', 'content-length', 'connection', 'transfer-encoding']);
+export const LOCAL_ROUTE_TOKEN_HEADER = 'x-ae-mcp-route-token';
+const LOCAL_ONLY = new Set([
+  'authorization',
+  LOCAL_ROUTE_TOKEN_HEADER,
+  'host',
+  'content-length',
+  'connection',
+  'transfer-encoding',
+]);
 const FORBIDDEN_EXACT = new Set([
   'host',
   'content-length',
@@ -117,7 +125,9 @@ export function collectCodexHeaders(rawHeaders = [], limits = {}) {
   for (let index = 0; index < rawHeaders.length; index += 2) {
     const name = validateName(rawHeaders[index]);
     const value = validateValue(rawHeaders[index + 1], bounded);
-    if (seen.has(name)) throw headerError('provider_header_duplicate', 'Duplicate provider header is forbidden.');
+    if (seen.has(name) && name !== 'authorization') {
+      throw headerError('provider_header_duplicate', 'Duplicate provider header is forbidden.');
+    }
     seen.add(name);
     all.push({ name, value });
     if (LOCAL_ONLY.has(name)) continue;

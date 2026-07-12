@@ -48,7 +48,7 @@ const S = {
     recheck: '重新检测',
     providerNone: '（未选择 provider）',
     importClaudeSettings: '从 ~/.claude/settings.json 导入',
-    claude3pNote: 'Claude-3p 桌面版的凭据无法自动读取；请在 Provider 管理里手动填写一次 Base URL 与 Token。',
+    claude3pNote: '同一个 Provider 可同时用于 Claude 和 Codex；协议与兼容转换按当前模型自动选择。',
     providerHelperRepair: 'Provider 凭据功能已安全停用。请修复或重新安装平台 Helper，重启 AE 后再点「重新检测」；不会回退读取明文凭据。',
     providerStoreCorrupt: 'Provider 配置文件损坏；当前列表已保留。请先从备份恢复 providers.json，再点「重新检测」。',
     providerStoreUnavailable: 'Provider 配置文件不可用；当前列表已保留。请检查 ~/.ae-mcp 的磁盘空间与读写权限。',
@@ -109,7 +109,7 @@ const S = {
     recheck: 'Re-check',
     providerNone: '(no provider selected)',
     importClaudeSettings: 'Import from ~/.claude/settings.json',
-    claude3pNote: 'Claude-3p desktop credentials cannot be read automatically; fill the base URL and token once in Provider Manager.',
+    claude3pNote: 'The same Provider can serve Claude and Codex; protocol routing and compatibility conversion are selected per model.',
     providerHelperRepair: 'Provider credentials are safely disabled. Repair or reinstall the platform Helper, restart AE, then re-check. Plaintext fallback is disabled.',
     providerStoreCorrupt: 'The provider configuration is corrupt; the current list was retained. Restore providers.json from backup, then re-check.',
     providerStoreUnavailable: 'The provider configuration is unavailable; the current list was retained. Check disk space and permissions for ~/.ae-mcp.',
@@ -368,7 +368,7 @@ export function SettingsScreen({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <Select value={claudeProviderId} onChange={onClaudeProviderChange} options={[
                     { value: '', label: t.providerNone },
-                    ...providers.filter((p) => p.protocol === 'anthropic').map((p) => ({ value: p.id, label: p.name })),
+                    ...providers.map((p) => ({ value: p.id, label: p.name })),
                   ]} />
                   {claudeSettingsImportAvailable ? (
                     <Button variant="secondary" size="sm" icon="download" onClick={onImportClaudeSettings}>{t.importClaudeSettings}</Button>
@@ -381,7 +381,7 @@ export function SettingsScreen({
               return (
                 <Select value={codexProviderId} onChange={onCodexProviderChange} options={[
                   { value: '', label: t.providerNone },
-                  ...providers.filter((p) => p.protocol === 'openai-compatible').map((p) => ({ value: p.id, label: p.name })),
+                  ...providers.map((p) => ({ value: p.id, label: p.name })),
                 ]} />
               );
             }

@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseModelsList, probeHeaders, probeProviderModels } from '../src/cep/modelProbe.js';
+import {
+  parseModelsList,
+  parseProviderModelInventory,
+  probeHeaders,
+  probeProviderModels,
+} from '../src/cep/modelProbe.js';
 
 test('parseModelsList handles OpenAI-style {data:[{id}]}', () => {
   const models = parseModelsList({ data: [{ id: 'glm-5.2' }, { id: 'deepseek-v4' }, { object: 'noise' }] });
@@ -15,6 +20,27 @@ test('parseModelsList handles Anthropic-style display_name and bare arrays', () 
     [{ id: 'claude-sonnet-5', label: 'Claude Sonnet 5' }]);
   assert.deepEqual(parseModelsList([{ id: 'm1' }]), [{ id: 'm1', label: 'm1' }]);
   assert.deepEqual(parseModelsList(null), []);
+});
+
+test('parseProviderModelInventory retains only safe modality and task metadata', () => {
+  assert.deepEqual(parseProviderModelInventory({ data: [{
+    id: 'vision-chat',
+    display_name: 'Vision Chat',
+    task: 'chat',
+    input_modalities: ['text', 'image', 7],
+    output_modalities: ['text'],
+    capabilities: ['tools'],
+    provider_private_blob: 'not persisted',
+  }] }), [{
+    id: 'vision-chat',
+    label: 'Vision Chat',
+    metadata: {
+      task: 'chat',
+      inputModalities: ['text', 'image'],
+      outputModalities: ['text'],
+      capabilities: ['tools'],
+    },
+  }]);
 });
 
 test('probeHeaders picks auth scheme by protocol', () => {
@@ -145,13 +171,35 @@ test('probeProviderModels converts injected request failures into a non-secret n
     },
     requestImpl: async () => { throw new Error(`socket failed ${secret}`); },
   });
-  assert.deepEqual(result, {
-    ok: false,
-    status: 0,
-    models: [],
-    detail: 'Network error while probing provider models',
-  });
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 0);
+  assert.deepEqual(result.models, []);
+  assert.equal(result.detail, 'Network error while probing provider models');
+  assert.equal(result.apiRoot, 'https://provider.example/v1');
+  assert.equal(result.authScheme, 'bearer');
   assert.equal(JSON.stringify(result).includes(secret), false);
+});
+
+test('probeProviderModels tries configured-root before plus-v1 and records the successful root', async () => {
+  const calls = [];
+  const result = await probeProviderModels({
+    baseUrl: 'https://relay.example/proxy',
+    apiKey: 'sk-test',
+    requestImpl: async (input) => {
+      calls.push(input);
+      return calls.length === 1
+        ? { status: 404, headers: { 'content-type': 'application/json' }, body: '{"error":{"message":"missing"}}' }
+        : { status: 200, headers: { 'content-type': 'application/json' }, body: '{"data":[{"id":"m"}]}' };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.apiRootId, 'plus-v1');
+  assert.equal(result.apiRoot, 'https://relay.example/proxy/v1');
+  assert.deepEqual(calls.map((call) => new URL(call.url).pathname), [
+    '/proxy/models',
+    '/proxy/v1/models',
+  ]);
 });
 
 test('probeProviderModels does not include secret-bearing error bodies in detail', async () => {

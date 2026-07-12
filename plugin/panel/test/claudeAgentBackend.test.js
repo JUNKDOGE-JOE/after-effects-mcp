@@ -75,6 +75,12 @@ function makeBackend(options = {}) {
     getToolMeta: async () => ({ allowedTools: ['ae.overview'], annotations: { 'ae.overview': { readOnlyHint: true } } }),
     getModel: () => 'claude-test',
     getPermissionMode: () => 'manual',
+    resolveCapability: async () => ({
+      ok: true,
+      upstreamProtocol: 'messages',
+      clientProtocol: 'messages',
+      conversion: 'native',
+    }),
     onEvent: (evt) => events.push(evt),
     spawnImpl: spawned.spawn,
     env: { PATH: 'C:\\Node', ANTHROPIC_API_KEY: 'sk-test' },
@@ -87,8 +93,55 @@ async function flush() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 function parseWrites(proc) {
   return proc.writes.map((line) => JSON.parse(line));
+}
+
+function makeApiProvider(overrides = {}) {
+  return {
+    id: 'provider-1',
+    baseUrl: 'https://provider.example/root',
+    requestProfileRevision: 1,
+    modelList: { revision: 1 },
+    ...overrides,
+  };
+}
+
+function makeProviderRouteFactory({
+  origin = 'http://127.0.0.1:43123',
+  routeToken = 'local-route-token',
+  startError = null,
+} = {}) {
+  const calls = [];
+  const routes = [];
+  const create = (options) => {
+    const route = {
+      startCalls: 0,
+      closeCalls: 0,
+      async start() {
+        this.startCalls += 1;
+        if (startError) throw startError;
+        return { origin, routeToken };
+      },
+      async close() {
+        this.closeCalls += 1;
+      },
+    };
+    calls.push(options);
+    routes.push(route);
+    return route;
+  };
+  return { create, calls, routes };
 }
 
 test('createClaudeAgentBackend writes user only after ready handshake', async () => {
@@ -369,55 +422,481 @@ test('resolveSystemNode returns the structured adapter failure', async () => {
   assert.match(result.detail, /VERSION_TOO_OLD/);
 });
 
-test('api channel resolves once while constructing spawn env and emits no secret', async () => {
-  const spawned = makeSpawn();
-  const events = [];
-  let resolveCalls = 0;
-  const backend = createClaudeAgentBackend({
-    resolveNode: async () => ({ ok: true, nodePath: 'C:\node.exe', version: 'v20.0.0' }),
-    sidecarPath: 'C:\ext\sidecar\agent-sidecar.mjs',
-    getMcpSpec: async () => ({ command: 'uv', args: [], env: {} }),
-    getToolMeta: async () => ({ allowedTools: [], annotations: {} }),
-    getModel: () => 'claude-sonnet-5',
-    getPermissionMode: () => 'manual',
+test('api channel exposes only the loopback route token to the sidecar', async () => {
+  const provider = makeApiProvider();
+  const routeFactory = makeProviderRouteFactory();
+  const capabilityResolver = async () => ({
+    ok: true,
+    upstreamProtocol: 'messages',
+    clientProtocol: 'messages',
+    conversion: 'native',
+  });
+  const upstreamSecret = 'upstream-secret-never-spawned';
+  let providerCalls = 0;
+  let profileCalls = 0;
+  const resolveRequestProfile = async () => {
+    profileCalls += 1;
+    return {
+      providerId: provider.id,
+      baseUrl: provider.baseUrl,
+      auth: { kind: 'header', name: 'x-api-key', value: upstreamSecret },
+    };
+  };
+  const { backend, events, spawned } = makeBackend({
     getChannel: () => 'api',
     resolveApiProvider: async () => {
-      resolveCalls += 1;
-      return {
-        providerId: 'official',
-        baseUrl: 'https://api.anthropic.com',
-        allowInsecureHttp: false,
-        auth: { kind: 'header', name: 'x-api-key', value: 'resolved-only-for-spawn' },
-        extraHeaders: [],
-        authProfileRevision: 1,
-      };
+      providerCalls += 1;
+      return provider;
     },
-    onEvent: (event) => events.push(event),
-    spawnImpl: spawned.spawn,
-    env: { PATH: 'C:\bin', ANTHROPIC_API_KEY: 'leak' },
+    resolveRequestProfile,
+    resolveCapability: capabilityResolver,
+    createProviderRoute: routeFactory.create,
+    env: {
+      PATH: 'C:\\bin',
+      ANTHROPIC_API_KEY: upstreamSecret,
+      ANTHROPIC_AUTH_TOKEN: 'stale-token',
+      ANTHROPIC_BASE_URL: 'https://stale.example/v1',
+    },
   });
+
   const run = backend.sendUser('hi');
   await flush();
   const proc = spawned.procs[0];
-  proc.pushStdout(JSON.stringify({ t: 'ready' }) + '\n');
+  proc.pushStdout({ t: 'ready' });
   await flush();
+
   const call = spawned.calls[0];
-  assert.equal(resolveCalls, 1);
-  assert.equal(call.options.env.ANTHROPIC_BASE_URL, 'https://api.anthropic.com');
-  assert.equal(call.options.env.ANTHROPIC_AUTH_TOKEN, 'resolved-only-for-spawn');
+  assert.equal(providerCalls, 1);
+  assert.equal(profileCalls, 0);
+  assert.equal(routeFactory.calls[0].provider, provider);
+  assert.equal(routeFactory.calls[0].resolveRequestProfile, resolveRequestProfile);
+  assert.equal(routeFactory.calls[0].resolveCapability, capabilityResolver);
+  assert.equal(call.options.env.ANTHROPIC_BASE_URL, 'http://127.0.0.1:43123');
+  assert.equal(call.options.env.ANTHROPIC_AUTH_TOKEN, 'local-route-token');
   assert.equal(call.options.env.ANTHROPIC_API_KEY, undefined);
-  const flagIndex = call.args.indexOf('--channel');
-  assert.ok(flagIndex > -1, '--channel flag passed to sidecar');
-  assert.equal(call.args[flagIndex + 1], 'api');
-  assert.equal(JSON.stringify(events).includes('resolved-only-for-spawn'), false);
-  proc.pushStderr('provider debug resolved-only-for-spawn');
-  assert.equal(backend.getStderrTail().includes('resolved-only-for-spawn'), false);
-  backend.reset();
+  assert.equal(JSON.stringify(call.options.env).includes(upstreamSecret), false);
+  assert.equal(call.args[call.args.indexOf('--channel') + 1], 'api');
+
+  proc.pushStderr('provider debug ' + upstreamSecret);
+  proc.pushStdout({
+    t: 'event',
+    event: { type: 'error', kind: 'provider', message: upstreamSecret },
+  });
   await run;
+  assert.equal(JSON.stringify(events).includes(upstreamSecret), false);
+  assert.equal(backend.getStderrTail().includes(upstreamSecret), false);
+
+  const second = backend.sendUser('same provider');
+  await flush();
+  assert.equal(providerCalls, 2);
+  assert.equal(spawned.calls.length, 1);
+  assert.equal(routeFactory.routes.length, 1);
+  proc.pushStdout({ t: 'event', event: { type: 'turn-end', stopReason: 'end_turn' } });
+  await second;
+
+  backend.reset();
+  await flush();
+  assert.equal(proc.killed, true);
+  assert.equal(routeFactory.routes[0].closeCalls, 1);
+});
+
+test('api needs-probe route recovers once before spawn and uses the recovered provider identity', async () => {
+  const candidate = makeApiProvider();
+  const recovered = makeApiProvider({
+    requestProfileRevision: 2,
+    modelList: { revision: 2 },
+  });
+  const routeFactory = makeProviderRouteFactory();
+  const selectionCalls = [];
+  const recoveryCalls = [];
+  let profileCalls = 0;
+  let refreshed = 0;
+  const { backend, events, spawned } = makeBackend({
+    getChannel: () => 'api',
+    resolveApiProvider: async () => candidate,
+    resolveCapability: async (details) => {
+      selectionCalls.push(details);
+      return details.provider === candidate
+        ? { ok: false, reasonCode: 'needs-probe', upstreamProtocol: 'messages' }
+        : { ok: true, reasonCode: 'selected', upstreamProtocol: 'messages', clientProtocol: 'messages' };
+    },
+    recoverProviderProfile: async (provider, facts, modelId) => {
+      recoveryCalls.push({ provider, facts, modelId });
+      return { provider: recovered, modelId };
+    },
+    onProviderProfileRecovered: () => { refreshed += 1; },
+    resolveRequestProfile: async () => {
+      profileCalls += 1;
+      return { auth: { kind: 'header', name: 'x-api-key', value: 'route-only-secret' } };
+    },
+    createProviderRoute: routeFactory.create,
+  });
+
+  const first = backend.sendUser('preflight');
+  await flush();
+  assert.equal(spawned.calls.length, 1);
+  assert.equal(routeFactory.calls[0].provider, recovered);
+  assert.equal(profileCalls, 0);
+  assert.deepEqual(recoveryCalls, [{
+    provider: candidate,
+    facts: { status: null, code: 'provider_preflight_required' },
+    modelId: 'claude-test',
+  }]);
+  assert.equal(selectionCalls.length, 2);
+  assert.equal(selectionCalls[0].clientProtocol, 'messages');
+  assert.equal(selectionCalls[0].feature, 'generate');
+  assert.equal(refreshed, 1);
+  spawned.procs[0].pushStdout({ t: 'ready' });
+  await flush();
+  spawned.procs[0].pushStdout({ t: 'event', event: { type: 'turn-end', stopReason: 'end_turn' } });
+  await first;
+
+  const second = backend.sendUser('same session');
+  await flush();
+  assert.equal(recoveryCalls.length, 1);
+  assert.equal(selectionCalls.length, 2);
+  assert.equal(spawned.calls.length, 1);
+  assert.equal(routeFactory.routes.length, 1);
+  spawned.procs[0].pushStdout({ t: 'event', event: { type: 'turn-end', stopReason: 'end_turn' } });
+  await second;
+  assert.equal(events.some((event) => event.type === 'error'), false);
+  backend.reset();
+});
+
+test('api stable unavailable route emits a model error before route creation or spawn', async () => {
+  const routeFactory = makeProviderRouteFactory();
+  let recoveryCalls = 0;
+  let profileCalls = 0;
+  const { backend, events, spawned } = makeBackend({
+    getChannel: () => 'api',
+    resolveApiProvider: async () => makeApiProvider(),
+    resolveCapability: async () => ({ ok: false, reasonCode: 'unavailable' }),
+    recoverProviderProfile: async () => { recoveryCalls += 1; return null; },
+    resolveRequestProfile: async () => { profileCalls += 1; return { auth: { kind: 'none' } }; },
+    createProviderRoute: routeFactory.create,
+  });
+
+  await backend.sendUser('unavailable');
+
+  assert.equal(recoveryCalls, 0);
+  assert.equal(profileCalls, 0);
+  assert.equal(routeFactory.routes.length, 0);
+  assert.equal(spawned.calls.length, 0);
+  assert.deepEqual(events.filter((event) => event.type === 'error'), [{
+    type: 'error',
+    kind: 'model',
+    code: 'provider_route_unavailable',
+    message: 'Custom provider has no verified Claude route for model claude-test',
+  }]);
+});
+
+test('api preflight reselects once and fails closed when the recovered route is still unverified', async () => {
+  const routeFactory = makeProviderRouteFactory();
+  const recovered = makeApiProvider({ requestProfileRevision: 2, modelList: { revision: 2 } });
+  let selectionCalls = 0;
+  let recoveryCalls = 0;
+  let profileCalls = 0;
+  const { backend, events, spawned } = makeBackend({
+    getChannel: () => 'api',
+    resolveApiProvider: async () => makeApiProvider(),
+    resolveCapability: async () => {
+      selectionCalls += 1;
+      return { ok: false, reasonCode: 'needs-probe', upstreamProtocol: 'messages' };
+    },
+    recoverProviderProfile: async () => {
+      recoveryCalls += 1;
+      return recovered;
+    },
+    resolveRequestProfile: async () => { profileCalls += 1; return { auth: { kind: 'none' } }; },
+    createProviderRoute: routeFactory.create,
+  });
+
+  await backend.sendUser('still unverified');
+
+  assert.equal(selectionCalls, 2);
+  assert.equal(recoveryCalls, 1);
+  assert.equal(profileCalls, 0);
+  assert.equal(routeFactory.routes.length, 0);
+  assert.equal(spawned.calls.length, 0);
+  assert.deepEqual(events.filter((event) => event.type === 'error'), [{
+    type: 'error',
+    kind: 'model',
+    code: 'provider_preflight_failed',
+    message: 'Custom provider did not expose a verified API for model claude-test',
+  }]);
+});
+
+test('reset prevents a late api preflight recovery from creating a route or sidecar', async () => {
+  const pendingRecovery = deferred();
+  const routeFactory = makeProviderRouteFactory();
+  const recovered = makeApiProvider({ requestProfileRevision: 2, modelList: { revision: 2 } });
+  let recoveryCalls = 0;
+  let refreshed = 0;
+  const { backend, events, spawned } = makeBackend({
+    getChannel: () => 'api',
+    resolveApiProvider: async () => makeApiProvider(),
+    resolveCapability: async ({ provider }) => (
+      provider === recovered
+        ? { ok: true, reasonCode: 'selected', upstreamProtocol: 'messages', clientProtocol: 'messages' }
+        : { ok: false, reasonCode: 'needs-probe', upstreamProtocol: 'messages' }
+    ),
+    recoverProviderProfile: async () => {
+      recoveryCalls += 1;
+      return pendingRecovery.promise;
+    },
+    onProviderProfileRecovered: () => { refreshed += 1; },
+    resolveRequestProfile: async () => { throw new Error('resolver must not run'); },
+    createProviderRoute: routeFactory.create,
+  });
+
+  const run = backend.sendUser('cancel preflight');
+  for (let index = 0; index < 10 && recoveryCalls === 0; index += 1) await flush();
+  assert.equal(recoveryCalls, 1);
+  backend.reset();
+  pendingRecovery.resolve(recovered);
+  await run;
+  await flush();
+
+  assert.equal(refreshed, 0);
+  assert.equal(routeFactory.routes.length, 0);
+  assert.equal(spawned.calls.length, 0);
+  assert.deepEqual(events, []);
+  assert.deepEqual(backend.getMessages(), []);
+});
+
+test('api provider resolution failure destroys the old route without exposing its error', async () => {
+  const routeFactory = makeProviderRouteFactory();
+  const secret = 'credential-resolution-secret';
+  let failResolution = false;
+  const { backend, events, spawned } = makeBackend({
+    getChannel: () => 'api',
+    resolveApiProvider: async () => {
+      if (failResolution) throw new Error(secret);
+      return makeApiProvider();
+    },
+    resolveRequestProfile: async () => ({ auth: { kind: 'none' } }),
+    createProviderRoute: routeFactory.create,
+  });
+
+  const first = backend.sendUser('first');
+  await flush();
+  spawned.procs[0].pushStdout({ t: 'ready' });
+  await flush();
+  spawned.procs[0].pushStdout({ t: 'event', event: { type: 'turn-end', stopReason: 'end_turn' } });
+  await first;
+
+  failResolution = true;
+  await backend.sendUser('must not reach old route');
+  assert.equal(spawned.procs[0].killed, true);
+  assert.equal(routeFactory.routes[0].closeCalls, 1);
+  assert.deepEqual(backend.getMessages(), []);
+  assert.equal(JSON.stringify(events).includes(secret), false);
+});
+
+test('reset during provider resolution cannot tear down a newer send', async () => {
+  const routeFactory = makeProviderRouteFactory();
+  const provider = makeApiProvider();
+  let releaseFirst;
+  const firstProvider = new Promise((resolve) => { releaseFirst = resolve; });
+  let providerCalls = 0;
+  const { backend, spawned } = makeBackend({
+    getChannel: () => 'api',
+    resolveApiProvider: async () => {
+      providerCalls += 1;
+      return providerCalls === 1 ? firstProvider : provider;
+    },
+    resolveRequestProfile: async () => ({ auth: { kind: 'none' } }),
+    createProviderRoute: routeFactory.create,
+  });
+
+  const stale = backend.sendUser('stale');
+  await flush();
+  backend.reset();
+  const current = backend.sendUser('current');
+  await flush();
+  assert.equal(spawned.calls.length, 1);
+  assert.equal(routeFactory.routes.length, 1);
+
+  releaseFirst(provider);
+  await flush();
+  assert.equal(spawned.calls.length, 1);
+  assert.equal(spawned.procs[0].killed, false);
+  assert.equal(routeFactory.routes[0].closeCalls, 0);
+
+  spawned.procs[0].pushStdout({ t: 'ready' });
+  await flush();
+  spawned.procs[0].pushStdout({ t: 'event', event: { type: 'turn-end', stopReason: 'end_turn' } });
+  await Promise.all([stale, current]);
+  backend.reset();
+});
+
+test('api provider identity fields and model changes replace the sidecar route session', async () => {
+  let provider = makeApiProvider();
+  let model = 'claude-test';
+  const routeFactory = makeProviderRouteFactory();
+  const { backend, spawned } = makeBackend({
+    getChannel: () => 'api',
+    getModel: () => model,
+    resolveApiProvider: async () => provider,
+    resolveRequestProfile: async () => ({
+      providerId: provider.id,
+      baseUrl: provider.baseUrl,
+      auth: { kind: 'none' },
+    }),
+    createProviderRoute: routeFactory.create,
+  });
+
+  async function completeTurn(index, text) {
+    const run = backend.sendUser(text);
+    await flush();
+    const proc = spawned.procs[index];
+    assert.ok(proc);
+    proc.pushStdout({ t: 'ready' });
+    await flush();
+    assert.deepEqual(backend.getMessages(), [{ role: 'user', text }]);
+    proc.pushStdout({ t: 'event', event: { type: 'turn-end', stopReason: 'end_turn' } });
+    await run;
+    return proc;
+  }
+
+  let previousProc = await completeTurn(0, 'turn-0');
+  const mutations = [
+    () => { provider = { ...provider, id: 'provider-2' }; },
+    () => { provider = { ...provider, baseUrl: 'https://provider-two.example/root' }; },
+    () => { provider = { ...provider, requestProfileRevision: 2 }; },
+    () => { provider = { ...provider, modelList: { ...provider.modelList, revision: 2 } }; },
+    () => { model = 'claude-next'; },
+  ];
+
+  for (let index = 0; index < mutations.length; index += 1) {
+    mutations[index]();
+    const nextProc = await completeTurn(index + 1, `turn-${index + 1}`);
+    assert.equal(previousProc.killed, true);
+    assert.equal(routeFactory.routes[index].closeCalls, 1);
+    previousProc = nextProc;
+  }
+
+  assert.equal(spawned.calls.length, 6);
+  assert.equal(routeFactory.routes.length, 6);
+  backend.reset();
+  await flush();
+  assert.equal(routeFactory.routes[5].closeCalls, 1);
+});
+
+test('switching from api to subscription closes the route and starts a clean session', async () => {
+  let channel = 'api';
+  const routeFactory = makeProviderRouteFactory();
+  const { backend, spawned } = makeBackend({
+    getChannel: () => channel,
+    resolveApiProvider: async () => makeApiProvider(),
+    resolveRequestProfile: async () => ({ auth: { kind: 'none' } }),
+    createProviderRoute: routeFactory.create,
+  });
+
+  const first = backend.sendUser('api turn');
+  await flush();
+  spawned.procs[0].pushStdout({ t: 'ready' });
+  await flush();
+  spawned.procs[0].pushStdout({ t: 'event', event: { type: 'turn-end', stopReason: 'end_turn' } });
+  await first;
+
+  channel = 'subscription';
+  const second = backend.sendUser('subscription turn');
+  await flush();
+  assert.equal(spawned.procs[0].killed, true);
+  assert.equal(routeFactory.routes[0].closeCalls, 1);
+  assert.equal(routeFactory.routes.length, 1);
+  spawned.procs[1].pushStdout({ t: 'ready' });
+  await flush();
+  assert.equal(spawned.calls[1].options.env.ANTHROPIC_BASE_URL, undefined);
+  assert.equal(spawned.calls[1].options.env.ANTHROPIC_AUTH_TOKEN, undefined);
+  assert.deepEqual(backend.getMessages(), [{ role: 'user', text: 'subscription turn' }]);
+  spawned.procs[1].pushStdout({ t: 'event', event: { type: 'turn-end', stopReason: 'end_turn' } });
+  await second;
+  backend.reset();
+});
+
+test('api route closes when route start, sidecar spawn, or ready handshake fails', async () => {
+  const routeFailure = makeProviderRouteFactory({ startError: new Error('route failed with secret') });
+  const first = makeBackend({
+    getChannel: () => 'api',
+    resolveApiProvider: async () => makeApiProvider(),
+    resolveRequestProfile: async () => ({ auth: { kind: 'none' } }),
+    createProviderRoute: routeFailure.create,
+  });
+  await first.backend.sendUser('route failure');
+  assert.equal(first.spawned.calls.length, 0);
+  assert.equal(routeFailure.routes[0].closeCalls, 1);
+  assert.equal(JSON.stringify(first.events).includes('route failed with secret'), false);
+
+  const spawnFailure = makeProviderRouteFactory();
+  const second = makeBackend({
+    getChannel: () => 'api',
+    resolveApiProvider: async () => makeApiProvider(),
+    resolveRequestProfile: async () => ({ auth: { kind: 'none' } }),
+    createProviderRoute: spawnFailure.create,
+    spawnImpl: () => { throw new Error('spawn failed'); },
+  });
+  await second.backend.sendUser('spawn failure');
+  assert.equal(spawnFailure.routes[0].closeCalls, 1);
+
+  const readyFailure = makeProviderRouteFactory();
+  const third = makeBackend({
+    getChannel: () => 'api',
+    resolveApiProvider: async () => makeApiProvider(),
+    resolveRequestProfile: async () => ({ auth: { kind: 'none' } }),
+    createProviderRoute: readyFailure.create,
+  });
+  const readyRun = third.backend.sendUser('ready failure');
+  await flush();
+  third.spawned.procs[0].exit(9);
+  await readyRun;
+  assert.equal(readyFailure.routes[0].closeCalls, 1);
+});
+
+test('api sidecar exit closes its route and resolves the active turn', async () => {
+  const routeFactory = makeProviderRouteFactory();
+  const { backend, spawned } = makeBackend({
+    getChannel: () => 'api',
+    resolveApiProvider: async () => makeApiProvider(),
+    resolveRequestProfile: async () => ({ auth: { kind: 'none' } }),
+    createProviderRoute: routeFactory.create,
+  });
+  const run = backend.sendUser('exit');
+  await flush();
+  spawned.procs[0].pushStdout({ t: 'ready' });
+  await flush();
+  spawned.procs[0].exit(7);
+  await run;
+  await flush();
+  assert.equal(routeFactory.routes[0].closeCalls, 1);
+});
+
+test('stream EOF error event completes the active promise', async () => {
+  const { backend, spawned } = makeBackend();
+  let resolved = false;
+  const run = backend.sendUser('eof').then(() => { resolved = true; });
+  await flush();
+  spawned.procs[0].pushStdout({ t: 'ready' });
+  await flush();
+  assert.equal(resolved, false);
+  spawned.procs[0].pushStdout({
+    t: 'event',
+    event: {
+      type: 'error',
+      kind: 'mcp',
+      message: 'stream disconnected before completion: stream closed before response.completed',
+    },
+  });
+  await run;
+  assert.equal(resolved, true);
+  backend.reset();
 });
 
 test('default subscription channel keeps current sanitize behavior and passes --channel subscription', async () => {
   const spawned = makeSpawn();
+  let providerCalls = 0;
+  let routeCalls = 0;
   const backend = createClaudeAgentBackend({
     resolveNode: async () => ({ ok: true, nodePath: 'C:\node.exe', version: 'v20.0.0' }),
     sidecarPath: 'C:\ext\sidecar\agent-sidecar.mjs',
@@ -425,6 +904,8 @@ test('default subscription channel keeps current sanitize behavior and passes --
     getToolMeta: async () => ({ allowedTools: [], annotations: {} }),
     getModel: () => 'claude-sonnet-5',
     getPermissionMode: () => 'manual',
+    resolveApiProvider: async () => { providerCalls += 1; throw new Error('must not resolve'); },
+    createProviderRoute: () => { routeCalls += 1; throw new Error('must not create'); },
     spawnImpl: spawned.spawn,
     env: { PATH: 'C:\bin', ANTHROPIC_API_KEY: 'leak', ANTHROPIC_BASE_URL: 'https://stale' },
   });
@@ -437,6 +918,8 @@ test('default subscription channel keeps current sanitize behavior and passes --
   assert.equal(call.options.env.ANTHROPIC_API_KEY, undefined);
   assert.equal(call.options.env.ANTHROPIC_BASE_URL, undefined);
   assert.equal(call.args[call.args.indexOf('--channel') + 1], 'subscription');
+  assert.equal(providerCalls, 0);
+  assert.equal(routeCalls, 0);
   backend.reset();
   await run;
 });

@@ -4,6 +4,13 @@ import { selectDescriptor, isClaudeApiBackend, reconcileModelPref } from '../src
 import { byokStaticDescriptor, codexStaticDescriptor, zcodeStaticDescriptor } from '../src/lib/backendCapabilities.js';
 
 const probedProvider = { id: 'relay', probedModels: [{ id: 'glm-5.2', label: 'GLM 5.2' }, { id: 'deepseek-v4', label: 'Deepseek V4' }] };
+const v3Provider = {
+  id: 'relay-v3',
+  modelList: {
+    status: 'supported',
+    models: [{ id: 'glm-5.2', label: 'GLM 5.2' }, { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' }],
+  },
+};
 
 test('isClaudeApiBackend covers claude-api and node-broken byok, nothing else', () => {
   assert.equal(isClaudeApiBackend('claude-api'), true);
@@ -23,6 +30,25 @@ test('node-broken byok backend uses the same probed-models path', () => {
   const base = byokStaticDescriptor();
   const d = selectDescriptor({ effectiveBackend: 'byok', backendPref: 'subscription', baseDescriptor: base, claudeApiProvider: probedProvider });
   assert.equal(d.defaultModelId, 'glm-5.2');
+});
+
+test('one v3 Provider model inventory drives both Claude and Codex descriptors', () => {
+  const expected = ['glm-5.2', 'gemini-3.5-flash'];
+  const claude = selectDescriptor({
+    effectiveBackend: 'claude-api',
+    baseDescriptor: byokStaticDescriptor(),
+    claudeApiProvider: v3Provider,
+  });
+  const codex = selectDescriptor({
+    effectiveBackend: 'codex',
+    effectiveChannel: 'custom',
+    backendPref: 'codex',
+    baseDescriptor: codexStaticDescriptor(),
+    codexCustomProvider: v3Provider,
+    customProviderCredentialResolverReady: true,
+  });
+  assert.deepEqual(claude.models.map((model) => model.id), expected);
+  assert.deepEqual(codex.models.map((model) => model.id), expected);
 });
 
 test('claude-api without probed models falls back to fetched /v1/models list, then to curated base', () => {
@@ -50,24 +76,85 @@ test('probed models take precedence over cached codex list; no provider -> cache
   assert.equal(selectDescriptor({ effectiveBackend: 'codex', backendPref: 'codex', baseDescriptor: base }), base);
 });
 
-test('codex descriptor ignores custom-provider facts unless both effective channel and resolver gate are open', () => {
+test('official codex CLI fills missing GPT-5.6 models without polluting provider channels', () => {
+  const base = codexStaticDescriptor();
+  const cached = [
+    { id: 'gpt-5.5', displayName: 'GPT-5.5' },
+    { id: 'gpt-5.6-sol', displayName: 'Live Sol', supportedReasoningEfforts: [{ reasoningEffort: 'low' }] },
+  ];
+  const official = selectDescriptor({
+    effectiveBackend: 'codex',
+    effectiveChannel: 'cli',
+    backendPref: 'codex',
+    baseDescriptor: base,
+    codexCachedModels: cached,
+  });
+
+  assert.deepEqual(official.models.map((model) => model.id), [
+    'gpt-5.5', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna',
+  ]);
+  assert.equal(official.models.find((model) => model.id === 'gpt-5.6-sol').label, 'Live Sol');
+  assert.deepEqual(official.models.find((model) => model.id === 'gpt-5.6-terra').effortLevels, ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
+  assert.deepEqual(official.models.find((model) => model.id === 'gpt-5.6-luna').effortLevels, ['low', 'medium', 'high', 'xhigh', 'max']);
+  assert.equal(official.supportsFast('gpt-5.6-sol'), true);
+  assert.equal(official.supportsFast('gpt-5.6-terra'), true);
+  assert.equal(official.supportsFast('gpt-5.6-luna'), true);
+
+  const officialFallback = selectDescriptor({
+    effectiveBackend: 'codex',
+    effectiveChannel: 'cli',
+    backendPref: 'codex',
+    baseDescriptor: base,
+  });
+  assert.deepEqual(officialFallback.models.map((model) => model.id), [
+    'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna',
+  ]);
+
+  for (const effectiveChannel of ['custom', 'cli-config', null]) {
+    const provider = selectDescriptor({
+      effectiveBackend: 'codex',
+      effectiveChannel,
+      backendPref: 'codex',
+      baseDescriptor: base,
+      codexCachedModels: cached,
+    });
+    assert.deepEqual(provider.models.map((model) => model.id), ['gpt-5.5', 'gpt-5.6-sol']);
+
+    const providerFallback = selectDescriptor({
+      effectiveBackend: 'codex',
+      effectiveChannel,
+      backendPref: 'codex',
+      baseDescriptor: base,
+    });
+    assert.deepEqual(providerFallback.models.map((model) => model.id), ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini']);
+  }
+});
+
+test('codex descriptor exposes provider models while dialect is pending but keeps the resolver gate', () => {
   const base = codexStaticDescriptor();
   const cached = [{ id: 'gpt-5.5', displayName: 'GPT-5.5' }];
-  for (const input of [
-    { effectiveChannel: 'cli-config', customProviderCredentialResolverReady: true },
-    { effectiveChannel: 'custom', customProviderCredentialResolverReady: false },
-    { effectiveChannel: null, customProviderCredentialResolverReady: true },
-  ]) {
+  for (const effectiveChannel of ['cli-config', 'custom', null]) {
     const descriptor = selectDescriptor({
       effectiveBackend: 'codex',
       backendPref: 'codex',
       baseDescriptor: base,
       codexCustomProvider: probedProvider,
       codexCachedModels: cached,
-      ...input,
+      effectiveChannel,
+      customProviderCredentialResolverReady: true,
     });
-    assert.deepEqual(descriptor.models.map((model) => model.id), ['gpt-5.5']);
+    assert.deepEqual(descriptor.models.map((model) => model.id), ['glm-5.2', 'deepseek-v4']);
   }
+  const gated = selectDescriptor({
+    effectiveBackend: 'codex',
+    backendPref: 'codex',
+    baseDescriptor: base,
+    codexCustomProvider: probedProvider,
+    codexCachedModels: cached,
+    effectiveChannel: 'custom',
+    customProviderCredentialResolverReady: false,
+  });
+  assert.deepEqual(gated.models.map((model) => model.id), ['gpt-5.5']);
 });
 
 test('custom model id is honored on claude-api and codex paths', () => {
@@ -283,6 +370,12 @@ test('reconcileModelPref keeps the current model when it is present in the descr
   const descriptor = { defaultModelId: 'mediastorm_glm/deepseek-v4-flash', models: [{ id: 'mediastorm_glm/deepseek-v4-flash' }, { id: 'other/model' }] };
   const result = reconcileModelPref('other/model', descriptor);
   assert.equal(result, 'other/model');
+});
+
+test('reconcileModelPref preserves a selected provider model while provider facts are loading', () => {
+  const descriptor = { defaultModelId: 'gpt-5.5', models: [{ id: 'gpt-5.5' }] };
+  const result = reconcileModelPref('claude-sonnet-5', descriptor, { providerFactsPending: true });
+  assert.equal(result, 'claude-sonnet-5');
 });
 
 test('reconcileModelPref is a no-op when the descriptor has no models (custom model path)', () => {

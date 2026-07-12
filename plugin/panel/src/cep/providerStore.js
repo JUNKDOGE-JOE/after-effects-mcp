@@ -1,7 +1,10 @@
-// Provider v2 persistence. Provider JSON contains opaque helper references only;
-// plaintext provider credentials are migration input and are never returned by
-// list()/get().
-import { normalizeProviderEntryV2, validateProviderBaseUrl } from '../lib/providerProfile.js';
+// Provider JSON contains opaque helper references only. Plaintext credentials
+// are accepted solely by the v1 secret migration and never returned by list/get.
+import {
+  normalizeProviderEntryV2,
+  normalizeProviderEntryV3,
+  validateProviderBaseUrl,
+} from '../lib/providerProfile.js';
 import { parseProviderSecretReference } from './platform/secret-reference.js';
 
 const FILE_NAME = 'providers.json';
@@ -88,10 +91,15 @@ function requireSafeProviderUrl(value) {
 function providerSecretReferences(provider) {
   const references = [];
   const add = (valueRef) => {
-    if (valueRef?.kind === 'secret') references.push(valueRef.reference);
+    if (valueRef?.kind === 'secret') references.push(valueRef);
   };
-  add(provider.auth?.model?.valueRef);
-  add(provider.auth?.probe?.valueRef);
+  if (provider.credential) {
+    add(provider.credential.valueRef);
+    add(provider.probeAuthOverride?.valueRef);
+  } else {
+    add(provider.auth?.model?.valueRef);
+    add(provider.auth?.probe?.valueRef);
+  }
   for (const header of provider.headers || []) add(header.valueRef);
   return references;
 }
@@ -136,10 +144,10 @@ function readFileIdentity(fs, file) {
   return fileIdentity(fs.statSync(file, { bigint: true }));
 }
 
-function normalizeState(value) {
+function normalizeStateForVersion(value, version, normalizeProvider) {
   if (!hasExactKeys(value, STATE_KEYS)) throw storeError('PROVIDER_STORE_INVALID');
   if (
-    value.version !== 2
+    value.version !== version
     || !Number.isSafeInteger(value.revision)
     || value.revision < 0
     || value.migratedLegacy !== true
@@ -156,7 +164,7 @@ function normalizeState(value) {
   }
   const providers = value.providers.map((provider) => {
     try {
-      const normalized = normalizeProviderEntryV2(provider);
+      const normalized = normalizeProvider(provider);
       requireSafeProviderUrl(normalized.baseUrl);
       return normalized;
     } catch {
@@ -164,15 +172,21 @@ function normalizeState(value) {
     }
   });
   const ids = new Set();
+  const activeReferences = new Map();
   for (const provider of providers) {
     if (ids.has(provider.id)) throw storeError('PROVIDER_STORE_INVALID');
     ids.add(provider.id);
-    for (const reference of providerSecretReferences(provider)) {
-      if (pendingKeys.has(reference)) throw storeError('PROVIDER_STORE_INVALID');
+    for (const valueRef of providerSecretReferences(provider)) {
+      if (pendingKeys.has(valueRef.reference)) throw storeError('PROVIDER_STORE_INVALID');
+      const existingRevision = activeReferences.get(valueRef.reference);
+      if (existingRevision !== undefined && existingRevision !== valueRef.revision) {
+        throw storeError('PROVIDER_STORE_INVALID');
+      }
+      activeReferences.set(valueRef.reference, valueRef.revision);
     }
   }
   return {
-    version: 2,
+    version,
     revision: value.revision,
     migratedLegacy: true,
     pendingSecretDeletes,
@@ -180,9 +194,23 @@ function normalizeState(value) {
   };
 }
 
+function normalizeStateV2(value) {
+  return normalizeStateForVersion(value, 2, normalizeProviderEntryV2);
+}
+
+function normalizeStateV3(value) {
+  return normalizeStateForVersion(value, 3, normalizeProviderEntryV3);
+}
+
+function normalizePersistedState(value) {
+  if (value?.version === 2) return normalizeStateV2(value);
+  if (value?.version === 3) return normalizeStateV3(value);
+  throw storeError('PROVIDER_STORE_INVALID');
+}
+
 function emptyState() {
   return {
-    version: 2,
+    version: 3,
     revision: 0,
     migratedLegacy: true,
     pendingSecretDeletes: [],
@@ -494,12 +522,18 @@ export function createProviderStore(inputDeps) {
   function readState() {
     const raw = readRaw();
     if (raw === null) return emptyState();
-    if (raw.parsed?.version === 1) throw storeError('PROVIDER_STORE_MIGRATION_REQUIRED');
-    return normalizeState(raw.parsed);
+    if (raw.parsed?.version === 1) {
+      throw storeError('PROVIDER_STORE_MIGRATION_REQUIRED');
+    }
+    if (raw.parsed?.version === 2) {
+      normalizeStateV2(raw.parsed);
+      throw storeError('PROVIDER_STORE_MIGRATION_REQUIRED');
+    }
+    return normalizeStateV3(raw.parsed);
   }
 
   function writeState(value) {
-    const state = normalizeState(value);
+    const state = normalizePersistedState(value);
     const directory = ensureDirectory();
     const tmp = path.join(
       directory,
@@ -530,8 +564,13 @@ export function createProviderStore(inputDeps) {
 
   function list() {
     const raw = readRaw();
-    if (raw?.parsed?.version === 1) return [];
-    return clone(raw === null ? [] : normalizeState(raw.parsed).providers);
+    if (raw === null) return [];
+    if (raw.parsed?.version === 1) return [];
+    if (raw.parsed?.version === 2) {
+      normalizeStateV2(raw.parsed);
+      return [];
+    }
+    return clone(normalizeStateV3(raw.parsed).providers);
   }
 
   function get(id) {
@@ -542,7 +581,7 @@ export function createProviderStore(inputDeps) {
   function upsert(entry, options = {}) {
     let normalized;
     try {
-      normalized = normalizeProviderEntryV2(entry);
+      normalized = normalizeProviderEntryV3(entry);
     } catch {
       throw storeError('PROVIDER_STORE_INVALID');
     }
@@ -593,20 +632,25 @@ export function createProviderStore(inputDeps) {
   }
 
   function replaceState(value, options = {}) {
-    const next = normalizeState(value);
+    const next = normalizePersistedState(value);
     return withMutationLock(() => {
       const raw = readRaw();
       if (options.expectedSourceRevision !== undefined) {
         if (typeof options.expectedSourceRevision !== 'string' || !options.expectedSourceRevision) {
           throw storeError('PROVIDER_STORE_INVALID');
         }
-        const currentLegacy = readLegacyMigrationInput();
-        if (!currentLegacy || currentLegacy.sourceRevision !== options.expectedSourceRevision) {
+        const expectedSourceVersion = options.expectedSourceVersion === undefined
+          ? next.version - 1
+          : options.expectedSourceVersion;
+        const currentSource = expectedSourceVersion === 1
+          ? readLegacyMigrationInput()
+          : expectedSourceVersion === 2 ? readSchemaMigrationInput() : null;
+        if (!currentSource || currentSource.sourceRevision !== options.expectedSourceRevision) {
           throw storeError('PROVIDER_STORE_CONFLICT');
         }
       }
       if (options.expectedRevision !== undefined) {
-        const current = raw === null ? emptyState() : normalizeState(raw.parsed);
+        const current = raw === null ? emptyState() : normalizeStateV3(raw.parsed);
         assertExpected(current, options.expectedRevision);
       }
       return { stateRevision: writeState(next).revision };
@@ -618,18 +662,12 @@ export function createProviderStore(inputDeps) {
     return raw !== null && raw.parsed?.version === 1;
   }
 
-  function readLegacyMigrationInput() {
+  function needsSchemaMigration() {
     const raw = readRaw();
-    if (raw === null || raw.parsed?.version !== 1) return null;
-    if (!raw.parsed || typeof raw.parsed !== 'object' || !Array.isArray(raw.parsed.providers)) {
-      throw storeError('PROVIDER_STORE_INVALID');
-    }
-    for (const provider of raw.parsed.providers) {
-      if (!provider || typeof provider !== 'object' || typeof provider.baseUrl !== 'string') {
-        throw storeError('PROVIDER_STORE_INVALID');
-      }
-      requireSafeProviderUrl(provider.baseUrl);
-    }
+    return raw !== null && raw.parsed?.version === 2;
+  }
+
+  function stableMigrationInput(raw, state) {
     if (typeof fs.statSync !== 'function') throw storeError('PROVIDER_STORE_UNAVAILABLE');
     let firstIdentity;
     let secondIdentity;
@@ -649,12 +687,32 @@ export function createProviderStore(inputDeps) {
     ) {
       throw storeError('PROVIDER_STORE_CONFLICT');
     }
-    const sourceRevision = JSON.stringify(firstIdentity);
-    return { sourceRevision, state: clone(raw.parsed) };
+    return { sourceRevision: JSON.stringify(firstIdentity), state: clone(state) };
+  }
+
+  function readLegacyMigrationInput() {
+    const raw = readRaw();
+    if (raw === null || raw.parsed?.version !== 1) return null;
+    if (!raw.parsed || typeof raw.parsed !== 'object' || !Array.isArray(raw.parsed.providers)) {
+      throw storeError('PROVIDER_STORE_INVALID');
+    }
+    for (const provider of raw.parsed.providers) {
+      if (!provider || typeof provider !== 'object' || typeof provider.baseUrl !== 'string') {
+        throw storeError('PROVIDER_STORE_INVALID');
+      }
+      requireSafeProviderUrl(provider.baseUrl);
+    }
+    return stableMigrationInput(raw, raw.parsed);
+  }
+
+  function readSchemaMigrationInput() {
+    const raw = readRaw();
+    if (raw === null || raw.parsed?.version !== 2) return null;
+    return stableMigrationInput(raw, normalizeStateV2(raw.parsed));
   }
 
   async function writeRedactedBackup(value, policy = {}) {
-    const state = normalizeState(value);
+    const state = normalizePersistedState(value);
     const keep = policy.keep === undefined ? 3 : policy.keep;
     const maxAgeDays = policy.maxAgeDays === undefined ? 30 : policy.maxAgeDays;
     if (!Number.isSafeInteger(keep) || keep < 1 || !Number.isFinite(maxAgeDays) || maxAgeDays <= 0) {
@@ -686,6 +744,7 @@ export function createProviderStore(inputDeps) {
     filePath,
     readState,
     readLegacyMigrationInput,
+    readSchemaMigrationInput,
     list,
     get,
     upsert,
@@ -694,5 +753,6 @@ export function createProviderStore(inputDeps) {
     replaceState,
     writeRedactedBackup,
     needsSecretMigration,
+    needsSchemaMigration,
   });
 }

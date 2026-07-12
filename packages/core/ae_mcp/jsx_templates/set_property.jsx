@@ -1,7 +1,8 @@
 // Template for ae.setProperty. Substitution: Python string.Template.
-// Placeholders: comp_expr, layer_id, path, value, at_time.
+// Placeholders: comp_expr, layer_id, path, use_expression, value, expression, at_time.
 // at_time null means write a constant value; any number, including negative AE
 // times, means write a keyframe with setValueAtTime.
+// Expression mode writes only prop.expression and never evaluates prop.value.
 // Returns JSON: ok, previous, current (or ok:false + error).
 (function() {
     var comp = ${comp_expr};
@@ -21,27 +22,44 @@
         }
     }
 
+    var useExpression = ${use_expression};
     var value = ${value};
+    var expressionText = ${expression};
     var atTime = ${at_time};
     var prev = null;
-    try { prev = AEMCP.safeValue(prop.value); } catch (e) { /* may lack .value */ }
-
-    try {
-        if (atTime !== null) {
-            prop.setValueAtTime(atTime, value);
-        } else {
-            prop.setValue(value);
-        }
-    } catch (e) {
-        return JSON.stringify({ok:false,error:"setValue threw: "+String(e)});
-    }
-
     var cur = null;
-    try { cur = AEMCP.safeValue(prop.value); } catch (e) { }
+
+    if (useExpression) {
+        if (prop.canSetExpression !== true) {
+            return JSON.stringify({ok:false,error:"property cannot set an expression"});
+        }
+        try { prev = prop.expression; } catch (e) { }
+        try {
+            prop.expression = expressionText;
+        } catch (e) {
+            return JSON.stringify({ok:false,error:"setting expression threw: "+String(e)});
+        }
+        try { cur = prop.expression; } catch (e) { }
+    } else {
+        try { prev = AEMCP.safeValue(prop.value); } catch (e) { }
+        try {
+            if (atTime !== null) {
+                prop.setValueAtTime(atTime, value);
+            } else {
+                prop.setValue(value);
+            }
+        } catch (e) {
+            return JSON.stringify({ok:false,error:"setValue threw: "+String(e)});
+        }
+        try { cur = AEMCP.safeValue(prop.value); } catch (e) { }
+    }
 
     try {
         return JSON.stringify({ok:true, previous:prev, current:cur});
     } catch (e) {
+        if (useExpression) {
+            return '{"ok":true,"previous":null,"current":null,"note":"expression set; previous/current not serializable"}';
+        }
         return '{"ok":true,"previous":null,"current":null,"note":"value set; previous/current not serializable"}';
     }
 })()

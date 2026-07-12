@@ -7,6 +7,7 @@ import {
   mergeByokModels,
   codexStaticDescriptor,
   codexDescriptorFromModels,
+  mergeCodexOfficialLoginModels,
   descriptorWithCustomModel,
   descriptorFromProbedModels,
   zcodeDescriptorFromModels,
@@ -17,6 +18,13 @@ import {
 // fetch-based loop serves the same API channel, so it shares the branch.
 export function isClaudeApiBackend(effectiveBackend) {
   return effectiveBackend === 'claude-api' || effectiveBackend === 'byok';
+}
+
+function providerModels(provider) {
+  if (provider?.modelList?.status === 'supported' && Array.isArray(provider.modelList.models)) {
+    return provider.modelList.models;
+  }
+  return Array.isArray(provider?.probedModels) ? provider.probedModels : [];
 }
 
 export function selectDescriptor({
@@ -36,8 +44,9 @@ export function selectDescriptor({
   const claudeApi = isClaudeApiBackend(effectiveBackend);
   const customId = (claudeApi || backendPref === 'codex') ? String(customModel || '').trim() : '';
   if (claudeApi) {
-    if (claudeApiProvider && claudeApiProvider.probedModels && claudeApiProvider.probedModels.length) {
-      return descriptorWithCustomModel(descriptorFromProbedModels(byokStaticDescriptor(), claudeApiProvider.probedModels), customId);
+    const models = providerModels(claudeApiProvider);
+    if (models.length) {
+      return descriptorWithCustomModel(descriptorFromProbedModels(byokStaticDescriptor(), models), customId);
     }
     if (byokApiModels) {
       return descriptorWithCustomModel(mergeByokModels(byokStaticDescriptor(), byokApiModels), customId);
@@ -45,18 +54,23 @@ export function selectDescriptor({
     return baseDescriptor;
   }
   if (backendPref === 'codex') {
-    const customProviderFactsAllowed = effectiveChannel === 'custom'
-      && customProviderCredentialResolverReady === true;
+    const customProviderFactsAllowed = customProviderCredentialResolverReady === true;
+    const models = providerModels(codexCustomProvider);
     if (customProviderFactsAllowed
         && codexCustomProvider
-        && codexCustomProvider.probedModels
-        && codexCustomProvider.probedModels.length) {
-      return descriptorWithCustomModel(descriptorFromProbedModels(codexStaticDescriptor(), codexCustomProvider.probedModels), customId);
+        && models.length) {
+      return descriptorWithCustomModel(descriptorFromProbedModels(codexStaticDescriptor(), models), customId);
     }
     if (codexCachedModels) {
-      return descriptorWithCustomModel(codexDescriptorFromModels({ models: codexCachedModels }), customId);
+      const cachedDescriptor = codexDescriptorFromModels({ models: codexCachedModels });
+      const channelDescriptor = effectiveChannel === 'cli'
+        ? mergeCodexOfficialLoginModels(cachedDescriptor)
+        : cachedDescriptor;
+      return descriptorWithCustomModel(channelDescriptor, customId);
     }
-    return baseDescriptor;
+    return effectiveChannel === 'cli'
+      ? descriptorWithCustomModel(mergeCodexOfficialLoginModels(baseDescriptor), customId)
+      : baseDescriptor;
   }
   // ZCode: the live model list only becomes known after session/create
   // returns settings.model.available (see zcodeBackend.js's
@@ -94,8 +108,11 @@ export function selectDescriptor({
 // defaultModelId when the stored id isn't among the descriptor's current
 // models. Reset to defaultModelId in that case. Custom model ids (isCustom)
 // are exempt: they are intentionally NOT part of the curated list.
-export function reconcileModelPref(model, descriptor, { isCustom = false } = {}) {
-  if (isCustom) return model;
+export function reconcileModelPref(model, descriptor, {
+  isCustom = false,
+  providerFactsPending = false,
+} = {}) {
+  if (isCustom || providerFactsPending) return model;
   const models = (descriptor && Array.isArray(descriptor.models)) ? descriptor.models : [];
   if (!models.length) return model;
   const trimmed = String(model || '').trim();

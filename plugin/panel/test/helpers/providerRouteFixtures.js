@@ -49,7 +49,7 @@ export function routeFixture(overrides = {}) {
 }
 
 export function routeHeaders(routeToken, extra = {}) {
-  return { authorization: `Bearer ${routeToken}`, ...extra };
+  return { 'x-ae-mcp-route-token': routeToken, ...extra };
 }
 
 export function requestText(url, { method = 'GET', headers = {}, body } = {}) {

@@ -1,9 +1,9 @@
-// Spec A/B3: Claude backend credential channels.
-// 'subscription' -> Agent SDK self-discovery; remove ANTHROPIC_API_KEY and
-//   any inherited base URL/token so a stray env can't hijack the session.
-// 'api' -> inject ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN from the chosen
-//   provider entry (Agent SDK natively supports third-party endpoints, so
-//   the panel keeps full agentic capabilities on relays).
+const UPSTREAM_ENV_KEYS = [
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_AUTH_TOKEN',
+];
+
 function deleteEnvironmentKey(environment, name) {
   const normalized = name.toUpperCase();
   for (const key of Object.keys(environment)) {
@@ -11,31 +11,67 @@ function deleteEnvironmentKey(environment, name) {
   }
 }
 
-function unsupportedProvider() {
-  const error = new Error('Claude Agent provider is unsupported');
-  error.code = 'CLAUDE_AGENT_PROVIDER_UNSUPPORTED';
+function routeError(code, message) {
+  const error = new Error(message);
+  error.code = code;
   return error;
 }
 
-export function claudeChannelEnv(baseEnv = {}, { channel = 'subscription', requestProfile = null } = {}) {
-  const env = { ...baseEnv };
-  deleteEnvironmentKey(env, 'ANTHROPIC_API_KEY');
-  deleteEnvironmentKey(env, 'ANTHROPIC_BASE_URL');
-  deleteEnvironmentKey(env, 'ANTHROPIC_AUTH_TOKEN');
-  if (channel === 'api' && requestProfile && requestProfile.baseUrl) {
-    if (Array.isArray(requestProfile.extraHeaders) && requestProfile.extraHeaders.length) throw unsupportedProvider();
-    if (requestProfile.auth?.kind !== 'header') throw unsupportedProvider();
-    const name = String(requestProfile.auth.name || '').toLowerCase();
-    if (name !== 'x-api-key' && name !== 'authorization') throw unsupportedProvider();
-    let token = String(requestProfile.auth.value || '');
-    if (name === 'authorization') {
-      if (!/^Bearer\s+\S+/i.test(token)) throw unsupportedProvider();
-      token = token.replace(/^Bearer\s+/i, '');
-    }
-    if (!token) throw unsupportedProvider();
-    env.ANTHROPIC_BASE_URL = String(requestProfile.baseUrl);
-    env.ANTHROPIC_AUTH_TOKEN = token;
-    return env;
+function isLoopbackHostname(hostname) {
+  const host = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.localhost') || host === '::1') return true;
+  const mapped = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  return /^127(?:\.\d{1,3}){3}$/.test(mapped ? mapped[1] : host);
+}
+
+function normalizeLocalRoute(localRoute) {
+  if (!localRoute || typeof localRoute !== 'object' || Array.isArray(localRoute)) {
+    throw routeError('CLAUDE_AGENT_LOCAL_ROUTE_REQUIRED', 'Claude Agent API channel requires a local route profile.');
   }
+  const keys = Object.keys(localRoute).sort();
+  if (keys.length !== 2 || keys[0] !== 'origin' || keys[1] !== 'routeToken') {
+    throw routeError('CLAUDE_AGENT_LOCAL_ROUTE_INVALID', 'Claude Agent local route profile is invalid.');
+  }
+  if (typeof localRoute.origin !== 'string' || typeof localRoute.routeToken !== 'string') {
+    throw routeError('CLAUDE_AGENT_LOCAL_ROUTE_INVALID', 'Claude Agent local route profile is invalid.');
+  }
+
+  const origin = localRoute.origin.trim();
+  const routeToken = localRoute.routeToken.trim();
+  let url;
+  try { url = new URL(origin); } catch { throw routeError('CLAUDE_AGENT_LOCAL_ROUTE_INVALID', 'Claude Agent local route profile is invalid.'); }
+  if (
+    url.protocol !== 'http:'
+    || !isLoopbackHostname(url.hostname)
+    || url.username
+    || url.password
+    || url.search
+    || url.hash
+    || (url.pathname !== '' && url.pathname !== '/')
+    || !routeToken
+    || routeToken !== localRoute.routeToken
+  ) {
+    throw routeError('CLAUDE_AGENT_LOCAL_ROUTE_INVALID', 'Claude Agent local route profile is invalid.');
+  }
+  return { origin: url.origin, routeToken };
+}
+
+export function claudeChannelEnv(baseEnv = {}, {
+  channel = 'subscription',
+  localRoute = null,
+  requestProfile = null,
+} = {}) {
+  const env = { ...baseEnv };
+  for (const key of UPSTREAM_ENV_KEYS) deleteEnvironmentKey(env, key);
+  if (channel !== 'api') return env;
+  if (requestProfile !== null && requestProfile !== undefined) {
+    throw routeError(
+      'CLAUDE_AGENT_UPSTREAM_PROFILE_FORBIDDEN',
+      'Claude Agent API channel cannot receive an upstream provider request profile.',
+    );
+  }
+  const route = normalizeLocalRoute(localRoute);
+  env.ANTHROPIC_BASE_URL = route.origin;
+  env.ANTHROPIC_AUTH_TOKEN = route.routeToken;
   return env;
 }

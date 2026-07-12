@@ -89,6 +89,31 @@ test('maps user turn, text, tool_use, tool_result, and result events', async () 
   ])
 })
 
+test('clean SDK EOF without a result emits one structured terminal error', async () => {
+  const writes = []
+  const sidecar = createSidecar({
+    queryFn: async function * () {
+      yield { type: 'assistant', message: { content: [{ type: 'text', text: 'partial' }] } }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'eof', permissionMode: 'none' }))
+  await waitFor(() => eventCount(writes, 'error') === 1)
+  await new Promise((resolve) => setTimeout(resolve, 10))
+
+  assert.deepEqual(events(writes).filter((event) => event.type === 'turn-end' || event.type === 'error'), [
+    {
+      type: 'error',
+      kind: 'network',
+      code: 'SDK_STREAM_EOF_BEFORE_RESULT',
+      message: 'Claude Agent SDK stream closed before a result event.'
+    }
+  ])
+})
+
 test('passes session resume on the second user turn', async () => {
   const writes = []
   const seenOptions = []
@@ -123,6 +148,15 @@ test('pins turn options to ae agent with annotations and allowed tools whitelist
     writeLine: (obj) => writes.push(obj),
     argvOptions: {
       ...defaultOptions,
+      mcp: {
+        ...defaultOptions.mcp,
+        env: {
+          EXTRA: '1',
+          anthropic_api_key: 'upstream-key',
+          Anthropic_Base_Url: 'https://upstream.example',
+          ANTHROPIC_auth_TOKEN: 'upstream-token'
+        }
+      },
       allowedTools: ['mcp__ae__ae_ping', 'mcp__ae__ae_overview'],
       annotations: {
         mcp__ae__ae_ping: { readOnly: true, destructive: false },
@@ -136,6 +170,13 @@ test('pins turn options to ae agent with annotations and allowed tools whitelist
   await waitFor(() => eventCount(writes, 'turn-end') === 1)
 
   assert.equal(seenOptions.agent, 'ae')
+  assert.deepEqual(seenOptions.mcpServers.ae.env, {
+    EXTRA: '1',
+    ANTHROPIC_API_KEY: '',
+    ANTHROPIC_BASE_URL: '',
+    ANTHROPIC_AUTH_TOKEN: '',
+    AE_MCP_BACKEND: 'ae-mcp'
+  })
   assert.deepEqual(seenOptions.agents.ae.tools, [
     'mcp__ae__ae_ping',
     'mcp__ae__ae_write',
@@ -512,7 +553,7 @@ test('query login failures map to auth errors', async () => {
   assert.equal(events(writes).find((event) => event.type === 'error').kind, 'auth')
 })
 
-test('query options env removes ANTHROPIC_API_KEY', async () => {
+test('subscription query env removes every provider credential variable', async () => {
   const writes = []
   let queryEnv
   const sidecar = createSidecar({
@@ -523,7 +564,9 @@ test('query options env removes ANTHROPIC_API_KEY', async () => {
     writeLine: (obj) => writes.push(obj),
     argvOptions: defaultOptions,
     env: {
-      ANTHROPIC_API_KEY: 'secret',
+      anthropic_api_key: 'secret',
+      Anthropic_Base_Url: 'https://upstream.example',
+      ANTHROPIC_auth_TOKEN: 'upstream-token',
       KEEP_ME: 'yes'
     }
   })
@@ -532,6 +575,11 @@ test('query options env removes ANTHROPIC_API_KEY', async () => {
   await waitFor(() => eventCount(writes, 'turn-end') === 1)
 
   assert.equal(queryEnv.ANTHROPIC_API_KEY, undefined)
+  assert.equal(queryEnv.ANTHROPIC_BASE_URL, undefined)
+  assert.equal(queryEnv.ANTHROPIC_AUTH_TOKEN, undefined)
+  assert.equal(queryEnv.anthropic_api_key, undefined)
+  assert.equal(queryEnv.Anthropic_Base_Url, undefined)
+  assert.equal(queryEnv.ANTHROPIC_auth_TOKEN, undefined)
   assert.equal(queryEnv.KEEP_ME, 'yes')
 })
 
@@ -909,7 +957,7 @@ test('parseArgv accepts --channel api and defaults to subscription', () => {
   assert.equal(parseArgv(['--channel', 'bogus']).channel, 'subscription')
 })
 
-test('api channel keeps injected anthropic env vars in query env', async () => {
+test('api channel keeps only a normalized local route in query env', async () => {
   let queryEnv = null
   const sidecar = createSidecar({
     queryFn: async function * ({ options }) {
@@ -918,11 +966,37 @@ test('api channel keeps injected anthropic env vars in query env', async () => {
     },
     writeLine: () => {},
     argvOptions: { ...defaultOptions, channel: 'api' },
-    env: { ANTHROPIC_API_KEY: 'secret', ANTHROPIC_BASE_URL: 'https://relay.example', ANTHROPIC_AUTH_TOKEN: 'tok' }
+    env: {
+      ANTHROPIC_API_KEY: 'upstream-key',
+      Anthropic_Base_Url: 'http://127.0.0.1:43125/',
+      ANTHROPIC_auth_TOKEN: 'local-route-token',
+      KEEP_ME: 'yes'
+    }
   })
   sidecar.handleLine(JSON.stringify({ t: 'user', text: 'env', permissionMode: 'none' }))
   await waitFor(() => queryEnv !== null)
-  assert.equal(queryEnv.ANTHROPIC_API_KEY, 'secret')
-  assert.equal(queryEnv.ANTHROPIC_BASE_URL, 'https://relay.example')
-  assert.equal(queryEnv.ANTHROPIC_AUTH_TOKEN, 'tok')
+  assert.equal(queryEnv.ANTHROPIC_API_KEY, undefined)
+  assert.equal(queryEnv.Anthropic_Base_Url, undefined)
+  assert.equal(queryEnv.ANTHROPIC_auth_TOKEN, undefined)
+  assert.equal(queryEnv.ANTHROPIC_BASE_URL, 'http://127.0.0.1:43125')
+  assert.equal(queryEnv.ANTHROPIC_AUTH_TOKEN, 'local-route-token')
+  assert.equal(queryEnv.KEEP_ME, 'yes')
+})
+
+test('api channel rejects upstream or versioned route environments', () => {
+  for (const env of [
+    { ANTHROPIC_BASE_URL: 'https://relay.example', ANTHROPIC_AUTH_TOKEN: 'token' },
+    { ANTHROPIC_BASE_URL: 'http://127.0.0.1:43125/v1', ANTHROPIC_AUTH_TOKEN: 'token' },
+    { ANTHROPIC_BASE_URL: 'http://127.0.0.1:43125' }
+  ]) {
+    assert.throws(
+      () => createSidecar({
+        queryFn: async function * () {},
+        writeLine: () => {},
+        argvOptions: { ...defaultOptions, channel: 'api' },
+        env
+      }),
+      (error) => error.code === 'CLAUDE_AGENT_LOCAL_ROUTE_INVALID'
+    )
+  }
 })

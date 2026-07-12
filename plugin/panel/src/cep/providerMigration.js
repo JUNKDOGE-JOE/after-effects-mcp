@@ -307,7 +307,8 @@ function expectedMigrationEntriesFromV2State(value) {
       || provider.auth.probe.kind !== 'inherit-model'
       || provider.headers.length !== 0
       || provider.dialect.override !== null
-      || provider.dialect.detected !== null
+      || !Array.isArray(provider.dialect.detected)
+      || provider.dialect.detected.length !== 0
     ) {
       throw migrationError();
     }
@@ -345,7 +346,12 @@ async function recoverCommittedProviderState({ store, legacyKeyStore, runner, jo
   if (typeof store.readState !== 'function') throw migrationError();
   const readCurrentState = () => {
     let state;
-    try { state = store.readState(); } catch { throw migrationError(); }
+    try {
+      const schemaInput = typeof store.readSchemaMigrationInput === 'function'
+        ? store.readSchemaMigrationInput()
+        : null;
+      state = schemaInput?.state || store.readState();
+    } catch { throw migrationError(); }
     return readStrictProviderStateV2(state);
   };
   if (journal.phase === 'committed') {

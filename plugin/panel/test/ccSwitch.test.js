@@ -137,6 +137,37 @@ test('confirmed cc-switch import applies explicit x-api-key metadata to the ephe
   });
 });
 
+test('cc-switch Anthropic imports default to x-api-key and preserve an explicit auth-token bearer hint', () => {
+  const file = 'C:\\Users\\me\\.cc-switch\\config.json';
+  const text = JSON.stringify({
+    providers: [
+      {
+        name: 'Anthropic API Key',
+        type: 'anthropic',
+        baseUrl: 'https://anthropic-key.example',
+        apiKey: 'sk-anthropic-key',
+      },
+      {
+        name: 'Anthropic Auth Token',
+        type: 'anthropic',
+        baseUrl: 'https://anthropic-token.example',
+        token: 'sk-anthropic-token',
+        settingsConfig: { env: { ANTHROPIC_AUTH_TOKEN: 'present' } },
+      },
+    ],
+  });
+  const fs = fakeFs({ [file]: text });
+  const preview = detectCcSwitch({ platform: platform(fs), fsImpl: fs });
+  assert.deepEqual(preview.providers.map((entry) => entry.authHint), [null, 'bearer']);
+  const drafts = readCcSwitchProviderDrafts({
+    file,
+    expectedSourceRevision: preview.sourceRevision,
+    fsImpl: fs,
+  });
+  assert.deepEqual(drafts.map((draft) => draft.modelAuthKind), ['x-api-key', 'bearer']);
+  assert.equal(JSON.stringify(preview).includes('sk-anthropic'), false);
+});
+
 test('readCcSwitchProviderDrafts rejects a changed source before returning secrets', () => {
   const file = 'C:\\Users\\me\\.cc-switch\\config.json';
   const fs = fakeFs({

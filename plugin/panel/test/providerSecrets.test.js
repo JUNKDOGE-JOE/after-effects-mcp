@@ -32,6 +32,90 @@ function providerFixture(overrides = {}) {
   }, overrides);
 }
 
+function unknownCapability(requestProfileRevision = 1, modelListRevision = 1) {
+  return {
+    status: 'unknown',
+    apiRoot: null,
+    auth: null,
+    compatibility: null,
+    agentFeatures: {
+      compact: 'unknown',
+      continuation: 'unknown',
+      countTokens: 'unknown',
+      namespaceTools: 'unknown',
+      reasoningReplay: 'unknown',
+      stream: 'unknown',
+      terminal: 'unknown',
+      tools: 'unknown',
+    },
+    checkedAt: 0,
+    validUntil: 0,
+    requestProfileRevision,
+    modelListRevision,
+    evidence: null,
+  };
+}
+
+function providerFixtureV3(overrides = {}) {
+  const checkedAt = 1_783_612_800_000;
+  return Object.assign({
+    id: 'provider-1',
+    credentialId: CREDENTIAL_ID,
+    name: 'Provider 1',
+    baseUrl: 'https://provider.example/root',
+    allowInsecureHttp: false,
+    requestProfileRevision: 1,
+    credential: {
+      valueRef: secretRef('auth-model', 4),
+      preferredAuth: { scheme: 'auto', headerName: null },
+    },
+    probeAuthOverride: { kind: 'custom', headerName: 'x-probe-token', valueRef: secretRef('auth-probe', 2) },
+    headers: [],
+    probePreference: 'chat',
+    modelList: {
+      revision: 1,
+      status: 'supported',
+      apiRoot: 'https://provider.example/v1beta/openai',
+      auth: { scheme: 'custom', headerName: 'x-probe-token' },
+      models: [{
+        id: 'model-a',
+        label: 'Model A',
+        metadata: { task: null, inputModalities: [], outputModalities: [], capabilities: [] },
+      }],
+      checkedAt,
+      validUntil: checkedAt + 3_600_000,
+      requestProfileRevision: 1,
+    },
+    modelCapabilities: [{
+      modelId: 'model-a',
+      responses: unknownCapability(),
+      chat: {
+        status: 'supported',
+        apiRoot: 'https://provider.example/v1beta/openai',
+        auth: { scheme: 'x-api-key', headerName: null },
+        compatibility: { instructionMode: 'chat-system', tokenField: 'max_tokens' },
+        agentFeatures: {
+          compact: 'unknown',
+          continuation: 'unknown',
+          countTokens: 'unknown',
+          namespaceTools: 'unknown',
+          reasoningReplay: 'unknown',
+          stream: 'unknown',
+          terminal: 'unknown',
+          tools: 'unknown',
+        },
+        checkedAt,
+        validUntil: checkedAt + 86_400_000,
+        requestProfileRevision: 1,
+        modelListRevision: 1,
+        evidence: 'chat-success-schema',
+      },
+      messages: unknownCapability(),
+    }],
+    routeOverrides: [],
+  }, overrides);
+}
+
 function publicErrorText(error) {
   return JSON.stringify({ name: error?.name, code: error?.code, message: error?.message });
 }
@@ -342,4 +426,48 @@ test('resolveProviderRequestProfile filters extra headers by scope and preserves
     { name: 'x-model-token', value: 'resolved-header-secret', source: 'secret' },
     { name: 'x-shared-feature', value: 'shared-on', source: 'literal' },
   ]);
+});
+
+test('Provider v3 resolves one primary credential with per-protocol auth and preserves a legacy probe override', async () => {
+  const provider = providerFixtureV3();
+  const resolved = [];
+  const secretService = {
+    async resolve(ref) {
+      resolved.push(ref.reference);
+      return ref.reference.includes('auth-probe') ? 'probe-secret' : 'primary-secret';
+    },
+  };
+
+  const probe = await resolveProviderRequestProfile(provider, { scope: 'probe', secretService });
+  const model = await resolveProviderRequestProfile(provider, {
+    scope: 'model',
+    secretService,
+    modelId: 'model-a',
+    protocol: 'chat',
+  });
+
+  assert.deepEqual(probe.auth, {
+    kind: 'header', name: 'x-probe-token', value: 'probe-secret',
+  });
+  assert.equal(probe.baseUrl, 'https://provider.example/v1beta/openai');
+  assert.deepEqual(model.auth, {
+    kind: 'header', name: 'x-api-key', value: 'primary-secret',
+  });
+  assert.equal(model.baseUrl, 'https://provider.example/v1beta/openai');
+  assert.equal(model.requestProfileRevision, 1);
+  assert.equal(resolved.filter((reference) => reference.includes('auth-probe')).length, 1);
+  assert.equal(resolved.filter((reference) => reference.includes('auth-model')).length, 1);
+});
+
+test('Provider v3 rejects an unsafe ad-hoc auth header before resolving the primary credential', async () => {
+  let resolves = 0;
+  await assert.rejects(
+    resolveProviderRequestProfile(providerFixtureV3(), {
+      scope: 'model',
+      secretService: { async resolve() { resolves += 1; return 'secret'; } },
+      authChoice: { scheme: 'custom', headerName: 'x-token\r\ninjected' },
+    }),
+    (error) => error?.code === 'INVALID_REFERENCE',
+  );
+  assert.equal(resolves, 0);
 });

@@ -13,7 +13,7 @@ function secretRef(slot, revision = 1) {
   };
 }
 
-function providerEntry(overrides = {}) {
+function providerEntryV2(overrides = {}) {
   return {
     id: 'relay',
     credentialId: CREDENTIAL_ID,
@@ -27,9 +27,40 @@ function providerEntry(overrides = {}) {
       probe: { kind: 'inherit-model' },
     },
     headers: [],
-    dialect: { override: null, detected: null },
+    dialect: { override: null, detected: [] },
     probedModels: [],
     probedAt: 0,
+    ...overrides,
+  };
+}
+
+function providerEntry(overrides = {}) {
+  return {
+    id: 'relay',
+    credentialId: CREDENTIAL_ID,
+    name: 'Relay',
+    baseUrl: 'https://relay.example/openai',
+    allowInsecureHttp: false,
+    requestProfileRevision: 1,
+    credential: {
+      valueRef: secretRef('auth-model-a13f28'),
+      preferredAuth: { scheme: 'bearer', headerName: null },
+    },
+    probeAuthOverride: null,
+    headers: [],
+    probePreference: null,
+    modelList: {
+      revision: 0,
+      status: 'unknown',
+      apiRoot: null,
+      auth: null,
+      models: [],
+      checkedAt: 0,
+      validUntil: 0,
+      requestProfileRevision: 1,
+    },
+    modelCapabilities: [],
+    routeOverrides: [],
     ...overrides,
   };
 }
@@ -176,10 +207,10 @@ function makeDeps() {
   };
 }
 
-test('fresh state is v2 and contains no plaintext-provider compatibility surface', () => {
+test('fresh state is v3 and contains no plaintext-provider compatibility surface', () => {
   const store = createProviderStore(makeDeps());
   assert.deepEqual(store.readState(), {
-    version: 2,
+    version: 3,
     revision: 0,
     migratedLegacy: true,
     pendingSecretDeletes: [],
@@ -187,10 +218,12 @@ test('fresh state is v2 and contains no plaintext-provider compatibility surface
   });
   assert.deepEqual(store.list(), []);
   assert.equal(store.needsSecretMigration(), false);
+  assert.equal(store.needsSchemaMigration(), false);
   assert.equal(store.readLegacyMigrationInput(), null);
+  assert.equal(store.readSchemaMigrationInput(), null);
 });
 
-test('upsert persists strict v2 entries with CAS and never persists a raw secret', () => {
+test('upsert persists strict v3 entries with CAS and never persists a raw secret', () => {
   const deps = makeDeps();
   const store = createProviderStore(deps);
   const result = store.upsert(providerEntry(), { expectedRevision: 0 });
@@ -200,13 +233,93 @@ test('upsert persists strict v2 entries with CAS and never persists a raw secret
 
   const rawText = deps.files.get('/home/user/.ae-mcp/providers.json');
   const raw = JSON.parse(rawText);
-  assert.equal(raw.version, 2);
+  assert.equal(raw.version, 3);
   assert.equal(raw.revision, 1);
   assert.deepEqual(raw.pendingSecretDeletes, []);
   assert.equal(Object.hasOwn(raw.providers[0], 'apiKey'), false);
   assert.equal(rawText.includes('sk-provider-secret'), false);
-  assert.match(raw.providers[0].auth.model.valueRef.reference, /^aemcp-secret:\/\//);
+  assert.match(raw.providers[0].credential.valueRef.reference, /^aemcp-secret:\/\//);
   assert.equal(deps.chmods.at(-1)[1], 0o600);
+});
+
+test('v2 input is schema-migration-only and its legacy detection is canonicalized in the snapshot', () => {
+  const deps = makeDeps();
+  const file = '/home/user/.ae-mcp/providers.json';
+  const legacy = providerEntryV2({
+    dialect: {
+      override: null,
+      detected: {
+        wireApi: 'responses',
+        baseUrl: 'https://relay.example/openai',
+        authProfileRevision: 1,
+        detectedAt: 100,
+        evidence: 'responses-success-schema',
+      },
+    },
+  });
+  deps.files.set(file, `${JSON.stringify({
+    version: 2,
+    revision: 4,
+    migratedLegacy: true,
+    pendingSecretDeletes: [],
+    providers: [legacy],
+  })}\n`);
+  const store = createProviderStore(deps);
+  assert.equal(store.needsSchemaMigration(), true);
+  assert.deepEqual(store.list(), []);
+  assert.throws(
+    () => store.readState(),
+    (error) => error.code === 'PROVIDER_STORE_MIGRATION_REQUIRED',
+  );
+  const migration = store.readSchemaMigrationInput();
+  assert.deepEqual(migration.state.providers[0].dialect, { override: null, detected: [] });
+  assert.equal(Array.isArray(JSON.parse(deps.files.get(file)).providers[0].dialect.detected), false);
+});
+
+test('replaceState atomically fences a v2 to v3 schema migration by source file identity', () => {
+  const deps = makeDeps();
+  const file = '/home/user/.ae-mcp/providers.json';
+  deps.files.set(file, `${JSON.stringify({
+    version: 2,
+    revision: 4,
+    migratedLegacy: true,
+    pendingSecretDeletes: [],
+    providers: [providerEntryV2()],
+  })}\n`);
+  const store = createProviderStore(deps);
+  const sourceRevision = store.readSchemaMigrationInput().sourceRevision;
+  const next = {
+    version: 3,
+    revision: 5,
+    migratedLegacy: true,
+    pendingSecretDeletes: [],
+    providers: [providerEntry()],
+  };
+  assert.deepEqual(store.replaceState(next, {
+    expectedSourceRevision: sourceRevision,
+    expectedSourceVersion: 2,
+  }), { stateRevision: 5 });
+  assert.deepEqual(store.readState(), next);
+
+  const conflictDeps = makeDeps();
+  conflictDeps.files.set(file, `${JSON.stringify({
+    version: 2,
+    revision: 4,
+    migratedLegacy: true,
+    pendingSecretDeletes: [],
+    providers: [providerEntryV2()],
+  })}\n`);
+  const conflictStore = createProviderStore(conflictDeps);
+  const staleRevision = conflictStore.readSchemaMigrationInput().sourceRevision;
+  conflictDeps.setFileIdentity({ mtimeMs: 1_700_000_000_999 });
+  assert.throws(
+    () => conflictStore.replaceState(next, {
+      expectedSourceRevision: staleRevision,
+      expectedSourceVersion: 2,
+    }),
+    (error) => error.code === 'PROVIDER_STORE_CONFLICT',
+  );
+  assert.equal(JSON.parse(conflictDeps.files.get(file)).version, 2);
 });
 
 test('upsert and remove reject stale CAS revisions without modifying disk', () => {
@@ -229,11 +342,14 @@ test('upsert and remove atomically append replaced references to the cleanup que
   const deps = makeDeps();
   const store = createProviderStore(deps);
   const first = store.upsert(providerEntry(), { expectedRevision: 0 });
-  const oldRef = providerEntry().auth.model.valueRef;
+  const oldRef = providerEntry().credential.valueRef;
   const nextRef = secretRef('auth-model-new', 2);
   const updated = providerEntry({
-    authProfileRevision: 2,
-    auth: { model: { kind: 'bearer', valueRef: nextRef }, probe: { kind: 'inherit-model' } },
+    requestProfileRevision: 2,
+    credential: {
+      valueRef: nextRef,
+      preferredAuth: { scheme: 'bearer', headerName: null },
+    },
   });
   const second = store.upsert(updated, {
     expectedRevision: first.stateRevision,
@@ -347,7 +463,7 @@ test('replaceState commits a migration result and writeRedactedBackup never rece
     revision: 1,
     migratedLegacy: true,
     pendingSecretDeletes: [],
-    providers: [providerEntry()],
+    providers: [providerEntryV2()],
   };
   assert.deepEqual(store.replaceState(state), { stateRevision: 1 });
   await store.writeRedactedBackup(state, { keep: 3, maxAgeDays: 30 });
@@ -374,7 +490,7 @@ test('replaceState compares the legacy file identity again while holding the mut
       revision: 1,
       migratedLegacy: true,
       pendingSecretDeletes: [],
-      providers: [providerEntry()],
+      providers: [providerEntryV2()],
     }, { expectedSourceRevision: sourceRevision }),
     (error) => error.code === 'PROVIDER_STORE_CONFLICT',
   );
@@ -398,7 +514,7 @@ test('store rejects credential-bearing provider base URLs even when callers bypa
   );
   assert.throws(
     () => store.replaceState({
-      version: 2,
+      version: 3,
       revision: 1,
       migratedLegacy: true,
       pendingSecretDeletes: [],
@@ -453,7 +569,7 @@ test('provider mutations hold a cross-process lock across re-read, CAS, and atom
   let nestedDeleteError = null;
   saveDeleteDeps.setRenameHook(() => {
     try {
-      remover.remove('relay', { expectedRevision: 1, pendingSecretDeletes: [providerEntry().auth.model.valueRef] });
+      remover.remove('relay', { expectedRevision: 1, pendingSecretDeletes: [providerEntry().credential.valueRef] });
     } catch (error) {
       nestedDeleteError = error;
     }
@@ -660,7 +776,7 @@ test('pending deletes are unique by reference even when revisions differ', () =>
   const reference = secretRef('queued', 1).reference;
   assert.throws(
     () => store.replaceState({
-      version: 2,
+      version: 3,
       revision: 1,
       migratedLegacy: true,
       pendingSecretDeletes: [
@@ -676,7 +792,7 @@ test('pending deletes are unique by reference even when revisions differ', () =>
 test('pending deletes can never overlap an active provider secret reference', () => {
   const deps = makeDeps();
   const store = createProviderStore(deps);
-  const active = providerEntry().auth.model.valueRef;
+  const active = providerEntry().credential.valueRef;
   assert.throws(
     () => store.upsert(providerEntry(), { expectedRevision: 0, pendingSecretDeletes: [active] }),
     (error) => error.code === 'PROVIDER_STORE_INVALID',

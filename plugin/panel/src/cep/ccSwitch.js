@@ -1,6 +1,7 @@
 // cc-switch import is preview-then-read: previews contain no secret or secret
 // reference, and confirmation re-reads the exact SHA-256 revision.
 import { createPlatformAdapter } from './platform/index.js';
+import { defaultProviderModelAuthKind } from '../lib/providerManagerState.js';
 
 const CONFIG_NAMES = ['config.json', 'providers.json'];
 const API_FORMAT_TO_WIRE_API = {
@@ -192,7 +193,7 @@ function previewEntry(provider) {
     protocol,
     baseUrl,
     dialectHint: protocol === 'openai-compatible' ? dialectHint(provider) : null,
-    authHint: protocol === 'openai-compatible' ? authHint(provider) : null,
+    authHint: authHint(provider),
   };
 }
 
@@ -238,7 +239,7 @@ export function readCcSwitchProviderDrafts({ file, expectedSourceRevision, fsImp
     if (!preview) return null;
     return {
       ...preview,
-      modelAuthKind: preview.authHint || 'bearer',
+      modelAuthKind: preview.authHint || defaultProviderModelAuthKind(preview.protocol),
       modelAuthSecret: String(provider.apiKey || provider.api_key || provider.key || provider.token || '').trim(),
     };
   }).filter(Boolean);

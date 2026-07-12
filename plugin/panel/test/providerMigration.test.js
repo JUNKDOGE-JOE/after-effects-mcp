@@ -522,6 +522,39 @@ test('a committed journal only reads strict v2 state and does not require a clea
   assert.deepEqual(result, { status: 'already-committed', written: 0, resumedFrom: 'committed' });
 });
 
+test('a committed journal validates v2 through the schema-migration reader when public readState is v3-only', async () => {
+  const harness = makeHarness();
+  await migrateProviderStoreSecrets({
+    store: harness.store,
+    legacyKeyStore: harness.legacyKeyStore,
+    runner: harness.runner,
+    secretStore: harness.secretStore,
+    legacyCredentialId: NAMESPACE_ID,
+  });
+  let publicReads = 0;
+  const store = {
+    ...harness.store,
+    readState() {
+      publicReads += 1;
+      const error = new Error('Provider store migration is required');
+      error.code = 'PROVIDER_STORE_MIGRATION_REQUIRED';
+      throw error;
+    },
+    readSchemaMigrationInput() {
+      return { sourceRevision: 'v2-file-identity', state: harness.committedState() };
+    },
+  };
+  const result = await migrateProviderStoreSecrets({
+    store,
+    legacyKeyStore: {},
+    runner: harness.runner,
+    secretStore: harness.secretStore,
+    legacyCredentialId: NAMESPACE_ID,
+  });
+  assert.deepEqual(result, { status: 'already-committed', written: 0, resumedFrom: 'committed' });
+  assert.equal(publicReads, 0);
+});
+
 test('provider migration rejects an exact legacy secret copied into any non-secret persisted field', async () => {
   const harness = makeHarness({ embedLegacySecretOutsideSecret: true });
   await assert.rejects(
