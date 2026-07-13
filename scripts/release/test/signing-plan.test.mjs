@@ -208,7 +208,7 @@ test('command construction rejects mutable identities and overlapping roots', ()
     outRoot: '/work/out',
   };
   assert.throws(
-    () => buildReleaseSigningCommands({ ...valid, version: '0.9.2' }),
+    () => buildReleaseSigningCommands({ ...valid, version: '0.9.3' }),
     /version/,
   );
   assert.throws(

@@ -291,7 +291,7 @@ test('installed-runtime smoke rejects platform, version, manifest digest, and AE
   assert.notEqual(platform.status, 0);
   assert.match(platform.stderr, /platform mismatch/i);
 
-  const version = runSmoke(fixture, { version: '0.9.2' });
+  const version = runSmoke(fixture, { version: '0.9.3' });
   assert.notEqual(version.status, 0);
   assert.match(version.stderr, /version mismatch/i);
 
