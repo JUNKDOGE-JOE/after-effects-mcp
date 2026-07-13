@@ -1,43 +1,122 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyDraft, draftFromEntry, validateDraft, draftToEntry } from '../src/lib/providerManagerState.js';
+import {
+  defaultProviderModelAuthKind,
+  draftFromEntry,
+  draftToEntry,
+  draftWithProtocol,
+  emptyDraft,
+  validateDraft,
+} from '../src/lib/providerManagerState.js';
 
-test('emptyDraft returns a blank openai-compatible draft', () => {
-  const d = emptyDraft();
-  assert.equal(d.id, '');
-  assert.equal(d.name, '');
-  assert.equal(d.protocol, 'openai-compatible');
-  assert.equal(d.baseUrl, '');
-  assert.equal(d.apiKey, '');
+const CREDENTIAL_ID = '5eb75f05-5d9e-5d9c-85af-f0893e8b90c2';
+
+test('emptyDraft uses one automatic API-key credential and no Provider-level protocol', () => {
+  assert.deepEqual(emptyDraft(), {
+    id: '',
+    name: '',
+    baseUrl: '',
+    allowInsecureHttp: false,
+    modelAuthKind: 'auto',
+    modelAuthAutomatic: false,
+    modelAuthHeaderName: '',
+    modelAuthSecret: '',
+    headers: [],
+    probePreference: '',
+  });
+  assert.equal(Object.hasOwn(emptyDraft(), 'protocol'), false);
+  assert.equal(Object.hasOwn(emptyDraft(), 'dialectOverride'), false);
+  assert.equal(Object.hasOwn(emptyDraft(), 'probeAuthSecret'), false);
 });
 
-test('draftFromEntry copies the editable fields from a stored provider entry', () => {
-  const entry = { id: 'p1', name: 'Provider 1', protocol: 'anthropic', baseUrl: 'https://x.example.com', apiKey: 'k', probedModels: [{ id: 'm' }], probedAt: 123 };
-  const d = draftFromEntry(entry);
-  assert.deepEqual(d, { id: 'p1', name: 'Provider 1', protocol: 'anthropic', baseUrl: 'https://x.example.com', apiKey: 'k' });
+test('legacy import helpers retain protocol auth hints without affecting v3 drafts', () => {
+  assert.equal(defaultProviderModelAuthKind('openai-compatible'), 'bearer');
+  assert.equal(defaultProviderModelAuthKind('anthropic'), 'x-api-key');
+  const changed = draftWithProtocol({ ...emptyDraft(), modelAuthKind: 'bearer', modelAuthAutomatic: true }, 'anthropic');
+  assert.equal(changed.protocol, 'anthropic');
+  assert.equal(changed.modelAuthKind, 'x-api-key');
 });
 
-test('validateDraft requires a name or id', () => {
-  const msg = validateDraft({ id: '', name: '', protocol: 'openai-compatible', baseUrl: 'https://x.example.com', apiKey: '' });
-  assert.ok(msg);
+test('draftFromEntry maps v3 auth and probe preference without copying opaque references', () => {
+  const reference = `aemcp-secret://provider/${CREDENTIAL_ID}/auth-model-old/v1`;
+  const entry = {
+    id: 'p1',
+    credentialId: CREDENTIAL_ID,
+    name: 'Provider 1',
+    baseUrl: 'https://x.example.com',
+    allowInsecureHttp: false,
+    credential: {
+      preferredAuth: { scheme: 'custom', headerName: 'x-provider-key' },
+      valueRef: { kind: 'secret', reference, revision: 2 },
+    },
+    probeAuthOverride: null,
+    headers: [{
+      id: 'feature',
+      name: 'x-feature',
+      scopes: ['model'],
+      valueRef: { kind: 'secret', reference, revision: 2 },
+    }],
+    probePreference: 'messages',
+  };
+  const draft = draftFromEntry(entry);
+  assert.equal(draft.modelAuthKind, 'custom');
+  assert.equal(draft.modelAuthHeaderName, 'x-provider-key');
+  assert.equal(draft.modelAuthSecret, '');
+  assert.equal(draft.probePreference, 'messages');
+  assert.deepEqual(draft.headers[0], {
+    id: 'feature',
+    name: 'x-feature',
+    scopes: ['model'],
+    valueKind: 'secret',
+    value: '',
+  });
+  assert.equal(JSON.stringify(draft).includes(reference), false);
+  assert.equal(Object.hasOwn(draft, 'credentialId'), false);
 });
 
-test('validateDraft requires an http(s) base URL', () => {
-  const msg = validateDraft({ id: '', name: 'Foo', protocol: 'openai-compatible', baseUrl: 'ftp://x.example.com', apiKey: '' });
-  assert.ok(msg);
-  assert.equal(validateDraft({ id: '', name: 'Foo', protocol: 'openai-compatible', baseUrl: 'https://x.example.com', apiKey: '' }), '');
-  assert.equal(validateDraft({ id: '', name: 'Foo', protocol: 'openai-compatible', baseUrl: 'http://x.example.com', apiKey: '' }), '');
+test('draftFromEntry keeps v2 entries editable only as a migration fallback', () => {
+  const entry = {
+    id: 'legacy',
+    name: 'Legacy',
+    protocol: 'anthropic',
+    baseUrl: 'https://legacy.example',
+    auth: { model: { kind: 'x-api-key' } },
+    headers: [],
+    dialect: { override: { wireApi: 'chat', source: 'manual', updatedAt: 1 }, detected: [] },
+  };
+  const draft = draftFromEntry(entry);
+  assert.equal(draft.modelAuthKind, 'x-api-key');
+  assert.equal(draft.probePreference, 'chat');
+  assert.equal(Object.hasOwn(draft, 'protocol'), false);
 });
 
-test('draftToEntry derives a slug id from the name when no id is set', () => {
-  const entry = draftToEntry({ id: '', name: 'My Cool Provider!', protocol: 'openai-compatible', baseUrl: 'https://x.example.com', apiKey: 'k' });
-  assert.equal(entry.id, 'my-cool-provider-');
+test('validateDraft requires a name and http(s) URL', () => {
+  assert.ok(validateDraft({ ...emptyDraft(), baseUrl: 'https://x.example.com' }));
+  assert.ok(validateDraft({ ...emptyDraft(), name: 'Foo', baseUrl: 'ftp://x.example.com' }));
+  assert.equal(validateDraft({ ...emptyDraft(), name: 'Foo', baseUrl: 'https://x.example.com' }), '');
+});
+
+test('validateDraft requires protected storage for credential-shaped literal values', () => {
+  const error = validateDraft({
+    ...emptyDraft(),
+    name: 'Foo',
+    baseUrl: 'https://x.example.com',
+    headers: [{ name: 'x-feature', valueKind: 'literal', value: '{"accessToken":"opaque"}' }],
+  });
+  assert.match(error, /protected secrets/);
+});
+
+test('draftToEntry derives an id and preserves only ephemeral v3 form fields', () => {
+  const entry = draftToEntry({
+    ...emptyDraft(),
+    name: 'My Cool Provider!',
+    baseUrl: 'https://x.example.com',
+    modelAuthSecret: 'sk-ephemeral',
+  });
+  assert.equal(entry.id, 'my-cool-provider');
   assert.equal(entry.name, 'My Cool Provider!');
-});
-
-test('draftToEntry preserves an existing id on edit', () => {
-  const entry = draftToEntry({ id: 'existing-id', name: 'Renamed', protocol: 'anthropic', baseUrl: 'https://x.example.com', apiKey: '' });
-  assert.equal(entry.id, 'existing-id');
-  assert.equal(entry.name, 'Renamed');
-  assert.equal(entry.protocol, 'anthropic');
+  assert.equal(entry.modelAuthSecret, 'sk-ephemeral');
+  assert.equal(entry.modelAuthKind, 'auto');
+  assert.equal(Object.hasOwn(entry, 'protocol'), false);
+  assert.equal(Object.hasOwn(entry, 'apiKey'), false);
 });

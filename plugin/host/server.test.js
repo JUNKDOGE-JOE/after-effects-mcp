@@ -7,8 +7,14 @@ const http = require('node:http');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const bundledExpressFixture = require('express');
 
 const authToken = require('./auth-token');
+
+function bindRuntimeDependencies(server) {
+    server.setRuntimeDependencies({ express: bundledExpressFixture });
+    return server;
+}
 
 // ---- tokenMatches (pure helper) ----
 
@@ -61,12 +67,27 @@ test('regenerate writes a fresh 64-char hex token', (t) => {
     fs.rmSync(tmp, { recursive: true, force: true });
 });
 
+test('server requires explicit Express injection even when ambient local dependencies exist', () => {
+    delete require.cache[require.resolve('./server')];
+    const server = require('./server');
+    assert.strictEqual(typeof server.setRuntimeDependencies, 'function');
+    assert.throws(
+        () => server.buildApp(),
+        (error) => error && error.code === 'HOST_RUNTIME_DEPENDENCIES_UNAVAILABLE',
+    );
+});
+
+test('secret helper capabilities are not exposed over HTTP routes', () => {
+    const source = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
+    assert.doesNotMatch(source, /\.(?:get|post|put|delete|patch|use)\s*\(\s*['"]\/[^'"]*(?:secret|credential|helper)/i);
+});
+
 // ---- /exec auth wiring via the real Express app ----
 
 function startApp() {
     delete require.cache[require.resolve('./server')];
     delete require.cache[require.resolve('./jsx-bridge')];
-    const server = require('./server');
+    const server = bindRuntimeDependencies(require('./server'));
     server.activity._reset();
     server.setPaused(false);
     // Inject a known token and a stub CSInterface so /exec can "run".
@@ -165,7 +186,7 @@ test('/exec returns 200 with the correct token', async () => {
 test('/exec decodes the evalScript transport envelope before responding', async () => {
     delete require.cache[require.resolve('./server')];
     delete require.cache[require.resolve('./jsx-bridge')];
-    const server = require('./server');
+    const server = bindRuntimeDependencies(require('./server'));
     server.activity._reset();
     server.setPaused(false);
     server._setExecToken('known-secret-token');
@@ -224,7 +245,7 @@ test('wrapForEvalScriptTransport returns an error envelope for thrown ExtendScri
 test('/exec reports empty evalScript output as no output', async () => {
     delete require.cache[require.resolve('./server')];
     delete require.cache[require.resolve('./jsx-bridge')];
-    const server = require('./server');
+    const server = bindRuntimeDependencies(require('./server'));
     server.activity._reset();
     server.setPaused(false);
     server._setExecToken('known-secret-token');
@@ -253,7 +274,7 @@ test('/exec reports empty evalScript output as no output', async () => {
 test('/exec reports decoded ExtendScript transport errors', async () => {
     delete require.cache[require.resolve('./server')];
     delete require.cache[require.resolve('./jsx-bridge')];
-    const server = require('./server');
+    const server = bindRuntimeDependencies(require('./server'));
     server.activity._reset();
     server.setPaused(false);
     server._setExecToken('known-secret-token');
@@ -385,7 +406,7 @@ test('/exec success is recorded in /activity with client label', async () => {
 test('/exec records emptyResult when the decoded result is empty', async () => {
     delete require.cache[require.resolve('./server')];
     delete require.cache[require.resolve('./jsx-bridge')];
-    const server = require('./server');
+    const server = bindRuntimeDependencies(require('./server'));
     server.activity._reset();
     server.setPaused(false);
     server._setExecToken('known-secret-token');
@@ -553,4 +574,49 @@ test('panel-internal diagnostic probes stay out of the client registry', async (
     } finally {
         srv.close();
     }
+});
+
+test('start and restart retain normalized frozen platform roots while legacy two-argument calls still work', async (t) => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-platform-roots-'));
+    t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+    t.mock.method(os, 'homedir', () => tmp);
+    delete require.cache[require.resolve('./server')];
+    const server = bindRuntimeDependencies(require('./server'));
+    t.after(() => new Promise((resolve) => server.stop(resolve)));
+    const listen = (method, roots, explicitRoots) => new Promise((resolve, reject) => {
+        const callback = (error) => error ? reject(error) : resolve();
+        if (explicitRoots) server[method](0, callback, roots);
+        else server[method](0, callback);
+    });
+    const stop = () => new Promise((resolve) => server.stop(resolve));
+
+    await listen('start');
+    assert.strictEqual(server._getPlatformRootsForTest(), null);
+    await stop();
+
+    const rootsA = {
+        extensionRoot: path.join(tmp, 'extension', '..', 'extension'),
+        runtimeRoot: path.join(tmp, '.ae-mcp', 'runtime', '..', 'runtime'),
+    };
+    await listen('start', rootsA, true);
+    const normalizedA = server._getPlatformRootsForTest();
+    assert.deepStrictEqual(normalizedA, {
+        extensionRoot: path.resolve(rootsA.extensionRoot),
+        runtimeRoot: path.resolve(rootsA.runtimeRoot),
+    });
+    assert.strictEqual(Object.isFrozen(normalizedA), true);
+
+    await listen('restart');
+    assert.deepStrictEqual(server._getPlatformRootsForTest(), normalizedA);
+
+    const rootsB = {
+        extensionRoot: path.join(tmp, 'other-extension'),
+        runtimeRoot: path.join(tmp, 'other-runtime'),
+    };
+    await listen('restart', rootsB, true);
+    assert.deepStrictEqual(server._getPlatformRootsForTest(), {
+        extensionRoot: path.resolve(rootsB.extensionRoot),
+        runtimeRoot: path.resolve(rootsB.runtimeRoot),
+    });
+    await stop();
 });

@@ -1,0 +1,31 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": 1,
+    "method": "capabilities",
+    "params": {}
+  },
+  "response": {
+    "protocolVersion": 1,
+    "id": 1,
+    "ok": true,
+    "result": {
+      "protocolVersion": 1,
+      "platform": "macos-arm64",
+      "helperVersion": "0.1.0",
+      "secretBackend": "keychain",
+      "captureBackend": "screen-capture-kit",
+      "authenticatedCaller": true,
+      "maxMessageBytes": 65536,
+      "methods": [
+        "capabilities",
+        "secret.get",
+        "secret.set",
+        "secret.delete",
+        "window.find",
+        "window.describe",
+        "window.capture"
+      ]
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import { createSseParser } from '../lib/sse.js';
 import { expertGuidanceEnv } from './externalClients.js';
+import { createPlatformAdapter } from './platform/index.js';
 
 const MCP_TIMEOUT_MS = 120000;
 const READY_TIMEOUT_MS = 30000;
@@ -16,26 +17,10 @@ function getCepRequire() {
   throw new Error('CEP Node require is unavailable');
 }
 
-function getCepEnv() {
-  return (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env) || {};
-}
-
 function defaultFetch() {
   if (globalThis.window && globalThis.window.fetch) return globalThis.window.fetch.bind(globalThis.window);
   if (globalThis.fetch) return globalThis.fetch.bind(globalThis);
   throw new Error('fetch is unavailable');
-}
-
-function defaultFs() {
-  return getCepRequire()('fs');
-}
-
-function defaultOs() {
-  return getCepRequire()('os');
-}
-
-function defaultPath() {
-  return getCepRequire()('path');
 }
 
 function sleep(ms) {
@@ -159,12 +144,10 @@ function permissionReplyPath(sessionId, permissionId) {
 }
 
 export function createOpenCodeBackend({
-  spawnImpl,
+  platform,
   fetchImpl,
   getPort = defaultGetPort,
   fsImpl,
-  osImpl,
-  pathImpl,
   tempDirName = randomTempName,
   getModel,
   getPermissionMode,
@@ -174,6 +157,7 @@ export function createOpenCodeBackend({
   onEvent,
   env,
 } = {}) {
+  const adapter = platform || createPlatformAdapter();
   let proc = null;
   let port = null;
   let baseUrl = '';
@@ -204,7 +188,7 @@ export function createOpenCodeBackend({
   }
 
   function currentEnv() {
-    return Object.assign({}, getCepEnv(), env || {});
+    return adapter.completeSpawnEnv(env || {});
   }
 
   function finishActive() {
@@ -262,11 +246,9 @@ export function createOpenCodeBackend({
   }
 
   function writeConfig(mcpSpec) {
-    const fs = fsImpl || defaultFs();
-    const os = osImpl || defaultOs();
-    const path = pathImpl || defaultPath();
-    configHome = path.join(os.tmpdir(), tempDirName());
-    const configDir = path.join(configHome, 'opencode');
+    const fs = fsImpl || adapter.fs;
+    configHome = adapter.paths.join([adapter.paths.tempRoot, tempDirName()]);
+    const configDir = adapter.paths.join([configHome, 'opencode']);
     fs.mkdirSync(configDir, { recursive: true });
     const config = {
       $schema: 'https://opencode.ai/config.json',
@@ -283,7 +265,7 @@ export function createOpenCodeBackend({
         },
       },
     };
-    fs.writeFileSync(path.join(configDir, 'opencode.json'), JSON.stringify(config, null, 2));
+    fs.writeFileSync(adapter.paths.join([configDir, 'opencode.json']), JSON.stringify(config, null, 2));
   }
 
   function handleExit(code, signal) {
@@ -323,15 +305,16 @@ export function createOpenCodeBackend({
       writeConfig(mcpSpec);
       port = await getPort();
       baseUrl = 'http://127.0.0.1:' + port;
-      const spawn = spawnImpl || getCepRequire()('child_process').spawn;
-      const spawnEnv = Object.assign({}, currentEnv(), { XDG_CONFIG_HOME: configHome });
+      const spawnEnv = adapter.completeSpawnEnv(currentEnv(), { XDG_CONFIG_HOME: configHome });
+      const requiredArch = adapter.id === 'macos-arm64' ? 'arm64' : (adapter.id === 'windows-x64' ? 'x64' : undefined);
+      const executable = await adapter.resolveExecutable('opencode', { env: spawnEnv, ...(requiredArch ? { requiredArch } : {}) });
+      if (!executable.ok) throw new Error('OpenCode CLI resolution failed: ' + executable.code);
       stderrTail = '';
       stopping = false;
       sseClosed = false;
-      proc = spawn('opencode', ['serve', '--port', String(port)], {
+      proc = adapter.spawn(executable, ['serve', '--port', String(port)], {
         stdio: 'pipe',
         windowsHide: true,
-        shell: true,
         env: spawnEnv,
       });
       if (proc.stderr && proc.stderr.on) proc.stderr.on('data', (chunk) => {
@@ -597,7 +580,7 @@ export function createOpenCodeBackend({
     serverPromise = null;
     try {
       if (configHome) {
-        const fs = fsImpl || defaultFs();
+        const fs = fsImpl || adapter.fs;
         fs.rmSync(configHome, { recursive: true, force: true });
       }
     } catch (e) {

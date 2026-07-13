@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple, Union
 
-from pydantic import BaseModel, ConfigDict, Field, constr
+from pydantic import BaseModel, ConfigDict, Field, constr, model_validator
 
 
 # Common literal set used by several schemas (effects / layer types).
@@ -215,8 +215,13 @@ class AeSetPropertyArgs(_StrictModel):
         description="Property path like 'Transform/Position' or 'Effects/Gaussian Blur/Blurriness'.",
     )
     value: Any = Field(
-        ...,
-        description="Scalar or array. Numeric arrays are passed as-is to setValue.",
+        None,
+        description="Scalar or array passed to setValue. Exactly one of value/expression is required.",
+    )
+    expression: Optional[str] = Field(
+        None,
+        min_length=1,
+        description="AE expression text. Exactly one of value/expression is required.",
     )
     at_time: Optional[float] = Field(
         None,
@@ -225,6 +230,18 @@ class AeSetPropertyArgs(_StrictModel):
             "are legal in AE). Omit to write the constant value."
         ),
     )
+
+    @model_validator(mode="after")
+    def validate_write_shape(self) -> "AeSetPropertyArgs":
+        has_value = "value" in self.model_fields_set
+        has_expression = "expression" in self.model_fields_set
+        if has_value == has_expression:
+            raise ValueError("exactly one of value or expression is required")
+        if has_expression and self.expression is None:
+            raise ValueError("expression must be a non-empty string")
+        if has_expression and self.at_time is not None:
+            raise ValueError("expression forbids at_time")
+        return self
 
 
 class AeMoveLayerArgs(_StrictModel):
@@ -381,6 +398,175 @@ class AeSkillUseArgs(_StrictModel):
     execute: bool = Field(False, description="When true, execute rendered JSX in AE.")
 
 
+ToolArtifactKind = Literal["jsx", "expression", "prompt-skill", "recipe", "diagnostic"]
+ToolArtifactStatus = Literal["candidate", "saved", "pinned", "archived", "deprecated"]
+ToolArtifactRisk = Literal["read", "write", "destructive", "external"]
+ToolArtifactOperation = Literal["render", "execute", "apply"]
+ToolSourceType = Literal["user", "legacy", "bundled", "chat-tool-call", "imported"]
+
+
+class AeToolIndexArgs(_StrictModel):
+    """ae.toolIndex — list lightweight Tool Library summaries."""
+    kinds: Optional[List[ToolArtifactKind]] = None
+    statuses: Optional[List[ToolArtifactStatus]] = None
+    source_types: Optional[List[ToolSourceType]] = None
+    include_candidates: bool = False
+    limit: int = Field(100, ge=1, le=1000)
+
+
+class AeToolSearchArgs(_StrictModel):
+    """ae.toolSearch — search lightweight Tool Library summaries."""
+    query: str = Field(..., max_length=512)
+    kinds: Optional[List[ToolArtifactKind]] = None
+    categories: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+    risks: Optional[List[ToolArtifactRisk]] = None
+    statuses: Optional[List[ToolArtifactStatus]] = None
+    source_types: Optional[List[ToolSourceType]] = None
+    offset: int = Field(0, ge=0)
+    limit: int = Field(50, ge=1, le=1000)
+
+
+class AeToolInspectArgs(_StrictModel):
+    """ae.toolInspect — read one full Tool Library artifact as untrusted content."""
+    artifact_id: str = Field(..., min_length=1, max_length=256)
+
+
+class AeToolUseArgs(_StrictModel):
+    """ae.toolUse — render or run the prepare, grant, execute protocol."""
+    artifact_id: Optional[str] = Field(None, min_length=1, max_length=256)
+    action: Literal["render", "prepare", "grant", "execute"]
+    operation: Optional[ToolArtifactOperation] = None
+    args: Dict[str, Any] = Field(default_factory=dict)
+    target: Dict[str, Any] = Field(default_factory=dict)
+    plan_hash: Optional[str] = Field(None, min_length=1, max_length=256)
+    grant_id: Optional[str] = Field(None, min_length=1, max_length=256)
+    grant_scope: Optional[Literal["once", "session"]] = None
+
+    @model_validator(mode="after")
+    def validate_action_shape(self) -> "AeToolUseArgs":
+        if self.action == "render":
+            if self.artifact_id is None or self.plan_hash is not None or self.grant_id is not None:
+                raise ValueError("render requires artifact_id and forbids plan_hash/grant_id")
+            if self.grant_scope is not None or self.target:
+                raise ValueError("render forbids grant_scope and target")
+            if self.operation not in {None, "render"}:
+                raise ValueError("render operation must be render")
+            self.operation = "render"
+        elif self.action == "prepare":
+            if self.artifact_id is None or self.operation is None:
+                raise ValueError("prepare requires artifact_id and operation")
+            if self.plan_hash is not None or self.grant_id is not None or self.grant_scope is not None:
+                raise ValueError("prepare forbids plan_hash/grant_id/grant_scope")
+        elif self.action == "grant":
+            if self.plan_hash is None or self.grant_scope is None:
+                raise ValueError("grant requires plan_hash and grant_scope")
+            if self.artifact_id is not None or self.grant_id is not None:
+                raise ValueError("grant forbids artifact_id/grant_id")
+            if self.operation is not None or self.args or self.target:
+                raise ValueError("grant forbids operation/args/target")
+        else:
+            if self.plan_hash is None or self.grant_id is None:
+                raise ValueError("execute requires plan_hash and grant_id")
+            if self.artifact_id is not None or self.grant_scope is not None:
+                raise ValueError("execute forbids artifact_id/grant_scope")
+            if self.operation is not None or self.args or self.target:
+                raise ValueError("execute forbids operation/args/target")
+        return self
+
+
+class AeToolCreateArgs(_StrictModel):
+    """ae.toolCreate — create a native user Tool Library artifact."""
+    name: str = Field(..., min_length=1, max_length=128)
+    description: str = Field("", max_length=4096)
+    kind: ToolArtifactKind
+    category: str = Field("workflow", min_length=1, max_length=128)
+    tags: List[str] = Field(default_factory=list, max_length=32)
+    compatibility: Dict[str, Any] = Field(default_factory=dict)
+    declared_risk: ToolArtifactRisk = "write"
+    status: Literal["candidate", "saved"] = "saved"
+    content: Any
+    args_schema: Dict[str, Any] = Field(default_factory=dict)
+    expected_store_revision: Optional[int] = Field(None, ge=0)
+
+
+class AeToolEditArgs(_StrictModel):
+    """ae.toolEdit — CAS-edit one Tool Library artifact."""
+    artifact_id: str = Field(..., min_length=1, max_length=256)
+    changes: Dict[str, Any] = Field(..., min_length=1)
+    expected_revision: int = Field(..., ge=1)
+    expected_content_hash: str = Field(..., min_length=64, max_length=64)
+    replace_artifact_id: Optional[str] = Field(None, min_length=1, max_length=256)
+
+    @model_validator(mode="after")
+    def validate_edit_shape(self) -> "AeToolEditArgs":
+        allowed = {
+            "name", "description", "kind", "category", "tags", "compatibility",
+            "declared_risk", "declaredRisk", "status", "content", "args_schema",
+            "argsSchema", "verification_action", "verificationAction",
+        }
+        if not set(self.changes).issubset(allowed):
+            raise ValueError("changes contain unsupported fields")
+        verification = self.changes.get(
+            "verification_action", self.changes.get("verificationAction")
+        )
+        if verification is not None and verification not in {"mark-reviewed", "clear"}:
+            raise ValueError("verification_action is invalid")
+        if self.replace_artifact_id is not None and self.changes.get("status") != "saved":
+            raise ValueError("replacement is valid only while promoting a candidate")
+        return self
+
+
+class _ToolCasMutationArgs(_StrictModel):
+    artifact_id: str = Field(..., min_length=1, max_length=256)
+    expected_revision: int = Field(..., ge=1)
+    expected_content_hash: str = Field(..., min_length=64, max_length=64)
+
+
+class AeToolDeleteArgs(_ToolCasMutationArgs):
+    """ae.toolDelete — permanently delete one user Tool Library artifact."""
+
+
+class AeToolArchiveArgs(_ToolCasMutationArgs):
+    """ae.toolArchive — archive one Tool Library artifact."""
+
+
+class AeToolDuplicateArgs(_ToolCasMutationArgs):
+    """ae.toolDuplicate — copy an exact artifact into the native user store."""
+    name: str = Field(..., min_length=1, max_length=128)
+
+
+class AeToolPromoteFromHistoryArgs(_ToolCasMutationArgs):
+    """ae.toolPromoteFromHistory — promote a candidate artifact to saved."""
+    replace_artifact_id: Optional[str] = Field(None, min_length=1, max_length=256)
+
+
+class AeToolImportArgs(_StrictModel):
+    """ae.toolImport — preview, commit, or discard a quarantined package import."""
+    action: Literal["preview", "commit", "discard"]
+    path: Optional[str] = Field(None, min_length=1, max_length=32768)
+    import_id: Optional[str] = Field(None, min_length=1, max_length=256)
+    resolutions: Dict[str, Literal["keep", "duplicate"]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_import_shape(self) -> "AeToolImportArgs":
+        if self.action == "preview":
+            if self.path is None or self.import_id is not None or self.resolutions:
+                raise ValueError("preview requires path only")
+        elif self.action == "commit":
+            if self.import_id is None or self.path is not None:
+                raise ValueError("commit requires import_id and forbids path")
+        elif self.import_id is None or self.path is not None or self.resolutions:
+            raise ValueError("discard requires import_id only")
+        return self
+
+
+class AeToolExportArgs(_StrictModel):
+    """ae.toolExport — write a deterministic Tool Library package."""
+    artifact_ids: List[str] = Field(..., min_length=1, max_length=511)
+    out_path: str = Field(..., min_length=1, max_length=32768)
+
+
 class AeCreateRigArgs(_StrictModel):
     """ae.createRig — create controller/expression rigs or apply an AE preset."""
     comp_id: Optional[str] = Field(None, description="AE comp id. Omit for the active comp.")
@@ -445,7 +631,19 @@ SCHEMAS = {
     "ae.skillEdit": AeSkillEditArgs,
     "ae.skillDelete": AeSkillDeleteArgs,
     "ae.skillUse": AeSkillUseArgs,
+    "ae.toolIndex": AeToolIndexArgs,
+    "ae.toolSearch": AeToolSearchArgs,
+    "ae.toolInspect": AeToolInspectArgs,
+    "ae.toolUse": AeToolUseArgs,
+    "ae.toolCreate": AeToolCreateArgs,
+    "ae.toolEdit": AeToolEditArgs,
+    "ae.toolDelete": AeToolDeleteArgs,
+    "ae.toolArchive": AeToolArchiveArgs,
+    "ae.toolDuplicate": AeToolDuplicateArgs,
+    "ae.toolPromoteFromHistory": AeToolPromoteFromHistoryArgs,
+    "ae.toolImport": AeToolImportArgs,
+    "ae.toolExport": AeToolExportArgs,
     "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 32, f"expected 32 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 44, f"expected 44 verbs, got {len(SCHEMAS)}"

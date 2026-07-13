@@ -1,0 +1,39 @@
+{
+  "model": "fixture-model",
+  "instructions": "Keep the answer short.",
+  "input": [
+    {
+      "type": "message",
+      "role": "user",
+      "content": [
+        { "type": "input_text", "text": "Check the composition." }
+      ]
+    },
+    {
+      "type": "function_call",
+      "call_id": "call_1",
+      "name": "ae_overview",
+      "arguments": "{}"
+    },
+    {
+      "type": "function_call_output",
+      "call_id": "call_1",
+      "output": "{\"ok\":true}"
+    }
+  ],
+  "max_output_tokens": 128,
+  "temperature": 0.2,
+  "top_p": 0.9,
+  "tools": [
+    {
+      "type": "function",
+      "name": "ae_overview",
+      "description": "Read project state",
+      "parameters": { "type": "object", "properties": {} },
+      "strict": true
+    }
+  ],
+  "tool_choice": { "type": "function", "name": "ae_overview" },
+  "parallel_tool_calls": false,
+  "stream": true
+}

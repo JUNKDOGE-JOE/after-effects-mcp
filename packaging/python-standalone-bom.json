@@ -1,0 +1,1056 @@
+{
+  "schemaVersion": 1,
+  "pythonVersion": "3.13.14",
+  "distributionRelease": "20260610",
+  "releaseCommit": "f1d7b92301235781d4de2493578773aaa413c0a5",
+  "platforms": {
+    "macos-arm64": {
+      "metadataSource": {
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-aarch64-apple-darwin-pgo%2Blto-full.tar.zst",
+        "sha256": "f8b07ffcaf10b1e3586665a848ad295a7d58453a248beac9da2f5f15861dad65",
+        "size": 58342192,
+        "expandedTarBytes": 260812800,
+        "expandedTarSha256": "bd12df8109d84004fc606b6ad31eb290435c28f3bc1cb8d0a04a05b2a3af315a",
+        "targetTriple": "aarch64-apple-darwin",
+        "buildOptions": [
+          "pgo",
+          "lto"
+        ],
+        "pythonJson": {
+          "path": "python/PYTHON.json",
+          "sha256": "0b1dea1de856d336bf9fde9a290b971ee808f53067dff5ac5ed5f755a4c6ae43"
+        }
+      },
+      "externalSystemDependenciesScope": "locked-payload-native-imports-excluding-baseline-loader-libraries",
+      "externalSystemDependencies": [
+        "AppKit.framework",
+        "ApplicationServices.framework",
+        "Carbon.framework",
+        "Cocoa.framework",
+        "CoreFoundation.framework",
+        "CoreGraphics.framework",
+        "CoreServices.framework",
+        "CoreText.framework",
+        "Foundation.framework",
+        "IOKit.framework",
+        "QuartzCore.framework",
+        "Security.framework",
+        "SystemConfiguration.framework",
+        "UniformTypeIdentifiers.framework",
+        "libSystem",
+        "libedit",
+        "libncurses",
+        "libobjc",
+        "libpanel",
+        "libz"
+      ],
+      "components": [
+        {
+          "name": "cpython",
+          "version": "3.13.14",
+          "relationship": "CONTAINS",
+          "disposition": "payload",
+          "licenseDeclared": "Python-2.0",
+          "source": {
+            "kind": "archive",
+            "url": "https://www.python.org/ftp/python/3.13.14/Python-3.13.14.tar.xz",
+            "sha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-aarch64-apple-darwin-pgo%2Blto-full.tar.zst",
+              "sha256": "f8b07ffcaf10b1e3586665a848ad295a7d58453a248beac9da2f5f15861dad65"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.cpython.txt",
+              "sha256": "86e61415828a8b5b06ec8d024e6f086ce155a8b85fd0c419c0ba4dc004e74fdd"
+            }
+          ]
+        },
+        {
+          "name": "hacl-star",
+          "version": "bb3d0dc8d9d15a5cd51094d5b69e70aa09005ff0",
+          "relationship": "STATIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "MIT AND Apache-2.0",
+          "source": {
+            "kind": "archive",
+            "url": "https://github.com/hacl-star/hacl-star/archive/bb3d0dc8d9d15a5cd51094d5b69e70aa09005ff0.zip",
+            "sha256": "e31e4ca10da91c585793c0eaf1b98aee3cb43e3a58d3d8d478593e5a6bd82927"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/hacl-star/hacl-star/archive/bb3d0dc8d9d15a5cd51094d5b69e70aa09005ff0.zip",
+              "sha256": "e31e4ca10da91c585793c0eaf1b98aee3cb43e3a58d3d8d478593e5a6bd82927"
+            },
+            {
+              "url": "https://www.python.org/ftp/python/3.13.14/Python-3.13.14.tar.xz",
+              "sha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "source-archive-member",
+              "path": "hacl-star-bb3d0dc8d9d15a5cd51094d5b69e70aa09005ff0/LICENSE",
+              "archiveSha256": "e31e4ca10da91c585793c0eaf1b98aee3cb43e3a58d3d8d478593e5a6bd82927",
+              "memberSha256": "c5accbbd8546e94c34aed24afe689a617627d18eed5a6c48277e48db57c23851"
+            },
+            {
+              "kind": "source-archive-member",
+              "path": "Python-3.13.14/Modules/_hacl/Hacl_Hash_MD5.c",
+              "archiveSha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690",
+              "memberSha256": "f71cf6a0e8f09354c2af2c785a1d36e0cba7613a589be01ca8a3d8478f4c8874"
+            },
+            {
+              "kind": "source-archive-member",
+              "path": "Python-3.13.14/Modules/_hacl/include/krml/FStar_UInt128_Verified.h",
+              "archiveSha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690",
+              "memberSha256": "455e94f24a0900deda7e6e36f4714e4253d32cea077f97e23f90c569a717bc48"
+            }
+          ]
+        },
+        {
+          "name": "libb2",
+          "version": "0.98.1",
+          "relationship": "STATIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "CC0-1.0",
+          "source": {
+            "kind": "archive",
+            "url": "https://github.com/BLAKE2/libb2/releases/download/v0.98.1/libb2-0.98.1.tar.gz",
+            "sha256": "53626fddce753c454a3fea581cbbc7fe9bbcf0bc70416d48fdbbf5d87ef6c72e"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://www.python.org/ftp/python/3.13.14/Python-3.13.14.tar.xz",
+              "sha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "source-archive-member",
+              "path": "Python-3.13.14/Modules/_blake2/impl/blake2.h",
+              "archiveSha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690",
+              "memberSha256": "2f6c9d0ecf70be474f2853b52394993625a32960e0a64eae147ef97a3a5c1460"
+            }
+          ]
+        },
+        {
+          "name": "macholib",
+          "version": "1.0",
+          "relationship": "CONTAINS",
+          "disposition": "payload",
+          "licenseDeclared": "MIT OR PSF-2.0",
+          "source": {
+            "kind": "archive",
+            "url": "https://files.pythonhosted.org/packages/ec/57/f0a712efc3ed982cf4038a3cee172057303b9be914c32c93b2fbec27f785/macholib-1.0.tar.gz",
+            "sha256": "c76f268f5054024e962f2515a0e522baf85313064f6740d80375afc850787a38"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-aarch64-apple-darwin-pgo%2Blto-full.tar.zst",
+              "sha256": "f8b07ffcaf10b1e3586665a848ad295a7d58453a248beac9da2f5f15861dad65"
+            },
+            {
+              "url": "https://www.python.org/ftp/python/3.13.14/Python-3.13.14.tar.xz",
+              "sha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "source-archive-member",
+              "path": "Python-3.13.14/Lib/ctypes/macholib/README.ctypes",
+              "archiveSha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690",
+              "memberSha256": "dc29d1da83b6a0a09a41647e4111eee878ed079c2d6b54a98fd6d8b88dd581f2"
+            },
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.cpython.txt",
+              "sha256": "86e61415828a8b5b06ec8d024e6f086ce155a8b85fd0c419c0ba4dc004e74fdd"
+            }
+          ]
+        },
+        {
+          "name": "mimalloc",
+          "version": "2.1.2",
+          "relationship": "STATIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "MIT",
+          "source": {
+            "kind": "archive",
+            "url": "https://github.com/microsoft/mimalloc/archive/refs/tags/v2.1.2.tar.gz",
+            "sha256": "2b1bff6f717f9725c70bf8d79e4786da13de8a270059e4ba0bdd262ae7be46eb"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/microsoft/mimalloc/archive/refs/tags/v2.1.2.tar.gz",
+              "sha256": "2b1bff6f717f9725c70bf8d79e4786da13de8a270059e4ba0bdd262ae7be46eb"
+            },
+            {
+              "url": "https://www.python.org/ftp/python/3.13.14/Python-3.13.14.tar.xz",
+              "sha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "source-archive-member",
+              "path": "mimalloc-2.1.2/LICENSE",
+              "archiveSha256": "2b1bff6f717f9725c70bf8d79e4786da13de8a270059e4ba0bdd262ae7be46eb",
+              "memberSha256": "19c99805e7a44a34b297a75d1edea9985e300066dfc024d5c99d4236d4573b5d"
+            },
+            {
+              "kind": "source-archive-member",
+              "path": "Python-3.13.14/Include/internal/mimalloc/mimalloc.h",
+              "archiveSha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690",
+              "memberSha256": "7c4e2fc555724fe674efbb2cfe64344fafa86f8c43d22e48263c33dd07ac7d81"
+            }
+          ]
+        },
+        {
+          "name": "bzip2",
+          "version": "1.0.8",
+          "relationship": "STATIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "bzip2-1.0.6",
+          "source": {
+            "kind": "archive",
+            "url": "https://astral-sh.github.io/mirror/files/bzip2-1.0.8.tar.gz",
+            "sha256": "ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-aarch64-apple-darwin-pgo%2Blto-full.tar.zst",
+              "sha256": "f8b07ffcaf10b1e3586665a848ad295a7d58453a248beac9da2f5f15861dad65"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.bzip2.txt",
+              "sha256": "1f38bbc7caacafd65169276d759c0d88c991b753b643ce35d0e45ea1971dd441"
+            }
+          ]
+        },
+        {
+          "name": "expat",
+          "version": "2.8.1",
+          "relationship": "STATIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "MIT",
+          "source": {
+            "kind": "archive",
+            "url": "https://github.com/libexpat/libexpat/releases/download/R_2_8_1/expat-2.8.1.tar.xz",
+            "sha256": "10b195ee78160a908388180a8fe3603d4e9a12f4755fbf5f3816b23a9d750da0"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-aarch64-apple-darwin-pgo%2Blto-full.tar.zst",
+              "sha256": "f8b07ffcaf10b1e3586665a848ad295a7d58453a248beac9da2f5f15861dad65"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.expat.txt",
+              "sha256": "122f2c27000472a201d337b9b31f7eb2b52d091b02857061a8880371612d9534"
+            }
+          ]
+        },
+        {
+          "name": "libffi",
+          "version": "3.4.6",
+          "relationship": "STATIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "MIT",
+          "source": {
+            "kind": "archive",
+            "url": "https://github.com/libffi/libffi/releases/download/v3.4.6/libffi-3.4.6.tar.gz",
+            "sha256": "b0dea9df23c863a7a50e825440f3ebffabd65df1497108e5d437747843895a4e"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-aarch64-apple-darwin-pgo%2Blto-full.tar.zst",
+              "sha256": "f8b07ffcaf10b1e3586665a848ad295a7d58453a248beac9da2f5f15861dad65"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.libffi.txt",
+              "sha256": "deaf3a42effb551a5b140fa9afefed183a27f1341c6d1bf430d106a5e6931fc0"
+            }
+          ]
+        },
+        {
+          "name": "mpdecimal",
+          "version": "4.0.0",
+          "relationship": "STATIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "BSD-2-Clause",
+          "source": {
+            "kind": "archive",
+            "url": "https://astral-sh.github.io/mirror/files/mpdecimal-4.0.0.tar.gz",
+            "sha256": "942445c3245b22730fd41a67a7c5c231d11cb1b9936b9c0f76334fb7d0b4468c"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-aarch64-apple-darwin-pgo%2Blto-full.tar.zst",
+              "sha256": "f8b07ffcaf10b1e3586665a848ad295a7d58453a248beac9da2f5f15861dad65"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.mpdecimal.txt",
+              "sha256": "669512af7219f58be03a398766d7c9da11a3b3df9d3f05cb74c5ceca25c8da3b"
+            }
+          ]
+        },
+        {
+          "name": "openssl-3",
+          "version": "3.5.7",
+          "relationship": "STATIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "Apache-2.0",
+          "source": {
+            "kind": "archive",
+            "url": "https://github.com/openssl/openssl/releases/download/openssl-3.5.7/openssl-3.5.7.tar.gz",
+            "sha256": "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-aarch64-apple-darwin-pgo%2Blto-full.tar.zst",
+              "sha256": "f8b07ffcaf10b1e3586665a848ad295a7d58453a248beac9da2f5f15861dad65"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.openssl-3.txt",
+              "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a"
+            }
+          ]
+        },
+        {
+          "name": "liblzma",
+          "version": "5.8.1",
+          "relationship": "STATIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "0BSD",
+          "source": {
+            "kind": "archive",
+            "url": "https://github.com/tukaani-project/xz/releases/download/v5.8.1/xz-5.8.1.tar.gz",
+            "sha256": "507825b599356c10dca1cd720c9d0d0c9d5400b9de300af00e4d1ea150795543"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-aarch64-apple-darwin-pgo%2Blto-full.tar.zst",
+              "sha256": "f8b07ffcaf10b1e3586665a848ad295a7d58453a248beac9da2f5f15861dad65"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.liblzma.txt",
+              "sha256": "9a4062de0a2c388a98cf35a35d348b62fa97c838a71c3c28ee1a2d7d0a565b02"
+            }
+          ]
+        },
+        {
+          "name": "sqlite",
+          "version": "3.53.1.0",
+          "relationship": "STATIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "LicenseRef-SQLite-Public-Domain",
+          "source": {
+            "kind": "archive",
+            "url": "https://www.sqlite.org/2026/sqlite-autoconf-3530100.tar.gz",
+            "sha256": "83e6b2020a034e9a7ad4a72feea59e1ad52f162e09cbd26735a3ffb98359fc4f"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-aarch64-apple-darwin-pgo%2Blto-full.tar.zst",
+              "sha256": "f8b07ffcaf10b1e3586665a848ad295a7d58453a248beac9da2f5f15861dad65"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.sqlite.txt",
+              "sha256": "38bef3d28b24f145ea293bd3b6eb4b20396982abc8303128fb493986ea5bc719"
+            }
+          ]
+        },
+        {
+          "name": "tcl",
+          "version": "9.0.3",
+          "relationship": "DYNAMIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "TCL",
+          "source": {
+            "kind": "archive",
+            "url": "https://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz",
+            "sha256": "2537ba0c86112c8c953f7c09d33f134dd45c0fb3a71f2d7f7691fd301d2c33a6"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-aarch64-apple-darwin-pgo%2Blto-full.tar.zst",
+              "sha256": "f8b07ffcaf10b1e3586665a848ad295a7d58453a248beac9da2f5f15861dad65"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.tcl.txt",
+              "sha256": "c0a69a2bfd757361ec7e6143973b103c90409316b49e9c88db26ad6388e79f16"
+            }
+          ]
+        },
+        {
+          "name": "tk",
+          "version": "9.0.3",
+          "relationship": "DYNAMIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "TCL",
+          "source": {
+            "kind": "archive",
+            "url": "https://prdownloads.sourceforge.net/tcl/tk9.0.3-src.tar.gz",
+            "sha256": "bf344efadb618babb7933f69275620f72454d1c8220130da93e3f7feb0efbf9b"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-aarch64-apple-darwin-pgo%2Blto-full.tar.zst",
+              "sha256": "f8b07ffcaf10b1e3586665a848ad295a7d58453a248beac9da2f5f15861dad65"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.tcl.txt",
+              "sha256": "c0a69a2bfd757361ec7e6143973b103c90409316b49e9c88db26ad6388e79f16"
+            }
+          ]
+        },
+        {
+          "name": "itcl",
+          "version": "4.3.5",
+          "relationship": "DYNAMIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "LicenseRef-Itcl-4.3.5",
+          "source": {
+            "kind": "archive",
+            "url": "https://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz",
+            "sha256": "2537ba0c86112c8c953f7c09d33f134dd45c0fb3a71f2d7f7691fd301d2c33a6"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz",
+              "sha256": "2537ba0c86112c8c953f7c09d33f134dd45c0fb3a71f2d7f7691fd301d2c33a6"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "source-archive-member",
+              "path": "tcl9.0.3/pkgs/itcl4.3.5/license.terms",
+              "archiveSha256": "2537ba0c86112c8c953f7c09d33f134dd45c0fb3a71f2d7f7691fd301d2c33a6",
+              "memberSha256": "b61edfaeead97546bc62b1f205b046f2e440b83bfc517bc0932b93bc3d505865"
+            }
+          ],
+          "payloadEvidence": {
+            "pkgIndex": {
+              "path": "python/lib/itcl4.3.5/pkgIndex.tcl",
+              "size": 442,
+              "sha256": "e4f4f5a9b506e05aafde44cf81bc3cb8f69a957cd54f78a52372c8d903d9dd06"
+            },
+            "subtreeManifest": {
+              "path": "python/lib/itcl4.3.5",
+              "entryCount": 9,
+              "algorithm": "c-byte-sort-path-tab-size-tab-sha256-lf-v1",
+              "sha256": "34dd1364909ac67463de517a9f3727fc966b2c228ae13c082fcb0efb44a74359"
+            }
+          }
+        },
+        {
+          "name": "tcl-thread",
+          "version": "3.0.4",
+          "relationship": "DYNAMIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "LicenseRef-Tcl-Thread-3.0.4",
+          "source": {
+            "kind": "archive",
+            "url": "https://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz",
+            "sha256": "2537ba0c86112c8c953f7c09d33f134dd45c0fb3a71f2d7f7691fd301d2c33a6"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz",
+              "sha256": "2537ba0c86112c8c953f7c09d33f134dd45c0fb3a71f2d7f7691fd301d2c33a6"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "source-archive-member",
+              "path": "tcl9.0.3/pkgs/thread3.0.4/license.terms",
+              "archiveSha256": "2537ba0c86112c8c953f7c09d33f134dd45c0fb3a71f2d7f7691fd301d2c33a6",
+              "memberSha256": "0a03981c40f7813ce6ddbdfce9882020bcfd696ea044b21ef07619ed9b86abae"
+            }
+          ],
+          "payloadEvidence": {
+            "pkgIndex": {
+              "path": "python/lib/thread3.0.4/pkgIndex.tcl",
+              "size": 2163,
+              "sha256": "518198152af6f9952c9064d5daec110ef81c91f46c2e30fb1a4b12b713f3ed66"
+            },
+            "subtreeManifest": {
+              "path": "python/lib/thread3.0.4",
+              "entryCount": 4,
+              "algorithm": "c-byte-sort-path-tab-size-tab-sha256-lf-v1",
+              "sha256": "c563ab6148871e424cd79f1a8d28ecf91bac2b1c9786517d89c93f0e062e19a5"
+            }
+          }
+        },
+        {
+          "name": "libuuid",
+          "version": "1.0.3",
+          "relationship": "STATIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "BSD-3-Clause",
+          "source": {
+            "kind": "archive",
+            "url": "https://sourceforge.net/projects/libuuid/files/libuuid-1.0.3.tar.gz",
+            "sha256": "46af3275291091009ad7f1b899de3d0cea0252737550e7919d17237997db5644"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-aarch64-apple-darwin-pgo%2Blto-full.tar.zst",
+              "sha256": "f8b07ffcaf10b1e3586665a848ad295a7d58453a248beac9da2f5f15861dad65"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.libuuid.txt",
+              "sha256": "122ee1f7e258f2c3c0e538a75c037684f420454bf3850ddc74ce750bbf5fe86b"
+            }
+          ]
+        }
+      ]
+    },
+    "windows-x64": {
+      "metadataSource": {
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+        "sha256": "df646d34e8a0b4aca87b8a253053c7e4994ba94fe2aebd9beb74697cc8e7516b",
+        "size": 45399670,
+        "expandedTarBytes": 317552640,
+        "expandedTarSha256": "f7baeba65d611c545a0911dc433ff46cb655df4779c77f1dfe9ad81854f180d0",
+        "targetTriple": "x86_64-pc-windows-msvc",
+        "buildOptions": [
+          "pgo"
+        ],
+        "pythonJson": {
+          "path": "python/PYTHON.json",
+          "sha256": "8eefa76eb09fcfa66cf15970536e3c2501f84e3a834bd3b5e3c688649db723f7"
+        }
+      },
+      "externalSystemDependenciesScope": "PYTHON.json-declared-system-links-excluding-placeholders-and-baseline-loader-libraries",
+      "externalSystemDependencies": [
+        "Crypt32",
+        "Iphlpapi",
+        "Ole32",
+        "OleAut32",
+        "PathCch",
+        "Propsys",
+        "Rpcrt4",
+        "User32",
+        "Version",
+        "Wbemuuid",
+        "Winmm",
+        "Ws2_32"
+      ],
+      "components": [
+        {
+          "name": "cpython",
+          "version": "3.13.14",
+          "relationship": "CONTAINS",
+          "disposition": "payload",
+          "licenseDeclared": "Python-2.0",
+          "source": {
+            "kind": "archive",
+            "url": "https://www.python.org/ftp/python/3.13.14/Python-3.13.14.tar.xz",
+            "sha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+              "sha256": "df646d34e8a0b4aca87b8a253053c7e4994ba94fe2aebd9beb74697cc8e7516b"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.cpython.txt",
+              "sha256": "8fe98bf9822926d854f56ffd8d97877d8b942617aa44eb7ea77fd99e22f2537e"
+            }
+          ]
+        },
+        {
+          "name": "hacl-star",
+          "version": "bb3d0dc8d9d15a5cd51094d5b69e70aa09005ff0",
+          "relationship": "STATIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "MIT AND Apache-2.0",
+          "source": {
+            "kind": "archive",
+            "url": "https://github.com/hacl-star/hacl-star/archive/bb3d0dc8d9d15a5cd51094d5b69e70aa09005ff0.zip",
+            "sha256": "e31e4ca10da91c585793c0eaf1b98aee3cb43e3a58d3d8d478593e5a6bd82927"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/hacl-star/hacl-star/archive/bb3d0dc8d9d15a5cd51094d5b69e70aa09005ff0.zip",
+              "sha256": "e31e4ca10da91c585793c0eaf1b98aee3cb43e3a58d3d8d478593e5a6bd82927"
+            },
+            {
+              "url": "https://www.python.org/ftp/python/3.13.14/Python-3.13.14.tar.xz",
+              "sha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "source-archive-member",
+              "path": "hacl-star-bb3d0dc8d9d15a5cd51094d5b69e70aa09005ff0/LICENSE",
+              "archiveSha256": "e31e4ca10da91c585793c0eaf1b98aee3cb43e3a58d3d8d478593e5a6bd82927",
+              "memberSha256": "c5accbbd8546e94c34aed24afe689a617627d18eed5a6c48277e48db57c23851"
+            },
+            {
+              "kind": "source-archive-member",
+              "path": "Python-3.13.14/Modules/_hacl/Hacl_Hash_MD5.c",
+              "archiveSha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690",
+              "memberSha256": "f71cf6a0e8f09354c2af2c785a1d36e0cba7613a589be01ca8a3d8478f4c8874"
+            },
+            {
+              "kind": "source-archive-member",
+              "path": "Python-3.13.14/Modules/_hacl/include/krml/FStar_UInt128_Verified.h",
+              "archiveSha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690",
+              "memberSha256": "455e94f24a0900deda7e6e36f4714e4253d32cea077f97e23f90c569a717bc48"
+            }
+          ]
+        },
+        {
+          "name": "libb2",
+          "version": "0.98.1",
+          "relationship": "STATIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "CC0-1.0",
+          "source": {
+            "kind": "archive",
+            "url": "https://github.com/BLAKE2/libb2/releases/download/v0.98.1/libb2-0.98.1.tar.gz",
+            "sha256": "53626fddce753c454a3fea581cbbc7fe9bbcf0bc70416d48fdbbf5d87ef6c72e"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://www.python.org/ftp/python/3.13.14/Python-3.13.14.tar.xz",
+              "sha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "source-archive-member",
+              "path": "Python-3.13.14/Modules/_blake2/impl/blake2.h",
+              "archiveSha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690",
+              "memberSha256": "2f6c9d0ecf70be474f2853b52394993625a32960e0a64eae147ef97a3a5c1460"
+            }
+          ]
+        },
+        {
+          "name": "macholib",
+          "version": "1.0",
+          "relationship": "CONTAINS",
+          "disposition": "payload",
+          "licenseDeclared": "MIT OR PSF-2.0",
+          "source": {
+            "kind": "archive",
+            "url": "https://files.pythonhosted.org/packages/ec/57/f0a712efc3ed982cf4038a3cee172057303b9be914c32c93b2fbec27f785/macholib-1.0.tar.gz",
+            "sha256": "c76f268f5054024e962f2515a0e522baf85313064f6740d80375afc850787a38"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+              "sha256": "df646d34e8a0b4aca87b8a253053c7e4994ba94fe2aebd9beb74697cc8e7516b"
+            },
+            {
+              "url": "https://www.python.org/ftp/python/3.13.14/Python-3.13.14.tar.xz",
+              "sha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "source-archive-member",
+              "path": "Python-3.13.14/Lib/ctypes/macholib/README.ctypes",
+              "archiveSha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690",
+              "memberSha256": "dc29d1da83b6a0a09a41647e4111eee878ed079c2d6b54a98fd6d8b88dd581f2"
+            },
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.cpython.txt",
+              "sha256": "8fe98bf9822926d854f56ffd8d97877d8b942617aa44eb7ea77fd99e22f2537e"
+            }
+          ]
+        },
+        {
+          "name": "mimalloc",
+          "version": "2.1.2",
+          "relationship": "STATIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "MIT",
+          "source": {
+            "kind": "archive",
+            "url": "https://github.com/microsoft/mimalloc/archive/refs/tags/v2.1.2.tar.gz",
+            "sha256": "2b1bff6f717f9725c70bf8d79e4786da13de8a270059e4ba0bdd262ae7be46eb"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/microsoft/mimalloc/archive/refs/tags/v2.1.2.tar.gz",
+              "sha256": "2b1bff6f717f9725c70bf8d79e4786da13de8a270059e4ba0bdd262ae7be46eb"
+            },
+            {
+              "url": "https://www.python.org/ftp/python/3.13.14/Python-3.13.14.tar.xz",
+              "sha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "source-archive-member",
+              "path": "mimalloc-2.1.2/LICENSE",
+              "archiveSha256": "2b1bff6f717f9725c70bf8d79e4786da13de8a270059e4ba0bdd262ae7be46eb",
+              "memberSha256": "19c99805e7a44a34b297a75d1edea9985e300066dfc024d5c99d4236d4573b5d"
+            },
+            {
+              "kind": "source-archive-member",
+              "path": "Python-3.13.14/Include/internal/mimalloc/mimalloc.h",
+              "archiveSha256": "639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690",
+              "memberSha256": "7c4e2fc555724fe674efbb2cfe64344fafa86f8c43d22e48263c33dd07ac7d81"
+            }
+          ]
+        },
+        {
+          "name": "bzip2",
+          "version": "1.0.8",
+          "relationship": "STATIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "bzip2-1.0.6",
+          "source": {
+            "kind": "archive",
+            "url": "https://astral-sh.github.io/mirror/files/bzip2-1.0.8.tar.gz",
+            "sha256": "ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+              "sha256": "df646d34e8a0b4aca87b8a253053c7e4994ba94fe2aebd9beb74697cc8e7516b"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.bzip2.txt",
+              "sha256": "bd5628cc76fb0ebf9c657d1dd4d1a240a1a7b216c31663e7bbf1131c0b70a910"
+            }
+          ]
+        },
+        {
+          "name": "expat",
+          "version": "2.8.1",
+          "relationship": "STATIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "MIT",
+          "source": {
+            "kind": "archive",
+            "url": "https://github.com/libexpat/libexpat/releases/download/R_2_8_1/expat-2.8.1.tar.gz",
+            "sha256": "a52eb72108be160e190b5cafa5bba8663f1313f2013e26060d1c18e26e31067b"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+              "sha256": "df646d34e8a0b4aca87b8a253053c7e4994ba94fe2aebd9beb74697cc8e7516b"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.expat.txt",
+              "sha256": "8a9cfe4b5924f4b25881aa0c9f5e4561c5f31065d0c4a13cdcdbcf917edf39aa"
+            }
+          ]
+        },
+        {
+          "name": "libffi",
+          "version": "3.4.6",
+          "relationship": "DYNAMIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "MIT",
+          "source": {
+            "kind": "archive",
+            "url": "https://github.com/libffi/libffi/releases/download/v3.4.6/libffi-3.4.6.tar.gz",
+            "sha256": "b0dea9df23c863a7a50e825440f3ebffabd65df1497108e5d437747843895a4e"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+              "sha256": "df646d34e8a0b4aca87b8a253053c7e4994ba94fe2aebd9beb74697cc8e7516b"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.libffi.txt",
+              "sha256": "9afb8970cd29fc1031fa647278e4bef613399e2e3468a1e3a397f4d158c6101c"
+            }
+          ]
+        },
+        {
+          "name": "mpdecimal",
+          "version": "4.0.0",
+          "relationship": "STATIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "BSD-2-Clause",
+          "source": {
+            "kind": "archive",
+            "url": "https://astral-sh.github.io/mirror/files/mpdecimal-4.0.0.tar.gz",
+            "sha256": "942445c3245b22730fd41a67a7c5c231d11cb1b9936b9c0f76334fb7d0b4468c"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+              "sha256": "df646d34e8a0b4aca87b8a253053c7e4994ba94fe2aebd9beb74697cc8e7516b"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.mpdecimal.txt",
+              "sha256": "f094277cd46e1f6e4d87916cc4b51e22f613d45eb81f48231c3cb7caf8fc8a6a"
+            }
+          ]
+        },
+        {
+          "name": "openssl-3",
+          "version": "3.5.7",
+          "relationship": "DYNAMIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "Apache-2.0",
+          "source": {
+            "kind": "archive",
+            "url": "https://github.com/openssl/openssl/releases/download/openssl-3.5.7/openssl-3.5.7.tar.gz",
+            "sha256": "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+              "sha256": "df646d34e8a0b4aca87b8a253053c7e4994ba94fe2aebd9beb74697cc8e7516b"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.openssl-3.txt",
+              "sha256": "ed72ce2b51ee58f117e5a021e2e04af158857f40269fbc03491f0b2a99dbcc96"
+            }
+          ]
+        },
+        {
+          "name": "liblzma",
+          "version": "5.8.1",
+          "relationship": "STATIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "0BSD",
+          "source": {
+            "kind": "archive",
+            "url": "https://github.com/tukaani-project/xz/releases/download/v5.8.1/xz-5.8.1.tar.gz",
+            "sha256": "507825b599356c10dca1cd720c9d0d0c9d5400b9de300af00e4d1ea150795543"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+              "sha256": "df646d34e8a0b4aca87b8a253053c7e4994ba94fe2aebd9beb74697cc8e7516b"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.liblzma.txt",
+              "sha256": "d87d218dd908b3243ec4cbc72af400e5b7437513ea9d9229291d0812b8464fec"
+            }
+          ]
+        },
+        {
+          "name": "sqlite",
+          "version": "3.53.1.0",
+          "relationship": "DYNAMIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "LicenseRef-SQLite-Public-Domain",
+          "source": {
+            "kind": "archive",
+            "url": "https://www.sqlite.org/2026/sqlite-autoconf-3530100.tar.gz",
+            "sha256": "83e6b2020a034e9a7ad4a72feea59e1ad52f162e09cbd26735a3ffb98359fc4f"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+              "sha256": "df646d34e8a0b4aca87b8a253053c7e4994ba94fe2aebd9beb74697cc8e7516b"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.sqlite.txt",
+              "sha256": "d8eb9aba7ef6b5ed06cb3ec19a7242316af2e5933c638eb67fb781c13884e01d"
+            }
+          ]
+        },
+        {
+          "name": "zlib",
+          "version": "1.3.1",
+          "relationship": "STATIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "Zlib",
+          "source": {
+            "kind": "archive",
+            "url": "https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz",
+            "sha256": "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+              "sha256": "df646d34e8a0b4aca87b8a253053c7e4994ba94fe2aebd9beb74697cc8e7516b"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.zlib.txt",
+              "sha256": "365e36720db366054863235aea5d6f440142ab968834bfaf81fa9d187c99b9b8"
+            }
+          ]
+        },
+        {
+          "name": "tcl",
+          "version": "8.6.12",
+          "relationship": "DYNAMIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "TCL",
+          "source": {
+            "kind": "archive",
+            "url": "https://prdownloads.sourceforge.net/tcl/tcl8.6.12-src.tar.gz",
+            "sha256": "26c995dd0f167e48b11961d891ee555f680c175f7173ff8cb829f4ebcde4c1a6"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+              "sha256": "df646d34e8a0b4aca87b8a253053c7e4994ba94fe2aebd9beb74697cc8e7516b"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.tcl.txt",
+              "sha256": "41613eabfc08921a7da9c4bfd7f3ce5d5406f55214b253d89f392ed86eebeb8f"
+            }
+          ]
+        },
+        {
+          "name": "tk",
+          "version": "8.6.12",
+          "relationship": "DYNAMIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "TCL",
+          "source": {
+            "kind": "archive",
+            "url": "https://prdownloads.sourceforge.net/tcl/tk8.6.12-src.tar.gz",
+            "sha256": "12395c1f3fcb6bed2938689f797ea3cdf41ed5cb6c4766eec8ac949560310630"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+              "sha256": "df646d34e8a0b4aca87b8a253053c7e4994ba94fe2aebd9beb74697cc8e7516b"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.tcl.txt",
+              "sha256": "41613eabfc08921a7da9c4bfd7f3ce5d5406f55214b253d89f392ed86eebeb8f"
+            }
+          ]
+        },
+        {
+          "name": "tix",
+          "version": "8.4.3.6",
+          "relationship": "DYNAMIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "LicenseRef-Tix-8.4.3.6",
+          "source": {
+            "kind": "archive",
+            "url": "https://github.com/python/cpython-source-deps/archive/tix-8.4.3.6.tar.gz",
+            "sha256": "f7b21d115867a41ae5fd7c635a4c234d3ca25126c3661eb36028c6e25601f85e"
+          },
+          "evidenceOrigins": [
+            {
+              "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+              "sha256": "df646d34e8a0b4aca87b8a253053c7e4994ba94fe2aebd9beb74697cc8e7516b"
+            }
+          ],
+          "licenseEvidence": [
+            {
+              "kind": "metadata-file",
+              "path": "python/licenses/LICENSE.tix.txt",
+              "sha256": "8cdff3addb9e9eb108c78e2cf5e05f26b216c098304945733bbec382b2eaef66"
+            }
+          ]
+        },
+        {
+          "name": "microsoft-vc-runtime-140",
+          "version": "14.44.35211.0",
+          "relationship": "DYNAMIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "LicenseRef-Microsoft-Visual-Cpp-Runtime",
+          "source": {
+            "kind": "runtime-file",
+            "path": "python/vcruntime140.dll",
+            "sha256": "d5e4d9a3e835fa679450145d6a7d94e36573a509317111904d9b3712c30d9066"
+          },
+          "evidenceOrigins": [],
+          "licenseEvidence": [
+            {
+              "kind": "payload-file",
+              "path": "python/vcruntime140.dll",
+              "sha256": "d5e4d9a3e835fa679450145d6a7d94e36573a509317111904d9b3712c30d9066"
+            }
+          ]
+        },
+        {
+          "name": "microsoft-vc-runtime-140-1",
+          "version": "14.44.35211.0",
+          "relationship": "DYNAMIC_LINK",
+          "disposition": "payload",
+          "licenseDeclared": "LicenseRef-Microsoft-Visual-Cpp-Runtime",
+          "source": {
+            "kind": "runtime-file",
+            "path": "python/vcruntime140_1.dll",
+            "sha256": "1f2d41c4aa5db0bc33ebf7b66d72943a817d7ce6cbe880502a9403823633093f"
+          },
+          "evidenceOrigins": [],
+          "licenseEvidence": [
+            {
+              "kind": "payload-file",
+              "path": "python/vcruntime140_1.dll",
+              "sha256": "1f2d41c4aa5db0bc33ebf7b66d72943a817d7ce6cbe880502a9403823633093f"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

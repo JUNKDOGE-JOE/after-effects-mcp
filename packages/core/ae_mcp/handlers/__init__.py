@@ -27,3 +27,4 @@ def load_all() -> None:
     from ae_mcp.handlers import typed  # noqa: F401
     from ae_mcp.handlers import skills  # noqa: F401
     from ae_mcp.handlers import rig  # noqa: F401
+    from ae_mcp.handlers import tools  # noqa: F401

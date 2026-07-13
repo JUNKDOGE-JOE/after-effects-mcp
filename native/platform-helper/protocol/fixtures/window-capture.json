@@ -1,0 +1,27 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": 3,
+    "method": "window.capture",
+    "params": {
+      "target": "after-effects-main",
+      "captureId": "capture-fixture-1",
+      "method": "auto"
+    }
+  },
+  "response": {
+    "protocolVersion": 1,
+    "id": 3,
+    "ok": true,
+    "result": {
+      "captureId": "capture-fixture-1",
+      "reference": "ae-window://main/42",
+      "spoolPath": "/private/tmp/ae-mcp/capture-fixture-1.png",
+      "width": 1920,
+      "height": 1080,
+      "scale": 2,
+      "method": "ScreenCaptureKit",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  }
+}

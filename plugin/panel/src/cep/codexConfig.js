@@ -1,20 +1,10 @@
-// Spec A extension: inherit Codex CLI's ~/.codex/config.toml custom
-// model_provider, mirroring the pattern already used for ZCode CLI
-// inheritance (zcodeBackend.js) and Claude settings import
+// Read the Codex CLI model_provider so the panel can reuse an existing CLI
+// configuration when it has no explicit provider profile.
 // (claudeSettingsImport.js).
 //
 // Minimal hand-rolled TOML parser — intentionally NOT a general-purpose
 // TOML implementation. See module-level comment blocks near the parser for
 // exactly what is (and is not) supported.
-
-function getCepRequire() {
-  if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-    return globalThis.window.cep_node.require;
-  }
-  if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-  if (globalThis.require) return globalThis.require;
-  throw new Error('CEP Node require is unavailable');
-}
 
 function stripInlineComment(line) {
   // Simple heuristic: a `#` that appears after the value's closing quote (or
@@ -51,6 +41,8 @@ function unquote(value) {
 // Does NOT support: arrays, inline tables, multi-line strings/literals,
 // escaped-quote edge cases beyond a naive backslash check, dotted keys
 // within a single line (`a.b = 1`), or non-TOML-standard shapes.
+import { createPlatformAdapter } from './platform/index.js';
+import { parseProviderSecretReference } from './platform/secret-reference.js';
 function parseToml(text) {
   const root = {};
   const sections = {};
@@ -75,14 +67,15 @@ function parseToml(text) {
   return { root, sections };
 }
 
-export function readCodexCliConfig({ env = {}, fsImpl } = {}) {
-  const home = env.USERPROFILE || env.HOME || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : '');
+export function readCodexCliConfig({ platform, fsImpl } = {}) {
+  const adapter = platform || createPlatformAdapter();
+  const home = adapter.paths.home;
   if (!home) return null;
-  let fs;
-  try { fs = fsImpl || getCepRequire()('fs'); } catch (e) { return null; }
+  const fs = fsImpl || adapter.fs;
+  if (!fs) return null;
   let text;
   try {
-    text = fs.readFileSync(String(home).replace(/[\\/]+$/, '') + '\\.codex\\config.toml', 'utf8');
+    text = fs.readFileSync(adapter.paths.join([home, '.codex', 'config.toml']), 'utf8');
   } catch (e) {
     return null;
   }
@@ -110,9 +103,36 @@ export function readCodexCliConfig({ env = {}, fsImpl } = {}) {
   return result;
 }
 
-export function resolveCodexProviderApiKey({ provider, env = {}, storedKey = '' } = {}) {
+function usableStoredValueRef(value) {
+  if (
+    !value
+    || value.kind !== 'secret'
+    || typeof value.reference !== 'string'
+    || !Number.isSafeInteger(value.revision)
+    || value.revision <= 0
+  ) return false;
+  try { parseProviderSecretReference(value.reference); } catch { return false; }
+  return true;
+}
+
+export function codexCliCredentialAvailable({ provider, env = {}, storedValueRef = null } = {}) {
   const envKey = provider && String(provider.envKey || '').trim();
-  if (envKey && env[envKey]) return String(env[envKey]);
-  if (storedKey) return String(storedKey);
-  return '';
+  if (envKey && typeof env[envKey] === 'string' && env[envKey].length > 0) return true;
+  return usableStoredValueRef(storedValueRef);
+}
+
+export async function resolveCodexCliCredential({
+  provider,
+  env = {},
+  storedValueRef = null,
+  secretService,
+} = {}) {
+  const envKey = provider && String(provider.envKey || '').trim();
+  if (envKey && typeof env[envKey] === 'string' && env[envKey].length > 0) return env[envKey];
+  if (usableStoredValueRef(storedValueRef) && secretService && typeof secretService.resolve === 'function') {
+    return await secretService.resolve(storedValueRef);
+  }
+  const error = new Error('Codex CLI credential is unavailable');
+  error.code = 'CODEX_CREDENTIAL_UNAVAILABLE';
+  throw error;
 }

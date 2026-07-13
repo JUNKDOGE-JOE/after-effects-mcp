@@ -1,5 +1,5 @@
 import { createSseParser } from './sse.js';
-import { anthropicEndpoint } from './providerProfile.js';
+import { anthropicEndpoint, validateProviderBaseUrl } from './providerProfile.js';
 
 export const DEFAULT_MODEL = 'claude-sonnet-4-6';
 export const FALLBACK_MODEL = 'claude-haiku-4-5-20251001';
@@ -114,8 +114,7 @@ function finishBlocks(blocks) {
 }
 
 export async function sendAnthropicMessage({
-  apiKey,
-  baseUrl = '',
+  requestProfile,
   model = DEFAULT_MODEL,
   system = buildSystemPrompt('zh'),
   messages,
@@ -126,18 +125,42 @@ export async function sendAnthropicMessage({
   fetchImpl = globalThis.fetch,
   onTextDelta = () => {},
 } = {}) {
-  if (!apiKey) throw toError('auth', 'Anthropic API key is missing.');
+  if (!requestProfile || typeof requestProfile !== 'object' || typeof requestProfile.baseUrl !== 'string') {
+    throw toError('auth', 'Provider request profile is missing.');
+  }
   if (!fetchImpl) throw toError('network', 'fetch is unavailable in this runtime.');
+
+  let validatedBaseUrl;
+  try {
+    validatedBaseUrl = validateProviderBaseUrl(requestProfile.baseUrl, {
+      allowInsecureHttp: requestProfile.allowInsecureHttp === true,
+      requireTransportApproval: true,
+    });
+  } catch {
+    throw toError('configuration', 'Provider request URL is not allowed. Reconfirm the provider transport settings.');
+  }
 
   let response;
   try {
-    const url = anthropicEndpoint(baseUrl, '/v1/messages');
+    const url = anthropicEndpoint(validatedBaseUrl, '/v1/messages');
     const headers = {
-      'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
       'anthropic-dangerous-direct-browser-access': 'true',
       'content-type': 'application/json',
     };
+    for (const header of requestProfile.extraHeaders || []) {
+      if (header && typeof header.name === 'string' && typeof header.value === 'string') {
+        headers[header.name] = header.value;
+      }
+    }
+    if (requestProfile.auth?.kind === 'header') {
+      if (typeof requestProfile.auth.name !== 'string' || typeof requestProfile.auth.value !== 'string') {
+        throw toError('auth', 'Provider request authentication is invalid.');
+      }
+      headers[requestProfile.auth.name] = requestProfile.auth.value;
+    } else if (requestProfile.auth?.kind !== 'none') {
+      throw toError('auth', 'Provider request authentication is invalid.');
+    }
     if (fast) headers['anthropic-beta'] = 'fast-mode-2026-02-01';
     const body = {
       model,
@@ -151,19 +174,20 @@ export async function sendAnthropicMessage({
     if (fast) body.speed = 'fast';
     response = await fetchImpl(url, {
       method: 'POST',
+      redirect: 'manual',
       signal,
       headers,
       body: JSON.stringify(body),
     });
   } catch (e) {
     if (e && e.name === 'AbortError') throw e;
-    throw toError('network', e && e.message ? e.message : 'Anthropic network request failed.');
+    throw toError('network', 'Anthropic network request failed.');
   }
 
   if (!response.ok) {
     let detail = '';
     try { detail = await response.text(); } catch (e) { /* best effort */ }
-    const classified = classifyHttpError(response.status, detail);
+    const classified = classifyHttpError(response.status, detail ? 'Anthropic request failed.' : 'Anthropic request failed.');
     throw toError(classified.kind, classified.message);
   }
 

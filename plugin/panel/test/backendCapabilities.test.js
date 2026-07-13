@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   CLAUDE_MODELS, APPROVAL_MODES, costTier,
   claudeSubDescriptor, byokStaticDescriptor, mergeByokModels,
-  codexStaticDescriptor, codexDescriptorFromModels,
+  codexStaticDescriptor, codexDescriptorFromModels, mergeCodexOfficialLoginModels,
   descriptorWithCustomModel,
   zcodeStaticDescriptor, zcodeDescriptorFromModels, zcodeDescriptorFromProbedModels,
 } from '../src/lib/backendCapabilities.js';
@@ -130,6 +130,32 @@ test('codexDescriptorFromModels falls back to static descriptor for empty input'
   });
   assert.equal(fallback.defaultEffort, 'medium');
   assert.equal(fallback.supportsFast('gpt-5.5'), true);
+  assert.equal(fallback.supportsFast('gpt-5.6-sol'), false);
+});
+
+test('mergeCodexOfficialLoginModels adds all GPT-5.6 variants without replacing live metadata', () => {
+  const liveSol = {
+    id: 'gpt-5.6-sol',
+    label: 'Live Sol',
+    effortLevels: ['low'],
+    cost: 2,
+    adaptive: false,
+  };
+  const descriptor = mergeCodexOfficialLoginModels({
+    ...codexStaticDescriptor(),
+    models: [codexStaticDescriptor().models[0], liveSol],
+  });
+
+  assert.deepEqual(descriptor.models.map((model) => model.id), [
+    'gpt-5.5', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna',
+  ]);
+  assert.equal(descriptor.models.find((model) => model.id === 'gpt-5.6-sol'), liveSol);
+  assert.deepEqual(descriptor.models.find((model) => model.id === 'gpt-5.6-terra').effortLevels, ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
+  assert.deepEqual(descriptor.models.find((model) => model.id === 'gpt-5.6-luna').effortLevels, ['low', 'medium', 'high', 'xhigh', 'max']);
+  assert.equal(descriptor.supportsFast('gpt-5.6-sol'), true);
+  assert.equal(descriptor.supportsFast('gpt-5.6-terra'), true);
+  assert.equal(descriptor.supportsFast('gpt-5.6-luna'), true);
+  assert.deepEqual(mergeCodexOfficialLoginModels(descriptor).models.map((model) => model.id), descriptor.models.map((model) => model.id));
 });
 
 test('descriptorWithCustomModel promotes a user-supplied model id without losing the base list', () => {

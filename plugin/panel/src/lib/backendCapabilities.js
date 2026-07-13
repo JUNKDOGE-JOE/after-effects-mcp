@@ -92,6 +92,17 @@ export function descriptorWithCustomModel(descriptor, modelId) {
   };
 }
 
+const CODEX_OFFICIAL_LOGIN_56_MODELS = [
+  { id: 'gpt-5.6-sol', label: 'GPT-5.6-Sol', effortLevels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'], cost: 2, adaptive: false },
+  { id: 'gpt-5.6-terra', label: 'GPT-5.6-Terra', effortLevels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'], cost: 2, adaptive: false },
+  { id: 'gpt-5.6-luna', label: 'GPT-5.6-Luna', effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'], cost: 2, adaptive: false },
+];
+const CODEX_OFFICIAL_LOGIN_56_MODEL_IDS = new Set(CODEX_OFFICIAL_LOGIN_56_MODELS.map((model) => model.id));
+
+function codexOfficialLogin56Models() {
+  return CODEX_OFFICIAL_LOGIN_56_MODELS.map((model) => ({ ...model, effortLevels: [...model.effortLevels] }));
+}
+
 export function codexStaticDescriptor() {
   const models = [
     { id: 'gpt-5.5', label: 'GPT-5.5', effortLevels: ['low', 'medium', 'high', 'xhigh'], cost: 2, adaptive: false },
@@ -107,6 +118,20 @@ export function codexStaticDescriptor() {
     supportsFast: (modelId) => modelId === 'gpt-5.5',
     approvalModes: APPROVAL_MODES,
     perTurnModelSwitch: true,
+  };
+}
+
+export function mergeCodexOfficialLoginModels(descriptor) {
+  const models = Array.isArray(descriptor && descriptor.models) ? descriptor.models : [];
+  const present = new Set(models.map((model) => model && model.id).filter(Boolean));
+  const missing = codexOfficialLogin56Models().filter((model) => !present.has(model.id));
+  const supportsFast = descriptor && typeof descriptor.supportsFast === 'function'
+    ? descriptor.supportsFast
+    : () => false;
+  return {
+    ...descriptor,
+    models: missing.length ? [...models, ...missing] : models,
+    supportsFast: (modelId) => CODEX_OFFICIAL_LOGIN_56_MODEL_IDS.has(String(modelId || '')) || supportsFast(modelId),
   };
 }
 
@@ -257,9 +282,9 @@ export function zcodeStaticDescriptor() {
 // descriptor around it so display and reconciliation agree with send-time
 // behavior. Only fall back to the static/builtin descriptor when there is
 // truly no CLI-configured model available.
-export function zcodeDynamicDescriptor({ env, fsImpl } = {}) {
+export function zcodeDynamicDescriptor({ env, fsImpl, platform } = {}) {
   let cliModel = '';
-  try { cliModel = String(readZcodeDesktopModel({ env, fsImpl }) || '').trim(); } catch (e) { /* ignore unreadable CLI config */ }
+  try { cliModel = String(readZcodeDesktopModel({ env, fsImpl, platform }) || '').trim(); } catch (e) { /* ignore unreadable CLI config */ }
   if (!cliModel) return zcodeStaticDescriptor();
   const label = cliModel.includes('/') ? cliModel.slice(cliModel.indexOf('/') + 1) : cliModel;
   return {
@@ -345,8 +370,8 @@ export function zcodeDescriptorFromProbedModels({ cliModel, providerId, probedMo
   };
 }
 
-// Spec A2: custom-provider channels list what /v1/models actually returned;
-// curated metadata (effort levels, cost) is reused when ids overlap. An
+// Custom-provider channels list what /v1/models actually returned. Curated
+// metadata such as effort levels and cost is reused when ids overlap. An
 // empty/failed probe keeps the descriptor unchanged so the manual custom
 // model id path still works.
 export function descriptorFromProbedModels(descriptor, probedModels) {

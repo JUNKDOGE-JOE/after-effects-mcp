@@ -1,3 +1,11 @@
+import {
+  approvalResult,
+  decideToolPlan,
+  extractToolPlan,
+  isCoreAuthorizedDynamicCall,
+  planSessionKey
+} from '../shared/tool-approval.mjs'
+
 const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
 
 const DISALLOWED_TOOLS = [
@@ -11,6 +19,11 @@ const DISALLOWED_TOOLS = [
 ]
 
 const AUTH_RE = /\/login|logged|credential|authentication/i
+const PROVIDER_ENV_KEYS = [
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_AUTH_TOKEN'
+]
 
 const SYSTEM_PROMPTS = {
   zh: `你是 After Effects 面板内的助手。只使用 ae_ 前缀工具操作 After Effects。回答简短，优先直接完成用户请求。
@@ -93,7 +106,9 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
   const options = normalizeOptions(argvOptions)
   const baseEnv = cleanEnv(env || {}, options.channel)
   const approvals = new Map()
+  const pendingElicitations = new Map()
   const sessionAllowedTools = new Set()
+  const sessionAllowedPlans = new Set()
   const toolUses = []
   const ignoredToolUseIds = new Set()
   let sessionId = null
@@ -106,6 +121,13 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
 
   function emitEvent(event) {
     writeLine({ t: 'event', event })
+  }
+
+  function emitTerminalEvent(turn, event) {
+    if (turn.terminalEventSent) return false
+    turn.terminalEventSent = true
+    emitEvent(event)
+    return true
   }
 
   function handleLine(line) {
@@ -139,7 +161,8 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
       thinking: message.thinking === 'adaptive' ? { type: 'adaptive' } : null,
       controller,
       stopRequested: false,
-      abortedEventSent: false
+      abortedEventSent: false,
+      terminalEventSent: false
     }
     activeTurn = turn
 
@@ -157,6 +180,7 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
   }
 
   async function runTurn(message, turn) {
+    let sawResult = false
     try {
       const model = typeof message.model === 'string' && message.model ? message.model : options.model
       const queryOptions = buildTurnOptions({ model, turn })
@@ -165,14 +189,23 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
         prompt: String(message.text || ''),
         options: queryOptions
       })) {
+        if (sdkMessage && sdkMessage.type === 'result') sawResult = true
         handleSdkMessage(sdkMessage, turn)
+      }
+      if (!sawResult && !turn.stopRequested) {
+        emitTerminalEvent(turn, {
+          type: 'error',
+          kind: 'network',
+          code: 'SDK_STREAM_EOF_BEFORE_RESULT',
+          message: 'Claude Agent SDK stream closed before a result event.'
+        })
       }
     } catch (error) {
       if (turn.stopRequested) {
         emitAbortedOnce(turn)
         return
       }
-      emitEvent({ type: 'error', kind: classifyError(error), message: truncateDetail(error) })
+      emitTerminalEvent(turn, { type: 'error', kind: classifyError(error), message: truncateDetail(error) })
     }
   }
 
@@ -187,6 +220,7 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
       agents: buildAgents(),
       agent: 'ae',
       canUseTool: async (toolName, input) => canUseTool(toolName, input, turn),
+      onElicitation: async (request, context = {}) => handleElicitation(request, turn, context.signal),
       env: baseEnv,
       abortController: turn.controller,
       effort: turn.effort
@@ -220,13 +254,21 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
       return {}
     }
 
+    const childEnv = {
+      ...(isPlainObject(options.mcp.env) ? options.mcp.env : {})
+    }
+    for (const key of PROVIDER_ENV_KEYS) deleteEnvironmentKey(childEnv, key)
+    // Claude Code merges its process environment into MCP children, so empty
+    // overrides are required to keep route credentials out of the AE process.
+    for (const key of PROVIDER_ENV_KEYS) childEnv[key] = ''
+
     return {
       ae: {
         type: 'stdio',
         command: options.mcp.command,
         args: Array.isArray(options.mcp.args) ? options.mcp.args : [],
         env: {
-          ...(isPlainObject(options.mcp.env) ? options.mcp.env : {}),
+          ...childEnv,
           AE_MCP_BACKEND: 'ae-mcp'
         }
       }
@@ -305,13 +347,13 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
       if (turn.stopRequested) {
         emitAbortedOnce(turn)
       } else if (message.is_error) {
-        emitEvent({
+        emitTerminalEvent(turn, {
           type: 'error',
           kind: classifyError(message.result || message),
           message: truncateDetail(message.result || message)
         })
       } else {
-        emitEvent({
+        emitTerminalEvent(turn, {
           type: 'turn-end',
           stopReason: message.subtype === 'success' ? 'end_turn' : String(message.subtype || 'end_turn')
         })
@@ -326,6 +368,10 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
         behavior: 'deny',
         message: 'Only After Effects (mcp__ae__*) tools are available in this panel.'
       }
+    }
+
+    if (isCoreAuthorizedDynamicCall(name, input)) {
+      return { behavior: 'allow', updatedInput: input }
     }
 
     if (sessionAllowedTools.has(name)) {
@@ -358,6 +404,68 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
     })
   }
 
+  async function handleElicitation(request, turn, signal) {
+    const schema = request && request.requestedSchema
+    const plan = extractToolPlan(schema)
+    if (!plan) {
+      return approvalResult('deny')
+    }
+
+    const key = planSessionKey(plan)
+    const policy = decideToolPlan({
+      tier: turn.permissionMode,
+      plan,
+      sessionAllowed: sessionAllowedPlans.has(key)
+    })
+    if (policy.decision === 'allow') {
+      return approvalResult('once', policy)
+    }
+    if (policy.decision === 'deny') {
+      return approvalResult('deny', policy)
+    }
+    return await waitForElicitationApproval(plan, policy, signal)
+  }
+
+  async function waitForElicitationApproval(plan, policy, signal) {
+    if (signal && signal.aborted) {
+      return approvalResult('deny', policy)
+    }
+
+    const name = 'mcp__ae__ae_toolUse'
+    const toolUseId = claimToolUseId(name)
+    emitEvent({
+      type: 'approval-required',
+      toolUseId,
+      name,
+      input: plan,
+      risk: policy.risk
+    })
+
+    return await new Promise((resolve) => {
+      const pending = {
+        plan,
+        policy,
+        resolve: (result) => {
+          if (signal && pending.onAbort) {
+            signal.removeEventListener('abort', pending.onAbort)
+          }
+          resolve(result)
+        },
+        onAbort: null
+      }
+      if (signal) {
+        pending.onAbort = () => {
+          if (pendingElicitations.get(toolUseId) !== pending) return
+          pendingElicitations.delete(toolUseId)
+          emitEvent({ type: 'tool-denied', toolUseId })
+          pending.resolve(approvalResult('deny', policy))
+        }
+        signal.addEventListener('abort', pending.onAbort, { once: true })
+      }
+      pendingElicitations.set(toolUseId, pending)
+    })
+  }
+
   function claimToolUseId(name) {
     const toolUse = toolUses.find((item) => item.name === name && !item.claimed)
     if (toolUse) {
@@ -372,20 +480,35 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
   function handleApproval(message) {
     const id = String(message.id || '')
     const pending = approvals.get(id)
-    if (!pending) {
+    if (pending) {
+      approvals.delete(id)
+
+      if (message.decision === 'allow' || message.decision === 'allow-session') {
+        if (message.decision === 'allow-session') {
+          sessionAllowedTools.add(pending.name)
+        }
+        pending.resolve({ behavior: 'allow', updatedInput: pending.input })
+      } else {
+        emitEvent({ type: 'tool-denied', toolUseId: id })
+        pending.resolve({ behavior: 'deny', message: 'User denied this action.' })
+      }
       return
     }
-    approvals.delete(id)
 
-    if (message.decision === 'allow' || message.decision === 'allow-session') {
-      if (message.decision === 'allow-session') {
-        sessionAllowedTools.add(pending.name)
-      }
-      pending.resolve({ behavior: 'allow', updatedInput: pending.input })
-    } else {
-      emitEvent({ type: 'tool-denied', toolUseId: id })
-      pending.resolve({ behavior: 'deny', message: 'User denied this action.' })
+    const elicitation = pendingElicitations.get(id)
+    if (!elicitation) return
+    pendingElicitations.delete(id)
+    const decision = message.decision === 'allow-session'
+      ? 'session'
+      : (message.decision === 'allow' ? 'once' : 'deny')
+    const result = approvalResult(decision, elicitation.policy)
+    if (result.action === 'accept' && result.content.decision === 'session') {
+      sessionAllowedPlans.add(planSessionKey(elicitation.plan))
     }
+    if (result.action === 'decline') {
+      emitEvent({ type: 'tool-denied', toolUseId: id })
+    }
+    elicitation.resolve(result)
   }
 
   function stopTurn() {
@@ -405,14 +528,19 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
       emitEvent({ type: 'tool-denied', toolUseId: id })
       pending.resolve({ behavior: 'deny', message })
     }
+    for (const [id, pending] of pendingElicitations) {
+      pendingElicitations.delete(id)
+      emitEvent({ type: 'tool-denied', toolUseId: id })
+      pending.resolve(approvalResult('deny', pending.policy))
+    }
   }
 
   function emitAbortedOnce(turn) {
-    if (turn.abortedEventSent) {
+    if (turn.abortedEventSent || turn.terminalEventSent) {
       return
     }
     turn.abortedEventSent = true
-    emitEvent({ type: 'error', kind: 'aborted', message: 'Turn aborted.' })
+    emitTerminalEvent(turn, { type: 'error', kind: 'aborted', message: 'Turn aborted.' })
   }
 
   async function runProbe() {
@@ -497,14 +625,68 @@ function parseJsonArg(value, name) {
 
 function cleanEnv(inputEnv, channel = 'subscription') {
   const output = { ...inputEnv }
-  // Subscription channel: the Agent SDK must self-discover login state, so a
-  // stray ANTHROPIC_API_KEY would silently reroute billing (spec B3).
-  // API-direct channel: the panel already curated the env (base URL + auth
-  // token injected); pass it through untouched.
-  if (channel !== 'api') {
-    delete output.ANTHROPIC_API_KEY
+  const routeOrigin = environmentValue(output, 'ANTHROPIC_BASE_URL')
+  const routeToken = environmentValue(output, 'ANTHROPIC_AUTH_TOKEN')
+  for (const key of PROVIDER_ENV_KEYS) deleteEnvironmentKey(output, key)
+  if (channel !== 'api') return output
+
+  const normalizedOrigin = normalizeLocalRouteOrigin(routeOrigin)
+  if (typeof routeToken !== 'string' || !routeToken || routeToken !== routeToken.trim()) {
+    throw localRouteError()
   }
+  output.ANTHROPIC_BASE_URL = normalizedOrigin
+  output.ANTHROPIC_AUTH_TOKEN = routeToken
   return output
+}
+
+function environmentValue(environment, name) {
+  const normalized = name.toUpperCase()
+  const matches = Object.keys(environment).filter((key) => key.toUpperCase() === normalized)
+  if (!matches.length) return undefined
+  const values = matches.map((key) => environment[key])
+  if (values.some((value) => value !== values[0])) throw localRouteError()
+  return values[0]
+}
+
+function deleteEnvironmentKey(environment, name) {
+  const normalized = name.toUpperCase()
+  for (const key of Object.keys(environment)) {
+    if (key.toUpperCase() === normalized) delete environment[key]
+  }
+}
+
+function normalizeLocalRouteOrigin(value) {
+  if (typeof value !== 'string') throw localRouteError()
+  let url
+  try {
+    url = new URL(value.trim())
+  } catch {
+    throw localRouteError()
+  }
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  const mapped = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
+  const loopback = host === 'localhost'
+    || host.endsWith('.localhost')
+    || host === '::1'
+    || /^127(?:\.\d{1,3}){3}$/.test(mapped ? mapped[1] : host)
+  if (
+    url.protocol !== 'http:'
+    || !loopback
+    || url.username
+    || url.password
+    || url.search
+    || url.hash
+    || (url.pathname !== '' && url.pathname !== '/')
+  ) {
+    throw localRouteError()
+  }
+  return url.origin
+}
+
+function localRouteError() {
+  const error = new Error('Claude Agent API channel requires a valid local route environment.')
+  error.code = 'CLAUDE_AGENT_LOCAL_ROUTE_INVALID'
+  return error
 }
 
 function normalizePermissionMode(mode) {

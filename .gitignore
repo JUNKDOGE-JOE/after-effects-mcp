@@ -12,9 +12,10 @@ packages/core/tests/live/_artifacts/
 # Build artifacts
 dist/
 build/
-release/
+/release/
 plugin/host/node_modules/
 plugin/sidecar/node_modules/
+plugin/platform/
 
 # OS
 .DS_Store
@@ -22,4 +23,6 @@ Thumbs.db
 
 # Local-only artifacts
 .rnd
+.worktrees/
+.superpowers/sdd/
 plugin/panel/ae_viewer_*.png

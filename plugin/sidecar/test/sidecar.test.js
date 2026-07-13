@@ -16,6 +16,28 @@ const defaultOptions = {
   annotations: {}
 }
 
+const WRITE_PLAN = {
+  artifactId: 'user:123',
+  contentHash: 'a'.repeat(64),
+  operation: 'execute',
+  normalizedArgs: {},
+  target: { compId: '7' },
+  planHash: 'b'.repeat(64),
+  risk: 'write',
+  expiresAt: 9999999999999
+}
+
+function planRequest(plan) {
+  return {
+    serverName: 'ae',
+    message: 'Approve artifact plan?',
+    requestedSchema: {
+      type: 'object',
+      'x-ae-mcp-plan': plan
+    }
+  }
+}
+
 test('maps user turn, text, tool_use, tool_result, and result events', async () => {
   const writes = []
   let tick = 100
@@ -67,6 +89,31 @@ test('maps user turn, text, tool_use, tool_result, and result events', async () 
   ])
 })
 
+test('clean SDK EOF without a result emits one structured terminal error', async () => {
+  const writes = []
+  const sidecar = createSidecar({
+    queryFn: async function * () {
+      yield { type: 'assistant', message: { content: [{ type: 'text', text: 'partial' }] } }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'eof', permissionMode: 'none' }))
+  await waitFor(() => eventCount(writes, 'error') === 1)
+  await new Promise((resolve) => setTimeout(resolve, 10))
+
+  assert.deepEqual(events(writes).filter((event) => event.type === 'turn-end' || event.type === 'error'), [
+    {
+      type: 'error',
+      kind: 'network',
+      code: 'SDK_STREAM_EOF_BEFORE_RESULT',
+      message: 'Claude Agent SDK stream closed before a result event.'
+    }
+  ])
+})
+
 test('passes session resume on the second user turn', async () => {
   const writes = []
   const seenOptions = []
@@ -101,6 +148,15 @@ test('pins turn options to ae agent with annotations and allowed tools whitelist
     writeLine: (obj) => writes.push(obj),
     argvOptions: {
       ...defaultOptions,
+      mcp: {
+        ...defaultOptions.mcp,
+        env: {
+          EXTRA: '1',
+          anthropic_api_key: 'upstream-key',
+          Anthropic_Base_Url: 'https://upstream.example',
+          ANTHROPIC_auth_TOKEN: 'upstream-token'
+        }
+      },
       allowedTools: ['mcp__ae__ae_ping', 'mcp__ae__ae_overview'],
       annotations: {
         mcp__ae__ae_ping: { readOnly: true, destructive: false },
@@ -114,6 +170,13 @@ test('pins turn options to ae agent with annotations and allowed tools whitelist
   await waitFor(() => eventCount(writes, 'turn-end') === 1)
 
   assert.equal(seenOptions.agent, 'ae')
+  assert.deepEqual(seenOptions.mcpServers.ae.env, {
+    EXTRA: '1',
+    ANTHROPIC_API_KEY: '',
+    ANTHROPIC_BASE_URL: '',
+    ANTHROPIC_AUTH_TOKEN: '',
+    AE_MCP_BACKEND: 'ae-mcp'
+  })
   assert.deepEqual(seenOptions.agents.ae.tools, [
     'mcp__ae__ae_ping',
     'mcp__ae__ae_write',
@@ -490,7 +553,7 @@ test('query login failures map to auth errors', async () => {
   assert.equal(events(writes).find((event) => event.type === 'error').kind, 'auth')
 })
 
-test('query options env removes ANTHROPIC_API_KEY', async () => {
+test('subscription query env removes every provider credential variable', async () => {
   const writes = []
   let queryEnv
   const sidecar = createSidecar({
@@ -501,7 +564,9 @@ test('query options env removes ANTHROPIC_API_KEY', async () => {
     writeLine: (obj) => writes.push(obj),
     argvOptions: defaultOptions,
     env: {
-      ANTHROPIC_API_KEY: 'secret',
+      anthropic_api_key: 'secret',
+      Anthropic_Base_Url: 'https://upstream.example',
+      ANTHROPIC_auth_TOKEN: 'upstream-token',
       KEEP_ME: 'yes'
     }
   })
@@ -510,6 +575,11 @@ test('query options env removes ANTHROPIC_API_KEY', async () => {
   await waitFor(() => eventCount(writes, 'turn-end') === 1)
 
   assert.equal(queryEnv.ANTHROPIC_API_KEY, undefined)
+  assert.equal(queryEnv.ANTHROPIC_BASE_URL, undefined)
+  assert.equal(queryEnv.ANTHROPIC_AUTH_TOKEN, undefined)
+  assert.equal(queryEnv.anthropic_api_key, undefined)
+  assert.equal(queryEnv.Anthropic_Base_Url, undefined)
+  assert.equal(queryEnv.ANTHROPIC_auth_TOKEN, undefined)
   assert.equal(queryEnv.KEEP_ME, 'yes')
 })
 
@@ -656,6 +726,190 @@ test('query model failures map to model errors', async () => {
   assert.equal(events(writes).find((event) => event.type === 'error').kind, 'model')
 })
 
+test('Claude none tier still asks for an external artifact plan', async () => {
+  const writes = []
+  const results = []
+  const externalPlan = { ...WRITE_PLAN, risk: 'external' }
+  const sidecar = createSidecar({
+    queryFn: async function * ({ options }) {
+      results.push(await options.onElicitation(
+        planRequest(externalPlan),
+        { signal: new AbortController().signal }
+      ))
+      yield { type: 'result', subtype: 'success', is_error: false, session_id: 'sess-1' }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'publish', permissionMode: 'none' }))
+  await waitFor(() => eventCount(writes, 'approval-required') === 1)
+  const approval = lastEvent(writes)
+  assert.deepEqual(approval, {
+    type: 'approval-required',
+    toolUseId: 'appr-1',
+    name: 'mcp__ae__ae_toolUse',
+    input: externalPlan,
+    risk: 'external'
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'approve', id: approval.toolUseId, decision: 'allow' }))
+  await waitFor(() => eventCount(writes, 'turn-end') === 1)
+  assert.deepEqual(results, [{ action: 'accept', content: { decision: 'once' } }])
+})
+
+test('Claude auto accepts a write plan once and declines a malformed plan without cards', async () => {
+  const writes = []
+  const results = []
+  const sidecar = createSidecar({
+    queryFn: async function * ({ options }) {
+      const signal = new AbortController().signal
+      results.push(await options.onElicitation(planRequest(WRITE_PLAN), { signal }))
+      results.push(await options.onElicitation(planRequest({ risk: 'write' }), { signal }))
+      yield { type: 'result', subtype: 'success', is_error: false, session_id: 'sess-1' }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'apply', permissionMode: 'auto' }))
+  await waitFor(() => eventCount(writes, 'turn-end') === 1)
+
+  assert.deepEqual(results, [
+    { action: 'accept', content: { decision: 'once' } },
+    { action: 'decline', content: {} }
+  ])
+  assert.equal(eventCount(writes, 'approval-required'), 0)
+})
+
+test('Claude plan session approval is bound to content hash and target', async () => {
+  const writes = []
+  const results = []
+  const changedHash = { ...WRITE_PLAN, contentHash: 'c'.repeat(64), planHash: 'd'.repeat(64) }
+  const changedTarget = { ...WRITE_PLAN, target: { compId: '8' }, planHash: 'e'.repeat(64) }
+  const sidecar = createSidecar({
+    queryFn: async function * ({ options }) {
+      const signal = new AbortController().signal
+      for (const plan of [WRITE_PLAN, WRITE_PLAN, changedHash, changedTarget]) {
+        results.push(await options.onElicitation(planRequest(plan), { signal }))
+      }
+      yield { type: 'result', subtype: 'success', is_error: false, session_id: 'sess-1' }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'apply plans', permissionMode: 'manual' }))
+  await waitFor(() => eventCount(writes, 'approval-required') === 1)
+  sidecar.handleLine(JSON.stringify({ t: 'approve', id: 'appr-1', decision: 'allow-session' }))
+  await waitFor(() => eventCount(writes, 'approval-required') === 2)
+  sidecar.handleLine(JSON.stringify({ t: 'approve', id: 'appr-2', decision: 'allow' }))
+  await waitFor(() => eventCount(writes, 'approval-required') === 3)
+  sidecar.handleLine(JSON.stringify({ t: 'approve', id: 'appr-3', decision: 'allow' }))
+  await waitFor(() => eventCount(writes, 'turn-end') === 1)
+
+  assert.deepEqual(results, [
+    { action: 'accept', content: { decision: 'session' } },
+    { action: 'accept', content: { decision: 'once' } },
+    { action: 'accept', content: { decision: 'once' } },
+    { action: 'accept', content: { decision: 'once' } }
+  ])
+  assert.deepEqual(
+    events(writes).filter((event) => event.type === 'approval-required').map((event) => event.input),
+    [WRITE_PLAN, changedHash, changedTarget]
+  )
+})
+
+test('Claude rejects high-risk session approval and delegates only valid staged calls to core', async () => {
+  const writes = []
+  const elicitationResults = []
+  const toolResults = []
+  const destructivePlan = { ...WRITE_PLAN, risk: 'destructive' }
+  const sidecar = createSidecar({
+    queryFn: async function * ({ options }) {
+      const signal = new AbortController().signal
+      elicitationResults.push(await options.onElicitation(planRequest(destructivePlan), { signal }))
+      toolResults.push(await options.canUseTool('mcp__ae__ae_toolUse', { action: 'prepare' }))
+      toolResults.push(await options.canUseTool('mcp__ae__ae_toolUse', { action: 'invalid' }))
+      yield { type: 'result', subtype: 'success', is_error: false, session_id: 'sess-1' }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'stage', permissionMode: 'manual' }))
+  await waitFor(() => eventCount(writes, 'approval-required') === 1)
+  sidecar.handleLine(JSON.stringify({ t: 'approve', id: 'appr-1', decision: 'allow-session' }))
+  await waitFor(() => eventCount(writes, 'approval-required') === 2)
+  sidecar.handleLine(JSON.stringify({ t: 'approve', id: 'appr-2', decision: 'allow' }))
+  await waitFor(() => eventCount(writes, 'turn-end') === 1)
+
+  assert.deepEqual(elicitationResults, [{ action: 'decline', content: {} }])
+  assert.deepEqual(toolResults, [
+    { behavior: 'allow', updatedInput: { action: 'prepare' } },
+    { behavior: 'allow', updatedInput: { action: 'invalid' } }
+  ])
+  assert.equal(events(writes).filter((event) => event.type === 'approval-required')[1].name, 'mcp__ae__ae_toolUse')
+})
+
+test('Claude stop drains plan approval and ignores a stale session decision', async () => {
+  const writes = []
+  const results = []
+  const sidecar = createSidecar({
+    queryFn: async function * ({ options }) {
+      results.push(await options.onElicitation(
+        planRequest(WRITE_PLAN),
+        { signal: new AbortController().signal }
+      ))
+      yield { type: 'result', subtype: 'success', is_error: false, session_id: 'sess-1' }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'first', permissionMode: 'manual' }))
+  await waitFor(() => eventCount(writes, 'approval-required') === 1)
+  sidecar.handleLine(JSON.stringify({ t: 'stop' }))
+  await waitFor(() => results.length === 1 && eventCount(writes, 'tool-denied') === 1)
+  sidecar.handleLine(JSON.stringify({ t: 'approve', id: 'appr-1', decision: 'allow-session' }))
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'second', permissionMode: 'manual' }))
+  await waitFor(() => eventCount(writes, 'approval-required') === 2)
+  sidecar.handleLine(JSON.stringify({ t: 'approve', id: 'appr-2', decision: 'allow' }))
+  await waitFor(() => eventCount(writes, 'turn-end') === 1)
+
+  assert.deepEqual(results, [
+    { action: 'decline', content: {} },
+    { action: 'accept', content: { decision: 'once' } }
+  ])
+})
+
+test('Claude query failure drains a pending plan elicitation', async () => {
+  const writes = []
+  let pendingElicitation
+  const sidecar = createSidecar({
+    queryFn: async function * ({ options }) {
+      pendingElicitation = options.onElicitation(
+        planRequest(WRITE_PLAN),
+        { signal: new AbortController().signal }
+      )
+      throw new Error('sdk failed')
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'fail', permissionMode: 'manual' }))
+  await waitFor(() => eventCount(writes, 'error') === 1 && eventCount(writes, 'tool-denied') === 1)
+  assert.deepEqual(await pendingElicitation, { action: 'decline', content: {} })
+})
+
 function events(writes) {
   return writes.filter((item) => item.t === 'event').map((item) => item.event)
 }
@@ -703,7 +957,7 @@ test('parseArgv accepts --channel api and defaults to subscription', () => {
   assert.equal(parseArgv(['--channel', 'bogus']).channel, 'subscription')
 })
 
-test('api channel keeps injected anthropic env vars in query env', async () => {
+test('api channel keeps only a normalized local route in query env', async () => {
   let queryEnv = null
   const sidecar = createSidecar({
     queryFn: async function * ({ options }) {
@@ -712,11 +966,37 @@ test('api channel keeps injected anthropic env vars in query env', async () => {
     },
     writeLine: () => {},
     argvOptions: { ...defaultOptions, channel: 'api' },
-    env: { ANTHROPIC_API_KEY: 'secret', ANTHROPIC_BASE_URL: 'https://relay.example', ANTHROPIC_AUTH_TOKEN: 'tok' }
+    env: {
+      ANTHROPIC_API_KEY: 'upstream-key',
+      Anthropic_Base_Url: 'http://127.0.0.1:43125/',
+      ANTHROPIC_auth_TOKEN: 'local-route-token',
+      KEEP_ME: 'yes'
+    }
   })
   sidecar.handleLine(JSON.stringify({ t: 'user', text: 'env', permissionMode: 'none' }))
   await waitFor(() => queryEnv !== null)
-  assert.equal(queryEnv.ANTHROPIC_API_KEY, 'secret')
-  assert.equal(queryEnv.ANTHROPIC_BASE_URL, 'https://relay.example')
-  assert.equal(queryEnv.ANTHROPIC_AUTH_TOKEN, 'tok')
+  assert.equal(queryEnv.ANTHROPIC_API_KEY, undefined)
+  assert.equal(queryEnv.Anthropic_Base_Url, undefined)
+  assert.equal(queryEnv.ANTHROPIC_auth_TOKEN, undefined)
+  assert.equal(queryEnv.ANTHROPIC_BASE_URL, 'http://127.0.0.1:43125')
+  assert.equal(queryEnv.ANTHROPIC_AUTH_TOKEN, 'local-route-token')
+  assert.equal(queryEnv.KEEP_ME, 'yes')
+})
+
+test('api channel rejects upstream or versioned route environments', () => {
+  for (const env of [
+    { ANTHROPIC_BASE_URL: 'https://relay.example', ANTHROPIC_AUTH_TOKEN: 'token' },
+    { ANTHROPIC_BASE_URL: 'http://127.0.0.1:43125/v1', ANTHROPIC_AUTH_TOKEN: 'token' },
+    { ANTHROPIC_BASE_URL: 'http://127.0.0.1:43125' }
+  ]) {
+    assert.throws(
+      () => createSidecar({
+        queryFn: async function * () {},
+        writeLine: () => {},
+        argvOptions: { ...defaultOptions, channel: 'api' },
+        env
+      }),
+      (error) => error.code === 'CLAUDE_AGENT_LOCAL_ROUTE_INVALID'
+    )
+  }
 })

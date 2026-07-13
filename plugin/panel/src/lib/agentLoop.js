@@ -1,4 +1,11 @@
 import { DEFAULT_MODEL, buildSystemPrompt, sendAnthropicMessage } from './anthropic.js';
+import { isCoreAuthorizedDynamicCall } from '../../../shared/tool-approval.mjs';
+import {
+  createDeltaRedactor,
+  redactValue,
+  safeErrorMessage,
+  sensitiveValues,
+} from './exactSecretRedaction.js';
 
 const MAX_TOOL_ROUNDS = 25;
 
@@ -49,8 +56,7 @@ function makeToolResult(toolUseId, text, isError) {
 }
 
 export function createAgentLoop({
-  getApiKey,
-  getApiBaseUrl,
+  resolveRequestProfile,
   getModel,
   mcp,
   getPermissionMode,
@@ -103,6 +109,10 @@ export function createAgentLoop({
   async function handleToolUse(toolUse, toolByName) {
     emit({ type: 'tool-start', toolUseId: toolUse.id, name: toolUse.name, input: clone(toolUse.input || {}) });
 
+    if (isCoreAuthorizedDynamicCall(toolUse.name, toolUse.input || {})) {
+      return await executeTool(toolUse);
+    }
+
     const tool = toolByName.get(toolUse.name) || {};
     const mode = (getPermissionMode && getPermissionMode()) || 'manual';
     if (mode === 'readonly' && !(tool.annotations && tool.annotations.readOnlyHint === true)) {
@@ -142,6 +152,7 @@ export function createAgentLoop({
     activeController = controller;
 
     activeRun = (async () => {
+      let activeSensitiveValues = [];
       try {
         const tools = await mcp.listTools();
         const toolByName = new Map((tools || []).map((tool) => [tool.name, tool]));
@@ -158,20 +169,37 @@ export function createAgentLoop({
             return;
           }
 
-          const result = await anthropic({
-            apiKey: getApiKey && getApiKey(),
-            baseUrl: getApiBaseUrl && getApiBaseUrl(),
-            model: (getModel && getModel()) || DEFAULT_MODEL,
-            system,
-            messages: clone(messages),
-            tools,
-            signal: controller.signal,
-            effort: (getEffort && getEffort()) || null,
-            fast: Boolean(getFast && getFast()),
-            onTextDelta: (delta) => emit({ type: 'text-delta', text: delta }),
-          });
+          if (typeof resolveRequestProfile !== 'function') {
+            throw Object.assign(new Error('Provider request profile is unavailable.'), { kind: 'auth' });
+          }
+          let requestProfile = await resolveRequestProfile();
+          activeSensitiveValues = sensitiveValues(requestProfile);
+          const deltaRedactor = createDeltaRedactor(
+            activeSensitiveValues,
+            (text) => { if (text) emit({ type: 'text-delta', text }); },
+          );
+          let result;
+          try {
+            result = await anthropic({
+              requestProfile,
+              model: (getModel && getModel()) || DEFAULT_MODEL,
+              system,
+              messages: clone(messages),
+              tools,
+              signal: controller.signal,
+              effort: (getEffort && getEffort()) || null,
+              fast: Boolean(getFast && getFast()),
+              onTextDelta: (delta) => deltaRedactor.feed(delta),
+            });
+            deltaRedactor.flush();
+          } catch (error) {
+            deltaRedactor.discard();
+            throw error;
+          } finally {
+            requestProfile = null;
+          }
 
-          const assistantMessage = result.assistantMessage || { role: 'assistant', content: [] };
+          const assistantMessage = redactValue(result.assistantMessage || { role: 'assistant', content: [] }, activeSensitiveValues);
           messages.push(assistantMessage);
 
           const toolUses = getToolUses(assistantMessage);
@@ -196,8 +224,9 @@ export function createAgentLoop({
         // gap with synthetic cancelled results so the conversation stays
         // continuable.
         repairDanglingToolUses();
-        emit({ type: 'error', kind, message: e && e.message ? e.message : 'Agent loop failed.' });
+        emit({ type: 'error', kind, message: safeErrorMessage(e, activeSensitiveValues) });
       } finally {
+        activeSensitiveValues = [];
         activeController = null;
         activeRun = null;
       }

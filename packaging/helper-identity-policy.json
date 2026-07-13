@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "helperId": "com.junkdoge.ae-mcp.platform-helper",
+  "protocolVersion": 1,
+  "maxMessageBytes": 65536,
+  "macos": {
+    "platform": "macos-arm64",
+    "minimumOsVersion": "14.0",
+    "architecture": "arm64",
+    "machServiceName": "com.junkdoge.ae-mcp.platform-helper",
+    "keychainService": "com.junkdoge.ae-mcp",
+    "keychainAccountPattern": "^provider:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:[a-z][a-z0-9_-]{0,31}:v1$",
+    "authorization": {
+      "publicConnectionIdentityOnly": true,
+      "processGenerationDoubleRead": true,
+      "positiveAuditSessionBinding": true,
+      "ancestrySnapshotCodeSnapshot": true,
+      "wholeChainFinalRead": true,
+      "currentUserOnly": true,
+      "nativeExecutionOnly": true,
+      "rejectionBackendAccessCount": 0
+    },
+    "caller": {
+      "adobeTeamId": "JQ525L2MZD",
+      "afterEffectsBundleId": "com.adobe.AfterEffects.application",
+      "afterEffectsMajors": [
+        25,
+        26
+      ],
+      "directSigningIdentifiers": [
+        "com.adobe.cep.CEPHtmlEngine"
+      ]
+    }
+  },
+  "windows": {
+    "platform": "windows-x64",
+    "minimumOsVersion": "11.0.26100",
+    "architecture": "x64",
+    "pipeName": "\\\\.\\pipe\\com.junkdoge.ae-mcp.platform-helper",
+    "credentialTargetPrefix": "com.junkdoge.ae-mcp/provider:",
+    "authorization": {
+      "currentUserOnly": true,
+      "nativeExecutionOnly": true,
+      "processGenerationDoubleRead": true,
+      "wholeChainFinalRead": true,
+      "authenticodeChainRequired": true,
+      "rejectionBackendAccessCount": 0
+    },
+    "caller": {
+      "publisherOrganization": "Adobe Inc.",
+      "directImage": "CEPHtmlEngine.exe",
+      "ancestorImage": "AfterFX.exe",
+      "afterEffectsMajors": [
+        25,
+        26
+      ]
+    }
+  }
+}

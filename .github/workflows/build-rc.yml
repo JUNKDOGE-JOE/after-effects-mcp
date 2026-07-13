@@ -1,0 +1,1143 @@
+name: Build signed RC
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  checks: write
+
+concurrency:
+  group: build-rc-${{ inputs.candidate_sha }}
+  queue: max
+  cancel-in-progress: false
+
+env:
+  RELEASE_VERSION: 0.9.1
+
+jobs:
+  guard:
+    name: Validate protected candidate and release prerequisites
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      candidate_sha: ${{ steps.identity.outputs.candidate_sha }}
+      product_evidence_base64: ${{ steps.product_evidence.outputs.evidence_base64 }}
+      product_evidence_sha256: ${{ steps.product_evidence.outputs.evidence_sha256 }}
+    steps:
+      - name: Validate immutable dispatch identity
+        id: identity
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          [[ "$RUN_ATTEMPT" == '1' ]]
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$VERSION" == "$RELEASE_VERSION" ]]
+          printf 'candidate_sha=%s\n' "$CANDIDATE_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout the exact candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ steps.identity.outputs.candidate_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select exact guard Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.17.0
+
+      - name: Require protected main and trusted workflow revision
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ steps.identity.outputs.candidate_sha }}
+          AE_MCP_ZXP_CERT_FINGERPRINT_SHA256: ${{ vars.AE_MCP_ZXP_CERT_FINGERPRINT_SHA256 }}
+          AE_MCP_APPLE_CERT_FINGERPRINT_SHA256: ${{ vars.AE_MCP_APPLE_CERT_FINGERPRINT_SHA256 }}
+          AE_MCP_APPLE_TEAM_ID: ${{ vars.AE_MCP_APPLE_TEAM_ID }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$(node --version)" == 'v24.17.0' ]]
+          [[ "$AE_MCP_ZXP_CERT_FINGERPRINT_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$AE_MCP_APPLE_CERT_FINGERPRINT_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$AE_MCP_APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ ]]
+          auth_header="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w 0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header" \
+            fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          unset auth_header
+
+          main_sha="$(git rev-parse origin/main)"
+          head_sha="$(git rev-parse HEAD)"
+          [[ "$main_sha" == "$CANDIDATE_SHA" ]]
+          [[ "$head_sha" == "$CANDIDATE_SHA" ]]
+
+          git show "HEAD:.github/workflows/build-rc.yml" \
+            > "$RUNNER_TEMP/dispatched-build-rc.yml"
+          git show "origin/main:.github/workflows/build-rc.yml" \
+            > "$RUNNER_TEMP/main-build-rc.yml"
+          cmp -s "$RUNNER_TEMP/dispatched-build-rc.yml" "$RUNNER_TEMP/main-build-rc.yml"
+
+          # Do not burn the irreversible lock while the separately approved
+          # platform-helper/foundation jobs are still absent.
+          node scripts/release/native-coverage-gate.mjs \
+            --root "$GITHUB_WORKSPACE" \
+            --policy "$GITHUB_WORKSPACE/packaging/native-coverage-approvals.json"
+          test -f scripts/package/build-platform-helper.mjs
+          test -f .github/workflows/platform-foundation-ci.yml
+          grep -Fq 'AE_MCP_NOTARY_KEYCHAIN_PATH' scripts/package/package-macos-dmg.sh
+          grep -Fq -- '--keychain "$AE_MCP_NOTARY_KEYCHAIN_PATH"' \
+            scripts/package/package-macos-dmg.sh
+          node --input-type=module -e '
+            import fs from "node:fs";
+            import { loadApprovals } from "./scripts/package/generate-runtime-inventory.mjs";
+            const policy = JSON.parse(fs.readFileSync("packaging/license-policy.json", "utf8"));
+            const selector = "packaging/runtime-license-approvals.json";
+            const approvals = await loadApprovals(selector, policy);
+            const trusted = policy.trustedApprovals || [];
+            const key = (item) => JSON.stringify([
+              item.package, item.version, item.sourceSha256, item.licenseRef, item.approvalId,
+            ]);
+            const selectedKeys = new Set(approvals.map(key));
+            const trustedKeys = new Set(trusted.map(key));
+            const refs = new Set(approvals.map((item) => item.licenseRef));
+            if (approvals.length === 0
+                || selectedKeys.size !== approvals.length
+                || selectedKeys.size !== trustedKeys.size
+                || [...trustedKeys].some((item) => !selectedKeys.has(item))
+                || policy.restrictedLicenseRefs.some((item) => !refs.has(item))) {
+              throw new Error("selected runtime redistribution approvals are incomplete");
+            }
+          '
+
+      - name: Verify candidate-bound product acceptance coverage
+        id: product_evidence
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ steps.identity.outputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/product-acceptance-evidence.json"
+          node scripts/release/verify-product-acceptance-coverage.mjs \
+            --candidate-sha "$CANDIDATE_SHA" \
+            --coverage "$GITHUB_WORKSPACE/packaging/product-acceptance-coverage.json" \
+            --out "$evidence"
+          [[ -f "$evidence" && ! -L "$evidence" ]]
+          evidence_size="$(wc -c < "$evidence" | tr -d ' ')"
+          [[ "$evidence_size" -gt 0 && "$evidence_size" -le 65536 ]]
+          evidence_sha256="$(sha256sum "$evidence" | awk '{print $1}')"
+          printf 'evidence_base64=%s\n' "$(base64 -w 0 "$evidence")" >> "$GITHUB_OUTPUT"
+          printf 'evidence_sha256=%s\n' "$evidence_sha256" >> "$GITHUB_OUTPUT"
+
+  preflight-macos:
+    name: Preflight Adobe signer on macOS arm64
+    needs: guard
+    if: ${{ needs.guard.result == 'success' && github.run_attempt == 1 }}
+    runs-on: macos-15
+    timeout-minutes: 20
+    outputs:
+      tool_artifact_id: ${{ steps.upload_tool.outputs.artifact-id }}
+    steps:
+      - name: Download and execute the reviewed Adobe signer
+        shell: bash
+        env:
+          AE_MCP_ZXP_SIGN_CMD_URL: https://raw.githubusercontent.com/Adobe-CEP/CEP-Resources/ab5e4e3e53a42fad08e1225a22a991bb1ffe73f6/ZXPSignCMD/4.1.3/macOS/ZXPSignCmd
+          AE_MCP_ZXP_SIGN_CMD_SHA256: bc773fae0b97416fc7a462e7dadcc00270428a9913480c9b78b5606ff1cfb095
+        run: |
+          set -euo pipefail
+          [[ "$(uname -m)" == 'arm64' ]]
+          tool_dir="$RUNNER_TEMP/ae-mcp-zxpsigncmd"
+          tool_path="$tool_dir/ZXPSignCmd"
+          mkdir -p "$tool_dir"
+          chmod 700 "$tool_dir"
+          curl --fail --silent --show-error --location \
+            --proto '=https' --tlsv1.2 \
+            --output "$tool_path" "$AE_MCP_ZXP_SIGN_CMD_URL"
+          actual_sha256="$(/usr/bin/shasum -a 256 "$tool_path" | /usr/bin/awk '{print $1}')"
+          [[ "$actual_sha256" == "$AE_MCP_ZXP_SIGN_CMD_SHA256" ]]
+          /usr/bin/file "$tool_path" | /usr/bin/grep -F 'Mach-O 64-bit executable x86_64' >/dev/null
+          /usr/bin/xattr -d com.apple.quarantine "$tool_path" 2>/dev/null || true
+          chmod 700 "$tool_path"
+          if ! /usr/bin/arch -x86_64 /usr/bin/true; then
+            sudo /usr/sbin/softwareupdate --install-rosetta --agree-to-license
+          fi
+          /usr/bin/arch -x86_64 /usr/bin/true
+          set +e
+          help_output="$("$tool_path" -help 2>&1)"
+          help_status=$?
+          set -e
+          [[ "$help_status" == '3' ]]
+          /usr/bin/grep -F 'ZXPSignCmd -sign' <<< "$help_output" >/dev/null
+
+      - name: Upload the preflighted macOS signer
+        id: upload_tool
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ae-mcp-zxpsigncmd-4.1.3-macos-x86_64
+          path: ${{ runner.temp }}/ae-mcp-zxpsigncmd/ZXPSignCmd
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  preflight-windows:
+    name: Preflight Adobe signer on Windows x64
+    needs: guard
+    if: ${{ needs.guard.result == 'success' && github.run_attempt == 1 }}
+    runs-on: windows-2025
+    timeout-minutes: 20
+    outputs:
+      tool_artifact_id: ${{ steps.upload_tool.outputs.artifact-id }}
+    steps:
+      - name: Download and execute the reviewed Adobe signer
+        shell: pwsh
+        env:
+          AE_MCP_ZXP_SIGN_CMD_URL: https://raw.githubusercontent.com/Adobe-CEP/CEP-Resources/ab5e4e3e53a42fad08e1225a22a991bb1ffe73f6/ZXPSignCMD/4.1.3/x64/ZXPSignCmd.exe
+          AE_MCP_ZXP_SIGN_CMD_SHA256: ffc2223167225ce61d024eb463fc5ad1a1be16133f99ef334a646f7311916c98
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') {
+            throw 'windows-2025 preflight runner must be AMD64'
+          }
+          $toolDirectory = Join-Path $env:RUNNER_TEMP 'ae-mcp-zxpsigncmd'
+          $toolPath = Join-Path $toolDirectory 'ZXPSignCmd.exe'
+          [IO.Directory]::CreateDirectory($toolDirectory) | Out-Null
+          Invoke-WebRequest -Uri $env:AE_MCP_ZXP_SIGN_CMD_URL -OutFile $toolPath
+          $actualSha256 = (Get-FileHash -LiteralPath $toolPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $env:AE_MCP_ZXP_SIGN_CMD_SHA256) {
+            throw 'Adobe ZXPSignCmd SHA-256 mismatch'
+          }
+          $helpOutput = (& $toolPath -help 2>&1 | Out-String)
+          if ($LASTEXITCODE -ne 3 -or $helpOutput -notmatch 'ZXPSignCmd -sign') {
+            throw 'Adobe ZXPSignCmd executable preflight failed'
+          }
+
+      - name: Upload the preflighted Windows signer
+        id: upload_tool
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ae-mcp-zxpsigncmd-4.1.3-windows-x64
+          path: ${{ runner.temp }}\ae-mcp-zxpsigncmd\ZXPSignCmd.exe
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  lock:
+    name: Create irreversible per-SHA build lock
+    needs: [guard, preflight-macos, preflight-windows]
+    if: ${{ github.run_attempt == 1 && needs.guard.result == 'success' && needs.preflight-macos.result == 'success' && needs.preflight-windows.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      candidate_sha: ${{ needs.guard.outputs.candidate_sha }}
+      check_run_id: ${{ steps.lock.outputs.check_run_id }}
+    steps:
+      - name: Checkout the exact candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ needs.guard.outputs.candidate_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Select exact lock Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.17.0
+
+      - name: Verify exact lock checkout
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ needs.guard.outputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$(node --version)" == 'v24.17.0' ]]
+          [[ "$(git rev-parse HEAD)" == "$CANDIDATE_SHA" ]]
+
+      - name: Create deterministic irreversible build lock
+        id: lock
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          CANDIDATE_SHA: ${{ needs.guard.outputs.candidate_sha }}
+          MACOS_TOOL_ARTIFACT_ID: ${{ needs.preflight-macos.outputs.tool_artifact_id }}
+          WINDOWS_TOOL_ARTIFACT_ID: ${{ needs.preflight-windows.outputs.tool_artifact_id }}
+          PRODUCT_EVIDENCE_SHA256: ${{ needs.guard.outputs.product_evidence_sha256 }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        with:
+          script: |
+            const path = require('node:path');
+            const { pathToFileURL } = require('node:url');
+            const moduleUrl = (name) => pathToFileURL(path.join(
+              process.env.GITHUB_WORKSPACE, 'scripts', 'release', name,
+            )).href;
+            const { listAllCheckRunsForRef } = await import(
+              moduleUrl('github-inventory.mjs')
+            );
+            const candidateSha = process.env.CANDIDATE_SHA;
+            const workflowSha = process.env.WORKFLOW_SHA;
+            const { owner, repo } = context.repo;
+            if (!/^[0-9a-f]{40}$/.test(workflowSha)
+                || !/^\d+$/.test(process.env.MACOS_TOOL_ARTIFACT_ID || '')
+                || !/^\d+$/.test(process.env.WINDOWS_TOOL_ARTIFACT_ID || '')
+                || !/^[a-f0-9]{64}$/.test(process.env.PRODUCT_EVIDENCE_SHA256 || '')) {
+              throw new Error('preflight identity is invalid');
+            }
+            const { data: branch } = await github.rest.repos.getBranch({
+              owner,
+              repo,
+              branch: 'main',
+            });
+            if (branch.protected !== true || branch.commit.sha !== candidateSha) {
+              throw new Error('candidate must equal protected main HEAD');
+            }
+
+            const [{ data: dispatchedWorkflow }, { data: trustedWorkflow }] = await Promise.all([
+              github.rest.repos.getContent({
+                owner, repo, path: '.github/workflows/build-rc.yml', ref: workflowSha,
+              }),
+              github.rest.repos.getContent({
+                owner, repo, path: '.github/workflows/build-rc.yml', ref: candidateSha,
+              }),
+            ]);
+            if (Array.isArray(dispatchedWorkflow) || Array.isArray(trustedWorkflow)
+                || dispatchedWorkflow.type !== 'file' || trustedWorkflow.type !== 'file'
+                || dispatchedWorkflow.sha !== trustedWorkflow.sha) {
+              throw new Error('running workflow revision does not equal protected main');
+            }
+
+            const externalId = `ae-mcp-build-lock:${candidateSha}`;
+            const checks = await listAllCheckRunsForRef(github, {
+              owner, repo, ref: candidateSha,
+            });
+            const priorLocks = checks.filter((check) => check.external_id === externalId);
+            if (priorLocks.length > 0) {
+              throw new Error('candidate SHA already has a permanent build lock');
+            }
+
+            const { data: lock } = await github.rest.checks.create({
+              owner,
+              repo,
+              head_sha: candidateSha,
+              name: 'signed-rc-build',
+              external_id: externalId,
+              status: 'in_progress',
+              started_at: new Date().toISOString(),
+              output: {
+                title: 'Signed RC build in progress',
+                summary: `Immutable candidate ${candidateSha}`,
+              },
+            });
+            core.setOutput('check_run_id', String(lock.id));
+
+  macos:
+    name: Sign macOS arm64 RC
+    needs: [lock, preflight-macos]
+    if: ${{ needs.lock.result == 'success' && github.run_attempt == 1 }}
+    runs-on: macos-15
+    environment: release-signing
+    timeout-minutes: 90
+    outputs:
+      dmg_artifact_id: ${{ steps.upload_dmg.outputs.artifact-id }}
+      zxp_artifact_id: ${{ steps.upload_zxp.outputs.artifact-id }}
+    env:
+      CANDIDATE_SHA: ${{ needs.lock.outputs.candidate_sha }}
+      VERSION: ${{ inputs.version }}
+      MACOSX_DEPLOYMENT_TARGET: '14.0'
+      AE_MCP_APPLE_SIGNING_IDENTITY: ${{ secrets.AE_MCP_APPLE_SIGNING_IDENTITY }}
+      AE_MCP_APPLE_CERT_FINGERPRINT_SHA256: ${{ vars.AE_MCP_APPLE_CERT_FINGERPRINT_SHA256 }}
+      AE_MCP_APPLE_TEAM_ID: ${{ vars.AE_MCP_APPLE_TEAM_ID }}
+      AE_MCP_NOTARY_KEYCHAIN_PROFILE: ${{ vars.AE_MCP_NOTARY_KEYCHAIN_PROFILE }}
+      AE_MCP_RUNTIME_LICENSE_APPROVAL: ${{ github.workspace }}/packaging/runtime-license-approvals.json
+    steps:
+      - name: Checkout the exact candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ needs.lock.outputs.candidate_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Select exact bootstrap Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.17.0
+
+      - name: Select exact bootstrap uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          version: 0.11.7
+          checksum: 66e37d91f839e12481d7b932a1eccbfe732560f42c1cfb89faddfa2454534ba8
+          enable-cache: false
+
+      - name: Assert native arm64 runner and locked bootstrap tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(uname -m)" == 'arm64' ]]
+          [[ "$(node --version)" == 'v24.17.0' ]]
+          [[ "$(uv --version)" == 'uv 0.11.7 '* ]]
+          [[ "$(git rev-parse HEAD)" == "$CANDIDATE_SHA" ]]
+
+      - name: Download the preflighted Adobe ZXP signer
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          artifact-ids: ${{ needs.preflight-macos.outputs.tool_artifact_id }}
+          path: ${{ runner.temp }}/ae-mcp-tools
+          merge-multiple: true
+
+      - name: Reverify the preflighted Adobe ZXP signer
+        shell: bash
+        env:
+          AE_MCP_ZXP_SIGN_CMD_SHA256: bc773fae0b97416fc7a462e7dadcc00270428a9913480c9b78b5606ff1cfb095
+        run: |
+          set -euo pipefail
+          tool_dir="$RUNNER_TEMP/ae-mcp-tools"
+          tool_path="$tool_dir/ZXPSignCmd"
+          actual_sha256="$(/usr/bin/shasum -a 256 "$tool_path" | /usr/bin/awk '{print $1}')"
+          [[ "$actual_sha256" == "$AE_MCP_ZXP_SIGN_CMD_SHA256" ]]
+          /usr/bin/file "$tool_path" | /usr/bin/grep -F 'Mach-O 64-bit executable x86_64' >/dev/null
+          /usr/bin/xattr -d com.apple.quarantine "$tool_path" 2>/dev/null || true
+          chmod 700 "$tool_path"
+
+          if ! /usr/bin/arch -x86_64 /usr/bin/true; then
+            sudo /usr/sbin/softwareupdate --install-rosetta --agree-to-license
+          fi
+          /usr/bin/arch -x86_64 /usr/bin/true
+          set +e
+          help_output="$("$tool_path" -help 2>&1)"
+          help_status=$?
+          set -e
+          [[ "$help_status" == '3' ]]
+          /usr/bin/grep -F 'ZXPSignCmd -sign' <<< "$help_output" >/dev/null
+          {
+            printf 'AE_MCP_ZXP_SIGN_CMD=%s\n' "$tool_path"
+            printf 'AE_MCP_ZXP_SIGN_CMD_SHA256=%s\n' "$AE_MCP_ZXP_SIGN_CMD_SHA256"
+          } >> "$GITHUB_ENV"
+
+      - name: Build locked foundation inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/package/build-portable-runtime.mjs \
+            --platform macos-arm64 \
+            --out build/runtime/macos-arm64
+          node scripts/package/build-platform-helper.mjs \
+            --platform macos-arm64 \
+            --out build/helper/macos-arm64
+          bundled_node="$GITHUB_WORKSPACE/build/runtime/macos-arm64/node/bin/node"
+          [[ -x "$bundled_node" && "$("$bundled_node" --version)" =~ ^v24\. ]]
+          printf '%s\n' "$GITHUB_WORKSPACE/build/runtime/macos-arm64/node/bin" >> "$GITHUB_PATH"
+
+      - name: Stage and verify unsigned macOS bundle
+        shell: bash
+        env:
+          AE_MCP_SOURCE_COMMIT_SHA: ${{ needs.lock.outputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          runtime_node="$GITHUB_WORKSPACE/build/runtime/macos-arm64/node/bin/node"
+          [[ -x "$runtime_node" ]]
+          "$runtime_node" scripts/package/stage-platform-bundle.mjs \
+            --platform macos-arm64 \
+            --version "$VERSION" \
+            --out "$GITHUB_WORKSPACE/build/stage/macos-arm64"
+          "$runtime_node" scripts/package/verify-platform-bundle.mjs \
+            --root "$GITHUB_WORKSPACE/build/stage/macos-arm64" \
+            --platform macos-arm64 \
+            --version "$VERSION"
+
+      - name: Import ephemeral Developer ID and notarization credentials
+        shell: bash
+        env:
+          AE_MCP_APPLE_CERT_P12_BASE64: ${{ secrets.AE_MCP_APPLE_CERT_P12_BASE64 }}
+          AE_MCP_APPLE_CERT_PASSWORD: ${{ secrets.AE_MCP_APPLE_CERT_PASSWORD }}
+          AE_MCP_NOTARY_KEY_P8_BASE64: ${{ secrets.AE_MCP_NOTARY_KEY_P8_BASE64 }}
+          AE_MCP_NOTARY_KEY_ID: ${{ secrets.AE_MCP_NOTARY_KEY_ID }}
+          AE_MCP_NOTARY_ISSUER_ID: ${{ secrets.AE_MCP_NOTARY_ISSUER_ID }}
+          AE_MCP_ZXP_CERT_P12_BASE64: ${{ secrets.AE_MCP_ZXP_CERT_P12_BASE64 }}
+        run: |
+          set -euo pipefail
+          for name in \
+            AE_MCP_APPLE_CERT_P12_BASE64 \
+            AE_MCP_APPLE_CERT_PASSWORD \
+            AE_MCP_NOTARY_KEY_P8_BASE64 \
+            AE_MCP_NOTARY_KEY_ID \
+            AE_MCP_NOTARY_ISSUER_ID \
+            AE_MCP_ZXP_CERT_P12_BASE64 \
+            AE_MCP_APPLE_SIGNING_IDENTITY; do
+            [[ -n "${!name:-}" ]]
+          done
+          [[ "$AE_MCP_NOTARY_KEYCHAIN_PROFILE" == 'ae-mcp-notary-ci' ]]
+          [[ "$AE_MCP_ZXP_SIGN_CMD" = /* && -x "$AE_MCP_ZXP_SIGN_CMD" ]]
+          [[ "$AE_MCP_ZXP_SIGN_CMD_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          zxp_sign_cmd_sha256="$(/usr/bin/shasum -a 256 "$AE_MCP_ZXP_SIGN_CMD" | /usr/bin/awk '{print $1}')"
+          [[ "$zxp_sign_cmd_sha256" == "$AE_MCP_ZXP_SIGN_CMD_SHA256" ]]
+
+          signing_dir="$RUNNER_TEMP/ae-mcp-signing"
+          keychain="$signing_dir/release-signing.keychain-db"
+          zxp_cert_path="$signing_dir/zxp-certificate.p12"
+          keychain_password="$(openssl rand -hex 32)"
+          mkdir -p "$signing_dir"
+          chmod 700 "$signing_dir"
+          printf '%s' "$AE_MCP_APPLE_CERT_P12_BASE64" | /usr/bin/base64 -D \
+            > "$signing_dir/developer-id.p12"
+          printf '%s' "$AE_MCP_NOTARY_KEY_P8_BASE64" | /usr/bin/base64 -D \
+            > "$signing_dir/notary-key.p8"
+          printf '%s' "$AE_MCP_ZXP_CERT_P12_BASE64" | /usr/bin/base64 -D \
+            > "$zxp_cert_path"
+          chmod 600 "$signing_dir"/*
+
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 7200 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$signing_dir/developer-id.p12" -k "$keychain" \
+            -P "$AE_MCP_APPLE_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s \
+            -k "$keychain_password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain"
+          security find-identity -v -p codesigning "$keychain" \
+            | grep -F "$AE_MCP_APPLE_SIGNING_IDENTITY" >/dev/null
+          xcrun notarytool store-credentials "$AE_MCP_NOTARY_KEYCHAIN_PROFILE" \
+            --key "$signing_dir/notary-key.p8" \
+            --key-id "$AE_MCP_NOTARY_KEY_ID" \
+            --issuer "$AE_MCP_NOTARY_ISSUER_ID" \
+            --keychain "$keychain" >/dev/null
+          {
+            printf 'AE_MCP_NOTARY_KEYCHAIN_PATH=%s\n' "$keychain"
+            printf 'AE_MCP_ZXP_CERT_PATH=%s\n' "$zxp_cert_path"
+          } >> "$GITHUB_ENV"
+
+      - name: Run reviewed signing plan once and write canonical report
+        shell: bash
+        env:
+          AE_MCP_ZXP_CERT_FINGERPRINT_SHA256: ${{ vars.AE_MCP_ZXP_CERT_FINGERPRINT_SHA256 }}
+          AE_MCP_ZXP_CERT_PASSWORD: ${{ secrets.AE_MCP_ZXP_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          runtime_node="$GITHUB_WORKSPACE/build/runtime/macos-arm64/node/bin/node"
+          "$runtime_node" --input-type=module -e '
+            import path from "node:path";
+            import { runReleaseSigning } from "./scripts/release/run-signing-plan.mjs";
+            import { writeSigningReport } from "./scripts/release/signing-report.mjs";
+            const [stageRoot, signingRoot, outRoot, candidateSha, version] = process.argv.slice(1);
+            const report = await runReleaseSigning({
+              platform: "macos-arm64", candidateSha, version, stageRoot, signingRoot, outRoot,
+            });
+            await writeSigningReport(path.join(outRoot, "signing-report.json"), report);
+          ' \
+            "$GITHUB_WORKSPACE/build/stage/macos-arm64" \
+            "$RUNNER_TEMP/ae-mcp-signed/macos-arm64" \
+            "$GITHUB_WORKSPACE/build/release/macos-arm64" \
+            "$CANDIDATE_SHA" \
+            "$VERSION"
+
+      - name: Verify every final macOS native signature and packaged artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_node="$GITHUB_WORKSPACE/build/runtime/macos-arm64/node/bin/node"
+          "$runtime_node" scripts/package/verify-final-native-signatures.mjs \
+            --platform macos-arm64 \
+            --candidate-sha "$CANDIDATE_SHA" \
+            --signed-root "$RUNNER_TEMP/ae-mcp-signed/macos-arm64" \
+            --zxp "$GITHUB_WORKSPACE/build/release/macos-arm64/ae-mcp-panel-v0.9.1-macos-arm64.zxp" \
+            --dmg "$GITHUB_WORKSPACE/build/release/macos-arm64/ae-mcp-panel-v0.9.1-macos-arm64.dmg" \
+            --out "$GITHUB_WORKSPACE/build/release/macos-arm64/final-native-signature-evidence.json"
+
+      - name: Assemble macOS package and evidence uploads
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_root="$GITHUB_WORKSPACE/build/release/macos-arm64"
+          stage_root="$GITHUB_WORKSPACE/build/stage/macos-arm64"
+          signed_root="$RUNNER_TEMP/ae-mcp-signed/macos-arm64"
+          install_root="$GITHUB_WORKSPACE/build/upload/macos-install"
+          payload_root="$GITHUB_WORKSPACE/build/upload/macos-payload"
+          mkdir -p "$install_root/evidence" "$payload_root"
+          cp -p "$release_root/ae-mcp-panel-v0.9.1-macos-arm64.dmg" "$install_root/"
+          cp -p "$release_root/ae-mcp-panel-v0.9.1-macos-arm64.zxp" "$payload_root/"
+          cp -p "$stage_root/bundle-manifest.json" "$install_root/evidence/bundle-manifest.json"
+          cp -p "$signed_root/bundle-manifest.json" \
+            "$install_root/evidence/signed-bundle-manifest.json"
+          cp -p "$stage_root/runtime/macos-arm64/runtime-manifest.json" \
+            "$install_root/evidence/runtime-manifest.json"
+          cp -p "$stage_root/runtime/macos-arm64/sbom.spdx.json" \
+            "$install_root/evidence/sbom.spdx.json"
+          cp -p "$stage_root/runtime/macos-arm64/license-inventory.json" \
+            "$install_root/evidence/license-inventory.json"
+          cp -p "$release_root/signing-report.json" "$install_root/evidence/signing-report.json"
+          cp -p "$release_root/final-native-signature-evidence.json" \
+            "$install_root/evidence/final-native-signature-evidence.json"
+
+      - name: Destroy ephemeral macOS credentials before upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/ae-mcp-signing/release-signing.keychain-db"
+          security delete-keychain "$keychain"
+          rm -rf "$RUNNER_TEMP/ae-mcp-signing"
+          [[ ! -e "$keychain" && ! -e "$RUNNER_TEMP/ae-mcp-signing" ]]
+
+      - name: Upload named macOS DMG and evidence
+        id: upload_dmg
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ae-mcp-panel-v0.9.1-macos-arm64.dmg
+          path: build/upload/macos-install
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Upload named macOS ZXP payload
+        id: upload_zxp
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ae-mcp-panel-v0.9.1-macos-arm64.zxp
+          path: build/upload/macos-payload/ae-mcp-panel-v0.9.1-macos-arm64.zxp
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Remove ephemeral macOS credentials
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set +e
+          security delete-keychain "$RUNNER_TEMP/ae-mcp-signing/release-signing.keychain-db" >/dev/null 2>&1
+          rm -rf "$RUNNER_TEMP/ae-mcp-signing"
+
+  windows:
+    name: Sign Windows x64 RC
+    needs: [lock, preflight-windows]
+    if: ${{ needs.lock.result == 'success' && github.run_attempt == 1 }}
+    runs-on: windows-2025
+    environment: release-signing
+    timeout-minutes: 90
+    outputs:
+      zxp_artifact_id: ${{ steps.upload_zxp.outputs.artifact-id }}
+    env:
+      CANDIDATE_SHA: ${{ needs.lock.outputs.candidate_sha }}
+      VERSION: ${{ inputs.version }}
+      AE_MCP_WINDOWS_TIMESTAMP_URL: ${{ vars.AE_MCP_WINDOWS_TIMESTAMP_URL }}
+      AE_MCP_RUNTIME_LICENSE_APPROVAL: ${{ github.workspace }}/packaging/runtime-license-approvals.json
+    steps:
+      - name: Checkout the exact candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ needs.lock.outputs.candidate_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Select exact bootstrap Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.17.0
+
+      - name: Select exact bootstrap uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          version: 0.11.7
+          checksum: fe0c7815acf4fc45f8a5eff58ed3cf7ae2e15c3cf1dceadbd10c816ec1690cc1
+          enable-cache: false
+
+      - name: Assert native AMD64 runner and locked bootstrap tools
+        shell: pwsh
+        run: |
+          if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw 'windows-2025 runner must be AMD64' }
+          if ((node --version) -cne 'v24.17.0') { throw 'runner Node must be v24.17.0' }
+          if ((uv --version) -notmatch '^uv 0\.11\.7(?:\s|$)') { throw 'runner uv must be 0.11.7' }
+          if ((git rev-parse HEAD) -ne $env:CANDIDATE_SHA) { throw 'candidate checkout mismatch' }
+
+      - name: Download the preflighted Adobe ZXP signer
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          artifact-ids: ${{ needs.preflight-windows.outputs.tool_artifact_id }}
+          path: ${{ runner.temp }}\ae-mcp-tools
+          merge-multiple: true
+
+      - name: Reverify the preflighted Adobe ZXP signer
+        shell: pwsh
+        env:
+          AE_MCP_ZXP_SIGN_CMD_SHA256: ffc2223167225ce61d024eb463fc5ad1a1be16133f99ef334a646f7311916c98
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $toolDirectory = Join-Path $env:RUNNER_TEMP 'ae-mcp-tools'
+          $toolPath = Join-Path $toolDirectory 'ZXPSignCmd.exe'
+          $actualSha256 = (Get-FileHash -LiteralPath $toolPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $env:AE_MCP_ZXP_SIGN_CMD_SHA256) {
+            throw 'Adobe ZXPSignCmd SHA-256 mismatch'
+          }
+          $helpOutput = (& $toolPath -help 2>&1 | Out-String)
+          if ($LASTEXITCODE -ne 3 -or $helpOutput -notmatch 'ZXPSignCmd -sign') {
+            throw 'Adobe ZXPSignCmd executable preflight failed'
+          }
+          "AE_MCP_ZXP_SIGN_CMD=$toolPath" >> $env:GITHUB_ENV
+          "AE_MCP_ZXP_SIGN_CMD_SHA256=$env:AE_MCP_ZXP_SIGN_CMD_SHA256" >> $env:GITHUB_ENV
+
+      - name: Build locked foundation inputs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node scripts/package/build-portable-runtime.mjs `
+            --platform windows-x64 `
+            --out build/runtime/windows-x64
+          node scripts/package/build-platform-helper.mjs `
+            --platform windows-x64 `
+            --out build/helper/windows-x64
+          $env:AE_MCP_WINDOWS_ADDON_PATH = Join-Path $env:GITHUB_WORKSPACE 'build\helper\windows-x64\lib\ae-mcp-platform-helper-transport.node'
+          $env:AE_MCP_WINDOWS_HELPER_PATH = Join-Path $env:GITHUB_WORKSPACE 'build\helper\windows-x64\bin\ae-mcp-platform-helper.exe'
+          node --test native/platform-helper/windows/Tests/platform-helper-addon-live.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Windows Platform Helper live identity test failed' }
+          $bundledNode = Join-Path $env:GITHUB_WORKSPACE 'build\runtime\windows-x64\node\node.exe'
+          if ((& $bundledNode --version) -notmatch '^v24\.') { throw 'bundled Node must be v24' }
+          (Join-Path $env:GITHUB_WORKSPACE 'build\runtime\windows-x64\node') >> $env:GITHUB_PATH
+
+      - name: Stage and verify unsigned Windows bundle
+        shell: pwsh
+        env:
+          AE_MCP_SOURCE_COMMIT_SHA: ${{ needs.lock.outputs.candidate_sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $runtimeNode = Join-Path $env:GITHUB_WORKSPACE 'build\runtime\windows-x64\node\node.exe'
+          if (-not (Test-Path -LiteralPath $runtimeNode -PathType Leaf)) { throw 'bundled Node is missing' }
+          & $runtimeNode scripts/package/stage-platform-bundle.mjs `
+            --platform windows-x64 `
+            --version $env:VERSION `
+            --out (Join-Path $env:GITHUB_WORKSPACE 'build\stage\windows-x64')
+          if ($LASTEXITCODE -ne 0) { throw 'Windows bundle staging failed' }
+          & $runtimeNode scripts/package/verify-platform-bundle.mjs `
+            --root (Join-Path $env:GITHUB_WORKSPACE 'build\stage\windows-x64') `
+            --platform windows-x64 `
+            --version $env:VERSION
+          if ($LASTEXITCODE -ne 0) { throw 'Windows bundle verification failed' }
+
+      - name: Import ephemeral Authenticode and ZXP credentials
+        shell: pwsh
+        env:
+          AE_MCP_WINDOWS_CERT_PFX_BASE64: ${{ secrets.AE_MCP_WINDOWS_CERT_PFX_BASE64 }}
+          AE_MCP_WINDOWS_CERT_PASSWORD: ${{ secrets.AE_MCP_WINDOWS_CERT_PASSWORD }}
+          AE_MCP_WINDOWS_CERT_SHA1: ${{ secrets.AE_MCP_WINDOWS_CERT_SHA1 }}
+          AE_MCP_ZXP_CERT_P12_BASE64: ${{ secrets.AE_MCP_ZXP_CERT_P12_BASE64 }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($value in @(
+            $env:AE_MCP_WINDOWS_CERT_PFX_BASE64,
+            $env:AE_MCP_WINDOWS_CERT_PASSWORD,
+            $env:AE_MCP_WINDOWS_CERT_SHA1,
+            $env:AE_MCP_ZXP_CERT_P12_BASE64,
+            $env:AE_MCP_WINDOWS_TIMESTAMP_URL,
+            $env:AE_MCP_ZXP_SIGN_CMD,
+            $env:AE_MCP_ZXP_SIGN_CMD_SHA256
+          )) {
+            if ([string]::IsNullOrWhiteSpace($value)) { throw 'required signing input is missing' }
+          }
+          if (-not [IO.Path]::IsPathFullyQualified($env:AE_MCP_ZXP_SIGN_CMD) -or
+              -not (Test-Path -LiteralPath $env:AE_MCP_ZXP_SIGN_CMD -PathType Leaf)) {
+            throw 'AE_MCP_ZXP_SIGN_CMD must be an existing absolute path'
+          }
+          if ($env:AE_MCP_ZXP_SIGN_CMD_SHA256 -notmatch '^[a-f0-9]{64}$') {
+            throw 'reviewed ZXPSignCmd SHA-256 is invalid'
+          }
+          $zxpSignCmdSha256 = (Get-FileHash -LiteralPath $env:AE_MCP_ZXP_SIGN_CMD -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($zxpSignCmdSha256 -ne $env:AE_MCP_ZXP_SIGN_CMD_SHA256) {
+            throw 'ZXPSignCmd SHA-256 mismatch'
+          }
+
+          $signingDir = Join-Path $env:RUNNER_TEMP 'ae-mcp-signing'
+          [IO.Directory]::CreateDirectory($signingDir) | Out-Null
+          $authenticodePath = Join-Path $signingDir 'authenticode.pfx'
+          $zxpCertificatePath = Join-Path $signingDir 'zxp-certificate.p12'
+          [IO.File]::WriteAllBytes(
+            $authenticodePath,
+            [Convert]::FromBase64String($env:AE_MCP_WINDOWS_CERT_PFX_BASE64)
+          )
+          [IO.File]::WriteAllBytes(
+            $zxpCertificatePath,
+            [Convert]::FromBase64String($env:AE_MCP_ZXP_CERT_P12_BASE64)
+          )
+          $password = ConvertTo-SecureString $env:AE_MCP_WINDOWS_CERT_PASSWORD -AsPlainText -Force
+          Get-ChildItem -Path Cert:\CurrentUser\My | ForEach-Object {
+            $_.Thumbprint.ToUpperInvariant()
+          } | Set-Content -LiteralPath (Join-Path $signingDir 'preexisting-certificates.txt') -Encoding ascii
+          $importedCertificates = @(Import-PfxCertificate `
+            -FilePath $authenticodePath `
+            -CertStoreLocation Cert:\CurrentUser\My `
+            -Password $password `
+            -Exportable:$false)
+          @($importedCertificates | ForEach-Object {
+            $_.Thumbprint.ToUpperInvariant()
+          } | Sort-Object -Unique) | Set-Content `
+            -LiteralPath (Join-Path $signingDir 'imported-certificates.txt') `
+            -Encoding ascii
+          $privateKeyCertificates = @($importedCertificates | Where-Object { $_.HasPrivateKey })
+          if ($privateKeyCertificates.Count -ne 1) {
+            throw 'Authenticode certificate import failed'
+          }
+          $certificate = $privateKeyCertificates[0]
+          $expectedThumbprint = $env:AE_MCP_WINDOWS_CERT_SHA1.ToUpperInvariant()
+          if ($expectedThumbprint -notmatch '^[0-9A-F]{40}$' -or
+              $certificate.Thumbprint.ToUpperInvariant() -ne $expectedThumbprint) {
+            throw 'Authenticode certificate SHA-1 does not match the protected identity'
+          }
+          "AE_MCP_WINDOWS_SIGNING_CERT_SHA1=$($certificate.Thumbprint.ToUpperInvariant())" `
+            >> $env:GITHUB_ENV
+          "AE_MCP_ZXP_CERT_PATH=$zxpCertificatePath" >> $env:GITHUB_ENV
+
+          $signTool = Get-ChildItem `
+            -Path "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" `
+            -File | Sort-Object FullName -Descending | Select-Object -First 1
+          if ($null -eq $signTool) { throw '64-bit signtool.exe is unavailable' }
+          "AE_MCP_WINDOWS_SIGNTOOL_PATH=$($signTool.FullName)" >> $env:GITHUB_ENV
+
+      - name: Run reviewed signing plan once and write canonical report
+        shell: pwsh
+        env:
+          AE_MCP_ZXP_CERT_FINGERPRINT_SHA256: ${{ vars.AE_MCP_ZXP_CERT_FINGERPRINT_SHA256 }}
+          AE_MCP_ZXP_CERT_PASSWORD: ${{ secrets.AE_MCP_ZXP_CERT_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $runtimeNode = Join-Path $env:GITHUB_WORKSPACE 'build\runtime\windows-x64\node\node.exe'
+          $script = @'
+          import path from "node:path";
+          import { runReleaseSigning } from "./scripts/release/run-signing-plan.mjs";
+          import { writeSigningReport } from "./scripts/release/signing-report.mjs";
+          const [stageRoot, signingRoot, outRoot, candidateSha, version] = process.argv.slice(1);
+          const report = await runReleaseSigning({
+            platform: "windows-x64", candidateSha, version, stageRoot, signingRoot, outRoot,
+          });
+          await writeSigningReport(path.join(outRoot, "signing-report.json"), report);
+          '@
+          & $runtimeNode --input-type=module -e $script `
+            (Join-Path $env:GITHUB_WORKSPACE 'build\stage\windows-x64') `
+            (Join-Path $env:RUNNER_TEMP 'ae-mcp-signed\windows-x64') `
+            (Join-Path $env:GITHUB_WORKSPACE 'build\release\windows-x64') `
+            $env:CANDIDATE_SHA `
+            $env:VERSION
+          if ($LASTEXITCODE -ne 0) { throw 'Windows release signing failed' }
+
+      - name: Verify every final Windows native signature and packaged artifact
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $runtimeNode = Join-Path $env:GITHUB_WORKSPACE 'build\runtime\windows-x64\node\node.exe'
+          & $runtimeNode scripts/package/verify-final-native-signatures.mjs `
+            --platform windows-x64 `
+            --candidate-sha $env:CANDIDATE_SHA `
+            --signed-root (Join-Path $env:RUNNER_TEMP 'ae-mcp-signed\windows-x64') `
+            --zxp (Join-Path $env:GITHUB_WORKSPACE 'build\release\windows-x64\ae-mcp-panel-v0.9.1-windows-x64.zxp') `
+            --out (Join-Path $env:GITHUB_WORKSPACE 'build\release\windows-x64\final-native-signature-evidence.json')
+          if ($LASTEXITCODE -ne 0) { throw 'final Windows native signature verification failed' }
+
+      - name: Assemble Windows package and evidence upload
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $releaseRoot = Join-Path $env:GITHUB_WORKSPACE 'build\release\windows-x64'
+          $stageRoot = Join-Path $env:GITHUB_WORKSPACE 'build\stage\windows-x64'
+          $signedRoot = Join-Path $env:RUNNER_TEMP 'ae-mcp-signed\windows-x64'
+          $installRoot = Join-Path $env:GITHUB_WORKSPACE 'build\upload\windows-install'
+          $evidenceRoot = Join-Path $installRoot 'evidence'
+          [IO.Directory]::CreateDirectory($evidenceRoot) | Out-Null
+          Copy-Item -LiteralPath (Join-Path $releaseRoot 'ae-mcp-panel-v0.9.1-windows-x64.zxp') -Destination $installRoot
+          Copy-Item -LiteralPath (Join-Path $stageRoot 'bundle-manifest.json') -Destination (Join-Path $evidenceRoot 'bundle-manifest.json')
+          Copy-Item -LiteralPath (Join-Path $signedRoot 'bundle-manifest.json') -Destination (Join-Path $evidenceRoot 'signed-bundle-manifest.json')
+          Copy-Item -LiteralPath (Join-Path $stageRoot 'runtime\windows-x64\runtime-manifest.json') -Destination (Join-Path $evidenceRoot 'runtime-manifest.json')
+          Copy-Item -LiteralPath (Join-Path $stageRoot 'runtime\windows-x64\sbom.spdx.json') -Destination (Join-Path $evidenceRoot 'sbom.spdx.json')
+          Copy-Item -LiteralPath (Join-Path $stageRoot 'runtime\windows-x64\license-inventory.json') -Destination (Join-Path $evidenceRoot 'license-inventory.json')
+          Copy-Item -LiteralPath (Join-Path $releaseRoot 'signing-report.json') -Destination (Join-Path $evidenceRoot 'signing-report.json')
+          Copy-Item -LiteralPath (Join-Path $releaseRoot 'final-native-signature-evidence.json') -Destination (Join-Path $evidenceRoot 'final-native-signature-evidence.json')
+
+      - name: Destroy ephemeral Windows credentials before upload
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $certificateList = Join-Path $env:RUNNER_TEMP 'ae-mcp-signing\imported-certificates.txt'
+          if (-not (Test-Path -LiteralPath $certificateList -PathType Leaf)) {
+            throw 'Windows imported certificate inventory is unavailable for cleanup'
+          }
+          foreach ($thumbprint in @(Get-Content -LiteralPath $certificateList | Sort-Object -Unique)) {
+            if ($thumbprint -notmatch '^[0-9A-F]{40}$') { throw 'invalid imported certificate identity' }
+            $certificatePath = "Cert:\CurrentUser\My\$thumbprint"
+            if (Test-Path -LiteralPath $certificatePath) {
+              Remove-Item -LiteralPath $certificatePath -DeleteKey -Force
+            }
+            if (Test-Path -LiteralPath $certificatePath) {
+              throw 'Windows signing certificate cleanup failed'
+            }
+          }
+          $signingDirectory = Join-Path $env:RUNNER_TEMP 'ae-mcp-signing'
+          Remove-Item -LiteralPath $signingDirectory -Recurse -Force
+          if (Test-Path -LiteralPath $signingDirectory) {
+            throw 'Windows signing credential directory cleanup failed'
+          }
+
+      - name: Upload named Windows ZXP and evidence
+        id: upload_zxp
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ae-mcp-panel-v0.9.1-windows-x64.zxp
+          path: build/upload/windows-install
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Remove ephemeral Windows credentials
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          $signingDirectory = Join-Path $env:RUNNER_TEMP 'ae-mcp-signing'
+          $preexistingPath = Join-Path $signingDirectory 'preexisting-certificates.txt'
+          $preexisting = @{}
+          if (Test-Path -LiteralPath $preexistingPath -PathType Leaf) {
+            foreach ($thumbprint in @(Get-Content -LiteralPath $preexistingPath)) {
+              if ($thumbprint -match '^[0-9A-F]{40}$') { $preexisting[$thumbprint] = $true }
+            }
+          }
+          foreach ($certificate in @(Get-ChildItem -Path Cert:\CurrentUser\My -ErrorAction SilentlyContinue)) {
+            $thumbprint = $certificate.Thumbprint.ToUpperInvariant()
+            if (-not $preexisting.ContainsKey($thumbprint)) {
+              Remove-Item -LiteralPath "Cert:\CurrentUser\My\$thumbprint" -DeleteKey -Force -ErrorAction SilentlyContinue
+            }
+          }
+          Remove-Item -LiteralPath $signingDirectory -Recurse -Force -ErrorAction SilentlyContinue
+
+  manifest:
+    name: Bind signed artifacts and evidence
+    needs: [guard, lock, macos, windows]
+    if: ${{ github.run_attempt == 1 && needs.guard.result == 'success' && needs.lock.result == 'success' && needs.macos.result == 'success' && needs.windows.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      artifact_id: ${{ steps.upload_manifest.outputs.artifact-id }}
+    steps:
+      - name: Checkout candidate manifest implementation
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ needs.lock.outputs.candidate_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Select exact manifest Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.17.0
+
+      - name: Download macOS DMG and evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: ae-mcp-panel-v0.9.1-macos-arm64.dmg
+          path: build/release-download/macos-install
+
+      - name: Download macOS ZXP payload
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: ae-mcp-panel-v0.9.1-macos-arm64.zxp
+          path: build/release-download/macos-payload
+
+      - name: Download Windows ZXP and evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: ae-mcp-panel-v0.9.1-windows-x64.zxp
+          path: build/release-download/windows-install
+
+      - name: Build and reverify canonical artifact manifest
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ needs.lock.outputs.candidate_sha }}
+          MAC_DMG_ARTIFACT_ID: ${{ needs.macos.outputs.dmg_artifact_id }}
+          MAC_ZXP_ARTIFACT_ID: ${{ needs.macos.outputs.zxp_artifact_id }}
+          WINDOWS_ZXP_ARTIFACT_ID: ${{ needs.windows.outputs.zxp_artifact_id }}
+          PRODUCT_ACCEPTANCE_EVIDENCE_BASE64: ${{ needs.guard.outputs.product_evidence_base64 }}
+          PRODUCT_ACCEPTANCE_EVIDENCE_SHA256: ${{ needs.guard.outputs.product_evidence_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$(node --version)" == 'v24.17.0' ]]
+          root="$GITHUB_WORKSPACE/build/artifact-root"
+          mkdir -p "$root"
+          cp -p build/release-download/macos-install/ae-mcp-panel-v0.9.1-macos-arm64.dmg "$root/"
+          cp -p build/release-download/macos-payload/ae-mcp-panel-v0.9.1-macos-arm64.zxp "$root/"
+          cp -p build/release-download/windows-install/ae-mcp-panel-v0.9.1-windows-x64.zxp "$root/"
+          printf '%s' "$PRODUCT_ACCEPTANCE_EVIDENCE_BASE64" | base64 -d \
+            > build/release-download/product-acceptance-evidence.json
+          [[ "$(sha256sum build/release-download/product-acceptance-evidence.json | awk '{print $1}')" \
+            == "$PRODUCT_ACCEPTANCE_EVIDENCE_SHA256" ]]
+          node --input-type=module -e '
+            import { writeFile } from "node:fs/promises";
+            import path from "node:path";
+            import {
+              buildArtifactManifest, serializeArtifactManifest, verifyArtifactManifest,
+            } from "./scripts/release/artifact-manifest.mjs";
+            const root = process.argv[1];
+            const download = process.argv[2];
+            const manifest = await buildArtifactManifest({
+              version: "0.9.1",
+              candidateSha: process.env.CANDIDATE_SHA,
+              workflowRunId: process.env.GITHUB_RUN_ID,
+              productAcceptanceEvidencePath: path.join(download, "product-acceptance-evidence.json"),
+              artifacts: [
+                { name: "ae-mcp-panel-v0.9.1-macos-arm64.dmg", path: path.join(root, "ae-mcp-panel-v0.9.1-macos-arm64.dmg"), platform: "macos-arm64", artifactId: process.env.MAC_DMG_ARTIFACT_ID, role: "install" },
+                { name: "ae-mcp-panel-v0.9.1-macos-arm64.zxp", path: path.join(root, "ae-mcp-panel-v0.9.1-macos-arm64.zxp"), platform: "macos-arm64", artifactId: process.env.MAC_ZXP_ARTIFACT_ID, role: "payload" },
+                { name: "ae-mcp-panel-v0.9.1-windows-x64.zxp", path: path.join(root, "ae-mcp-panel-v0.9.1-windows-x64.zxp"), platform: "windows-x64", artifactId: process.env.WINDOWS_ZXP_ARTIFACT_ID, role: "install" },
+              ],
+              evidence: [
+                { platform: "macos-arm64", bundleManifestPath: path.join(download, "macos-install/evidence/bundle-manifest.json"), signedBundleManifestPath: path.join(download, "macos-install/evidence/signed-bundle-manifest.json"), runtimeInventoryPath: path.join(download, "macos-install/evidence/runtime-manifest.json"), sbomPath: path.join(download, "macos-install/evidence/sbom.spdx.json"), licensesPath: path.join(download, "macos-install/evidence/license-inventory.json"), signingReportPath: path.join(download, "macos-install/evidence/signing-report.json"), nativeSignatureEvidencePath: path.join(download, "macos-install/evidence/final-native-signature-evidence.json") },
+                { platform: "windows-x64", bundleManifestPath: path.join(download, "windows-install/evidence/bundle-manifest.json"), signedBundleManifestPath: path.join(download, "windows-install/evidence/signed-bundle-manifest.json"), runtimeInventoryPath: path.join(download, "windows-install/evidence/runtime-manifest.json"), sbomPath: path.join(download, "windows-install/evidence/sbom.spdx.json"), licensesPath: path.join(download, "windows-install/evidence/license-inventory.json"), signingReportPath: path.join(download, "windows-install/evidence/signing-report.json"), nativeSignatureEvidencePath: path.join(download, "windows-install/evidence/final-native-signature-evidence.json") },
+              ],
+            });
+            const errors = await verifyArtifactManifest(manifest, root);
+            if (errors.length) throw new Error(`artifact manifest verification failed: ${errors.join(", ")}`);
+            const manifestBytes = serializeArtifactManifest(manifest);
+            await writeFile(path.join(root, "artifact-manifest-v0.9.1.json"), manifestBytes, { flag: "wx" });
+          ' "$root" "$GITHUB_WORKSPACE/build/release-download"
+
+      - name: Upload immutable artifact manifest
+        id: upload_manifest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: artifact-manifest-v0.9.1.json
+          path: build/artifact-root/artifact-manifest-v0.9.1.json
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Record immutable run and artifact IDs
+        shell: bash
+        env:
+          MAC_DMG_ARTIFACT_ID: ${{ needs.macos.outputs.dmg_artifact_id }}
+          MAC_ZXP_ARTIFACT_ID: ${{ needs.macos.outputs.zxp_artifact_id }}
+          WINDOWS_ZXP_ARTIFACT_ID: ${{ needs.windows.outputs.zxp_artifact_id }}
+          MANIFEST_ARTIFACT_ID: ${{ steps.upload_manifest.outputs.artifact-id }}
+        run: |
+          {
+            printf '### Immutable signed RC\n\n'
+            printf -- '- workflow run ID: `%s`\n' "$GITHUB_RUN_ID"
+            printf -- '- macOS DMG artifact ID: `%s`\n' "$MAC_DMG_ARTIFACT_ID"
+            printf -- '- macOS ZXP artifact ID: `%s`\n' "$MAC_ZXP_ARTIFACT_ID"
+            printf -- '- Windows ZXP artifact ID: `%s`\n' "$WINDOWS_ZXP_ARTIFACT_ID"
+            printf -- '- manifest artifact ID: `%s`\n' "$MANIFEST_ARTIFACT_ID"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  finalize-lock:
+    name: Finalize irreversible build lock
+    needs: [lock, macos, windows, manifest]
+    if: ${{ always() && needs.lock.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout candidate verifier
+        if: ${{ needs.macos.result == 'success' && needs.windows.result == 'success' && needs.manifest.result == 'success' }}
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ needs.lock.outputs.candidate_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Select exact final verifier Node
+        if: ${{ needs.macos.result == 'success' && needs.windows.result == 'success' && needs.manifest.result == 'success' }}
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.17.0
+
+      - name: Download macOS DMG and evidence
+        if: ${{ needs.macos.result == 'success' && needs.windows.result == 'success' && needs.manifest.result == 'success' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: ae-mcp-panel-v0.9.1-macos-arm64.dmg
+          path: build/finalize/macos-install
+
+      - name: Download macOS ZXP payload
+        if: ${{ needs.macos.result == 'success' && needs.windows.result == 'success' && needs.manifest.result == 'success' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: ae-mcp-panel-v0.9.1-macos-arm64.zxp
+          path: build/finalize/macos-payload
+
+      - name: Download Windows ZXP and evidence
+        if: ${{ needs.macos.result == 'success' && needs.windows.result == 'success' && needs.manifest.result == 'success' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: ae-mcp-panel-v0.9.1-windows-x64.zxp
+          path: build/finalize/windows-install
+
+      - name: Download artifact manifest
+        if: ${{ needs.macos.result == 'success' && needs.windows.result == 'success' && needs.manifest.result == 'success' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: artifact-manifest-v0.9.1.json
+          path: build/finalize/manifest
+
+      - name: Reverify final downloaded bytes
+        id: reverify
+        if: ${{ needs.macos.result == 'success' && needs.windows.result == 'success' && needs.manifest.result == 'success' }}
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ needs.lock.outputs.candidate_sha }}
+          MAC_DMG_ARTIFACT_ID: ${{ needs.macos.outputs.dmg_artifact_id }}
+          MAC_ZXP_ARTIFACT_ID: ${{ needs.macos.outputs.zxp_artifact_id }}
+          WINDOWS_ZXP_ARTIFACT_ID: ${{ needs.windows.outputs.zxp_artifact_id }}
+        run: |
+          set -euo pipefail
+          [[ "$(node --version)" == 'v24.17.0' ]]
+          root="$GITHUB_WORKSPACE/build/finalize/root"
+          mkdir -p "$root"
+          cp -p build/finalize/macos-install/ae-mcp-panel-v0.9.1-macos-arm64.dmg "$root/"
+          cp -p build/finalize/macos-payload/ae-mcp-panel-v0.9.1-macos-arm64.zxp "$root/"
+          cp -p build/finalize/windows-install/ae-mcp-panel-v0.9.1-windows-x64.zxp "$root/"
+          node --input-type=module -e '
+            import { readFile } from "node:fs/promises";
+            import { verifyArtifactManifest } from "./scripts/release/artifact-manifest.mjs";
+            const [manifestPath, root] = process.argv.slice(1);
+            const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+            if (manifest.candidateSha !== process.env.CANDIDATE_SHA
+                || manifest.version !== "0.9.1"
+                || manifest.workflowRunId !== process.env.GITHUB_RUN_ID) {
+              throw new Error("artifact manifest identity changed");
+            }
+            const expected = [
+              ["ae-mcp-panel-v0.9.1-macos-arm64.dmg", "macos-arm64", "install", process.env.MAC_DMG_ARTIFACT_ID],
+              ["ae-mcp-panel-v0.9.1-macos-arm64.zxp", "macos-arm64", "payload", process.env.MAC_ZXP_ARTIFACT_ID],
+              ["ae-mcp-panel-v0.9.1-windows-x64.zxp", "windows-x64", "install", process.env.WINDOWS_ZXP_ARTIFACT_ID],
+            ];
+            for (const [name, platform, role, artifactId] of expected) {
+              const matches = manifest.artifacts.filter((item) => item.name === name
+                && item.platform === platform && item.role === role
+                && item.artifactId === artifactId);
+              if (matches.length !== 1) throw new Error(`artifact identity mismatch: ${name}`);
+            }
+            const errors = await verifyArtifactManifest(manifest, root);
+            if (errors.length) throw new Error(`final artifact verification failed: ${errors.join(", ")}`);
+          ' \
+            "$GITHUB_WORKSPACE/build/finalize/manifest/artifact-manifest-v0.9.1.json" \
+            "$root"
+
+      - name: Complete permanent build lock
+        if: ${{ always() }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          CHECK_RUN_ID: ${{ needs.lock.outputs.check_run_id }}
+          CANDIDATE_SHA: ${{ needs.lock.outputs.candidate_sha }}
+          PLATFORM_JOBS_OK: ${{ github.run_attempt == 1 && needs.macos.result == 'success' && needs.windows.result == 'success' && needs.manifest.result == 'success' }}
+          REVERIFY_OUTCOME: ${{ steps.reverify.outcome }}
+        with:
+          script: |
+            const success = process.env.PLATFORM_JOBS_OK === 'true'
+              && process.env.REVERIFY_OUTCOME === 'success';
+            await github.rest.checks.update({
+              ...context.repo,
+              check_run_id: Number(process.env.CHECK_RUN_ID),
+              status: 'completed',
+              conclusion: success ? 'success' : 'failure',
+              completed_at: new Date().toISOString(),
+              output: {
+                title: success ? 'Signed RC build complete' : 'Signed RC build permanently rejected',
+                summary: `Immutable candidate ${process.env.CANDIDATE_SHA}; final byte verification: ${success ? 'PASS' : 'FAIL'}`,
+              },
+            });
+            if (!success) core.setFailed('signed RC build did not complete and cannot be retried for this SHA');

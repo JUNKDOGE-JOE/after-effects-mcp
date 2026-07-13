@@ -1,12 +1,12 @@
-// Pure descriptor selection (spec A2/D): given the EFFECTIVE backend from
-// pickBackend (not the raw pref -- backendPref never equals 'byok') and the
-// per-channel provider/model facts, pick the composer descriptor. Kept as a
-// lib pure function so the branch logic is unit-testable outside React.
+// Select the composer descriptor from the effective backend and per-channel
+// provider/model facts. backendPref never equals 'byok', so callers must not
+// pass the raw preference here. Kept pure so it can be tested outside React.
 import {
   byokStaticDescriptor,
   mergeByokModels,
   codexStaticDescriptor,
   codexDescriptorFromModels,
+  mergeCodexOfficialLoginModels,
   descriptorWithCustomModel,
   descriptorFromProbedModels,
   zcodeDescriptorFromModels,
@@ -19,13 +19,22 @@ export function isClaudeApiBackend(effectiveBackend) {
   return effectiveBackend === 'claude-api' || effectiveBackend === 'byok';
 }
 
+function providerModels(provider) {
+  if (provider?.modelList?.status === 'supported' && Array.isArray(provider.modelList.models)) {
+    return provider.modelList.models;
+  }
+  return Array.isArray(provider?.probedModels) ? provider.probedModels : [];
+}
+
 export function selectDescriptor({
   effectiveBackend = 'none',
+  effectiveChannel = null,
   backendPref = 'subscription',
   baseDescriptor,
   customModel = '',
   claudeApiProvider = null,
   codexCustomProvider = null,
+  customProviderCredentialResolverReady = false,
   byokApiModels = null,
   codexCachedModels = null,
   zcodeSessionModels = null,
@@ -34,8 +43,9 @@ export function selectDescriptor({
   const claudeApi = isClaudeApiBackend(effectiveBackend);
   const customId = (claudeApi || backendPref === 'codex') ? String(customModel || '').trim() : '';
   if (claudeApi) {
-    if (claudeApiProvider && claudeApiProvider.probedModels && claudeApiProvider.probedModels.length) {
-      return descriptorWithCustomModel(descriptorFromProbedModels(byokStaticDescriptor(), claudeApiProvider.probedModels), customId);
+    const models = providerModels(claudeApiProvider);
+    if (models.length) {
+      return descriptorWithCustomModel(descriptorFromProbedModels(byokStaticDescriptor(), models), customId);
     }
     if (byokApiModels) {
       return descriptorWithCustomModel(mergeByokModels(byokStaticDescriptor(), byokApiModels), customId);
@@ -43,13 +53,23 @@ export function selectDescriptor({
     return baseDescriptor;
   }
   if (backendPref === 'codex') {
-    if (codexCustomProvider && codexCustomProvider.probedModels && codexCustomProvider.probedModels.length) {
-      return descriptorWithCustomModel(descriptorFromProbedModels(codexStaticDescriptor(), codexCustomProvider.probedModels), customId);
+    const customProviderFactsAllowed = customProviderCredentialResolverReady === true;
+    const models = providerModels(codexCustomProvider);
+    if (customProviderFactsAllowed
+        && codexCustomProvider
+        && models.length) {
+      return descriptorWithCustomModel(descriptorFromProbedModels(codexStaticDescriptor(), models), customId);
     }
     if (codexCachedModels) {
-      return descriptorWithCustomModel(codexDescriptorFromModels({ models: codexCachedModels }), customId);
+      const cachedDescriptor = codexDescriptorFromModels({ models: codexCachedModels });
+      const channelDescriptor = effectiveChannel === 'cli'
+        ? mergeCodexOfficialLoginModels(cachedDescriptor)
+        : cachedDescriptor;
+      return descriptorWithCustomModel(channelDescriptor, customId);
     }
-    return baseDescriptor;
+    return effectiveChannel === 'cli'
+      ? descriptorWithCustomModel(mergeCodexOfficialLoginModels(baseDescriptor), customId)
+      : baseDescriptor;
   }
   // ZCode: the live model list only becomes known after session/create
   // returns settings.model.available (see zcodeBackend.js's
@@ -82,13 +102,16 @@ export function selectDescriptor({
   return baseDescriptor;
 }
 
-// Bug 2: a stale localStorage model id (e.g. a pre-migration hardcoded
-// 'glm-5.2') can silently outrank a freshly-computed descriptor's
+// A persisted model id can outlive its provider catalog and otherwise outrank
+// a freshly computed descriptor's
 // defaultModelId when the stored id isn't among the descriptor's current
 // models. Reset to defaultModelId in that case. Custom model ids (isCustom)
 // are exempt: they are intentionally NOT part of the curated list.
-export function reconcileModelPref(model, descriptor, { isCustom = false } = {}) {
-  if (isCustom) return model;
+export function reconcileModelPref(model, descriptor, {
+  isCustom = false,
+  providerFactsPending = false,
+} = {}) {
+  if (isCustom || providerFactsPending) return model;
   const models = (descriptor && Array.isArray(descriptor.models)) ? descriptor.models : [];
   if (!models.length) return model;
   const trimmed = String(model || '').trim();

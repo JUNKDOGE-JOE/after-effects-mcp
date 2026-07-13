@@ -26,6 +26,16 @@ def test_no_verb_is_both_readonly_and_destructive():
         assert not (ann.readOnlyHint and ann.destructiveHint), verb
 
 
+def test_tool_library_annotations_express_worst_path_risk():
+    for verb in ("ae.toolIndex", "ae.toolSearch", "ae.toolInspect"):
+        assert VERB_ANNOTATIONS[verb].readOnlyHint is True
+        assert VERB_ANNOTATIONS[verb].destructiveHint is False
+    assert VERB_ANNOTATIONS["ae.toolUse"].destructiveHint is True
+    assert VERB_ANNOTATIONS["ae.toolDelete"].destructiveHint is True
+    assert VERB_ANNOTATIONS["ae.toolExport"].destructiveHint is True
+
+
+
 @pytest.mark.asyncio
 async def test_list_tools_carries_annotations(monkeypatch):
     from ae_mcp import server as srv

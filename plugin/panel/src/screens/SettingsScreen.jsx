@@ -14,6 +14,7 @@ import { copyText } from '../lib/clipboard';
 import { zcodeDefaultModelLocked as shouldLockZcodeDefaultModel, zcodeManagedModelLabel } from '../lib/settingsState';
 import { Icon } from '../components/core/Icon';
 import { loadSectionState, saveSectionState, toggleSection } from '../lib/settingsSections';
+import { createPlatformAdapter } from '../cep/platform/index';
 
 const REPO_URL = 'https://github.com/JUNKDOGE-JOE/after-effects-mcp';
 const DOCS_URL = 'https://github.com/JUNKDOGE-JOE/after-effects-mcp#readme';
@@ -47,9 +48,17 @@ const S = {
     recheck: '重新检测',
     providerNone: '（未选择 provider）',
     importClaudeSettings: '从 ~/.claude/settings.json 导入',
-    claude3pNote: 'Claude-3p 桌面版的凭据无法自动读取；请在 Provider 管理里手动填写一次 Base URL 与 Token。',
+    claude3pNote: '同一个 Provider 可同时用于 Claude 和 Codex；协议与兼容转换按当前模型自动选择。',
+    providerHelperStartFailed: 'Provider 凭据功能已安全停用。平台 Helper 会随 AE 自动启动，但本次未能启动或连接；请先重新打开面板，仍失败时重启 AE。不会回退读取明文凭据。',
+    providerHelperRepair: 'Provider 凭据功能已安全停用。平台 Helper 已启动但未通过握手、版本或授权检查；请重启 AE，仍失败时再修复当前安装。不会回退读取明文凭据。',
+    providerStoreCorrupt: 'Provider 配置文件损坏；当前列表已保留。请先从备份恢复 providers.json，再点「重新检测」。',
+    providerStoreUnavailable: 'Provider 配置文件不可用；当前列表已保留。请检查 ~/.ae-mcp 的磁盘空间与读写权限。',
+    providerMigrationConflict: 'Provider 迁移期间配置发生冲突；当前列表已保留。请关闭其他面板实例后重新启动 AE 再检测。',
+    providerSecretMismatch: 'Provider 引用与系统凭据不一致；当前列表已保留。请在 Provider 管理中重新保存对应凭据。',
+    providerInitializationFailed: 'Provider 初始化失败；当前列表已保留。请导出日志后重新检测。',
     zcodeKeyPlaceholder: '粘贴 provider API Key（存本机）',
-    zcodeKeyStored: '已保存到 ~/.ae-mcp/zcode-key，可粘贴新值覆盖',
+    zcodeKeyStored: '已保存到系统安全凭据库，可粘贴新值覆盖',
+    zcodeKeySaveFailed: '安全凭据保存失败，请修复 Helper 后重试。',
     save: '保存',
     modelDefault: '默认模型（打开面板时使用）',
     customModel: '自定义模型 ID',
@@ -102,9 +111,17 @@ const S = {
     recheck: 'Re-check',
     providerNone: '(no provider selected)',
     importClaudeSettings: 'Import from ~/.claude/settings.json',
-    claude3pNote: 'Claude-3p desktop credentials cannot be read automatically; fill the base URL and token once in Provider Manager.',
+    claude3pNote: 'The same Provider can serve Claude and Codex; protocol routing and compatibility conversion are selected per model.',
+    providerHelperStartFailed: 'Provider credentials are safely disabled. Platform Helper starts with AE but could not start or connect in this session. Reopen the panel, then restart AE if it still fails. Plaintext fallback is disabled.',
+    providerHelperRepair: 'Provider credentials are safely disabled. Platform Helper started but failed its handshake, version, or authorization check. Restart AE, then repair the current install if it still fails. Plaintext fallback is disabled.',
+    providerStoreCorrupt: 'The provider configuration is corrupt; the current list was retained. Restore providers.json from backup, then re-check.',
+    providerStoreUnavailable: 'The provider configuration is unavailable; the current list was retained. Check disk space and permissions for ~/.ae-mcp.',
+    providerMigrationConflict: 'The provider configuration changed during migration; the current list was retained. Close other panel instances, restart AE, then re-check.',
+    providerSecretMismatch: 'A provider reference no longer matches its system credential; the current list was retained. Save that credential again in Provider Manager.',
+    providerInitializationFailed: 'Provider initialization failed; the current list was retained. Export logs, then re-check.',
     zcodeKeyPlaceholder: 'Paste the provider API key (stored locally)',
-    zcodeKeyStored: 'Saved to ~/.ae-mcp/zcode-key; paste a new value to overwrite',
+    zcodeKeyStored: 'Saved in the protected system credential store; paste a new value to overwrite',
+    zcodeKeySaveFailed: 'Protected credential save failed. Repair the Helper and retry.',
     save: 'Save',
     modelDefault: 'Default model (used when the panel opens)',
     customModel: 'Custom model ID',
@@ -162,10 +179,29 @@ function Section({ id, title, children, disabled, caption, expanded, onToggle })
 
 function ZcodeKeyFallback({ t, stored, onSave }) {
   const [draft, setDraft] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const save = async () => {
+    if (!onSave || saving || !draft.trim()) return;
+    setSaving(true);
+    setError('');
+    try {
+      const saved = await onSave(draft.trim());
+      if (saved === false) setError(t.zcodeKeySaveFailed);
+      else setDraft('');
+    } catch {
+      setError(t.zcodeKeySaveFailed);
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
-    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-      <Input secret value={draft} onChange={setDraft} placeholder={stored ? t.zcodeKeyStored : t.zcodeKeyPlaceholder} style={{ flex: 1 }} />
-      <Button variant="primary" size="sm" disabled={!draft.trim()} onClick={() => { if (onSave) onSave(draft.trim()); setDraft(''); }}>{t.save}</Button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <Input secret value={draft} onChange={setDraft} placeholder={stored ? t.zcodeKeyStored : t.zcodeKeyPlaceholder} style={{ flex: 1 }} />
+        <Button variant="primary" size="sm" disabled={saving || !draft.trim()} onClick={save}>{t.save}</Button>
+      </div>
+      {error ? <div style={{ font: '400 10px/1.4 var(--font-ui)', color: 'var(--warn)' }}>{error}</div> : null}
     </div>
   );
 }
@@ -224,22 +260,11 @@ function maskToken(value) {
   return v.slice(0, 7) + '*'.repeat(Math.min(10, v.length - 11)) + v.slice(-4);
 }
 
-function cepRequire() {
-  if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) return globalThis.window.cep_node.require;
-  if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-  if (globalThis.require) return globalThis.require;
-  return null;
-}
-
 function readTokenValue() {
   try {
-    const req = cepRequire();
-    if (!req) return '';
-    const fs = req('fs');
-    const path = req('path');
-    const os = req('os');
-    const tokenPath = path.join(os.homedir(), '.ae-mcp', 'auth-token');
-    return fs.readFileSync(tokenPath, 'utf8').trim();
+    const platform = createPlatformAdapter();
+    const tokenPath = platform.paths.join([platform.paths.configRoot, 'auth-token']);
+    return platform.fs.readFileSync(tokenPath, 'utf8').trim();
   } catch (e) {
     return '';
   }
@@ -293,12 +318,22 @@ export function SettingsScreen({
   codexKeyStored = false,
   codexCliConfig = null,
   providerManager = null,
+  providerInit = { state: 'checking', error: '' },
   logLevel = 'info',
   onLogLevel,
   onExportLogs,
   onRerunWizard,
 }) {
   const t = S[lang] || S.zh;
+  const providerInitMessage = {
+    PLATFORM_HELPER_START_FAILED: t.providerHelperStartFailed,
+    PLATFORM_HELPER_REPAIR_REQUIRED: t.providerHelperRepair,
+    PROVIDER_STORE_CORRUPT: t.providerStoreCorrupt,
+    PROVIDER_STORE_UNAVAILABLE: t.providerStoreUnavailable,
+    PROVIDER_MIGRATION_CONFLICT: t.providerMigrationConflict,
+    PROVIDER_SECRET_MISMATCH: t.providerSecretMismatch,
+    PROVIDER_INITIALIZATION_FAILED: t.providerInitializationFailed,
+  }[providerInit.error] || t.providerInitializationFailed;
   const zcodeModelLocked = shouldLockZcodeDefaultModel({ backend, models: modelOptions });
   const [customModelDraft, setCustomModelDraft] = React.useState(customModel);
   const [draftPort, setDraftPort] = React.useState(String(port));
@@ -357,7 +392,7 @@ export function SettingsScreen({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <Select value={claudeProviderId} onChange={onClaudeProviderChange} options={[
                     { value: '', label: t.providerNone },
-                    ...providers.filter((p) => p.protocol === 'anthropic').map((p) => ({ value: p.id, label: p.name })),
+                    ...providers.map((p) => ({ value: p.id, label: p.name })),
                   ]} />
                   {claudeSettingsImportAvailable ? (
                     <Button variant="secondary" size="sm" icon="download" onClick={onImportClaudeSettings}>{t.importClaudeSettings}</Button>
@@ -370,7 +405,7 @@ export function SettingsScreen({
               return (
                 <Select value={codexProviderId} onChange={onCodexProviderChange} options={[
                   { value: '', label: t.providerNone },
-                  ...providers.filter((p) => p.protocol === 'openai-compatible').map((p) => ({ value: p.id, label: p.name })),
+                  ...providers.map((p) => ({ value: p.id, label: p.name })),
                 ]} />
               );
             }
@@ -385,13 +420,18 @@ export function SettingsScreen({
                       {[codexCliConfig.providerId, codexCliConfig.model, codexCliConfig.provider.baseUrl].filter(Boolean).join(' · ')}
                     </div>
                   ) : null}
-                  <ZcodeKeyFallback t={t} stored={codexKeyStored} onSave={onSaveCodexKey} />
+                  {onSaveCodexKey ? <ZcodeKeyFallback t={t} stored={codexKeyStored} onSave={onSaveCodexKey} /> : null}
                 </div>
               );
             }
             return null;
           }}
         />
+        {providerInit.state === 'unavailable' ? (
+          <div role="alert" style={{ padding: '7px 8px', border: '1px solid var(--error-border)', borderRadius: 'var(--radius-md)', background: 'var(--error-bg)', color: 'var(--error)', font: '400 10px/1.5 var(--font-ui)' }}>
+            {providerInitMessage}{providerInit.error ? ` (${providerInit.error})` : ''}
+          </div>
+        ) : null}
         {providerManager}
         <Field label={t.modelDefault}>
           {zcodeModelLocked ? (

@@ -28,6 +28,7 @@ function makeProc() {
       const line = typeof message === 'string' ? message : JSON.stringify(message) + '\n';
       for (const handler of stdoutHandlers) handler(line);
     },
+    pushStderr(message) { for (const handler of stderrHandlers) handler(String(message)); },
     exit(code = 0, signal = null) { for (const h of exitHandlers) h(code, signal); },
     error(error) { for (const h of errorHandlers) h(error); },
   };
@@ -79,11 +80,53 @@ const TOOL_META = {
   },
 };
 
+const WRITE_PLAN = {
+  artifactId: 'user:123',
+  contentHash: 'a'.repeat(64),
+  operation: 'execute',
+  normalizedArgs: {},
+  target: { compId: '7' },
+  planHash: 'b'.repeat(64),
+  risk: 'write',
+  expiresAt: 9999999999999,
+};
+
+function pushPlanElicitation(proc, id, plan) {
+  proc.pushStdout({
+    id,
+    method: 'elicitation/create',
+    params: {
+      mode: 'form',
+      message: 'Approve artifact plan?',
+      requestedSchema: {
+        type: 'object',
+        'x-ae-mcp-plan': plan,
+      },
+    },
+  });
+}
+
 function makeBackend(options = {}) {
   const events = [];
   const spawned = makeSpawn();
+  const platform = options.platform || {
+    id: 'windows-x64',
+    paths: {
+      home: 'C:\\Users\\test',
+      tempRoot: 'C:\\tmp',
+      join: (parts) => parts.join('\\'),
+      resolve: (parts) => parts.join('\\').replace(/\//g, '\\'),
+      dirname: (value) => String(value).replace(/[\\/][^\\/]+$/, ''),
+    },
+    fs: { readFileSync: () => { throw new Error('ENOENT'); } },
+    completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
+    resolveExecutable: async (id) => id === 'zcode'
+      ? { ok: true, id, path: 'C:\\Node\\node.exe', argsPrefix: ['C:\\ZCode\\zcode.cjs'], source: 'standard', version: '1.0.0', arch: 'x64' }
+      : { ok: false, id, code: 'NOT_FOUND', attempts: [] },
+    spawn: (executable, args, spawnOptions) => spawned.spawn(executable.path, [...(executable.argsPrefix || []), ...args], spawnOptions),
+  };
   const backend = createZcodeBackend({
-    spawnImpl: spawned.spawn,
+    platform,
     getModel: () => 'glm-5.2',
     getPermissionMode: () => 'manual',
     getToolMeta: async () => TOOL_META,
@@ -96,8 +139,6 @@ function makeBackend(options = {}) {
       LOCALAPPDATA: 'C:\\Users\\test\\AppData\\Local',
       AE_MCP_PANEL_EXT_ROOT: 'C:\\Repo\\plugin\\panel',
     },
-    resolveCli: async () => ({ ok: true, cliPath: 'C:\\ZCode\\zcode.cjs' }),
-    resolveNode: async () => ({ ok: true, nodePath: 'C:\\Node\\node.exe', version: 'v24.0.0' }),
     ...options,
   });
   return { backend, events, spawned };
@@ -250,23 +291,24 @@ test('interaction/requestProviderRuntimeHeaders reports the desktop OAuth plan b
   assert.match(reply.result.errorMessage, /captcha/i);
 });
 
-test('interaction/requestProviderRuntimeHeaders reports provider header failures without method errors', async () => {
+test('interaction/requestProviderRuntimeHeaders never reads unsupported desktop credentials', async () => {
+  let credentialReads = 0;
   const { backend, spawned } = makeBackend({
-    getModel: () => 'builtin:bigmodel-start-plan/GLM-5.2',
+    getModel: () => 'custom-provider/model-1',
     readDesktopRuntimeModel: () => ({
-      revision: 'desktop-v2:builtin:bigmodel-start-plan',
+      revision: 'desktop-v2:custom-provider',
       generatedAt: 1,
-      model: { providerId: 'builtin:bigmodel-start-plan', modelId: 'GLM-5.2' },
+      model: { providerId: 'custom-provider', modelId: 'model-1' },
       provider: {
-        providerId: 'builtin:bigmodel-start-plan',
-        kind: 'anthropic',
-        apiFormat: 'anthropic-messages',
+        providerId: 'custom-provider',
+        kind: 'openai-compatible',
+        apiFormat: 'openai-responses',
         source: 'custom',
-        baseURL: 'https://zcode.z.ai/api/v1/zcode-plan/anthropic',
-        models: [{ modelId: 'GLM-5.2' }],
+        baseURL: 'https://api.example.com/v1',
+        models: [{ modelId: 'model-1' }],
       },
     }),
-    readOAuthAccessToken: () => '',
+    readOAuthAccessToken: () => { credentialReads += 1; return 'must-not-be-read'; },
   });
   const { proc } = await startTurn(backend, spawned, 'hello');
 
@@ -277,8 +319,8 @@ test('interaction/requestProviderRuntimeHeaders reports provider header failures
       requestId: 'runtime_headers_2',
       sessionId: 'sess_test',
       workspace: { workspacePath: 'C:\\Repo\\plugin\\panel', workspaceKey: 'C:\\Repo\\plugin\\panel' },
-      modelRef: { providerId: 'builtin:bigmodel-start-plan', modelId: 'GLM-5.2' },
-      providerId: 'builtin:bigmodel-start-plan',
+      modelRef: { providerId: 'custom-provider', modelId: 'model-1' },
+      providerId: 'custom-provider',
       reason: 'model-request',
     },
   });
@@ -288,6 +330,7 @@ test('interaction/requestProviderRuntimeHeaders reports provider header failures
   assert.equal(reply.error, undefined);
   assert.equal(reply.result.headersApplied, false);
   assert.match(reply.result.errorMessage, /runtime headers/i);
+  assert.equal(credentialReads, 0);
 });
 
 test('zcodeModelFromDesktopConfig picks the enabled coding-plan provider from v2 settings', () => {
@@ -429,6 +472,59 @@ test('text-delta events flow from model.streaming notifications', async () => {
   assert.equal(deltas[1].text, 'G');
   assert.ok(events.some((e) => e.type === 'turn-start'));
   assert.ok(events.some((e) => e.type === 'turn-end' && e.stopReason === 'end_turn'));
+});
+
+test('stored provider credentials echoed by ZCode never enter events or transcript', async () => {
+  const secret = 'opaque-zcode-provider-value';
+  const { backend, events, spawned } = makeBackend({
+    readStoredZcodeKey: () => secret,
+  });
+  const { proc, pending } = await startTurn(backend, spawned, 'safe user text');
+  pushEvent(proc, 'model.streaming', {
+    delta: `before ${secret} after`,
+    kind: 'text_delta',
+    done: false,
+  });
+  pushEvent(proc, 'turn.completed', { response: secret, usage: { totalTokens: 1 } });
+  await pending;
+  await flush();
+
+  const rendered = JSON.stringify({ events, messages: backend.getMessages() });
+  assert.equal(rendered.includes(secret), false);
+  assert.match(rendered, /\[redacted\]/);
+});
+
+test('inline runtime provider credentials stay redacted through pending RPC process exit', async () => {
+  const secret = 'opaque-inline-runtime-provider-value';
+  const { backend, events, spawned } = makeBackend({
+    readDesktopRuntimeModel: () => ({
+      revision: 'desktop-v2:test',
+      generatedAt: 1,
+      model: { providerId: 'test', modelId: 'model' },
+      provider: {
+        providerId: 'test',
+        kind: 'openai-compatible',
+        apiFormat: 'openai-responses',
+        source: 'custom',
+        apiKey: { source: 'inline', value: secret },
+        models: [{ modelId: 'model' }],
+      },
+    }),
+  });
+  const pending = backend.sendUser('safe user text');
+  await flush();
+  const proc = spawned.procs[0];
+  const createReq = parseWrites(proc)[0];
+  assert.equal(createReq.params.runtimeModel.provider.apiKey.value, secret);
+  proc.pushStderr(`provider failed: ${secret}`);
+  proc.exit(1);
+  await pending;
+  await flush();
+  await flush();
+
+  const rendered = JSON.stringify({ events, messages: backend.getMessages() });
+  assert.equal(rendered.includes(secret), false);
+  assert.match(rendered, /\[redacted\]/);
 });
 
 test('turn.failed object errors keep their message and classify provider failures as model errors', async () => {
@@ -837,6 +933,175 @@ test('elicitation auto-accepts in none tier (no blocking)', async () => {
   assert.equal(reply.result.content.color, 'red');
 });
 
+test('ZCode none tier still asks for an external artifact plan', async () => {
+  const externalPlan = { ...WRITE_PLAN, risk: 'external' };
+  const { backend, events, spawned } = makeBackend({ getPermissionMode: () => 'none' });
+  const { proc } = await startTurn(backend, spawned, 'publish');
+
+  pushPlanElicitation(proc, 201, externalPlan);
+  await flush();
+  assert.deepEqual(events.at(-1), {
+    type: 'approval-required',
+    toolUseId: 'elicit_201',
+    name: 'mcp__ae__ae_toolUse',
+    input: externalPlan,
+    risk: 'external',
+  });
+
+  backend.approve('elicit_201', 'allow');
+  await flush();
+  assert.deepEqual(parseWrites(proc).find((message) => message.id === 201), {
+    id: 201,
+    result: { action: 'accept', content: { decision: 'once' } },
+  });
+});
+
+test('ZCode auto accepts write plans once and declines malformed plans without cards', async () => {
+  const { events, spawned, backend } = makeBackend({ getPermissionMode: () => 'auto' });
+  const { proc } = await startTurn(backend, spawned, 'apply');
+
+  pushPlanElicitation(proc, 202, WRITE_PLAN);
+  pushPlanElicitation(proc, 203, { risk: 'write' });
+  await flush();
+
+  assert.deepEqual(parseWrites(proc).find((message) => message.id === 202), {
+    id: 202,
+    result: { action: 'accept', content: { decision: 'once' } },
+  });
+  assert.deepEqual(parseWrites(proc).find((message) => message.id === 203), {
+    id: 203,
+    result: { action: 'decline', content: {} },
+  });
+  assert.equal(events.some((event) => event.type === 'approval-required'), false);
+});
+
+test('ZCode plan approval fails closed for unknown or missing decisions', async () => {
+  const { backend, spawned } = makeBackend();
+  const { proc } = await startTurn(backend, spawned, 'decide');
+
+  for (const [id, decision] of [[211, 'unexpected'], [212, undefined]]) {
+    pushPlanElicitation(proc, id, WRITE_PLAN);
+    await flush();
+    backend.approve('elicit_' + id, decision);
+    assert.deepEqual(parseWrites(proc).find((message) => message.id === id), {
+      id,
+      result: { action: 'decline', content: {} },
+    });
+  }
+});
+
+test('ZCode responds to plan elicitations with JSON-RPC id zero', async () => {
+  let tier = 'auto';
+  const { backend, spawned } = makeBackend({ getPermissionMode: () => tier });
+  const { proc } = await startTurn(backend, spawned, 'zero');
+
+  pushPlanElicitation(proc, 0, WRITE_PLAN);
+  await flush();
+  assert.deepEqual(parseWrites(proc).filter((message) => message.id === 0).at(-1), {
+    id: 0,
+    result: { action: 'accept', content: { decision: 'once' } },
+  });
+
+  tier = 'manual';
+  pushPlanElicitation(proc, 0, WRITE_PLAN);
+  await flush();
+  backend.approve('elicit_0', 'allow');
+  assert.deepEqual(parseWrites(proc).filter((message) => message.id === 0).at(-1), {
+    id: 0,
+    result: { action: 'accept', content: { decision: 'once' } },
+  });
+
+  pushPlanElicitation(proc, 0, WRITE_PLAN);
+  await flush();
+  backend.stop();
+  assert.deepEqual(parseWrites(proc).filter((message) => message.id === 0).at(-1), {
+    id: 0,
+    result: { action: 'decline', content: {} },
+  });
+});
+
+test('ZCode plan sessions bind content and target while high risks reject session scope', async () => {
+  const changedHash = { ...WRITE_PLAN, contentHash: 'c'.repeat(64), planHash: 'd'.repeat(64) };
+  const changedTarget = { ...WRITE_PLAN, target: { compId: '8' }, planHash: 'e'.repeat(64) };
+  const destructivePlan = { ...WRITE_PLAN, risk: 'destructive' };
+  const { backend, events, spawned } = makeBackend();
+  const { proc } = await startTurn(backend, spawned, 'apply plans');
+
+  pushPlanElicitation(proc, 204, WRITE_PLAN);
+  await flush();
+  backend.approve('elicit_204', 'allow-session');
+  assert.deepEqual(parseWrites(proc).find((message) => message.id === 204), {
+    id: 204,
+    result: { action: 'accept', content: { decision: 'session' } },
+  });
+
+  const cardsAfterSession = events.filter((event) => event.type === 'approval-required').length;
+  pushPlanElicitation(proc, 205, WRITE_PLAN);
+  await flush();
+  assert.deepEqual(parseWrites(proc).find((message) => message.id === 205), {
+    id: 205,
+    result: { action: 'accept', content: { decision: 'once' } },
+  });
+  assert.equal(events.filter((event) => event.type === 'approval-required').length, cardsAfterSession);
+
+  pushPlanElicitation(proc, 206, changedHash);
+  await flush();
+  assert.equal(events.at(-1).toolUseId, 'elicit_206');
+  assert.deepEqual(events.at(-1).input, changedHash);
+  backend.approve('elicit_206', 'allow');
+
+  pushPlanElicitation(proc, 207, changedTarget);
+  await flush();
+  assert.equal(events.at(-1).toolUseId, 'elicit_207');
+  assert.deepEqual(events.at(-1).input, changedTarget);
+  backend.approve('elicit_207', 'allow');
+
+  pushPlanElicitation(proc, 208, destructivePlan);
+  await flush();
+  assert.equal(events.at(-1).risk, 'destructive');
+  backend.approve('elicit_208', 'allow-session');
+  assert.deepEqual(parseWrites(proc).find((message) => message.id === 208), {
+    id: 208,
+    result: { action: 'decline', content: {} },
+  });
+});
+
+test('ZCode delegates valid staged ae_toolUse calls without caching the tool name', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { proc } = await startTurn(backend, spawned, 'stage');
+
+  proc.pushStdout({
+    id: 209,
+    method: 'interaction/requestPermission',
+    params: { toolCallId: 'stage_valid', toolName: 'ae_toolUse', input: { action: 'prepare' } },
+  });
+  await flush();
+  assert.deepEqual(parseWrites(proc).find((message) => message.id === 209), {
+    id: 209,
+    result: { decision: 'allow' },
+  });
+
+  proc.pushStdout({
+    id: 210,
+    method: 'interaction/requestPermission',
+    params: { toolCallId: 'stage_invalid', toolName: 'ae_toolUse', input: { action: 'invalid' } },
+  });
+  await flush();
+  assert.deepEqual(events.at(-1), {
+    type: 'approval-required',
+    toolUseId: 'stage_invalid',
+    name: 'mcp__ae__ae_toolUse',
+    input: { action: 'invalid' },
+    risk: 'write',
+  });
+  backend.approve('stage_invalid', 'allow');
+  await flush();
+  assert.deepEqual(parseWrites(proc).find((message) => message.id === 210), {
+    id: 210,
+    result: { decision: 'allow' },
+  });
+});
+
 test('interaction/requestUserInput (AskUserQuestion) surfaces choices and replies with decision/answers', async () => {
   const { backend, events, spawned } = makeBackend({ getPermissionMode: () => 'manual' });
   const { proc } = await startTurn(backend, spawned, 'pick a color');
@@ -950,6 +1215,14 @@ function fakeFs(files) {
   };
 }
 
+function zcodePlatform(fsImpl, home = 'C:\\Users\\me') {
+  return {
+    paths: { home, join: (parts) => parts.join('\\') },
+    fs: fsImpl,
+    completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
+  };
+}
+
 test('mergeZcodeConfigs lets CLI providers override desktop providers of the same id', () => {
   const merged = mergeZcodeConfigs({
     cliConfig: { provider: { shared: { kind: 'openai-compatible', options: { baseURL: 'https://cli' } }, cliOnly: {} } },
@@ -1000,6 +1273,7 @@ test('zcodeRuntimeModelFromDesktopConfig injects the resolved apiKeyEnv key for 
   const config = { provider: { mediastorm_glm: CLI_PROVIDER } };
   const fromEnv = zcodeRuntimeModelFromDesktopConfig({ config, setting: {}, modelRef: 'mediastorm_glm/glm-5.2', env: { MEDIASTORM_GLM_API_KEY: 'sk-env' } });
   assert.equal(fromEnv.model.modelId, 'glm-5.2');
+  assert.equal(fromEnv.provider.apiFormat, 'openai-chat-completions');
   assert.deepEqual(fromEnv.provider.apiKey, { source: 'inline', value: 'sk-env' });
   assert.deepEqual(fromEnv.provider.models, [{ modelId: 'glm-5.2' }]);
   const fromPanel = zcodeRuntimeModelFromDesktopConfig({ config, setting: {}, modelRef: 'mediastorm_glm/glm-5.2', env: {}, storedKey: 'sk-panel' });
@@ -1008,14 +1282,32 @@ test('zcodeRuntimeModelFromDesktopConfig injects the resolved apiKeyEnv key for 
   assert.equal(none.provider.apiKey, undefined);
 });
 
+test('zcodeRuntimeModelFromDesktopConfig maps openai-compatible dialect responses to openai-responses', () => {
+  const config = {
+    provider: {
+      mediastorm_glm: {
+        ...CLI_PROVIDER,
+        dialect: { wireApi: 'responses', authScheme: 'bearer', source: 'detected', updatedAt: 123 },
+        models: { 'glm-5.2': {} },
+      },
+    },
+  };
+
+  const runtimeModel = zcodeRuntimeModelFromDesktopConfig({ config, setting: {}, modelRef: 'mediastorm_glm/glm-5.2', storedKey: 'sk-panel' });
+
+  assert.equal(runtimeModel.provider.kind, 'openai-compatible');
+  assert.equal(runtimeModel.provider.apiFormat, 'openai-responses');
+});
+
 test('readZcodeDesktopModel merges ~/.zcode/cli/config.json and prefers its top-level model', () => {
-  const env = { USERPROFILE: 'C:\\Users\\me' };
+  const env = {};
   const files = {
     'C:\\Users\\me\\.zcode\\cli\\config.json': JSON.stringify({ provider: { mediastorm_glm: CLI_PROVIDER }, model: 'mediastorm_glm/glm-5.2' }),
     'C:\\Users\\me\\.zcode\\v2\\config.json': JSON.stringify({ provider: { 'builtin:zai-start-plan': { enabled: true, models: { 'GLM-5.2': {} } } } }),
     'C:\\Users\\me\\.zcode\\v2\\setting.json': JSON.stringify({ providerFamilyDomain: 'zai' }),
   };
-  assert.equal(readZcodeDesktopModel({ env, fsImpl: fakeFs(files) }), 'mediastorm_glm/glm-5.2');
+  const fsImpl = fakeFs(files);
+  assert.equal(readZcodeDesktopModel({ env, fsImpl, platform: zcodePlatform(fsImpl) }), 'mediastorm_glm/glm-5.2');
 });
 
 // End-to-end regression for the "settings page shows CLI model X, but Chat
@@ -1029,7 +1321,7 @@ test('readZcodeDesktopModel merges ~/.zcode/cli/config.json and prefers its top-
 // non-legacy '<provider>/<model>' ref -- so the wrong (builtin) model shipped
 // in the session/create request.
 test('CLI config X + stale stored model Y reconcile to X, and X is what session/create actually sends', async () => {
-  const env = { USERPROFILE: 'C:\\Users\\me', PATH: 'C:\\Node', TEMP: 'C:\\tmp', LOCALAPPDATA: 'C:\\Users\\test\\AppData\\Local', AE_MCP_PANEL_EXT_ROOT: 'C:\\Repo\\plugin\\panel' };
+  const env = { PATH: 'C:\\Node', TEMP: 'C:\\tmp', AE_MCP_PANEL_EXT_ROOT: 'C:\\Repo\\plugin\\panel' };
   const files = {
     'C:\\Users\\me\\.zcode\\cli\\config.json': JSON.stringify({
       provider: { mediastorm_glm: CLI_PROVIDER },
@@ -1042,7 +1334,8 @@ test('CLI config X + stale stored model Y reconcile to X, and X is what session/
   // 1. Settings-page display source: the descriptor built while CLI
   //    inheritance is active (no live session yet) must be built around the
   //    CLI-configured model, not the static/builtin list.
-  const descriptor = zcodeDynamicDescriptor({ env, fsImpl });
+  const configPlatform = zcodePlatform(fsImpl);
+  const descriptor = zcodeDynamicDescriptor({ env, fsImpl, platform: configPlatform });
   assert.equal(descriptor.defaultModelId, cliModel);
   assert.deepEqual(descriptor.models.map((m) => m.id), [cliModel]);
 
@@ -1058,7 +1351,7 @@ test('CLI config X + stale stored model Y reconcile to X, and X is what session/
   //    send-time behavior, not just descriptor bookkeeping.
   const { backend, spawned } = makeBackend({
     getModel: () => reconciled,
-    readDesktopModel: () => readZcodeDesktopModel({ env, fsImpl }),
+    readDesktopModel: () => readZcodeDesktopModel({ env, fsImpl, platform: configPlatform }),
     env,
   });
   backend.sendUser('hello');
@@ -1072,12 +1365,14 @@ test('CLI config X + stale stored model Y reconcile to X, and X is what session/
 });
 
 test('summarizeZcodeConfig reports cli/desktop/start-plan channel facts', () => {
-  const env = { USERPROFILE: 'C:\\Users\\me' };
+  const env = {};
   const files = {
     'C:\\Users\\me\\.zcode\\cli\\config.json': JSON.stringify({ provider: { mediastorm_glm: CLI_PROVIDER }, model: 'mediastorm_glm/glm-5.2' }),
     'C:\\Users\\me\\.zcode\\v2\\config.json': JSON.stringify({ provider: { 'builtin:zai-start-plan': { enabled: true, models: { 'GLM-5.2': {} } } } }),
   };
-  const bare = summarizeZcodeConfig({ env, fsImpl: fakeFs(files) });
+  const fsImpl = fakeFs(files);
+  const configPlatform = zcodePlatform(fsImpl);
+  const bare = summarizeZcodeConfig({ env, fsImpl, platform: configPlatform });
   assert.equal(bare.cli.providerId, 'mediastorm_glm');
   assert.equal(bare.cli.model, 'mediastorm_glm/glm-5.2');
   assert.equal(bare.cli.apiKeyEnv, 'MEDIASTORM_GLM_API_KEY');
@@ -1085,10 +1380,10 @@ test('summarizeZcodeConfig reports cli/desktop/start-plan channel facts', () => 
   assert.equal(bare.desktop.providerId, 'builtin:zai-start-plan');
   assert.equal(bare.startPlan.providerId, 'builtin:zai-start-plan');
   assert.equal(bare.startPlan.hasCredential, false);
-  const withKey = summarizeZcodeConfig({ env: { ...env, MEDIASTORM_GLM_API_KEY: 'k' }, fsImpl: fakeFs(files) });
+  const withKey = summarizeZcodeConfig({ env: { ...env, MEDIASTORM_GLM_API_KEY: 'k' }, fsImpl, platform: configPlatform });
   assert.equal(withKey.cli.hasCredential, true);
   assert.equal(withKey.cli.keySource, 'env');
-  const withStored = summarizeZcodeConfig({ env, fsImpl: fakeFs(files), storedKey: 'panel-key' });
+  const withStored = summarizeZcodeConfig({ env, fsImpl, platform: configPlatform, storedKey: 'panel-key' });
   assert.equal(withStored.cli.hasCredential, true);
   assert.equal(withStored.cli.keySource, 'panel');
 });
@@ -1097,23 +1392,25 @@ test('summarizeZcodeConfig reports cli/desktop/start-plan channel facts', () => 
 // panel needs the CLI provider's baseUrl + protocol kind to call
 // probeProviderModels (cep/modelProbe.js) against /v1/models.
 test('summarizeZcodeConfig exposes cli.baseUrl and cli.protocol for probe-driven model discovery', () => {
-  const env = { USERPROFILE: 'C:\\Users\\me' };
+  const env = {};
   const files = {
     'C:\\Users\\me\\.zcode\\cli\\config.json': JSON.stringify({ provider: { mediastorm_glm: CLI_PROVIDER }, model: 'mediastorm_glm/glm-5.2' }),
     'C:\\Users\\me\\.zcode\\v2\\config.json': JSON.stringify({ provider: {} }),
   };
-  const summary = summarizeZcodeConfig({ env, fsImpl: fakeFs(files) });
+  const fsImpl = fakeFs(files);
+  const summary = summarizeZcodeConfig({ env, fsImpl, platform: zcodePlatform(fsImpl) });
   assert.equal(summary.cli.baseUrl, 'https://api.example.com/v1');
   assert.equal(summary.cli.protocol, 'openai-compatible');
 });
 
 test('summarizeZcodeConfig omits cli.baseUrl when the CLI provider has none configured', () => {
-  const env = { USERPROFILE: 'C:\\Users\\me' };
+  const env = {};
   const files = {
     'C:\\Users\\me\\.zcode\\cli\\config.json': JSON.stringify({ provider: { anthro: { kind: 'anthropic' } }, model: 'anthro/claude' }),
     'C:\\Users\\me\\.zcode\\v2\\config.json': JSON.stringify({ provider: {} }),
   };
-  const summary = summarizeZcodeConfig({ env, fsImpl: fakeFs(files) });
+  const fsImpl = fakeFs(files);
+  const summary = summarizeZcodeConfig({ env, fsImpl, platform: zcodePlatform(fsImpl) });
   assert.equal(summary.cli.baseUrl, '');
   assert.equal(summary.cli.protocol, 'anthropic');
 });

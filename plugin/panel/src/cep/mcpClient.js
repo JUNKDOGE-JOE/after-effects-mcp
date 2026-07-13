@@ -1,64 +1,19 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
 import { expertGuidanceEnv } from './externalClients.js';
+import { createPlatformAdapter } from './platform/index.js';
 
 const DEFAULT_TIMEOUT_MS = 30000;
 const MCP_PROTOCOL_VERSION = '2025-06-18';
-export const PANEL_VERSION = '0.9.0';
+export const PANEL_VERSION = '0.9.1';
 
-function getCepRequire() {
-  if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-    return globalThis.window.cep_node.require;
-  }
-  if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-  if (globalThis.require) return globalThis.require;
-  throw new Error('CEP Node require is unavailable');
-}
+export function findProjectRoot({ extRoot, repoRoot, fsImpl, platform }) {
+  const adapter = platform || createPlatformAdapter();
+  if (repoRoot && fsImpl.existsSync(adapter.paths.join([repoRoot, 'pyproject.toml']))) return adapter.paths.resolve([repoRoot]);
 
-function getCepEnv() {
-  return (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env) || {};
-}
-
-function normalizeFsPath(value) {
-  let text = String(value || '').replace(/\//g, '\\');
-  text = text.replace(/\\+$/, '');
-  return text;
-}
-
-function dirname(value) {
-  const normalized = normalizeFsPath(value);
-  const index = normalized.lastIndexOf('\\');
-  if (index <= 0) return '';
-  return normalized.slice(0, index);
-}
-
-function joinPath(base, leaf) {
-  return normalizeFsPath(base) + '\\' + leaf;
-}
-
-function firstWhereHit(stdout) {
-  return String(stdout || '').split(/\r?\n/).map((line) => line.trim()).find(Boolean) || '';
-}
-
-function defaultWhereImpl() {
-  const childProcess = getCepRequire()('child_process');
-  return new Promise((resolve) => {
-    childProcess.execFile('where', ['ae-mcp'], { windowsHide: true }, (err, stdout) => {
-      resolve(err ? '' : stdout);
-    });
-  });
-}
-
-function defaultFs() {
-  return getCepRequire()('fs');
-}
-
-export function findProjectRoot({ extRoot, repoRoot, fsImpl }) {
-  if (repoRoot && fsImpl.existsSync(joinPath(repoRoot, 'pyproject.toml'))) return normalizeFsPath(repoRoot);
-
-  let current = normalizeFsPath(extRoot);
+  let current = adapter.paths.resolve([extRoot]);
   while (current) {
-    if (fsImpl.existsSync(joinPath(current, 'pyproject.toml'))) return current;
-    const parent = dirname(current);
+    if (fsImpl.existsSync(adapter.paths.join([current, 'pyproject.toml']))) return current;
+    const parent = adapter.paths.dirname(current);
     if (!parent || parent === current) break;
     current = parent;
   }
@@ -67,37 +22,22 @@ export function findProjectRoot({ extRoot, repoRoot, fsImpl }) {
 
 export async function resolveMcpCommand({
   explicitPath,
-  whereImpl = defaultWhereImpl,
-  fsImpl,
-  envImpl = null,
-  extRoot = '',
-  repoRoot = '',
+  platform,
 } = {}) {
   const configured = String(explicitPath || '').trim();
   if (configured) return { command: configured, args: [], source: 'explicit' };
-
-  const found = firstWhereHit(await whereImpl('ae-mcp'));
-  if (found) return { command: found, args: [], source: 'where' };
-
-  const fs = fsImpl || defaultFs();
-  const profile = (envImpl || getCepEnv()).USERPROFILE || '';
-  if (profile) {
-    const shim = joinPath(joinPath(joinPath(normalizeFsPath(profile), '.local'), 'bin'), 'ae-mcp.exe');
-    if (fs.existsSync(shim)) return { command: shim, args: [], source: 'uv-tool' };
-  }
-
-  const projectRoot = findProjectRoot({ extRoot, repoRoot, fsImpl: fs });
-  if (projectRoot) {
-    return { command: 'uv', args: ['run', '--project', projectRoot, 'ae-mcp'], source: 'uv' };
-  }
-
-  throw new Error('Unable to find ae-mcp. Configure the ae-mcp executable path, add ae-mcp to PATH, or run from a checkout containing pyproject.toml for uv run --project.');
+  const adapter = platform || createPlatformAdapter();
+  const resolved = await adapter.resolveExecutable('ae-mcp');
+  if (resolved.ok) return { command: resolved.path, args: [...resolved.argsPrefix], source: resolved.source };
+  throw new Error('Unable to find ae-mcp. Repair the installed runtime launcher at ' + adapter.paths.launcher + '.');
 }
 
 export function _createRpc(stdinWrite, onLine, options = {}) {
   const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
+  const onRequest = options.onRequest;
   let nextId = 1;
   const pending = new Map();
+  const inbound = new Map();
 
   function rejectPending(id, error) {
     const entry = pending.get(id);
@@ -107,8 +47,91 @@ export function _createRpc(stdinWrite, onLine, options = {}) {
     entry.reject(error);
   }
 
+  function writeMessage(message) {
+    stdinWrite(JSON.stringify(message) + '\n');
+  }
+
+  function hasId(message) {
+    return message && message.id !== undefined && message.id !== null;
+  }
+
+  function hasMethod(message) {
+    return message && typeof message.method === 'string' && message.method.length > 0;
+  }
+
+  function abortInbound(id) {
+    const entry = inbound.get(id);
+    if (entry) entry.controller.abort();
+  }
+
+  async function dispatchRequest(message) {
+    if (inbound.has(message.id)) {
+      writeMessage({
+        jsonrpc: '2.0',
+        id: message.id,
+        error: { code: -32600, message: 'Invalid Request' },
+      });
+      return;
+    }
+    const controller = new AbortController();
+    let settleAbort;
+    const aborted = new Promise((resolve) => { settleAbort = resolve; });
+    const abortHandler = () => settleAbort({ kind: 'abort' });
+    controller.signal.addEventListener('abort', abortHandler, { once: true });
+    inbound.set(message.id, { controller });
+    try {
+      const handled = typeof onRequest === 'function'
+        ? Promise.resolve().then(() => onRequest(message, { signal: controller.signal }))
+        : Promise.reject(Object.assign(new Error('Method not found'), { code: -32601 }));
+      const outcome = await Promise.race([
+        handled.then(
+          (result) => ({ kind: 'result', result }),
+          (error) => ({ kind: 'error', error }),
+        ),
+        aborted,
+      ]);
+      if (outcome.kind === 'abort') {
+        writeMessage({
+          jsonrpc: '2.0',
+          id: message.id,
+          result: { action: 'cancel', content: {} },
+        });
+      } else if (outcome.kind === 'error') {
+        const code = outcome.error && outcome.error.code === -32601 ? -32601 : -32603;
+        const error = {
+          code,
+          message: code === -32601 ? 'Method not found' : 'Internal error',
+        };
+        if (code === -32601 && outcome.error && outcome.error.data !== undefined) {
+          error.data = outcome.error.data;
+        }
+        writeMessage({ jsonrpc: '2.0', id: message.id, error });
+      } else {
+        writeMessage({
+          jsonrpc: '2.0',
+          id: message.id,
+          result: outcome.result === undefined ? null : outcome.result,
+        });
+      }
+    } finally {
+      controller.signal.removeEventListener('abort', abortHandler);
+      inbound.delete(message.id);
+    }
+  }
+
   function handleMessage(message) {
-    if (!message || message.id === undefined || message.id === null) return;
+    if (!message || typeof message !== 'object') return;
+    if (hasMethod(message)) {
+      if (!hasId(message)) {
+        if (message.method === 'notifications/cancelled') {
+          abortInbound(message.params && message.params.requestId);
+        }
+        return;
+      }
+      dispatchRequest(message).catch(() => {});
+      return;
+    }
+    if (!hasId(message)) return;
     const entry = pending.get(message.id);
     if (!entry) return;
     pending.delete(message.id);
@@ -126,10 +149,6 @@ export function _createRpc(stdinWrite, onLine, options = {}) {
   const handleChunk = createNdjsonReader(handleMessage);
 
   if (onLine) onLine(handleChunk);
-
-  function writeMessage(message) {
-    stdinWrite(JSON.stringify(message) + '\n');
-  }
 
   function request(method, params) {
     const id = nextId++;
@@ -151,16 +170,19 @@ export function _createRpc(stdinWrite, onLine, options = {}) {
 
   function close(reason = new Error('MCP process closed')) {
     for (const id of Array.from(pending.keys())) rejectPending(id, reason);
+    for (const entry of inbound.values()) entry.controller.abort();
   }
 
   return { request, notify, handleChunk, close };
 }
 
 export function createMcpClient({
+  platform,
   spawnImpl,
   resolveCommand = resolveMcpCommand,
   env,
   onCrash,
+  onElicitation,
   extRoot,
   repoRoot,
   getExpertGuidance = () => true,
@@ -171,6 +193,7 @@ export function createMcpClient({
   let rpc = null;
   let tools = null;
   let serverInstructions = '';
+  let serverInfo = null;
   let status = 'idle';
   let startPromise = null;
   let retryCount = 0;
@@ -182,15 +205,42 @@ export function createMcpClient({
     return { status, retryCount, error: lastError, tools };
   }
 
-  function getSpawn() {
-    if (spawnImpl) return spawnImpl;
-    return getCepRequire()('child_process').spawn;
-  }
-
   function attachBeforeUnload() {
     if (globalThis.window && globalThis.window.addEventListener) {
       globalThis.window.addEventListener('beforeunload', () => stop());
     }
+  }
+
+  async function handleServerRequest(message, { signal }) {
+    if (message.method !== 'elicitation/create') {
+      throw Object.assign(new Error('Method not found'), {
+        code: -32601,
+        data: { method: message.method },
+      });
+    }
+    if (typeof onElicitation !== 'function') return { action: 'decline', content: {} };
+    const params = message.params && typeof message.params === 'object' ? message.params : {};
+    const request = {
+      serverName: serverInfo && typeof serverInfo.name === 'string' ? serverInfo.name : '',
+      message: typeof params.message === 'string' ? params.message : '',
+      requestedSchema: params.requestedSchema,
+      mode: params.mode,
+      serverInfo: serverInfo ? { ...serverInfo } : null,
+      serverInstructions,
+      meta: params._meta,
+    };
+    if (signal.aborted) return { action: 'cancel', content: {} };
+    const result = await onElicitation(request, { signal });
+    if (signal.aborted) return { action: 'cancel', content: {} };
+    if (!result || !['accept', 'decline', 'cancel'].includes(result.action)) {
+      return { action: 'decline', content: {} };
+    }
+    return {
+      action: result.action,
+      content: result.content && typeof result.content === 'object' && !Array.isArray(result.content)
+        ? result.content
+        : {},
+    };
   }
 
   async function start() {
@@ -199,20 +249,28 @@ export function createMcpClient({
     stopped = false;
     status = 'starting';
     startPromise = (async () => {
-      const commandSpec = await resolveCommand({ extRoot, repoRoot });
-      const spawn = getSpawn();
-      const spawnEnv = Object.assign({}, getCepEnv(), env || {}, {
+      const adapter = platform || (!spawnImpl ? createPlatformAdapter() : null);
+      const commandSpec = await resolveCommand({ extRoot, repoRoot, platform: adapter || undefined });
+      const additions = {
         AE_MCP_BACKEND: 'ae-mcp',
         ...expertGuidanceEnv(getExpertGuidance()),
-      });
-      proc = spawn(commandSpec.command, commandSpec.args || [], {
+      };
+      const spawnEnv = adapter ? adapter.completeSpawnEnv(env || {}, additions) : Object.assign({}, env || {}, additions);
+      const options = {
         stdio: 'pipe',
         windowsHide: true,
         env: spawnEnv,
-      });
+      };
+      if (adapter) {
+        const executable = { ok: true, id: 'ae-mcp', path: commandSpec.command, argsPrefix: [], source: commandSpec.source || 'runtime', version: null, arch: null };
+        proc = adapter.spawn(executable, commandSpec.args || [], options);
+      } else {
+        proc = spawnImpl(commandSpec.command, commandSpec.args || [], { ...options, shell: false });
+      }
       rpc = _createRpc(
         (line) => proc.stdin.write(line),
         (handler) => proc.stdout.on('data', handler),
+        { onRequest: handleServerRequest },
       );
       proc.on('exit', (code, signal) => handleExit(code, signal));
       proc.on('error', (err) => handleCrash(err));
@@ -221,9 +279,12 @@ export function createMcpClient({
       const initResult = await rpc.request('initialize', {
         protocolVersion: MCP_PROTOCOL_VERSION,
         clientInfo: { name: 'panel-chat', version: packageVersion },
-        capabilities: {},
+        capabilities: { elicitation: {} },
       });
       serverInstructions = (initResult && initResult.instructions) || '';
+      serverInfo = initResult && initResult.serverInfo && typeof initResult.serverInfo === 'object'
+        ? { ...initResult.serverInfo }
+        : null;
       rpc.notify('notifications/initialized');
       const listed = await rpc.request('tools/list', {});
       tools = listed && Array.isArray(listed.tools) ? listed.tools : [];
@@ -295,6 +356,7 @@ export function createMcpClient({
     }
     proc = null;
     rpc = null;
+    serverInfo = null;
     startPromise = null;
   }
 

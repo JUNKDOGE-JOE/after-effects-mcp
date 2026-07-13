@@ -1,18 +1,12 @@
 """Handlers for ae.skill* verbs."""
 from __future__ import annotations
 
-import json
 from typing import Any
 
-from ae_mcp import progress, schemas
-from ae_mcp.backends import discovery as _discovery
+from ae_mcp import schemas
 from ae_mcp.handlers import register
-from ae_mcp.jsx_result import parse_jsx_result as _try_json
-from ae_mcp.skill_store import Skill, SkillError, SkillStore, render_skill
-
-
-def _backend():
-    return _discovery.select_backend()
+from ae_mcp.skill_store import Skill, SkillStore, render_skill
+from ae_mcp.tool_service import default_tool_service
 
 
 def _store() -> SkillStore:
@@ -88,24 +82,21 @@ async def _run_skill_delete(args: schemas.AeSkillDeleteArgs, ctx: Any) -> Any:
 
 async def _run_skill_use(args: schemas.AeSkillUseArgs, ctx: Any) -> Any:
     try:
-        skill = _store().load(str(args.name))
-        rendered = render_skill(skill, args.args)
+        record = _store().resolve(str(args.name))
+        rendered = render_skill(record.skill, args.args)
         if not args.execute:
             return {
                 "ok": True,
-                "name": skill.name,
-                "template_type": skill.template_type,
+                "name": record.skill.name,
+                "template_type": record.skill.template_type,
                 "rendered": rendered,
             }
-        if skill.template_type != "jsx":
+        if record.skill.template_type != "jsx":
             return {"ok": False, "error": "only jsx skills can be executed"}
-
-        async def _call() -> Any:
-            out = await _backend().exec(code=rendered, timeout_sec=60.0)
-            return _try_json(out)
-
-        return await progress.run_with_timeout(
-            ctx, _call(), timeout_sec=75.0, start_msg=f"ae.skillUse {skill.name}..."
+        return await default_tool_service().execution.execute_legacy_skill(
+            record,
+            args=args.args,
+            ctx=ctx,
         )
     except Exception as e:  # noqa: BLE001
         return _error(e)

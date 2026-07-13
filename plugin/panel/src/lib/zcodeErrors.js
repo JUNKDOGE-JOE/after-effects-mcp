@@ -1,12 +1,12 @@
-// Spec B1: localize + actionable-ize ZCode failures. For zh a header line
-// with concrete next steps is prepended; the raw English detail is kept
-// below for diagnostics. en (and unknown patterns) pass through.
+// Chinese ZCode failures prepend concrete next steps while retaining the raw
+// English detail below for diagnostics. English and unknown patterns pass
+// through unchanged.
 const ZH_RULES = [
   {
     // Provider ids may contain dots (e.g. "mediastorm_glm/glm-5.2"): capture the
     // whole non-space run, then drop one trailing sentence terminator if present.
     re: /Model provider is missing an API key:\s*([^\s]+?)[.。]?(?=\s|$)/i,
-    hint: (m) => 'ZCode provider「' + m[1] + '」缺少 API Key —— 到 设置 → AI 服务 → ZCode 通道 粘贴一次 Key（保存在本机 ~/.ae-mcp/zcode-key），或在 ~/.zcode/cli/config.json 里配置。',
+    hint: (m) => 'ZCode provider「' + m[1] + '」缺少 API Key —— 到 设置 → AI 服务 → ZCode 通道 粘贴一次 Key（保存在系统安全凭据库），或在 ~/.zcode/cli/config.json 里配置。',
   },
   {
     re: /Model config is missing/i,

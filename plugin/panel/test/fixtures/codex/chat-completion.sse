@@ -1,0 +1,13 @@
+: keep-alive
+
+data: {"id":"chatcmpl_stream","object":"chat.completion.chunk","created":1730000000,"model":"fixture-model","choices":[{"index":0,"delta":{"role":"assistant","content":"Composition "},"finish_reason":null}]}
+
+data: {"id":"chatcmpl_stream","object":"chat.completion.chunk","created":1730000000,"model":"fixture-model","choices":[{"index":0,"delta":{"content":"checked."},"finish_reason":null}]}
+
+data: {"id":"chatcmpl_stream","object":"chat.completion.chunk","created":1730000000,"model":"fixture-model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_2","type":"function","function":{"name":"ae_layers","arguments":"{\"comp"}}]},"finish_reason":null}]}
+
+data: {"id":"chatcmpl_stream","object":"chat.completion.chunk","created":1730000000,"model":"fixture-model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"_id\":1}"}}]},"finish_reason":null}]}
+
+data: {"id":"chatcmpl_stream","object":"chat.completion.chunk","created":1730000000,"model":"fixture-model","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}
+
+data: [DONE]

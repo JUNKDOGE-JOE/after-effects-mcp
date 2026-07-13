@@ -8,7 +8,8 @@ test('zh adds an actionable header for missing-API-key errors, keeping the origi
   assert.match(zh, /builtin:zai-start-plan/);
   assert.match(zh, /缺少 API Key/);
   assert.match(zh, /设置 → AI 服务 → ZCode/);
-  assert.match(zh, /zcode-key/);
+  assert.match(zh, /系统安全凭据库/);
+  assert.doesNotMatch(zh, /zcode-key/);
   assert.ok(zh.includes(raw), 'original detail preserved for diagnostics');
 });
 

@@ -1,0 +1,271 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Phase0EvidenceV1",
+  "oneOf": [
+    { "$ref": "#/$defs/helperEvidence" },
+    { "$ref": "#/$defs/signingEvidence" },
+    { "$ref": "#/$defs/mergedEvidence" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "platform": {
+      "enum": ["macos-arm64", "windows-x64"]
+    },
+    "stepId": {
+      "enum": [
+        "sign-helper",
+        "sign-xpc",
+        "sign-addon",
+        "sign-launcher",
+        "verify-nested",
+        "freeze-signed-manifests",
+        "sign-zxp",
+        "verify-zxp",
+        "build-dmg",
+        "sign-dmg",
+        "notarize-dmg",
+        "staple-dmg",
+        "verify-gatekeeper",
+        "verify-authenticode"
+      ]
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "inputSha256", "outputSha256", "exitCode"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stepId" },
+        "inputSha256": { "$ref": "#/$defs/sha256" },
+        "outputSha256": { "$ref": "#/$defs/sha256" },
+        "exitCode": { "const": 0 }
+      }
+    },
+    "signingEvidence": {
+      "title": "Phase0SigningEvidenceV1",
+      "type": "object",
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": { "platform": { "const": "macos-arm64" } },
+            "required": ["platform"]
+          },
+          "then": {
+            "properties": {
+              "verifiedIdentity": { "$ref": "#/$defs/macAggregateIdentity" }
+            }
+          },
+          "else": {
+            "properties": {
+              "verifiedIdentity": { "$ref": "#/$defs/windowsAggregateIdentity" }
+            }
+          }
+        }
+      ],
+      "required": [
+        "schemaVersion",
+        "platform",
+        "sourceStageSha256",
+        "disposableOutputRoot",
+        "steps",
+        "verifiedIdentity",
+        "verifiedAt",
+        "publicationAttempted"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "platform": { "$ref": "#/$defs/platform" },
+        "sourceStageSha256": { "$ref": "#/$defs/sha256" },
+        "disposableOutputRoot": { "type": "string", "minLength": 1 },
+        "steps": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 13,
+          "items": { "$ref": "#/$defs/step" }
+        },
+        "verifiedIdentity": { "type": "object" },
+        "verifiedAt": { "type": "string", "format": "date-time" },
+        "publicationAttempted": { "const": false }
+      }
+    },
+    "macCodeIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["certificateFingerprint", "developerIdTeamId"],
+      "properties": {
+        "certificateFingerprint": { "$ref": "#/$defs/sha256" },
+        "developerIdTeamId": { "type": "string", "pattern": "^[A-Z0-9]{10}$" }
+      }
+    },
+    "zxpIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["zxpCertificateFingerprint", "zxpPayloadSha256", "zxpVerified"],
+      "properties": {
+        "zxpCertificateFingerprint": { "$ref": "#/$defs/sha256" },
+        "zxpPayloadSha256": { "$ref": "#/$defs/sha256" },
+        "zxpVerified": { "const": true }
+      }
+    },
+    "macDmgIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "certificateFingerprint",
+        "developerIdTeamId",
+        "notarySubmissionId",
+        "stapledTicketVerified",
+        "gatekeeperVerified"
+      ],
+      "properties": {
+        "certificateFingerprint": { "$ref": "#/$defs/sha256" },
+        "developerIdTeamId": { "type": "string", "pattern": "^[A-Z0-9]{10}$" },
+        "notarySubmissionId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "stapledTicketVerified": { "const": true },
+        "gatekeeperVerified": { "const": true }
+      }
+    },
+    "windowsCodeIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authenticodeSignerThumbprint", "timestampVerified"],
+      "properties": {
+        "authenticodeSignerThumbprint": {
+          "type": "string",
+          "pattern": "^[0-9A-F]{40}$"
+        },
+        "timestampVerified": { "const": true }
+      }
+    },
+    "macAggregateIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nested", "zxp", "dmg"],
+      "properties": {
+        "nested": { "$ref": "#/$defs/macCodeIdentity" },
+        "zxp": { "$ref": "#/$defs/zxpIdentity" },
+        "dmg": { "$ref": "#/$defs/macDmgIdentity" }
+      }
+    },
+    "windowsAggregateIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nested", "zxp"],
+      "properties": {
+        "nested": { "$ref": "#/$defs/windowsCodeIdentity" },
+        "zxp": { "$ref": "#/$defs/zxpIdentity" }
+      }
+    },
+    "aeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result"],
+      "properties": {
+        "result": { "const": "PASS" }
+      }
+    },
+    "backendCounters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authorized", "rejectedBeforeAccess"],
+      "properties": {
+        "authorized": { "type": "integer", "minimum": 1 },
+        "rejectedBeforeAccess": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "adversarialCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "result", "backendAccessCount"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "result": { "const": "REJECTED" },
+        "backendAccessCount": { "const": 0 }
+      }
+    },
+    "helperEvidence": {
+      "title": "Phase0HelperEvidenceV1",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "kind",
+        "platform",
+        "helperIdentity",
+        "afterEffects",
+        "backendAccess",
+        "signingOutputSha256",
+        "adversarialCases"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "kind": { "const": "helper-platform" },
+        "platform": { "$ref": "#/$defs/platform" },
+        "helperIdentity": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "afterEffects": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["25", "26"],
+          "properties": {
+            "25": { "$ref": "#/$defs/aeResult" },
+            "26": { "$ref": "#/$defs/aeResult" }
+          }
+        },
+        "backendAccess": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["secret", "capture"],
+          "properties": {
+            "secret": { "$ref": "#/$defs/backendCounters" },
+            "capture": { "$ref": "#/$defs/backendCounters" }
+          }
+        },
+        "signingOutputSha256": { "$ref": "#/$defs/sha256" },
+        "adversarialCases": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/adversarialCase" }
+        }
+      }
+    },
+    "mergedPlatformRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "helperEvidenceSha256",
+        "signingEvidenceSha256",
+        "sourceStageSha256"
+      ],
+      "properties": {
+        "helperEvidenceSha256": { "$ref": "#/$defs/sha256" },
+        "signingEvidenceSha256": { "$ref": "#/$defs/sha256" },
+        "sourceStageSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "mergedEvidence": {
+      "title": "Phase0MergedEvidenceV1",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "kind", "platforms"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "kind": { "const": "platform-helper" },
+        "platforms": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["macos-arm64", "windows-x64"],
+          "properties": {
+            "macos-arm64": { "$ref": "#/$defs/mergedPlatformRecord" },
+            "windows-x64": { "$ref": "#/$defs/mergedPlatformRecord" }
+          }
+        }
+      }
+    }
+  }
+}

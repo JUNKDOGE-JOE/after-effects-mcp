@@ -1,7 +1,28 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
-import { codexAppServerArgs, codexSpawnEnv, ensureUserEnv, normalizeProviderProfile } from '../lib/providerProfile.js';
+import {
+  codexAppServerArgs,
+  codexSpawnEnv,
+} from '../lib/providerProfile.js';
+import { LOCAL_ROUTE_TOKEN_HEADER } from '../lib/providerHeaders.js';
+import { selectProviderRoute } from '../lib/providerRouteSelection.js';
+import {
+  containsExactSecret,
+  createDeltaRedactor,
+  redactText,
+  redactValue,
+} from '../lib/exactSecretRedaction.js';
 import { PANEL_VERSION } from './mcpClient.js';
+import { createUniversalProviderRoute } from './universalProviderRoute.js';
 import { expertGuidanceEnv } from './externalClients.js';
+import { createPlatformAdapter } from './platform/index.js';
+import {
+  PLAN_SCHEMA_KEY,
+  approvalResult,
+  decideToolPlan,
+  extractToolPlan,
+  isCoreAuthorizedDynamicCall,
+  planSessionKey,
+} from '../../../shared/tool-approval.mjs';
 
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -10,19 +31,6 @@ const APPROVAL_POLICY = {
 };
 // Tagged union per the protocol schema: ReadOnlySandboxPolicy.
 const SANDBOX_POLICY = { type: 'readOnly' };
-
-function getCepRequire() {
-  if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-    return globalThis.window.cep_node.require;
-  }
-  if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-  if (globalThis.require) return globalThis.require;
-  throw new Error('CEP Node require is unavailable');
-}
-
-function getCepEnv() {
-  return (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env) || {};
-}
 
 function appendTail(tail, chunk) {
   const next = tail + String(chunk || '');
@@ -33,27 +41,11 @@ function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
 
-function normalizeFsPath(value) {
-  return String(value || '').replace(/\//g, '\\').replace(/\\+$/, '');
-}
-
-function dirname(value) {
-  const normalized = normalizeFsPath(value);
-  const index = normalized.lastIndexOf('\\');
-  if (index <= 0) return '';
-  return normalized.slice(0, index);
-}
-
-function defaultCwd(env) {
+function defaultCwd(env, platform) {
   const extRoot = env && (env.AE_MCP_PANEL_EXT_ROOT || env.EXTENSION_ROOT);
-  const parent = extRoot ? dirname(extRoot) : '';
+  const parent = extRoot ? platform.paths.dirname(extRoot) : '';
   if (parent) return parent;
-  if (env && (env.TEMP || env.TMP)) return env.TEMP || env.TMP;
-  try {
-    return getCepRequire()('os').tmpdir();
-  } catch (e) {
-    return '.';
-  }
+  return platform.paths.tempRoot;
 }
 
 function responseMessage(id, result) {
@@ -69,6 +61,54 @@ function isTransientReconnectError(error) {
   // codex app-server currently exposes MCP cold-start retries only as this
   // notification text; there is no structured retry flag in the panel protocol.
   return /^reconnecting\.\.\.\s*\d+\/\d+$/i.test(message);
+}
+
+function recoverableProviderFailure(error) {
+  const values = [error, error?.data, error?.error, error?.cause].filter((value) => value && typeof value === 'object');
+  if (values.some((value) => ['code', 'type', 'kind', 'reason']
+    .some((key) => String(value[key] || '').toLowerCase() === 'provider_compaction_unsupported'))) {
+    return false;
+  }
+  const message = values.map((value) => String(value.message || '')).filter(Boolean).join('\n');
+  if (
+    /\bprovider_compaction_unsupported\b/i.test(message)
+    || /\bthis chat-only provider cannot compact responses context\.?/i.test(message)
+  ) return false;
+  for (const value of values) {
+    for (const key of ['status', 'statusCode', 'httpStatus', 'upstreamStatus']) {
+      if ([401, 403, 404, 405, 501].includes(Number(value[key]))) return true;
+    }
+    for (const key of ['code', 'type', 'kind', 'reason']) {
+      if (key === 'code' && [401, 403, 404, 405, 501].includes(Number(value[key]))) return true;
+      const code = String(value[key] || '').toLowerCase();
+      if (/unsupported[_-](?:endpoint|api|wire)|(?:endpoint|api|wire)[_-]unsupported/.test(code)) return true;
+    }
+  }
+  return /\b(?:http|status(?:\s+code)?)\s*[:=]?\s*(?:401|403|404|405|501)\b/i.test(message)
+    || /\bunsupported\s+(?:endpoint|api|wire api|request)\b/i.test(message);
+}
+
+function providerFailureFacts(error) {
+  const values = [error, error?.data, error?.error, error?.cause].filter((value) => value && typeof value === 'object');
+  let status = null;
+  let code = '';
+  for (const value of values) {
+    for (const key of ['status', 'statusCode', 'httpStatus', 'upstreamStatus']) {
+      const candidate = Number(value[key]);
+      if (Number.isInteger(candidate)) status = candidate;
+    }
+    for (const key of ['code', 'type', 'kind', 'reason']) {
+      if (!code && value[key] !== undefined) code = String(value[key]);
+    }
+  }
+  return { status, code };
+}
+
+function providerModelError(code, message) {
+  const error = new Error(message);
+  error.kind = 'model';
+  error.code = code;
+  return error;
 }
 
 function createRpc({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEOUT_MS }) {
@@ -197,40 +237,18 @@ function threadIdFromResult(result) {
   return (result && (result.threadId || result.id || (result.thread && result.thread.id))) || null;
 }
 
-function execFileAsync(execFile, cmd, args, env) {
-  return new Promise((resolve) => {
-    execFile(cmd, args, { env, windowsHide: true }, (err, stdout, stderr) => {
-      resolve({ err, stdout: String(stdout || ''), stderr: String(stderr || '') });
-    });
-  });
-}
-
-function getHomedir() {
-  try { return getCepRequire()('os').homedir(); } catch (e) { return ''; }
-}
-
-// Spec B2: resolve the codex binary explicitly. AE_MCP_CODEX_CLI overrides
-// (mirrors AE_MCP_ZCODE_CLI); otherwise `where codex` on the spawn PATH.
-export async function resolveCodexCli({ env, execFileImpl } = {}) {
-  const override = env && env.AE_MCP_CODEX_CLI;
-  if (override) return { ok: true, cliPath: String(override), version: '' };
-  let execFile = execFileImpl;
-  if (!execFile) {
-    try { execFile = getCepRequire()('child_process').execFile; } catch (e) { return { ok: false, cliPath: '', version: '', detail: 'child_process unavailable' }; }
+export async function resolveCodexCli({ env, platform } = {}) {
+  const adapter = platform || createPlatformAdapter();
+  const requiredArch = adapter.id === 'macos-arm64' ? 'arm64' : (adapter.id === 'windows-x64' ? 'x64' : undefined);
+  const resolved = await adapter.resolveExecutable('codex', { env: env || {}, ...(requiredArch ? { requiredArch } : {}) });
+  if (!resolved.ok) {
+    return { ok: false, cliPath: '', version: '', detail: 'codex CLI resolution failed: ' + resolved.code, resolution: resolved };
   }
-  const where = await execFileAsync(execFile, 'where', ['codex'], env || {});
-  if (!where.err && where.stdout) {
-    const exe = String(where.stdout).split(/\r?\n/)[0].trim();
-    if (exe) {
-      const v = await execFileAsync(execFile, exe, ['--version'], env || {});
-      return { ok: true, cliPath: exe, version: v.err ? '' : String(v.stdout || v.stderr || '').trim() };
-    }
-  }
-  return { ok: false, cliPath: '', version: '', detail: 'codex CLI not found on PATH. Sign in with codex in a terminal, or set AE_MCP_CODEX_CLI to the executable.' };
+  return { ok: true, cliPath: resolved.path, version: resolved.version || '', executable: resolved };
 }
 
 export function createCodexBackend({
-  spawnImpl,
+  platform,
   getModel,
   getEffort,
   getFast,
@@ -239,18 +257,28 @@ export function createCodexBackend({
   getToolMeta,
   getExpertGuidance = () => true,
   getServerInstructions = () => '',
-  getProviderProfile = () => ({}),
-  // Spec A extension: when the panel has no explicit custom provider
-  // configured, inherit a model_provider already declared in
-  // ~/.codex/config.toml. config.toml owns model_provider selection; the
+  getProviderProfile = () => null,
+  getProviderCandidate = () => null,
+  getProviderSensitiveValues = () => [],
+  resolveRequestProfile,
+  recoverProviderProfile,
+  onProviderProfileRecovered = () => {},
+  // When the panel has no explicit custom provider, inherit a model_provider
+  // already declared in ~/.codex/config.toml. config.toml owns provider
+  // selection; the
   // panel only supplies the missing API key env var the provider needs (no
   // `-c model_provider=...` override).
   getCliConfigProvider = () => null,
+  createProviderRoute = createUniversalProviderRoute,
+  createResponsesRoute,
+  selectRoute = selectProviderRoute,
   resolveCli = resolveCodexCli,
   onEvent,
   lang = 'zh',
   env,
 }) {
+  const adapter = platform || createPlatformAdapter();
+  const providerRouteFactory = createResponsesRoute || createProviderRoute;
   let proc = null;
   let rpc = null;
   let startPromise = null;
@@ -270,33 +298,92 @@ export function createCodexBackend({
   let activeAssistantText = '';
   let toolMeta = { allowedTools: [], annotations: {} };
   let lastCliInfo = null;
+  let providerRoute = null;
+  let providerSensitiveValues = [];
+  let providerDeltaPhase = undefined;
+  let providerDeltaRedactor = createDeltaRedactor([], () => {});
+  let providerStderrRedactor = createDeltaRedactor([], () => {});
+  let runtimeGeneration = 0;
+  let providerProfileOverride = null;
+  let providerRecoveryAttempted = false;
+  let providerRecoveryInFlight = false;
+  let turnFailureInFlight = false;
+  let providerRecoverySequence = 0;
+  let providerRefreshPending = false;
+  let activeUserText = '';
+  let activeUserRecorded = false;
   const pendingApprovals = new Map();
   const sessionAllowedTools = new Set();
+  const sessionAllowedPlans = new Set();
 
-  function emit(evt) {
-    if (onEvent) onEvent(evt);
+  function closeProviderRoute() {
+    const route = providerRoute;
+    providerRoute = null;
+    if (route && route.close) Promise.resolve(route.close()).catch(() => {});
   }
 
-  function getSpawn() {
-    if (spawnImpl) return spawnImpl;
-    return getCepRequire()('child_process').spawn;
+  function emit(evt) {
+    if (onEvent) onEvent(redactValue(evt, providerSensitiveValues));
+  }
+
+  function resetProviderDeltaRedactor() {
+    providerDeltaRedactor.discard();
+    providerDeltaPhase = undefined;
+    providerDeltaRedactor = createDeltaRedactor(providerSensitiveValues, (text) => {
+      activeAssistantText += text;
+      emit({ type: 'text-delta', text, phase: providerDeltaPhase });
+    });
+  }
+
+  function resetProviderStderrRedactor() {
+    providerStderrRedactor.discard();
+    providerStderrRedactor = createDeltaRedactor(providerSensitiveValues, (text) => {
+      stderrTail = appendTail(stderrTail, text);
+    });
+  }
+
+  function setProviderSensitiveValues(values) {
+    providerSensitiveValues = Array.from(new Set((values || []).filter((value) => typeof value === 'string' && value)))
+      .sort((left, right) => right.length - left.length);
+    resetProviderDeltaRedactor();
+    resetProviderStderrRedactor();
+  }
+
+  function providerRedactionValues(additional = []) {
+    const values = getProviderSensitiveValues();
+    if (!Array.isArray(values)) throw new TypeError('getProviderSensitiveValues must return an array');
+    return [...values, ...additional];
+  }
+
+  function clearProviderSensitiveValues() {
+    providerDeltaRedactor.discard();
+    providerStderrRedactor.discard();
+    providerSensitiveValues = [];
+    providerDeltaPhase = undefined;
+    providerDeltaRedactor = createDeltaRedactor([], () => {});
+    providerStderrRedactor = createDeltaRedactor([], () => {});
   }
 
   function currentEnv() {
-    return Object.assign({}, getCepEnv(), env || {});
+    return adapter.completeSpawnEnv(env || {});
   }
 
   function finishActive() {
-    if (!activeResolve) {
-      activeRun = null;
-      activeAssistantText = '';
-      return;
-    }
     const resolve = activeResolve;
+    const refreshProvider = providerRefreshPending;
     activeResolve = null;
     activeRun = null;
     activeAssistantText = '';
-    resolve();
+    activeUserText = '';
+    activeUserRecorded = false;
+    providerRecoveryAttempted = false;
+    providerRecoveryInFlight = false;
+    turnFailureInFlight = false;
+    providerRefreshPending = false;
+    if (resolve) resolve();
+    if (refreshProvider) {
+      Promise.resolve().then(() => onProviderProfileRecovered()).catch(() => {});
+    }
   }
 
   function drainApprovals() {
@@ -307,10 +394,34 @@ export function createCodexBackend({
     }
   }
 
+  function detachRuntimeForProviderRecovery() {
+    const previousProc = proc;
+    const previousRpc = rpc;
+    runtimeGeneration += 1;
+    drainApprovals();
+    closeProviderRoute();
+    if (previousRpc) previousRpc.close(new Error('Codex provider runtime is restarting'));
+    proc = null;
+    rpc = null;
+    startPromise = null;
+    initializePromise = null;
+    initialized = false;
+    threadId = null;
+    preambleSent = false;
+    currentTurnId = null;
+    activeAssistantText = '';
+    stderrTail = '';
+    clearProviderSensitiveValues();
+    if (previousProc) {
+      try { previousProc.kill(); } catch { /* best effort */ }
+    }
+  }
+
   function handleNotification(message) {
     const params = message.params || {};
     if (message.method === 'turn/started') {
       currentTurnId = (params.turn && params.turn.id) || params.turnId || null;
+      resetProviderDeltaRedactor();
       emit({ type: 'turn-start' });
       return;
     }
@@ -318,8 +429,8 @@ export function createCodexBackend({
       emit({ type: 'thinking', active: false });
       const text = params.delta !== undefined ? params.delta : params.text;
       if (text) {
-        activeAssistantText += String(text);
-        emit({ type: 'text-delta', text: String(text), phase: params.phase });
+        providerDeltaPhase = params.phase;
+        providerDeltaRedactor.feed(String(text));
       }
       return;
     }
@@ -357,6 +468,17 @@ export function createCodexBackend({
     }
     if (message.method === 'turn/completed') {
       currentTurnId = null;
+      const turn = params.turn && typeof params.turn === 'object' ? params.turn : params;
+      const completionFailure = turn.error || params.error
+        || (turn.status === 'failed' || turn.status === 'error'
+          ? { code: turn.status, message: 'Codex turn failed.' }
+          : null);
+      if (completionFailure) {
+        providerDeltaRedactor.discard();
+        void handleTurnFailure(completionFailure);
+        return;
+      }
+      providerDeltaRedactor.flush();
       drainApprovals();
       emit({ type: 'turn-end', stopReason: 'end_turn' });
       transcript.push({ role: 'assistant', text: activeAssistantText });
@@ -366,8 +488,8 @@ export function createCodexBackend({
     if (message.method === 'error') {
       const error = params.error || params;
       if (isTransientReconnectError(error)) return;
-      emit({ type: 'error', kind: error.kind || 'mcp', message: error.message || String(error || 'Codex app-server error') });
-      finishActive();
+      providerDeltaRedactor.discard();
+      void handleTurnFailure(error);
     }
   }
 
@@ -387,11 +509,56 @@ export function createCodexBackend({
     }
     const toolUseId = String(message.id);
     const params = message.params || {};
+    const schema = params.requestedSchema;
+    if (schema && Object.prototype.hasOwnProperty.call(schema, PLAN_SCHEMA_KEY)) {
+      const plan = extractToolPlan(schema);
+      if (!plan) {
+        if (rpc) rpc.respond(message.id, approvalResult('deny'));
+        return;
+      }
+
+      const policy = decideToolPlan({
+        tier: getPermissionMode ? getPermissionMode() : 'manual',
+        plan,
+        sessionAllowed: sessionAllowedPlans.has(planSessionKey(plan)),
+      });
+      if (policy.decision === 'allow') {
+        if (rpc) rpc.respond(message.id, approvalResult('once', policy));
+        return;
+      }
+      if (policy.decision === 'deny') {
+        declineElicitation(message.id, toolUseId);
+        return;
+      }
+
+      pendingApprovals.set(toolUseId, {
+        kind: 'tool-plan',
+        rpcId: message.id,
+        name: 'mcp__ae__ae_toolUse',
+        input: plan,
+        plan,
+        allowSession: policy.allowSession,
+      });
+      emit({
+        type: 'approval-required',
+        toolUseId,
+        name: 'mcp__ae__ae_toolUse',
+        input: plan,
+        risk: policy.risk,
+      });
+      return;
+    }
+
     const name = prefixedToolName(params);
     const input = elicitationInput(params) || {};
     const annotations = (toolMeta && toolMeta.annotations) || {};
     const ann = annotations[name] || {};
     const tier = getPermissionMode ? getPermissionMode() : 'manual';
+
+    if (isCoreAuthorizedDynamicCall(name, input)) {
+      acceptElicitation(message.id);
+      return;
+    }
 
     if (sessionAllowedTools.has(name) || ann.readOnly || tier === 'none' || (tier === 'auto' && !ann.destructive)) {
       acceptElicitation(message.id);
@@ -420,6 +587,7 @@ export function createCodexBackend({
 
   function handleExit(code, signal) {
     const wasStopping = stopping;
+    providerStderrRedactor.flush();
     const detail = stderrTail ? String(code) + (signal ? ' ' + signal : '') + ' ' + stderrTail : String(code) + (signal ? ' ' + signal : '');
     if (rpc) rpc.close(new Error('codex app-server exited: ' + detail));
     proc = null;
@@ -429,11 +597,16 @@ export function createCodexBackend({
     initialized = false;
     threadId = null;
     preambleSent = false;
-    if (wasStopping) return;
+    closeProviderRoute();
+    if (wasStopping) {
+      clearProviderSensitiveValues();
+      return;
+    }
     if (activeRun) {
       emit({ type: 'error', kind: 'mcp', message: 'codex app-server exited: ' + detail });
       finishActive();
     }
+    clearProviderSensitiveValues();
   }
 
   function handleError(error) {
@@ -446,92 +619,321 @@ export function createCodexBackend({
     initialized = false;
     threadId = null;
     preambleSent = false;
+    closeProviderRoute();
     if (activeRun) {
       emit({ type: 'error', kind: 'mcp', message: err.message });
       finishActive();
     }
+    clearProviderSensitiveValues();
+  }
+
+  function clearSpawnCredentialCopies(runtimeConfig, spawnEnvironment, extraNames = []) {
+    const names = new Set(extraNames);
+    for (const header of runtimeConfig?.envHeaders || []) {
+      names.add(header.envName);
+      header.value = undefined;
+    }
+    for (const name of names) delete spawnEnvironment[name];
+  }
+
+  function selectedProviderProfile() {
+    const selected = providerProfileOverride || (getProviderProfile ? getProviderProfile() : null);
+    if (!selected) return null;
+    const provider = selected.provider || selected;
+    const modelId = String(selected.modelId || '').trim();
+    const runtimeModelId = String(getModel ? getModel() : '').trim();
+    if (!provider) throw new Error('Custom provider is unavailable');
+    if (!modelId || modelId !== runtimeModelId) {
+      throw new Error('Custom provider model binding is unavailable');
+    }
+    if (typeof resolveRequestProfile !== 'function') {
+      throw new Error('Custom provider credential resolver is unavailable');
+    }
+    const route = selectRoute(provider, {
+      client: 'codex',
+      modelId,
+      feature: 'generate',
+    });
+    if (!route?.ok) {
+      const code = route?.reasonCode === 'needs-probe'
+        ? 'provider_preflight_required'
+        : 'provider_route_unavailable';
+      throw providerModelError(code, `Custom provider has no verified Codex route for model ${modelId}`);
+    }
+    return { provider, modelId, route };
+  }
+
+  function normalizedProviderProfile(selected) {
+    if (!selected) return null;
+    const provider = selected.provider || selected;
+    const modelId = String(selected.modelId || '').trim();
+    let route = null;
+    try {
+      route = selectRoute(provider, {
+        client: 'codex',
+        modelId,
+        feature: 'generate',
+      });
+    } catch {
+      route = null;
+    }
+    return {
+      provider,
+      modelId,
+      route,
+    };
+  }
+
+  function providerProfileMatchesCandidate(profile, candidate) {
+    if (!profile?.provider || !candidate?.provider) return false;
+    const profileProviderId = String(profile.provider.id || '').trim();
+    const candidateProviderId = String(candidate.provider.id || '').trim();
+    const profileBaseUrl = String(profile.provider.baseUrl || '').trim();
+    const candidateBaseUrl = String(candidate.provider.baseUrl || '').trim();
+    const profileRequestRevision = profile.provider.requestProfileRevision
+      ?? profile.provider.authProfileRevision
+      ?? null;
+    const candidateRequestRevision = candidate.provider.requestProfileRevision
+      ?? candidate.provider.authProfileRevision
+      ?? null;
+    const profileModelListRevision = profile.provider.modelList?.revision ?? null;
+    const candidateModelListRevision = candidate.provider.modelList?.revision ?? null;
+    return Boolean(
+      profileProviderId
+      && profileProviderId === candidateProviderId
+      && profileBaseUrl === candidateBaseUrl
+      && profileRequestRevision === candidateRequestRevision
+      && profileModelListRevision === candidateModelListRevision
+      && profile.route?.ok === true
+      && profile.modelId === candidate.modelId,
+    );
+  }
+
+  function currentProviderCandidate() {
+    const selected = getProviderCandidate ? getProviderCandidate() : null;
+    if (!selected) return null;
+    const provider = selected.provider || selected;
+    const modelId = String(selected.modelId || '').trim();
+    const runtimeModelId = String(getModel ? getModel() : '').trim();
+    if (!provider) {
+      throw providerModelError('provider_candidate_unavailable', 'Selected custom provider is unavailable');
+    }
+    if (!modelId || modelId !== runtimeModelId) {
+      throw providerModelError('provider_model_binding_unavailable', 'Selected custom provider model binding is unavailable');
+    }
+    return { provider, modelId };
+  }
+
+  async function ensureProviderProfileForSend() {
+    const candidate = currentProviderCandidate();
+    if (!candidate) return true;
+
+    const override = normalizedProviderProfile(providerProfileOverride);
+    if (providerProfileMatchesCandidate(override, candidate)) return true;
+
+    let configured = null;
+    try {
+      configured = normalizedProviderProfile(getProviderProfile ? getProviderProfile() : null);
+    } catch {
+      configured = null;
+    }
+
+    const sequence = providerRecoverySequence + 1;
+    providerRecoverySequence = sequence;
+    detachRuntimeForProviderRecovery();
+    providerProfileOverride = null;
+    if (providerProfileMatchesCandidate(configured, candidate)) {
+      providerProfileOverride = configured;
+      return true;
+    }
+    if (typeof recoverProviderProfile !== 'function') {
+      throw providerModelError(
+        'provider_preflight_unavailable',
+        `Custom provider cannot be verified for model ${candidate.modelId}`,
+      );
+    }
+
+    let recovered;
+    try {
+      recovered = await recoverProviderProfile(
+        candidate.provider,
+        { status: null, code: 'provider_preflight_required' },
+        candidate.modelId,
+      );
+    } catch (error) {
+      if (sequence !== providerRecoverySequence || !activeRun) return false;
+      throw providerModelError(
+        'provider_preflight_failed',
+        error?.message || `Custom provider could not verify model ${candidate.modelId}`,
+      );
+    }
+    if (sequence !== providerRecoverySequence || !activeRun) return false;
+
+    const profile = normalizedProviderProfile(recovered);
+    const currentModelId = String(getModel ? getModel() : '').trim();
+    if (!providerProfileMatchesCandidate(profile, candidate) || currentModelId !== candidate.modelId) {
+      throw providerModelError(
+        'provider_preflight_failed',
+        `Custom provider did not expose a verified API for model ${candidate.modelId}`,
+      );
+    }
+    providerProfileOverride = profile;
+    providerRefreshPending = true;
+    return true;
   }
 
   async function startProcess() {
     if (proc && rpc) return true;
     if (startPromise) return startPromise;
-    startPromise = (async () => {
-      const spawn = getSpawn();
-      const spawnEnv = ensureUserEnv(currentEnv(), { homedir: getHomedir() });
-      const providerProfile = normalizeProviderProfile(getProviderProfile ? getProviderProfile() : {}, spawnEnv);
+    const startGeneration = runtimeGeneration;
+    const assertCurrentStart = () => {
+      if (startGeneration !== runtimeGeneration) throw new Error('Codex start was cancelled');
+    };
+    const pendingStart = (async () => {
+      const spawnEnv = currentEnv();
       stderrTail = '';
       stopping = false;
-      const cliOverride = spawnEnv.AE_MCP_CODEX_CLI ? { ok: true, cliPath: String(spawnEnv.AE_MCP_CODEX_CLI), version: '' } : null;
-      lastCliInfo = cliOverride || lastCliInfo;
-      const command = cliOverride ? cliOverride.cliPath : 'codex';
-      let spawnEnvWithCreds = codexSpawnEnv(providerProfile, spawnEnv);
+      const cliInfo = await resolveCli({ env: spawnEnv, platform: adapter });
+      assertCurrentStart();
+      if (!cliInfo || !cliInfo.ok) throw new Error((cliInfo && cliInfo.detail) || 'codex CLI is unavailable');
+      lastCliInfo = cliInfo;
+      const executable = cliInfo.executable || {
+        ok: true, id: 'codex', path: cliInfo.cliPath, argsPrefix: [], source: 'path', version: cliInfo.version || null, arch: null,
+      };
+      const selected = selectedProviderProfile();
+      let runtimeConfig = null;
+      if (selected) {
+        closeProviderRoute();
+        providerRoute = providerRouteFactory({
+          provider: selected.provider,
+          resolveCapability: ({ provider, modelId, clientProtocol, feature }) => selectRoute(provider, {
+            client: clientProtocol === 'messages' ? 'claude-code' : 'codex',
+            modelId,
+            feature,
+          }),
+          resolveRequestProfile,
+        });
+        const routeInfo = await providerRoute.start();
+        assertCurrentStart();
+        runtimeConfig = {
+          providerId: selected.provider.id,
+          baseUrl: routeInfo.openaiBaseUrl || routeInfo.baseUrl,
+          chatCompatibility: selected.route.upstreamProtocol !== 'responses',
+          envHeaders: [{
+            name: LOCAL_ROUTE_TOKEN_HEADER,
+            envName: 'AE_MCP_PROVIDER_HEADER_00',
+            value: routeInfo.routeToken,
+          }],
+        };
+        setProviderSensitiveValues(providerRedactionValues([routeInfo.routeToken]));
+      } else {
+        setProviderSensitiveValues([]);
+      }
+      let spawnEnvWithCreds = codexSpawnEnv(runtimeConfig, spawnEnv);
+      const extraCredentialEnvNames = [];
       // Only inherit cli-config's provider env var when the panel has no
-      // explicit custom provider (codexBaseUrl) configured — an explicit
+      // explicit custom provider configured — an explicit
       // custom provider always wins.
-      if (!providerProfile.codexBaseUrl) {
+      if (!selected) {
         const cliConfig = getCliConfigProvider ? getCliConfigProvider() : null;
         const envKey = cliConfig && cliConfig.provider && String(cliConfig.provider.envKey || '').trim();
         if (envKey && cliConfig.apiKey) {
           spawnEnvWithCreds = Object.assign({}, spawnEnvWithCreds, { [envKey]: cliConfig.apiKey });
+          extraCredentialEnvNames.push(envKey);
+          setProviderSensitiveValues([String(cliConfig.apiKey)]);
         }
       }
-      proc = spawn(command, codexAppServerArgs(providerProfile), {
-        stdio: 'pipe',
-        windowsHide: true,
-        shell: true,
-        env: spawnEnvWithCreds,
-      });
-      rpc = createRpc({
-        writeLine: (line) => proc.stdin.write(line),
+      assertCurrentStart();
+      let spawnedProc;
+      try {
+        spawnedProc = adapter.spawn(executable, codexAppServerArgs(runtimeConfig), {
+          stdio: 'pipe',
+          windowsHide: true,
+          env: spawnEnvWithCreds,
+        });
+      } finally {
+        clearSpawnCredentialCopies(runtimeConfig, spawnEnvWithCreds, extraCredentialEnvNames);
+      }
+      proc = spawnedProc;
+      const generation = startGeneration + 1;
+      runtimeGeneration = generation;
+      const nextRpc = createRpc({
+        writeLine: (line) => spawnedProc.stdin.write(line),
         onNotification: handleNotification,
         onRequest: handleRequest,
       });
-      const reader = createNdjsonReader((message) => rpc && rpc.handleMessage(message));
-      if (proc.stdout && proc.stdout.on) proc.stdout.on('data', reader);
-      if (proc.stderr && proc.stderr.on) proc.stderr.on('data', (chunk) => {
-        stderrTail = appendTail(stderrTail, chunk);
+      rpc = nextRpc;
+      const reader = createNdjsonReader((message) => {
+        if (generation === runtimeGeneration && rpc === nextRpc) nextRpc.handleMessage(message);
       });
-      proc.on('exit', (code, signal) => handleExit(code, signal));
-      proc.on('error', (error) => handleError(error));
+      if (spawnedProc.stdout && spawnedProc.stdout.on) spawnedProc.stdout.on('data', reader);
+      if (spawnedProc.stderr && spawnedProc.stderr.on) spawnedProc.stderr.on('data', (chunk) => {
+        if (generation !== runtimeGeneration || proc !== spawnedProc) return;
+        providerStderrRedactor.feed(chunk);
+      });
+      spawnedProc.on('exit', (code, signal) => {
+        if (generation === runtimeGeneration && proc === spawnedProc) handleExit(code, signal);
+      });
+      spawnedProc.on('error', (error) => {
+        if (generation === runtimeGeneration && proc === spawnedProc) handleError(error);
+      });
       return true;
-    })();
+    })().catch((error) => {
+      if (startGeneration === runtimeGeneration) {
+        closeProviderRoute();
+        clearProviderSensitiveValues();
+      }
+      throw error;
+    });
+    startPromise = pendingStart;
     try {
-      return await startPromise;
+      return await pendingStart;
     } finally {
-      startPromise = null;
+      if (startPromise === pendingStart) startPromise = null;
     }
   }
 
-  async function initialize() {
+  async function initialize(timeoutOverrideMs) {
     if (initialized) return true;
     if (initializePromise) return initializePromise;
-    initializePromise = (async () => {
+    const pendingInitialize = (async () => {
       await startProcess();
-      await rpc.request('initialize', {
+      const initializingRpc = rpc;
+      const initializingGeneration = runtimeGeneration;
+      await initializingRpc.request('initialize', {
         clientInfo: { name: 'ae-mcp-panel', version: PANEL_VERSION },
         // granular askForApproval (our four-tier mapping) is gated behind
         // the experimental API surface (live error without it).
         capabilities: { experimentalApi: true },
-      });
+      }, timeoutOverrideMs);
+      if (initializingGeneration !== runtimeGeneration || rpc !== initializingRpc) {
+        throw new Error('Codex initialization was cancelled');
+      }
       initialized = true;
       return true;
     })();
+    initializePromise = pendingInitialize;
     try {
-      return await initializePromise;
+      return await pendingInitialize;
     } finally {
-      initializePromise = null;
+      if (initializePromise === pendingInitialize) initializePromise = null;
     }
   }
 
   async function ensureThread() {
     if (threadId) return threadId;
     await initialize();
+    const threadRpc = rpc;
+    const threadGeneration = runtimeGeneration;
     const mcpSpec = await getMcpSpec();
     toolMeta = getToolMeta ? await getToolMeta() : { allowedTools: [], annotations: {} };
+    if (threadGeneration !== runtimeGeneration || rpc !== threadRpc) {
+      throw new Error('Codex thread start was cancelled');
+    }
     const spawnEnv = currentEnv();
-    const result = await rpc.request('thread/start', {
+    const result = await threadRpc.request('thread/start', {
       ephemeral: true,
-      cwd: defaultCwd(spawnEnv),
+      cwd: defaultCwd(spawnEnv, adapter),
       model: getModel(),
       approvalPolicy: APPROVAL_POLICY,
       approvalsReviewer: 'user',
@@ -549,6 +951,9 @@ export function createCodexBackend({
         },
       },
     });
+    if (threadGeneration !== runtimeGeneration || rpc !== threadRpc) {
+      throw new Error('Codex thread start was cancelled');
+    }
     threadId = threadIdFromResult(result);
     return threadId;
   }
@@ -567,40 +972,124 @@ export function createCodexBackend({
     return params;
   }
 
+  async function launchActiveTurn() {
+    await ensureThread();
+    if (!activeRun) return;
+    if (!activeUserRecorded) {
+      transcript.push({ role: 'user', text: activeUserText });
+      activeUserRecorded = true;
+    }
+    let turnText = activeUserText;
+    if (!preambleSent) {
+      const instructions = (getServerInstructions() || '').trim();
+      if (instructions) turnText = instructions + '\n\n---\n\n' + activeUserText;
+      preambleSent = true;
+    }
+    rpc.request('turn/start', turnParams(turnText), 180000).catch((error) => {
+      void handleTurnFailure(error);
+    });
+  }
+
+  async function attemptProviderRecovery(error) {
+    if (providerRecoveryInFlight) return true;
+    if (
+      providerRecoveryAttempted
+      || !activeRun
+      || typeof recoverProviderProfile !== 'function'
+      || !recoverableProviderFailure(error)
+    ) return false;
+
+    let selected;
+    try { selected = selectedProviderProfile(); } catch { return false; }
+    if (!selected) return false;
+
+    providerRecoveryAttempted = true;
+    providerRecoveryInFlight = true;
+    const sequence = providerRecoverySequence + 1;
+    providerRecoverySequence = sequence;
+    detachRuntimeForProviderRecovery();
+
+    let recovered;
+    try {
+      recovered = await recoverProviderProfile(
+        selected.provider,
+        providerFailureFacts(error),
+        selected.modelId,
+      );
+    } catch {
+      recovered = null;
+    }
+    if (sequence !== providerRecoverySequence || !activeRun) return true;
+    providerRecoveryInFlight = false;
+    const profile = normalizedProviderProfile(recovered);
+    const provider = profile?.provider;
+    const modelId = profile?.modelId || '';
+    if (
+      !provider
+      || String(provider.id || '').trim() !== String(selected.provider.id || '').trim()
+      || profile.route?.ok !== true
+      || modelId !== selected.modelId
+      || modelId !== String(getModel ? getModel() : '').trim()
+    ) return false;
+    providerProfileOverride = profile;
+    providerRefreshPending = true;
+    await launchActiveTurn();
+    return true;
+  }
+
+  async function handleTurnFailure(error) {
+    if (!activeRun || providerRecoveryInFlight || turnFailureInFlight) return;
+    turnFailureInFlight = true;
+    try {
+      let failure = {
+        kind: error?.kind,
+        code: error?.code,
+        message: redactValue(error?.message || 'Failed to start Codex turn.', providerSensitiveValues),
+      };
+      try {
+        if (await attemptProviderRecovery(error)) return;
+      } catch (recoveryError) {
+        failure = {
+          kind: recoveryError?.kind,
+          code: recoveryError?.code,
+          message: redactValue(recoveryError?.message || 'Failed to start Codex turn.', providerSensitiveValues),
+        };
+      }
+      providerDeltaRedactor.discard();
+      const message = failure?.message || 'Failed to start Codex turn.';
+      const providerHttpFailure = /\bunexpected status\s+\d{3}\b.*\burl:\s*https?:\/\//i.test(message);
+      emit({
+        type: 'error',
+        kind: failure?.kind || (providerHttpFailure || /model/i.test(message) ? 'model' : 'mcp'),
+        ...(failure?.code ? { code: failure.code } : {}),
+        message,
+      });
+      finishActive();
+    } finally {
+      turnFailureInFlight = false;
+    }
+  }
+
   async function sendUser(text) {
     if (activeRun) return activeRun;
     activeAssistantText = '';
+    activeUserText = String(text || '');
+    activeUserRecorded = false;
+    providerRecoveryAttempted = false;
+    providerRecoveryInFlight = false;
+    turnFailureInFlight = false;
+    providerRecoverySequence += 1;
     activeRun = new Promise((resolve) => {
       activeResolve = resolve;
     });
+    const run = activeRun;
 
     try {
-      await ensureThread();
-      const userText = String(text || '');
-      transcript.push({ role: 'user', text: userText });
-      // On the first turn of a (re)started thread, prepend the ae-mcp server
-      // instructions as a preamble (Codex does not forward them to the model).
-      // Attempt only once per thread; subsequent turns rely on thread history.
-      let turnText = userText;
-      if (!preambleSent) {
-        const instr = (getServerInstructions() || '').trim();
-        if (instr) turnText = instr + '\n\n---\n\n' + userText;
-        preambleSent = true;
-      }
-      // turn/start resolves long before turn/completed; track it so a
-      // JSON-RPC error (bad model, dead thread) surfaces instead of
-      // leaving the run promise spinning forever. The first ack can wait
-      // on the injected ae-mcp cold start, hence the long timeout.
-      rpc.request('turn/start', turnParams(turnText), 180000).catch((e) => {
-        const message = e && e.message ? e.message : 'Failed to start Codex turn.';
-        emit({ type: 'error', kind: /model/i.test(message) ? 'model' : 'mcp', message });
-        finishActive();
-      });
-    } catch (e) {
-      emit({ type: 'error', kind: 'mcp', message: e && e.message ? e.message : 'Failed to start Codex turn.' });
-      finishActive();
+      if (await ensureProviderProfileForSend()) await launchActiveTurn();
+    } catch (error) {
+      await handleTurnFailure(error);
     }
-    return activeRun;
+    return run;
   }
 
   function approve(toolUseId, decision) {
@@ -608,6 +1097,18 @@ export function createCodexBackend({
     const approval = pendingApprovals.get(id);
     if (!approval || !rpc) return;
     pendingApprovals.delete(id);
+    if (approval.kind === 'tool-plan') {
+      const requestedDecision = decision === 'allow-session'
+        ? 'session'
+        : (decision === 'allow' ? 'once' : 'deny');
+      const result = approvalResult(requestedDecision, { allowSession: approval.allowSession });
+      if (result.action === 'accept' && result.content.decision === 'session') {
+        sessionAllowedPlans.add(planSessionKey(approval.plan));
+      }
+      rpc.respond(approval.rpcId, result);
+      emit({ type: result.action === 'accept' ? 'tool-allowed' : 'tool-denied', toolUseId: id });
+      return;
+    }
     const action = decision === 'deny' ? 'decline' : 'accept';
     if (action === 'accept' && decision === 'allow-session') sessionAllowedTools.add(approval.name);
     rpc.respond(approval.rpcId, { action, content: {} });
@@ -616,12 +1117,14 @@ export function createCodexBackend({
   }
 
   function stop() {
+    providerRecoverySequence += 1;
     // turn/interrupt requires BOTH ids (schema: TurnInterruptParams);
     // without an active turn there is nothing to interrupt server-side.
     if (rpc && threadId && currentTurnId) {
       rpc.fireRequest('turn/interrupt', { threadId, turnId: currentTurnId });
     }
     drainApprovals();
+    providerDeltaRedactor.discard();
     if (activeRun) {
       emit({ type: 'error', kind: 'aborted', message: 'Turn aborted.' });
       finishActive();
@@ -630,6 +1133,9 @@ export function createCodexBackend({
 
   function reset() {
     stopping = true;
+    runtimeGeneration += 1;
+    providerRecoverySequence += 1;
+    closeProviderRoute();
     drainApprovals();
     if (rpc) rpc.close(new Error('Codex backend reset'));
     if (proc) {
@@ -646,9 +1152,12 @@ export function createCodexBackend({
     transcript = [];
     pendingApprovals.clear();
     sessionAllowedTools.clear();
+    sessionAllowedPlans.clear();
     toolMeta = { allowedTools: [], annotations: {} };
+    providerProfileOverride = null;
     finishActive();
     stderrTail = '';
+    clearProviderSensitiveValues();
     stopping = false;
   }
 
@@ -661,32 +1170,36 @@ export function createCodexBackend({
   const PROBE_ACCOUNT_READ_TIMEOUT_MS = 10000;
   const PROBE_MODEL_LIST_TIMEOUT_MS = 4000;
 
-  function withTimeout(promise, ms, label) {
-    let timer;
-    const timeout = new Promise((_, reject) => {
-      timer = setTimeout(() => reject(Object.assign(new Error('probe timeout: ' + label), { probeTimeout: label })), ms);
-    });
-    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  async function boundedProbeRequest(method, params, ms, label) {
+    try {
+      return await rpc.request(method, params, ms);
+    } catch (error) {
+      if (error && /timed out/i.test(String(error.message || ''))) error.probeTimeout = label;
+      throw error;
+    }
   }
 
   async function probeAccount() {
-    const spawnEnv = ensureUserEnv(currentEnv(), { homedir: getHomedir() });
+    const spawnEnv = currentEnv();
     let cliInfo = { ok: false, cliPath: '', version: '' };
     try {
-      let execFileImpl = null;
-      try { execFileImpl = getCepRequire()('child_process').execFile; } catch (e) { /* non-CEP env */ }
-      cliInfo = await resolveCli({ env: spawnEnv, execFileImpl });
+      cliInfo = lastCliInfo || await resolveCli({ env: spawnEnv, platform: adapter });
       lastCliInfo = cliInfo;
     } catch (e) { /* diagnostics only, never blocks the probe */ }
     const diag = { cliPath: cliInfo.cliPath || '', cliVersion: cliInfo.version || '' };
     let probedProc = null;
     try {
-      await withTimeout(initialize(), PROBE_INITIALIZE_TIMEOUT_MS, 'initialize');
+      try {
+        await initialize(PROBE_INITIALIZE_TIMEOUT_MS);
+      } catch (error) {
+        if (error && /timed out/i.test(String(error.message || ''))) error.probeTimeout = 'initialize';
+        throw error;
+      }
       probedProc = proc;
-      const accountResult = await withTimeout(rpc.request('account/read', {}), PROBE_ACCOUNT_READ_TIMEOUT_MS, 'account/read');
+      const accountResult = await boundedProbeRequest('account/read', {}, PROBE_ACCOUNT_READ_TIMEOUT_MS, 'account/read');
       let models = null;
       try {
-        const listed = await withTimeout(rpc.request('model/list', {}), PROBE_MODEL_LIST_TIMEOUT_MS, 'model/list');
+        const listed = await boundedProbeRequest('model/list', {}, PROBE_MODEL_LIST_TIMEOUT_MS, 'model/list');
         models = Array.isArray(listed) ? listed : listed && listed.models;
       } catch (e) {
         // Non-fatal: a stuck/slow model/list (e.g. a relay whose upstream
@@ -694,8 +1207,13 @@ export function createCodexBackend({
         models = null;
       }
       const account = accountResult && accountResult.account;
-      if (!account) return { loggedIn: false, runtimeOk: true, detail: accountResult && accountResult.requiresOpenaiAuth ? 'OpenAI auth required' : undefined, models, ...diag };
-      return {
+      const result = !account ? {
+        loggedIn: false,
+        runtimeOk: true,
+        detail: accountResult && accountResult.requiresOpenaiAuth ? 'OpenAI auth required' : undefined,
+        models,
+        ...diag,
+      } : {
         loggedIn: true,
         runtimeOk: true,
         email: account.email,
@@ -703,8 +1221,20 @@ export function createCodexBackend({
         models,
         ...diag,
       };
+      const secrets = [...providerSensitiveValues, ...providerRedactionValues()];
+      if (containsExactSecret(result, secrets)) {
+        return { loggedIn: false, runtimeOk: false, detail: 'Provider probe metadata was rejected', ...diag };
+      }
+      return result;
     } catch (e) {
-      const detail = [e && e.message ? e.message : String(e), cliInfo.ok ? '' : cliInfo.detail].filter(Boolean).join(' | ');
+      let secrets = [...providerSensitiveValues];
+      try { secrets = [...secrets, ...providerRedactionValues()]; } catch {}
+      const detail = redactText(
+        [e && e.message ? e.message : String(e), cliInfo.ok ? '' : cliInfo.detail]
+          .filter(Boolean)
+          .join(' | '),
+        secrets,
+      );
       if (e && e.probeTimeout) {
         // The app-server process behind this probe is stuck (e.g. hung
         // upstream RPC). Kill this specific spawned process so it doesn't

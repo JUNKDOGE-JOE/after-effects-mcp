@@ -1,29 +1,68 @@
-// Spec B3: one-click inherit of Claude Code's third-party endpoint config.
-// Only reads the documented env block of ~/.claude/settings.json; the
-// Claude-3p host-creds file is intentionally NOT read (internal format).
-function getCepRequire() {
-  if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-    return globalThis.window.cep_node.require;
-  }
-  if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-  if (globalThis.require) return globalThis.require;
-  throw new Error('CEP Node require is unavailable');
+// Claude settings import follows the same preview-then-read contract as
+// cc-switch. The preview contains only availability/base URL/source digest.
+import { sha256Text } from './ccSwitch.js';
+import { createPlatformAdapter } from './platform/index.js';
+
+function settingsFile(platform) {
+  const home = platform.paths.home;
+  if (!home) return '';
+  return platform.paths.join([home, '.claude', 'settings.json']);
 }
 
-export function readClaudeSettingsEnv({ env = {}, fsImpl } = {}) {
-  const home = env.USERPROFILE || env.HOME || (env.HOMEDRIVE && env.HOMEPATH ? env.HOMEDRIVE + env.HOMEPATH : '');
-  if (!home) return null;
-  let fs;
-  try { fs = fsImpl || getCepRequire()('fs'); } catch (e) { return null; }
-  let parsed;
+function parseSettings(text) {
+  const parsed = JSON.parse(text);
+  const settingsEnv = parsed?.env && typeof parsed.env === 'object' && !Array.isArray(parsed.env)
+    ? parsed.env
+    : {};
+  const baseUrl = String(settingsEnv.ANTHROPIC_BASE_URL || 'https://api.anthropic.com').trim();
+  const secret = String(settingsEnv.ANTHROPIC_AUTH_TOKEN || '').trim();
+  if (!secret) return null;
+  const url = new URL(baseUrl);
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash) return null;
+  const sensitiveName = /(?:^|[-_])(?:authorization|api[-_]?key|token|secret|password|auth)(?:$|[-_])/i;
+  for (const name of url.searchParams.keys()) {
+    if (sensitiveName.test(name)) return null;
+  }
+  return { baseUrl, secret };
+}
+
+function sourceChanged() {
+  const error = new Error('Provider import source changed');
+  error.code = 'provider_import_source_changed';
+  return error;
+}
+
+export function inspectClaudeSettingsEnv({ platform, fsImpl } = {}) {
+  const adapter = platform || createPlatformAdapter();
+  const fs = fsImpl || adapter.fs;
+  const file = settingsFile(adapter);
+  if (!file || !fs?.readFileSync) return null;
   try {
-    parsed = JSON.parse(fs.readFileSync(String(home).replace(/[\\/]+$/, '') + '\\.claude\\settings.json', 'utf8'));
-  } catch (e) {
+    const text = String(fs.readFileSync(file, 'utf8'));
+    const settings = parseSettings(text);
+    if (!settings) return null;
+    return { available: true, baseUrl: settings.baseUrl, sourceRevision: sha256Text(text) };
+  } catch {
     return null;
   }
-  const settingsEnv = parsed && parsed.env && typeof parsed.env === 'object' ? parsed.env : {};
-  const baseUrl = String(settingsEnv.ANTHROPIC_BASE_URL || '').trim();
-  const authToken = String(settingsEnv.ANTHROPIC_AUTH_TOKEN || '').trim();
-  if (!baseUrl && !authToken) return null;
-  return { baseUrl, authToken };
+}
+
+export function readClaudeSettingsProviderDraft({ platform, expectedSourceRevision, fsImpl } = {}) {
+  const adapter = platform || createPlatformAdapter();
+  const fs = fsImpl || adapter.fs;
+  const file = settingsFile(adapter);
+  if (!file || !expectedSourceRevision || !fs?.readFileSync) throw sourceChanged();
+  let text;
+  try { text = String(fs.readFileSync(file, 'utf8')); } catch { throw sourceChanged(); }
+  if (sha256Text(text) !== expectedSourceRevision) throw sourceChanged();
+  let settings;
+  try { settings = parseSettings(text); } catch { throw sourceChanged(); }
+  if (!settings) return null;
+  return {
+    name: 'Claude Code config',
+    protocol: 'anthropic',
+    baseUrl: settings.baseUrl,
+    modelAuthKind: 'bearer',
+    modelAuthSecret: settings.secret,
+  };
 }

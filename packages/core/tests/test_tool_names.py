@@ -39,6 +39,17 @@ def test_every_exposed_verb_matches_mcp_pattern():
         assert _MCP_TOOL_NAME.fullmatch(exposed), f"{verb!r} -> {exposed!r} is not MCP-compliant"
 
 
+def test_tool_library_exposes_exact_twelve_names():
+    load_all()
+    exposed = {expose_tool_name(name) for name in HANDLERS if name.startswith("ae.tool")}
+    assert exposed == {
+        "ae_toolIndex", "ae_toolSearch", "ae_toolInspect", "ae_toolUse",
+        "ae_toolCreate", "ae_toolEdit", "ae_toolDelete", "ae_toolArchive",
+        "ae_toolDuplicate", "ae_toolPromoteFromHistory",
+        "ae_toolImport", "ae_toolExport",
+    }
+
+
 def test_resolve_round_trips_for_every_verb():
     load_all()
     for verb in HANDLERS:
@@ -212,6 +223,38 @@ async def test_call_tool_schema_error_sets_iserror_true():
     payload = json.loads(result.content[0].text)
     assert payload["ok"] is False
     assert payload["error"].startswith("schema:")
+
+
+@pytest.mark.parametrize(
+    ("verb", "arguments"),
+    [
+        ("ae.toolUse", {"action": "render", "artifact_id": "user:1"}),
+        ("ae.skillUse", {"name": "render-only", "execute": False}),
+    ],
+)
+async def test_dynamic_content_calls_skip_the_static_name_gate(
+    monkeypatch, verb, arguments
+):
+    from ae_mcp import server as srv
+
+    load_all()
+    gated = []
+
+    async def _gate(name, ctx):
+        gated.append(name)
+        return {"ok": False, "error": "static gate reached"}
+
+    async def _run(validated, ctx):
+        return {"dynamic": True}
+
+    schema_cls, _ = HANDLERS[verb]
+    monkeypatch.setitem(HANDLERS, verb, (schema_cls, _run))
+    monkeypatch.setattr(srv.approval_gate, "enforce", _gate)
+
+    result = await build_server()._ae_call_tool(expose_tool_name(verb), arguments)
+
+    assert result.isError is False
+    assert gated == []
 
 
 async def test_call_tool_handler_raise_sets_iserror_true(monkeypatch):

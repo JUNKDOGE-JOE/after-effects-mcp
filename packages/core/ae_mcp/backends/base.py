@@ -18,6 +18,10 @@ ALL_VERBS: Set[str] = {
     "ae.getKeyframes", "ae.searchProject",
     "ae.skillList", "ae.skillCreate", "ae.skillEdit",
     "ae.skillDelete", "ae.skillUse",
+    "ae.toolIndex", "ae.toolSearch", "ae.toolInspect", "ae.toolUse",
+    "ae.toolCreate", "ae.toolEdit", "ae.toolDelete", "ae.toolArchive",
+    "ae.toolDuplicate", "ae.toolPromoteFromHistory",
+    "ae.toolImport", "ae.toolExport",
     "ae.createRig",
 }
 

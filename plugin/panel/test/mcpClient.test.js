@@ -55,61 +55,46 @@ test('_createRpc rejects JSON-RPC error responses', async () => {
   await assert.rejects(pending, /nope/);
 });
 
+function fakeCommandPlatform({ launcher = '/Users/a/.ae-mcp/bin/ae-mcp', resolved = null, exists = () => false } = {}) {
+  return {
+    id: launcher.includes('\\') ? 'windows-x64' : 'macos-arm64',
+    paths: {
+      launcher,
+      join: (parts) => parts.join(launcher.includes('\\') ? '\\' : '/'),
+      dirname: (value) => value.slice(0, Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'))),
+      resolve: (parts) => parts.join(launcher.includes('\\') ? '\\' : '/').replace(/\//g, launcher.includes('\\') ? '\\' : '/'),
+    },
+    fs: { existsSync: exists },
+    resolveExecutable: async () => resolved || ({ ok: true, id: 'ae-mcp', path: launcher, argsPrefix: [], source: 'runtime', version: null, arch: null }),
+  };
+}
+
 test('resolveMcpCommand prefers an explicit executable path', async () => {
   const result = await resolveMcpCommand({
     explicitPath: 'C:/tools/ae-mcp.exe',
-    whereImpl: () => { throw new Error('should not call where'); },
+    platform: fakeCommandPlatform(),
   });
 
   assert.deepEqual(result, { command: 'C:/tools/ae-mcp.exe', args: [], source: 'explicit' });
 });
 
-test('resolveMcpCommand uses where ae-mcp when no explicit path is configured', async () => {
-  const result = await resolveMcpCommand({
-    whereImpl: async () => 'C:\\Tools\\ae-mcp.exe\r\n',
+test('resolveMcpCommand prefers the installed stable launcher on both platforms', async () => {
+  const mac = fakeCommandPlatform({ launcher: '/Users/a/.ae-mcp/bin/ae-mcp' });
+  const win = fakeCommandPlatform({ launcher: 'C:\\Users\\a\\.ae-mcp\\bin\\ae-mcp.exe' });
+  assert.deepEqual(await resolveMcpCommand({ platform: mac }), {
+    command: '/Users/a/.ae-mcp/bin/ae-mcp', args: [], source: 'runtime',
   });
-
-  assert.deepEqual(result, { command: 'C:\\Tools\\ae-mcp.exe', args: [], source: 'where' });
-});
-
-test('resolveMcpCommand falls back to uv project command in development mode', async () => {
-  const result = await resolveMcpCommand({
-    whereImpl: async () => '',
-    extRoot: 'E:/Code/ae-mcp-codex-p5a/plugin/panel',
-    fsImpl: { existsSync: (p) => p === 'E:\\Code\\ae-mcp-codex-p5a\\pyproject.toml' },
+  assert.deepEqual(await resolveMcpCommand({ platform: win }), {
+    command: 'C:\\Users\\a\\.ae-mcp\\bin\\ae-mcp.exe', args: [], source: 'runtime',
   });
-
-  assert.equal(result.command, 'uv');
-  assert.deepEqual(result.args.slice(0, 3), ['run', '--project', 'E:\\Code\\ae-mcp-codex-p5a']);
-  assert.equal(result.args[3], 'ae-mcp');
-  assert.equal(result.source, 'uv');
-});
-
-test('resolveMcpCommand uses the uv tool shim without an AE restart', async () => {
-  const result = await resolveMcpCommand({
-    whereImpl: async () => '',
-    envImpl: { USERPROFILE: 'C:\\Users\\X' },
-    fsImpl: { existsSync: (p) => p === 'C:\\Users\\X\\.local\\bin\\ae-mcp.exe' },
-  });
-
-  assert.deepEqual(result, { command: 'C:\\Users\\X\\.local\\bin\\ae-mcp.exe', args: [], source: 'uv-tool' });
-});
-
-test('resolveMcpCommand falls through to checkout when uv tool shim is absent', async () => {
-  const result = await resolveMcpCommand({
-    whereImpl: async () => '',
-    envImpl: {},
-    extRoot: 'E:/repo/plugin/panel',
-    fsImpl: { existsSync: (p) => p === 'E:\\repo\\pyproject.toml' },
-  });
-
-  assert.deepEqual(result, { command: 'uv', args: ['run', '--project', 'E:\\repo', 'ae-mcp'], source: 'uv' });
 });
 
 test('findProjectRoot is exported for wizard repo probing', () => {
+  const platform = fakeCommandPlatform({ launcher: 'E:\\Users\\a\\.ae-mcp\\bin\\ae-mcp.exe' });
   const root = findProjectRoot({
     extRoot: 'E:/repo/plugin/panel',
     repoRoot: '',
+    platform,
     fsImpl: { existsSync: (p) => p === 'E:\\repo\\pyproject.toml' },
   });
 
@@ -119,9 +104,7 @@ test('findProjectRoot is exported for wizard repo probing', () => {
 test('resolveMcpCommand reports a repair hint when no executable can be found', async () => {
   await assert.rejects(
     resolveMcpCommand({
-      whereImpl: async () => '',
-      extRoot: 'E:/missing/plugin/panel',
-      fsImpl: { existsSync: () => false },
+      platform: fakeCommandPlatform({ resolved: { ok: false, id: 'ae-mcp', code: 'NOT_FOUND', attempts: [] } }),
     }),
     /Unable to find ae-mcp/,
   );
@@ -146,12 +129,15 @@ function makeFakeProc() {
 // tools/list so createMcpClient.start() resolves to ready.
 function spawnReplying(initResult) {
   let proc = null;
-  const spawnImpl = () => {
+  const spawnImpl = (_command, _args, options) => {
     proc = makeFakeProc();
+    proc.spawnOptions = options;
+    proc.clientWrites = [];
     const origWrite = proc.stdin.write;
     proc.stdin.write = (line) => {
       origWrite(line);
       const msg = JSON.parse(line);
+      proc.clientWrites.push(msg);
       if (msg.method === 'initialize') {
         proc.pushStdout({ jsonrpc: '2.0', id: msg.id, result: initResult });
       } else if (msg.method === 'tools/list') {
@@ -160,7 +146,7 @@ function spawnReplying(initResult) {
     };
     return proc;
   };
-  return { spawnImpl };
+  return { spawnImpl, getProc: () => proc };
 }
 
 test('createMcpClient captures server instructions from the initialize result', async () => {
@@ -185,5 +171,106 @@ test('createMcpClient defaults server instructions to empty when absent', async 
 
   await client.start();
   assert.equal(client.getServerInstructions(), '');
+  client.stop();
+});
+
+test('createMcpClient passes the Tool Library tier file into the direct MCP process', async () => {
+  const { spawnImpl, getProc } = spawnReplying({});
+  const client = createMcpClient({
+    spawnImpl,
+    env: { AE_MCP_TOOL_APPROVAL_TIER_FILE: '/tmp/panel.tier' },
+    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
+  });
+
+  await client.start();
+  assert.equal(
+    getProc().spawnOptions.env.AE_MCP_TOOL_APPROVAL_TIER_FILE,
+    '/tmp/panel.tier',
+  );
+  client.stop();
+});
+
+test('createMcpClient relays elicitation with server metadata and responds', async () => {
+  const initResult = {
+    instructions: 'SERVER_GUIDE',
+    serverInfo: { name: 'ae', version: '1.2.3' },
+  };
+  const { spawnImpl, getProc } = spawnReplying(initResult);
+  const seen = [];
+  const client = createMcpClient({
+    spawnImpl,
+    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
+    onElicitation: async (request, { signal }) => {
+      seen.push({ request, signal });
+      return { action: 'accept', content: { decision: 'once' } };
+    },
+  });
+  await client.start();
+  getProc().pushStdout({
+    jsonrpc: '2.0',
+    id: 77,
+    method: 'elicitation/create',
+    params: {
+      mode: 'form',
+      message: 'Approve tool?',
+      requestedSchema: { type: 'object' },
+      _meta: { progressToken: 'p1' },
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].request.message, 'Approve tool?');
+  assert.equal(seen[0].request.mode, 'form');
+  assert.deepEqual(seen[0].request.requestedSchema, { type: 'object' });
+  assert.deepEqual(seen[0].request.serverInfo, initResult.serverInfo);
+  assert.equal(seen[0].request.serverInstructions, 'SERVER_GUIDE');
+  assert.deepEqual(seen[0].request.meta, { progressToken: 'p1' });
+  assert.equal(seen[0].signal.aborted, false);
+  assert.deepEqual(getProc().clientWrites.find((message) => message.id === 77), {
+    jsonrpc: '2.0', id: 77, result: { action: 'accept', content: { decision: 'once' } },
+  });
+  client.stop();
+});
+
+test('createMcpClient declines elicitation when no callback is configured', async () => {
+  const { spawnImpl, getProc } = spawnReplying({ serverInfo: { name: 'ae', version: '1' } });
+  const client = createMcpClient({
+    spawnImpl,
+    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
+  });
+  await client.start();
+  getProc().pushStdout({
+    jsonrpc: '2.0', id: 78, method: 'elicitation/create', params: { message: 'Approve?' },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(getProc().clientWrites.find((message) => message.id === 78), {
+    jsonrpc: '2.0', id: 78, result: { action: 'decline', content: {} },
+  });
+  client.stop();
+});
+
+test('createMcpClient returns JSON-RPC method-not-found for unknown server requests', async () => {
+  const { spawnImpl, getProc } = spawnReplying({ serverInfo: { name: 'ae', version: '1' } });
+  const client = createMcpClient({
+    spawnImpl,
+    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
+  });
+  await client.start();
+  getProc().pushStdout({
+    jsonrpc: '2.0', id: 79, method: 'unknown/request', params: {},
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(getProc().clientWrites.find((message) => message.id === 79), {
+    jsonrpc: '2.0',
+    id: 79,
+    error: {
+      code: -32601,
+      message: 'Method not found',
+      data: { method: 'unknown/request' },
+    },
+  });
   client.stop();
 });

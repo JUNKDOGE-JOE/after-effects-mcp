@@ -15,8 +15,8 @@ import { buildComposerChips } from '../lib/composerOptions';
 const C = {
   zh: {
     hello: '你好！我可以直接操作当前打开的 AE 工程。试试这些：',
-    keyTitle: '在设置里粘贴 Anthropic API Key',
-    keyCaption: '保存并验证后，就可以在这里让 AI 操作你的工程。',
+    keyTitle: '在设置的 Provider 管理中选择可用渠道',
+    keyCaption: '凭据由系统凭据 Helper 保管；如不可用，请按设置中的修复提示处理。',
     newSession: '新会话',
     placeholder: '描述你想在 AE 里做什么…',
     noticeAction: '新会话',
@@ -35,8 +35,8 @@ const C = {
   },
   en: {
     hello: 'Hi! I can operate the open AE project directly. Try one of these:',
-    keyTitle: 'Paste an Anthropic API Key in Settings',
-    keyCaption: 'After saving and validating it, AI can operate your project here.',
+    keyTitle: 'Choose an available channel in Provider Manager',
+    keyCaption: 'Credentials stay in the system credential helper; follow the repair guidance in Settings if it is unavailable.',
     newSession: 'New session',
     placeholder: 'Describe what to do in AE…',
     noticeAction: 'New session',
@@ -105,7 +105,7 @@ function Entry({ entry, lang, onApprove }) {
     return <ChatBubble role="ai">{entry.text}</ChatBubble>;
   }
   if (entry.type === 'tool-call') {
-    const highRisk = entry.risk === 'destructive';
+    const highRisk = entry.risk === 'destructive' || entry.risk === 'external';
     return (
       <div style={{ paddingLeft: 28, display: 'flex', flexDirection: 'column', gap: 6 }}>
         <ToolCallCard

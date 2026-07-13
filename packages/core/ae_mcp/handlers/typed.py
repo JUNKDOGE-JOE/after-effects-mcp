@@ -271,7 +271,9 @@ def render_set_property(args: schemas.AeSetPropertyArgs) -> str:
         comp_expr=_comp_expr(args.comp_id),
         layer_id=int(args.layer_id),
         path=_json_literal(args.path),
+        use_expression="true" if args.expression is not None else "false",
         value=_json_literal(args.value),
+        expression=_json_literal(args.expression),
         at_time=_json_literal(float(args.at_time) if args.at_time is not None else None),
     ))
 

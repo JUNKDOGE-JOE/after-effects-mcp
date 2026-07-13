@@ -547,23 +547,32 @@ async def test_skill_use_missing_arg_fails(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_skill_use_execute_runs_jsx(monkeypatch, tmp_path, mock_backend):
-    monkeypatch.setenv("AE_MCP_SKILL_DIR", str(tmp_path))
+    monkeypatch.setenv("AE_MCP_SKILL_DIR", str(tmp_path / "skills"))
+    monkeypatch.setenv("AE_MCP_TOOL_DIR", str(tmp_path / "tools"))
+    tier = tmp_path / "approval-tier"
+    tier.write_text("none\n", encoding="utf-8")
+    monkeypatch.setenv("AE_MCP_TOOL_APPROVAL_TIER_FILE", str(tier))
     from ae_mcp.handlers.skills import _run_skill_create, _run_skill_use
+    from ae_mcp.tool_service import reset_default_tool_service_for_tests
 
-    mock_backend.set_response(json.dumps({"ok": True, "mutated": True}))
-    await _run_skill_create(S.AeSkillCreateArgs(
-        name="exec-jsx",
-        description="x",
-        template="JSON.stringify({ok:true,value:${value}})",
-        args_schema={"value": {"type": "number"}},
-    ), None)
-    result = await _run_skill_use(
-        S.AeSkillUseArgs(name="exec-jsx", args={"value": 42}, execute=True),
-        None,
-    )
-    assert result["ok"] is True
-    assert result["mutated"] is True
-    assert "42" in mock_backend.calls[-1]["code"]
+    reset_default_tool_service_for_tests()
+    try:
+        mock_backend.set_response(json.dumps({"ok": True, "mutated": True}))
+        await _run_skill_create(S.AeSkillCreateArgs(
+            name="exec-jsx",
+            description="x",
+            template="JSON.stringify({ok:true,value:${value}})",
+            args_schema={"value": {"type": "number"}},
+        ), None)
+        result = await _run_skill_use(
+            S.AeSkillUseArgs(name="exec-jsx", args={"value": 42}, execute=True),
+            None,
+        )
+        assert result["ok"] is True
+        assert result["result"]["mutated"] is True
+        assert "42" in mock_backend.calls[-1]["code"]
+    finally:
+        reset_default_tool_service_for_tests()
 
 
 @pytest.mark.asyncio

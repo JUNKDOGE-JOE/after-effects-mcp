@@ -84,10 +84,16 @@ function makeMcp({ tools, resultText = 'ok', isError = false } = {}) {
   };
 }
 
-function makeLoop({ anthropic, mcp = makeMcp(), mode = 'none', events = [], getEffort, getFast, getApiBaseUrl }) {
+function makeLoop({ anthropic, mcp = makeMcp(), mode = 'none', events = [], getEffort, getFast, resolveRequestProfile }) {
   return createAgentLoop({
-    getApiKey: () => 'sk-test',
-    getApiBaseUrl,
+    resolveRequestProfile: resolveRequestProfile || (async () => ({
+      providerId: 'test-provider',
+      baseUrl: 'https://api.anthropic.com',
+      allowInsecureHttp: false,
+      auth: { kind: 'header', name: 'x-api-key', value: 'sk-test' },
+      extraHeaders: [],
+      authProfileRevision: 1,
+    })),
     getModel: () => 'claude-sonnet-4-6',
     getPermissionMode: () => mode,
     getEffort,
@@ -306,12 +312,108 @@ test('createAgentLoop passes custom Anthropic base URL to the direct API backend
   const calls = [];
   const loop = makeLoop({
     anthropic: anthropicFromSse([textTurn('ok')], calls),
-    getApiBaseUrl: () => 'https://proxy.example/anthropic',
+    resolveRequestProfile: async () => ({
+      providerId: 'proxy',
+      baseUrl: 'https://proxy.example/anthropic',
+      allowInsecureHttp: false,
+      auth: { kind: 'header', name: 'x-api-key', value: 'resolved-only-for-request' },
+      extraHeaders: [],
+      authProfileRevision: 2,
+    }),
   });
 
   await loop.sendUser('hi');
 
-  assert.equal(calls[0].baseUrl, 'https://proxy.example/anthropic');
+  assert.equal(calls[0].requestProfile.baseUrl, 'https://proxy.example/anthropic');
+});
+
+test('createAgentLoop resolves a request profile once per model call and never emits its secret', async () => {
+  const events = [];
+  const calls = [];
+  let resolveCalls = 0;
+  const loop = makeLoop({
+    anthropic: anthropicFromSse([textTurn('ok')], calls),
+    events,
+    resolveRequestProfile: async () => {
+      resolveCalls += 1;
+      return {
+        providerId: 'relay',
+        baseUrl: 'https://relay.example',
+        allowInsecureHttp: false,
+        auth: { kind: 'header', name: 'x-api-key', value: 'resolved-only-for-request' },
+        extraHeaders: [],
+        authProfileRevision: 1,
+      };
+    },
+  });
+  await loop.sendUser('hi');
+  assert.equal(resolveCalls, 1);
+  assert.equal(calls[0].requestProfile.auth.value, 'resolved-only-for-request');
+  assert.equal(JSON.stringify(events).includes('resolved-only-for-request'), false);
+  assert.equal(JSON.stringify(loop.getMessages()).includes('resolved-only-for-request'), false);
+});
+
+test('createAgentLoop redacts resolved secret values from model errors', async () => {
+  const events = [];
+  const loop = makeLoop({
+    anthropic: async () => { throw Object.assign(new Error('upstream echoed resolved-only-for-request'), { kind: 'network' }); },
+    events,
+    resolveRequestProfile: async () => ({
+      providerId: 'relay',
+      baseUrl: 'https://relay.example',
+      allowInsecureHttp: false,
+      auth: { kind: 'header', name: 'x-api-key', value: 'resolved-only-for-request' },
+      extraHeaders: [],
+      authProfileRevision: 1,
+    }),
+  });
+  await loop.sendUser('hi');
+  assert.equal(JSON.stringify(events).includes('resolved-only-for-request'), false);
+});
+
+test('createAgentLoop also redacts the bare token from a Bearer auth value', async () => {
+  const events = [];
+  const loop = makeLoop({
+    anthropic: async () => { throw Object.assign(new Error('provider echoed bare-token-marker'), { kind: 'network' }); },
+    events,
+    resolveRequestProfile: async () => ({
+      providerId: 'relay',
+      baseUrl: 'https://relay.example',
+      allowInsecureHttp: false,
+      auth: { kind: 'header', name: 'Authorization', value: 'Bearer bare-token-marker' },
+      extraHeaders: [],
+      authProfileRevision: 1,
+    }),
+  });
+  await loop.sendUser('hi');
+  assert.equal(JSON.stringify(events).includes('bare-token-marker'), false);
+});
+
+test('createAgentLoop redacts credentials echoed in deltas and assistant history', async () => {
+  const events = [];
+  const loop = makeLoop({
+    anthropic: async ({ onTextDelta }) => {
+      onTextDelta('echoed-token-');
+      onTextDelta('marker');
+      return {
+        assistantMessage: { role: 'assistant', content: [{ type: 'text', text: 'echoed-token-marker' }] },
+        stopReason: 'end_turn',
+      };
+    },
+    events,
+    resolveRequestProfile: async () => ({
+      providerId: 'relay',
+      baseUrl: 'https://relay.example',
+      allowInsecureHttp: false,
+      auth: { kind: 'header', name: 'x-api-key', value: 'echoed-token-marker' },
+      extraHeaders: [],
+      authProfileRevision: 1,
+    }),
+  });
+  await loop.sendUser('hi');
+  assert.equal(JSON.stringify(events).includes('echoed-token-marker'), false);
+  assert.equal(events.filter((event) => event.type === 'text-delta').map((event) => event.text).join('').includes('echoed-token-marker'), false);
+  assert.equal(JSON.stringify(loop.getMessages()).includes('echoed-token-marker'), false);
 });
 
 test('createAgentLoop appends ae-mcp server instructions to the system prompt', async () => {
@@ -334,4 +436,75 @@ test('createAgentLoop omits server instructions when the mcp fake lacks the meth
 
   // Default-safe: a fake without getServerInstructions yields the bare prompt.
   assert.equal(calls[0].system, buildSystemPrompt('zh'));
+});
+
+test('createAgentLoop delegates staged toolUse and skillUse calls directly to core', async () => {
+  const events = [];
+  const mcp = makeMcp({
+    tools: [
+      { name: 'ae_toolUse', inputSchema: {}, annotations: { destructiveHint: true } },
+      { name: 'mcp__ae__ae_skillUse', inputSchema: {}, annotations: { destructiveHint: true } },
+    ],
+  });
+  const loop = makeLoop({
+    anthropic: anthropicFromSse([
+      toolTurn({ id: 'plan', name: 'ae_toolUse', input: { action: 'prepare', artifact_id: 'user:1' } }),
+      textTurn('planned'),
+      toolTurn({ id: 'legacy', name: 'mcp__ae__ae_skillUse', input: { name: 'legacy', execute: true } }),
+      textTurn('executed'),
+    ]),
+    mcp,
+    mode: 'readonly',
+    events,
+  });
+
+  await loop.sendUser('plan');
+  await loop.sendUser('legacy');
+
+  assert.deepEqual(mcp.calls, [
+    { name: 'ae_toolUse', args: { action: 'prepare', artifact_id: 'user:1' } },
+    { name: 'mcp__ae__ae_skillUse', args: { name: 'legacy', execute: true } },
+  ]);
+  assert.equal(events.some((event) => event.type === 'approval-required'), false);
+  assert.equal(events.some((event) => event.type === 'tool-denied'), false);
+});
+
+test('dynamic delegation never creates a tool-name session allowance', async () => {
+  const events = [];
+  const mcp = makeMcp({
+    tools: [
+      { name: 'ae_toolUse', inputSchema: {}, annotations: { readOnlyHint: false } },
+    ],
+  });
+  const loop = makeLoop({
+    anthropic: anthropicFromSse([
+      toolTurn({ id: 'staged', name: 'ae_toolUse', input: { action: 'grant', plan_hash: 'b'.repeat(64) } }),
+      textTurn('granted'),
+      toolTurn({ id: 'not-staged', name: 'ae_toolUse', input: { action: 'delete' } }),
+      textTurn('denied'),
+    ]),
+    mcp,
+    mode: 'manual',
+    events,
+  });
+
+  const first = loop.sendUser('grant');
+  const firstOutcome = await Promise.race([
+    first.then(() => 'completed'),
+    waitFor(events, 'approval-required'),
+  ]);
+  if (firstOutcome !== 'completed') {
+    loop.approve(firstOutcome.toolUseId, 'deny');
+    await first;
+  }
+  assert.equal(firstOutcome, 'completed');
+  const second = loop.sendUser('delete');
+  const approval = await waitFor(events, 'approval-required');
+  assert.equal(approval.toolUseId, 'not-staged');
+  loop.approve(approval.toolUseId, 'deny');
+  await second;
+
+  assert.deepEqual(mcp.calls, [
+    { name: 'ae_toolUse', args: { action: 'grant', plan_hash: 'b'.repeat(64) } },
+  ]);
 });

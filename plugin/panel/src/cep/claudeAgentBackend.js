@@ -1,61 +1,18 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
 import { claudeChannelEnv } from '../lib/claudeChannel.js';
+import { createDeltaRedactor, redactValue } from '../lib/exactSecretRedaction.js';
+import { selectProviderRoute } from '../lib/providerRouteSelection.js';
+import { createPlatformAdapter } from './platform/index.js';
+import { createUniversalProviderRoute } from './universalProviderRoute.js';
 
 const READY_TIMEOUT_MS = 15000;
 const STDERR_TAIL_LIMIT = 4096;
-const FIXED_NODE_CANDIDATE = 'C:\\Program Files\\nodejs\\node.exe';
-
-function getCepRequire() {
-  if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
-    return globalThis.window.cep_node.require;
-  }
-  if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-  if (globalThis.require) return globalThis.require;
-  throw new Error('CEP Node require is unavailable');
-}
-
-function getCepEnv() {
-  return (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.process && globalThis.window.cep_node.process.env) || {};
-}
-
-function execFileAsync(execFileImpl, file, args, env) {
-  return new Promise((resolve) => {
-    execFileImpl(file, args, { windowsHide: true, env }, (err, stdout, stderr) => {
-      resolve({ err, stdout: String(stdout || ''), stderr: String(stderr || '') });
-    });
-  });
-}
-
-function nodeCandidates(stdout) {
-  const seen = new Set();
-  const candidates = String(stdout || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  candidates.push(FIXED_NODE_CANDIDATE);
-  return candidates.filter((candidate) => {
-    if (seen.has(candidate)) return false;
-    seen.add(candidate);
-    return true;
-  });
-}
-
-function parseMajor(version) {
-  const match = String(version || '').trim().match(/^v(\d+)/);
-  return match ? Number(match[1]) : 0;
-}
-
-export async function resolveSystemNode({ execFileImpl, env } = {}) {
-  const execFile = execFileImpl || getCepRequire()('child_process').execFile;
-  const processEnv = env || getCepEnv();
-  const where = await execFileAsync(execFile, 'where', ['node'], processEnv);
-  const candidates = nodeCandidates(where.err ? '' : where.stdout);
-
-  for (const candidate of candidates) {
-    const checked = await execFileAsync(execFile, candidate, ['--version'], processEnv);
-    if (checked.err) continue;
-    const version = String(checked.stdout || checked.stderr || '').trim();
-    if (parseMajor(version) >= 18) return { ok: true, nodePath: candidate, version };
-  }
-
-  return { ok: false, detail: 'No system Node 18+ found.' };
+export async function resolveSystemNode({ platform } = {}) {
+  const adapter = platform || createPlatformAdapter();
+  const requiredArch = adapter.id === 'macos-arm64' ? 'arm64' : (adapter.id === 'windows-x64' ? 'x64' : undefined);
+  const resolved = await adapter.resolveExecutable('node', { minimumVersion: '18.0.0', ...(requiredArch ? { requiredArch } : {}) });
+  if (!resolved.ok) return { ok: false, detail: 'Node runtime resolution failed: ' + resolved.code, resolution: resolved };
+  return { ok: true, nodePath: resolved.path, version: resolved.version || '', executable: resolved };
 }
 
 function clone(value) {
@@ -63,8 +20,8 @@ function clone(value) {
 }
 
 function nodeMissingMessage(lang) {
-  if (lang === 'zh') return '内嵌对话需要系统 Node 18+（未检测到）。安装 Node.js LTS 后重试。';
-  return 'Embedded chat needs system Node 18+. Install Node.js LTS and retry.';
+  if (lang === 'zh') return '内嵌对话运行时缺失或损坏，请在设置中修复离线运行时。';
+  return 'The embedded chat runtime is missing or damaged. Repair the offline runtime in Settings.';
 }
 
 function appendTail(tail, chunk) {
@@ -72,7 +29,44 @@ function appendTail(tail, chunk) {
   return next.length > STDERR_TAIL_LIMIT ? next.slice(next.length - STDERR_TAIL_LIMIT) : next;
 }
 
+function defaultResolveCapability({ provider, modelId, feature = 'generate' } = {}) {
+  return selectProviderRoute(provider, {
+    client: 'claude-code',
+    modelId,
+    feature,
+  });
+}
+
+function runtimeIdentity({ channel, model, provider }) {
+  return JSON.stringify([
+    channel,
+    model,
+    channel === 'api' ? provider.id ?? null : null,
+    channel === 'api' ? provider.baseUrl ?? null : null,
+    channel === 'api' ? provider.requestProfileRevision ?? null : null,
+    channel === 'api' ? provider.modelList?.revision ?? null : null,
+  ]);
+}
+
+function cancelledStartError() {
+  const error = new Error('Claude sidecar start was cancelled');
+  error.code = 'CLAUDE_AGENT_START_CANCELLED';
+  return error;
+}
+
+function normalizeChannel(channel) {
+  return channel === 'api' ? 'api' : 'subscription';
+}
+
+function providerModelError(code, message) {
+  const error = new Error(message);
+  error.kind = 'model';
+  error.code = code;
+  return error;
+}
+
 export function createClaudeAgentBackend({
+  platform,
   resolveNode = resolveSystemNode,
   sidecarPath,
   getMcpSpec,
@@ -82,31 +76,69 @@ export function createClaudeAgentBackend({
   getEffort,
   getThinking,
   getChannel = () => 'subscription',
-  getApiProvider = () => null,
+  getProviderSensitiveValues = () => [],
+  resolveApiProvider,
+  resolveRequestProfile,
+  resolveCapability = defaultResolveCapability,
+  createProviderRoute = createUniversalProviderRoute,
+  recoverProviderProfile,
+  onProviderProfileRecovered = () => {},
   onEvent,
   lang = 'zh',
   spawnImpl,
   env,
 }) {
+  const adapter = platform || (spawnImpl ? {
+    completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
+    spawn: (executable, args, options) => spawnImpl(executable.path, [...(executable.argsPrefix || []), ...args], options),
+  } : createPlatformAdapter());
   let proc = null;
   let startPromise = null;
   let pendingReadyReject = null;
   let pendingReadyTimer = null;
   let ready = false;
-  let stopping = false;
   let stderrTail = '';
   let transcript = [];
   let activeRun = null;
   let activeResolve = null;
   let activeAssistantText = '';
+  let processChannel = 'subscription';
+  let processModel = '';
+  let processIdentity = null;
+  let processProvider = null;
+  let processCandidateIdentity = null;
+  let providerRoute = null;
+  let routeClosePromise = Promise.resolve();
+  let runtimeGeneration = 0;
+  let providerSensitiveValues = [];
+  let providerDeltaPhase = undefined;
+  let providerDeltaRedactor = createDeltaRedactor([], () => {});
 
   function emit(evt) {
-    if (onEvent) onEvent(evt);
+    if (onEvent) onEvent(redactValue(evt, providerSensitiveValues));
   }
 
-  function getSpawn() {
-    if (spawnImpl) return spawnImpl;
-    return getCepRequire()('child_process').spawn;
+  function resetProviderDeltaRedactor() {
+    providerDeltaRedactor.discard();
+    providerDeltaPhase = undefined;
+    providerDeltaRedactor = createDeltaRedactor(providerSensitiveValues, (text) => {
+      activeAssistantText += text;
+      emit({ type: 'text-delta', text, ...(providerDeltaPhase ? { phase: providerDeltaPhase } : {}) });
+    });
+  }
+
+  function setProviderSensitiveValues(values) {
+    providerSensitiveValues = Array.from(new Set((values || [])
+      .filter((value) => typeof value === 'string' && value)))
+      .sort((left, right) => right.length - left.length);
+    resetProviderDeltaRedactor();
+  }
+
+  function clearProviderSensitiveValues() {
+    providerDeltaRedactor.discard();
+    providerSensitiveValues = [];
+    providerDeltaPhase = undefined;
+    providerDeltaRedactor = createDeltaRedactor([], () => {});
   }
 
   function writeMessage(message) {
@@ -131,9 +163,19 @@ export function createClaudeAgentBackend({
     if (!message || message.t === 'ready') return;
     if (message.t !== 'event') return;
 
-    const event = message.event;
+    let event = message.event;
     if (!event) return;
-    if (event.type === 'text-delta') activeAssistantText += String(event.text || '');
+    if (processChannel === 'api' && event.type === 'error') {
+      event = { ...event, message: 'Provider sidecar request failed.' };
+    }
+    if (event.type === 'text-delta') {
+      const nextPhase = typeof event.phase === 'string' ? event.phase : undefined;
+      if (providerDeltaPhase !== undefined && providerDeltaPhase !== nextPhase) providerDeltaRedactor.flush();
+      providerDeltaPhase = nextPhase;
+      providerDeltaRedactor.feed(String(event.text || ''));
+      return;
+    }
+    providerDeltaRedactor.flush();
     emit(event);
     if (event.type === 'turn-end') {
       transcript.push({ role: 'assistant', text: activeAssistantText });
@@ -153,62 +195,287 @@ export function createClaudeAgentBackend({
     pendingReadyReject = null;
   }
 
-  function handleExit(code, signal) {
-    const wasStopping = stopping;
+  function closeProviderRoute() {
+    const route = providerRoute;
+    providerRoute = null;
+    if (!route || typeof route.close !== 'function') return routeClosePromise;
+    routeClosePromise = routeClosePromise
+      .then(() => route.close())
+      .catch(() => {});
+    return routeClosePromise;
+  }
+
+  async function discardRuntime({ clearTranscript = false, finishRun = false, clearStderr = false } = {}) {
+    runtimeGeneration += 1;
+    const current = proc;
+    const rejectReady = pendingReadyReject;
+    proc = null;
+    ready = false;
+    startPromise = null;
+    clearReadyWait();
+    processChannel = 'subscription';
+    processModel = '';
+    processIdentity = null;
+    processProvider = null;
+    processCandidateIdentity = null;
+    if (rejectReady) rejectReady(cancelledStartError());
+    if (current) {
+      try { current.kill(); } catch {}
+    }
+    if (clearTranscript) transcript = [];
+    if (finishRun) finishActive();
+    if (clearStderr) stderrTail = '';
+    clearProviderSensitiveValues();
+    await closeProviderRoute();
+  }
+
+  function apiSafeErrorMessage(message) {
+    return processChannel === 'api' ? 'Provider sidecar request failed.' : message;
+  }
+
+  function handleExit(target, generation, code, signal) {
+    if (generation !== runtimeGeneration || proc !== target) return;
     const wasReady = ready;
     const detail = exitDetail(code, signal);
     const rejectReady = pendingReadyReject;
     proc = null;
     ready = false;
     startPromise = null;
-    stopping = false;
-    if (wasStopping) return;
+    processIdentity = null;
+    processModel = '';
+    processProvider = null;
+    processCandidateIdentity = null;
+    runtimeGeneration += 1;
+    void closeProviderRoute();
     if (!wasReady && rejectReady) {
       clearReadyWait();
+      processChannel = 'subscription';
+      clearProviderSensitiveValues();
       rejectReady(new Error('sidecar exited: ' + detail));
       return;
     }
     if (activeRun) {
-      emit({ type: 'error', kind: 'mcp', message: 'sidecar exited: ' + detail });
+      providerDeltaRedactor.flush();
+      emit({ type: 'error', kind: 'mcp', message: apiSafeErrorMessage('sidecar exited: ' + detail) });
       finishActive();
     }
+    processChannel = 'subscription';
+    clearProviderSensitiveValues();
   }
 
-  function handleProcError(error) {
+  function handleProcError(target, generation, error) {
+    if (generation !== runtimeGeneration || proc !== target) return;
     const rejectReady = pendingReadyReject;
     proc = null;
     ready = false;
     startPromise = null;
+    processIdentity = null;
+    processModel = '';
+    processProvider = null;
+    processCandidateIdentity = null;
+    runtimeGeneration += 1;
+    void closeProviderRoute();
     if (rejectReady) {
       clearReadyWait();
+      processChannel = 'subscription';
+      clearProviderSensitiveValues();
       rejectReady(error instanceof Error ? error : new Error('sidecar error'));
       return;
     }
     if (activeRun) {
-      emit({ type: 'error', kind: 'mcp', message: error && error.message ? error.message : 'sidecar error' });
+      const message = error && error.message ? error.message : 'sidecar error';
+      providerDeltaRedactor.flush();
+      emit({ type: 'error', kind: 'mcp', message: apiSafeErrorMessage(message) });
       finishActive();
+    }
+    processChannel = 'subscription';
+    clearProviderSensitiveValues();
+  }
+
+  async function selectApiRoute(provider, model) {
+    try {
+      return await resolveCapability({
+        provider,
+        modelId: model,
+        clientProtocol: 'messages',
+        feature: 'generate',
+      });
+    } catch {
+      return null;
     }
   }
 
-  async function startSidecar() {
+  async function desiredSession(channel) {
+    const model = String(getModel ? getModel() : '').trim();
+    let provider = null;
+    let candidateIdentity = null;
+    let recovered = false;
+    let route = null;
+    if (channel === 'api') {
+      if (typeof resolveApiProvider !== 'function') throw new Error('Provider is unavailable.');
+      if (typeof resolveRequestProfile !== 'function') throw new Error('Provider credential resolver is unavailable.');
+      if (typeof resolveCapability !== 'function') throw new Error('Provider capability resolver is unavailable.');
+      if (typeof createProviderRoute !== 'function') throw new Error('Provider route factory is unavailable.');
+      provider = await resolveApiProvider();
+      if (!provider || typeof provider !== 'object' || Array.isArray(provider)) {
+        throw new Error('Provider is unavailable.');
+      }
+      candidateIdentity = runtimeIdentity({ channel, model, provider });
+      if (
+        proc
+        && ready
+        && processProvider
+        && processCandidateIdentity === candidateIdentity
+      ) {
+        provider = processProvider;
+        return {
+          channel,
+          model,
+          provider,
+          candidateIdentity,
+          recovered,
+          route: null,
+          identity: runtimeIdentity({ channel, model, provider }),
+        };
+      }
+
+      route = await selectApiRoute(provider, model);
+      if (!route?.ok) {
+        if (route?.reasonCode !== 'needs-probe') {
+          throw providerModelError(
+            'provider_route_unavailable',
+            `Custom provider has no verified Claude route for model ${model}`,
+          );
+        }
+        if (typeof recoverProviderProfile !== 'function') {
+          throw providerModelError(
+            'provider_preflight_unavailable',
+            `Custom provider cannot be verified for model ${model}`,
+          );
+        }
+
+        let recovery;
+        try {
+          recovery = await recoverProviderProfile(
+            provider,
+            { status: null, code: 'provider_preflight_required' },
+            model,
+          );
+        } catch {
+          throw providerModelError(
+            'provider_preflight_failed',
+            `Custom provider could not verify model ${model}`,
+          );
+        }
+        const recoveredProvider = recovery?.provider || recovery;
+        const recoveredModel = String(recovery?.modelId || model).trim();
+        if (
+          !recoveredProvider
+          || typeof recoveredProvider !== 'object'
+          || Array.isArray(recoveredProvider)
+          || recoveredModel !== model
+        ) {
+          throw providerModelError(
+            'provider_preflight_failed',
+            `Custom provider did not expose a verified API for model ${model}`,
+          );
+        }
+        route = await selectApiRoute(recoveredProvider, model);
+        if (!route?.ok) {
+          throw providerModelError(
+            'provider_preflight_failed',
+            `Custom provider did not expose a verified API for model ${model}`,
+          );
+        }
+        provider = recoveredProvider;
+        recovered = true;
+      }
+    }
+    return {
+      channel,
+      model,
+      provider,
+      candidateIdentity,
+      recovered,
+      route,
+      identity: runtimeIdentity({ channel, model, provider }),
+    };
+  }
+
+  async function cleanupFailedStart(generation) {
+    if (generation !== runtimeGeneration) {
+      await routeClosePromise;
+      return;
+    }
+    runtimeGeneration += 1;
+    const current = proc;
+    proc = null;
+    ready = false;
+    processChannel = 'subscription';
+    processModel = '';
+    processIdentity = null;
+    processProvider = null;
+    processCandidateIdentity = null;
+    clearReadyWait();
+    clearProviderSensitiveValues();
+    if (current) {
+      try { current.kill(); } catch {}
+    }
+    await closeProviderRoute();
+  }
+
+  async function startSidecar(session) {
     if (proc && ready) return true;
     if (startPromise) return startPromise;
+    const startGeneration = runtimeGeneration;
+    const assertCurrentStart = () => {
+      if (startGeneration !== runtimeGeneration) throw cancelledStartError();
+    };
 
-    startPromise = (async () => {
-      const node = await resolveNode();
+    const pendingStart = (async () => {
+      const node = await resolveNode({ platform: adapter });
+      assertCurrentStart();
       if (!node || !node.ok) {
         emit({ type: 'error', kind: 'mcp', message: nodeMissingMessage(lang) });
         return false;
       }
 
       const mcpSpec = await getMcpSpec();
+      assertCurrentStart();
       const meta = await getToolMeta();
-      const spawn = getSpawn();
-      const channel = getChannel ? getChannel() : 'subscription';
-      const spawnEnv = claudeChannelEnv(env || getCepEnv(), { channel, provider: getApiProvider ? getApiProvider() : null });
+      assertCurrentStart();
+      await routeClosePromise;
+      assertCurrentStart();
+      let localRoute = null;
+      if (session.channel === 'api') {
+        providerRoute = createProviderRoute({
+          provider: session.provider,
+          resolveCapability,
+          resolveRequestProfile,
+        });
+        const routeInfo = await providerRoute.start();
+        assertCurrentStart();
+        localRoute = {
+          origin: routeInfo?.origin,
+          routeToken: routeInfo?.routeToken,
+        };
+        const redactionValues = getProviderSensitiveValues();
+        if (!Array.isArray(redactionValues)) throw new TypeError('getProviderSensitiveValues must return an array');
+        setProviderSensitiveValues([...redactionValues, routeInfo?.routeToken]);
+      } else {
+        setProviderSensitiveValues([]);
+      }
+      let spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), {
+        channel: session.channel,
+        localRoute,
+      });
       stderrTail = '';
-      stopping = false;
       ready = false;
+      processChannel = session.channel;
+      processModel = session.model;
+      processIdentity = session.identity;
+      processProvider = session.provider;
+      processCandidateIdentity = session.candidateIdentity;
 
       let readyResolve;
       let readyReject;
@@ -221,23 +488,22 @@ export function createClaudeAgentBackend({
         pendingReadyTimer = null;
         pendingReadyReject = null;
         try {
-          stopping = true;
           if (proc) proc.kill();
-        } catch (e) {
-          // best effort
-        }
+        } catch {}
         readyReject(new Error('sidecar ready timed out'));
       }, READY_TIMEOUT_MS);
 
+      let spawnedProc;
       try {
-        proc = spawn(node.nodePath, [
+        const executable = node.executable || { ok: true, id: 'node', path: node.nodePath, argsPrefix: [], source: 'runtime', version: node.version || null, arch: null };
+        spawnedProc = adapter.spawn(executable, [
           sidecarPath,
           '--mcp', JSON.stringify(mcpSpec),
           '--allowed-tools', JSON.stringify(meta.allowedTools),
           '--annotations', JSON.stringify(meta.annotations),
-          '--model', getModel(),
+          '--model', session.model,
           '--lang', lang,
-          '--channel', channel,
+          '--channel', session.channel,
         ], {
           stdio: 'pipe',
           windowsHide: true,
@@ -246,9 +512,15 @@ export function createClaudeAgentBackend({
       } catch (e) {
         clearReadyWait();
         throw e;
+      } finally {
+        if (spawnEnv) delete spawnEnv.ANTHROPIC_AUTH_TOKEN;
+        spawnEnv = null;
       }
+      assertCurrentStart();
+      proc = spawnedProc;
 
       const reader = createNdjsonReader((message) => {
+        if (startGeneration !== runtimeGeneration || proc !== spawnedProc) return;
         if (message && message.t === 'ready') {
           ready = true;
           clearReadyWait();
@@ -257,26 +529,81 @@ export function createClaudeAgentBackend({
         }
         handleSidecarMessage(message);
       });
-      if (proc.stdout && proc.stdout.on) proc.stdout.on('data', reader);
-      if (proc.stderr && proc.stderr.on) proc.stderr.on('data', (chunk) => {
-        stderrTail = appendTail(stderrTail, chunk);
+      if (spawnedProc.stdout && spawnedProc.stdout.on) spawnedProc.stdout.on('data', reader);
+      if (spawnedProc.stderr && spawnedProc.stderr.on) spawnedProc.stderr.on('data', (chunk) => {
+        if (startGeneration !== runtimeGeneration || proc !== spawnedProc) return;
+        stderrTail = appendTail(stderrTail, processChannel === 'api' ? '[provider-sidecar-stderr-redacted]\n' : chunk);
       });
-      proc.on('exit', (code, signal) => handleExit(code, signal));
-      proc.on('error', (error) => {
-        handleProcError(error);
+      spawnedProc.on('exit', (code, signal) => handleExit(spawnedProc, startGeneration, code, signal));
+      spawnedProc.on('error', (error) => {
+        handleProcError(spawnedProc, startGeneration, error);
       });
 
       await readyPromise;
       return true;
     })();
+    startPromise = pendingStart;
 
     try {
-      return await startPromise;
+      return await pendingStart;
     } catch (e) {
-      emit({ type: 'error', kind: 'mcp', message: e && e.message ? e.message : 'Failed to start sidecar.' });
+      await cleanupFailedStart(startGeneration);
+      if (e?.code !== 'CLAUDE_AGENT_START_CANCELLED') {
+        const message = session.channel === 'api'
+          ? 'Provider sidecar request failed.'
+          : (e && e.message ? e.message : 'Failed to start sidecar.');
+        emit({ type: 'error', kind: 'mcp', message });
+      }
       return false;
     } finally {
-      startPromise = null;
+      if (startPromise === pendingStart) startPromise = null;
+    }
+  }
+
+  async function ensureSidecar(runToken) {
+    let session;
+    let channel = 'subscription';
+    const initialGeneration = runtimeGeneration;
+    try {
+      channel = normalizeChannel(getChannel ? getChannel() : 'subscription');
+      session = await desiredSession(channel);
+      if (activeRun !== runToken || runtimeGeneration !== initialGeneration) {
+        throw cancelledStartError();
+      }
+      if (session.recovered) {
+        try { await onProviderProfileRecovered(session.provider); } catch {}
+        if (activeRun !== runToken || runtimeGeneration !== initialGeneration) {
+          throw cancelledStartError();
+        }
+      }
+      if (processIdentity !== null && processIdentity !== session.identity) {
+        const replacing = discardRuntime({ clearTranscript: true, clearStderr: true });
+        const replacementGeneration = runtimeGeneration;
+        await replacing;
+        if (activeRun !== runToken || runtimeGeneration !== replacementGeneration) {
+          throw cancelledStartError();
+        }
+      }
+      if (proc && ready && processIdentity === session.identity) {
+        processProvider = session.provider;
+        processCandidateIdentity = session.candidateIdentity;
+      }
+      return await startSidecar(session);
+    } catch (error) {
+      if (activeRun === runToken) {
+        await discardRuntime({ clearTranscript: true, clearStderr: true });
+      }
+      if (error?.code !== 'CLAUDE_AGENT_START_CANCELLED') {
+        if (error?.kind === 'model') {
+          emit({ type: 'error', kind: 'model', code: error.code, message: error.message });
+        } else {
+          const message = channel === 'api'
+            ? 'Provider sidecar request failed.'
+            : (error?.message || 'Failed to start sidecar.');
+          emit({ type: 'error', kind: 'mcp', message });
+        }
+      }
+      return false;
     }
   }
 
@@ -284,14 +611,16 @@ export function createClaudeAgentBackend({
     if (activeRun) return activeRun;
 
     activeAssistantText = '';
+    resetProviderDeltaRedactor();
     activeRun = new Promise((resolve) => {
       activeResolve = resolve;
     });
+    const run = activeRun;
 
-    const ok = await startSidecar();
-    if (!ok) {
-      finishActive();
-      return activeRun;
+    const ok = await ensureSidecar(run);
+    if (!ok || activeRun !== run || !proc || !ready) {
+      if (activeRun === run) finishActive();
+      return run;
     }
 
     const userText = String(text || '');
@@ -300,11 +629,11 @@ export function createClaudeAgentBackend({
       t: 'user',
       text: userText,
       permissionMode: getPermissionMode(),
-      model: getModel(),
+      model: processModel,
       effort: getEffort ? getEffort() : undefined,
       thinking: getThinking ? getThinking() : undefined,
     });
-    return activeRun;
+    return run;
   }
 
   function approve(toolUseId, decision) {
@@ -316,17 +645,7 @@ export function createClaudeAgentBackend({
   }
 
   function reset() {
-    stopping = true;
-    if (proc) {
-      try { proc.kill(); } catch (e) { /* best effort */ }
-    }
-    proc = null;
-    ready = false;
-    startPromise = null;
-    transcript = [];
-    finishActive();
-    stderrTail = '';
-    stopping = false;
+    void discardRuntime({ clearTranscript: true, finishRun: true, clearStderr: true });
   }
 
   return {

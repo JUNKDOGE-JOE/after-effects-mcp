@@ -38,6 +38,16 @@ def test_instructions_cover_panel_runtime_and_file_hygiene():
     assert "ae_mcp_previews" in text
 
 
+def test_instructions_require_progressive_tool_library_discovery():
+    text = SERVER_INSTRUCTIONS
+    index = text.index("ae_toolIndex")
+    search = text.index("ae_toolSearch")
+    inspect = text.index("ae_toolInspect")
+    use = text.index("ae_toolUse")
+    assert index < search < inspect < use
+    assert "candidate content is inspect-only" in text.lower()
+
+
 def test_instructions_use_underscore_verb_names_not_dotted():
     """Model-facing guidance must not feed the model dotted verb names it
     can't call on strict clients. No dotted ``ae.<verb>`` token may appear in

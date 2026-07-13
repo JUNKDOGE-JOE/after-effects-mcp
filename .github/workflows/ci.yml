@@ -6,44 +6,56 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  tests:
-    name: Python tests (pytest)
+  python-tests:
+    name: Fast Python tests (Windows)
     runs-on: windows-2022
+    timeout-minutes: 30
+    env:
+      UV_LINK_MODE: copy
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python 3.10
-        uses: actions/setup-python@v5
+      - name: Checkout the candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
-          python-version: "3.10"
+          persist-credentials: false
 
-      - name: Install uv
-        shell: pwsh
-        run: pip install uv
+      - name: Select exact uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          version: 0.11.7
+          checksum: fe0c7815acf4fc45f8a5eff58ed3cf7ae2e15c3cf1dceadbd10c816ec1690cc1
+          enable-cache: false
 
-      - name: Sync dev deps
-        shell: pwsh
-        env:
-          UV_LINK_MODE: copy
-        run: python -m uv sync --group dev
+      - name: Install exact Python
+        run: uv python install 3.13.13
 
-      - name: Run pytest
-        shell: pwsh
-        env:
-          UV_LINK_MODE: copy
-        run: python -m uv run pytest -v
+      - name: Sync the frozen workspace
+        run: uv sync --frozen --group dev --python 3.13.13
 
-  js-tests:
-    name: JS tests (panel / sidecar / host)
+      - name: Run Python tests
+        run: uv run --frozen --python 3.13.13 pytest -v
+
+  javascript-tests:
+    name: Fast JS and contract tests (Windows)
     runs-on: windows-2022
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node 24
-        uses: actions/setup-node@v4
+      - name: Checkout the candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
-          node-version: 24
+          persist-credentials: false
+
+      - name: Select exact Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.17.0
 
       - name: Run host tests
         working-directory: plugin/host
@@ -57,7 +69,7 @@ jobs:
           npm ci
           npm test
 
-      - name: Verify panel dist is up to date
+      - name: Verify panel dist is current
         working-directory: plugin/panel
         run: |
           npm run build
@@ -68,3 +80,24 @@ jobs:
         run: |
           npm ci
           npm test
+
+  contract-tests:
+    name: Fast packaging and release contract tests (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout the candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Select exact Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.17.0
+
+      - name: Run packaging contract tests
+        run: node --test scripts/package/test/*.test.mjs
+
+      - name: Run release contract tests
+        run: node --test scripts/release/test/*.test.mjs

@@ -51,7 +51,7 @@ def test_same_basename_different_paths_get_different_dirs(tmp_path):
 
 
 def test_same_path_is_stable_key(tmp_path):
-    # The same file (even with differing separators/case) hashes the same.
+    # The same Windows file hashes identically with either path separator.
     store = CheckpointStore(root=tmp_path)
     d1 = store._dir_for("C:/projects/Same.aep")
     d2 = store._dir_for("C:\\projects\\Same.aep")

@@ -10,6 +10,18 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### [0.9.1] — 未发布
+
+#### 候选准备
+
+- **双平台不可变 RC 契约**——固定从 protected `main` 的同一个 candidate SHA 构建 `ae-mcp-panel-v0.9.1-macos-arm64.zxp`、`ae-mcp-panel-v0.9.1-macos-arm64.dmg`、`ae-mcp-panel-v0.9.1-windows-x64.zxp`，并由 `artifact-manifest-v0.9.1.json` 绑定 artifact ID 与 SHA-256；正式发布只原样提升通过验证的字节，禁止重建。
+- **版本与支持矩阵同步**——Python workspace、CEP host/panel/sidecar、Panel handshake 与 CEP manifest 统一为 `0.9.1`；After Effects host 范围保持 `[25.0,26.9]`。
+- **离线安装文档**——普通用户路径改为平台签名资产和包内 runtime；Claude Code CLI、Codex CLI、ZCode CLI/app-server 明确为各自 AI 通道的可选依赖，`uv`/系统 Python/Node 只用于开发。
+
+#### 尚未完成的发布门禁
+
+- v0.9.1 仍是未发布候选。revised “条件式 A→B” signed-helper architecture 的明确批准与 Phase 0 证据、helper-gated provider/Tool Library 实现、runtime 许可证/再分发批准、Developer ID/ZXP/Authenticode 签名条件、Mac/Windows × AE 25/26 四格实机结果及双 attestation Check 都是正式 tag 的硬前置；此条目不声称这些工作已闭环。
+
 ### [0.9.0] — 2026-07-04
 
 #### ✨ 新增
@@ -218,6 +230,18 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### [0.9.1] — Unreleased
+
+#### Candidate Preparation
+
+- **Immutable dual-platform RC contract** — one protected-`main` candidate SHA produces `ae-mcp-panel-v0.9.1-macos-arm64.zxp`, `ae-mcp-panel-v0.9.1-macos-arm64.dmg`, and `ae-mcp-panel-v0.9.1-windows-x64.zxp`; `artifact-manifest-v0.9.1.json` binds artifact IDs and SHA-256, and the final release promotes the verified bytes without rebuilding.
+- **Version and support-matrix synchronization** — the Python workspace, CEP host/panel/sidecar, Panel handshake, and CEP manifest move to `0.9.1`; the After Effects host range remains `[25.0,26.9]`.
+- **Offline install documentation** — normal-user installation uses signed platform assets and bundled runtime. Claude Code CLI, Codex CLI, and the ZCode CLI/app-server are optional channel dependencies; `uv` and system Python/Node remain development-only.
+
+#### Release Gates Still Open
+
+- v0.9.1 remains unreleased. Explicit approval plus Phase 0 evidence for the revised conditional A→B signed-helper architecture, helper-gated provider/Tool Library implementation, runtime redistribution approval, Developer ID/ZXP/Authenticode signing prerequisites, the Mac/Windows × AE 25/26 hardware matrix, and both attestation Checks are hard prerequisites for the final tag. This entry does not claim those goals are closed.
 
 ### [0.9.0] — 2026-07-04
 

@@ -1,16 +1,22 @@
 import { REAL_BACKENDS } from '../cep/backends/index.js';
 import { pickChannel } from './channels.js';
 
-// Spec D: one selection algorithm for all backends, fed by uniform channel
-// probe arrays. `pref` is the 3-way backend choice (subscription|codex|zcode);
+// All backends use the same selection algorithm over uniform channel probe
+// arrays. `pref` is the 3-way backend choice (subscription|codex|zcode);
 // channels = { claude: [...], codex: [...], zcode: [...] }.
 export function pickBackend({ pref, channels = {}, lockedChannel = '', nodeOk = true }) {
   const group = pref === 'codex' || pref === 'zcode' ? pref : 'claude';
   const list = channels[group] || [];
-  if (list.some((c) => c && c.checking)) {
+  const selectedCustom = group === 'codex'
+    ? list.find((channel) => channel?.channel === 'custom' && channel.selected === true)
+    : null;
+  if ((!selectedCustom && list.some((c) => c && c.checking)) || selectedCustom?.checking) {
     return { backend: 'none', reason: group + '-probing', channel: null, fixHint: null };
   }
-  const chosen = pickChannel(list, lockedChannel);
+  const chosen = selectedCustom || pickChannel(list, lockedChannel);
+  if (group === 'codex' && chosen?.channel === 'custom' && chosen.canPreflight === true && !chosen.ok) {
+    return { backend: 'codex', reason: 'provider-preflight', channel: 'custom', fixHint: null };
+  }
   if (!chosen || !chosen.ok) {
     const hintSource = chosen || list.find((c) => c && !c.ok) || list[0] || null;
     return {
@@ -22,7 +28,10 @@ export function pickBackend({ pref, channels = {}, lockedChannel = '', nodeOk = 
   }
   if (group === 'claude') {
     if (chosen.channel === 'api') {
-      return { backend: nodeOk ? 'claude-api' : 'byok', reason: 'ok', channel: 'api', fixHint: null };
+      // Provider credentials stay in the direct loop, whose delta/history
+      // redactor can prove exact-secret suppression without retaining a
+      // sidecar credential for the process lifetime.
+      return { backend: 'byok', reason: 'ok', channel: 'api', fixHint: null };
     }
     return { backend: 'subscription', reason: 'ok', channel: 'subscription', fixHint: null };
   }

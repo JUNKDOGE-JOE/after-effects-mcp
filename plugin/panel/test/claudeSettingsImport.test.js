@@ -1,31 +1,73 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readClaudeSettingsEnv } from '../src/cep/claudeSettingsImport.js';
+import { inspectClaudeSettingsEnv, readClaudeSettingsProviderDraft } from '../src/cep/claudeSettingsImport.js';
 
-function fakeFs(files) {
+function fakeFs(initial) {
+  const files = new Map(Object.entries(initial));
   return {
-    readFileSync(p) {
-      if (!(p in files)) { const e = new Error('ENOENT'); e.code = 'ENOENT'; throw e; }
-      return files[p];
+    files,
+    readFileSync(path) {
+      if (!files.has(path)) { const error = new Error('ENOENT'); error.code = 'ENOENT'; throw error; }
+      return files.get(path);
     },
   };
 }
 
-test('reads ANTHROPIC_BASE_URL/AUTH_TOKEN from ~/.claude/settings.json env block', () => {
-  const files = {
-    'C:\\Users\\me\\.claude\\settings.json': JSON.stringify({
-      env: { ANTHROPIC_BASE_URL: 'https://relay.example/anthropic', ANTHROPIC_AUTH_TOKEN: 'sk-relay' },
-    }),
-  };
-  assert.deepEqual(
-    readClaudeSettingsEnv({ env: { USERPROFILE: 'C:\\Users\\me' }, fsImpl: fakeFs(files) }),
-    { baseUrl: 'https://relay.example/anthropic', authToken: 'sk-relay' }
+const FILE = 'C:\\Users\\me\\.claude\\settings.json';
+const PLATFORM = {
+  paths: {
+    home: 'C:\\Users\\me',
+    join(parts) { return parts.join('\\'); },
+  },
+};
+
+test('inspectClaudeSettingsEnv is a non-secret SHA-256 preview', () => {
+  const fs = fakeFs({
+    [FILE]: JSON.stringify({ env: { ANTHROPIC_BASE_URL: 'https://relay.example/anthropic', ANTHROPIC_AUTH_TOKEN: 'sk-claude-marker' } }),
+  });
+  const preview = inspectClaudeSettingsEnv({ platform: PLATFORM, fsImpl: fs });
+  assert.deepEqual(Object.keys(preview).sort(), ['available', 'baseUrl', 'sourceRevision']);
+  assert.equal(preview.available, true);
+  assert.equal(preview.baseUrl, 'https://relay.example/anthropic');
+  assert.match(preview.sourceRevision, /^[a-f0-9]{64}$/);
+  assert.equal(JSON.stringify(preview).includes('sk-claude-marker'), false);
+});
+
+test('readClaudeSettingsProviderDraft re-reads by revision and returns an ephemeral draft', () => {
+  const fs = fakeFs({
+    [FILE]: JSON.stringify({ env: { ANTHROPIC_BASE_URL: 'https://relay.example/anthropic', ANTHROPIC_AUTH_TOKEN: 'sk-claude-marker' } }),
+  });
+  const preview = inspectClaudeSettingsEnv({ platform: PLATFORM, fsImpl: fs });
+  assert.deepEqual(readClaudeSettingsProviderDraft({ platform: PLATFORM, expectedSourceRevision: preview.sourceRevision, fsImpl: fs }), {
+    name: 'Claude Code config',
+    protocol: 'anthropic',
+    baseUrl: 'https://relay.example/anthropic',
+    modelAuthKind: 'bearer',
+    modelAuthSecret: 'sk-claude-marker',
+  });
+});
+
+test('readClaudeSettingsProviderDraft rejects source changes before exposing new data', () => {
+  const fs = fakeFs({
+    [FILE]: JSON.stringify({ env: { ANTHROPIC_BASE_URL: 'https://relay.example', ANTHROPIC_AUTH_TOKEN: 'sk-old' } }),
+  });
+  const preview = inspectClaudeSettingsEnv({ platform: PLATFORM, fsImpl: fs });
+  fs.files.set(FILE, JSON.stringify({ env: { ANTHROPIC_BASE_URL: 'https://changed.example', ANTHROPIC_AUTH_TOKEN: 'sk-new' } }));
+  assert.throws(
+    () => readClaudeSettingsProviderDraft({ platform: PLATFORM, expectedSourceRevision: preview.sourceRevision, fsImpl: fs }),
+    (error) => error.code === 'provider_import_source_changed',
   );
 });
 
-test('returns null for missing file, bad JSON, or no relevant env keys', () => {
-  assert.equal(readClaudeSettingsEnv({ env: { USERPROFILE: 'C:\\Users\\me' }, fsImpl: fakeFs({}) }), null);
-  assert.equal(readClaudeSettingsEnv({ env: { USERPROFILE: 'C:\\Users\\me' }, fsImpl: fakeFs({ 'C:\\Users\\me\\.claude\\settings.json': '{oops' }) }), null);
-  assert.equal(readClaudeSettingsEnv({ env: { USERPROFILE: 'C:\\Users\\me' }, fsImpl: fakeFs({ 'C:\\Users\\me\\.claude\\settings.json': JSON.stringify({ env: { OTHER: '1' } }) }) }), null);
-  assert.equal(readClaudeSettingsEnv({ env: {}, fsImpl: fakeFs({}) }), null);
+test('Claude settings preview returns null for missing, corrupt, or irrelevant files', () => {
+  assert.equal(inspectClaudeSettingsEnv({ platform: PLATFORM, fsImpl: fakeFs({}) }), null);
+  assert.equal(inspectClaudeSettingsEnv({ platform: PLATFORM, fsImpl: fakeFs({ [FILE]: '{bad' }) }), null);
+  assert.equal(inspectClaudeSettingsEnv({ platform: PLATFORM, fsImpl: fakeFs({ [FILE]: JSON.stringify({ env: { OTHER: '1' } }) }) }), null);
+});
+
+test('Claude settings preview rejects credential-bearing base URLs', () => {
+  const userInfo = fakeFs({ [FILE]: JSON.stringify({ env: { ANTHROPIC_BASE_URL: 'https://user:secret@relay.example', ANTHROPIC_AUTH_TOKEN: 'sk-marker' } }) });
+  assert.equal(inspectClaudeSettingsEnv({ platform: PLATFORM, fsImpl: userInfo }), null);
+  const querySecret = fakeFs({ [FILE]: JSON.stringify({ env: { ANTHROPIC_BASE_URL: 'https://relay.example?vendor_token=secret', ANTHROPIC_AUTH_TOKEN: 'sk-marker' } }) });
+  assert.equal(inspectClaudeSettingsEnv({ platform: PLATFORM, fsImpl: querySecret }), null);
 });
