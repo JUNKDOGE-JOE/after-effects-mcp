@@ -281,7 +281,11 @@ test('native Responses and Chat facade successes remove reflected Provider crede
       };
     const encoded = JSON.stringify(body);
     const split = encoded.indexOf(secret) + 'upstream-'.length;
-    res.writeHead(200, { 'content-type': 'application/json', 'x-request-id': secret });
+    res.writeHead(200, {
+      'content-type': 'application/json',
+      'x-request-id': 'upstream-',
+      'openai-request-id': 'secret',
+    });
     res.write(encoded.slice(0, split));
     res.end(encoded.slice(split));
   });
@@ -303,6 +307,7 @@ test('native Responses and Chat facade successes remove reflected Provider crede
       });
       assert.equal(result.status, 200);
       assert.equal(result.headers['x-request-id'], undefined);
+      assert.equal(result.headers['openai-request-id'], undefined);
       assert.equal(result.body.includes(secret), false);
       assert.match(result.body, /\[redacted\]/);
       if (model === 'native-r') {
@@ -322,9 +327,9 @@ test('native non-streaming responses remove encoded credentials from body and he
   const upstream = controlledUpstream(records, ({ res, record }) => {
     res.writeHead(200, {
       'content-type': 'application/json',
-      'x-request-id': reflected,
-      'x-fragment-left': 'opaque-provider-',
-      'x-fragment-right': 'secret',
+      'request-id': reflected,
+      'x-request-id': 'opaque-provider-',
+      'openai-request-id': 'secret',
     });
     res.end(JSON.stringify({
       id: 'response-encoded',
@@ -358,11 +363,152 @@ test('native non-streaming responses remove encoded credentials from body and he
       body: { model: 'native-r', input: 'safe', stream: false },
     });
     assert.equal(result.status, 200);
+    assert.equal(result.headers['request-id'], undefined);
     assert.equal(result.headers['x-request-id'], undefined);
-    assert.equal(result.headers['x-fragment-left'], undefined);
-    assert.equal(result.headers['x-fragment-right'], undefined);
+    assert.equal(result.headers['openai-request-id'], undefined);
     assert.equal(result.body.includes(reflected), false);
     assert.match(result.body, /\[redacted\]/);
+  } finally {
+    await route.close();
+    await closeServer(upstream);
+  }
+});
+
+test('native Responses and Chat facade drop a header fragment completed by the JSON body', async () => {
+  const secret = 'abc';
+  const records = [];
+  const upstream = controlledUpstream(records, ({ res, record }) => {
+    const body = record.path.startsWith('/v1/chat/completions')
+      ? {
+        id: 'chat-cross-channel',
+        object: 'chat.completion',
+        created: 1,
+        model: record.body.model,
+        choices: [{
+          index: 0,
+          message: { role: 'assistant', content: 'c' },
+          finish_reason: 'stop',
+        }],
+      }
+      : {
+        id: 'response-cross-channel',
+        object: 'response',
+        status: 'completed',
+        model: record.body.model,
+        output: [{
+          id: 'message-cross-channel',
+          type: 'message',
+          status: 'completed',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'c' }],
+        }],
+      };
+    const splitHeaders = record.body.model.endsWith('-three')
+      ? { 'x-request-id': 'a', 'openai-request-id': 'b' }
+      : { 'x-request-id': 'ab' };
+    res.writeHead(200, { 'content-type': 'application/json', ...splitHeaders });
+    res.end(JSON.stringify(body));
+  });
+  await listen(upstream);
+  const apiRoot = 'http://127.0.0.1:' + upstream.address().port + '/v1';
+  const route = makeRoute({
+    apiRoot,
+    records,
+    capabilities: {
+      'native-r': 'responses',
+      'native-three': 'responses',
+      'chat-m': 'chat',
+      'chat-three': 'chat',
+    },
+    profileCalls: [],
+    secret,
+  });
+  try {
+    const local = await route.start();
+    for (const model of ['native-r', 'native-three', 'chat-m', 'chat-three']) {
+      const result = await requestText(local.openaiBaseUrl + '/responses', {
+        method: 'POST',
+        headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
+        body: { model, input: 'safe', stream: false },
+      });
+      assert.equal(result.status, 200);
+      assert.equal(result.headers['x-request-id'], undefined);
+      assert.equal(result.headers['openai-request-id'], undefined);
+      assert.equal(result.body.includes('c'), true);
+    }
+  } finally {
+    await route.close();
+    await closeServer(upstream);
+  }
+});
+
+test('native SSE drops a header fragment completed by a data value', async () => {
+  const records = [];
+  const upstream = controlledUpstream(records, ({ res, record }) => {
+    const splitHeader = record.body.model === 'native-name'
+      ? { 'ratelimit-opaque-provider-': 'safe' }
+      : { 'x-request-id': 'opaque-provider-' };
+    res.writeHead(200, {
+      'content-type': 'text/event-stream',
+      ...splitHeader,
+    });
+    res.end('event: future.event\ndata: {"type":"future.event","text":"secret"}\n\n');
+  });
+  await listen(upstream);
+  const apiRoot = 'http://127.0.0.1:' + upstream.address().port + '/v1';
+  const route = makeRoute({
+    apiRoot,
+    records,
+    capabilities: { 'native-r': 'responses', 'native-name': 'responses' },
+    profileCalls: [],
+    secret: 'opaque-provider-secret',
+  });
+  try {
+    const local = await route.start();
+    for (const model of ['native-r', 'native-name']) {
+      const result = await requestText(local.openaiBaseUrl + '/responses', {
+        method: 'POST',
+        headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
+        body: { model, input: 'safe', stream: true },
+      });
+      assert.equal(result.status, 200);
+      assert.equal(result.headers['x-request-id'], undefined);
+      assert.equal(result.headers['ratelimit-opaque-provider-'], undefined);
+      assert.match(result.body, /"text":"secret"/);
+    }
+  } finally {
+    await route.close();
+    await closeServer(upstream);
+  }
+});
+
+test('native and Chat errors drop a request id fragment completed by the message', async () => {
+  const records = [];
+  const upstream = controlledUpstream(records, ({ res }) => {
+    res.writeHead(400, { 'content-type': 'application/json', 'x-request-id': 'opaque-provider-' });
+    res.end(JSON.stringify({ error: { message: 'secret' } }));
+  });
+  await listen(upstream);
+  const apiRoot = 'http://127.0.0.1:' + upstream.address().port + '/v1';
+  const route = makeRoute({
+    apiRoot,
+    records,
+    capabilities: { 'native-r': 'responses', 'chat-m': 'chat' },
+    profileCalls: [],
+    secret: 'opaque-provider-secret',
+  });
+  try {
+    const local = await route.start();
+    for (const model of ['native-r', 'chat-m']) {
+      const result = await requestText(local.openaiBaseUrl + '/responses', {
+        method: 'POST',
+        headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
+        body: { model, input: 'safe', stream: false },
+      });
+      assert.equal(result.status, 400);
+      assert.equal(result.headers['x-request-id'], undefined);
+      assert.equal(JSON.parse(result.body).error.message, 'Provider request failed.');
+    }
   } finally {
     await route.close();
     await closeServer(upstream);

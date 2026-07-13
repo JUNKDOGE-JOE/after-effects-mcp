@@ -1,6 +1,6 @@
-// Spec B1: localize + actionable-ize ZCode failures. For zh a header line
-// with concrete next steps is prepended; the raw English detail is kept
-// below for diagnostics. en (and unknown patterns) pass through.
+// Chinese ZCode failures prepend concrete next steps while retaining the raw
+// English detail below for diagnostics. English and unknown patterns pass
+// through unchanged.
 const ZH_RULES = [
   {
     // Provider ids may contain dots (e.g. "mediastorm_glm/glm-5.2"): capture the

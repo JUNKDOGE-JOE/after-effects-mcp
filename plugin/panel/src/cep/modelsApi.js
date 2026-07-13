@@ -1,5 +1,5 @@
-// /v1/models via cep_node's Node https. Browser fetch is CORS-blocked in CEP
-// (verified note at App.jsx:91); the Node channel has no CORS.
+// Use cep_node for /v1/models because CEP browser requests are subject to CORS,
+// while the local Node channel can reach the configured Provider directly.
 import { anthropicEndpoint, normalizeBaseUrl } from '../lib/providerProfile.js';
 import { containsExactSecret } from '../lib/exactSecretRedaction.js';
 

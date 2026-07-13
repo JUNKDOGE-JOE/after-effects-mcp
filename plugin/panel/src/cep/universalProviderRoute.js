@@ -1,4 +1,9 @@
-import { containsExactSecret, redactText, redactValue } from '../lib/exactSecretRedaction.js';
+import {
+  containsExactSecret,
+  containsExactSecretAcrossBoundary,
+  redactText,
+  redactValue,
+} from '../lib/exactSecretRedaction.js';
 import {
   anthropicMessageToResponse,
   chatCompletionToMessages,
@@ -210,6 +215,20 @@ function withoutSecretBearingHeaders(headers, secrets) {
   return containsExactSecret(filtered, secrets) ? {} : filtered;
 }
 
+function withoutHeadersCompletedByPayload(headers, payload, secrets) {
+  const entries = Object.entries(headers);
+  const seeds = [
+    ...entries.flat(),
+    entries.map(([name]) => name).join(''),
+    entries.map(([, value]) => value).join(''),
+    entries.flat().join(''),
+  ];
+  if (containsExactSecretAcrossBoundary(seeds, payload, secrets)) return {};
+  return Object.fromEntries(Object.entries(headers).filter(([name, value]) => (
+    !containsExactSecretAcrossBoundary([name, value], payload, secrets)
+  )));
+}
+
 function sanitizedError(buffer, secrets) {
   let parsed;
   try { parsed = JSON.parse(buffer.toString('utf8')); } catch { return 'Provider request failed.'; }
@@ -416,9 +435,10 @@ export function createUniversalProviderRoute({
 
   const writeConverted = ({ context, value, clientProtocol, stream, responseHeaders, secrets }) => {
     const safeValue = redactValue(value, secrets);
+    const safeHeaders = withoutHeadersCompletedByPayload(responseHeaders, safeValue, secrets);
     if (!stream) {
       if (!context.finish()) return;
-      sendJson(context.res, 200, safeValue, responseHeaders);
+      sendJson(context.res, 200, safeValue, safeHeaders);
       return;
     }
     const events = clientProtocol === 'messages'
@@ -426,9 +446,9 @@ export function createUniversalProviderRoute({
       : responsesSseEvents(safeValue);
     if (!context.finish()) return;
     context.res.writeHead(200, {
-      ...responseHeaders,
+      ...safeHeaders,
       'content-type': 'text/event-stream; charset=utf-8',
-      'cache-control': responseHeaders['cache-control'] || 'no-cache',
+      'cache-control': safeHeaders['cache-control'] || 'no-cache',
     });
     for (const [event, data] of events) writeSse(context.res, event, data);
     context.res.end();
@@ -611,9 +631,9 @@ export function createUniversalProviderRoute({
             const finishError = () => {
               if (responseSettled || context.finished) return;
               responseSettled = true;
-              const errorBody = Buffer.concat(chunks);
+              const rawErrorBody = Buffer.concat(chunks);
               const retryHeaders = allowBetaRetry && status === 400
-                ? headersWithoutRejectedAnthropicBetas(attemptHeaders, errorBody)
+                ? headersWithoutRejectedAnthropicBetas(attemptHeaders, rawErrorBody)
                 : null;
               if (retryHeaders) {
                 onAudit({
@@ -627,16 +647,30 @@ export function createUniversalProviderRoute({
                 sendAttempt(retryHeaders, false);
                 return;
               }
+              let errorHeaders = responseHeaders;
+              let outputErrorBody = envelope(
+                'provider_error',
+                'provider_error',
+                sanitizedError(rawErrorBody, profileSecrets(profile)),
+              );
+              errorHeaders = withoutHeadersCompletedByPayload(
+                errorHeaders,
+                outputErrorBody,
+                secrets,
+              );
+              if (Object.keys(errorHeaders).length < Object.keys(responseHeaders).length) {
+                outputErrorBody = envelope(
+                  'provider_error',
+                  'provider_error',
+                  'Provider request failed.',
+                );
+              }
               if (!context.finish()) return;
               sendJson(
                 context.res,
                 status >= 400 && status < 500 ? status : 502,
-                envelope(
-                  'provider_error',
-                  'provider_error',
-                  sanitizedError(errorBody, profileSecrets(profile)),
-                ),
-                responseHeaders,
+                outputErrorBody,
+                errorHeaders,
               );
             };
             upstream.once('end', finishError);
@@ -685,15 +719,17 @@ export function createUniversalProviderRoute({
             upstream.once('end', () => {
               if (settled || context.finished) return;
               let safeValue;
+              let safeHeaders = responseHeaders;
               try {
                 safeValue = redactValue(JSON.parse(Buffer.concat(chunks).toString('utf8')), secrets);
+                safeHeaders = withoutHeadersCompletedByPayload(responseHeaders, safeValue, secrets);
               } catch {
                 failNative();
                 return;
               }
               settled = true;
               if (!context.finish()) return;
-              context.res.writeHead(status || 200, responseHeaders);
+              context.res.writeHead(status || 200, safeHeaders);
               context.res.end(JSON.stringify(safeValue));
               onAudit({
                 event: 'provider_route',
@@ -737,15 +773,29 @@ export function createUniversalProviderRoute({
           upstream.once('end', () => {
             if (settled || context.finished) return;
             const transcript = Buffer.concat(chunks);
+            let safeHeaders = responseHeaders;
             try {
-              requireCredentialFreeSse(transcript, secrets, { maxFrameBytes: 1024 * 1024 });
+              requireCredentialFreeSse(transcript, secrets, {
+                maxFrameBytes: 1024 * 1024,
+                seedValues: [
+                  ...Object.entries(responseHeaders).flat(),
+                  Object.keys(responseHeaders).join(''),
+                  Object.values(responseHeaders).join(''),
+                  Object.entries(responseHeaders).flat().join(''),
+                ],
+              });
             } catch (error) {
-              failNativeStream(error);
-              return;
+              try {
+                requireCredentialFreeSse(transcript, secrets, { maxFrameBytes: 1024 * 1024 });
+                safeHeaders = {};
+              } catch {
+                failNativeStream(error);
+                return;
+              }
             }
             settled = true;
             if (!context.finish()) return;
-            context.res.writeHead(status || 200, responseHeaders);
+            context.res.writeHead(status || 200, safeHeaders);
             context.res.end(transcript);
             onAudit({
               event: 'provider_route',

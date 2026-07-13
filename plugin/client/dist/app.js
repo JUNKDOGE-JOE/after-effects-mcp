@@ -14971,18 +14971,26 @@
     const secrets = normalizedSecrets(values);
     if (!secrets.length) return false;
     const visiting = /* @__PURE__ */ new WeakSet();
-    const stringParts = [];
-    let stringChars = 0;
+    const valueParts = [];
+    const keyParts = [];
+    const keyValueParts = [];
+    const leafKeyValueParts = [];
+    let structureChars = 0;
     const containsText = (candidate) => textContainsSecret(candidate, secrets);
+    const appendPart = (parts, candidate) => {
+      const text = String(candidate);
+      structureChars += text.length;
+      if (structureChars > MAX_STRUCTURE_CHARS) return true;
+      parts.push(text);
+      return false;
+    };
     const visit = (candidate) => {
-      if ((typeof candidate !== "object" || candidate === null) && typeof candidate !== "function") {
+      if (typeof candidate === "function") return true;
+      if (typeof candidate !== "object" || candidate === null) {
         try {
-          if (typeof candidate === "string") {
-            stringChars += candidate.length;
-            if (stringChars > MAX_STRUCTURE_CHARS) return true;
-            stringParts.push(candidate);
-          }
-          return containsText(String(candidate));
+          if (appendPart(valueParts, candidate)) return true;
+          if (appendPart(keyValueParts, candidate)) return true;
+          return containsText(candidate);
         } catch {
           return true;
         }
@@ -14998,8 +15006,15 @@
       try {
         for (const key of keys) {
           try {
-            if (containsText(String(key))) return true;
-            if (visit(Reflect.get(candidate, key))) return true;
+            const item = Reflect.get(candidate, key);
+            if (appendPart(keyParts, key)) return true;
+            if (appendPart(keyValueParts, key)) return true;
+            if (containsText(key)) return true;
+            if (typeof item !== "function" && (typeof item !== "object" || item === null)) {
+              if (appendPart(leafKeyValueParts, key)) return true;
+              if (appendPart(leafKeyValueParts, item)) return true;
+            }
+            if (visit(item)) return true;
           } catch {
             return true;
           }
@@ -15010,7 +15025,79 @@
       }
     };
     if (visit(value)) return true;
-    return containsText(stringParts.join(""));
+    return [valueParts, keyParts, keyValueParts, leafKeyValueParts].some((parts) => containsText(parts.join("")));
+  }
+  function containsExactSecretAcrossBoundary(seedValues, payload, values = []) {
+    const secrets = normalizedSecrets(values);
+    if (!secrets.length) return false;
+    const valueParts = [];
+    const keyParts = [];
+    const keyValueParts = [];
+    const leafKeyValueParts = [];
+    const visiting = /* @__PURE__ */ new WeakSet();
+    let chars = 0;
+    const append = (parts, value) => {
+      const text = String(value);
+      chars += text.length;
+      if (chars > MAX_STRUCTURE_CHARS) return false;
+      parts.push(text);
+      return true;
+    };
+    const visit = (value) => {
+      if (typeof value === "function") return false;
+      if (typeof value !== "object" || value === null) {
+        return append(valueParts, value) && append(keyValueParts, value);
+      }
+      if (visiting.has(value)) return false;
+      let keys;
+      try {
+        keys = Reflect.ownKeys(value);
+      } catch {
+        return false;
+      }
+      visiting.add(value);
+      try {
+        for (const key of keys) {
+          let item;
+          try {
+            item = Reflect.get(value, key);
+          } catch {
+            return false;
+          }
+          if (!append(keyParts, key) || !append(keyValueParts, key)) return false;
+          if (typeof item !== "function" && (typeof item !== "object" || item === null)) {
+            if (!append(valueParts, item) || !append(keyValueParts, item) || !append(leafKeyValueParts, key) || !append(leafKeyValueParts, item)) return false;
+          } else if (!visit(item)) {
+            return false;
+          }
+        }
+        return true;
+      } finally {
+        visiting.delete(value);
+      }
+    };
+    if (!visit(payload)) return true;
+    const candidates = [
+      ...leafKeyValueParts,
+      valueParts.join(""),
+      keyParts.join(""),
+      keyValueParts.join(""),
+      leafKeyValueParts.join("")
+    ];
+    let seeds;
+    try {
+      seeds = Array.from(seedValues || [], (value) => String(value));
+    } catch {
+      return true;
+    }
+    for (const seed of seeds) {
+      for (const candidate of candidates) {
+        if (textContainsSecret(seed + candidate, secrets) || textContainsSecret(candidate + seed, secrets)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
   function redactText(value, values = []) {
     let text = String(value == null ? "" : value);
@@ -21800,7 +21887,15 @@ ${output}` : output
     "status",
     "type"
   ]);
+  var STREAM_DISCRIMINATOR_KEYS = /* @__PURE__ */ new Set([
+    "object",
+    "role",
+    "status",
+    "type"
+  ]);
   var MAX_STREAM_AGGREGATE_CHARS = 16 * 1024 * 1024;
+  var MAX_STREAM_PROJECTION_CHARS = MAX_STREAM_AGGREGATE_CHARS * 12;
+  var STREAM_TOTAL_CHARS = Symbol("stream-total-chars");
   function invalidSse(code, message) {
     return Object.assign(new Error(message), { status: 502, code });
   }
@@ -21819,27 +21914,36 @@ ${output}` : output
   }
   function appendStream(streams, key, value) {
     const next = (streams.get(key) || "") + value;
-    if (next.length > MAX_STREAM_AGGREGATE_CHARS) {
+    const total = (streams.get(STREAM_TOTAL_CHARS) || 0) + value.length;
+    if (next.length > MAX_STREAM_AGGREGATE_CHARS || total > MAX_STREAM_PROJECTION_CHARS) {
       throw invalidSse("provider_stream_too_large", "Provider stream was too large.");
     }
     streams.set(key, next);
+    streams.set(STREAM_TOTAL_CHARS, total);
   }
   function collectStreamingStrings(value, identity, streams, path = []) {
     var _a;
-    if (typeof value === "string") {
+    if (value === null || ["string", "number", "boolean", "bigint"].includes(typeof value)) {
+      const text = String(value);
       const leaf = String((_a = path.at(-1)) != null ? _a : "");
       const pathKey = `path:${identity}:${path.join(".")}`;
-      appendStream(streams, pathKey, value);
+      appendStream(streams, pathKey, text);
       const globalPathKey = `global-path:${path.join(".")}`;
-      appendStream(streams, globalPathKey, value);
-      appendStream(streams, "global-all-strings", value);
-      if (!STREAM_CONTROL_KEYS.has(leaf)) {
-        appendStream(streams, "global-data-strings", value);
+      appendStream(streams, globalPathKey, text);
+      appendStream(streams, "global-all-values", text);
+      if (!STREAM_DISCRIMINATOR_KEYS.has(leaf)) {
+        appendStream(streams, "global-data-values", text);
+        appendStream(streams, "sse-visible-data-values", text);
+        for (const key of streams.keys()) {
+          if (typeof key === "string" && key.startsWith("sse-seed-value:")) {
+            appendStream(streams, key, text);
+          }
+        }
       }
       if (STREAM_TEXT_KEYS.has(leaf)) {
         const semanticKey = `semantic:${identity}`;
-        appendStream(streams, semanticKey, value);
-        appendStream(streams, "global-semantic", value);
+        appendStream(streams, semanticKey, text);
+        appendStream(streams, "global-semantic", text);
       }
       return;
     }
@@ -21849,17 +21953,36 @@ ${output}` : output
     }
     if (!value || typeof value !== "object") return;
     for (const [key, item] of Object.entries(value)) {
+      appendStream(streams, "global-all-keys", key);
+      if (!STREAM_CONTROL_KEYS.has(key)) {
+        appendStream(streams, "global-data-keys", key);
+        appendStream(streams, "global-data-key-values", key);
+        if (item === null || ["string", "number", "boolean", "bigint"].includes(typeof item)) {
+          appendStream(streams, "global-data-key-values", String(item));
+        }
+      }
       collectStreamingStrings(item, identity, streams, [...path, key]);
     }
   }
-  function requireCredentialFreeSse(data, secrets = [], { maxFrameBytes = 1024 * 1024 } = {}) {
+  function requireCredentialFreeSse(data, secrets = [], {
+    maxFrameBytes = 1024 * 1024,
+    seedValues = []
+  } = {}) {
     const bytes = Buffer.isBuffer(data) ? Buffer.from(data) : Buffer.from(data || "");
+    if (bytes.length > MAX_STREAM_AGGREGATE_CHARS) {
+      throw invalidSse("provider_stream_too_large", "Provider stream was too large.");
+    }
     const text = bytes.toString("utf8");
     if (!Buffer.from(text, "utf8").equals(bytes)) {
       throw invalidSse("provider_stream_invalid_utf8", "Provider stream was not valid UTF-8.");
     }
     const frames = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split(/\n\n/);
     const streams = /* @__PURE__ */ new Map();
+    for (const [index, value] of Array.from(seedValues || []).entries()) {
+      const textValue = String(value);
+      appendStream(streams, `sse-seed-value:${index}`, textValue);
+      appendStream(streams, "sse-visible-data-values", textValue);
+    }
     for (const frame of frames) {
       if (!frame) continue;
       if (Buffer.byteLength(frame, "utf8") > maxFrameBytes) {
@@ -21870,8 +21993,25 @@ ${output}` : output
       }
       const dataLines = [];
       for (const line of frame.split("\n")) {
-        if (line === "data") dataLines.push("");
-        else if (line.startsWith("data:")) dataLines.push(line.slice(5).replace(/^ /, ""));
+        if (line.startsWith(":")) {
+          const comment = line.slice(1).replace(/^ /, "");
+          appendStream(streams, "sse-comments", comment);
+          appendStream(streams, "sse-non-data-values", comment);
+          appendStream(streams, "sse-visible-data-values", comment);
+          continue;
+        }
+        const separator = line.indexOf(":");
+        const field = separator < 0 ? line : line.slice(0, separator);
+        const fieldValue = separator < 0 ? "" : line.slice(separator + 1).replace(/^ /, "");
+        if (field === "data") {
+          dataLines.push(fieldValue);
+          continue;
+        }
+        appendStream(streams, `sse-field:${field}`, fieldValue);
+        appendStream(streams, "sse-field-names", field);
+        appendStream(streams, "sse-non-data-values", fieldValue);
+        appendStream(streams, "sse-non-data-key-values", field + fieldValue);
+        appendStream(streams, "sse-visible-data-values", fieldValue);
       }
       if (!dataLines.length) continue;
       const payloadText = dataLines.join("\n");
@@ -21887,7 +22027,8 @@ ${output}` : output
       }
       collectStreamingStrings(payload, payloadIdentity(payload), streams);
     }
-    for (const value of streams.values()) {
+    for (const [key, value] of streams) {
+      if (key === STREAM_TOTAL_CHARS) continue;
       if (containsExactSecret(value, secrets)) {
         throw invalidSse("provider_stream_credential_reflection", "Provider stream metadata was rejected.");
       }
@@ -22310,7 +22451,18 @@ ${output}` : output
       if (containsExactSecret(text, secrets)) continue;
       output[name] = text;
     }
-    return output;
+    return containsExactSecret(output, secrets) ? {} : output;
+  }
+  function withoutHeadersCompletedByPayload(headers, payload, secrets) {
+    const entries = Object.entries(headers);
+    const seeds = [
+      ...entries.flat(),
+      entries.map(([name]) => name).join(""),
+      entries.map(([, value]) => value).join(""),
+      entries.flat().join("")
+    ];
+    if (containsExactSecretAcrossBoundary(seeds, payload, secrets)) return {};
+    return Object.fromEntries(Object.entries(headers).filter(([name, value]) => !containsExactSecretAcrossBoundary([name, value], payload, secrets)));
   }
   function readProviderError(context, upstream, status, responseHeaders, secrets, retryCompatibility) {
     const chunks = [];
@@ -22321,15 +22473,24 @@ ${output}` : output
       settled = true;
       const buffer = Buffer.concat(chunks);
       if (!truncated && typeof retryCompatibility === "function" && retryCompatibility(status, buffer)) return;
-      const message = sanitizedProviderMessage(buffer, truncated, secrets);
-      const requestId = responseHeaders["x-request-id"] || responseHeaders["request-id"] || responseHeaders["openai-request-id"];
-      const extra = requestId ? { request_id: requestId } : {};
+      let message = sanitizedProviderMessage(buffer, truncated, secrets);
+      let requestId = responseHeaders["x-request-id"] || responseHeaders["request-id"] || responseHeaders["openai-request-id"];
+      let extra = requestId ? { request_id: requestId } : {};
+      let outputHeaders = requestId ? { "x-request-id": requestId } : {};
+      const errorPayload = { message, ...extra };
+      outputHeaders = withoutHeadersCompletedByPayload(outputHeaders, errorPayload, secrets);
+      if (!Object.keys(outputHeaders).length && requestId) {
+        message = "Provider request failed.";
+        requestId = null;
+        extra = {};
+        outputHeaders = {};
+      }
       finishOnce(context);
       sendJson(
         context.res,
         status >= 400 && status < 500 ? status : 502,
         envelope("provider_error", "provider_error", message, extra),
-        requestId ? { "x-request-id": requestId } : {}
+        outputHeaders
       );
     };
     upstream.on("data", (chunk) => {
@@ -22380,8 +22541,9 @@ ${output}` : output
         });
         return;
       }
+      const outputHeaders = withoutHeadersCompletedByPayload(headers, parsed, secrets);
       if (!finishOnce(context)) return;
-      sendJson(context.res, status, parsed, headers);
+      sendJson(context.res, status, parsed, outputHeaders);
     });
     upstream.on("error", () => {
       streamFailure(context, {
@@ -22430,8 +22592,9 @@ ${output}` : output
         });
         return;
       }
+      const outputHeaders = withoutHeadersCompletedByPayload(headers, response, secrets);
       finishOnce(context);
-      sendJson(context.res, status, response, headers);
+      sendJson(context.res, status, response, outputHeaders);
     });
     upstream.on("error", () => streamFailure(context, {
       status: 502,
@@ -22461,16 +22624,32 @@ ${output}` : output
       var _a;
       if (context.finished) return;
       const transcript = Buffer.concat(chunks);
+      let outputHeaders = headers;
       try {
-        requireCredentialFreeSse(transcript, secrets, { maxFrameBytes: context.limits.sseFrameBytes });
+        requireCredentialFreeSse(transcript, secrets, {
+          maxFrameBytes: context.limits.sseFrameBytes,
+          seedValues: [
+            ...Object.entries(headers).flat(),
+            Object.keys(headers).join(""),
+            Object.values(headers).join(""),
+            Object.entries(headers).flat().join("")
+          ]
+        });
       } catch (error) {
-        streamFailure(context, error);
-        return;
+        try {
+          requireCredentialFreeSse(transcript, secrets, {
+            maxFrameBytes: context.limits.sseFrameBytes
+          });
+          outputHeaders = {};
+        } catch {
+          streamFailure(context, error);
+          return;
+        }
       }
       context.res.writeHead(status, {
-        ...headers,
+        ...outputHeaders,
         "content-type": "text/event-stream; charset=utf-8",
-        "cache-control": headers["cache-control"] || "no-cache"
+        "cache-control": outputHeaders["cache-control"] || "no-cache"
       });
       const responseRedactor = createByteRedactor(secrets, (chunk) => context.res.write(chunk));
       const failAdapter = () => {
@@ -23186,6 +23365,17 @@ data: ${JSON.stringify(payload)}
     const filtered = Object.fromEntries(Object.entries(headers).filter(([, value]) => !containsExactSecret(String(value), secrets)));
     return containsExactSecret(filtered, secrets) ? {} : filtered;
   }
+  function withoutHeadersCompletedByPayload2(headers, payload, secrets) {
+    const entries = Object.entries(headers);
+    const seeds = [
+      ...entries.flat(),
+      entries.map(([name]) => name).join(""),
+      entries.map(([, value]) => value).join(""),
+      entries.flat().join("")
+    ];
+    if (containsExactSecretAcrossBoundary(seeds, payload, secrets)) return {};
+    return Object.fromEntries(Object.entries(headers).filter(([name, value]) => !containsExactSecretAcrossBoundary([name, value], payload, secrets)));
+  }
   function sanitizedError(buffer, secrets) {
     let parsed;
     try {
@@ -23405,17 +23595,18 @@ data: ${JSON.stringify(payload)}
     };
     const writeConverted = ({ context, value, clientProtocol, stream, responseHeaders, secrets }) => {
       const safeValue = redactValue(value, secrets);
+      const safeHeaders = withoutHeadersCompletedByPayload2(responseHeaders, safeValue, secrets);
       if (!stream) {
         if (!context.finish()) return;
-        sendJson2(context.res, 200, safeValue, responseHeaders);
+        sendJson2(context.res, 200, safeValue, safeHeaders);
         return;
       }
       const events = clientProtocol === "messages" ? messagesSseEvents(safeValue) : responsesSseEvents(safeValue);
       if (!context.finish()) return;
       context.res.writeHead(200, {
-        ...responseHeaders,
+        ...safeHeaders,
         "content-type": "text/event-stream; charset=utf-8",
-        "cache-control": responseHeaders["cache-control"] || "no-cache"
+        "cache-control": safeHeaders["cache-control"] || "no-cache"
       });
       for (const [event, data] of events) writeSse2(context.res, event, data);
       context.res.end();
@@ -23601,8 +23792,8 @@ data: ${JSON.stringify(payload)}
               const finishError = () => {
                 if (responseSettled || context.finished) return;
                 responseSettled = true;
-                const errorBody = Buffer.concat(chunks2);
-                const retryHeaders = allowBetaRetry && status === 400 ? headersWithoutRejectedAnthropicBetas(attemptHeaders, errorBody) : null;
+                const rawErrorBody = Buffer.concat(chunks2);
+                const retryHeaders = allowBetaRetry && status === 400 ? headersWithoutRejectedAnthropicBetas(attemptHeaders, rawErrorBody) : null;
                 if (retryHeaders) {
                   onAudit({
                     event: "provider_route_compat_retry",
@@ -23615,16 +23806,30 @@ data: ${JSON.stringify(payload)}
                   sendAttempt(retryHeaders, false);
                   return;
                 }
+                let errorHeaders = responseHeaders;
+                let outputErrorBody = envelope2(
+                  "provider_error",
+                  "provider_error",
+                  sanitizedError(rawErrorBody, profileSecrets(profile))
+                );
+                errorHeaders = withoutHeadersCompletedByPayload2(
+                  errorHeaders,
+                  outputErrorBody,
+                  secrets
+                );
+                if (Object.keys(errorHeaders).length < Object.keys(responseHeaders).length) {
+                  outputErrorBody = envelope2(
+                    "provider_error",
+                    "provider_error",
+                    "Provider request failed."
+                  );
+                }
                 if (!context.finish()) return;
                 sendJson2(
                   context.res,
                   status >= 400 && status < 500 ? status : 502,
-                  envelope2(
-                    "provider_error",
-                    "provider_error",
-                    sanitizedError(errorBody, profileSecrets(profile))
-                  ),
-                  responseHeaders
+                  outputErrorBody,
+                  errorHeaders
                 );
               };
               upstream.once("end", finishError);
@@ -23676,15 +23881,17 @@ data: ${JSON.stringify(payload)}
               upstream.once("end", () => {
                 if (settled2 || context.finished) return;
                 let safeValue;
+                let safeHeaders = responseHeaders;
                 try {
                   safeValue = redactValue(JSON.parse(Buffer.concat(chunks2).toString("utf8")), secrets);
+                  safeHeaders = withoutHeadersCompletedByPayload2(responseHeaders, safeValue, secrets);
                 } catch {
                   failNative();
                   return;
                 }
                 settled2 = true;
                 if (!context.finish()) return;
-                context.res.writeHead(status || 200, responseHeaders);
+                context.res.writeHead(status || 200, safeHeaders);
                 context.res.end(JSON.stringify(safeValue));
                 onAudit({
                   event: "provider_route",
@@ -23731,15 +23938,29 @@ data: ${JSON.stringify(payload)}
             upstream.once("end", () => {
               if (settled || context.finished) return;
               const transcript = Buffer.concat(chunks);
+              let safeHeaders = responseHeaders;
               try {
-                requireCredentialFreeSse(transcript, secrets, { maxFrameBytes: 1024 * 1024 });
+                requireCredentialFreeSse(transcript, secrets, {
+                  maxFrameBytes: 1024 * 1024,
+                  seedValues: [
+                    ...Object.entries(responseHeaders).flat(),
+                    Object.keys(responseHeaders).join(""),
+                    Object.values(responseHeaders).join(""),
+                    Object.entries(responseHeaders).flat().join("")
+                  ]
+                });
               } catch (error) {
-                failNativeStream(error);
-                return;
+                try {
+                  requireCredentialFreeSse(transcript, secrets, { maxFrameBytes: 1024 * 1024 });
+                  safeHeaders = {};
+                } catch {
+                  failNativeStream(error);
+                  return;
+                }
               }
               settled = true;
               if (!context.finish()) return;
-              context.res.writeHead(status || 200, responseHeaders);
+              context.res.writeHead(status || 200, safeHeaders);
               context.res.end(transcript);
               onAudit({
                 event: "provider_route",

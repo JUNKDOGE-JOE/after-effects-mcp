@@ -65,18 +65,26 @@ export function containsExactSecret(value, values = []) {
   const secrets = normalizedSecrets(values);
   if (!secrets.length) return false;
   const visiting = new WeakSet();
-  const stringParts = [];
-  let stringChars = 0;
+  const valueParts = [];
+  const keyParts = [];
+  const keyValueParts = [];
+  const leafKeyValueParts = [];
+  let structureChars = 0;
   const containsText = (candidate) => textContainsSecret(candidate, secrets);
+  const appendPart = (parts, candidate) => {
+    const text = String(candidate);
+    structureChars += text.length;
+    if (structureChars > MAX_STRUCTURE_CHARS) return true;
+    parts.push(text);
+    return false;
+  };
   const visit = (candidate) => {
-    if ((typeof candidate !== 'object' || candidate === null) && typeof candidate !== 'function') {
+    if (typeof candidate === 'function') return true;
+    if (typeof candidate !== 'object' || candidate === null) {
       try {
-        if (typeof candidate === 'string') {
-          stringChars += candidate.length;
-          if (stringChars > MAX_STRUCTURE_CHARS) return true;
-          stringParts.push(candidate);
-        }
-        return containsText(String(candidate));
+        if (appendPart(valueParts, candidate)) return true;
+        if (appendPart(keyValueParts, candidate)) return true;
+        return containsText(candidate);
       } catch { return true; }
     }
     if (visiting.has(candidate)) return true;
@@ -86,8 +94,15 @@ export function containsExactSecret(value, values = []) {
     try {
       for (const key of keys) {
         try {
-          if (containsText(String(key))) return true;
-          if (visit(Reflect.get(candidate, key))) return true;
+          const item = Reflect.get(candidate, key);
+          if (appendPart(keyParts, key)) return true;
+          if (appendPart(keyValueParts, key)) return true;
+          if (containsText(key)) return true;
+          if (typeof item !== 'function' && (typeof item !== 'object' || item === null)) {
+            if (appendPart(leafKeyValueParts, key)) return true;
+            if (appendPart(leafKeyValueParts, item)) return true;
+          }
+          if (visit(item)) return true;
         } catch {
           return true;
         }
@@ -98,7 +113,73 @@ export function containsExactSecret(value, values = []) {
     }
   };
   if (visit(value)) return true;
-  return containsText(stringParts.join(''));
+  return [valueParts, keyParts, keyValueParts, leafKeyValueParts]
+    .some((parts) => containsText(parts.join('')));
+}
+
+export function containsExactSecretAcrossBoundary(seedValues, payload, values = []) {
+  const secrets = normalizedSecrets(values);
+  if (!secrets.length) return false;
+  const valueParts = [];
+  const keyParts = [];
+  const keyValueParts = [];
+  const leafKeyValueParts = [];
+  const visiting = new WeakSet();
+  let chars = 0;
+  const append = (parts, value) => {
+    const text = String(value);
+    chars += text.length;
+    if (chars > MAX_STRUCTURE_CHARS) return false;
+    parts.push(text);
+    return true;
+  };
+  const visit = (value) => {
+    if (typeof value === 'function') return false;
+    if (typeof value !== 'object' || value === null) {
+      return append(valueParts, value) && append(keyValueParts, value);
+    }
+    if (visiting.has(value)) return false;
+    let keys;
+    try { keys = Reflect.ownKeys(value); } catch { return false; }
+    visiting.add(value);
+    try {
+      for (const key of keys) {
+        let item;
+        try { item = Reflect.get(value, key); } catch { return false; }
+        if (!append(keyParts, key) || !append(keyValueParts, key)) return false;
+        if (typeof item !== 'function' && (typeof item !== 'object' || item === null)) {
+          if (!append(valueParts, item)
+              || !append(keyValueParts, item)
+              || !append(leafKeyValueParts, key)
+              || !append(leafKeyValueParts, item)) return false;
+        } else if (!visit(item)) {
+          return false;
+        }
+      }
+      return true;
+    } finally {
+      visiting.delete(value);
+    }
+  };
+  if (!visit(payload)) return true;
+  const candidates = [
+    ...leafKeyValueParts,
+    valueParts.join(''),
+    keyParts.join(''),
+    keyValueParts.join(''),
+    leafKeyValueParts.join(''),
+  ];
+  let seeds;
+  try { seeds = Array.from(seedValues || [], (value) => String(value)); } catch { return true; }
+  for (const seed of seeds) {
+    for (const candidate of candidates) {
+      if (textContainsSecret(seed + candidate, secrets)
+          || textContainsSecret(candidate + seed, secrets)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 export function redactText(value, values = []) {

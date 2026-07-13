@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   containsExactSecret,
+  containsExactSecretAcrossBoundary,
   createByteRedactor,
   createDeltaRedactor,
   redactText,
@@ -67,10 +68,38 @@ test('recursive detection inspects decoded values and keys and fails closed on u
 });
 
 test('recursive detection joins string leaves in deterministic traversal order', () => {
-  const secret = 'opaque-provider-secret';
-  const split = { metadata: { left: 'opaque-provider-', right: 'secret' } };
-  assert.equal(containsExactSecret(split, [secret]), true);
-  assert.equal(redactValue(split, [secret]), '[redacted]');
+  for (const [split, secret] of [
+    [{ metadata: { left: 'opaque-provider-', right: 'secret' } }, 'opaque-provider-secret'],
+    [{ 'opaque-provider-': 'secret' }, 'opaque-provider-secret'],
+    [{ a: { left: 'opaque-provider-' }, b: { secret: 'safe' } }, 'opaque-provider-secret'],
+    [{ headers: { 'x-request-id': 'opaque-provider-' }, body: { secret: 'safe' } }, 'opaque-provider-secret'],
+    [{ left: 'opaque', right: 123 }, 'opaque123'],
+    [{ left: 'opaque', right: true }, 'opaquetrue'],
+  ]) {
+    assert.equal(containsExactSecret(split, [secret]), true);
+    assert.equal(redactValue(split, [secret]), '[redacted]');
+  }
+});
+
+test('boundary detection pairs each seed with every primitive payload key and value', () => {
+  const payload = {
+    id: 'response-1',
+    object: 'response',
+    status: 'completed',
+    output: [{ type: 'output_text', text: 'secret' }],
+  };
+  assert.equal(containsExactSecretAcrossBoundary(
+    ['x-request-id', 'opaque-provider-'],
+    payload,
+    ['opaque-provider-secret'],
+  ), true);
+  assert.equal(containsExactSecretAcrossBoundary(
+    ['x-request-id', 'safe'],
+    payload,
+    ['opaque-provider-secret'],
+  ), false);
+  assert.equal(containsExactSecretAcrossBoundary(['a'], { left: 'b', right: 'c' }, ['abc']), true);
+  assert.equal(containsExactSecretAcrossBoundary(['a', 'b', 'ab'], { value: 'c' }, ['abc']), true);
 });
 
 test('recursive detection and redaction decode bounded percent and Unicode escapes', () => {

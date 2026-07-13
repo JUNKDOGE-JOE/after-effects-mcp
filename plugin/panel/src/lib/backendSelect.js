@@ -1,8 +1,8 @@
 import { REAL_BACKENDS } from '../cep/backends/index.js';
 import { pickChannel } from './channels.js';
 
-// Spec D: one selection algorithm for all backends, fed by uniform channel
-// probe arrays. `pref` is the 3-way backend choice (subscription|codex|zcode);
+// All backends use the same selection algorithm over uniform channel probe
+// arrays. `pref` is the 3-way backend choice (subscription|codex|zcode);
 // channels = { claude: [...], codex: [...], zcode: [...] }.
 export function pickBackend({ pref, channels = {}, lockedChannel = '', nodeOk = true }) {
   const group = pref === 'codex' || pref === 'zcode' ? pref : 'claude';

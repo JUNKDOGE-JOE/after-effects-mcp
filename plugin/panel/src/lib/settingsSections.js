@@ -1,5 +1,5 @@
-// Spec C: collapsible Settings sections; only AI expanded by default,
-// expansion state persisted per machine.
+// Only the AI settings section starts expanded; expansion state persists per
+// machine.
 const KEY = 'ae_mcp_settings_sections';
 
 export const SECTION_IDS = ['ai', 'conn', 'externalClients', 'sec', 'gen', 'about'];

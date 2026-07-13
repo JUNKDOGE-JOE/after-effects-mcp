@@ -108,3 +108,58 @@ test('SSE guard joins unknown metadata across different keys and events', () => 
     );
   }
 });
+
+test('SSE guard joins credential fragments across control fields and primitive types', () => {
+  for (const [transcript, secret] of [
+    [sse(
+      JSON.stringify({ type: 'future.event', id: 'opaque-provider-' }),
+      JSON.stringify({ type: 'future.event', model: 'secret' }),
+    ), 'opaque-provider-secret'],
+    [sse(
+      JSON.stringify({ type: 'future.event', metadata: { part: 'opaque' } }),
+      JSON.stringify({ type: 'future.event', metadata: { part: 123 } }),
+    ), 'opaque123'],
+  ]) {
+    assert.throws(
+      () => requireCredentialFreeSse(transcript, [secret]),
+      (error) => error.code === 'provider_stream_credential_reflection',
+    );
+  }
+});
+
+test('SSE guard joins credential fragments across comment-only frames', () => {
+  const transcript = Buffer.from(': opaque-provider-\n\n: secret\n\n', 'utf8');
+  assert.throws(
+    () => requireCredentialFreeSse(transcript, ['opaque-provider-secret']),
+    (error) => error.code === 'provider_stream_credential_reflection',
+  );
+});
+
+test('SSE guard joins non-data field fragments with JSON payload values', () => {
+  for (const prefix of [':', 'event:', 'id:']) {
+    const transcript = Buffer.from(
+      `${prefix} opaque-provider-\ndata: ${JSON.stringify({ type: 'future.event', text: 'secret' })}\n\n`,
+      'utf8',
+    );
+    assert.throws(
+      () => requireCredentialFreeSse(transcript, ['opaque-provider-secret']),
+      (error) => error.code === 'provider_stream_credential_reflection',
+    );
+  }
+});
+
+test('SSE guard keeps the 16 MiB transcript budget independent of projection count', () => {
+  const transcript = sse(JSON.stringify({
+    type: 'response.output_text.delta',
+    delta: 'x'.repeat(3 * 1024 * 1024),
+  }));
+  assert.doesNotThrow(() => requireCredentialFreeSse(
+    transcript,
+    ['opaque-provider-secret'],
+    { maxFrameBytes: 4 * 1024 * 1024 },
+  ));
+  assert.throws(
+    () => requireCredentialFreeSse(Buffer.alloc(16 * 1024 * 1024 + 1, 0x78), []),
+    (error) => error.code === 'provider_stream_too_large',
+  );
+});

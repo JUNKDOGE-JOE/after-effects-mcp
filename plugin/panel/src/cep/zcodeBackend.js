@@ -207,8 +207,8 @@ function zcodeProviderScore(providerId, provider, family, env = {}, { allowEmpty
   if (family && id === 'builtin:' + family) score += 40;
   if (/-start-plan$/.test(id)) score += 30;
   if (/-coding-plan$/.test(id)) score += 20;
-  // Spec B1: usable credentials MUST outrank the fixed family/start-plan
-  // bonuses. Max keyless total is 100+80+30 = 210, so credentials add 300 —
+  // Usable credentials must outrank the fixed family and start-plan bonuses.
+  // The maximum keyless total is 100+80+30 = 210, so credentials add 300 and
   // a keyed custom provider always beats a keyless builtin start-plan.
   if (hasZcodeProviderCredential(provider, env)) score += 300;
   return score;

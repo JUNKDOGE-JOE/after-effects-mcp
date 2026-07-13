@@ -30,7 +30,15 @@ const STREAM_CONTROL_KEYS = new Set([
   'status',
   'type',
 ]);
+const STREAM_DISCRIMINATOR_KEYS = new Set([
+  'object',
+  'role',
+  'status',
+  'type',
+]);
 const MAX_STREAM_AGGREGATE_CHARS = 16 * 1024 * 1024;
+const MAX_STREAM_PROJECTION_CHARS = MAX_STREAM_AGGREGATE_CHARS * 12;
+const STREAM_TOTAL_CHARS = Symbol('stream-total-chars');
 
 function invalidSse(code, message) {
   return Object.assign(new Error(message), { status: 502, code });
@@ -51,27 +59,36 @@ function payloadIdentity(payload) {
 
 function appendStream(streams, key, value) {
   const next = (streams.get(key) || '') + value;
-  if (next.length > MAX_STREAM_AGGREGATE_CHARS) {
+  const total = (streams.get(STREAM_TOTAL_CHARS) || 0) + value.length;
+  if (next.length > MAX_STREAM_AGGREGATE_CHARS || total > MAX_STREAM_PROJECTION_CHARS) {
     throw invalidSse('provider_stream_too_large', 'Provider stream was too large.');
   }
   streams.set(key, next);
+  streams.set(STREAM_TOTAL_CHARS, total);
 }
 
 function collectStreamingStrings(value, identity, streams, path = []) {
-  if (typeof value === 'string') {
+  if (value === null || ['string', 'number', 'boolean', 'bigint'].includes(typeof value)) {
+    const text = String(value);
     const leaf = String(path.at(-1) ?? '');
     const pathKey = `path:${identity}:${path.join('.')}`;
-    appendStream(streams, pathKey, value);
+    appendStream(streams, pathKey, text);
     const globalPathKey = `global-path:${path.join('.')}`;
-    appendStream(streams, globalPathKey, value);
-    appendStream(streams, 'global-all-strings', value);
-    if (!STREAM_CONTROL_KEYS.has(leaf)) {
-      appendStream(streams, 'global-data-strings', value);
+    appendStream(streams, globalPathKey, text);
+    appendStream(streams, 'global-all-values', text);
+    if (!STREAM_DISCRIMINATOR_KEYS.has(leaf)) {
+      appendStream(streams, 'global-data-values', text);
+      appendStream(streams, 'sse-visible-data-values', text);
+      for (const key of streams.keys()) {
+        if (typeof key === 'string' && key.startsWith('sse-seed-value:')) {
+          appendStream(streams, key, text);
+        }
+      }
     }
     if (STREAM_TEXT_KEYS.has(leaf)) {
       const semanticKey = `semantic:${identity}`;
-      appendStream(streams, semanticKey, value);
-      appendStream(streams, 'global-semantic', value);
+      appendStream(streams, semanticKey, text);
+      appendStream(streams, 'global-semantic', text);
     }
     return;
   }
@@ -81,18 +98,37 @@ function collectStreamingStrings(value, identity, streams, path = []) {
   }
   if (!value || typeof value !== 'object') return;
   for (const [key, item] of Object.entries(value)) {
+    appendStream(streams, 'global-all-keys', key);
+    if (!STREAM_CONTROL_KEYS.has(key)) {
+      appendStream(streams, 'global-data-keys', key);
+      appendStream(streams, 'global-data-key-values', key);
+      if (item === null || ['string', 'number', 'boolean', 'bigint'].includes(typeof item)) {
+        appendStream(streams, 'global-data-key-values', String(item));
+      }
+    }
     collectStreamingStrings(item, identity, streams, [...path, key]);
   }
 }
 
-export function requireCredentialFreeSse(data, secrets = [], { maxFrameBytes = 1024 * 1024 } = {}) {
+export function requireCredentialFreeSse(data, secrets = [], {
+  maxFrameBytes = 1024 * 1024,
+  seedValues = [],
+} = {}) {
   const bytes = Buffer.isBuffer(data) ? Buffer.from(data) : Buffer.from(data || '');
+  if (bytes.length > MAX_STREAM_AGGREGATE_CHARS) {
+    throw invalidSse('provider_stream_too_large', 'Provider stream was too large.');
+  }
   const text = bytes.toString('utf8');
   if (!Buffer.from(text, 'utf8').equals(bytes)) {
     throw invalidSse('provider_stream_invalid_utf8', 'Provider stream was not valid UTF-8.');
   }
   const frames = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split(/\n\n/);
   const streams = new Map();
+  for (const [index, value] of Array.from(seedValues || []).entries()) {
+    const textValue = String(value);
+    appendStream(streams, `sse-seed-value:${index}`, textValue);
+    appendStream(streams, 'sse-visible-data-values', textValue);
+  }
   for (const frame of frames) {
     if (!frame) continue;
     if (Buffer.byteLength(frame, 'utf8') > maxFrameBytes) {
@@ -103,8 +139,25 @@ export function requireCredentialFreeSse(data, secrets = [], { maxFrameBytes = 1
     }
     const dataLines = [];
     for (const line of frame.split('\n')) {
-      if (line === 'data') dataLines.push('');
-      else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
+      if (line.startsWith(':')) {
+        const comment = line.slice(1).replace(/^ /, '');
+        appendStream(streams, 'sse-comments', comment);
+        appendStream(streams, 'sse-non-data-values', comment);
+        appendStream(streams, 'sse-visible-data-values', comment);
+        continue;
+      }
+      const separator = line.indexOf(':');
+      const field = separator < 0 ? line : line.slice(0, separator);
+      const fieldValue = separator < 0 ? '' : line.slice(separator + 1).replace(/^ /, '');
+      if (field === 'data') {
+        dataLines.push(fieldValue);
+        continue;
+      }
+      appendStream(streams, `sse-field:${field}`, fieldValue);
+      appendStream(streams, 'sse-field-names', field);
+      appendStream(streams, 'sse-non-data-values', fieldValue);
+      appendStream(streams, 'sse-non-data-key-values', field + fieldValue);
+      appendStream(streams, 'sse-visible-data-values', fieldValue);
     }
     if (!dataLines.length) continue;
     const payloadText = dataLines.join('\n');
@@ -118,7 +171,8 @@ export function requireCredentialFreeSse(data, secrets = [], { maxFrameBytes = 1
     }
     collectStreamingStrings(payload, payloadIdentity(payload), streams);
   }
-  for (const value of streams.values()) {
+  for (const [key, value] of streams) {
+    if (key === STREAM_TOTAL_CHARS) continue;
     if (containsExactSecret(value, secrets)) {
       throw invalidSse('provider_stream_credential_reflection', 'Provider stream metadata was rejected.');
     }

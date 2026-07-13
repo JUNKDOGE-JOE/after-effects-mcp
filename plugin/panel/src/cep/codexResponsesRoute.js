@@ -15,6 +15,7 @@ import {
 import { buildProviderEndpoint } from '../lib/providerUrl.js';
 import {
   containsExactSecret,
+  containsExactSecretAcrossBoundary,
   createByteRedactor,
   redactText,
   redactValue,
@@ -309,7 +310,21 @@ function withoutSecretBearingHeaders(headers, secrets) {
     if (containsExactSecret(text, secrets)) continue;
     output[name] = text;
   }
-  return output;
+  return containsExactSecret(output, secrets) ? {} : output;
+}
+
+function withoutHeadersCompletedByPayload(headers, payload, secrets) {
+  const entries = Object.entries(headers);
+  const seeds = [
+    ...entries.flat(),
+    entries.map(([name]) => name).join(''),
+    entries.map(([, value]) => value).join(''),
+    entries.flat().join(''),
+  ];
+  if (containsExactSecretAcrossBoundary(seeds, payload, secrets)) return {};
+  return Object.fromEntries(Object.entries(headers).filter(([name, value]) => (
+    !containsExactSecretAcrossBoundary([name, value], payload, secrets)
+  )));
 }
 
 function readProviderError(
@@ -332,17 +347,26 @@ function readProviderError(
       && typeof retryCompatibility === 'function'
       && retryCompatibility(status, buffer)
     ) return;
-    const message = sanitizedProviderMessage(buffer, truncated, secrets);
-    const requestId = responseHeaders['x-request-id']
+    let message = sanitizedProviderMessage(buffer, truncated, secrets);
+    let requestId = responseHeaders['x-request-id']
       || responseHeaders['request-id']
       || responseHeaders['openai-request-id'];
-    const extra = requestId ? { request_id: requestId } : {};
+    let extra = requestId ? { request_id: requestId } : {};
+    let outputHeaders = requestId ? { 'x-request-id': requestId } : {};
+    const errorPayload = { message, ...extra };
+    outputHeaders = withoutHeadersCompletedByPayload(outputHeaders, errorPayload, secrets);
+    if (!Object.keys(outputHeaders).length && requestId) {
+      message = 'Provider request failed.';
+      requestId = null;
+      extra = {};
+      outputHeaders = {};
+    }
     finishOnce(context);
     sendJson(
       context.res,
       status >= 400 && status < 500 ? status : 502,
       envelope('provider_error', 'provider_error', message, extra),
-      requestId ? { 'x-request-id': requestId } : {},
+      outputHeaders,
     );
   };
   upstream.on('data', (chunk) => {
@@ -394,8 +418,9 @@ function pipeModels(context, upstream, status, headers, secrets) {
       });
       return;
     }
+    const outputHeaders = withoutHeadersCompletedByPayload(headers, parsed, secrets);
     if (!finishOnce(context)) return;
-    sendJson(context.res, status, parsed, headers);
+    sendJson(context.res, status, parsed, outputHeaders);
   });
   upstream.on('error', () => {
     streamFailure(context, {
@@ -444,8 +469,9 @@ function readNonStreamingResponse(context, upstream, status, headers, chatBody, 
       });
       return;
     }
+    const outputHeaders = withoutHeadersCompletedByPayload(headers, response, secrets);
     finishOnce(context);
-    sendJson(context.res, status, response, headers);
+    sendJson(context.res, status, response, outputHeaders);
   });
   upstream.on('error', () => streamFailure(context, {
     status: 502,
@@ -475,16 +501,32 @@ function streamChatResponse(context, upstream, status, headers, chatBody, secret
   upstream.on('end', () => {
     if (context.finished) return;
     const transcript = Buffer.concat(chunks);
+    let outputHeaders = headers;
     try {
-      requireCredentialFreeSse(transcript, secrets, { maxFrameBytes: context.limits.sseFrameBytes });
+      requireCredentialFreeSse(transcript, secrets, {
+        maxFrameBytes: context.limits.sseFrameBytes,
+        seedValues: [
+          ...Object.entries(headers).flat(),
+          Object.keys(headers).join(''),
+          Object.values(headers).join(''),
+          Object.entries(headers).flat().join(''),
+        ],
+      });
     } catch (error) {
-      streamFailure(context, error);
-      return;
+      try {
+        requireCredentialFreeSse(transcript, secrets, {
+          maxFrameBytes: context.limits.sseFrameBytes,
+        });
+        outputHeaders = {};
+      } catch {
+        streamFailure(context, error);
+        return;
+      }
     }
     context.res.writeHead(status, {
-      ...headers,
+      ...outputHeaders,
       'content-type': 'text/event-stream; charset=utf-8',
-      'cache-control': headers['cache-control'] || 'no-cache',
+      'cache-control': outputHeaders['cache-control'] || 'no-cache',
     });
     const responseRedactor = createByteRedactor(secrets, (chunk) => context.res.write(chunk));
     const failAdapter = () => {
