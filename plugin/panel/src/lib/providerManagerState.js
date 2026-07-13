@@ -1,5 +1,11 @@
 // React state contains form hints only. Opaque references stay in the Provider
 // entry and an empty secret input means "retain the current protected value".
+import {
+  isCredentialShapedProviderLiteral,
+  isReservedProviderExtraHeaderName,
+  isSensitiveProviderHeaderName,
+} from './providerHeaderPolicy.js';
+
 export function defaultProviderModelAuthKind(protocol) {
   return protocol === 'anthropic' ? 'x-api-key' : 'bearer';
 }
@@ -88,6 +94,18 @@ export function validateDraft(draft) {
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     return 'Base URL 必须以 http(s):// 开头 / must start with http(s)://';
+  }
+  for (const header of draft?.headers || []) {
+    const name = String(header?.name || '').trim();
+    if (isReservedProviderExtraHeaderName(name)) {
+      return '该 Header 不允许转发 / this header cannot be forwarded';
+    }
+    if (header?.valueKind === 'literal' && (
+      isSensitiveProviderHeaderName(name)
+      || isCredentialShapedProviderLiteral(header?.value)
+    )) {
+      return '敏感 Header 必须使用安全凭据 / sensitive headers require protected secrets';
+    }
   }
   return '';
 }

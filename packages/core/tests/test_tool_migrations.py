@@ -107,6 +107,60 @@ def test_scanner_finding_aborts_before_backup_or_primary_commit(tmp_path: Path) 
     assert not (root / "backups").exists()
 
 
+def test_existing_migration_marker_does_not_bypass_current_secret_scan(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "home" / "tools"
+    store = ToolArtifactStore(root=root)
+    store.create(draft("Before"))
+    ToolDataMigrator(root=root).migrate_from_v0_9()
+    artifact_path = next((root / "artifacts").glob("*.json"))
+    artifact = json.loads(artifact_path.read_text("utf-8"))
+    artifact["source"]["provenance"]["accessToken"] = "opaque-provider-value"
+    artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
+
+    with pytest.raises(SecretDetectedError):
+        ToolDataMigrator(root=root).migrate_from_v0_9()
+
+
+def test_json_escaped_secret_key_aborts_before_backup_or_marker(tmp_path: Path) -> None:
+    root = tmp_path / "home" / "tools"
+    legacy = tmp_path / "home" / "skills"
+    legacy.mkdir(parents=True)
+    (legacy / "unsafe.json").write_text(
+        r'{"name":"unsafe","template":"safe","template_type":"jsx","client\u0053ecret":[{"value":"opaque-provider-value"}]}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SecretDetectedError):
+        ToolDataMigrator(root=root, legacy_roots=(legacy,)).migrate_from_v0_9()
+
+    assert not (root / "backups").exists()
+    assert not (root / "migration-v1.json").exists()
+
+
+def test_existing_marker_rescans_json_decoded_secret_keys_without_new_backup(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "home" / "tools"
+    legacy = tmp_path / "home" / "skills"
+    legacy.mkdir(parents=True)
+    first = ToolDataMigrator(root=root, legacy_roots=(legacy,)).migrate_from_v0_9()
+    backups_before = sorted((root / "backups").glob("*/manifest.json"))
+    marker_before = (root / "migration-v1.json").read_bytes()
+    (legacy / "unsafe.json").write_text(
+        r'{"name":"unsafe","template":"safe","template_type":"jsx","auth\u002etoken":{"nested":["opaque-provider-value"]}}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SecretDetectedError):
+        ToolDataMigrator(root=root, legacy_roots=(legacy,)).migrate_from_v0_9()
+
+    assert first.backup_id
+    assert sorted((root / "backups").glob("*/manifest.json")) == backups_before
+    assert (root / "migration-v1.json").read_bytes() == marker_before
+
+
 @pytest.mark.parametrize("stage", ["after-backup", "after-index", "before-marker"])
 def test_injected_crashes_resume_idempotently_without_duplicate_backups(
     tmp_path: Path, stage: str

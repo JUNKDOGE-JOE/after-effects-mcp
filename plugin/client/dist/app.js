@@ -9712,7 +9712,8 @@
       providerSecretMismatch: "Provider \u5F15\u7528\u4E0E\u7CFB\u7EDF\u51ED\u636E\u4E0D\u4E00\u81F4\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u5728 Provider \u7BA1\u7406\u4E2D\u91CD\u65B0\u4FDD\u5B58\u5BF9\u5E94\u51ED\u636E\u3002",
       providerInitializationFailed: "Provider \u521D\u59CB\u5316\u5931\u8D25\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u5BFC\u51FA\u65E5\u5FD7\u540E\u91CD\u65B0\u68C0\u6D4B\u3002",
       zcodeKeyPlaceholder: "\u7C98\u8D34 provider API Key\uFF08\u5B58\u672C\u673A\uFF09",
-      zcodeKeyStored: "\u5DF2\u4FDD\u5B58\u5230 ~/.ae-mcp/zcode-key\uFF0C\u53EF\u7C98\u8D34\u65B0\u503C\u8986\u76D6",
+      zcodeKeyStored: "\u5DF2\u4FDD\u5B58\u5230\u7CFB\u7EDF\u5B89\u5168\u51ED\u636E\u5E93\uFF0C\u53EF\u7C98\u8D34\u65B0\u503C\u8986\u76D6",
+      zcodeKeySaveFailed: "\u5B89\u5168\u51ED\u636E\u4FDD\u5B58\u5931\u8D25\uFF0C\u8BF7\u4FEE\u590D Helper \u540E\u91CD\u8BD5\u3002",
       save: "\u4FDD\u5B58",
       modelDefault: "\u9ED8\u8BA4\u6A21\u578B\uFF08\u6253\u5F00\u9762\u677F\u65F6\u4F7F\u7528\uFF09",
       customModel: "\u81EA\u5B9A\u4E49\u6A21\u578B ID",
@@ -9774,7 +9775,8 @@
       providerSecretMismatch: "A provider reference no longer matches its system credential; the current list was retained. Save that credential again in Provider Manager.",
       providerInitializationFailed: "Provider initialization failed; the current list was retained. Export logs, then re-check.",
       zcodeKeyPlaceholder: "Paste the provider API key (stored locally)",
-      zcodeKeyStored: "Saved to ~/.ae-mcp/zcode-key; paste a new value to overwrite",
+      zcodeKeyStored: "Saved in the protected system credential store; paste a new value to overwrite",
+      zcodeKeySaveFailed: "Protected credential save failed. Repair the Helper and retry.",
       save: "Save",
       modelDefault: "Default model (used when the panel opens)",
       customModel: "Custom model ID",
@@ -9832,12 +9834,28 @@
   }
   function ZcodeKeyFallback({ t, stored, onSave }) {
     const [draft, setDraft] = import_react19.default.useState("");
-    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6, alignItems: "center" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { secret: true, value: draft, onChange: setDraft, placeholder: stored ? t.zcodeKeyStored : t.zcodeKeyPlaceholder, style: { flex: 1 } }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "primary", size: "sm", disabled: !draft.trim(), onClick: () => {
-        if (onSave) onSave(draft.trim());
-        setDraft("");
-      }, children: t.save })
+    const [saving, setSaving] = import_react19.default.useState(false);
+    const [error, setError] = import_react19.default.useState("");
+    const save = async () => {
+      if (!onSave || saving || !draft.trim()) return;
+      setSaving(true);
+      setError("");
+      try {
+        const saved = await onSave(draft.trim());
+        if (saved === false) setError(t.zcodeKeySaveFailed);
+        else setDraft("");
+      } catch {
+        setError(t.zcodeKeySaveFailed);
+      } finally {
+        setSaving(false);
+      }
+    };
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6, alignItems: "center" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { secret: true, value: draft, onChange: setDraft, placeholder: stored ? t.zcodeKeyStored : t.zcodeKeyPlaceholder, style: { flex: 1 } }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "primary", size: "sm", disabled: saving || !draft.trim(), onClick: save, children: t.save })
+      ] }),
+      error ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: error }) : null
     ] });
   }
   function ClientRow({ name, lastActive, blocked, onBlock, blockLabel }) {
@@ -13462,6 +13480,145 @@
     };
   }
 
+  // src/lib/providerHeaderPolicy.js
+  var FORBIDDEN_EXACT = /* @__PURE__ */ new Set([
+    "host",
+    "content-length",
+    "connection",
+    "transfer-encoding",
+    "upgrade",
+    "keep-alive",
+    "te",
+    "trailer",
+    "expect",
+    "cookie",
+    "set-cookie",
+    "forwarded",
+    "proxy-authorization",
+    "proxy-authenticate"
+  ]);
+  var SENSITIVE_SEGMENTS = /* @__PURE__ */ new Set([
+    "api-key",
+    "apikey",
+    "auth",
+    "authentication",
+    "authorization",
+    "cookie",
+    "credential",
+    "credentials",
+    "key",
+    "oauth",
+    "passwd",
+    "password",
+    "secret",
+    "session",
+    "signature",
+    "token"
+  ]);
+  var STRONG_SENSITIVE_FRAGMENTS = [
+    "apikey",
+    "auth",
+    "cookie",
+    "credential",
+    "oauth",
+    "passwd",
+    "password",
+    "secret",
+    "session",
+    "signature",
+    "token"
+  ];
+  var KEY_SUFFIX_PREFIXES = /* @__PURE__ */ new Set([
+    "api",
+    "access",
+    "client",
+    "credential",
+    "private",
+    "provider",
+    "public",
+    "secret",
+    "x"
+  ]);
+  var SECRET_LIKE_LITERAL = /(?:^|[^A-Za-z0-9_-])(?:Bearer\s+\S+|Basic\s+\S+|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,})(?=$|[^A-Za-z0-9_-])/i;
+  var CREDENTIAL_ASSIGNMENT = /(?:^|[^A-Za-z0-9_.-])(["']?)([A-Za-z][A-Za-z0-9_.-]*)(\1)[ \t]*[:=]/g;
+  var MAX_LITERAL_DECODE_LAYERS = 3;
+  function normalizedName(value) {
+    return String(value || "").trim().toLowerCase();
+  }
+  function isSensitiveProviderHeaderName(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return false;
+    const separated = raw.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
+    const segments = separated.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    if (segments.some((segment) => SENSITIVE_SEGMENTS.has(segment))) return true;
+    const compact = raw.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    if (STRONG_SENSITIVE_FRAGMENTS.some((fragment) => compact.includes(fragment))) return true;
+    if (!compact.endsWith("key")) return false;
+    const prefix = compact.slice(0, -3);
+    return KEY_SUFFIX_PREFIXES.has(prefix) || Array.from(KEY_SUFFIX_PREFIXES).some((candidate) => prefix.endsWith(candidate));
+  }
+  function isCredentialShapedProviderLiteral(value) {
+    let text = String(value == null ? "" : value);
+    if (!text) return false;
+    if (text.length > 8192) return true;
+    for (let layer = 0; layer <= MAX_LITERAL_DECODE_LAYERS; layer += 1) {
+      if (literalLayerContainsCredential(text)) return true;
+      const decoded = text.replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
+        try {
+          return decodeURIComponent(run);
+        } catch {
+          return run;
+        }
+      });
+      if (decoded === text) break;
+      text = decoded;
+    }
+    return false;
+  }
+  function literalLayerContainsCredential(text) {
+    if (textContainsCredentialSyntax(text)) return true;
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return false;
+    }
+    return jsonContainsCredential(parsed);
+  }
+  function textContainsCredentialSyntax(text) {
+    if (SECRET_LIKE_LITERAL.test(text)) return true;
+    CREDENTIAL_ASSIGNMENT.lastIndex = 0;
+    let match;
+    while ((match = CREDENTIAL_ASSIGNMENT.exec(text)) !== null) {
+      if (isSensitiveProviderHeaderName(match[2])) return true;
+    }
+    return false;
+  }
+  function jsonHasMaterial(value) {
+    if (typeof value === "string") return value.length > 0;
+    if (Array.isArray(value)) return value.some(jsonHasMaterial);
+    if (value && typeof value === "object") return Object.values(value).some(jsonHasMaterial);
+    return value !== null && value !== void 0;
+  }
+  function jsonContainsCredential(value) {
+    if (typeof value === "string") return textContainsCredentialSyntax(value);
+    if (Array.isArray(value)) return value.some(jsonContainsCredential);
+    if (!value || typeof value !== "object") return false;
+    for (const [key, item] of Object.entries(value)) {
+      if (isSensitiveProviderHeaderName(key) && jsonHasMaterial(item)) return true;
+      if (jsonContainsCredential(item)) return true;
+    }
+    return false;
+  }
+  function isForbiddenProviderHeaderName(value) {
+    const name = normalizedName(value);
+    return FORBIDDEN_EXACT.has(name) || name.startsWith("x-forwarded-") || name.startsWith("proxy-") || name.startsWith("sec-") || name.startsWith("x-ae-mcp-route-");
+  }
+  function isReservedProviderExtraHeaderName(value) {
+    const name = normalizedName(value);
+    return name === "authorization" || name === "x-api-key" || isForbiddenProviderHeaderName(name);
+  }
+
   // src/lib/providerProfile.js
   var DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com";
   var DEFAULT_CODEX_PROVIDER_ID = "ae_mcp_custom";
@@ -13581,11 +13738,20 @@
     "chat-missing-messages",
     "chat-missing-messages-500-compat"
   ]);
-  var SENSITIVE_HEADER_NAME = /(?:^|[-_])(?:authorization|api[-_]?key|token|secret|password)(?:$|[-_])/i;
-  var SECRET_LIKE_LITERAL = /^(?:Bearer\s+\S+|Basic\s+\S+|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,})$/;
   var SECRET_LIKE_PATH_LITERAL = /(?:Bearer\s+\S{8,}|Basic\s+\S{8,}|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,})/i;
   var HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
   var MAX_PERCENT_DECODE_LAYERS = 3;
+  var CREDENTIAL_PATH_LABELS = /* @__PURE__ */ new Set([
+    "accesstoken",
+    "apikey",
+    "authtoken",
+    "clientsecret",
+    "credential",
+    "credentials",
+    "passwd",
+    "password",
+    "xapikey"
+  ]);
   function normalizeBaseUrl(value) {
     return String(value || "").trim().replace(/\/+$/, "");
   }
@@ -13608,7 +13774,13 @@
   function pathContainsCredential(value) {
     let current = String(value || "");
     for (let layer = 0; layer <= MAX_PERCENT_DECODE_LAYERS; layer += 1) {
-      if (SECRET_LIKE_PATH_LITERAL.test(current)) return true;
+      if (SECRET_LIKE_PATH_LITERAL.test(current) || isCredentialShapedProviderLiteral(current)) return true;
+      const segments = current.split("/").filter(Boolean);
+      for (let index = 0; index + 1 < segments.length; index += 1) {
+        const label = segments[index].toLowerCase().replace(/[^a-z0-9]/g, "");
+        const candidate = segments[index + 1];
+        if (CREDENTIAL_PATH_LABELS.has(label) && !/^v\d+(?:\.\d+)*$/i.test(candidate)) return true;
+      }
       const decoded = decodePercentRuns(current);
       if (decoded === current) break;
       current = decoded;
@@ -13752,7 +13924,10 @@
     });
     if (new Set(scopes).size !== scopes.length) throw providerProfileError();
     const valueRef = normalizeHeaderValueRef(value.valueRef, credentialId);
-    if (valueRef.kind === "literal" && (SENSITIVE_HEADER_NAME.test(name.toLowerCase()) || SECRET_LIKE_LITERAL.test(valueRef.value))) {
+    if (isReservedProviderExtraHeaderName(name)) {
+      throw providerProfileError("provider_header_forbidden");
+    }
+    if (valueRef.kind === "literal" && (isSensitiveProviderHeaderName(name) || isCredentialShapedProviderLiteral(valueRef.value))) {
       throw providerProfileError("provider_header_secret_reference_required");
     }
     return { id, name, scopes, valueRef };
@@ -14747,12 +14922,97 @@
     return Array.from(new Set(values)).sort((a, b) => b.length - a.length);
   }
   function normalizedSecrets(values) {
-    return Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((a, b) => b.length - a.length);
+    const variants = [];
+    for (const value of values || []) {
+      if (typeof value !== "string" || !value) continue;
+      variants.push(value);
+      try {
+        const encoded = JSON.stringify(value);
+        if ((encoded == null ? void 0 : encoded.startsWith('"')) && encoded.endsWith('"')) variants.push(encoded.slice(1, -1));
+      } catch {
+      }
+    }
+    return Array.from(new Set(variants.filter(Boolean))).sort((a, b) => b.length - a.length);
+  }
+  var MAX_DECODE_CHARS = 1024 * 1024;
+  var MAX_DECODE_LAYERS = 3;
+  function decodePercentRuns2(value) {
+    return String(value).replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
+      try {
+        return decodeURIComponent(run);
+      } catch {
+        return run;
+      }
+    });
+  }
+  function decodeUnicodeEscapes(value) {
+    return String(value).replace(/\\u([0-9a-f]{4})/gi, (_match, hex) => String.fromCharCode(Number.parseInt(hex, 16)));
+  }
+  function decodedTextLayers(value) {
+    let current = String(value);
+    const layers = [current];
+    for (let layer = 0; layer < MAX_DECODE_LAYERS; layer += 1) {
+      if (!current.includes("%") && !/\\u[0-9a-f]{4}/i.test(current)) break;
+      if (current.length > MAX_DECODE_CHARS) return null;
+      const decoded = decodeUnicodeEscapes(decodePercentRuns2(current));
+      if (decoded === current) break;
+      layers.push(decoded);
+      current = decoded;
+    }
+    return layers;
+  }
+  function textContainsSecret(value, secrets) {
+    const layers = decodedTextLayers(value);
+    if (layers === null) return true;
+    return layers.some((layer) => secrets.some((secret) => layer.includes(secret)));
+  }
+  function containsExactSecret(value, values = []) {
+    const secrets = normalizedSecrets(values);
+    if (!secrets.length) return false;
+    const visiting = /* @__PURE__ */ new WeakSet();
+    const containsText = (candidate) => textContainsSecret(candidate, secrets);
+    const visit = (candidate) => {
+      if ((typeof candidate !== "object" || candidate === null) && typeof candidate !== "function") {
+        try {
+          return containsText(String(candidate));
+        } catch {
+          return true;
+        }
+      }
+      if (visiting.has(candidate)) return true;
+      let keys;
+      try {
+        keys = Reflect.ownKeys(candidate);
+      } catch {
+        return true;
+      }
+      visiting.add(candidate);
+      try {
+        for (const key of keys) {
+          try {
+            if (containsText(String(key))) return true;
+            if (visit(Reflect.get(candidate, key))) return true;
+          } catch {
+            return true;
+          }
+        }
+        return false;
+      } finally {
+        visiting.delete(candidate);
+      }
+    };
+    return visit(value);
   }
   function redactText(value, values = []) {
     let text = String(value == null ? "" : value);
     const secrets = normalizedSecrets(values);
+    if (!secrets.length) return text;
     const marker = secrets.some((secret) => "[redacted]".includes(secret)) ? "" : "[redacted]";
+    const decodedLayers = decodedTextLayers(text);
+    if (decodedLayers === null) return marker;
+    if (decodedLayers.slice(1).some((layer) => secrets.some((secret) => layer.includes(secret)))) {
+      return marker;
+    }
     const maximumPasses = Math.max(1, secrets.length * 4 + 8);
     for (let pass = 0; pass < maximumPasses; pass += 1) {
       let changed = false;
@@ -14767,9 +15027,17 @@
   }
   function redactValue(value, values = []) {
     if (typeof value === "string") return redactText(value, values);
+    if (value === null || ["number", "boolean", "bigint"].includes(typeof value)) {
+      const text = String(value);
+      const redacted = redactText(text, values);
+      return redacted === text ? value : redacted;
+    }
     if (Array.isArray(value)) return value.map((item) => redactValue(item, values));
     if (!value || typeof value !== "object") return value;
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactValue(item, values)]));
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+      redactText(key, values),
+      redactValue(item, values)
+    ]));
   }
   function createDeltaRedactor(values, emitText) {
     const secrets = normalizedSecrets(values);
@@ -14793,6 +15061,60 @@
       },
       discard() {
         buffer = "";
+      }
+    };
+  }
+  function createByteRedactor(values, emitBytes) {
+    const secrets = normalizedSecrets(values).map((value) => Buffer.from(value, "utf8")).filter((value) => value.length > 0).sort((left, right) => right.length - left.length);
+    const displayMarker = Buffer.from("[redacted]", "utf8");
+    const marker = secrets.some((secret) => displayMarker.includes(secret)) ? Buffer.alloc(0) : displayMarker;
+    const maximum = secrets.reduce((length, secret) => Math.max(length, secret.length), 0);
+    let pending = Buffer.alloc(0);
+    function emit(value) {
+      if (value.length > 0) emitBytes(value);
+    }
+    function drain(flush) {
+      if (!secrets.length) {
+        emit(pending);
+        pending = Buffer.alloc(0);
+        return;
+      }
+      while (pending.length > 0) {
+        const boundary = flush ? pending.length : Math.max(0, pending.length - maximum + 1);
+        if (!flush && boundary === 0) return;
+        let matchIndex = -1;
+        let matchSecret = null;
+        for (const secret of secrets) {
+          const index = pending.indexOf(secret);
+          if (index < 0 || !flush && index >= boundary) continue;
+          if (matchIndex < 0 || index < matchIndex || index === matchIndex && secret.length > matchSecret.length) {
+            matchIndex = index;
+            matchSecret = secret;
+          }
+        }
+        if (matchIndex < 0) {
+          emit(pending.subarray(0, boundary));
+          pending = pending.subarray(boundary);
+          if (!flush) return;
+          continue;
+        }
+        emit(pending.subarray(0, matchIndex));
+        emit(marker);
+        pending = pending.subarray(matchIndex + matchSecret.length);
+      }
+    }
+    return {
+      feed(chunk) {
+        const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk || "");
+        if (!value.length) return;
+        pending = pending.length ? Buffer.concat([pending, value]) : Buffer.from(value);
+        drain(false);
+      },
+      flush() {
+        drain(true);
+      },
+      discard() {
+        pending = Buffer.alloc(0);
       }
     };
   }
@@ -15052,84 +15374,13 @@
     });
   }
 
-  // src/cep/apiKey.js
-  var KEY_FILES = {
-    anthropic: "anthropic-key",
-    codex: "codex-key",
-    zcode: "zcode-key"
-  };
-  function cepRequire2() {
-    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) return globalThis.window.cep_node.require;
-    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    return null;
-  }
-  function defaultDeps() {
-    const req = cepRequire2();
-    if (!req) throw new Error("CEP Node require is unavailable");
-    return {
-      fs: req("fs"),
-      os: req("os"),
-      path: req("path"),
-      pid: req("process") && req("process").pid
-    };
-  }
-  function createApiKeyStore(deps = defaultDeps()) {
-    const fs = deps.fs;
-    const os = deps.os;
-    const path = deps.path;
-    function keyDir() {
-      return path.join(os.homedir(), ".ae-mcp");
-    }
-    function keyFile(name = "anthropic") {
-      const file = KEY_FILES[String(name || "anthropic")];
-      if (!file) throw new Error("Unsupported API key name: " + name);
-      return file;
-    }
-    function keyPath(name = "anthropic") {
-      return path.join(keyDir(), keyFile(name));
-    }
-    function readKey(name = "anthropic") {
-      try {
-        return fs.readFileSync(keyPath(name), "utf8").trim();
-      } catch (e) {
-        if (e && e.code === "ENOENT") return "";
-        throw e;
-      }
-    }
-    function writeKey(key, name = "anthropic") {
-      const value = String(key || "").trim();
-      const dir = keyDir();
-      const fileName = keyFile(name);
-      const file = keyPath(name);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      const pid = deps.pid || 0;
-      const tmp = path.join(dir, `${fileName}.${pid}.${Date.now()}.tmp`);
-      fs.writeFileSync(tmp, value, "utf8");
-      try {
-        fs.chmodSync(tmp, 384);
-      } catch (e) {
-      }
-      fs.renameSync(tmp, file);
-      return value;
-    }
-    function clearKey(name = "anthropic") {
-      try {
-        fs.unlinkSync(keyPath(name));
-      } catch (e) {
-        if (!e || e.code !== "ENOENT") throw e;
-      }
-    }
-    return { keyDir, keyPath, readKey, writeKey, clearKey };
-  }
-
   // src/lib/zcodeErrors.js
   var ZH_RULES = [
     {
       // Provider ids may contain dots (e.g. "mediastorm_glm/glm-5.2"): capture the
       // whole non-space run, then drop one trailing sentence terminator if present.
       re: /Model provider is missing an API key:\s*([^\s]+?)[.。]?(?=\s|$)/i,
-      hint: (m) => "ZCode provider\u300C" + m[1] + "\u300D\u7F3A\u5C11 API Key \u2014\u2014 \u5230 \u8BBE\u7F6E \u2192 AI \u670D\u52A1 \u2192 ZCode \u901A\u9053 \u7C98\u8D34\u4E00\u6B21 Key\uFF08\u4FDD\u5B58\u5728\u672C\u673A ~/.ae-mcp/zcode-key\uFF09\uFF0C\u6216\u5728 ~/.zcode/cli/config.json \u91CC\u914D\u7F6E\u3002"
+      hint: (m) => "ZCode provider\u300C" + m[1] + "\u300D\u7F3A\u5C11 API Key \u2014\u2014 \u5230 \u8BBE\u7F6E \u2192 AI \u670D\u52A1 \u2192 ZCode \u901A\u9053 \u7C98\u8D34\u4E00\u6B21 Key\uFF08\u4FDD\u5B58\u5728\u7CFB\u7EDF\u5B89\u5168\u51ED\u636E\u5E93\uFF09\uFF0C\u6216\u5728 ~/.zcode/cli/config.json \u91CC\u914D\u7F6E\u3002"
     },
     {
       re: /Model config is missing/i,
@@ -15536,13 +15787,6 @@
   function zcodeErrorKind(message) {
     return /\b(model|provider|api[-\s_]*key|credential|auth)\b/i.test(String(message || "")) ? "model" : "mcp";
   }
-  function defaultReadStoredZcodeKey() {
-    try {
-      return createApiKeyStore().readKey("zcode");
-    } catch (e) {
-      return "";
-    }
-  }
   function createZcodeBackend({
     platform,
     getModel,
@@ -15558,7 +15802,7 @@
     readDesktopModel = readZcodeDesktopModel,
     readDesktopRuntimeModel = readZcodeDesktopRuntimeModel,
     resolveCli = resolveZcodeCli,
-    readStoredZcodeKey = defaultReadStoredZcodeKey
+    readStoredZcodeKey = () => ""
   }) {
     const adapter = platform || createPlatformAdapter();
     let proc = null;
@@ -15575,6 +15819,10 @@
     let activeRun = null;
     let activeResolve = null;
     let activeAssistantText = "";
+    let environmentSecretValues = [];
+    let runtimeSecretValues = [];
+    let activeSecretValues = [];
+    let secretEpoch = 0;
     let toolMeta = { allowedTools: [], annotations: {} };
     const pendingApprovals = /* @__PURE__ */ new Map();
     const pendingElicitations = /* @__PURE__ */ new Map();
@@ -15582,7 +15830,40 @@
     const sessionAllowedTools = /* @__PURE__ */ new Set();
     const sessionAllowedPlans = /* @__PURE__ */ new Set();
     function emit(evt) {
-      if (onEvent) onEvent(evt);
+      if (onEvent) onEvent(redactValue(evt, activeSecretValues));
+    }
+    function safeText(value) {
+      return redactText(value, activeSecretValues);
+    }
+    function refreshActiveSecretValues() {
+      activeSecretValues = Array.from(/* @__PURE__ */ new Set([
+        ...environmentSecretValues,
+        ...runtimeSecretValues
+      ])).sort((left, right) => right.length - left.length);
+      secretEpoch += 1;
+    }
+    function clearActiveSecretValues() {
+      environmentSecretValues = [];
+      runtimeSecretValues = [];
+      activeSecretValues = [];
+      secretEpoch += 1;
+    }
+    function scheduleSecretCleanup() {
+      const scheduledEpoch = secretEpoch;
+      setTimeout(() => {
+        if (secretEpoch === scheduledEpoch) clearActiveSecretValues();
+      }, 0);
+    }
+    function runtimeModelSecrets(runtimeModel) {
+      var _a, _b;
+      const values = [];
+      const apiKey = (_a = runtimeModel == null ? void 0 : runtimeModel.provider) == null ? void 0 : _a.apiKey;
+      if (typeof apiKey === "string" && apiKey) values.push(apiKey);
+      if (typeof (apiKey == null ? void 0 : apiKey.value) === "string" && apiKey.value) values.push(apiKey.value);
+      for (const header of ((_b = runtimeModel == null ? void 0 : runtimeModel.provider) == null ? void 0 : _b.headers) || []) {
+        if (typeof (header == null ? void 0 : header.value) === "string" && header.value) values.push(header.value);
+      }
+      return values;
     }
     function currentEnv() {
       const next = adapter.completeSpawnEnv(env || {});
@@ -15594,6 +15875,8 @@
         const providerEnv = zcodeProviderApiKeyEnv(zcodeProviderId(next.ZCODE_MODEL));
         if (providerEnv && !next[providerEnv]) next[providerEnv] = panelApiKey;
       }
+      environmentSecretValues = Array.from(new Set(Object.entries(next).filter(([name, value]) => isSensitiveProviderHeaderName(name) && typeof value === "string" && value).map(([, value]) => value))).sort((left, right) => right.length - left.length);
+      refreshActiveSecretValues();
       return next;
     }
     function currentModelRef(spawnEnv) {
@@ -15791,8 +16074,9 @@
       if (type === "model.streaming") {
         const payload = params.payload || {};
         if (payload.kind === "text_delta" && payload.delta) {
-          activeAssistantText += String(payload.delta);
-          emit({ type: "text-delta", text: String(payload.delta) });
+          const delta = safeText(String(payload.delta));
+          activeAssistantText += delta;
+          emit({ type: "text-delta", text: delta });
         }
         return;
       }
@@ -15816,7 +16100,7 @@
         drainApprovals();
         const payload = params.payload || {};
         emit({ type: "turn-end", stopReason: "end_turn" });
-        transcript.push({ role: "assistant", text: activeAssistantText || payload.response || "" });
+        transcript.push({ role: "assistant", text: activeAssistantText || safeText(payload.response || "") });
         finishActive();
         return;
       }
@@ -15874,11 +16158,16 @@
       sessionId = null;
       sessionModelRef = null;
       subscribed = false;
-      if (wasStopping) return;
+      activeRuntimeModel = null;
+      if (wasStopping) {
+        scheduleSecretCleanup();
+        return;
+      }
       if (activeRun) {
         emit({ type: "error", kind: "mcp", message: "ZCode app-server exited: " + detail });
         finishActive();
       }
+      scheduleSecretCleanup();
     }
     function handleError(error) {
       const err = error instanceof Error ? error : new Error("ZCode app-server error");
@@ -15890,10 +16179,12 @@
       sessionId = null;
       sessionModelRef = null;
       subscribed = false;
+      activeRuntimeModel = null;
       if (activeRun) {
         emit({ type: "error", kind: "mcp", message: err.message });
         finishActive();
       }
+      scheduleSecretCleanup();
     }
     async function startProcess() {
       if (proc && rpc) return true;
@@ -15983,7 +16274,9 @@
         const modelRef = currentModelRef(spawnEnv);
         const runtimeModel = currentRuntimeModel(spawnEnv, modelRef, thoughtLevel);
         if (runtimeModel) createParams.runtimeModel = runtimeModel;
-        activeRuntimeModel = runtimeModel || null;
+        runtimeSecretValues = runtimeModelSecrets(runtimeModel);
+        refreshActiveSecretValues();
+        activeRuntimeModel = runtimeModel ? redactValue(runtimeModel, runtimeSecretValues) : null;
         const model = runtimeModel && runtimeModel.model || zcodeProtocolModelFromRef(modelRef);
         if (model) createParams.model = model;
         if (thoughtLevel) createParams.thoughtLevel = thoughtLevel;
@@ -16137,6 +16430,7 @@
       toolMeta = { allowedTools: [], annotations: {} };
       finishActive();
       stderrTail = "";
+      clearActiveSecretValues();
       stopping = false;
     }
     async function setThoughtLevel(level) {
@@ -16158,7 +16452,7 @@
           loggedIn: true,
           runtimeOk: false,
           provider: "zcode",
-          detail: zcodeErrorMessage(e, "ZCode runtime unavailable.", lang)
+          detail: safeText(zcodeErrorMessage(e, "ZCode runtime unavailable.", lang))
         };
       }
     }
@@ -16560,7 +16854,7 @@
       checking: zcodeProbe === null,
       ok: Boolean(summary.cli && summary.cli.hasCredential && runtimeOk),
       detail: summary.cli ? summary.cli.model || summary.cli.providerId : "",
-      fixHint: !runtimeOk && summary.cli ? runtimeHint : summary.cli && !summary.cli.hasCredential ? { zh: "\u68C0\u6D4B\u5230 ZCode CLI provider\u300C" + summary.cli.providerId + "\u300D\uFF0C\u4F46\u5176 API Key \u73AF\u5883\u53D8\u91CF\uFF08" + (summary.cli.apiKeyEnv || "-") + "\uFF09\u6CA1\u6709\u88AB\u9762\u677F\u7EE7\u627F\u3002\u5728\u4E0B\u65B9\u7C98\u8D34\u4E00\u6B21 Key\uFF08\u4FDD\u5B58\u5230\u672C\u673A ~/.ae-mcp/zcode-key\uFF09\u5373\u53EF\u4F7F\u7528\u3002", en: 'Found ZCode CLI provider "' + summary.cli.providerId + '", but its API key env (' + (summary.cli.apiKeyEnv || "-") + ") is not inherited by the panel. Paste the key once below (stored at ~/.ae-mcp/zcode-key)." } : { zh: "\u672A\u627E\u5230 ~/.zcode/cli/config.json \u7684\u53EF\u7528 provider\uFF1A\u5148\u5728 ZCode CLI \u91CC\u914D\u7F6E provider \u4E0E\u9ED8\u8BA4\u6A21\u578B\u3002", en: "No usable provider in ~/.zcode/cli/config.json: configure a provider and default model in the ZCode CLI first." }
+      fixHint: !runtimeOk && summary.cli ? runtimeHint : summary.cli && !summary.cli.hasCredential ? { zh: "\u68C0\u6D4B\u5230 ZCode CLI provider\u300C" + summary.cli.providerId + "\u300D\uFF0C\u4F46\u5176 API Key \u73AF\u5883\u53D8\u91CF\uFF08" + (summary.cli.apiKeyEnv || "-") + "\uFF09\u6CA1\u6709\u88AB\u9762\u677F\u7EE7\u627F\u3002\u5728\u4E0B\u65B9\u7C98\u8D34\u4E00\u6B21 Key\uFF08\u4FDD\u5B58\u5230\u7CFB\u7EDF\u5B89\u5168\u51ED\u636E\u5E93\uFF09\u5373\u53EF\u4F7F\u7528\u3002", en: 'Found ZCode CLI provider "' + summary.cli.providerId + '", but its API key env (' + (summary.cli.apiKeyEnv || "-") + ") is not inherited by the panel. Paste the key once below; it will be stored in the protected system credential store." } : { zh: "\u672A\u627E\u5230 ~/.zcode/cli/config.json \u7684\u53EF\u7528 provider\uFF1A\u5148\u5728 ZCode CLI \u91CC\u914D\u7F6E provider \u4E0E\u9ED8\u8BA4\u6A21\u578B\u3002", en: "No usable provider in ~/.zcode/cli/config.json: configure a provider and default model in the ZCode CLI first." }
     };
     const desktop = {
       channel: "desktop",
@@ -17018,49 +17312,31 @@
   // src/cep/approvalTierFile.js
   var TOOL_TIER_ENV = "AE_MCP_TOOL_APPROVAL_TIER_FILE";
   var VALID_TIERS = /* @__PURE__ */ new Set(["readonly", "manual", "auto", "none"]);
-  function cepRequire3() {
-    var _a, _b, _c;
-    if ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) return globalThis.window.cep_node.require;
-    if ((_c = globalThis.window) == null ? void 0 : _c.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    return null;
-  }
-  function defaultDeps2() {
-    var _a, _b;
-    const require2 = cepRequire3();
-    if (!require2) throw new Error("CEP Node require is unavailable");
-    const processImpl = ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.process) || globalThis.process;
-    return {
-      fs: require2("fs"),
-      os: require2("os"),
-      path: require2("path"),
-      pid: (processImpl == null ? void 0 : processImpl.pid) || 0,
-      platform: (processImpl == null ? void 0 : processImpl.platform) || "",
-      now: () => Date.now()
-    };
-  }
-  function protect(fs, path, mode, platform) {
+  function protect(fs, path, mode, platformId) {
     try {
       fs.chmodSync(path, mode);
     } catch (error) {
-      if (platform !== "win32") throw error;
+      if (platformId !== "windows-x64") throw error;
     }
   }
-  function createApprovalTierFile(deps = defaultDeps2()) {
-    const { fs, os, path } = deps;
+  function createApprovalTierFile(deps) {
+    if (!(deps == null ? void 0 : deps.fs) || !(deps == null ? void 0 : deps.paths) || typeof deps.paths.join !== "function") {
+      throw new TypeError("platform file dependencies are required");
+    }
+    const { fs, paths } = deps;
     const pid = Number.isSafeInteger(deps.pid) && deps.pid >= 0 ? deps.pid : 0;
     const now = typeof deps.now === "function" ? deps.now : () => Date.now();
-    const directory = path.join(os.homedir(), ".ae-mcp", "runtime", "approval");
-    const file = path.join(directory, `panel-${pid}.tier`);
+    const directory = paths.join([paths.runtimeRoot, "approval"]);
+    const file = paths.join([directory, `panel-${pid}.tier`]);
     let temporaryCounter = 0;
     function ensureDirectory() {
       fs.mkdirSync(directory, { recursive: true, mode: 448 });
-      protect(fs, directory, 448, deps.platform);
+      protect(fs, directory, 448, deps.platformId);
     }
     function temporaryPath() {
       temporaryCounter += 1;
       const suffix = typeof deps.nonce === "function" ? deps.nonce() : temporaryCounter;
-      return path.join(directory, `.panel-${pid}.${now()}.${suffix}.tmp`);
+      return paths.join([directory, `.panel-${pid}.${now()}.${suffix}.tmp`]);
     }
     function write(tier) {
       if (!VALID_TIERS.has(tier)) throw new TypeError("Unsupported tool approval tier");
@@ -17074,7 +17350,7 @@
         fs.fsyncSync(descriptor);
         fs.closeSync(descriptor);
         descriptor = null;
-        protect(fs, temporary, 384, deps.platform);
+        protect(fs, temporary, 384, deps.platformId);
         fs.renameSync(temporary, file);
         return tier;
       } catch (error) {
@@ -17111,6 +17387,185 @@
         [TOOL_TIER_ENV]: tierFile.path()
       })
     });
+  }
+
+  // src/cep/apiKey.js
+  var KEY_FILES = {
+    anthropic: "anthropic-key",
+    codex: "codex-key",
+    zcode: "zcode-key"
+  };
+  function cepRequire2() {
+    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) return globalThis.window.cep_node.require;
+    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
+    if (globalThis.require) return globalThis.require;
+    return null;
+  }
+  function defaultDeps() {
+    const req = cepRequire2();
+    if (!req) throw new Error("CEP Node require is unavailable");
+    return {
+      fs: req("fs"),
+      os: req("os"),
+      path: req("path")
+    };
+  }
+  function createLegacyApiKeyStore(deps = defaultDeps()) {
+    const fs = deps.fs;
+    const os = deps.os;
+    const path = deps.path;
+    function keyDir() {
+      return path.join(os.homedir(), ".ae-mcp");
+    }
+    function keyFile(name = "anthropic") {
+      const file = KEY_FILES[String(name || "anthropic")];
+      if (!file) throw new Error("Unsupported API key name: " + name);
+      return file;
+    }
+    function keyPath(name = "anthropic") {
+      return path.join(keyDir(), keyFile(name));
+    }
+    function readKey(name = "anthropic") {
+      try {
+        return fs.readFileSync(keyPath(name), "utf8").trim();
+      } catch (e) {
+        if (e && e.code === "ENOENT") return "";
+        throw e;
+      }
+    }
+    function clearKey(name = "anthropic") {
+      try {
+        fs.unlinkSync(keyPath(name));
+      } catch (e) {
+        if (!e || e.code !== "ENOENT") throw e;
+      }
+    }
+    return Object.freeze({ keyDir, keyPath, readKey, clearKey });
+  }
+
+  // src/cep/zcodeCredential.js
+  var STORAGE_KEY = "ae_mcp_zcode_credential_v1";
+  var CREDENTIAL_ID = "6c1d936a-3f93-5b2c-9e15-1a513cdd8a89";
+  var VALUE_REF_KEYS = ["kind", "reference", "revision"];
+  function credentialError() {
+    const error = new Error("ZCode protected credential is unavailable");
+    error.code = "ZCODE_CREDENTIAL_UNAVAILABLE";
+    return error;
+  }
+  function exactKeys(value, expected) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const keys = Object.keys(value).sort();
+    return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+  }
+  function normalizeValueRef(value) {
+    if (!exactKeys(value, VALUE_REF_KEYS) || value.kind !== "secret") throw credentialError();
+    let parsed;
+    try {
+      parsed = parseProviderSecretReference(value.reference);
+    } catch {
+      throw credentialError();
+    }
+    if (parsed.providerId !== CREDENTIAL_ID || !parsed.slot.startsWith("auth-model-") || !Number.isSafeInteger(value.revision) || value.revision <= 0) {
+      throw credentialError();
+    }
+    return Object.freeze({ kind: "secret", reference: value.reference, revision: value.revision });
+  }
+  function createZcodeCredentialManager({ storage, secretService, legacyKeyStore } = {}) {
+    if (!storage || typeof storage.getItem !== "function" || typeof storage.setItem !== "function") {
+      throw new TypeError("storage must implement getItem and setItem");
+    }
+    if (!secretService || typeof secretService.create !== "function" || typeof secretService.resolve !== "function" || typeof secretService.delete !== "function") {
+      throw new TypeError("secretService must implement create, resolve, and delete");
+    }
+    function readValueRef() {
+      let raw;
+      try {
+        raw = storage.getItem(STORAGE_KEY);
+      } catch {
+        throw credentialError();
+      }
+      if (!raw) return null;
+      try {
+        return normalizeValueRef(JSON.parse(raw));
+      } catch {
+        throw credentialError();
+      }
+    }
+    function persistValueRef(valueRef) {
+      try {
+        storage.setItem(STORAGE_KEY, JSON.stringify(normalizeValueRef(valueRef)));
+      } catch {
+        throw credentialError();
+      }
+    }
+    function clearLegacy() {
+      if (!legacyKeyStore) return;
+      try {
+        legacyKeyStore.clearKey("zcode");
+        if (legacyKeyStore.readKey("zcode")) throw credentialError();
+      } catch {
+        throw credentialError();
+      }
+    }
+    async function resolve(valueRef = readValueRef()) {
+      if (!valueRef) return "";
+      try {
+        const value = await secretService.resolve(valueRef);
+        if (typeof value !== "string") throw credentialError();
+        return value;
+      } catch {
+        throw credentialError();
+      }
+    }
+    async function save(rawValue) {
+      const value = String(rawValue || "").trim();
+      if (!value) throw credentialError();
+      const previous = readValueRef();
+      let created;
+      try {
+        created = await secretService.create({
+          credentialId: CREDENTIAL_ID,
+          slotPrefix: "auth-model",
+          value
+        });
+        persistValueRef(created);
+      } catch {
+        if (created) {
+          try {
+            await secretService.delete(created);
+          } catch {
+          }
+        }
+        throw credentialError();
+      }
+      if (previous) {
+        try {
+          await secretService.delete(previous);
+        } catch {
+        }
+      }
+      clearLegacy();
+      return value;
+    }
+    async function loadOrMigrate() {
+      const current = readValueRef();
+      if (current) {
+        const value = await resolve(current);
+        clearLegacy();
+        return value;
+      }
+      let legacy = "";
+      if (legacyKeyStore) {
+        try {
+          legacy = String(legacyKeyStore.readKey("zcode") || "").trim();
+        } catch {
+          throw credentialError();
+        }
+      }
+      if (!legacy) return "";
+      return save(legacy);
+    }
+    return Object.freeze({ loadOrMigrate, readValueRef, resolve, save });
   }
 
   // src/lib/claudeChannel.js
@@ -19867,22 +20322,6 @@ ${output}` : output
     "connection",
     "transfer-encoding"
   ]);
-  var FORBIDDEN_EXACT = /* @__PURE__ */ new Set([
-    "host",
-    "content-length",
-    "connection",
-    "transfer-encoding",
-    "upgrade",
-    "keep-alive",
-    "te",
-    "trailer",
-    "expect",
-    "cookie",
-    "set-cookie",
-    "forwarded",
-    "proxy-authorization",
-    "proxy-authenticate"
-  ]);
   var RESPONSE_EXACT = /* @__PURE__ */ new Set([
     "content-type",
     "cache-control",
@@ -19893,8 +20332,6 @@ ${output}` : output
     "x-goog-request-id",
     "x-amzn-requestid"
   ]);
-  var SENSITIVE_HEADER_NAME2 = /(?:^|[-_])(?:authorization|api[-_]?key|token|secret|password)(?:$|[-_])/i;
-  var SECRET_LIKE_LITERAL2 = /^(?:Bearer\s+\S+|Basic\s+\S+|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,})$/;
   var JSON_MEDIA_TYPE = /^application\/(?:json|[!#$%&'*+.^_`|~0-9A-Za-z-]+\+json)(?:\s*;\s*charset=utf-8)?$/i;
   var DEFAULT_LIMITS = Object.freeze({ maxValueBytes: 8 * 1024, maxTotalBytes: 32 * 1024, maxCount: 64 });
   function headerError(code, message) {
@@ -19911,7 +20348,7 @@ ${output}` : output
     return output;
   }
   function isForbiddenName(name) {
-    return FORBIDDEN_EXACT.has(name) || name.startsWith("x-forwarded-") || name.startsWith("proxy-") || name.startsWith("sec-") || name.startsWith("x-ae-mcp-route-") || name === "x-ae-mcp-route-token";
+    return isForbiddenProviderHeaderName(name);
   }
   function validatesInboundName(name) {
     return INBOUND_EXACT.has(name) || name.startsWith("x-stainless-") || name.startsWith("x-codex-");
@@ -19965,7 +20402,7 @@ ${output}` : output
       if (LOCAL_ONLY.has(name)) continue;
       if (isForbiddenName(name)) throw headerError("provider_header_forbidden", "Provider header is forbidden.");
       if (!validatesInboundName(name)) continue;
-      if (SENSITIVE_HEADER_NAME2.test(name)) {
+      if (isSensitiveProviderHeaderName(name)) {
         throw headerError("provider_header_forbidden", "Provider header is forbidden.");
       }
       if (name === "content-type") validateContentType(value);
@@ -19990,7 +20427,7 @@ ${output}` : output
       if (isForbiddenName(name) || name === "authorization" || name === "x-api-key" || name === authName) {
         throw headerError("provider_header_forbidden", "Provider header is reserved.");
       }
-      if (source !== "secret" && (SENSITIVE_HEADER_NAME2.test(name) || SECRET_LIKE_LITERAL2.test(value))) {
+      if (source !== "secret" && (isSensitiveProviderHeaderName(name) || isCredentialShapedProviderLiteral(value))) {
         throw headerError("provider_header_secret_reference_required", "Provider header requires a secret reference.");
       }
       if (name === "content-type") validateContentType(value);
@@ -21317,6 +21754,105 @@ ${output}` : output
     return new URL((candidates.find((candidate) => candidate.id === "plus-v1") || candidates[0]).url.toString());
   }
 
+  // src/lib/providerSseSecretGuard.js
+  var STREAM_TEXT_KEYS = /* @__PURE__ */ new Set([
+    "arguments",
+    "content",
+    "delta",
+    "input_json",
+    "output_text",
+    "partial_json",
+    "reasoning_content",
+    "refusal",
+    "signature",
+    "summary",
+    "summary_text",
+    "text",
+    "thinking",
+    "transcript"
+  ]);
+  function invalidSse(code, message) {
+    return Object.assign(new Error(message), { status: 502, code });
+  }
+  function payloadIdentity(payload) {
+    var _a, _b;
+    if (!payload || typeof payload !== "object") return "";
+    return [
+      payload.item_id,
+      payload.id,
+      (_a = payload.response) == null ? void 0 : _a.id,
+      (_b = payload.message) == null ? void 0 : _b.id,
+      payload.output_index,
+      payload.content_index,
+      payload.index
+    ].map((value) => String(value != null ? value : "")).join("|");
+  }
+  function collectStreamingStrings(value, identity, streams, path = []) {
+    var _a;
+    if (typeof value === "string") {
+      const leaf = String((_a = path.at(-1)) != null ? _a : "");
+      const pathKey = `path:${identity}:${path.join(".")}`;
+      streams.set(pathKey, (streams.get(pathKey) || "") + value);
+      const globalPathKey = `global-path:${path.join(".")}`;
+      streams.set(globalPathKey, (streams.get(globalPathKey) || "") + value);
+      if (STREAM_TEXT_KEYS.has(leaf)) {
+        const semanticKey = `semantic:${identity}`;
+        streams.set(semanticKey, (streams.get(semanticKey) || "") + value);
+        streams.set("global-semantic", (streams.get("global-semantic") || "") + value);
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => collectStreamingStrings(item, identity, streams, [...path, index]));
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    for (const [key, item] of Object.entries(value)) {
+      collectStreamingStrings(item, identity, streams, [...path, key]);
+    }
+  }
+  function requireCredentialFreeSse(data, secrets = [], { maxFrameBytes = 1024 * 1024 } = {}) {
+    const bytes = Buffer.isBuffer(data) ? Buffer.from(data) : Buffer.from(data || "");
+    const text = bytes.toString("utf8");
+    if (!Buffer.from(text, "utf8").equals(bytes)) {
+      throw invalidSse("provider_stream_invalid_utf8", "Provider stream was not valid UTF-8.");
+    }
+    const frames = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split(/\n\n/);
+    const streams = /* @__PURE__ */ new Map();
+    for (const frame of frames) {
+      if (!frame) continue;
+      if (Buffer.byteLength(frame, "utf8") > maxFrameBytes) {
+        throw invalidSse("provider_stream_frame_too_large", "Provider stream frame was too large.");
+      }
+      if (containsExactSecret(frame, secrets)) {
+        throw invalidSse("provider_stream_credential_reflection", "Provider stream metadata was rejected.");
+      }
+      const dataLines = [];
+      for (const line of frame.split("\n")) {
+        if (line === "data") dataLines.push("");
+        else if (line.startsWith("data:")) dataLines.push(line.slice(5).replace(/^ /, ""));
+      }
+      if (!dataLines.length) continue;
+      const payloadText = dataLines.join("\n");
+      if (payloadText.trim() === "[DONE]") continue;
+      let payload;
+      try {
+        payload = JSON.parse(payloadText);
+      } catch {
+        throw invalidSse("provider_stream_invalid_json", "Provider stream contained invalid JSON.");
+      }
+      if (containsExactSecret(payload, secrets)) {
+        throw invalidSse("provider_stream_credential_reflection", "Provider stream metadata was rejected.");
+      }
+      collectStreamingStrings(payload, payloadIdentity(payload), streams);
+    }
+    for (const value of streams.values()) {
+      if (containsExactSecret(value, secrets)) {
+        throw invalidSse("provider_stream_credential_reflection", "Provider stream metadata was rejected.");
+      }
+    }
+  }
+
   // src/cep/providerRouteAuth.js
   function generateRouteToken({ randomBytes } = {}) {
     if (typeof randomBytes !== "function") throw new TypeError("randomBytes is required");
@@ -21457,6 +21993,7 @@ ${output}` : output
   // src/cep/codexResponsesRoute.js
   var DEFAULT_ROUTE_LIMITS = Object.freeze({
     requestBodyBytes: 16 * 1024 * 1024,
+    responseBodyBytes: 16 * 1024 * 1024,
     sseFrameBytes: 1024 * 1024,
     concurrent: 4,
     connectTimeoutMs: 15e3,
@@ -21729,7 +22266,7 @@ ${output}` : output
     const output = {};
     for (const [name, value] of Object.entries(headers)) {
       const text = String(value);
-      if (secrets.some((secret) => text.includes(secret))) continue;
+      if (containsExactSecret(text, secrets)) continue;
       output[name] = text;
     }
     return output;
@@ -21769,24 +22306,7 @@ ${output}` : output
     upstream.on("end", () => finish(false));
     upstream.on("error", () => finish(bytes > context.limits.errorBodyBytes));
   }
-  function pipeModels(context, upstream, status, headers) {
-    context.res.writeHead(status, headers);
-    upstream.on("data", (chunk) => {
-      if (context.finished) return;
-      resetIdleTimer(context);
-      context.res.write(chunk);
-    });
-    upstream.on("end", () => {
-      if (!finishOnce(context)) return;
-      context.res.end();
-    });
-    upstream.on("error", () => streamFailure(context, {
-      status: 502,
-      code: "provider_error",
-      message: "Provider response stream failed."
-    }));
-  }
-  function readNonStreamingResponse(context, upstream, status, headers, chatBody) {
+  function pipeModels(context, upstream, status, headers, secrets) {
     const chunks = [];
     let bytes = 0;
     upstream.on("data", (chunk) => {
@@ -21794,7 +22314,51 @@ ${output}` : output
       resetIdleTimer(context);
       const value = Buffer.from(chunk);
       bytes += value.length;
-      if (bytes > context.limits.requestBodyBytes) {
+      if (bytes > context.limits.responseBodyBytes) {
+        streamFailure(context, {
+          status: 502,
+          code: "provider_response_too_large",
+          message: "Provider model response was too large."
+        });
+        return;
+      }
+      chunks.push(value);
+    });
+    upstream.on("end", () => {
+      if (context.finished) return;
+      let parsed;
+      try {
+        parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        if (containsExactSecret(parsed, secrets)) throw new Error("credential reflection");
+        parsed = redactValue(parsed, secrets);
+      } catch {
+        streamFailure(context, {
+          status: 502,
+          code: "provider_model_metadata_rejected",
+          message: "Provider model metadata was rejected."
+        });
+        return;
+      }
+      if (!finishOnce(context)) return;
+      sendJson(context.res, status, parsed, headers);
+    });
+    upstream.on("error", () => {
+      streamFailure(context, {
+        status: 502,
+        code: "provider_error",
+        message: "Provider response stream failed."
+      });
+    });
+  }
+  function readNonStreamingResponse(context, upstream, status, headers, chatBody, secrets) {
+    const chunks = [];
+    let bytes = 0;
+    upstream.on("data", (chunk) => {
+      if (context.finished) return;
+      resetIdleTimer(context);
+      const value = Buffer.from(chunk);
+      bytes += value.length;
+      if (bytes > context.limits.responseBodyBytes) {
         streamFailure(context, {
           status: 502,
           code: "provider_response_too_large",
@@ -21816,11 +22380,12 @@ ${output}` : output
           { id: context.responseId, model: String(chatBody.model || "") },
           { sealReasoning: (_a = context.reasoningCapsule) == null ? void 0 : _a.seal }
         );
-      } catch (error) {
+        response = redactValue(response, secrets);
+      } catch {
         streamFailure(context, {
-          status: Number(error == null ? void 0 : error.status) || 502,
-          code: (error == null ? void 0 : error.code) || "invalid_chat_completion",
-          message: (error == null ? void 0 : error.message) || "Provider returned an invalid Chat Completion."
+          status: 502,
+          code: "invalid_chat_completion",
+          message: "Provider returned an invalid Chat Completion."
         });
         return;
       }
@@ -21833,45 +22398,81 @@ ${output}` : output
       message: "Provider response body failed."
     }));
   }
-  function streamChatResponse(context, upstream, status, headers, chatBody) {
-    var _a;
-    context.res.writeHead(status, {
-      ...headers,
-      "content-type": "text/event-stream; charset=utf-8",
-      "cache-control": headers["cache-control"] || "no-cache"
-    });
-    const adapter = createChatSseToResponses({
-      id: context.responseId,
-      model: String(chatBody.model || ""),
-      maxFrameBytes: context.limits.sseFrameBytes,
-      writeEvent: (name, payload) => writeSse(context.res, name, payload),
-      fail: (error) => streamFailure(context, error),
-      sealReasoning: (_a = context.reasoningCapsule) == null ? void 0 : _a.seal
-    });
+  function streamChatResponse(context, upstream, status, headers, chatBody, secrets) {
+    const chunks = [];
+    let bytes = 0;
     upstream.on("data", (chunk) => {
       if (context.finished) return;
       resetIdleTimer(context);
-      try {
-        adapter.feed(chunk);
-      } catch (error) {
-        streamFailure(context, error);
+      const value = Buffer.from(chunk);
+      bytes += value.length;
+      if (bytes > context.limits.responseBodyBytes) {
+        streamFailure(context, {
+          status: 502,
+          code: "provider_response_too_large",
+          message: "Provider response stream was too large."
+        });
+        return;
       }
+      chunks.push(value);
     });
     upstream.on("end", () => {
+      var _a;
       if (context.finished) return;
+      const transcript = Buffer.concat(chunks);
       try {
-        adapter.end();
+        requireCredentialFreeSse(transcript, secrets, { maxFrameBytes: context.limits.sseFrameBytes });
       } catch (error) {
         streamFailure(context, error);
+        return;
       }
+      context.res.writeHead(status, {
+        ...headers,
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": headers["cache-control"] || "no-cache"
+      });
+      const responseRedactor = createByteRedactor(secrets, (chunk) => context.res.write(chunk));
+      const failAdapter = () => {
+        responseRedactor.discard();
+        streamFailure(context, {
+          status: 502,
+          code: "invalid_chat_completion",
+          message: "Provider returned an invalid Chat Completion stream."
+        });
+      };
+      const adapter = createChatSseToResponses({
+        id: context.responseId,
+        model: String(chatBody.model || ""),
+        maxFrameBytes: context.limits.sseFrameBytes,
+        writeEvent: (name, payload) => responseRedactor.feed(Buffer.from(
+          `event: ${name}
+data: ${JSON.stringify(payload)}
+
+`,
+          "utf8"
+        )),
+        fail: failAdapter,
+        sealReasoning: (_a = context.reasoningCapsule) == null ? void 0 : _a.seal
+      });
+      try {
+        adapter.feed(transcript);
+        if (!context.finished) adapter.end();
+      } catch {
+        failAdapter();
+        return;
+      }
+      if (context.finished) return;
+      responseRedactor.flush();
       if (!finishOnce(context)) return;
       context.res.end();
     });
-    upstream.on("error", () => streamFailure(context, {
-      status: 502,
-      code: "provider_error",
-      message: "Provider response stream failed."
-    }));
+    upstream.on("error", () => {
+      streamFailure(context, {
+        status: 502,
+        code: "provider_error",
+        message: "Provider response stream failed."
+      });
+    });
   }
   function handleUpstreamResponse(context, upstream, kind, profile, chatBody, retryCompatibility) {
     if (context.finished) {
@@ -21909,14 +22510,14 @@ ${output}` : output
       return;
     }
     if (kind === "models") {
-      pipeModels(context, upstream, status, headers);
+      pipeModels(context, upstream, status, headers, secrets);
       return;
     }
     if (chatBody.stream === false) {
-      readNonStreamingResponse(context, upstream, status, headers, chatBody);
+      readNonStreamingResponse(context, upstream, status, headers, chatBody, secrets);
       return;
     }
-    streamChatResponse(context, upstream, status, headers, chatBody);
+    streamChatResponse(context, upstream, status, headers, chatBody, secrets);
   }
   function openUpstream(context, {
     endpoint,
@@ -22385,6 +22986,7 @@ ${output}` : output
   var PROTOCOLS = /* @__PURE__ */ new Set(["responses", "chat", "messages"]);
   var DEFAULT_LIMITS2 = Object.freeze({
     requestBodyBytes: 16 * 1024 * 1024,
+    responseBodyBytes: 16 * 1024 * 1024,
     errorBodyBytes: 64 * 1024,
     concurrent: 4,
     connectTimeoutMs: 15e3,
@@ -22538,6 +23140,9 @@ ${output}` : output
       if (header == null ? void 0 : header.value) values.push(String(header.value));
     }
     return [...new Set(values)].sort((left, right) => right.length - left.length);
+  }
+  function withoutSecretBearingHeaders2(headers, secrets) {
+    return Object.fromEntries(Object.entries(headers).filter(([, value]) => !containsExactSecret(String(value), secrets)));
   }
   function sanitizedError(buffer, secrets) {
     let parsed;
@@ -22756,13 +23361,14 @@ ${output}` : output
         code: "provider_conversion_unsupported"
       });
     };
-    const writeConverted = ({ context, value, clientProtocol, stream, responseHeaders }) => {
+    const writeConverted = ({ context, value, clientProtocol, stream, responseHeaders, secrets }) => {
+      const safeValue = redactValue(value, secrets);
       if (!stream) {
         if (!context.finish()) return;
-        sendJson2(context.res, 200, value, responseHeaders);
+        sendJson2(context.res, 200, safeValue, responseHeaders);
         return;
       }
-      const events = clientProtocol === "messages" ? messagesSseEvents(value) : responsesSseEvents(value);
+      const events = clientProtocol === "messages" ? messagesSseEvents(safeValue) : responsesSseEvents(safeValue);
       if (!context.finish()) return;
       context.res.writeHead(200, {
         ...responseHeaders,
@@ -22780,7 +23386,8 @@ ${output}` : output
       upstreamProtocol,
       stream,
       modelId,
-      consumed
+      consumed,
+      secrets
     }) => {
       const chunks = [];
       const collector2 = stream ? collectorFor(upstreamProtocol) : null;
@@ -22795,18 +23402,26 @@ ${output}` : output
         }
         if (!context.finish()) return;
         const status = Number(error == null ? void 0 : error.status) || 502;
+        const rawCode = String((error == null ? void 0 : error.code) || "provider_conversion_failed");
+        const code = containsExactSecret(rawCode, secrets) ? "provider_conversion_failed" : rawCode;
+        const message = redactText(
+          (error == null ? void 0 : error.message) || "Provider response conversion failed.",
+          secrets
+        );
+        const rawParam = typeof (error == null ? void 0 : error.param) === "string" ? error.param : "";
+        const param = rawParam && !containsExactSecret(rawParam, secrets) ? redactText(rawParam, secrets) : "provider_response";
         sendJson2(context.res, status, envelope2(
           status === 501 || status === 400 ? "invalid_request_error" : "provider_error",
-          (error == null ? void 0 : error.code) || "provider_conversion_failed",
-          (error == null ? void 0 : error.message) || "Provider response conversion failed.",
-          (error == null ? void 0 : error.param) ? { param: error.param } : {}
+          code,
+          message,
+          (error == null ? void 0 : error.param) ? { param } : {}
         ));
       };
       upstream.on("data", (chunk) => {
         if (settled) return;
         const value = Buffer.from(chunk);
         bytes += value.length;
-        if (bytes > bounded.requestBodyBytes) {
+        if (bytes > bounded.responseBodyBytes) {
           fail(Object.assign(new Error("Provider response is too large."), {
             status: 502,
             code: "provider_response_too_large"
@@ -22832,7 +23447,7 @@ ${output}` : output
             source = JSON.parse(Buffer.concat(chunks).toString("utf8"));
           }
           converted = convertCompletion(source, upstreamProtocol, clientProtocol);
-          writeConverted({ context, value: converted, clientProtocol, stream, responseHeaders });
+          writeConverted({ context, value: converted, clientProtocol, stream, responseHeaders, secrets });
           settled = true;
           onAudit({
             event: "provider_route",
@@ -22860,11 +23475,13 @@ ${output}` : output
       search,
       payload,
       modelId,
-      conversion = null
+      conversion = null,
+      stream = false
     }) => {
       let profile;
       let endpoint;
       let headers;
+      let secrets;
       try {
         profile = await profileFor(modelId, capability);
         if (context.finished) return;
@@ -22876,6 +23493,7 @@ ${output}` : output
         );
         headers = nativeHeaders(context.req, profile, clientProtocol);
         headers["content-length"] = String(payload.length);
+        secrets = profileSecrets(profile);
       } catch {
         if (!context.finish()) return;
         sendJson2(context.res, 502, envelope2(
@@ -22923,22 +23541,25 @@ ${output}` : output
               ));
               return;
             }
-            const responseHeaders = filterUpstreamResponseHeaders(upstream.rawHeaders || []);
+            const responseHeaders = withoutSecretBearingHeaders2(
+              filterUpstreamResponseHeaders(upstream.rawHeaders || []),
+              secrets
+            );
             if (status >= 400) {
-              const chunks = [];
-              let bytes = 0;
+              const chunks2 = [];
+              let bytes2 = 0;
               let responseSettled = false;
               upstream.on("data", (chunk) => {
                 const value = Buffer.from(chunk);
-                const remaining = bounded.errorBodyBytes - bytes;
-                if (remaining > 0) chunks.push(value.subarray(0, remaining));
-                bytes += value.length;
-                if (bytes > bounded.errorBodyBytes) upstream.destroy();
+                const remaining = bounded.errorBodyBytes - bytes2;
+                if (remaining > 0) chunks2.push(value.subarray(0, remaining));
+                bytes2 += value.length;
+                if (bytes2 > bounded.errorBodyBytes) upstream.destroy();
               });
               const finishError = () => {
                 if (responseSettled || context.finished) return;
                 responseSettled = true;
-                const errorBody = Buffer.concat(chunks);
+                const errorBody = Buffer.concat(chunks2);
                 const retryHeaders = allowBetaRetry && status === 400 ? headersWithoutRejectedAnthropicBetas(attemptHeaders, errorBody) : null;
                 if (retryHeaders) {
                   onAudit({
@@ -22977,17 +23598,107 @@ ${output}` : output
                 upstreamProtocol: capability.upstreamProtocol,
                 stream: conversion.stream,
                 modelId,
-                consumed: conversion.consumed
+                consumed: conversion.consumed,
+                secrets
               });
               return;
             }
-            context.res.writeHead(status || 200, responseHeaders);
+            if (!stream) {
+              const chunks2 = [];
+              let bytes2 = 0;
+              let settled2 = false;
+              const failNative = () => {
+                if (settled2 || context.finished) return;
+                settled2 = true;
+                try {
+                  upstream.destroy();
+                } catch {
+                }
+                if (!context.finish()) return;
+                sendJson2(context.res, 502, envelope2(
+                  "provider_error",
+                  "provider_response_invalid",
+                  "Provider response is invalid."
+                ));
+              };
+              upstream.on("data", (chunk) => {
+                if (settled2) return;
+                const value = Buffer.from(chunk);
+                bytes2 += value.length;
+                if (bytes2 > bounded.responseBodyBytes) {
+                  failNative();
+                  return;
+                }
+                chunks2.push(value);
+              });
+              upstream.once("end", () => {
+                if (settled2 || context.finished) return;
+                let safeValue;
+                try {
+                  safeValue = redactValue(JSON.parse(Buffer.concat(chunks2).toString("utf8")), secrets);
+                } catch {
+                  failNative();
+                  return;
+                }
+                settled2 = true;
+                if (!context.finish()) return;
+                context.res.writeHead(status || 200, responseHeaders);
+                context.res.end(JSON.stringify(safeValue));
+                onAudit({
+                  event: "provider_route",
+                  modelId,
+                  clientProtocol,
+                  upstreamProtocol: capability.upstreamProtocol,
+                  conversion: "native",
+                  outcome: "pass"
+                });
+              });
+              upstream.once("error", failNative);
+              return;
+            }
+            const chunks = [];
+            let bytes = 0;
+            let settled = false;
+            const failNativeStream = (error) => {
+              if (settled || context.finished) return;
+              settled = true;
+              try {
+                upstream.destroy();
+              } catch {
+              }
+              if (!context.finish()) return;
+              sendJson2(context.res, Number(error == null ? void 0 : error.status) || 502, envelope2(
+                "provider_error",
+                (error == null ? void 0 : error.code) || "provider_stream_error",
+                (error == null ? void 0 : error.message) || "Provider response stream failed."
+              ));
+            };
             upstream.on("data", (chunk) => {
-              if (!context.finished) context.res.write(chunk);
+              if (settled || context.finished) return;
+              const value = Buffer.from(chunk);
+              bytes += value.length;
+              if (bytes > bounded.responseBodyBytes) {
+                failNativeStream(Object.assign(new Error("Provider response is too large."), {
+                  status: 502,
+                  code: "provider_response_too_large"
+                }));
+                return;
+              }
+              chunks.push(value);
             });
             upstream.once("end", () => {
+              if (settled || context.finished) return;
+              const transcript = Buffer.concat(chunks);
+              try {
+                requireCredentialFreeSse(transcript, secrets, { maxFrameBytes: 1024 * 1024 });
+              } catch (error) {
+                failNativeStream(error);
+                return;
+              }
+              settled = true;
               if (!context.finish()) return;
-              context.res.end();
+              context.res.writeHead(status || 200, responseHeaders);
+              context.res.end(transcript);
               onAudit({
                 event: "provider_route",
                 modelId,
@@ -22998,14 +23709,10 @@ ${output}` : output
               });
             });
             upstream.once("error", () => {
-              if (!context.finish()) return;
-              if (!context.res.headersSent) {
-                sendJson2(context.res, 502, envelope2(
-                  "provider_error",
-                  "provider_stream_error",
-                  "Provider response stream failed."
-                ));
-              } else context.res.destroy();
+              failNativeStream(Object.assign(new Error("Provider response stream failed."), {
+                status: 502,
+                code: "provider_stream_error"
+              }));
             });
           });
           context.upstream = request;
@@ -23131,7 +23838,8 @@ ${output}` : output
           suffix: clientProtocol === "responses" ? "/responses" : "/messages",
           search: clientProtocol === "messages" ? localUrl.search : "",
           payload,
-          modelId
+          modelId,
+          stream: body.stream === true
         });
         return;
       }
@@ -23429,6 +24137,7 @@ ${output}` : output
     getEffort,
     getThinking,
     getChannel = () => "subscription",
+    getProviderSensitiveValues = () => [],
     resolveApiProvider,
     resolveRequestProfile,
     resolveCapability = defaultResolveCapability,
@@ -23463,8 +24172,31 @@ ${output}` : output
     let providerRoute = null;
     let routeClosePromise = Promise.resolve();
     let runtimeGeneration = 0;
+    let providerSensitiveValues = [];
+    let providerDeltaPhase = void 0;
+    let providerDeltaRedactor = createDeltaRedactor([], () => {
+    });
     function emit(evt) {
-      if (onEvent) onEvent(evt);
+      if (onEvent) onEvent(redactValue(evt, providerSensitiveValues));
+    }
+    function resetProviderDeltaRedactor() {
+      providerDeltaRedactor.discard();
+      providerDeltaPhase = void 0;
+      providerDeltaRedactor = createDeltaRedactor(providerSensitiveValues, (text) => {
+        activeAssistantText += text;
+        emit({ type: "text-delta", text, ...providerDeltaPhase ? { phase: providerDeltaPhase } : {} });
+      });
+    }
+    function setProviderSensitiveValues(values) {
+      providerSensitiveValues = Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((left, right) => right.length - left.length);
+      resetProviderDeltaRedactor();
+    }
+    function clearProviderSensitiveValues() {
+      providerDeltaRedactor.discard();
+      providerSensitiveValues = [];
+      providerDeltaPhase = void 0;
+      providerDeltaRedactor = createDeltaRedactor([], () => {
+      });
     }
     function writeMessage(message) {
       if (!proc || !proc.stdin || !proc.stdin.write) return;
@@ -23490,7 +24222,14 @@ ${output}` : output
       if (processChannel === "api" && event.type === "error") {
         event = { ...event, message: "Provider sidecar request failed." };
       }
-      if (event.type === "text-delta") activeAssistantText += String(event.text || "");
+      if (event.type === "text-delta") {
+        const nextPhase = typeof event.phase === "string" ? event.phase : void 0;
+        if (providerDeltaPhase !== void 0 && providerDeltaPhase !== nextPhase) providerDeltaRedactor.flush();
+        providerDeltaPhase = nextPhase;
+        providerDeltaRedactor.feed(String(event.text || ""));
+        return;
+      }
+      providerDeltaRedactor.flush();
       emit(event);
       if (event.type === "turn-end") {
         transcript.push({ role: "assistant", text: activeAssistantText });
@@ -23538,6 +24277,7 @@ ${output}` : output
       if (clearTranscript) transcript = [];
       if (finishRun) finishActive();
       if (clearStderr) stderrTail = "";
+      clearProviderSensitiveValues();
       await closeProviderRoute();
     }
     function apiSafeErrorMessage(message) {
@@ -23560,14 +24300,17 @@ ${output}` : output
       if (!wasReady && rejectReady) {
         clearReadyWait();
         processChannel = "subscription";
+        clearProviderSensitiveValues();
         rejectReady(new Error("sidecar exited: " + detail));
         return;
       }
       if (activeRun) {
+        providerDeltaRedactor.flush();
         emit({ type: "error", kind: "mcp", message: apiSafeErrorMessage("sidecar exited: " + detail) });
         finishActive();
       }
       processChannel = "subscription";
+      clearProviderSensitiveValues();
     }
     function handleProcError(target, generation, error) {
       if (generation !== runtimeGeneration || proc !== target) return;
@@ -23584,15 +24327,18 @@ ${output}` : output
       if (rejectReady) {
         clearReadyWait();
         processChannel = "subscription";
+        clearProviderSensitiveValues();
         rejectReady(error instanceof Error ? error : new Error("sidecar error"));
         return;
       }
       if (activeRun) {
         const message = error && error.message ? error.message : "sidecar error";
+        providerDeltaRedactor.flush();
         emit({ type: "error", kind: "mcp", message: apiSafeErrorMessage(message) });
         finishActive();
       }
       processChannel = "subscription";
+      clearProviderSensitiveValues();
     }
     async function selectApiRoute(provider, model) {
       try {
@@ -23705,6 +24451,7 @@ ${output}` : output
       processProvider = null;
       processCandidateIdentity = null;
       clearReadyWait();
+      clearProviderSensitiveValues();
       if (current) {
         try {
           current.kill();
@@ -23746,6 +24493,11 @@ ${output}` : output
             origin: routeInfo == null ? void 0 : routeInfo.origin,
             routeToken: routeInfo == null ? void 0 : routeInfo.routeToken
           };
+          const redactionValues = getProviderSensitiveValues();
+          if (!Array.isArray(redactionValues)) throw new TypeError("getProviderSensitiveValues must return an array");
+          setProviderSensitiveValues([...redactionValues, routeInfo == null ? void 0 : routeInfo.routeToken]);
+        } else {
+          setProviderSensitiveValues([]);
         }
         let spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), {
           channel: session.channel,
@@ -23891,6 +24643,7 @@ ${output}` : output
     async function sendUser(text) {
       if (activeRun) return activeRun;
       activeAssistantText = "";
+      resetProviderDeltaRedactor();
       activeRun = new Promise((resolve) => {
         activeResolve = resolve;
       });
@@ -24219,6 +24972,7 @@ ${output}` : output
     getServerInstructions = () => "",
     getProviderProfile = () => null,
     getProviderCandidate = () => null,
+    getProviderSensitiveValues = () => [],
     resolveRequestProfile,
     recoverProviderProfile,
     onProviderProfileRecovered = () => {
@@ -24301,6 +25055,11 @@ ${output}` : output
       providerSensitiveValues = Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((left, right) => right.length - left.length);
       resetProviderDeltaRedactor();
       resetProviderStderrRedactor();
+    }
+    function providerRedactionValues(additional = []) {
+      const values = getProviderSensitiveValues();
+      if (!Array.isArray(values)) throw new TypeError("getProviderSensitiveValues must return an array");
+      return [...values, ...additional];
     }
     function clearProviderSensitiveValues() {
       providerDeltaRedactor.discard();
@@ -24741,7 +25500,7 @@ ${output}` : output
               value: routeInfo.routeToken
             }]
           };
-          setProviderSensitiveValues([routeInfo.routeToken]);
+          setProviderSensitiveValues(providerRedactionValues([routeInfo.routeToken]));
         } else {
           setProviderSensitiveValues([]);
         }
@@ -25090,8 +25849,13 @@ ${output}` : output
           models = null;
         }
         const account = accountResult && accountResult.account;
-        if (!account) return { loggedIn: false, runtimeOk: true, detail: accountResult && accountResult.requiresOpenaiAuth ? "OpenAI auth required" : void 0, models, ...diag };
-        return {
+        const result = !account ? {
+          loggedIn: false,
+          runtimeOk: true,
+          detail: accountResult && accountResult.requiresOpenaiAuth ? "OpenAI auth required" : void 0,
+          models,
+          ...diag
+        } : {
           loggedIn: true,
           runtimeOk: true,
           email: account.email,
@@ -25099,8 +25863,21 @@ ${output}` : output
           models,
           ...diag
         };
+        const secrets = [...providerSensitiveValues, ...providerRedactionValues()];
+        if (containsExactSecret(result, secrets)) {
+          return { loggedIn: false, runtimeOk: false, detail: "Provider probe metadata was rejected", ...diag };
+        }
+        return result;
       } catch (e) {
-        const detail = [e && e.message ? e.message : String(e), cliInfo.ok ? "" : cliInfo.detail].filter(Boolean).join(" | ");
+        let secrets = [...providerSensitiveValues];
+        try {
+          secrets = [...secrets, ...providerRedactionValues()];
+        } catch {
+        }
+        const detail = redactText(
+          [e && e.message ? e.message : String(e), cliInfo.ok ? "" : cliInfo.detail].filter(Boolean).join(" | "),
+          secrets
+        );
         if (e && e.probeTimeout) {
           if (probedProc) {
             try {
@@ -25665,20 +26442,20 @@ ${output}` : output
   // src/cep/providerStore.js
   var FILE_NAME = "providers.json";
   var STATE_KEYS = ["migratedLegacy", "pendingSecretDeletes", "providers", "revision", "version"];
-  var VALUE_REF_KEYS = ["kind", "reference", "revision"];
+  var VALUE_REF_KEYS2 = ["kind", "reference", "revision"];
   var LOCK_KEYS = ["createdAt", "ownerNonce", "pid", "schemaVersion"];
   var RELEASED_LOCK_NONCES = /* @__PURE__ */ new Set();
   var MAX_RELEASED_LOCK_NONCES = 256;
   var LOCK_STALE_AFTER_MS = 3e4;
-  function cepRequire4() {
+  function cepRequire3() {
     var _a, _b, _c;
     if ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) return globalThis.window.cep_node.require;
     if ((_c = globalThis.window) == null ? void 0 : _c.require) return globalThis.window.require;
     if (globalThis.require) return globalThis.require;
     return null;
   }
-  function defaultDeps3() {
-    const req = cepRequire4();
+  function defaultDeps2() {
+    const req = cepRequire3();
     if (!req) throw storeError("PROVIDER_STORE_UNAVAILABLE");
     const processApi = req("process");
     return {
@@ -25717,8 +26494,8 @@ ${output}` : output
   function clone5(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
   }
-  function normalizeValueRef(value) {
-    if (!hasExactKeys2(value, VALUE_REF_KEYS) || value.kind !== "secret") {
+  function normalizeValueRef2(value) {
+    if (!hasExactKeys2(value, VALUE_REF_KEYS2) || value.kind !== "secret") {
       throw storeError("PROVIDER_STORE_INVALID");
     }
     try {
@@ -25795,7 +26572,7 @@ ${output}` : output
     if (value.version !== version || !Number.isSafeInteger(value.revision) || value.revision < 0 || value.migratedLegacy !== true || !Array.isArray(value.pendingSecretDeletes) || !Array.isArray(value.providers)) {
       throw storeError("PROVIDER_STORE_INVALID");
     }
-    const pendingSecretDeletes = value.pendingSecretDeletes.map(normalizeValueRef);
+    const pendingSecretDeletes = value.pendingSecretDeletes.map(normalizeValueRef2);
     const pendingKeys = /* @__PURE__ */ new Set();
     for (const ref of pendingSecretDeletes) {
       if (pendingKeys.has(ref.reference)) throw storeError("PROVIDER_STORE_INVALID");
@@ -25858,7 +26635,7 @@ ${output}` : output
     const output = existing.slice();
     const seen = new Map(output.map((ref) => [ref.reference, ref.revision]));
     for (const raw of additions) {
-      const ref = normalizeValueRef(raw);
+      const ref = normalizeValueRef2(raw);
       if (seen.has(ref.reference)) {
         if (seen.get(ref.reference) !== ref.revision) throw storeError("PROVIDER_STORE_INVALID");
       } else {
@@ -25870,7 +26647,7 @@ ${output}` : output
   }
   function createProviderStore(inputDeps) {
     var _a;
-    const deps = inputDeps || defaultDeps3();
+    const deps = inputDeps || defaultDeps2();
     const { fs, os, path } = deps;
     const now = typeof deps.now === "function" ? deps.now : Date.now;
     const pid = Number.isSafeInteger(deps.pid) && deps.pid > 0 ? deps.pid : 0;
@@ -26410,7 +27187,7 @@ ${output}` : output
     const keys = Object.keys(value).sort();
     return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
   }
-  function normalizeValueRef2(valueRef) {
+  function normalizeValueRef3(valueRef) {
     if (!hasExactKeys3(valueRef, ["kind", "reference", "revision"]) || valueRef.kind !== "secret") {
       throw providerSecretError("INVALID_REFERENCE");
     }
@@ -26467,6 +27244,13 @@ ${output}` : output
     if (typeof getHost !== "function") throw new TypeError("getHost must be a function");
     if (typeof createReference !== "function") throw new TypeError("createReference must be a function");
     if (typeof randomBytes !== "function") throw new TypeError("randomBytes must be a function");
+    const redactionValues = /* @__PURE__ */ new Set();
+    function rememberForRedaction(value) {
+      if (typeof value === "string" && value) redactionValues.add(value);
+    }
+    function getRedactionValues() {
+      return Array.from(redactionValues).sort((left, right) => right.length - left.length);
+    }
     function requireHost() {
       let host;
       try {
@@ -26480,7 +27264,7 @@ ${output}` : output
       return host;
     }
     async function resolve(valueRef) {
-      const normalized = normalizeValueRef2(valueRef);
+      const normalized = normalizeValueRef3(valueRef);
       let result;
       try {
         result = await requireHost().secretGet(normalized.reference);
@@ -26490,6 +27274,7 @@ ${output}` : output
       if (!hasExactKeys3(result, ["reference", "revision", "value"]) || result.reference !== normalized.reference || result.revision !== normalized.revision || typeof result.value !== "string") {
         throw providerSecretError("SECRET_CONFLICT");
       }
+      rememberForRedaction(result.value);
       return result.value;
     }
     async function create(input) {
@@ -26523,6 +27308,7 @@ ${output}` : output
             if (!hasExactKeys3(recovered, ["reference", "revision", "value"]) || recovered.reference !== reference || !validRevision(recovered.revision) || recovered.value !== input.value) {
               throw providerSecretError("SECRET_CONFLICT");
             }
+            rememberForRedaction(input.value);
             return Object.freeze({ kind: "secret", reference, revision: recovered.revision });
           }
         }
@@ -26547,10 +27333,11 @@ ${output}` : output
         if (readbackError) throw readbackError;
         throw providerSecretError("SECRET_CONFLICT");
       }
+      rememberForRedaction(input.value);
       return Object.freeze({ kind: "secret", reference, revision: created.revision });
     }
     async function deleteSecret(valueRef) {
-      const normalized = normalizeValueRef2(valueRef);
+      const normalized = normalizeValueRef3(valueRef);
       let result;
       try {
         result = await requireHost().secretDelete({
@@ -26565,7 +27352,7 @@ ${output}` : output
       }
       return { deleted: result.deleted, revision: result.revision };
     }
-    return Object.freeze({ resolve, create, delete: deleteSecret });
+    return Object.freeze({ resolve, create, delete: deleteSecret, getRedactionValues });
   }
   async function resolveAuth(policy, secretService) {
     if (policy.kind === "none") return { kind: "none" };
@@ -27453,7 +28240,7 @@ ${output}` : output
   var DEFAULT_LEGACY_NAMESPACE = "6ba7b811-9dad-11d1-80b4-00c04fd430c8";
   var MIGRATION_ID = "provider-store-v1-to-v2";
   var STATE_KEYS2 = ["migratedLegacy", "pendingSecretDeletes", "providers", "revision", "version"];
-  var VALUE_REF_KEYS2 = ["kind", "reference", "revision"];
+  var VALUE_REF_KEYS3 = ["kind", "reference", "revision"];
   var MIGRATION_PHASES = /* @__PURE__ */ new Set(["pending", "secrets-written", "state-committed", "committed"]);
   var INITIAL_PHASE_OBSERVER2 = Symbol.for(
     "com.junkdoge.ae-mcp.secret-migration.initial-phase"
@@ -27620,12 +28407,12 @@ ${output}` : output
     return state;
   }
   function isSecretValueRef(value) {
-    return hasExactKeys5(value, VALUE_REF_KEYS2) && value.kind === "secret" && typeof value.reference === "string" && Number.isSafeInteger(value.revision) && value.revision > 0;
+    return hasExactKeys5(value, VALUE_REF_KEYS3) && value.kind === "secret" && typeof value.reference === "string" && Number.isSafeInteger(value.revision) && value.revision > 0;
   }
   function assertNoLegacySecretInPersistedFields(value, legacySecrets) {
     const forbidden = legacySecrets.filter((secret) => typeof secret === "string" && secret);
     const embeddedForbidden = forbidden.filter((secret) => utf8Bytes(secret).length >= 8);
-    const decodePercentRuns2 = (input) => String(input).replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
+    const decodePercentRuns3 = (input) => String(input).replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
       try {
         return decodeURIComponent(run);
       } catch {
@@ -27637,7 +28424,7 @@ ${output}` : output
       for (let layer = 0; layer <= 3; layer += 1) {
         if (forbidden.some((secret) => current === secret)) return true;
         if (embeddedForbidden.some((secret) => current.includes(secret))) return true;
-        const decoded = decodePercentRuns2(current);
+        const decoded = decodePercentRuns3(current);
         if (decoded === current) break;
         current = decoded;
       }
@@ -27883,7 +28670,7 @@ ${output}` : output
 
   // src/cep/providerSchemaMigration.js
   var STATE_KEYS3 = ["migratedLegacy", "pendingSecretDeletes", "providers", "revision", "version"];
-  var VALUE_REF_KEYS3 = ["kind", "reference", "revision"];
+  var VALUE_REF_KEYS4 = ["kind", "reference", "revision"];
   var MODEL_LIST_TTL_MS = 36e5;
   function migrationError3() {
     const error = new Error("Provider schema migration is invalid");
@@ -27898,8 +28685,8 @@ ${output}` : output
   function clone6(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
   }
-  function normalizeValueRef3(value) {
-    if (!hasExactKeys6(value, VALUE_REF_KEYS3) || value.kind !== "secret" || !Number.isSafeInteger(value.revision) || value.revision <= 0) {
+  function normalizeValueRef4(value) {
+    if (!hasExactKeys6(value, VALUE_REF_KEYS4) || value.kind !== "secret" || !Number.isSafeInteger(value.revision) || value.revision <= 0) {
       throw migrationError3();
     }
     try {
@@ -27942,7 +28729,7 @@ ${output}` : output
     }
     const pendingReferences = /* @__PURE__ */ new Set();
     const pendingSecretDeletes = value.pendingSecretDeletes.map((entry) => {
-      const ref = normalizeValueRef3(entry);
+      const ref = normalizeValueRef4(entry);
       if (pendingReferences.has(ref.reference) || activeReferences.has(ref.reference)) {
         throw migrationError3();
       }
@@ -28077,11 +28864,21 @@ ${output}` : output
       provider_draft_invalid: "Provider draft is invalid",
       provider_secret_required: "Provider secret is required",
       provider_insecure_http_forbidden: "Insecure provider HTTP is forbidden",
-      provider_insecure_http_confirmation_required: "Insecure provider HTTP confirmation is required"
+      provider_insecure_http_confirmation_required: "Insecure provider HTTP confirmation is required",
+      provider_draft_contains_credential: "Provider draft contains protected credential material"
     };
     const error = new Error(messages[code] || messages.provider_draft_invalid);
     error.code = messages[code] ? code : "provider_draft_invalid";
     return error;
+  }
+  function assertProviderCandidateCredentialFree(candidate, secretService) {
+    if (typeof (secretService == null ? void 0 : secretService.getRedactionValues) !== "function") {
+      throw flowError("provider_draft_contains_credential");
+    }
+    const values = secretService.getRedactionValues();
+    if (!Array.isArray(values) || containsExactSecret(candidate, values)) {
+      throw flowError("provider_draft_contains_credential");
+    }
   }
   function slug(value) {
     return String(value || "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
@@ -28157,9 +28954,13 @@ ${output}` : output
       if (!id || !name || !scopes.length) throw flowError("provider_draft_invalid");
       const current = currentById.get(id);
       const valueKind = raw.valueKind || ((_a = raw.valueRef) == null ? void 0 : _a.kind) || "literal";
+      if (isReservedProviderExtraHeaderName(name)) throw flowError("provider_draft_invalid");
       if (valueKind === "literal") {
         const value = ((_b = raw.valueRef) == null ? void 0 : _b.kind) === "literal" ? raw.valueRef.value : raw.value;
         if (typeof value !== "string") throw flowError("provider_draft_invalid");
+        if (isSensitiveProviderHeaderName(name) || isCredentialShapedProviderLiteral(value)) {
+          throw flowError("provider_draft_invalid");
+        }
         output.push({ id, name, scopes, valueRef: { kind: "literal", value } });
         continue;
       }
@@ -28313,6 +29114,7 @@ ${output}` : output
         candidate.modelCapabilities = [];
       }
       entry = normalizeProviderEntryV3(candidate);
+      assertProviderCandidateCredentialFree(entry, secretService);
       const pendingSecretDeletes = refsRemoved(currentProvider, entry);
       const committed = store.upsert(entry, {
         expectedRevision,
@@ -28475,6 +29277,7 @@ ${output}` : output
   }
 
   // src/cep/modelProbe.js
+  var MAX_MODELS_RESPONSE_BYTES = 512 * 1024;
   function getCepRequire4() {
     var _a, _b, _c;
     if ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) return globalThis.window.cep_node.require;
@@ -28524,6 +29327,22 @@ ${output}` : output
       detail: "Network error while probing provider models"
     };
   }
+  function responseTooLargeFailure() {
+    return {
+      ok: false,
+      status: 0,
+      models: [],
+      detail: "Provider model response exceeded size limit"
+    };
+  }
+  function timeoutFailure() {
+    return {
+      ok: false,
+      status: 0,
+      models: [],
+      detail: "Provider model request timed out"
+    };
+  }
   function resultFromResponse(status, body, sensitiveValues2 = []) {
     if (status !== 200) {
       return { ok: false, status, models: [], detail: "HTTP " + status + " from provider" };
@@ -28531,8 +29350,7 @@ ${output}` : output
     try {
       const inventory = parseProviderModelInventory(JSON.parse(body));
       const models = inventory.map(({ id, label }) => ({ id, label }));
-      const serialized = JSON.stringify(inventory);
-      if (sensitiveValues2.some((value) => value && serialized.includes(value))) {
+      if (containsExactSecret(inventory, sensitiveValues2)) {
         return { ok: false, status: 200, models: [], detail: "Provider model metadata was rejected" };
       }
       return models.length ? { ok: true, status: 200, models, inventory, detail: "" } : { ok: false, status: 200, models: [], detail: "Empty model list" };
@@ -28540,21 +29358,47 @@ ${output}` : output
       return { ok: false, status: 200, models: [], detail: "Response was not valid JSON" };
     }
   }
-  function requestWithTransport({ endpoint, headers, sensitiveValues: sensitiveValues2, httpsImpl, timeoutMs }) {
+  function requestWithTransport({
+    endpoint,
+    headers,
+    sensitiveValues: sensitiveValues2,
+    httpsImpl,
+    timeoutMs,
+    responseBodyBytes
+  }) {
+    var _a;
     let transport;
+    let BufferImpl;
     try {
       transport = httpsImpl || getCepRequire4()(endpoint.protocol === "http:" ? "http" : "https");
+      BufferImpl = globalThis.Buffer || ((_a = getCepRequire4()("buffer")) == null ? void 0 : _a.Buffer);
+      if (!BufferImpl || typeof BufferImpl.from !== "function" || typeof BufferImpl.concat !== "function") {
+        throw new Error("Buffer is unavailable");
+      }
     } catch {
       return Promise.resolve(networkFailure());
     }
     return new Promise((resolve) => {
       let settled = false;
+      let req = null;
+      let activeResponse = null;
       const finish = (result) => {
         if (settled) return;
         settled = true;
         resolve(result);
       };
-      const req = transport.request({
+      const abort = () => {
+        var _a2, _b;
+        try {
+          (_a2 = activeResponse == null ? void 0 : activeResponse.destroy) == null ? void 0 : _a2.call(activeResponse);
+        } catch {
+        }
+        try {
+          (_b = req == null ? void 0 : req.destroy) == null ? void 0 : _b.call(req);
+        } catch {
+        }
+      };
+      req = transport.request({
         hostname: endpoint.hostname,
         port: endpoint.port || void 0,
         protocol: endpoint.protocol,
@@ -28562,20 +29406,34 @@ ${output}` : output
         method: "GET",
         headers
       }, (res) => {
-        let body = "";
+        activeResponse = res;
+        let chunks = [];
+        let responseBytes = 0;
         res.on("data", (chunk) => {
-          body += String(chunk);
+          var _a2;
+          if (settled) return;
+          const bytes = ((_a2 = BufferImpl.isBuffer) == null ? void 0 : _a2.call(BufferImpl, chunk)) ? chunk : BufferImpl.from(chunk);
+          responseBytes += bytes.length;
+          if (responseBytes > responseBodyBytes) {
+            chunks = [];
+            finish(responseTooLargeFailure());
+            abort();
+            return;
+          }
+          chunks.push(bytes);
         });
-        res.on("end", () => finish(resultFromResponse(res.statusCode || 0, body, sensitiveValues2)));
+        res.on("end", () => {
+          if (settled) return;
+          const body = BufferImpl.concat(chunks, responseBytes).toString("utf8");
+          chunks = [];
+          finish(resultFromResponse(res.statusCode || 0, body, sensitiveValues2));
+        });
       });
       req.on("error", () => finish(networkFailure()));
       if (req.setTimeout) {
         req.setTimeout(timeoutMs, () => {
-          try {
-            req.destroy();
-          } catch {
-          }
-          finish({ ok: false, status: 0, models: [], detail: "timeout" });
+          finish(timeoutFailure());
+          abort();
         });
       }
       req.end();
@@ -28591,7 +29449,8 @@ ${output}` : output
     allowInsecureHttp = false,
     requestImpl,
     httpsImpl,
-    timeoutMs = 8e3
+    timeoutMs = 8e3,
+    responseBodyBytes = MAX_MODELS_RESPONSE_BYTES
   } = {}) {
     var _a;
     const profile = requestProfile && typeof requestProfile === "object" ? requestProfile : null;
@@ -28668,7 +29527,8 @@ ${output}` : output
             headers: authCandidate2.headers,
             sensitiveValues: sensitiveValues2,
             httpsImpl,
-            timeoutMs
+            timeoutMs,
+            responseBodyBytes: Number.isSafeInteger(responseBodyBytes) && responseBodyBytes > 0 ? responseBodyBytes : MAX_MODELS_RESPONSE_BYTES
           });
         }
         lastResult = {
@@ -29703,15 +30563,6 @@ ${output}` : output
     }
     return [...new Set(values.filter(Boolean))];
   }
-  function containsSensitiveValue(value, sensitiveValues2) {
-    let serialized;
-    try {
-      serialized = JSON.stringify(value);
-    } catch {
-      return true;
-    }
-    return sensitiveValues2.some((secret) => serialized.includes(secret));
-  }
   function capabilityFailure(reason, detail, tried, capabilities = null, modelListProbe = null) {
     return {
       ok: false,
@@ -29795,7 +30646,7 @@ ${output}` : output
             models: modelResult.models,
             inventory: modelResult.inventory || []
           };
-          if (!containsSensitiveValue(candidate, sensitiveValues2)) {
+          if (!containsExactSecret(candidate, sensitiveValues2)) {
             models = candidate.models;
             inventory = candidate.inventory;
             modelListProbe = candidate;
@@ -30370,11 +31221,17 @@ ${output}` : output
     if (code === "HELPER_UNAVAILABLE" || code === "HELPER_START_FAILED") {
       failure = "PLATFORM_HELPER_START_FAILED";
     } else if (HELPER_FAILURE_CODES.has(code)) failure = "PLATFORM_HELPER_REPAIR_REQUIRED";
-    else if (code === "PROVIDER_STORE_INVALID") failure = "PROVIDER_STORE_CORRUPT";
+    else if (code === "PROVIDER_STORE_INVALID" || code === "PROVIDER_STORE_CREDENTIAL_CONTAMINATION") failure = "PROVIDER_STORE_CORRUPT";
     else if (code === "PROVIDER_STORE_UNAVAILABLE") failure = "PROVIDER_STORE_UNAVAILABLE";
     else if (MIGRATION_FAILURE_CODES.has(code)) failure = "PROVIDER_MIGRATION_CONFLICT";
     else if (SECRET_MISMATCH_CODES.has(code)) failure = "PROVIDER_SECRET_MISMATCH";
     return { state: "unavailable", error: failure };
+  }
+  function assertProviderStateCredentialFree(providerState, exactSecrets = []) {
+    if (!containsExactSecret(providerState == null ? void 0 : providerState.providers, exactSecrets)) return providerState;
+    const error = new Error("Stored Provider data contains protected credential material.");
+    error.code = "PROVIDER_STORE_CREDENTIAL_CONTAMINATION";
+    throw error;
   }
 
   // src/components/settings/ProviderManagerSection.jsx
@@ -30454,6 +31311,15 @@ ${output}` : output
     }
     if (url.protocol !== "http:" && url.protocol !== "https:") {
       return "Base URL \u5FC5\u987B\u4EE5 http(s):// \u5F00\u5934 / must start with http(s)://";
+    }
+    for (const header of (draft == null ? void 0 : draft.headers) || []) {
+      const name = String((header == null ? void 0 : header.name) || "").trim();
+      if (isReservedProviderExtraHeaderName(name)) {
+        return "\u8BE5 Header \u4E0D\u5141\u8BB8\u8F6C\u53D1 / this header cannot be forwarded";
+      }
+      if ((header == null ? void 0 : header.valueKind) === "literal" && (isSensitiveProviderHeaderName(name) || isCredentialShapedProviderLiteral(header == null ? void 0 : header.value))) {
+        return "\u654F\u611F Header \u5FC5\u987B\u4F7F\u7528\u5B89\u5168\u51ED\u636E / sensitive headers require protected secrets";
+      }
     }
     return "";
   }
@@ -30731,17 +31597,21 @@ ${output}` : output
                 { value: "messages", label: "Messages" }
               ] }) }),
               /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.extraHeaders, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-                draft.headers.map((header, index) => /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: 6, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)" }, children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { mono: true, value: header.name, onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, name: value } : item) }), placeholder: t.headerName }),
-                  /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: header.valueKind, onChange: (valueKind) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, valueKind, value: valueKind === "literal" ? item.value || "" : "" } : item) }), options: [{ value: "literal", label: t.literal }, { value: "secret", label: t.secretValue }] }),
-                  header.valueKind === "secret" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(SecretInput, { name: `headerSecret:${header.id}`, disabled }) : /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { mono: true, value: header.value || "", onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, value } : item) }) }),
-                  /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { style: { display: "flex", gap: 10 }, children: ["probe", "model"].map((scope) => /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 4, font: "400 10px/1.35 var(--font-ui)" }, children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("input", { type: "checkbox", checked: header.scopes.includes(scope), onChange: (event) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, scopes: event.target.checked ? [.../* @__PURE__ */ new Set([...item.scopes, scope])] : item.scopes.filter((value) => value !== scope) } : item) }) }),
-                    scope === "probe" ? t.scopeProbe : t.scopeModel
-                  ] }, scope)) }),
-                  /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => setDraft({ ...draft, headers: draft.headers.filter((_, itemIndex) => itemIndex !== index) }), children: t.removeHeader })
-                ] }, header.id)),
-                /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: () => setDraft({ ...draft, headers: [...draft.headers, { id: nextHeaderId(draft.headers), name: "", scopes: ["model"], valueKind: "literal", value: "" }] }), children: t.addHeader })
+                draft.headers.map((header, index) => {
+                  const sensitiveName = isSensitiveProviderHeaderName(header.name);
+                  const valueKind = sensitiveName ? "secret" : header.valueKind;
+                  return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: 6, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)" }, children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { mono: true, value: header.name, onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, name: value, ...isSensitiveProviderHeaderName(value) ? { valueKind: "secret", value: "" } : {} } : item) }), placeholder: t.headerName }),
+                    /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: valueKind, onChange: (nextValueKind) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, valueKind: nextValueKind, value: nextValueKind === "literal" ? item.value || "" : "" } : item) }), options: sensitiveName ? [{ value: "secret", label: t.secretValue }] : [{ value: "literal", label: t.literal }, { value: "secret", label: t.secretValue }] }),
+                    valueKind === "secret" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(SecretInput, { name: `headerSecret:${header.id}`, disabled }) : /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { mono: true, value: header.value || "", onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, value } : item) }) }),
+                    /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { style: { display: "flex", gap: 10 }, children: ["probe", "model"].map((scope) => /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 4, font: "400 10px/1.35 var(--font-ui)" }, children: [
+                      /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("input", { type: "checkbox", checked: header.scopes.includes(scope), onChange: (event) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, scopes: event.target.checked ? [.../* @__PURE__ */ new Set([...item.scopes, scope])] : item.scopes.filter((value) => value !== scope) } : item) }) }),
+                      scope === "probe" ? t.scopeProbe : t.scopeModel
+                    ] }, scope)) }),
+                    /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => setDraft({ ...draft, headers: draft.headers.filter((_, itemIndex) => itemIndex !== index) }), children: t.removeHeader })
+                  ] }, header.id);
+                }),
+                /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: () => setDraft({ ...draft, headers: [...draft.headers, { id: nextHeaderId(draft.headers), name: "", scopes: ["model"], valueKind: "secret", value: "" }] }), children: t.addHeader })
               ] }) })
             ] })
           ] }),
@@ -31394,30 +32264,6 @@ ${output}` : output
   // src/lib/zcodeModelCache.js
   var ZCODE_PROBED_MODELS_CACHE_KEY = "ae_mcp_zcode_probed_models";
   var ZCODE_PROBED_MODELS_CACHE_MS = 60 * 60 * 1e3;
-  function readCachedZcodeProbedModels(storage) {
-    try {
-      const raw = storage.getItem(ZCODE_PROBED_MODELS_CACHE_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== "object") return null;
-      if (!Array.isArray(parsed.probedModels)) return null;
-      if (Date.now() - Number(parsed.probedAt || 0) > ZCODE_PROBED_MODELS_CACHE_MS) return null;
-      return { cliModel: String(parsed.cliModel || ""), providerId: String(parsed.providerId || ""), probedModels: parsed.probedModels };
-    } catch (e) {
-      return null;
-    }
-  }
-  function writeCachedZcodeProbedModels(storage, { cliModel, providerId, probedModels } = {}) {
-    try {
-      storage.setItem(ZCODE_PROBED_MODELS_CACHE_KEY, JSON.stringify({
-        cliModel: String(cliModel || ""),
-        providerId: String(providerId || ""),
-        probedModels: Array.isArray(probedModels) ? probedModels : [],
-        probedAt: Date.now()
-      }));
-    } catch (e) {
-    }
-  }
 
   // src/cep/useActivity.js
   var import_react43 = __toESM(require_react(), 1);
@@ -31864,8 +32710,8 @@ ${output}` : output
     if (globalThis.require) return globalThis.require;
     throw new Error("CEP Node require is unavailable");
   }
-  function loadBundledHostDependencies({ cepRequire: cepRequire6, adapter, extensionRoot }) {
-    if (typeof cepRequire6 !== "function") throw new TypeError("CEP Node require is unavailable");
+  function loadBundledHostDependencies({ cepRequire: cepRequire5, adapter, extensionRoot }) {
+    if (typeof cepRequire5 !== "function") throw new TypeError("CEP Node require is unavailable");
     if (!adapter || !["macos-arm64", "windows-x64"].includes(adapter.id)) {
       throw new TypeError("A supported platform adapter is required");
     }
@@ -31876,11 +32722,11 @@ ${output}` : output
     if (typeof nativePath.resolve !== "function" || typeof nativePath.dirname !== "function" || typeof nativePath.isAbsolute !== "function" || typeof nativePath.contains !== "function" || typeof nativePath.same !== "function") {
       throw new TypeError("A complete native platform path catalog is required");
     }
-    const moduleApi = cepRequire6("module");
+    const moduleApi = cepRequire5("module");
     if (!moduleApi || typeof moduleApi.createRequire !== "function") {
       throw new Error("CEP Node module.createRequire is unavailable");
     }
-    const fs = adapter.fs || cepRequire6("fs");
+    const fs = adapter.fs || cepRequire5("fs");
     if (!fs || typeof fs.existsSync !== "function" || typeof fs.lstatSync !== "function" || typeof fs.realpathSync !== "function" || typeof fs.statSync !== "function" || typeof fs.readFileSync !== "function") {
       throw new Error("CEP Node filesystem is unavailable");
     }
@@ -32057,20 +32903,20 @@ ${output}` : output
       } catch {
       }
     }
-    function bindPlatformHelperFacade({ cepRequire: cepRequire6, extRoot, hostInstance }) {
+    function bindPlatformHelperFacade({ cepRequire: cepRequire5, extRoot, hostInstance }) {
       let transport = null;
       let nextClient = null;
       let bindingError = null;
       try {
         const transportFactory = createPlatformHelperTransportImpl || (() => {
           const modulePath = adapter.paths.join([extRoot, "host", "platform-helper-transport.js"]);
-          const loaded = cepRequire6(modulePath);
+          const loaded = cepRequire5(modulePath);
           if (typeof (loaded == null ? void 0 : loaded.createPlatformHelperTransport) !== "function") throw helperUnavailableError();
           return loaded.createPlatformHelperTransport;
         })();
         const clientFactory = createPlatformHelperClientImpl || (() => {
           const modulePath = adapter.paths.join([extRoot, "host", "platform-helper-client.js"]);
-          const loaded = cepRequire6(modulePath);
+          const loaded = cepRequire5(modulePath);
           if (typeof (loaded == null ? void 0 : loaded.createPlatformHelperClient) !== "function") throw helperUnavailableError();
           return loaded.createPlatformHelperClient;
         })();
@@ -32120,18 +32966,18 @@ ${output}` : output
       platformRoots = null;
       if (priorHost || priorClient) disposeLifecycle(priorClient, priorHost);
       try {
-        const cepRequire6 = requireImpl || getCepRequire6();
+        const cepRequire5 = requireImpl || getCepRequire6();
         const extRoot = normalizeCepPath(extensionRoot || cs2.getSystemPath("extension"), adapter);
         const hostPath = adapter.paths.join([extRoot, "host", "server.js"]);
         const roots = { extensionRoot: extRoot, runtimeRoot: adapter.paths.runtimeRoot };
         platformRoots = roots;
         onLog("host: " + hostPath);
         const runtimeDependencies = loadBundledHostDependencies({
-          cepRequire: cepRequire6,
+          cepRequire: cepRequire5,
           adapter,
           extensionRoot: extRoot
         });
-        const nextHost = cepRequire6(hostPath);
+        const nextHost = cepRequire5(hostPath);
         if (!nextHost || typeof nextHost.setRuntimeDependencies !== "function") {
           throw new Error("Host runtime dependency binding is unavailable");
         }
@@ -32139,7 +32985,7 @@ ${output}` : output
         nextHost.setCSInterface(cs2);
         if (nextHost.setPlatformRoots) nextHost.setPlatformRoots(roots);
         host = nextHost;
-        bindPlatformHelperFacade({ cepRequire: cepRequire6, extRoot, hostInstance: nextHost });
+        bindPlatformHelperFacade({ cepRequire: cepRequire5, extRoot, hostInstance: nextHost });
         if (!beforeUnloadInstalled) {
           const installBeforeUnload = addBeforeUnload || ((handler) => window.addEventListener("beforeunload", handler));
           installBeforeUnload(() => {
@@ -32199,25 +33045,125 @@ ${output}` : output
     }
   }
 
-  // src/lib/logExport.js
-  function redactSecrets(text) {
-    var s = String(text == null ? "" : text);
-    var mask = function(v) {
-      return v.slice(0, 6) + "...[redacted]";
-    };
-    s = s.replace(/aemcp-secret:\/\/provider\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[a-z0-9_-]+\/v1/g, "[secret-reference-redacted]");
-    s = s.replace(/((?:ANTHROPIC_AUTH_TOKEN|[A-Z_]*API_KEY)\s*[=:]\s*)(\S+)/g, function(m, pre, v) {
-      return pre + mask(v);
-    });
-    s = s.replace(/((?:Authorization|x-api-key)\s*[:=]\s*(?:Bearer\s+)?)(\S+)/gi, function(m, pre, v) {
-      return pre + mask(v);
-    });
-    s = s.replace(/sk-[A-Za-z0-9_-]{8,}/g, function(m) {
-      return mask(m);
-    });
-    return s;
+  // src/lib/credentialTextRedaction.js
+  var SECRET_REFERENCE = /aemcp-secret:\/\/provider\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[a-z0-9_-]+\/v1/gi;
+  var HEADER_LINE = /^([ \t]*)([!#$%&'*+.^_`|~0-9A-Za-z-]+)([ \t]*:[ \t]*)([^\r\n]+)$/gm;
+  var QUOTED_PAIR = /(["'])([A-Za-z][A-Za-z0-9_.-]*)\1(\s*:\s*)(["'])([^"'\r\n]+)\4/g;
+  var ASSIGNMENT = /(^|[\s?&,;])([A-Za-z][A-Za-z0-9_.-]*)(\s*=\s*)([^\s&,;]+)/gm;
+  var INLINE_HEADER = /(^|[\s{,;])([!#$%&'*+.^_`|~0-9A-Za-z-]+)(\s*:\s*)((?:Bearer|Basic)\s+[^\s,;}]+|[^\s,;}]+)/gim;
+  var PRIVATE_KEY = /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----[\s\S]*?-----END (?:[A-Z0-9 ]+ )?PRIVATE KEY-----/g;
+  var JWT = /(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,}(?![A-Za-z0-9_-])/g;
+  var PREFIXED_KEY = /(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{8,}(?![A-Za-z0-9_-])/g;
+  var JSON_KEY = /"((?:\\.|[^"\\])*)"\s*:/g;
+  var SENSITIVE_ASSIGNMENT_START = /(^|[^A-Za-z0-9_.-])(["']?)([A-Za-z][A-Za-z0-9_.-]*)(\2)([ \t]*[:=][ \t]*)/g;
+  var MARKER = "[redacted]";
+  function quotedValueEnd(text, start) {
+    const quote = text[start];
+    let escaped = false;
+    for (let index = start + 1; index < text.length; index += 1) {
+      const character = text[index];
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === quote) {
+        return index + 1;
+      }
+    }
+    return -1;
   }
-  function buildLogExport({ panelLogs = [], hostInfo = {}, sidecarTail = "", version = "", now = /* @__PURE__ */ new Date() } = {}) {
+  function jsonContainerEnd(text, start) {
+    const stack = [text[start]];
+    let stringQuote = null;
+    let escaped = false;
+    for (let index = start + 1; index < text.length; index += 1) {
+      const character = text[index];
+      if (stringQuote) {
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === stringQuote) stringQuote = null;
+        continue;
+      }
+      if (character === '"' || character === "'" || character === "`") {
+        stringQuote = character;
+        continue;
+      }
+      if (character === "{" || character === "[") stack.push(character);
+      if (character !== "}" && character !== "]") continue;
+      const opening = stack.pop();
+      if (opening === "{" && character !== "}" || opening === "[" && character !== "]") return -1;
+      if (!stack.length) return index + 1;
+    }
+    return -1;
+  }
+  function jsonValueEnd(text, start) {
+    if (start >= text.length) return -1;
+    if (text[start] === '"') return quotedValueEnd(text, start);
+    if (text[start] === "{" || text[start] === "[") return jsonContainerEnd(text, start);
+    let end = start;
+    while (end < text.length && !/[\s,}\]]/.test(text[end])) end += 1;
+    return end > start ? end : -1;
+  }
+  function redactSensitiveJsonValues(value) {
+    let text = String(value == null ? "" : value);
+    let offset = 0;
+    while (offset < text.length) {
+      JSON_KEY.lastIndex = offset;
+      const match = JSON_KEY.exec(text);
+      if (!match) break;
+      let name = "";
+      try {
+        name = JSON.parse(`"${match[1]}"`);
+      } catch {
+        name = "";
+      }
+      if (!isSensitiveProviderHeaderName(name)) {
+        offset = JSON_KEY.lastIndex;
+        continue;
+      }
+      let start = JSON_KEY.lastIndex;
+      while (start < text.length && /\s/.test(text[start])) start += 1;
+      const end = jsonValueEnd(text, start);
+      if (end < 0) {
+        offset = JSON_KEY.lastIndex;
+        continue;
+      }
+      const replacement = JSON.stringify(MARKER);
+      text = text.slice(0, start) + replacement + text.slice(end);
+      offset = start + replacement.length;
+    }
+    return text;
+  }
+  function redactSensitiveLineSuffixes(value) {
+    const text = String(value == null ? "" : value);
+    SENSITIVE_ASSIGNMENT_START.lastIndex = 0;
+    let match;
+    while ((match = SENSITIVE_ASSIGNMENT_START.exec(text)) !== null) {
+      if (!isSensitiveProviderHeaderName(match[3])) continue;
+      return text.slice(0, match.index) + match[1] + match[2] + match[3] + match[4] + match[5] + MARKER;
+    }
+    return text;
+  }
+  function redactCredentialText(value, exactSecrets = []) {
+    let text = redactText(value, exactSecrets);
+    text = redactSensitiveJsonValues(text);
+    text = redactSensitiveLineSuffixes(text);
+    text = text.replace(SECRET_REFERENCE, "[secret-reference-redacted]");
+    text = text.replace(PRIVATE_KEY, MARKER);
+    text = text.replace(HEADER_LINE, (match, prefix, name, separator, headerValue) => isSensitiveProviderHeaderName(name) && headerValue.trim() ? prefix + name + separator + MARKER : match);
+    text = text.replace(QUOTED_PAIR, (match, quote, name, separator) => isSensitiveProviderHeaderName(name) ? quote + name + quote + separator + quote + MARKER + quote : match);
+    text = text.replace(ASSIGNMENT, (match, prefix, name, separator) => isSensitiveProviderHeaderName(name) ? prefix + name + separator + MARKER : match);
+    text = text.replace(INLINE_HEADER, (match, prefix, name, separator) => isSensitiveProviderHeaderName(name) ? prefix + name + separator + MARKER : match);
+    text = text.replace(PREFIXED_KEY, MARKER);
+    text = text.replace(JWT, MARKER);
+    return text;
+  }
+
+  // src/lib/logExport.js
+  function redactSecrets(text, exactSecrets = []) {
+    return redactCredentialText(text, exactSecrets);
+  }
+  function buildLogExport({ panelLogs = [], hostInfo = {}, sidecarTail = "", version = "", now = /* @__PURE__ */ new Date(), exactSecrets = [] } = {}) {
     const lines = [];
     lines.push("# ae-mcp panel log export");
     lines.push("exported-at: " + now.toISOString());
@@ -32226,10 +33172,10 @@ ${output}` : output
     lines.push("python-version: " + (hostInfo.pythonVersion || "-"));
     lines.push("");
     lines.push("## panel logs (" + panelLogs.length + ")");
-    for (const line of panelLogs) lines.push(redactSecrets(line));
+    for (const line of panelLogs) lines.push(redactSecrets(line, exactSecrets));
     lines.push("");
     lines.push("## sidecar stderr tail");
-    lines.push(sidecarTail ? redactSecrets(sidecarTail) : "(empty)");
+    lines.push(sidecarTail ? redactSecrets(sidecarTail, exactSecrets) : "(empty)");
     return lines.join("\n") + "\n";
   }
   function exportFileName(now = /* @__PURE__ */ new Date()) {
@@ -32614,38 +33560,19 @@ ${output}` : output
     }
   }
   var CODEX_MODELS_CACHE_KEY = "ae_mcp_codex_models";
-  var CODEX_MODELS_CACHE_MS = 24 * 60 * 60 * 1e3;
-  function readCachedCodexModels(storage) {
-    try {
-      const raw = storage.getItem(CODEX_MODELS_CACHE_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (!parsed || !Array.isArray(parsed.models)) return null;
-      if (Date.now() - Number(parsed.ts || 0) > CODEX_MODELS_CACHE_MS) return null;
-      return parsed.models;
-    } catch (e) {
-      return null;
-    }
-  }
-  function writeCachedCodexModels(storage, models) {
-    try {
-      storage.setItem(CODEX_MODELS_CACHE_KEY, JSON.stringify({ ts: Date.now(), models }));
-    } catch (e) {
-    }
-  }
   var CLIENT_NAMES = {
     builtin: { zh: "\u9762\u677F\u5185\u7F6E\u5BF9\u8BDD", en: "Built-in chat" },
     "claude-desktop": { zh: "Claude Desktop", en: "Claude Desktop" },
     "claude-code": { zh: "Claude Code", en: "Claude Code" },
     cursor: { zh: "Cursor", en: "Cursor" }
   };
-  function cepRequire5(mod) {
+  function cepRequire4(mod) {
     if (window.cep_node && window.cep_node.require) return window.cep_node.require(mod);
     if (window.require) return window.require(mod);
     return null;
   }
   function randomProviderCredentialId() {
-    const cryptoImpl = cepRequire5("crypto");
+    const cryptoImpl = cepRequire4("crypto");
     if (!cryptoImpl || typeof cryptoImpl.randomUUID !== "function") throw new Error("Secure UUID generation is unavailable");
     return cryptoImpl.randomUUID();
   }
@@ -32766,14 +33693,9 @@ ${output}` : output
     error.code = "PLATFORM_HELPER_REPAIR_REQUIRED";
     return error;
   }
-  function modelMetadataContainsCredential(models, credential) {
-    let serialized;
-    try {
-      serialized = JSON.stringify(models);
-    } catch {
-      return true;
-    }
-    return serialized.includes("aemcp-secret://") || (credential ? serialized.includes(credential) : false);
+  function modelMetadataContainsCredential(models, credentials = []) {
+    const values = Array.isArray(credentials) ? credentials : credentials ? [credentials] : [];
+    return containsExactSecret(models, ["aemcp-secret://", ...values]);
   }
   function Shell({ cs: cs2 }) {
     const { lang, setLang } = useLang();
@@ -32795,9 +33717,9 @@ ${output}` : output
     const [confirmRegen, setConfirmRegen] = import_react45.default.useState(false);
     const [tokenEpoch, setTokenEpoch] = import_react45.default.useState(0);
     const platform = import_react45.default.useMemo(() => createPlatformAdapter(), []);
-    const keyStore = import_react45.default.useMemo(() => {
+    const legacyKeyStore = import_react45.default.useMemo(() => {
       try {
-        return createApiKeyStore();
+        return createLegacyApiKeyStore();
       } catch (e) {
         return null;
       }
@@ -32813,7 +33735,12 @@ ${output}` : output
     const [permissionMode, setPermissionMode] = import_react45.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
     const permissionModeRef = import_react45.default.useRef(permissionMode);
     permissionModeRef.current = permissionMode;
-    const approvalTierFile = import_react45.default.useMemo(() => createApprovalTierFile(), []);
+    const approvalTierFile = import_react45.default.useMemo(() => createApprovalTierFile({
+      fs: platform.fs,
+      paths: platform.paths,
+      platformId: platform.id,
+      pid: window.cep_node && window.cep_node.process && window.cep_node.process.pid || 0
+    }), [platform]);
     const elicitationCoordinator = import_react45.default.useMemo(() => createElicitationCoordinator({
       resolveApproval: (_request, { plan }) => decideToolPlan({
         tier: permissionModeRef.current,
@@ -32848,8 +33775,15 @@ ${output}` : output
     }, []);
     const providerSecretService = import_react45.default.useMemo(() => createProviderSecretService({
       getHost,
-      randomBytes: (size) => cepRequire5("crypto").randomBytes(size)
+      randomBytes: (size) => cepRequire4("crypto").randomBytes(size)
     }), [getHost]);
+    const zcodeCredentialManager = import_react45.default.useMemo(() => createZcodeCredentialManager({
+      storage: window.localStorage,
+      secretService: providerSecretService,
+      legacyKeyStore
+    }), [legacyKeyStore, providerSecretService]);
+    const zcodeStoredKeyRef = import_react45.default.useRef("");
+    const [zcodeCredentialEpoch, setZcodeCredentialEpoch] = import_react45.default.useState(0);
     const [providerInit, setProviderInit] = import_react45.default.useState({ state: "checking", error: "" });
     const [providers, setProviders] = import_react45.default.useState([]);
     const [claudeProviderId, setClaudeProviderId] = import_react45.default.useState(() => readPref("ae_mcp_claude_provider", ""));
@@ -32864,10 +33798,17 @@ ${output}` : output
     const [expertGuidance, setExpertGuidance] = import_react45.default.useState(() => loadExpertGuidance(window.localStorage));
     const [probe, setProbe] = import_react45.default.useState(null);
     const [codexProbe, setCodexProbe] = import_react45.default.useState(null);
-    const [codexModels, setCodexModels] = import_react45.default.useState(() => readCachedCodexModels(window.localStorage));
+    const [codexModels, setCodexModels] = import_react45.default.useState(null);
     const [zcodeProbe, setZcodeProbe] = import_react45.default.useState(null);
     const [zcodeSessionModels, setZcodeSessionModels] = import_react45.default.useState(null);
-    const [zcodeProbedModels, setZcodeProbedModels] = import_react45.default.useState(() => readCachedZcodeProbedModels(window.localStorage));
+    const [zcodeProbedModels, setZcodeProbedModels] = import_react45.default.useState(null);
+    import_react45.default.useEffect(() => {
+      try {
+        window.localStorage.removeItem(CODEX_MODELS_CACHE_KEY);
+        window.localStorage.removeItem(ZCODE_PROBED_MODELS_CACHE_KEY);
+      } catch {
+      }
+    }, []);
     const [chatEntries, setChatEntries] = import_react45.default.useState([]);
     const [chatStreaming, setChatStreaming] = import_react45.default.useState(false);
     const [thinkingActive, setThinkingActive] = import_react45.default.useState(false);
@@ -33010,17 +33951,11 @@ ${baseUrl}`),
     );
     const zcodeConfigSummary = import_react45.default.useMemo(() => {
       try {
-        return summarizeZcodeConfig({ env: window.cep_node && window.cep_node.process && window.cep_node.process.env || {}, storedKey: (() => {
-          try {
-            return keyStore ? keyStore.readKey("zcode") : "";
-          } catch (e) {
-            return "";
-          }
-        })() });
+        return summarizeZcodeConfig({ env: window.cep_node && window.cep_node.process && window.cep_node.process.env || {}, storedKey: zcodeStoredKeyRef.current });
       } catch (e) {
         return null;
       }
-    }, [keyStore, zcodeProbe]);
+    }, [zcodeCredentialEpoch, zcodeProbe]);
     const codexCliConfigStableRef = import_react45.default.useRef(null);
     const codexCliConfig = import_react45.default.useMemo(() => {
       let next;
@@ -33145,6 +34080,7 @@ ${baseUrl}`),
       getEffort: () => runtimeRef.current.effort,
       getThinking: () => runtimeRef.current.thinking,
       getChannel: () => runtimeRef.current.claudeChannel || "subscription",
+      getProviderSensitiveValues: () => providerSecretService.getRedactionValues(),
       resolveApiProvider: () => {
         const provider = runtimeRef.current.claudeApiProvider;
         if (!provider) throw new Error("Custom Provider is unavailable");
@@ -33171,6 +34107,7 @@ ${baseUrl}`),
       getServerInstructions: () => mcp.getServerInstructions(),
       getProviderProfile: () => runtimeRef.current.providerProfile,
       getProviderCandidate: () => runtimeRef.current.providerCandidate,
+      getProviderSensitiveValues: () => providerSecretService.getRedactionValues(),
       resolveRequestProfile: (provider, details) => resolveProviderRequestProfile(provider, {
         ...details,
         secretService: providerSecretService
@@ -33315,10 +34252,12 @@ ${baseUrl}`),
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
       getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       getServerInstructions: () => mcp.getServerInstructions(),
+      readStoredZcodeKey: () => zcodeStoredKeyRef.current,
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
     import_react45.default.useEffect(() => () => {
+      zcodeStoredKeyRef.current = "";
       zcodeBackend.reset();
     }, [zcodeBackend]);
     runtimeRef.current = {
@@ -33345,7 +34284,7 @@ ${baseUrl}`),
         codexCustomProvider,
         customProviderCredentialResolverReady: codexProviderCredentialResolverReady,
         byokApiModels: null,
-        codexCachedModels: codexModels || readCachedCodexModels(window.localStorage),
+        codexCachedModels: codexModels,
         zcodeSessionModels,
         zcodeProbedModels
       };
@@ -33369,31 +34308,17 @@ ${baseUrl}`),
       if (sessionAvailable.length > 1) return void 0;
       const cli = zcodeConfigSummary && zcodeConfigSummary.cli;
       if (!cli || !cli.model || !cli.baseUrl || !cli.hasCredential) return void 0;
-      const cached = readCachedZcodeProbedModels(window.localStorage);
-      if (cached && cached.cliModel === cli.model) {
-        const same = zcodeProbedModels && zcodeProbedModels.cliModel === cached.cliModel && Array.isArray(zcodeProbedModels.probedModels) && zcodeProbedModels.probedModels.length === cached.probedModels.length;
-        if (!same) setZcodeProbedModels(cached);
-        return void 0;
-      }
       let alive = true;
       const providerId = cli.providerId || "";
-      const apiKeyValue = (() => {
-        try {
-          return keyStore ? keyStore.readKey("zcode") : "";
-        } catch (e) {
-          return "";
-        }
-      })();
       probeProviderModels({
         baseUrl: cli.baseUrl,
-        ["apiKey"]: apiKeyValue,
+        ["apiKey"]: zcodeStoredKeyRef.current,
         protocol: cli.protocol,
         allowInsecureHttp: false
       }).then((result) => {
         if (!alive) return;
         if (result.ok && result.models && result.models.length) {
           const entry = { cliModel: cli.model, providerId, probedModels: result.models };
-          writeCachedZcodeProbedModels(window.localStorage, entry);
           setZcodeProbedModels(entry);
         }
       }).catch(() => {
@@ -33401,7 +34326,7 @@ ${baseUrl}`),
       return () => {
         alive = false;
       };
-    }, [backendPref, zcodeSessionModels, zcodeConfigSummary, keyStore]);
+    }, [backendPref, zcodeCredentialEpoch, zcodeSessionModels, zcodeConfigSummary]);
     const runClaudeProbe = import_react45.default.useCallback(() => {
       let alive = true;
       setProbe(null);
@@ -33426,10 +34351,15 @@ ${baseUrl}`),
       setCodexProbe(null);
       codexBackend.probeAccount().then((result) => {
         if (!alive) return;
+        const redactionValues = providerSecretService.getRedactionValues();
+        if (containsExactSecret(result, ["aemcp-secret://", ...redactionValues])) {
+          setCodexProbe({ loggedIn: false, runtimeOk: false, detail: "Codex probe metadata was rejected" });
+          setCodexModels(null);
+          return;
+        }
         setCodexProbe(result);
-        if (result && Array.isArray(result.models)) {
+        if (result && Array.isArray(result.models) && !modelMetadataContainsCredential(result.models, redactionValues)) {
           setCodexModels(result.models);
-          writeCachedCodexModels(window.localStorage, result.models);
         }
       }).catch((e) => {
         if (alive) setCodexProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
@@ -33437,7 +34367,7 @@ ${baseUrl}`),
       return () => {
         alive = false;
       };
-    }, [codexBackend]);
+    }, [codexBackend, providerSecretService]);
     import_react45.default.useEffect(() => {
       if (backendPref !== "codex") return void 0;
       return runCodexProbe();
@@ -33464,9 +34394,8 @@ ${baseUrl}`),
             allowInsecureHttp: false
           });
           if (!alive) return;
-          if (result.ok && result.models && result.models.length && !modelMetadataContainsCredential(result.models, credential)) {
+          if (result.ok && result.models && result.models.length && !modelMetadataContainsCredential(result.models, [credential])) {
             setCodexModels(result.models);
-            writeCachedCodexModels(window.localStorage, result.models);
           }
         } catch {
         } finally {
@@ -33530,11 +34459,14 @@ ${baseUrl}`),
     }, []);
     const exportLogs = import_react45.default.useCallback(() => {
       try {
+        const exactSecrets = providerSecretService.getRedactionValues();
+        if (zcodeStoredKeyRef.current) exactSecrets.push(zcodeStoredKeyRef.current);
         const text = buildLogExport({
           panelLogs: logs,
           hostInfo: { hostVersion: connInfo && connInfo.hostVersion || "-", pythonVersion: connInfo && connInfo.pythonVersion || "-" },
           sidecarTail: claudeBackend.getStderrTail ? claudeBackend.getStderrTail() : "",
-          version: pkgVersion
+          version: pkgVersion,
+          exactSecrets
         });
         const file = writeLogExport({ text, fileName: exportFileName() });
         revealInExplorer(file, void 0, (err) => pushLog("Log export reveal failed: " + (err && err.message ? err.message : String(err))));
@@ -33542,7 +34474,7 @@ ${baseUrl}`),
       } catch (e) {
         pushLog("Log export failed: " + (e && e.message ? e.message : String(e)));
       }
-    }, [logs, connInfo, claudeBackend, pushLog]);
+    }, [logs, connInfo, claudeBackend, providerSecretService, pushLog]);
     const undoToPreviousCheckpoint = import_react45.default.useCallback(async () => {
       try {
         await revertToPreviousCheckpoint(mcp);
@@ -33575,15 +34507,28 @@ ${baseUrl}`),
       setProviderInit({ state: "checking", error: "" });
       (async () => {
         try {
+          const host = getHost();
+          if (!host || typeof host.capabilities !== "function") throw providerRuntimeUnavailableError();
+          const capabilities = await host.capabilities();
+          requireProviderHelperCapabilities(capabilities, platform.id);
+          try {
+            const value = await zcodeCredentialManager.loadOrMigrate();
+            if (alive) {
+              zcodeStoredKeyRef.current = value;
+              setZcodeCredentialEpoch((current) => current + 1);
+            }
+          } catch {
+            if (alive) {
+              zcodeStoredKeyRef.current = "";
+              setZcodeCredentialEpoch((current) => current + 1);
+            }
+            pushLog("ZCode credential unavailable: protected credential migration is required");
+          }
           if (!providerStore) {
             const error = new Error("Provider store is unavailable");
             error.code = "PROVIDER_STORE_UNAVAILABLE";
             throw error;
           }
-          const host = getHost();
-          if (!host || typeof host.capabilities !== "function") throw providerRuntimeUnavailableError();
-          const capabilities = await host.capabilities();
-          requireProviderHelperCapabilities(capabilities, platform.id);
           if (providerStore.needsSecretMigration() || providerStore.needsSchemaMigration()) {
             const secretStore = createHostSecretStore(host);
             const runner = createSecretMigrationRunner({
@@ -33595,15 +34540,15 @@ ${baseUrl}`),
               legacyKeyStore: {
                 readKey: (name) => {
                   try {
-                    return keyStore ? keyStore.readKey(name) : "";
+                    return legacyKeyStore ? legacyKeyStore.readKey(name) : "";
                   } catch {
                     return "";
                   }
                 },
                 async cleanupCommittedProviderSecrets() {
-                  if (!keyStore) return;
-                  keyStore.clearKey("anthropic");
-                  keyStore.clearKey("codex");
+                  if (!legacyKeyStore) return;
+                  legacyKeyStore.clearKey("anthropic");
+                  legacyKeyStore.clearKey("codex");
                 }
               },
               runner,
@@ -33628,22 +34573,22 @@ ${baseUrl}`),
               resolved = null;
             }
           }
+          assertProviderStateCredentialFree(
+            providerState,
+            providerSecretService.getRedactionValues()
+          );
           if (!alive) return;
           setProviders(providerState.providers);
           setProviderInit({ state: "ready", error: "" });
         } catch (error) {
           if (!alive) return;
-          try {
-            if (providerStore) setProviders(providerStore.list());
-          } catch {
-          }
           setProviderInit(providerInitFailure(error));
         }
       })();
       return () => {
         alive = false;
       };
-    }, [status.state, providerStore, providerSecretService, getHost, keyStore, platform]);
+    }, [status.state, providerStore, providerSecretService, getHost, legacyKeyStore, platform, pushLog, zcodeCredentialManager]);
     import_react45.default.useEffect(() => {
       if (!drawerOpen) return void 0;
       const update = () => {
@@ -33671,7 +34616,7 @@ ${baseUrl}`),
         const items = await runDiagnostics({
           getHost,
           port: status.port,
-          fs: cepRequire5("fs"),
+          fs: cepRequire4("fs"),
           fetchImpl: window.fetch.bind(window)
         });
         setDiagnostics(items);
@@ -33879,19 +34824,21 @@ ${baseUrl}`),
                 draft = null;
               }
             },
-            onSaveZcodeKey: (k) => {
-              if (keyStore) keyStore.writeKey(k, "zcode");
-              setZcodeProbe(null);
-              zcodeBackend.reset();
-              runZcodeProbe();
-            },
-            zcodeKeyStored: (() => {
+            onSaveZcodeKey: async (k) => {
               try {
-                return Boolean(keyStore && keyStore.readKey("zcode"));
-              } catch (e) {
+                const value = await zcodeCredentialManager.save(k);
+                zcodeStoredKeyRef.current = value;
+                setZcodeCredentialEpoch((current) => current + 1);
+                setZcodeProbe(null);
+                zcodeBackend.reset();
+                runZcodeProbe();
+                return true;
+              } catch {
+                pushLog("ZCode credential save failed: protected credential store is unavailable");
                 return false;
               }
-            })(),
+            },
+            zcodeKeyStored: Boolean(zcodeStoredKeyRef.current),
             onSaveCodexKey: void 0,
             codexKeyStored: false,
             codexCliConfig,

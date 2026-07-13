@@ -167,7 +167,7 @@ function sendNativeMessage(res, model = 'native-m') {
   }));
 }
 
-function makeRoute({ apiRoot, records, capabilities, profileCalls, audit = [] }) {
+function makeRoute({ apiRoot, records, capabilities, profileCalls, audit = [], secret = 'upstream-secret' }) {
   const provider = {
     id: 'provider-1',
     modelList: {
@@ -199,8 +199,8 @@ function makeRoute({ apiRoot, records, capabilities, profileCalls, audit = [] })
         apiRoot,
         allowInsecureHttp: true,
         auth: details.protocol === 'messages'
-          ? { kind: 'header', name: 'x-api-key', value: 'upstream-secret' }
-          : { kind: 'header', name: 'authorization', value: 'Bearer upstream-secret' },
+          ? { kind: 'header', name: 'x-api-key', value: secret }
+          : { kind: 'header', name: 'authorization', value: `Bearer ${secret}` },
         extraHeaders: [],
       };
     },
@@ -242,6 +242,224 @@ test('returns distinct OpenAI and Anthropic local roots and proxies native Respo
     assert.deepEqual(records[0].body.future_typed_field, { preserved: true });
     assert.equal(profileCalls[0].modelId, 'native-r');
     assert.equal(profileCalls[0].protocol, 'responses');
+  } finally {
+    await route.close();
+    await closeServer(upstream);
+  }
+});
+
+test('native Responses and Chat facade successes remove reflected Provider credentials', async () => {
+  const secret = 'upstream-secret';
+  const records = [];
+  const upstream = controlledUpstream(records, ({ res, record }) => {
+    const body = record.path.startsWith('/v1/chat/completions')
+      ? {
+        id: 'chat_secret',
+        object: 'chat.completion',
+        created: 1,
+        model: record.body.model,
+        choices: [{
+          index: 0,
+          message: { role: 'assistant', content: secret },
+          finish_reason: 'stop',
+          logprobs: null,
+        }],
+      }
+      : {
+        id: 'response_secret',
+        object: 'response',
+        status: 'completed',
+        model: record.body.model,
+        metadata: { [secret]: 'safe' },
+        output: [{
+          id: 'message_secret',
+          type: 'message',
+          status: 'completed',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: secret }],
+        }],
+      };
+    const encoded = JSON.stringify(body);
+    const split = encoded.indexOf(secret) + 'upstream-'.length;
+    res.writeHead(200, { 'content-type': 'application/json', 'x-request-id': secret });
+    res.write(encoded.slice(0, split));
+    res.end(encoded.slice(split));
+  });
+  await listen(upstream);
+  const apiRoot = 'http://127.0.0.1:' + upstream.address().port + '/v1';
+  const route = makeRoute({
+    apiRoot,
+    records,
+    capabilities: { 'native-r': 'responses', 'native-m': 'messages', 'chat-m': 'chat' },
+    profileCalls: [],
+  });
+  try {
+    const local = await route.start();
+    for (const model of ['native-r', 'chat-m']) {
+      const result = await requestText(local.openaiBaseUrl + '/responses', {
+        method: 'POST',
+        headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
+        body: { model, input: 'safe', stream: false },
+      });
+      assert.equal(result.status, 200);
+      assert.equal(result.headers['x-request-id'], undefined);
+      assert.equal(result.body.includes(secret), false);
+      assert.match(result.body, /\[redacted\]/);
+      if (model === 'native-r') {
+        assert.equal(Object.hasOwn(JSON.parse(result.body).metadata, '[redacted]'), true);
+      }
+    }
+  } finally {
+    await route.close();
+    await closeServer(upstream);
+  }
+});
+
+test('native non-streaming responses remove encoded credentials from body and headers', async () => {
+  const secret = 'opaque-provider-secret';
+  const reflected = 'opaque%2dprovider%2dsecret';
+  const records = [];
+  const upstream = controlledUpstream(records, ({ res, record }) => {
+    res.writeHead(200, { 'content-type': 'application/json', 'x-request-id': reflected });
+    res.end(JSON.stringify({
+      id: 'response-encoded',
+      object: 'response',
+      status: 'completed',
+      model: record.body.model,
+      output: [{
+        id: 'message-encoded',
+        type: 'message',
+        status: 'completed',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: reflected }],
+      }],
+    }));
+  });
+  await listen(upstream);
+  const apiRoot = 'http://127.0.0.1:' + upstream.address().port + '/v1';
+  const route = makeRoute({
+    apiRoot,
+    records,
+    capabilities: { 'native-r': 'responses' },
+    profileCalls: [],
+    secret,
+  });
+  try {
+    const local = await route.start();
+    const result = await requestText(local.openaiBaseUrl + '/responses', {
+      method: 'POST',
+      headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
+      body: { model: 'native-r', input: 'safe', stream: false },
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.headers['x-request-id'], undefined);
+    assert.equal(result.body.includes(reflected), false);
+    assert.match(result.body, /\[redacted\]/);
+  } finally {
+    await route.close();
+    await closeServer(upstream);
+  }
+});
+
+test('native SSE rejects credentials split across unknown metadata events before forwarding any frame', async () => {
+  const secret = 'opaque-provider-secret';
+  const records = [];
+  const upstream = controlledUpstream(records, ({ res }) => {
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.write('event: future.event\ndata: {"type":"future.event","metadata":{"piece":"opaque-provider-"}}\n\n');
+    res.end('event: future.event\ndata: {"type":"future.event","metadata":{"piece":"secret"}}\n\n');
+  });
+  await listen(upstream);
+  const apiRoot = 'http://127.0.0.1:' + upstream.address().port + '/v1';
+  const route = makeRoute({
+    apiRoot,
+    records,
+    capabilities: { 'native-r': 'responses' },
+    profileCalls: [],
+    secret,
+  });
+  try {
+    const local = await route.start();
+    const result = await requestText(local.openaiBaseUrl + '/responses', {
+      method: 'POST',
+      headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
+      body: { model: 'native-r', input: 'safe', stream: true },
+    });
+    assert.equal(result.status, 502);
+    assert.equal(result.body.includes(secret), false);
+    assert.equal(JSON.parse(result.body).error.code, 'provider_stream_credential_reflection');
+  } finally {
+    await route.close();
+    await closeServer(upstream);
+  }
+});
+
+test('native SSE preserves safe unknown events byte-for-byte after validation', async () => {
+  const records = [];
+  const transcript = 'event: future.event\ndata: {"type":"future.event","future_field":{"preserved":true}}\n\n';
+  const upstream = controlledUpstream(records, ({ res }) => {
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.end(transcript);
+  });
+  await listen(upstream);
+  const apiRoot = 'http://127.0.0.1:' + upstream.address().port + '/v1';
+  const route = makeRoute({
+    apiRoot,
+    records,
+    capabilities: { 'native-r': 'responses' },
+    profileCalls: [],
+  });
+  try {
+    const local = await route.start();
+    const result = await requestText(local.openaiBaseUrl + '/responses', {
+      method: 'POST',
+      headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
+      body: { model: 'native-r', input: 'safe', stream: true },
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.body, transcript);
+  } finally {
+    await route.close();
+    await closeServer(upstream);
+  }
+});
+
+test('converted response errors never echo credential-shaped unknown keys', async () => {
+  const secret = 'opaque-provider-secret';
+  const reflectedKey = 'opaque%2dprovider%2dsecret';
+  const records = [];
+  const upstream = controlledUpstream(records, ({ res, record }) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({
+      id: 'chat-invalid',
+      object: 'chat.completion',
+      created: 1,
+      model: record.body.model,
+      choices: [{ index: 0, message: { role: 'assistant', content: 'safe' }, finish_reason: 'stop' }],
+      [reflectedKey]: true,
+    }));
+  });
+  await listen(upstream);
+  const apiRoot = 'http://127.0.0.1:' + upstream.address().port + '/v1';
+  const route = makeRoute({
+    apiRoot,
+    records,
+    capabilities: { 'chat-m': 'chat' },
+    profileCalls: [],
+    secret,
+  });
+  try {
+    const local = await route.start();
+    const result = await requestText(local.openaiBaseUrl + '/responses', {
+      method: 'POST',
+      headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
+      body: { model: 'chat-m', input: 'safe', stream: false },
+    });
+    assert.equal(result.status, 502);
+    assert.equal(result.body.includes(secret), false);
+    assert.equal(result.body.includes(reflectedKey), false);
+    const error = JSON.parse(result.body).error;
+    if (Object.hasOwn(error, 'param')) assert.equal(error.param, 'provider_response');
   } finally {
     await route.close();
     await closeServer(upstream);

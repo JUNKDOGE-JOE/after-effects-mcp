@@ -12,13 +12,13 @@ from ae_mcp.tool_artifact import (
     ToolArtifact,
     ToolArtifactDraft,
     ToolSource,
-    canonical_json_bytes,
     compute_content_hash,
 )
 from ae_mcp.tool_secrets import (
     SecretDetectedError,
     SecretScanner,
     require_secret_free,
+    require_secret_free_json,
 )
 from ae_mcp.tool_store import ToolArtifactStore
 
@@ -146,11 +146,7 @@ def _scan_draft(scanner: SecretScanner, draft: ToolArtifactDraft) -> None:
         "content": draft.content,
         "argsSchema": dict(draft.args_schema),
     }
-    require_secret_free(
-        scanner,
-        name="history-candidate.json",
-        data=canonical_json_bytes(value),
-    )
+    require_secret_free_json(scanner, name="history-candidate.json", value=value)
     if isinstance(draft.content, str):
         for match in _STRING_LITERAL.finditer(draft.content):
             require_secret_free(

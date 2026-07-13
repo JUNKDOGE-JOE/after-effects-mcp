@@ -28,6 +28,7 @@ function makeProc() {
       const line = typeof message === 'string' ? message : JSON.stringify(message) + '\n';
       for (const handler of stdoutHandlers) handler(line);
     },
+    pushStderr(message) { for (const handler of stderrHandlers) handler(String(message)); },
     exit(code = 0, signal = null) { for (const h of exitHandlers) h(code, signal); },
     error(error) { for (const h of errorHandlers) h(error); },
   };
@@ -471,6 +472,59 @@ test('text-delta events flow from model.streaming notifications', async () => {
   assert.equal(deltas[1].text, 'G');
   assert.ok(events.some((e) => e.type === 'turn-start'));
   assert.ok(events.some((e) => e.type === 'turn-end' && e.stopReason === 'end_turn'));
+});
+
+test('stored provider credentials echoed by ZCode never enter events or transcript', async () => {
+  const secret = 'opaque-zcode-provider-value';
+  const { backend, events, spawned } = makeBackend({
+    readStoredZcodeKey: () => secret,
+  });
+  const { proc, pending } = await startTurn(backend, spawned, 'safe user text');
+  pushEvent(proc, 'model.streaming', {
+    delta: `before ${secret} after`,
+    kind: 'text_delta',
+    done: false,
+  });
+  pushEvent(proc, 'turn.completed', { response: secret, usage: { totalTokens: 1 } });
+  await pending;
+  await flush();
+
+  const rendered = JSON.stringify({ events, messages: backend.getMessages() });
+  assert.equal(rendered.includes(secret), false);
+  assert.match(rendered, /\[redacted\]/);
+});
+
+test('inline runtime provider credentials stay redacted through pending RPC process exit', async () => {
+  const secret = 'opaque-inline-runtime-provider-value';
+  const { backend, events, spawned } = makeBackend({
+    readDesktopRuntimeModel: () => ({
+      revision: 'desktop-v2:test',
+      generatedAt: 1,
+      model: { providerId: 'test', modelId: 'model' },
+      provider: {
+        providerId: 'test',
+        kind: 'openai-compatible',
+        apiFormat: 'openai-responses',
+        source: 'custom',
+        apiKey: { source: 'inline', value: secret },
+        models: [{ modelId: 'model' }],
+      },
+    }),
+  });
+  const pending = backend.sendUser('safe user text');
+  await flush();
+  const proc = spawned.procs[0];
+  const createReq = parseWrites(proc)[0];
+  assert.equal(createReq.params.runtimeModel.provider.apiKey.value, secret);
+  proc.pushStderr(`provider failed: ${secret}`);
+  proc.exit(1);
+  await pending;
+  await flush();
+  await flush();
+
+  const rendered = JSON.stringify({ events, messages: backend.getMessages() });
+  assert.equal(rendered.includes(secret), false);
+  assert.match(rendered, /\[redacted\]/);
 });
 
 test('turn.failed object errors keep their message and classify provider failures as model errors', async () => {

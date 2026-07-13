@@ -30,7 +30,13 @@ from ae_mcp.tool_artifact import (
     compute_content_hash,
     new_user_artifact_id,
 )
-from ae_mcp.tool_secrets import RegexSecretScanner, SecretScanner, require_secret_free
+from ae_mcp.tool_secrets import (
+    RegexSecretScanner,
+    SecretScanError,
+    SecretScanner,
+    require_secret_free,
+    require_secret_free_json,
+)
 
 
 class ToolStoreError(RuntimeError):
@@ -435,15 +441,31 @@ class ToolArtifactStore:
         if _directory_identity(self.artifacts_dir) != self._artifacts_identity:
             raise ToolStoreRootChanged()
 
+    def _read_scanned_json(self, path: Path, *, name: str) -> JsonValue:
+        try:
+            data = path.read_bytes()
+            require_secret_free(self.scanner, name=name, data=data)
+            value = cast(JsonValue, json.loads(data.decode("utf-8")))
+            require_secret_free_json(self.scanner, name=name, value=value)
+            canonical = canonical_json_bytes(value) + b"\n"
+            require_secret_free(self.scanner, name=name, data=canonical)
+            return value
+        except (
+            OSError,
+            UnicodeError,
+            json.JSONDecodeError,
+            SecretScanError,
+            TypeError,
+            ValueError,
+        ) as exc:
+            raise ToolStoreCorrupt() from exc
+
     def _read_index(self) -> dict[str, JsonValue]:
         if not self.index_path.exists():
             return _empty_index()
         if self.index_path.is_symlink() or not self.index_path.is_file():
             raise ToolStoreCorrupt()
-        try:
-            value = json.loads(self.index_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-            raise ToolStoreCorrupt() from exc
+        value = self._read_scanned_json(self.index_path, name="index.json")
         if not isinstance(value, dict) or set(value) != _INDEX_KEYS:
             raise ToolStoreCorrupt()
         if value.get("schemaVersion") != 1:
@@ -490,18 +512,22 @@ class ToolArtifactStore:
         if path.is_symlink() or not path.is_file():
             raise ToolStoreCorrupt()
         try:
-            value = json.loads(path.read_text(encoding="utf-8"))
+            value = self._read_scanned_json(path, name="artifact.json")
             artifact = ToolArtifact.from_dict(value)
         except ToolNotFound:
             raise
-        except (OSError, UnicodeError, json.JSONDecodeError, ValueError, TypeError) as exc:
+        except ToolStoreCorrupt:
+            raise
+        except (ValueError, TypeError) as exc:
             raise ToolStoreCorrupt() from exc
         if artifact.id != artifact_id:
             raise ToolStoreCorrupt()
         return artifact
 
     def _scan_artifact(self, artifact: ToolArtifact) -> bytes:
-        data = canonical_json_bytes(artifact.to_dict()) + b"\n"
+        value = artifact.to_dict()
+        require_secret_free_json(self.scanner, name="artifact.json", value=value)
+        data = canonical_json_bytes(value) + b"\n"
         require_secret_free(self.scanner, name="artifact.json", data=data)
         return data
 

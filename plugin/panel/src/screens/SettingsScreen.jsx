@@ -57,7 +57,8 @@ const S = {
     providerSecretMismatch: 'Provider 引用与系统凭据不一致；当前列表已保留。请在 Provider 管理中重新保存对应凭据。',
     providerInitializationFailed: 'Provider 初始化失败；当前列表已保留。请导出日志后重新检测。',
     zcodeKeyPlaceholder: '粘贴 provider API Key（存本机）',
-    zcodeKeyStored: '已保存到 ~/.ae-mcp/zcode-key，可粘贴新值覆盖',
+    zcodeKeyStored: '已保存到系统安全凭据库，可粘贴新值覆盖',
+    zcodeKeySaveFailed: '安全凭据保存失败，请修复 Helper 后重试。',
     save: '保存',
     modelDefault: '默认模型（打开面板时使用）',
     customModel: '自定义模型 ID',
@@ -119,7 +120,8 @@ const S = {
     providerSecretMismatch: 'A provider reference no longer matches its system credential; the current list was retained. Save that credential again in Provider Manager.',
     providerInitializationFailed: 'Provider initialization failed; the current list was retained. Export logs, then re-check.',
     zcodeKeyPlaceholder: 'Paste the provider API key (stored locally)',
-    zcodeKeyStored: 'Saved to ~/.ae-mcp/zcode-key; paste a new value to overwrite',
+    zcodeKeyStored: 'Saved in the protected system credential store; paste a new value to overwrite',
+    zcodeKeySaveFailed: 'Protected credential save failed. Repair the Helper and retry.',
     save: 'Save',
     modelDefault: 'Default model (used when the panel opens)',
     customModel: 'Custom model ID',
@@ -177,10 +179,29 @@ function Section({ id, title, children, disabled, caption, expanded, onToggle })
 
 function ZcodeKeyFallback({ t, stored, onSave }) {
   const [draft, setDraft] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const save = async () => {
+    if (!onSave || saving || !draft.trim()) return;
+    setSaving(true);
+    setError('');
+    try {
+      const saved = await onSave(draft.trim());
+      if (saved === false) setError(t.zcodeKeySaveFailed);
+      else setDraft('');
+    } catch {
+      setError(t.zcodeKeySaveFailed);
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
-    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-      <Input secret value={draft} onChange={setDraft} placeholder={stored ? t.zcodeKeyStored : t.zcodeKeyPlaceholder} style={{ flex: 1 }} />
-      <Button variant="primary" size="sm" disabled={!draft.trim()} onClick={() => { if (onSave) onSave(draft.trim()); setDraft(''); }}>{t.save}</Button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <Input secret value={draft} onChange={setDraft} placeholder={stored ? t.zcodeKeyStored : t.zcodeKeyPlaceholder} style={{ flex: 1 }} />
+        <Button variant="primary" size="sm" disabled={saving || !draft.trim()} onClick={save}>{t.save}</Button>
+      </div>
+      {error ? <div style={{ font: '400 10px/1.4 var(--font-ui)', color: 'var(--warn)' }}>{error}</div> : null}
     </div>
   );
 }

@@ -15,10 +15,12 @@ import { createAgentLoop } from '../lib/agentLoop';
 import { revertToPreviousCheckpoint } from '../lib/activityModel';
 import { pickBackend, deriveToolMeta, shouldResetOnBackendChange } from '../lib/backendSelect';
 import { installBeforeUnloadReset } from '../lib/backendLifecycle.js';
+import { containsExactSecret } from '../lib/exactSecretRedaction.js';
 import { createMcpClient, resolveMcpCommand } from '../cep/mcpClient';
 import { createApprovalTierFile, withToolApprovalTier } from '../cep/approvalTierFile';
 import { createToolsApi } from '../cep/toolsApi';
-import { createApiKeyStore } from '../cep/apiKey';
+import { createLegacyApiKeyStore } from '../cep/apiKey';
+import { createZcodeCredentialManager } from '../cep/zcodeCredential.js';
 import { probeClaudeLogin, resolveSidecarPath } from '../cep/claudeAuth';
 import { createClaudeAgentBackend, resolveSystemNode } from '../cep/claudeAgentBackend';
 import { createCodexBackend } from '../cep/codexBackend';
@@ -34,7 +36,7 @@ import { migrateProviderStoreV2ToV3 } from '../cep/providerSchemaMigration';
 import { createSecretMigrationRunner } from '../cep/platform/secret-migration';
 import { deleteProviderProfile, drainPendingProviderSecretDeletes, importProviderDraft, saveProviderDraft } from './providerProfileFlow';
 import { runProviderManagerProbe } from './providerProbeFlow.js';
-import { providerInitFailure } from './providerInitState';
+import { assertProviderStateCredentialFree, providerInitFailure } from './providerInitState';
 import { ProviderManagerSection } from '../components/settings/ProviderManagerSection';
 import { probeProviderModels } from '../cep/modelProbe';
 import { detectCcSwitch, readCcSwitchProviderDrafts } from '../cep/ccSwitch';
@@ -44,7 +46,7 @@ import { reduceEvent } from '../lib/chatEntries';
 import { DEFAULT_MODEL } from '../lib/anthropic';
 import { descriptorWithCustomModel } from '../lib/backendCapabilities';
 import { selectDescriptor, reconcileModelPref } from '../lib/descriptorSelect';
-import { readCachedZcodeProbedModels, writeCachedZcodeProbedModels } from '../lib/zcodeModelCache';
+import { ZCODE_PROBED_MODELS_CACHE_KEY } from '../lib/zcodeModelCache';
 import { baseDescriptorFor } from '../cep/backends/index.js';
 import { costBadge } from '../lib/composerOptions';
 import { codexRuntimeProviderProfile } from '../lib/providerProfile.js';
@@ -130,28 +132,6 @@ function writePref(key, value) {
 }
 
 const CODEX_MODELS_CACHE_KEY = 'ae_mcp_codex_models';
-const CODEX_MODELS_CACHE_MS = 24 * 60 * 60 * 1000;
-
-function readCachedCodexModels(storage) {
-  try {
-    const raw = storage.getItem(CODEX_MODELS_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || !Array.isArray(parsed.models)) return null;
-    if (Date.now() - Number(parsed.ts || 0) > CODEX_MODELS_CACHE_MS) return null;
-    return parsed.models;
-  } catch (e) {
-    return null;
-  }
-}
-
-function writeCachedCodexModels(storage, models) {
-  try {
-    storage.setItem(CODEX_MODELS_CACHE_KEY, JSON.stringify({ ts: Date.now(), models }));
-  } catch (e) {
-    // best-effort
-  }
-}
 
 const CLIENT_NAMES = {
   builtin: { zh: '面板内置对话', en: 'Built-in chat' },
@@ -297,10 +277,9 @@ function providerRuntimeUnavailableError() {
   return error;
 }
 
-function modelMetadataContainsCredential(models, credential) {
-  let serialized;
-  try { serialized = JSON.stringify(models); } catch { return true; }
-  return serialized.includes('aemcp-secret://') || (credential ? serialized.includes(credential) : false);
+function modelMetadataContainsCredential(models, credentials = []) {
+  const values = Array.isArray(credentials) ? credentials : (credentials ? [credentials] : []);
+  return containsExactSecret(models, ['aemcp-secret://', ...values]);
 }
 
 function Shell({ cs }) {
@@ -334,8 +313,8 @@ function Shell({ cs }) {
   // Embedded chat: provider references, model/permission prefs, entry feed.
   // Resolved provider values exist only inside a request/probe/spawn call.
   const platform = React.useMemo(() => createPlatformAdapter(), []);
-  const keyStore = React.useMemo(() => {
-    try { return createApiKeyStore(); } catch (e) { return null; }
+  const legacyKeyStore = React.useMemo(() => {
+    try { return createLegacyApiKeyStore(); } catch (e) { return null; }
   }, []);
   const [customModel, setCustomModel] = React.useState(() => readPref('ae_mcp_custom_model', ''));
   const [model, setModel] = React.useState(() => readPref('ae_mcp_model', DEFAULT_MODEL));
@@ -348,7 +327,12 @@ function Shell({ cs }) {
   const [permissionMode, setPermissionMode] = React.useState(() => readPref('ae_mcp_perm_mode', 'manual'));
   const permissionModeRef = React.useRef(permissionMode);
   permissionModeRef.current = permissionMode;
-  const approvalTierFile = React.useMemo(() => createApprovalTierFile(), []);
+  const approvalTierFile = React.useMemo(() => createApprovalTierFile({
+    fs: platform.fs,
+    paths: platform.paths,
+    platformId: platform.id,
+    pid: (window.cep_node && window.cep_node.process && window.cep_node.process.pid) || 0,
+  }), [platform]);
   const elicitationCoordinator = React.useMemo(() => createElicitationCoordinator({
     resolveApproval: (_request, { plan }) => decideToolPlan({
       tier: permissionModeRef.current,
@@ -378,6 +362,13 @@ function Shell({ cs }) {
     getHost,
     randomBytes: (size) => cepRequire('crypto').randomBytes(size),
   }), [getHost]);
+  const zcodeCredentialManager = React.useMemo(() => createZcodeCredentialManager({
+    storage: window.localStorage,
+    secretService: providerSecretService,
+    legacyKeyStore,
+  }), [legacyKeyStore, providerSecretService]);
+  const zcodeStoredKeyRef = React.useRef('');
+  const [zcodeCredentialEpoch, setZcodeCredentialEpoch] = React.useState(0);
   const [providerInit, setProviderInit] = React.useState({ state: 'checking', error: '' });
   const [providers, setProviders] = React.useState([]);
   const [claudeProviderId, setClaudeProviderId] = React.useState(() => readPref('ae_mcp_claude_provider', ''));
@@ -392,18 +383,16 @@ function Shell({ cs }) {
   const [expertGuidance, setExpertGuidance] = React.useState(() => loadExpertGuidance(window.localStorage));
   const [probe, setProbe] = React.useState(null);
   const [codexProbe, setCodexProbe] = React.useState(null);
-  const [codexModels, setCodexModels] = React.useState(() => readCachedCodexModels(window.localStorage));
+  const [codexModels, setCodexModels] = React.useState(null);
   const [zcodeProbe, setZcodeProbe] = React.useState(null);
-  // Populated from the 'zcode-session-created' chat event (session/create's
-  // result), used by selectDescriptor to build a live model list for the
-  // zcode backend. See zcodeDescriptorFromModels in backendCapabilities.js.
   const [zcodeSessionModels, setZcodeSessionModels] = React.useState(null);
-  // Probe-driven fallback (spec A2 applied to zcode): when session/create's
-  // settings.model.available is empty (custom openai-compatible providers
-  // have no session-side model enumeration), actively probe the CLI provider's
-  // /v1/models endpoint. Seeded from the 1h localStorage cache so a fresh
-  // panel load doesn't need to re-probe immediately. See lib/zcodeModelCache.js.
-  const [zcodeProbedModels, setZcodeProbedModels] = React.useState(() => readCachedZcodeProbedModels(window.localStorage));
+  const [zcodeProbedModels, setZcodeProbedModels] = React.useState(null);
+  React.useEffect(() => {
+    try {
+      window.localStorage.removeItem(CODEX_MODELS_CACHE_KEY);
+      window.localStorage.removeItem(ZCODE_PROBED_MODELS_CACHE_KEY);
+    } catch {}
+  }, []);
   const [chatEntries, setChatEntries] = React.useState([]);
   const [chatStreaming, setChatStreaming] = React.useState(false);
   const [thinkingActive, setThinkingActive] = React.useState(false);
@@ -538,9 +527,8 @@ function Shell({ cs }) {
     />
   );
   const zcodeConfigSummary = React.useMemo(() => {
-    try { return summarizeZcodeConfig({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {}, storedKey: (() => { try { return keyStore ? keyStore.readKey('zcode') : ''; } catch (e) { return ''; } })() }); } catch (e) { return null; }
-    // zcodeProbe in deps: re-summarize after each re-check so pasted keys reflect immediately.
-  }, [keyStore, zcodeProbe]);
+    try { return summarizeZcodeConfig({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {}, storedKey: zcodeStoredKeyRef.current }); } catch (e) { return null; }
+  }, [zcodeCredentialEpoch, zcodeProbe]);
   const codexCliConfigStableRef = React.useRef(null);
   // Spec A extension: inherit a custom model_provider declared in
   // ~/.codex/config.toml (mirrors zcodeConfigSummary above).
@@ -671,6 +659,7 @@ function Shell({ cs }) {
     getEffort: () => runtimeRef.current.effort,
     getThinking: () => runtimeRef.current.thinking,
     getChannel: () => runtimeRef.current.claudeChannel || 'subscription',
+    getProviderSensitiveValues: () => providerSecretService.getRedactionValues(),
     resolveApiProvider: () => {
       const provider = runtimeRef.current.claudeApiProvider;
       if (!provider) throw new Error('Custom Provider is unavailable');
@@ -698,6 +687,7 @@ function Shell({ cs }) {
     getServerInstructions: () => mcp.getServerInstructions(),
     getProviderProfile: () => runtimeRef.current.providerProfile,
     getProviderCandidate: () => runtimeRef.current.providerCandidate,
+    getProviderSensitiveValues: () => providerSecretService.getRedactionValues(),
     resolveRequestProfile: (provider, details) => resolveProviderRequestProfile(provider, {
       ...details,
       secretService: providerSecretService,
@@ -847,11 +837,13 @@ function Shell({ cs }) {
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     getServerInstructions: () => mcp.getServerInstructions(),
+    readStoredZcodeKey: () => zcodeStoredKeyRef.current,
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
   }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
 
   React.useEffect(() => () => {
+    zcodeStoredKeyRef.current = '';
     zcodeBackend.reset();
   }, [zcodeBackend]);
 
@@ -886,7 +878,7 @@ function Shell({ cs }) {
       codexCustomProvider,
       customProviderCredentialResolverReady: codexProviderCredentialResolverReady,
       byokApiModels: null,
-      codexCachedModels: codexModels || readCachedCodexModels(window.localStorage),
+      codexCachedModels: codexModels,
       zcodeSessionModels,
       zcodeProbedModels,
     };
@@ -912,52 +904,32 @@ function Shell({ cs }) {
   }, [effective.backend, effective.channel, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, zcodeSessionModels, zcodeProbedModels, providerSecretService, codexProviderCredentialResolverReady, codexProviderId, providerInit.state]);
   const activeBackendRef = React.useRef(null);
 
-  // Probe the CLI-configured zcode provider's /v1/models when session data
-  // hasn't supplied a usable model list yet. Only runs for custom providers
-  // that expose a baseUrl and a resolved API key (summarizeZcodeConfig gives
-  // us both facts); a stale/expired cache entry re-triggers a fresh probe.
+  // Custom ZCode providers can omit model.available, so use their authenticated
+  // /models endpoint only after the runtime configuration is ready.
   React.useEffect(() => {
     if (backendPref !== 'zcode') return undefined;
-    // Only a session result that actually enumerates a choice (>1 model)
-    // makes probing unnecessary. probeAccount's session/create on custom
-    // providers returns a truthy result whose available list is empty or
-    // only names the current model — that must NOT suppress the probe.
     const sessionAvailable = zcodeSessionModels && zcodeSessionModels.settings && zcodeSessionModels.settings.model && Array.isArray(zcodeSessionModels.settings.model.available)
       ? zcodeSessionModels.settings.model.available
       : [];
     if (sessionAvailable.length > 1) return undefined;
     const cli = zcodeConfigSummary && zcodeConfigSummary.cli;
     if (!cli || !cli.model || !cli.baseUrl || !cli.hasCredential) return undefined;
-    const cached = readCachedZcodeProbedModels(window.localStorage);
-    if (cached && cached.cliModel === cli.model) {
-      // Reference-compare fails (fresh object per read), so compare identity
-      // facts to avoid a setState loop between this effect and the descriptor
-      // effect (which now depends on zcodeSessionModels changes too).
-      const same = zcodeProbedModels
-        && zcodeProbedModels.cliModel === cached.cliModel
-        && Array.isArray(zcodeProbedModels.probedModels)
-        && zcodeProbedModels.probedModels.length === cached.probedModels.length;
-      if (!same) setZcodeProbedModels(cached);
-      return undefined;
-    }
     let alive = true;
     const providerId = cli.providerId || '';
-    const apiKeyValue = (() => { try { return keyStore ? keyStore.readKey('zcode') : ''; } catch (e) { return ''; } })();
     probeProviderModels({
       baseUrl: cli.baseUrl,
-      ['apiKey']: apiKeyValue,
+      ['apiKey']: zcodeStoredKeyRef.current,
       protocol: cli.protocol,
       allowInsecureHttp: false,
     }).then((result) => {
       if (!alive) return;
       if (result.ok && result.models && result.models.length) {
         const entry = { cliModel: cli.model, providerId, probedModels: result.models };
-        writeCachedZcodeProbedModels(window.localStorage, entry);
         setZcodeProbedModels(entry);
       }
     }).catch(() => {});
     return () => { alive = false; };
-  }, [backendPref, zcodeSessionModels, zcodeConfigSummary, keyStore]);
+  }, [backendPref, zcodeCredentialEpoch, zcodeSessionModels, zcodeConfigSummary]);
 
   const runClaudeProbe = React.useCallback(() => {
     let alive = true;
@@ -983,25 +955,29 @@ function Shell({ cs }) {
     setCodexProbe(null);
     codexBackend.probeAccount().then((result) => {
       if (!alive) return;
+      const redactionValues = providerSecretService.getRedactionValues();
+      if (containsExactSecret(result, ['aemcp-secret://', ...redactionValues])) {
+        setCodexProbe({ loggedIn: false, runtimeOk: false, detail: 'Codex probe metadata was rejected' });
+        setCodexModels(null);
+        return;
+      }
       setCodexProbe(result);
-      if (result && Array.isArray(result.models)) {
+      if (result && Array.isArray(result.models) && !modelMetadataContainsCredential(result.models, redactionValues)) {
         setCodexModels(result.models);
-        writeCachedCodexModels(window.localStorage, result.models);
       }
     }).catch((e) => {
       if (alive) setCodexProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
     });
     return () => { alive = false; };
-  }, [codexBackend]);
+  }, [codexBackend, providerSecretService]);
 
   React.useEffect(() => {
     if (backendPref !== 'codex') return undefined;
     return runCodexProbe();
   }, [backendPref, runCodexProbe]);
 
-  // Spec A extension: when the cli-config channel is active (custom provider
-  // via inherited config.toml), probe its /v1/models the same way zcode's
-  // cli-config channel does (same probeProviderModels entry point).
+  // CLI-configured providers need a direct /models fallback when Codex does
+  // not enumerate their models through the app-server.
   React.useEffect(() => {
     if (backendPref !== 'codex') return undefined;
     if (!codexCliConfig || !codexCliConfig.provider || !codexCliCredentialReady) return undefined;
@@ -1024,9 +1000,8 @@ function Shell({ cs }) {
           allowInsecureHttp: false,
         });
         if (!alive) return;
-        if (result.ok && result.models && result.models.length && !modelMetadataContainsCredential(result.models, credential)) {
+        if (result.ok && result.models && result.models.length && !modelMetadataContainsCredential(result.models, [credential])) {
           setCodexModels(result.models);
-          writeCachedCodexModels(window.localStorage, result.models);
         }
       } catch { /* probe is best effort */ } finally {
         credential = '';
@@ -1096,11 +1071,14 @@ function Shell({ cs }) {
 
   const exportLogs = React.useCallback(() => {
     try {
+      const exactSecrets = providerSecretService.getRedactionValues();
+      if (zcodeStoredKeyRef.current) exactSecrets.push(zcodeStoredKeyRef.current);
       const text = buildLogExport({
         panelLogs: logs,
         hostInfo: { hostVersion: (connInfo && connInfo.hostVersion) || '-', pythonVersion: (connInfo && connInfo.pythonVersion) || '-' },
         sidecarTail: claudeBackend.getStderrTail ? claudeBackend.getStderrTail() : '',
         version: pkgVersion,
+        exactSecrets,
       });
       const file = writeLogExport({ text, fileName: exportFileName() });
       revealInExplorer(file, undefined, (err) => pushLog('Log export reveal failed: ' + (err && err.message ? err.message : String(err))));
@@ -1108,7 +1086,7 @@ function Shell({ cs }) {
     } catch (e) {
       pushLog('Log export failed: ' + (e && e.message ? e.message : String(e)));
     }
-  }, [logs, connInfo, claudeBackend, pushLog]);
+  }, [logs, connInfo, claudeBackend, providerSecretService, pushLog]);
 
   const undoToPreviousCheckpoint = React.useCallback(async () => {
     try {
@@ -1144,15 +1122,28 @@ function Shell({ cs }) {
     setProviderInit({ state: 'checking', error: '' });
     (async () => {
       try {
+        const host = getHost();
+        if (!host || typeof host.capabilities !== 'function') throw providerRuntimeUnavailableError();
+        const capabilities = await host.capabilities();
+        requireProviderHelperCapabilities(capabilities, platform.id);
+        try {
+          const value = await zcodeCredentialManager.loadOrMigrate();
+          if (alive) {
+            zcodeStoredKeyRef.current = value;
+            setZcodeCredentialEpoch((current) => current + 1);
+          }
+        } catch {
+          if (alive) {
+            zcodeStoredKeyRef.current = '';
+            setZcodeCredentialEpoch((current) => current + 1);
+          }
+          pushLog('ZCode credential unavailable: protected credential migration is required');
+        }
         if (!providerStore) {
           const error = new Error('Provider store is unavailable');
           error.code = 'PROVIDER_STORE_UNAVAILABLE';
           throw error;
         }
-        const host = getHost();
-        if (!host || typeof host.capabilities !== 'function') throw providerRuntimeUnavailableError();
-        const capabilities = await host.capabilities();
-        requireProviderHelperCapabilities(capabilities, platform.id);
         if (providerStore.needsSecretMigration() || providerStore.needsSchemaMigration()) {
           const secretStore = createHostSecretStore(host);
           const runner = createSecretMigrationRunner({
@@ -1162,11 +1153,11 @@ function Shell({ cs }) {
           await migrateProviderStoreSecrets({
             store: providerStore,
             legacyKeyStore: {
-              readKey: (name) => { try { return keyStore ? keyStore.readKey(name) : ''; } catch { return ''; } },
+              readKey: (name) => { try { return legacyKeyStore ? legacyKeyStore.readKey(name) : ''; } catch { return ''; } },
               async cleanupCommittedProviderSecrets() {
-                if (!keyStore) return;
-                keyStore.clearKey('anthropic');
-                keyStore.clearKey('codex');
+                if (!legacyKeyStore) return;
+                legacyKeyStore.clearKey('anthropic');
+                legacyKeyStore.clearKey('codex');
               },
             },
             runner,
@@ -1191,17 +1182,20 @@ function Shell({ cs }) {
             resolved = null;
           }
         }
+        assertProviderStateCredentialFree(
+          providerState,
+          providerSecretService.getRedactionValues(),
+        );
         if (!alive) return;
         setProviders(providerState.providers);
         setProviderInit({ state: 'ready', error: '' });
       } catch (error) {
         if (!alive) return;
-        try { if (providerStore) setProviders(providerStore.list()); } catch { /* retain last known list */ }
         setProviderInit(providerInitFailure(error));
       }
     })();
     return () => { alive = false; };
-  }, [status.state, providerStore, providerSecretService, getHost, keyStore, platform]);
+  }, [status.state, providerStore, providerSecretService, getHost, legacyKeyStore, platform, pushLog, zcodeCredentialManager]);
 
   // Keep connection info fresh while the drawer is open.
   React.useEffect(() => {
@@ -1443,13 +1437,21 @@ function Shell({ cs }) {
                 draft = null;
               }
             }}
-            onSaveZcodeKey={(k) => {
-              if (keyStore) keyStore.writeKey(k, 'zcode');
-              setZcodeProbe(null);
-              zcodeBackend.reset();
-              runZcodeProbe();
+            onSaveZcodeKey={async (k) => {
+              try {
+                const value = await zcodeCredentialManager.save(k);
+                zcodeStoredKeyRef.current = value;
+                setZcodeCredentialEpoch((current) => current + 1);
+                setZcodeProbe(null);
+                zcodeBackend.reset();
+                runZcodeProbe();
+                return true;
+              } catch {
+                pushLog('ZCode credential save failed: protected credential store is unavailable');
+                return false;
+              }
             }}
-            zcodeKeyStored={(() => { try { return Boolean(keyStore && keyStore.readKey('zcode')); } catch (e) { return false; } })()}
+            zcodeKeyStored={Boolean(zcodeStoredKeyRef.current)}
             onSaveCodexKey={undefined}
             codexKeyStored={false}
             codexCliConfig={codexCliConfig}

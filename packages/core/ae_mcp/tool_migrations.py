@@ -15,7 +15,13 @@ from pathlib import Path
 from typing import Any, cast
 
 from ae_mcp.platform_files import atomic_replace_bytes, fsync_parent
-from ae_mcp.tool_secrets import RegexSecretScanner, SecretScanner, require_secret_free
+from ae_mcp.tool_artifact import JsonValue, canonical_json_bytes
+from ae_mcp.tool_secrets import (
+    RegexSecretScanner,
+    SecretScanner,
+    require_secret_free,
+    require_secret_free_json,
+)
 from ae_mcp.tool_store import StoreLock, ToolStoreError, atomic_write_json
 
 
@@ -166,6 +172,17 @@ class ToolDataMigrator:
             except OSError as exc:
                 raise ToolMigrationError() from exc
             require_secret_free(self.scanner, name=name, data=data)
+            if path.suffix.lower() == ".json":
+                try:
+                    value = cast(JsonValue, json.loads(data.decode("utf-8")))
+                except (UnicodeError, json.JSONDecodeError) as exc:
+                    raise ToolMigrationError() from exc
+                require_secret_free_json(self.scanner, name=name, value=value)
+                require_secret_free(
+                    self.scanner,
+                    name=name,
+                    data=canonical_json_bytes(value) + b"\n",
+                )
             result.append({"kind": kind, "name": name, "sha256": _sha256(data)})
         return result
 
@@ -255,18 +272,15 @@ class ToolDataMigrator:
         return backup_id, manifest
 
     def migrate_from_v0_9(self) -> MigrationResult:
-        marker = self._marker()
-        if marker is not None:
-            return MigrationResult(migrated=False, backup_id=cast(str, marker["backupId"]))
         try:
             with StoreLock(self.root) as lock:
                 marker = self._marker()
+                self._validate_primary_schema()
+                sources = self._scan_sources()
                 if marker is not None:
                     return MigrationResult(
                         migrated=False, backup_id=cast(str, marker["backupId"])
                     )
-                self._validate_primary_schema()
-                sources = self._scan_sources()
                 lock.assert_current()
                 _ensure_directory(self.backups_dir)
                 _ensure_directory(self.artifacts_dir)

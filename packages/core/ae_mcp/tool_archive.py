@@ -482,6 +482,17 @@ def _scan_all(scanner: SecretScanner, members: Mapping[str, bytes]) -> None:
         try:
             findings = tuple(scanner.scan_bytes(name, members[name]))
             details.extend(_finding_detail(name, finding) for finding in findings)
+            scan_json = getattr(scanner, "scan_json", None)
+            if callable(scan_json) and name.endswith(".json"):
+                try:
+                    value = json.loads(members[name].decode("utf-8", errors="strict"))
+                except (UnicodeError, json.JSONDecodeError):
+                    value = None
+                if value is not None:
+                    json_findings = tuple(scan_json(name, value))
+                    details.extend(
+                        _finding_detail(name, finding) for finding in json_findings
+                    )
         except Exception:
             raise _error(
                 "SECRET_SCANNER_UNAVAILABLE",

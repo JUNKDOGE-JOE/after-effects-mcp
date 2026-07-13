@@ -9,9 +9,10 @@ const PANEL_SRC_ROOT = path.join(REPO_ROOT, 'plugin', 'panel', 'src');
 const CEP_ROOT = path.join(PANEL_SRC_ROOT, 'cep');
 const PLATFORM_ROOT = path.join(CEP_ROOT, 'platform') + path.sep;
 
-// These are intentionally temporary and exact-counted: the helper approval
-// gate has not opened, so provider plaintext persistence cannot yet migrate to
-// protected secret references. Do not add a whole-file exemption here.
+// Exact counts keep the remaining filesystem compatibility boundaries narrow.
+// apiKey.js only reads and removes legacy plaintext during verified migration;
+// Provider storage and Codex environment shaping still need their current CEP
+// primitives until those interfaces move behind the platform adapter.
 const GATED_PLATFORM_ALLOWLIST = new Map([
   ['plugin/panel/src/cep/apiKey.js::native-path-home-module', 2],
   ['plugin/panel/src/cep/providerStore.js::native-path-home-module', 2],
@@ -70,7 +71,7 @@ test('business modules do not branch on platform or invoke system discovery comm
     for (const rule of FORBIDDEN_PLATFORM_PATTERNS) {
       const count = countRule(text, rule);
       if (!count) continue;
-      const relative = path.relative(REPO_ROOT, file);
+      const relative = path.relative(REPO_ROOT, file).split(path.sep).join('/');
       const allowanceKey = relative + '::' + rule.id;
       const allowedCount = GATED_PLATFORM_ALLOWLIST.get(allowanceKey);
       if (allowedCount === count) usedAllowances.add(allowanceKey);

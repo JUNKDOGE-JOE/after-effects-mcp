@@ -103,6 +103,31 @@ def test_secret_hit_does_not_persist_candidate(
     assert store.list(statuses={"candidate"}) == []
 
 
+@pytest.mark.parametrize(
+    "code",
+    [
+        "X-Custom-Token: opaque-custom-token",
+        "client_secret=opaque-client-secret",
+        "password='opaque-password'",
+    ],
+)
+def test_credential_named_values_do_not_persist_history_candidates(
+    store: ToolArtifactStore,
+    scanner: RegexSecretScanner,
+    code: str,
+) -> None:
+    result = capture_history_candidate(
+        store=store,
+        scanner=scanner,
+        verb_name="ae.exec",
+        arguments={"code": code},
+        result={"ok": True},
+        context=context("credential-shaped"),
+    )
+    assert result is None
+    assert store.list(statuses={"candidate"}) == []
+
+
 def test_real_set_property_expression_creates_expression_draft() -> None:
     arguments = S.AeSetPropertyArgs(
         comp_id="42",

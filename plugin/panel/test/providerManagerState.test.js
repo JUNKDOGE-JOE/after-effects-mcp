@@ -96,6 +96,16 @@ test('validateDraft requires a name and http(s) URL', () => {
   assert.equal(validateDraft({ ...emptyDraft(), name: 'Foo', baseUrl: 'https://x.example.com' }), '');
 });
 
+test('validateDraft requires protected storage for credential-shaped literal values', () => {
+  const error = validateDraft({
+    ...emptyDraft(),
+    name: 'Foo',
+    baseUrl: 'https://x.example.com',
+    headers: [{ name: 'x-feature', valueKind: 'literal', value: '{"accessToken":"opaque"}' }],
+  });
+  assert.match(error, /protected secrets/);
+});
+
 test('draftToEntry derives an id and preserves only ephemeral v3 form fields', () => {
   const entry = draftToEntry({
     ...emptyDraft(),

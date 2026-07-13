@@ -54,8 +54,11 @@ function makeDeps() {
   };
   return {
     fs,
-    os: { homedir: () => '/home/user' },
-    path: { join: (...parts) => parts.join('/') },
+    paths: {
+      runtimeRoot: '/home/user/.ae-mcp/runtime',
+      join: (parts) => parts.join('/'),
+    },
+    platformId: 'macos-arm64',
     pid: 42,
     now: () => 1234,
     nonce: () => 'nonce',

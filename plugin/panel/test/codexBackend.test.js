@@ -775,6 +775,24 @@ test('createCodexBackend redacts a local route token split across Codex deltas a
   assert.equal(JSON.stringify(backend.getMessages()).includes('split-secret-marker'), false);
 });
 
+test('createCodexBackend redacts reflected Provider credentials split across successful deltas', async () => {
+  const secret = 'opaque-provider-credential';
+  const { backend, events, spawned } = makeBackend({
+    createProviderRoute: () => localProviderRoute(),
+    getProviderProfile: () => selectedProvider(),
+    getProviderSensitiveValues: () => [secret],
+    resolveRequestProfile: async () => resolvedModelProfile(),
+  });
+  const { pending, proc } = await startTurn(backend, spawned, 'redact reflected provider credential');
+  proc.pushStdout({ jsonrpc: '2.0', method: 'item/agentMessage/delta', params: { delta: 'opaque-provider-' } });
+  proc.pushStdout({ jsonrpc: '2.0', method: 'item/agentMessage/delta', params: { delta: 'credential' } });
+  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
+  await pending;
+  const rendered = JSON.stringify({ events, messages: backend.getMessages() });
+  assert.equal(rendered.includes(secret), false);
+  assert.match(rendered, /\[redacted\]/);
+});
+
 test('createCodexBackend redacts the local route token from stderr failures', async () => {
   const provider = providerForProtocol('chat');
   const { backend, events, spawned } = makeBackend({
@@ -1628,6 +1646,52 @@ test('createCodexBackend probeAccount initializes and reads account plus model l
     cliPath: 'C:\\Tools\\codex.exe',
     cliVersion: '1.0.0',
   });
+});
+
+test('createCodexBackend probeAccount rejects JSON-escaped Provider credentials in model metadata', async () => {
+  for (const secret of ['opaque"provider-secret', 'opaque\\provider-secret']) {
+    const { backend, spawned } = makeBackend({ getProviderSensitiveValues: () => [secret] });
+    const probe = backend.probeAccount();
+    await flush();
+    const proc = spawned.procs[0];
+    respond(proc, parseWrites(proc)[0], {});
+    await flush();
+    respond(proc, parseWrites(proc)[1], { account: { type: 'chatgpt', email: 'safe@example.com', planType: 'plus' } });
+    await flush();
+    respond(proc, parseWrites(proc)[2], { models: [{ id: secret, displayName: `label ${secret}` }] });
+
+    const result = await probe;
+    assert.deepEqual(result, {
+      loggedIn: false,
+      runtimeOk: false,
+      detail: 'Provider probe metadata was rejected',
+      cliPath: 'C:\\Tools\\codex.exe',
+      cliVersion: '1.0.0',
+    });
+    assert.equal(JSON.stringify(result).includes(secret), false);
+  }
+});
+
+test('createCodexBackend probeAccount redacts reflected credentials from failure details', async () => {
+  const secret = 'opaque-provider-secret';
+  for (const reflected of [
+    secret,
+    'opaque\\u002dprovider-secret',
+    'opaque%2dprovider%2dsecret',
+  ]) {
+    const { backend, spawned } = makeBackend({ getProviderSensitiveValues: () => [secret] });
+    const probe = backend.probeAccount();
+    await flush();
+    const proc = spawned.procs[0];
+    const initialize = parseWrites(proc)[0];
+    proc.pushStdout({ id: initialize.id, error: { message: `initialize failed: ${reflected}` } });
+
+    const result = await probe;
+    assert.equal(result.loggedIn, false);
+    assert.equal(result.runtimeOk, false);
+    assert.equal(result.detail.includes(secret), false);
+    assert.equal(result.detail.includes(reflected), false);
+  }
 });
 
 test('createCodexBackend probeAccount reports runtime ok when OpenAI auth is absent', async () => {

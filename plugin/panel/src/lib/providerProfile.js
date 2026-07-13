@@ -1,4 +1,9 @@
 import { parseProviderSecretReference } from '../cep/platform/secret-reference.js';
+import {
+  isCredentialShapedProviderLiteral,
+  isReservedProviderExtraHeaderName,
+  isSensitiveProviderHeaderName,
+} from './providerHeaderPolicy.js';
 
 const DEFAULT_ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
 const DEFAULT_CODEX_PROVIDER_ID = 'ae_mcp_custom';
@@ -119,11 +124,20 @@ const LEGACY_DIALECT_EVIDENCE = new Set([
   'chat-missing-messages',
   'chat-missing-messages-500-compat',
 ]);
-const SENSITIVE_HEADER_NAME = /(?:^|[-_])(?:authorization|api[-_]?key|token|secret|password)(?:$|[-_])/i;
-const SECRET_LIKE_LITERAL = /^(?:Bearer\s+\S+|Basic\s+\S+|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,})$/;
 const SECRET_LIKE_PATH_LITERAL = /(?:Bearer\s+\S{8,}|Basic\s+\S{8,}|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,})/i;
 const HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const MAX_PERCENT_DECODE_LAYERS = 3;
+const CREDENTIAL_PATH_LABELS = new Set([
+  'accesstoken',
+  'apikey',
+  'authtoken',
+  'clientsecret',
+  'credential',
+  'credentials',
+  'passwd',
+  'password',
+  'xapikey',
+]);
 
 export function normalizeBaseUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '');
@@ -146,7 +160,13 @@ function decodePercentRuns(value) {
 function pathContainsCredential(value) {
   let current = String(value || '');
   for (let layer = 0; layer <= MAX_PERCENT_DECODE_LAYERS; layer += 1) {
-    if (SECRET_LIKE_PATH_LITERAL.test(current)) return true;
+    if (SECRET_LIKE_PATH_LITERAL.test(current) || isCredentialShapedProviderLiteral(current)) return true;
+    const segments = current.split('/').filter(Boolean);
+    for (let index = 0; index + 1 < segments.length; index += 1) {
+      const label = segments[index].toLowerCase().replace(/[^a-z0-9]/g, '');
+      const candidate = segments[index + 1];
+      if (CREDENTIAL_PATH_LABELS.has(label) && !/^v\d+(?:\.\d+)*$/i.test(candidate)) return true;
+    }
     const decoded = decodePercentRuns(current);
     if (decoded === current) break;
     current = decoded;
@@ -320,9 +340,12 @@ function normalizeExtraHeader(value, credentialId) {
   });
   if (new Set(scopes).size !== scopes.length) throw providerProfileError();
   const valueRef = normalizeHeaderValueRef(value.valueRef, credentialId);
+  if (isReservedProviderExtraHeaderName(name)) {
+    throw providerProfileError('provider_header_forbidden');
+  }
   if (
     valueRef.kind === 'literal'
-    && (SENSITIVE_HEADER_NAME.test(name.toLowerCase()) || SECRET_LIKE_LITERAL.test(valueRef.value))
+    && (isSensitiveProviderHeaderName(name) || isCredentialShapedProviderLiteral(valueRef.value))
   ) {
     throw providerProfileError('provider_header_secret_reference_required');
   }

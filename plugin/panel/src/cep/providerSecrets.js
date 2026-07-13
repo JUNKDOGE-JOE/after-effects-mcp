@@ -115,6 +115,15 @@ export function createProviderSecretService({
   if (typeof getHost !== 'function') throw new TypeError('getHost must be a function');
   if (typeof createReference !== 'function') throw new TypeError('createReference must be a function');
   if (typeof randomBytes !== 'function') throw new TypeError('randomBytes must be a function');
+  const redactionValues = new Set();
+
+  function rememberForRedaction(value) {
+    if (typeof value === 'string' && value) redactionValues.add(value);
+  }
+
+  function getRedactionValues() {
+    return Array.from(redactionValues).sort((left, right) => right.length - left.length);
+  }
 
   function requireHost() {
     let host;
@@ -150,6 +159,7 @@ export function createProviderSecretService({
     ) {
       throw providerSecretError('SECRET_CONFLICT');
     }
+    rememberForRedaction(result.value);
     return result.value;
   }
 
@@ -195,6 +205,7 @@ export function createProviderSecretService({
               || recovered.value !== input.value) {
             throw providerSecretError('SECRET_CONFLICT');
           }
+          rememberForRedaction(input.value);
           return Object.freeze({ kind: 'secret', reference, revision: recovered.revision });
         }
         // The set may have committed, but without a returned/read-back
@@ -227,6 +238,7 @@ export function createProviderSecretService({
       if (readbackError) throw readbackError;
       throw providerSecretError('SECRET_CONFLICT');
     }
+    rememberForRedaction(input.value);
     return Object.freeze({ kind: 'secret', reference, revision: created.revision });
   }
 
@@ -252,7 +264,7 @@ export function createProviderSecretService({
     return { deleted: result.deleted, revision: result.revision };
   }
 
-  return Object.freeze({ resolve, create, delete: deleteSecret });
+  return Object.freeze({ resolve, create, delete: deleteSecret, getRedactionValues });
 }
 
 async function resolveAuth(policy, secretService) {

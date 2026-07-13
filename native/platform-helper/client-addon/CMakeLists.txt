@@ -49,6 +49,7 @@ elseif(WIN32)
   )
   target_link_libraries(ae-mcp-platform-helper-transport PRIVATE
     "${NODE_IMPORT_LIBRARY}"
+    bcrypt
     delayimp
   )
   target_link_options(ae-mcp-platform-helper-transport PRIVATE

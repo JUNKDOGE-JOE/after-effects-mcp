@@ -150,8 +150,9 @@ test('provider secret service creates, reads back, and returns only a reference 
     randomBytes: () => Buffer.from('a13f28', 'utf8'),
   });
 
-  assert.deepEqual(Object.keys(service).sort(), ['create', 'delete', 'resolve']);
+  assert.deepEqual(Object.keys(service).sort(), ['create', 'delete', 'getRedactionValues', 'resolve']);
   assert.equal('list' in service, false);
+  assert.deepEqual(service.getRedactionValues(), []);
 
   const ref = await service.create({
     credentialId: CREDENTIAL_ID,
@@ -166,10 +167,13 @@ test('provider secret service creates, reads back, and returns only a reference 
     /^aemcp-secret:\/\/provider\/5eb75f05-5d9e-5d9c-85af-f0893e8b90c2\/auth-model-[a-z0-9_-]+\/v1$/,
   );
   assert.equal(JSON.stringify(ref).includes('sk-provider-secret'), false);
+  assert.deepEqual(service.getRedactionValues(), ['sk-provider-secret']);
   assert.equal(await service.resolve(ref), 'sk-provider-secret');
+  assert.deepEqual(service.getRedactionValues(), ['sk-provider-secret']);
   assert.deepEqual(calls.map((call) => call[0]), ['set', 'get', 'get']);
 
   assert.deepEqual(await service.delete(ref), { deleted: true, revision: null });
+  assert.deepEqual(service.getRedactionValues(), ['sk-provider-secret']);
   assert.deepEqual(calls.at(-1), ['delete', ref.reference, 1]);
   await assert.rejects(service.resolve(ref), (error) => {
     assert.equal(error.code, 'SECRET_NOT_FOUND');
@@ -247,6 +251,7 @@ test('provider secret service fails closed on mismatched create readback without
     },
   );
   assert.deepEqual(deletes, [{ reference: createdReference, expectedRevision: 1 }]);
+  assert.deepEqual(service.getRedactionValues(), []);
 });
 
 test('provider secret service rolls back the exact created revision when create readback throws', async () => {

@@ -1,98 +1,69 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createApiKeyStore } from '../src/cep/apiKey.js';
+import { readFileSync } from 'node:fs';
+import { createLegacyApiKeyStore } from '../src/cep/apiKey.js';
 
 function makeDeps() {
   const files = new Map();
-  const dirs = new Set();
-  const chmods = [];
   const fs = {
-    existsSync(p) {
-      return dirs.has(p) || files.has(p);
-    },
-    mkdirSync(p) {
-      dirs.add(p);
-    },
-    readFileSync(p) {
-      if (!files.has(p)) {
-        const e = new Error('missing');
-        e.code = 'ENOENT';
-        throw e;
+    readFileSync(file) {
+      if (!files.has(file)) {
+        const error = new Error('missing');
+        error.code = 'ENOENT';
+        throw error;
       }
-      return files.get(p);
+      return files.get(file);
     },
-    writeFileSync(p, value) {
-      files.set(p, value);
-    },
-    chmodSync(p, mode) {
-      chmods.push([p, mode]);
-    },
-    renameSync(from, to) {
-      files.set(to, files.get(from));
-      files.delete(from);
-    },
-    unlinkSync(p) {
-      if (!files.has(p)) {
-        const e = new Error('missing');
-        e.code = 'ENOENT';
-        throw e;
+    unlinkSync(file) {
+      if (!files.has(file)) {
+        const error = new Error('missing');
+        error.code = 'ENOENT';
+        throw error;
       }
-      files.delete(p);
+      files.delete(file);
     },
   };
-  const path = {
-    join(...parts) {
-      return parts.join('/');
-    },
+  return {
+    fs,
+    os: { homedir: () => '/home/user' },
+    path: { join: (...parts) => parts.join('/') },
+    files,
   };
-  const os = { homedir: () => '/home/user' };
-  return { fs, path, os, pid: 42, files, dirs, chmods };
 }
 
-test('readKey returns empty string when the key file is missing', () => {
+test('legacy key store only reads migration sources and trims their values', () => {
   const deps = makeDeps();
-  const store = createApiKeyStore(deps);
-  assert.equal(store.readKey(), '');
+  deps.files.set('/home/user/.ae-mcp/zcode-key', '  legacy-value  ');
+  const store = createLegacyApiKeyStore(deps);
+  assert.equal(store.readKey('zcode'), 'legacy-value');
+  assert.equal(Object.hasOwn(store, 'writeKey'), false);
 });
 
-test('writeKey atomically writes, chmods, renames, and readKey trims the stored value', () => {
+test('legacy key cleanup removes an existing key and ignores a missing file', () => {
   const deps = makeDeps();
-  const store = createApiKeyStore(deps);
-  assert.equal(store.writeKey('  sk-ant-test  '), 'sk-ant-test');
-  assert.equal(store.readKey(), 'sk-ant-test');
-  assert.equal(deps.dirs.has('/home/user/.ae-mcp'), true);
-  assert.equal(deps.files.has('/home/user/.ae-mcp/anthropic-key'), true);
-  assert.equal(deps.chmods.length, 1);
-  assert.equal(deps.chmods[0][1], 0o600);
+  deps.files.set('/home/user/.ae-mcp/anthropic-key', 'legacy-value');
+  const store = createLegacyApiKeyStore(deps);
+  store.clearKey('anthropic');
+  assert.equal(store.readKey('anthropic'), '');
+  assert.doesNotThrow(() => store.clearKey('anthropic'));
 });
 
-test('writeKey can store Codex and Anthropic keys separately', () => {
-  const deps = makeDeps();
-  const store = createApiKeyStore(deps);
-  store.writeKey('sk-ant-test');
-  store.writeKey('sk-codex-test', 'codex');
-
-  assert.equal(store.readKey(), 'sk-ant-test');
-  assert.equal(store.readKey('codex'), 'sk-codex-test');
-  assert.equal(deps.files.has('/home/user/.ae-mcp/anthropic-key'), true);
-  assert.equal(deps.files.has('/home/user/.ae-mcp/codex-key'), true);
+test('legacy key store rejects unknown file slots', () => {
+  const store = createLegacyApiKeyStore(makeDeps());
+  assert.throws(() => store.readKey('unknown'), /Unsupported API key name/);
 });
 
-test('clearKey removes an existing key and ignores missing files', () => {
-  const deps = makeDeps();
-  const store = createApiKeyStore(deps);
-  store.writeKey('sk-ant-test');
-  store.clearKey();
-  assert.equal(store.readKey(), '');
-  assert.doesNotThrow(() => store.clearKey());
-});
-
-test('writeKey can store a ZCode fallback key at ~/.ae-mcp/zcode-key', () => {
-  const deps = makeDeps();
-  const store = createApiKeyStore(deps);
-  store.writeKey('zc-secret', 'zcode');
-  assert.equal(store.readKey('zcode'), 'zc-secret');
-  assert.equal(deps.files.has('/home/user/.ae-mcp/zcode-key'), true);
-  store.clearKey('zcode');
-  assert.equal(store.readKey('zcode'), '');
+test('production ZCode paths cannot write or directly reopen plaintext key files', () => {
+  const legacySource = readFileSync(new URL('../src/cep/apiKey.js', import.meta.url), 'utf8');
+  const appSource = readFileSync(new URL('../src/app/App.jsx', import.meta.url), 'utf8');
+  const backendSource = readFileSync(new URL('../src/cep/zcodeBackend.js', import.meta.url), 'utf8');
+  const settingsSource = readFileSync(new URL('../src/screens/SettingsScreen.jsx', import.meta.url), 'utf8');
+  const channelsSource = readFileSync(new URL('../src/lib/channels.js', import.meta.url), 'utf8');
+  const errorsSource = readFileSync(new URL('../src/lib/zcodeErrors.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(legacySource, /writeFileSync|renameSync|writeKey/);
+  assert.doesNotMatch(appSource, /writeKey\s*\(|readKey\s*\(\s*['"]zcode/);
+  assert.doesNotMatch(backendSource, /apiKey\.js|createLegacyApiKeyStore|createApiKeyStore/);
+  assert.doesNotMatch(settingsSource, /\.ae-mcp[\\/]zcode-key/);
+  assert.doesNotMatch(channelsSource, /\.ae-mcp[\\/]zcode-key/);
+  assert.doesNotMatch(errorsSource, /\.ae-mcp[\\/]zcode-key/);
 });

@@ -54,6 +54,43 @@ test('route selects one scoped profile and never forwards local route auth', asy
   }
 });
 
+test('/models rejects encoded credential reflections in body and response headers', async () => {
+  const secret = 'opaque-provider-secret';
+  const upstream = http.createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      res.writeHead(200, {
+        'content-type': 'application/json',
+        'x-request-id': 'opaque%2dprovider%2dsecret',
+      });
+      res.end('{"object":"list","data":[{"id":"opaque\\u002dprovider-secret"}]}');
+    });
+  });
+  const port = await listen(upstream);
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const route = routeFixture({
+    provider: providerFixture({ baseUrl }),
+    resolveRequestProfile: async () => resolvedModelProfile({
+      baseUrl,
+      auth: { kind: 'header', name: 'x-api-key', value: secret },
+    }),
+  });
+  try {
+    const local = await route.start();
+    const result = await requestText(local.baseUrl + '/models', {
+      headers: routeHeaders(local.routeToken),
+    });
+    assert.equal(result.status, 502);
+    assert.equal(result.headers['x-request-id'], undefined);
+    assert.equal(result.body.includes(secret), false);
+    assert.equal(result.body.includes('opaque%2dprovider%2dsecret'), false);
+    assert.equal(JSON.parse(result.body).error.code, 'provider_model_metadata_rejected');
+  } finally {
+    await route.close();
+    await closeServer(upstream);
+  }
+});
+
 test('invalid custom auth names fail before secret resolution or upstream creation', async () => {
   const counts = { resolve: 0, upstream: 0 };
   const secretRef = { kind: 'secret', reference: 'aemcp-secret://provider/5eb75f05-5d9e-5d9c-85af-f0893e8b90c2/auth-model-a/v1', revision: 1 };

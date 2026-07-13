@@ -1,5 +1,6 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
 import { claudeChannelEnv } from '../lib/claudeChannel.js';
+import { createDeltaRedactor, redactValue } from '../lib/exactSecretRedaction.js';
 import { selectProviderRoute } from '../lib/providerRouteSelection.js';
 import { createPlatformAdapter } from './platform/index.js';
 import { createUniversalProviderRoute } from './universalProviderRoute.js';
@@ -75,6 +76,7 @@ export function createClaudeAgentBackend({
   getEffort,
   getThinking,
   getChannel = () => 'subscription',
+  getProviderSensitiveValues = () => [],
   resolveApiProvider,
   resolveRequestProfile,
   resolveCapability = defaultResolveCapability,
@@ -108,9 +110,35 @@ export function createClaudeAgentBackend({
   let providerRoute = null;
   let routeClosePromise = Promise.resolve();
   let runtimeGeneration = 0;
+  let providerSensitiveValues = [];
+  let providerDeltaPhase = undefined;
+  let providerDeltaRedactor = createDeltaRedactor([], () => {});
 
   function emit(evt) {
-    if (onEvent) onEvent(evt);
+    if (onEvent) onEvent(redactValue(evt, providerSensitiveValues));
+  }
+
+  function resetProviderDeltaRedactor() {
+    providerDeltaRedactor.discard();
+    providerDeltaPhase = undefined;
+    providerDeltaRedactor = createDeltaRedactor(providerSensitiveValues, (text) => {
+      activeAssistantText += text;
+      emit({ type: 'text-delta', text, ...(providerDeltaPhase ? { phase: providerDeltaPhase } : {}) });
+    });
+  }
+
+  function setProviderSensitiveValues(values) {
+    providerSensitiveValues = Array.from(new Set((values || [])
+      .filter((value) => typeof value === 'string' && value)))
+      .sort((left, right) => right.length - left.length);
+    resetProviderDeltaRedactor();
+  }
+
+  function clearProviderSensitiveValues() {
+    providerDeltaRedactor.discard();
+    providerSensitiveValues = [];
+    providerDeltaPhase = undefined;
+    providerDeltaRedactor = createDeltaRedactor([], () => {});
   }
 
   function writeMessage(message) {
@@ -140,7 +168,14 @@ export function createClaudeAgentBackend({
     if (processChannel === 'api' && event.type === 'error') {
       event = { ...event, message: 'Provider sidecar request failed.' };
     }
-    if (event.type === 'text-delta') activeAssistantText += String(event.text || '');
+    if (event.type === 'text-delta') {
+      const nextPhase = typeof event.phase === 'string' ? event.phase : undefined;
+      if (providerDeltaPhase !== undefined && providerDeltaPhase !== nextPhase) providerDeltaRedactor.flush();
+      providerDeltaPhase = nextPhase;
+      providerDeltaRedactor.feed(String(event.text || ''));
+      return;
+    }
+    providerDeltaRedactor.flush();
     emit(event);
     if (event.type === 'turn-end') {
       transcript.push({ role: 'assistant', text: activeAssistantText });
@@ -190,6 +225,7 @@ export function createClaudeAgentBackend({
     if (clearTranscript) transcript = [];
     if (finishRun) finishActive();
     if (clearStderr) stderrTail = '';
+    clearProviderSensitiveValues();
     await closeProviderRoute();
   }
 
@@ -214,14 +250,17 @@ export function createClaudeAgentBackend({
     if (!wasReady && rejectReady) {
       clearReadyWait();
       processChannel = 'subscription';
+      clearProviderSensitiveValues();
       rejectReady(new Error('sidecar exited: ' + detail));
       return;
     }
     if (activeRun) {
+      providerDeltaRedactor.flush();
       emit({ type: 'error', kind: 'mcp', message: apiSafeErrorMessage('sidecar exited: ' + detail) });
       finishActive();
     }
     processChannel = 'subscription';
+    clearProviderSensitiveValues();
   }
 
   function handleProcError(target, generation, error) {
@@ -239,15 +278,18 @@ export function createClaudeAgentBackend({
     if (rejectReady) {
       clearReadyWait();
       processChannel = 'subscription';
+      clearProviderSensitiveValues();
       rejectReady(error instanceof Error ? error : new Error('sidecar error'));
       return;
     }
     if (activeRun) {
       const message = error && error.message ? error.message : 'sidecar error';
+      providerDeltaRedactor.flush();
       emit({ type: 'error', kind: 'mcp', message: apiSafeErrorMessage(message) });
       finishActive();
     }
     processChannel = 'subscription';
+    clearProviderSensitiveValues();
   }
 
   async function selectApiRoute(provider, model) {
@@ -375,6 +417,7 @@ export function createClaudeAgentBackend({
     processProvider = null;
     processCandidateIdentity = null;
     clearReadyWait();
+    clearProviderSensitiveValues();
     if (current) {
       try { current.kill(); } catch {}
     }
@@ -416,6 +459,11 @@ export function createClaudeAgentBackend({
           origin: routeInfo?.origin,
           routeToken: routeInfo?.routeToken,
         };
+        const redactionValues = getProviderSensitiveValues();
+        if (!Array.isArray(redactionValues)) throw new TypeError('getProviderSensitiveValues must return an array');
+        setProviderSensitiveValues([...redactionValues, routeInfo?.routeToken]);
+      } else {
+        setProviderSensitiveValues([]);
       }
       let spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), {
         channel: session.channel,
@@ -563,6 +611,7 @@ export function createClaudeAgentBackend({
     if (activeRun) return activeRun;
 
     activeAssistantText = '';
+    resetProviderDeltaRedactor();
     activeRun = new Promise((resolve) => {
       activeResolve = resolve;
     });

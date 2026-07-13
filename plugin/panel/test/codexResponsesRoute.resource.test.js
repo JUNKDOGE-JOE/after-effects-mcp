@@ -16,6 +16,7 @@ import {
 
 const TEST_LIMITS = {
   requestBodyBytes: 32,
+  responseBodyBytes: 8192,
   sseFrameBytes: 24,
   concurrent: 2,
   connectTimeoutMs: 25,
@@ -41,6 +42,7 @@ class FakeUpstreamRequest extends EventEmitter {
 test('production route limits match the locked safety contract', () => {
   assert.deepEqual(DEFAULT_ROUTE_LIMITS, {
     requestBodyBytes: 16 * 1024 * 1024,
+    responseBodyBytes: 16 * 1024 * 1024,
     sseFrameBytes: 1024 * 1024,
     concurrent: 4,
     connectTimeoutMs: 15_000,
@@ -95,7 +97,7 @@ test('route accepts the body limit and rejects one byte over before upstream cre
   }
 });
 
-test('route applies an injected body limit to non-streaming upstream responses', async () => {
+test('route applies an injected response body limit to non-streaming upstream responses', async () => {
   const upstream = http.createServer((_req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end('x'.repeat(65));
@@ -105,7 +107,7 @@ test('route applies an injected body limit to non-streaming upstream responses',
   const route = routeFixture({
     provider: providerFixture({ baseUrl }),
     resolveRequestProfile: async () => resolvedModelProfile({ baseUrl }),
-    limits: { ...TEST_LIMITS, requestBodyBytes: 64 },
+    limits: { ...TEST_LIMITS, requestBodyBytes: 64, responseBodyBytes: 64 },
   });
   try {
     const local = await route.start();
@@ -170,7 +172,7 @@ test('route maps a missing upstream response to the connect timeout and destroys
   }
 });
 
-test('route emits one SSE error when an upstream stream exceeds the idle timeout', async () => {
+test('route returns one bounded error when an upstream stream exceeds the idle timeout', async () => {
   const upstream = http.createServer((_req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/event-stream' });
     res.flushHeaders();
@@ -189,7 +191,7 @@ test('route emits one SSE error when an upstream stream exceeds the idle timeout
       headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
       body: { model: 'm', input: 'x', stream: true },
     });
-    assert.equal(result.status, 200, result.body);
+    assert.equal(result.status, 504, result.body);
     assert.equal((result.body.match(/provider_idle_timeout/g) || []).length, 1);
   } finally {
     await route.close();
@@ -225,7 +227,7 @@ test('continuous upstream bytes cannot extend the total timeout', async () => {
       headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
       body: { model: 'm', input: 'x', stream: true },
     });
-    assert.equal(result.status, 200, result.body);
+    assert.equal(result.status, 504, result.body);
     assert.equal((result.body.match(/provider_total_timeout/g) || []).length, 1);
   } finally {
     await route.close();
@@ -233,7 +235,7 @@ test('continuous upstream bytes cannot extend the total timeout', async () => {
   }
 });
 
-test('an oversized SSE frame emits one bounded error and closes upstream', async () => {
+test('an oversized SSE frame returns one bounded error and closes upstream', async () => {
   const upstream = http.createServer((_req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/event-stream' });
     res.end(`data: ${'x'.repeat(19)}\n\n`);
@@ -252,8 +254,8 @@ test('an oversized SSE frame emits one bounded error and closes upstream', async
       headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
       body: { model: 'm', input: 'x', stream: true },
     });
-    assert.equal(result.status, 200);
-    assert.equal((result.body.match(/upstream_sse_frame_too_large/g) || []).length, 1);
+    assert.equal(result.status, 502);
+    assert.equal((result.body.match(/provider_stream_frame_too_large/g) || []).length, 1);
   } finally {
     await route.close();
     await closeServer(upstream);

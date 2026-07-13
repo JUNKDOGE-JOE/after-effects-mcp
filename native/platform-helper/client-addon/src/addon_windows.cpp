@@ -2,16 +2,19 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <bcrypt.h>
 
 #include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <cwctype>
 #include <limits>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace aemcp::platform_helper {
 namespace {
@@ -45,6 +48,175 @@ class ScopedHandle final {
  private:
   HANDLE handle_;
 };
+
+class ScopedAlgorithm final {
+ public:
+  explicit ScopedAlgorithm(BCRYPT_ALG_HANDLE value) : value_(value) {}
+  ~ScopedAlgorithm() {
+    if (value_ != nullptr) BCryptCloseAlgorithmProvider(value_, 0);
+  }
+  ScopedAlgorithm(const ScopedAlgorithm&) = delete;
+  ScopedAlgorithm& operator=(const ScopedAlgorithm&) = delete;
+  BCRYPT_ALG_HANDLE get() const { return value_; }
+
+ private:
+  BCRYPT_ALG_HANDLE value_{};
+};
+
+class ScopedHash final {
+ public:
+  explicit ScopedHash(BCRYPT_HASH_HANDLE value) : value_(value) {}
+  ~ScopedHash() {
+    if (value_ != nullptr) BCryptDestroyHash(value_);
+  }
+  ScopedHash(const ScopedHash&) = delete;
+  ScopedHash& operator=(const ScopedHash&) = delete;
+  BCRYPT_HASH_HANDLE get() const { return value_; }
+
+ private:
+  BCRYPT_HASH_HANDLE value_{};
+};
+
+std::wstring FromUtf8(const std::string& value) {
+  if (value.empty()) throw std::runtime_error("platform helper server identity is invalid");
+  const int size = MultiByteToWideChar(
+      CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), static_cast<int>(value.size()), nullptr, 0);
+  if (size <= 0) throw std::runtime_error("platform helper server identity is invalid");
+  std::wstring result(size, L'\0');
+  if (MultiByteToWideChar(
+          CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), static_cast<int>(value.size()),
+          result.data(), size) != size) {
+    throw std::runtime_error("platform helper server identity is invalid");
+  }
+  return result;
+}
+
+std::wstring Lower(std::wstring value) {
+  std::transform(value.begin(), value.end(), value.begin(), [](wchar_t character) {
+    return static_cast<wchar_t>(std::towlower(character));
+  });
+  return value;
+}
+
+std::wstring CanonicalFilePath(const std::wstring& path) {
+  ScopedHandle file(CreateFileW(
+      path.c_str(), FILE_READ_ATTRIBUTES,
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+      nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+  if (file.get() == INVALID_HANDLE_VALUE) throw Win32Error("helper identity file open");
+  const DWORD required = GetFinalPathNameByHandleW(
+      file.get(), nullptr, 0, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+  if (required == 0 || required > 32768) throw Win32Error("helper identity path query");
+  std::vector<wchar_t> buffer(static_cast<std::size_t>(required) + 1, L'\0');
+  const DWORD copied = GetFinalPathNameByHandleW(
+      file.get(), buffer.data(), static_cast<DWORD>(buffer.size()),
+      FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+  if (copied == 0 || copied >= buffer.size()) throw Win32Error("helper identity path query");
+  std::wstring result(buffer.data(), copied);
+  if (result.starts_with(LR"(\\?\UNC\)")) result = LR"(\\)" + result.substr(8);
+  else if (result.starts_with(LR"(\\?\)")) result = result.substr(4);
+  return Lower(result);
+}
+
+std::array<std::uint8_t, 32> ParseSha256(const std::string& value) {
+  if (value.size() != 64) throw std::runtime_error("platform helper server identity is invalid");
+  auto hex = [](char character) -> int {
+    if (character >= '0' && character <= '9') return character - '0';
+    if (character >= 'a' && character <= 'f') return character - 'a' + 10;
+    if (character >= 'A' && character <= 'F') return character - 'A' + 10;
+    return -1;
+  };
+  std::array<std::uint8_t, 32> result{};
+  for (std::size_t index = 0; index < result.size(); ++index) {
+    const int high = hex(value[index * 2]);
+    const int low = hex(value[index * 2 + 1]);
+    if (high < 0 || low < 0) throw std::runtime_error("platform helper server identity is invalid");
+    result[index] = static_cast<std::uint8_t>((high << 4) | low);
+  }
+  return result;
+}
+
+std::array<std::uint8_t, 32> Sha256File(const std::wstring& path) {
+  ScopedHandle file(CreateFileW(
+      path.c_str(), GENERIC_READ,
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+      nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
+  if (file.get() == INVALID_HANDLE_VALUE) throw Win32Error("helper identity hash open");
+
+  BCRYPT_ALG_HANDLE raw_algorithm{};
+  if (BCryptOpenAlgorithmProvider(&raw_algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0) < 0) {
+    throw std::runtime_error("platform helper server identity verification failed");
+  }
+  ScopedAlgorithm algorithm(raw_algorithm);
+  DWORD object_size = 0;
+  DWORD copied = 0;
+  if (BCryptGetProperty(
+          algorithm.get(), BCRYPT_OBJECT_LENGTH,
+          reinterpret_cast<PUCHAR>(&object_size), sizeof(object_size), &copied, 0) < 0
+      || object_size == 0) {
+    throw std::runtime_error("platform helper server identity verification failed");
+  }
+  std::vector<std::uint8_t> hash_object(object_size);
+  BCRYPT_HASH_HANDLE raw_hash{};
+  if (BCryptCreateHash(
+          algorithm.get(), &raw_hash, hash_object.data(), object_size,
+          nullptr, 0, 0) < 0) {
+    throw std::runtime_error("platform helper server identity verification failed");
+  }
+  ScopedHash hash(raw_hash);
+  std::array<std::uint8_t, 64 * 1024> buffer{};
+  for (;;) {
+    DWORD read = 0;
+    if (!ReadFile(file.get(), buffer.data(), static_cast<DWORD>(buffer.size()), &read, nullptr)) {
+      throw Win32Error("helper identity hash read");
+    }
+    if (read == 0) break;
+    if (BCryptHashData(hash.get(), buffer.data(), read, 0) < 0) {
+      throw std::runtime_error("platform helper server identity verification failed");
+    }
+  }
+  std::array<std::uint8_t, 32> digest{};
+  if (BCryptFinishHash(hash.get(), digest.data(), static_cast<ULONG>(digest.size()), 0) < 0) {
+    throw std::runtime_error("platform helper server identity verification failed");
+  }
+  return digest;
+}
+
+std::wstring ProcessImagePath(HANDLE process) {
+  std::wstring path(32768, L'\0');
+  DWORD size = static_cast<DWORD>(path.size());
+  if (!QueryFullProcessImageNameW(process, 0, path.data(), &size) || size == 0) {
+    throw Win32Error("named-pipe server image query");
+  }
+  path.resize(size);
+  return path;
+}
+
+void AuthenticateServer(
+    HANDLE pipe,
+    const PlatformTransportOptions& options) {
+  const std::wstring expected_path = FromUtf8(options.expected_server_path);
+  const auto expected_hash = ParseSha256(options.expected_server_sha256);
+  DWORD process_id = 0;
+  if (!GetNamedPipeServerProcessId(pipe, &process_id) || process_id == 0) {
+    throw Win32Error("named-pipe server identity query");
+  }
+  ScopedHandle process(OpenProcess(
+      PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, process_id));
+  if (process.get() == nullptr) throw Win32Error("named-pipe server process open");
+  FILETIME created{}, exited{}, kernel{}, user{};
+  if (!GetProcessTimes(process.get(), &created, &exited, &kernel, &user)
+      || (created.dwLowDateTime == 0 && created.dwHighDateTime == 0)
+      || WaitForSingleObject(process.get(), 0) != WAIT_TIMEOUT) {
+    throw std::runtime_error("platform helper server identity verification failed");
+  }
+  const std::wstring process_path = CanonicalFilePath(ProcessImagePath(process.get()));
+  if (process_path != CanonicalFilePath(expected_path)
+      || Sha256File(process_path) != expected_hash
+      || WaitForSingleObject(process.get(), 0) != WAIT_TIMEOUT) {
+    throw std::runtime_error("platform helper server identity verification failed");
+  }
+}
 
 DWORD RemainingWaitMilliseconds(const RequestDeadline& deadline) {
   const auto now = std::chrono::steady_clock::now();
@@ -149,7 +321,7 @@ void ReadExact(
 
 class WindowsTransport final : public PlatformTransport {
  public:
-  WindowsTransport() {
+  explicit WindowsTransport(const PlatformTransportOptions& options) {
     handle_ = CreateFileW(
         kPipeName,
         GENERIC_READ | GENERIC_WRITE,
@@ -159,12 +331,16 @@ class WindowsTransport final : public PlatformTransport {
         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
         nullptr);
     if (handle_ == INVALID_HANDLE_VALUE) throw Win32Error("named-pipe connection");
-    DWORD mode = PIPE_READMODE_BYTE;
-    if (!SetNamedPipeHandleState(handle_, &mode, nullptr, nullptr)) {
-      const auto error = Win32Error("named-pipe mode");
+    try {
+      AuthenticateServer(handle_, options);
+      DWORD mode = PIPE_READMODE_BYTE;
+      if (!SetNamedPipeHandleState(handle_, &mode, nullptr, nullptr)) {
+        throw Win32Error("named-pipe mode");
+      }
+    } catch (...) {
       CloseHandle(handle_);
       handle_ = INVALID_HANDLE_VALUE;
-      throw error;
+      throw;
     }
   }
 
@@ -248,8 +424,9 @@ class WindowsTransport final : public PlatformTransport {
 
 }  // namespace
 
-std::shared_ptr<PlatformTransport> CreatePlatformTransport() {
-  return std::make_shared<WindowsTransport>();
+std::shared_ptr<PlatformTransport> CreatePlatformTransport(
+    const PlatformTransportOptions& options) {
+  return std::make_shared<WindowsTransport>(options);
 }
 
 }  // namespace aemcp::platform_helper

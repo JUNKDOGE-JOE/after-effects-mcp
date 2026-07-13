@@ -385,6 +385,7 @@ def default_tool_service() -> ToolLibraryService:
         legacy = LegacySkillAdapter(
             skill_store=skill_store,
             metadata_store=LegacyMetadataStore(root / "legacy-metadata.json"),
+            scanner=scanner,
         )
         store = _ToolArtifactStoreView(native, legacy)
         execution = ToolExecutionEngine(

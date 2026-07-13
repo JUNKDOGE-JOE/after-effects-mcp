@@ -107,7 +107,8 @@ class MacTransport final : public PlatformTransport {
 
 }  // namespace
 
-std::shared_ptr<PlatformTransport> CreatePlatformTransport() {
+std::shared_ptr<PlatformTransport> CreatePlatformTransport(
+    const PlatformTransportOptions&) {
   return std::make_shared<MacTransport>();
 }
 

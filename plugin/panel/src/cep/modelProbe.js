@@ -1,6 +1,9 @@
 import { validateProviderBaseUrl } from '../lib/providerProfile.js';
 import { buildProtocolAuthCandidates } from '../lib/providerProbeAuth.js';
 import { buildProviderEndpointCandidates } from '../lib/providerUrl.js';
+import { containsExactSecret } from '../lib/exactSecretRedaction.js';
+
+const MAX_MODELS_RESPONSE_BYTES = 512 * 1024;
 
 function getCepRequire() {
   if (globalThis.window?.cep_node?.require) return globalThis.window.cep_node.require;
@@ -67,6 +70,24 @@ function networkFailure() {
   };
 }
 
+function responseTooLargeFailure() {
+  return {
+    ok: false,
+    status: 0,
+    models: [],
+    detail: 'Provider model response exceeded size limit',
+  };
+}
+
+function timeoutFailure() {
+  return {
+    ok: false,
+    status: 0,
+    models: [],
+    detail: 'Provider model request timed out',
+  };
+}
+
 function resultFromResponse(status, body, sensitiveValues = []) {
   if (status !== 200) {
     return { ok: false, status, models: [], detail: 'HTTP ' + status + ' from provider' };
@@ -74,8 +95,7 @@ function resultFromResponse(status, body, sensitiveValues = []) {
   try {
     const inventory = parseProviderModelInventory(JSON.parse(body));
     const models = inventory.map(({ id, label }) => ({ id, label }));
-    const serialized = JSON.stringify(inventory);
-    if (sensitiveValues.some((value) => value && serialized.includes(value))) {
+    if (containsExactSecret(inventory, sensitiveValues)) {
       return { ok: false, status: 200, models: [], detail: 'Provider model metadata was rejected' };
     }
     return models.length
@@ -86,21 +106,39 @@ function resultFromResponse(status, body, sensitiveValues = []) {
   }
 }
 
-function requestWithTransport({ endpoint, headers, sensitiveValues, httpsImpl, timeoutMs }) {
+function requestWithTransport({
+  endpoint,
+  headers,
+  sensitiveValues,
+  httpsImpl,
+  timeoutMs,
+  responseBodyBytes,
+}) {
   let transport;
+  let BufferImpl;
   try {
     transport = httpsImpl || getCepRequire()(endpoint.protocol === 'http:' ? 'http' : 'https');
+    BufferImpl = globalThis.Buffer || getCepRequire()('buffer')?.Buffer;
+    if (!BufferImpl || typeof BufferImpl.from !== 'function' || typeof BufferImpl.concat !== 'function') {
+      throw new Error('Buffer is unavailable');
+    }
   } catch {
     return Promise.resolve(networkFailure());
   }
   return new Promise((resolve) => {
     let settled = false;
+    let req = null;
+    let activeResponse = null;
     const finish = (result) => {
       if (settled) return;
       settled = true;
       resolve(result);
     };
-    const req = transport.request({
+    const abort = () => {
+      try { activeResponse?.destroy?.(); } catch {}
+      try { req?.destroy?.(); } catch {}
+    };
+    req = transport.request({
       hostname: endpoint.hostname,
       port: endpoint.port || undefined,
       protocol: endpoint.protocol,
@@ -108,15 +146,33 @@ function requestWithTransport({ endpoint, headers, sensitiveValues, httpsImpl, t
       method: 'GET',
       headers,
     }, (res) => {
-      let body = '';
-      res.on('data', (chunk) => { body += String(chunk); });
-      res.on('end', () => finish(resultFromResponse(res.statusCode || 0, body, sensitiveValues)));
+      activeResponse = res;
+      let chunks = [];
+      let responseBytes = 0;
+      res.on('data', (chunk) => {
+        if (settled) return;
+        const bytes = BufferImpl.isBuffer?.(chunk) ? chunk : BufferImpl.from(chunk);
+        responseBytes += bytes.length;
+        if (responseBytes > responseBodyBytes) {
+          chunks = [];
+          finish(responseTooLargeFailure());
+          abort();
+          return;
+        }
+        chunks.push(bytes);
+      });
+      res.on('end', () => {
+        if (settled) return;
+        const body = BufferImpl.concat(chunks, responseBytes).toString('utf8');
+        chunks = [];
+        finish(resultFromResponse(res.statusCode || 0, body, sensitiveValues));
+      });
     });
     req.on('error', () => finish(networkFailure()));
     if (req.setTimeout) {
       req.setTimeout(timeoutMs, () => {
-        try { req.destroy(); } catch { /* timeout teardown is best effort */ }
-        finish({ ok: false, status: 0, models: [], detail: 'timeout' });
+        finish(timeoutFailure());
+        abort();
       });
     }
     req.end();
@@ -134,6 +190,7 @@ export async function probeProviderModels({
   requestImpl,
   httpsImpl,
   timeoutMs = 8000,
+  responseBodyBytes = MAX_MODELS_RESPONSE_BYTES,
 } = {}) {
   const profile = requestProfile && typeof requestProfile === 'object' ? requestProfile : null;
   const selectedBaseUrl = profile ? profile.baseUrl : baseUrl;
@@ -215,6 +272,9 @@ export async function probeProviderModels({
           sensitiveValues,
           httpsImpl,
           timeoutMs,
+          responseBodyBytes: Number.isSafeInteger(responseBodyBytes) && responseBodyBytes > 0
+            ? responseBodyBytes
+            : MAX_MODELS_RESPONSE_BYTES,
         });
       }
       lastResult = {

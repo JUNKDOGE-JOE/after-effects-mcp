@@ -1,4 +1,10 @@
 const RFC_TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+import {
+  isCredentialShapedProviderLiteral,
+  isForbiddenProviderHeaderName,
+  isSensitiveProviderHeaderName,
+} from './providerHeaderPolicy.js';
+
 const INBOUND_EXACT = new Set([
   'accept',
   'content-type',
@@ -18,22 +24,6 @@ const LOCAL_ONLY = new Set([
   'connection',
   'transfer-encoding',
 ]);
-const FORBIDDEN_EXACT = new Set([
-  'host',
-  'content-length',
-  'connection',
-  'transfer-encoding',
-  'upgrade',
-  'keep-alive',
-  'te',
-  'trailer',
-  'expect',
-  'cookie',
-  'set-cookie',
-  'forwarded',
-  'proxy-authorization',
-  'proxy-authenticate',
-]);
 const RESPONSE_EXACT = new Set([
   'content-type',
   'cache-control',
@@ -44,8 +34,6 @@ const RESPONSE_EXACT = new Set([
   'x-goog-request-id',
   'x-amzn-requestid',
 ]);
-const SENSITIVE_HEADER_NAME = /(?:^|[-_])(?:authorization|api[-_]?key|token|secret|password)(?:$|[-_])/i;
-const SECRET_LIKE_LITERAL = /^(?:Bearer\s+\S+|Basic\s+\S+|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,})$/;
 const JSON_MEDIA_TYPE = /^application\/(?:json|[!#$%&'*+.^_`|~0-9A-Za-z-]+\+json)(?:\s*;\s*charset=utf-8)?$/i;
 const DEFAULT_LIMITS = Object.freeze({ maxValueBytes: 8 * 1024, maxTotalBytes: 32 * 1024, maxCount: 64 });
 
@@ -67,12 +55,7 @@ function resolvedLimits(limits = {}) {
 }
 
 function isForbiddenName(name) {
-  return FORBIDDEN_EXACT.has(name)
-    || name.startsWith('x-forwarded-')
-    || name.startsWith('proxy-')
-    || name.startsWith('sec-')
-    || name.startsWith('x-ae-mcp-route-')
-    || name === 'x-ae-mcp-route-token';
+  return isForbiddenProviderHeaderName(name);
 }
 
 function validatesInboundName(name) {
@@ -133,7 +116,7 @@ export function collectCodexHeaders(rawHeaders = [], limits = {}) {
     if (LOCAL_ONLY.has(name)) continue;
     if (isForbiddenName(name)) throw headerError('provider_header_forbidden', 'Provider header is forbidden.');
     if (!validatesInboundName(name)) continue;
-    if (SENSITIVE_HEADER_NAME.test(name)) {
+    if (isSensitiveProviderHeaderName(name)) {
       throw headerError('provider_header_forbidden', 'Provider header is forbidden.');
     }
     if (name === 'content-type') validateContentType(value);
@@ -159,7 +142,7 @@ function validateProviderHeaders(providerHeaders, authName, limits) {
     if (isForbiddenName(name) || name === 'authorization' || name === 'x-api-key' || name === authName) {
       throw headerError('provider_header_forbidden', 'Provider header is reserved.');
     }
-    if (source !== 'secret' && (SENSITIVE_HEADER_NAME.test(name) || SECRET_LIKE_LITERAL.test(value))) {
+    if (source !== 'secret' && (isSensitiveProviderHeaderName(name) || isCredentialShapedProviderLiteral(value))) {
       throw headerError('provider_header_secret_reference_required', 'Provider header requires a secret reference.');
     }
     if (name === 'content-type') validateContentType(value);

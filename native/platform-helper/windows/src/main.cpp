@@ -808,7 +808,7 @@ int RunService() {
 
   for (;;) {
     ScopedHandle pipe(CreateNamedPipeW(
-        kPipeName, PIPE_ACCESS_DUPLEX,
+        kPipeName, PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
         PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
         1, kMaximumMessageBytes + 4, kMaximumMessageBytes + 4, 0, &security));
     if (!pipe) return 70;

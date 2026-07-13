@@ -116,7 +116,13 @@ function verifyWindowsPayload(addonPath, input) {
             throw repairRequired('platform helper payload verification failed');
         }
     }
-    return path.join(helperRoot, ...manifest.entrypoints.helper.split('/'));
+    const helperRecord = files.find(function (record) {
+        return record.path === manifest.entrypoints.helper;
+    });
+    return Object.freeze({
+        path: path.join(helperRoot, ...manifest.entrypoints.helper.split('/')),
+        sha256: helperRecord.sha256.toLowerCase(),
+    });
 }
 
 function positiveDelay(value, fallback, name) {
@@ -154,11 +160,15 @@ function createPlatformHelperTransport(options) {
         return new Promise(function (resolve) { setTimeout(resolve, milliseconds); });
     };
 
-    let helperPath = null;
+    let helperIdentity = null;
     if (platformId === 'windows-x64') {
         const verifyPayload = input.verifyWindowsPayload || verifyWindowsPayload;
-        helperPath = verifyPayload(addonPath, input);
-        if (typeof helperPath !== 'string' || helperPath.length === 0) {
+        helperIdentity = verifyPayload(addonPath, input);
+        if (!helperIdentity
+            || typeof helperIdentity.path !== 'string'
+            || helperIdentity.path.length === 0
+            || typeof helperIdentity.sha256 !== 'string'
+            || !/^[0-9a-f]{64}$/i.test(helperIdentity.sha256)) {
             throw repairRequired('platform helper payload verifier returned an invalid entrypoint');
         }
     }
@@ -179,7 +189,12 @@ function createPlatformHelperTransport(options) {
     let closed = false;
 
     function openNativeTransport() {
-        const opened = addon.createTransport();
+        const opened = platformId === 'windows-x64'
+            ? addon.createTransport({
+                expectedServerPath: helperIdentity.path,
+                expectedServerSha256: helperIdentity.sha256,
+            })
+            : addon.createTransport();
         if (!validNativeTransport(opened)) {
             try {
                 if (opened && typeof opened.close === 'function') opened.close();
@@ -209,7 +224,7 @@ function createPlatformHelperTransport(options) {
         let childError = null;
         let childExitCode = null;
         try {
-            child = spawnHelper(helperPath);
+            child = spawnHelper(helperIdentity.path);
             if (!child || typeof child !== 'object') {
                 throw new TypeError('platform helper launcher returned an invalid child process');
             }

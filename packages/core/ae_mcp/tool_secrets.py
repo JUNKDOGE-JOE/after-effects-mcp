@@ -94,6 +94,180 @@ _PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
 )
 
+_CREDENTIAL_FIELDS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        "credential-header",
+        re.compile(
+            r"^[ \t]*(?P<name>[!#$%&'*+.^_`|~0-9A-Za-z-]+)[ \t]*:[ \t]*(?P<value>[^\s\r\n][^\r\n]*)$",
+            re.MULTILINE,
+        ),
+    ),
+    (
+        "credential-assignment",
+        re.compile(
+            r"(?<![A-Za-z0-9_.-])['\"]?(?P<name>[A-Za-z][A-Za-z0-9_.-]*)['\"]?[ \t]*[:=][ \t]*(?P<value>['\"][^'\"\r\n]+['\"]|[^'\"\s,;&{}\[\]]+)",
+            re.MULTILINE,
+        ),
+    ),
+)
+
+_SENSITIVE_KEY_SEGMENTS = frozenset(
+    {
+        "apikey",
+        "auth",
+        "authentication",
+        "authorization",
+        "cookie",
+        "credential",
+        "credentials",
+        "key",
+        "oauth",
+        "passwd",
+        "password",
+        "secret",
+        "session",
+        "signature",
+        "token",
+    }
+)
+
+_STRONG_SENSITIVE_FRAGMENTS = (
+    "apikey",
+    "auth",
+    "cookie",
+    "credential",
+    "oauth",
+    "passwd",
+    "password",
+    "secret",
+    "session",
+    "signature",
+    "token",
+)
+
+_KEY_SUFFIX_PREFIXES = frozenset(
+    {
+        "api",
+        "access",
+        "client",
+        "credential",
+        "private",
+        "provider",
+        "public",
+        "secret",
+        "x",
+    }
+)
+
+_SCHEMA_ONLY_KEYS = frozenset(
+    {
+        "$comment",
+        "$ref",
+        "deprecated",
+        "description",
+        "format",
+        "readOnly",
+        "title",
+        "type",
+        "writeOnly",
+    }
+)
+
+_JSON_SCHEMA_TYPES = frozenset(
+    {"array", "boolean", "integer", "null", "number", "object", "string"}
+)
+
+
+def _sensitive_name(value: str) -> bool:
+    raw = value.strip()
+    if not raw:
+        return False
+    separated = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", raw)
+    separated = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", separated)
+    segments = tuple(
+        segment
+        for segment in re.split(r"[^a-z0-9]+", separated.lower())
+        if segment
+    )
+    if any(segment in _SENSITIVE_KEY_SEGMENTS for segment in segments):
+        return True
+    compact = re.sub(r"[^a-z0-9]+", "", raw.lower())
+    if any(fragment in compact for fragment in _STRONG_SENSITIVE_FRAGMENTS):
+        return True
+    if not compact.endswith("key"):
+        return False
+    prefix = compact[:-3]
+    return prefix in _KEY_SUFFIX_PREFIXES or any(
+        prefix.endswith(candidate) for candidate in _KEY_SUFFIX_PREFIXES
+    )
+
+
+def _schema_only_object(value: dict[str, JsonValue]) -> bool:
+    keys = set(value)
+    return (
+        bool(keys)
+        and keys <= _SCHEMA_ONLY_KEYS
+        and value.get("type") in _JSON_SCHEMA_TYPES
+    )
+
+
+def _contains_credential_payload(value: JsonValue) -> bool:
+    if isinstance(value, str):
+        return bool(value)
+    if isinstance(value, list):
+        return any(_contains_credential_payload(item) for item in value)
+    if isinstance(value, dict):
+        if _schema_only_object(value):
+            return False
+        return any(_contains_credential_payload(item) for item in value.values())
+    return value is not None
+
+
+def _json_key_findings(name: str, value: JsonValue) -> tuple[SecretFinding, ...]:
+    findings: list[SecretFinding] = []
+
+    def visit(current: JsonValue) -> None:
+        if isinstance(current, dict):
+            for key, item in current.items():
+                if (
+                    isinstance(key, str)
+                    and _sensitive_name(key)
+                    and _contains_credential_payload(item)
+                ):
+                    findings.append(
+                        SecretFinding(
+                            kind="credential-key",
+                            file=name,
+                            line=1,
+                            column=1,
+                        )
+                    )
+                visit(item)
+        elif isinstance(current, list):
+            for item in current:
+                visit(item)
+
+    visit(value)
+    return tuple(findings)
+
+
+def _json_string_values(value: JsonValue) -> tuple[str, ...]:
+    strings: list[str] = []
+
+    def visit(current: JsonValue) -> None:
+        if isinstance(current, str):
+            if current:
+                strings.append(current)
+        elif isinstance(current, dict):
+            for item in current.values():
+                visit(item)
+        elif isinstance(current, list):
+            for item in current:
+                visit(item)
+
+    visit(value)
+    return tuple(strings)
+
 
 def _position(text: str, offset: int) -> tuple[int, int]:
     line = text.count("\n", 0, offset) + 1
@@ -132,6 +306,19 @@ class RegexSecretScanner:
                 findings.append(
                     SecretFinding(kind=kind, file=name, line=line, column=column)
                 )
+        for kind, pattern in _CREDENTIAL_FIELDS:
+            for match in pattern.finditer(text):
+                if not _sensitive_name(match.group("name")):
+                    continue
+                offset = match.start("name")
+                key = (kind, offset)
+                if key in seen:
+                    continue
+                seen.add(key)
+                line, column = _position(text, offset)
+                findings.append(
+                    SecretFinding(kind=kind, file=name, line=line, column=column)
+                )
         findings.sort(key=lambda item: (item.line, item.column, item.kind))
         return tuple(findings)
 
@@ -150,7 +337,20 @@ class RegexSecretScanner:
             data = b""
         if serialization_failed:
             raise SecretScanError("scan value must be finite JSON")
-        return self.scan_bytes(name, data)
+        findings = list(self.scan_bytes(name, data))
+        for string_value in _json_string_values(value):
+            findings.extend(self.scan_bytes(name, string_value.encode("utf-8")))
+        findings.extend(_json_key_findings(name, value))
+        unique = {
+            (finding.kind, finding.file, finding.line, finding.column): finding
+            for finding in findings
+        }
+        return tuple(
+            sorted(
+                unique.values(),
+                key=lambda item: (item.line, item.column, item.kind),
+            )
+        )
 
 
 def require_secret_free(
@@ -171,6 +371,24 @@ def require_secret_free(
         )
 
 
+def require_secret_free_json(
+    scanner: SecretScanner, *, name: str, value: JsonValue
+) -> None:
+    scan_failed = False
+    try:
+        findings = scanner.scan_json(name, value)
+    except Exception:
+        scan_failed = True
+        findings = ()
+    if scan_failed:
+        raise SecretScanError("secret scanner failed closed")
+    if findings:
+        kinds = ",".join(sorted({finding.kind for finding in findings}))
+        raise SecretDetectedError(
+            f"secret-shaped content detected ({len(findings)} finding(s); types={kinds})"
+        )
+
+
 __all__ = [
     "MAX_SCAN_BYTES",
     "RegexSecretScanner",
@@ -179,4 +397,5 @@ __all__ = [
     "SecretScanError",
     "SecretScanner",
     "require_secret_free",
+    "require_secret_free_json",
 ]

@@ -691,6 +691,10 @@ jobs:
           node scripts/package/build-platform-helper.mjs `
             --platform windows-x64 `
             --out build/helper/windows-x64
+          $env:AE_MCP_WINDOWS_ADDON_PATH = Join-Path $env:GITHUB_WORKSPACE 'build\helper\windows-x64\lib\ae-mcp-platform-helper-transport.node'
+          $env:AE_MCP_WINDOWS_HELPER_PATH = Join-Path $env:GITHUB_WORKSPACE 'build\helper\windows-x64\bin\ae-mcp-platform-helper.exe'
+          node --test native/platform-helper/windows/Tests/platform-helper-addon-live.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Windows Platform Helper live identity test failed' }
           $bundledNode = Join-Path $env:GITHUB_WORKSPACE 'build\runtime\windows-x64\node\node.exe'
           if ((& $bundledNode --version) -notmatch '^v24\.') { throw 'bundled Node must be v24' }
           (Join-Path $env:GITHUB_WORKSPACE 'build\runtime\windows-x64\node') >> $env:GITHUB_PATH

@@ -500,6 +500,35 @@ test('api channel exposes only the loopback route token to the sidecar', async (
   assert.equal(routeFactory.routes[0].closeCalls, 1);
 });
 
+test('api channel redacts reflected Provider credentials split across sidecar deltas', async () => {
+  const secret = 'opaque-provider-credential';
+  const routeFactory = makeProviderRouteFactory();
+  const { backend, events, spawned } = makeBackend({
+    getChannel: () => 'api',
+    getProviderSensitiveValues: () => [secret],
+    resolveApiProvider: async () => makeApiProvider(),
+    resolveRequestProfile: async () => ({
+      providerId: 'provider-1',
+      baseUrl: 'https://provider.example/root',
+      auth: { kind: 'header', name: 'x-api-key', value: secret },
+    }),
+    createProviderRoute: routeFactory.create,
+  });
+  const run = backend.sendUser('safe text');
+  await flush();
+  const proc = spawned.procs[0];
+  proc.pushStdout({ t: 'ready' });
+  await flush();
+  proc.pushStdout({ t: 'event', event: { type: 'text-delta', text: 'opaque-provider-' } });
+  proc.pushStdout({ t: 'event', event: { type: 'text-delta', text: 'credential' } });
+  proc.pushStdout({ t: 'event', event: { type: 'turn-end', stopReason: 'end_turn' } });
+  await run;
+
+  const rendered = JSON.stringify({ events, messages: backend.getMessages() });
+  assert.equal(rendered.includes(secret), false);
+  assert.match(rendered, /\[redacted\]/);
+});
+
 test('api needs-probe route recovers once before spawn and uses the recovered provider identity', async () => {
   const candidate = makeApiProvider();
   const recovered = makeApiProvider({

@@ -6,7 +6,9 @@ import {
 import { LOCAL_ROUTE_TOKEN_HEADER } from '../lib/providerHeaders.js';
 import { selectProviderRoute } from '../lib/providerRouteSelection.js';
 import {
+  containsExactSecret,
   createDeltaRedactor,
+  redactText,
   redactValue,
 } from '../lib/exactSecretRedaction.js';
 import { PANEL_VERSION } from './mcpClient.js';
@@ -257,6 +259,7 @@ export function createCodexBackend({
   getServerInstructions = () => '',
   getProviderProfile = () => null,
   getProviderCandidate = () => null,
+  getProviderSensitiveValues = () => [],
   resolveRequestProfile,
   recoverProviderProfile,
   onProviderProfileRecovered = () => {},
@@ -344,6 +347,12 @@ export function createCodexBackend({
       .sort((left, right) => right.length - left.length);
     resetProviderDeltaRedactor();
     resetProviderStderrRedactor();
+  }
+
+  function providerRedactionValues(additional = []) {
+    const values = getProviderSensitiveValues();
+    if (!Array.isArray(values)) throw new TypeError('getProviderSensitiveValues must return an array');
+    return [...values, ...additional];
   }
 
   function clearProviderSensitiveValues() {
@@ -816,7 +825,7 @@ export function createCodexBackend({
             value: routeInfo.routeToken,
           }],
         };
-        setProviderSensitiveValues([routeInfo.routeToken]);
+        setProviderSensitiveValues(providerRedactionValues([routeInfo.routeToken]));
       } else {
         setProviderSensitiveValues([]);
       }
@@ -1198,8 +1207,13 @@ export function createCodexBackend({
         models = null;
       }
       const account = accountResult && accountResult.account;
-      if (!account) return { loggedIn: false, runtimeOk: true, detail: accountResult && accountResult.requiresOpenaiAuth ? 'OpenAI auth required' : undefined, models, ...diag };
-      return {
+      const result = !account ? {
+        loggedIn: false,
+        runtimeOk: true,
+        detail: accountResult && accountResult.requiresOpenaiAuth ? 'OpenAI auth required' : undefined,
+        models,
+        ...diag,
+      } : {
         loggedIn: true,
         runtimeOk: true,
         email: account.email,
@@ -1207,8 +1221,20 @@ export function createCodexBackend({
         models,
         ...diag,
       };
+      const secrets = [...providerSensitiveValues, ...providerRedactionValues()];
+      if (containsExactSecret(result, secrets)) {
+        return { loggedIn: false, runtimeOk: false, detail: 'Provider probe metadata was rejected', ...diag };
+      }
+      return result;
     } catch (e) {
-      const detail = [e && e.message ? e.message : String(e), cliInfo.ok ? '' : cliInfo.detail].filter(Boolean).join(' | ');
+      let secrets = [...providerSensitiveValues];
+      try { secrets = [...secrets, ...providerRedactionValues()]; } catch {}
+      const detail = redactText(
+        [e && e.message ? e.message : String(e), cliInfo.ok ? '' : cliInfo.detail]
+          .filter(Boolean)
+          .join(' | '),
+        secrets,
+      );
       if (e && e.probeTimeout) {
         // The app-server process behind this probe is stuck (e.g. hung
         // upstream RPC). Kill this specific spawned process so it doesn't

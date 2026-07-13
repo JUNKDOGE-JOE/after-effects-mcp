@@ -29,6 +29,7 @@ USER_ID = "user:12345678-1234-5678-9234-567812345678"
 
 
 def artifact_wire(**overrides: Any) -> dict[str, Any]:
+    sensitive_source = bool(overrides.pop("_sensitive_source", False))
     content = overrides.pop("content", "return 1;")
     args_schema = overrides.pop("argsSchema", {})
     kind = overrides.pop("kind", "jsx")
@@ -44,13 +45,21 @@ def artifact_wire(**overrides: Any) -> dict[str, Any]:
         "declaredRisk": "write",
         "source": {
             "type": "user",
-            "ref": "/Users/person/private/provider-config.json",
-            "client": "private-client",
+            "ref": (
+                "/Users/person/private/provider-config.json"
+                if sensitive_source
+                else "manual"
+            ),
+            "client": "private-client" if sensitive_source else None,
             "productVersion": "0.9.1",
-            "provenance": {
-                "provider": "private-provider-shape",
-                "Authorization": "do-not-export",
-            },
+            "provenance": (
+                {
+                    "provider": "private-provider-shape",
+                    "Authorization": "do-not-export",
+                }
+                if sensitive_source
+                else {}
+            ),
         },
         "status": "saved",
         "verified": False,
@@ -270,7 +279,7 @@ def package_manager(tmp_path: Path):
 
 @pytest.fixture
 def saved_artifact() -> ToolArtifact:
-    return ToolArtifact.from_dict(artifact_wire())
+    return ToolArtifact.from_dict(artifact_wire(_sensitive_source=True))
 
 
 @pytest.mark.parametrize(
@@ -601,6 +610,52 @@ def test_scanner_findings_are_redacted_and_scanner_exceptions_fail_closed(
         failing_manager.preview_import(package)
     assert scanner_error.value.code == "SECRET_SCANNER_UNAVAILABLE"
     assert "leaked-secret-value" not in str(scanner_error.value)
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("X-Custom-Token", "opaque-custom-token"),
+        ("client_secret", "opaque-client-secret"),
+        ("password", "opaque-password"),
+    ],
+)
+def test_import_rejects_credential_named_values_without_known_prefixes(
+    package_manager: ToolPackageManager,
+    tmp_path: Path,
+    name: str,
+    value: str,
+) -> None:
+    wire = artifact_wire()
+    wire["source"]["provenance"] = {name: value}
+    package = package_from_wires(tmp_path / f"{name}.aemcptools", [wire])
+    with pytest.raises(ToolPackageError) as raised:
+        package_manager.preview_import(package)
+    assert raised.value.code == "SECRET_DETECTED"
+    assert value not in str(raised.value) + repr(raised.value.details)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "X-Custom-Token: opaque-custom-token",
+        "client_secret=opaque-client-secret",
+        "password='opaque-password'",
+    ],
+)
+def test_import_recursively_scans_artifact_content_strings(
+    package_manager: ToolPackageManager,
+    tmp_path: Path,
+    content: str,
+) -> None:
+    package = package_from_wires(
+        tmp_path / "content-secret.aemcptools",
+        [artifact_wire(content=content)],
+    )
+    with pytest.raises(ToolPackageError) as raised:
+        package_manager.preview_import(package)
+    assert raised.value.code == "SECRET_DETECTED"
+    assert content not in str(raised.value) + repr(raised.value.details)
 
 
 def test_round_trip_export_is_byte_deterministic_and_export_safe(

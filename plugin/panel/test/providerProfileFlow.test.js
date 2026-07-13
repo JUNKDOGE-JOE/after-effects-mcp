@@ -70,9 +70,10 @@ function providerEntry(overrides = {}) {
   };
 }
 
-function createdSecretService({ failDelete = false } = {}) {
+function createdSecretService({ failDelete = false, initialValues = [] } = {}) {
   const created = [];
   const deleted = [];
+  const redactionValues = new Set(initialValues);
   return {
     created,
     deleted,
@@ -83,8 +84,10 @@ function createdSecretService({ failDelete = false } = {}) {
         revision: 1,
       };
       created.push({ credentialId, slotPrefix, value, ref });
+      redactionValues.add(value);
       return ref;
     },
+    getRedactionValues: () => [...redactionValues],
     async delete(ref) {
       deleted.push(ref);
       if (failDelete) throw Object.assign(new Error('helper unavailable'), { code: 'SECRET_STORE_UNAVAILABLE' });
@@ -92,6 +95,62 @@ function createdSecretService({ failDelete = false } = {}) {
     },
   };
 }
+
+test('saveProviderDraft rejects exact credentials in ordinary persisted fields and rolls back new refs', async () => {
+  for (const { id, name } of [
+    { id: 'opaque-provider-secret', name: 'opaque-provider-secret' },
+    { id: 'safe-percent', name: 'opaque%2dprovider%2dsecret' },
+    { id: 'safe-mixed', name: 'opaque\\u002dprovider%2dsecret' },
+  ]) {
+    const secretService = createdSecretService();
+    let storeCalls = 0;
+    await assert.rejects(
+      saveProviderDraft({
+        draft: providerDraft({
+          id,
+          name,
+          modelAuthSecret: 'opaque-provider-secret',
+        }),
+        current: null,
+        store: {
+          readState: () => ({ revision: 0 }),
+          upsert: () => { storeCalls += 1; },
+        },
+        secretService,
+        randomUUID: () => CREDENTIAL_ID,
+      }),
+      (error) => error.code === 'provider_draft_contains_credential',
+    );
+    assert.equal(storeCalls, 0);
+    assert.deepEqual(secretService.deleted, secretService.created.map((item) => item.ref));
+  }
+});
+
+test('saveProviderDraft rejects a retained credential reused as a name or neutral literal', async () => {
+  const secret = 'opaque-retained-provider-value';
+  const current = providerEntry();
+  for (const overrides of [
+    { name: secret },
+    { headers: [{ id: 'feature', name: 'x-feature', scopes: ['model'], valueKind: 'literal', value: secret }] },
+  ]) {
+    const secretService = createdSecretService({ initialValues: [secret] });
+    let storeCalls = 0;
+    await assert.rejects(
+      saveProviderDraft({
+        draft: providerDraft({ id: current.id, ...overrides }),
+        current,
+        store: {
+          readState: () => ({ revision: 1 }),
+          upsert: () => { storeCalls += 1; },
+        },
+        secretService,
+        randomUUID: () => CREDENTIAL_ID,
+      }),
+      (error) => error.code === 'provider_draft_contains_credential',
+    );
+    assert.equal(storeCalls, 0);
+  }
+});
 
 test('saveProviderDraft deletes a newly-created secret when JSON commit fails', async () => {
   const secretService = createdSecretService();
@@ -135,6 +194,30 @@ test('saveProviderDraft commits only a secret reference and never forwards raw d
   assert.equal(JSON.stringify(result).includes('sk-provider-secret'), false);
   assert.equal(JSON.stringify(calls).includes('sk-provider-secret'), false);
   assert.deepEqual(calls[0].options, { expectedRevision: 3, pendingSecretDeletes: [] });
+});
+
+test('saveProviderDraft rejects sensitive literal and forbidden headers before creating secrets', async () => {
+  for (const header of [
+    { id: 'auth', name: 'X-Auth', scopes: ['model'], valueKind: 'literal', value: 'opaque' },
+    { id: 'camel', name: 'clientSecret', scopes: ['model'], valueKind: 'literal', value: 'opaque' },
+    { id: 'dot', name: 'auth.token', scopes: ['model'], valueKind: 'literal', value: 'opaque' },
+    { id: 'value', name: 'x-feature', scopes: ['model'], valueKind: 'literal', value: 'client_secret=opaque' },
+    { id: 'encoded', name: 'x-feature', scopes: ['model'], valueKind: 'literal', value: 'client_secret%3Dopaque' },
+    { id: 'cookie', name: 'Cookie', scopes: ['model'], valueKind: 'secret', value: 'sid=opaque' },
+  ]) {
+    const secretService = createdSecretService();
+    await assert.rejects(
+      saveProviderDraft({
+        draft: providerDraft({ modelAuthKind: 'none', headers: [header] }),
+        current: null,
+        store: { readState: () => ({ revision: 0 }), upsert: () => assert.fail('must not persist') },
+        secretService,
+        randomUUID: () => CREDENTIAL_ID,
+      }),
+      (error) => error.code === 'provider_draft_invalid',
+    );
+    assert.equal(secretService.created.length, 0);
+  }
 });
 
 test('new v3 profiles create exactly one primary credential even when legacy probe fields are present', async () => {

@@ -23,8 +23,9 @@
 
 import { createNdjsonReader } from '../lib/ndjson.js';
 import { expertGuidanceEnv } from './externalClients.js';
-import { createApiKeyStore } from './apiKey.js';
 import { localizeZcodeError } from '../lib/zcodeErrors.js';
+import { redactText, redactValue } from '../lib/exactSecretRedaction.js';
+import { isSensitiveProviderHeaderName } from '../lib/providerHeaderPolicy.js';
 import { createPlatformAdapter } from './platform/index.js';
 import {
   PLAN_SCHEMA_KEY,
@@ -484,10 +485,6 @@ function zcodeErrorKind(message) {
   return /\b(model|provider|api[-\s_]*key|credential|auth)\b/i.test(String(message || '')) ? 'model' : 'mcp';
 }
 
-function defaultReadStoredZcodeKey() {
-  try { return createApiKeyStore().readKey('zcode'); } catch (e) { return ''; }
-}
-
 export function createZcodeBackend({
   platform,
   getModel,
@@ -503,7 +500,7 @@ export function createZcodeBackend({
   readDesktopModel = readZcodeDesktopModel,
   readDesktopRuntimeModel = readZcodeDesktopRuntimeModel,
   resolveCli = resolveZcodeCli,
-  readStoredZcodeKey = defaultReadStoredZcodeKey,
+  readStoredZcodeKey = () => '',
 }) {
   const adapter = platform || createPlatformAdapter();
   let proc = null;
@@ -520,6 +517,10 @@ export function createZcodeBackend({
   let activeRun = null;
   let activeResolve = null;
   let activeAssistantText = '';
+  let environmentSecretValues = [];
+  let runtimeSecretValues = [];
+  let activeSecretValues = [];
+  let secretEpoch = 0;
   let toolMeta = { allowedTools: [], annotations: {} };
   const pendingApprovals = new Map();
   const pendingElicitations = new Map();
@@ -528,7 +529,44 @@ export function createZcodeBackend({
   const sessionAllowedPlans = new Set();
 
   function emit(evt) {
-    if (onEvent) onEvent(evt);
+    if (onEvent) onEvent(redactValue(evt, activeSecretValues));
+  }
+
+  function safeText(value) {
+    return redactText(value, activeSecretValues);
+  }
+
+  function refreshActiveSecretValues() {
+    activeSecretValues = Array.from(new Set([
+      ...environmentSecretValues,
+      ...runtimeSecretValues,
+    ])).sort((left, right) => right.length - left.length);
+    secretEpoch += 1;
+  }
+
+  function clearActiveSecretValues() {
+    environmentSecretValues = [];
+    runtimeSecretValues = [];
+    activeSecretValues = [];
+    secretEpoch += 1;
+  }
+
+  function scheduleSecretCleanup() {
+    const scheduledEpoch = secretEpoch;
+    setTimeout(() => {
+      if (secretEpoch === scheduledEpoch) clearActiveSecretValues();
+    }, 0);
+  }
+
+  function runtimeModelSecrets(runtimeModel) {
+    const values = [];
+    const apiKey = runtimeModel?.provider?.apiKey;
+    if (typeof apiKey === 'string' && apiKey) values.push(apiKey);
+    if (typeof apiKey?.value === 'string' && apiKey.value) values.push(apiKey.value);
+    for (const header of runtimeModel?.provider?.headers || []) {
+      if (typeof header?.value === 'string' && header.value) values.push(header.value);
+    }
+    return values;
   }
 
   function currentEnv() {
@@ -541,6 +579,11 @@ export function createZcodeBackend({
       const providerEnv = zcodeProviderApiKeyEnv(zcodeProviderId(next.ZCODE_MODEL));
       if (providerEnv && !next[providerEnv]) next[providerEnv] = panelApiKey;
     }
+    environmentSecretValues = Array.from(new Set(Object.entries(next)
+      .filter(([name, value]) => isSensitiveProviderHeaderName(name) && typeof value === 'string' && value)
+      .map(([, value]) => value)))
+      .sort((left, right) => right.length - left.length);
+    refreshActiveSecretValues();
     return next;
   }
 
@@ -790,8 +833,9 @@ export function createZcodeBackend({
     if (type === 'model.streaming') {
       const payload = params.payload || {};
       if (payload.kind === 'text_delta' && payload.delta) {
-        activeAssistantText += String(payload.delta);
-        emit({ type: 'text-delta', text: String(payload.delta) });
+        const delta = safeText(String(payload.delta));
+        activeAssistantText += delta;
+        emit({ type: 'text-delta', text: delta });
       }
       return;
     }
@@ -816,7 +860,7 @@ export function createZcodeBackend({
       drainApprovals();
       const payload = params.payload || {};
       emit({ type: 'turn-end', stopReason: 'end_turn' });
-      transcript.push({ role: 'assistant', text: activeAssistantText || payload.response || '' });
+      transcript.push({ role: 'assistant', text: activeAssistantText || safeText(payload.response || '') });
       finishActive();
       return;
     }
@@ -882,11 +926,16 @@ export function createZcodeBackend({
     sessionId = null;
     sessionModelRef = null;
     subscribed = false;
-    if (wasStopping) return;
+    activeRuntimeModel = null;
+    if (wasStopping) {
+      scheduleSecretCleanup();
+      return;
+    }
     if (activeRun) {
       emit({ type: 'error', kind: 'mcp', message: 'ZCode app-server exited: ' + detail });
       finishActive();
     }
+    scheduleSecretCleanup();
   }
 
   function handleError(error) {
@@ -899,10 +948,12 @@ export function createZcodeBackend({
     sessionId = null;
     sessionModelRef = null;
     subscribed = false;
+    activeRuntimeModel = null;
     if (activeRun) {
       emit({ type: 'error', kind: 'mcp', message: err.message });
       finishActive();
     }
+    scheduleSecretCleanup();
   }
 
   async function startProcess() {
@@ -997,7 +1048,9 @@ export function createZcodeBackend({
       const modelRef = currentModelRef(spawnEnv);
       const runtimeModel = currentRuntimeModel(spawnEnv, modelRef, thoughtLevel);
       if (runtimeModel) createParams.runtimeModel = runtimeModel;
-      activeRuntimeModel = runtimeModel || null;
+      runtimeSecretValues = runtimeModelSecrets(runtimeModel);
+      refreshActiveSecretValues();
+      activeRuntimeModel = runtimeModel ? redactValue(runtimeModel, runtimeSecretValues) : null;
       const model = (runtimeModel && runtimeModel.model) || zcodeProtocolModelFromRef(modelRef);
       if (model) createParams.model = model;
       if (thoughtLevel) createParams.thoughtLevel = thoughtLevel;
@@ -1188,6 +1241,7 @@ export function createZcodeBackend({
     toolMeta = { allowedTools: [], annotations: {} };
     finishActive();
     stderrTail = '';
+    clearActiveSecretValues();
     stopping = false;
   }
 
@@ -1219,7 +1273,7 @@ export function createZcodeBackend({
         loggedIn: true,
         runtimeOk: false,
         provider: 'zcode',
-        detail: zcodeErrorMessage(e, 'ZCode runtime unavailable.', lang),
+        detail: safeText(zcodeErrorMessage(e, 'ZCode runtime unavailable.', lang)),
       };
     }
   }

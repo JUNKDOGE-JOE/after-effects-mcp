@@ -136,7 +136,7 @@ export function zcodeChannels({ zcodeProbe, configSummary } = {}) {
     detail: summary.cli ? (summary.cli.model || summary.cli.providerId) : '',
     fixHint: !runtimeOk && summary.cli ? runtimeHint
       : summary.cli && !summary.cli.hasCredential
-        ? { zh: '检测到 ZCode CLI provider「' + summary.cli.providerId + '」，但其 API Key 环境变量（' + (summary.cli.apiKeyEnv || '-') + '）没有被面板继承。在下方粘贴一次 Key（保存到本机 ~/.ae-mcp/zcode-key）即可使用。', en: 'Found ZCode CLI provider "' + summary.cli.providerId + '", but its API key env (' + (summary.cli.apiKeyEnv || '-') + ') is not inherited by the panel. Paste the key once below (stored at ~/.ae-mcp/zcode-key).' }
+        ? { zh: '检测到 ZCode CLI provider「' + summary.cli.providerId + '」，但其 API Key 环境变量（' + (summary.cli.apiKeyEnv || '-') + '）没有被面板继承。在下方粘贴一次 Key（保存到系统安全凭据库）即可使用。', en: 'Found ZCode CLI provider "' + summary.cli.providerId + '", but its API key env (' + (summary.cli.apiKeyEnv || '-') + ') is not inherited by the panel. Paste the key once below; it will be stored in the protected system credential store.' }
         : { zh: '未找到 ~/.zcode/cli/config.json 的可用 provider：先在 ZCode CLI 里配置 provider 与默认模型。', en: 'No usable provider in ~/.zcode/cli/config.json: configure a provider and default model in the ZCode CLI first.' },
   };
   const desktop = {

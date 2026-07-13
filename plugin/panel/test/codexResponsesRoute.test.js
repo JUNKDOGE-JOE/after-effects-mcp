@@ -89,6 +89,95 @@ test('the Chat facade converts /responses and forwards only /chat/completions up
   }
 });
 
+test('the Chat facade rejects Provider credentials split across upstream SSE events', async () => {
+  const secret = 'opaque-provider-secret';
+  const upstream = http.createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.write('data: {"id":"chat-secret","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"opaque-provider-"},"finish_reason":null}]}\n\n');
+      res.end('data: {"id":"chat-secret","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"secret"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n');
+    });
+  });
+  let route = null;
+  try {
+    const port = await listen(upstream);
+    const baseUrl = `http://127.0.0.1:${port}/v1`;
+    route = createCodexResponsesRoute({
+      provider: providerFixture({ baseUrl }),
+      resolveRequestProfile: async () => resolvedModelProfile({
+        baseUrl,
+        auth: { kind: 'header', name: 'authorization', value: `Bearer ${secret}` },
+      }),
+      requireImpl: (name) => { if (name === 'http') return http; throw new Error('unexpected module ' + name); },
+      cryptoImpl: deterministicCrypto(),
+    });
+    const local = await route.start();
+    const result = await requestText(`${local.baseUrl}/responses`, {
+      method: 'POST',
+      headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
+      body: { model: 'gpt-5.4', input: 'safe', stream: true },
+    });
+    assert.equal(result.status, 502);
+    assert.equal(result.body.includes(secret), false);
+    assert.equal(JSON.parse(result.body).error.code, 'provider_stream_credential_reflection');
+  } finally {
+    if (route) await route.close();
+    await closeServer(upstream);
+  }
+});
+
+test('Chat conversion failures never echo credential-shaped unknown keys', async () => {
+  const secret = 'opaque-provider-secret';
+  for (const reflectedKey of [secret, 'opaque%2dprovider%2dsecret', 'opaque\\u002dprovider-secret']) {
+    const upstream = http.createServer((req, res) => {
+      req.resume();
+      req.on('end', () => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({
+          id: 'chat-invalid',
+          object: 'chat.completion',
+          created: 1,
+          model: 'gpt-5.4',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'safe' }, finish_reason: 'stop' }],
+          [reflectedKey]: true,
+        }));
+      });
+    });
+    let route = null;
+    try {
+      const port = await listen(upstream);
+      const baseUrl = `http://127.0.0.1:${port}/v1`;
+      route = createCodexResponsesRoute({
+        provider: providerFixture({ baseUrl }),
+        resolveRequestProfile: async () => resolvedModelProfile({
+          baseUrl,
+          auth: { kind: 'header', name: 'authorization', value: `Bearer ${secret}` },
+        }),
+        requireImpl: (name) => { if (name === 'http') return http; throw new Error('unexpected module ' + name); },
+        cryptoImpl: deterministicCrypto(),
+      });
+      const local = await route.start();
+      const result = await requestText(`${local.baseUrl}/responses`, {
+        method: 'POST',
+        headers: routeHeaders(local.routeToken, { 'content-type': 'application/json' }),
+        body: { model: 'gpt-5.4', input: 'safe', stream: false },
+      });
+      assert.equal(result.status, 502);
+      assert.equal(result.body.includes(secret), false);
+      assert.equal(result.body.includes(reflectedKey), false);
+      assert.deepEqual(JSON.parse(result.body).error, {
+        type: 'provider_protocol_error',
+        code: 'invalid_chat_completion',
+        message: 'Provider returned an invalid Chat Completion.',
+      });
+    } finally {
+      if (route) await route.close();
+      await closeServer(upstream);
+    }
+  }
+});
+
 test('the Chat facade retries once with developer mapped to system after an explicit role rejection', async () => {
   const upstreamCalls = [];
   const upstreamSecret = 'sk-role-retry-secret';

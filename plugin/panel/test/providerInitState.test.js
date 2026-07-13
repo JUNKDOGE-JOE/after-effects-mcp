@@ -28,7 +28,7 @@ test('provider init distinguishes automatic Helper startup failures from repair-
 });
 
 test('provider init distinguishes corrupt stores, migration conflicts, and secret mismatches', async () => {
-  for (const code of ['PROVIDER_STORE_INVALID']) {
+  for (const code of ['PROVIDER_STORE_INVALID', 'PROVIDER_STORE_CREDENTIAL_CONTAMINATION']) {
     assert.deepEqual(await classify(code), { state: 'unavailable', error: 'PROVIDER_STORE_CORRUPT' });
   }
   for (const code of ['PROVIDER_STORE_CONFLICT', 'INVALID_PROVIDER_MIGRATION', 'INVALID_MIGRATION_JOURNAL']) {
@@ -48,4 +48,25 @@ test('provider init distinguishes corrupt stores, migration conflicts, and secre
 test('provider init failure state never exposes the original message', async () => {
   const result = await classify('PROVIDER_STORE_INVALID');
   assert.equal(JSON.stringify(result).includes('sensitive implementation detail'), false);
+});
+
+test('provider init rejects persisted model metadata containing resolved credentials', async () => {
+  const { assertProviderStateCredentialFree } = await import('../src/app/providerInitState.js');
+  for (const secret of ['opaque"provider-secret', 'opaque\\provider-secret']) {
+    const state = {
+      providers: [{
+        id: 'provider-1',
+        modelList: {
+          models: [{ id: 'safe-model', label: secret, metadata: { [secret]: 'safe' } }],
+        },
+      }],
+    };
+    assert.throws(
+      () => assertProviderStateCredentialFree(state, [secret]),
+      (error) => error.code === 'PROVIDER_STORE_CREDENTIAL_CONTAMINATION'
+        && !error.message.includes(secret),
+    );
+  }
+  const safe = { providers: [{ id: 'provider-1', modelList: { models: [{ id: 'safe-model' }] } }] };
+  assert.equal(assertProviderStateCredentialFree(safe, ['provider-secret']), safe);
 });

@@ -3,6 +3,12 @@ import {
   normalizeProviderEntryV3,
   validateProviderBaseUrl,
 } from '../lib/providerProfile.js';
+import {
+  isCredentialShapedProviderLiteral,
+  isReservedProviderExtraHeaderName,
+  isSensitiveProviderHeaderName,
+} from '../lib/providerHeaderPolicy.js';
+import { containsExactSecret } from '../lib/exactSecretRedaction.js';
 
 function flowError(code) {
   const messages = {
@@ -10,10 +16,21 @@ function flowError(code) {
     provider_secret_required: 'Provider secret is required',
     provider_insecure_http_forbidden: 'Insecure provider HTTP is forbidden',
     provider_insecure_http_confirmation_required: 'Insecure provider HTTP confirmation is required',
+    provider_draft_contains_credential: 'Provider draft contains protected credential material',
   };
   const error = new Error(messages[code] || messages.provider_draft_invalid);
   error.code = messages[code] ? code : 'provider_draft_invalid';
   return error;
+}
+
+function assertProviderCandidateCredentialFree(candidate, secretService) {
+  if (typeof secretService?.getRedactionValues !== 'function') {
+    throw flowError('provider_draft_contains_credential');
+  }
+  const values = secretService.getRedactionValues();
+  if (!Array.isArray(values) || containsExactSecret(candidate, values)) {
+    throw flowError('provider_draft_contains_credential');
+  }
 }
 
 function slug(value) {
@@ -97,9 +114,13 @@ async function buildHeaders({ draftHeaders, currentHeaders, credentialId, secret
     if (!id || !name || !scopes.length) throw flowError('provider_draft_invalid');
     const current = currentById.get(id);
     const valueKind = raw.valueKind || raw.valueRef?.kind || 'literal';
+    if (isReservedProviderExtraHeaderName(name)) throw flowError('provider_draft_invalid');
     if (valueKind === 'literal') {
       const value = raw.valueRef?.kind === 'literal' ? raw.valueRef.value : raw.value;
       if (typeof value !== 'string') throw flowError('provider_draft_invalid');
+      if (isSensitiveProviderHeaderName(name) || isCredentialShapedProviderLiteral(value)) {
+        throw flowError('provider_draft_invalid');
+      }
       output.push({ id, name, scopes, valueRef: { kind: 'literal', value } });
       continue;
     }
@@ -267,6 +288,7 @@ export async function saveProviderDraft({
       candidate.modelCapabilities = [];
     }
     entry = normalizeProviderEntryV3(candidate);
+    assertProviderCandidateCredentialFree(entry, secretService);
     const pendingSecretDeletes = refsRemoved(currentProvider, entry);
     const committed = store.upsert(entry, {
       expectedRevision,

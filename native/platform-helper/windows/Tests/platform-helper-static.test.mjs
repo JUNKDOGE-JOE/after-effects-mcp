@@ -34,6 +34,23 @@ test('named pipe is local-user-only and remote clients are rejected', () => {
   assert.match(service, /D:P\(A;;GA;;;/);
   assert.match(service, /PIPE_REJECT_REMOTE_CLIENTS/);
   assert.match(service, /GetNamedPipeClientProcessId/);
+  assert.match(service, /FILE_FLAG_FIRST_PIPE_INSTANCE/);
+});
+
+test('addon authenticates the pipe server before any request bytes are written', () => {
+  assert.match(addon, /GetNamedPipeServerProcessId/);
+  assert.match(addon, /OpenProcess\([\s\S]*PROCESS_QUERY_LIMITED_INFORMATION[\s\S]*SYNCHRONIZE/);
+  assert.match(addon, /GetProcessTimes/);
+  assert.match(addon, /QueryFullProcessImageNameW/);
+  assert.match(addon, /GetFinalPathNameByHandleW/);
+  assert.match(addon, /BCryptFinishHash/);
+  assert.match(addonCmake, /\bbcrypt\b/i);
+  const constructor = addon.slice(
+    addon.indexOf('explicit WindowsTransport'),
+    addon.indexOf('~WindowsTransport'),
+  );
+  assert.ok(constructor.indexOf('AuthenticateServer(handle_, options)') >= 0);
+  assert.doesNotMatch(constructor, /WriteExact|WriteFile/);
 });
 
 test('caller authorization binds user, architecture, Adobe signatures, ancestry, and generation', () => {

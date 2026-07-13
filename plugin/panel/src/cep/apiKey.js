@@ -1,3 +1,5 @@
+// Migration-only access to API key files created by older panel versions.
+// Runtime callers must move values into the platform Helper before use.
 const KEY_FILES = {
   anthropic: 'anthropic-key',
   codex: 'codex-key',
@@ -18,11 +20,10 @@ function defaultDeps() {
     fs: req('fs'),
     os: req('os'),
     path: req('path'),
-    pid: req('process') && req('process').pid,
   };
 }
 
-export function createApiKeyStore(deps = defaultDeps()) {
+export function createLegacyApiKeyStore(deps = defaultDeps()) {
   const fs = deps.fs;
   const os = deps.os;
   const path = deps.path;
@@ -50,24 +51,6 @@ export function createApiKeyStore(deps = defaultDeps()) {
     }
   }
 
-  function writeKey(key, name = 'anthropic') {
-    const value = String(key || '').trim();
-    const dir = keyDir();
-    const fileName = keyFile(name);
-    const file = keyPath(name);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const pid = deps.pid || 0;
-    const tmp = path.join(dir, `${fileName}.${pid}.${Date.now()}.tmp`);
-    fs.writeFileSync(tmp, value, 'utf8');
-    try {
-      fs.chmodSync(tmp, 0o600);
-    } catch (e) {
-      // Best effort only. Windows and some filesystems ignore or reject chmod.
-    }
-    fs.renameSync(tmp, file);
-    return value;
-  }
-
   function clearKey(name = 'anthropic') {
     try {
       fs.unlinkSync(keyPath(name));
@@ -76,17 +59,5 @@ export function createApiKeyStore(deps = defaultDeps()) {
     }
   }
 
-  return { keyDir, keyPath, readKey, writeKey, clearKey };
-}
-
-export function readKey(deps) {
-  return createApiKeyStore(deps).readKey();
-}
-
-export function writeKey(key, deps) {
-  return createApiKeyStore(deps).writeKey(key);
-}
-
-export function clearKey(deps) {
-  return createApiKeyStore(deps).clearKey();
+  return Object.freeze({ keyDir, keyPath, readKey, clearKey });
 }

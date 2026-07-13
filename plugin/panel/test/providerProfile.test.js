@@ -13,6 +13,7 @@ import {
   normalizeProviderEntryV3,
   providerCapabilityForModel,
   providerRouteOverride,
+  validateProviderBaseUrl,
 } from '../src/lib/providerProfile.js';
 
 const CREDENTIAL_ID = '5eb75f05-5d9e-5d9c-85af-f0893e8b90c2';
@@ -190,9 +191,24 @@ test('validateProviderBaseUrl rejects raw and percent-decoded credential-like pa
     'https://relay.example/proxy/%73%6b%2dsecret-token-123456',
     'https://relay.example/proxy/Bearer%20secret-token-123456',
     'https://relay.example/proxy/%2542%2565%2561%2572%2565%2572%2520secret-token-123456',
+    'https://provider.example/v1/client_secret=opaque-provider-value',
+    'https://provider.example/v1/accessToken%3Dopaque-provider-value',
+    'https://provider.example/v1;auth.token=opaque-provider-value',
+    'https://provider.example/v1/client_secret/opaque-provider-value',
+    'https://provider.example/v1/accessToken%2Fopaque-provider-value',
+    'https://provider.example/v1/auth%2Etoken/opaque-provider-value',
+    'https://provider.example/v1/client-secret/opaque-provider-value',
+    'https://provider.example/v1/access-token/opaque-provider-value',
+    'https://provider.example/v1/auth-token/opaque-provider-value',
+    'https://provider.example/v1/api-key/opaque-provider-value',
+    'https://provider.example/v1/x.api.key/opaque-provider-value',
   ]) {
     assertInvalidProvider(providerFixture({ baseUrl }));
   }
+  assert.equal(
+    validateProviderBaseUrl('https://provider.example/oauth/token'),
+    'https://provider.example/oauth/token',
+  );
 });
 
 test('validateProviderBaseUrl rejects even empty query, fragment, and userinfo delimiters', () => {
@@ -553,6 +569,8 @@ test('normalizeProviderEntryV2 rejects extra, missing, or malformed nested schem
 test('normalizeProviderEntryV2 requires SecretValueRef for sensitive names and exact credential literals', () => {
   const rejectedHeaders = [
     { id: 'named-token', name: 'x-provider-token', scopes: ['model'], valueRef: { kind: 'literal', value: 'enabled' } },
+    { id: 'named-auth', name: 'x-auth', scopes: ['model'], valueRef: { kind: 'literal', value: 'opaque' } },
+    { id: 'named-credential', name: 'x-credential', scopes: ['model'], valueRef: { kind: 'literal', value: 'opaque' } },
     { id: 'secret-value', name: 'x-feature', scopes: ['model'], valueRef: { kind: 'literal', value: 'sk-test-secret-1234' } },
     { id: 'jwt-value', name: 'x-feature', scopes: ['probe'], valueRef: { kind: 'literal', value: `${'a'.repeat(16)}.${'b'.repeat(16)}.${'c'.repeat(8)}` } },
   ];
@@ -570,6 +588,49 @@ test('normalizeProviderEntryV2 requires SecretValueRef for sensitive names and e
     })).headers,
     [{ id: 'feature', name: 'x-provider-feature', scopes: ['model'], valueRef: { kind: 'literal', value: 'enabled' } }],
   );
+});
+
+test('V2 and V3 reject forbidden headers before they can reach the provider store', () => {
+  for (const name of ['Cookie', 'Set-Cookie', 'Host', 'Proxy-Authorization']) {
+    const header = { id: 'forbidden', name, scopes: ['model'], valueRef: secretRef('header') };
+    for (const input of [providerFixture({ headers: [header] }), providerFixtureV3({ headers: [header] })]) {
+      const normalize = Object.hasOwn(input, 'requestProfileRevision')
+        ? normalizeProviderEntryV3
+        : normalizeProviderEntryV2;
+      assert.throws(
+        () => normalize(input),
+        (error) => error instanceof Error && error.code === 'provider_header_forbidden',
+      );
+    }
+  }
+});
+
+test('V3 requires protected references for custom auth and credential headers', () => {
+  for (const name of ['X-Auth', 'X-Credential', 'X-Custom-Token', 'XAuth', 'clientSecret', 'accessToken', 'auth.token']) {
+    assert.throws(
+      () => normalizeProviderEntryV3(providerFixtureV3({
+        headers: [{ id: 'sensitive', name, scopes: ['model'], valueRef: { kind: 'literal', value: 'opaque' } }],
+      })),
+      (error) => error instanceof Error && error.code === 'provider_header_secret_reference_required',
+    );
+  }
+});
+
+test('V3 rejects credential-shaped literal values under neutral header names', () => {
+  for (const value of [
+    'client_secret=opaque-provider-value',
+    '{"accessToken":"opaque-provider-value"}',
+    'token: opaque-provider-value',
+    '{"auth\\u002etoken":"opaque-provider-value"}',
+    'client_secret%3Dopaque-provider-value',
+  ]) {
+    assert.throws(
+      () => normalizeProviderEntryV3(providerFixtureV3({
+        headers: [{ id: 'neutral', name: 'x-feature', scopes: ['model'], valueRef: { kind: 'literal', value } }],
+      })),
+      (error) => error instanceof Error && error.code === 'provider_header_secret_reference_required',
+    );
+  }
 });
 
 test('normalizeProviderEntryV3 canonicalizes the per-model protocol matrix and client overrides', () => {

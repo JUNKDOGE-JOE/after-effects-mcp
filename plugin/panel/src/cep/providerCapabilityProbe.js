@@ -3,6 +3,7 @@ import { chatErrorRequestsMaxCompletionTokens } from '../lib/codexResponsesCodec
 import { buildProtocolAuthCandidates } from '../lib/providerProbeAuth.js';
 import { buildProviderEndpointCandidates } from '../lib/providerUrl.js';
 import { normalizeBaseUrl } from '../lib/providerProfile.js';
+import { containsExactSecret } from '../lib/exactSecretRedaction.js';
 import {
   createChatSseCollector,
   createMessagesSseCollector,
@@ -1107,12 +1108,6 @@ function profileSensitiveValues(profile) {
   return [...new Set(values.filter(Boolean))];
 }
 
-function containsSensitiveValue(value, sensitiveValues) {
-  let serialized;
-  try { serialized = JSON.stringify(value); } catch { return true; }
-  return sensitiveValues.some((secret) => serialized.includes(secret));
-}
-
 function capabilityFailure(reason, detail, tried, capabilities = null, modelListProbe = null) {
   return {
     ok: false,
@@ -1198,7 +1193,7 @@ export async function probeProviderCapabilities({
           models: modelResult.models,
           inventory: modelResult.inventory || [],
         };
-        if (!containsSensitiveValue(candidate, sensitiveValues)) {
+        if (!containsExactSecret(candidate, sensitiveValues)) {
           models = candidate.models;
           inventory = candidate.inventory;
           modelListProbe = candidate;

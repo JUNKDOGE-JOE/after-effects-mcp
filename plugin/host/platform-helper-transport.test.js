@@ -24,7 +24,12 @@ function fakeChild() {
 function windowsOptions(overrides) {
     return {
         runtime: { platform: 'win32', arch: 'x64' },
-        verifyWindowsPayload: function () { return 'C:\\verified\\ae-mcp-platform-helper.exe'; },
+        verifyWindowsPayload: function () {
+            return {
+                path: 'C:\\verified\\ae-mcp-platform-helper.exe',
+                sha256: 'a'.repeat(64),
+            };
+        },
         ...overrides,
     };
 }
@@ -38,7 +43,12 @@ test('transport loads the in-process N-API addon for only the two supported targ
         const native = fakeNativeTransport();
         const transport = createPlatformHelperTransport({
             runtime: { platform: fixture.platform, arch: fixture.arch },
-            verifyWindowsPayload: function () { return 'C:\\verified\\ae-mcp-platform-helper.exe'; },
+            verifyWindowsPayload: function () {
+                return {
+                    path: 'C:\\verified\\ae-mcp-platform-helper.exe',
+                    sha256: 'a'.repeat(64),
+                };
+            },
             loadAddon: function (addonPath) {
                 loaded.push(addonPath);
                 return { createTransport: function () { return native; } };
@@ -85,6 +95,16 @@ test('transport fails closed when the addon or N-API result violates the contrac
     await transport.close();
 });
 
+test('Windows transport rejects a path-only identity before loading native code', () => {
+    let loads = 0;
+    assert.throws(() => createPlatformHelperTransport({
+        runtime: { platform: 'win32', arch: 'x64' },
+        verifyWindowsPayload: function () { return 'C:\\untrusted\\helper.exe'; },
+        loadAddon: function () { loads += 1; },
+    }), { code: 'PLATFORM_HELPER_REPAIR_REQUIRED' });
+    assert.equal(loads, 0);
+});
+
 test('Windows transport starts the verified Helper once and retries the named pipe', async () => {
     let opens = 0;
     let spawns = 0;
@@ -94,8 +114,12 @@ test('Windows transport starts the verified Helper once and retries the named pi
     const transport = createPlatformHelperTransport(windowsOptions({
         loadAddon: function () {
             return {
-                createTransport: function () {
+                createTransport: function (identity) {
                     opens += 1;
+                    assert.deepEqual(identity, {
+                        expectedServerPath: 'C:\\verified\\ae-mcp-platform-helper.exe',
+                        expectedServerSha256: 'a'.repeat(64),
+                    });
                     if (opens < 3) throw new Error('pipe absent');
                     return native;
                 },

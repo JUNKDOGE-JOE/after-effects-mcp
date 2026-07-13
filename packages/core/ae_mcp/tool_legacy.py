@@ -31,6 +31,13 @@ from ae_mcp.tool_artifact import (
     canonical_json_bytes,
     legacy_artifact_id,
 )
+from ae_mcp.tool_secrets import (
+    RegexSecretScanner,
+    SecretScanError,
+    SecretScanner,
+    require_secret_free,
+    require_secret_free_json,
+)
 
 
 _HEX_64 = re.compile(r"^[0-9a-f]{64}$")
@@ -506,11 +513,27 @@ class LegacySkillAdapter:
         *,
         skill_store: SkillStore | None = None,
         metadata_store: LegacyMetadataStore | None = None,
+        scanner: SecretScanner | None = None,
     ) -> None:
         self.skill_store = skill_store or SkillStore()
         self.metadata_store = metadata_store or LegacyMetadataStore(
             Path.home() / ".ae-mcp" / "tools" / "legacy-metadata.json"
         )
+        self.scanner = scanner or RegexSecretScanner()
+
+    def _scan_value(self, name: str, value: JsonValue) -> None:
+        try:
+            require_secret_free_json(self.scanner, name=name, value=value)
+            require_secret_free(
+                self.scanner,
+                name=name,
+                data=canonical_json_bytes(value) + b"\n",
+            )
+        except SecretScanError as exc:
+            raise ToolLegacyError(
+                "Legacy tool contains protected credential material.",
+                code="tool_legacy_secret_detected",
+            ) from exc
 
     def _records_and_manifest(
         self,
@@ -603,11 +626,13 @@ class LegacySkillAdapter:
             last_used_at=metadata.last_used_at,
         )
         try:
-            return ToolArtifact.from_dict(artifact.to_dict())
+            normalized = ToolArtifact.from_dict(artifact.to_dict())
         except (TypeError, ValueError) as exc:
             raise ToolLegacyError(
                 "Legacy skill is invalid.", code="tool_legacy_invalid"
             ) from exc
+        self._scan_value("legacy-artifact.json", normalized.to_dict())
+        return normalized
 
     def list(self) -> list[ToolArtifact]:
         records, manifest = self._records_and_manifest()
@@ -712,6 +737,10 @@ class LegacySkillAdapter:
                 metadata_patch.update({"verified": False, "verification": None})
             elif verification_action is not None:
                 raise ToolLegacyError("Legacy verification action is invalid.")
+            normalized_metadata_patch = _normalize_metadata_patch(metadata_patch)
+            self._scan_value(
+                "legacy-metadata.json", cast(JsonValue, normalized_metadata_patch)
+            )
             store_revision = self.metadata_store.store_revision()
             _current_record, current, _current_manifest = self._find(artifact_id)
             if (
@@ -722,7 +751,7 @@ class LegacySkillAdapter:
             self.metadata_store.compare_and_set(
                 record.path,
                 expected_content_hash,
-                metadata_patch,
+                normalized_metadata_patch,
                 expected_revision=store_revision,
             )
             return self.get(artifact.id)
@@ -754,6 +783,7 @@ class LegacySkillAdapter:
             skill_content_hash(updated)
         except (TypeError, ValueError) as exc:
             raise ToolLegacyError("Legacy skill content is invalid.") from exc
+        self._scan_value("legacy-skill.json", cast(JsonValue, updated.to_dict()))
         self.skill_store.write_record(
             record,
             updated,

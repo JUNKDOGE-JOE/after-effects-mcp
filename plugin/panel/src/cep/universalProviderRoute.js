@@ -1,4 +1,4 @@
-import { redactText } from '../lib/exactSecretRedaction.js';
+import { containsExactSecret, redactText, redactValue } from '../lib/exactSecretRedaction.js';
 import {
   anthropicMessageToResponse,
   chatCompletionToMessages,
@@ -26,11 +26,13 @@ import {
   routeTokenMatches,
 } from './providerRouteAuth.js';
 import { createReasoningCapsule } from './reasoningCapsule.js';
+import { requireCredentialFreeSse } from '../lib/providerSseSecretGuard.js';
 
 const LOCAL_ORIGIN = 'http://127.0.0.1';
 const PROTOCOLS = new Set(['responses', 'chat', 'messages']);
 const DEFAULT_LIMITS = Object.freeze({
   requestBodyBytes: 16 * 1024 * 1024,
+  responseBodyBytes: 16 * 1024 * 1024,
   errorBodyBytes: 64 * 1024,
   concurrent: 4,
   connectTimeoutMs: 15_000,
@@ -199,6 +201,12 @@ function profileSecrets(profile) {
     if (header?.value) values.push(String(header.value));
   }
   return [...new Set(values)].sort((left, right) => right.length - left.length);
+}
+
+function withoutSecretBearingHeaders(headers, secrets) {
+  return Object.fromEntries(Object.entries(headers).filter(([, value]) => (
+    !containsExactSecret(String(value), secrets)
+  )));
 }
 
 function sanitizedError(buffer, secrets) {
@@ -405,15 +413,16 @@ export function createUniversalProviderRoute({
     });
   };
 
-  const writeConverted = ({ context, value, clientProtocol, stream, responseHeaders }) => {
+  const writeConverted = ({ context, value, clientProtocol, stream, responseHeaders, secrets }) => {
+    const safeValue = redactValue(value, secrets);
     if (!stream) {
       if (!context.finish()) return;
-      sendJson(context.res, 200, value, responseHeaders);
+      sendJson(context.res, 200, safeValue, responseHeaders);
       return;
     }
     const events = clientProtocol === 'messages'
-      ? messagesSseEvents(value)
-      : responsesSseEvents(value);
+      ? messagesSseEvents(safeValue)
+      : responsesSseEvents(safeValue);
     if (!context.finish()) return;
     context.res.writeHead(200, {
       ...responseHeaders,
@@ -433,6 +442,7 @@ export function createUniversalProviderRoute({
     stream,
     modelId,
     consumed,
+    secrets,
   }) => {
     const chunks = [];
     const collector = stream ? collectorFor(upstreamProtocol) : null;
@@ -444,18 +454,28 @@ export function createUniversalProviderRoute({
       try { upstream.destroy(); } catch {}
       if (!context.finish()) return;
       const status = Number(error?.status) || 502;
+      const rawCode = String(error?.code || 'provider_conversion_failed');
+      const code = containsExactSecret(rawCode, secrets) ? 'provider_conversion_failed' : rawCode;
+      const message = redactText(
+        error?.message || 'Provider response conversion failed.',
+        secrets,
+      );
+      const rawParam = typeof error?.param === 'string' ? error.param : '';
+      const param = rawParam && !containsExactSecret(rawParam, secrets)
+        ? redactText(rawParam, secrets)
+        : 'provider_response';
       sendJson(context.res, status, envelope(
         status === 501 || status === 400 ? 'invalid_request_error' : 'provider_error',
-        error?.code || 'provider_conversion_failed',
-        error?.message || 'Provider response conversion failed.',
-        error?.param ? { param: error.param } : {},
+        code,
+        message,
+        error?.param ? { param } : {},
       ));
     };
     upstream.on('data', (chunk) => {
       if (settled) return;
       const value = Buffer.from(chunk);
       bytes += value.length;
-      if (bytes > bounded.requestBodyBytes) {
+      if (bytes > bounded.responseBodyBytes) {
         fail(Object.assign(new Error('Provider response is too large.'), {
           status: 502,
           code: 'provider_response_too_large',
@@ -479,7 +499,7 @@ export function createUniversalProviderRoute({
           source = JSON.parse(Buffer.concat(chunks).toString('utf8'));
         }
         converted = convertCompletion(source, upstreamProtocol, clientProtocol);
-        writeConverted({ context, value: converted, clientProtocol, stream, responseHeaders });
+        writeConverted({ context, value: converted, clientProtocol, stream, responseHeaders, secrets });
         settled = true;
         onAudit({
           event: 'provider_route',
@@ -507,10 +527,12 @@ export function createUniversalProviderRoute({
     payload,
     modelId,
     conversion = null,
+    stream = false,
   }) => {
     let profile;
     let endpoint;
     let headers;
+    let secrets;
     try {
       profile = await profileFor(modelId, capability);
       if (context.finished) return;
@@ -522,6 +544,7 @@ export function createUniversalProviderRoute({
       );
       headers = nativeHeaders(context.req, profile, clientProtocol);
       headers['content-length'] = String(payload.length);
+      secrets = profileSecrets(profile);
     } catch {
       if (!context.finish()) return;
       sendJson(context.res, 502, envelope(
@@ -569,7 +592,10 @@ export function createUniversalProviderRoute({
             ));
             return;
           }
-          const responseHeaders = filterUpstreamResponseHeaders(upstream.rawHeaders || []);
+          const responseHeaders = withoutSecretBearingHeaders(
+            filterUpstreamResponseHeaders(upstream.rawHeaders || []),
+            secrets,
+          );
           if (status >= 400) {
             const chunks = [];
             let bytes = 0;
@@ -626,14 +652,100 @@ export function createUniversalProviderRoute({
               stream: conversion.stream,
               modelId,
               consumed: conversion.consumed,
+              secrets,
             });
             return;
           }
-          context.res.writeHead(status || 200, responseHeaders);
-          upstream.on('data', (chunk) => { if (!context.finished) context.res.write(chunk); });
-          upstream.once('end', () => {
+          if (!stream) {
+            const chunks = [];
+            let bytes = 0;
+            let settled = false;
+            const failNative = () => {
+              if (settled || context.finished) return;
+              settled = true;
+              try { upstream.destroy(); } catch {}
+              if (!context.finish()) return;
+              sendJson(context.res, 502, envelope(
+                'provider_error',
+                'provider_response_invalid',
+                'Provider response is invalid.',
+              ));
+            };
+            upstream.on('data', (chunk) => {
+              if (settled) return;
+              const value = Buffer.from(chunk);
+              bytes += value.length;
+              if (bytes > bounded.responseBodyBytes) {
+                failNative();
+                return;
+              }
+              chunks.push(value);
+            });
+            upstream.once('end', () => {
+              if (settled || context.finished) return;
+              let safeValue;
+              try {
+                safeValue = redactValue(JSON.parse(Buffer.concat(chunks).toString('utf8')), secrets);
+              } catch {
+                failNative();
+                return;
+              }
+              settled = true;
+              if (!context.finish()) return;
+              context.res.writeHead(status || 200, responseHeaders);
+              context.res.end(JSON.stringify(safeValue));
+              onAudit({
+                event: 'provider_route',
+                modelId,
+                clientProtocol,
+                upstreamProtocol: capability.upstreamProtocol,
+                conversion: 'native',
+                outcome: 'pass',
+              });
+            });
+            upstream.once('error', failNative);
+            return;
+          }
+          const chunks = [];
+          let bytes = 0;
+          let settled = false;
+          const failNativeStream = (error) => {
+            if (settled || context.finished) return;
+            settled = true;
+            try { upstream.destroy(); } catch {}
             if (!context.finish()) return;
-            context.res.end();
+            sendJson(context.res, Number(error?.status) || 502, envelope(
+              'provider_error',
+              error?.code || 'provider_stream_error',
+              error?.message || 'Provider response stream failed.',
+            ));
+          };
+          upstream.on('data', (chunk) => {
+            if (settled || context.finished) return;
+            const value = Buffer.from(chunk);
+            bytes += value.length;
+            if (bytes > bounded.responseBodyBytes) {
+              failNativeStream(Object.assign(new Error('Provider response is too large.'), {
+                status: 502,
+                code: 'provider_response_too_large',
+              }));
+              return;
+            }
+            chunks.push(value);
+          });
+          upstream.once('end', () => {
+            if (settled || context.finished) return;
+            const transcript = Buffer.concat(chunks);
+            try {
+              requireCredentialFreeSse(transcript, secrets, { maxFrameBytes: 1024 * 1024 });
+            } catch (error) {
+              failNativeStream(error);
+              return;
+            }
+            settled = true;
+            if (!context.finish()) return;
+            context.res.writeHead(status || 200, responseHeaders);
+            context.res.end(transcript);
             onAudit({
               event: 'provider_route',
               modelId,
@@ -644,14 +756,10 @@ export function createUniversalProviderRoute({
             });
           });
           upstream.once('error', () => {
-            if (!context.finish()) return;
-            if (!context.res.headersSent) {
-              sendJson(context.res, 502, envelope(
-                'provider_error',
-                'provider_stream_error',
-                'Provider response stream failed.',
-              ));
-            } else context.res.destroy();
+            failNativeStream(Object.assign(new Error('Provider response stream failed.'), {
+              status: 502,
+              code: 'provider_stream_error',
+            }));
           });
         });
         context.upstream = request;
@@ -778,6 +886,7 @@ export function createUniversalProviderRoute({
         search: clientProtocol === 'messages' ? localUrl.search : '',
         payload,
         modelId,
+        stream: body.stream === true,
       });
       return;
     }

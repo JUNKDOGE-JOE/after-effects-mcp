@@ -29,6 +29,9 @@ test('provider manager keeps one automatic API key primary and v3 overrides fold
     /scopeModel/,
     /probePreference/,
   ]) assert.match(manager, pattern);
+  assert.match(manager, /isSensitiveProviderHeaderName\(header\.name\)/);
+  assert.match(manager, /isSensitiveProviderHeaderName\(value\)[\s\S]*valueKind:\s*'secret'/);
+  assert.match(manager, /name:\s*'',\s*scopes:\s*\['model'\],\s*valueKind:\s*'secret'/);
   assert.match(manager, /label=\{t\.apiKey\}/);
   assert.match(manager, /value:\s*'auto',\s*label:\s*t\.auto/);
   assert.doesNotMatch(manager, /<Field\s+label=\{t\.protocol\}/);
@@ -78,7 +81,8 @@ test('App routes provider probing through the v3 profile resolver and CAS flow',
 test('App requires authenticated helper capabilities before migration and preserves providers on repairable failure', () => {
   const app = source('../src/app/App.jsx');
   const settings = source('../src/screens/SettingsScreen.jsx');
-  const init = app.slice(app.indexOf("if (status.state !== 'ok')"));
+  const initStart = app.indexOf("setProviderInit({ state: 'checking', error: '' })");
+  const init = app.slice(initStart, app.indexOf('// Keep connection info fresh', initStart));
   assert.match(init, /await\s+host\.capabilities\s*\(/);
   for (const pattern of [
     /protocolVersion/,
@@ -96,7 +100,8 @@ test('App requires authenticated helper capabilities before migration and preser
   assert.match(init, /if\s*\(providerStore\.needsSchemaMigration\(\)\)\s*\{\s*await migrateProviderStoreV2ToV3/);
   assert.match(init, /providerSecretService\.resolve/);
   assert.match(init, /finally\s*\{[^}]*resolved[^}]*=\s*null/s);
-  assert.match(init, /catch[\s\S]*setProviders\(providerStore\.list\(\)\)/);
+  assert.match(init, /assertProviderStateCredentialFree\s*\(/);
+  assert.doesNotMatch(init, /catch[\s\S]*setProviders\(providerStore\.list\(\)\)/);
   assert.match(app, /onImportClaudeSettings=\{async[\s\S]*providerInit\.state\s*!==\s*'ready'/);
   assert.match(app, /providerInit=\{providerInit\}/);
   assert.match(settings, /providerInit/);
@@ -128,8 +133,12 @@ test('Codex app-server profile follows effective.channel and cannot inherit a cl
 test('provider initialization retains the last provider list and renders distinct actionable failure classes', () => {
   const app = source('../src/app/App.jsx');
   const settings = source('../src/screens/SettingsScreen.jsx');
-  const init = app.slice(app.indexOf("if (status.state !== 'ok')"));
+  const initStart = app.indexOf("setProviderInit({ state: 'checking', error: '' })");
+  const init = app.slice(initStart, app.indexOf('// Keep connection info fresh', initStart));
   assert.match(init, /providerInitFailure\s*\(\s*error\s*\)/);
+  assert.match(init, /assertProviderStateCredentialFree\s*\(/);
+  assert.ok(init.indexOf('assertProviderStateCredentialFree') < init.indexOf('setProviders(providerState.providers)'));
+  assert.doesNotMatch(init, /setProviders\s*\(\s*providerStore\.list\s*\(\s*\)\s*\)/);
   assert.doesNotMatch(init, /catch\s*\{\s*setProviders\s*\(\s*\[\s*\]\s*\)/);
   for (const code of [
     'PLATFORM_HELPER_START_FAILED',
@@ -138,6 +147,16 @@ test('provider initialization retains the last provider list and renders distinc
     'PROVIDER_MIGRATION_CONFLICT',
     'PROVIDER_SECRET_MISMATCH',
   ]) assert.match(settings, new RegExp(code));
+});
+
+test('startup discards unversioned Codex and ZCode model caches', () => {
+  const app = source('../src/app/App.jsx');
+  assert.doesNotMatch(app, /readCachedCodexModels|writeCachedCodexModels/);
+  assert.doesNotMatch(app, /readCachedZcodeProbedModels|writeCachedZcodeProbedModels/);
+  assert.match(app, /localStorage\.removeItem\s*\(\s*CODEX_MODELS_CACHE_KEY\s*\)/);
+  assert.match(app, /localStorage\.removeItem\s*\(\s*ZCODE_PROBED_MODELS_CACHE_KEY\s*\)/);
+  assert.match(app, /\[codexModels,\s*setCodexModels\]\s*=\s*React\.useState\(null\)/);
+  assert.match(app, /\[zcodeProbedModels,\s*setZcodeProbedModels\]\s*=\s*React\.useState\(null\)/);
 });
 
 test('ChatScreen directs users to Provider Manager and the credential helper instead of pasting a key', () => {

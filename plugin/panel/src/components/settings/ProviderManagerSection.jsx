@@ -11,6 +11,7 @@ import {
   validateDraft,
 } from '../../lib/providerManagerState';
 import { providerClientRouteBadge } from '../../lib/providerDialectBadge';
+import { isSensitiveProviderHeaderName } from '../../lib/providerHeaderPolicy.js';
 
 const L = {
   zh: {
@@ -175,11 +176,14 @@ export function ProviderManagerSection({
                 </Field>
                 <Field label={t.extraHeaders}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {draft.headers.map((header, index) => (
+                    {draft.headers.map((header, index) => {
+                      const sensitiveName = isSensitiveProviderHeaderName(header.name);
+                      const valueKind = sensitiveName ? 'secret' : header.valueKind;
+                      return (
                       <div key={header.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: 6, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)' }}>
-                        <Input mono value={header.name} onChange={(value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, name: value } : item) })} placeholder={t.headerName} />
-                        <Select value={header.valueKind} onChange={(valueKind) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, valueKind, value: valueKind === 'literal' ? item.value || '' : '' } : item) })} options={[{ value: 'literal', label: t.literal }, { value: 'secret', label: t.secretValue }]} />
-                        {header.valueKind === 'secret'
+                        <Input mono value={header.name} onChange={(value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, name: value, ...(isSensitiveProviderHeaderName(value) ? { valueKind: 'secret', value: '' } : {}) } : item) })} placeholder={t.headerName} />
+                        <Select value={valueKind} onChange={(nextValueKind) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, valueKind: nextValueKind, value: nextValueKind === 'literal' ? item.value || '' : '' } : item) })} options={sensitiveName ? [{ value: 'secret', label: t.secretValue }] : [{ value: 'literal', label: t.literal }, { value: 'secret', label: t.secretValue }]} />
+                        {valueKind === 'secret'
                           ? <SecretInput name={`headerSecret:${header.id}`} disabled={disabled} />
                           : <Input mono value={header.value || ''} onChange={(value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, value } : item) })} />}
                         <div style={{ display: 'flex', gap: 10 }}>
@@ -192,8 +196,9 @@ export function ProviderManagerSection({
                         </div>
                         <Button variant="ghost" size="sm" onClick={() => setDraft({ ...draft, headers: draft.headers.filter((_, itemIndex) => itemIndex !== index) })}>{t.removeHeader}</Button>
                       </div>
-                    ))}
-                    <Button variant="secondary" size="sm" icon="plus" onClick={() => setDraft({ ...draft, headers: [...draft.headers, { id: nextHeaderId(draft.headers), name: '', scopes: ['model'], valueKind: 'literal', value: '' }] })}>{t.addHeader}</Button>
+                      );
+                    })}
+                    <Button variant="secondary" size="sm" icon="plus" onClick={() => setDraft({ ...draft, headers: [...draft.headers, { id: nextHeaderId(draft.headers), name: '', scopes: ['model'], valueKind: 'secret', value: '' }] })}>{t.addHeader}</Button>
                   </div>
                 </Field>
               </div>

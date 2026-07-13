@@ -13,7 +13,13 @@ import {
   validateProviderRequestConfiguration,
 } from '../lib/providerHeaders.js';
 import { buildProviderEndpoint } from '../lib/providerUrl.js';
-import { redactText } from '../lib/exactSecretRedaction.js';
+import {
+  containsExactSecret,
+  createByteRedactor,
+  redactText,
+  redactValue,
+} from '../lib/exactSecretRedaction.js';
+import { requireCredentialFreeSse } from '../lib/providerSseSecretGuard.js';
 import {
   generateRouteToken,
   parseRouteToken,
@@ -25,6 +31,7 @@ export { responsesBodyToChatBody } from '../lib/codexResponsesCodec.js';
 
 export const DEFAULT_ROUTE_LIMITS = Object.freeze({
   requestBodyBytes: 16 * 1024 * 1024,
+  responseBodyBytes: 16 * 1024 * 1024,
   sseFrameBytes: 1024 * 1024,
   concurrent: 4,
   connectTimeoutMs: 15_000,
@@ -299,7 +306,7 @@ function withoutSecretBearingHeaders(headers, secrets) {
   const output = {};
   for (const [name, value] of Object.entries(headers)) {
     const text = String(value);
-    if (secrets.some((secret) => text.includes(secret))) continue;
+    if (containsExactSecret(text, secrets)) continue;
     output[name] = text;
   }
   return output;
@@ -354,25 +361,7 @@ function readProviderError(
   upstream.on('error', () => finish(bytes > context.limits.errorBodyBytes));
 }
 
-function pipeModels(context, upstream, status, headers) {
-  context.res.writeHead(status, headers);
-  upstream.on('data', (chunk) => {
-    if (context.finished) return;
-    resetIdleTimer(context);
-    context.res.write(chunk);
-  });
-  upstream.on('end', () => {
-    if (!finishOnce(context)) return;
-    context.res.end();
-  });
-  upstream.on('error', () => streamFailure(context, {
-    status: 502,
-    code: 'provider_error',
-    message: 'Provider response stream failed.',
-  }));
-}
-
-function readNonStreamingResponse(context, upstream, status, headers, chatBody) {
+function pipeModels(context, upstream, status, headers, secrets) {
   const chunks = [];
   let bytes = 0;
   upstream.on('data', (chunk) => {
@@ -380,7 +369,52 @@ function readNonStreamingResponse(context, upstream, status, headers, chatBody) 
     resetIdleTimer(context);
     const value = Buffer.from(chunk);
     bytes += value.length;
-    if (bytes > context.limits.requestBodyBytes) {
+    if (bytes > context.limits.responseBodyBytes) {
+      streamFailure(context, {
+        status: 502,
+        code: 'provider_response_too_large',
+        message: 'Provider model response was too large.',
+      });
+      return;
+    }
+    chunks.push(value);
+  });
+  upstream.on('end', () => {
+    if (context.finished) return;
+    let parsed;
+    try {
+      parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      if (containsExactSecret(parsed, secrets)) throw new Error('credential reflection');
+      parsed = redactValue(parsed, secrets);
+    } catch {
+      streamFailure(context, {
+        status: 502,
+        code: 'provider_model_metadata_rejected',
+        message: 'Provider model metadata was rejected.',
+      });
+      return;
+    }
+    if (!finishOnce(context)) return;
+    sendJson(context.res, status, parsed, headers);
+  });
+  upstream.on('error', () => {
+    streamFailure(context, {
+      status: 502,
+      code: 'provider_error',
+      message: 'Provider response stream failed.',
+    });
+  });
+}
+
+function readNonStreamingResponse(context, upstream, status, headers, chatBody, secrets) {
+  const chunks = [];
+  let bytes = 0;
+  upstream.on('data', (chunk) => {
+    if (context.finished) return;
+    resetIdleTimer(context);
+    const value = Buffer.from(chunk);
+    bytes += value.length;
+    if (bytes > context.limits.responseBodyBytes) {
       streamFailure(context, {
         status: 502,
         code: 'provider_response_too_large',
@@ -401,11 +435,12 @@ function readNonStreamingResponse(context, upstream, status, headers, chatBody) 
         { id: context.responseId, model: String(chatBody.model || '') },
         { sealReasoning: context.reasoningCapsule?.seal },
       );
-    } catch (error) {
+      response = redactValue(response, secrets);
+    } catch {
       streamFailure(context, {
-        status: Number(error?.status) || 502,
-        code: error?.code || 'invalid_chat_completion',
-        message: error?.message || 'Provider returned an invalid Chat Completion.',
+        status: 502,
+        code: 'invalid_chat_completion',
+        message: 'Provider returned an invalid Chat Completion.',
       });
       return;
     }
@@ -419,36 +454,77 @@ function readNonStreamingResponse(context, upstream, status, headers, chatBody) 
   }));
 }
 
-function streamChatResponse(context, upstream, status, headers, chatBody) {
-  context.res.writeHead(status, {
-    ...headers,
-    'content-type': 'text/event-stream; charset=utf-8',
-    'cache-control': headers['cache-control'] || 'no-cache',
-  });
-  const adapter = createChatSseToResponses({
-    id: context.responseId,
-    model: String(chatBody.model || ''),
-    maxFrameBytes: context.limits.sseFrameBytes,
-    writeEvent: (name, payload) => writeSse(context.res, name, payload),
-    fail: (error) => streamFailure(context, error),
-    sealReasoning: context.reasoningCapsule?.seal,
-  });
+function streamChatResponse(context, upstream, status, headers, chatBody, secrets) {
+  const chunks = [];
+  let bytes = 0;
   upstream.on('data', (chunk) => {
     if (context.finished) return;
     resetIdleTimer(context);
-    try { adapter.feed(chunk); } catch (error) { streamFailure(context, error); }
+    const value = Buffer.from(chunk);
+    bytes += value.length;
+    if (bytes > context.limits.responseBodyBytes) {
+      streamFailure(context, {
+        status: 502,
+        code: 'provider_response_too_large',
+        message: 'Provider response stream was too large.',
+      });
+      return;
+    }
+    chunks.push(value);
   });
   upstream.on('end', () => {
     if (context.finished) return;
-    try { adapter.end(); } catch (error) { streamFailure(context, error); }
+    const transcript = Buffer.concat(chunks);
+    try {
+      requireCredentialFreeSse(transcript, secrets, { maxFrameBytes: context.limits.sseFrameBytes });
+    } catch (error) {
+      streamFailure(context, error);
+      return;
+    }
+    context.res.writeHead(status, {
+      ...headers,
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': headers['cache-control'] || 'no-cache',
+    });
+    const responseRedactor = createByteRedactor(secrets, (chunk) => context.res.write(chunk));
+    const failAdapter = () => {
+      responseRedactor.discard();
+      streamFailure(context, {
+        status: 502,
+        code: 'invalid_chat_completion',
+        message: 'Provider returned an invalid Chat Completion stream.',
+      });
+    };
+    const adapter = createChatSseToResponses({
+      id: context.responseId,
+      model: String(chatBody.model || ''),
+      maxFrameBytes: context.limits.sseFrameBytes,
+      writeEvent: (name, payload) => responseRedactor.feed(Buffer.from(
+        `event: ${name}\ndata: ${JSON.stringify(payload)}\n\n`,
+        'utf8',
+      )),
+      fail: failAdapter,
+      sealReasoning: context.reasoningCapsule?.seal,
+    });
+    try {
+      adapter.feed(transcript);
+      if (!context.finished) adapter.end();
+    } catch {
+      failAdapter();
+      return;
+    }
+    if (context.finished) return;
+    responseRedactor.flush();
     if (!finishOnce(context)) return;
     context.res.end();
   });
-  upstream.on('error', () => streamFailure(context, {
-    status: 502,
-    code: 'provider_error',
-    message: 'Provider response stream failed.',
-  }));
+  upstream.on('error', () => {
+    streamFailure(context, {
+      status: 502,
+      code: 'provider_error',
+      message: 'Provider response stream failed.',
+    });
+  });
 }
 
 function handleUpstreamResponse(
@@ -494,14 +570,14 @@ function handleUpstreamResponse(
     return;
   }
   if (kind === 'models') {
-    pipeModels(context, upstream, status, headers);
+    pipeModels(context, upstream, status, headers, secrets);
     return;
   }
   if (chatBody.stream === false) {
-    readNonStreamingResponse(context, upstream, status, headers, chatBody);
+    readNonStreamingResponse(context, upstream, status, headers, chatBody, secrets);
     return;
   }
-  streamChatResponse(context, upstream, status, headers, chatBody);
+  streamChatResponse(context, upstream, status, headers, chatBody, secrets);
 }
 
 function openUpstream(context, {

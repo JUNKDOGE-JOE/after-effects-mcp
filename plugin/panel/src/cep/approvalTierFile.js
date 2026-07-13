@@ -2,52 +2,34 @@ export const TOOL_TIER_ENV = 'AE_MCP_TOOL_APPROVAL_TIER_FILE';
 
 const VALID_TIERS = new Set(['readonly', 'manual', 'auto', 'none']);
 
-function cepRequire() {
-  if (globalThis.window?.cep_node?.require) return globalThis.window.cep_node.require;
-  if (globalThis.window?.require) return globalThis.window.require;
-  if (globalThis.require) return globalThis.require;
-  return null;
-}
-
-function defaultDeps() {
-  const require = cepRequire();
-  if (!require) throw new Error('CEP Node require is unavailable');
-  const processImpl = globalThis.window?.cep_node?.process || globalThis.process;
-  return {
-    fs: require('fs'),
-    os: require('os'),
-    path: require('path'),
-    pid: processImpl?.pid || 0,
-    platform: processImpl?.platform || '',
-    now: () => Date.now(),
-  };
-}
-
-function protect(fs, path, mode, platform) {
+function protect(fs, path, mode, platformId) {
   try {
     fs.chmodSync(path, mode);
   } catch (error) {
-    if (platform !== 'win32') throw error;
+    if (platformId !== 'windows-x64') throw error;
   }
 }
 
-export function createApprovalTierFile(deps = defaultDeps()) {
-  const { fs, os, path } = deps;
+export function createApprovalTierFile(deps) {
+  if (!deps?.fs || !deps?.paths || typeof deps.paths.join !== 'function') {
+    throw new TypeError('platform file dependencies are required');
+  }
+  const { fs, paths } = deps;
   const pid = Number.isSafeInteger(deps.pid) && deps.pid >= 0 ? deps.pid : 0;
   const now = typeof deps.now === 'function' ? deps.now : () => Date.now();
-  const directory = path.join(os.homedir(), '.ae-mcp', 'runtime', 'approval');
-  const file = path.join(directory, `panel-${pid}.tier`);
+  const directory = paths.join([paths.runtimeRoot, 'approval']);
+  const file = paths.join([directory, `panel-${pid}.tier`]);
   let temporaryCounter = 0;
 
   function ensureDirectory() {
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-    protect(fs, directory, 0o700, deps.platform);
+    protect(fs, directory, 0o700, deps.platformId);
   }
 
   function temporaryPath() {
     temporaryCounter += 1;
     const suffix = typeof deps.nonce === 'function' ? deps.nonce() : temporaryCounter;
-    return path.join(directory, `.panel-${pid}.${now()}.${suffix}.tmp`);
+    return paths.join([directory, `.panel-${pid}.${now()}.${suffix}.tmp`]);
   }
 
   function write(tier) {
@@ -62,7 +44,7 @@ export function createApprovalTierFile(deps = defaultDeps()) {
       fs.fsyncSync(descriptor);
       fs.closeSync(descriptor);
       descriptor = null;
-      protect(fs, temporary, 0o600, deps.platform);
+      protect(fs, temporary, 0o600, deps.platformId);
       fs.renameSync(temporary, file);
       return tier;
     } catch (error) {

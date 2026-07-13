@@ -78,6 +78,40 @@ test('header policy rejects duplicates, unsafe provider names, and literal crede
     auth: { kind: 'none' },
     contentType: 'application/json',
   }), hasCode('provider_header_secret_reference_required'));
+  for (const name of ['X-Auth', 'X-Credential', 'X-Session-Id', 'XAuth', 'clientSecret', 'accessToken', 'auth.token']) {
+    assert.throws(() => mergeUpstreamHeaders({
+      rawHeaders: [],
+      providerHeaders: [{ name, value: 'opaque-value', source: 'literal' }],
+      auth: { kind: 'none' },
+      contentType: 'application/json',
+    }), hasCode('provider_header_secret_reference_required'));
+  }
+  for (const value of [
+    'client_secret=opaque-provider-value',
+    '{"accessToken":"opaque-provider-value"}',
+    'token: opaque-provider-value',
+    '{"client\\u0053ecret":"opaque-provider-value"}',
+    'client_secret%3Dopaque-provider-value',
+  ]) {
+    assert.throws(() => mergeUpstreamHeaders({
+      rawHeaders: [],
+      providerHeaders: [{ name: 'x-feature', value, source: 'literal' }],
+      auth: { kind: 'none' },
+      contentType: 'application/json',
+    }), hasCode('provider_header_secret_reference_required'));
+  }
+  assert.throws(() => mergeUpstreamHeaders({
+    rawHeaders: [],
+    providerHeaders: [{ name: 'Cookie', value: 'sid=opaque', source: 'secret' }],
+    auth: { kind: 'none' },
+    contentType: 'application/json',
+  }), hasCode('provider_header_forbidden'));
+  assert.equal(mergeUpstreamHeaders({
+    rawHeaders: [],
+    providerHeaders: [{ name: 'X-Auth', value: 'opaque-value', source: 'secret' }],
+    auth: { kind: 'none' },
+    contentType: 'application/json',
+  })['x-auth'], 'opaque-value');
 });
 
 test('header policy accepts JSON media types and enforces exact byte/count boundaries', () => {

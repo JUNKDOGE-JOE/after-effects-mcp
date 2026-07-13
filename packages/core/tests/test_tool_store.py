@@ -15,6 +15,7 @@ from ae_mcp.tool_store import (
     ToolNotFound,
     ToolRevisionConflict,
     ToolStoreLocked,
+    ToolStoreCorrupt,
     ToolStoreRevisionConflict,
     ToolStoreRootChanged,
     ToolStoreWriteError,
@@ -109,6 +110,29 @@ def test_index_search_and_content_hash_lookup_never_return_content(tmp_path: Pat
     assert by_hash == [summary]
     assert not hasattr(summary, "content")
     assert "TOP SECRET BODY" not in (store.root / "index.json").read_text("utf-8")
+
+
+def test_reads_fail_closed_for_secret_bearing_legacy_index_and_artifact(
+    tmp_path: Path,
+) -> None:
+    index_root = tmp_path / "index-tools"
+    index_store = ToolArtifactStore(root=index_root)
+    index_store.create(draft())
+    index = json.loads(index_store.index_path.read_text("utf-8"))
+    index["artifacts"][0]["description"] = "clientSecret=opaque-provider-value"
+    index_store.index_path.write_text(json.dumps(index), encoding="utf-8")
+    with pytest.raises(ToolStoreCorrupt):
+        index_store.list()
+
+    artifact_root = tmp_path / "artifact-tools"
+    artifact_store = ToolArtifactStore(root=artifact_root)
+    created = artifact_store.create(draft())
+    artifact_path = next(artifact_store.artifacts_dir.glob("*.json"))
+    artifact = json.loads(artifact_path.read_text("utf-8"))
+    artifact["source"]["provenance"]["auth.token"] = "opaque-provider-value"
+    artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
+    with pytest.raises(ToolStoreCorrupt):
+        artifact_store.get(created.id)
 
 
 class _ReplacingScanner:

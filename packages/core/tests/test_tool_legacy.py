@@ -134,6 +134,32 @@ def test_legacy_edit_writes_original_json_without_native_artifact_copy(tmp_path)
     assert not (tmp_path / "tools" / "artifacts").exists()
 
 
+def test_legacy_live_reads_and_edits_fail_closed_on_current_secret_rules(tmp_path):
+    user = tmp_path / "user"
+    bundled = tmp_path / "bundled"
+    bundled.mkdir()
+    unsafe_path = _write_skill(
+        user,
+        _skill("unsafe", template='const clientSecret = "opaque-provider-value";'),
+    )
+    adapter = _adapter(tmp_path, user=user, bundled=bundled)
+    with pytest.raises(ToolLegacyError) as unsafe_read:
+        adapter.get(legacy_artifact_id(unsafe_path.resolve()))
+    assert unsafe_read.value.code == "tool_legacy_secret_detected"
+
+    safe_path = _write_skill(user, _skill("safe", template="SAFE"))
+    before = adapter.get(legacy_artifact_id(safe_path.resolve()))
+    with pytest.raises(ToolLegacyError) as unsafe_edit:
+        adapter.edit(
+            before.id,
+            {"content": 'auth.token = "opaque-provider-value";'},
+            expected_revision=before.revision,
+            expected_content_hash=before.content_hash,
+        )
+    assert unsafe_edit.value.code == "tool_legacy_secret_detected"
+    assert Skill.from_dict(json.loads(safe_path.read_text("utf-8"))).template == "SAFE"
+
+
 def test_pure_metadata_edit_uses_entry_revision_and_preserves_skill_file(tmp_path):
     user = tmp_path / "user"
     bundled = tmp_path / "bundled"

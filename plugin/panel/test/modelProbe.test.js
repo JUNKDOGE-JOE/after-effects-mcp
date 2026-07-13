@@ -80,6 +80,92 @@ test('probeProviderModels returns ok with parsed models on 200', async () => {
   assert.deepEqual(result.models, [{ id: 'glm-5.2', label: 'glm-5.2' }]);
 });
 
+test('probeProviderModels preserves UTF-8 model metadata split across response chunks', async () => {
+  const body = Buffer.from(JSON.stringify({ data: [{ id: '模型-😀' }] }), 'utf8');
+  const emojiOffset = body.indexOf(Buffer.from('😀', 'utf8'));
+  const https = makeHttps((options, res, onRes) => {
+    onRes(Object.assign(res, { statusCode: 200 }));
+    res.handlers.data(body.subarray(0, emojiOffset + 1));
+    res.handlers.data(body.subarray(emojiOffset + 1));
+    res.handlers.end();
+  });
+
+  const result = await probeProviderModels({
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'sk-x',
+    httpsImpl: https,
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.models, [{ id: '模型-😀', label: '模型-😀' }]);
+});
+
+test('probeProviderModels aborts sustained chunked responses above 512 KiB', async () => {
+  let requestDestroyed = 0;
+  let responseDestroyed = 0;
+  const https = makeHttps((options, res, onRes, req) => {
+    res.destroy = () => { responseDestroyed += 1; };
+    req.destroy = () => { requestDestroyed += 1; };
+    onRes(Object.assign(res, { statusCode: 200 }));
+    for (let index = 0; index < 140; index += 1) {
+      res.handlers.data(Buffer.alloc(4096, 120));
+      if (index === 128) {
+        assert.equal(requestDestroyed, 1);
+        assert.equal(responseDestroyed, 1);
+      }
+    }
+    res.handlers.end();
+  });
+
+  const result = await probeProviderModels({
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'sk-x',
+    httpsImpl: https,
+  });
+
+  assert.deepEqual(result.models, []);
+  assert.equal(result.detail, 'Provider model response exceeded size limit');
+  assert.equal(requestDestroyed, 1);
+  assert.equal(responseDestroyed, 1);
+});
+
+test('probeProviderModels aborts both streams when the request times out', async () => {
+  let requestDestroyed = 0;
+  let responseDestroyed = 0;
+  const https = {
+    request(options, onRes) {
+      const responseHandlers = {};
+      const res = {
+        statusCode: 200,
+        on(event, handler) { responseHandlers[event] = handler; return this; },
+        destroy() { responseDestroyed += 1; },
+      };
+      let timeoutHandler = null;
+      const req = {
+        on() { return this; },
+        setTimeout(timeoutMs, handler) { timeoutHandler = handler; },
+        destroy() { requestDestroyed += 1; },
+        end() {
+          onRes(res);
+          timeoutHandler();
+        },
+      };
+      return req;
+    },
+  };
+
+  const result = await probeProviderModels({
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'sk-x',
+    httpsImpl: https,
+  });
+
+  assert.deepEqual(result.models, []);
+  assert.equal(result.detail, 'Provider model request timed out');
+  assert.equal(requestDestroyed, 1);
+  assert.equal(responseDestroyed, 1);
+});
+
 test('probeProviderModels respects openai-compatible dialect auth schemes', async () => {
   const seen = [];
   const https = makeHttps((options, res, onRes) => {
@@ -156,6 +242,58 @@ test('probeProviderModels sends a resolved probe profile without collapsing auth
   assert.equal(Object.hasOwn(calls[0], 'apiKey'), false);
   assert.equal(JSON.stringify(result).includes(probeSecret), false);
   assert.equal(JSON.stringify(result).includes(extraSecret), false);
+});
+
+test('probeProviderModels rejects JSON-escaped credentials in model ids and labels', async () => {
+  for (const secret of ['opaque"provider-secret', 'opaque\\provider-secret']) {
+    const result = await probeProviderModels({
+      requestProfile: {
+        providerId: 'provider-1',
+        baseUrl: 'https://provider.example/v1',
+        allowInsecureHttp: false,
+        auth: { kind: 'header', name: 'Authorization', value: `Bearer ${secret}` },
+        extraHeaders: [],
+        authProfileRevision: 1,
+      },
+      protocol: 'openai-compatible',
+      requestImpl: async () => ({
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ data: [{ id: secret, display_name: `label ${secret}` }] }),
+      }),
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.detail, 'Provider model metadata was rejected');
+    assert.deepEqual(result.models, []);
+  }
+});
+
+test('probeProviderModels rejects percent and Unicode encoded credentials in model metadata', async () => {
+  const secret = 'opaque-provider-secret';
+  for (const reflected of [
+    'opaque%2dprovider%2dsecret',
+    'opaque\\u002dprovider%2dsecret',
+    'opaque%252dprovider%252dsecret',
+  ]) {
+    const result = await probeProviderModels({
+      requestProfile: {
+        providerId: 'provider-1',
+        baseUrl: 'https://provider.example/v1',
+        allowInsecureHttp: false,
+        auth: { kind: 'header', name: 'Authorization', value: `Bearer ${secret}` },
+        extraHeaders: [],
+        authProfileRevision: 1,
+      },
+      protocol: 'openai-compatible',
+      requestImpl: async () => ({
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ data: [{ id: reflected }] }),
+      }),
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.detail, 'Provider model metadata was rejected');
+  }
 });
 
 test('probeProviderModels converts injected request failures into a non-secret network result', async () => {

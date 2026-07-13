@@ -17,6 +17,9 @@ from ae_mcp.tool_secrets import (
     [
         ("authorization", b"Authorization: Bearer value-that-must-not-leak"),
         ("api-key-header", b"x-api-key: provider-key-that-must-not-leak"),
+        ("credential-header", b"X-Custom-Token: opaque-provider-value"),
+        ("credential-assignment", b"client_secret=opaque-provider-value"),
+        ("credential-assignment", b"password='opaque-provider-value'"),
         ("cookie", b"Cookie: session=private-cookie-value"),
         (
             "jwt",
@@ -57,6 +60,55 @@ def test_scan_json_uses_canonical_text_and_detects_nested_values():
     )
     assert findings
     assert "sk-nested-secret-value" not in repr(findings)
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "X-Custom-Token",
+        "client_secret",
+        "access_token",
+        "password",
+        "session_credential",
+        "clientSecret",
+        "accessToken",
+        "auth.token",
+    ],
+)
+def test_scan_json_recursively_rejects_credential_named_values(key):
+    secret = "opaque-value-without-a-known-prefix"
+    findings = RegexSecretScanner().scan_json(
+        "nested.json", {"outer": [{"inner": {key: secret}}]}
+    )
+    assert any(finding.kind == "credential-key" for finding in findings)
+    assert secret not in repr(findings)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        {"client_secret": {"value": "opaque-value-without-prefix"}},
+        {"token": ["opaque-value-without-prefix"]},
+        {"clientSecret": "opaque-value-without-prefix"},
+        {"accessToken": "opaque-value-without-prefix"},
+        {"auth.token": "opaque-value-without-prefix"},
+    ],
+)
+def test_scan_json_rejects_nested_and_compound_credential_fields(value):
+    secret = "opaque-value-without-prefix"
+    findings = RegexSecretScanner().scan_json("compound.json", value)
+    assert any(finding.kind == "credential-key" for finding in findings)
+    assert secret not in repr(findings)
+
+
+def test_scan_json_allows_schema_objects_and_empty_sensitive_defaults():
+    assert RegexSecretScanner().scan_json(
+        "schema.json",
+        {
+            "properties": {"password": {"type": "string"}},
+            "defaults": {"access_token": ""},
+        },
+    ) == ()
 
 
 @pytest.mark.parametrize(

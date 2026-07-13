@@ -27,6 +27,45 @@ void Require(napi_status status, const char* message) {
   if (status != napi_ok) throw std::runtime_error(message);
 }
 
+std::string StringProperty(napi_env env, napi_value object, const char* name) {
+  napi_value value;
+  Require(napi_get_named_property(env, object, name, &value), "could not read transport option");
+  napi_valuetype type;
+  Require(napi_typeof(env, value, &type), "could not inspect transport option");
+  if (type != napi_string) throw std::runtime_error("transport identity option is invalid");
+  std::size_t bytes = 0;
+  Require(
+      napi_get_value_string_utf8(env, value, nullptr, 0, &bytes),
+      "could not measure transport option");
+  if (bytes == 0 || bytes > 32768) {
+    throw std::runtime_error("transport identity option is invalid");
+  }
+  std::vector<char> buffer(bytes + 1, '\0');
+  std::size_t copied = 0;
+  Require(
+      napi_get_value_string_utf8(env, value, buffer.data(), buffer.size(), &copied),
+      "could not read transport option");
+  return std::string(buffer.data(), copied);
+}
+
+PlatformTransportOptions ReadTransportOptions(
+    napi_env env,
+    napi_callback_info info) {
+  std::size_t argument_count = 1;
+  napi_value arguments[1];
+  Require(
+      napi_get_cb_info(env, info, &argument_count, arguments, nullptr, nullptr),
+      "could not read transport options");
+  if (argument_count == 0) return {};
+  napi_valuetype type;
+  Require(napi_typeof(env, arguments[0], &type), "could not inspect transport options");
+  if (type != napi_object) throw std::runtime_error("transport identity options are invalid");
+  return {
+      StringProperty(env, arguments[0], "expectedServerPath"),
+      StringProperty(env, arguments[0], "expectedServerSha256"),
+  };
+}
+
 napi_value ErrorValue(napi_env env, const std::string& message) {
   napi_value text;
   napi_value error;
@@ -180,7 +219,7 @@ void Finalize(napi_env, void* data, void*) {
 
 }  // namespace
 
-napi_value CreateTransport(napi_env env, napi_callback_info) {
+napi_value CreateTransport(napi_env env, napi_callback_info info) {
   try {
     napi_value object;
     Require(napi_create_object(env, &object), "could not create transport object");
@@ -191,8 +230,9 @@ napi_value CreateTransport(napi_env env, napi_callback_info) {
     Require(
         napi_define_properties(env, object, 2, properties),
         "could not define transport functions");
+    const PlatformTransportOptions options = ReadTransportOptions(env, info);
     auto holder = std::make_unique<TransportHolder>(
-        TransportHolder{CreatePlatformTransport()});
+        TransportHolder{CreatePlatformTransport(options)});
     Require(napi_wrap(env, object, holder.get(), Finalize, nullptr, nullptr),
             "could not retain native transport");
     holder.release();

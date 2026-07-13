@@ -242,6 +242,23 @@ test('upsert persists strict v3 entries with CAS and never persists a raw secret
   assert.equal(deps.chmods.at(-1)[1], 0o600);
 });
 
+test('upsert rejects credential-like literals and forbidden headers before disk mutation', () => {
+  for (const header of [
+    { id: 'auth', name: 'X-Auth', scopes: ['model'], valueRef: { kind: 'literal', value: 'opaque' } },
+    { id: 'credential', name: 'X-Credential', scopes: ['model'], valueRef: { kind: 'literal', value: 'opaque' } },
+    { id: 'camel', name: 'clientSecret', scopes: ['model'], valueRef: { kind: 'literal', value: 'opaque' } },
+    { id: 'dot', name: 'auth.token', scopes: ['model'], valueRef: { kind: 'literal', value: 'opaque' } },
+    { id: 'value', name: 'x-feature', scopes: ['model'], valueRef: { kind: 'literal', value: 'client_secret=opaque' } },
+    { id: 'escaped', name: 'x-feature', scopes: ['model'], valueRef: { kind: 'literal', value: '{"client\\u0053ecret":"opaque"}' } },
+    { id: 'cookie', name: 'Cookie', scopes: ['model'], valueRef: secretRef('header-cookie') },
+  ]) {
+    const deps = makeDeps();
+    const store = createProviderStore(deps);
+    assert.throws(() => store.upsert(providerEntry({ headers: [header] }), { expectedRevision: 0 }));
+    assert.equal(deps.files.has('/home/user/.ae-mcp/providers.json'), false);
+  }
+});
+
 test('v2 input is schema-migration-only and its legacy detection is canonicalized in the snapshot', () => {
   const deps = makeDeps();
   const file = '/home/user/.ae-mcp/providers.json';

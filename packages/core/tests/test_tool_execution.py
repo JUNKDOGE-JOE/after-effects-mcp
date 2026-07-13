@@ -696,6 +696,30 @@ async def test_secret_denial_audit_never_persists_the_matched_key(
 
 
 @pytest.mark.asyncio
+async def test_execution_rejects_nested_credential_named_values(
+    tmp_path: Path,
+) -> None:
+    artifact = _artifact(args_schema={})
+    backend = _Backend()
+    audit = ToolAuditLog(tmp_path)
+    engine = ToolExecutionEngine(_Store(artifact), backend, audit_log=audit)
+    secret = "opaque-value-without-known-prefix"
+    plan = engine.prepare(
+        artifact.id,
+        operation="execute",
+        args={"nested": {"client_secret": secret}},
+        target={},
+    )
+    grant = engine.grants.issue_once(plan)
+    with pytest.raises(ToolExecutionError) as caught:
+        await engine.execute(plan.plan_hash, grant.grant_id, ctx=None)
+    persisted = (tmp_path / "audit.jsonl").read_text(encoding="utf-8")
+    assert caught.value.code == "tool_secret_detected"
+    assert secret not in persisted
+    assert backend.calls == []
+
+
+@pytest.mark.asyncio
 async def test_grant_denial_audit_redacts_secret_shaped_keys_before_scan(
     tmp_path: Path, monkeypatch
 ) -> None:
