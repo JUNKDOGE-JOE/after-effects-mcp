@@ -21,6 +21,7 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 #### 🐛 修复 / 改进
 
+- **Windows ZXP Host runtime 打包修复（#58）**——生产包现在将 Express 与 Host package anchor 放入面板实际加载的 `runtime/windows-x64/node/host`，并在签名前后验证该契约，避免面板启动时报 `host runtime dependencies are unavailable`。
 - **跨协议角色与流式完成兼容**——向不接受 `developer` 角色的上游安全降级为其支持的等价角色；兼容缺少 `response.completed` 但已正常结束的受限流式实现，同时仍拒绝截断或语义不完整的流。
 - **诊断与错误边界收紧**——最小 token 探测按模型运行，未知错误转为可操作的结构化信息；Provider 响应、凭据、请求头和导出内容均经过脱敏与泄漏回归测试。
 - **双平台不可变 RC 契约更新**——受保护 `main` 的同一个 candidate SHA 生成 `ae-mcp-panel-v0.9.2-macos-arm64.zxp`、`ae-mcp-panel-v0.9.2-macos-arm64.dmg`、`ae-mcp-panel-v0.9.2-windows-x64.zxp`，由 `artifact-manifest-v0.9.2.json` 绑定 artifact ID 与 SHA-256；正式发布只提升已验证字节，禁止重建。
@@ -254,6 +255,7 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 
 #### 🐛 Fixed / Improved
 
+- **Windows ZXP Host runtime packaging (#58)** — the production package now places Express and the Host package anchor under the Panel's actual `runtime/windows-x64/node/host` load path and verifies that contract around signing, preventing `host runtime dependencies are unavailable` at Panel startup.
 - **Cross-protocol roles and stream completion** — upstreams that reject the `developer` role receive a safe equivalent supported role. Restricted streaming implementations that finish cleanly without `response.completed` are supported without accepting truncated or semantically incomplete streams.
 - **Tighter diagnostics and error boundaries** — minimal-token probes run per model; unknown failures become actionable structured errors; Provider responses, credentials, headers, and exports are covered by redaction and leak regressions.
 - **Updated immutable dual-platform RC contract** — one protected-`main` candidate SHA produces `ae-mcp-panel-v0.9.2-macos-arm64.zxp`, `ae-mcp-panel-v0.9.2-macos-arm64.dmg`, and `ae-mcp-panel-v0.9.2-windows-x64.zxp`; `artifact-manifest-v0.9.2.json` binds artifact IDs and SHA-256, and release promotion never rebuilds verified bytes.

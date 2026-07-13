@@ -126,6 +126,17 @@ async function writeRuntime(repoRoot, platform) {
     await writeFixtureFile(root, 'node/node.exe', nativeBytes, 0o644);
     await writeFixtureFile(root, 'python/python.exe', nativeBytes, 0o644);
   }
+  await writeFixtureFile(root, 'node/host/package.json', `${JSON.stringify({
+    name: 'ae-mcp-host',
+    version: '0.9.2',
+    dependencies: { express: '4.22.1' },
+  })}\n`);
+  await writeFixtureFile(root, 'node/host/package-lock.json', '{}\n');
+  await writeFixtureFile(root, 'node/host/node_modules/express/package.json', `${JSON.stringify({
+    name: 'express',
+    version: '4.22.1',
+    main: 'index.js',
+  })}\n`);
   await writeFixtureFile(root, 'node/host/node_modules/express/index.js', 'module.exports = () => {};\n');
   await writeFixtureFile(root, 'node/sidecar/node_modules/sdk/index.js', 'export default {};\n');
   const claudePackage = platform === 'macos-arm64'

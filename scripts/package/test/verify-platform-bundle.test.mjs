@@ -37,6 +37,21 @@ test('verification rejects one changed runtime byte', async (t) => {
   );
 });
 
+test('verification requires the production host package anchor used by the CEP panel', async (t) => {
+  const h = await makeStageHarness(t, 'windows-x64');
+  await stagePlatformBundle(h.input);
+  await fs.promises.rm(path.join(
+    h.outDir,
+    'runtime/windows-x64/node/host/package.json',
+  ));
+  await rewriteStageManifests(h);
+
+  await assert.rejects(
+    verifyPlatformBundle(h.verifyInput),
+    { code: 'BUNDLE_HOST_RUNTIME_INVALID' },
+  );
+});
+
 test('verification rejects the wrong expected platform and version', async (t) => {
   const h = await makeStageHarness(t, 'windows-x64');
   await stagePlatformBundle(h.input);
