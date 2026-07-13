@@ -14,7 +14,7 @@ on:
       version:
         description: Release version without the v prefix
         required: true
-        default: 0.9.1
+        default: 0.9.2
         type: string
 
 permissions:
@@ -25,13 +25,13 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: release-v0.9.1
+  group: release-v0.9.2
   queue: max
   cancel-in-progress: false
 
 env:
-  RELEASE_VERSION: 0.9.1
-  RELEASE_TAG: v0.9.1
+  RELEASE_VERSION: 0.9.2
+  RELEASE_TAG: v0.9.2
 
 jobs:
   promote:
@@ -126,10 +126,10 @@ jobs:
             const candidateSha = process.env.CANDIDATE_SHA;
             const buildRunId = process.env.BUILD_RUN_ID;
             const expectedNames = new Map([
-              ['ae-mcp-panel-v0.9.1-macos-arm64.dmg', 'mac_dmg_artifact_id'],
-              ['ae-mcp-panel-v0.9.1-macos-arm64.zxp', 'mac_zxp_artifact_id'],
-              ['ae-mcp-panel-v0.9.1-windows-x64.zxp', 'windows_zxp_artifact_id'],
-              ['artifact-manifest-v0.9.1.json', 'manifest_artifact_id'],
+              ['ae-mcp-panel-v0.9.2-macos-arm64.dmg', 'mac_dmg_artifact_id'],
+              ['ae-mcp-panel-v0.9.2-macos-arm64.zxp', 'mac_zxp_artifact_id'],
+              ['ae-mcp-panel-v0.9.2-windows-x64.zxp', 'windows_zxp_artifact_id'],
+              ['artifact-manifest-v0.9.2.json', 'manifest_artifact_id'],
             ]);
             const allowedPreflightNames = new Set([
               'ae-mcp-zxpsigncmd-4.1.3-macos-x86_64',
@@ -265,10 +265,10 @@ jobs:
             const downloadRoot = path.join(root, 'download');
             const releaseRoot = path.join(root, 'release-assets');
             const names = {
-              macDmg: 'ae-mcp-panel-v0.9.1-macos-arm64.dmg',
-              macZxp: 'ae-mcp-panel-v0.9.1-macos-arm64.zxp',
-              windowsZxp: 'ae-mcp-panel-v0.9.1-windows-x64.zxp',
-              manifest: 'artifact-manifest-v0.9.1.json',
+              macDmg: 'ae-mcp-panel-v0.9.2-macos-arm64.dmg',
+              macZxp: 'ae-mcp-panel-v0.9.2-macos-arm64.zxp',
+              windowsZxp: 'ae-mcp-panel-v0.9.2-windows-x64.zxp',
+              manifest: 'artifact-manifest-v0.9.2.json',
             };
             const sources = new Map([
               [names.macDmg, path.join(downloadRoot, 'mac-dmg', names.macDmg)],
@@ -308,7 +308,7 @@ jobs:
             const manifestText = new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes);
             const manifest = JSON.parse(manifestText);
             if (!serializeArtifactManifest(manifest).equals(manifestBytes)
-                || manifest.version !== '0.9.1'
+                || manifest.version !== '0.9.2'
                 || manifest.candidateSha !== process.env.CANDIDATE_SHA
                 || String(manifest.workflowRunId) !== process.env.BUILD_RUN_ID) {
               throw new Error('canonical manifest identity mismatch');
@@ -399,7 +399,7 @@ jobs:
             const buildRunId = process.env.BUILD_RUN_ID;
             const promotionRoot = process.env.PROMOTION_ROOT;
             const manifestPath = path.join(
-              promotionRoot, 'release-assets', 'artifact-manifest-v0.9.1.json',
+              promotionRoot, 'release-assets', 'artifact-manifest-v0.9.2.json',
             );
             const manifestStat = await fs.lstat(manifestPath);
             if (!manifestStat.isFile() || manifestStat.isSymbolicLink()
@@ -421,8 +421,8 @@ jobs:
             const SHA = /^[a-f0-9]{40}$/;
             const DIGEST = /^[a-f0-9]{64}$/;
             const DECIMAL_ID = /^\d+$/;
-            const TAG = 'v0.9.1';
-            const TAG_MESSAGE = 'AE MCP v0.9.1 immutable RC promotion';
+            const TAG = 'v0.9.2';
+            const TAG_MESSAGE = 'AE MCP v0.9.2 immutable RC promotion';
             const STATE_MARKER = 'ae-mcp-attestation-state:v1:';
             const COMMENT_MARKER = '<!-- ae-mcp-rc-attestation:v1 -->';
             const appId = 15368;
@@ -927,7 +927,7 @@ jobs:
               try {
                 await revalidateTagGate(gate);
                 await github.rest.git.createRef({
-                  owner, repo, ref: 'refs/tags/v0.9.1', sha: created.sha,
+                  owner, repo, ref: 'refs/tags/v0.9.2', sha: created.sha,
                 });
               } catch (error) {
                 if (error?.status !== 422) throw error;
@@ -954,15 +954,15 @@ jobs:
             const candidateSha = process.env.CANDIDATE_SHA;
             const releaseBody = 'Immutable Mac arm64 and Windows x64 release promoted from one verified RC.';
             const expectedNames = new Set([
-              'ae-mcp-panel-v0.9.1-macos-arm64.dmg',
-              'ae-mcp-panel-v0.9.1-macos-arm64.zxp',
-              'ae-mcp-panel-v0.9.1-windows-x64.zxp',
-              'artifact-manifest-v0.9.1.json',
+              'ae-mcp-panel-v0.9.2-macos-arm64.dmg',
+              'ae-mcp-panel-v0.9.2-macos-arm64.zxp',
+              'ae-mcp-panel-v0.9.2-windows-x64.zxp',
+              'artifact-manifest-v0.9.2.json',
             ]);
             const releases = await github.paginate(github.rest.repos.listReleases, {
               owner, repo, per_page: 100,
             });
-            const matchingReleases = releases.filter((item) => item.tag_name === 'v0.9.1');
+            const matchingReleases = releases.filter((item) => item.tag_name === 'v0.9.2');
             if (matchingReleases.length > 1) {
               throw new Error('release tag identifies multiple draft or published releases');
             }
@@ -971,9 +971,9 @@ jobs:
               ({ data: release } = await github.rest.repos.createRelease({
                 owner,
                 repo,
-                tag_name: 'v0.9.1',
+                tag_name: 'v0.9.2',
                 target_commitish: candidateSha,
-                name: 'v0.9.1',
+                name: 'v0.9.2',
                 body: releaseBody,
                 draft: true,
                 prerelease: false,
@@ -984,13 +984,13 @@ jobs:
             const refreshedReleases = await github.paginate(github.rest.repos.listReleases, {
               owner, repo, per_page: 100,
             });
-            const persisted = refreshedReleases.filter((item) => item.tag_name === 'v0.9.1');
+            const persisted = refreshedReleases.filter((item) => item.tag_name === 'v0.9.2');
             if (persisted.length !== 1 || String(persisted[0].id) !== String(release.id)) {
               throw new Error('draft release ID was not persisted uniquely');
             }
             [release] = persisted;
-            if (release.tag_name !== 'v0.9.1'
-                || release.name !== 'v0.9.1'
+            if (release.tag_name !== 'v0.9.2'
+                || release.name !== 'v0.9.2'
                 || release.body !== releaseBody
                 || release.prerelease === true) {
               throw new Error('existing release identity is incompatible with this promotion');
@@ -1048,7 +1048,7 @@ jobs:
             await fs.mkdir(existingRoot, { recursive: false });
             for (const asset of inventory.assets) {
               if (!/^\d+$/.test(String(asset.id))
-                  || !/^(?:ae-mcp-panel-v0\.9\.1-(?:macos-arm64\.(?:dmg|zxp)|windows-x64\.zxp)|artifact-manifest-v0\.9\.1\.json)$/.test(asset.name)) {
+                  || !/^(?:ae-mcp-panel-v0\.9\.2-(?:macos-arm64\.(?:dmg|zxp)|windows-x64\.zxp)|artifact-manifest-v0\.9\.2\.json)$/.test(asset.name)) {
                 throw new Error('existing release asset identity is invalid');
               }
               const endpoint = `${process.env.GITHUB_API_URL}/repos/${context.repo.owner}/${context.repo.repo}/releases/assets/${asset.id}`;
@@ -1121,10 +1121,10 @@ jobs:
               throw new Error('persisted release identity is invalid');
             }
             const names = [
-              'ae-mcp-panel-v0.9.1-macos-arm64.dmg',
-              'ae-mcp-panel-v0.9.1-macos-arm64.zxp',
-              'ae-mcp-panel-v0.9.1-windows-x64.zxp',
-              'artifact-manifest-v0.9.1.json',
+              'ae-mcp-panel-v0.9.2-macos-arm64.dmg',
+              'ae-mcp-panel-v0.9.2-macos-arm64.zxp',
+              'ae-mcp-panel-v0.9.2-windows-x64.zxp',
+              'artifact-manifest-v0.9.2.json',
             ];
             const existingNames = new Set(inventory.assets.map((asset) => asset.name));
             const responses = path.join(root, 'upload-responses');
@@ -1178,22 +1178,22 @@ jobs:
             const { owner, repo } = context.repo;
             const releaseBody = 'Immutable Mac arm64 and Windows x64 release promoted from one verified RC.';
             const expectedNames = [
-              'ae-mcp-panel-v0.9.1-macos-arm64.dmg',
-              'ae-mcp-panel-v0.9.1-macos-arm64.zxp',
-              'ae-mcp-panel-v0.9.1-windows-x64.zxp',
-              'artifact-manifest-v0.9.1.json',
+              'ae-mcp-panel-v0.9.2-macos-arm64.dmg',
+              'ae-mcp-panel-v0.9.2-macos-arm64.zxp',
+              'ae-mcp-panel-v0.9.2-windows-x64.zxp',
+              'artifact-manifest-v0.9.2.json',
             ].sort();
             const releases = await github.paginate(github.rest.repos.listReleases, {
               owner, repo, per_page: 100,
             });
-            const matches = releases.filter((item) => item.tag_name === 'v0.9.1');
+            const matches = releases.filter((item) => item.tag_name === 'v0.9.2');
             if (matches.length !== 1 || String(matches[0].id) !== process.env.RELEASE_ID) {
               throw new Error('persisted draft release is missing or ambiguous');
             }
             const [release] = matches;
-            if (release.tag_name !== 'v0.9.1'
+            if (release.tag_name !== 'v0.9.2'
                 || String(release.id) !== process.env.RELEASE_ID
-                || release.name !== 'v0.9.1'
+                || release.name !== 'v0.9.2'
                 || release.body !== releaseBody
                 || release.prerelease === true
                 || String(!release.draft) !== process.env.EXPECTED_PUBLISHED) {
@@ -1322,7 +1322,7 @@ jobs:
                 throw new Error(`release asset digest mismatch: ${asset.name}`);
               }
             }
-            const manifestPath = path.join(downloadRoot, 'artifact-manifest-v0.9.1.json');
+            const manifestPath = path.join(downloadRoot, 'artifact-manifest-v0.9.2.json');
             const manifestStat = await fs.lstat(manifestPath);
             if (!manifestStat.isFile() || manifestStat.isSymbolicLink()
                 || manifestStat.nlink !== 1 || manifestStat.size <= 0
@@ -1345,7 +1345,7 @@ jobs:
             const currentReleases = await github.paginate(github.rest.repos.listReleases, {
               owner, repo, per_page: 100,
             });
-            const currentMatches = currentReleases.filter((item) => item.tag_name === 'v0.9.1');
+            const currentMatches = currentReleases.filter((item) => item.tag_name === 'v0.9.2');
             if (currentMatches.length !== 1
                 || String(currentMatches[0].id) !== process.env.RELEASE_ID) {
               throw new Error('persisted release is missing or ambiguous');
@@ -1367,9 +1367,9 @@ jobs:
             if (canonicalStringify(currentInventory) !== canonicalStringify(inventory)) {
               throw new Error('release asset inventory changed');
             }
-            if (release.tag_name !== 'v0.9.1'
+            if (release.tag_name !== 'v0.9.2'
                 || String(release.id) !== process.env.RELEASE_ID
-                || release.name !== 'v0.9.1'
+                || release.name !== 'v0.9.2'
                 || release.body !== releaseBody
                 || release.prerelease === true) {
               throw new Error('release identity changed');
@@ -1382,14 +1382,14 @@ jobs:
               throw new Error('candidate is no longer current protected main');
             }
             const { data: reference } = await github.rest.git.getRef({
-              owner, repo, ref: 'tags/v0.9.1',
+              owner, repo, ref: 'tags/v0.9.2',
             });
             if (reference.object?.type !== 'tag') throw new Error('release tag is not annotated');
             const { data: tag } = await github.rest.git.getTag({
               owner, repo, tag_sha: reference.object.sha,
             });
-            if (tag.tag !== 'v0.9.1'
-                || tag.message !== 'AE MCP v0.9.1 immutable RC promotion'
+            if (tag.tag !== 'v0.9.2'
+                || tag.message !== 'AE MCP v0.9.2 immutable RC promotion'
                 || tag.object?.type !== 'commit' || tag.object?.sha !== candidateSha) {
               throw new Error('release tag changed');
             }
@@ -1669,15 +1669,15 @@ jobs:
             const finalReleases = await github.paginate(github.rest.repos.listReleases, {
               owner, repo, per_page: 100,
             });
-            const finalMatches = finalReleases.filter((item) => item.tag_name === 'v0.9.1');
+            const finalMatches = finalReleases.filter((item) => item.tag_name === 'v0.9.2');
             if (finalMatches.length !== 1
                 || String(finalMatches[0].id) !== process.env.RELEASE_ID) {
               throw new Error('persisted release disappeared before publication');
             }
             const [prePublicationRelease] = finalMatches;
             if (String(prePublicationRelease.id) !== process.env.RELEASE_ID
-                || prePublicationRelease.tag_name !== 'v0.9.1'
-                || prePublicationRelease.name !== 'v0.9.1'
+                || prePublicationRelease.tag_name !== 'v0.9.2'
+                || prePublicationRelease.name !== 'v0.9.2'
                 || prePublicationRelease.body !== releaseBody
                 || prePublicationRelease.prerelease === true
                 || (!prePublicationRelease.draft && prePublicationRelease.immutable !== true)) {
@@ -1711,7 +1711,7 @@ jobs:
                 throw new Error('candidate changed immediately before publication');
               }
               const { data: currentReference } = await github.rest.git.getRef({
-                owner, repo, ref: 'tags/v0.9.1',
+                owner, repo, ref: 'tags/v0.9.2',
               });
               if (currentReference.object?.type !== 'tag') {
                 throw new Error('release tag changed immediately before publication');
@@ -1719,8 +1719,8 @@ jobs:
               const { data: currentTag } = await github.rest.git.getTag({
                 owner, repo, tag_sha: currentReference.object.sha,
               });
-              if (currentTag.tag !== 'v0.9.1'
-                  || currentTag.message !== 'AE MCP v0.9.1 immutable RC promotion'
+              if (currentTag.tag !== 'v0.9.2'
+                  || currentTag.message !== 'AE MCP v0.9.2 immutable RC promotion'
                   || currentTag.object?.type !== 'commit'
                   || currentTag.object?.sha !== candidateSha) {
                 throw new Error('release tag changed immediately before publication');
@@ -1835,14 +1835,14 @@ jobs:
               const releases = await github.paginate(github.rest.repos.listReleases, {
                 owner, repo, per_page: 100,
               });
-              const matches = releases.filter((item) => item.tag_name === 'v0.9.1');
+              const matches = releases.filter((item) => item.tag_name === 'v0.9.2');
               if (matches.length !== 1 || String(matches[0].id) !== process.env.RELEASE_ID) {
                 throw new Error('persisted release changed immediately before publication');
               }
               const [release] = matches;
               if (String(release.id) !== process.env.RELEASE_ID
-                  || release.tag_name !== 'v0.9.1'
-                  || release.name !== 'v0.9.1' || release.body !== releaseBody
+                  || release.tag_name !== 'v0.9.2'
+                  || release.name !== 'v0.9.2' || release.body !== releaseBody
                   || release.prerelease === true
                   || release.draft !== expectedDraft
                   || (!release.draft && release.immutable !== true)) {
@@ -1874,8 +1874,8 @@ jobs:
                 owner, repo, release_id: publishableRelease.id, draft: false,
               });
               if (String(published.id) !== process.env.RELEASE_ID
-                  || published.tag_name !== 'v0.9.1'
-                  || published.name !== 'v0.9.1'
+                  || published.tag_name !== 'v0.9.2'
+                  || published.name !== 'v0.9.2'
                   || published.body !== releaseBody
                   || published.prerelease === true
                   || published.draft !== false || published.immutable !== true) {

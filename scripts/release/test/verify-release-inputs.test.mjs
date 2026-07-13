@@ -77,7 +77,7 @@ function commandEvidence(platform, result) {
 
 const manifest = {
   schemaVersion: 1,
-  version: '0.9.1',
+  version: '0.9.2',
   candidateSha,
   workflowRunId: '42',
   artifacts: [
@@ -506,7 +506,7 @@ test('attestation workflow pins actions and binds platform checks to immutable b
   assert.match(workflow, /ae-mcp-attestation-state:v1:/);
   assert.match(workflow, /reconcileAttestationState/);
   assert.match(workflow, /validateAttestation/);
-  assert.match(workflow, /artifact-manifest-v0\.9\.1\.json/);
+  assert.match(workflow, /artifact-manifest-v0\.9\.2\.json/);
   assert.match(workflow, /sha256File/);
   assert.match(workflow, /artifact\.expired !== false/);
   assert.match(workflow, /artifact\.name !== report\.artifactName/);
@@ -574,7 +574,7 @@ test('release promotion trusts protected main and downloads exact artifacts from
   assert.match(workflow, /issues: read/);
   assert.match(workflow, /pull-requests: read/);
   assert.match(workflow, /environment: release-promotion/);
-  assert.match(workflow, /group: release-v0\.9\.1\s+queue: max\s+cancel-in-progress: false/);
+  assert.match(workflow, /group: release-v0\.9\.2\s+queue: max\s+cancel-in-progress: false/);
   assert.match(workflow, /runs-on: ubuntu-24\.04/);
   assert.match(workflow, /actions\/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd/);
   assert.match(workflow, /actions\/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020/);
@@ -620,10 +620,10 @@ test('release promotion validates canonical bytes and deterministic attestation 
   assert.match(workflow, /canonicalStringify/);
   assert.match(workflow, /verifyArtifactManifest/);
   assert.match(workflow, /sha256File/);
-  assert.match(workflow, /artifact-manifest-v0\.9\.1\.json/);
-  assert.match(workflow, /ae-mcp-panel-v0\.9\.1-macos-arm64\.dmg/);
-  assert.match(workflow, /ae-mcp-panel-v0\.9\.1-macos-arm64\.zxp/);
-  assert.match(workflow, /ae-mcp-panel-v0\.9\.1-windows-x64\.zxp/);
+  assert.match(workflow, /artifact-manifest-v0\.9\.2\.json/);
+  assert.match(workflow, /ae-mcp-panel-v0\.9\.2-macos-arm64\.dmg/);
+  assert.match(workflow, /ae-mcp-panel-v0\.9\.2-macos-arm64\.zxp/);
+  assert.match(workflow, /ae-mcp-panel-v0\.9\.2-windows-x64\.zxp/);
   assert.match(workflow, /macos-rc-attestation/);
   assert.match(workflow, /windows-rc-attestation/);
   assert.match(workflow, /ae-mcp-rc:\$\{candidateSha\}:\$\{platform\}/);
@@ -666,7 +666,7 @@ test('release promotion validates canonical bytes and deterministic attestation 
   assert.match(workflow, /git\.createTag/);
   assert.match(workflow, /git\.createRef/);
   assert.match(workflow, /git\.getTag/);
-  assert.match(workflow, /refs\/tags\/v0\.9\.1/);
+  assert.match(workflow, /refs\/tags\/v0\.9\.2/);
 
   assert.doesNotMatch(workflow, /actions\/upload-artifact/);
   assert.doesNotMatch(workflow, /npm\s+(?:ci|install|run\s+build)|pip\s+install|uv\s+sync/);
@@ -723,9 +723,9 @@ test('unsigned local rehearsal binds both platform bytes and rejects tamper or l
     await rm(root, { recursive: true, force: true });
   });
   const fixtures = [
-    ['ae-mcp-panel-v0.9.1-macos-arm64.dmg', 'macos-arm64', '200', 'install'],
-    ['ae-mcp-panel-v0.9.1-macos-arm64.zxp', 'macos-arm64', '201', 'payload'],
-    ['ae-mcp-panel-v0.9.1-windows-x64.zxp', 'windows-x64', '202', 'install'],
+    ['ae-mcp-panel-v0.9.2-macos-arm64.dmg', 'macos-arm64', '200', 'install'],
+    ['ae-mcp-panel-v0.9.2-macos-arm64.zxp', 'macos-arm64', '201', 'payload'],
+    ['ae-mcp-panel-v0.9.2-windows-x64.zxp', 'windows-x64', '202', 'install'],
   ];
   for (const [name] of fixtures) await writeFile(join(root, name), `unsigned fixture: ${name}\n`);
   const productAcceptanceEvidencePath = join(root, 'product-acceptance-evidence.json');
@@ -770,7 +770,7 @@ test('unsigned local rehearsal binds both platform bytes and rejects tamper or l
     const bundleManifestPath = join(root, `${platform}-bundle.json`);
     await writeFile(bundleManifestPath, canonicalJson({
       schemaVersion: 1,
-      version: '0.9.1',
+      version: '0.9.2',
       platform,
       sourceCommitSha: candidateSha,
       runtime: {
@@ -876,7 +876,7 @@ test('unsigned local rehearsal binds both platform bytes and rejects tamper or l
   }
 
   const fixtureManifest = await buildArtifactManifest({
-    version: '0.9.1',
+    version: '0.9.2',
     candidateSha,
     workflowRunId: '84',
     artifacts: fixtures.map(([name, platform, artifactId, role]) => ({
@@ -921,7 +921,7 @@ test('unsigned local rehearsal binds both platform bytes and rejects tamper or l
     candidateSha, mainSha: candidateSha, manifest: fixtureManifest, attestations: passes,
   }), []);
 
-  await writeFile(join(root, 'ae-mcp-panel-v0.9.1-windows-x64.zxp'), 'tampered byte\n');
+  await writeFile(join(root, 'ae-mcp-panel-v0.9.2-windows-x64.zxp'), 'tampered byte\n');
   assert.match((await verifyArtifactManifest(fixtureManifest, root)).join(' '), /sha256 mismatch/);
 
   const laterFail = fixtureReport('windows-x64', 'FAIL', 2);

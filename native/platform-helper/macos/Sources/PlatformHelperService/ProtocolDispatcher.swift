@@ -309,7 +309,7 @@ final class ProtocolDispatcher {
             return .success(id: request.id, result: [
                 "protocolVersion": platformHelperProtocolVersion,
                 "platform": "macos-arm64",
-                "helperVersion": "0.9.1",
+                "helperVersion": "0.9.2",
                 "secretBackend": "keychain",
                 "captureBackend": "screen-capture-kit",
                 "authenticatedCaller": true,

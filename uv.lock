@@ -19,7 +19,7 @@ dev = [
 
 [[package]]
 name = "ae-mcp"
-version = "0.9.1"
+version = "0.9.2"
 source = { editable = "packages/core" }
 dependencies = [
     { name = "mcp" },
@@ -45,7 +45,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "ae-mcp-bridge"
-version = "0.9.1"
+version = "0.9.2"
 source = { editable = "packages/bridge" }
 dependencies = [
     { name = "ae-mcp" },
@@ -71,7 +71,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "ae-mcp-snapshot-mss"
-version = "0.9.1"
+version = "0.9.2"
 source = { editable = "packages/snapshot-mss" }
 dependencies = [
     { name = "ae-mcp" },

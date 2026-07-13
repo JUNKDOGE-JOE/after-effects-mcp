@@ -5,11 +5,11 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
-const VERSION = '0.9.1';
+const VERSION = '0.9.2';
 const PLATFORM_ASSETS = [
-  'ae-mcp-panel-v0.9.1-macos-arm64.zxp',
-  'ae-mcp-panel-v0.9.1-macos-arm64.dmg',
-  'ae-mcp-panel-v0.9.1-windows-x64.zxp',
+  'ae-mcp-panel-v0.9.2-macos-arm64.zxp',
+  'ae-mcp-panel-v0.9.2-macos-arm64.dmg',
+  'ae-mcp-panel-v0.9.2-windows-x64.zxp',
 ];
 
 const PYTHON_PROJECTS = [
@@ -69,7 +69,7 @@ function panelVersion(source) {
   return source.match(/PANEL_VERSION\s*=\s*['"]([^'"]+)['"];/)?.[1];
 }
 
-test('all active package and lockfile versions are v0.9.1', async () => {
+test('all active package and lockfile versions are v0.9.2', async () => {
   for (const relativePath of PYTHON_PROJECTS) {
     assert.equal(projectVersion(await text(relativePath), relativePath), VERSION, relativePath);
   }
@@ -106,10 +106,10 @@ test('Panel source, generated bundle, and CEP manifest use the release version',
   assert.equal(manifest.match(/<Host Name="AEFT" Version="([^"]+)"/)?.[1], '[25.0,26.9]');
 });
 
-test('user docs describe the v0.9.1 platform assets and optional AI channel CLIs', async () => {
+test('user docs describe the v0.9.2 platform assets and optional AI channel CLIs', async () => {
   for (const relativePath of USER_DOCS) {
     const body = await text(relativePath);
-    assert.match(body, /v?0\.9\.1/, `${relativePath} release version`);
+    assert.match(body, /v?0\.9\.2/, `${relativePath} release version`);
     for (const asset of PLATFORM_ASSETS) {
       assert.ok(body.includes(asset), `${relativePath} must name ${asset}`);
     }
@@ -135,7 +135,7 @@ test('release docs define immutable build, dual attestation, and no-rebuild prom
   const release = await text('docs/RELEASE.md');
   for (const marker of [
     'build-rc.yml',
-    'artifact-manifest-v0.9.1.json',
+    'artifact-manifest-v0.9.2.json',
     'macos-rc-attestation',
     'windows-rc-attestation',
     'release.yml',
@@ -153,7 +153,7 @@ test('release docs define immutable build, dual attestation, and no-rebuild prom
   const changelog = await text('CHANGELOG.md');
   const firstRelease = changelog.match(/^### \[([^\]]+)\].*$/m)?.[1];
   assert.equal(firstRelease, VERSION);
-  assert.match(changelog, /^### \[0\.9\.1\].*(?:Unreleased|未发布)/mi);
+  assert.match(changelog, /^### \[0\.9\.2\].*(?:Unreleased|未发布)/mi);
 });
 
 test('user docs distinguish the unreleased target contract from current verified behavior', async () => {
@@ -166,8 +166,8 @@ test('user docs distinguish the unreleased target contract from current verified
     readFile('docs/WORKFLOW.md', 'utf8'),
   ]);
 
-  assert.match(readme, /v0\.9\.1 Target Support Matrix/);
-  assert.match(readmeZh, /v0\.9\.1 目标支持矩阵/);
+  assert.match(readme, /v0\.9\.2 Target Support Matrix/);
+  assert.match(readmeZh, /v0\.9\.2 目标支持矩阵/);
   assert.match(readme, /historical v0\.9\.0 development wizard[\s\S]*online `uv`/i);
   assert.match(readmeZh, /历史 v0\.9\.0 开发向导[\s\S]*在线 `uv`/);
   assert.match(readme, /install-plugin-dev-macos\.sh/);

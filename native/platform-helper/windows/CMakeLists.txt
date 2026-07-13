@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(ae_mcp_platform_helper_windows VERSION 0.9.1 LANGUAGES CXX)
+project(ae_mcp_platform_helper_windows VERSION 0.9.2 LANGUAGES CXX)
 
 if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
   message(FATAL_ERROR "the Windows platform helper requires a native x64 Windows host")

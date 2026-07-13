@@ -26,7 +26,7 @@ $Out = [IO.Path]::GetFullPath($Out)
 $CommentOut = [IO.Path]::GetFullPath($CommentOut)
 if ($Out -ceq $CommentOut) { throw 'Attestation and comment outputs must be distinct.' }
 $NodePath = (Get-Command node -ErrorAction Stop).Source
-if ([IO.Path]::GetFileName($Artifact) -cne 'ae-mcp-panel-v0.9.1-windows-x64.zxp') {
+if ([IO.Path]::GetFileName($Artifact) -cne 'ae-mcp-panel-v0.9.2-windows-x64.zxp') {
     throw 'Unexpected Windows RC artifact name.'
 }
 if ([IO.Path]::GetFileName($Ae25Path) -cne 'AfterFX.exe' -or
@@ -134,7 +134,7 @@ try {
     if ($Ae26Version -notmatch '^26\.') { $Failures.Add('AE 26 version identity failed'); $PreflightOk = $false }
 
     $Launcher = Join-Path $env:USERPROFILE '.ae-mcp\bin\ae-mcp.exe'
-    $RuntimeManifest = Join-Path $env:USERPROFILE '.ae-mcp\runtime\0.9.1\windows-x64\runtime-manifest.json'
+    $RuntimeManifest = Join-Path $env:USERPROFILE '.ae-mcp\runtime\0.9.2\windows-x64\runtime-manifest.json'
     $Ae25Smoke = Join-Path $EvidenceRoot 'ae-mcp-ae25-smoke.json'
     $Ae26Smoke = Join-Path $EvidenceRoot 'ae-mcp-ae26-smoke.json'
 
@@ -156,7 +156,7 @@ try {
                 --launcher $Launcher `
                 --runtime-manifest $RuntimeManifest `
                 --expected-platform windows-x64 `
-                --expected-version 0.9.1 `
+                --expected-version 0.9.2 `
                 --expected-runtime-manifest-sha256 $ExpectedRuntimeManifestSha256 `
                 --expected-launcher-sha256 $ExpectedLauncherSha256 `
                 --expected-ae-major ([string]$Major) `

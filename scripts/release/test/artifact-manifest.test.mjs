@@ -87,7 +87,7 @@ async function writeEvidence(root, candidateSha, artifacts) {
       files.bundleManifest,
       canonicalJson({
         schemaVersion: 1,
-        version: '0.9.1',
+        version: '0.9.2',
         platform,
         sourceCommitSha: candidateSha,
         runtime: {
@@ -207,15 +207,15 @@ async function makeFixture(t) {
   const candidateSha = 'a'.repeat(40);
   const artifacts = [
     {
-      name: 'ae-mcp-panel-v0.9.1-macos-arm64.dmg', path: join(root, 'ae-mcp-panel-v0.9.1-macos-arm64.dmg'), platform: 'macos-arm64',
+      name: 'ae-mcp-panel-v0.9.2-macos-arm64.dmg', path: join(root, 'ae-mcp-panel-v0.9.2-macos-arm64.dmg'), platform: 'macos-arm64',
       artifactId: '100', role: 'install', bytes: 'mac-dmg-bytes',
     },
     {
-      name: 'ae-mcp-panel-v0.9.1-macos-arm64.zxp', path: join(root, 'ae-mcp-panel-v0.9.1-macos-arm64.zxp'), platform: 'macos-arm64',
+      name: 'ae-mcp-panel-v0.9.2-macos-arm64.zxp', path: join(root, 'ae-mcp-panel-v0.9.2-macos-arm64.zxp'), platform: 'macos-arm64',
       artifactId: '101', role: 'payload', bytes: 'mac-zxp-bytes',
     },
     {
-      name: 'ae-mcp-panel-v0.9.1-windows-x64.zxp', path: join(root, 'ae-mcp-panel-v0.9.1-windows-x64.zxp'), platform: 'windows-x64',
+      name: 'ae-mcp-panel-v0.9.2-windows-x64.zxp', path: join(root, 'ae-mcp-panel-v0.9.2-windows-x64.zxp'), platform: 'windows-x64',
       artifactId: '102', role: 'install', bytes: 'win-zxp-bytes',
     },
   ];
@@ -244,7 +244,7 @@ async function makeFixture(t) {
 test('manifest is canonical and binds exact artifact bytes', async (t) => {
   const fixture = await makeFixture(t);
   const manifest = await buildArtifactManifest({
-    version: '0.9.1',
+    version: '0.9.2',
     candidateSha: fixture.candidateSha,
     workflowRunId: '42',
     artifacts: fixture.artifacts,
@@ -274,17 +274,17 @@ test('manifest is canonical and binds exact artifact bytes', async (t) => {
     /evidence digest|runtime manifest/i,
   );
 
-  await writeFile(join(fixture.root, 'ae-mcp-panel-v0.9.1-macos-arm64.dmg'), 'tampered');
+  await writeFile(join(fixture.root, 'ae-mcp-panel-v0.9.2-macos-arm64.dmg'), 'tampered');
   assert.deepEqual(
     await verifyArtifactManifest(manifest, fixture.root),
-    ['sha256 mismatch: ae-mcp-panel-v0.9.1-macos-arm64.dmg'],
+    ['sha256 mismatch: ae-mcp-panel-v0.9.2-macos-arm64.dmg'],
   );
 });
 
 test('pure manifest verifier rejects extra or missing exact-schema keys', async (t) => {
   const fixture = await makeFixture(t);
   const manifest = await buildArtifactManifest({
-    version: '0.9.1',
+    version: '0.9.2',
     candidateSha: fixture.candidateSha,
     workflowRunId: '42',
     artifacts: fixture.artifacts,
@@ -337,7 +337,7 @@ test('builder applies the 8 MiB bound to each evidence JSON leaf', async (t) => 
   );
   await assert.rejects(
     buildArtifactManifest({
-      version: '0.9.1',
+      version: '0.9.2',
       candidateSha: fixture.candidateSha,
       workflowRunId: '42',
       artifacts: fixture.artifacts,
@@ -351,7 +351,7 @@ test('builder applies the 8 MiB bound to each evidence JSON leaf', async (t) => 
 test('manifest rejects mutable or malformed identity fields', async () => {
   await assert.rejects(
     buildArtifactManifest({
-      version: 'v0.9.1',
+      version: 'v0.9.2',
       candidateSha: 'short',
       workflowRunId: '',
       artifacts: [],
@@ -363,14 +363,14 @@ test('manifest rejects mutable or malformed identity fields', async () => {
 test('builder requires unique artifacts and exactly one evidence record per platform', async (t) => {
   const fixture = await makeFixture(t);
   const artifact = {
-    name: 'ae-mcp-panel-v0.9.1-macos-arm64.zxp',
+    name: 'ae-mcp-panel-v0.9.2-macos-arm64.zxp',
     path: fixture.artifactPath,
     platform: 'macos-arm64',
     artifactId: '100',
     role: 'install',
   };
   const identity = {
-    version: '0.9.1',
+    version: '0.9.2',
     candidateSha: fixture.candidateSha,
     workflowRunId: '42',
   };
@@ -396,7 +396,7 @@ test('builder requires unique artifacts and exactly one evidence record per plat
 test('verification rejects traversal and symbolic-link artifact names fail closed', async (t) => {
   const fixture = await makeFixture(t);
   const manifest = await buildArtifactManifest({
-    version: '0.9.1',
+    version: '0.9.2',
     candidateSha: fixture.candidateSha,
     workflowRunId: '42',
     artifacts: fixture.artifacts,
@@ -406,23 +406,23 @@ test('verification rejects traversal and symbolic-link artifact names fail close
 
   const traversal = structuredClone(manifest);
   const macZxp = traversal.artifacts.find(
-    (item) => item.name === 'ae-mcp-panel-v0.9.1-macos-arm64.zxp',
+    (item) => item.name === 'ae-mcp-panel-v0.9.2-macos-arm64.zxp',
   );
-  macZxp.name = '../ae-mcp-panel-v0.9.1-macos-arm64.zxp';
+  macZxp.name = '../ae-mcp-panel-v0.9.2-macos-arm64.zxp';
   assert.deepEqual(
     await verifyArtifactManifest(traversal, fixture.root),
     [
-      'invalid artifact name: ../ae-mcp-panel-v0.9.1-macos-arm64.zxp',
+      'invalid artifact name: ../ae-mcp-panel-v0.9.2-macos-arm64.zxp',
       'final native signature evidence artifact mismatch: macos-arm64',
     ],
   );
 
   if (process.platform !== 'win32') {
-    const aliasName = 'ae-mcp-panel-v0.9.1-macos-arm64.zzz';
+    const aliasName = 'ae-mcp-panel-v0.9.2-macos-arm64.zzz';
     await symlink(fixture.artifactPath, join(fixture.root, aliasName));
     const symbolicLink = structuredClone(manifest);
     symbolicLink.artifacts.find(
-      (item) => item.name === 'ae-mcp-panel-v0.9.1-macos-arm64.zxp',
+      (item) => item.name === 'ae-mcp-panel-v0.9.2-macos-arm64.zxp',
     ).name = aliasName;
     assert.deepEqual(
       await verifyArtifactManifest(symbolicLink, fixture.root),
@@ -437,7 +437,7 @@ test('verification rejects traversal and symbolic-link artifact names fail close
   await link(fixture.artifactPath, hardlink);
   await assert.rejects(
     buildArtifactManifest({
-      version: '0.9.1',
+      version: '0.9.2',
       candidateSha: fixture.candidateSha,
       workflowRunId: '42',
       artifacts: [{
@@ -461,7 +461,7 @@ test('builder refuses symlinked evidence JSON instead of following it', {
 
   await assert.rejects(
     buildArtifactManifest({
-      version: '0.9.1',
+      version: '0.9.2',
       candidateSha: fixture.candidateSha,
       workflowRunId: '42',
       artifacts: fixture.artifacts,
@@ -478,7 +478,7 @@ test('builder and verifier bind every evidence digest and signed output to relea
   await writeFile(fixture.evidence[0].runtimeInventoryPath, `${runtimeBytes}\n`);
   await assert.rejects(
     buildArtifactManifest({
-      version: '0.9.1',
+      version: '0.9.2',
       candidateSha: fixture.candidateSha,
       workflowRunId: '42',
       artifacts: fixture.artifacts,
@@ -494,7 +494,7 @@ test('builder and verifier bind every evidence digest and signed output to relea
   await writeFile(second.evidence[1].signingReportPath, canonicalStringify(signing));
   await assert.rejects(
     buildArtifactManifest({
-      version: '0.9.1',
+      version: '0.9.2',
       candidateSha: second.candidateSha,
       workflowRunId: '42',
       artifacts: second.artifacts,
@@ -506,7 +506,7 @@ test('builder and verifier bind every evidence digest and signed output to relea
 
   const third = await makeFixture(t);
   const manifest = await buildArtifactManifest({
-    version: '0.9.1',
+    version: '0.9.2',
     candidateSha: third.candidateSha,
     workflowRunId: '42',
     artifacts: third.artifacts,

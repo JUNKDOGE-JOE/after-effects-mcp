@@ -309,7 +309,7 @@ def test_export_safe_source_omits_client_paths_and_arbitrary_provenance():
             "type": "chat-tool-call",
             "ref": "/Users/person/private/provider-config.json",
             "client": "private-client-identity",
-            "productVersion": "0.9.1",
+            "productVersion": "0.9.2",
             "provenance": {
                 "provider": "private-provider-shape",
                 "Authorization": "Bearer do-not-export",
@@ -323,7 +323,7 @@ def test_export_safe_source_omits_client_paths_and_arbitrary_provenance():
         "type": "chat-tool-call",
         "ref": artifact.id,
         "client": None,
-        "productVersion": "0.9.1",
+        "productVersion": "0.9.2",
         "provenance": {"contentHash": artifact.content_hash},
     }
     for forbidden in (

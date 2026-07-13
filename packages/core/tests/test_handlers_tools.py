@@ -85,7 +85,7 @@ def _artifact(*, bundled: bool = False) -> ToolArtifact:
             "bundled" if bundled else "user",
             "wiggle.json",
             None,
-            "0.9.1" if bundled else None,
+            "0.9.2" if bundled else None,
             {"manifestSha256": "b" * 64} if bundled else {},
         ),
         status="saved",

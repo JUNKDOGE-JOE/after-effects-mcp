@@ -17,16 +17,16 @@
 | Preview output | 默认位于操作系统临时目录的 `ae_mcp_previews/<session>/...png`，可用 `out_dir` 覆盖 |
 | Checkpoint store | 操作系统临时目录下的 `ae_mcp_checkpoints/<basename>/<id>.aep + .json` |
 
-### v0.9.1 平台与分发契约
+### v0.9.2 平台与分发契约
 
-v0.9.1 当前是未发布候选；下面是最终 RC 契约，不表示 helper、provider route、Tool Library 或实机矩阵已经验收：
+v0.9.2 当前是未发布候选。Provider、Tool Library 与 Platform Helper 已完成实现并通过 Windows AE 2025 实机验证；下面的最终 RC 契约不表示签名、公证、包内 RuntimeManager 或完整实机矩阵已经验收：
 
 | 平台 | 安装资产 | 审计载荷 |
 |---|---|---|
-| macOS 14+ Apple Silicon arm64 | `ae-mcp-panel-v0.9.1-macos-arm64.dmg` | `ae-mcp-panel-v0.9.1-macos-arm64.zxp` |
-| Windows 11 24H2+ x64 | `ae-mcp-panel-v0.9.1-windows-x64.zxp` | 同一个 ZXP |
+| macOS 14+ Apple Silicon arm64 | `ae-mcp-panel-v0.9.2-macos-arm64.dmg` | `ae-mcp-panel-v0.9.2-macos-arm64.zxp` |
+| Windows 11 24H2+ x64 | `ae-mcp-panel-v0.9.2-windows-x64.zxp` | 同一个 ZXP |
 
-两端的最终目标均为 AE 25.x–26.x（CEP `[25.0,26.9]`），并由 `artifact-manifest-v0.9.1.json` 绑定同一个 candidate SHA。在最终契约中，Panel 将从资产内离线安装 runtime，普通用户不依赖系统 Python/Node/uv。Claude Code CLI、Codex CLI 与 ZCode CLI/app-server 都是对应 AI 通道的**可选**依赖，不是 core 前置。Provider 配置与凭据不可导出；signed helper、RuntimeManager 和系统凭据库的最终实现仍受明确审批与 Phase 0 证据门禁。
+两端的最终目标均为 AE 25.x–26.x（CEP `[25.0,26.9]`），并由 `artifact-manifest-v0.9.2.json` 绑定同一个 candidate SHA。在最终契约中，Panel 将从资产内离线安装 runtime，普通用户不依赖系统 Python/Node/uv。Claude Code CLI、Codex CLI 与 ZCode CLI/app-server 都是对应 AI 通道的**可选**依赖，不是 core 前置。Provider 配置与凭据不可导出；系统凭据库与 Helper 功能已经落地并保持 fail-closed，正式签名资产、RuntimeManager 和剩余平台验收仍受发布门禁。
 
 ### 环境变量
 
@@ -262,7 +262,7 @@ MVP 不生成任意二进制 `.ffx` 文件。
 
 ### Atom-Parity 状态
 
-以下是当前代码已覆盖的能力清单，不是 v0.9.1 双平台或四格实机验收证据：
+以下是当前代码已覆盖的能力清单，不是 v0.9.2 双平台或四格实机验收证据：
 
 - CEP panel 到 AE bridge
 - 44 个已注册 `ae.*` handlers（42 个 backend verbs，加 `ae.status`/`ae.diagnose`）
@@ -303,16 +303,16 @@ ae-mcp 是独立实现，参考了 Atom 风格 AE 操作面和 FX Console 风格
 | Preview output | `ae_mcp_previews/<session>/...png` in the operating-system temporary directory unless `out_dir` is set |
 | Checkpoint store | `ae_mcp_checkpoints/<basename>/<id>.aep + .json` under the operating-system temporary directory |
 
-### v0.9.1 Platform and Distribution Contract
+### v0.9.2 Platform and Distribution Contract
 
-v0.9.1 is currently an unreleased candidate. This is the final RC contract, not a claim that the helper, provider route, Tool Library, or hardware matrix has passed:
+v0.9.2 is currently an unreleased candidate. Provider, Tool Library, and Platform Helper implementation is complete and has passed Windows AE 2025 hardware validation; the final RC contract below is not a claim that signing, notarization, bundled RuntimeManager, or the complete hardware matrix has passed:
 
 | Platform | Install asset | Audit payload |
 |---|---|---|
-| macOS 14+ Apple Silicon arm64 | `ae-mcp-panel-v0.9.1-macos-arm64.dmg` | `ae-mcp-panel-v0.9.1-macos-arm64.zxp` |
-| Windows 11 24H2+ x64 | `ae-mcp-panel-v0.9.1-windows-x64.zxp` | the same ZXP |
+| macOS 14+ Apple Silicon arm64 | `ae-mcp-panel-v0.9.2-macos-arm64.dmg` | `ae-mcp-panel-v0.9.2-macos-arm64.zxp` |
+| Windows 11 24H2+ x64 | `ae-mcp-panel-v0.9.2-windows-x64.zxp` | the same ZXP |
 
-Both target AE 25.x–26.x (CEP `[25.0,26.9]`) and are bound to one candidate SHA by `artifact-manifest-v0.9.1.json`. Under the final contract, the Panel will install the bundled runtime offline so normal users do not depend on system Python/Node/uv. Claude Code CLI, Codex CLI, and the ZCode CLI/app-server are **optional** dependencies for their corresponding AI channels, not core prerequisites. Provider configuration and credentials are not exportable; the final signed-helper, RuntimeManager, and system-credential implementation remains gated by explicit approval and Phase 0 evidence.
+Both target AE 25.x–26.x (CEP `[25.0,26.9]`) and are bound to one candidate SHA by `artifact-manifest-v0.9.2.json`. Under the final contract, the Panel will install the bundled runtime offline so normal users do not depend on system Python/Node/uv. Claude Code CLI, Codex CLI, and the ZCode CLI/app-server are **optional** dependencies for their corresponding AI channels, not core prerequisites. Provider configuration and credentials are not exportable; system-credential and Helper behavior is implemented and fail-closed, while signed release assets, RuntimeManager, and the remaining platform acceptance stay release-gated.
 
 ### Environment Variables
 
@@ -542,7 +542,7 @@ The MVP does not generate arbitrary binary `.ffx` files.
 
 ### Atom-Parity Status
 
-The following capabilities are present in the current code; this is not v0.9.1 dual-platform or four-cell hardware-acceptance evidence:
+The following capabilities are present in the current code; this is not v0.9.2 dual-platform or four-cell hardware-acceptance evidence:
 
 - CEP panel to AE bridge
 - 44 registered `ae.*` handlers (42 backend verbs plus `ae.status`/`ae.diagnose`)
