@@ -6,15 +6,14 @@ ae-mcp is a backend-agnostic automation tool that keeps Adobe After Effects and 
 
 The MCP server is the core. Outside the MCP layer, ae-mcp also ships a CEP panel that wraps built-in agent chat, backend configuration, approval controls, diagnostics, and first-run setup. You can use ae-mcp from an external agent backend through MCP, or configure Claude / Codex / ZCode directly inside the AE panel.
 
-The next release candidate is **v0.9.2 (unreleased)**. Version sources are synchronized for candidate construction; this is not a claim that the signed artifacts or four-cell AE acceptance matrix have passed.
+**v0.9.2 is the Windows x64 release.** macOS compatibility, bundled RuntimeManager, the production cross-platform signing chain, and the complete AE 25/26 hardware matrix move to v0.9.3.
 
 ## v0.9.2 Target Support Matrix
 
-The unreleased v0.9.2 candidate targets only the following platform and host matrix. None of these cells is a release-accepted support claim until the four-cell hardware gate passes:
+The published v0.9.2 asset targets this verified release scope:
 
-- macOS 14.0 Sonoma or newer on native Apple Silicon arm64. Intel Macs and Rosetta are not supported.
 - Windows 11 24H2 (11.0.26100) or newer on x64. Windows on ARM is not supported.
-- After Effects 25.x and 26.x, represented by the CEP host range `[25.0,26.9]`.
+- After Effects 25.x is hardware-validated. The CEP manifest remains `[25.0,26.9]`; complete AE 26 and macOS acceptance is deferred to v0.9.3.
 
 ## Architecture
 
@@ -36,7 +35,7 @@ The MCP core is backend-agnostic: external clients can talk to AE through the st
 
 - One protected `main` candidate SHA produces both native platform payloads; a failed or changed candidate must be rebuilt under a new SHA.
 - Core operation is designed to be offline and self-contained in the signed release payload. System Python, system Node, `uv`, PyPI, and npm resolution are development inputs, not normal-user install prerequisites.
-- Provider, Tool Library, and Platform Helper implementation is complete, including Windows AE 2025 hardware validation. Publishing remains gated on bundled RuntimeManager, per-file native-signature and product-acceptance coverage, signing and redistribution prerequisites, the remaining AE 25/26 hardware cells on both platforms, and valid Mac/Windows attestations. The native coverage policy remains fail-closed, so implementation or synchronized v0.9.2 metadata cannot bypass those release gates.
+- Provider, Tool Library, and Platform Helper implementation is complete, including Windows AE 2025 hardware validation. v0.9.2 ships a self-signed Windows ZXP whose certificate is valid until 2037; the asset has no TSA timestamp, and its native Helper binaries are not Authenticode-signed. Bundled RuntimeManager, production native signing, macOS, and the remaining hardware cells are v0.9.3 work.
 - UXP, Intel Mac, Windows ARM, provider-config export, and ZCode desktop captcha/runtime-header bridging are outside the v0.9.2 support scope.
 
 ## Install and First Run
@@ -45,12 +44,11 @@ Normal users install one immutable asset from the v0.9.2 release set. Do not use
 
 | Platform | Install asset | Auditable payload |
 |---|---|---|
-| macOS 14+ Apple Silicon arm64 | `ae-mcp-panel-v0.9.2-macos-arm64.dmg` | `ae-mcp-panel-v0.9.2-macos-arm64.zxp` |
 | Windows 11 24H2+ x64 | `ae-mcp-panel-v0.9.2-windows-x64.zxp` | same ZXP |
 
-The macOS DMG contains only the exact signed ZXP in a signed/notarized distribution container; it is not itself a ZXP installer. Both platforms require a separately supplied supported ZXP installer. Verify each download against `artifact-manifest-v0.9.2.json`, install the Mac ZXP from the DMG or the Windows ZXP, restart After Effects, and open `Window -> Extensions -> ae-mcp`. Under the final gated contract, the panel then installs the bundled runtime offline and exposes the stable `ae-mcp` launcher after verification.
+Install `ae-mcp-panel-v0.9.2-windows-x64.zxp` with a supported ZXP installer, restart After Effects, and open `Window -> Extensions -> ae-mcp`. This release retains the existing external runtime setup; the bundled offline RuntimeManager is deferred to v0.9.3.
 
-These filenames describe the v0.9.2 contract. They are not available for general use until both attestation checks pass and the no-rebuild promotion workflow publishes them. See [Install](docs/INSTALL.md) and [Release](docs/RELEASE.md).
+The GitHub Release publishes the exact Windows asset and its SHA-256 digest. See [Install](docs/INSTALL.md) and [Release](docs/RELEASE.md).
 
 ## Built-in Backends
 

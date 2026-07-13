@@ -4,13 +4,12 @@
 
 ### v0.9.2 状态与支持矩阵
 
-v0.9.2 当前是未发布候选契约。Provider、Tool Library 与 Platform Helper 已完成实现，并通过 Windows AE 2025 实机验证；仓库里的版本号与文件名仍不代表签名、公证、包内 RuntimeManager 或完整四格 AE 实机验收已经完成。只有 [发布门禁](RELEASE.md)全部通过后，下面的资产才会公开。
+v0.9.2 是 Windows x64 正式版本。Provider、Tool Library 与 Platform Helper 已完成实现，并通过 Windows AE 2025 实机验证。macOS、包内 RuntimeManager、正式跨平台签名链和完整 AE 25/26 实机矩阵转入 v0.9.3。
 
 支持范围固定为：
 
-- macOS 14 Sonoma 或更高版本，Apple Silicon arm64；不支持 Intel Mac 或 Rosetta。
 - Windows 11 24H2 或更高版本，x64；不支持 Windows ARM。
-- After Effects 25.x 与 26.x；正式发布前必须完成 Mac/Windows × AE 25/26 四格 smoke。
+- After Effects 25.x 已完成实机验证；AE 26 完整验收转入 v0.9.3。
 
 ### 普通用户：安装离线发布资产
 
@@ -18,19 +17,15 @@ v0.9.2 的平台资产是：
 
 | 平台 | 安装资产 | 同组审计资产 |
 |---|---|---|
-| macOS arm64 | `ae-mcp-panel-v0.9.2-macos-arm64.dmg` | `ae-mcp-panel-v0.9.2-macos-arm64.zxp` |
 | Windows x64 | `ae-mcp-panel-v0.9.2-windows-x64.zxp` | 同一个 ZXP |
 
-两个平台的精确文件都由 `artifact-manifest-v0.9.2.json` 绑定到同一个 protected `main` candidate SHA。不要用源码归档、本地重建包、公共 PyPI 同名包或在线依赖安装替代它们。
+GitHub Release 同时给出 Windows ZXP 的 SHA-256。不要用源码归档、本地重建包、公共 PyPI 同名包或在线依赖安装替代它。
 
-macOS DMG 只封装 manifest 绑定的签名 ZXP，不包含也不冒充第三方安装器。受支持的 ZXP installer 必须为两个平台另行提供；同一个安装器契约也用于 Mac/Windows RC verifier。
-
-1. 从同一个 GitHub Release 下载当前平台资产和 `artifact-manifest-v0.9.2.json`。
-2. 按 manifest 校验文件名、平台、candidate SHA 与 SHA-256。
-3. macOS 挂载 DMG，并用受支持的 ZXP installer 安装其中唯一的 ZXP；Windows 用受支持的 ZXP installer 安装下载的 ZXP。
-4. 重启 After Effects，打开 `Window -> Extensions -> ae-mcp`。
-5. Panel 从包内离线安装并校验 runtime，随后将稳定 launcher 暴露为展开后的平台绝对路径（macOS 为 `/Users/<USER>/.ae-mcp/bin/ae-mcp`，Windows 为 `%USERPROFILE%\.ae-mcp\bin\ae-mcp.exe` 展开后的路径）。普通用户不需要系统 Python、系统 Node、`uv`、pip 或 npm。
-6. 先运行 `ae_ping` / `ae_status`，再在测试工程执行只读与预览 smoke。
+1. 从 GitHub Release 下载 Windows ZXP，并对照发布说明校验 SHA-256。
+2. 使用受支持的 ZXP installer 安装下载的 ZXP。
+3. 重启 After Effects，打开 `Window -> Extensions -> ae-mcp`。
+4. 继续使用现有外部 runtime/launcher 配置；包内离线 RuntimeManager 转入 v0.9.3。
+5. 先运行 `ae_ping` / `ae_status`，再在测试工程执行只读与预览 smoke。
 
 在 Windows 上，平台 Helper 由 Panel 打开时自动启动，不由安装器预先常驻启动。关闭并重开 Panel 时，同一个 AE 会话可以重新连接现有 Helper；AE 正常退出或闪退后，Helper 随已认证的 AE 进程退出。启动、握手或凭据库失败时 Provider 凭据保持 fail-closed，不回退读取明文配置。
 
@@ -111,13 +106,12 @@ Windows 开发机在完成相同依赖同步后运行：
 
 ### v0.9.2 Status and Support Matrix
 
-v0.9.2 is currently an unreleased candidate contract. Provider, Tool Library, and Platform Helper implementation is complete and has passed Windows AE 2025 hardware validation; repository versions and filenames still do not assert that signing, notarization, bundled RuntimeManager, or the full four-cell AE hardware matrix is complete. The assets below become public only after every [release gate](RELEASE.md) passes.
+v0.9.2 is the Windows x64 release. Provider, Tool Library, and Platform Helper implementation is complete and has passed Windows AE 2025 hardware validation. macOS, bundled RuntimeManager, the production cross-platform signing chain, and the complete AE 25/26 hardware matrix move to v0.9.3.
 
 The supported matrix is fixed to:
 
-- macOS 14 Sonoma or newer on Apple Silicon arm64; no Intel Mac or Rosetta support.
 - Windows 11 24H2 or newer on x64; no Windows ARM support.
-- After Effects 25.x and 26.x; Mac/Windows × AE 25/26 smoke is mandatory before publication.
+- After Effects 25.x is hardware-validated; complete AE 26 acceptance moves to v0.9.3.
 
 ### Normal Users: Install an Offline Release Asset
 
@@ -125,19 +119,15 @@ The v0.9.2 platform assets are:
 
 | Platform | Install asset | Same-set audit asset |
 |---|---|---|
-| macOS arm64 | `ae-mcp-panel-v0.9.2-macos-arm64.dmg` | `ae-mcp-panel-v0.9.2-macos-arm64.zxp` |
 | Windows x64 | `ae-mcp-panel-v0.9.2-windows-x64.zxp` | the same ZXP |
 
-`artifact-manifest-v0.9.2.json` binds the exact files for both platforms to one protected `main` candidate SHA. Do not substitute a source archive, locally rebuilt package, public PyPI namesake, or online dependency install.
+The GitHub Release lists the Windows ZXP SHA-256. Do not substitute a source archive, locally rebuilt package, public PyPI namesake, or online dependency install.
 
-The macOS DMG contains only the manifest-bound signed ZXP; it neither contains nor impersonates a third-party installer. A separately supplied supported ZXP installer is required on both platforms, and the Mac/Windows RC verifiers use the same installer contract.
-
-1. Download the platform asset and `artifact-manifest-v0.9.2.json` from the same GitHub Release.
-2. Verify filename, platform, candidate SHA, and SHA-256 against the manifest.
-3. On macOS, mount the DMG and use the supported ZXP installer for its sole ZXP; on Windows, use the supported ZXP installer for the downloaded ZXP.
-4. Restart After Effects and open `Window -> Extensions -> ae-mcp`.
-5. The Panel installs and verifies the bundled runtime offline, then exposes an expanded platform-absolute stable launcher (macOS: `/Users/<USER>/.ae-mcp/bin/ae-mcp`; Windows: the expanded path for `%USERPROFILE%\.ae-mcp\bin\ae-mcp.exe`). Normal users do not need system Python, system Node, `uv`, pip, or npm.
-6. Run `ae_ping` / `ae_status` first, followed by read-only and preview smoke in a test project.
+1. Download the Windows ZXP and verify its SHA-256 against the GitHub Release notes.
+2. Install it with a supported ZXP installer.
+3. Restart After Effects and open `Window -> Extensions -> ae-mcp`.
+4. Continue using the existing external runtime/launcher setup; bundled offline RuntimeManager moves to v0.9.3.
+5. Run `ae_ping` / `ae_status` first, followed by read-only and preview smoke in a test project.
 
 On Windows, the Panel starts Platform Helper when it opens; the installer does not prestart a resident Helper. Closing and reopening the Panel reconnects within the same AE session. Platform Helper exits when its authenticated AE process exits or crashes. Startup, handshake, or credential-store failures remain fail-closed and never fall back to plaintext provider configuration.
 

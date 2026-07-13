@@ -6,15 +6,14 @@ ae-mcp 是一个**后端无关**的 After Effects 自动化工具，用来让 AE
 
 MCP server 是核心。在 MCP 本体之外，ae-mcp 还包装了一套 CEP 面板插件，提供面板内对话、后端配置、审批、诊断和首跑安装。你可以根据自己的工作流选择：在外部 agent 后端里通过 MCP 使用 ae-mcp，或者直接在 AE 面板内配置 Claude / Codex / ZCode 后端进行对话。
 
-下一个候选版本是 **v0.9.2（未发布）**。当前只是同步候选构建所需的版本源，不代表签名产物或四格 AE 实机验收已经通过。
+**v0.9.2 是 Windows x64 正式版本。** macOS 兼容、包内 RuntimeManager、正式跨平台签名链以及完整 AE 25/26 实机矩阵转入 v0.9.3。
 
 ## v0.9.2 目标支持矩阵
 
-未发布的 v0.9.2 候选只面向以下平台与宿主矩阵。在四格实机门禁通过前，下列矩阵不构成“已经支持”的发布声明：
+v0.9.2 已发布资产面向以下已验证范围：
 
-- macOS 14.0 Sonoma 或更新版本，原生运行于 Apple Silicon arm64；不支持 Intel Mac 和 Rosetta。
 - Windows 11 24H2（11.0.26100）或更新版本，运行于 x64；不支持 Windows ARM。
-- After Effects 25.x 和 26.x，对应 CEP host 范围 `[25.0,26.9]`。
+- After Effects 25.x 已完成实机验证。CEP manifest 仍为 `[25.0,26.9]`；完整 AE 26 与 macOS 验收延后至 v0.9.3。
 
 ## 架构
 
@@ -36,7 +35,7 @@ MCP core 本身保持后端无关：外部客户端可以通过 stdio server 与
 
 - protected `main` 上的同一个候选 SHA 同时生成两个平台原生载荷；候选失败或发生任何变化，都必须以新 SHA 重新构建。
 - 核心能力按离线、自包含发布包设计。系统 Python、系统 Node、`uv`、PyPI 和 npm 解析只属于开发环境，不是普通用户安装前提。
-- Provider、Tool Library 与 Platform Helper 已完成实现，并通过 Windows AE 2025 实机验证。正式发布仍受包内 RuntimeManager、逐文件原生签名与产品验收覆盖、签名与再分发前置条件、Mac/Windows 上其余 AE 25/26 实机 smoke 及双 attestation 门禁约束。原生覆盖策略继续 fail-closed，功能实现或同步 v0.9.2 元数据都不能绕过发布门禁。
+- Provider、Tool Library 与 Platform Helper 已完成实现，并通过 Windows AE 2025 实机验证。v0.9.2 发布使用有效至 2037 年证书的自签名 Windows ZXP；本次资产没有 TSA 时间戳，其中原生 Helper 二进制也尚未做 Authenticode。包内 RuntimeManager、正式原生签名、macOS 和其余实机矩阵转入 v0.9.3。
 - UXP、Intel Mac、Windows ARM、provider 配置导出以及 ZCode 桌面 captcha/runtime-header 桥接不属于 v0.9.2 支持范围。
 
 ## 安装和首次启动
@@ -45,12 +44,11 @@ MCP core 本身保持后端无关：外部客户端可以通过 stdio server 与
 
 | 平台 | 安装资产 | 可审计载荷 |
 |---|---|---|
-| macOS 14+ Apple Silicon arm64 | `ae-mcp-panel-v0.9.2-macos-arm64.dmg` | `ae-mcp-panel-v0.9.2-macos-arm64.zxp` |
 | Windows 11 24H2+ x64 | `ae-mcp-panel-v0.9.2-windows-x64.zxp` | 同一个 ZXP |
 
-macOS DMG 只封装精确的签名 ZXP，并为该容器提供签名与公证；DMG 本身不是 ZXP installer。两个平台都需要另行提供受支持的 ZXP installer。先用 `artifact-manifest-v0.9.2.json` 校验下载内容，再安装 DMG 内的 Mac ZXP 或 Windows ZXP、重启 After Effects，并打开 `Window -> Extensions -> ae-mcp`。在最终 gated 契约中，面板随后离线安装包内 runtime，校验成功后暴露稳定 launcher。
+使用受支持的 ZXP installer 安装 `ae-mcp-panel-v0.9.2-windows-x64.zxp`，重启 After Effects，再打开 `Window -> Extensions -> ae-mcp`。本版继续使用现有外部 runtime 配置；包内离线 RuntimeManager 延后至 v0.9.3。
 
-这些文件名定义的是 v0.9.2 契约。只有两个 attestation Check 都通过、no-rebuild 提升流程完成后，它们才会公开可用。详见[安装文档](docs/INSTALL.md)和[发布文档](docs/RELEASE.md)。
+GitHub Release 会发布精确的 Windows 资产及其 SHA-256。详见[安装文档](docs/INSTALL.md)和[发布文档](docs/RELEASE.md)。
 
 ## 选择并登录后端
 

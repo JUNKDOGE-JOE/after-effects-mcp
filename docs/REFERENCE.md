@@ -19,14 +19,13 @@
 
 ### v0.9.2 平台与分发契约
 
-v0.9.2 当前是未发布候选。Provider、Tool Library 与 Platform Helper 已完成实现并通过 Windows AE 2025 实机验证；下面的最终 RC 契约不表示签名、公证、包内 RuntimeManager 或完整实机矩阵已经验收：
+v0.9.2 是 Windows x64 正式版本。Provider、Tool Library 与 Platform Helper 已完成实现并通过 Windows AE 2025 实机验证；macOS、包内 RuntimeManager、正式跨平台签名链和完整实机矩阵转入 v0.9.3：
 
 | 平台 | 安装资产 | 审计载荷 |
 |---|---|---|
-| macOS 14+ Apple Silicon arm64 | `ae-mcp-panel-v0.9.2-macos-arm64.dmg` | `ae-mcp-panel-v0.9.2-macos-arm64.zxp` |
 | Windows 11 24H2+ x64 | `ae-mcp-panel-v0.9.2-windows-x64.zxp` | 同一个 ZXP |
 
-两端的最终目标均为 AE 25.x–26.x（CEP `[25.0,26.9]`），并由 `artifact-manifest-v0.9.2.json` 绑定同一个 candidate SHA。在最终契约中，Panel 将从资产内离线安装 runtime，普通用户不依赖系统 Python/Node/uv。Claude Code CLI、Codex CLI 与 ZCode CLI/app-server 都是对应 AI 通道的**可选**依赖，不是 core 前置。Provider 配置与凭据不可导出；系统凭据库与 Helper 功能已经落地并保持 fail-closed，正式签名资产、RuntimeManager 和剩余平台验收仍受发布门禁。
+v0.9.2 保持 CEP host 范围 `[25.0,26.9]`，但本次发布证据只覆盖 Windows AE 2025。Panel 继续使用现有外部 runtime/launcher 配置；包内离线 RuntimeManager 转入 v0.9.3。Claude Code CLI、Codex CLI 与 ZCode CLI/app-server 都是对应 AI 通道的**可选**依赖，不是 core 前置。Provider 配置与凭据不可导出；系统凭据库与 Helper 功能已经落地并保持 fail-closed。
 
 ### 环境变量
 
@@ -305,14 +304,13 @@ ae-mcp 是独立实现，参考了 Atom 风格 AE 操作面和 FX Console 风格
 
 ### v0.9.2 Platform and Distribution Contract
 
-v0.9.2 is currently an unreleased candidate. Provider, Tool Library, and Platform Helper implementation is complete and has passed Windows AE 2025 hardware validation; the final RC contract below is not a claim that signing, notarization, bundled RuntimeManager, or the complete hardware matrix has passed:
+v0.9.2 is the Windows x64 release. Provider, Tool Library, and Platform Helper implementation is complete and has passed Windows AE 2025 hardware validation; macOS, bundled RuntimeManager, the production cross-platform signing chain, and the complete hardware matrix move to v0.9.3:
 
 | Platform | Install asset | Audit payload |
 |---|---|---|
-| macOS 14+ Apple Silicon arm64 | `ae-mcp-panel-v0.9.2-macos-arm64.dmg` | `ae-mcp-panel-v0.9.2-macos-arm64.zxp` |
 | Windows 11 24H2+ x64 | `ae-mcp-panel-v0.9.2-windows-x64.zxp` | the same ZXP |
 
-Both target AE 25.x–26.x (CEP `[25.0,26.9]`) and are bound to one candidate SHA by `artifact-manifest-v0.9.2.json`. Under the final contract, the Panel will install the bundled runtime offline so normal users do not depend on system Python/Node/uv. Claude Code CLI, Codex CLI, and the ZCode CLI/app-server are **optional** dependencies for their corresponding AI channels, not core prerequisites. Provider configuration and credentials are not exportable; system-credential and Helper behavior is implemented and fail-closed, while signed release assets, RuntimeManager, and the remaining platform acceptance stay release-gated.
+v0.9.2 retains the CEP host range `[25.0,26.9]`, while this release evidence covers Windows AE 2025 only. The Panel continues to use the existing external runtime/launcher setup; bundled offline RuntimeManager moves to v0.9.3. Claude Code CLI, Codex CLI, and the ZCode CLI/app-server are **optional** dependencies for their corresponding AI channels, not core prerequisites. Provider configuration and credentials are not exportable; system-credential and Helper behavior is implemented and fail-closed.
 
 ### Environment Variables
 

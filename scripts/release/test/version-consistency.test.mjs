@@ -7,8 +7,6 @@ import { join } from 'node:path';
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const VERSION = '0.9.2';
 const PLATFORM_ASSETS = [
-  'ae-mcp-panel-v0.9.2-macos-arm64.zxp',
-  'ae-mcp-panel-v0.9.2-macos-arm64.dmg',
   'ae-mcp-panel-v0.9.2-windows-x64.zxp',
 ];
 
@@ -131,7 +129,7 @@ test('normal install docs do not make an online uv tool install the user path', 
   }
 });
 
-test('release docs define immutable build, dual attestation, and no-rebuild promotion', async () => {
+test('release docs retain the hardened dual-platform design for v0.9.3 work', async () => {
   const release = await text('docs/RELEASE.md');
   for (const marker of [
     'build-rc.yml',
@@ -153,10 +151,10 @@ test('release docs define immutable build, dual attestation, and no-rebuild prom
   const changelog = await text('CHANGELOG.md');
   const firstRelease = changelog.match(/^### \[([^\]]+)\].*$/m)?.[1];
   assert.equal(firstRelease, VERSION);
-  assert.match(changelog, /^### \[0\.9\.2\].*(?:Unreleased|未发布)/mi);
+  assert.match(changelog, /^### \[0\.9\.2\].*2026-07-13/mi);
 });
 
-test('user docs distinguish the unreleased target contract from current verified behavior', async () => {
+test('user docs distinguish the Windows v0.9.2 release from deferred v0.9.3 work', async () => {
   const [readme, readmeZh, install, reference, release, workflow] = await Promise.all([
     readFile('README.md', 'utf8'),
     readFile('README.zh-CN.md', 'utf8'),
@@ -174,10 +172,9 @@ test('user docs distinguish the unreleased target contract from current verified
   assert.match(readmeZh, /install-plugin-dev-macos\.sh/);
 
   for (const value of [install, readme, readmeZh]) {
-    assert.match(value, /DMG[\s\S]{0,300}(?:contains only|只封装)[\s\S]{0,300}ZXP/i);
+    assert.match(value, /Windows[\s\S]{0,400}v0\.9\.3/i);
+    assert.match(value, /macOS[\s\S]{0,400}v0\.9\.3/i);
   }
-  assert.match(install, /supported ZXP installer[\s\S]{0,240}both platforms/i);
-  assert.match(install, /受支持的 ZXP installer[\s\S]{0,240}两个平台/);
   assert.doesNotMatch(workflow, /Mac 安装 DMG|install the DMG/i);
   assert.match(workflow, /受支持的 ZXP installer/);
   assert.match(workflow, /supported ZXP installer/i);
