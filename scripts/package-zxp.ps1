@@ -64,18 +64,33 @@ if (Test-Path (Join-Path $stageDir 'sidecar\test')) {
 # local process attach a DevTools/Node client. Strip it before signing.
 Remove-Item -Force (Join-Path $stageDir '.debug') -ErrorAction SilentlyContinue
 
-Write-Host "[2/5] Installing host production dependencies..."
-Push-Location (Join-Path $stageDir 'host')
+Write-Host "[2/5] Installing production host runtime dependencies..."
+$runtimeHostDir = Join-Path $stageDir 'runtime\windows-x64\node\host'
+New-Item -ItemType Directory -Force -Path $runtimeHostDir | Out-Null
+Copy-Item -LiteralPath (Join-Path $stageDir 'host\package.json') -Destination $runtimeHostDir
+Copy-Item -LiteralPath (Join-Path $stageDir 'host\package-lock.json') -Destination $runtimeHostDir
+Push-Location $runtimeHostDir
 try {
     npm ci --omit=dev
+    if ($LASTEXITCODE -ne 0) {
+        throw "npm failed while installing production host runtime dependencies"
+    }
 } finally {
     Pop-Location
+}
+foreach ($requiredHostFile in @('package.json', 'node_modules\express\package.json')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $runtimeHostDir $requiredHostFile) -PathType Leaf)) {
+        throw "Production host runtime file is missing: $requiredHostFile"
+    }
 }
 
 Write-Host "[3/5] Installing sidecar production dependencies..."
 Push-Location (Join-Path $stageDir 'sidecar')
 try {
     npm ci --omit=dev
+    if ($LASTEXITCODE -ne 0) {
+        throw "npm failed while installing sidecar production dependencies"
+    }
 } finally {
     Pop-Location
 }
@@ -91,9 +106,18 @@ Write-Host "[5/5] Signing package..."
 if (Test-Path $OutputPath) {
     Remove-Item -Force $OutputPath
 }
-# -tsa adds a trusted timestamp so the signature stays valid after the cert
-# expires.
-& $ZxpSignCmd -sign $stageDir $OutputPath $CertPath $CertPassword -tsa $Tsa
+if ([string]::IsNullOrWhiteSpace($Tsa)) {
+    & $ZxpSignCmd -sign $stageDir $OutputPath $CertPath $CertPassword
+} else {
+    & $ZxpSignCmd -sign $stageDir $OutputPath $CertPath $CertPassword -tsa $Tsa
+}
+if ($LASTEXITCODE -ne 0) {
+    throw "ZXP signing failed"
+}
+& $ZxpSignCmd -verify $OutputPath
+if ($LASTEXITCODE -ne 0) {
+    throw "ZXP signature verification failed"
+}
 
 Write-Host ""
 Write-Host "Wrote $OutputPath"

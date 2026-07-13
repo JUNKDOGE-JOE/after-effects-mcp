@@ -154,6 +154,48 @@ async function verifyRuntimeEvidence(root, platform, runtimeManifest, bundleMani
   });
 }
 
+async function verifyHostRuntime(root, platform, entries) {
+  const relativeHostRoot = `runtime/${platform}/node/host`;
+  const hostRoot = path.join(root, 'runtime', platform, 'node', 'host');
+  const entriesByPath = new Map(entries.map((entry) => [entry.path, entry]));
+  const requireFile = (relative) => {
+    const entry = entriesByPath.get(`${relativeHostRoot}/${relative}`);
+    if (!entry || entry.type !== 'file') {
+      throw bundleError(
+        'BUNDLE_HOST_RUNTIME_INVALID',
+        `required production host runtime file is missing: ${relative}`,
+      );
+    }
+  };
+  requireFile('package.json');
+  requireFile('node_modules/express/package.json');
+
+  const hostPackage = await readJsonFile(
+    path.join(hostRoot, 'package.json'),
+    'BUNDLE_HOST_RUNTIME_INVALID',
+  );
+  const expressPackage = await readJsonFile(
+    path.join(hostRoot, 'node_modules', 'express', 'package.json'),
+    'BUNDLE_HOST_RUNTIME_INVALID',
+  );
+  if (hostPackage.name !== 'ae-mcp-host'
+      || typeof hostPackage.dependencies?.express !== 'string'
+      || expressPackage.name !== 'express') {
+    throw bundleError('BUNDLE_HOST_RUNTIME_INVALID', 'production host package identity is invalid');
+  }
+  const mainEntry = expressPackage.main === undefined ? 'index.js' : expressPackage.main;
+  if (typeof mainEntry !== 'string' || !mainEntry.trim() || mainEntry.includes('\0')) {
+    throw bundleError('BUNDLE_HOST_RUNTIME_INVALID', 'Express package main is invalid');
+  }
+  const expressRoot = path.join(hostRoot, 'node_modules', 'express');
+  const resolvedEntry = path.resolve(expressRoot, mainEntry);
+  const entryRelative = path.relative(expressRoot, resolvedEntry);
+  if (!entryRelative || entryRelative.startsWith('..') || path.isAbsolute(entryRelative)) {
+    throw bundleError('BUNDLE_HOST_RUNTIME_INVALID', 'Express package main escapes its package root');
+  }
+  requireFile(`node_modules/express/${entryRelative.split(path.sep).join('/')}`);
+}
+
 async function verifyHelper(root, platform, manifest) {
   const helperRoot = path.join(root, 'platform', platform);
   const helperManifestPath = path.join(helperRoot, 'helper-manifest.json');
@@ -293,6 +335,7 @@ export async function verifyPlatformBundle({ root, platform, version, sourceComm
   const runtimeManifest = validateRuntimeManifest(await readJsonFile(runtimeManifestPath), platform);
   await verifyRuntimeInventory(resolvedRoot, platform, runtimeManifest);
   await verifyRuntimeEvidence(resolvedRoot, platform, runtimeManifest, manifest);
+  await verifyHostRuntime(resolvedRoot, platform, actual);
   await verifySupportContract(resolvedRoot, platform);
   await verifyHelper(resolvedRoot, platform, manifest);
   assertProductionFileSet(actual, platform);
