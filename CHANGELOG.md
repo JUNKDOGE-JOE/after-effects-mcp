@@ -10,7 +10,7 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
-### [0.9.2] — 未发布
+### [0.9.2] — 2026-07-13
 
 #### ✨ 新增
 
@@ -30,9 +30,9 @@ Format based on Keep a Changelog; versioning follows SemVer.
 - Provider、Tool Library 与安全定向回归 207/207，通过额外 44/44 路由安全集成测试；Panel 951 项（944 通过、7 跳过），Python 635 通过（8 跳过、25 deselected）。
 - Windows AE 2025 实机已验证 Panel 正常挂载、Helper/凭据链路、`127.0.0.1:11488` 服务与 AE→Helper 生命周期；PR #54 CI 与独立安全复核均无阻断项。
 
-#### 尚未完成的发布门禁
+#### 发布范围
 
-- v0.9.2 仍是未发布候选。Provider、Tool Library、Helper 功能实现与 Windows AE 2025 验证已经闭环；包内 RuntimeManager、runtime 许可证/再分发批准、Developer ID/ZXP/Authenticode 签名条件、Mac/Windows × AE 25/26 完整四格实机结果及双 attestation Check 仍是正式 tag 的硬前置。
+- v0.9.2 正式资产仅面向 Windows 11 x64；Provider、Tool Library、Helper 功能与 Windows AE 2025 实机链路已经闭环。macOS、包内 RuntimeManager、完整跨平台签名链和 Mac/Windows × AE 25/26 四格矩阵转入 v0.9.3。Windows ZXP 使用有效至 2037 年的自签名证书；ZXPSignCmd 无法通过本机代理连接 TSA，因此本次资产没有时间戳。包内原生 Helper 尚未进行 Authenticode 签名，发布页会明确披露这些边界。
 
 ### [0.9.0] — 2026-07-04
 
@@ -243,7 +243,7 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 
 ## English
 
-### [0.9.2] — Unreleased
+### [0.9.2] — 2026-07-13
 
 #### ✨ Added
 
@@ -263,9 +263,9 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 - Provider, Tool Library, and security targeted regressions pass 207/207, plus 44/44 route-security integration tests; Panel tests report 944 passed and 7 skipped out of 951, while Python reports 635 passed, 8 skipped, and 25 deselected.
 - Windows AE 2025 hardware validation covered Panel mounting, Helper/credential flow, the `127.0.0.1:11488` service, and AE→Helper lifetime. PR #54 CI and the independent security review found no blocking issues.
 
-#### Release Gates Still Open
+#### Release Scope
 
-- v0.9.2 remains unreleased. Provider, Tool Library, Helper implementation, and Windows AE 2025 validation are closed; bundled RuntimeManager, runtime redistribution approval, Developer ID/ZXP/Authenticode signing prerequisites, the complete Mac/Windows × AE 25/26 hardware matrix, and both attestation Checks remain hard prerequisites for the final tag.
+- v0.9.2 publishes a Windows 11 x64 asset only. Provider, Tool Library, Helper behavior, and the Windows AE 2025 hardware path are closed. macOS, bundled RuntimeManager, the complete cross-platform signing chain, and the Mac/Windows × AE 25/26 four-cell matrix move to v0.9.3. The Windows ZXP uses a self-signed certificate valid until 2037; ZXPSignCmd could not reach the TSA through the local proxy, so this asset has no timestamp. Bundled native Helper binaries are not Authenticode-signed, and the GitHub Release discloses these boundaries.
 
 ### [0.9.0] — 2026-07-04
 
