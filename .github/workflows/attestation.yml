@@ -385,8 +385,8 @@ jobs:
       PLATFORM: macos-arm64
       CANDIDATE_SHA: ${{ needs.parse.outputs.candidate_sha }}
       AUTHOR_ALLOWED: ${{ needs.parse.outputs.author_allowed }}
-      MANIFEST_GROUP: artifact-manifest-v0.9.1.json
-      MANIFEST_NAME: artifact-manifest-v0.9.1.json
+      MANIFEST_GROUP: artifact-manifest-v0.9.2.json
+      MANIFEST_NAME: artifact-manifest-v0.9.2.json
     steps: &validation_steps
       - name: Checkout trusted default branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -637,7 +637,7 @@ jobs:
             const manifest = JSON.parse(manifestText);
             const checkedManifestBytes = serializeArtifactManifest(manifest);
             if (!checkedManifestBytes.equals(manifestBytes)
-                || manifest.version !== '0.9.1'
+                || manifest.version !== '0.9.2'
                 || manifest.candidateSha !== candidateSha
                 || String(manifest.workflowRunId) !== String(process.env.RUN_ID)) {
               throw new Error('manifest identity is invalid');
@@ -702,8 +702,8 @@ jobs:
       PLATFORM: windows-x64
       CANDIDATE_SHA: ${{ needs.parse.outputs.candidate_sha }}
       AUTHOR_ALLOWED: ${{ needs.parse.outputs.author_allowed }}
-      MANIFEST_GROUP: artifact-manifest-v0.9.1.json
-      MANIFEST_NAME: artifact-manifest-v0.9.1.json
+      MANIFEST_GROUP: artifact-manifest-v0.9.2.json
+      MANIFEST_NAME: artifact-manifest-v0.9.2.json
     steps: *validation_steps
 
   reconcile-macos:

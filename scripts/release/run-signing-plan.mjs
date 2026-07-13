@@ -23,7 +23,7 @@ import { freezeSignedManifests as foundationFreezeSignedManifests } from '../pac
 import { sha256Directory as foundationSha256Directory } from '../package/lib/files.mjs';
 import { collectManifestEntries, copyTree } from '../package/lib/manifest.mjs';
 
-const RELEASE_VERSION = '0.9.1';
+const RELEASE_VERSION = '0.9.2';
 const CANDIDATE_SHA = /^[a-f0-9]{40}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
 const PLATFORMS = new Set(['macos-arm64', 'windows-x64']);

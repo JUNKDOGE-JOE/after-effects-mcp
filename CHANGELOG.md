@@ -10,17 +10,29 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
-### [0.9.1] — 未发布
+### [0.9.2] — 未发布
 
-#### 候选准备
+#### ✨ 新增
 
-- **双平台不可变 RC 契约**——固定从 protected `main` 的同一个 candidate SHA 构建 `ae-mcp-panel-v0.9.1-macos-arm64.zxp`、`ae-mcp-panel-v0.9.1-macos-arm64.dmg`、`ae-mcp-panel-v0.9.1-windows-x64.zxp`，并由 `artifact-manifest-v0.9.1.json` 绑定 artifact ID 与 SHA-256；正式发布只原样提升通过验证的字节，禁止重建。
-- **版本与支持矩阵同步**——Python workspace、CEP host/panel/sidecar、Panel handshake 与 CEP manifest 统一为 `0.9.1`；After Effects host 范围保持 `[25.0,26.9]`。
-- **离线安装文档**——普通用户路径改为平台签名资产和包内 runtime；Claude Code CLI、Codex CLI、ZCode CLI/app-server 明确为各自 AI 通道的可选依赖，`uv`/系统 Python/Node 只用于开发。
+- **按模型路由的通用自定义 Provider（#49）**——同一个 Provider 可同时承载 Responses、Chat Completions 与 Anthropic Messages 模型。每个明确模型 ID 独立探测并缓存协议能力：原生支持 Responses 时直连 `/responses`；仅支持 Chat Completions 时由本地 `/responses` facade 做可审计转换；只有请求含无法等价转换的 Responses 特性时才返回带字段路径的 compact 501，绝不静默丢字段。
+- **安全平台 Helper 与系统凭据库（#49）**——Provider API key 不再从明文配置回读；Helper 启动、认证或系统凭据库异常时 fail-closed。Panel 启动 Helper，Helper 生命周期跟随已认证的 AE 主进程，AE 正常退出或闪退后不会残留。
+- **完整 Tool Library（#50）**——Panel Tools 页支持搜索、查看、创建、编辑、复制、固定、归档、删除及 `.aemcptools` 安全导入/导出；legacy/bundled skills 与原生制品统一呈现，并通过 `ae.toolIndex → Search → Inspect → Use` 渐进发现和 plan/grant/execute 门禁执行。
+- **Codex 官方登录态模型扩展**——加入 GPT-5.6 系列登录态模型，并保留按模型能力选择协议的行为，不再把 Provider 全部模型误判为同一种 API。
+
+#### 🐛 修复 / 改进
+
+- **跨协议角色与流式完成兼容**——向不接受 `developer` 角色的上游安全降级为其支持的等价角色；兼容缺少 `response.completed` 但已正常结束的受限流式实现，同时仍拒绝截断或语义不完整的流。
+- **诊断与错误边界收紧**——最小 token 探测按模型运行，未知错误转为可操作的结构化信息；Provider 响应、凭据、请求头和导出内容均经过脱敏与泄漏回归测试。
+- **双平台不可变 RC 契约更新**——受保护 `main` 的同一个 candidate SHA 生成 `ae-mcp-panel-v0.9.2-macos-arm64.zxp`、`ae-mcp-panel-v0.9.2-macos-arm64.dmg`、`ae-mcp-panel-v0.9.2-windows-x64.zxp`，由 `artifact-manifest-v0.9.2.json` 绑定 artifact ID 与 SHA-256；正式发布只提升已验证字节，禁止重建。
+
+#### 验证
+
+- Provider、Tool Library 与安全定向回归 207/207，通过额外 44/44 路由安全集成测试；Panel 951 项（944 通过、7 跳过），Python 635 通过（8 跳过、25 deselected）。
+- Windows AE 2025 实机已验证 Panel 正常挂载、Helper/凭据链路、`127.0.0.1:11488` 服务与 AE→Helper 生命周期；PR #54 CI 与独立安全复核均无阻断项。
 
 #### 尚未完成的发布门禁
 
-- v0.9.1 仍是未发布候选。revised “条件式 A→B” signed-helper architecture 的明确批准与 Phase 0 证据、helper-gated provider/Tool Library 实现、runtime 许可证/再分发批准、Developer ID/ZXP/Authenticode 签名条件、Mac/Windows × AE 25/26 四格实机结果及双 attestation Check 都是正式 tag 的硬前置；此条目不声称这些工作已闭环。
+- v0.9.2 仍是未发布候选。Provider、Tool Library、Helper 功能实现与 Windows AE 2025 验证已经闭环；包内 RuntimeManager、runtime 许可证/再分发批准、Developer ID/ZXP/Authenticode 签名条件、Mac/Windows × AE 25/26 完整四格实机结果及双 attestation Check 仍是正式 tag 的硬前置。
 
 ### [0.9.0] — 2026-07-04
 
@@ -231,17 +243,29 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 
 ## English
 
-### [0.9.1] — Unreleased
+### [0.9.2] — Unreleased
 
-#### Candidate Preparation
+#### ✨ Added
 
-- **Immutable dual-platform RC contract** — one protected-`main` candidate SHA produces `ae-mcp-panel-v0.9.1-macos-arm64.zxp`, `ae-mcp-panel-v0.9.1-macos-arm64.dmg`, and `ae-mcp-panel-v0.9.1-windows-x64.zxp`; `artifact-manifest-v0.9.1.json` binds artifact IDs and SHA-256, and the final release promotes the verified bytes without rebuilding.
-- **Version and support-matrix synchronization** — the Python workspace, CEP host/panel/sidecar, Panel handshake, and CEP manifest move to `0.9.1`; the After Effects host range remains `[25.0,26.9]`.
-- **Offline install documentation** — normal-user installation uses signed platform assets and bundled runtime. Claude Code CLI, Codex CLI, and the ZCode CLI/app-server are optional channel dependencies; `uv` and system Python/Node remain development-only.
+- **Per-model universal custom Provider routing (#49)** — one Provider can host Responses, Chat Completions, and Anthropic Messages models. Protocol capabilities are probed and cached per explicit model ID: native Responses models use `/responses`; Chat-only models use the local `/responses` facade with auditable conversion; only non-equivalent Responses features receive a compact 501 with a field path, and fields are never silently discarded.
+- **Secure Platform Helper and system credential store (#49)** — Provider API keys are never read back from plaintext configuration. Helper startup, authentication, and credential-store failures remain fail-closed. The Panel starts Helper, and Helper follows the authenticated AE process lifetime so it does not survive a normal exit or crash.
+- **Complete Tool Library (#50)** — the Panel Tools page supports search, inspect, create, edit, duplicate, pin, archive, delete, and safe `.aemcptools` import/export. Legacy/bundled skills and native artifacts share one view, with progressive `ae.toolIndex → Search → Inspect → Use` discovery and plan/grant/execute enforcement.
+- **Expanded Codex authenticated models** — GPT-5.6 family models are available to the official-login channel, while protocol selection remains model-specific instead of classifying every model on a Provider as one API type.
+
+#### 🐛 Fixed / Improved
+
+- **Cross-protocol roles and stream completion** — upstreams that reject the `developer` role receive a safe equivalent supported role. Restricted streaming implementations that finish cleanly without `response.completed` are supported without accepting truncated or semantically incomplete streams.
+- **Tighter diagnostics and error boundaries** — minimal-token probes run per model; unknown failures become actionable structured errors; Provider responses, credentials, headers, and exports are covered by redaction and leak regressions.
+- **Updated immutable dual-platform RC contract** — one protected-`main` candidate SHA produces `ae-mcp-panel-v0.9.2-macos-arm64.zxp`, `ae-mcp-panel-v0.9.2-macos-arm64.dmg`, and `ae-mcp-panel-v0.9.2-windows-x64.zxp`; `artifact-manifest-v0.9.2.json` binds artifact IDs and SHA-256, and release promotion never rebuilds verified bytes.
+
+#### Validation
+
+- Provider, Tool Library, and security targeted regressions pass 207/207, plus 44/44 route-security integration tests; Panel tests report 944 passed and 7 skipped out of 951, while Python reports 635 passed, 8 skipped, and 25 deselected.
+- Windows AE 2025 hardware validation covered Panel mounting, Helper/credential flow, the `127.0.0.1:11488` service, and AE→Helper lifetime. PR #54 CI and the independent security review found no blocking issues.
 
 #### Release Gates Still Open
 
-- v0.9.1 remains unreleased. Explicit approval plus Phase 0 evidence for the revised conditional A→B signed-helper architecture, helper-gated provider/Tool Library implementation, runtime redistribution approval, Developer ID/ZXP/Authenticode signing prerequisites, the Mac/Windows × AE 25/26 hardware matrix, and both attestation Checks are hard prerequisites for the final tag. This entry does not claim those goals are closed.
+- v0.9.2 remains unreleased. Provider, Tool Library, Helper implementation, and Windows AE 2025 validation are closed; bundled RuntimeManager, runtime redistribution approval, Developer ID/ZXP/Authenticode signing prerequisites, the complete Mac/Windows × AE 25/26 hardware matrix, and both attestation Checks remain hard prerequisites for the final tag.
 
 ### [0.9.0] — 2026-07-04
 

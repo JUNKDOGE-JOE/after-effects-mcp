@@ -212,13 +212,13 @@ test('CLI candidate resolution requires exact clean HEAD and strict arguments', 
   );
   assert.deepEqual(
     parseStagePlatformBundleArgs([
-      '--platform=macos-arm64', '--version', '0.9.1', '--out', 'build/stage',
+      '--platform=macos-arm64', '--version', '0.9.2', '--out', 'build/stage',
     ]),
-    { platform: 'macos-arm64', version: '0.9.1', outDir: 'build/stage' },
+    { platform: 'macos-arm64', version: '0.9.2', outDir: 'build/stage' },
   );
   assert.throws(
     () => parseStagePlatformBundleArgs([
-      '--platform', 'macos-arm64', '--version', '0.9.1', '--out', 'stage', '--force', '1',
+      '--platform', 'macos-arm64', '--version', '0.9.2', '--out', 'stage', '--force', '1',
     ]),
     /invalid argument/,
   );

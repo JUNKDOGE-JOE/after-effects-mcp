@@ -44,7 +44,7 @@ const valid = {
   candidateSha: 'b'.repeat(40),
   workflowRunId: '42',
   artifactId: '101',
-  artifactName: 'ae-mcp-panel-v0.9.1-windows-x64.zxp',
+  artifactName: 'ae-mcp-panel-v0.9.2-windows-x64.zxp',
   artifactSha256: 'c'.repeat(64),
   osVersion: 'Windows 10.0.26100',
   codexVersion: '0.144.0-alpha.4',
@@ -119,7 +119,7 @@ test('PASS enforces the supported OS matrix and AE version-major binding', () =>
   const macos = {
     ...valid,
     platform: 'macos-arm64',
-    artifactName: 'ae-mcp-panel-v0.9.1-macos-arm64.dmg',
+    artifactName: 'ae-mcp-panel-v0.9.2-macos-arm64.dmg',
     osVersion: 'macOS 14.0',
     commands: successfulCommands(MACOS_PASS_COMMANDS),
   };
@@ -179,7 +179,7 @@ test('write-attestation binds exact artifact bytes and requires a complete manif
   const commentOutPath = join(root, 'windows-comment.utf8');
   const candidateSha = fixture.candidateSha;
   const manifest = await buildArtifactManifest({
-    version: '0.9.1',
+    version: '0.9.2',
     candidateSha,
     workflowRunId: '42',
     artifacts: fixture.artifacts,

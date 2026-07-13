@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  RELEASE_VERSION: 0.9.1
+  RELEASE_VERSION: 0.9.2
 
 jobs:
   guard:
@@ -547,8 +547,8 @@ jobs:
             --platform macos-arm64 \
             --candidate-sha "$CANDIDATE_SHA" \
             --signed-root "$RUNNER_TEMP/ae-mcp-signed/macos-arm64" \
-            --zxp "$GITHUB_WORKSPACE/build/release/macos-arm64/ae-mcp-panel-v0.9.1-macos-arm64.zxp" \
-            --dmg "$GITHUB_WORKSPACE/build/release/macos-arm64/ae-mcp-panel-v0.9.1-macos-arm64.dmg" \
+            --zxp "$GITHUB_WORKSPACE/build/release/macos-arm64/ae-mcp-panel-v0.9.2-macos-arm64.zxp" \
+            --dmg "$GITHUB_WORKSPACE/build/release/macos-arm64/ae-mcp-panel-v0.9.2-macos-arm64.dmg" \
             --out "$GITHUB_WORKSPACE/build/release/macos-arm64/final-native-signature-evidence.json"
 
       - name: Assemble macOS package and evidence uploads
@@ -561,8 +561,8 @@ jobs:
           install_root="$GITHUB_WORKSPACE/build/upload/macos-install"
           payload_root="$GITHUB_WORKSPACE/build/upload/macos-payload"
           mkdir -p "$install_root/evidence" "$payload_root"
-          cp -p "$release_root/ae-mcp-panel-v0.9.1-macos-arm64.dmg" "$install_root/"
-          cp -p "$release_root/ae-mcp-panel-v0.9.1-macos-arm64.zxp" "$payload_root/"
+          cp -p "$release_root/ae-mcp-panel-v0.9.2-macos-arm64.dmg" "$install_root/"
+          cp -p "$release_root/ae-mcp-panel-v0.9.2-macos-arm64.zxp" "$payload_root/"
           cp -p "$stage_root/bundle-manifest.json" "$install_root/evidence/bundle-manifest.json"
           cp -p "$signed_root/bundle-manifest.json" \
             "$install_root/evidence/signed-bundle-manifest.json"
@@ -589,7 +589,7 @@ jobs:
         id: upload_dmg
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: ae-mcp-panel-v0.9.1-macos-arm64.dmg
+          name: ae-mcp-panel-v0.9.2-macos-arm64.dmg
           path: build/upload/macos-install
           if-no-files-found: error
           retention-days: 30
@@ -599,8 +599,8 @@ jobs:
         id: upload_zxp
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: ae-mcp-panel-v0.9.1-macos-arm64.zxp
-          path: build/upload/macos-payload/ae-mcp-panel-v0.9.1-macos-arm64.zxp
+          name: ae-mcp-panel-v0.9.2-macos-arm64.zxp
+          path: build/upload/macos-payload/ae-mcp-panel-v0.9.2-macos-arm64.zxp
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
@@ -831,7 +831,7 @@ jobs:
             --platform windows-x64 `
             --candidate-sha $env:CANDIDATE_SHA `
             --signed-root (Join-Path $env:RUNNER_TEMP 'ae-mcp-signed\windows-x64') `
-            --zxp (Join-Path $env:GITHUB_WORKSPACE 'build\release\windows-x64\ae-mcp-panel-v0.9.1-windows-x64.zxp') `
+            --zxp (Join-Path $env:GITHUB_WORKSPACE 'build\release\windows-x64\ae-mcp-panel-v0.9.2-windows-x64.zxp') `
             --out (Join-Path $env:GITHUB_WORKSPACE 'build\release\windows-x64\final-native-signature-evidence.json')
           if ($LASTEXITCODE -ne 0) { throw 'final Windows native signature verification failed' }
 
@@ -845,7 +845,7 @@ jobs:
           $installRoot = Join-Path $env:GITHUB_WORKSPACE 'build\upload\windows-install'
           $evidenceRoot = Join-Path $installRoot 'evidence'
           [IO.Directory]::CreateDirectory($evidenceRoot) | Out-Null
-          Copy-Item -LiteralPath (Join-Path $releaseRoot 'ae-mcp-panel-v0.9.1-windows-x64.zxp') -Destination $installRoot
+          Copy-Item -LiteralPath (Join-Path $releaseRoot 'ae-mcp-panel-v0.9.2-windows-x64.zxp') -Destination $installRoot
           Copy-Item -LiteralPath (Join-Path $stageRoot 'bundle-manifest.json') -Destination (Join-Path $evidenceRoot 'bundle-manifest.json')
           Copy-Item -LiteralPath (Join-Path $signedRoot 'bundle-manifest.json') -Destination (Join-Path $evidenceRoot 'signed-bundle-manifest.json')
           Copy-Item -LiteralPath (Join-Path $stageRoot 'runtime\windows-x64\runtime-manifest.json') -Destination (Join-Path $evidenceRoot 'runtime-manifest.json')
@@ -882,7 +882,7 @@ jobs:
         id: upload_zxp
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: ae-mcp-panel-v0.9.1-windows-x64.zxp
+          name: ae-mcp-panel-v0.9.2-windows-x64.zxp
           path: build/upload/windows-install
           if-no-files-found: error
           retention-days: 30
@@ -932,19 +932,19 @@ jobs:
       - name: Download macOS DMG and evidence
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: ae-mcp-panel-v0.9.1-macos-arm64.dmg
+          name: ae-mcp-panel-v0.9.2-macos-arm64.dmg
           path: build/release-download/macos-install
 
       - name: Download macOS ZXP payload
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: ae-mcp-panel-v0.9.1-macos-arm64.zxp
+          name: ae-mcp-panel-v0.9.2-macos-arm64.zxp
           path: build/release-download/macos-payload
 
       - name: Download Windows ZXP and evidence
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: ae-mcp-panel-v0.9.1-windows-x64.zxp
+          name: ae-mcp-panel-v0.9.2-windows-x64.zxp
           path: build/release-download/windows-install
 
       - name: Build and reverify canonical artifact manifest
@@ -961,9 +961,9 @@ jobs:
           [[ "$(node --version)" == 'v24.17.0' ]]
           root="$GITHUB_WORKSPACE/build/artifact-root"
           mkdir -p "$root"
-          cp -p build/release-download/macos-install/ae-mcp-panel-v0.9.1-macos-arm64.dmg "$root/"
-          cp -p build/release-download/macos-payload/ae-mcp-panel-v0.9.1-macos-arm64.zxp "$root/"
-          cp -p build/release-download/windows-install/ae-mcp-panel-v0.9.1-windows-x64.zxp "$root/"
+          cp -p build/release-download/macos-install/ae-mcp-panel-v0.9.2-macos-arm64.dmg "$root/"
+          cp -p build/release-download/macos-payload/ae-mcp-panel-v0.9.2-macos-arm64.zxp "$root/"
+          cp -p build/release-download/windows-install/ae-mcp-panel-v0.9.2-windows-x64.zxp "$root/"
           printf '%s' "$PRODUCT_ACCEPTANCE_EVIDENCE_BASE64" | base64 -d \
             > build/release-download/product-acceptance-evidence.json
           [[ "$(sha256sum build/release-download/product-acceptance-evidence.json | awk '{print $1}')" \
@@ -977,14 +977,14 @@ jobs:
             const root = process.argv[1];
             const download = process.argv[2];
             const manifest = await buildArtifactManifest({
-              version: "0.9.1",
+              version: "0.9.2",
               candidateSha: process.env.CANDIDATE_SHA,
               workflowRunId: process.env.GITHUB_RUN_ID,
               productAcceptanceEvidencePath: path.join(download, "product-acceptance-evidence.json"),
               artifacts: [
-                { name: "ae-mcp-panel-v0.9.1-macos-arm64.dmg", path: path.join(root, "ae-mcp-panel-v0.9.1-macos-arm64.dmg"), platform: "macos-arm64", artifactId: process.env.MAC_DMG_ARTIFACT_ID, role: "install" },
-                { name: "ae-mcp-panel-v0.9.1-macos-arm64.zxp", path: path.join(root, "ae-mcp-panel-v0.9.1-macos-arm64.zxp"), platform: "macos-arm64", artifactId: process.env.MAC_ZXP_ARTIFACT_ID, role: "payload" },
-                { name: "ae-mcp-panel-v0.9.1-windows-x64.zxp", path: path.join(root, "ae-mcp-panel-v0.9.1-windows-x64.zxp"), platform: "windows-x64", artifactId: process.env.WINDOWS_ZXP_ARTIFACT_ID, role: "install" },
+                { name: "ae-mcp-panel-v0.9.2-macos-arm64.dmg", path: path.join(root, "ae-mcp-panel-v0.9.2-macos-arm64.dmg"), platform: "macos-arm64", artifactId: process.env.MAC_DMG_ARTIFACT_ID, role: "install" },
+                { name: "ae-mcp-panel-v0.9.2-macos-arm64.zxp", path: path.join(root, "ae-mcp-panel-v0.9.2-macos-arm64.zxp"), platform: "macos-arm64", artifactId: process.env.MAC_ZXP_ARTIFACT_ID, role: "payload" },
+                { name: "ae-mcp-panel-v0.9.2-windows-x64.zxp", path: path.join(root, "ae-mcp-panel-v0.9.2-windows-x64.zxp"), platform: "windows-x64", artifactId: process.env.WINDOWS_ZXP_ARTIFACT_ID, role: "install" },
               ],
               evidence: [
                 { platform: "macos-arm64", bundleManifestPath: path.join(download, "macos-install/evidence/bundle-manifest.json"), signedBundleManifestPath: path.join(download, "macos-install/evidence/signed-bundle-manifest.json"), runtimeInventoryPath: path.join(download, "macos-install/evidence/runtime-manifest.json"), sbomPath: path.join(download, "macos-install/evidence/sbom.spdx.json"), licensesPath: path.join(download, "macos-install/evidence/license-inventory.json"), signingReportPath: path.join(download, "macos-install/evidence/signing-report.json"), nativeSignatureEvidencePath: path.join(download, "macos-install/evidence/final-native-signature-evidence.json") },
@@ -994,15 +994,15 @@ jobs:
             const errors = await verifyArtifactManifest(manifest, root);
             if (errors.length) throw new Error(`artifact manifest verification failed: ${errors.join(", ")}`);
             const manifestBytes = serializeArtifactManifest(manifest);
-            await writeFile(path.join(root, "artifact-manifest-v0.9.1.json"), manifestBytes, { flag: "wx" });
+            await writeFile(path.join(root, "artifact-manifest-v0.9.2.json"), manifestBytes, { flag: "wx" });
           ' "$root" "$GITHUB_WORKSPACE/build/release-download"
 
       - name: Upload immutable artifact manifest
         id: upload_manifest
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: artifact-manifest-v0.9.1.json
-          path: build/artifact-root/artifact-manifest-v0.9.1.json
+          name: artifact-manifest-v0.9.2.json
+          path: build/artifact-root/artifact-manifest-v0.9.2.json
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
@@ -1049,28 +1049,28 @@ jobs:
         if: ${{ needs.macos.result == 'success' && needs.windows.result == 'success' && needs.manifest.result == 'success' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: ae-mcp-panel-v0.9.1-macos-arm64.dmg
+          name: ae-mcp-panel-v0.9.2-macos-arm64.dmg
           path: build/finalize/macos-install
 
       - name: Download macOS ZXP payload
         if: ${{ needs.macos.result == 'success' && needs.windows.result == 'success' && needs.manifest.result == 'success' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: ae-mcp-panel-v0.9.1-macos-arm64.zxp
+          name: ae-mcp-panel-v0.9.2-macos-arm64.zxp
           path: build/finalize/macos-payload
 
       - name: Download Windows ZXP and evidence
         if: ${{ needs.macos.result == 'success' && needs.windows.result == 'success' && needs.manifest.result == 'success' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: ae-mcp-panel-v0.9.1-windows-x64.zxp
+          name: ae-mcp-panel-v0.9.2-windows-x64.zxp
           path: build/finalize/windows-install
 
       - name: Download artifact manifest
         if: ${{ needs.macos.result == 'success' && needs.windows.result == 'success' && needs.manifest.result == 'success' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: artifact-manifest-v0.9.1.json
+          name: artifact-manifest-v0.9.2.json
           path: build/finalize/manifest
 
       - name: Reverify final downloaded bytes
@@ -1087,23 +1087,23 @@ jobs:
           [[ "$(node --version)" == 'v24.17.0' ]]
           root="$GITHUB_WORKSPACE/build/finalize/root"
           mkdir -p "$root"
-          cp -p build/finalize/macos-install/ae-mcp-panel-v0.9.1-macos-arm64.dmg "$root/"
-          cp -p build/finalize/macos-payload/ae-mcp-panel-v0.9.1-macos-arm64.zxp "$root/"
-          cp -p build/finalize/windows-install/ae-mcp-panel-v0.9.1-windows-x64.zxp "$root/"
+          cp -p build/finalize/macos-install/ae-mcp-panel-v0.9.2-macos-arm64.dmg "$root/"
+          cp -p build/finalize/macos-payload/ae-mcp-panel-v0.9.2-macos-arm64.zxp "$root/"
+          cp -p build/finalize/windows-install/ae-mcp-panel-v0.9.2-windows-x64.zxp "$root/"
           node --input-type=module -e '
             import { readFile } from "node:fs/promises";
             import { verifyArtifactManifest } from "./scripts/release/artifact-manifest.mjs";
             const [manifestPath, root] = process.argv.slice(1);
             const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
             if (manifest.candidateSha !== process.env.CANDIDATE_SHA
-                || manifest.version !== "0.9.1"
+                || manifest.version !== "0.9.2"
                 || manifest.workflowRunId !== process.env.GITHUB_RUN_ID) {
               throw new Error("artifact manifest identity changed");
             }
             const expected = [
-              ["ae-mcp-panel-v0.9.1-macos-arm64.dmg", "macos-arm64", "install", process.env.MAC_DMG_ARTIFACT_ID],
-              ["ae-mcp-panel-v0.9.1-macos-arm64.zxp", "macos-arm64", "payload", process.env.MAC_ZXP_ARTIFACT_ID],
-              ["ae-mcp-panel-v0.9.1-windows-x64.zxp", "windows-x64", "install", process.env.WINDOWS_ZXP_ARTIFACT_ID],
+              ["ae-mcp-panel-v0.9.2-macos-arm64.dmg", "macos-arm64", "install", process.env.MAC_DMG_ARTIFACT_ID],
+              ["ae-mcp-panel-v0.9.2-macos-arm64.zxp", "macos-arm64", "payload", process.env.MAC_ZXP_ARTIFACT_ID],
+              ["ae-mcp-panel-v0.9.2-windows-x64.zxp", "windows-x64", "install", process.env.WINDOWS_ZXP_ARTIFACT_ID],
             ];
             for (const [name, platform, role, artifactId] of expected) {
               const matches = manifest.artifacts.filter((item) => item.name === name
@@ -1114,7 +1114,7 @@ jobs:
             const errors = await verifyArtifactManifest(manifest, root);
             if (errors.length) throw new Error(`final artifact verification failed: ${errors.join(", ")}`);
           ' \
-            "$GITHUB_WORKSPACE/build/finalize/manifest/artifact-manifest-v0.9.1.json" \
+            "$GITHUB_WORKSPACE/build/finalize/manifest/artifact-manifest-v0.9.2.json" \
             "$root"
 
       - name: Complete permanent build lock

@@ -46,7 +46,7 @@ test('verification rejects the wrong expected platform and version', async (t) =
     { code: 'BUNDLE_PLATFORM_MISMATCH' },
   );
   await assert.rejects(
-    verifyPlatformBundle({ ...h.verifyInput, version: '0.9.2' }),
+    verifyPlatformBundle({ ...h.verifyInput, version: '0.9.3' }),
     { code: 'BUNDLE_VERSION_MISMATCH' },
   );
 });

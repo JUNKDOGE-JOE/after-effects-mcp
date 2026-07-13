@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
 const SCRIPT = 'scripts/release/smoke-installed-runtime.mjs';
-const VERSION = '0.9.1';
+const VERSION = '0.9.2';
 const PLATFORM = 'macos-arm64';
 
 function sha256(bytes) {
@@ -291,7 +291,7 @@ test('installed-runtime smoke rejects platform, version, manifest digest, and AE
   assert.notEqual(platform.status, 0);
   assert.match(platform.stderr, /platform mismatch/i);
 
-  const version = runSmoke(fixture, { version: '0.9.2' });
+  const version = runSmoke(fixture, { version: '0.9.3' });
   assert.notEqual(version.status, 0);
   assert.match(version.stderr, /version mismatch/i);
 
@@ -372,7 +372,7 @@ test('Windows Codex handoff is exact-identity and fails closed without a tested 
     '<OWNER/REPOSITORY>', '<MERGED_RC_PR_NUMBER>', '<CANDIDATE_SHA>', '<BUILD_RUN_ID>',
     '<WINDOWS_ARTIFACT_ID>', '<MANIFEST_ARTIFACT_ID>', '<AE25_AFTERFX_EXE>',
     '<AE26_AFTERFX_EXE>', '<ZXP_INSTALLER>', '<CODEX_VERSION>',
-    'ae-mcp-panel-v0.9.1-windows-x64.zxp', 'artifact-manifest-v0.9.1.json',
+    'ae-mcp-panel-v0.9.2-windows-x64.zxp', 'artifact-manifest-v0.9.2.json',
     'run_attempt', 'workflow_dispatch', '.github/workflows/build-rc.yml',
     'expired', 'gh api', 'gh run download', 'git status --porcelain',
     '--comment-out', '--input', 'UTF8Encoding',

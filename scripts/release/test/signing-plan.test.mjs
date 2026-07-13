@@ -115,7 +115,7 @@ test('verified stage copy preserves manifest-bound internal relative symlinks ve
     stageRoot: h.outDir,
     signingRoot,
     platform: 'macos-arm64',
-    version: '0.9.1',
+    version: '0.9.2',
     candidateSha: h.input.sourceCommitSha,
   });
   assert.equal(
@@ -129,7 +129,7 @@ test('Mac release invokes only the reviewed foundation signing entry points', ()
   const commands = buildReleaseSigningCommands({
     platform: 'macos-arm64',
     candidateSha: 'a'.repeat(40),
-    version: '0.9.1',
+    version: '0.9.2',
     stageRoot: '/work/unsigned',
     signingRoot: '/work/signed',
     outRoot: '/work/out',
@@ -154,7 +154,7 @@ test('Windows release invokes only the reviewed foundation signing entry points'
   const commands = buildReleaseSigningCommands({
     platform: 'windows-x64',
     candidateSha: 'b'.repeat(40),
-    version: '0.9.1',
+    version: '0.9.2',
     stageRoot: 'C:\\work\\unsigned',
     signingRoot: 'C:\\work\\signed',
     outRoot: 'C:\\work\\out',
@@ -202,13 +202,13 @@ test('command construction rejects mutable identities and overlapping roots', ()
   const valid = {
     platform: 'macos-arm64',
     candidateSha: 'a'.repeat(40),
-    version: '0.9.1',
+    version: '0.9.2',
     stageRoot: '/work/unsigned',
     signingRoot: '/work/signed',
     outRoot: '/work/out',
   };
   assert.throws(
-    () => buildReleaseSigningCommands({ ...valid, version: '0.9.2' }),
+    () => buildReleaseSigningCommands({ ...valid, version: '0.9.3' }),
     /version/,
   );
   assert.throws(
@@ -268,8 +268,8 @@ test('step evidence rejects missing, duplicate, non-zero, malformed, or secret-b
 
 test('Mac signing report is canonical, hashes final outputs, and contains no paths', async () => {
   const root = await mkdtemp(join(tmpdir(), 'ae-mcp-signing-report-'));
-  const zxpPath = join(root, 'ae-mcp-panel-v0.9.1-macos-arm64.zxp');
-  const dmgPath = join(root, 'ae-mcp-panel-v0.9.1-macos-arm64.dmg');
+  const zxpPath = join(root, 'ae-mcp-panel-v0.9.2-macos-arm64.zxp');
+  const dmgPath = join(root, 'ae-mcp-panel-v0.9.2-macos-arm64.dmg');
   const reportPath = join(root, 'signing-report.json');
   await writeFile(zxpPath, 'signed-zxp');
   await writeFile(dmgPath, 'signed-dmg');
@@ -343,7 +343,7 @@ test('Mac signing report is canonical, hashes final outputs, and contains no pat
 
 test('Windows signing report requires verified Authenticode, timestamp, and ZXP evidence', async () => {
   const root = await mkdtemp(join(tmpdir(), 'ae-mcp-signing-report-'));
-  const zxpPath = join(root, 'ae-mcp-panel-v0.9.1-windows-x64.zxp');
+  const zxpPath = join(root, 'ae-mcp-panel-v0.9.2-windows-x64.zxp');
   await writeFile(zxpPath, 'windows-zxp');
   const signingPlan = plan('windows-x64', WINDOWS_STEP_IDS);
   const input = {
@@ -393,7 +393,7 @@ test('signing reports and command audits never serialize signing secret sentinel
   for (const sentinel of sentinels) assert.equal(serializedAudit.includes(sentinel), false);
 
   const root = await mkdtemp(join(tmpdir(), 'ae-mcp-signing-report-'));
-  const zxpPath = join(root, 'ae-mcp-panel-v0.9.1-windows-x64.zxp');
+  const zxpPath = join(root, 'ae-mcp-panel-v0.9.2-windows-x64.zxp');
   await writeFile(zxpPath, 'windows-zxp');
   const signingPlan = plan('windows-x64', WINDOWS_STEP_IDS);
   await assert.rejects(
@@ -428,7 +428,7 @@ test('release runner copies the verified stage, executes reviewed commands witho
   const candidateSha = 'a'.repeat(40);
   const bundleManifest = `${JSON.stringify({
     schemaVersion: 1,
-    version: '0.9.1',
+    version: '0.9.2',
     platform: 'macos-arm64',
     sourceCommitSha: candidateSha,
     files: [],
@@ -498,7 +498,7 @@ test('release runner copies the verified stage, executes reviewed commands witho
     {
       platform: 'macos-arm64',
       candidateSha,
-      version: '0.9.1',
+      version: '0.9.2',
       stageRoot,
       signingRoot,
       outRoot,
@@ -529,7 +529,7 @@ test('release runner copies the verified stage, executes reviewed commands witho
       verifyPlatformBundleImpl: async (input) => {
         verifiedRoots.push(input.root);
         assert.equal(input.platform, 'macos-arm64');
-        assert.equal(input.version, '0.9.1');
+        assert.equal(input.version, '0.9.2');
         assert.equal(input.sourceCommitSha, candidateSha);
       },
       freezeSignedManifestsImpl: async (freezeInput) => {
@@ -578,7 +578,7 @@ test('command construction rejects roots that overlap through a symlinked parent
     () => buildReleaseSigningCommands({
       platform: 'macos-arm64',
       candidateSha: 'a'.repeat(40),
-      version: '0.9.1',
+      version: '0.9.2',
       stageRoot,
       signingRoot: join(aliasRoot, 'signed'),
       outRoot: join(root, 'out'),
@@ -601,7 +601,7 @@ test('command construction refuses a non-empty signing root', async () => {
     () => buildReleaseSigningCommands({
       platform: 'macos-arm64',
       candidateSha: 'a'.repeat(40),
-      version: '0.9.1',
+      version: '0.9.2',
       stageRoot,
       signingRoot,
       outRoot,
@@ -621,7 +621,7 @@ test('release runner sanitizes evidence reader failures', async () => {
   const candidateSha = 'a'.repeat(40);
   await writeFile(join(stageRoot, 'bundle-manifest.json'), `${JSON.stringify({
     schemaVersion: 1,
-    version: '0.9.1',
+    version: '0.9.2',
     platform: 'macos-arm64',
     sourceCommitSha: candidateSha,
     files: [],
@@ -633,7 +633,7 @@ test('release runner sanitizes evidence reader failures', async () => {
       {
         platform: 'macos-arm64',
         candidateSha,
-        version: '0.9.1',
+        version: '0.9.2',
         stageRoot,
         signingRoot,
         outRoot,
@@ -789,7 +789,7 @@ test('release runner verifies the copied unsigned tree before executing a signin
   const candidateSha = 'a'.repeat(40);
   await writeFile(join(stageRoot, 'bundle-manifest.json'), `${JSON.stringify({
     schemaVersion: 1,
-    version: '0.9.1',
+    version: '0.9.2',
     platform: 'macos-arm64',
     sourceCommitSha: candidateSha,
     files: [],
@@ -803,7 +803,7 @@ test('release runner verifies the copied unsigned tree before executing a signin
       {
         platform: 'macos-arm64',
         candidateSha,
-        version: '0.9.1',
+        version: '0.9.2',
         stageRoot,
         signingRoot,
         outRoot,
@@ -849,7 +849,7 @@ test('signed RC workflow accepts only protected main and creates an irreversible
 
   assert.match(workflow, /runs-on: ubuntu-24\.04/);
   assert.match(workflow, /\^\[0-9a-f\]\{40\}\$/);
-  assert.match(workflow, /VERSION.*0\.9\.1|0\.9\.1.*VERSION/);
+  assert.match(workflow, /VERSION.*0\.9\.2|0\.9\.2.*VERSION/);
   assert.match(workflow, /fetch --no-tags origin \+refs\/heads\/main:refs\/remotes\/origin\/main/);
   assert.match(workflow, /git rev-parse origin\/main/);
   assert.match(workflow, /main_sha.*CANDIDATE_SHA|CANDIDATE_SHA.*main_sha/);
@@ -1049,11 +1049,11 @@ test('signed RC workflow uses pinned platform, signing, evidence, and finalizati
   assert.match(workflow, /buildArtifactManifest/);
   assert.match(workflow, /serializeArtifactManifest/);
   assert.match(workflow, /const manifestBytes = serializeArtifactManifest\(manifest\)/);
-  assert.match(workflow, /writeFile\([^\n]+artifact-manifest-v0\.9\.1\.json[^\n]+manifestBytes/);
+  assert.match(workflow, /writeFile\([^\n]+artifact-manifest-v0\.9\.2\.json[^\n]+manifestBytes/);
   assert.match(workflow, /verifyArtifactManifest/);
   assert.match(workflow, /role: ['"]install['"]/);
   assert.match(workflow, /role: ['"]payload['"]/);
-  assert.match(workflow, /artifact-manifest-v0\.9\.1\.json/);
+  assert.match(workflow, /artifact-manifest-v0\.9\.2\.json/);
   assert.match(workflow, /retention-days: 30/);
   assert.match(workflow, /if: \$\{\{ always\(\).*needs\.lock\.result == ['"]success['"]/);
   assert.match(workflow, /steps\.reverify\.outcome/);

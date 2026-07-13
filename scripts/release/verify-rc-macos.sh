@@ -43,7 +43,7 @@ artifact=$(CDPATH= cd -- "$(dirname -- "$artifact")" && pwd -P)/$(basename -- "$
 manifest=$(CDPATH= cd -- "$(dirname -- "$manifest")" && pwd -P)/$(basename -- "$manifest")
 out_dir=$(CDPATH= cd -- "$(dirname -- "$out")" && pwd -P)
 out=$out_dir/$(basename -- "$out")
-[[ $(basename -- "$artifact") == 'ae-mcp-panel-v0.9.1-macos-arm64.dmg' ]] || {
+[[ $(basename -- "$artifact") == 'ae-mcp-panel-v0.9.2-macos-arm64.dmg' ]] || {
   echo 'unexpected macOS RC artifact name' >&2
   exit 65
 }
@@ -123,7 +123,7 @@ run_recorded 'codesign --verify --deep --strict' /usr/bin/codesign --verify --de
 run_recorded 'spctl --assess' /usr/sbin/spctl --assess --type open "$artifact" || preflight_ok=0
 run_recorded 'xcrun stapler validate' /usr/bin/xcrun stapler validate "$artifact" || preflight_ok=0
 
-payload="$mount_point/ae-mcp-panel-v0.9.1-macos-arm64.zxp"
+payload="$mount_point/ae-mcp-panel-v0.9.2-macos-arm64.zxp"
 expected_launcher_sha=''
 if [[ $preflight_ok == 1 ]]; then
   if run_recorded 'mount exact notarized DMG' hdiutil attach -readonly -nobrowse -mountpoint "$mount_point" "$artifact"; then
@@ -180,7 +180,7 @@ fi
 [[ $ae26_version == 26.* ]] || { append_failure 'AE 26 version identity failed'; preflight_ok=0; }
 
 launcher="$HOME/.ae-mcp/bin/ae-mcp"
-runtime_manifest="$HOME/.ae-mcp/runtime/0.9.1/macos-arm64/runtime-manifest.json"
+runtime_manifest="$HOME/.ae-mcp/runtime/0.9.2/macos-arm64/runtime-manifest.json"
 run_ae_smoke() {
   local app=$1 major=$2 smoke_out=$3 app_name code=0
   app_name=$(basename -- "$app" .app)
@@ -198,7 +198,7 @@ run_ae_smoke() {
         --launcher "$launcher" \
         --runtime-manifest "$runtime_manifest" \
         --expected-platform macos-arm64 \
-        --expected-version 0.9.1 \
+        --expected-version 0.9.2 \
         --expected-runtime-manifest-sha256 "$expected_runtime_manifest_sha" \
         --expected-launcher-sha256 "$expected_launcher_sha" \
         --expected-ae-major "$major" \

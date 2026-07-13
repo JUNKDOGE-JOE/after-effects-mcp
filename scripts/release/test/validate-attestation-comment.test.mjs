@@ -24,7 +24,7 @@ function report(result = 'PASS') {
     candidateSha: 'b'.repeat(40),
     workflowRunId: '42',
     artifactId: '101',
-    artifactName: 'ae-mcp-panel-v0.9.1-windows-x64.zxp',
+    artifactName: 'ae-mcp-panel-v0.9.2-windows-x64.zxp',
     artifactSha256: 'c'.repeat(64),
     osVersion: 'Windows 10.0.26100',
     codexVersion: '0.144.0-alpha.4',

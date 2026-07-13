@@ -51,7 +51,7 @@ def artifact_wire(**overrides: Any) -> dict[str, Any]:
                 else "manual"
             ),
             "client": "private-client" if sensitive_source else None,
-            "productVersion": "0.9.1",
+            "productVersion": "0.9.2",
             "provenance": (
                 {
                     "provider": "private-provider-shape",

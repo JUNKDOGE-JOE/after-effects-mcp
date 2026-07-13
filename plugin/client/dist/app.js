@@ -8278,7 +8278,7 @@
   // package.json
   var package_default = {
     name: "ae-mcp-panel",
-    version: "0.9.1",
+    version: "0.9.2",
     private: true,
     type: "module",
     scripts: {
@@ -17082,7 +17082,7 @@
   // src/cep/mcpClient.js
   var DEFAULT_TIMEOUT_MS2 = 3e4;
   var MCP_PROTOCOL_VERSION = "2025-06-18";
-  var PANEL_VERSION = "0.9.1";
+  var PANEL_VERSION = "0.9.2";
   function findProjectRoot({ extRoot, repoRoot, fsImpl, platform }) {
     const adapter = platform || createPlatformAdapter();
     if (repoRoot && fsImpl.existsSync(adapter.paths.join([repoRoot, "pyproject.toml"]))) return adapter.paths.resolve([repoRoot]);

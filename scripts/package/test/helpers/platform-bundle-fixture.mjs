@@ -95,8 +95,8 @@ async function writePlugin(repoRoot) {
   const plugin = path.join(repoRoot, 'plugin');
   await writeFixtureFile(plugin, 'CSXS/manifest.xml', [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    '<ExtensionManifest ExtensionBundleId="com.aemcp.panel" ExtensionBundleVersion="0.9.1">',
-    '  <ExtensionList><Extension Id="com.aemcp.panel" Version="0.9.1" /></ExtensionList>',
+    '<ExtensionManifest ExtensionBundleId="com.aemcp.panel" ExtensionBundleVersion="0.9.2">',
+    '  <ExtensionList><Extension Id="com.aemcp.panel" Version="0.9.2" /></ExtensionList>',
     '  <ExecutionEnvironment><HostList><Host Name="AEFT" Version="[25.0,26.9]" /></HostList></ExecutionEnvironment>',
     '</ExtensionManifest>',
     '',
@@ -137,7 +137,7 @@ async function writeRuntime(repoRoot, platform) {
     nativeBytes,
     platform === 'macos-arm64' ? 0o755 : 0o644,
   );
-  await writeFixtureFile(root, 'python/site-packages/ae_mcp/__init__.py', '__version__ = "0.9.1"\n');
+  await writeFixtureFile(root, 'python/site-packages/ae_mcp/__init__.py', '__version__ = "0.9.2"\n');
   await writeFixtureFile(root, 'licenses/NOTICE.txt', 'fixture license\n');
   const licenseApprovals = [];
   const components = [{
@@ -241,7 +241,7 @@ export async function makeStageHarness(t, platform = 'macos-arm64', overrides = 
   const helperRoot = await writeHelper(repoRoot, platform);
   const input = {
     platform,
-    version: '0.9.1',
+    version: '0.9.2',
     outDir,
     repoRoot,
     sourceCommitSha: SOURCE_COMMIT_SHA,
@@ -254,7 +254,7 @@ export async function makeStageHarness(t, platform = 'macos-arm64', overrides = 
     runtimeRoot,
     helperRoot,
     input,
-    verifyInput: { root: outDir, platform, version: '0.9.1' },
+    verifyInput: { root: outDir, platform, version: '0.9.2' },
     exists(relative) {
       return fs.existsSync(path.join(outDir, ...relative.split('/')));
     },

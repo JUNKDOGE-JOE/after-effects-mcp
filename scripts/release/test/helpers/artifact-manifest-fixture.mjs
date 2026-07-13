@@ -77,7 +77,7 @@ async function writeEvidence(root, candidateSha, artifacts) {
       files.bundleManifest,
       canonicalJson({
         schemaVersion: 1,
-        version: '0.9.1',
+        version: '0.9.2',
         platform,
         sourceCommitSha: candidateSha,
         runtime: {
@@ -197,15 +197,15 @@ export async function makeArtifactManifestFixture(t) {
   const candidateSha = 'a'.repeat(40);
   const artifacts = [
     {
-      name: 'ae-mcp-panel-v0.9.1-macos-arm64.dmg', path: join(root, 'ae-mcp-panel-v0.9.1-macos-arm64.dmg'), platform: 'macos-arm64',
+      name: 'ae-mcp-panel-v0.9.2-macos-arm64.dmg', path: join(root, 'ae-mcp-panel-v0.9.2-macos-arm64.dmg'), platform: 'macos-arm64',
       artifactId: '100', role: 'install', bytes: 'mac-dmg-bytes',
     },
     {
-      name: 'ae-mcp-panel-v0.9.1-macos-arm64.zxp', path: join(root, 'ae-mcp-panel-v0.9.1-macos-arm64.zxp'), platform: 'macos-arm64',
+      name: 'ae-mcp-panel-v0.9.2-macos-arm64.zxp', path: join(root, 'ae-mcp-panel-v0.9.2-macos-arm64.zxp'), platform: 'macos-arm64',
       artifactId: '101', role: 'payload', bytes: 'mac-zxp-bytes',
     },
     {
-      name: 'ae-mcp-panel-v0.9.1-windows-x64.zxp', path: join(root, 'ae-mcp-panel-v0.9.1-windows-x64.zxp'), platform: 'windows-x64',
+      name: 'ae-mcp-panel-v0.9.2-windows-x64.zxp', path: join(root, 'ae-mcp-panel-v0.9.2-windows-x64.zxp'), platform: 'windows-x64',
       artifactId: '102', role: 'install', bytes: 'win-zxp-bytes',
     },
   ];

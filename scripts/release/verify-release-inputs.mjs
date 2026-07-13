@@ -6,7 +6,7 @@ const SHA = /^[a-f0-9]{40}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
 const DECIMAL_ID = /^\d+$/;
 const POSITIVE_DECIMAL_ID = /^[1-9]\d*$/;
-const VERSION = '0.9.1';
+const VERSION = '0.9.2';
 
 function recordIdentity(record, field) {
   return record?.[field] ?? record?.report?.[field];

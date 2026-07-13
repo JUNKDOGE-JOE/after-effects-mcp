@@ -38,7 +38,7 @@ test('writes independent canonical freeze-step evidence bound to signed root byt
   const evidence = await module.freezeSignedManifestsWithEvidence({
     root: signingRoot,
     platform: 'windows-x64',
-    version: '0.9.1',
+    version: '0.9.2',
     sourceCommitSha: h.input.sourceCommitSha,
     sourceStageSha256,
     evidencePath,
@@ -84,14 +84,14 @@ test('freezes signed helper bytes into a final helper and bundle manifest withou
   await assert.rejects(verifyPlatformBundle({
     root: signingRoot,
     platform: 'macos-arm64',
-    version: '0.9.1',
+    version: '0.9.2',
     sourceCommitSha: h.input.sourceCommitSha,
   }), { code: 'BUNDLE_FILE_METADATA_MISMATCH' });
 
   const result = await freezeSignedManifests({
     root: signingRoot,
     platform: 'macos-arm64',
-    version: '0.9.1',
+    version: '0.9.2',
     sourceCommitSha: h.input.sourceCommitSha,
     sourceStageSha256,
   });
@@ -99,7 +99,7 @@ test('freezes signed helper bytes into a final helper and bundle manifest withou
   await verifyPlatformBundle({
     root: signingRoot,
     platform: 'macos-arm64',
-    version: '0.9.1',
+    version: '0.9.2',
     sourceCommitSha: h.input.sourceCommitSha,
   });
   assert.equal(
@@ -158,7 +158,7 @@ test('freezes the reviewed XPC CodeResources seal into the helper manifest', asy
   await freezeSignedManifests({
     root: signingRoot,
     platform: 'macos-arm64',
-    version: '0.9.1',
+    version: '0.9.2',
     sourceCommitSha: h.input.sourceCommitSha,
     sourceStageSha256,
   });
@@ -178,7 +178,7 @@ test('freezes the reviewed XPC CodeResources seal into the helper manifest', asy
   await verifyPlatformBundle({
     root: signingRoot,
     platform: 'macos-arm64',
-    version: '0.9.1',
+    version: '0.9.2',
     sourceCommitSha: h.input.sourceCommitSha,
   });
 });
@@ -189,7 +189,7 @@ test('refuses to freeze when the asserted unsigned source digest is malformed', 
   await assert.rejects(freezeSignedManifests({
     root: h.outDir,
     platform: 'windows-x64',
-    version: '0.9.1',
+    version: '0.9.2',
     sourceCommitSha: h.input.sourceCommitSha,
     sourceStageSha256: 'bad',
   }), /source stage digest/i);

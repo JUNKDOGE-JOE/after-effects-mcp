@@ -21,7 +21,7 @@ test('promotion queues every idempotent retry instead of replacing an older pend
 
   assert.match(
     text,
-    /concurrency:\n  group: release-v0\.9\.1\n  queue: max\n  cancel-in-progress: false/,
+    /concurrency:\n  group: release-v0\.9\.2\n  queue: max\n  cancel-in-progress: false/,
   );
 });
 

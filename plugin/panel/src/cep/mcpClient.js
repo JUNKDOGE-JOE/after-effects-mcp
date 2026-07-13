@@ -4,7 +4,7 @@ import { createPlatformAdapter } from './platform/index.js';
 
 const DEFAULT_TIMEOUT_MS = 30000;
 const MCP_PROTOCOL_VERSION = '2025-06-18';
-export const PANEL_VERSION = '0.9.1';
+export const PANEL_VERSION = '0.9.2';
 
 export function findProjectRoot({ extRoot, repoRoot, fsImpl, platform }) {
   const adapter = platform || createPlatformAdapter();
