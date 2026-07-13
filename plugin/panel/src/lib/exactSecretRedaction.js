@@ -27,6 +27,7 @@ function normalizedSecrets(values) {
 
 const MAX_DECODE_CHARS = 1024 * 1024;
 const MAX_DECODE_LAYERS = 3;
+const MAX_STRUCTURE_CHARS = 16 * 1024 * 1024;
 
 function decodePercentRuns(value) {
   return String(value).replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
@@ -64,10 +65,19 @@ export function containsExactSecret(value, values = []) {
   const secrets = normalizedSecrets(values);
   if (!secrets.length) return false;
   const visiting = new WeakSet();
+  const stringParts = [];
+  let stringChars = 0;
   const containsText = (candidate) => textContainsSecret(candidate, secrets);
   const visit = (candidate) => {
     if ((typeof candidate !== 'object' || candidate === null) && typeof candidate !== 'function') {
-      try { return containsText(String(candidate)); } catch { return true; }
+      try {
+        if (typeof candidate === 'string') {
+          stringChars += candidate.length;
+          if (stringChars > MAX_STRUCTURE_CHARS) return true;
+          stringParts.push(candidate);
+        }
+        return containsText(String(candidate));
+      } catch { return true; }
     }
     if (visiting.has(candidate)) return true;
     let keys;
@@ -87,7 +97,8 @@ export function containsExactSecret(value, values = []) {
       visiting.delete(candidate);
     }
   };
-  return visit(value);
+  if (visit(value)) return true;
+  return containsText(stringParts.join(''));
 }
 
 export function redactText(value, values = []) {
@@ -113,19 +124,26 @@ export function redactText(value, values = []) {
   return secrets.some((secret) => text.includes(secret)) ? '' : text;
 }
 
-export function redactValue(value, values = []) {
+function redactValueParts(value, values) {
   if (typeof value === 'string') return redactText(value, values);
   if (value === null || ['number', 'boolean', 'bigint'].includes(typeof value)) {
     const text = String(value);
     const redacted = redactText(text, values);
     return redacted === text ? value : redacted;
   }
-  if (Array.isArray(value)) return value.map((item) => redactValue(item, values));
+  if (Array.isArray(value)) return value.map((item) => redactValueParts(item, values));
   if (!value || typeof value !== 'object') return value;
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [
     redactText(key, values),
-    redactValue(item, values),
+    redactValueParts(item, values),
   ]));
+}
+
+export function redactValue(value, values = []) {
+  const redacted = redactValueParts(value, values);
+  if (!containsExactSecret(redacted, values)) return redacted;
+  const secrets = normalizedSecrets(values);
+  return secrets.some((secret) => '[redacted]'.includes(secret)) ? '' : '[redacted]';
 }
 
 export function createDeltaRedactor(values, emitText) {

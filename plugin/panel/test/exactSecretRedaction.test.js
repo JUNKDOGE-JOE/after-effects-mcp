@@ -66,6 +66,13 @@ test('recursive detection inspects decoded values and keys and fails closed on u
   assert.equal(containsExactSecret(inaccessible, ['provider-secret']), true);
 });
 
+test('recursive detection joins string leaves in deterministic traversal order', () => {
+  const secret = 'opaque-provider-secret';
+  const split = { metadata: { left: 'opaque-provider-', right: 'secret' } };
+  assert.equal(containsExactSecret(split, [secret]), true);
+  assert.equal(redactValue(split, [secret]), '[redacted]');
+});
+
 test('recursive detection and redaction decode bounded percent and Unicode escapes', () => {
   const secret = 'opaque-provider-secret';
   for (const encoded of [

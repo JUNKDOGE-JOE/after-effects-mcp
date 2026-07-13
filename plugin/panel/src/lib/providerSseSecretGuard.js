@@ -16,6 +16,21 @@ const STREAM_TEXT_KEYS = new Set([
   'thinking',
   'transcript',
 ]);
+const STREAM_CONTROL_KEYS = new Set([
+  'content_index',
+  'id',
+  'index',
+  'item_id',
+  'message_id',
+  'model',
+  'object',
+  'output_index',
+  'response_id',
+  'role',
+  'status',
+  'type',
+]);
+const MAX_STREAM_AGGREGATE_CHARS = 16 * 1024 * 1024;
 
 function invalidSse(code, message) {
   return Object.assign(new Error(message), { status: 502, code });
@@ -34,17 +49,29 @@ function payloadIdentity(payload) {
   ].map((value) => String(value ?? '')).join('|');
 }
 
+function appendStream(streams, key, value) {
+  const next = (streams.get(key) || '') + value;
+  if (next.length > MAX_STREAM_AGGREGATE_CHARS) {
+    throw invalidSse('provider_stream_too_large', 'Provider stream was too large.');
+  }
+  streams.set(key, next);
+}
+
 function collectStreamingStrings(value, identity, streams, path = []) {
   if (typeof value === 'string') {
     const leaf = String(path.at(-1) ?? '');
     const pathKey = `path:${identity}:${path.join('.')}`;
-    streams.set(pathKey, (streams.get(pathKey) || '') + value);
+    appendStream(streams, pathKey, value);
     const globalPathKey = `global-path:${path.join('.')}`;
-    streams.set(globalPathKey, (streams.get(globalPathKey) || '') + value);
+    appendStream(streams, globalPathKey, value);
+    appendStream(streams, 'global-all-strings', value);
+    if (!STREAM_CONTROL_KEYS.has(leaf)) {
+      appendStream(streams, 'global-data-strings', value);
+    }
     if (STREAM_TEXT_KEYS.has(leaf)) {
       const semanticKey = `semantic:${identity}`;
-      streams.set(semanticKey, (streams.get(semanticKey) || '') + value);
-      streams.set('global-semantic', (streams.get('global-semantic') || '') + value);
+      appendStream(streams, semanticKey, value);
+      appendStream(streams, 'global-semantic', value);
     }
     return;
   }

@@ -370,8 +370,8 @@ export function zcodeDescriptorFromProbedModels({ cliModel, providerId, probedMo
   };
 }
 
-// Spec A2: custom-provider channels list what /v1/models actually returned;
-// curated metadata (effort levels, cost) is reused when ids overlap. An
+// Custom-provider channels list what /v1/models actually returned. Curated
+// metadata such as effort levels and cost is reused when ids overlap. An
 // empty/failed probe keeps the descriptor unchanged so the manual custom
 // model id path still works.
 export function descriptorFromProbedModels(descriptor, probedModels) {

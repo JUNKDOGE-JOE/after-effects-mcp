@@ -263,9 +263,9 @@ export function createCodexBackend({
   resolveRequestProfile,
   recoverProviderProfile,
   onProviderProfileRecovered = () => {},
-  // Spec A extension: when the panel has no explicit custom provider
-  // configured, inherit a model_provider already declared in
-  // ~/.codex/config.toml. config.toml owns model_provider selection; the
+  // When the panel has no explicit custom provider, inherit a model_provider
+  // already declared in ~/.codex/config.toml. config.toml owns provider
+  // selection; the
   // panel only supplies the missing API key env var the provider needs (no
   // `-c model_provider=...` override).
   getCliConfigProvider = () => null,

@@ -320,7 +320,12 @@ test('native non-streaming responses remove encoded credentials from body and he
   const reflected = 'opaque%2dprovider%2dsecret';
   const records = [];
   const upstream = controlledUpstream(records, ({ res, record }) => {
-    res.writeHead(200, { 'content-type': 'application/json', 'x-request-id': reflected });
+    res.writeHead(200, {
+      'content-type': 'application/json',
+      'x-request-id': reflected,
+      'x-fragment-left': 'opaque-provider-',
+      'x-fragment-right': 'secret',
+    });
     res.end(JSON.stringify({
       id: 'response-encoded',
       object: 'response',
@@ -333,6 +338,7 @@ test('native non-streaming responses remove encoded credentials from body and he
         role: 'assistant',
         content: [{ type: 'output_text', text: reflected }],
       }],
+      metadata: { left: 'opaque-provider-', right: 'secret' },
     }));
   });
   await listen(upstream);
@@ -353,6 +359,8 @@ test('native non-streaming responses remove encoded credentials from body and he
     });
     assert.equal(result.status, 200);
     assert.equal(result.headers['x-request-id'], undefined);
+    assert.equal(result.headers['x-fragment-left'], undefined);
+    assert.equal(result.headers['x-fragment-right'], undefined);
     assert.equal(result.body.includes(reflected), false);
     assert.match(result.body, /\[redacted\]/);
   } finally {
@@ -366,8 +374,8 @@ test('native SSE rejects credentials split across unknown metadata events before
   const records = [];
   const upstream = controlledUpstream(records, ({ res }) => {
     res.writeHead(200, { 'content-type': 'text/event-stream' });
-    res.write('event: future.event\ndata: {"type":"future.event","metadata":{"piece":"opaque-provider-"}}\n\n');
-    res.end('event: future.event\ndata: {"type":"future.event","metadata":{"piece":"secret"}}\n\n');
+    res.write('event: future.event\ndata: {"type":"future.event","metadata":{"left":"opaque-provider-"}}\n\n');
+    res.end('event: future.event\ndata: {"type":"future.event","metadata":{"right":"secret"}}\n\n');
   });
   await listen(upstream);
   const apiRoot = 'http://127.0.0.1:' + upstream.address().port + '/v1';

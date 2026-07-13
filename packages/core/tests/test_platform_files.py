@@ -91,7 +91,7 @@ def test_private_temp_dir_cleanup_uses_an_open_directory_when_root_is_raced_to_a
     try:
         with private_temp_dir(prefix="tool-import-") as directory:
             state["root"] = directory
-    except Exception as error:  # the old implementation raises after deleting the victim
+    except Exception as error:
         cleanup_error = error
 
     assert state["raced"] is True
@@ -135,6 +135,7 @@ def test_windows_cleanup_opens_reparse_points_and_never_scans_their_target(
 
     class FakeWin32File:
         raced = False
+        FileDispositionInfo = 4
 
         @classmethod
         def CreateFile(  # noqa: N802 - mirrors pywin32
@@ -162,16 +163,22 @@ def test_windows_cleanup_opens_reparse_points_and_never_scans_their_target(
             return (attributes,)
 
         @staticmethod
-        def RemoveDirectory(path: str) -> None:  # noqa: N802
-            candidate = Path(path)
-            if candidate.is_symlink():
-                candidate.unlink()
-            else:
-                candidate.rmdir()
+        def GetFinalPathNameByHandle(handle: FakeHandle, _flags: int) -> str:  # noqa: N802
+            return str(handle.path.absolute())
 
         @staticmethod
-        def DeleteFile(path: str) -> None:  # noqa: N802
-            Path(path).unlink()
+        def SetFileInformationByHandle(  # noqa: N802
+            handle: FakeHandle, info_class: int, delete: bool
+        ) -> None:
+            assert info_class == FakeWin32File.FileDispositionInfo
+            assert delete is True
+            candidate = handle.path
+            if candidate.is_symlink():
+                candidate.unlink()
+            elif candidate.is_dir():
+                candidate.rmdir()
+            else:
+                candidate.unlink()
 
     monkeypatch.setattr(os, "scandir", lambda _path: (_ for _ in ()).throw(AssertionError("reparse target was scanned")))
     platform_files._remove_windows_tree_without_following_links(  # noqa: SLF001
@@ -222,6 +229,7 @@ def test_windows_cleanup_clears_readonly_on_verified_regular_files(
 
     class FakeWin32File:
         FileBasicInfo = 0
+        FileDispositionInfo = 4
 
         @staticmethod
         def CreateFile(  # noqa: N802 - mirrors pywin32
@@ -240,6 +248,10 @@ def test_windows_cleanup_clears_readonly_on_verified_regular_files(
             return (attributes,)
 
         @staticmethod
+        def GetFinalPathNameByHandle(handle: FakeHandle, _flags: int) -> str:  # noqa: N802
+            return str(handle.path.absolute())
+
+        @staticmethod
         def GetFileInformationByHandleEx(handle: FakeHandle, info_class: int) -> dict[str, int]:  # noqa: N802
             assert info_class == FakeWin32File.FileBasicInfo
             attributes = FakeWin32Con.FILE_ATTRIBUTE_READONLY if handle.path in readonly_paths else 0
@@ -250,24 +262,23 @@ def test_windows_cleanup_clears_readonly_on_verified_regular_files(
 
         @staticmethod
         def SetFileInformationByHandle(  # noqa: N802
-            handle: FakeHandle, info_class: int, info: dict[str, int]
+            handle: FakeHandle, info_class: int, info: dict[str, int] | bool
         ) -> None:
-            assert info_class == FakeWin32File.FileBasicInfo
-            attributes = info["FileAttributes"]
-            attribute_updates.append((handle.path, attributes))
-            if not attributes & FakeWin32Con.FILE_ATTRIBUTE_READONLY:
-                readonly_paths.discard(handle.path)
-
-        @staticmethod
-        def RemoveDirectory(path: str) -> None:  # noqa: N802
-            Path(path).rmdir()
-
-        @staticmethod
-        def DeleteFile(path: str) -> None:  # noqa: N802
-            candidate = Path(path)
-            if candidate in readonly_paths:
+            if info_class == FakeWin32File.FileBasicInfo:
+                assert isinstance(info, dict)
+                attributes = info["FileAttributes"]
+                attribute_updates.append((handle.path, attributes))
+                if not attributes & FakeWin32Con.FILE_ATTRIBUTE_READONLY:
+                    readonly_paths.discard(handle.path)
+                return
+            assert info_class == FakeWin32File.FileDispositionInfo
+            assert info is True
+            if handle.path in readonly_paths:
                 raise AccessDenied("readonly")
-            candidate.unlink()
+            if handle.path.is_dir():
+                handle.path.rmdir()
+            else:
+                handle.path.unlink()
 
     platform_files._remove_windows_tree_without_following_links(  # noqa: SLF001
         root,
@@ -320,6 +331,7 @@ def test_windows_cleanup_clears_readonly_file_reparse_by_handle_without_touching
 
     class FakeWin32File:
         FileBasicInfo = 0
+        FileDispositionInfo = 4
 
         @staticmethod
         def CreateFile(  # noqa: N802
@@ -342,6 +354,10 @@ def test_windows_cleanup_clears_readonly_file_reparse_by_handle_without_touching
             return (attributes,)
 
         @staticmethod
+        def GetFinalPathNameByHandle(handle: FakeHandle, _flags: int) -> str:  # noqa: N802
+            return str(handle.path.absolute())
+
+        @staticmethod
         def GetFileInformationByHandleEx(handle: FakeHandle, info_class: int) -> dict[str, int]:  # noqa: N802
             assert info_class == FakeWin32File.FileBasicInfo
             return {
@@ -355,23 +371,22 @@ def test_windows_cleanup_clears_readonly_file_reparse_by_handle_without_touching
 
         @staticmethod
         def SetFileInformationByHandle(  # noqa: N802
-            handle: FakeHandle, info_class: int, info: dict[str, int]
+            handle: FakeHandle, info_class: int, info: dict[str, int] | bool
         ) -> None:
-            assert info_class == FakeWin32File.FileBasicInfo
-            assert info["FileAttributes"] == FakeWin32Con.FILE_ATTRIBUTE_REPARSE_POINT
-            updated_handles.append(handle.path)
-            readonly_entries.discard(handle.path)
-
-        @staticmethod
-        def RemoveDirectory(path: str) -> None:  # noqa: N802
-            Path(path).rmdir()
-
-        @staticmethod
-        def DeleteFile(path: str) -> None:  # noqa: N802
-            candidate = Path(path)
-            if candidate in readonly_entries:
+            if info_class == FakeWin32File.FileBasicInfo:
+                assert isinstance(info, dict)
+                assert info["FileAttributes"] == FakeWin32Con.FILE_ATTRIBUTE_REPARSE_POINT
+                updated_handles.append(handle.path)
+                readonly_entries.discard(handle.path)
+                return
+            assert info_class == FakeWin32File.FileDispositionInfo
+            assert info is True
+            if handle.path in readonly_entries:
                 raise AccessDenied("readonly reparse")
-            candidate.unlink()
+            if handle.path.is_dir() and not handle.path.is_symlink():
+                handle.path.rmdir()
+            else:
+                handle.path.unlink()
 
     platform_files._remove_windows_tree_without_following_links(  # noqa: SLF001
         root,

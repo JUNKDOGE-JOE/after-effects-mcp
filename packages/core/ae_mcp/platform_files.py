@@ -162,7 +162,7 @@ def _remove_windows_tree_without_following_links(
     win32file_module: object | None = None,
     win32con_module: object | None = None,
 ) -> None:
-    """Remove a Windows tree while opened handles prevent reparse substitution."""
+    """Remove a Windows tree by binding traversal and deletion to opened handles."""
     if win32file_module is None:
         import win32file as win32file_module  # type: ignore[import-not-found,no-redef]
     if win32con_module is None:
@@ -173,18 +173,32 @@ def _remove_windows_tree_without_following_links(
     missing_codes = {2, 3}
     retry_codes = {5, 32, 145, 267}
     write_attributes = getattr(win32con, "FILE_WRITE_ATTRIBUTES", 0x00000100)
+    delete_access = getattr(win32con, "DELETE", 0x00010000)
+    share_delete = getattr(win32con, "FILE_SHARE_DELETE", 0x00000004)
     open_reparse_point = getattr(
         win32con, "FILE_FLAG_OPEN_REPARSE_POINT", 0x00200000
     )
+    disposition_info = getattr(win32file, "FileDispositionInfo", 4)
 
-    def remove_entry(path: Path) -> None:
+    class _WindowsPathChanged(OSError):
+        pass
+
+    def final_path(handle: object) -> str:
+        value = str(win32file.GetFinalPathNameByHandle(handle, 0))
+        if value.startswith("\\\\?\\UNC\\"):
+            value = "\\\\" + value[8:]
+        elif value.startswith("\\\\?\\"):
+            value = value[4:]
+        return os.path.normcase(os.path.normpath(value))
+
+    def remove_entry(path: Path, *, expected_path: str | None = None) -> None:
         last_error: BaseException | None = None
         for _ in range(_MAX_REMOVE_RETRIES):
             try:
                 handle = win32file.CreateFile(
                     str(path),
-                    write_attributes,
-                    win32con.FILE_SHARE_READ | win32con.FILE_SHARE_WRITE,
+                    write_attributes | delete_access,
+                    win32con.FILE_SHARE_READ | win32con.FILE_SHARE_WRITE | share_delete,
                     None,
                     win32con.OPEN_EXISTING,
                     win32con.FILE_FLAG_BACKUP_SEMANTICS | open_reparse_point,
@@ -195,52 +209,60 @@ def _remove_windows_tree_without_following_links(
                     return
                 raise
 
+            marked_for_delete = False
             try:
+                opened_path = final_path(handle)
+                if expected_path is not None and opened_path != expected_path:
+                    raise _WindowsPathChanged(f"Windows path changed during cleanup: {path}")
                 attributes = win32file.GetFileInformationByHandle(handle)[0]
                 is_directory = bool(attributes & win32con.FILE_ATTRIBUTE_DIRECTORY)
                 is_reparse = bool(attributes & win32con.FILE_ATTRIBUTE_REPARSE_POINT)
                 is_readonly = bool(attributes & win32con.FILE_ATTRIBUTE_READONLY)
                 if is_directory and not is_reparse:
-                    # The open handle intentionally omits FILE_SHARE_DELETE, so
-                    # this path cannot be swapped for a junction during scandir.
+                    restart = False
                     for _scan_attempt in range(_MAX_REMOVE_RETRIES):
                         entries = list(os.scandir(path))
                         if not entries:
                             break
-                        for entry in entries:
-                            remove_entry(path / entry.name)
+                        try:
+                            for entry in entries:
+                                child_path = os.path.normcase(os.path.normpath(
+                                    os.path.join(opened_path, entry.name)
+                                ))
+                                remove_entry(path / entry.name, expected_path=child_path)
+                        except _WindowsPathChanged:
+                            restart = True
+                            break
                     else:
                         raise OSError(f"directory contents kept changing during secure cleanup: {path}")
+                    if restart:
+                        continue
                 elif not is_directory and is_readonly:
-                    # FileBasicInfo updates the opened entry itself.  Combined
-                    # with OPEN_REPARSE_POINT this clears a read-only file link
-                    # without following or modifying its target.
                     basic_info = dict(
                         win32file.GetFileInformationByHandleEx(handle, win32file.FileBasicInfo)
                     )
                     remaining = int(basic_info["FileAttributes"]) & ~win32con.FILE_ATTRIBUTE_READONLY
-                    # FILE_BASIC_INFO treats zero as "leave attributes unchanged".
                     basic_info["FileAttributes"] = remaining or win32con.FILE_ATTRIBUTE_NORMAL
                     win32file.SetFileInformationByHandle(
                         handle, win32file.FileBasicInfo, basic_info
                     )
+                try:
+                    win32file.SetFileInformationByHandle(handle, disposition_info, True)
+                    marked_for_delete = True
+                except Exception as error:
+                    code = _windows_error_code(error)
+                    if code in missing_codes:
+                        return
+                    if code in retry_codes:
+                        last_error = error
+                        continue
+                    raise
             finally:
                 handle.Close()
 
-            try:
-                if is_directory:
-                    win32file.RemoveDirectory(str(path))
-                else:
-                    win32file.DeleteFile(str(path))
+            if marked_for_delete and not os.path.lexists(path):
                 return
-            except Exception as error:
-                code = _windows_error_code(error)
-                if code in missing_codes:
-                    return
-                if code in retry_codes:
-                    last_error = error
-                    continue
-                raise
+            last_error = OSError(f"Windows path was replaced during cleanup: {path}")
         if last_error is not None:
             raise last_error
         raise OSError(f"Windows path kept changing during secure cleanup: {root}")

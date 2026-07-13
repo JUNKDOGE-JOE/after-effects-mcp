@@ -1,4 +1,4 @@
-// Spec A/D: unified per-backend credential channels.
+// Credential channels share one shape so backend selection can compare them.
 // ChannelProbe: { channel, source:{zh,en}, checking, ok, detail, fixHint:{zh,en} }
 // Order in each array IS the priority order (channel (1) first).
 
@@ -75,8 +75,7 @@ export function codexChannels({
     detail: codexProbe ? [codexProbe.email, codexProbe.planType, codexProbe.cliPath, codexProbe.cliVersion].filter(Boolean).join(' · ') : '',
     fixHint: { zh: '在终端完成 codex 登录后重新检测；若 codex 不在面板 PATH 上，设置环境变量 AE_MCP_CODEX_CLI 指向 codex 可执行文件后重启 AE。', en: 'Sign in with codex in a terminal and re-check; if codex is not on the panel PATH, set AE_MCP_CODEX_CLI to the codex executable and restart AE.' },
   };
-  // Spec A extension: inherit a custom model_provider declared in
-  // ~/.codex/config.toml (mirrors zcodeChannels' 'cli-config' pattern).
+  // Reuse a Codex CLI model_provider when the panel has no explicit provider.
   const runtimeOk = Boolean(!codexProbe || codexProbe.runtimeOk !== false);
   const hasProvider = Boolean(cliConfig && cliConfig.provider);
   const hasKey = Boolean(cliCredentialAvailable);

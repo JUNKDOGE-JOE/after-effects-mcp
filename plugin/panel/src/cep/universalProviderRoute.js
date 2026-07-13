@@ -204,9 +204,10 @@ function profileSecrets(profile) {
 }
 
 function withoutSecretBearingHeaders(headers, secrets) {
-  return Object.fromEntries(Object.entries(headers).filter(([, value]) => (
+  const filtered = Object.fromEntries(Object.entries(headers).filter(([, value]) => (
     !containsExactSecret(String(value), secrets)
   )));
+  return containsExactSecret(filtered, secrets) ? {} : filtered;
 }
 
 function sanitizedError(buffer, secrets) {

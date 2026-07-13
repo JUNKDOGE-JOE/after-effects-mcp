@@ -188,7 +188,7 @@ test('user docs distinguish the unreleased target contract from current verified
   assert.doesNotMatch(reference, /203 passed/);
   assert.doesNotMatch(reference, /24 passed/);
   assert.doesNotMatch(reference, /\| Handler count \| 30 verbs/);
-  assert.match(reference, /\| Handler count \| 32 verbs/);
+  assert.match(reference, /\| Handler count \| 44 verbs/);
   assert.equal((reference.match(/\| `ae\.status` \|/g) || []).length, 2);
   assert.equal((reference.match(/\| `ae\.diagnose` \|/g) || []).length, 2);
   assert.match(reference, /operating-system temporary directory/i);

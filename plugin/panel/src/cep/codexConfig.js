@@ -1,6 +1,5 @@
-// Spec A extension: inherit Codex CLI's ~/.codex/config.toml custom
-// model_provider, mirroring the pattern already used for ZCode CLI
-// inheritance (zcodeBackend.js) and Claude settings import
+// Read the Codex CLI model_provider so the panel can reuse an existing CLI
+// configuration when it has no explicit provider profile.
 // (claudeSettingsImport.js).
 //
 // Minimal hand-rolled TOML parser — intentionally NOT a general-purpose

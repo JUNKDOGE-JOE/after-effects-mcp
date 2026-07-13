@@ -530,8 +530,8 @@ function Shell({ cs }) {
     try { return summarizeZcodeConfig({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {}, storedKey: zcodeStoredKeyRef.current }); } catch (e) { return null; }
   }, [zcodeCredentialEpoch, zcodeProbe]);
   const codexCliConfigStableRef = React.useRef(null);
-  // Spec A extension: inherit a custom model_provider declared in
-  // ~/.codex/config.toml (mirrors zcodeConfigSummary above).
+  // Keep a Codex CLI model_provider available when the panel has no explicit
+  // provider configuration of its own.
   const codexCliConfig = React.useMemo(() => {
     let next;
     try { next = readCodexCliConfig({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {} }); } catch (e) { next = null; }
@@ -884,8 +884,7 @@ function Shell({ cs }) {
     };
     const nextDescriptor = selectDescriptor(facts);
     setDescriptor(nextDescriptor);
-    // Bug 2: a stale localStorage model id (from an older backend/session)
-    // can silently outrank the descriptor's current defaultModelId. Reset it
+    // A persisted model id can outlive its backend or model catalog. Reset it
     // when the current model isn't in the new descriptor's model list, but
     // exempt the codex custom-model path (customModel is intentionally not
     // in the curated list there).

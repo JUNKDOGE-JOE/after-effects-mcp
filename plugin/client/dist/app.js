@@ -14936,6 +14936,7 @@
   }
   var MAX_DECODE_CHARS = 1024 * 1024;
   var MAX_DECODE_LAYERS = 3;
+  var MAX_STRUCTURE_CHARS = 16 * 1024 * 1024;
   function decodePercentRuns2(value) {
     return String(value).replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
       try {
@@ -14970,10 +14971,17 @@
     const secrets = normalizedSecrets(values);
     if (!secrets.length) return false;
     const visiting = /* @__PURE__ */ new WeakSet();
+    const stringParts = [];
+    let stringChars = 0;
     const containsText = (candidate) => textContainsSecret(candidate, secrets);
     const visit = (candidate) => {
       if ((typeof candidate !== "object" || candidate === null) && typeof candidate !== "function") {
         try {
+          if (typeof candidate === "string") {
+            stringChars += candidate.length;
+            if (stringChars > MAX_STRUCTURE_CHARS) return true;
+            stringParts.push(candidate);
+          }
           return containsText(String(candidate));
         } catch {
           return true;
@@ -15001,7 +15009,8 @@
         visiting.delete(candidate);
       }
     };
-    return visit(value);
+    if (visit(value)) return true;
+    return containsText(stringParts.join(""));
   }
   function redactText(value, values = []) {
     let text = String(value == null ? "" : value);
@@ -15025,19 +15034,25 @@
     }
     return secrets.some((secret) => text.includes(secret)) ? "" : text;
   }
-  function redactValue(value, values = []) {
+  function redactValueParts(value, values) {
     if (typeof value === "string") return redactText(value, values);
     if (value === null || ["number", "boolean", "bigint"].includes(typeof value)) {
       const text = String(value);
       const redacted = redactText(text, values);
       return redacted === text ? value : redacted;
     }
-    if (Array.isArray(value)) return value.map((item) => redactValue(item, values));
+    if (Array.isArray(value)) return value.map((item) => redactValueParts(item, values));
     if (!value || typeof value !== "object") return value;
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [
       redactText(key, values),
-      redactValue(item, values)
+      redactValueParts(item, values)
     ]));
+  }
+  function redactValue(value, values = []) {
+    const redacted = redactValueParts(value, values);
+    if (!containsExactSecret(redacted, values)) return redacted;
+    const secrets = normalizedSecrets(values);
+    return secrets.some((secret) => "[redacted]".includes(secret)) ? "" : "[redacted]";
   }
   function createDeltaRedactor(values, emitText) {
     const secrets = normalizedSecrets(values);
@@ -21771,6 +21786,21 @@ ${output}` : output
     "thinking",
     "transcript"
   ]);
+  var STREAM_CONTROL_KEYS = /* @__PURE__ */ new Set([
+    "content_index",
+    "id",
+    "index",
+    "item_id",
+    "message_id",
+    "model",
+    "object",
+    "output_index",
+    "response_id",
+    "role",
+    "status",
+    "type"
+  ]);
+  var MAX_STREAM_AGGREGATE_CHARS = 16 * 1024 * 1024;
   function invalidSse(code, message) {
     return Object.assign(new Error(message), { status: 502, code });
   }
@@ -21787,18 +21817,29 @@ ${output}` : output
       payload.index
     ].map((value) => String(value != null ? value : "")).join("|");
   }
+  function appendStream(streams, key, value) {
+    const next = (streams.get(key) || "") + value;
+    if (next.length > MAX_STREAM_AGGREGATE_CHARS) {
+      throw invalidSse("provider_stream_too_large", "Provider stream was too large.");
+    }
+    streams.set(key, next);
+  }
   function collectStreamingStrings(value, identity, streams, path = []) {
     var _a;
     if (typeof value === "string") {
       const leaf = String((_a = path.at(-1)) != null ? _a : "");
       const pathKey = `path:${identity}:${path.join(".")}`;
-      streams.set(pathKey, (streams.get(pathKey) || "") + value);
+      appendStream(streams, pathKey, value);
       const globalPathKey = `global-path:${path.join(".")}`;
-      streams.set(globalPathKey, (streams.get(globalPathKey) || "") + value);
+      appendStream(streams, globalPathKey, value);
+      appendStream(streams, "global-all-strings", value);
+      if (!STREAM_CONTROL_KEYS.has(leaf)) {
+        appendStream(streams, "global-data-strings", value);
+      }
       if (STREAM_TEXT_KEYS.has(leaf)) {
         const semanticKey = `semantic:${identity}`;
-        streams.set(semanticKey, (streams.get(semanticKey) || "") + value);
-        streams.set("global-semantic", (streams.get("global-semantic") || "") + value);
+        appendStream(streams, semanticKey, value);
+        appendStream(streams, "global-semantic", value);
       }
       return;
     }
@@ -23142,7 +23183,8 @@ data: ${JSON.stringify(payload)}
     return [...new Set(values)].sort((left, right) => right.length - left.length);
   }
   function withoutSecretBearingHeaders2(headers, secrets) {
-    return Object.fromEntries(Object.entries(headers).filter(([, value]) => !containsExactSecret(String(value), secrets)));
+    const filtered = Object.fromEntries(Object.entries(headers).filter(([, value]) => !containsExactSecret(String(value), secrets)));
+    return containsExactSecret(filtered, secrets) ? {} : filtered;
   }
   function sanitizedError(buffer, secrets) {
     let parsed;
@@ -24977,9 +25019,9 @@ data: ${JSON.stringify(payload)}
     recoverProviderProfile,
     onProviderProfileRecovered = () => {
     },
-    // Spec A extension: when the panel has no explicit custom provider
-    // configured, inherit a model_provider already declared in
-    // ~/.codex/config.toml. config.toml owns model_provider selection; the
+    // When the panel has no explicit custom provider, inherit a model_provider
+    // already declared in ~/.codex/config.toml. config.toml owns provider
+    // selection; the
     // panel only supplies the missing API key env var the provider needs (no
     // `-c model_provider=...` override).
     getCliConfigProvider = () => null,

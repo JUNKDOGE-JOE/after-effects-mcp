@@ -1,7 +1,6 @@
-// Pure descriptor selection (spec A2/D): given the EFFECTIVE backend from
-// pickBackend (not the raw pref -- backendPref never equals 'byok') and the
-// per-channel provider/model facts, pick the composer descriptor. Kept as a
-// lib pure function so the branch logic is unit-testable outside React.
+// Select the composer descriptor from the effective backend and per-channel
+// provider/model facts. backendPref never equals 'byok', so callers must not
+// pass the raw preference here. Kept pure so it can be tested outside React.
 import {
   byokStaticDescriptor,
   mergeByokModels,
@@ -103,8 +102,8 @@ export function selectDescriptor({
   return baseDescriptor;
 }
 
-// Bug 2: a stale localStorage model id (e.g. a pre-migration hardcoded
-// 'glm-5.2') can silently outrank a freshly-computed descriptor's
+// A persisted model id can outlive its provider catalog and otherwise outrank
+// a freshly computed descriptor's
 // defaultModelId when the stored id isn't among the descriptor's current
 // models. Reset to defaultModelId in that case. Custom model ids (isCustom)
 // are exempt: they are intentionally NOT part of the curated list.

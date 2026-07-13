@@ -91,3 +91,20 @@ test('SSE guard does not trust provider-controlled ids to partition unknown meta
     (error) => error.code === 'provider_stream_credential_reflection',
   );
 });
+
+test('SSE guard joins unknown metadata across different keys and events', () => {
+  for (const transcript of [
+    sse(JSON.stringify({ type: 'future.event', metadata: {
+      left: 'opaque-provider-', right: 'secret',
+    } })),
+    sse(
+      JSON.stringify({ type: 'future.event', metadata: { left: 'opaque-provider-' } }),
+      JSON.stringify({ type: 'future.event', metadata: { right: 'secret' } }),
+    ),
+  ]) {
+    assert.throws(
+      () => requireCredentialFreeSse(transcript, ['opaque-provider-secret']),
+      (error) => error.code === 'provider_stream_credential_reflection',
+    );
+  }
+});
