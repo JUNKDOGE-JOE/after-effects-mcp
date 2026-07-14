@@ -45,6 +45,17 @@ test('native mac build compiles product Git blobs from a private minimal SDK sna
   assert.doesNotMatch(BUILD_SCRIPT, /cleanup did not complete.*stage/u);
 });
 
+test('native mac build emits the AE-recognized AEGP package metadata', async () => {
+  const [verifier, plist] = await Promise.all([
+    fs.promises.readFile('native/ae-plugin/verify-macos.mjs', 'utf8'),
+    fs.promises.readFile('native/ae-plugin/resources/Info.plist', 'utf8'),
+  ]);
+  assert.match(plist, /<key>CFBundleSignature<\/key>\s*<string>FXTC<\/string>/u);
+  assert.match(BUILD_SCRIPT, /Buffer\.from\('AEgxFXTC', 'ascii'\)/u);
+  assert.match(verifier, /'Contents\/PkgInfo'/u);
+  assert.match(verifier, /Buffer\.from\('AEgxFXTC', 'ascii'\)/u);
+});
+
 test('native README examples use safe shell variables and the complete build inputs', async () => {
   for (const readmePath of ['README.md', 'README.zh-CN.md']) {
     const readme = await fs.promises.readFile(readmePath, 'utf8');

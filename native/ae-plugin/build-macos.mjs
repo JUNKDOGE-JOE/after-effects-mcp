@@ -414,6 +414,11 @@ async function buildMacPluginInternal({
       path.join(contents, 'Info.plist'),
       fs.constants.COPYFILE_EXCL,
     );
+    await fs.promises.writeFile(
+      path.join(contents, 'PkgInfo'),
+      Buffer.from('AEgxFXTC', 'ascii'),
+      { mode: 0o600, flag: 'wx' },
+    );
 
     const xcrun = '/usr/bin/xcrun';
     const clang = command(xcrun, ['--find', 'clang++']).trim();

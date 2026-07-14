@@ -42,7 +42,7 @@ function artifactFor(payload) {
     architecture: 'arm64',
     bundleType: 'AEgx',
     entryPoint: 'AeMcpNativeMain',
-    fileCount: 4,
+    fileCount: 5,
     bundleTreeSha256: digest(`tree:${payload}`),
     executableSha256: digest(`executable:${payload}`),
     piplSha256: digest(`pipl:${payload}`),

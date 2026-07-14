@@ -16,6 +16,8 @@
   <string>AeMcpNative</string>
   <key>CFBundlePackageType</key>
   <string>AEgx</string>
+  <key>CFBundleSignature</key>
+  <string>FXTC</string>
   <key>CFBundleShortVersionString</key>
   <string>0.1.0</string>
   <key>CFBundleSupportedPlatforms</key>

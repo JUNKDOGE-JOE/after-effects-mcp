@@ -10,6 +10,7 @@ const MODULE_PATH = fileURLToPath(import.meta.url);
 const EXPECTED_FILES = new Set([
   'Contents/Info.plist',
   'Contents/MacOS/AeMcpNative',
+  'Contents/PkgInfo',
   'Contents/Resources/AeMcpNative.rsrc',
   'Contents/_CodeSignature/CodeResources',
 ]);
@@ -166,12 +167,14 @@ export async function verifyMacPlugin({
 
   const plist = path.join(rootReal, 'Contents', 'Info.plist');
   const executable = path.join(rootReal, 'Contents', 'MacOS', 'AeMcpNative');
+  const pkgInfo = path.join(rootReal, 'Contents', 'PkgInfo');
   const resource = path.join(rootReal, 'Contents', 'Resources', 'AeMcpNative.rsrc');
   command('/usr/bin/plutil', ['-lint', plist]);
   const requiredPlist = {
     CFBundleExecutable: 'AeMcpNative',
     CFBundleIdentifier: 'dev.aemcp.native-plugin',
     CFBundlePackageType: 'AEgx',
+    CFBundleSignature: 'FXTC',
     CFBundleShortVersionString: '0.1.0',
     CFBundleVersion: '1',
     LSMinimumSystemVersion: '14.0',
@@ -180,6 +183,9 @@ export async function verifyMacPlugin({
     if (plistValue(plist, key) !== expected) {
       throw verificationError('AE_PLUGIN_PLIST_INVALID', `unexpected ${key} in native plug-in`);
     }
+  }
+  if (!(await fs.promises.readFile(pkgInfo)).equals(Buffer.from('AEgxFXTC', 'ascii'))) {
+    throw verificationError('AE_PLUGIN_PLIST_INVALID', 'native plug-in PkgInfo is invalid');
   }
 
   const fileOutput = command('/usr/bin/file', [executable]);
