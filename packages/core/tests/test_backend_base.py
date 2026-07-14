@@ -1,6 +1,6 @@
-"""Unit tests for the Backend abstract base class."""
+"""Unit tests for the legacy ExtendScript backend boundary."""
 import pytest
-from ae_mcp.backends.base import Backend, ALL_VERBS
+from ae_mcp.backends.base import ALL_VERBS, Backend, LegacyExtendScriptBackend
 
 
 def test_all_verbs_constant_has_42_entries():
@@ -21,6 +21,21 @@ def test_all_verbs_constant_has_42_entries():
 def test_cannot_instantiate_backend_directly():
     with pytest.raises(TypeError):
         Backend()
+
+
+def test_backend_compatibility_name_remains_an_explicit_legacy_jsx_adapter():
+    assert issubclass(Backend, LegacyExtendScriptBackend)
+
+
+def test_legacy_jsx_provenance_distinguishes_maintained_and_ephemeral_code():
+    assert (
+        LegacyExtendScriptBackend.execution_engine_for(ephemeral=False)
+        == "maintained-jsx"
+    )
+    assert (
+        LegacyExtendScriptBackend.execution_engine_for(ephemeral=True)
+        == "ephemeral-jsx"
+    )
 
 
 def test_backend_subclass_must_define_exec_health_from_env():

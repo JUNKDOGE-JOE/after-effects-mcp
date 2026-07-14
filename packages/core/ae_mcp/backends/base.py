@@ -2,7 +2,15 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional, Set
+from typing import Literal, Optional, Set
+
+
+ExecutionEngine = Literal["native-aegp", "maintained-jsx", "ephemeral-jsx"]
+EXECUTION_ENGINES: tuple[ExecutionEngine, ...] = (
+    "native-aegp",
+    "maintained-jsx",
+    "ephemeral-jsx",
+)
 
 
 ALL_VERBS: Set[str] = {
@@ -30,12 +38,14 @@ class BackendError(RuntimeError):
     """Raised by backend implementations on protocol / connectivity failures."""
 
 
-class Backend(ABC):
-    """Abstract bridge between core MCP layer and a concrete AE plugin protocol.
+class LegacyExtendScriptBackend(ABC):
+    """Explicit adapter for backends whose execution primitive is JSX.
 
     A backend is a separate pip package that registers itself via entry
     point group `ae_mcp.backends`. Core never imports any concrete
-    backend module.
+    backend module. This contract intentionally remains JSX-specific; native
+    AEGP capabilities use :class:`ae_mcp.backends.native.NativeInvokeBackend`
+    and never receive source text.
     """
 
     name: str  # value matched against AE_MCP_BACKEND env var
@@ -45,6 +55,16 @@ class Backend(ABC):
     # case core should skip its own wrapping/checkpointing).
     manages_undo: bool = False
     manages_checkpoints: bool = False
+
+    @staticmethod
+    def execution_engine_for(*, ephemeral: bool) -> ExecutionEngine:
+        """Label one JSX invocation without selecting or rerouting it.
+
+        The transport alone cannot determine provenance: repository-managed
+        JSX and one-off JSX may use the same backend. Callers therefore
+        classify each invocation explicitly for audit purposes.
+        """
+        return "ephemeral-jsx" if ephemeral else "maintained-jsx"
 
     @abstractmethod
     async def exec(
@@ -69,10 +89,19 @@ class Backend(ABC):
 
     @classmethod
     @abstractmethod
-    def from_env(cls) -> "Backend":
+    def from_env(cls) -> "LegacyExtendScriptBackend":
         """Construct from this backend's own env vars. Raise EnvironmentError
         with a clear message when required vars are missing."""
 
     async def shutdown(self) -> None:
         """Optional cleanup hook. Default no-op."""
         return None
+
+
+class Backend(LegacyExtendScriptBackend):
+    """Backward-compatible name for the legacy ExtendScript adapter.
+
+    Third-party backend packages currently subclass ``Backend``. Keeping this
+    abstract compatibility class avoids a flag-day migration while making the
+    JSX boundary explicit to new Core code.
+    """

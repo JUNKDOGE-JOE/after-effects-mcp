@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, cast
 
+from ae_mcp.backends.base import EXECUTION_ENGINES, ExecutionEngine
 from ae_mcp.tool_artifact import JsonValue, canonical_json_bytes
 
 
@@ -85,9 +86,14 @@ class AuditRecord:
     started_at: int
     finished_at: int
     error_code: str | None = None
+    engine: ExecutionEngine | None = None
+
+    def __post_init__(self) -> None:
+        if self.engine is not None and self.engine not in EXECUTION_ENGINES:
+            raise ValueError("audit execution engine is invalid")
 
     def public_dict(self) -> dict[str, JsonValue]:
-        return {
+        value: dict[str, JsonValue] = {
             "artifactId": self.artifact_id,
             "contentHash": self.content_hash,
             "planHash": self.plan_hash,
@@ -103,6 +109,9 @@ class AuditRecord:
             "finishedAt": self.finished_at,
             "errorCode": self.error_code,
         }
+        if self.engine is not None:
+            value["engine"] = self.engine
+        return value
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "AuditRecord":
@@ -110,6 +119,9 @@ class AuditRecord:
         target = value.get("target", {})
         if not isinstance(args, Mapping) or not isinstance(target, Mapping):
             raise ValueError("audit args and target must be objects")
+        engine = value.get("engine")
+        if engine is not None and engine not in EXECUTION_ENGINES:
+            raise ValueError("audit execution engine is invalid")
         return cls(
             artifact_id=str(value["artifactId"]),
             content_hash=str(value["contentHash"]),
@@ -125,6 +137,7 @@ class AuditRecord:
             started_at=int(value["startedAt"]),
             finished_at=int(value["finishedAt"]),
             error_code=cast(str | None, value.get("errorCode")),
+            engine=cast(ExecutionEngine | None, engine),
         )
 
 

@@ -32,6 +32,13 @@ async def test_status_tool_is_only_exposed_when_backend_selection_fails(monkeypa
     assert result["ok"] is False
     assert "pip install" in result["backendError"]
     assert result["backend"] is None
+    assert result["selectedAdapter"] is None
+    assert result["activeExecutionEngine"] is None
+    assert result["knownExecutionEngines"] == [
+        "native-aegp",
+        "maintained-jsx",
+        "ephemeral-jsx",
+    ]
 
 
 @pytest.mark.asyncio
@@ -52,6 +59,13 @@ async def test_status_tool_reports_backend_and_supported_verbs(monkeypatch):
     assert result["backend"] == "MockBackend"
     assert result["backendError"] is None
     assert result["installedBackends"] == ["mock"]
+    assert result["selectedAdapter"] == "legacy-extendscript"
+    assert result["activeExecutionEngine"] is None
+    assert result["knownExecutionEngines"] == [
+        "native-aegp",
+        "maintained-jsx",
+        "ephemeral-jsx",
+    ]
 
 
 def test_filtered_tool_names_ignores_snapshotter_selection_exceptions(monkeypatch):
