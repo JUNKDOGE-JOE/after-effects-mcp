@@ -134,7 +134,9 @@ For visual work, ask the agent to preview frames and verify intermediate results
 
 ## Development
 
-Close every After Effects / AfterFX process before a development deployment. Each installer preflights the source, copies and verifies a unique same-parent staging directory, atomically retains the old panel as a backup, and prints an absolute restore command.
+Close every After Effects / AfterFX process before a development deployment. The CEP installer
+preflights and stages the panel with its own backup flow. The native AEGP installer described
+below independently verifies its artifact and returns a transaction ID for exact rollback.
 
 ### Native AEGP SDK input
 
@@ -172,7 +174,55 @@ extraction scripts/binaries to GitHub **or Git LFS**. Public CI contains only a 
 rejects vendored SDK material; it never receives the SDK. Read the complete
 [SDK intake, verification, and distribution policy](docs/native-sdk/SDK_INPUTS.md).
 
-macOS development setup:
+#### Build and install the native AEGP host on macOS
+
+This development flow is separate from the CEP panel installer below. It currently builds only
+an Apple Silicon arm64 AEGP host. Commit the product source first: evidence builds fail closed
+with `AE_PLUGIN_SOURCE_DIRTY` unless the entire worktree is clean, so the receipt can bind the
+artifact to the exact repository commit. To prevent bypassing the transactional installer, the
+output path must be a new absolute directory under canonical `/private/tmp`; it must remain
+outside every Git worktree, the Git common directory, and the SDK root.
+
+```bash
+BUILD_DIR=/private/tmp/ae-mcp-native-73
+node native/ae-plugin/build-macos.mjs \
+  --sdk-archive "$AE_SDK_ARCHIVE" \
+  --sdk-root "$AE_SDK_ROOT" \
+  --output "$BUILD_DIR"
+node native/ae-plugin/verify-macos.mjs \
+  --bundle "$BUILD_DIR/AeMcpNative.plugin"
+```
+
+Close every After Effects, AfterFX, and aerender process before installing. The development
+installer verifies the build receipt and installed copy, uses only a disabled same-parent staging
+name, and installs the loadable bundle at
+`~/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/ae-mcp/AeMcpNative.plugin`:
+
+```bash
+node native/ae-plugin/install-dev-macos.mjs install \
+  --artifact-dir "$BUILD_DIR"
+```
+
+Keep the returned `transactionId`. With AE closed, roll back exactly that current transaction:
+
+```bash
+TRANSACTION_ID="paste the transactionId from the install output here"
+node native/ae-plugin/install-dev-macos.mjs rollback \
+  --transaction "$TRANSACTION_ID"
+```
+
+If a previous installer process was interrupted between transaction phases, keep AE closed and
+reconcile its durable record before retrying:
+
+```bash
+node native/ae-plugin/install-dev-macos.mjs recover
+```
+
+Ad-hoc signing and a successful local build are development evidence only. The generated receipt
+deliberately keeps `distributionApproved`, `runtimeEvidence`, and `compatibilityEvidence` false;
+real AE loading and the public MCP-to-AEGP read/write gate are separate required evidence.
+
+CEP panel macOS development setup:
 
 ```bash
 uv sync --all-packages --group dev

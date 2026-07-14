@@ -112,6 +112,15 @@ jobs:
       - name: Run native AEGP RPC contract tests
         run: node --test native/ae-plugin/protocol/protocol.test.mjs
 
+      - name: Build and run the portable native host dispatcher test
+        run: >-
+          c++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -pthread
+          -I native/ae-plugin/include
+          native/ae-plugin/src/core/host_dispatcher.cpp
+          native/ae-plugin/tests/host_dispatcher_test.cpp
+          -o /tmp/ae-mcp-host-dispatcher-test
+          && /tmp/ae-mcp-host-dispatcher-test
+
       - name: Run packaging contract tests
         run: node --test scripts/package/test/*.test.mjs
 

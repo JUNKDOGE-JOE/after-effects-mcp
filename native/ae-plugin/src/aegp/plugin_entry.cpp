@@ -1,0 +1,475 @@
+#include "aemcp_native/host_dispatcher.hpp"
+
+#include <CoreFoundation/CoreFoundation.h>
+
+#include <algorithm>
+#include <array>
+#include <cerrno>
+#include <chrono>
+#include <cstdint>
+#include <cstdlib>
+#include <filesystem>
+#include <iomanip>
+#include <memory>
+#include <mutex>
+#include <new>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <utility>
+
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/file.h>
+#include <sys/stat.h>
+
+#include "AEConfig.h"
+#include "AE_GeneralPlug.h"
+#include "SPBasic.h"
+
+#ifndef AE_MCP_SOURCE_COMMIT
+#error "AE_MCP_SOURCE_COMMIT must bind the native binary to a clean repository commit"
+#endif
+
+namespace {
+
+using namespace std::chrono_literals;
+using aemcp::native::Completion;
+using aemcp::native::DrainBatch;
+using aemcp::native::HostApi;
+using aemcp::native::HostDispatcher;
+using aemcp::native::HostReadResult;
+using aemcp::native::ProjectSummary;
+using aemcp::native::Request;
+using aemcp::native::SystemClock;
+using aemcp::native::TimePoint;
+using aemcp::native::kProjectSummaryCapability;
+
+constexpr std::string_view kPluginVersion = "0.1.0-dev";
+constexpr std::string_view kSdkVersion = "25.6.61";
+constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
+constexpr std::int64_t kMaximumProjectItems = 100000;
+static_assert(kSourceCommit.size() == 40);
+
+std::string json_escape(std::string_view input) {
+  std::ostringstream escaped;
+  for (unsigned char value : input) {
+    switch (value) {
+      case '"': escaped << "\\\""; break;
+      case '\\': escaped << "\\\\"; break;
+      case '\b': escaped << "\\b"; break;
+      case '\f': escaped << "\\f"; break;
+      case '\n': escaped << "\\n"; break;
+      case '\r': escaped << "\\r"; break;
+      case '\t': escaped << "\\t"; break;
+      default:
+        if (value < 0x20 || value >= 0x7f) {
+          escaped << "\\u00" << std::hex << std::setw(2) << std::setfill('0')
+                  << static_cast<unsigned int>(value) << std::dec;
+        } else {
+          escaped << static_cast<char>(value);
+        }
+    }
+  }
+  return escaped.str();
+}
+
+std::int64_t unix_time_ms() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+std::string cf_string(CFTypeRef value) {
+  if (value == nullptr || CFGetTypeID(value) != CFStringGetTypeID()) return {};
+  const auto string = static_cast<CFStringRef>(value);
+  const CFIndex length = CFStringGetLength(string);
+  const CFIndex maximum = CFStringGetMaximumSizeForEncoding(length, kCFStringEncodingUTF8) + 1;
+  if (maximum <= 1 || maximum > 4096) return {};
+  std::string output(static_cast<std::size_t>(maximum), '\0');
+  if (!CFStringGetCString(string, output.data(), maximum, kCFStringEncodingUTF8)) return {};
+  output.resize(std::char_traits<char>::length(output.c_str()));
+  return output;
+}
+
+struct HostIdentity {
+  std::string version;
+  std::string build;
+};
+
+HostIdentity read_host_identity() {
+  const CFBundleRef bundle = CFBundleGetMainBundle();
+  if (bundle == nullptr) return {};
+  return {
+      cf_string(CFBundleGetValueForInfoDictionaryKey(bundle, CFSTR("CFBundleShortVersionString"))),
+      cf_string(CFBundleGetValueForInfoDictionaryKey(bundle, CFSTR("Adobe Product Build"))),
+  };
+}
+
+class DiagnosticLog final {
+ public:
+  DiagnosticLog() {
+    const char* home = std::getenv("HOME");
+    if (home == nullptr || *home == '\0') return;
+    path_ = std::filesystem::path(home) / "Library" / "Logs" / "AfterEffectsMCP"
+        / "native-plugin-v1.jsonl";
+  }
+
+  void append(std::string_view object) noexcept {
+    try {
+      if (path_.empty() || object.empty() || object.size() > kMaximumRecordBytes
+          || object.front() != '{' || object.back() != '}') return;
+      std::lock_guard lock(mutex_);
+      if (!prepare_private_directory()) return;
+      const int descriptor = ::open(
+          path_.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC | O_NOFOLLOW, 0600);
+      if (descriptor < 0) return;
+      struct stat status {};
+      if (::flock(descriptor, LOCK_EX | LOCK_NB) != 0
+          || ::fstat(descriptor, &status) != 0 || !S_ISREG(status.st_mode)
+          || status.st_uid != ::getuid() || status.st_nlink != 1
+          || ::fchmod(descriptor, 0600) != 0) {
+        ::close(descriptor);
+        return;
+      }
+      if (status.st_size < 0
+          || static_cast<std::uint64_t>(status.st_size) + object.size() + 1
+              > kMaximumLogBytes) {
+        if (::ftruncate(descriptor, 0) != 0) {
+          ::close(descriptor);
+          return;
+        }
+      }
+      const std::string record = std::string(object) + '\n';
+      std::size_t written = 0;
+      while (written < record.size()) {
+        const ssize_t count = ::write(
+            descriptor, record.data() + written, record.size() - written);
+        if (count > 0) {
+          written += static_cast<std::size_t>(count);
+        } else if (count < 0 && errno == EINTR) {
+          continue;
+        } else {
+          break;
+        }
+      }
+      ::close(descriptor);
+    } catch (...) {
+      // Diagnostics must never affect After Effects lifecycle callbacks.
+    }
+  }
+
+ private:
+  static constexpr std::size_t kMaximumRecordBytes = 8192;
+  static constexpr std::uint64_t kMaximumLogBytes = 1024 * 1024;
+
+  [[nodiscard]] bool prepare_private_directory() const noexcept {
+    const std::filesystem::path directory = path_.parent_path();
+    if (::mkdir(directory.c_str(), 0700) != 0 && errno != EEXIST) return false;
+    struct stat status {};
+    if (::lstat(directory.c_str(), &status) != 0 || !S_ISDIR(status.st_mode)
+        || status.st_uid != ::getuid()) {
+      return false;
+    }
+    return ::chmod(directory.c_str(), 0700) == 0;
+  }
+
+  std::filesystem::path path_;
+  std::mutex mutex_;
+};
+
+template <typename Suite>
+class SuiteLease final {
+ public:
+  SuiteLease(SPBasicSuite* basic, const char* name, std::int32_t version)
+      : basic_(basic), name_(name), version_(version) {
+    if (basic_ != nullptr
+        && basic_->AcquireSuite(name_, version_, reinterpret_cast<const void**>(&suite_)) != 0) {
+      suite_ = nullptr;
+    }
+  }
+
+  ~SuiteLease() {
+    if (suite_ != nullptr) basic_->ReleaseSuite(name_, version_);
+  }
+
+  SuiteLease(const SuiteLease&) = delete;
+  SuiteLease& operator=(const SuiteLease&) = delete;
+
+  [[nodiscard]] const Suite* get() const noexcept { return suite_; }
+  [[nodiscard]] const Suite* operator->() const noexcept { return suite_; }
+
+ private:
+  SPBasicSuite* basic_{nullptr};
+  const char* name_{nullptr};
+  std::int32_t version_{0};
+  const Suite* suite_{nullptr};
+};
+
+class AegpHostApi final : public HostApi {
+ public:
+  explicit AegpHostApi(SPBasicSuite* basic) : basic_(basic) {}
+
+  [[nodiscard]] HostReadResult read_project_summary(TimePoint work_deadline) override {
+    const auto budget_expired = [work_deadline] {
+      return std::chrono::steady_clock::now() >= work_deadline;
+    };
+    if (budget_expired()) {
+      return HostReadResult::failure("DEADLINE_EXCEEDED", "project summary budget elapsed");
+    }
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr) {
+      return HostReadResult::failure("NATIVE_UNSUPPORTED", "required project suites unavailable");
+    }
+
+    A_long project_count = 0;
+    if (budget_expired()) {
+      return HostReadResult::failure("DEADLINE_EXCEEDED", "project summary budget elapsed");
+    }
+    if (project_suite->AEGP_GetNumProjects(&project_count) != A_Err_NONE) {
+      return HostReadResult::failure("CAPABILITY_FAILED", "could not read project count");
+    }
+    if (budget_expired()) {
+      return HostReadResult::failure("DEADLINE_EXCEEDED", "project summary budget elapsed");
+    }
+    if (project_count <= 0) return HostReadResult::success({false, {}, 0});
+
+    AEGP_ProjectH project = nullptr;
+    if (budget_expired()) {
+      return HostReadResult::failure("DEADLINE_EXCEEDED", "project summary budget elapsed");
+    }
+    if (project_suite->AEGP_GetProjectByIndex(0, &project) != A_Err_NONE || project == nullptr) {
+      return HostReadResult::failure("CAPABILITY_FAILED", "could not resolve active project");
+    }
+
+    std::array<A_char, AEGP_MAX_PROJ_NAME_SIZE> name{};
+    if (budget_expired()) {
+      return HostReadResult::failure("DEADLINE_EXCEEDED", "project summary budget elapsed");
+    }
+    if (project_suite->AEGP_GetProjectName(project, name.data()) != A_Err_NONE) {
+      return HostReadResult::failure("CAPABILITY_FAILED", "could not read project name");
+    }
+
+    AEGP_ItemH root = nullptr;
+    if (budget_expired()) {
+      return HostReadResult::failure("DEADLINE_EXCEEDED", "project summary budget elapsed");
+    }
+    if (project_suite->AEGP_GetProjectRootFolder(project, &root) != A_Err_NONE || root == nullptr) {
+      return HostReadResult::failure("CAPABILITY_FAILED", "could not resolve project root");
+    }
+    AEGP_ItemH item = nullptr;
+    if (budget_expired()) {
+      return HostReadResult::failure("DEADLINE_EXCEEDED", "project summary budget elapsed");
+    }
+    if (item_suite->AEGP_GetNextProjItem(project, root, &item) != A_Err_NONE) {
+      return HostReadResult::failure("CAPABILITY_FAILED", "could not begin project traversal");
+    }
+    std::int64_t item_count = 0;
+    while (item != nullptr) {
+      if (budget_expired()) {
+        return HostReadResult::failure("DEADLINE_EXCEEDED", "project traversal budget elapsed");
+      }
+      ++item_count;
+      if (item_count > kMaximumProjectItems) {
+        return HostReadResult::failure("CAPABILITY_FAILED", "project item bound exceeded");
+      }
+      AEGP_ItemH next = nullptr;
+      if (item_suite->AEGP_GetNextProjItem(project, item, &next) != A_Err_NONE) {
+        return HostReadResult::failure("CAPABILITY_FAILED", "project traversal failed");
+      }
+      item = next;
+    }
+    if (budget_expired()) {
+      return HostReadResult::failure("DEADLINE_EXCEEDED", "project traversal budget elapsed");
+    }
+    const auto name_end = std::find(name.begin(), name.end(), '\0');
+    return HostReadResult::success({
+        true, std::string(name.begin(), name_end), item_count});
+  }
+
+ private:
+  SPBasicSuite* basic_{nullptr};
+};
+
+struct PluginState final {
+  PluginState(SPBasicSuite* basic_suite, AEGP_PluginID plugin_id_value,
+      A_long driver_major_value, A_long driver_minor_value)
+      : basic(basic_suite),
+        plugin_id(plugin_id_value),
+        driver_major(driver_major_value),
+        driver_minor(driver_minor_value),
+        dispatcher(std::this_thread::get_id(), clock) {
+    const auto timestamp = unix_time_ms();
+    instance_id = std::to_string(static_cast<long long>(getpid())) + "-"
+        + std::to_string(static_cast<long long>(timestamp));
+  }
+
+  SPBasicSuite* basic;
+  AEGP_PluginID plugin_id;
+  A_long driver_major;
+  A_long driver_minor;
+  std::string instance_id;
+  HostIdentity host_identity{read_host_identity()};
+  DiagnosticLog log;
+  SystemClock clock;
+  HostDispatcher dispatcher;
+};
+
+std::string event_prefix(const PluginState& state, std::string_view event) {
+  std::ostringstream output;
+  output << "{\"schemaVersion\":1,\"event\":\"" << json_escape(event)
+         << "\",\"timeUnixMs\":" << unix_time_ms()
+         << ",\"provenance\":\"native-aegp\",\"instanceId\":\""
+         << json_escape(state.instance_id) << "\"";
+  return output.str();
+}
+
+void log_load(PluginState& state) {
+  std::ostringstream output;
+  output << event_prefix(state, "load")
+         << ",\"pluginVersion\":\"" << kPluginVersion
+         << "\",\"compiledSdkVersion\":\"" << kSdkVersion
+         << "\",\"sourceCommit\":\"" << kSourceCommit
+         << "\",\"driverApi\":{\"major\":" << state.driver_major
+         << ",\"minor\":" << state.driver_minor << "}"
+         << ",\"host\":{\"version\":\"" << json_escape(state.host_identity.version)
+         << "\",\"build\":\"" << json_escape(state.host_identity.build) << "\"}"
+         << ",\"capabilities\":[\"" << kProjectSummaryCapability << "\"]}"
+         ;
+  state.log.append(output.str());
+}
+
+void log_completion(PluginState& state, const Completion& completion) {
+  std::ostringstream output;
+  output << event_prefix(state, "invoke.terminal")
+         << ",\"requestId\":\"" << json_escape(completion.request_id)
+         << "\",\"capabilityId\":\"" << json_escape(completion.capability_id)
+         << "\",\"ok\":" << (completion.ok ? "true" : "false");
+  if (completion.ok) {
+    output << ",\"result\":{\"projectOpen\":"
+           << (completion.result.project_open ? "true" : "false")
+           << ",\"projectNameRedacted\":"
+           << (completion.result.project_name.empty() ? "false" : "true")
+           << ",\"itemCount\":" << completion.result.item_count << "}";
+  } else {
+    output << ",\"error\":{\"code\":\"" << json_escape(completion.error_code)
+           << "\",\"message\":\"" << json_escape(completion.message)
+           << "\",\"lateResultDiscarded\":"
+           << (completion.late_result_discarded ? "true" : "false") << "}";
+  }
+  output << "}";
+  state.log.append(output.str());
+}
+
+A_Err death_hook(
+    AEGP_GlobalRefcon global_refcon, AEGP_DeathRefcon death_refcon) noexcept {
+  try {
+    auto* state = reinterpret_cast<PluginState*>(death_refcon);
+    if (state == nullptr) state = reinterpret_cast<PluginState*>(global_refcon);
+    if (state == nullptr) return A_Err_GENERIC;
+    std::unique_ptr<PluginState> state_owner(state);
+    for (const Completion& completion : state->dispatcher.shutdown()) {
+      log_completion(*state, completion);
+    }
+    state->log.append(event_prefix(*state, "death") + "}");
+    return A_Err_NONE;
+  } catch (...) {
+    return A_Err_GENERIC;
+  }
+}
+
+A_Err idle_hook(
+    AEGP_GlobalRefcon global_refcon, AEGP_IdleRefcon idle_refcon, A_long* max_sleep) noexcept {
+  try {
+    auto* state = reinterpret_cast<PluginState*>(idle_refcon);
+    if (state == nullptr) state = reinterpret_cast<PluginState*>(global_refcon);
+    if (state == nullptr) return A_Err_GENERIC;
+    AegpHostApi host(state->basic);
+    const DrainBatch batch = state->dispatcher.drain(host);
+    if (batch.wrong_thread) {
+      state->log.append(event_prefix(*state, "dispatch.wrong-thread") + "}");
+      return A_Err_GENERIC;
+    }
+    for (const Completion& completion : batch.completions) log_completion(*state, completion);
+    if (max_sleep != nullptr && batch.remaining > 0) *max_sleep = 1;
+    return A_Err_NONE;
+  } catch (...) {
+    return A_Err_GENERIC;
+  }
+}
+
+}  // namespace
+
+extern "C" __attribute__((visibility("default"))) A_Err AeMcpNativeMain(
+    SPBasicSuite* pica_basic,
+    A_long driver_major,
+    A_long driver_minor,
+    AEGP_PluginID plugin_id,
+    AEGP_GlobalRefcon* global_refcon) noexcept {
+  try {
+    if (pica_basic == nullptr || global_refcon == nullptr
+        || driver_major < AEGP_INITFUNC_MAJOR_VERSION
+        || (driver_major == AEGP_INITFUNC_MAJOR_VERSION
+            && driver_minor < AEGP_INITFUNC_MINOR_VERSION)) {
+      return A_Err_GENERIC;
+    }
+    auto state = std::unique_ptr<PluginState>(new (std::nothrow) PluginState(
+        pica_basic, plugin_id, driver_major, driver_minor));
+    if (!state) return A_Err_GENERIC;
+    *global_refcon = reinterpret_cast<AEGP_GlobalRefcon>(state.get());
+
+    const AEGP_RegisterSuite5* register_suite = nullptr;
+    if (pica_basic->AcquireSuite(
+            kAEGPRegisterSuite,
+            kAEGPRegisterSuiteVersion5,
+            reinterpret_cast<const void**>(&register_suite)) != 0
+        || register_suite == nullptr) {
+      *global_refcon = nullptr;
+      return A_Err_GENERIC;
+    }
+    const A_Err death_error = register_suite->AEGP_RegisterDeathHook(
+        plugin_id, death_hook, reinterpret_cast<AEGP_DeathRefcon>(state.get()));
+    PluginState* lifecycle_state = state.get();
+    if (death_error == A_Err_NONE) {
+      // From this point onward AE's DeathHook owns the state. Any later exception
+      // must leave the registered hook refcons alive rather than deleting them.
+      lifecycle_state = state.release();
+    }
+    const A_Err idle_error = death_error == A_Err_NONE
+        ? register_suite->AEGP_RegisterIdleHook(
+            plugin_id, idle_hook, reinterpret_cast<AEGP_IdleRefcon>(lifecycle_state))
+        : death_error;
+    const SPErr release_error = pica_basic->ReleaseSuite(
+        kAEGPRegisterSuite, kAEGPRegisterSuiteVersion5);
+
+    if (death_error != A_Err_NONE) {
+      *global_refcon = nullptr;
+      return death_error;
+    }
+    if (idle_error != A_Err_NONE || release_error != 0) {
+      return idle_error != A_Err_NONE ? idle_error : A_Err_GENERIC;
+    }
+
+    try {
+      log_load(*lifecycle_state);
+      const auto admission = lifecycle_state->dispatcher.enqueue({
+          "boot-project-summary",
+          std::string(kProjectSummaryCapability),
+          lifecycle_state->clock.now() + 60s,
+      });
+      if (admission.code != aemcp::native::EnqueueCode::kAccepted) {
+        lifecycle_state->log.append(event_prefix(*lifecycle_state, "boot-probe.rejected")
+            + ",\"errorCode\":\"" + json_escape(admission.error_code) + "\"}");
+      }
+    } catch (...) {
+      // Hook registration is authoritative; optional boot diagnostics cannot
+      // turn a live AE-owned state into a failed initialization.
+    }
+    return A_Err_NONE;
+  } catch (...) {
+    return A_Err_GENERIC;
+  }
+}
