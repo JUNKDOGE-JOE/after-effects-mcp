@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "sdk": {
+    "name": "Adobe After Effects C/C++ Plug-in SDK",
+    "claimedVersion": "25.6.61",
+    "claimedBuild": 61,
+    "claimedBitness": 64,
+    "acquisition": "developer-supplied-unverified-origin",
+    "byteIdentityMeaning": "exact-developer-provided-bytes-only",
+    "extractedRoot": "ae25.6_61.64bit.AfterEffectsSDK",
+    "rootVerification": "structural-only-not-provenance",
+    "antiVendoring": {
+      "strategy": "tracked-git-path-container-and-locked-payload-scan",
+      "trackedIndexOnly": true,
+      "gitLfsPointers": "rejected-uninspectable"
+    },
+    "layoutSentinels": [
+      { "path": "Examples/Headers/AE_GeneralPlug.h", "type": "file" },
+      { "path": "Examples/Headers/AE_GeneralPlugOld.h", "type": "file" },
+      { "path": "Examples/Headers/SP/SPBasic.h", "type": "file" },
+      { "path": "Examples/Resources/AE_General.r", "type": "file" },
+      { "path": "Examples/Util/AEGP_SuiteHandler.h", "type": "file" }
+    ],
+    "platforms": {
+      "macos-arm64": {
+        "archive": {
+          "fileNameHint": "AfterEffectsSDK_25.6_61_mac.zip",
+          "bytes": 2039255,
+          "sha256": "c6abccd52ae25936b819b78c4fea2858bd161f216f72f75184fe9ec55a49756e"
+        },
+        "innerPayload": {
+          "entryPath": "AfterEffectsSDK_25.6_61_mac/ae25.6_61.64bit.AfterEffectsSDK.tar.zstd.zip",
+          "format": "raw-zstd-containing-tar",
+          "bytes": 1540471,
+          "sha256": "e02fa2b488c3cceb238866b648eb9a2526d308a260744367915a2f173663c36c"
+        },
+        "rootContentLock": {
+          "status": "canonical-file-tree-verified",
+          "fileCount": 436,
+          "fileBytes": 5526135,
+          "sha256": "3bec810920dd6ad2d9180c6456d4af421fef20e751dca7446800de80a2751cca"
+        },
+        "buildSentinel": { "path": "Examples/Buildall.xcodeproj", "type": "directory" }
+      },
+      "windows-x64": {
+        "archive": {
+          "fileNameHint": "AfterEffectsSDK_25.6_61_win.zip",
+          "bytes": 7549997,
+          "sha256": "3d3a39175a09d07f6f9734284636f9eadce968b05161650e3cba097a95905330"
+        },
+        "innerPayload": {
+          "entryPath": "AfterEffectsSDK_25.6_61_win/ae25.6_61.64bit.AfterEffectsSDK.zstd.zip",
+          "format": "zip-method-93-zstd",
+          "bytes": 1941777,
+          "sha256": "640b513bfdfdab264057f3fce0356ced468cdb6d3bd3e2666e6743ec8be1fdba"
+        },
+        "rootContentLock": {
+          "status": "pending-windows-extraction-evidence",
+          "fileCount": null,
+          "fileBytes": null,
+          "sha256": null
+        },
+        "buildSentinel": { "path": "Examples/BuildAll.sln", "type": "file" }
+      }
+    },
+    "licenseReview": {
+      "status": "operator-attested-native-development-in-scope",
+      "defaultPolicy": "deny-unless-scope-approved",
+      "operatorAttestation": {
+        "status": "recorded",
+        "recordedAt": "2026-07-14",
+        "statement": "operator-confirms-authorized-sdk-use-at-actual-location-and-authorizes-continued-development",
+        "actualLocationStored": false
+      },
+      "termsEvidence": {
+        "documentTitle": "Adobe Developer Terms of Use",
+        "url": "https://wwwimages2.adobe.com/content/dam/cc/en/legal/servicetou/Developer-Terms-en_US-20240618.pdf",
+        "lastUpdated": "2024-06-18",
+        "retrievedAt": "2026-07-14",
+        "relevance": "review-evidence-not-adobe-authorization",
+        "reviewedClauses": ["4.1(A)", "6.5", "6.16", "6.17"],
+        "approvalId": null
+      },
+      "regionalEligibility": {
+        "status": "operator-attested-authorized-at-actual-location",
+        "restrictedCountryDefinitionIncludes": ["mainland China", "Russia"],
+        "locationInferredFromTimezone": false
+      },
+      "purposeEligibility": {
+        "interactiveMcpExecutionPlaneDevelopment": "operator-attested-in-scope",
+        "modelTrainingAndEvaluation": "deferred-to-issue-83-separate-review"
+      },
+      "embeddedNotices": {
+        "status": "restrictive-notices-present-applicability-pending",
+        "observedCategories": ["headers", "utilities", "sample-source"],
+        "noticeTextCopiedToRepository": false
+      },
+      "scopes": {
+        "localDevelopmentTesting": "allowed-by-operator-attestation",
+        "rawSdkMaterialInPublicRepository": "forbidden",
+        "publicSdkCiCacheArtifact": "forbidden",
+        "publicNonContentIntegrityMetadata": "allowed-aggregate-locks-and-minimal-layout-sentinels",
+        "privateSelfHostedCi": "blocked-pending-scope-approval",
+        "privateHostedArtifactStorage": "blocked-pending-scope-approval",
+        "rawSdkRedistribution": "blocked",
+        "compiledPluginDistribution": "blocked-pending-separate-review",
+        "adobeSampleDerivedCode": "blocked-pending-separate-review"
+      }
+    },
+    "compatibility": {
+      "afterEffects25": "unknown",
+      "afterEffects26": "unknown",
+      "aegpSuites": "unknown",
+      "toolchains": "unknown",
+      "macosArchitectures": "unknown"
+    }
+  }
+}

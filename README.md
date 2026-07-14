@@ -136,6 +136,42 @@ For visual work, ask the agent to preview frames and verify intermediate results
 
 Close every After Effects / AfterFX process before a development deployment. Each installer preflights the source, copies and verifies a unique same-parent staging directory, atomically retains the old panel as a backup, and prints an absolute restore command.
 
+### Native AEGP SDK input
+
+The Adobe After Effects C/C++ Plug-in SDK is **not distributed with this repository** and
+is never downloaded automatically. Developers must obtain the matching SDK from Adobe's
+official [After Effects Developer page](https://developer.adobe.com/after-effects/) using
+**Get the SDKs**, then extract it outside this checkout. The current native input lock is
+After Effects SDK **25.6, build 61, 64-bit**:
+
+| Platform | Expected outer archive | Bytes | SHA-256 |
+|---|---|---:|---|
+| macOS | `AfterEffectsSDK_25.6_61_mac.zip` | 2,039,255 | `c6abccd52ae25936b819b78c4fea2858bd161f216f72f75184fe9ec55a49756e` |
+| Windows | `AfterEffectsSDK_25.6_61_win.zip` | 7,549,997 | `3d3a39175a09d07f6f9734284636f9eadce968b05161650e3cba097a95905330` |
+
+Point `AE_SDK_ROOT` at the local extracted
+`ae25.6_61.64bit.AfterEffectsSDK` directory (or its direct parent), and point
+`AE_SDK_ARCHIVE` at the original outer archive. Before any native build, verify both the
+archive identity and extracted layout/content:
+
+```bash
+export AE_SDK_ARCHIVE=/absolute/path/AfterEffectsSDK_25.6_61_mac.zip
+export AE_SDK_ROOT=/absolute/path/ae25.6_61.64bit.AfterEffectsSDK
+node scripts/package/ae-sdk-input.mjs verify-input --platform macos-arm64
+```
+
+Use `windows-x64` for the Windows input. The validator fails clearly with
+`AE_SDK_ROOT_REQUIRED`/`AE_SDK_ARCHIVE_REQUIRED` when input is missing,
+`AE_SDK_ARCHIVE_INVALID` for the wrong archive bytes, `AE_SDK_LAYOUT_INVALID` for a wrong
+or changed extraction, and `AE_SDK_CONTENT_EVIDENCE_PENDING` when a platform does not yet
+have a reviewed canonical content lock. Windows root content evidence is currently pending and
+therefore fails closed.
+
+Never commit the SDK archive, headers, examples, PDFs, PiPLtool, or package-bundled
+extraction scripts/binaries to GitHub **or Git LFS**. Public CI contains only a guard that
+rejects vendored SDK material; it never receives the SDK. Read the complete
+[SDK intake, verification, and distribution policy](docs/native-sdk/SDK_INPUTS.md).
+
 macOS development setup:
 
 ```bash
