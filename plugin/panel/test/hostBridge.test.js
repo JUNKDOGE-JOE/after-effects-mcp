@@ -431,12 +431,14 @@ test('host controller reuses an already-normalized extension root instead of rea
   const calls = [];
   let receivedRoots = null;
   let receivedDependencies = null;
+  let receivedNativeRuntime = null;
   const bundledExpress = function bundledExpress() {};
   const runtime = fakeHostDependencyRuntime({
     platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP', express: bundledExpress,
   });
   const host = {
     setRuntimeDependencies(dependencies) { receivedDependencies = dependencies; },
+    setNativeAegpRuntime(runtime) { receivedNativeRuntime = runtime; },
     setCSInterface() {},
     start(port, callback, roots) { calls.push(port); receivedRoots = roots; callback(null); },
     stop() {},
@@ -458,6 +460,7 @@ test('host controller reuses an already-normalized extension root instead of rea
   controller.start(11488);
   assert.equal(calls[0], '/Applications/AE MCP/host/server.js');
   assert.equal(receivedDependencies.express, bundledExpress);
+  assert.deepEqual(receivedNativeRuntime, { platform: 'darwin', arch: 'arm64' });
   assert.deepEqual(receivedRoots, {
     extensionRoot: '/Applications/AE MCP',
     runtimeRoot: '/Applications/AE MCP/runtime',

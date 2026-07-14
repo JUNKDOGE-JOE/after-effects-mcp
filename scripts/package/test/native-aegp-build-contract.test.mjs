@@ -60,26 +60,19 @@ test('native mac build emits the AE-recognized AEGP package metadata', async () 
   assert.match(verifier, /Buffer\.from\('AEgxFXTC', 'ascii'\)/u);
 });
 
-test('native boot probe starts its deadline at the first AE idle callback', () => {
-  const submitStart = PLUGIN_ENTRY.indexOf('void submit_boot_probe_once(');
+test('native idle hook drains only real authenticated requests', () => {
   const idleStart = PLUGIN_ENTRY.indexOf('A_Err idle_hook(');
   const namespaceEnd = PLUGIN_ENTRY.indexOf('}  // namespace', idleStart);
   const entryStart = PLUGIN_ENTRY.indexOf('extern "C"', namespaceEnd);
-  assert.notEqual(submitStart, -1);
   assert.notEqual(idleStart, -1);
   assert.notEqual(namespaceEnd, -1);
   assert.notEqual(entryStart, -1);
 
-  const submitBootProbe = PLUGIN_ENTRY.slice(submitStart, idleStart);
   const idleHook = PLUGIN_ENTRY.slice(idleStart, namespaceEnd);
   const pluginEntry = PLUGIN_ENTRY.slice(entryStart);
-  assert.match(submitBootProbe, /PluginState& state\) noexcept/u);
-  assert.match(submitBootProbe, /if \(state\.boot_probe_submitted\) return;/u);
-  assert.match(submitBootProbe, /state\.boot_probe_submitted = true;\s*try \{/u);
-  assert.match(submitBootProbe, /"boot-project-summary"/u);
-  assert.match(submitBootProbe, /state\.clock\.now\(\) \+ 60s/u);
-  assert.match(submitBootProbe, /catch \(\.\.\.\)/u);
-  assert.match(idleHook, /submit_boot_probe_once\(\*state\)[\s\S]*dispatcher\.drain/u);
+  assert.match(idleHook, /state->dispatcher\.drain\(host\)/u);
+  assert.doesNotMatch(PLUGIN_ENTRY, /submit_boot_probe_once|boot_probe_submitted/u);
+  assert.doesNotMatch(idleHook, /dispatcher\.enqueue/u);
   assert.doesNotMatch(pluginEntry, /"boot-project-summary"/u);
 });
 

@@ -148,6 +148,157 @@ function post(port, pathname, headers, body) {
     });
 }
 
+async function startNativeApp(nativeClient) {
+    delete require.cache[require.resolve('./server')];
+    const server = bindRuntimeDependencies(require('./server'));
+    server.activity._reset();
+    server.setPaused(false);
+    server._setExecToken('known-secret-token');
+    server._setNativeAegpClientForTest(nativeClient);
+    const app = server.buildApp();
+    const srv = await new Promise((resolve) => {
+        const instance = app.listen(0, '127.0.0.1', () => resolve(instance));
+    });
+    return { server, srv, port: srv.address().port };
+}
+
+function fakeNativeClient() {
+    let state = 'disconnected';
+    let closed = 0;
+    const calls = [];
+    const pending = {
+        fingerprint: '12AB-34CD',
+        expiresInMs: 60000,
+        hostInstanceId: '22222222-2222-4222-8222-222222222222',
+        sourceCommit: 'a'.repeat(40),
+    };
+    return {
+        beginPairing: async function () { calls.push('pair'); state = 'pairing-decision'; return pending; },
+        waitUntilConnected: async function () { calls.push('wait'); state = 'connected'; return {}; },
+        capabilities: async function (detail) { calls.push('capabilities:' + detail); return { items: [] }; },
+        projectSummary: async function () {
+            calls.push('projectSummary');
+            return {
+                capabilityId: 'ae.project.summary',
+                capabilityVersion: 1,
+                engine: 'native-aegp',
+                evidence: {
+                    requestDigest: 'b'.repeat(64),
+                    postcondition: { verified: true, digest: 'c'.repeat(64) },
+                },
+                value: { projectOpen: true, projectName: 'Fixture.aep', itemCount: 2 },
+            };
+        },
+        status: function () {
+            return {
+                state,
+                hostInstanceId: pending.hostInstanceId,
+                sourceCommit: pending.sourceCommit,
+                sessionGeneration: state === 'connected' ? 7 : null,
+                capabilitiesDigest: 'd'.repeat(64),
+                projectSummaryContractDigest: 'e'.repeat(64),
+            };
+        },
+        close: async function () { closed += 1; state = 'closed'; },
+        authorize: function () { state = 'connected'; },
+        calls,
+        closed: function () { return closed; },
+    };
+}
+
+test('native routes require the shared token and reject an open-ended invoke envelope', async () => {
+    const nativeClient = fakeNativeClient();
+    const { server, srv, port } = await startNativeApp(nativeClient);
+    try {
+        const unauthorized = await post(port, '/native/invoke', {}, {
+            capabilityId: 'ae.project.summary', capabilityVersion: 1, arguments: {},
+        });
+        assert.strictEqual(unauthorized.status, 401);
+        assert.strictEqual(unauthorized.body.error.code, 'UNAUTHORIZED');
+
+        const arbitrary = await post(port, '/native/invoke', {
+            'X-AE-MCP-Token': 'known-secret-token',
+        }, {
+            capabilityId: 'ae.project.summary',
+            capabilityVersion: 1,
+            arguments: { jsx: 'app.project.close()' },
+        });
+        assert.strictEqual(arbitrary.status, 400);
+        assert.strictEqual(arbitrary.body.error.code, 'INVALID_ARGUMENT');
+        assert.deepStrictEqual(nativeClient.calls, []);
+    } finally {
+        srv.close();
+        server.stop();
+    }
+});
+
+test('native route exposes pairing without logging its fingerprint, then invokes hello-capabilities-read session', async () => {
+    const nativeClient = fakeNativeClient();
+    const { server, srv, port } = await startNativeApp(nativeClient);
+    const headers = {
+        'X-AE-MCP-Token': 'known-secret-token',
+        'x-ae-mcp-client': 'stdio-mcp/test',
+    };
+    try {
+        const pairing = await post(port, '/native/invoke', headers, {
+            capabilityId: 'ae.project.summary', capabilityVersion: 1, arguments: {},
+        });
+        assert.strictEqual(pairing.status, 409);
+        assert.strictEqual(pairing.body.error.code, 'NATIVE_PAIRING_REQUIRED');
+        assert.strictEqual(pairing.body.pairing.fingerprint, '12AB-34CD');
+        assert.strictEqual(pairing.body.pairing.sourceCommit, 'a'.repeat(40));
+        assert.doesNotMatch(JSON.stringify(server.activity.list()), /12AB-34CD/);
+
+        nativeClient.authorize();
+        const invoked = await post(port, '/native/invoke', headers, {
+            capabilityId: 'ae.project.summary', capabilityVersion: 1, arguments: {},
+        });
+        assert.strictEqual(invoked.status, 200);
+        assert.strictEqual(invoked.body.engine, 'native-aegp');
+        assert.strictEqual(invoked.body.result.value.itemCount, 2);
+        assert.strictEqual(invoked.body.result.evidence.postcondition.verified, true);
+        assert.strictEqual(invoked.body.runtime.sourceCommit, 'a'.repeat(40));
+        assert.strictEqual(invoked.body.runtime.projectSummaryContractDigest, 'e'.repeat(64));
+        assert.deepStrictEqual(nativeClient.calls, [
+            'pair', 'capabilities:full', 'projectSummary',
+        ]);
+    } finally {
+        srv.close();
+        server.stop();
+    }
+});
+
+test('native routes preserve panel pause and client-block controls and close the session on stop', async () => {
+    const nativeClient = fakeNativeClient();
+    nativeClient.authorize();
+    const { server, srv, port } = await startNativeApp(nativeClient);
+    const body = { capabilityId: 'ae.project.summary', capabilityVersion: 1, arguments: {} };
+    try {
+        server.setPaused(true);
+        const paused = await post(port, '/native/invoke', {
+            'X-AE-MCP-Token': 'known-secret-token',
+        }, body);
+        assert.strictEqual(paused.status, 503);
+        assert.strictEqual(paused.body.error.code, 'ACTIONS_PAUSED');
+        server.setPaused(false);
+
+        server.setClientBlocked('blocked/test', true);
+        const blocked = await post(port, '/native/invoke', {
+            'X-AE-MCP-Token': 'known-secret-token',
+            'x-ae-mcp-client': 'blocked/test',
+        }, body);
+        assert.strictEqual(blocked.status, 403);
+        assert.strictEqual(blocked.body.error.code, 'CLIENT_BLOCKED');
+        assert.deepStrictEqual(nativeClient.calls, []);
+    } finally {
+        server.setPaused(false);
+        server.setClientBlocked('blocked/test', false);
+        srv.close();
+        server.stop();
+    }
+    assert.strictEqual(nativeClient.closed(), 1);
+});
+
 test('/exec returns 401 without a token', async () => {
     const { srv, port } = await startApp();
     try {
