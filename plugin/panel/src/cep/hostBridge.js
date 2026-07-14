@@ -346,6 +346,9 @@ export function createHostController({
         throw new Error('Host runtime dependency binding is unavailable');
       }
       nextHost.setRuntimeDependencies(runtimeDependencies);
+      if (nextHost.setNativeAegpRuntime) {
+        nextHost.setNativeAegpRuntime(helperRuntime(adapter.id));
+      }
       nextHost.setCSInterface(cs);
       if (nextHost.setPlatformRoots) nextHost.setPlatformRoots(roots);
       host = nextHost;

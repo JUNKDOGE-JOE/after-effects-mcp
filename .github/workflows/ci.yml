@@ -112,6 +112,9 @@ jobs:
       - name: Run native AEGP RPC contract tests
         run: node --test native/ae-plugin/protocol/protocol.test.mjs
 
+      - name: Run Unix native AEGP client transport tests
+        run: node --test plugin/host/native-aegp-client.test.js
+
       - name: Build and run the portable native host dispatcher test
         run: >-
           c++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -pthread
@@ -120,6 +123,41 @@ jobs:
           native/ae-plugin/tests/host_dispatcher_test.cpp
           -o /tmp/ae-mcp-host-dispatcher-test
           && /tmp/ae-mcp-host-dispatcher-test
+
+      - name: Build and run the portable native RPC codec test
+        run: >-
+          c++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -pthread
+          -I native/ae-plugin/include
+          native/ae-plugin/src/core/rpc_codec.cpp
+          native/ae-plugin/tests/rpc_codec_test.cpp
+          -o /tmp/ae-mcp-rpc-codec-test
+          && /tmp/ae-mcp-rpc-codec-test
+
+      - name: Build and run the portable native RPC connection test
+        run: >-
+          c++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -pthread
+          -I native/ae-plugin/include
+          native/ae-plugin/src/core/host_dispatcher.cpp
+          native/ae-plugin/src/core/rpc_codec.cpp
+          native/ae-plugin/src/core/native_rpc_connection.cpp
+          native/ae-plugin/tests/native_rpc_connection_test.cpp
+          -o /tmp/ae-mcp-native-rpc-connection-test
+          && /tmp/ae-mcp-native-rpc-connection-test
+
+      - name: Build and run the portable native pairing and transport tests
+        run: |
+          c++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -pthread \
+            -I native/ae-plugin/include \
+            native/ae-plugin/src/core/pairing_gate.cpp \
+            native/ae-plugin/tests/pairing_gate_test.cpp \
+            -o /tmp/ae-mcp-pairing-gate-test
+          /tmp/ae-mcp-pairing-gate-test
+          c++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -pthread \
+            -I native/ae-plugin/include \
+            native/ae-plugin/src/core/transport_auth.cpp \
+            native/ae-plugin/tests/transport_auth_test.cpp \
+            -o /tmp/ae-mcp-transport-auth-test
+          /tmp/ae-mcp-transport-auth-test
 
       - name: Run packaging contract tests
         run: node --test scripts/package/test/*.test.mjs

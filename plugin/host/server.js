@@ -3,6 +3,7 @@ const path = require('path');
 const jsxBridge = require('./jsx-bridge');
 const authToken = require('./auth-token');
 const activity = require('./activity');
+const nativeAegp = require('./native-aegp-client');
 const PKG_VERSION = require('./package.json').version;
 
 let app = null;
@@ -16,6 +17,9 @@ let execToken = null;
 let paused = false;
 let lastHealthAt = null;
 let lastPythonVersion = null;
+let nativeAegpClient = null;
+let nativeAegpClientFactory = null;
+let nativeAegpRuntime = null;
 const clients = new Map();
 const blocked = new Set();
 // Self-reported label of the panel's own diagnostic /exec probes. Must match
@@ -105,6 +109,128 @@ function regenerateToken(cb) {
         else throw e;
         return null;
     }
+}
+
+function makeNativeAegpClient() {
+    if (nativeAegpClient) return nativeAegpClient;
+    const factory = nativeAegpClientFactory || nativeAegp.createNativeAegpClient;
+    nativeAegpClient = factory({
+        version: PKG_VERSION,
+        component: 'core-broker',
+        runtime: nativeAegpRuntime,
+    });
+    if (!nativeAegpClient
+        || typeof nativeAegpClient.beginPairing !== 'function'
+        || typeof nativeAegpClient.waitUntilConnected !== 'function'
+        || typeof nativeAegpClient.capabilities !== 'function'
+        || typeof nativeAegpClient.projectSummary !== 'function'
+        || typeof nativeAegpClient.status !== 'function'
+        || typeof nativeAegpClient.close !== 'function') {
+        nativeAegpClient = null;
+        const error = new Error('native AEGP client factory returned an invalid client');
+        error.code = 'NATIVE_UNAVAILABLE';
+        error.retryable = true;
+        throw error;
+    }
+    return nativeAegpClient;
+}
+
+function closeNativeAegpClient() {
+    const client = nativeAegpClient;
+    nativeAegpClient = null;
+    if (!client) return;
+    try { Promise.resolve(client.close()).catch(() => {}); } catch (_) {}
+}
+
+function setNativeAegpRuntime(runtime) {
+    if (!runtime || typeof runtime !== 'object' || Array.isArray(runtime)
+        || !['darwin', 'win32'].includes(runtime.platform)
+        || !['arm64', 'x64'].includes(runtime.arch)) {
+        throw new TypeError('native AEGP runtime is invalid');
+    }
+    if (nativeAegpRuntime
+        && (nativeAegpRuntime.platform !== runtime.platform || nativeAegpRuntime.arch !== runtime.arch)) {
+        closeNativeAegpClient();
+    }
+    nativeAegpRuntime = Object.freeze({ platform: runtime.platform, arch: runtime.arch });
+}
+
+function nativeErrorPayload(error) {
+    const code = typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]{2,63}$/.test(error.code)
+        ? error.code : 'NATIVE_UNAVAILABLE';
+    return {
+        code,
+        message: code === 'NATIVE_PAIRING_REQUIRED'
+            ? 'Approve the matching fingerprint from the After Effects AE MCP menu, then retry.'
+            : 'Native AEGP request failed with ' + code + '.',
+        retryable: error?.retryable === true || code === 'NATIVE_UNAVAILABLE',
+    };
+}
+
+function nativeRequestGate(req, res) {
+    const provided = req.get(authToken.HEADER);
+    if (!authToken.tokenMatches(provided, execToken)) {
+        res.status(401).json({ ok: false, error: { code: 'UNAUTHORIZED', message: 'unauthorized', retryable: false } });
+        return null;
+    }
+    const client = req.get('x-ae-mcp-client') || 'unknown';
+    const pythonVersion = req.get('x-ae-mcp-python');
+    if (pythonVersion) lastPythonVersion = pythonVersion;
+    if (client !== INTERNAL_CLIENT) touchClient(client);
+    if (blocked.has(client)) {
+        activity.record({ client, engine: 'native-aegp', ok: false, denied: 'blocked' });
+        res.status(403).json({
+            ok: false,
+            error: { code: 'CLIENT_BLOCKED', message: 'this client is blocked in the panel', retryable: false },
+        });
+        return null;
+    }
+    if (paused) {
+        activity.record({ client, engine: 'native-aegp', ok: false, denied: 'paused' });
+        res.status(503).json({
+            ok: false,
+            error: { code: 'ACTIONS_PAUSED', message: 'AI actions are paused in the panel', retryable: true },
+        });
+        return null;
+    }
+    return client;
+}
+
+async function nativePairingRequired(client) {
+    const pending = await client.beginPairing();
+    const error = new Error('native AEGP pairing requires an After Effects decision');
+    error.code = 'NATIVE_PAIRING_REQUIRED';
+    error.retryable = true;
+    error.pairing = pending;
+    throw error;
+}
+
+async function connectedNativeClient() {
+    const client = makeNativeAegpClient();
+    const status = client.status();
+    if (status.state === 'connected') return client;
+    if (status.state === 'authenticating') {
+        await client.waitUntilConnected();
+        return client;
+    }
+    return nativePairingRequired(client);
+}
+
+function sendNativeFailure(res, error) {
+    const payload = nativeErrorPayload(error);
+    const status = payload.code === 'NATIVE_PAIRING_REQUIRED' ? 409
+        : payload.code === 'INVALID_ARGUMENT' ? 400
+            : payload.code === 'AUTH_REQUIRED' ? 401 : 503;
+    const response = { ok: false, error: payload };
+    if (payload.code === 'NATIVE_PAIRING_REQUIRED' && error?.pairing) {
+        response.pairing = {
+            fingerprint: error.pairing.fingerprint,
+            expiresInMs: error.pairing.expiresInMs,
+            hostInstanceId: error.pairing.hostInstanceId,
+            sourceCommit: error.pairing.sourceCommit,
+        };
+    }
+    res.status(status).json(response);
 }
 
 // Wrap user JSX in app.beginUndoGroup / app.endUndoGroup.
@@ -239,6 +365,108 @@ function buildApp() {
         res.json({ ok: true, events: activity.list(Number.isFinite(since) ? since : 0) });
     });
 
+    a.get('/native/status', (req, res) => {
+        if (nativeRequestGate(req, res) === null) return;
+        try {
+            const status = makeNativeAegpClient().status();
+            res.json({ ok: true, status });
+        } catch (error) {
+            sendNativeFailure(res, error);
+        }
+    });
+
+    a.post('/native/pair', async (req, res) => {
+        const clientLabel = nativeRequestGate(req, res);
+        if (clientLabel === null) return;
+        const startedAt = Date.now();
+        try {
+            const client = makeNativeAegpClient();
+            if (client.status().state === 'connected') {
+                return res.json({ ok: true, status: client.status() });
+            }
+            const pending = await client.beginPairing();
+            activity.record({
+                client: clientLabel,
+                engine: 'native-aegp',
+                operation: 'pair',
+                ok: false,
+                denied: 'pairing_required',
+                durationMs: Date.now() - startedAt,
+            });
+            const error = new Error('native AEGP pairing requires an After Effects decision');
+            error.code = 'NATIVE_PAIRING_REQUIRED';
+            error.retryable = true;
+            error.pairing = pending;
+            sendNativeFailure(res, error);
+        } catch (error) {
+            activity.record({
+                client: clientLabel,
+                engine: 'native-aegp',
+                operation: 'pair',
+                ok: false,
+                error: nativeErrorPayload(error).code,
+                durationMs: Date.now() - startedAt,
+            });
+            sendNativeFailure(res, error);
+        }
+    });
+
+    a.post('/native/invoke', async (req, res) => {
+        const clientLabel = nativeRequestGate(req, res);
+        if (clientLabel === null) return;
+        const body = req.body || {};
+        if (!body || typeof body !== 'object' || Array.isArray(body)
+            || JSON.stringify(Object.keys(body).sort()) !== JSON.stringify([
+                'arguments', 'capabilityId', 'capabilityVersion',
+            ])
+            || body.capabilityId !== 'ae.project.summary'
+            || body.capabilityVersion !== 1
+            || !body.arguments || typeof body.arguments !== 'object'
+            || Array.isArray(body.arguments) || Object.keys(body.arguments).length !== 0) {
+            return res.status(400).json({
+                ok: false,
+                error: { code: 'INVALID_ARGUMENT', message: 'native invoke parameters are invalid', retryable: false },
+            });
+        }
+        const startedAt = Date.now();
+        try {
+            const client = await connectedNativeClient();
+            await client.capabilities('full');
+            const result = await client.projectSummary();
+            const runtime = client.status();
+            activity.record({
+                client: clientLabel,
+                engine: 'native-aegp',
+                capabilityId: body.capabilityId,
+                ok: true,
+                durationMs: Date.now() - startedAt,
+            });
+            res.json({
+                ok: true,
+                capabilityId: body.capabilityId,
+                engine: 'native-aegp',
+                result,
+                runtime: {
+                    hostInstanceId: runtime.hostInstanceId,
+                    sourceCommit: runtime.sourceCommit,
+                    sessionGeneration: runtime.sessionGeneration,
+                    capabilitiesDigest: runtime.capabilitiesDigest,
+                    projectSummaryContractDigest: runtime.projectSummaryContractDigest,
+                },
+            });
+        } catch (error) {
+            activity.record({
+                client: clientLabel,
+                engine: 'native-aegp',
+                capabilityId: body.capabilityId,
+                ok: false,
+                error: nativeErrorPayload(error).code,
+                durationMs: Date.now() - startedAt,
+            });
+            sendNativeFailure(res, error);
+        }
+    });
+
     a.post('/exec', async (req, res) => {
         // Require the shared-secret token. /exec runs arbitrary ExtendScript, so
         // every caller must prove it can read ~/.ae-mcp/auth-token. Constant-time
@@ -328,6 +556,7 @@ function start(port, callback, roots) {
 }
 
 function stop(callback) {
+    closeNativeAegpClient();
     if (!httpServer) return callback ? callback() : null;
     httpServer.close(() => {
         httpServer = null;
@@ -363,6 +592,7 @@ module.exports = {
     regenerateToken,
     setCSInterface: jsxBridge.setCSInterface,
     setRuntimeDependencies,
+    setNativeAegpRuntime,
     // Exported for unit-testing the wrap shape without spinning up Express.
     wrapWithUndoGroup,
     wrapForEvalScriptTransport,
@@ -371,6 +601,14 @@ module.exports = {
     // touching the real token file.
     buildApp,
     _setExecToken: function (t) { execToken = t; },
+    _setNativeAegpClientForTest: function (client) {
+        closeNativeAegpClient();
+        nativeAegpClient = client;
+    },
+    _setNativeAegpClientFactoryForTest: function (factory) {
+        closeNativeAegpClient();
+        nativeAegpClientFactory = factory;
+    },
     // Test-only state inspection. Platform roots are never exposed over HTTP.
     _getPlatformRootsForTest: function () { return platformRoots; },
 };

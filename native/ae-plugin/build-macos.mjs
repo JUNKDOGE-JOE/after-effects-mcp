@@ -338,8 +338,27 @@ async function buildMacPluginInternal({
     await fs.promises.mkdir(stage, { mode: 0o700 });
     stageOwned = true;
     const productInputPaths = [
+      'native/ae-plugin/include/aemcp_native/endpoint_registry_macos.hpp',
       'native/ae-plugin/include/aemcp_native/host_dispatcher.hpp',
+      'native/ae-plugin/include/aemcp_native/mac_ipc_server.hpp',
+      'native/ae-plugin/include/aemcp_native/native_rpc_connection.hpp',
+      'native/ae-plugin/include/aemcp_native/pairing_gate.hpp',
+      'native/ae-plugin/include/aemcp_native/pairing_ui_macos.hpp',
+      'native/ae-plugin/include/aemcp_native/peer_identity.hpp',
+      'native/ae-plugin/include/aemcp_native/peer_identity_macos.hpp',
+      'native/ae-plugin/include/aemcp_native/rpc_codec.hpp',
+      'native/ae-plugin/include/aemcp_native/secure_random_macos.hpp',
+      'native/ae-plugin/include/aemcp_native/transport_auth.hpp',
       'native/ae-plugin/src/core/host_dispatcher.cpp',
+      'native/ae-plugin/src/core/native_rpc_connection.cpp',
+      'native/ae-plugin/src/core/pairing_gate.cpp',
+      'native/ae-plugin/src/core/rpc_codec.cpp',
+      'native/ae-plugin/src/core/transport_auth.cpp',
+      'native/ae-plugin/src/platform/macos/endpoint_registry_macos.cpp',
+      'native/ae-plugin/src/platform/macos/mac_ipc_server.cpp',
+      'native/ae-plugin/src/platform/macos/pairing_ui_macos.mm',
+      'native/ae-plugin/src/platform/macos/peer_identity_macos.cpp',
+      'native/ae-plugin/src/platform/macos/secure_random_macos.cpp',
       'native/ae-plugin/src/aegp/plugin_entry.cpp',
       'native/ae-plugin/resources/Info.plist',
       'native/ae-plugin/resources/AeMcpNative_PiPL.r',
@@ -438,20 +457,38 @@ async function buildMacPluginInternal({
       ...includes,
     ];
     const sourceFiles = [
-      productInputs.get('native/ae-plugin/src/core/host_dispatcher.cpp'),
-      productInputs.get('native/ae-plugin/src/aegp/plugin_entry.cpp'),
+      'native/ae-plugin/src/core/host_dispatcher.cpp',
+      'native/ae-plugin/src/core/native_rpc_connection.cpp',
+      'native/ae-plugin/src/core/pairing_gate.cpp',
+      'native/ae-plugin/src/core/rpc_codec.cpp',
+      'native/ae-plugin/src/core/transport_auth.cpp',
+      'native/ae-plugin/src/platform/macos/endpoint_registry_macos.cpp',
+      'native/ae-plugin/src/platform/macos/mac_ipc_server.cpp',
+      'native/ae-plugin/src/platform/macos/pairing_ui_macos.mm',
+      'native/ae-plugin/src/platform/macos/peer_identity_macos.cpp',
+      'native/ae-plugin/src/platform/macos/secure_random_macos.cpp',
+      'native/ae-plugin/src/aegp/plugin_entry.cpp',
     ];
     const objectFiles = [];
-    for (const [index, source] of sourceFiles.entries()) {
+    for (const [index, relativePath] of sourceFiles.entries()) {
+      const source = productInputs.get(relativePath);
       const object = path.join(objects, `${index}.o`);
-      command(clang, [...compileFlags, '-c', source, '-o', object], redactions);
+      const languageFlags = relativePath.endsWith('.mm') ? ['-fobjc-arc'] : [];
+      command(clang, [
+        ...compileFlags, ...languageFlags, '-c', source, '-o', object,
+      ], redactions);
       objectFiles.push(object);
     }
     command(clang, [
       '-bundle', '-arch', 'arm64', '-mmacosx-version-min=14.0', '-pthread',
       '-isysroot', sysroot,
       '-Wl,-dead_strip', '-Wl,-exported_symbol,_AeMcpNativeMain',
-      ...objectFiles, '-framework', 'CoreFoundation', '-o', executable,
+      ...objectFiles,
+      '-framework', 'AppKit',
+      '-framework', 'CoreFoundation',
+      '-framework', 'Security',
+      '-lbsm',
+      '-o', executable,
     ], redactions);
     command(rez, [
       '-useDF', '-arch', 'arm64', '-isysroot', sysroot,
