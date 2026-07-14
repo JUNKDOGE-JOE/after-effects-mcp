@@ -221,13 +221,23 @@ node native/ae-plugin/verify-macos.mjs \
 ```
 
 安装前必须关闭所有 After Effects、AfterFX 和 aerender 进程。开发安装器会校验构建回执和安装后的副本，
-暂存目录使用不可加载的同父级 `.disabled` 名称，最终安装位置为
+最终安装位置为
 `~/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/ae-mcp/AeMcpNative.plugin`：
 
 ```bash
 node native/ae-plugin/install-dev-macos.mjs install \
   --artifact-dir "$BUILD_DIR"
 ```
+
+MediaCore 命名空间采用严格约束：事务进行中允许为空，其余时间只能包含当前生效的
+`AeMcpNative.plugin`。事务记录以及完整的 stage、backup、failed、replaced bundle 全部保存在 Adobe
+扫描根之外的 `~/Library/Application Support/AfterEffectsMCP/native-plugin-dev-v1/`。AE 关闭时，安装器会先把
+完整的旧命名空间移入扫描区外的隔离区，再只恢复当前生效的 bundle；迁移在各个中断边界都可继续恢复。
+仅添加 `.disabled` 后缀不再被视为可靠隔离。写入中断后可安全处理的元数据或暂存残留会保存在同一状态根的
+`orphan-evidence/`；如果不完整记录已被部署证据引用，恢复会拒绝猜测并保持失败关闭。
+
+安装、恢复、回滚以及过期 owner 的接管由一个持久的 Darwin 内核 guard 串行化。不要同时运行旧 checkout
+中的安装器：安装器会拒绝已观察到的旧版存活锁，但跨版本安装器并不共享新的 guard 协议。
 
 请保留输出中的 `transactionId`。关闭 AE 后，可精确回滚当前这笔事务：
 

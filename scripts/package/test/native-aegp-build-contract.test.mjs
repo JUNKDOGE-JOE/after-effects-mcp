@@ -94,6 +94,7 @@ test('native README examples use safe shell variables and the complete build inp
     assert.match(section, /--sdk-root "\$AE_SDK_ROOT"/u);
     assert.match(section, /--output "\$BUILD_DIR"/u);
     assert.match(section, /--transaction "\$TRANSACTION_ID"/u);
+    assert.match(section, /native-plugin-dev-v1/u);
     assert.doesNotMatch(section, /<(?:commit|transactionId)>/u);
   }
 });

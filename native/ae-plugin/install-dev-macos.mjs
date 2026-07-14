@@ -15,11 +15,22 @@ const BUNDLE_NAME = 'AeMcpNative.plugin';
 const NAMESPACE_NAME = 'ae-mcp';
 const RECEIPT_NAME = 'build-receipt.json';
 const LOCK_NAME = '.AeMcpNative.install.lock';
+const GUARD_NAME = '.AeMcpNative.install.guard';
 const CURRENT_NAME = '.AeMcpNative.current.json';
+const STATE_STORE_NAME = 'store';
+const MIGRATION_NAME = 'legacy-namespace-migration';
+const ORPHAN_EVIDENCE_NAME = 'orphan-evidence';
+const DARWIN_O_EXLOCK = 0x20;
 const MAX_JSON_BYTES = 64 * 1024;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const SHA256 = /^[0-9a-f]{64}$/u;
 const COMMIT_SHA = /^[0-9a-f]{40}$/u;
+const MANAGED_BUNDLE_NAME = /^\.AeMcpNative\.(?:stage|backup|failed|replaced)\.([0-9a-f-]+)\.disabled$/u;
+const TRANSACTION_FILE_NAME = /^\.AeMcpNative\.transaction\.([0-9a-f-]+)\.json$/u;
+const STALE_LOCK_FILE_NAME = /^\.AeMcpNative\.stale-lock\.([0-9a-f-]+)\.json$/u;
+const INSTALLER_TEMP_FILE_NAME = /^\.(\.AeMcpNative\.(?:current|transaction\.([0-9a-f-]+))\.json)\.tmp-[1-9][0-9]*-[0-9a-f]{12}$/u;
+const LOCK_TEMP_FILE_NAME = /^\.\.AeMcpNative\.install\.lock\.tmp-[1-9][0-9]*-[0-9a-f]{12}$/u;
+const STAGE_BUNDLE_NAME = /^\.AeMcpNative\.stage\.([0-9a-f-]+)\.disabled$/u;
 const ARTIFACT_KEYS = [
   'architecture',
   'bundleName',
@@ -39,6 +50,38 @@ function installerError(code, message, recovery) {
   error.code = code;
   if (recovery) error.recovery = recovery;
   return error;
+}
+
+function defaultMediaCoreRoot() {
+  return path.join(
+    os.homedir(),
+    'Library',
+    'Application Support',
+    'Adobe',
+    'Common',
+    'Plug-ins',
+    '7.0',
+    'MediaCore',
+  );
+}
+
+function defaultStateBaseRoot(mediaCoreRoot) {
+  if (path.resolve(mediaCoreRoot) === path.resolve(defaultMediaCoreRoot())) {
+    return path.join(
+      os.homedir(),
+      'Library',
+      'Application Support',
+      'AfterEffectsMCP',
+      'native-plugin-dev-v1',
+    );
+  }
+  return path.join(path.dirname(path.resolve(mediaCoreRoot)), '.ae-mcp-native-state-v1');
+}
+
+function isSameOrDescendant(parent, candidate) {
+  const relative = path.relative(parent, candidate);
+  return relative === ''
+    || (!relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
 }
 
 function isRecord(value) {
@@ -189,9 +232,9 @@ async function ensureMissing(candidate, label) {
   }
 }
 
-async function ensureSafeDirectory(directory) {
+async function ensureSafeDirectory(directory, label = 'installer') {
   if (!path.isAbsolute(directory)) {
-    throw installerError('AE_PLUGIN_INSTALL_ROOT_UNSAFE', 'MediaCore root must be absolute');
+    throw installerError('AE_PLUGIN_INSTALL_ROOT_UNSAFE', `${label} root must be absolute`);
   }
   const parsed = path.parse(path.resolve(directory));
   let current = parsed.root;
@@ -199,15 +242,18 @@ async function ensureSafeDirectory(directory) {
     current = path.join(current, component);
     let metadata = await lstatOrNull(current);
     if (!metadata) {
-      await fs.promises.mkdir(current, { mode: 0o700 }).catch((error) => {
+      try {
+        await fs.promises.mkdir(current, { mode: 0o700 });
+      } catch (error) {
         if (error?.code !== 'EEXIST') throw error;
-      });
+      }
       metadata = await fs.promises.lstat(current);
+      await syncDirectory(path.dirname(current));
     }
     if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
       throw installerError(
         'AE_PLUGIN_INSTALL_ROOT_UNSAFE',
-        'MediaCore path contains a symbolic or non-directory component',
+        `${label} path contains a symbolic or non-directory component`,
       );
     }
   }
@@ -215,7 +261,7 @@ async function ensureSafeDirectory(directory) {
 }
 
 async function readBoundedRegularFile(file, label) {
-  const metadata = await fs.promises.lstat(file).catch(() => null);
+  const metadata = await lstatOrNull(file);
   if (!metadata?.isFile() || metadata.isSymbolicLink() || metadata.nlink !== 1
       || metadata.size <= 0 || metadata.size > MAX_JSON_BYTES) {
     throw installerError('AE_PLUGIN_RECEIPT_INVALID', `${label} is not a bounded regular file`);
@@ -281,6 +327,114 @@ async function syncDirectory(directory) {
   }
 }
 
+async function assertSameFilesystem(sourceParent, destinationParent) {
+  const [sourceMetadata, destinationMetadata] = await Promise.all([
+    fs.promises.stat(sourceParent),
+    fs.promises.stat(destinationParent),
+  ]);
+  if (sourceMetadata.dev !== destinationMetadata.dev) {
+    throw installerError(
+      'AE_PLUGIN_INSTALL_ROOT_UNSAFE',
+      'native deployment rename crosses filesystem boundaries',
+    );
+  }
+}
+
+async function durableRename(
+  source,
+  destination,
+  renameOperation = fs.promises.rename,
+  syncOperation = syncDirectory,
+) {
+  const sourceParent = path.dirname(source);
+  const destinationParent = path.dirname(destination);
+  await assertSameFilesystem(sourceParent, destinationParent);
+  const [sourceMetadata, destinationParentMetadata] = await Promise.all([
+    fs.promises.stat(source),
+    fs.promises.stat(destinationParent),
+  ]);
+  if (sourceMetadata.dev !== destinationParentMetadata.dev) {
+    throw installerError(
+      'AE_PLUGIN_INSTALL_ROOT_UNSAFE',
+      'native deployment source is mounted on a different filesystem',
+    );
+  }
+  let renameCompleted = false;
+  try {
+    await renameOperation(source, destination);
+    renameCompleted = true;
+    const parents = [...new Set([sourceParent, destinationParent])];
+    await Promise.all(parents.map((directory) => syncOperation(directory)));
+  } catch (error) {
+    if (renameCompleted && error && typeof error === 'object') {
+      error.renameCompleted = true;
+    }
+    throw error;
+  }
+}
+
+async function renameBundleDurable(dependencies, source, destination) {
+  await dependencies.assertAeStopped();
+  await durableRename(
+    source,
+    destination,
+    dependencies.renameBundle,
+    dependencies.syncDirectory,
+  );
+}
+
+async function renameBundleTracked(dependencies, source, destination, markMoved) {
+  try {
+    await renameBundleDurable(dependencies, source, destination);
+    markMoved();
+  } catch (error) {
+    if (error?.renameCompleted
+        || (!await lstatOrNull(source) && await lstatOrNull(destination))) {
+      markMoved();
+    }
+    throw error;
+  }
+}
+
+async function renameDeploymentDirectoryDurable(dependencies, source, destination) {
+  await dependencies.assertAeStopped();
+  await durableRename(
+    source,
+    destination,
+    fs.promises.rename,
+    dependencies.syncDirectory,
+  );
+}
+
+async function syncTree(candidate, syncOperation = syncDirectory) {
+  const metadata = await fs.promises.lstat(candidate);
+  if (metadata.isSymbolicLink()) {
+    throw installerError(
+      'AE_PLUGIN_INSTALL_STATE_INVALID',
+      'native staging tree contains a symbolic entry',
+    );
+  }
+  if (metadata.isDirectory()) {
+    for (const name of await fs.promises.readdir(candidate)) {
+      await syncTree(path.join(candidate, name), syncOperation);
+    }
+    await syncOperation(candidate);
+    return;
+  }
+  if (!metadata.isFile() || metadata.nlink !== 1) {
+    throw installerError(
+      'AE_PLUGIN_INSTALL_STATE_INVALID',
+      'native staging tree contains an unsupported filesystem entry',
+    );
+  }
+  const handle = await fs.promises.open(candidate, 'r');
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
 async function writeJsonExclusive(file, value) {
   const handle = await fs.promises.open(file, 'wx', 0o600);
   try {
@@ -290,6 +444,28 @@ async function writeJsonExclusive(file, value) {
     await handle.close();
   }
   await syncDirectory(path.dirname(file));
+}
+
+async function writeJsonExclusiveAtomic(file, value) {
+  const temporary = path.join(
+    path.dirname(file),
+    `.${path.basename(file)}.tmp-${process.pid}-${crypto.randomBytes(6).toString('hex')}`,
+  );
+  let published = false;
+  try {
+    await writeJsonExclusive(temporary, value);
+    await fs.promises.link(temporary, file);
+    published = true;
+    await syncDirectory(path.dirname(file));
+    await fs.promises.unlink(temporary).catch((error) => {
+      if (error?.code !== 'ENOENT') throw error;
+    });
+    await syncDirectory(path.dirname(file));
+  } catch (error) {
+    await fs.promises.unlink(temporary).catch(() => {});
+    if (published) await syncDirectory(path.dirname(file)).catch(() => {});
+    throw error;
+  }
 }
 
 async function writeJsonAtomic(file, value) {
@@ -366,49 +542,147 @@ async function readLockOwner(lockPath) {
   }
 }
 
-async function acquireLock(namespace, dependencies) {
-  const lockPath = path.join(namespace, LOCK_NAME);
-  let handle;
-  for (let attempt = 0; attempt < 2 && !handle; attempt += 1) {
-    try {
-      handle = await fs.promises.open(lockPath, 'wx', 0o600);
-    } catch (error) {
-      if (error?.code !== 'EEXIST') throw error;
-      const owner = await readLockOwner(lockPath);
-      if (await dependencies.isProcessAlive(owner.pid)) {
-        throw installerError(
-          'AE_PLUGIN_INSTALL_LOCKED',
-          'another native install or rollback is active',
-        );
-      }
-      const stalePath = path.join(
-        namespace,
-        `.AeMcpNative.stale-lock.${crypto.randomUUID()}.json`,
-      );
+async function removePublishedLockTempAliases(directory, lockPath) {
+  const lockMetadata = await lstatOrNull(lockPath);
+  if (!lockMetadata) return;
+  let changed = false;
+  for (const name of await fs.promises.readdir(directory)) {
+    if (!LOCK_TEMP_FILE_NAME.test(name)) continue;
+    const temporary = path.join(directory, name);
+    const metadata = await lstatOrNull(temporary);
+    if (metadata?.isFile() && !metadata.isSymbolicLink()
+        && metadata.dev === lockMetadata.dev && metadata.ino === lockMetadata.ino) {
       try {
-        await fs.promises.rename(lockPath, stalePath);
-        await syncDirectory(namespace);
-      } catch (renameError) {
-        if (renameError?.code !== 'ENOENT') throw renameError;
+        await fs.promises.unlink(temporary);
+        changed = true;
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
       }
     }
   }
-  if (!handle) {
-    throw installerError('AE_PLUGIN_INSTALL_LOCKED', 'could not acquire the native install lock');
+  if (changed) await syncDirectory(directory);
+}
+
+async function defaultAcquireStateGuard(directory) {
+  if (process.platform !== 'darwin') {
+    throw installerError(
+      'AE_PLUGIN_PLATFORM_UNSUPPORTED',
+      'native installer kernel guard requires macOS',
+    );
+  }
+  const guardPath = path.join(directory, GUARD_NAME);
+  const flags = fs.constants.O_RDWR
+    | fs.constants.O_CREAT
+    | fs.constants.O_NONBLOCK
+    | fs.constants.O_NOFOLLOW
+    | DARWIN_O_EXLOCK;
+  let handle;
+  try {
+    handle = await fs.promises.open(guardPath, flags, 0o600);
+  } catch (error) {
+    if (error?.code === 'EAGAIN' || error?.code === 'EWOULDBLOCK') {
+      throw installerError(
+        'AE_PLUGIN_INSTALL_LOCKED',
+        'another native install or rollback holds the kernel guard',
+      );
+    }
+    throw error;
   }
   try {
-    await handle.writeFile(`${JSON.stringify({ pid: process.pid, createdAt: nowIso(dependencies) })}\n`);
+    const [descriptorMetadata, pathMetadata] = await Promise.all([
+      handle.stat(),
+      fs.promises.lstat(guardPath),
+    ]);
+    if (!descriptorMetadata.isFile() || descriptorMetadata.nlink !== 1
+        || pathMetadata.isSymbolicLink() || !pathMetadata.isFile()
+        || descriptorMetadata.dev !== pathMetadata.dev
+        || descriptorMetadata.ino !== pathMetadata.ino) {
+      throw installerError(
+        'AE_PLUGIN_INSTALL_ROOT_UNSAFE',
+        'native installer kernel guard is not a private regular file',
+      );
+    }
     await handle.sync();
+    await syncDirectory(directory);
   } catch (error) {
     await handle.close().catch(() => {});
-    await fs.promises.unlink(lockPath).catch(() => {});
     throw error;
   }
   return async () => {
     await handle.close();
-    await fs.promises.unlink(lockPath);
-    await syncDirectory(namespace);
   };
+}
+
+async function acquireLock(directory, dependencies) {
+  const releaseGuard = await dependencies.acquireStateGuard(directory);
+  const lockPath = path.join(directory, LOCK_NAME);
+  try {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const ownerRecord = {
+        pid: process.pid,
+        createdAt: nowIso(dependencies),
+        nonce: crypto.randomBytes(16).toString('hex'),
+      };
+      try {
+        await writeJsonExclusiveAtomic(lockPath, ownerRecord);
+        const identity = await fs.promises.lstat(lockPath);
+        return async () => {
+          try {
+            const observed = await lstatOrNull(lockPath);
+            if (!observed || observed.dev !== identity.dev || observed.ino !== identity.ino) {
+              throw installerError(
+                'AE_PLUGIN_INSTALL_LOCKED',
+                'native install lock ownership changed before release',
+              );
+            }
+            await fs.promises.unlink(lockPath);
+            await syncDirectory(directory);
+          } finally {
+            await releaseGuard();
+          }
+        };
+      } catch (error) {
+        if (error?.code !== 'EEXIST') throw error;
+        await removePublishedLockTempAliases(directory, lockPath);
+        if (!await lstatOrNull(lockPath)) continue;
+        let owner;
+        try {
+          owner = await readLockOwner(lockPath);
+        } catch (lockError) {
+          if (!await lstatOrNull(lockPath)) continue;
+          const metadata = await fs.promises.lstat(lockPath);
+          if (!metadata.isFile() || metadata.isSymbolicLink()
+              || metadata.nlink !== 1 || metadata.size > 4096) {
+            throw lockError;
+          }
+        }
+        if (owner && await dependencies.isProcessAlive(owner.pid)) {
+          throw installerError(
+            'AE_PLUGIN_INSTALL_LOCKED',
+            'another native install or rollback is active',
+          );
+        }
+        const stalePath = path.join(
+          directory,
+          `.AeMcpNative.stale-lock.${crypto.randomUUID()}.json`,
+        );
+        try {
+          await durableRename(
+            lockPath,
+            stalePath,
+            fs.promises.rename,
+            dependencies.syncDirectory,
+          );
+        } catch (renameError) {
+          if (renameError?.code !== 'ENOENT') throw renameError;
+        }
+      }
+    }
+    throw installerError('AE_PLUGIN_INSTALL_LOCKED', 'could not acquire the native install lock');
+  } catch (error) {
+    await releaseGuard().catch(() => {});
+    throw error;
+  }
 }
 
 async function defaultAssertAeStopped() {
@@ -447,6 +721,7 @@ function defaultIsProcessAlive(pid) {
 
 function dependenciesFor(overrides = {}) {
   return {
+    acquireStateGuard: overrides.acquireStateGuard ?? defaultAcquireStateGuard,
     assertAeStopped: overrides.assertAeStopped ?? defaultAssertAeStopped,
     copyBundle: overrides.copyBundle ?? ((source, destination) => fs.promises.cp(
       source,
@@ -467,6 +742,7 @@ function dependenciesFor(overrides = {}) {
     renameBundle: overrides.renameBundle ?? ((source, destination) => (
       fs.promises.rename(source, destination)
     )),
+    syncDirectory: overrides.syncDirectory ?? syncDirectory,
     verifyBundle: overrides.verifyBundle ?? verifyMacPlugin,
   };
 }
@@ -527,35 +803,608 @@ async function verifyTarget(target, expected, dependencies, label, sourceCommit 
   return observed;
 }
 
-async function removeGeneratedStage(stage, namespace) {
-  if (path.dirname(stage) !== namespace
+async function removeGeneratedStage(stage, stateStore) {
+  if (path.dirname(stage) !== stateStore
       || !path.basename(stage).startsWith('.AeMcpNative.stage.')
       || !path.basename(stage).endsWith('.disabled')) {
     throw installerError('AE_PLUGIN_INSTALL_STATE_INVALID', 'refused to remove an unmanaged path');
   }
   await fs.promises.rm(stage, { recursive: true, force: true });
+  await syncDirectory(stateStore);
 }
 
-async function prepareNamespace(mediaCoreRoot) {
-  const safeMediaCore = await ensureSafeDirectory(mediaCoreRoot);
-  const namespace = await ensureSafeDirectory(path.join(safeMediaCore, NAMESPACE_NAME));
+async function prepareRoots(mediaCoreRoot, stateBaseRoot) {
+  if (!path.isAbsolute(mediaCoreRoot) || !path.isAbsolute(stateBaseRoot)) {
+    throw installerError(
+      'AE_PLUGIN_INSTALL_ROOT_UNSAFE',
+      'MediaCore and native installer state roots must be absolute',
+    );
+  }
+  const mediaCore = path.resolve(mediaCoreRoot);
+  const stateBaseInput = path.resolve(stateBaseRoot);
+  if (isSameOrDescendant(mediaCore, stateBaseInput)
+      || isSameOrDescendant(stateBaseInput, mediaCore)) {
+    throw installerError(
+      'AE_PLUGIN_INSTALL_ROOT_UNSAFE',
+      'native installer state must remain outside the Adobe plug-in scan root',
+    );
+  }
+  const safeMediaCore = await ensureSafeDirectory(mediaCore, 'MediaCore');
+  const stateBase = await ensureSafeDirectory(stateBaseInput, 'native installer state');
+  if (isSameOrDescendant(safeMediaCore, stateBase)
+      || isSameOrDescendant(stateBase, safeMediaCore)) {
+    throw installerError(
+      'AE_PLUGIN_INSTALL_ROOT_UNSAFE',
+      'native installer state resolves inside the Adobe plug-in scan root',
+    );
+  }
+  const [mediaCoreMetadata, stateBaseMetadata] = await Promise.all([
+    fs.promises.stat(safeMediaCore),
+    fs.promises.stat(stateBase),
+  ]);
+  if (mediaCoreMetadata.dev !== stateBaseMetadata.dev) {
+    throw installerError(
+      'AE_PLUGIN_INSTALL_ROOT_UNSAFE',
+      'native installer state and MediaCore must share a filesystem for atomic deployment',
+    );
+  }
+  const namespace = path.join(safeMediaCore, NAMESPACE_NAME);
+  const stateStore = path.join(stateBase, STATE_STORE_NAME);
+  const migration = path.join(stateBase, MIGRATION_NAME);
+  for (const [candidate, label] of [
+    [namespace, 'managed MediaCore namespace'],
+    [stateStore, 'native installer state store'],
+    [migration, 'native installer legacy migration'],
+  ]) {
+    const metadata = await lstatOrNull(candidate);
+    if (!metadata) continue;
+    if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
+      throw installerError(
+        'AE_PLUGIN_INSTALL_ROOT_UNSAFE',
+        `${label} is symbolic or not a directory`,
+      );
+    }
+    if ((await fs.promises.stat(candidate)).dev !== mediaCoreMetadata.dev) {
+      throw installerError(
+        'AE_PLUGIN_INSTALL_ROOT_UNSAFE',
+        `${label} is mounted on a different filesystem`,
+      );
+    }
+  }
   return {
+    device: mediaCoreMetadata.dev,
+    migration,
     namespace,
+    stateBase,
+    stateStore,
     target: path.join(namespace, BUNDLE_NAME),
   };
 }
 
-async function assertNoUnexpectedLoadableBundles(namespace) {
-  const entries = await fs.promises.readdir(namespace);
-  const unexpected = entries.filter(
-    (name) => name.endsWith('.plugin') && name !== BUNDLE_NAME,
-  );
-  if (unexpected.length > 0) {
+function managedStateEntry(name) {
+  if (name === BUNDLE_NAME || name === LOCK_NAME || name === CURRENT_NAME) return true;
+  const managed = MANAGED_BUNDLE_NAME.exec(name);
+  if (managed) return UUID_V4.test(managed[1] ?? '');
+  const transaction = TRANSACTION_FILE_NAME.exec(name);
+  if (transaction) return UUID_V4.test(transaction[1] ?? '');
+  const staleLock = STALE_LOCK_FILE_NAME.exec(name);
+  if (staleLock) return UUID_V4.test(staleLock[1] ?? '');
+  return false;
+}
+
+async function validateManagedStateDirectory(directory, label) {
+  const metadata = await lstatOrNull(directory);
+  if (!metadata) return [];
+  if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
     throw installerError(
-      'AE_PLUGIN_INSTALL_STATE_INVALID',
-      'managed MediaCore namespace contains an unexpected loadable plug-in bundle',
+      'AE_PLUGIN_INSTALL_ROOT_UNSAFE',
+      `${label} is symbolic or not a directory`,
     );
   }
+  const entries = (await fs.promises.readdir(directory)).sort();
+  for (const name of entries) {
+    if (!managedStateEntry(name)) {
+      throw installerError(
+        'AE_PLUGIN_INSTALL_STATE_INVALID',
+        `${label} contains an unexpected entry`,
+      );
+    }
+    const entry = await fs.promises.lstat(path.join(directory, name));
+    if (entry.isSymbolicLink()) {
+      if (name === BUNDLE_NAME) {
+        throw installerError(
+          'AE_PLUGIN_EXISTING_TARGET_INVALID',
+          'existing native plug-in target is symbolic',
+        );
+      }
+      throw installerError(
+        'AE_PLUGIN_INSTALL_STATE_INVALID',
+        `${label} contains a symbolic entry`,
+      );
+    }
+    const bundleShaped = name === BUNDLE_NAME || MANAGED_BUNDLE_NAME.test(name);
+    if ((bundleShaped && !entry.isDirectory()) || (!bundleShaped && !entry.isFile())) {
+      if (name === BUNDLE_NAME) {
+        throw installerError(
+          'AE_PLUGIN_EXISTING_TARGET_INVALID',
+          'existing native plug-in target is not a bundle directory',
+        );
+      }
+      throw installerError(
+        'AE_PLUGIN_INSTALL_STATE_INVALID',
+        `${label} contains an entry with the wrong type`,
+      );
+    }
+  }
+  return entries;
+}
+
+async function assertManagedDirectoryDevice(directory, device, label) {
+  const metadata = await lstatOrNull(directory);
+  if (!metadata) return false;
+  if (!metadata.isDirectory() || metadata.isSymbolicLink()
+      || (await fs.promises.stat(directory)).dev !== device) {
+    throw installerError(
+      'AE_PLUGIN_INSTALL_ROOT_UNSAFE',
+      `${label} is unsafe or mounted on a different filesystem`,
+    );
+  }
+  return true;
+}
+
+async function ensureManagedDirectory(directory, device, label) {
+  const safeDirectory = await ensureSafeDirectory(directory, label);
+  await assertManagedDirectoryDevice(safeDirectory, device, label);
+  return safeDirectory;
+}
+
+async function ensureDeploymentNamespace(dependencies, namespace, device) {
+  if (await lstatOrNull(namespace)) {
+    await assertManagedDirectoryDevice(namespace, device, 'managed MediaCore namespace');
+    return;
+  }
+  await dependencies.assertAeStopped();
+  await ensureManagedDirectory(namespace, device, 'managed MediaCore namespace');
+  await dependencies.syncDirectory(path.dirname(namespace));
+}
+
+async function assertLegacyLockInactive(directory, dependencies) {
+  const lockPath = path.join(directory, LOCK_NAME);
+  if (!await lstatOrNull(lockPath)) return null;
+  const owner = await readLockOwner(lockPath);
+  if (await dependencies.isProcessAlive(owner.pid)) {
+    throw installerError(
+      'AE_PLUGIN_INSTALL_LOCKED',
+      'a legacy native install or rollback is active',
+    );
+  }
+  return owner;
+}
+
+async function rotateLegacyLock(directory, stateStore, dependencies, checkedOwner = undefined) {
+  const lockPath = path.join(directory, LOCK_NAME);
+  if (!await lstatOrNull(lockPath)) return false;
+  if (checkedOwner === undefined) await assertLegacyLockInactive(directory, dependencies);
+  let stalePath;
+  do {
+    stalePath = path.join(
+      stateStore,
+      `.AeMcpNative.stale-lock.${crypto.randomUUID()}.json`,
+    );
+  } while (await lstatOrNull(stalePath));
+  await durableRename(
+    lockPath,
+    stalePath,
+    fs.promises.rename,
+    dependencies.syncDirectory,
+  );
+  return true;
+}
+
+function installerTempFinalName(name) {
+  const match = INSTALLER_TEMP_FILE_NAME.exec(name);
+  if (!match || (match[2] && !UUID_V4.test(match[2]))) return null;
+  return match[1];
+}
+
+async function ensureOrphanEvidenceDirectory(stateBase, device, name) {
+  const evidenceBase = await ensureManagedDirectory(
+    path.join(stateBase, ORPHAN_EVIDENCE_NAME),
+    device,
+    'native installer orphan evidence',
+  );
+  return ensureManagedDirectory(
+    path.join(evidenceBase, name),
+    device,
+    'native installer orphan evidence record',
+  );
+}
+
+async function moveOrphanEvidence(source, destinationDirectory, dependencies) {
+  const destination = path.join(destinationDirectory, path.basename(source));
+  await ensureMissing(destination, 'native installer orphan evidence');
+  await durableRename(
+    source,
+    destination,
+    fs.promises.rename,
+    dependencies.syncDirectory,
+  );
+}
+
+async function recoverInstallerTempFiles({
+  dependencies,
+  device,
+  stateBase,
+  stateStore,
+}) {
+  let recovered = 0;
+  for (const name of await fs.promises.readdir(stateStore)) {
+    const finalName = installerTempFinalName(name);
+    if (!finalName) continue;
+    const temporary = path.join(stateStore, name);
+    const finalPath = path.join(stateStore, finalName);
+    const [temporaryMetadata, finalMetadata] = await Promise.all([
+      fs.promises.lstat(temporary),
+      lstatOrNull(finalPath),
+    ]);
+    if (!temporaryMetadata.isFile() || temporaryMetadata.isSymbolicLink()
+        || temporaryMetadata.size > MAX_JSON_BYTES || temporaryMetadata.nlink > 2) {
+      throw installerError(
+        'AE_PLUGIN_INSTALL_STATE_INVALID',
+        'native installer temporary state is unsafe',
+      );
+    }
+    if (finalMetadata
+        && finalMetadata.dev === temporaryMetadata.dev
+        && finalMetadata.ino === temporaryMetadata.ino) {
+      await fs.promises.unlink(temporary);
+      await dependencies.syncDirectory(stateStore);
+      recovered += 1;
+      continue;
+    }
+    if (temporaryMetadata.nlink !== 1) {
+      throw installerError(
+        'AE_PLUGIN_INSTALL_STATE_INVALID',
+        'native installer temporary state has an unexpected hard link',
+      );
+    }
+    const evidenceDirectory = await ensureOrphanEvidenceDirectory(
+      stateBase,
+      device,
+      `temp-${crypto.randomUUID()}`,
+    );
+    await moveOrphanEvidence(temporary, evidenceDirectory, dependencies);
+    recovered += 1;
+  }
+  return recovered;
+}
+
+async function archiveOrphanTransaction({
+  dependencies,
+  device,
+  stateBase,
+  stateStore,
+  transactionId,
+  transactionPath,
+}) {
+  const currentTransactionId = await readCurrentTransactionId(
+    path.join(stateStore, CURRENT_NAME),
+  );
+  if (currentTransactionId === transactionId) {
+    throw installerError(
+      'AE_PLUGIN_INSTALL_STATE_INVALID',
+      'current native transaction metadata is incomplete and cannot be archived',
+    );
+  }
+  for (const kind of ['backup', 'failed', 'replaced']) {
+    if (await lstatOrNull(path.join(stateStore, managedName(kind, transactionId)))) {
+      throw installerError(
+        'AE_PLUGIN_INSTALL_STATE_INVALID',
+        'partial native transaction has deployment evidence and requires manual recovery',
+      );
+    }
+  }
+  const stage = path.join(stateStore, managedName('stage', transactionId));
+  const evidenceDirectory = await ensureOrphanEvidenceDirectory(
+    stateBase,
+    device,
+    `transaction-${transactionId}`,
+  );
+  const evidenceStage = path.join(evidenceDirectory, path.basename(stage));
+  if (!await lstatOrNull(stage) && !await lstatOrNull(evidenceStage)) {
+    throw installerError(
+      'AE_PLUGIN_INSTALL_STATE_INVALID',
+      'partial native transaction has no recoverable staging evidence',
+    );
+  }
+  if (transactionPath && await lstatOrNull(transactionPath)) {
+    const metadata = await fs.promises.lstat(transactionPath);
+    if (!metadata.isFile() || metadata.isSymbolicLink()
+        || metadata.nlink !== 1 || metadata.size > MAX_JSON_BYTES) {
+      throw installerError(
+        'AE_PLUGIN_INSTALL_STATE_INVALID',
+        'partial native transaction metadata is unsafe',
+      );
+    }
+    await moveOrphanEvidence(transactionPath, evidenceDirectory, dependencies);
+  }
+  if (await lstatOrNull(stage)) {
+    const metadata = await fs.promises.lstat(stage);
+    if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
+      throw installerError(
+        'AE_PLUGIN_INSTALL_STATE_INVALID',
+        'partial native transaction stage is unsafe',
+      );
+    }
+    await moveOrphanEvidence(stage, evidenceDirectory, dependencies);
+  }
+}
+
+async function recoverOrphanStateArtifacts({
+  dependencies,
+  device,
+  stateBase,
+  stateStore,
+}) {
+  let recovered = await recoverInstallerTempFiles({
+    dependencies,
+    device,
+    stateBase,
+    stateStore,
+  });
+  for (const name of await fs.promises.readdir(stateStore)) {
+    const match = TRANSACTION_FILE_NAME.exec(name);
+    if (!match || !UUID_V4.test(match[1] ?? '')) continue;
+    const transactionId = match[1];
+    const transactionPath = path.join(stateStore, name);
+    try {
+      validateTransaction(
+        await readJson(transactionPath, 'transaction record'),
+        transactionId,
+      );
+    } catch (error) {
+      if (!['AE_PLUGIN_INSTALL_STATE_INVALID', 'AE_PLUGIN_RECEIPT_INVALID']
+        .includes(error?.code)) {
+        throw error;
+      }
+      await archiveOrphanTransaction({
+        dependencies,
+        device,
+        stateBase,
+        stateStore,
+        transactionId,
+        transactionPath,
+      });
+      recovered += 1;
+    }
+  }
+  for (const name of await fs.promises.readdir(stateStore)) {
+    const match = STAGE_BUNDLE_NAME.exec(name);
+    if (!match || !UUID_V4.test(match[1] ?? '')) continue;
+    const transactionId = match[1];
+    if (await lstatOrNull(path.join(stateStore, transactionName(transactionId)))) continue;
+    await archiveOrphanTransaction({
+      dependencies,
+      device,
+      stateBase,
+      stateStore,
+      transactionId,
+      transactionPath: null,
+    });
+    recovered += 1;
+  }
+  return recovered;
+}
+
+async function assertDeploymentNamespace(namespace) {
+  const entries = (await fs.promises.readdir(namespace)).sort();
+  if (!isDeepStrictEqual(entries, [])
+      && !isDeepStrictEqual(entries, [BUNDLE_NAME])) {
+    throw installerError(
+      'AE_PLUGIN_INSTALL_STATE_INVALID',
+      'managed MediaCore namespace must contain only the active native plug-in',
+    );
+  }
+}
+
+async function restoreMigratedTarget({
+  dependencies,
+  device,
+  sourceDirectory,
+  namespace,
+  target,
+}) {
+  const migratedTarget = path.join(sourceDirectory, BUNDLE_NAME);
+  if (!await lstatOrNull(migratedTarget)) return false;
+  if (await lstatOrNull(target)) {
+    throw installerError(
+      'AE_PLUGIN_INSTALL_STATE_CONFLICT',
+      'both deployment and migrated state contain the active native plug-in',
+    );
+  }
+  await inspectTarget(migratedTarget, dependencies);
+  await Promise.all([
+    assertManagedDirectoryDevice(sourceDirectory, device, 'native installer migration source'),
+    assertManagedDirectoryDevice(namespace, device, 'managed MediaCore namespace'),
+  ]);
+  await renameBundleDurable(dependencies, migratedTarget, target);
+  await dependencies.onTransition('migration.target_restored');
+  return true;
+}
+
+async function mergeMigrationState({
+  dependencies,
+  migration,
+  stateStore,
+}) {
+  const entries = (await fs.promises.readdir(migration)).sort();
+  if (entries.some((name) => !managedStateEntry(name))) {
+    throw installerError(
+      'AE_PLUGIN_INSTALL_STATE_INVALID',
+      'off-scan legacy migration contains unrecognized state and was retained for recovery',
+      { quarantineName: MIGRATION_NAME },
+    );
+  }
+  await validateManagedStateDirectory(migration, 'native installer legacy migration');
+  const movable = entries.filter((name) => name !== BUNDLE_NAME && name !== LOCK_NAME);
+  const stateEntries = new Set(await fs.promises.readdir(stateStore));
+  if (movable.some((name) => stateEntries.has(name))) {
+    throw installerError(
+      'AE_PLUGIN_INSTALL_STATE_CONFLICT',
+      'off-scan legacy migration overlaps existing installer state and was retained for recovery',
+      { quarantineName: MIGRATION_NAME },
+    );
+  }
+  for (const name of movable) {
+    const source = path.join(migration, name);
+    const destination = path.join(stateStore, name);
+    await durableRename(
+      source,
+      destination,
+      fs.promises.rename,
+      dependencies.syncDirectory,
+    );
+    await dependencies.onTransition('migration.state_moved');
+  }
+}
+
+async function resumeLegacyMigration({
+  dependencies,
+  device,
+  migration,
+  namespace,
+  stateStore,
+  target,
+}) {
+  await assertManagedDirectoryDevice(
+    migration,
+    device,
+    'native installer legacy migration',
+  );
+  const migrationEntries = (await fs.promises.readdir(migration)).sort();
+  const legacyLockOwner = migrationEntries.includes(LOCK_NAME)
+    ? await assertLegacyLockInactive(migration, dependencies)
+    : null;
+  if (!await lstatOrNull(namespace)) {
+    await ensureDeploymentNamespace(dependencies, namespace, device);
+    await dependencies.onTransition('migration.namespace_recreated');
+  } else {
+    await assertManagedDirectoryDevice(namespace, device, 'managed MediaCore namespace');
+  }
+  await restoreMigratedTarget({
+    dependencies,
+    device,
+    sourceDirectory: migration,
+    namespace,
+    target,
+  });
+  if (migrationEntries.includes(LOCK_NAME)) {
+    await rotateLegacyLock(migration, stateStore, dependencies, legacyLockOwner);
+  }
+  await mergeMigrationState({ dependencies, migration, stateStore });
+  const remaining = await fs.promises.readdir(migration);
+  if (remaining.length !== 0) {
+    throw installerError(
+      'AE_PLUGIN_INSTALL_STATE_INVALID',
+      'native installer legacy migration could not be emptied safely',
+    );
+  }
+  await fs.promises.rmdir(migration);
+  await syncDirectory(path.dirname(migration));
+  await dependencies.onTransition('migration.complete');
+}
+
+async function prepareStateLayout({
+  dependencies,
+  device,
+  migration,
+  namespace,
+  stateBase,
+  stateStore,
+  target,
+}) {
+  let migratedLegacyState = false;
+  await ensureManagedDirectory(stateStore, device, 'native installer state store');
+  if (await recoverOrphanStateArtifacts({
+    dependencies,
+    device,
+    stateBase,
+    stateStore,
+  }) > 0) {
+    migratedLegacyState = true;
+  }
+
+  if (await lstatOrNull(migration)) {
+    migratedLegacyState = true;
+    await resumeLegacyMigration({
+      dependencies,
+      device,
+      migration,
+      namespace,
+      stateStore,
+      target,
+    });
+  }
+
+  if (!await lstatOrNull(namespace)) {
+    await ensureDeploymentNamespace(dependencies, namespace, device);
+  }
+
+  await validateManagedStateDirectory(stateStore, 'native installer state store');
+  if (await lstatOrNull(path.join(stateStore, LOCK_NAME))) {
+    await rotateLegacyLock(stateStore, stateStore, dependencies);
+    migratedLegacyState = true;
+  }
+  if (await restoreMigratedTarget({
+    dependencies,
+    device,
+    sourceDirectory: stateStore,
+    namespace,
+    target,
+  })) {
+    migratedLegacyState = true;
+  }
+
+  let legacyEntries = (await fs.promises.readdir(namespace)).sort();
+  if (!isDeepStrictEqual(legacyEntries, [])
+      && !isDeepStrictEqual(legacyEntries, [BUNDLE_NAME])) {
+    await ensureMissing(migration, 'native installer legacy migration');
+    if (legacyEntries.includes(LOCK_NAME)) {
+      await assertLegacyLockInactive(namespace, dependencies);
+    }
+    await assertManagedDirectoryDevice(namespace, device, 'managed MediaCore namespace');
+    await renameDeploymentDirectoryDurable(dependencies, namespace, migration);
+    migratedLegacyState = true;
+    await dependencies.onTransition('migration.namespace_moved');
+    await resumeLegacyMigration({
+      dependencies,
+      device,
+      migration,
+      namespace,
+      stateStore,
+      target,
+    });
+  } else {
+    await validateManagedStateDirectory(namespace, 'managed MediaCore namespace');
+  }
+
+  await assertDeploymentNamespace(namespace);
+  const stateEntries = await validateManagedStateDirectory(
+    stateStore,
+    'native installer state store',
+  );
+  if (stateEntries.includes(BUNDLE_NAME) || stateEntries.includes(LOCK_NAME)) {
+    throw installerError(
+      'AE_PLUGIN_INSTALL_STATE_INVALID',
+      'native installer state store retained a deployment or legacy lock entry',
+    );
+  }
+  return {
+    migratedLegacyState,
+    namespace,
+    stateStore,
+    target,
+  };
 }
 
 async function compensateInstall({
@@ -570,7 +1419,7 @@ async function compensateInstall({
   const failures = [];
   if (candidateMoved && await lstatOrNull(target)) {
     try {
-      await dependencies.renameBundle(target, failed);
+      await renameBundleDurable(dependencies, target, failed);
     } catch (error) {
       failures.push(`preserve failed candidate: ${error?.code ?? 'rename failed'}`);
     }
@@ -580,7 +1429,7 @@ async function compensateInstall({
       if (await lstatOrNull(target)) {
         failures.push('restore previous target: destination is occupied');
       } else {
-        await dependencies.renameBundle(backup, target);
+        await renameBundleDurable(dependencies, backup, target);
         await verifyTarget(target, previousArtifact, dependencies, 'restored previous artifact');
       }
     } catch (error) {
@@ -592,49 +1441,57 @@ async function compensateInstall({
 
 export async function installDevMacPlugin({
   artifactDir,
-  mediaCoreRoot = path.join(
-    os.homedir(),
-    'Library',
-    'Application Support',
-    'Adobe',
-    'Common',
-    'Plug-ins',
-    '7.0',
-    'MediaCore',
-  ),
+  mediaCoreRoot = defaultMediaCoreRoot(),
+  stateBaseRoot = defaultStateBaseRoot(mediaCoreRoot),
   dependencies: dependencyOverrides,
 }) {
   const dependencies = dependenciesFor(dependencyOverrides);
   requireMac(dependencies);
   await dependencies.assertAeStopped();
   const source = await loadSourceArtifact(artifactDir, dependencies);
-  const { namespace, target } = await prepareNamespace(mediaCoreRoot);
   const artifactReal = await fs.promises.realpath(artifactDir);
-  const relativeSource = path.relative(namespace, artifactReal);
-  if (relativeSource === ''
-      || (!relativeSource.startsWith(`..${path.sep}`) && !path.isAbsolute(relativeSource))) {
+  const deploymentInput = path.join(path.resolve(mediaCoreRoot), NAMESPACE_NAME);
+  const stateBaseInput = path.resolve(stateBaseRoot);
+  if (isSameOrDescendant(deploymentInput, artifactReal)
+      || isSameOrDescendant(artifactReal, deploymentInput)
+      || isSameOrDescendant(stateBaseInput, artifactReal)
+      || isSameOrDescendant(artifactReal, stateBaseInput)) {
     throw installerError(
       'AE_PLUGIN_ARTIFACT_INVALID',
-      'source artifact must remain outside the managed installation directory',
+      'source artifact must remain outside deployment and installer state directories',
+    );
+  }
+  const roots = await prepareRoots(mediaCoreRoot, stateBaseRoot);
+  if (isSameOrDescendant(roots.namespace, artifactReal)
+      || isSameOrDescendant(artifactReal, roots.namespace)
+      || isSameOrDescendant(roots.stateBase, artifactReal)
+      || isSameOrDescendant(artifactReal, roots.stateBase)) {
+    throw installerError(
+      'AE_PLUGIN_ARTIFACT_INVALID',
+      'source artifact must remain outside deployment and installer state directories',
     );
   }
 
-  const releaseLock = await acquireLock(namespace, dependencies);
+  const releaseLock = await acquireLock(roots.stateBase, dependencies);
   let stage;
   let preserveForRecovery = false;
   try {
-    await assertNoUnexpectedLoadableBundles(namespace);
-    await recoverIncompleteTransactions({ dependencies, namespace, target });
+    const {
+      namespace,
+      stateStore,
+      target,
+    } = await prepareStateLayout({ dependencies, ...roots });
+    await recoverIncompleteTransactions({ dependencies, stateStore, target });
     const transactionId = dependencies.randomUUID();
     assertTransactionId(transactionId);
     const stageName = managedName('stage', transactionId);
     const backupName = managedName('backup', transactionId);
     const failedName = managedName('failed', transactionId);
-    stage = path.join(namespace, stageName);
-    const backup = path.join(namespace, backupName);
-    const failed = path.join(namespace, failedName);
-    const transactionPath = path.join(namespace, transactionName(transactionId));
-    const currentPath = path.join(namespace, CURRENT_NAME);
+    stage = path.join(stateStore, stageName);
+    const backup = path.join(stateStore, backupName);
+    const failed = path.join(stateStore, failedName);
+    const transactionPath = path.join(stateStore, transactionName(transactionId));
+    const currentPath = path.join(stateStore, CURRENT_NAME);
     await Promise.all([
       ensureMissing(stage, 'transaction stage'),
       ensureMissing(backup, 'transaction backup'),
@@ -650,6 +1507,8 @@ export async function installDevMacPlugin({
       'staged native artifact',
       source.receipt.sourceCommit,
     );
+    await syncTree(stage, dependencies.syncDirectory);
+    await dependencies.syncDirectory(stateStore);
     const previousArtifact = await inspectTarget(target, dependencies);
     const previousCurrentTransactionId = await readCurrentTransactionId(currentPath);
     if (!previousArtifact && previousCurrentTransactionId) {
@@ -676,16 +1535,19 @@ export async function installDevMacPlugin({
       createdAt,
       updatedAt: createdAt,
     };
-    await writeJsonExclusive(transactionPath, transaction);
+    await writeJsonExclusiveAtomic(transactionPath, transaction);
 
     let oldMoved = false;
     let candidateMoved = false;
     try {
       await dependencies.onTransition('install.prepared');
-      await dependencies.assertAeStopped();
       if (previousArtifact) {
-        await dependencies.renameBundle(target, backup);
-        oldMoved = true;
+        await renameBundleTracked(
+          dependencies,
+          target,
+          backup,
+          () => { oldMoved = true; },
+        );
         await dependencies.onTransition('install.old_moved');
         transaction = {
           ...transaction,
@@ -700,8 +1562,12 @@ export async function installDevMacPlugin({
           'backed-up previous artifact',
         );
       }
-      await dependencies.renameBundle(stage, target);
-      candidateMoved = true;
+      await renameBundleTracked(
+        dependencies,
+        stage,
+        target,
+        () => { candidateMoved = true; },
+      );
       await dependencies.onTransition('install.candidate_moved');
       transaction = {
         ...transaction,
@@ -724,6 +1590,7 @@ export async function installDevMacPlugin({
       };
       await writeJsonAtomic(transactionPath, transaction);
       await writeCurrentTransaction(currentPath, transactionId, dependencies);
+      await assertDeploymentNamespace(namespace);
       stage = null;
       return Object.freeze({
         schemaVersion: 1,
@@ -778,7 +1645,7 @@ export async function installDevMacPlugin({
     }
   } finally {
     if (!preserveForRecovery && stage && await lstatOrNull(stage)) {
-      await removeGeneratedStage(stage, namespace).catch(() => {});
+      await removeGeneratedStage(stage, roots.stateStore).catch(() => {});
     }
     await releaseLock();
   }
@@ -844,18 +1711,18 @@ async function observeBundle(bundlePath, dependencies, allowManagedDisabledName,
   }
 }
 
-async function loadTransactions(namespace) {
+async function loadTransactions(stateStore) {
   const records = [];
   const pattern = /^\.AeMcpNative\.transaction\.([0-9a-f-]+)\.json$/u;
-  for (const name of await fs.promises.readdir(namespace)) {
+  for (const name of await fs.promises.readdir(stateStore)) {
     const match = pattern.exec(name);
     if (!match) continue;
     assertTransactionId(match[1]);
     const value = validateTransaction(
-      await readJson(path.join(namespace, name), 'transaction record'),
+      await readJson(path.join(stateStore, name), 'transaction record'),
       match[1],
     );
-    records.push({ name, path: path.join(namespace, name), value });
+    records.push({ name, path: path.join(stateStore, name), value });
   }
   records.sort((left, right) => String(left.value.createdAt).localeCompare(
     String(right.value.createdAt),
@@ -863,14 +1730,14 @@ async function loadTransactions(namespace) {
   return records;
 }
 
-async function recoverInstallTransaction({ dependencies, namespace, record, target }) {
+async function recoverInstallTransaction({ dependencies, stateStore, record, target }) {
   let transaction = record.value;
   const { transactionId } = transaction;
-  const stage = path.join(namespace, managedName('stage', transactionId));
+  const stage = path.join(stateStore, managedName('stage', transactionId));
   const backup = transaction.previous.backupName
-    ? path.join(namespace, transaction.previous.backupName) : null;
+    ? path.join(stateStore, transaction.previous.backupName) : null;
   const failedName = managedName('failed', transactionId);
-  const failed = path.join(namespace, failedName);
+  const failed = path.join(stateStore, failedName);
   const targetArtifact = await observeBundle(
     target,
     dependencies,
@@ -941,7 +1808,6 @@ async function recoverInstallTransaction({ dependencies, namespace, record, targ
   }
   if (targetIsInstalled) await assertEmbeddedSourceCommit(target, transaction.sourceCommit);
 
-  await dependencies.assertAeStopped();
   if (targetIsInstalled) {
     if (failedArtifact) {
       throw installerError(
@@ -950,7 +1816,7 @@ async function recoverInstallTransaction({ dependencies, namespace, record, targ
         { transactionId },
       );
     }
-    await dependencies.renameBundle(target, failed);
+    await renameBundleDurable(dependencies, target, failed);
   }
 
   if (transaction.previous.present) {
@@ -969,7 +1835,7 @@ async function recoverInstallTransaction({ dependencies, namespace, record, targ
           { transactionId },
         );
       }
-      await dependencies.renameBundle(backup, target);
+      await renameBundleDurable(dependencies, backup, target);
     }
     await verifyTarget(
       target,
@@ -986,7 +1852,7 @@ async function recoverInstallTransaction({ dependencies, namespace, record, targ
   }
 
   if (stageArtifact && await lstatOrNull(stage)) {
-    await removeGeneratedStage(stage, namespace);
+    await removeGeneratedStage(stage, stateStore);
   }
   transaction = {
     ...transaction,
@@ -1003,12 +1869,12 @@ async function recoverInstallTransaction({ dependencies, namespace, record, targ
   };
 }
 
-async function recoverRollbackTransaction({ dependencies, namespace, record, target }) {
+async function recoverRollbackTransaction({ dependencies, stateStore, record, target }) {
   let transaction = record.value;
   const { transactionId } = transaction;
   const backup = transaction.previous.backupName
-    ? path.join(namespace, transaction.previous.backupName) : null;
-  const replaced = path.join(namespace, managedName('replaced', transactionId));
+    ? path.join(stateStore, transaction.previous.backupName) : null;
+  const replaced = path.join(stateStore, managedName('replaced', transactionId));
   const targetArtifact = await observeBundle(
     target,
     dependencies,
@@ -1061,7 +1927,6 @@ async function recoverRollbackTransaction({ dependencies, namespace, record, tar
   }
   if (targetIsInstalled) await assertEmbeddedSourceCommit(target, transaction.sourceCommit);
 
-  await dependencies.assertAeStopped();
   if (!targetIsInstalled) {
     if (!replacedArtifact) {
       throw installerError(
@@ -1078,7 +1943,7 @@ async function recoverRollbackTransaction({ dependencies, namespace, record, tar
           { transactionId },
         );
       }
-      await dependencies.renameBundle(target, backup);
+      await renameBundleDurable(dependencies, target, backup);
     } else if (targetArtifact) {
       throw installerError(
         'AE_PLUGIN_RECOVERY_INCOMPLETE',
@@ -1086,7 +1951,7 @@ async function recoverRollbackTransaction({ dependencies, namespace, record, tar
         { transactionId },
       );
     }
-    await dependencies.renameBundle(replaced, target);
+    await renameBundleDurable(dependencies, replaced, target);
   } else if (replacedArtifact) {
     throw installerError(
       'AE_PLUGIN_RECOVERY_INCOMPLETE',
@@ -1115,8 +1980,8 @@ async function recoverRollbackTransaction({ dependencies, namespace, record, tar
   };
 }
 
-async function reconcileCurrentTransaction({ dependencies, namespace, target, transactions }) {
-  const currentPath = path.join(namespace, CURRENT_NAME);
+async function reconcileCurrentTransaction({ dependencies, stateStore, target, transactions }) {
+  const currentPath = path.join(stateStore, CURRENT_NAME);
   const targetArtifact = await observeBundle(
     target,
     dependencies,
@@ -1183,11 +2048,11 @@ async function reconcileCurrentTransaction({ dependencies, namespace, target, tr
   return desired;
 }
 
-async function recoverIncompleteTransactions({ dependencies, namespace, target }) {
-  const records = await loadTransactions(namespace);
+async function recoverIncompleteTransactions({ dependencies, stateStore, target }) {
+  const records = await loadTransactions(stateStore);
   const recovered = [];
   if (records.length === 0) {
-    const currentTransactionId = await readCurrentTransactionId(path.join(namespace, CURRENT_NAME));
+    const currentTransactionId = await readCurrentTransactionId(path.join(stateStore, CURRENT_NAME));
     if (currentTransactionId) {
       throw installerError(
         'AE_PLUGIN_INSTALL_STATE_INVALID',
@@ -1211,23 +2076,23 @@ async function recoverIncompleteTransactions({ dependencies, namespace, target }
     if (installStates.has(record.value.status)) {
       recovered.push(await recoverInstallTransaction({
         dependencies,
-        namespace,
+        stateStore,
         record,
         target,
       }));
     } else if (rollbackStates.has(record.value.status)) {
       recovered.push(await recoverRollbackTransaction({
         dependencies,
-        namespace,
+        stateStore,
         record,
         target,
       }));
     }
   }
-  const refreshed = recovered.length > 0 ? await loadTransactions(namespace) : records;
+  const refreshed = recovered.length > 0 ? await loadTransactions(stateStore) : records;
   const currentTransactionId = await reconcileCurrentTransaction({
     dependencies,
-    namespace,
+    stateStore,
     target,
     transactions: refreshed,
   });
@@ -1247,7 +2112,7 @@ async function compensateRollback({
   const failures = [];
   if (previousRestored && await lstatOrNull(target)) {
     try {
-      await dependencies.renameBundle(target, backup);
+      await renameBundleDurable(dependencies, target, backup);
     } catch (error) {
       failures.push(`preserve restored previous target: ${error?.code ?? 'rename failed'}`);
     }
@@ -1257,7 +2122,7 @@ async function compensateRollback({
       if (await lstatOrNull(target)) {
         failures.push('restore installed target: destination is occupied');
       } else {
-        await dependencies.renameBundle(replaced, target);
+        await renameBundleDurable(dependencies, replaced, target);
         await verifyTarget(
           target,
           installedArtifact,
@@ -1275,29 +2140,25 @@ async function compensateRollback({
 
 export async function rollbackDevMacPlugin({
   transactionId,
-  mediaCoreRoot = path.join(
-    os.homedir(),
-    'Library',
-    'Application Support',
-    'Adobe',
-    'Common',
-    'Plug-ins',
-    '7.0',
-    'MediaCore',
-  ),
+  mediaCoreRoot = defaultMediaCoreRoot(),
+  stateBaseRoot = defaultStateBaseRoot(mediaCoreRoot),
   dependencies: dependencyOverrides,
 }) {
   assertTransactionId(transactionId);
   const dependencies = dependenciesFor(dependencyOverrides);
   requireMac(dependencies);
   await dependencies.assertAeStopped();
-  const { namespace, target } = await prepareNamespace(mediaCoreRoot);
-  const releaseLock = await acquireLock(namespace, dependencies);
+  const roots = await prepareRoots(mediaCoreRoot, stateBaseRoot);
+  const releaseLock = await acquireLock(roots.stateBase, dependencies);
   try {
-    await assertNoUnexpectedLoadableBundles(namespace);
-    await recoverIncompleteTransactions({ dependencies, namespace, target });
-    const transactionPath = path.join(namespace, transactionName(transactionId));
-    const currentPath = path.join(namespace, CURRENT_NAME);
+    const {
+      namespace,
+      stateStore,
+      target,
+    } = await prepareStateLayout({ dependencies, ...roots });
+    await recoverIncompleteTransactions({ dependencies, stateStore, target });
+    const transactionPath = path.join(stateStore, transactionName(transactionId));
+    const currentPath = path.join(stateStore, CURRENT_NAME);
     let transaction = validateTransaction(
       await readJson(transactionPath, 'transaction record'),
       transactionId,
@@ -1331,7 +2192,7 @@ export async function rollbackDevMacPlugin({
     );
 
     const backupName = transaction.previous.backupName;
-    const backup = backupName ? path.join(namespace, backupName) : null;
+    const backup = backupName ? path.join(stateStore, backupName) : null;
     if (backup) {
       await verifyDisabled(
         backup,
@@ -1341,9 +2202,8 @@ export async function rollbackDevMacPlugin({
       );
     }
     const replacedName = managedName('replaced', transactionId);
-    const replaced = path.join(namespace, replacedName);
+    const replaced = path.join(stateStore, replacedName);
     await ensureMissing(replaced, 'rollback replacement');
-    await dependencies.assertAeStopped();
     transaction = {
       ...transaction,
       status: 'rollback_prepared',
@@ -1355,8 +2215,12 @@ export async function rollbackDevMacPlugin({
     let previousRestored = false;
     try {
       await dependencies.onTransition('rollback.prepared');
-      await dependencies.renameBundle(target, replaced);
-      targetMoved = true;
+      await renameBundleTracked(
+        dependencies,
+        target,
+        replaced,
+        () => { targetMoved = true; },
+      );
       await dependencies.onTransition('rollback.target_moved');
       transaction = {
         ...transaction,
@@ -1365,8 +2229,12 @@ export async function rollbackDevMacPlugin({
       };
       await writeJsonAtomic(transactionPath, transaction);
       if (backup) {
-        await dependencies.renameBundle(backup, target);
-        previousRestored = true;
+        await renameBundleTracked(
+          dependencies,
+          backup,
+          target,
+          () => { previousRestored = true; },
+        );
         await dependencies.onTransition('rollback.previous_moved');
         transaction = {
           ...transaction,
@@ -1399,6 +2267,7 @@ export async function rollbackDevMacPlugin({
         dependencies,
         { rolledBackTransactionId: transactionId },
       );
+      await assertDeploymentNamespace(namespace);
       return Object.freeze({
         schemaVersion: 1,
         action: 'rollback',
@@ -1449,33 +2318,31 @@ export async function rollbackDevMacPlugin({
 }
 
 export async function recoverDevMacPlugin({
-  mediaCoreRoot = path.join(
-    os.homedir(),
-    'Library',
-    'Application Support',
-    'Adobe',
-    'Common',
-    'Plug-ins',
-    '7.0',
-    'MediaCore',
-  ),
+  mediaCoreRoot = defaultMediaCoreRoot(),
+  stateBaseRoot = defaultStateBaseRoot(mediaCoreRoot),
   dependencies: dependencyOverrides,
 } = {}) {
   const dependencies = dependenciesFor(dependencyOverrides);
   requireMac(dependencies);
   await dependencies.assertAeStopped();
-  const { namespace, target } = await prepareNamespace(mediaCoreRoot);
-  const releaseLock = await acquireLock(namespace, dependencies);
+  const roots = await prepareRoots(mediaCoreRoot, stateBaseRoot);
+  const releaseLock = await acquireLock(roots.stateBase, dependencies);
   try {
-    await assertNoUnexpectedLoadableBundles(namespace);
-    const recovery = await recoverIncompleteTransactions({ dependencies, namespace, target });
+    const layout = await prepareStateLayout({ dependencies, ...roots });
+    const recovery = await recoverIncompleteTransactions({
+      dependencies,
+      stateStore: layout.stateStore,
+      target: layout.target,
+    });
+    await assertDeploymentNamespace(layout.namespace);
     return Object.freeze({
       schemaVersion: 1,
       action: 'recover',
-      target,
+      target: layout.target,
       recovered: recovery.recovered,
       currentTransactionId: recovery.currentTransactionId,
-      restartRequired: recovery.recovered.length > 0,
+      migratedLegacyState: layout.migratedLegacyState,
+      restartRequired: layout.migratedLegacyState || recovery.recovered.length > 0,
     });
   } finally {
     await releaseLock();
