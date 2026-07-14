@@ -1,0 +1,115 @@
+{
+  "_fixture": {
+    "classification": "synthetic-contract-vector",
+    "runtimeEvidence": false,
+    "compatibilityEvidence": false
+  },
+  "responses": {
+    "wireVersionMismatch": {
+      "wireVersion": 1,
+      "kind": "response",
+      "requestId": "hello-2",
+      "method": "hello",
+      "ok": false,
+      "replayed": false,
+      "error": {
+        "code": "WIRE_VERSION_MISMATCH",
+        "message": "No supported native wire version overlaps the client range.",
+        "retryable": false,
+        "sideEffect": "not-started",
+        "recovery": {
+          "action": "reconnect",
+          "hint": "Upgrade Core or the native plug-in, then reconnect."
+        },
+        "details": {
+          "supportedWireVersions": { "minimum": 1, "maximum": 1 }
+        }
+      }
+    },
+    "staleLocator": {
+      "wireVersion": 1,
+      "kind": "response",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-stale-1",
+      "method": "invoke",
+      "ok": false,
+      "replayed": false,
+      "error": {
+        "code": "STALE_LOCATOR",
+        "message": "The locator generation does not match current state.",
+        "retryable": true,
+        "sideEffect": "not-started",
+        "recovery": {
+          "action": "refresh-locator",
+          "hint": "Read the parent object again and retry with its new locator."
+        },
+        "details": {
+          "field": "arguments.layer",
+          "capabilityId": "ae.layer.inspect",
+          "currentGeneration": 8
+        }
+      }
+    },
+    "possiblySideEffecting": {
+      "wireVersion": 1,
+      "kind": "response",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-mutation-1",
+      "method": "invoke",
+      "ok": false,
+      "replayed": false,
+      "error": {
+        "code": "POSSIBLY_SIDE_EFFECTING_FAILURE",
+        "message": "The host stopped responding after accepting the mutation.",
+        "retryable": false,
+        "sideEffect": "may-have-occurred",
+        "recovery": {
+          "action": "inspect-state",
+          "hint": "Read the affected object before deciding whether to retry."
+        },
+        "details": {
+          "capabilityId": "ae.project.set_current_time"
+        }
+      }
+    },
+    "queueFull": {
+      "wireVersion": 1,
+      "kind": "response",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-queue-full-1",
+      "method": "invoke",
+      "ok": false,
+      "replayed": false,
+      "error": {
+        "code": "QUEUE_FULL",
+        "message": "The bounded native dispatch queue is full.",
+        "retryable": true,
+        "sideEffect": "not-started",
+        "recovery": {
+          "action": "retry",
+          "hint": "Retry after the bounded delay.",
+          "retryAfterMs": 250
+        }
+      }
+    },
+    "duplicateRequest": {
+      "wireVersion": 1,
+      "kind": "response",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-summary-1",
+      "method": "invoke",
+      "ok": false,
+      "replayed": false,
+      "error": {
+        "code": "DUPLICATE_REQUEST",
+        "message": "The request ID is in flight or has different content.",
+        "retryable": false,
+        "sideEffect": "not-started",
+        "recovery": {
+          "action": "inspect-state",
+          "hint": "Inspect the original result before issuing a new request ID."
+        }
+      }
+    }
+  }
+}

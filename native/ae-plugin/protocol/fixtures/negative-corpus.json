@@ -1,0 +1,138 @@
+{
+  "_fixture": {
+    "classification": "synthetic-contract-vector",
+    "runtimeEvidence": false,
+    "compatibilityEvidence": false
+  },
+  "vectors": [
+  {
+    "name": "unknown-method",
+    "expectedErrorCode": "INVALID_REQUEST",
+    "message": {
+      "wireVersion": 1,
+      "kind": "request",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "bad-1",
+      "method": "execute",
+      "params": {}
+    }
+  },
+  {
+    "name": "invoke-missing-session",
+    "expectedErrorCode": "SESSION_STALE",
+    "message": {
+      "wireVersion": 1,
+      "kind": "request",
+      "requestId": "bad-2",
+      "method": "invoke",
+      "deadlineUnixMs": 1900000005000,
+      "params": {
+        "capabilityId": "ae.project.summary",
+        "capabilityVersion": 1,
+        "arguments": {}
+      }
+    }
+  },
+  {
+    "name": "wrong-capability-detail-enum",
+    "expectedErrorCode": "INVALID_ARGUMENT",
+    "message": {
+      "wireVersion": 1,
+      "kind": "request",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "bad-3",
+      "method": "capabilities",
+      "params": { "detail": "everything" }
+    }
+  },
+  {
+    "name": "unexpected-envelope-field",
+    "expectedErrorCode": "INVALID_REQUEST",
+    "message": {
+      "wireVersion": 1,
+      "kind": "request",
+      "requestId": "bad-4",
+      "method": "hello",
+      "unexpected": true,
+      "params": {
+        "supportedWireVersions": { "minimum": 1, "maximum": 1 },
+        "client": {
+          "component": "core-broker",
+          "version": "0.9.2",
+          "instanceId": "33333333-3333-4333-8333-333333333333"
+        },
+        "nonce": "abcdefghijklmnopqrstuvwxyzABCDEF"
+      }
+    }
+  },
+  {
+    "name": "invoke-missing-capability-version",
+    "expectedErrorCode": "INVALID_ARGUMENT",
+    "message": {
+      "wireVersion": 1,
+      "kind": "request",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "bad-5",
+      "method": "invoke",
+      "deadlineUnixMs": 1900000005000,
+      "params": {
+        "capabilityId": "ae.project.summary",
+        "arguments": {}
+      }
+    }
+  },
+  {
+    "name": "raw-jsx-argument",
+    "expectedErrorCode": "INVALID_ARGUMENT",
+    "message": {
+      "wireVersion": 1,
+      "kind": "request",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "bad-6",
+      "method": "invoke",
+      "deadlineUnixMs": 1900000005000,
+      "params": {
+        "capabilityId": "ae.project.summary",
+        "capabilityVersion": 1,
+        "arguments": { "jsx": "alert('not allowed')" }
+      }
+    }
+  },
+  {
+    "name": "nested-executable-alias",
+    "expectedErrorCode": "INVALID_ARGUMENT",
+    "message": {
+      "wireVersion": 1,
+      "kind": "request",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "bad-7",
+      "method": "invoke",
+      "deadlineUnixMs": 1900000005000,
+      "params": {
+        "capabilityId": "ae.project.summary",
+        "capabilityVersion": 1,
+        "arguments": {
+          "payload": { "code": "synthetic executable input" }
+        }
+      }
+    }
+  },
+  {
+    "name": "unsafe-integer-deadline",
+    "expectedErrorCode": "INVALID_ARGUMENT",
+    "message": {
+      "wireVersion": 1,
+      "kind": "request",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "bad-8",
+      "method": "invoke",
+      "deadlineUnixMs": 9007199254740992,
+      "params": {
+        "capabilityId": "ae.project.summary",
+        "capabilityVersion": 1,
+        "arguments": {}
+      }
+    }
+  }
+  ]
+}

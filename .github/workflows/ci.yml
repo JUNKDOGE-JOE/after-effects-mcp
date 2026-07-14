@@ -3,8 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+  # Stacked native P0 PRs target their dependency branch until real-host
+  # validation is complete, so CI must run for every pull-request base.
+  pull_request: {}
 
 permissions:
   contents: read
@@ -63,6 +64,9 @@ jobs:
       - name: Run native SDK input contract tests
         run: node --test scripts/package/test/ae-sdk-input.test.mjs
 
+      - name: Run native AEGP RPC contract tests
+        run: node --test native/ae-plugin/protocol/protocol.test.mjs
+
       - name: Run host tests
         working-directory: plugin/host
         run: |
@@ -104,6 +108,9 @@ jobs:
 
       - name: Verify the native SDK remains developer-supplied
         run: node scripts/package/ae-sdk-input.mjs verify-repository --repo-root .
+
+      - name: Run native AEGP RPC contract tests
+        run: node --test native/ae-plugin/protocol/protocol.test.mjs
 
       - name: Run packaging contract tests
         run: node --test scripts/package/test/*.test.mjs
