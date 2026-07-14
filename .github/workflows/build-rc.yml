@@ -59,6 +59,9 @@ jobs:
         with:
           node-version: 24.17.0
 
+      - name: Verify the native SDK remains developer-supplied
+        run: node scripts/package/ae-sdk-input.mjs verify-repository --repo-root .
+
       - name: Require protected main and trusted workflow revision
         shell: bash
         env:

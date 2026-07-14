@@ -57,6 +57,12 @@ jobs:
         with:
           node-version: 24.17.0
 
+      - name: Verify the native SDK remains developer-supplied
+        run: node scripts/package/ae-sdk-input.mjs verify-repository --repo-root .
+
+      - name: Run native SDK input contract tests
+        run: node --test scripts/package/test/ae-sdk-input.test.mjs
+
       - name: Run host tests
         working-directory: plugin/host
         run: |
@@ -95,6 +101,9 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24.17.0
+
+      - name: Verify the native SDK remains developer-supplied
+        run: node scripts/package/ae-sdk-input.mjs verify-repository --repo-root .
 
       - name: Run packaging contract tests
         run: node --test scripts/package/test/*.test.mjs

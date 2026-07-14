@@ -1,0 +1,260 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/JUNKDOGE-JOE/after-effects-mcp/packaging/schemas/ae-sdk-inputs.schema.json",
+  "title": "After Effects SDK input policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sdk"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "sdk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "claimedVersion",
+        "claimedBuild",
+        "claimedBitness",
+        "acquisition",
+        "byteIdentityMeaning",
+        "extractedRoot",
+        "rootVerification",
+        "antiVendoring",
+        "layoutSentinels",
+        "platforms",
+        "licenseReview",
+        "compatibility"
+      ],
+      "properties": {
+        "name": { "const": "Adobe After Effects C/C++ Plug-in SDK" },
+        "claimedVersion": { "const": "25.6.61" },
+        "claimedBuild": { "const": 61 },
+        "claimedBitness": { "const": 64 },
+        "acquisition": { "const": "developer-supplied-unverified-origin" },
+        "byteIdentityMeaning": { "const": "exact-developer-provided-bytes-only" },
+        "extractedRoot": { "const": "ae25.6_61.64bit.AfterEffectsSDK" },
+        "rootVerification": { "const": "structural-only-not-provenance" },
+        "antiVendoring": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy", "trackedIndexOnly", "gitLfsPointers"],
+          "properties": {
+            "strategy": { "const": "tracked-git-path-container-and-locked-payload-scan" },
+            "trackedIndexOnly": { "const": true },
+            "gitLfsPointers": { "const": "rejected-uninspectable" }
+          }
+        },
+        "layoutSentinels": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/entry" }
+        },
+        "platforms": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["macos-arm64", "windows-x64"],
+          "properties": {
+            "macos-arm64": { "$ref": "#/$defs/platform" },
+            "windows-x64": { "$ref": "#/$defs/platform" }
+          }
+        },
+        "licenseReview": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "defaultPolicy",
+            "operatorAttestation",
+            "termsEvidence",
+            "regionalEligibility",
+            "purposeEligibility",
+            "embeddedNotices",
+            "scopes"
+          ],
+          "properties": {
+            "status": { "const": "operator-attested-native-development-in-scope" },
+            "defaultPolicy": { "const": "deny-unless-scope-approved" },
+            "operatorAttestation": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "recordedAt", "statement", "actualLocationStored"],
+              "properties": {
+                "status": { "const": "recorded" },
+                "recordedAt": { "const": "2026-07-14" },
+                "statement": { "const": "operator-confirms-authorized-sdk-use-at-actual-location-and-authorizes-continued-development" },
+                "actualLocationStored": { "const": false }
+              }
+            },
+            "termsEvidence": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "documentTitle",
+                "url",
+                "lastUpdated",
+                "retrievedAt",
+                "relevance",
+                "reviewedClauses",
+                "approvalId"
+              ],
+              "properties": {
+                "documentTitle": { "const": "Adobe Developer Terms of Use" },
+                "url": { "const": "https://wwwimages2.adobe.com/content/dam/cc/en/legal/servicetou/Developer-Terms-en_US-20240618.pdf" },
+                "lastUpdated": { "const": "2024-06-18" },
+                "retrievedAt": { "const": "2026-07-14" },
+                "relevance": { "const": "review-evidence-not-adobe-authorization" },
+                "reviewedClauses": { "const": ["4.1(A)", "6.5", "6.16", "6.17"] },
+                "approvalId": { "type": "null" }
+              }
+            },
+            "regionalEligibility": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "restrictedCountryDefinitionIncludes",
+                "locationInferredFromTimezone"
+              ],
+              "properties": {
+                "status": { "const": "operator-attested-authorized-at-actual-location" },
+                "restrictedCountryDefinitionIncludes": { "const": ["mainland China", "Russia"] },
+                "locationInferredFromTimezone": { "const": false }
+              }
+            },
+            "purposeEligibility": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["interactiveMcpExecutionPlaneDevelopment", "modelTrainingAndEvaluation"],
+              "properties": {
+                "interactiveMcpExecutionPlaneDevelopment": { "const": "operator-attested-in-scope" },
+                "modelTrainingAndEvaluation": { "const": "deferred-to-issue-83-separate-review" }
+              }
+            },
+            "embeddedNotices": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "observedCategories", "noticeTextCopiedToRepository"],
+              "properties": {
+                "status": { "const": "restrictive-notices-present-applicability-pending" },
+                "observedCategories": { "const": ["headers", "utilities", "sample-source"] },
+                "noticeTextCopiedToRepository": { "const": false }
+              }
+            },
+            "scopes": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "localDevelopmentTesting",
+                "rawSdkMaterialInPublicRepository",
+                "publicSdkCiCacheArtifact",
+                "publicNonContentIntegrityMetadata",
+                "privateSelfHostedCi",
+                "privateHostedArtifactStorage",
+                "rawSdkRedistribution",
+                "compiledPluginDistribution",
+                "adobeSampleDerivedCode"
+              ],
+              "properties": {
+                "localDevelopmentTesting": { "const": "allowed-by-operator-attestation" },
+                "rawSdkMaterialInPublicRepository": { "const": "forbidden" },
+                "publicSdkCiCacheArtifact": { "const": "forbidden" },
+                "publicNonContentIntegrityMetadata": { "const": "allowed-aggregate-locks-and-minimal-layout-sentinels" },
+                "privateSelfHostedCi": { "const": "blocked-pending-scope-approval" },
+                "privateHostedArtifactStorage": { "const": "blocked-pending-scope-approval" },
+                "rawSdkRedistribution": { "const": "blocked" },
+                "compiledPluginDistribution": { "const": "blocked-pending-separate-review" },
+                "adobeSampleDerivedCode": { "const": "blocked-pending-separate-review" }
+              }
+            }
+          }
+        },
+        "compatibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "afterEffects25",
+            "afterEffects26",
+            "aegpSuites",
+            "toolchains",
+            "macosArchitectures"
+          ],
+          "properties": {
+            "afterEffects25": { "const": "unknown" },
+            "afterEffects26": { "const": "unknown" },
+            "aegpSuites": { "const": "unknown" },
+            "toolchains": { "const": "unknown" },
+            "macosArchitectures": { "const": "unknown" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "type"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["file", "directory"] }
+      }
+    },
+    "archive": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fileNameHint", "bytes", "sha256"],
+      "properties": {
+        "fileNameHint": { "type": "string", "minLength": 1 },
+        "bytes": { "type": "integer", "minimum": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "innerPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entryPath", "format", "bytes", "sha256"],
+      "properties": {
+        "entryPath": { "type": "string", "minLength": 1 },
+        "format": { "enum": ["raw-zstd-containing-tar", "zip-method-93-zstd"] },
+        "bytes": { "type": "integer", "minimum": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["archive", "innerPayload", "rootContentLock", "buildSentinel"],
+      "properties": {
+        "archive": { "$ref": "#/$defs/archive" },
+        "innerPayload": { "$ref": "#/$defs/innerPayload" },
+        "rootContentLock": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "fileCount", "fileBytes", "sha256"],
+              "properties": {
+                "status": { "const": "canonical-file-tree-verified" },
+                "fileCount": { "type": "integer", "minimum": 1 },
+                "fileBytes": { "type": "integer", "minimum": 1 },
+                "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "fileCount", "fileBytes", "sha256"],
+              "properties": {
+                "status": { "const": "pending-windows-extraction-evidence" },
+                "fileCount": { "type": "null" },
+                "fileBytes": { "type": "null" },
+                "sha256": { "type": "null" }
+              }
+            }
+          ]
+        },
+        "buildSentinel": { "$ref": "#/$defs/entry" }
+      }
+    }
+  }
+}
