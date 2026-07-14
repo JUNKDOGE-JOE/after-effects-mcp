@@ -767,5 +767,6 @@ async def test_backend_failure_audit_keeps_backend_name_and_no_exception_text(
     persisted = (tmp_path / "audit.jsonl").read_text(encoding="utf-8")
     assert caught.value.code == "tool_backend_failed"
     assert record.backend == "audit-backend"
+    assert record.engine == "maintained-jsx"
     assert record.outcome == "backend-error"
     assert private_error not in persisted

@@ -26,6 +26,7 @@ def _record(index: int, **overrides) -> AuditRecord:
         "started_at": index,
         "finished_at": index + 1,
         "error_code": None,
+        "engine": "maintained-jsx",
     }
     values.update(overrides)
     return AuditRecord(**values)
@@ -48,9 +49,33 @@ def test_audit_round_trip_contains_required_fields_and_no_rendered_content(
     assert wire["grantId"] == "grant-1"
     assert wire["grantScope"] == "once"
     assert wire["backend"] == "mock"
+    assert wire["engine"] == "maintained-jsx"
     assert wire["outcome"] == "success"
     assert "rendered" not in wire
     assert "content" not in wire
+
+
+def test_audit_reads_legacy_records_without_engine_and_rejects_unknown_engine():
+    legacy = _record(1).public_dict()
+    legacy.pop("engine")
+    assert AuditRecord.from_dict(legacy).engine is None
+
+    invalid = _record(1).public_dict()
+    invalid["engine"] = "backend-name-is-not-an-engine"
+    with pytest.raises(ValueError, match="execution engine"):
+        AuditRecord.from_dict(invalid)
+
+    with pytest.raises(ValueError, match="execution engine"):
+        _record(1, engine="backend-name-is-not-an-engine")
+
+
+@pytest.mark.parametrize(
+    "engine",
+    ["native-aegp", "maintained-jsx", "ephemeral-jsx"],
+)
+def test_audit_round_trips_each_execution_engine(engine: str):
+    record = _record(1, engine=engine)
+    assert AuditRecord.from_dict(record.public_dict()).engine == engine
 
 
 def test_audit_redacts_sensitive_values_and_secret_shaped_keys(tmp_path: Path) -> None:
@@ -99,7 +124,8 @@ def test_audit_rotation_retains_at_most_three_generations(tmp_path: Path) -> Non
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits are not authoritative on Windows")
 def test_audit_generations_are_owner_only(tmp_path: Path) -> None:
-    log = ToolAuditLog(tmp_path, max_bytes=500, generations=3)
+    line_size = len(json.dumps(_record(0).public_dict(), separators=(",", ":"))) + 1
+    log = ToolAuditLog(tmp_path, max_bytes=line_size * 2 + 20, generations=3)
     for index in range(8):
         log.append(_record(index))
 

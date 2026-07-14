@@ -967,6 +967,7 @@ class ToolExecutionEngine:
             started_at=started_at,
             finished_at=self._now(),
             error_code=error_code,
+            engine=("maintained-jsx" if backend is not None else None),
         )
         self.audit_log.append(record)
 
