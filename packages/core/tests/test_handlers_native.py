@@ -123,7 +123,7 @@ def _folder_execution() -> ProjectFolderCreateExecution:
             algorithm="sha256-rfc8785-jcs-v1",
             digest="c" * 64,
         ),
-        undo=NativeUndoEvidence(available=True, verified=True),
+        undo=NativeUndoEvidence(available=True, verified=False),
     )
     return ProjectFolderCreateExecution(
         implementation=descriptor,
@@ -226,7 +226,7 @@ async def test_project_folder_public_tool_returns_state_risk_undo_and_audit(monk
     assert result["implementation"]["undo"] == "ae-undo-group"
     assert result["audit"]["effect"] == "committed"
     assert result["audit"]["undoAvailable"] is True
-    assert result["audit"]["undoVerified"] is True
+    assert result["audit"]["undoVerified"] is False
     assert "groupId" not in result["evidence"]["undo"]
 
 

@@ -130,7 +130,7 @@ class FolderBackend(N.NativeInvokeBackend):
                     algorithm="sha256-rfc8785-jcs-v1",
                     digest=N._project_folder_create_digest(value),
                 ),
-                undo=N.NativeUndoEvidence(available=True, verified=True),
+                undo=N.NativeUndoEvidence(available=True, verified=False),
             ),
         )
 
@@ -157,7 +157,7 @@ async def test_folder_create_binds_key_state_undo_and_native_evidence():
     assert execution.evidence.effect == "committed"
     assert execution.evidence.undo is not None
     assert execution.evidence.undo.group_id is None
-    assert execution.audit_fields()["undoVerified"] is True
+    assert execution.audit_fields()["undoVerified"] is False
 
 
 def test_folder_name_uses_utf16_units_and_rejects_controls_before_dispatch():

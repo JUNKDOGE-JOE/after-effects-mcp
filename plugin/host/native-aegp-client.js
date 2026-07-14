@@ -813,7 +813,7 @@ function createNativeAegpClient(options) {
             || evidence.effect !== 'committed'
             || evidence.postcondition.kind !== 'project-folder-created'
             || !exactKeys(evidence.undo, ['available', 'verified'])
-            || evidence.undo.available !== true || evidence.undo.verified !== true
+            || evidence.undo.available !== true || evidence.undo.verified !== false
             || !exactKeys(value, [
                 'created', 'folderItemId', 'folderName', 'parentItemId',
                 'itemCountBefore', 'itemCountAfter',

@@ -552,7 +552,7 @@ void response_helpers_are_bounded_and_typed() {
   require(folder_body.find("\"capabilityId\":\"ae.project.folder.create\"")
           != std::string::npos
           && folder_body.find("\"effect\":\"committed\"") != std::string::npos
-          && folder_body.find("\"undo\":{\"available\":true,\"verified\":true}")
+          && folder_body.find("\"undo\":{\"available\":true,\"verified\":false}")
             != std::string::npos
           && folder_body.find("groupId") == std::string::npos
           && folder_body.find("\"parentItemId\":0") != std::string::npos,

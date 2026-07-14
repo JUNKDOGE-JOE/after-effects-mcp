@@ -224,7 +224,7 @@ function fakeNativeClient() {
                         requestDigest: 'b'.repeat(64),
                         effect: 'committed',
                         postcondition: { verified: true, digest: 'c'.repeat(64) },
-                        undo: { available: true, verified: true },
+                        undo: { available: true, verified: false },
                     },
                     value: {
                         created: true,
@@ -399,7 +399,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
         assert.strictEqual(folder.body.result.value.parentItemId, 0);
         assert.strictEqual(folder.body.result.evidence.effect, 'committed');
         assert.deepStrictEqual(folder.body.result.evidence.undo, {
-            available: true, verified: true,
+            available: true, verified: false,
         });
         assert.deepStrictEqual(nativeClient.calls, [
             'pair',

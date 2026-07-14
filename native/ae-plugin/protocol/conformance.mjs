@@ -1217,7 +1217,11 @@ export function validateTranscript(context, request, messages) {
     && (descriptor.mutability !== 'mutating'
       || (evidence.effect === 'committed'
         && (descriptor.undo !== 'ae-undo-group'
-          || (evidence.undo?.available === true && evidence.undo?.verified === true))))
+          || (evidence.undo?.available === true
+            && typeof evidence.undo?.verified === 'boolean'
+            && (request.params.capabilityId !== 'ae.project.folder.create'
+              || request.params.capabilityVersion !== 1
+              || evidence.undo.verified === false)))))
     && evidence.postcondition.verified === true
     && evidence.requestDigest === requestDigest
     && evidence.postcondition.digest === resultDigest;

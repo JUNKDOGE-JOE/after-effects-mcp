@@ -1329,7 +1329,10 @@ async def invoke_project_folder_create(
         or result.evidence.effect != "committed"
         or undo is None
         or undo.available is not True
-        or undo.verified is not True
+        # The runtime verifies that AE accepted a balanced Undo group. It does
+        # not consume the user's global Undo stack to prove the reverse
+        # transition for this individual invocation.
+        or undo.verified is not False
         or undo.group_id is not None
         or result.evidence.completed_at_unix_ms > deadline_unix_ms
         or result.evidence.request_digest != expected_request_digest

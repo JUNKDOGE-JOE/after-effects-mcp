@@ -168,7 +168,7 @@ async def test_native_folder_write_preserves_key_replay_and_undo_evidence(token_
                 "algorithm": "sha256-rfc8785-jcs-v1",
                 "digest": "c" * 64,
             },
-            "undo": {"available": True, "verified": True},
+            "undo": {"available": True, "verified": False},
         },
     }
 
@@ -186,6 +186,7 @@ async def test_native_folder_write_preserves_key_replay_and_undo_evidence(token_
     assert result.evidence.effect == "committed"
     assert result.evidence.undo is not None
     assert result.evidence.undo.available is True
+    assert result.evidence.undo.verified is False
     assert result.evidence.undo.group_id is None
 
 

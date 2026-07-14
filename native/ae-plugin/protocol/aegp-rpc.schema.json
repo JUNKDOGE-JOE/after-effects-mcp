@@ -775,8 +775,14 @@
       "additionalProperties": false,
       "required": ["available", "verified"],
       "properties": {
-        "available": { "type": "boolean" },
-        "verified": { "type": "boolean" },
+        "available": {
+          "type": "boolean",
+          "description": "True when AE accepted a balanced native undo group for this invocation; this alone is not a rollback guarantee."
+        },
+        "verified": {
+          "type": "boolean",
+          "description": "True only when the reverse state transition was verified for this invocation. The v1 folder-create path leaves this false because it does not consume the user's global Undo stack."
+        },
         "groupId": { "type": "string", "minLength": 1, "maxLength": 128 }
       }
     },

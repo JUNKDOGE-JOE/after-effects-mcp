@@ -244,7 +244,7 @@ function installProtocol(server, options) {
                                 algorithm: 'sha256-rfc8785-jcs-v1',
                                 digest: folderPostconditionDigest(value),
                             },
-                            undo: { available: true, verified: true },
+                            undo: { available: true, verified: false },
                         },
                         value,
                     };
@@ -408,7 +408,7 @@ test('CEP client completes pairing, hello, capabilities, and verified native pro
         itemCountBefore: 4,
         itemCountAfter: 5,
     });
-    assert.deepEqual(folder.evidence.undo, { available: true, verified: true });
+    assert.deepEqual(folder.evidence.undo, { available: true, verified: false });
     assert.equal(folder.evidence.requestDigest, invokeRequestDigest(protocol.requests[3]));
     assert.deepEqual(protocol.requests[3].params.arguments, {
         name: 'AI_😀_Folder', idempotencyKey: 'folder-intent-0001',

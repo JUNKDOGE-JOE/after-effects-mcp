@@ -417,7 +417,7 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(folder, "\"capabilityId\":\"ae.project.folder.create\"",
       "folder response");
   require_contains(folder, "\"effect\":\"committed\"", "folder response");
-  require_contains(folder, "\"undo\":{\"available\":true,\"verified\":true}",
+  require_contains(folder, "\"undo\":{\"available\":true,\"verified\":false}",
       "folder response");
   require_contains(folder, "\"folderItemId\":101", "folder response");
   require_contains(folder, "\"parentItemId\":0", "folder response");

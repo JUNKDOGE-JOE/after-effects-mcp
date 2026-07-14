@@ -1532,7 +1532,11 @@ std::vector<std::uint8_t> encode_project_folder_create_success(
       + ",\"requestId\":" + json_string(response.request_id)
       + ",\"sessionId\":" + json_string(response.session_id)
       + ",\"startedAtUnixMs\":" + std::to_string(response.started_at_unix_ms)
-      + ",\"undo\":{\"available\":true,\"verified\":true}},"
+      // The balanced AE undo group makes Undo available, but this invocation
+      // deliberately does not consume the global Undo stack to prove the
+      // reverse transition. Capability qualification performs that destructive
+      // verification separately in a disposable real-host fixture.
+      + ",\"undo\":{\"available\":true,\"verified\":false}},"
         "\"outcome\":\"succeeded\",\"value\":{\"created\":true,"
         "\"folderItemId\":" + std::to_string(response.folder_item_id)
       + ",\"folderName\":" + json_string(response.folder_name)

@@ -186,7 +186,7 @@ def test_folder_mutation_success_can_never_be_a_transport_replay():
                     "algorithm": "sha256-rfc8785-jcs-v1",
                     "digest": "b" * 64,
                 },
-                "undo": {"available": True, "verified": True},
+                "undo": {"available": True, "verified": False},
             },
         },
     }
