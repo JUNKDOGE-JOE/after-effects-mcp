@@ -1,0 +1,63 @@
+{
+  "_fixture": {
+    "classification": "synthetic-contract-vector",
+    "runtimeEvidence": false,
+    "compatibilityEvidence": false
+  },
+  "targetRequest": {
+    "wireVersion": 1,
+    "kind": "request",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "requestId": "invoke-summary-cancelled",
+    "method": "invoke",
+    "deadlineUnixMs": 1900000005000,
+    "params": {
+      "capabilityId": "ae.project.summary",
+      "capabilityVersion": 1,
+      "arguments": {}
+    }
+  },
+  "request": {
+    "wireVersion": 1,
+    "kind": "request",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "requestId": "cancel-1",
+    "method": "cancel",
+    "params": { "targetRequestId": "invoke-summary-cancelled" }
+  },
+  "response": {
+    "wireVersion": 1,
+    "kind": "response",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "requestId": "cancel-1",
+    "method": "cancel",
+    "ok": true,
+    "replayed": false,
+    "result": {
+      "targetRequestId": "invoke-summary-cancelled",
+      "state": "queued-cancelled",
+      "terminalResponseExpected": true
+    }
+  },
+  "targetMessages": [
+    {
+      "wireVersion": 1,
+      "kind": "response",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-summary-cancelled",
+      "method": "invoke",
+      "ok": false,
+      "replayed": false,
+      "error": {
+        "code": "CANCELLED",
+        "message": "The queued synthetic request was cancelled before dispatch.",
+        "retryable": false,
+        "sideEffect": "not-started",
+        "recovery": {
+          "action": "none",
+          "hint": "Issue a new request only if the result is still needed."
+        }
+      }
+    }
+  ]
+}

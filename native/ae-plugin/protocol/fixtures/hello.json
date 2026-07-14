@@ -1,0 +1,64 @@
+{
+  "_fixture": {
+    "classification": "synthetic-contract-vector",
+    "runtimeEvidence": false,
+    "compatibilityEvidence": false
+  },
+  "request": {
+    "wireVersion": 1,
+    "kind": "request",
+    "requestId": "hello-1",
+    "method": "hello",
+    "params": {
+      "supportedWireVersions": { "minimum": 1, "maximum": 1 },
+      "client": {
+        "component": "core-broker",
+        "version": "0.9.2",
+        "instanceId": "33333333-3333-4333-8333-333333333333"
+      },
+      "nonce": "abcdefghijklmnopqrstuvwxyzABCDEF"
+    }
+  },
+  "response": {
+    "wireVersion": 1,
+    "kind": "response",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "requestId": "hello-1",
+    "method": "hello",
+    "ok": true,
+    "replayed": false,
+    "result": {
+      "selectedWireVersion": 1,
+      "pluginVersion": "0.0.0-synthetic",
+      "compiledSdk": {
+        "version": "0.0.0",
+        "build": 1,
+        "architecture": "arm64"
+      },
+      "host": {
+        "application": "after-effects",
+        "version": "0.0.0",
+        "build": 1,
+        "platform": "macos-arm64",
+        "instanceId": "22222222-2222-4222-8222-222222222222"
+      },
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "sessionGeneration": 1,
+      "limits": {
+        "maxFrameBytes": 65536,
+        "maxInFlight": 8,
+        "maxQueueDepth": 32,
+        "maxDeadlineMs": 30000,
+        "maxRequestsPerSecond": 10,
+        "maxBurst": 4,
+        "maxControlInFlight": 1,
+        "maxControlRequestsPerSecond": 20,
+        "maxControlBurst": 4,
+        "maxTerminalCacheEntries": 128,
+        "terminalCacheTtlMs": 60000
+      },
+      "capabilitiesDigest": "778a01733fcf37510f56894a46ec5bd87c7429de2e06d2d5eafb4cdbbae88557",
+      "clientNonce": "abcdefghijklmnopqrstuvwxyzABCDEF"
+    }
+  }
+}

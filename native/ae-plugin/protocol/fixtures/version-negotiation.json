@@ -1,0 +1,87 @@
+{
+  "_fixture": {
+    "classification": "synthetic-contract-vector",
+    "runtimeEvidence": false,
+    "compatibilityEvidence": false
+  },
+  "vectors": [
+    {
+      "name": "future-client-to-v1-plugin",
+      "request": {
+        "wireVersion": 1,
+        "kind": "request",
+        "requestId": "hello-future-client",
+        "method": "hello",
+        "params": {
+          "supportedWireVersions": { "minimum": 2, "maximum": 3 },
+          "client": {
+            "component": "core-broker",
+            "version": "2.0.0-synthetic",
+            "instanceId": "33333333-3333-4333-8333-333333333333"
+          },
+          "nonce": "futureClientUsesPermanentV1BootX"
+        }
+      },
+      "response": {
+        "wireVersion": 1,
+        "kind": "response",
+        "requestId": "hello-future-client",
+        "method": "hello",
+        "ok": false,
+        "replayed": false,
+        "error": {
+          "code": "WIRE_VERSION_MISMATCH",
+          "message": "The future client does not support the v1 plug-in range.",
+          "retryable": false,
+          "sideEffect": "not-started",
+          "recovery": {
+            "action": "reconnect",
+            "hint": "Install a plug-in supporting the client range."
+          },
+          "details": {
+            "supportedWireVersions": { "minimum": 1, "maximum": 1 }
+          }
+        }
+      }
+    },
+    {
+      "name": "v1-client-to-future-plugin",
+      "request": {
+        "wireVersion": 1,
+        "kind": "request",
+        "requestId": "hello-future-plugin",
+        "method": "hello",
+        "params": {
+          "supportedWireVersions": { "minimum": 1, "maximum": 1 },
+          "client": {
+            "component": "core-broker",
+            "version": "1.0.0-synthetic",
+            "instanceId": "33333333-3333-4333-8333-333333333333"
+          },
+          "nonce": "v1ClientUsesPermanentBootstrapXX"
+        }
+      },
+      "response": {
+        "wireVersion": 1,
+        "kind": "response",
+        "requestId": "hello-future-plugin",
+        "method": "hello",
+        "ok": false,
+        "replayed": false,
+        "error": {
+          "code": "WIRE_VERSION_MISMATCH",
+          "message": "The future plug-in does not support the v1 client range.",
+          "retryable": false,
+          "sideEffect": "not-started",
+          "recovery": {
+            "action": "reconnect",
+            "hint": "Upgrade Core to a supported negotiated wire version."
+          },
+          "details": {
+            "supportedWireVersions": { "minimum": 2, "maximum": 3 }
+          }
+        }
+      }
+    }
+  ]
+}
