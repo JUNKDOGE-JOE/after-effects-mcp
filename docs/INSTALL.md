@@ -66,7 +66,7 @@ macOS 请把 `<USER>` 替换为实际账户名。Windows 请把 `command` 改成
 
 ### 开发安装
 
-开发 checkout 才需要 `uv`、Node/npm 和本地编译/签名工具。它不是普通用户安装路径。运行脚本前必须关闭全部 After Effects / AfterFX 进程。脚本会先预检必须文件，在目标同一 CEP 父目录建立唯一 staging，完成整树复制与复验后再原子 rename；旧安装保留为唯一 backup，任何交换失败都会自动恢复，成功时会打印绝对恢复命令。
+开发 checkout 才需要 `uv`、Node/npm 和本地编译/签名工具。它不是普通用户安装路径。运行脚本前必须关闭全部 After Effects / AfterFX 进程。macOS 脚本会先预检必须文件，并把旧版安装器遗留且名称严格匹配的 transaction artifact 非破坏性迁出 Adobe CEP 扫描根；随后在私有 `~/Library/Application Support/AfterEffectsMCP/cep-panel-dev-v1/` 中建立唯一 staging，完成整树复制与复验后再原子 rename。扫描根中只保留生效的 `com.aemcp.panel`。旧安装作为唯一 backup 保存在同一私有状态目录中，任何交换失败都会自动恢复，成功时会打印绝对恢复命令。Windows 脚本仍使用目标旁的事务目录和同样的回滚契约。
 
 ```bash
 uv sync --all-packages --group dev
@@ -168,7 +168,7 @@ This is the final v0.9.2 stable-launcher contract. The current Panel config gene
 
 ### Developer Install
 
-Only a development checkout requires `uv`, Node/npm, and local build/signing tools. This is not the normal-user install path. Close every After Effects / AfterFX process first. Each script preflights required source files, copies and verifies a unique staging tree beside the target, then performs same-parent atomic renames. It retains the old panel as a unique backup, restores it automatically on swap failure, and prints an absolute restore command after success.
+Only a development checkout requires `uv`, Node/npm, and local build/signing tools. This is not the normal-user install path. Close every After Effects / AfterFX process first. On macOS, the script preflights required source files and non-destructively moves strictly named transaction artifacts left by older installers out of Adobe's CEP scan root. It then creates its unique staging tree in the private off-scan state directory `~/Library/Application Support/AfterEffectsMCP/cep-panel-dev-v1/`. After copying and verifying the complete tree, it atomically renames the candidate into place; the scan root retains only the active `com.aemcp.panel`. The old panel remains as the unique backup in that private state directory, is restored automatically on swap failure, and is named in an absolute restore command after success. The Windows script continues to use transaction directories beside its target with the same rollback contract.
 
 ```bash
 uv sync --all-packages --group dev

@@ -19,6 +19,7 @@ plugin_src="${repo_root}/plugin"
 cep_parent="${HOME}/Library/Application Support/Adobe/CEP/extensions"
 extension_id='com.aemcp.panel'
 cep_dir="${cep_parent}/${extension_id}"
+state_dir="${HOME}/Library/Application Support/AfterEffectsMCP/cep-panel-dev-v1"
 
 required_files=(
   'CSXS/manifest.xml'
@@ -35,6 +36,7 @@ require_tool find
 require_tool realpath
 require_tool rsync
 require_tool mv
+require_tool chmod
 
 set +e
 pgrep -f 'Adobe After Effects|AfterFX' >/dev/null 2>&1
@@ -85,11 +87,53 @@ if [[ -e "$cep_dir" || -L "$cep_dir" ]]; then
     || fail "existing CEP target is not a regular directory: ${cep_dir}"
 fi
 
+mkdir -p "$state_dir"
+[[ -d "$state_dir" && ! -L "$state_dir" ]] \
+  || fail "CEP installer state is not a regular directory: ${state_dir}"
+chmod 700 "$state_dir" \
+  || fail "could not make CEP installer state private: ${state_dir}"
+state_dir="$(cd "$state_dir" && pwd -P)"
+case "$state_dir" in
+  "$cep_parent"|"$cep_parent"/*)
+    fail "CEP installer state must remain outside the Adobe extension scan root"
+    ;;
+esac
+
+# Older versions retained complete transaction artifacts beside the active
+# extension. Adobe may discover those directories even when their names begin
+# with a dot, so move only the installer-owned shapes out of the scan root
+# before creating the next transaction.
+legacy_artifacts=()
+legacy_destinations=()
+shopt -s nullglob
+for legacy_kind in staging backup failed replaced; do
+  legacy_prefix=".${extension_id}.${legacy_kind}."
+  for legacy_artifact in "${cep_parent}/${legacy_prefix}"*; do
+    legacy_name="${legacy_artifact##*/}"
+    legacy_suffix="${legacy_name#"$legacy_prefix"}"
+    [[ "$legacy_name" == "$legacy_prefix"* \
+      && "$legacy_suffix" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
+      || fail "legacy CEP transaction artifact has an invalid name: ${legacy_artifact}"
+    [[ -d "$legacy_artifact" && ! -L "$legacy_artifact" ]] \
+      || fail "legacy CEP transaction artifact is not a regular directory: ${legacy_artifact}"
+    legacy_destination="${state_dir}/${legacy_name}"
+    [[ ! -e "$legacy_destination" && ! -L "$legacy_destination" ]] \
+      || fail "legacy CEP transaction destination already exists: ${legacy_destination}"
+    legacy_artifacts+=("$legacy_artifact")
+    legacy_destinations+=("$legacy_destination")
+  done
+done
+shopt -u nullglob
+for ((legacy_index = 0; legacy_index < ${#legacy_artifacts[@]}; legacy_index += 1)); do
+  mv "${legacy_artifacts[$legacy_index]}" "${legacy_destinations[$legacy_index]}" \
+    || fail "could not move legacy CEP transaction artifact out of the Adobe scan root"
+done
+
 install_id="$(date -u '+%Y%m%dT%H%M%SZ').$$.${RANDOM}"
-staging="${cep_parent}/.${extension_id}.staging.${install_id}"
-backup="${cep_parent}/.${extension_id}.backup.${install_id}"
-failed_install="${cep_parent}/.${extension_id}.failed.${install_id}"
-restore_replaced="${cep_parent}/.${extension_id}.replaced.${install_id}"
+staging="${state_dir}/.${extension_id}.staging.${install_id}"
+backup="${state_dir}/.${extension_id}.backup.${install_id}"
+failed_install="${state_dir}/.${extension_id}.failed.${install_id}"
+restore_replaced="${state_dir}/.${extension_id}.replaced.${install_id}"
 for generated in "$staging" "$backup" "$failed_install" "$restore_replaced"; do
   [[ ! -e "$generated" && ! -L "$generated" ]] \
     || fail "generated deployment path already exists: ${generated}"
@@ -144,7 +188,7 @@ verify_tree() {
   [[ -z "$changes" ]] || fail "staged plugin tree differs from source: ${destination}"
 }
 
-printf '[1/5] Staging the complete plugin tree beside the final target...\n'
+printf '[1/5] Staging the complete plugin tree outside the Adobe scan root...\n'
 mkdir -m 700 "$staging"
 rsync -a --delete "${plugin_src}/" "${staging}/" \
   || fail 'plugin copy into staging failed'
