@@ -62,9 +62,11 @@ exec /bin/mv "$@"
 `);
   }
 
-  const target = path.join(
+  const scanRoot = path.join(home, 'Library/Application Support/Adobe/CEP/extensions');
+  const target = path.join(scanRoot, 'com.aemcp.panel');
+  const stateDir = path.join(
     home,
-    'Library/Application Support/Adobe/CEP/extensions/com.aemcp.panel',
+    'Library/Application Support/AfterEffectsMCP/cep-panel-dev-v1',
   );
   await mkdir(target, { recursive: true });
   await writeFile(path.join(target, 'old-install.txt'), 'preserve me\n', 'utf8');
@@ -77,6 +79,8 @@ exec /bin/mv "$@"
     fixtureRepo,
     installer,
     plugin,
+    scanRoot,
+    stateDir,
     target,
   };
 }
@@ -116,13 +120,78 @@ test('macOS dev install stages, verifies, swaps, and retains a restorable backup
   });
   assert.equal(await readFile(path.join(fixture.target, 'client/dist/app.js'), 'utf8'),
     'fixture:client/dist/app.js\n');
-  const parent = path.dirname(fixture.target);
-  const backups = (await readdir(parent)).filter((name) => name.includes('.backup.'));
+  const scanRootEntries = await readdir(path.dirname(fixture.target));
+  assert.deepEqual(scanRootEntries, ['com.aemcp.panel']);
+  const backups = (await readdir(fixture.stateDir)).filter((name) => name.includes('.backup.'));
   assert.equal(backups.length, 1);
-  assert.equal(await readFile(path.join(parent, backups[0], 'old-install.txt'), 'utf8'),
+  assert.equal(await readFile(path.join(fixture.stateDir, backups[0], 'old-install.txt'), 'utf8'),
     'preserve me\n');
+  assert.equal((await stat(fixture.stateDir)).mode & 0o077, 0);
   assert.match(stdout, /Restore command.*After Effects is closed/is);
   assert.match(stdout, new RegExp(backups[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('macOS dev install preserves legacy transaction artifacts outside the CEP scan root', async (t) => {
+  const fixture = await makeMacFixture(t);
+  const legacyName = '.com.aemcp.panel.backup.20260714T210715Z.54520.16325';
+  const legacyArtifact = path.join(fixture.scanRoot, legacyName);
+  await mkdir(legacyArtifact);
+  await writeFile(path.join(legacyArtifact, 'legacy-install.txt'), 'legacy bytes\n', 'utf8');
+
+  await execFileAsync(fixture.installer, [], {
+    cwd: fixture.fixtureRepo,
+    env: fixture.env,
+  });
+
+  assert.deepEqual(await readdir(fixture.scanRoot), ['com.aemcp.panel']);
+  assert.equal(
+    await readFile(path.join(fixture.stateDir, legacyName, 'legacy-install.txt'), 'utf8'),
+    'legacy bytes\n',
+  );
+});
+
+test('macOS dev install rejects symbolic or non-directory legacy transaction artifacts', async (t) => {
+  for (const kind of ['symlink', 'file']) {
+    await t.test(kind, async (child) => {
+      const fixture = await makeMacFixture(child);
+      const legacyName = `.com.aemcp.panel.failed.${kind}-fixture`;
+      const legacyArtifact = path.join(fixture.scanRoot, legacyName);
+      if (kind === 'symlink') await symlink(fixture.target, legacyArtifact);
+      else await writeFile(legacyArtifact, 'not a directory\n', 'utf8');
+
+      await assert.rejects(
+        execFileAsync(fixture.installer, [], {
+          cwd: fixture.fixtureRepo,
+          env: fixture.env,
+        }),
+        /legacy CEP transaction artifact is not a regular directory/i,
+      );
+      assert.equal(await readFile(path.join(fixture.target, 'old-install.txt'), 'utf8'),
+        'preserve me\n');
+    });
+  }
+});
+
+test('macOS dev install fails closed when a legacy artifact destination conflicts', async (t) => {
+  const fixture = await makeMacFixture(t);
+  const legacyName = '.com.aemcp.panel.replaced.conflict-fixture';
+  const legacyArtifact = path.join(fixture.scanRoot, legacyName);
+  await mkdir(legacyArtifact);
+  await writeFile(path.join(legacyArtifact, 'scan-root-copy.txt'), 'scan root\n', 'utf8');
+  await mkdir(fixture.stateDir, { recursive: true });
+  await mkdir(path.join(fixture.stateDir, legacyName));
+
+  await assert.rejects(
+    execFileAsync(fixture.installer, [], {
+      cwd: fixture.fixtureRepo,
+      env: fixture.env,
+    }),
+    /legacy CEP transaction destination already exists/i,
+  );
+  assert.equal(await readFile(path.join(legacyArtifact, 'scan-root-copy.txt'), 'utf8'),
+    'scan root\n');
+  assert.equal(await readFile(path.join(fixture.target, 'old-install.txt'), 'utf8'),
+    'preserve me\n');
 });
 
 test('macOS dev install restores the old panel when the second atomic rename fails', async (t) => {
@@ -131,11 +200,12 @@ test('macOS dev install restores the old panel when the second atomic rename fai
     execFileAsync(fixture.installer, [], { cwd: fixture.fixtureRepo, env: fixture.env }),
   );
   assert.equal(await readFile(path.join(fixture.target, 'old-install.txt'), 'utf8'), 'preserve me\n');
-  const siblings = await readdir(path.dirname(fixture.target));
-  assert.equal(siblings.some((name) => name.includes('.staging.')), false);
+  assert.deepEqual(await readdir(path.dirname(fixture.target)), ['com.aemcp.panel']);
+  const stateEntries = await readdir(fixture.stateDir);
+  assert.equal(stateEntries.some((name) => name.includes('.staging.')), false);
 });
 
-test('both dev installers encode preflight, same-parent staging, rollback, and no delete-first path', async () => {
+test('dev installers encode preflight, isolated macOS state, rollback, and no delete-first path', async () => {
   const mac = await readFile(path.join(repoRoot, 'scripts/install-plugin-dev-macos.sh'), 'utf8');
   const windows = await readFile(path.join(repoRoot, 'scripts/install-plugin-dev.ps1'), 'utf8');
 
@@ -146,6 +216,16 @@ test('both dev installers encode preflight, same-parent staging, rollback, and n
   assert.match(mac, /rsync[\s\S]*--delete/);
   assert.match(mac, /rsync[\s\S]*--checksum/);
   assert.match(mac, /restore/i);
+  assert.match(mac, /AfterEffectsMCP\/cep-panel-dev-v1/);
+  assert.match(mac, /state_dir=.*AfterEffectsMCP/);
+  assert.match(mac, /staging="\$\{state_dir\}/);
+  assert.match(mac, /backup="\$\{state_dir\}/);
+  assert.match(mac, /failed_install="\$\{state_dir\}/);
+  assert.match(mac, /restore_replaced="\$\{state_dir\}/);
+  assert.doesNotMatch(mac, /staging="\$\{cep_parent\}/);
+  assert.doesNotMatch(mac, /backup="\$\{cep_parent\}/);
+  assert.doesNotMatch(mac, /failed_install="\$\{cep_parent\}/);
+  assert.doesNotMatch(mac, /restore_replaced="\$\{cep_parent\}/);
   assert.ok(mac.indexOf('defaults write') < mac.indexOf('mv "$cep_dir" "$backup"'));
   for (const required of ['CSXS/manifest.xml', 'client/dist/app.js', 'host/server.js']) {
     assert.ok(mac.includes(required));
