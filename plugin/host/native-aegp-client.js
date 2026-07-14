@@ -17,13 +17,39 @@ const SOCKET_PATTERN = /^s-[0-9a-f]{12}\.sock$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const TOKEN_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const NATIVE_WIRE_ERROR_CODES = new Set([
+    'NATIVE_UNAVAILABLE', 'NATIVE_UNSUPPORTED', 'WIRE_VERSION_MISMATCH',
+    'INVALID_REQUEST', 'INVALID_ARGUMENT', 'DUPLICATE_REQUEST',
+    'PRECONDITION_FAILED', 'STALE_LOCATOR', 'DEADLINE_EXCEEDED', 'CANCELLED',
+    'QUEUE_FULL', 'AE_SHUTTING_DOWN', 'SESSION_STALE', 'CAPABILITY_FAILED',
+    'POSSIBLY_SIDE_EFFECTING_FAILURE',
+]);
 
-function nativeError(code, message, retryable, cause) {
+function nativeError(code, message, retryable, cause, structured) {
     const error = new Error(message);
     error.code = code;
     error.retryable = Boolean(retryable);
     if (cause !== undefined) error.cause = cause;
+    if (structured && structured.sideEffect !== undefined) error.sideEffect = structured.sideEffect;
+    if (structured && structured.recovery !== undefined) error.recovery = structured.recovery;
+    if (structured && structured.details !== undefined) error.details = structured.details;
     return error;
+}
+
+function nativeContractMismatch(message, cause) {
+    return nativeError(
+        'NATIVE_CONTRACT_MISMATCH',
+        message,
+        false,
+        cause,
+        {
+            sideEffect: 'not-started',
+            recovery: {
+                action: 'refresh-capabilities',
+                hint: 'Refresh the authenticated native contract before retrying.',
+            },
+        },
+    );
 }
 
 function exactKeys(value, required, optional) {
@@ -190,11 +216,11 @@ function sha256Canonical(value) {
     return crypto.createHash('sha256').update(JSON.stringify(value), 'utf8').digest('hex');
 }
 
-function capabilitiesQueryDigest(sessionId, detail) {
+function capabilitiesQueryDigest(sessionId, ids, detail, limit) {
     return sha256Canonical({
         detail,
-        ids: ['ae.project.summary'],
-        limit: 1,
+        ids: ids === undefined ? null : ids,
+        limit,
         sessionId,
     });
 }
@@ -254,6 +280,7 @@ function createNativeAegpClient(options) {
     let sessionGeneration = 0;
     let capabilitiesDigest = null;
     let projectSummaryContractDigest = null;
+    let helloIdentity = null;
     let nextRequest = 1;
     let inputBuffer = Buffer.alloc(0);
     let pairingResolve;
@@ -266,10 +293,7 @@ function createNativeAegpClient(options) {
 
     function fail(error) {
         const protocolCodes = new Set([
-            'AUTH_REQUIRED', 'INVALID_ARGUMENT', 'INVALID_REQUEST', 'NATIVE_UNAVAILABLE',
-            'NATIVE_UNSUPPORTED', 'WIRE_VERSION_MISMATCH', 'DUPLICATE_REQUEST',
-            'DEADLINE_EXCEEDED', 'CANCELLED', 'QUEUE_FULL', 'AE_SHUTTING_DOWN',
-            'SESSION_STALE', 'CAPABILITY_FAILED',
+            ...NATIVE_WIRE_ERROR_CODES, 'AUTH_REQUIRED', 'NATIVE_CONTRACT_MISMATCH',
         ]);
         const failure = error && protocolCodes.has(error.code)
             ? error : nativeError('NATIVE_UNAVAILABLE', 'native AEGP connection failed', true, error);
@@ -289,6 +313,7 @@ function createNativeAegpClient(options) {
         sessionGeneration = 0;
         capabilitiesDigest = null;
         projectSummaryContractDigest = null;
+        helloIdentity = null;
         if (socket) {
             const current = socket;
             socket = null;
@@ -298,25 +323,32 @@ function createNativeAegpClient(options) {
 
     function responseError(response) {
         const error = response && response.error;
-        const code = typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]{2,63}$/.test(error.code)
-            ? error.code : 'INVALID_REQUEST';
-        return nativeError(code, 'native AEGP request failed with ' + code, Boolean(error?.retryable));
+        if (!exactKeys(error, ['code', 'message', 'retryable', 'sideEffect', 'recovery'], ['details'])
+            || typeof error.code !== 'string' || !NATIVE_WIRE_ERROR_CODES.has(error.code)
+            || typeof error.message !== 'string' || error.message.length === 0
+            || typeof error.retryable !== 'boolean'
+            || !['not-started', 'may-have-occurred', 'completed'].includes(error.sideEffect)
+            || !error.recovery || typeof error.recovery !== 'object' || Array.isArray(error.recovery)
+            || typeof error.recovery.action !== 'string' || typeof error.recovery.hint !== 'string') {
+            return nativeContractMismatch('native AEGP returned a malformed error payload');
+        }
+        return nativeError(error.code, error.message, error.retryable, undefined, error);
     }
 
     function handleFrame(frame) {
         let response;
         try { response = JSON.parse(frame.toString('utf8')); } catch (cause) {
-            throw nativeError('INVALID_REQUEST', 'native AEGP returned malformed JSON', false, cause);
+            throw nativeContractMismatch('native AEGP returned malformed JSON', cause);
         }
         if (!response || typeof response !== 'object' || Array.isArray(response)) {
-            throw nativeError('INVALID_REQUEST', 'native AEGP returned an invalid envelope', false);
+            throw nativeContractMismatch('native AEGP returned an invalid envelope');
         }
         if (response.kind === 'event') return;
         const pending = pendingRequests.get(response.requestId);
         if (!pending || response.wireVersion !== 1 || response.kind !== 'response'
             || response.method !== pending.method
             || (pending.method !== 'hello' && response.sessionId !== sessionId)) {
-            throw nativeError('INVALID_REQUEST', 'native AEGP response did not match an active request', false);
+            throw nativeContractMismatch('native AEGP response did not match an active request');
         }
         if (response.ok === true && pending.method === 'invoke') {
             const evidence = response.result?.evidence;
@@ -325,7 +357,7 @@ function createNativeAegpClient(options) {
                 || evidence?.capabilityId !== 'ae.project.summary'
                 || evidence?.capabilityVersion !== 1
                 || evidence?.requestDigest !== pending.requestDigest) {
-                throw nativeError('INVALID_REQUEST', 'native AEGP evidence did not match its response envelope', false);
+                throw nativeContractMismatch('native AEGP evidence did not match its response envelope');
             }
         }
         pendingRequests.delete(response.requestId);
@@ -338,7 +370,7 @@ function createNativeAegpClient(options) {
         while (inputBuffer.length >= 4) {
             const length = inputBuffer.readUInt32BE(0);
             if (length === 0 || length > MAX_FRAME_BYTES) {
-                throw nativeError('INVALID_REQUEST', 'native AEGP returned an invalid frame size', false);
+                throw nativeContractMismatch('native AEGP returned an invalid frame size');
             }
             if (inputBuffer.length < length + 4) return;
             const frame = inputBuffer.subarray(4, length + 4);
@@ -347,20 +379,35 @@ function createNativeAegpClient(options) {
         }
     }
 
-    function send(method, params, deadlineUnixMs) {
+    function send(method, params, options) {
         if (!socket || (method !== 'hello' && state !== 'connected')) {
             return Promise.reject(nativeError('NATIVE_UNAVAILABLE', 'native AEGP session is not connected', true));
         }
-        const requestId = method + '-' + String(nextRequest++) + '-' + randomBytes(4).toString('hex');
+        const call = options || {};
+        const deadlineUnixMs = call.deadlineUnixMs;
+        if (deadlineUnixMs !== undefined
+            && (!Number.isSafeInteger(deadlineUnixMs) || deadlineUnixMs <= now())) {
+            return Promise.reject(nativeError('DEADLINE_EXCEEDED', 'native AEGP request deadline elapsed before dispatch', true));
+        }
+        const requestId = call.requestId
+            || method + '-' + String(nextRequest++) + '-' + randomBytes(4).toString('hex');
+        if (!TOKEN_PATTERN.test(requestId)) {
+            return Promise.reject(nativeError('INVALID_ARGUMENT', 'native AEGP request ID is invalid', false));
+        }
+        if (pendingRequests.has(requestId)) {
+            return Promise.reject(nativeError('DUPLICATE_REQUEST', 'native AEGP request ID is already in flight', false));
+        }
         const request = { wireVersion: 1, kind: 'request', requestId, method, params };
         if (method !== 'hello') request.sessionId = sessionId;
         if (deadlineUnixMs !== undefined) request.deadlineUnixMs = deadlineUnixMs;
         const requestDigest = method === 'invoke' ? projectSummaryRequestDigest(request) : null;
         return new Promise(function (resolve, reject) {
+            const remainingMs = deadlineUnixMs === undefined
+                ? requestTimeoutMs : Math.max(1, deadlineUnixMs - now());
             const timer = setTimeout(function () {
                 pendingRequests.delete(requestId);
                 reject(nativeError('DEADLINE_EXCEEDED', 'native AEGP request timed out', true));
-            }, requestTimeoutMs);
+            }, Math.min(requestTimeoutMs, remainingMs));
             pendingRequests.set(requestId, { method, requestDigest, resolve, reject, timer });
             try {
                 socket.write(encodeFrame(request), function (error) {
@@ -379,13 +426,13 @@ function createNativeAegpClient(options) {
         });
     }
 
-    async function hello() {
+    async function hello(deadlineUnixMs) {
         const nonce = randomBytes(24).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
         const result = await send('hello', {
             supportedWireVersions: { minimum: 1, maximum: 1 },
             client: { component: input.component || 'core-broker', version: input.version || '0.9.2', instanceId: clientInstanceId },
             nonce,
-        });
+        }, { deadlineUnixMs });
         if (!exactKeys(result, [
             'selectedWireVersion', 'pluginVersion', 'compiledSdk', 'host', 'sessionId',
             'sessionGeneration', 'limits', 'capabilitiesDigest', 'clientNonce',
@@ -396,16 +443,17 @@ function createNativeAegpClient(options) {
             || result.host?.application !== 'after-effects'
             || result.host?.platform !== 'macos-arm64'
             || result.compiledSdk?.architecture !== 'arm64') {
-            throw nativeError('INVALID_REQUEST', 'native AEGP hello identity did not match discovery', false);
+            throw nativeContractMismatch('native AEGP hello identity did not match discovery');
         }
         capabilitiesDigest = result.capabilitiesDigest;
+        helloIdentity = Object.freeze({ ...result, sourceCommit: endpoint.sourceCommit });
         return result;
     }
 
     function onData(chunk) {
         try {
             if (!chunk || inputBuffer.length + chunk.length > MAX_BUFFERED_BYTES) {
-                throw nativeError('INVALID_REQUEST', 'native AEGP buffered input exceeded its bound', false);
+                throw nativeContractMismatch('native AEGP buffered input exceeded its bound');
             }
             inputBuffer = Buffer.concat([inputBuffer, Buffer.from(chunk)]);
             if (state === 'pairing-pending') {
@@ -413,7 +461,7 @@ function createNativeAegpClient(options) {
                 const pending = parseAuthPending(inputBuffer.subarray(0, AUTH_PENDING_BYTES));
                 inputBuffer = inputBuffer.subarray(AUTH_PENDING_BYTES);
                 if (!pending || pending.hostInstanceId !== endpoint.hostInstanceId) {
-                    throw nativeError('INVALID_REQUEST', 'native pairing challenge did not match discovery', false);
+                    throw nativeContractMismatch('native pairing challenge did not match discovery');
                 }
                 state = 'pairing-decision';
                 const resolve = pairingResolve;
@@ -425,7 +473,7 @@ function createNativeAegpClient(options) {
                 if (inputBuffer.length < AUTH_DECISION_BYTES) return;
                 const decision = parseAuthDecision(inputBuffer.subarray(0, AUTH_DECISION_BYTES));
                 inputBuffer = inputBuffer.subarray(AUTH_DECISION_BYTES);
-                if (!decision) throw nativeError('INVALID_REQUEST', 'native pairing decision was malformed', false);
+                if (!decision) throw nativeContractMismatch('native pairing decision was malformed');
                 if (decision.code !== 'authorized') {
                     throw nativeError('AUTH_REQUIRED', 'native pairing was ' + decision.code, decision.code === 'expired');
                 }
@@ -477,9 +525,30 @@ function createNativeAegpClient(options) {
         });
     }
 
-    function beginPairing() {
+    function boundByDeadline(promise, deadlineUnixMs, message) {
+        if (deadlineUnixMs === undefined) return promise;
+        if (!Number.isSafeInteger(deadlineUnixMs) || deadlineUnixMs <= now()) {
+            return Promise.reject(nativeError('DEADLINE_EXCEEDED', message, true));
+        }
+        return new Promise(function (resolve, reject) {
+            const timer = setTimeout(function () {
+                reject(nativeError('DEADLINE_EXCEEDED', message, true));
+            }, Math.min(requestTimeoutMs, Math.max(1, deadlineUnixMs - now())));
+            promise.then(function (value) {
+                clearTimeout(timer);
+                resolve(value);
+            }, function (error) {
+                clearTimeout(timer);
+                reject(error);
+            });
+        });
+    }
+
+    function beginPairing(deadlineUnixMs) {
         if (state === 'closed') return Promise.reject(nativeError('NATIVE_UNAVAILABLE', 'native AEGP client is closed', false));
-        if (pairingPromise && state.startsWith('pairing')) return pairingPromise;
+        if (pairingPromise && state.startsWith('pairing')) {
+            return boundByDeadline(pairingPromise, deadlineUnixMs, 'native pairing deadline elapsed');
+        }
         if (state === 'connected' || state === 'authenticating') {
             return Promise.reject(nativeError('DUPLICATE_REQUEST', 'native AEGP client is already connected', false));
         }
@@ -509,42 +578,89 @@ function createNativeAegpClient(options) {
         } catch (cause) {
             fail(nativeError('NATIVE_UNAVAILABLE', 'native AEGP connection could not be opened', true, cause));
         }
-        return pairingPromise;
+        return boundByDeadline(pairingPromise, deadlineUnixMs, 'native pairing deadline elapsed');
     }
 
-    function waitUntilConnected() {
-        if (state === 'connected') return Promise.resolve({ sessionId, sessionGeneration });
+    function waitUntilConnected(deadlineUnixMs) {
+        if (state === 'connected') {
+            return boundByDeadline(
+                Promise.resolve(helloIdentity), deadlineUnixMs, 'native connection deadline elapsed',
+            );
+        }
         if (!connectedPromise) return Promise.reject(nativeError('AUTH_REQUIRED', 'begin native pairing first', false));
-        return connectedPromise;
+        return boundByDeadline(connectedPromise, deadlineUnixMs, 'native connection deadline elapsed');
     }
 
-    async function capabilities(detail) {
-        if (state !== 'connected') await waitUntilConnected();
-        const requestedDetail = detail || 'full';
-        const result = await send('capabilities', {
-            ids: ['ae.project.summary'], detail: requestedDetail, limit: 1,
+    async function negotiate(options) {
+        const call = options || {};
+        if (call.deadlineUnixMs !== undefined
+            && (!Number.isSafeInteger(call.deadlineUnixMs) || call.deadlineUnixMs <= now())) {
+            throw nativeError('DEADLINE_EXCEEDED', 'native negotiation deadline elapsed', true);
+        }
+        if (state !== 'connected') await waitUntilConnected(call.deadlineUnixMs);
+        if (call.deadlineUnixMs !== undefined && call.deadlineUnixMs <= now()) {
+            throw nativeError('DEADLINE_EXCEEDED', 'native negotiation deadline elapsed', true);
+        }
+        if (!helloIdentity) {
+            throw nativeContractMismatch('native hello identity is unavailable');
+        }
+        return helloIdentity;
+    }
+
+    async function capabilities(options) {
+        const call = typeof options === 'string' ? { detail: options } : (options || {});
+        const requestedDetail = call.detail || 'full';
+        const limit = call.limit === undefined ? 100 : call.limit;
+        const ids = call.ids === null || call.ids === undefined ? undefined : call.ids;
+        if (!['summary', 'full'].includes(requestedDetail)
+            || !Number.isSafeInteger(limit) || limit < 1 || limit > 100
+            || (ids !== undefined && (!Array.isArray(ids) || ids.length === 0 || ids.length > 32
+                || ids.some(function (id) { return typeof id !== 'string' || !TOKEN_PATTERN.test(id); })
+                || new Set(ids).size !== ids.length))) {
+            throw nativeError('INVALID_ARGUMENT', 'native capabilities query is invalid', false);
+        }
+        if (state !== 'connected') await waitUntilConnected(call.deadlineUnixMs);
+        const params = { detail: requestedDetail, limit };
+        // Omission is protocol-significant: no filter is represented on the
+        // wire by an absent member, while its canonical query digest uses
+        // ids:null. Never serialize a JavaScript null for this field.
+        if (ids !== undefined) params.ids = ids;
+        const result = await send('capabilities', params, {
+            deadlineUnixMs: call.deadlineUnixMs,
         });
         const item = Array.isArray(result?.items)
             ? result.items.find(function (candidate) { return candidate?.id === 'ae.project.summary'; })
             : null;
         if (!exactKeys(result, ['detail', 'items', 'nextCursor', 'queryDigest', 'capabilitiesDigest'])
             || result.detail !== requestedDetail || result.nextCursor !== null
-            || result.queryDigest !== capabilitiesQueryDigest(sessionId, requestedDetail)
+            || result.queryDigest !== capabilitiesQueryDigest(sessionId, ids, requestedDetail, limit)
             || result.capabilitiesDigest !== capabilitiesDigest
-            || !item || item.version !== 1 || item.detail !== requestedDetail
-            || (requestedDetail === 'full' && !SHA256_PATTERN.test(item.contractDigest))) {
-            throw nativeError('INVALID_REQUEST', 'native capabilities result was malformed', false);
+            || (ids === undefined && !item)
+            || (item && (item.version !== 1 || item.detail !== requestedDetail
+                || (requestedDetail === 'full' && !SHA256_PATTERN.test(item.contractDigest))))) {
+            throw nativeContractMismatch('native capabilities result was malformed');
         }
-        if (requestedDetail === 'full') projectSummaryContractDigest = item.contractDigest;
+        if (requestedDetail === 'full' && item) projectSummaryContractDigest = item.contractDigest;
         return result;
     }
 
-    async function projectSummary() {
-        if (state !== 'connected') await waitUntilConnected();
-        const deadline = now() + Math.min(requestTimeoutMs, 5000);
+    async function invoke(options) {
+        const call = options || {};
+        if (!exactKeys(call, [
+            'requestId', 'capabilityId', 'capabilityVersion', 'arguments', 'deadlineUnixMs',
+        ]) || !TOKEN_PATTERN.test(call.requestId || '')
+            || call.capabilityId !== 'ae.project.summary' || call.capabilityVersion !== 1
+            || !call.arguments || typeof call.arguments !== 'object' || Array.isArray(call.arguments)
+            || Object.keys(call.arguments).length !== 0
+            || !Number.isSafeInteger(call.deadlineUnixMs) || call.deadlineUnixMs <= 0) {
+            throw nativeError('INVALID_ARGUMENT', 'native invoke request is invalid', false);
+        }
+        if (state !== 'connected') await waitUntilConnected(call.deadlineUnixMs);
         const result = await send('invoke', {
-            capabilityId: 'ae.project.summary', capabilityVersion: 1, arguments: {},
-        }, deadline);
+            capabilityId: call.capabilityId,
+            capabilityVersion: call.capabilityVersion,
+            arguments: call.arguments,
+        }, { requestId: call.requestId, deadlineUnixMs: call.deadlineUnixMs });
         const value = result?.value;
         const evidence = result?.evidence;
         if (result?.capabilityId !== 'ae.project.summary' || result?.capabilityVersion !== 1
@@ -565,9 +681,19 @@ function createNativeAegpClient(options) {
             || !Number.isSafeInteger(value?.itemCount) || value.itemCount < 0
             || !SHA256_PATTERN.test(projectSummaryContractDigest || '')
             || evidence.postcondition.digest !== projectSummaryPostconditionDigest(value)) {
-            throw nativeError('INVALID_REQUEST', 'native project summary result lacked verified AEGP evidence', false);
+            throw nativeContractMismatch('native project summary result lacked verified AEGP evidence');
         }
         return result;
+    }
+
+    async function projectSummary() {
+        return invoke({
+            requestId: 'invoke-' + String(nextRequest++) + '-' + randomBytes(4).toString('hex'),
+            capabilityId: 'ae.project.summary',
+            capabilityVersion: 1,
+            arguments: {},
+            deadlineUnixMs: now() + Math.min(requestTimeoutMs, 5000),
+        });
     }
 
     async function close() {
@@ -580,7 +706,9 @@ function createNativeAegpClient(options) {
     return Object.freeze({
         beginPairing,
         waitUntilConnected,
+        negotiate,
         capabilities,
+        invoke,
         projectSummary,
         close,
         status: function () {
@@ -588,6 +716,7 @@ function createNativeAegpClient(options) {
                 state,
                 hostInstanceId: endpoint?.hostInstanceId || null,
                 sourceCommit: endpoint?.sourceCommit || null,
+                sessionId,
                 sessionGeneration: sessionGeneration || null,
                 capabilitiesDigest,
                 projectSummaryContractDigest,

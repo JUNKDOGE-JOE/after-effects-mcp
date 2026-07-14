@@ -9,9 +9,9 @@ from ae_mcp import schemas as S
 
 
 def test_registry_has_all_verbs():
-    assert len(S.SCHEMAS) == 44, f"expected 44 verbs, got {len(S.SCHEMAS)}"
+    assert len(S.SCHEMAS) == 45, f"expected 45 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
-        "ae.init", "ae.overview", "ae.layers", "ae.readProps", "ae.exec",
+        "ae.init", "ae.overview", "ae.projectSummary", "ae.layers", "ae.readProps", "ae.exec",
         "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.previewFrame",
         "ae.applyEffect", "ae.ping", "ae.status", "ae.diagnose",
         "ae.createLayer", "ae.setProperty", "ae.moveLayer", "ae.selectLayers",
@@ -43,6 +43,12 @@ def test_overview_is_empty():
     S.AeOverviewArgs()  # no error
     with pytest.raises(ValidationError):
         S.AeOverviewArgs(foo=1)
+
+
+def test_native_project_summary_is_empty_and_distinct_from_overview():
+    assert S.AeProjectSummaryArgs() != S.AeOverviewArgs()
+    with pytest.raises(ValidationError):
+        S.AeProjectSummaryArgs(foo=1)
 
 
 def test_layers_optional_comp_id():

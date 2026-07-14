@@ -5,6 +5,7 @@ import pytest
 
 from ae_mcp.backends.discovery import BackendSelectionError
 from ae_mcp.backends.mock import MockBackend
+from ae_mcp.backends.native import NativeInvokeBackend
 from ae_mcp.handlers import HANDLERS, load_all
 from ae_mcp.server import _filtered_tool_names
 
@@ -13,6 +14,17 @@ def _load_status_handler():
     load_all()
     schema_cls, run_fn = HANDLERS["ae.status"]
     return schema_cls, run_fn
+
+
+class NativeMockBackend(MockBackend, NativeInvokeBackend):
+    async def negotiate(self, **_kwargs):
+        raise AssertionError("status must not negotiate")
+
+    async def capabilities(self, **_kwargs):
+        raise AssertionError("status must not read capabilities")
+
+    async def invoke(self, *_args, **_kwargs):
+        raise AssertionError("status must not invoke")
 
 
 @pytest.mark.asyncio
@@ -34,6 +46,11 @@ async def test_status_tool_is_only_exposed_when_backend_selection_fails(monkeypa
     assert result["backend"] is None
     assert result["selectedAdapter"] is None
     assert result["activeExecutionEngine"] is None
+    assert result["nativeExecutionPlane"] == {
+        "available": False,
+        "adapter": None,
+        "engine": None,
+    }
     assert result["knownExecutionEngines"] == [
         "native-aegp",
         "maintained-jsx",
@@ -61,11 +78,33 @@ async def test_status_tool_reports_backend_and_supported_verbs(monkeypatch):
     assert result["installedBackends"] == ["mock"]
     assert result["selectedAdapter"] == "legacy-extendscript"
     assert result["activeExecutionEngine"] is None
+    assert result["nativeExecutionPlane"]["available"] is False
     assert result["knownExecutionEngines"] == [
         "native-aegp",
         "maintained-jsx",
         "ephemeral-jsx",
     ]
+
+
+@pytest.mark.asyncio
+async def test_status_reports_native_plane_without_claiming_active_routing(monkeypatch):
+    backend = NativeMockBackend()
+    monkeypatch.setattr(backend, "supported_verbs", lambda: {"ae.ping"})
+    monkeypatch.setattr("ae_mcp.backends.discovery.select_backend", lambda: backend)
+    monkeypatch.setattr("ae_mcp.backends.discovery.list_installed_backends", lambda: {"mock": NativeMockBackend})
+    monkeypatch.setattr("ae_mcp.snapshot.discovery.select_snapshotter", lambda: None)
+
+    assert "ae.projectSummary" in _filtered_tool_names()
+    schema_cls, run_fn = _load_status_handler()
+    result = await run_fn(schema_cls(), None)
+
+    assert result["selectedAdapter"] == "legacy-extendscript"
+    assert result["activeExecutionEngine"] is None
+    assert result["nativeExecutionPlane"] == {
+        "available": True,
+        "adapter": "NativeMockBackend",
+        "engine": "native-aegp",
+    }
 
 
 def test_filtered_tool_names_ignores_snapshotter_selection_exceptions(monkeypatch):

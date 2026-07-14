@@ -25,6 +25,7 @@ def _ann(read_only: bool, destructive: bool, idempotent: bool) -> ToolAnnotation
 VERB_ANNOTATIONS: dict[str, ToolAnnotations] = {
     "ae.init": _ann(True, False, True),
     "ae.overview": _ann(True, False, True),
+    "ae.projectSummary": _ann(True, False, True),
     "ae.layers": _ann(True, False, True),
     "ae.readProps": _ann(True, False, True),
     "ae.exec": _ann(False, True, False),

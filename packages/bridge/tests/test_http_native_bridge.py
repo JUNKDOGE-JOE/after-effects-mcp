@@ -1,0 +1,442 @@
+"""Authenticated CEP HTTP adapter for the typed native Core contract."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+import respx
+from httpx import Response
+
+import ae_mcp_bridge
+from ae_mcp.backends.native import (
+    NativeBackendError,
+    NativeCancellationToken,
+    NativeInvokeRequest,
+)
+from ae_mcp_bridge import HttpBridge
+
+
+_FIXTURES = Path(__file__).resolve().parents[3] / "native" / "ae-plugin" / "protocol" / "fixtures"
+_DEADLINE = 1_900_000_005_000
+_SESSION = "11111111-1111-4111-8111-111111111111"
+_HOST = "22222222-2222-4222-8222-222222222222"
+_SOURCE = "a" * 40
+
+
+@pytest.fixture
+def token_file(tmp_path, monkeypatch):
+    token = tmp_path / "auth-token"
+    token.write_text("native-test-token", encoding="utf-8")
+    monkeypatch.setattr(ae_mcp_bridge, "_token_path", lambda: token)
+    return token
+
+
+def _fixture(name: str) -> dict:
+    return json.loads((_FIXTURES / name).read_text(encoding="utf-8"))
+
+
+def _broker_fixture(name: str) -> dict:
+    return _fixture("broker-http-errors.json")[name]
+
+
+def _negotiation() -> dict:
+    result = _fixture("hello.json")["response"]["result"]
+    return {
+        "selectedWireVersion": result["selectedWireVersion"],
+        "pluginVersion": result["pluginVersion"],
+        "compiledSdkVersion": result["compiledSdk"]["version"],
+        "sourceCommit": _SOURCE,
+        "hostInstanceId": result["host"]["instanceId"],
+        "hostPlatform": result["host"]["platform"],
+        "sessionId": result["sessionId"],
+        "sessionGeneration": result["sessionGeneration"],
+        "capabilitiesDigest": result["capabilitiesDigest"],
+    }
+
+
+def _capabilities() -> dict:
+    return {
+        "sessionId": _SESSION,
+        **_fixture("capabilities.json")["response"]["result"],
+    }
+
+
+def _invoke_result() -> dict:
+    return _fixture("invoke-project-summary.json")["response"]["result"]
+
+
+@pytest.mark.asyncio
+async def test_native_backend_posts_lossless_typed_contract(token_file):
+    captured: dict[str, dict] = {}
+
+    def respond(name: str, result: dict):
+        def _response(request):
+            captured[name] = {
+                "body": json.loads(request.content),
+                "token": request.headers.get("X-AE-MCP-Token"),
+                "client": request.headers.get("x-ae-mcp-client"),
+            }
+            return Response(200, json={"ok": True, "result": result})
+
+        return _response
+
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/negotiate").mock(side_effect=respond("negotiate", _negotiation()))
+        mock.post("/native/capabilities").mock(side_effect=respond("capabilities", _capabilities()))
+        mock.post("/native/invoke").mock(side_effect=respond("invoke", _invoke_result()))
+        backend = HttpBridge("http://127.0.0.1:11488")
+
+        negotiation = await backend.negotiate(deadline_unix_ms=_DEADLINE)
+        capabilities = await backend.capabilities(
+            ids=None,
+            detail="full",
+            limit=100,
+            deadline_unix_ms=_DEADLINE,
+        )
+        request = NativeInvokeRequest(
+            request_id="invoke-summary-1",
+            capability_id="ae.project.summary",
+            capability_version=1,
+            arguments={},
+            deadline_unix_ms=_DEADLINE,
+        )
+        result = await backend.invoke(request)
+
+    assert negotiation.host_instance_id == _HOST
+    assert capabilities.session_id == _SESSION
+    assert capabilities.items[0].capability_id == "ae.project.summary"
+    assert result.evidence.request_id == "invoke-summary-1"
+    assert captured["negotiate"]["body"] == {"deadlineUnixMs": _DEADLINE}
+    assert captured["capabilities"]["body"] == {
+        "detail": "full",
+        "limit": 100,
+        "deadlineUnixMs": _DEADLINE,
+    }
+    assert captured["invoke"]["body"] == request.model_dump(
+        mode="json", by_alias=True
+    )
+    assert all(item["token"] == "native-test-token" for item in captured.values())
+    assert all(item["client"] for item in captured.values())
+
+
+@pytest.mark.asyncio
+async def test_native_pairing_error_preserves_fingerprint_and_provenance(token_file):
+    pairing = {
+        "fingerprint": "12AB-34CD",
+        "expiresInMs": 60_000,
+        "hostInstanceId": _HOST,
+        "sourceCommit": _SOURCE,
+    }
+    error = {
+        "code": "NATIVE_PAIRING_REQUIRED",
+        "message": "Approve the matching fingerprint in After Effects.",
+        "retryable": True,
+        "sideEffect": "not-started",
+        "recovery": {
+            "action": "approve-pairing",
+            "hint": "Approve the fingerprint, then retry.",
+        },
+        "details": {
+            "pairingFingerprint": pairing["fingerprint"],
+            "pairingExpiresInMs": pairing["expiresInMs"],
+            "hostInstanceId": pairing["hostInstanceId"],
+            "sourceCommit": pairing["sourceCommit"],
+        },
+    }
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/negotiate").mock(
+            return_value=Response(
+                409,
+                json={"ok": False, "error": error, "pairing": pairing},
+            )
+        )
+        backend = HttpBridge("http://127.0.0.1:11488")
+        with pytest.raises(NativeBackendError) as raised:
+            await backend.negotiate(deadline_unix_ms=_DEADLINE)
+
+    assert raised.value.code == "NATIVE_PAIRING_REQUIRED"
+    assert raised.value.retryable is True
+    assert raised.value.side_effect == "not-started"
+    assert raised.value.recovery.action == "approve-pairing"
+    assert raised.value.details == error["details"]
+
+
+@pytest.mark.parametrize(
+    (
+        "status",
+        "host_code",
+        "host_retryable",
+        "host_action",
+        "expected_code",
+        "expected_action",
+    ),
+    [
+        (401, "UNAUTHORIZED", False, "reconnect", "NATIVE_BROKER_UNAUTHORIZED", "refresh-auth"),
+        (403, "CLIENT_BLOCKED", False, "none", "NATIVE_CLIENT_BLOCKED", "review-client-access"),
+        (503, "ACTIONS_PAUSED", True, "retry", "NATIVE_ACTIONS_PAUSED", "resume-actions"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_native_broker_gate_errors_map_to_core_policy(
+    token_file,
+    status: int,
+    host_code: str,
+    host_retryable: bool,
+    host_action: str,
+    expected_code: str,
+    expected_action: str,
+):
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/negotiate").mock(
+            return_value=Response(
+                status,
+                json={
+                    "ok": False,
+                    "error": {
+                        "code": host_code,
+                        "message": host_code,
+                        "retryable": host_retryable,
+                        "sideEffect": "not-started",
+                        "recovery": {
+                            "action": host_action,
+                            "hint": "broker-specific recovery",
+                        },
+                    },
+                },
+            )
+        )
+        backend = HttpBridge("http://127.0.0.1:11488")
+        with pytest.raises(NativeBackendError) as raised:
+            await backend.negotiate(deadline_unix_ms=_DEADLINE)
+
+    assert raised.value.code == expected_code
+    assert raised.value.side_effect == "not-started"
+    assert raised.value.recovery.action == expected_action
+
+
+@pytest.mark.parametrize("host_retryable", [False, True])
+@pytest.mark.asyncio
+async def test_internal_auth_required_is_a_fresh_pairing_outcome(
+    token_file,
+    host_retryable: bool,
+):
+    fixture = _broker_fixture("authRequired")
+    body = fixture["body"]
+    body["error"]["retryable"] = host_retryable
+    if host_retryable:
+        body["error"]["message"] = "native pairing was expired"
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/negotiate").mock(
+            return_value=Response(
+                fixture["status"],
+                json=body,
+            )
+        )
+        backend = HttpBridge("http://127.0.0.1:11488")
+        with pytest.raises(NativeBackendError) as raised:
+            await backend.negotiate(deadline_unix_ms=_DEADLINE)
+
+    assert raised.value.code == "NATIVE_PAIRING_REJECTED"
+    assert raised.value.code != "NATIVE_BROKER_UNAUTHORIZED"
+    assert raised.value.recovery.action == "retry-pairing"
+    assert str(raised.value) == body["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_internal_contract_mismatch_maps_to_core_contract_error(token_file):
+    fixture = _broker_fixture("contractMismatch")
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/negotiate").mock(
+            return_value=Response(
+                fixture["status"],
+                json=fixture["body"],
+            )
+        )
+        backend = HttpBridge("http://127.0.0.1:11488")
+        with pytest.raises(NativeBackendError) as raised:
+            await backend.negotiate(deadline_unix_ms=_DEADLINE)
+
+    assert raised.value.code == "NATIVE_CONTRACT_MISMATCH"
+    assert raised.value.recovery.action == "refresh-capabilities"
+    assert str(raised.value) == fixture["body"]["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_true_native_wire_error_uses_strict_native_validator(token_file):
+    error = _fixture("errors.json")["responses"]["queueFull"]["error"]
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/negotiate").mock(
+            return_value=Response(503, json={"ok": False, "error": error})
+        )
+        backend = HttpBridge("http://127.0.0.1:11488")
+        with pytest.raises(NativeBackendError) as raised:
+            await backend.negotiate(deadline_unix_ms=_DEADLINE)
+
+    assert raised.value.code == "QUEUE_FULL"
+    assert raised.value.recovery.action == "retry"
+    assert raised.value.recovery.retry_after_ms == 250
+
+
+@pytest.mark.asyncio
+async def test_pairing_failure_without_closed_pairing_envelope_fails_closed(token_file):
+    error = {
+        "code": "NATIVE_PAIRING_REQUIRED",
+        "message": "Pairing required.",
+        "retryable": True,
+        "sideEffect": "not-started",
+        "recovery": {
+            "action": "approve-pairing",
+            "hint": "Approve the matching fingerprint.",
+        },
+        "details": {
+            "pairingFingerprint": "12AB-34CD",
+            "pairingExpiresInMs": 60_000,
+            "hostInstanceId": _HOST,
+            "sourceCommit": _SOURCE,
+        },
+    }
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/negotiate").mock(
+            return_value=Response(409, json={"ok": False, "error": error})
+        )
+        backend = HttpBridge("http://127.0.0.1:11488")
+        with pytest.raises(NativeBackendError) as raised:
+            await backend.negotiate(deadline_unix_ms=_DEADLINE)
+
+    assert raised.value.code == "NATIVE_CONTRACT_MISMATCH"
+
+
+@pytest.mark.asyncio
+async def test_failure_envelope_with_http_200_fails_closed(token_file):
+    body = {
+        "ok": False,
+        "error": {
+            "code": "UNAUTHORIZED",
+            "message": "unauthorized",
+            "retryable": False,
+            "sideEffect": "not-started",
+            "recovery": {"action": "reconnect", "hint": "Reload token."},
+        },
+    }
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/negotiate").mock(
+            return_value=Response(200, json=body)
+        )
+        backend = HttpBridge("http://127.0.0.1:11488")
+        with pytest.raises(NativeBackendError) as raised:
+            await backend.negotiate(deadline_unix_ms=_DEADLINE)
+
+    assert raised.value.code == "NATIVE_CONTRACT_MISMATCH"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {
+            "ok": False,
+            "error": {
+                "code": "UNAUTHORIZED",
+                "message": "unauthorized",
+                "retryable": False,
+                "sideEffect": "not-started",
+                "recovery": {"action": "reconnect", "hint": "Reload token."},
+            },
+            "extra": True,
+        },
+        {
+            "ok": False,
+            "error": {
+                "code": "UNAUTHORIZED",
+                "message": "unauthorized",
+                "retryable": False,
+                "recovery": {"action": "reconnect", "hint": "Reload token."},
+            },
+        },
+        {
+            "ok": False,
+            "error": {
+                "code": "UNAUTHORIZED",
+                "message": "unauthorized",
+                "retryable": False,
+                "sideEffect": "not-started",
+                "recovery": {"action": "reconnect", "hint": "Reload token."},
+                "extra": True,
+            },
+        },
+        {
+            "ok": False,
+            "error": {
+                "code": "UNAUTHORIZED",
+                "message": "unauthorized",
+                "retryable": False,
+                "sideEffect": "not-started",
+                "recovery": {
+                    "action": "reconnect",
+                    "hint": "Reload token.",
+                    "extra": True,
+                },
+            },
+        },
+        {
+            "ok": False,
+            "error": {
+                "code": "ACTIONS_PAUSED",
+                "message": "paused",
+                "retryable": True,
+                "sideEffect": "not-started",
+                "recovery": {"action": "none", "hint": "Resume actions."},
+            },
+        },
+    ],
+)
+@pytest.mark.asyncio
+async def test_malformed_broker_failure_envelopes_fail_closed(token_file, body):
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/negotiate").mock(
+            return_value=Response(503 if body["error"]["code"] == "ACTIONS_PAUSED" else 401, json=body)
+        )
+        backend = HttpBridge("http://127.0.0.1:11488")
+        with pytest.raises(NativeBackendError) as raised:
+            await backend.negotiate(deadline_unix_ms=_DEADLINE)
+
+    assert raised.value.code == "NATIVE_CONTRACT_MISMATCH"
+
+
+@pytest.mark.asyncio
+async def test_native_success_envelope_fails_closed_on_extra_member(token_file):
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/negotiate").mock(
+            return_value=Response(
+                200,
+                json={"ok": True, "result": _negotiation(), "unchecked": True},
+            )
+        )
+        backend = HttpBridge("http://127.0.0.1:11488")
+        with pytest.raises(NativeBackendError) as raised:
+            await backend.negotiate(deadline_unix_ms=_DEADLINE)
+
+    assert raised.value.code == "NATIVE_CONTRACT_MISMATCH"
+
+
+@pytest.mark.asyncio
+async def test_native_cancellation_before_dispatch_makes_no_http_request(token_file):
+    cancellation = NativeCancellationToken()
+    cancellation.cancel()
+    async with respx.mock(
+        base_url="http://127.0.0.1:11488",
+        assert_all_called=False,
+    ) as mock:
+        route = mock.post("/native/negotiate").mock(
+            return_value=Response(200, json={"ok": True, "result": _negotiation()})
+        )
+        backend = HttpBridge("http://127.0.0.1:11488")
+        with pytest.raises(NativeBackendError) as raised:
+            await backend.negotiate(
+                deadline_unix_ms=_DEADLINE,
+                cancellation=cancellation,
+            )
+
+    assert raised.value.code == "CANCELLED"
+    assert route.called is False
