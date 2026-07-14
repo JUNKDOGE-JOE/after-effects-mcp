@@ -1290,7 +1290,7 @@ std::string project_folder_create_descriptor(const CapabilitiesSuccess& response
           "\"idempotencyKey\":{\"maxLength\":64,\"minLength\":16,"
           "\"pattern\":\"^[A-Za-z0-9][A-Za-z0-9._:-]*$\",\"type\":\"string\"},"
           "\"name\":{\"maxLength\":31,\"minLength\":1,"
-          "\"pattern\":\"^[^\\u0000-\\u001f\\u007f]+$\",\"type\":\"string\","
+          "\"pattern\":\"^[^\\\\u0000-\\\\u001f\\\\u007f]+$\",\"type\":\"string\","
           "\"x-lengthUnit\":\"utf-16-code-units\",\"x-maximumUtf16CodeUnits\":31}},"
           "\"required\":[\"name\",\"idempotencyKey\"],\"type\":\"object\","
           "\"x-invariant\":\"name-must-not-exceed-31-utf16-code-units\"},"

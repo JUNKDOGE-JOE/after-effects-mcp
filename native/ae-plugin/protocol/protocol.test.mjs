@@ -23,6 +23,7 @@ import {
   materializeDeadline,
   nativeCapabilityRegistry,
   postconditionDigest,
+  projectFolderCreateDescriptor,
   projectSummaryContractDigest,
   projectSummaryDescriptor,
   schemaAccepts as productSchemaAccepts,
@@ -645,6 +646,7 @@ test('capability discovery uses real canonical digests and keeps compatibility u
 
 test('full descriptors are bounded, self-contained direct-run contracts', () => {
   const descriptor = projectSummaryDescriptor(schema);
+  const folderDescriptor = projectFolderCreateDescriptor(schema);
   const containsRef = (value) => {
     if (Array.isArray(value)) return value.some(containsRef);
     if (value === null || typeof value !== 'object') return false;
@@ -665,6 +667,12 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     inputSchema: descriptor.inputSchema,
     resultSchema: descriptor.resultSchema,
   }));
+  assert.equal(folderDescriptor.inputSchema.properties.name.pattern,
+    '^[^\\u0000-\\u001f\\u007f]+$');
+  assert.equal(folderDescriptor.contractDigest,
+    'd9defb50a560e02ee4ca2e46abccf903136b2f65f51a74fd24baaafc8bedcb0f');
+  assert.equal(capabilityDigest([descriptor, folderDescriptor]),
+    '33afff4311c76b6671101c9f2a15d2bbfe328c43dd7b539c0825b24ffa416be8');
   assert.ok(Buffer.byteLength(canonicalize(descriptor), 'utf8') < LIMITS.maxFrameBytes);
 });
 

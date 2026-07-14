@@ -381,6 +381,9 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(folder_capabilities,
       "\"contractDigest\":\"d9defb50a560e02ee4ca2e46abccf903136b2f65f51a74fd24baaafc8bedcb0f\"",
       "folder capabilities response");
+  require_contains(folder_capabilities,
+      "\"pattern\":\"^[^\\\\u0000-\\\\u001f\\\\u007f]+$\"",
+      "folder capabilities response");
 
   send_json(sockets[0], invoke_json("invoke-read"));
   const std::string progress = read_body(sockets[0]);

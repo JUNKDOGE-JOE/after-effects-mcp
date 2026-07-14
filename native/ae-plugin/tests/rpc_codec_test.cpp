@@ -497,6 +497,9 @@ void response_helpers_are_bounded_and_typed() {
   require(capabilities_body.find("\"additionalProperties\":false") != std::string::npos
       && capabilities_body.find("aemcp.requirement.native.project-read") != std::string::npos
       && capabilities_body.find("aemcp.requirement.native.project-folder-create")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"pattern\":\"^[^\\\\u0000-\\\\u001f\\\\u007f]+$\"")
           != std::string::npos,
       "full capability serializer omitted the closed contract");
 
