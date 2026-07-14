@@ -134,7 +134,9 @@ For visual work, ask the agent to preview frames and verify intermediate results
 
 ## Development
 
-Close every After Effects / AfterFX process before a development deployment. Each installer preflights the source, copies and verifies a unique same-parent staging directory, atomically retains the old panel as a backup, and prints an absolute restore command.
+Close every After Effects / AfterFX process before a development deployment. The CEP installer
+preflights and stages the panel with its own backup flow. The native AEGP installer described
+below independently verifies its artifact and returns a transaction ID for exact rollback.
 
 ### Native AEGP SDK input
 
@@ -172,7 +174,68 @@ extraction scripts/binaries to GitHub **or Git LFS**. Public CI contains only a 
 rejects vendored SDK material; it never receives the SDK. Read the complete
 [SDK intake, verification, and distribution policy](docs/native-sdk/SDK_INPUTS.md).
 
-macOS development setup:
+#### Build and install the native AEGP host on macOS
+
+This development flow is separate from the CEP panel installer below. It currently builds only
+an Apple Silicon arm64 AEGP host. Commit the product source first: evidence builds fail closed
+with `AE_PLUGIN_SOURCE_DIRTY` unless the entire worktree is clean, so the receipt can bind the
+artifact to the exact repository commit. To prevent bypassing the transactional installer, the
+output path must be a new absolute directory under canonical `/private/tmp`; it must remain
+outside every Git worktree, the Git common directory, and the SDK root.
+
+```bash
+BUILD_DIR=/private/tmp/ae-mcp-native-73
+node native/ae-plugin/build-macos.mjs \
+  --sdk-archive "$AE_SDK_ARCHIVE" \
+  --sdk-root "$AE_SDK_ROOT" \
+  --output "$BUILD_DIR"
+node native/ae-plugin/verify-macos.mjs \
+  --bundle "$BUILD_DIR/AeMcpNative.plugin"
+```
+
+Close every After Effects, AfterFX, and aerender process before installing. The development
+installer verifies the build receipt and installed copy, and installs the loadable bundle at
+`~/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/ae-mcp/AeMcpNative.plugin`:
+
+```bash
+node native/ae-plugin/install-dev-macos.mjs install \
+  --artifact-dir "$BUILD_DIR"
+```
+
+That MediaCore namespace is kept strict: it is either empty during a transaction or contains only
+the active `AeMcpNative.plugin`. Transaction records and every complete stage, backup, failed, or
+replaced bundle live outside Adobe's scan roots under
+`~/Library/Application Support/AfterEffectsMCP/native-plugin-dev-v1/`. With AE closed, the installer
+moves the complete legacy namespace into an off-scan quarantine, restores only the active bundle,
+and resumes safely from interrupted migration boundaries. A `.disabled` suffix alone is not treated
+as a safe isolation boundary. Recoverable metadata or staging remnants from an interrupted write are
+preserved under the same state root's `orphan-evidence/`; if deployment evidence references an
+incomplete record, recovery fails closed instead of guessing.
+
+A persistent Darwin kernel guard serializes install, recovery, and rollback, including stale-owner
+recovery. Do not run this installer concurrently from an older checkout: observed live legacy locks
+are rejected, but cross-version installers do not share the new guard protocol.
+
+Keep the returned `transactionId`. With AE closed, roll back exactly that current transaction:
+
+```bash
+TRANSACTION_ID="paste the transactionId from the install output here"
+node native/ae-plugin/install-dev-macos.mjs rollback \
+  --transaction "$TRANSACTION_ID"
+```
+
+If a previous installer process was interrupted between transaction phases, keep AE closed and
+reconcile its durable record before retrying:
+
+```bash
+node native/ae-plugin/install-dev-macos.mjs recover
+```
+
+Ad-hoc signing and a successful local build are development evidence only. The generated receipt
+deliberately keeps `distributionApproved`, `runtimeEvidence`, and `compatibilityEvidence` false;
+real AE loading and the public MCP-to-AEGP read/write gate are separate required evidence.
+
+CEP panel macOS development setup:
 
 ```bash
 uv sync --all-packages --group dev
