@@ -1,0 +1,29 @@
+{
+  "_fixture": {
+    "classification": "synthetic-contract-vector",
+    "runtimeEvidence": false,
+    "compatibilityEvidence": false
+  },
+  "vectors": [
+  {
+    "name": "zero-length",
+    "hex": "00000000",
+    "expectedErrorCode": "INVALID_REQUEST"
+  },
+  {
+    "name": "over-maximum",
+    "hex": "00010001",
+    "expectedErrorCode": "INVALID_REQUEST"
+  },
+  {
+    "name": "truncated-json",
+    "hex": "000000087b226f6b22",
+    "expectedErrorCode": "INVALID_REQUEST"
+  },
+  {
+    "name": "invalid-utf8",
+    "hex": "00000002c328",
+    "expectedErrorCode": "INVALID_REQUEST"
+  }
+  ]
+}

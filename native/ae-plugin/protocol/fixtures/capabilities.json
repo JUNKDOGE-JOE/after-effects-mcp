@@ -1,0 +1,109 @@
+{
+  "_fixture": {
+    "classification": "synthetic-contract-vector",
+    "runtimeEvidence": false,
+    "compatibilityEvidence": false
+  },
+  "request": {
+    "wireVersion": 1,
+    "kind": "request",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "requestId": "capabilities-1",
+    "method": "capabilities",
+    "params": {
+      "ids": ["ae.project.summary"],
+      "detail": "full",
+      "limit": 1
+    }
+  },
+  "response": {
+    "wireVersion": 1,
+    "kind": "response",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "requestId": "capabilities-1",
+    "method": "capabilities",
+    "ok": true,
+    "replayed": false,
+    "result": {
+      "detail": "full",
+      "items": [
+        {
+          "detail": "full",
+          "id": "ae.project.summary",
+          "version": 1,
+          "schemaVersion": 1,
+          "summary": "Read bounded facts about the active After Effects project.",
+          "risk": "read",
+          "mutability": "read-only",
+          "idempotency": "idempotent",
+          "cancellation": "before-dispatch",
+          "undo": "not-applicable",
+          "sideEffectSummary": "Reads project state without modifying it.",
+          "preconditions": [],
+          "compatibility": {
+            "status": "unverified",
+            "intendedPlatforms": ["macos-arm64", "windows-x64"]
+          },
+          "inputContractId": "aemcp.contract.ae.project.summary.input.v1",
+          "resultContractId": "aemcp.contract.ae.project.summary.result.v1",
+          "contractDigest": "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [],
+            "properties": {}
+          },
+          "resultSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["projectOpen", "projectName", "itemCount"],
+            "properties": {
+              "projectOpen": { "type": "boolean" },
+              "projectName": { "type": "string", "maxLength": 1024 },
+              "itemCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            }
+          },
+          "requirements": [
+            {
+              "id": "aemcp.requirement.native.project-read",
+              "contractVersion": 1
+            }
+          ],
+          "examples": [
+            {
+              "id": "aemcp-example-project-summary-empty",
+              "kind": "positive",
+              "summary": "Read a bounded summary when no project content exists.",
+              "arguments": {},
+              "expected": {
+                "outcome": "succeeded",
+                "value": {
+                  "projectOpen": false,
+                  "projectName": "SYNTHETIC_EXAMPLE",
+                  "itemCount": 0
+                }
+              }
+            },
+            {
+              "id": "aemcp-example-project-summary-unavailable",
+              "kind": "negative",
+              "summary": "Return a typed unavailable error before native dispatch.",
+              "arguments": {},
+              "expected": {
+                "errorCode": "NATIVE_UNAVAILABLE",
+                "recoveryAction": "reconnect"
+              }
+            }
+          ]
+        }
+      ],
+      "nextCursor": null,
+      "queryDigest": "aa3c66bc21e50b6a35db9c3cb12fcb1627694cd8f9fc411f21f7e3de46b3e56a",
+      "capabilitiesDigest": "778a01733fcf37510f56894a46ec5bd87c7429de2e06d2d5eafb4cdbbae88557"
+    }
+  }
+}

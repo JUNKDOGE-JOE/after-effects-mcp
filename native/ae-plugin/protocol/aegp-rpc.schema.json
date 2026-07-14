@@ -1,0 +1,1083 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ae-mcp.invalid/schemas/aegp-rpc-v1.json",
+  "title": "AeMcpNativeAegpRpcV1",
+  "x-framing": {
+    "lengthPrefixBytes": 4,
+    "byteOrder": "big-endian",
+    "encoding": "utf-8",
+    "maxFrameBytes": 65536,
+    "maxJsonDepth": 16,
+    "maxJsonNodes": 2048,
+    "maxStringLength": 8192,
+    "stringLengthUnit": "unicode-scalar-values",
+    "duplicateObjectKeys": "reject"
+  },
+  "x-bootstrap": {
+    "framingVersion": 1,
+    "helloEnvelopeVersion": 1,
+    "permanent": true,
+    "futureImplementations": "must-parse-v1-framing-and-hello-before-negotiation"
+  },
+  "x-lifecycle": {
+    "defaultDeadlineMs": 5000,
+    "maximumDeadlineMs": 30000,
+    "duplicateRequest": "reject-in-flight-or-nonidentical",
+    "terminalResponsesPerRequest": 1,
+    "pagination": "unsupported-in-v1",
+    "defaultTerminalCacheEntries": 128,
+    "defaultTerminalCacheTtlMs": 60000,
+    "terminalObservationClockToleranceMs": 0,
+    "cancelDecision": "atomic-one-use-controller-receipt"
+  },
+  "x-digests": {
+    "algorithm": "sha256",
+    "canonicalization": "rfc8785-jcs",
+    "propertyNameSort": "utf-16-code-units",
+    "contractScope": "normalized-self-contained-input-and-result-schemas",
+    "capabilitiesScope": "ordered-full-capability-descriptors",
+    "requestScope": "complete-request-envelope",
+    "postconditionScope": "capability-id-version-and-result-value"
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/request" },
+    { "$ref": "#/$defs/response" },
+    { "$ref": "#/$defs/progressEvent" }
+  ],
+  "$defs": {
+    "wireVersion": { "const": 1 },
+    "safePositiveInteger": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "safeNonnegativeInteger": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "capabilityId": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 96,
+      "pattern": "^ae(?:\\.[a-z][a-z0-9_-]*)+$"
+    },
+    "platform": {
+      "enum": ["macos-arm64", "windows-x64"]
+    },
+    "method": {
+      "enum": ["hello", "capabilities", "invoke", "cancel"]
+    },
+    "wireRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum", "maximum"],
+      "properties": {
+        "minimum": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "maximum": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      },
+      "x-invariant": "minimum-must-not-exceed-maximum"
+    },
+    "clientIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component", "version", "instanceId"],
+      "properties": {
+        "component": { "enum": ["core-broker", "development-smoke"] },
+        "version": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "instanceId": { "$ref": "#/$defs/uuid" }
+      }
+    },
+    "helloParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["supportedWireVersions", "client", "nonce"],
+      "properties": {
+        "supportedWireVersions": { "$ref": "#/$defs/wireRange" },
+        "client": { "$ref": "#/$defs/clientIdentity" },
+        "nonce": { "type": "string", "minLength": 32, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" }
+      }
+    },
+    "capabilitiesParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/capabilityId" }
+        },
+        "detail": {
+          "enum": ["summary", "full"],
+          "default": "summary",
+          "x-omissionBehavior": "summary"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50,
+          "x-omissionBehavior": 50
+        }
+      }
+    },
+    "projectSummaryArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [],
+      "properties": {}
+    },
+    "projectSummaryInputSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {}
+      }
+    },
+    "projectSummaryResultSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["projectOpen", "projectName", "itemCount"],
+        "properties": {
+          "projectOpen": { "type": "boolean" },
+          "projectName": { "type": "string", "maxLength": 1024 },
+          "itemCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      }
+    },
+    "projectSummaryInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.project.summary" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/projectSummaryArguments" }
+      }
+    },
+    "invokeParams": {
+      "oneOf": [
+        { "$ref": "#/$defs/projectSummaryInvokeParams" }
+      ],
+      "x-invariant": "every-invoke-variant-is-compile-time-allowlisted-and-closed"
+    },
+    "cancelParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetRequestId"],
+      "properties": {
+        "targetRequestId": { "$ref": "#/$defs/requestId" }
+      }
+    },
+    "requestBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wireVersion", "kind", "requestId", "method", "params"],
+      "properties": {
+        "wireVersion": { "$ref": "#/$defs/wireVersion" },
+        "kind": { "const": "request" },
+        "sessionId": { "$ref": "#/$defs/uuid" },
+        "requestId": { "$ref": "#/$defs/requestId" },
+        "method": { "$ref": "#/$defs/method" },
+        "deadlineUnixMs": {
+          "$ref": "#/$defs/safePositiveInteger",
+          "x-omissionBehavior": "broker-send-time-plus-5000ms"
+        },
+        "params": { "type": "object" }
+      }
+    },
+    "helloRequest": {
+      "allOf": [
+        { "$ref": "#/$defs/requestBase" },
+        {
+          "type": "object",
+          "not": { "required": ["sessionId"] },
+          "properties": {
+            "method": { "const": "hello" },
+            "params": { "$ref": "#/$defs/helloParams" }
+          }
+        }
+      ]
+    },
+    "capabilitiesRequest": {
+      "allOf": [
+        { "$ref": "#/$defs/requestBase" },
+        {
+          "type": "object",
+          "required": ["sessionId"],
+          "properties": {
+            "method": { "const": "capabilities" },
+            "params": { "$ref": "#/$defs/capabilitiesParams" }
+          }
+        }
+      ]
+    },
+    "invokeRequest": {
+      "allOf": [
+        { "$ref": "#/$defs/requestBase" },
+        {
+          "type": "object",
+          "required": ["sessionId"],
+          "properties": {
+            "method": { "const": "invoke" },
+            "params": { "$ref": "#/$defs/invokeParams" }
+          }
+        }
+      ]
+    },
+    "cancelRequest": {
+      "allOf": [
+        { "$ref": "#/$defs/requestBase" },
+        {
+          "type": "object",
+          "required": ["sessionId"],
+          "properties": {
+            "method": { "const": "cancel" },
+            "params": { "$ref": "#/$defs/cancelParams" }
+          }
+        }
+      ]
+    },
+    "request": {
+      "oneOf": [
+        { "$ref": "#/$defs/helloRequest" },
+        { "$ref": "#/$defs/capabilitiesRequest" },
+        { "$ref": "#/$defs/invokeRequest" },
+        { "$ref": "#/$defs/cancelRequest" }
+      ]
+    },
+    "compiledSdk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "build", "architecture"],
+      "properties": {
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?$" },
+        "build": { "$ref": "#/$defs/safePositiveInteger" },
+        "architecture": { "enum": ["arm64", "x86_64"] }
+      }
+    },
+    "hostIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["application", "version", "build", "platform", "instanceId"],
+      "properties": {
+        "application": { "const": "after-effects" },
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?$" },
+        "build": { "$ref": "#/$defs/safePositiveInteger" },
+        "platform": { "$ref": "#/$defs/platform" },
+        "instanceId": { "$ref": "#/$defs/uuid" }
+      }
+    },
+    "negotiatedLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxFrameBytes",
+        "maxInFlight",
+        "maxQueueDepth",
+        "maxDeadlineMs",
+        "maxRequestsPerSecond",
+        "maxBurst",
+        "maxControlInFlight",
+        "maxControlRequestsPerSecond",
+        "maxControlBurst",
+        "maxTerminalCacheEntries",
+        "terminalCacheTtlMs"
+      ],
+      "properties": {
+        "maxFrameBytes": { "type": "integer", "minimum": 4096, "maximum": 65536 },
+        "maxInFlight": { "type": "integer", "minimum": 1, "maximum": 64 },
+        "maxQueueDepth": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "maxDeadlineMs": { "type": "integer", "minimum": 100, "maximum": 30000 },
+        "maxRequestsPerSecond": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "maxBurst": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "maxControlInFlight": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "maxControlRequestsPerSecond": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "maxControlBurst": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "maxTerminalCacheEntries": { "type": "integer", "minimum": 1, "maximum": 4096 },
+        "terminalCacheTtlMs": { "type": "integer", "minimum": 1000, "maximum": 300000 }
+      }
+    },
+    "helloResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selectedWireVersion",
+        "pluginVersion",
+        "compiledSdk",
+        "host",
+        "sessionId",
+        "sessionGeneration",
+        "limits",
+        "capabilitiesDigest",
+        "clientNonce"
+      ],
+      "properties": {
+        "selectedWireVersion": { "$ref": "#/$defs/wireVersion" },
+        "pluginVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "compiledSdk": { "$ref": "#/$defs/compiledSdk" },
+        "host": { "$ref": "#/$defs/hostIdentity" },
+        "sessionId": { "$ref": "#/$defs/uuid" },
+        "sessionGeneration": { "$ref": "#/$defs/safePositiveInteger" },
+        "limits": { "$ref": "#/$defs/negotiatedLimits" },
+        "capabilitiesDigest": { "$ref": "#/$defs/sha256" },
+        "clientNonce": { "type": "string", "minLength": 32, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" }
+      },
+      "x-invariant": "selected-version-must-overlap-offer; outer-and-result-session-and-nonce-must-match; platform-and-architecture-must-agree"
+    },
+    "contractId": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128,
+      "pattern": "^aemcp\\.contract(?:\\.[a-z][a-z0-9_-]*)+\\.v[1-9][0-9]*$"
+    },
+    "requirementId": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128,
+      "pattern": "^aemcp\\.requirement(?:\\.[a-z][a-z0-9_-]*)+$"
+    },
+    "requirementRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "contractVersion"],
+      "properties": {
+        "id": { "$ref": "#/$defs/requirementId" },
+        "contractVersion": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      }
+    },
+    "compatibilityUnverified": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "intendedPlatforms"],
+      "properties": {
+        "status": { "const": "unverified" },
+        "intendedPlatforms": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/platform" }
+        }
+      }
+    },
+    "compatibilityVerified": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "intendedPlatforms", "minimumHostMajor", "maximumHostMajor"],
+      "properties": {
+        "status": { "const": "verified" },
+        "intendedPlatforms": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/platform" }
+        },
+        "minimumHostMajor": { "type": "integer", "minimum": 1 },
+        "maximumHostMajor": { "type": "integer", "minimum": 1 }
+      },
+      "x-invariant": "minimumHostMajor-must-not-exceed-maximumHostMajor"
+    },
+    "compatibility": {
+      "oneOf": [
+        { "$ref": "#/$defs/compatibilityUnverified" },
+        { "$ref": "#/$defs/compatibilityVerified" }
+      ]
+    },
+    "positiveCapabilityExample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "summary", "arguments", "expected"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^aemcp-example-[a-z0-9-]+$", "maxLength": 96 },
+        "kind": { "const": "positive" },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "arguments": { "$ref": "#/$defs/projectSummaryArguments" },
+        "expected": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["outcome", "value"],
+          "properties": {
+            "outcome": { "const": "succeeded" },
+            "value": { "$ref": "#/$defs/projectSummaryValue" }
+          }
+        }
+      }
+    },
+    "negativeCapabilityExample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "summary", "arguments", "expected"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^aemcp-example-[a-z0-9-]+$", "maxLength": 96 },
+        "kind": { "const": "negative" },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "arguments": { "$ref": "#/$defs/projectSummaryArguments" },
+        "expected": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["errorCode", "recoveryAction"],
+          "properties": {
+            "errorCode": { "$ref": "#/$defs/errorCode" },
+            "recoveryAction": {
+              "enum": [
+                "retry",
+                "refresh-capabilities",
+                "refresh-locator",
+                "reconnect",
+                "open-project",
+                "change-arguments",
+                "inspect-state",
+                "none"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "capabilityExample": {
+      "oneOf": [
+        { "$ref": "#/$defs/positiveCapabilityExample" },
+        { "$ref": "#/$defs/negativeCapabilityExample" }
+      ]
+    },
+    "capabilityDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "detail",
+        "id",
+        "version",
+        "schemaVersion",
+        "summary",
+        "risk",
+        "mutability",
+        "idempotency",
+        "cancellation",
+        "undo",
+        "sideEffectSummary",
+        "preconditions",
+        "compatibility"
+      ],
+      "properties": {
+        "detail": { "enum": ["summary", "full"] },
+        "id": { "$ref": "#/$defs/capabilityId" },
+        "version": { "type": "integer", "minimum": 1 },
+        "schemaVersion": { "type": "integer", "minimum": 1 },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "risk": { "enum": ["read", "write"] },
+        "mutability": { "enum": ["read-only", "mutating"] },
+        "idempotency": { "enum": ["idempotent", "idempotency-key", "non-idempotent"] },
+        "cancellation": { "enum": ["before-dispatch", "cooperative", "none"] },
+        "undo": { "enum": ["not-applicable", "ae-undo-group", "checkpoint-required", "none"] },
+        "sideEffectSummary": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "preconditions": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 96 }
+        },
+        "compatibility": { "$ref": "#/$defs/compatibility" },
+        "inputContractId": { "$ref": "#/$defs/contractId" },
+        "resultContractId": { "$ref": "#/$defs/contractId" },
+        "contractDigest": { "$ref": "#/$defs/sha256" },
+        "inputSchema": { "$ref": "#/$defs/projectSummaryInputSchemaContract" },
+        "resultSchema": { "$ref": "#/$defs/projectSummaryResultSchemaContract" },
+        "requirements": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/requirementRef" }
+        },
+        "examples": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/capabilityExample" }
+        }
+      }
+    },
+    "capabilitySummary": {
+      "allOf": [
+        { "$ref": "#/$defs/capabilityDescriptor" },
+        {
+          "type": "object",
+          "properties": { "detail": { "const": "summary" } },
+          "not": {
+            "anyOf": [
+              { "required": ["inputContractId"] },
+              { "required": ["resultContractId"] },
+              { "required": ["contractDigest"] },
+              { "required": ["inputSchema"] },
+              { "required": ["resultSchema"] },
+              { "required": ["requirements"] },
+              { "required": ["examples"] }
+            ]
+          }
+        }
+      ]
+    },
+    "capabilityFull": {
+      "allOf": [
+        { "$ref": "#/$defs/capabilityDescriptor" },
+        {
+          "type": "object",
+          "required": [
+            "inputContractId",
+            "resultContractId",
+            "contractDigest",
+            "inputSchema",
+            "resultSchema",
+            "requirements",
+            "examples"
+          ],
+          "properties": { "detail": { "const": "full" } }
+        }
+      ]
+    },
+    "capabilityResultItem": {
+      "oneOf": [
+        { "$ref": "#/$defs/capabilitySummary" },
+        { "$ref": "#/$defs/capabilityFull" }
+      ]
+    },
+    "capabilitiesResultBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["detail", "items", "nextCursor", "queryDigest", "capabilitiesDigest"],
+      "properties": {
+        "detail": { "enum": ["summary", "full"] },
+        "items": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/capabilityResultItem" }
+        },
+        "nextCursor": { "type": "null" },
+        "queryDigest": { "$ref": "#/$defs/sha256" },
+        "capabilitiesDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "capabilitiesSummaryResult": {
+      "allOf": [
+        { "$ref": "#/$defs/capabilitiesResultBase" },
+        {
+          "type": "object",
+          "properties": {
+            "detail": { "const": "summary" },
+            "items": {
+              "type": "array",
+              "maxItems": 100,
+              "items": { "$ref": "#/$defs/capabilitySummary" }
+            }
+          }
+        }
+      ]
+    },
+    "capabilitiesFullResult": {
+      "allOf": [
+        { "$ref": "#/$defs/capabilitiesResultBase" },
+        {
+          "type": "object",
+          "properties": {
+            "detail": { "const": "full" },
+            "items": {
+              "type": "array",
+              "maxItems": 100,
+              "items": { "$ref": "#/$defs/capabilityFull" }
+            }
+          }
+        }
+      ]
+    },
+    "capabilitiesResult": {
+      "oneOf": [
+        { "$ref": "#/$defs/capabilitiesSummaryResult" },
+        { "$ref": "#/$defs/capabilitiesFullResult" }
+      ]
+    },
+    "locator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "hostInstanceId", "sessionId", "projectId", "generation", "objectId"],
+      "properties": {
+        "kind": { "enum": ["project", "item", "composition", "layer", "stream"] },
+        "hostInstanceId": { "$ref": "#/$defs/uuid" },
+        "sessionId": { "$ref": "#/$defs/uuid" },
+        "projectId": { "$ref": "#/$defs/uuid" },
+        "generation": { "$ref": "#/$defs/safePositiveInteger" },
+        "objectId": { "$ref": "#/$defs/uuid" }
+      },
+      "x-invariant": "server-issued-opaque-identifiers-bound-to-host-session-project-generation"
+    },
+    "postconditionEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verified", "kind", "algorithm", "digest"],
+      "properties": {
+        "verified": { "const": true },
+        "kind": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9_-]*$" },
+        "algorithm": { "const": "sha256-rfc8785-jcs-v1" },
+        "digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "undoEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available", "verified"],
+      "properties": {
+        "available": { "type": "boolean" },
+        "verified": { "type": "boolean" },
+        "groupId": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    },
+    "executionEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engine",
+        "hostInstanceId",
+        "sessionId",
+        "requestId",
+        "capabilityId",
+        "capabilityVersion",
+        "startedAtUnixMs",
+        "completedAtUnixMs",
+        "effect",
+        "postcondition",
+        "requestDigest"
+      ],
+      "properties": {
+        "engine": { "const": "native-aegp" },
+        "hostInstanceId": { "$ref": "#/$defs/uuid" },
+        "sessionId": { "$ref": "#/$defs/uuid" },
+        "requestId": { "$ref": "#/$defs/requestId" },
+        "capabilityId": { "$ref": "#/$defs/capabilityId" },
+        "capabilityVersion": { "type": "integer", "minimum": 1 },
+        "startedAtUnixMs": { "$ref": "#/$defs/safePositiveInteger" },
+        "completedAtUnixMs": { "$ref": "#/$defs/safePositiveInteger" },
+        "effect": { "enum": ["none", "committed"] },
+        "postcondition": { "$ref": "#/$defs/postconditionEvidence" },
+        "requestDigest": { "$ref": "#/$defs/sha256" },
+        "undo": { "$ref": "#/$defs/undoEvidence" }
+      },
+      "x-invariant": "outer-session-request-capability-must-match-and-completed-time-must-not-precede-started-time"
+    },
+    "projectSummaryValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projectOpen", "projectName", "itemCount"],
+      "properties": {
+        "projectOpen": { "type": "boolean" },
+        "projectName": { "type": "string", "maxLength": 1024 },
+        "itemCount": { "$ref": "#/$defs/safeNonnegativeInteger" }
+      }
+    },
+    "invokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.project.summary" },
+        "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" },
+        "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/projectSummaryValue" },
+        "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "cancelResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetRequestId", "state", "terminalResponseExpected"],
+      "properties": {
+        "targetRequestId": { "$ref": "#/$defs/requestId" },
+        "state": {
+          "enum": [
+            "queued-cancelled",
+            "running-cancel-requested",
+            "running-not-cancellable",
+            "already-terminal",
+            "not-found"
+          ]
+        },
+        "terminalResponseExpected": { "type": "boolean" }
+      }
+    },
+    "errorCode": {
+      "enum": [
+        "NATIVE_UNAVAILABLE",
+        "NATIVE_UNSUPPORTED",
+        "WIRE_VERSION_MISMATCH",
+        "INVALID_REQUEST",
+        "INVALID_ARGUMENT",
+        "DUPLICATE_REQUEST",
+        "PRECONDITION_FAILED",
+        "STALE_LOCATOR",
+        "DEADLINE_EXCEEDED",
+        "CANCELLED",
+        "QUEUE_FULL",
+        "AE_SHUTTING_DOWN",
+        "SESSION_STALE",
+        "CAPABILITY_FAILED",
+        "POSSIBLY_SIDE_EFFECTING_FAILURE"
+      ]
+    },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "hint"],
+      "properties": {
+        "action": {
+          "enum": [
+            "retry",
+            "refresh-capabilities",
+            "refresh-locator",
+            "reconnect",
+            "open-project",
+            "change-arguments",
+            "inspect-state",
+            "none"
+          ]
+        },
+        "hint": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "retryAfterMs": { "type": "integer", "minimum": 1, "maximum": 30000 }
+      }
+    },
+    "errorDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "field": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "capabilityId": { "$ref": "#/$defs/capabilityId" },
+        "supportedWireVersions": { "$ref": "#/$defs/wireRange" },
+        "currentGeneration": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "errorPolicy": {
+      "oneOf": [
+        {
+          "properties": {
+            "code": { "enum": ["NATIVE_UNAVAILABLE", "AE_SHUTTING_DOWN", "SESSION_STALE"] },
+            "retryable": { "const": true },
+            "sideEffect": { "const": "not-started" },
+            "recovery": { "properties": { "action": { "const": "reconnect" } } }
+          }
+        },
+        {
+          "properties": {
+            "code": { "const": "NATIVE_UNSUPPORTED" },
+            "retryable": { "const": false },
+            "sideEffect": { "const": "not-started" },
+            "recovery": { "properties": { "action": { "const": "refresh-capabilities" } } }
+          }
+        },
+        {
+          "properties": {
+            "code": { "const": "WIRE_VERSION_MISMATCH" },
+            "retryable": { "const": false },
+            "sideEffect": { "const": "not-started" },
+            "recovery": { "properties": { "action": { "const": "reconnect" } } }
+          }
+        },
+        {
+          "properties": {
+            "code": { "const": "INVALID_REQUEST" },
+            "retryable": { "const": false },
+            "sideEffect": { "const": "not-started" },
+            "recovery": { "properties": { "action": { "const": "none" } } }
+          }
+        },
+        {
+          "properties": {
+            "code": { "const": "INVALID_ARGUMENT" },
+            "retryable": { "const": false },
+            "sideEffect": { "const": "not-started" },
+            "recovery": { "properties": { "action": { "const": "change-arguments" } } }
+          }
+        },
+        {
+          "properties": {
+            "code": { "const": "DUPLICATE_REQUEST" },
+            "retryable": { "const": false },
+            "sideEffect": { "const": "not-started" },
+            "recovery": { "properties": { "action": { "const": "inspect-state" } } }
+          }
+        },
+        {
+          "properties": {
+            "code": { "const": "PRECONDITION_FAILED" },
+            "retryable": { "const": false },
+            "sideEffect": { "const": "not-started" },
+            "recovery": { "properties": { "action": { "const": "open-project" } } }
+          }
+        },
+        {
+          "properties": {
+            "code": { "const": "STALE_LOCATOR" },
+            "retryable": { "const": true },
+            "sideEffect": { "const": "not-started" },
+            "recovery": { "properties": { "action": { "const": "refresh-locator" } } }
+          }
+        },
+        {
+          "properties": {
+            "code": { "const": "DEADLINE_EXCEEDED" },
+            "retryable": { "const": true },
+            "sideEffect": { "const": "not-started" },
+            "recovery": { "properties": { "action": { "const": "retry" } } }
+          }
+        },
+        {
+          "properties": {
+            "code": { "const": "CANCELLED" },
+            "retryable": { "const": false },
+            "sideEffect": { "const": "not-started" },
+            "recovery": { "properties": { "action": { "const": "none" } } }
+          }
+        },
+        {
+          "properties": {
+            "code": { "const": "QUEUE_FULL" },
+            "retryable": { "const": true },
+            "sideEffect": { "const": "not-started" },
+            "recovery": {
+              "required": ["retryAfterMs"],
+              "properties": { "action": { "const": "retry" } }
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": { "const": "CAPABILITY_FAILED" },
+            "retryable": { "const": false },
+            "sideEffect": { "const": "not-started" },
+            "recovery": { "properties": { "action": { "const": "inspect-state" } } }
+          }
+        },
+        {
+          "properties": {
+            "code": { "const": "POSSIBLY_SIDE_EFFECTING_FAILURE" },
+            "retryable": { "const": false },
+            "sideEffect": { "const": "may-have-occurred" },
+            "recovery": { "properties": { "action": { "const": "inspect-state" } } }
+          }
+        }
+      ]
+    },
+    "rpcError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable", "sideEffect", "recovery"],
+      "properties": {
+        "code": { "$ref": "#/$defs/errorCode" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "retryable": { "type": "boolean" },
+        "sideEffect": { "enum": ["not-started", "may-have-occurred", "completed"] },
+        "recovery": { "$ref": "#/$defs/recovery" },
+        "details": { "$ref": "#/$defs/errorDetails" }
+      },
+      "allOf": [
+        { "$ref": "#/$defs/errorPolicy" },
+        {
+          "if": { "properties": { "code": { "const": "QUEUE_FULL" } } },
+          "then": { "properties": { "recovery": { "required": ["retryAfterMs"] } } },
+          "else": { "properties": { "recovery": { "not": { "required": ["retryAfterMs"] } } } }
+        },
+        {
+          "if": { "properties": { "code": { "const": "WIRE_VERSION_MISMATCH" } } },
+          "then": {
+            "required": ["details"],
+            "properties": { "details": { "required": ["supportedWireVersions"] } }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "enum": [
+                  "NATIVE_UNSUPPORTED",
+                  "PRECONDITION_FAILED",
+                  "STALE_LOCATOR",
+                  "CAPABILITY_FAILED",
+                  "POSSIBLY_SIDE_EFFECTING_FAILURE"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": ["details"],
+            "properties": { "details": { "required": ["capabilityId"] } }
+          }
+        }
+      ]
+    },
+    "helloSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wireVersion", "kind", "sessionId", "requestId", "method", "ok", "replayed", "result"],
+      "properties": {
+        "wireVersion": { "$ref": "#/$defs/wireVersion" },
+        "kind": { "const": "response" },
+        "sessionId": { "$ref": "#/$defs/uuid" },
+        "requestId": { "$ref": "#/$defs/requestId" },
+        "method": { "const": "hello" },
+        "ok": { "const": true },
+        "replayed": { "const": false },
+        "result": { "$ref": "#/$defs/helloResult" }
+      }
+    },
+    "capabilitiesSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wireVersion", "kind", "sessionId", "requestId", "method", "ok", "replayed", "result"],
+      "properties": {
+        "wireVersion": { "$ref": "#/$defs/wireVersion" },
+        "kind": { "const": "response" },
+        "sessionId": { "$ref": "#/$defs/uuid" },
+        "requestId": { "$ref": "#/$defs/requestId" },
+        "method": { "const": "capabilities" },
+        "ok": { "const": true },
+        "replayed": { "const": false },
+        "result": { "$ref": "#/$defs/capabilitiesResult" }
+      }
+    },
+    "invokeSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wireVersion", "kind", "sessionId", "requestId", "method", "ok", "replayed", "result"],
+      "properties": {
+        "wireVersion": { "$ref": "#/$defs/wireVersion" },
+        "kind": { "const": "response" },
+        "sessionId": { "$ref": "#/$defs/uuid" },
+        "requestId": { "$ref": "#/$defs/requestId" },
+        "method": { "const": "invoke" },
+        "ok": { "const": true },
+        "replayed": { "type": "boolean" },
+        "result": { "$ref": "#/$defs/invokeResult" }
+      }
+    },
+    "cancelSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wireVersion", "kind", "sessionId", "requestId", "method", "ok", "replayed", "result"],
+      "properties": {
+        "wireVersion": { "$ref": "#/$defs/wireVersion" },
+        "kind": { "const": "response" },
+        "sessionId": { "$ref": "#/$defs/uuid" },
+        "requestId": { "$ref": "#/$defs/requestId" },
+        "method": { "const": "cancel" },
+        "ok": { "const": true },
+        "replayed": { "const": false },
+        "result": { "$ref": "#/$defs/cancelResult" }
+      }
+    },
+    "failureBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wireVersion", "kind", "requestId", "method", "ok", "replayed", "error"],
+      "properties": {
+        "wireVersion": { "$ref": "#/$defs/wireVersion" },
+        "kind": { "const": "response" },
+        "sessionId": { "$ref": "#/$defs/uuid" },
+        "requestId": { "$ref": "#/$defs/requestId" },
+        "method": { "$ref": "#/$defs/method" },
+        "ok": { "const": false },
+        "replayed": { "const": false },
+        "error": { "$ref": "#/$defs/rpcError" }
+      }
+    },
+    "helloFailure": {
+      "allOf": [
+        { "$ref": "#/$defs/failureBase" },
+        {
+          "type": "object",
+          "not": { "required": ["sessionId"] },
+          "properties": {
+            "method": { "const": "hello" },
+            "error": {
+              "properties": {
+                "code": {
+                  "enum": ["NATIVE_UNAVAILABLE", "WIRE_VERSION_MISMATCH", "INVALID_REQUEST", "INVALID_ARGUMENT"]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "sessionFailure": {
+      "allOf": [
+        { "$ref": "#/$defs/failureBase" },
+        {
+          "type": "object",
+          "required": ["sessionId"],
+          "properties": {
+            "method": { "enum": ["capabilities", "invoke", "cancel"] },
+            "error": {
+              "properties": {
+                "code": { "not": { "const": "WIRE_VERSION_MISMATCH" } }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "response": {
+      "oneOf": [
+        { "$ref": "#/$defs/helloSuccess" },
+        { "$ref": "#/$defs/capabilitiesSuccess" },
+        { "$ref": "#/$defs/invokeSuccess" },
+        { "$ref": "#/$defs/cancelSuccess" },
+        { "$ref": "#/$defs/helloFailure" },
+        { "$ref": "#/$defs/sessionFailure" }
+      ]
+    },
+    "progressEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wireVersion", "kind", "sessionId", "requestId", "event", "sequence", "progress"],
+      "properties": {
+        "wireVersion": { "$ref": "#/$defs/wireVersion" },
+        "kind": { "const": "event" },
+        "sessionId": { "$ref": "#/$defs/uuid" },
+        "requestId": { "$ref": "#/$defs/requestId" },
+        "event": { "const": "progress" },
+        "sequence": { "$ref": "#/$defs/safePositiveInteger" },
+        "progress": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["phase", "fraction", "message"],
+          "properties": {
+            "phase": { "enum": ["queued", "dispatched", "running", "validating"] },
+            "fraction": { "type": "number", "minimum": 0, "maximum": 1 },
+            "message": { "type": "string", "minLength": 1, "maxLength": 160 }
+          }
+        }
+      }
+    }
+  }
+}
