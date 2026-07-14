@@ -24,6 +24,7 @@ from mcp.types import CallToolResult, TextContent, Tool
 
 from ae_mcp import approval_gate, client_identity
 from ae_mcp.annotations import VERB_ANNOTATIONS
+from ae_mcp.backends.native import NativeBackendError, NativeInvokeBackend
 from ae_mcp.error_hints import append_hint
 from ae_mcp.handlers import HANDLERS, load_all
 from ae_mcp.instructions import SERVER_INSTRUCTIONS, build_server_instructions
@@ -77,6 +78,10 @@ def _filtered_tool_names() -> set:
         snapshotter = None
     if snapshotter is None:
         supported = supported - {"ae.snapshot"}
+    if isinstance(backend, NativeInvokeBackend):
+        supported = supported | {"ae.projectSummary"}
+    else:
+        supported = supported - {"ae.projectSummary"}
     return supported | {"ae.status", "ae.diagnose"}
 
 
@@ -264,6 +269,9 @@ def build_server() -> Server:
 
         try:
             result = await run_fn(validated, ctx)
+        except NativeBackendError as e:
+            log.info("native handler %s failed with %s", name, e.code)
+            result = {"ok": False, "error": e.public_dict()}
         except Exception as e:  # noqa: BLE001
             log.exception("handler %s raised", name)
             payload = _format_result({"ok": False, "error": append_hint(str(e))})
@@ -273,7 +281,9 @@ def build_server() -> Server:
             )
 
         if isinstance(result, dict) and result.get("ok") is False and "error" in result:
-            result = {**result, "error": append_hint(str(result["error"]))}
+            error = result["error"]
+            if isinstance(error, str):
+                result = {**result, "error": append_hint(error)}
 
         if isinstance(result, dict) and result.get("ok") is True:
             request_id = None

@@ -13,6 +13,7 @@ import httpx
 from ae_mcp import progress, schemas
 from ae_mcp.backends import discovery as _backend_discovery
 from ae_mcp.backends.base import EXECUTION_ENGINES
+from ae_mcp.backends.native import NativeInvokeBackend
 from ae_mcp.handlers import register
 from ae_mcp.jsx_prelude import with_prelude
 from ae_mcp.jsx_result import parse_jsx_result as _try_json
@@ -44,6 +45,11 @@ async def _run_status(args: schemas.AeStatusArgs, ctx: Any) -> dict[str, Any]:
         "selectedAdapter": None,
         "activeExecutionEngine": None,
         "knownExecutionEngines": list(EXECUTION_ENGINES),
+        "nativeExecutionPlane": {
+            "available": False,
+            "adapter": None,
+            "engine": None,
+        },
         "snapshotter": None,
     }
 
@@ -63,6 +69,12 @@ async def _run_status(args: schemas.AeStatusArgs, ctx: Any) -> dict[str, Any]:
         result["ok"] = True
         result["backend"] = backend.__class__.__name__
         result["selectedAdapter"] = "legacy-extendscript"
+        if isinstance(backend, NativeInvokeBackend):
+            result["nativeExecutionPlane"] = {
+                "available": True,
+                "adapter": backend.__class__.__name__,
+                "engine": "native-aegp",
+            }
 
     try:
         snapshotter = _snapshot_discovery.select_snapshotter()

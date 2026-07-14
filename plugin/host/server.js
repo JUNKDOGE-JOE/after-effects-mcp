@@ -25,6 +25,7 @@ const blocked = new Set();
 // Self-reported label of the panel's own diagnostic /exec probes. Must match
 // the x-ae-mcp-client header in plugin/panel/src/cep/diagnostics.js.
 const INTERNAL_CLIENT = 'panel-diagnostics/internal';
+const NATIVE_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 
 function setRuntimeDependencies(dependencies) {
     if (!dependencies || typeof dependencies.express !== 'function') {
@@ -122,8 +123,9 @@ function makeNativeAegpClient() {
     if (!nativeAegpClient
         || typeof nativeAegpClient.beginPairing !== 'function'
         || typeof nativeAegpClient.waitUntilConnected !== 'function'
+        || typeof nativeAegpClient.negotiate !== 'function'
         || typeof nativeAegpClient.capabilities !== 'function'
-        || typeof nativeAegpClient.projectSummary !== 'function'
+        || typeof nativeAegpClient.invoke !== 'function'
         || typeof nativeAegpClient.status !== 'function'
         || typeof nativeAegpClient.close !== 'function') {
         nativeAegpClient = null;
@@ -158,19 +160,95 @@ function setNativeAegpRuntime(runtime) {
 function nativeErrorPayload(error) {
     const code = typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]{2,63}$/.test(error.code)
         ? error.code : 'NATIVE_UNAVAILABLE';
-    return {
+    const policies = {
+        NATIVE_UNAVAILABLE: [true, 'not-started', 'reconnect'],
+        NATIVE_UNSUPPORTED: [false, 'not-started', 'refresh-capabilities'],
+        NATIVE_CONTRACT_MISMATCH: [false, 'not-started', 'refresh-capabilities'],
+        AUTH_REQUIRED: [false, 'not-started', 'approve-pairing'],
+        WIRE_VERSION_MISMATCH: [false, 'not-started', 'reconnect'],
+        INVALID_REQUEST: [false, 'not-started', 'none'],
+        INVALID_ARGUMENT: [false, 'not-started', 'change-arguments'],
+        DUPLICATE_REQUEST: [false, 'not-started', 'inspect-state'],
+        PRECONDITION_FAILED: [false, 'not-started', 'open-project'],
+        STALE_LOCATOR: [true, 'not-started', 'refresh-locator'],
+        DEADLINE_EXCEEDED: [true, 'not-started', 'retry'],
+        CANCELLED: [false, 'not-started', 'none'],
+        QUEUE_FULL: [true, 'not-started', 'retry'],
+        AE_SHUTTING_DOWN: [true, 'not-started', 'reconnect'],
+        SESSION_STALE: [true, 'not-started', 'reconnect'],
+        CAPABILITY_FAILED: [false, 'not-started', 'inspect-state'],
+        POSSIBLY_SIDE_EFFECTING_FAILURE: [false, 'may-have-occurred', 'inspect-state'],
+        NATIVE_PAIRING_REQUIRED: [true, 'not-started', 'approve-pairing'],
+    };
+    const policy = policies[code] || policies.NATIVE_UNAVAILABLE;
+    const fixedContractMismatch = code === 'NATIVE_CONTRACT_MISMATCH';
+    const recovery = !fixedContractMismatch
+        && error?.recovery && typeof error.recovery === 'object'
+        ? { ...error.recovery }
+        : {
+            action: policy[2],
+            hint: fixedContractMismatch
+                ? 'Refresh the authenticated native contract before retrying.'
+                : code === 'NATIVE_PAIRING_REQUIRED' || code === 'AUTH_REQUIRED'
+                ? 'Approve the matching fingerprint in After Effects, then retry.'
+                : 'Follow the recovery action before retrying the native request.',
+        };
+    const payload = {
         code,
-        message: code === 'NATIVE_PAIRING_REQUIRED'
+        message: typeof error?.message === 'string' && error.message.length > 0
+            ? error.message : code === 'NATIVE_PAIRING_REQUIRED'
             ? 'Approve the matching fingerprint from the After Effects AE MCP menu, then retry.'
             : 'Native AEGP request failed with ' + code + '.',
-        retryable: error?.retryable === true || code === 'NATIVE_UNAVAILABLE',
+        retryable: fixedContractMismatch
+            ? false : typeof error?.retryable === 'boolean' ? error.retryable : policy[0],
+        sideEffect: fixedContractMismatch
+            ? 'not-started' : typeof error?.sideEffect === 'string' ? error.sideEffect : policy[1],
+        recovery,
+    };
+    if (code === 'NATIVE_PAIRING_REQUIRED' && error?.pairing) {
+        payload.details = {
+            pairingFingerprint: error.pairing.fingerprint,
+            pairingExpiresInMs: error.pairing.expiresInMs,
+            hostInstanceId: error.pairing.hostInstanceId,
+            sourceCommit: error.pairing.sourceCommit,
+        };
+    } else if (error?.details && typeof error.details === 'object' && !Array.isArray(error.details)) {
+        payload.details = { ...error.details };
+    }
+    return payload;
+}
+
+function exactBody(value, required, optional) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const allowed = new Set(required.concat(optional || []));
+    return required.every(function (key) { return Object.hasOwn(value, key); })
+        && Object.keys(value).every(function (key) { return allowed.has(key); });
+}
+
+function validDeadline(value) {
+    return Number.isSafeInteger(value) && value > 0;
+}
+
+function nativeGateError(code, message, retryable, action, hint) {
+    return {
+        code,
+        message,
+        retryable,
+        sideEffect: 'not-started',
+        recovery: { action, hint },
     };
 }
 
 function nativeRequestGate(req, res) {
     const provided = req.get(authToken.HEADER);
     if (!authToken.tokenMatches(provided, execToken)) {
-        res.status(401).json({ ok: false, error: { code: 'UNAUTHORIZED', message: 'unauthorized', retryable: false } });
+        res.status(401).json({
+            ok: false,
+            error: nativeGateError(
+                'UNAUTHORIZED', 'unauthorized', false, 'reconnect',
+                'Reload the shared loopback token before reconnecting.',
+            ),
+        });
         return null;
     }
     const client = req.get('x-ae-mcp-client') || 'unknown';
@@ -181,7 +259,10 @@ function nativeRequestGate(req, res) {
         activity.record({ client, engine: 'native-aegp', ok: false, denied: 'blocked' });
         res.status(403).json({
             ok: false,
-            error: { code: 'CLIENT_BLOCKED', message: 'this client is blocked in the panel', retryable: false },
+            error: nativeGateError(
+                'CLIENT_BLOCKED', 'this client is blocked in the panel', false, 'none',
+                'A user must unblock this client in the panel before another request.',
+            ),
         });
         return null;
     }
@@ -189,15 +270,18 @@ function nativeRequestGate(req, res) {
         activity.record({ client, engine: 'native-aegp', ok: false, denied: 'paused' });
         res.status(503).json({
             ok: false,
-            error: { code: 'ACTIONS_PAUSED', message: 'AI actions are paused in the panel', retryable: true },
+            error: nativeGateError(
+                'ACTIONS_PAUSED', 'AI actions are paused in the panel', true, 'retry',
+                'Resume AI actions in the panel before retrying.',
+            ),
         });
         return null;
     }
     return client;
 }
 
-async function nativePairingRequired(client) {
-    const pending = await client.beginPairing();
+async function nativePairingRequired(client, deadlineUnixMs) {
+    const pending = await client.beginPairing(deadlineUnixMs);
     const error = new Error('native AEGP pairing requires an After Effects decision');
     error.code = 'NATIVE_PAIRING_REQUIRED';
     error.retryable = true;
@@ -205,15 +289,15 @@ async function nativePairingRequired(client) {
     throw error;
 }
 
-async function connectedNativeClient() {
+async function connectedNativeClient(deadlineUnixMs) {
     const client = makeNativeAegpClient();
     const status = client.status();
     if (status.state === 'connected') return client;
     if (status.state === 'authenticating') {
-        await client.waitUntilConnected();
+        await client.waitUntilConnected(deadlineUnixMs);
         return client;
     }
-    return nativePairingRequired(client);
+    return nativePairingRequired(client, deadlineUnixMs);
 }
 
 function sendNativeFailure(res, error) {
@@ -411,54 +495,151 @@ function buildApp() {
         }
     });
 
-    a.post('/native/invoke', async (req, res) => {
+    a.post('/native/negotiate', async (req, res) => {
         const clientLabel = nativeRequestGate(req, res);
         if (clientLabel === null) return;
         const body = req.body || {};
-        if (!body || typeof body !== 'object' || Array.isArray(body)
-            || JSON.stringify(Object.keys(body).sort()) !== JSON.stringify([
-                'arguments', 'capabilityId', 'capabilityVersion',
-            ])
-            || body.capabilityId !== 'ae.project.summary'
-            || body.capabilityVersion !== 1
-            || !body.arguments || typeof body.arguments !== 'object'
-            || Array.isArray(body.arguments) || Object.keys(body.arguments).length !== 0) {
+        if (!exactBody(body, ['deadlineUnixMs']) || !validDeadline(body.deadlineUnixMs)) {
             return res.status(400).json({
                 ok: false,
-                error: { code: 'INVALID_ARGUMENT', message: 'native invoke parameters are invalid', retryable: false },
+                error: nativeErrorPayload(Object.assign(
+                    new Error('native negotiation parameters are invalid'),
+                    { code: 'INVALID_ARGUMENT', retryable: false },
+                )),
             });
         }
         const startedAt = Date.now();
         try {
-            const client = await connectedNativeClient();
-            await client.capabilities('full');
-            const result = await client.projectSummary();
-            const runtime = client.status();
+            const client = await connectedNativeClient(body.deadlineUnixMs);
+            const hello = await client.negotiate({ deadlineUnixMs: body.deadlineUnixMs });
+            const result = {
+                selectedWireVersion: hello.selectedWireVersion,
+                pluginVersion: hello.pluginVersion,
+                compiledSdkVersion: hello.compiledSdk.version,
+                sourceCommit: hello.sourceCommit,
+                hostInstanceId: hello.host.instanceId,
+                hostPlatform: hello.host.platform,
+                sessionId: hello.sessionId,
+                sessionGeneration: hello.sessionGeneration,
+                capabilitiesDigest: hello.capabilitiesDigest,
+            };
+            activity.record({
+                client: clientLabel,
+                engine: 'native-aegp',
+                operation: 'negotiate',
+                ok: true,
+                hostInstanceId: result.hostInstanceId,
+                sessionGeneration: result.sessionGeneration,
+                durationMs: Date.now() - startedAt,
+            });
+            res.json({ ok: true, result });
+        } catch (error) {
+            activity.record({
+                client: clientLabel,
+                engine: 'native-aegp',
+                operation: 'negotiate',
+                ok: false,
+                error: nativeErrorPayload(error).code,
+                durationMs: Date.now() - startedAt,
+            });
+            sendNativeFailure(res, error);
+        }
+    });
+
+    a.post('/native/capabilities', async (req, res) => {
+        const clientLabel = nativeRequestGate(req, res);
+        if (clientLabel === null) return;
+        const body = req.body || {};
+        const validIds = !Object.hasOwn(body, 'ids')
+            || (Array.isArray(body.ids) && body.ids.length >= 1 && body.ids.length <= 32
+                && body.ids.every(function (id) { return typeof id === 'string' && id.length > 0; })
+                && new Set(body.ids).size === body.ids.length);
+        if (!exactBody(body, ['detail', 'limit', 'deadlineUnixMs'], ['ids'])
+            || body.detail !== 'full'
+            || !Number.isSafeInteger(body.limit) || body.limit < 1 || body.limit > 100
+            || !validDeadline(body.deadlineUnixMs) || !validIds) {
+            return res.status(400).json({
+                ok: false,
+                error: nativeErrorPayload(Object.assign(
+                    new Error('native capabilities parameters are invalid'),
+                    { code: 'INVALID_ARGUMENT', retryable: false },
+                )),
+            });
+        }
+        const startedAt = Date.now();
+        try {
+            const client = await connectedNativeClient(body.deadlineUnixMs);
+            const query = {
+                detail: body.detail,
+                limit: body.limit,
+                deadlineUnixMs: body.deadlineUnixMs,
+            };
+            // ids=None is represented by omission across both HTTP and UDS.
+            if (Object.hasOwn(body, 'ids')) query.ids = body.ids;
+            const nativeResult = await client.capabilities(query);
+            const result = { sessionId: client.status().sessionId, ...nativeResult };
+            activity.record({
+                client: clientLabel,
+                engine: 'native-aegp',
+                operation: 'capabilities',
+                ok: true,
+                itemCount: result.items.length,
+                durationMs: Date.now() - startedAt,
+            });
+            res.json({ ok: true, result });
+        } catch (error) {
+            activity.record({
+                client: clientLabel,
+                engine: 'native-aegp',
+                operation: 'capabilities',
+                ok: false,
+                error: nativeErrorPayload(error).code,
+                durationMs: Date.now() - startedAt,
+            });
+            sendNativeFailure(res, error);
+        }
+    });
+
+    a.post('/native/invoke', async (req, res) => {
+        const clientLabel = nativeRequestGate(req, res);
+        if (clientLabel === null) return;
+        const body = req.body || {};
+        if (!exactBody(body, [
+            'requestId', 'capabilityId', 'capabilityVersion', 'arguments', 'deadlineUnixMs',
+        ])
+            || typeof body.requestId !== 'string' || !NATIVE_REQUEST_ID_PATTERN.test(body.requestId)
+            || body.capabilityId !== 'ae.project.summary'
+            || body.capabilityVersion !== 1
+            || !body.arguments || typeof body.arguments !== 'object'
+            || Array.isArray(body.arguments) || Object.keys(body.arguments).length !== 0
+            || !validDeadline(body.deadlineUnixMs)) {
+            return res.status(400).json({
+                ok: false,
+                error: nativeErrorPayload(Object.assign(
+                    new Error('native invoke parameters are invalid'),
+                    { code: 'INVALID_ARGUMENT', retryable: false },
+                )),
+            });
+        }
+        const startedAt = Date.now();
+        try {
+            const client = await connectedNativeClient(body.deadlineUnixMs);
+            const result = await client.invoke(body);
             activity.record({
                 client: clientLabel,
                 engine: 'native-aegp',
                 capabilityId: body.capabilityId,
+                requestId: body.requestId,
                 ok: true,
                 durationMs: Date.now() - startedAt,
             });
-            res.json({
-                ok: true,
-                capabilityId: body.capabilityId,
-                engine: 'native-aegp',
-                result,
-                runtime: {
-                    hostInstanceId: runtime.hostInstanceId,
-                    sourceCommit: runtime.sourceCommit,
-                    sessionGeneration: runtime.sessionGeneration,
-                    capabilitiesDigest: runtime.capabilitiesDigest,
-                    projectSummaryContractDigest: runtime.projectSummaryContractDigest,
-                },
-            });
+            res.json({ ok: true, result });
         } catch (error) {
             activity.record({
                 client: clientLabel,
                 engine: 'native-aegp',
                 capabilityId: body.capabilityId,
+                requestId: body.requestId,
                 ok: false,
                 error: nativeErrorPayload(error).code,
                 durationMs: Date.now() - startedAt,

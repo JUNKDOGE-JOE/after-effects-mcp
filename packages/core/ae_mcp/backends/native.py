@@ -40,6 +40,11 @@ NativeRecoveryAction: TypeAlias = Literal[
     "open-project",
     "change-arguments",
     "inspect-state",
+    "approve-pairing",
+    "retry-pairing",
+    "refresh-auth",
+    "review-client-access",
+    "resume-actions",
     "none",
 ]
 NativeWireErrorCode: TypeAlias = Literal[
@@ -59,8 +64,15 @@ NativeWireErrorCode: TypeAlias = Literal[
     "CAPABILITY_FAILED",
     "POSSIBLY_SIDE_EFFECTING_FAILURE",
 ]
-NativeErrorCode: TypeAlias = NativeWireErrorCode | Literal[
-    "NATIVE_CONTRACT_MISMATCH"
+NativeBrokerErrorCode: TypeAlias = Literal[
+    "NATIVE_PAIRING_REQUIRED",
+    "NATIVE_PAIRING_REJECTED",
+    "NATIVE_BROKER_UNAUTHORIZED",
+    "NATIVE_CLIENT_BLOCKED",
+    "NATIVE_ACTIONS_PAUSED",
+]
+NativeErrorCode: TypeAlias = NativeWireErrorCode | NativeBrokerErrorCode | Literal[
+    "NATIVE_CONTRACT_MISMATCH",
 ]
 NativePlatform: TypeAlias = Literal["macos-arm64", "windows-x64"]
 CapabilityDetail: TypeAlias = Literal["full"]
@@ -348,6 +360,13 @@ class NativeErrorDetails(_NativeModel):
     capability_id: CapabilityId | None = None
     supported_wire_versions: NativeWireRange | None = None
     current_generation: PositiveInt | None = None
+    pairing_fingerprint: Annotated[
+        StrictStr,
+        Field(pattern=r"^[0-9A-F]{4}(?:-[0-9A-F]{4})+$"),
+    ] | None = None
+    pairing_expires_in_ms: PositiveInt | None = None
+    host_instance_id: Uuid | None = None
+    source_commit: SourceCommit | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -364,6 +383,11 @@ _ERROR_POLICY: dict[
     "NATIVE_UNAVAILABLE": (True, "not-started", "reconnect"),
     "NATIVE_UNSUPPORTED": (False, "not-started", "refresh-capabilities"),
     "NATIVE_CONTRACT_MISMATCH": (False, "not-started", "refresh-capabilities"),
+    "NATIVE_PAIRING_REQUIRED": (True, "not-started", "approve-pairing"),
+    "NATIVE_PAIRING_REJECTED": (True, "not-started", "retry-pairing"),
+    "NATIVE_BROKER_UNAUTHORIZED": (False, "not-started", "refresh-auth"),
+    "NATIVE_CLIENT_BLOCKED": (False, "not-started", "review-client-access"),
+    "NATIVE_ACTIONS_PAUSED": (True, "not-started", "resume-actions"),
     "WIRE_VERSION_MISMATCH": (False, "not-started", "reconnect"),
     "INVALID_REQUEST": (False, "not-started", "none"),
     "INVALID_ARGUMENT": (False, "not-started", "change-arguments"),
@@ -410,6 +434,19 @@ class NativeErrorPayload(_NativeModel):
                 raise ValueError("QUEUE_FULL requires retryAfterMs")
         elif self.recovery.retry_after_ms is not None:
             raise ValueError("retryAfterMs is only valid for QUEUE_FULL")
+        pairing_values = (
+            self.details.pairing_fingerprint,
+            self.details.pairing_expires_in_ms,
+            self.details.host_instance_id,
+            self.details.source_commit,
+        ) if self.details is not None else (None, None, None, None)
+        if self.code == "NATIVE_PAIRING_REQUIRED":
+            if any(value is None for value in pairing_values):
+                raise ValueError(
+                    "NATIVE_PAIRING_REQUIRED requires complete pairing details"
+                )
+        elif any(value is not None for value in pairing_values):
+            raise ValueError("pairing details require NATIVE_PAIRING_REQUIRED")
         if self.details is not None:
             _validate_json(
                 self.details.model_dump(
@@ -467,7 +504,14 @@ class NativeBackendError(BackendError):
     def from_payload(cls, value: Mapping[str, Any]) -> "NativeBackendError":
         try:
             raw = dict(value)
-            if raw.get("code") == "NATIVE_CONTRACT_MISMATCH":
+            if raw.get("code") in {
+                "NATIVE_CONTRACT_MISMATCH",
+                "NATIVE_PAIRING_REQUIRED",
+                "NATIVE_PAIRING_REJECTED",
+                "NATIVE_BROKER_UNAUTHORIZED",
+                "NATIVE_CLIENT_BLOCKED",
+                "NATIVE_ACTIONS_PAUSED",
+            }:
                 raise ValueError("Core-only error code appeared on the native wire")
             if "details" in raw and raw["details"] is None:
                 raise ValueError("native wire error details cannot be null")
@@ -484,6 +528,11 @@ class NativeBackendError(BackendError):
                 if payload.details is None or payload.details.capability_id is None:
                     raise ValueError(
                         f"{payload.code} requires a capabilityId detail"
+                    )
+            elif payload.code == "NATIVE_PAIRING_REQUIRED":
+                if payload.details is None:
+                    raise ValueError(
+                        "NATIVE_PAIRING_REQUIRED requires pairing details"
                     )
         except (TypeError, ValueError, ValidationError) as exc:
             raise cls(
@@ -955,6 +1004,7 @@ __all__ = [
     "CapabilityDetail",
     "ExecutionEngine",
     "NativeBackendError",
+    "NativeBrokerErrorCode",
     "NativeCancellationToken",
     "NativeCancelResult",
     "NativeCapabilities",

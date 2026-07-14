@@ -1,0 +1,36 @@
+{
+  "authRequired": {
+    "name": "native AUTH_REQUIRED distinct from loopback token auth",
+    "status": 401,
+    "body": {
+      "ok": false,
+      "error": {
+        "code": "AUTH_REQUIRED",
+        "message": "native pairing was rejected",
+        "retryable": false,
+        "sideEffect": "not-started",
+        "recovery": {
+          "action": "approve-pairing",
+          "hint": "Approve the matching fingerprint in After Effects, then retry."
+        }
+      }
+    }
+  },
+  "contractMismatch": {
+    "name": "broker contract mismatch",
+    "status": 503,
+    "body": {
+      "ok": false,
+      "error": {
+        "code": "NATIVE_CONTRACT_MISMATCH",
+        "message": "native result evidence did not match the request",
+        "retryable": false,
+        "sideEffect": "not-started",
+        "recovery": {
+          "action": "refresh-capabilities",
+          "hint": "Refresh the authenticated native contract before retrying."
+        }
+      }
+    }
+  }
+}

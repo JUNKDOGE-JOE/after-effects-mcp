@@ -45,6 +45,16 @@ class AeOverviewArgs(_StrictModel):
     pass
 
 
+class AeProjectSummaryArgs(_StrictModel):
+    """ae.projectSummary — verified native AEGP project summary (no args).
+
+    This public tool is explicitly bound to ae.project.summary@1. It never
+    falls back to ae.overview or to JSX when the native execution plane is
+    unavailable.
+    """
+    pass
+
+
 class AeLayersArgs(_StrictModel):
     """ae.layers — list layers in a comp (paginated)."""
     comp_id: Optional[str] = Field(
@@ -602,6 +612,7 @@ class AeDiagnoseArgs(_StrictModel):
 SCHEMAS = {
     "ae.init": AeInitArgs,
     "ae.overview": AeOverviewArgs,
+    "ae.projectSummary": AeProjectSummaryArgs,
     "ae.layers": AeLayersArgs,
     "ae.readProps": AeReadPropsArgs,
     "ae.exec": AeExecArgs,
@@ -646,4 +657,4 @@ SCHEMAS = {
     "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 44, f"expected 44 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 45, f"expected 45 verbs, got {len(SCHEMAS)}"

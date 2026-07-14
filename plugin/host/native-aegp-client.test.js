@@ -110,6 +110,16 @@ function invokeRequestDigest(request) {
     return crypto.createHash('sha256').update(JSON.stringify(canonical), 'utf8').digest('hex');
 }
 
+function capabilitiesRequestDigest(request) {
+    const canonical = {
+        detail: request.params.detail || 'summary',
+        ids: Object.hasOwn(request.params, 'ids') ? request.params.ids : null,
+        limit: request.params.limit === undefined ? 50 : request.params.limit,
+        sessionId: request.sessionId,
+    };
+    return crypto.createHash('sha256').update(JSON.stringify(canonical), 'utf8').digest('hex');
+}
+
 function installProtocol(server, options) {
     const input = options || {};
     let authorize;
@@ -161,9 +171,9 @@ function installProtocol(server, options) {
                     };
                 } else if (request.method === 'capabilities') {
                     result = {
-                        detail: 'full',
+                        detail: request.params.detail || 'summary',
                         capabilitiesDigest: DIGEST,
-                        queryDigest: 'aa3c66bc21e50b6a35db9c3cb12fcb1627694cd8f9fc411f21f7e3de46b3e56a',
+                        queryDigest: capabilitiesRequestDigest(request),
                         nextCursor: null,
                         items: [{
                             id: 'ae.project.summary',
@@ -200,15 +210,17 @@ function installProtocol(server, options) {
                     };
                     if (input.mutateInvoke) input.mutateInvoke(result, request);
                 }
+                if (input.suppressHello && request.method === 'hello') continue;
+                const responseError = request.method === 'invoke' ? input.invokeError : null;
                 socket.write(frame({
                     wireVersion: 1,
                     kind: 'response',
                     sessionId: SESSION,
                     requestId: request.requestId,
                     method: request.method,
-                    ok: true,
+                    ok: responseError ? false : true,
                     replayed: false,
-                    result,
+                    ...(responseError ? { error: responseError } : { result }),
                 }));
             }
         }
@@ -274,9 +286,22 @@ test('CEP client completes pairing, hello, capabilities, and verified native pro
     const hello = await client.waitUntilConnected();
     assert.equal(hello.host.instanceId, HOST);
     assert.equal(client.status().state, 'connected');
-    const capabilities = await client.capabilities();
+    const negotiation = await client.negotiate({ deadlineUnixMs: 1900000005000 });
+    assert.equal(negotiation.sourceCommit, SOURCE);
+    const capabilities = await client.capabilities({
+        ids: null,
+        detail: 'full',
+        limit: 100,
+        deadlineUnixMs: 1900000005000,
+    });
     assert.equal(capabilities.items[0].id, 'ae.project.summary');
-    const summary = await client.projectSummary();
+    const summary = await client.invoke({
+        requestId: 'core-project-summary-1',
+        capabilityId: 'ae.project.summary',
+        capabilityVersion: 1,
+        arguments: {},
+        deadlineUnixMs: 1900000002000,
+    });
     assert.deepEqual(summary.value, {
         projectOpen: true, projectName: 'Fixture.aep', itemCount: 3,
     });
@@ -286,8 +311,163 @@ test('CEP client completes pairing, hello, capabilities, and verified native pro
     assert.deepEqual(protocol.requests.map(function (request) { return request.method; }), [
         'hello', 'capabilities', 'invoke',
     ]);
+    assert.equal(Object.hasOwn(protocol.requests[1].params, 'ids'), false);
+    assert.equal(protocol.requests[1].params.limit, 100);
+    assert.equal(protocol.requests[2].requestId, 'core-project-summary-1');
     assert.equal(protocol.requests[2].deadlineUnixMs, 1900000002000);
     assert.equal(summary.evidence.requestDigest, invokeRequestDigest(protocol.requests[2]));
+});
+
+test('CEP client preserves the complete structured native error contract', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const fixture = await endpointFixture(t);
+    const protocol = installProtocol(fixture.server, {
+        invokeError: {
+            code: 'CAPABILITY_FAILED',
+            message: 'project summary failed',
+            retryable: false,
+            sideEffect: 'not-started',
+            recovery: { action: 'inspect-state', hint: 'Inspect the project state.' },
+            details: { capabilityId: 'ae.project.summary' },
+        },
+    });
+    const client = createNativeAegpClient({
+        runtime: { platform: 'darwin', arch: 'arm64' },
+        runtimeRoot: fixture.root,
+        clientInstanceId: CLIENT,
+        requestTimeoutMs: 2000,
+        now: function () { return 1900000000000; },
+    });
+    t.after(function () { return client.close(); });
+    await client.beginPairing();
+    protocol.authorize();
+    await client.waitUntilConnected();
+    await client.capabilities({ detail: 'full', limit: 100 });
+    await assert.rejects(
+        client.invoke({
+            requestId: 'core-project-summary-error',
+            capabilityId: 'ae.project.summary',
+            capabilityVersion: 1,
+            arguments: {},
+            deadlineUnixMs: 1900000002000,
+        }),
+        function (error) {
+            assert.equal(error.code, 'CAPABILITY_FAILED');
+            assert.equal(error.message, 'project summary failed');
+            assert.equal(error.retryable, false);
+            assert.equal(error.sideEffect, 'not-started');
+            assert.deepEqual(error.recovery, {
+                action: 'inspect-state', hint: 'Inspect the project state.',
+            });
+            assert.deepEqual(error.details, { capabilityId: 'ae.project.summary' });
+            return true;
+        },
+    );
+});
+
+for (const errorFixture of [
+    {
+        name: 'keeps an actual native INVALID_REQUEST distinct',
+        error: {
+            code: 'INVALID_REQUEST',
+            message: 'native request was invalid',
+            retryable: false,
+            sideEffect: 'not-started',
+            recovery: { action: 'none', hint: 'Do not retry this request.' },
+        },
+        expectedCode: 'INVALID_REQUEST',
+        expectedAction: 'none',
+    },
+    {
+        name: 'labels a malformed native error as a broker contract mismatch',
+        error: {
+            code: 'INVALID_REQUEST',
+            message: 'missing recovery fields',
+            retryable: false,
+            sideEffect: 'not-started',
+        },
+        expectedCode: 'NATIVE_CONTRACT_MISMATCH',
+        expectedAction: 'refresh-capabilities',
+    },
+]) {
+    test('CEP client ' + errorFixture.name, {
+        skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+    }, async (t) => {
+        const fixture = await endpointFixture(t);
+        const protocol = installProtocol(fixture.server, { invokeError: errorFixture.error });
+        const client = createNativeAegpClient({
+            runtime: { platform: 'darwin', arch: 'arm64' },
+            runtimeRoot: fixture.root,
+            clientInstanceId: CLIENT,
+            requestTimeoutMs: 2000,
+            now: function () { return 1900000000000; },
+        });
+        t.after(function () { return client.close(); });
+        await client.beginPairing();
+        protocol.authorize();
+        await client.waitUntilConnected();
+        await client.capabilities({ detail: 'full', limit: 100 });
+        await assert.rejects(
+            client.invoke({
+                requestId: 'core-error-classification',
+                capabilityId: 'ae.project.summary',
+                capabilityVersion: 1,
+                arguments: {},
+                deadlineUnixMs: 1900000002000,
+            }),
+            function (error) {
+                assert.equal(error.code, errorFixture.expectedCode);
+                assert.equal(error.retryable, false);
+                assert.equal(error.sideEffect, 'not-started');
+                assert.equal(error.recovery.action, errorFixture.expectedAction);
+                return true;
+            },
+        );
+    });
+}
+
+test('CEP client bounds an authenticating wait by the Core absolute deadline', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const fixture = await endpointFixture(t);
+    const protocol = installProtocol(fixture.server, { suppressHello: true });
+    const client = createNativeAegpClient({
+        runtime: { platform: 'darwin', arch: 'arm64' },
+        runtimeRoot: fixture.root,
+        clientInstanceId: CLIENT,
+        requestTimeoutMs: 2000,
+    });
+    t.after(function () { return client.close(); });
+    await client.beginPairing();
+    protocol.authorize();
+    while (!protocol.requests.some(function (request) { return request.method === 'hello'; })) {
+        await new Promise(function (resolve) { setImmediate(resolve); });
+    }
+    assert.equal(client.status().state, 'authenticating');
+    await assert.rejects(
+        client.negotiate({ deadlineUnixMs: Date.now() + 40 }),
+        { code: 'DEADLINE_EXCEEDED', retryable: true },
+    );
+    assert.equal(client.status().state, 'authenticating');
+});
+
+test('CEP client bounds the initial pairing challenge by the Core absolute deadline', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const fixture = await endpointFixture(t);
+    const client = createNativeAegpClient({
+        runtime: { platform: 'darwin', arch: 'arm64' },
+        runtimeRoot: fixture.root,
+        clientInstanceId: CLIENT,
+        requestTimeoutMs: 2000,
+    });
+    t.after(function () { return client.close(); });
+    await assert.rejects(
+        client.beginPairing(Date.now() + 40),
+        { code: 'DEADLINE_EXCEEDED', retryable: true },
+    );
+    assert.equal(client.status().state, 'pairing-pending');
 });
 
 for (const fixture of [
@@ -317,7 +497,16 @@ for (const fixture of [
         protocol.authorize();
         await client.waitUntilConnected();
         await client.capabilities();
-        await assert.rejects(client.projectSummary(), { code: 'INVALID_REQUEST', retryable: false });
+        await assert.rejects(client.projectSummary(), function (error) {
+            assert.equal(error.code, 'NATIVE_CONTRACT_MISMATCH');
+            assert.equal(error.retryable, false);
+            assert.equal(error.sideEffect, 'not-started');
+            assert.deepEqual(error.recovery, {
+                action: 'refresh-capabilities',
+                hint: 'Refresh the authenticated native contract before retrying.',
+            });
+            return true;
+        });
     });
 }
 
