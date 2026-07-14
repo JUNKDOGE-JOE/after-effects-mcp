@@ -11,9 +11,8 @@
     "requestId": "capabilities-1",
     "method": "capabilities",
     "params": {
-      "ids": ["ae.project.summary"],
       "detail": "full",
-      "limit": 1
+      "limit": 100
     }
   },
   "response": {
@@ -99,11 +98,165 @@
               }
             }
           ]
+        },
+        {
+          "detail": "full",
+          "id": "ae.project.bit-depth.read",
+          "version": 1,
+          "schemaVersion": 1,
+          "summary": "Read the open After Effects project's bit depth.",
+          "risk": "read",
+          "mutability": "read-only",
+          "idempotency": "idempotent",
+          "cancellation": "before-dispatch",
+          "undo": "not-applicable",
+          "sideEffectSummary": "Reads project bit depth without changing After Effects state.",
+          "preconditions": ["An After Effects project must be open."],
+          "compatibility": {
+            "status": "unverified",
+            "intendedPlatforms": ["macos-arm64", "windows-x64"]
+          },
+          "inputContractId": "aemcp.contract.ae.project.bit-depth.read.input.v1",
+          "resultContractId": "aemcp.contract.ae.project.bit-depth.read.result.v1",
+          "contractDigest": "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [],
+            "properties": {}
+          },
+          "resultSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["bitsPerChannel"],
+            "properties": {
+              "bitsPerChannel": { "enum": [8, 16, 32] }
+            }
+          },
+          "requirements": [
+            {
+              "id": "aemcp.requirement.native.project-bit-depth-read",
+              "contractVersion": 1
+            }
+          ],
+          "examples": [
+            {
+              "id": "aemcp-example-project-bit-depth-read",
+              "kind": "positive",
+              "summary": "Read the project bits per channel.",
+              "arguments": {},
+              "expected": {
+                "outcome": "succeeded",
+                "value": { "bitsPerChannel": 16 }
+              }
+            },
+            {
+              "id": "aemcp-example-project-bit-depth-read-no-project",
+              "kind": "negative",
+              "summary": "Require an open project before reading bit depth.",
+              "arguments": {},
+              "expected": {
+                "errorCode": "PRECONDITION_FAILED",
+                "recoveryAction": "open-project"
+              }
+            }
+          ]
+        },
+        {
+          "detail": "full",
+          "id": "ae.project.bit-depth.set",
+          "version": 1,
+          "schemaVersion": 1,
+          "summary": "Set the open After Effects project's bit depth.",
+          "risk": "write",
+          "mutability": "mutating",
+          "idempotency": "idempotency-key",
+          "cancellation": "before-dispatch",
+          "undo": "ae-undo-group",
+          "sideEffectSummary": "Changes project bit depth and creates one After Effects Undo step.",
+          "preconditions": [
+            "An After Effects project must be open.",
+            "targetDepth must differ from the current project bit depth."
+          ],
+          "compatibility": {
+            "status": "unverified",
+            "intendedPlatforms": ["macos-arm64", "windows-x64"]
+          },
+          "inputContractId": "aemcp.contract.ae.project.bit-depth.set.input.v1",
+          "resultContractId": "aemcp.contract.ae.project.bit-depth.set.result.v1",
+          "contractDigest": "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["targetDepth", "idempotencyKey"],
+            "properties": {
+              "targetDepth": { "enum": [8, 16, 32] },
+              "idempotencyKey": {
+                "type": "string",
+                "minLength": 16,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+              }
+            }
+          },
+          "resultSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "changed",
+              "beforeBitsPerChannel",
+              "afterBitsPerChannel"
+            ],
+            "properties": {
+              "changed": { "const": true },
+              "beforeBitsPerChannel": { "enum": [8, 16, 32] },
+              "afterBitsPerChannel": { "enum": [8, 16, 32] }
+            },
+            "x-invariant": "beforeBitsPerChannel-must-differ-from-afterBitsPerChannel"
+          },
+          "requirements": [
+            {
+              "id": "aemcp.requirement.native.project-bit-depth-set",
+              "contractVersion": 1
+            }
+          ],
+          "examples": [
+            {
+              "id": "aemcp-example-project-bit-depth-set",
+              "kind": "positive",
+              "summary": "Change the project from 8 to 16 bits per channel.",
+              "arguments": {
+                "idempotencyKey": "synthetic-bit-depth-0001",
+                "targetDepth": 16
+              },
+              "expected": {
+                "outcome": "succeeded",
+                "value": {
+                  "afterBitsPerChannel": 16,
+                  "beforeBitsPerChannel": 8,
+                  "changed": true
+                }
+              }
+            },
+            {
+              "id": "aemcp-example-project-bit-depth-no-change",
+              "kind": "negative",
+              "summary": "Reject a target that already matches the project bit depth.",
+              "arguments": {
+                "idempotencyKey": "synthetic-bit-depth-0002",
+                "targetDepth": 16
+              },
+              "expected": {
+                "errorCode": "INVALID_ARGUMENT",
+                "recoveryAction": "change-arguments"
+              }
+            }
+          ]
         }
       ],
       "nextCursor": null,
-      "queryDigest": "aa3c66bc21e50b6a35db9c3cb12fcb1627694cd8f9fc411f21f7e3de46b3e56a",
-      "capabilitiesDigest": "33afff4311c76b6671101c9f2a15d2bbfe328c43dd7b539c0825b24ffa416be8"
+      "queryDigest": "1c9d06b8b5f876c7b41fb00204efe2f5c5e62502bb188fa8a1e5eae5e59d0c3b",
+      "capabilitiesDigest": "0fda4e1bfbc8657bcd0c676fb802aecc97ba2ee6268cc115ff6d12b74758c042"
     }
   }
 }

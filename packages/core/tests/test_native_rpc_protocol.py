@@ -58,6 +58,8 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
         "hello.json",
         "capabilities.json",
         "invoke-project-summary.json",
+        "invoke-project-bit-depth-read.json",
+        "invoke-project-bit-depth-set.json",
         "cancel.json",
     ):
         fixture = _json(FIXTURE_ROOT / name)
@@ -77,6 +79,8 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
         "hello.json",
         "capabilities.json",
         "invoke-project-summary.json",
+        "invoke-project-bit-depth-read.json",
+        "invoke-project-bit-depth-set.json",
         "cancel.json",
         "errors.json",
         "negative-corpus.json",
@@ -90,9 +94,10 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
             "compatibilityEvidence": False,
         }
 
-    descriptor = _json(FIXTURE_ROOT / "capabilities.json")["response"]["result"][
+    items = _json(FIXTURE_ROOT / "capabilities.json")["response"]["result"][
         "items"
-    ][0]
+    ]
+    descriptor = next(item for item in items if item["id"] == "ae.project.summary")
     assert descriptor["requirements"] == [
         {
             "id": "aemcp.requirement.native.project-read",
@@ -126,55 +131,52 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
     ]
     capabilities = _json(FIXTURE_ROOT / "capabilities.json")
     hello = _json(FIXTURE_ROOT / "hello.json")
-    # This vector deliberately filters the returned page to project.summary.
-    # capabilitiesDigest binds the complete negotiated registry, not the
-    # filtered items page, and therefore must match hello's registry digest.
+    # Core negotiates the complete closed registry so it can independently
+    # recompute the registry digest advertised by hello.
     assert capabilities["request"]["params"] == {
-        "ids": ["ae.project.summary"],
         "detail": "full",
-        "limit": 1,
+        "limit": 100,
     }
+    assert [item["id"] for item in capabilities["response"]["result"]["items"]] == [
+        "ae.project.summary",
+        "ae.project.bit-depth.read",
+        "ae.project.bit-depth.set",
+    ]
     assert capabilities["response"]["result"]["capabilitiesDigest"] == hello[
         "response"
     ]["result"]["capabilitiesDigest"]
-    assert capabilities["response"]["result"]["capabilitiesDigest"] == (
-        "33afff4311c76b6671101c9f2a15d2bbfe328c43dd7b539c0825b24ffa416be8"
-    )
     assert _jcs_subset({"\ue000": 1, "😀": 2}).decode("utf-8") == (
         '{"😀":2,"\ue000":1}'
     )
 
 
-def test_folder_mutation_success_can_never_be_a_transport_replay():
+def test_bit_depth_mutation_success_can_never_be_a_transport_replay():
     schema = _json(SCHEMA_PATH)
     validator = Draft202012Validator(schema)
     response = {
         "wireVersion": 1,
         "kind": "response",
         "sessionId": "11111111-1111-4111-8111-111111111111",
-        "requestId": "folder-create-1",
+        "requestId": "bit-depth-set-1",
         "method": "invoke",
         "ok": True,
         "replayed": False,
         "result": {
-            "capabilityId": "ae.project.folder.create",
+            "capabilityId": "ae.project.bit-depth.set",
             "capabilityVersion": 1,
             "engine": "native-aegp",
             "outcome": "succeeded",
             "value": {
-                "created": True,
-                "folderItemId": 17,
-                "folderName": "AI Folder",
-                "parentItemId": 0,
-                "itemCountBefore": 4,
-                "itemCountAfter": 5,
+                "changed": True,
+                "beforeBitsPerChannel": 8,
+                "afterBitsPerChannel": 16,
             },
             "evidence": {
                 "engine": "native-aegp",
                 "hostInstanceId": "22222222-2222-4222-8222-222222222222",
                 "sessionId": "11111111-1111-4111-8111-111111111111",
-                "requestId": "folder-create-1",
-                "capabilityId": "ae.project.folder.create",
+                "requestId": "bit-depth-set-1",
+                "capabilityId": "ae.project.bit-depth.set",
                 "capabilityVersion": 1,
                 "startedAtUnixMs": 1_900_000_000_000,
                 "completedAtUnixMs": 1_900_000_000_025,
@@ -182,7 +184,7 @@ def test_folder_mutation_success_can_never_be_a_transport_replay():
                 "requestDigest": "a" * 64,
                 "postcondition": {
                     "verified": True,
-                    "kind": "project-folder-created",
+                    "kind": "project-bit-depth-set",
                     "algorithm": "sha256-rfc8785-jcs-v1",
                     "digest": "b" * 64,
                 },

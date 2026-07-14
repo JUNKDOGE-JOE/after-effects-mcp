@@ -1,4 +1,4 @@
-"""Public MCP surface for the explicitly bound native project-summary read."""
+"""Public MCP surfaces explicitly bound to typed native AEGP capabilities."""
 
 from __future__ import annotations
 
@@ -9,24 +9,8 @@ from typing import Any
 import pytest
 
 from ae_mcp import schemas
+from ae_mcp.backends import native as N
 from ae_mcp.backends.mock import MockBackend
-from ae_mcp.backends.native import (
-    NativeBackendError,
-    NativeCapabilities,
-    NativeCapabilityDescriptor,
-    NativeInvokeBackend,
-    NativeInvokeResult,
-    NativeNegotiation,
-    NativeExecutionEvidence,
-    NativePostconditionEvidence,
-    NativeRecovery,
-    NativeUndoEvidence,
-    ProjectFolderCreateExecution,
-    ProjectFolderCreateValue,
-    PROJECT_FOLDER_CREATE_CONTRACT_DIGEST,
-    ProjectSummaryExecution,
-    ProjectSummaryValue,
-)
 from ae_mcp.handlers import HANDLERS, load_all
 from ae_mcp.handlers import native as native_handler
 
@@ -38,13 +22,14 @@ def _fixture(name: str) -> dict[str, Any]:
     return json.loads((_FIXTURES / name).read_text(encoding="utf-8"))
 
 
-def _execution() -> ProjectSummaryExecution:
+def _summary_execution() -> N.ProjectSummaryExecution:
     hello = _fixture("hello.json")["response"]["result"]
     raw_result = _fixture("invoke-project-summary.json")["response"]["result"]
-    descriptor = NativeCapabilityDescriptor.model_validate(
-        _fixture("capabilities.json")["response"]["result"]["items"][0]
+    raw_items = _fixture("capabilities.json")["response"]["result"]["items"]
+    descriptor = N.NativeCapabilityDescriptor.model_validate(
+        next(item for item in raw_items if item["id"] == "ae.project.summary")
     )
-    negotiation = NativeNegotiation(
+    negotiation = N.NativeNegotiation(
         selected_wire_version=hello["selectedWireVersion"],
         plugin_version=hello["pluginVersion"],
         compiled_sdk_version=hello["compiledSdk"]["version"],
@@ -55,84 +40,145 @@ def _execution() -> ProjectSummaryExecution:
         session_generation=hello["sessionGeneration"],
         capabilities_digest=hello["capabilitiesDigest"],
     )
-    result = NativeInvokeResult.model_validate({**raw_result, "replayed": False})
-    return ProjectSummaryExecution(
+    result = N.NativeInvokeResult.model_validate({**raw_result, "replayed": False})
+    return N.ProjectSummaryExecution(
         implementation=descriptor,
         negotiation=negotiation,
-        value=ProjectSummaryValue.model_validate(result.value),
+        value=N.ProjectSummaryValue.model_validate(result.value),
         evidence=result.evidence,
     )
 
 
-def _folder_execution() -> ProjectFolderCreateExecution:
-    summary = _execution()
-    descriptor = NativeCapabilityDescriptor(
+def _bit_depth_descriptor(*, write: bool) -> N.NativeCapabilityDescriptor:
+    if write:
+        return N.NativeCapabilityDescriptor(
+            detail="full",
+            id=N.PROJECT_BIT_DEPTH_SET_CAPABILITY_ID,
+            version=1,
+            schema_version=1,
+            summary="Set the open After Effects project's bit depth.",
+            risk="write",
+            mutability="mutating",
+            idempotency="idempotency-key",
+            cancellation="before-dispatch",
+            undo="ae-undo-group",
+            side_effect_summary=(
+                "Changes project bit depth and creates one After Effects Undo step."
+            ),
+            preconditions=(
+                "An After Effects project must be open.",
+                "targetDepth must differ from the current project bit depth.",
+            ),
+            compatibility={
+                "status": "unverified",
+                "intendedPlatforms": ["macos-arm64", "windows-x64"],
+            },
+            input_contract_id="aemcp.contract.ae.project.bit-depth.set.input.v1",
+            result_contract_id="aemcp.contract.ae.project.bit-depth.set.result.v1",
+            contract_digest=N.PROJECT_BIT_DEPTH_SET_CONTRACT_DIGEST,
+            input_schema=N._PROJECT_BIT_DEPTH_SET_INPUT_SCHEMA,
+            result_schema=N._PROJECT_BIT_DEPTH_SET_RESULT_SCHEMA,
+            requirements=(
+                {
+                    "id": "aemcp.requirement.native.project-bit-depth-set",
+                    "contractVersion": 1,
+                },
+            ),
+            examples=({"id": "bit-depth-set"},),
+        )
+    return N.NativeCapabilityDescriptor(
         detail="full",
-        id="ae.project.folder.create",
+        id=N.PROJECT_BIT_DEPTH_READ_CAPABILITY_ID,
         version=1,
         schema_version=1,
-        summary="Create one folder at the root of the open After Effects project.",
-        risk="write",
-        mutability="mutating",
-        idempotency="idempotency-key",
+        summary="Read the open After Effects project's bit depth.",
+        risk="read",
+        mutability="read-only",
+        idempotency="idempotent",
         cancellation="before-dispatch",
-        undo="ae-undo-group",
+        undo="not-applicable",
         side_effect_summary=(
-            "Creates one root project folder and one After Effects undo step."
+            "Reads project bit depth without changing After Effects state."
         ),
         preconditions=("An After Effects project must be open.",),
         compatibility={
             "status": "unverified",
             "intendedPlatforms": ["macos-arm64", "windows-x64"],
         },
-        input_contract_id="aemcp.contract.ae.project.folder.create.input.v1",
-        result_contract_id="aemcp.contract.ae.project.folder.create.result.v1",
-        contract_digest=PROJECT_FOLDER_CREATE_CONTRACT_DIGEST,
-        input_schema={"type": "object"},
-        result_schema={"type": "object"},
+        input_contract_id="aemcp.contract.ae.project.bit-depth.read.input.v1",
+        result_contract_id="aemcp.contract.ae.project.bit-depth.read.result.v1",
+        contract_digest=N.PROJECT_BIT_DEPTH_READ_CONTRACT_DIGEST,
+        input_schema=N._PROJECT_BIT_DEPTH_READ_INPUT_SCHEMA,
+        result_schema=N._PROJECT_BIT_DEPTH_READ_RESULT_SCHEMA,
         requirements=(
             {
-                "id": "aemcp.requirement.native.project-folder-create",
+                "id": "aemcp.requirement.native.project-bit-depth-read",
                 "contractVersion": 1,
             },
         ),
-        examples=({"id": "folder-create"},),
+        examples=({"id": "bit-depth-read"},),
     )
-    value = ProjectFolderCreateValue(
-        created=True,
-        folder_item_id=17,
-        folder_name="AI Folder",
-        parent_item_id=0,
-        item_count_before=4,
-        item_count_after=5,
-    )
-    evidence = NativeExecutionEvidence(
-        engine="native-aegp",
-        host_instance_id=summary.negotiation.host_instance_id,
-        session_id=summary.negotiation.session_id,
-        request_id="core-folder-create-1",
-        capability_id="ae.project.folder.create",
-        capability_version=1,
-        started_at_unix_ms=1_900_000_000_000,
-        completed_at_unix_ms=1_900_000_000_025,
-        effect="committed",
-        request_digest="b" * 64,
-        postcondition=NativePostconditionEvidence(
-            verified=True,
-            kind="project-folder-created",
-            algorithm="sha256-rfc8785-jcs-v1",
-            digest="c" * 64,
-        ),
-        undo=NativeUndoEvidence(available=True, verified=False),
-    )
-    return ProjectFolderCreateExecution(
-        implementation=descriptor,
+
+
+def _read_execution() -> N.ProjectBitDepthReadExecution:
+    summary = _summary_execution()
+    return N.ProjectBitDepthReadExecution(
+        implementation=_bit_depth_descriptor(write=False),
         negotiation=summary.negotiation,
-        transport_request_id="core-folder-create-1",
-        idempotency_key="folder-intent-0001",
+        value=N.ProjectBitDepthReadValue(bits_per_channel=8),
+        evidence=N.NativeExecutionEvidence(
+            engine="native-aegp",
+            host_instance_id=summary.negotiation.host_instance_id,
+            session_id=summary.negotiation.session_id,
+            request_id="core-bit-depth-read-1",
+            capability_id=N.PROJECT_BIT_DEPTH_READ_CAPABILITY_ID,
+            capability_version=1,
+            started_at_unix_ms=1_900_000_000_000,
+            completed_at_unix_ms=1_900_000_000_010,
+            effect="none",
+            request_digest="b" * 64,
+            postcondition=N.NativePostconditionEvidence(
+                verified=True,
+                kind="project-bit-depth-read",
+                algorithm="sha256-rfc8785-jcs-v1",
+                digest="c" * 64,
+            ),
+        ),
+    )
+
+
+def _set_execution() -> N.ProjectBitDepthSetExecution:
+    summary = _summary_execution()
+    return N.ProjectBitDepthSetExecution(
+        implementation=_bit_depth_descriptor(write=True),
+        negotiation=summary.negotiation,
+        transport_request_id="core-bit-depth-set-1",
+        idempotency_key="bit-depth-intent-0001",
         replayed=False,
-        value=value,
-        evidence=evidence,
+        value=N.ProjectBitDepthSetValue(
+            changed=True,
+            before_bits_per_channel=8,
+            after_bits_per_channel=16,
+        ),
+        evidence=N.NativeExecutionEvidence(
+            engine="native-aegp",
+            host_instance_id=summary.negotiation.host_instance_id,
+            session_id=summary.negotiation.session_id,
+            request_id="core-bit-depth-set-1",
+            capability_id=N.PROJECT_BIT_DEPTH_SET_CAPABILITY_ID,
+            capability_version=1,
+            started_at_unix_ms=1_900_000_000_000,
+            completed_at_unix_ms=1_900_000_000_025,
+            effect="committed",
+            request_digest="d" * 64,
+            postcondition=N.NativePostconditionEvidence(
+                verified=True,
+                kind="project-bit-depth-set",
+                algorithm="sha256-rfc8785-jcs-v1",
+                digest="e" * 64,
+            ),
+            undo=N.NativeUndoEvidence(available=True, verified=False),
+        ),
     )
 
 
@@ -143,7 +189,7 @@ def _load_handlers():
 
 @pytest.mark.asyncio
 async def test_project_summary_returns_typed_value_provenance_and_evidence(monkeypatch):
-    execution = _execution()
+    execution = _summary_execution()
     sentinel_backend = object()
     captured: dict[str, Any] = {}
 
@@ -154,10 +200,8 @@ async def test_project_summary_returns_typed_value_provenance_and_evidence(monke
 
     monkeypatch.setattr(native_handler, "_backend", lambda: sentinel_backend)
     monkeypatch.setattr(native_handler, "invoke_project_summary", _invoke)
-
     result = await native_handler._run_project_summary(
-        schemas.AeProjectSummaryArgs(),
-        None,
+        schemas.AeProjectSummaryArgs(), None
     )
 
     assert captured["backend"] is sentinel_backend
@@ -186,8 +230,8 @@ async def test_project_summary_returns_typed_value_provenance_and_evidence(monke
 
 
 @pytest.mark.asyncio
-async def test_project_folder_public_tool_returns_state_risk_undo_and_audit(monkeypatch):
-    execution = _folder_execution()
+async def test_bit_depth_read_public_tool_returns_native_state(monkeypatch):
+    execution = _read_execution()
     captured: dict[str, Any] = {}
 
     async def _invoke(backend, **kwargs):
@@ -197,32 +241,49 @@ async def test_project_folder_public_tool_returns_state_risk_undo_and_audit(monk
 
     sentinel_backend = object()
     monkeypatch.setattr(native_handler, "_backend", lambda: sentinel_backend)
-    monkeypatch.setattr(native_handler, "invoke_project_folder_create", _invoke)
+    monkeypatch.setattr(native_handler, "invoke_project_bit_depth_read", _invoke)
+    result = await native_handler._run_get_project_bit_depth(
+        schemas.AeGetProjectBitDepthArgs(), None
+    )
 
-    result = await native_handler._run_project_create_folder(
-        schemas.AeProjectCreateFolderArgs(
-            name="AI Folder",
-            idempotency_key="folder-intent-0001",
+    assert captured["backend"] is sentinel_backend
+    assert result["value"] == {"bitsPerChannel": 8}
+    assert result["implementation"]["risk"] == "read"
+    assert result["audit"]["effect"] == "none"
+    assert "undo" not in result["evidence"]
+
+
+@pytest.mark.asyncio
+async def test_bit_depth_set_public_tool_returns_transition_undo_and_audit(monkeypatch):
+    execution = _set_execution()
+    captured: dict[str, Any] = {}
+
+    async def _invoke(backend, **kwargs):
+        captured["backend"] = backend
+        captured.update(kwargs)
+        return execution
+
+    sentinel_backend = object()
+    monkeypatch.setattr(native_handler, "_backend", lambda: sentinel_backend)
+    monkeypatch.setattr(native_handler, "invoke_project_bit_depth_set", _invoke)
+    result = await native_handler._run_set_project_bit_depth(
+        schemas.AeSetProjectBitDepthArgs(
+            target_depth=16,
+            idempotency_key="bit-depth-intent-0001",
         ),
         None,
     )
 
     assert captured["backend"] is sentinel_backend
-    assert captured["name"] == "AI Folder"
-    assert captured["idempotency_key"] == "folder-intent-0001"
-    assert captured["request_id"].startswith("mcp-")
-    assert result["created"] is True
-    assert result["replayed"] is False
-    assert result["state"] == {
-        "before": {"projectItemCount": 4},
-        "after": {
-            "projectItemCount": 5,
-            "folder": {"itemId": 17, "name": "AI Folder", "parentItemId": 0},
-        },
+    assert captured["target_depth"] == 16
+    assert captured["idempotency_key"] == "bit-depth-intent-0001"
+    assert result["value"] == {
+        "changed": True,
+        "beforeBitsPerChannel": 8,
+        "afterBitsPerChannel": 16,
     }
+    assert "state" not in result
     assert result["implementation"]["risk"] == "write"
-    assert result["implementation"]["mutability"] == "mutating"
-    assert result["implementation"]["idempotency"] == "idempotency-key"
     assert result["implementation"]["undo"] == "ae-undo-group"
     assert result["audit"]["effect"] == "committed"
     assert result["audit"]["undoAvailable"] is True
@@ -231,54 +292,48 @@ async def test_project_folder_public_tool_returns_state_risk_undo_and_audit(monk
 
 
 @pytest.mark.asyncio
-async def test_project_folder_never_falls_back_to_legacy_exec(monkeypatch):
-    legacy = MockBackend()
-    monkeypatch.setattr(native_handler._discovery, "select_backend", lambda: legacy)
-
-    with pytest.raises(NativeBackendError) as raised:
-        await native_handler._run_project_create_folder(
-            schemas.AeProjectCreateFolderArgs(
-                name="AI Folder",
-                idempotency_key="folder-intent-0001",
+@pytest.mark.parametrize(
+    ("runner", "args"),
+    [
+        (native_handler._run_project_summary, schemas.AeProjectSummaryArgs()),
+        (native_handler._run_get_project_bit_depth, schemas.AeGetProjectBitDepthArgs()),
+        (
+            native_handler._run_set_project_bit_depth,
+            schemas.AeSetProjectBitDepthArgs(
+                target_depth=16,
+                idempotency_key="bit-depth-intent-0001",
             ),
-            None,
-        )
-
-    assert raised.value.code == "NATIVE_UNAVAILABLE"
-    assert legacy.calls == []
-
-
-@pytest.mark.asyncio
-async def test_project_summary_never_falls_back_to_legacy_exec(monkeypatch):
+        ),
+    ],
+)
+async def test_native_public_tools_never_fall_back_to_legacy_exec(
+    monkeypatch, runner, args
+):
     legacy = MockBackend()
     monkeypatch.setattr(native_handler._discovery, "select_backend", lambda: legacy)
-
-    with pytest.raises(NativeBackendError) as raised:
-        await native_handler._run_project_summary(
-            schemas.AeProjectSummaryArgs(),
-            None,
-        )
-
+    with pytest.raises(N.NativeBackendError) as raised:
+        await runner(args, None)
     assert raised.value.code == "NATIVE_UNAVAILABLE"
     assert legacy.calls == []
 
 
-def test_project_summary_registration_is_distinct_from_overview():
+def test_native_tool_registration_is_explicit():
     assert HANDLERS["ae.projectSummary"][0] is schemas.AeProjectSummaryArgs
+    assert HANDLERS["ae.getProjectBitDepth"][0] is schemas.AeGetProjectBitDepthArgs
+    assert HANDLERS["ae.setProjectBitDepth"][0] is schemas.AeSetProjectBitDepthArgs
     assert HANDLERS["ae.projectSummary"][1] is not HANDLERS["ae.overview"][1]
-    assert HANDLERS["ae.projectCreateFolder"][0] is schemas.AeProjectCreateFolderArgs
 
 
 @pytest.mark.asyncio
 async def test_mcp_dispatch_preserves_structured_native_error(monkeypatch):
     from ae_mcp import server as server_module
 
-    error = NativeBackendError(
+    error = N.NativeBackendError(
         "NATIVE_PAIRING_REQUIRED",
         "Approve the matching fingerprint in After Effects.",
         retryable=True,
         side_effect="not-started",
-        recovery=NativeRecovery(
+        recovery=N.NativeRecovery(
             action="approve-pairing",
             hint="Approve the fingerprint, then retry.",
         ),
@@ -295,14 +350,10 @@ async def test_mcp_dispatch_preserves_structured_native_error(monkeypatch):
 
     monkeypatch.setitem(
         HANDLERS,
-        "ae.projectSummary",
-        (schemas.AeProjectSummaryArgs, _raise),
+        "ae.getProjectBitDepth",
+        (schemas.AeGetProjectBitDepthArgs, _raise),
     )
-    monkeypatch.setattr(
-        server_module,
-        "_filtered_tool_names",
-        lambda: set(HANDLERS),
-    )
+    monkeypatch.setattr(server_module, "_filtered_tool_names", lambda: set(HANDLERS))
     monkeypatch.setattr(
         server_module.approval_gate,
         "enforce",
@@ -310,14 +361,10 @@ async def test_mcp_dispatch_preserves_structured_native_error(monkeypatch):
     )
 
     response = await server_module.build_server()._ae_call_tool(
-        "ae_projectSummary",
-        {},
+        "ae_getProjectBitDepth", {}
     )
     payload = json.loads(response.content[0].text)
-
     assert response.isError is True
-    assert payload["ok"] is False
-    assert isinstance(payload["error"], dict)
     assert payload["error"]["code"] == "NATIVE_PAIRING_REQUIRED"
     assert payload["error"]["details"]["pairingFingerprint"] == "12AB-34CD"
 
@@ -326,12 +373,12 @@ async def test_mcp_dispatch_preserves_structured_native_error(monkeypatch):
 async def test_mcp_dispatch_preserves_pairing_rejection_as_structured_error(monkeypatch):
     from ae_mcp import server as server_module
 
-    error = NativeBackendError(
+    error = N.NativeBackendError(
         "NATIVE_PAIRING_REJECTED",
         "Native pairing expired before authorization.",
         retryable=True,
         side_effect="not-started",
-        recovery=NativeRecovery(
+        recovery=N.NativeRecovery(
             action="retry-pairing",
             hint="Start a fresh native pairing request and approve it in After Effects.",
         ),
@@ -342,14 +389,10 @@ async def test_mcp_dispatch_preserves_pairing_rejection_as_structured_error(monk
 
     monkeypatch.setitem(
         HANDLERS,
-        "ae.projectSummary",
-        (schemas.AeProjectSummaryArgs, _raise),
+        "ae.getProjectBitDepth",
+        (schemas.AeGetProjectBitDepthArgs, _raise),
     )
-    monkeypatch.setattr(
-        server_module,
-        "_filtered_tool_names",
-        lambda: set(HANDLERS),
-    )
+    monkeypatch.setattr(server_module, "_filtered_tool_names", lambda: set(HANDLERS))
     monkeypatch.setattr(
         server_module.approval_gate,
         "enforce",
@@ -357,11 +400,9 @@ async def test_mcp_dispatch_preserves_pairing_rejection_as_structured_error(monk
     )
 
     response = await server_module.build_server()._ae_call_tool(
-        "ae_projectSummary",
-        {},
+        "ae_getProjectBitDepth", {}
     )
     payload = json.loads(response.content[0].text)
-
     assert response.isError is True
     assert payload["error"]["code"] == "NATIVE_PAIRING_REJECTED"
     assert payload["error"]["recovery"]["action"] == "retry-pairing"
@@ -371,14 +412,14 @@ async def _none():
     return None
 
 
-class _NativeMock(MockBackend, NativeInvokeBackend):
+class _NativeMock(MockBackend, N.NativeInvokeBackend):
     async def negotiate(self, **_kwargs):
         raise AssertionError("filtering must not negotiate")
 
-    async def capabilities(self, **_kwargs) -> NativeCapabilities:
+    async def capabilities(self, **_kwargs) -> N.NativeCapabilities:
         raise AssertionError("filtering must not read capabilities")
 
-    async def invoke(self, *_args, **_kwargs) -> NativeInvokeResult:
+    async def invoke(self, *_args, **_kwargs) -> N.NativeInvokeResult:
         raise AssertionError("filtering must not invoke")
 
 
@@ -387,15 +428,15 @@ def test_tool_filter_exposes_native_tools_only_for_native_adapter(monkeypatch):
     from ae_mcp.backends import discovery as backend_discovery
     from ae_mcp.snapshot import discovery as snapshot_discovery
 
-    monkeypatch.setattr(
-        snapshot_discovery,
-        "select_snapshotter",
-        lambda: None,
-    )
+    monkeypatch.setattr(snapshot_discovery, "select_snapshotter", lambda: None)
     monkeypatch.setattr(backend_discovery, "select_backend", lambda: MockBackend())
-    assert "ae.projectSummary" not in server_module._filtered_tool_names()
-    assert "ae.projectCreateFolder" not in server_module._filtered_tool_names()
+    names = server_module._filtered_tool_names()
+    assert "ae.projectSummary" not in names
+    assert "ae.getProjectBitDepth" not in names
+    assert "ae.setProjectBitDepth" not in names
 
     monkeypatch.setattr(backend_discovery, "select_backend", lambda: _NativeMock())
-    assert "ae.projectSummary" in server_module._filtered_tool_names()
-    assert "ae.projectCreateFolder" in server_module._filtered_tool_names()
+    names = server_module._filtered_tool_names()
+    assert "ae.projectSummary" in names
+    assert "ae.getProjectBitDepth" in names
+    assert "ae.setProjectBitDepth" in names

@@ -16,8 +16,10 @@
 namespace aemcp::native {
 
 inline constexpr std::string_view kProjectSummaryCapability = "ae.project.summary";
-inline constexpr std::string_view kProjectFolderCreateCapability =
-    "ae.project.folder.create";
+inline constexpr std::string_view kProjectBitDepthReadCapability =
+    "ae.project.bit-depth.read";
+inline constexpr std::string_view kProjectBitDepthSetCapability =
+    "ae.project.bit-depth.set";
 
 using TimePoint = std::chrono::steady_clock::time_point;
 
@@ -40,13 +42,14 @@ struct ProjectSummary {
   std::int64_t item_count{0};
 };
 
-struct ProjectFolderCreated {
-  bool created{true};
-  std::int64_t folder_item_id{0};
-  std::string folder_name;
-  std::int64_t parent_item_id{0};
-  std::int64_t item_count_before{0};
-  std::int64_t item_count_after{0};
+struct ProjectBitDepth {
+  std::int32_t bits_per_channel{0};
+};
+
+struct ProjectBitDepthChanged {
+  bool changed{true};
+  std::int32_t before_bits_per_channel{0};
+  std::int32_t after_bits_per_channel{0};
 };
 
 struct HostReadResult {
@@ -59,23 +62,37 @@ struct HostReadResult {
   [[nodiscard]] static HostReadResult failure(std::string code, std::string detail);
 };
 
-struct HostWriteResult {
+struct HostBitDepthReadResult {
   bool ok{false};
-  ProjectFolderCreated value;
+  ProjectBitDepth value;
   std::string error_code;
   std::string message;
 
-  [[nodiscard]] static HostWriteResult success(ProjectFolderCreated result);
-  [[nodiscard]] static HostWriteResult failure(std::string code, std::string detail);
+  [[nodiscard]] static HostBitDepthReadResult success(ProjectBitDepth result);
+  [[nodiscard]] static HostBitDepthReadResult failure(
+      std::string code, std::string detail);
+};
+
+struct HostBitDepthWriteResult {
+  bool ok{false};
+  ProjectBitDepthChanged value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostBitDepthWriteResult success(ProjectBitDepthChanged result);
+  [[nodiscard]] static HostBitDepthWriteResult failure(
+      std::string code, std::string detail, std::string field = {});
 };
 
 class HostApi {
  public:
   virtual ~HostApi() = default;
   [[nodiscard]] virtual HostReadResult read_project_summary(TimePoint work_deadline) = 0;
-  [[nodiscard]] virtual HostWriteResult create_project_folder(
-      std::string_view name,
+  [[nodiscard]] virtual HostBitDepthReadResult read_project_bit_depth(
       TimePoint work_deadline);
+  [[nodiscard]] virtual HostBitDepthWriteResult set_project_bit_depth(
+      std::int32_t target_depth, TimePoint work_deadline);
 };
 
 struct Request {
@@ -86,7 +103,7 @@ struct Request {
       TimePoint deadline_value,
       std::string route_id_value = {},
       std::uint64_t session_generation_value = 0,
-      std::string folder_name_value = {},
+      std::int32_t target_depth_value = 0,
       std::string idempotency_key_value = {},
       std::string arguments_fingerprint_value = {})
       : request_id(std::move(request_id_value)),
@@ -94,7 +111,7 @@ struct Request {
         deadline(deadline_value),
         route_id(std::move(route_id_value)),
         session_generation(session_generation_value),
-        folder_name(std::move(folder_name_value)),
+        target_depth(target_depth_value),
         idempotency_key(std::move(idempotency_key_value)),
         arguments_fingerprint_sha256(std::move(arguments_fingerprint_value)) {}
 
@@ -106,7 +123,7 @@ struct Request {
   // route is re-bound.
   std::string route_id{};
   std::uint64_t session_generation{0};
-  std::string folder_name;
+  std::int32_t target_depth{0};
   std::string idempotency_key;
   std::string arguments_fingerprint_sha256;
 };
@@ -147,11 +164,13 @@ struct Completion {
   std::uint64_t session_generation{0};
   bool ok{false};
   ProjectSummary result;
-  ProjectFolderCreated folder_result;
+  ProjectBitDepth bit_depth_result;
+  ProjectBitDepthChanged bit_depth_change_result;
   // Internal fence correlation only; never serialized or logged.
   std::string idempotency_key;
   std::string error_code;
   std::string message;
+  std::string error_field;
   bool late_result_discarded{false};
   // This is a snapshot for audit/filtering, not a send authorization. A
   // transport must exact-match route+generation under the same connection lock

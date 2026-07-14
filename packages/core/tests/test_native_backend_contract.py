@@ -26,9 +26,6 @@ from ae_mcp.backends.native import (
     NativeInvokeResult,
     NativeNegotiation,
     ProjectSummaryExecution,
-    PROJECT_FOLDER_CREATE_CONTRACT_DIGEST,
-    _PROJECT_FOLDER_CREATE_INPUT_SCHEMA,
-    _PROJECT_FOLDER_CREATE_RESULT_SCHEMA,
     invoke_project_summary,
 )
 
@@ -55,79 +52,11 @@ def _jcs_digest(value: Any) -> str:
 
 
 def _descriptor() -> NativeCapabilityDescriptor:
-    raw = _fixture("capabilities.json")["response"]["result"]["items"][0]
+    items = _fixture("capabilities.json")["response"]["result"]["items"]
+    raw = next(item for item in items if item["id"] == "ae.project.summary")
     # The model deliberately accepts protocol aliases (id/version and camel
     # case) so transport adapters need no lossy hand-written field mapping.
     return NativeCapabilityDescriptor.model_validate(raw)
-
-
-def _folder_descriptor() -> NativeCapabilityDescriptor:
-    return NativeCapabilityDescriptor(
-        detail="full",
-        id="ae.project.folder.create",
-        version=1,
-        schema_version=1,
-        summary="Create one folder at the root of the open After Effects project.",
-        risk="write",
-        mutability="mutating",
-        idempotency="idempotency-key",
-        cancellation="before-dispatch",
-        undo="ae-undo-group",
-        side_effect_summary=(
-            "Creates one root project folder and one After Effects undo step."
-        ),
-        preconditions=("An After Effects project must be open.",),
-        compatibility={
-            "status": "unverified",
-            "intendedPlatforms": ["macos-arm64", "windows-x64"],
-        },
-        input_contract_id="aemcp.contract.ae.project.folder.create.input.v1",
-        result_contract_id="aemcp.contract.ae.project.folder.create.result.v1",
-        contract_digest=PROJECT_FOLDER_CREATE_CONTRACT_DIGEST,
-        input_schema=_PROJECT_FOLDER_CREATE_INPUT_SCHEMA,
-        result_schema=_PROJECT_FOLDER_CREATE_RESULT_SCHEMA,
-        requirements=(
-            {
-                "id": "aemcp.requirement.native.project-folder-create",
-                "contractVersion": 1,
-            },
-        ),
-        examples=(
-            {
-                "id": "aemcp-example-project-folder-create",
-                "kind": "positive",
-                "summary": "Create one synthetic root project folder.",
-                "arguments": {
-                    "name": "AI Assets",
-                    "idempotencyKey": "synthetic-folder-0001",
-                },
-                "expected": {
-                    "outcome": "succeeded",
-                    "value": {
-                        "created": True,
-                        "folderItemId": 101,
-                        "folderName": "AI Assets",
-                        "parentItemId": 1,
-                        "itemCountBefore": 2,
-                        "itemCountAfter": 3,
-                    },
-                },
-            },
-            {
-                "id": "aemcp-example-project-folder-no-project",
-                "kind": "negative",
-                "summary": "Require an open project before native mutation.",
-                "arguments": {
-                    "name": "AI Assets",
-                    "idempotencyKey": "synthetic-folder-0002",
-                },
-                "expected": {
-                    "errorCode": "PRECONDITION_FAILED",
-                    "recoveryAction": "open-project",
-                },
-            },
-        ),
-    )
 
 
 def _capabilities(
@@ -135,10 +64,19 @@ def _capabilities(
 ) -> NativeCapabilities:
     response = _fixture("capabilities.json")["response"]
     result = response["result"]
+    items = tuple(
+        NativeCapabilityDescriptor.model_validate(item)
+        for item in result["items"]
+    )
+    if descriptor is not None:
+        items = tuple(
+            descriptor if item.capability_id == "ae.project.summary" else item
+            for item in items
+        )
     return NativeCapabilities(
         session_id=response["sessionId"],
         detail=result["detail"],
-        items=(descriptor or _descriptor(), _folder_descriptor()),
+        items=items,
         next_cursor=result["nextCursor"],
         query_digest=_jcs_digest(
             {
@@ -462,10 +400,7 @@ async def test_project_summary_binding_is_explicit_native_and_deadline_bound():
         "hostInstanceId": "22222222-2222-4222-8222-222222222222",
         "sessionId": "11111111-1111-4111-8111-111111111111",
         "sessionGeneration": 1,
-        "capabilitiesDigest": (
-            "33afff4311c76b6671101c9f2a15d2b"
-            "bfe328c43dd7b539c0825b24ffa416be8"
-        ),
+        "capabilitiesDigest": _negotiation().capabilities_digest,
         "requestId": "invoke-summary-1",
         "effect": "none",
         "requestDigest": (

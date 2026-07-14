@@ -44,10 +44,16 @@ export const INVOKE_REGISTRY = Object.freeze([
     resultContractId: 'aemcp.contract.ae.project.summary.result.v1',
   }),
   Object.freeze({
-    id: 'ae.project.folder.create',
+    id: 'ae.project.bit-depth.read',
     version: 1,
-    inputContractId: 'aemcp.contract.ae.project.folder.create.input.v1',
-    resultContractId: 'aemcp.contract.ae.project.folder.create.result.v1',
+    inputContractId: 'aemcp.contract.ae.project.bit-depth.read.input.v1',
+    resultContractId: 'aemcp.contract.ae.project.bit-depth.read.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.project.bit-depth.set',
+    version: 1,
+    inputContractId: 'aemcp.contract.ae.project.bit-depth.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.project.bit-depth.set.result.v1',
   }),
 ]);
 const ENVELOPE_KEYS = new Set([
@@ -561,16 +567,19 @@ export function classifyRequest(message) {
     const registration = INVOKE_REGISTRY.find((item) => item.id === params.capabilityId
       && item.version === params.capabilityVersion);
     if (!registration) return { ok: false, errorCode: 'INVALID_ARGUMENT' };
-    if (params.capabilityId === 'ae.project.summary') {
+    if (params.capabilityId === 'ae.project.summary'
+        || params.capabilityId === 'ae.project.bit-depth.read') {
       if (!exactKeys(params.arguments, new Set())) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
     } else {
       const args = params.arguments;
-      if (!exactKeys(args, new Set(['name', 'idempotencyKey']), ['name', 'idempotencyKey'])
-          || typeof args.name !== 'string' || hasLoneSurrogate(args.name)
-          || args.name.length < 1 || args.name.length > 31
-          || /[\u0000-\u001f\u007f]/u.test(args.name)
+      if (!exactKeys(
+        args,
+        new Set(['targetDepth', 'idempotencyKey']),
+        ['targetDepth', 'idempotencyKey'],
+      )
+          || ![8, 16, 32].includes(args.targetDepth)
           || typeof args.idempotencyKey !== 'string'
           || !/^[A-Za-z0-9][A-Za-z0-9._:-]{15,63}$/u.test(args.idempotencyKey)) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
@@ -733,9 +742,15 @@ export function projectSummaryContractDigest(schema) {
   });
 }
 
-export function projectFolderCreateContractDigest(schema) {
-  const inputSchema = structuredClone(schema.$defs.projectFolderCreateInputSchemaContract.const);
-  const resultSchema = structuredClone(schema.$defs.projectFolderCreateResultSchemaContract.const);
+export function projectBitDepthReadContractDigest(schema) {
+  const inputSchema = structuredClone(schema.$defs.projectBitDepthReadInputSchemaContract.const);
+  const resultSchema = structuredClone(schema.$defs.projectBitDepthReadResultSchemaContract.const);
+  return sha256Jcs({ inputSchema, resultSchema });
+}
+
+export function projectBitDepthSetContractDigest(schema) {
+  const inputSchema = structuredClone(schema.$defs.projectBitDepthSetInputSchemaContract.const);
+  const resultSchema = structuredClone(schema.$defs.projectBitDepthSetResultSchemaContract.const);
   return sha256Jcs({ inputSchema, resultSchema });
 }
 
@@ -793,20 +808,20 @@ export function projectSummaryDescriptor(schema) {
   };
 }
 
-export function projectFolderCreateDescriptor(schema) {
+export function projectBitDepthReadDescriptor(schema) {
   const registration = INVOKE_REGISTRY[1];
   return {
     detail: 'full',
     id: registration.id,
     version: registration.version,
     schemaVersion: 1,
-    summary: 'Create one folder at the root of the open After Effects project.',
-    risk: 'write',
-    mutability: 'mutating',
-    idempotency: 'idempotency-key',
+    summary: "Read the open After Effects project's bit depth.",
+    risk: 'read',
+    mutability: 'read-only',
+    idempotency: 'idempotent',
     cancellation: 'before-dispatch',
-    undo: 'ae-undo-group',
-    sideEffectSummary: 'Creates one root project folder and one After Effects undo step.',
+    undo: 'not-applicable',
+    sideEffectSummary: 'Reads project bit depth without changing After Effects state.',
     preconditions: ['An After Effects project must be open.'],
     compatibility: {
       status: 'unverified',
@@ -814,44 +829,95 @@ export function projectFolderCreateDescriptor(schema) {
     },
     inputContractId: registration.inputContractId,
     resultContractId: registration.resultContractId,
-    contractDigest: projectFolderCreateContractDigest(schema),
-    inputSchema: structuredClone(schema.$defs.projectFolderCreateInputSchemaContract.const),
-    resultSchema: structuredClone(schema.$defs.projectFolderCreateResultSchemaContract.const),
+    contractDigest: projectBitDepthReadContractDigest(schema),
+    inputSchema: structuredClone(schema.$defs.projectBitDepthReadInputSchemaContract.const),
+    resultSchema: structuredClone(schema.$defs.projectBitDepthReadResultSchemaContract.const),
     requirements: [{
-      id: 'aemcp.requirement.native.project-folder-create',
+      id: 'aemcp.requirement.native.project-bit-depth-read',
       contractVersion: 1,
     }],
     examples: [
       {
-        id: 'aemcp-example-project-folder-create',
+        id: 'aemcp-example-project-bit-depth-read',
         kind: 'positive',
-        summary: 'Create one synthetic root project folder.',
-        arguments: { idempotencyKey: 'synthetic-folder-0001', name: 'AI Assets' },
-        expected: {
-          outcome: 'succeeded',
-          value: {
-            created: true,
-            folderItemId: 101,
-            folderName: 'AI Assets',
-            itemCountAfter: 3,
-            itemCountBefore: 2,
-            parentItemId: 1,
-          },
-        },
+        summary: 'Read the project bits per channel.',
+        arguments: {},
+        expected: { outcome: 'succeeded', value: { bitsPerChannel: 16 } },
       },
       {
-        id: 'aemcp-example-project-folder-no-project',
+        id: 'aemcp-example-project-bit-depth-read-no-project',
         kind: 'negative',
-        summary: 'Require an open project before native mutation.',
-        arguments: { idempotencyKey: 'synthetic-folder-0002', name: 'AI Assets' },
+        summary: 'Require an open project before reading bit depth.',
+        arguments: {},
         expected: { errorCode: 'PRECONDITION_FAILED', recoveryAction: 'open-project' },
       },
     ],
   };
 }
 
+export function projectBitDepthSetDescriptor(schema) {
+  const registration = INVOKE_REGISTRY[2];
+  return {
+    detail: 'full',
+    id: registration.id,
+    version: registration.version,
+    schemaVersion: 1,
+    summary: "Set the open After Effects project's bit depth.",
+    risk: 'write',
+    mutability: 'mutating',
+    idempotency: 'idempotency-key',
+    cancellation: 'before-dispatch',
+    undo: 'ae-undo-group',
+    sideEffectSummary: 'Changes project bit depth and creates one After Effects Undo step.',
+    preconditions: [
+      'An After Effects project must be open.',
+      'targetDepth must differ from the current project bit depth.',
+    ],
+    compatibility: {
+      status: 'unverified',
+      intendedPlatforms: ['macos-arm64', 'windows-x64'],
+    },
+    inputContractId: registration.inputContractId,
+    resultContractId: registration.resultContractId,
+    contractDigest: projectBitDepthSetContractDigest(schema),
+    inputSchema: structuredClone(schema.$defs.projectBitDepthSetInputSchemaContract.const),
+    resultSchema: structuredClone(schema.$defs.projectBitDepthSetResultSchemaContract.const),
+    requirements: [{
+      id: 'aemcp.requirement.native.project-bit-depth-set',
+      contractVersion: 1,
+    }],
+    examples: [
+      {
+        id: 'aemcp-example-project-bit-depth-set',
+        kind: 'positive',
+        summary: 'Change the project from 8 to 16 bits per channel.',
+        arguments: { idempotencyKey: 'synthetic-bit-depth-0001', targetDepth: 16 },
+        expected: {
+          outcome: 'succeeded',
+          value: {
+            afterBitsPerChannel: 16,
+            beforeBitsPerChannel: 8,
+            changed: true,
+          },
+        },
+      },
+      {
+        id: 'aemcp-example-project-bit-depth-no-change',
+        kind: 'negative',
+        summary: 'Reject a target that already matches the project bit depth.',
+        arguments: { idempotencyKey: 'synthetic-bit-depth-0002', targetDepth: 16 },
+        expected: { errorCode: 'INVALID_ARGUMENT', recoveryAction: 'change-arguments' },
+      },
+    ],
+  };
+}
+
 export function nativeCapabilityRegistry(schema) {
-  return [projectSummaryDescriptor(schema), projectFolderCreateDescriptor(schema)];
+  return [
+    projectSummaryDescriptor(schema),
+    projectBitDepthReadDescriptor(schema),
+    projectBitDepthSetDescriptor(schema),
+  ];
 }
 
 export function capabilityQueryDigest(request) {
@@ -1219,9 +1285,13 @@ export function validateTranscript(context, request, messages) {
         && (descriptor.undo !== 'ae-undo-group'
           || (evidence.undo?.available === true
             && typeof evidence.undo?.verified === 'boolean'
-            && (request.params.capabilityId !== 'ae.project.folder.create'
+            && (request.params.capabilityId !== 'ae.project.bit-depth.set'
               || request.params.capabilityVersion !== 1
               || evidence.undo.verified === false)))))
+    && (request.params.capabilityId !== 'ae.project.bit-depth.set'
+      || request.params.capabilityVersion !== 1
+      || (result.value.beforeBitsPerChannel !== result.value.afterBitsPerChannel
+        && result.value.afterBitsPerChannel === request.params.arguments.targetDepth))
     && evidence.postcondition.verified === true
     && evidence.requestDigest === requestDigest
     && evidence.postcondition.digest === resultDigest;

@@ -18,8 +18,10 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 const TOKEN_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const PROJECT_SUMMARY_CAPABILITY = 'ae.project.summary';
-const PROJECT_FOLDER_CREATE_CAPABILITY = 'ae.project.folder.create';
-const PROJECT_FOLDER_CREATE_CONTRACT_DIGEST = 'd9defb50a560e02ee4ca2e46abccf903136b2f65f51a74fd24baaafc8bedcb0f';
+const PROJECT_BIT_DEPTH_READ_CAPABILITY = 'ae.project.bit-depth.read';
+const PROJECT_BIT_DEPTH_SET_CAPABILITY = 'ae.project.bit-depth.set';
+const PROJECT_BIT_DEPTH_READ_CONTRACT_DIGEST = '936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e';
+const PROJECT_BIT_DEPTH_SET_CONTRACT_DIGEST = 'd5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a';
 const NATIVE_WIRE_ERROR_CODES = new Set([
     'NATIVE_UNAVAILABLE', 'NATIVE_UNSUPPORTED', 'WIRE_VERSION_MISMATCH',
     'INVALID_REQUEST', 'INVALID_ARGUMENT', 'DUPLICATE_REQUEST',
@@ -55,7 +57,7 @@ function nativeContractMismatch(message, cause) {
     );
 }
 
-function nativeMutationUncertain(message, cause) {
+function nativeMutationUncertain(message, capabilityId, cause) {
     return nativeError(
         'POSSIBLY_SIDE_EFFECTING_FAILURE',
         message,
@@ -65,9 +67,9 @@ function nativeMutationUncertain(message, cause) {
             sideEffect: 'may-have-occurred',
             recovery: {
                 action: 'inspect-state',
-                hint: 'Inspect the project folders and Undo stack before retrying.',
+                hint: 'Inspect the project bit depth and Undo stack before retrying.',
             },
-            details: { capabilityId: PROJECT_FOLDER_CREATE_CAPABILITY },
+            details: { capabilityId },
         },
     );
 }
@@ -257,25 +259,31 @@ function projectSummaryPostconditionDigest(value) {
     });
 }
 
-function projectFolderCreatePostconditionDigest(value) {
+function projectBitDepthReadPostconditionDigest(value) {
     return sha256Canonical({
-        capabilityId: PROJECT_FOLDER_CREATE_CAPABILITY,
+        capabilityId: PROJECT_BIT_DEPTH_READ_CAPABILITY,
         capabilityVersion: 1,
         value: {
-            created: value.created,
-            folderItemId: value.folderItemId,
-            folderName: value.folderName,
-            itemCountAfter: value.itemCountAfter,
-            itemCountBefore: value.itemCountBefore,
-            parentItemId: value.parentItemId,
+            bitsPerChannel: value.bitsPerChannel,
         },
     });
 }
 
-function validProjectFolderCreateArguments(value) {
-    return exactKeys(value, ['name', 'idempotencyKey'])
-        && typeof value.name === 'string' && value.name.length >= 1 && value.name.length <= 31
-        && !/[\u0000-\u001f\u007f]/.test(value.name)
+function projectBitDepthSetPostconditionDigest(value) {
+    return sha256Canonical({
+        capabilityId: PROJECT_BIT_DEPTH_SET_CAPABILITY,
+        capabilityVersion: 1,
+        value: {
+            afterBitsPerChannel: value.afterBitsPerChannel,
+            beforeBitsPerChannel: value.beforeBitsPerChannel,
+            changed: value.changed,
+        },
+    });
+}
+
+function validProjectBitDepthSetArguments(value) {
+    return exactKeys(value, ['targetDepth', 'idempotencyKey'])
+        && [8, 16, 32].includes(value.targetDepth)
         && typeof value.idempotencyKey === 'string'
         && value.idempotencyKey.length >= 16 && TOKEN_PATTERN.test(value.idempotencyKey);
 }
@@ -284,10 +292,10 @@ function validProjectFolderCreateArguments(value) {
 // RFC 8785 member order explicitly so the broker can bind native evidence to
 // the exact request it sent instead of trusting a digest-shaped string.
 function invokeRequestDigest(request) {
-    const argumentsValue = request.params.capabilityId === PROJECT_FOLDER_CREATE_CAPABILITY
+    const argumentsValue = request.params.capabilityId === PROJECT_BIT_DEPTH_SET_CAPABILITY
         ? {
             idempotencyKey: request.params.arguments.idempotencyKey,
-            name: request.params.arguments.name,
+            targetDepth: request.params.arguments.targetDepth,
         }
         : {};
     return sha256Canonical({
@@ -329,7 +337,8 @@ function createNativeAegpClient(options) {
     let sessionGeneration = 0;
     let capabilitiesDigest = null;
     let projectSummaryContractDigest = null;
-    let projectFolderCreateContractDigest = null;
+    let projectBitDepthReadContractDigest = null;
+    let projectBitDepthSetContractDigest = null;
     let helloIdentity = null;
     let nextRequest = 1;
     let inputBuffer = Buffer.alloc(0);
@@ -343,7 +352,7 @@ function createNativeAegpClient(options) {
 
     function pendingTransportFailure(pending, error, message) {
         return pending && pending.mutating
-            ? nativeMutationUncertain(message, error)
+            ? nativeMutationUncertain(message, pending.capabilityId, error)
             : error;
     }
 
@@ -373,7 +382,8 @@ function createNativeAegpClient(options) {
         sessionGeneration = 0;
         capabilitiesDigest = null;
         projectSummaryContractDigest = null;
-        projectFolderCreateContractDigest = null;
+        projectBitDepthReadContractDigest = null;
+        projectBitDepthSetContractDigest = null;
         helloIdentity = null;
         if (socket) {
             const current = socket;
@@ -471,14 +481,17 @@ function createNativeAegpClient(options) {
         if (deadlineUnixMs !== undefined) request.deadlineUnixMs = deadlineUnixMs;
         const requestDigest = method === 'invoke' ? invokeRequestDigest(request) : null;
         const mutating = method === 'invoke'
-            && params.capabilityId === PROJECT_FOLDER_CREATE_CAPABILITY;
+            && params.capabilityId === PROJECT_BIT_DEPTH_SET_CAPABILITY;
         return new Promise(function (resolve, reject) {
             const remainingMs = deadlineUnixMs === undefined
                 ? requestTimeoutMs : Math.max(1, deadlineUnixMs - now());
             const timer = setTimeout(function () {
                 pendingRequests.delete(requestId);
                 reject(mutating
-                    ? nativeMutationUncertain('Native mutation response timed out after dispatch.')
+                    ? nativeMutationUncertain(
+                        'Native mutation response timed out after dispatch.',
+                        params.capabilityId,
+                    )
                     : nativeError('DEADLINE_EXCEEDED', 'native AEGP request timed out', true));
             }, Math.min(requestTimeoutMs, remainingMs));
             pendingRequests.set(requestId, {
@@ -509,7 +522,9 @@ function createNativeAegpClient(options) {
                 clearTimeout(timer);
                 reject(mutating
                     ? nativeMutationUncertain(
-                        'Native mutation transport write failed after dispatch may have begun.', cause,
+                        'Native mutation transport write failed after dispatch may have begun.',
+                        params.capabilityId,
+                        cause,
                     )
                     : nativeError('NATIVE_UNAVAILABLE', 'native AEGP request write failed', true, cause));
             }
@@ -721,28 +736,42 @@ function createNativeAegpClient(options) {
         const summaryItem = Array.isArray(result?.items)
             ? result.items.find(function (candidate) { return candidate?.id === PROJECT_SUMMARY_CAPABILITY; })
             : null;
-        const folderItem = Array.isArray(result?.items)
-            ? result.items.find(function (candidate) { return candidate?.id === PROJECT_FOLDER_CREATE_CAPABILITY; })
+        const bitDepthReadItem = Array.isArray(result?.items)
+            ? result.items.find(function (candidate) { return candidate?.id === PROJECT_BIT_DEPTH_READ_CAPABILITY; })
+            : null;
+        const bitDepthSetItem = Array.isArray(result?.items)
+            ? result.items.find(function (candidate) { return candidate?.id === PROJECT_BIT_DEPTH_SET_CAPABILITY; })
             : null;
         const requiresSummary = ids === undefined || ids.includes(PROJECT_SUMMARY_CAPABILITY);
-        const requiresFolder = ids === undefined || ids.includes(PROJECT_FOLDER_CREATE_CAPABILITY);
+        const requiresBitDepthRead = ids === undefined || ids.includes(PROJECT_BIT_DEPTH_READ_CAPABILITY);
+        const requiresBitDepthSet = ids === undefined || ids.includes(PROJECT_BIT_DEPTH_SET_CAPABILITY);
         if (!exactKeys(result, ['detail', 'items', 'nextCursor', 'queryDigest', 'capabilitiesDigest'])
             || result.detail !== requestedDetail || result.nextCursor !== null
             || result.queryDigest !== capabilitiesQueryDigest(sessionId, ids, requestedDetail, limit)
             || result.capabilitiesDigest !== capabilitiesDigest
-            || (requiresSummary && !summaryItem) || (requiresFolder && !folderItem)
+            || (requiresSummary && !summaryItem)
+            || (requiresBitDepthRead && !bitDepthReadItem)
+            || (requiresBitDepthSet && !bitDepthSetItem)
             || (summaryItem && (summaryItem.version !== 1 || summaryItem.detail !== requestedDetail
                 || (requestedDetail === 'full' && !SHA256_PATTERN.test(summaryItem.contractDigest))))
-            || (folderItem && (folderItem.version !== 1 || folderItem.detail !== requestedDetail
+            || (bitDepthReadItem && (bitDepthReadItem.version !== 1
+                || bitDepthReadItem.detail !== requestedDetail
                 || (requestedDetail === 'full'
-                    && folderItem.contractDigest !== PROJECT_FOLDER_CREATE_CONTRACT_DIGEST)))) {
+                    && bitDepthReadItem.contractDigest !== PROJECT_BIT_DEPTH_READ_CONTRACT_DIGEST)))
+            || (bitDepthSetItem && (bitDepthSetItem.version !== 1
+                || bitDepthSetItem.detail !== requestedDetail
+                || (requestedDetail === 'full'
+                    && bitDepthSetItem.contractDigest !== PROJECT_BIT_DEPTH_SET_CONTRACT_DIGEST)))) {
             throw nativeContractMismatch('native capabilities result was malformed');
         }
         if (requestedDetail === 'full' && summaryItem) {
             projectSummaryContractDigest = summaryItem.contractDigest;
         }
-        if (requestedDetail === 'full' && folderItem) {
-            projectFolderCreateContractDigest = folderItem.contractDigest;
+        if (requestedDetail === 'full' && bitDepthReadItem) {
+            projectBitDepthReadContractDigest = bitDepthReadItem.contractDigest;
+        }
+        if (requestedDetail === 'full' && bitDepthSetItem) {
+            projectBitDepthSetContractDigest = bitDepthSetItem.contractDigest;
         }
         return result;
     }
@@ -753,21 +782,31 @@ function createNativeAegpClient(options) {
             && call.capabilityVersion === 1
             && call.arguments && typeof call.arguments === 'object'
             && !Array.isArray(call.arguments) && Object.keys(call.arguments).length === 0;
-        const folderCall = call.capabilityId === PROJECT_FOLDER_CREATE_CAPABILITY
+        const bitDepthReadCall = call.capabilityId === PROJECT_BIT_DEPTH_READ_CAPABILITY
             && call.capabilityVersion === 1
-            && validProjectFolderCreateArguments(call.arguments);
+            && call.arguments && typeof call.arguments === 'object'
+            && !Array.isArray(call.arguments) && Object.keys(call.arguments).length === 0;
+        const bitDepthSetCall = call.capabilityId === PROJECT_BIT_DEPTH_SET_CAPABILITY
+            && call.capabilityVersion === 1
+            && validProjectBitDepthSetArguments(call.arguments);
         if (!exactKeys(call, [
             'requestId', 'capabilityId', 'capabilityVersion', 'arguments', 'deadlineUnixMs',
         ]) || !TOKEN_PATTERN.test(call.requestId || '')
-            || (!summaryCall && !folderCall)
+            || (!summaryCall && !bitDepthReadCall && !bitDepthSetCall)
             || !Number.isSafeInteger(call.deadlineUnixMs) || call.deadlineUnixMs <= 0) {
             throw nativeError('INVALID_ARGUMENT', 'native invoke request is invalid', false);
         }
         if (state !== 'connected') await waitUntilConnected(call.deadlineUnixMs);
-        if (folderCall
-            && projectFolderCreateContractDigest !== PROJECT_FOLDER_CREATE_CONTRACT_DIGEST) {
+        if (bitDepthReadCall
+            && projectBitDepthReadContractDigest !== PROJECT_BIT_DEPTH_READ_CONTRACT_DIGEST) {
             throw nativeContractMismatch(
-                'native project-folder capability was not verified before dispatch',
+                'native project-bit-depth read capability was not verified before dispatch',
+            );
+        }
+        if (bitDepthSetCall
+            && projectBitDepthSetContractDigest !== PROJECT_BIT_DEPTH_SET_CONTRACT_DIGEST) {
+            throw nativeContractMismatch(
+                'native project-bit-depth set capability was not verified before dispatch',
             );
         }
         const result = await send('invoke', {
@@ -794,8 +833,16 @@ function createNativeAegpClient(options) {
             && evidence.postcondition.algorithm === 'sha256-rfc8785-jcs-v1'
             && SHA256_PATTERN.test(evidence.postcondition.digest || '');
         if (!commonValid || !evidenceValid) {
-            if (folderCall) {
-                throw nativeMutationUncertain('Native project-folder result lacked verified AEGP evidence.');
+            if (bitDepthSetCall) {
+                throw nativeMutationUncertain(
+                    'Native project-bit-depth set result lacked verified AEGP evidence.',
+                    PROJECT_BIT_DEPTH_SET_CAPABILITY,
+                );
+            }
+            if (bitDepthReadCall) {
+                throw nativeContractMismatch(
+                    'native project-bit-depth read result lacked verified AEGP evidence',
+                );
             }
             throw nativeContractMismatch('native project summary result lacked verified AEGP evidence');
         }
@@ -809,26 +856,34 @@ function createNativeAegpClient(options) {
             || evidence.postcondition.digest !== projectSummaryPostconditionDigest(value))) {
             throw nativeContractMismatch('native project summary result lacked verified AEGP evidence');
         }
-        if (folderCall && (result.replayed !== false
+        if (bitDepthReadCall && (evidence.effect !== 'none'
+            || evidence.undo !== undefined
+            || evidence.postcondition.kind !== 'project-bit-depth-read'
+            || !exactKeys(value, ['bitsPerChannel'])
+            || ![8, 16, 32].includes(value.bitsPerChannel)
+            || projectBitDepthReadContractDigest !== PROJECT_BIT_DEPTH_READ_CONTRACT_DIGEST
+            || evidence.postcondition.digest !== projectBitDepthReadPostconditionDigest(value))) {
+            throw nativeContractMismatch(
+                'native project-bit-depth read result failed verification',
+            );
+        }
+        if (bitDepthSetCall && (result.replayed !== false
             || evidence.effect !== 'committed'
-            || evidence.postcondition.kind !== 'project-folder-created'
+            || evidence.postcondition.kind !== 'project-bit-depth-set'
             || !exactKeys(evidence.undo, ['available', 'verified'])
             || evidence.undo.available !== true || evidence.undo.verified !== false
-            || !exactKeys(value, [
-                'created', 'folderItemId', 'folderName', 'parentItemId',
-                'itemCountBefore', 'itemCountAfter',
-            ])
-            || value.created !== true
-            || !Number.isSafeInteger(value.folderItemId) || value.folderItemId < 1
-            || typeof value.folderName !== 'string' || value.folderName !== call.arguments.name
-            || value.folderName.length < 1 || value.folderName.length > 31
-            || !Number.isSafeInteger(value.parentItemId) || value.parentItemId < 0
-            || !Number.isSafeInteger(value.itemCountBefore) || value.itemCountBefore < 0
-            || !Number.isSafeInteger(value.itemCountAfter)
-            || value.itemCountAfter !== value.itemCountBefore + 1
-            || projectFolderCreateContractDigest !== PROJECT_FOLDER_CREATE_CONTRACT_DIGEST
-            || evidence.postcondition.digest !== projectFolderCreatePostconditionDigest(value))) {
-            throw nativeMutationUncertain('Native project-folder result failed post-dispatch verification.');
+            || !exactKeys(value, ['changed', 'beforeBitsPerChannel', 'afterBitsPerChannel'])
+            || value.changed !== true
+            || ![8, 16, 32].includes(value.beforeBitsPerChannel)
+            || ![8, 16, 32].includes(value.afterBitsPerChannel)
+            || value.beforeBitsPerChannel === value.afterBitsPerChannel
+            || value.afterBitsPerChannel !== call.arguments.targetDepth
+            || projectBitDepthSetContractDigest !== PROJECT_BIT_DEPTH_SET_CONTRACT_DIGEST
+            || evidence.postcondition.digest !== projectBitDepthSetPostconditionDigest(value))) {
+            throw nativeMutationUncertain(
+                'Native project-bit-depth set result failed post-dispatch verification.',
+                PROJECT_BIT_DEPTH_SET_CAPABILITY,
+            );
         }
         return result;
     }
@@ -867,7 +922,8 @@ function createNativeAegpClient(options) {
                 sessionGeneration: sessionGeneration || null,
                 capabilitiesDigest,
                 projectSummaryContractDigest,
-                projectFolderCreateContractDigest,
+                projectBitDepthReadContractDigest,
+                projectBitDepthSetContractDigest,
             });
         },
     });

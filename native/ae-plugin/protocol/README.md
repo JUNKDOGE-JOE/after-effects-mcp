@@ -57,16 +57,18 @@ Adobe approval or completed host validation.
    SDK identity, actual AE host identity, instance/session IDs, limits, and a
    capability digest. No overlap returns `WIRE_VERSION_MISMATCH`.
 3. The broker requests compact capability summaries by default. It can request
-   full, bounded contracts for selected IDs. Version 1 has one compile-time
-   capability and deliberately does not support pagination: `cursor` is rejected
+   full, bounded contracts for selected IDs. Version 1 has three compile-time
+   capabilities and deliberately does not support pagination: `cursor` is rejected
    and `nextCursor` must be null. If the effective limit is smaller than the
    number of matching descriptors, the plug-in fails closed instead of returning
    an incomplete page. Unknown requested IDs produce an empty, digest-bound page.
    Responses bind the normalized ids/detail/limit query and session with
    `queryDigest` and can never be replayed.
 4. `invoke` is a closed `oneOf` over compile-time registered capability-specific
-   input schemas. The v1 seed permits only `ae.project.summary` with an empty
-   argument object. Future capabilities extend that allowlist with closed,
+   input schemas. Version 1 permits `ae.project.summary` and
+   `ae.project.bit-depth.read` with empty argument objects, plus
+   `ae.project.bit-depth.set` with exactly `targetDepth` (`8`, `16`, or `32`)
+   and `idempotencyKey`. Future capabilities extend that allowlist with closed,
    bounded schemas; a generic argument bag or field-name blacklist is never a
    security boundary. Arbitrary C++, JSX, shell text, command lines, pointers,
    native handles, and unknown nested data are rejected before dispatch.
@@ -89,6 +91,14 @@ the broker's terminal-observation time, which itself must not exceed the effecti
 deadline; no clock tolerance is implicit. Different sessions may reuse an ID.
 Capabilities declared `idempotency-key` must use a capability-specific invoke
 schema that requires the key; non-idempotent mutations are never replayed.
+The bit-depth mutation rejects a target that already matches the project before
+opening an Undo group and reports `INVALID_ARGUMENT` with `change-arguments`;
+that safe no-op does not consume the idempotency key. A successful mutation
+reports the verified before/after bits per channel, `effect=committed`, and
+`undo={available:true,verified:false}`. Availability is based on an SDK
+operation documented as undoable plus a balanced AE Undo group; the invocation
+does not consume the global Undo stack to claim the reverse transition was
+verified.
 Failure responses are retained only as duplicate-detection tombstones and are
 never replayed. The reference ledger has hard active/terminal capacities,
 deterministic FIFO terminal eviction, a negotiated TTL, and explicit session
@@ -124,7 +134,7 @@ is decided atomically by the controller for the target in the cancel request's
 session. It removes an exact queued target or observes running/terminal/unknown
 state and issues a one-use decision receipt; exchange validation rejects copied,
 replayed, or cross-session decisions. Cooperative descriptors map a running
-target to `running-cancel-requested`; the v1 seed's `before-dispatch` descriptor
+target to `running-cancel-requested`; the v1 capabilities' `before-dispatch` descriptors
 maps it to `running-not-cancellable`. This is contract behavior, not a claim that
 the native dispatcher has already been deployed.
 

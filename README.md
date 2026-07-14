@@ -19,7 +19,7 @@ The published v0.9.2 asset targets this verified release scope:
 
 ```text
 Embedded panel chat or external MCP client
-  -> packages/core (ae_mcp, Python stdio MCP server, 44 ae_ tools)
+  -> packages/core (ae_mcp, Python stdio MCP server, 47 ae_ tools)
   -> backend (packages/bridge, httpx)
   -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
   -> CSInterface.evalScript
@@ -233,7 +233,12 @@ node native/ae-plugin/install-dev-macos.mjs recover
 
 Ad-hoc signing and a successful local build are development evidence only. The generated receipt
 deliberately keeps `distributionApproved`, `runtimeEvidence`, and `compatibilityEvidence` false;
-real AE loading and the public MCP-to-AEGP read/write gate are separate required evidence.
+each candidate still requires an exact-commit real-AE gate through the public MCP surface. The
+development-native surface is intentionally small: `ae_projectSummary` reads a project summary,
+`ae_getProjectBitDepth` reads the current 8/16/32 bits-per-channel value, and
+`ae_setProjectBitDepth` performs the SDK-declared undoable change with an idempotency key and
+verified native readback. These tools fail explicitly when the native plane is unavailable; they do
+not fall back to JSX.
 
 CEP panel macOS development setup:
 

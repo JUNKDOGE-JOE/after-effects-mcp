@@ -27,17 +27,19 @@ using aemcp::native::Clock;
 using aemcp::native::Completion;
 using aemcp::native::EnqueueCode;
 using aemcp::native::HostApi;
+using aemcp::native::HostBitDepthReadResult;
+using aemcp::native::HostBitDepthWriteResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostReadResult;
-using aemcp::native::HostWriteResult;
 using aemcp::native::NativeRpcConnectionHandler;
 using aemcp::native::NativeRpcObserver;
 using aemcp::native::NativeRpcRuntimeInfo;
+using aemcp::native::ProjectBitDepthChanged;
 using aemcp::native::ProjectSummary;
 using aemcp::native::Request;
 using aemcp::native::TimePoint;
+using aemcp::native::kProjectBitDepthSetCapability;
 using aemcp::native::kProjectSummaryCapability;
-using aemcp::native::kProjectFolderCreateCapability;
 using aemcp::native::rpc::SessionClock;
 
 constexpr std::string_view kSession = "11111111-1111-4111-8111-111111111111";
@@ -82,23 +84,35 @@ class FakeHost final : public HostApi {
     return HostReadResult::success(summary);
   }
 
-  [[nodiscard]] HostWriteResult create_project_folder(
-      std::string_view name, TimePoint) override {
-    ++write_calls;
-    observed_folder_name = std::string(name);
-    if (!write_error_code.empty()) {
-      return HostWriteResult::failure(write_error_code, "fake write error");
+  [[nodiscard]] HostBitDepthReadResult read_project_bit_depth(TimePoint) override {
+    ++bit_depth_read_calls;
+    if (!bit_depth_read_error_code.empty()) {
+      return HostBitDepthReadResult::failure(
+          bit_depth_read_error_code, "fake bit-depth read error");
     }
-    auto result = folder_result;
-    result.folder_name = std::string(name);
-    return HostWriteResult::success(std::move(result));
+    return HostBitDepthReadResult::success({bits_per_channel});
+  }
+
+  [[nodiscard]] HostBitDepthWriteResult set_project_bit_depth(
+      std::int32_t target_depth, TimePoint) override {
+    ++write_calls;
+    observed_target_depth = target_depth;
+    if (!write_error_code.empty()) {
+      return HostBitDepthWriteResult::failure(
+          write_error_code, "fake write error", write_error_field);
+    }
+    return HostBitDepthWriteResult::success(bit_depth_change);
   }
 
   ProjectSummary summary{true, "fixture.aep", 3};
-  aemcp::native::ProjectFolderCreated folder_result{true, 101, "AI Assets", 0, 3, 4};
+  ProjectBitDepthChanged bit_depth_change{true, 8, 16};
+  std::int32_t bits_per_channel{8};
+  std::string bit_depth_read_error_code;
   std::string write_error_code;
-  std::string observed_folder_name;
+  std::string write_error_field;
+  std::int32_t observed_target_depth{0};
   int read_calls{0};
+  int bit_depth_read_calls{0};
   int write_calls{0};
 };
 
@@ -183,9 +197,10 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      "33afff4311c76b6671101c9f2a15d2bbfe328c43dd7b539c0825b24ffa416be8",
+      "0fda4e1bfbc8657bcd0c676fb802aecc97ba2ee6268cc115ff6d12b74758c042",
       "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
-      "d9defb50a560e02ee4ca2e46abccf903136b2f65f51a74fd24baaafc8bedcb0f",
+      "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
+      "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
   };
 }
 
@@ -286,11 +301,13 @@ std::string capabilities_json() {
         "\"params\":{\"ids\":[\"ae.project.summary\"],\"detail\":\"full\",\"limit\":1}}";
 }
 
-std::string folder_capabilities_json() {
+std::string bit_depth_capabilities_json(
+    std::string_view request_id, std::string_view capability_id) {
   return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
       + std::string(kSession)
-      + "\",\"requestId\":\"capabilities-folder\",\"method\":\"capabilities\","
-        "\"params\":{\"ids\":[\"ae.project.folder.create\"],\"detail\":\"full\","
+      + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"capabilities\",\"params\":{\"ids\":[\""
+      + std::string(capability_id) + "\"],\"detail\":\"full\","
         "\"limit\":1}}";
 }
 
@@ -304,16 +321,25 @@ std::string invoke_json(
         "\"capabilityVersion\":1,\"arguments\":{}}}";
 }
 
-std::string folder_invoke_json(
-    std::string_view request_id,
-    std::string_view key = "folder-intent-001",
-    std::string_view name = "AI Assets") {
+std::string bit_depth_read_invoke_json(std::string_view request_id) {
   return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
       + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
       + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
-        "\"params\":{\"capabilityId\":\"ae.project.folder.create\","
-        "\"capabilityVersion\":1,\"arguments\":{\"name\":\""
-      + std::string(name) + "\",\"idempotencyKey\":\"" + std::string(key) + "\"}}}";
+        "\"params\":{\"capabilityId\":\"ae.project.bit-depth.read\","
+        "\"capabilityVersion\":1,\"arguments\":{}}}";
+}
+
+std::string bit_depth_set_invoke_json(
+    std::string_view request_id,
+    std::string_view key = "bit-depth-intent-001",
+    std::int32_t target_depth = 16) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.project.bit-depth.set\","
+        "\"capabilityVersion\":1,\"arguments\":{\"targetDepth\":"
+      + std::to_string(target_depth) + ",\"idempotencyKey\":\""
+      + std::string(key) + "\"}}}";
 }
 
 std::string cancel_json(std::string_view request_id, std::string_view target_request_id) {
@@ -372,18 +398,33 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
       "\"queryDigest\":\"aa3c66bc21e50b6a35db9c3cb12fcb1627694cd8f9fc411f21f7e3de46b3e56a\"",
       "capabilities response");
 
-  send_json(sockets[0], folder_capabilities_json());
-  const std::string folder_capabilities = read_body(sockets[0]);
-  require_contains(folder_capabilities, "\"id\":\"ae.project.folder.create\"",
-      "folder capabilities response");
-  require_contains(folder_capabilities, "\"idempotency\":\"idempotency-key\"",
-      "folder capabilities response");
-  require_contains(folder_capabilities,
-      "\"contractDigest\":\"d9defb50a560e02ee4ca2e46abccf903136b2f65f51a74fd24baaafc8bedcb0f\"",
-      "folder capabilities response");
-  require_contains(folder_capabilities,
-      "\"pattern\":\"^[^\\\\u0000-\\\\u001f\\\\u007f]+$\"",
-      "folder capabilities response");
+  send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-bit-depth-read", "ae.project.bit-depth.read"));
+  const std::string bit_depth_read_capabilities = read_body(sockets[0]);
+  require_contains(bit_depth_read_capabilities,
+      "\"id\":\"ae.project.bit-depth.read\"", "bit-depth read capabilities response");
+  require_contains(bit_depth_read_capabilities,
+      "\"idempotency\":\"idempotent\"", "bit-depth read capabilities response");
+  require_contains(bit_depth_read_capabilities,
+      "\"contractDigest\":\"936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e\"",
+      "bit-depth read capabilities response");
+  require_contains(bit_depth_read_capabilities,
+      "\"bitsPerChannel\":{\"enum\":[8,16,32]",
+      "bit-depth read capabilities response");
+
+  send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-bit-depth-set", "ae.project.bit-depth.set"));
+  const std::string bit_depth_set_capabilities = read_body(sockets[0]);
+  require_contains(bit_depth_set_capabilities,
+      "\"id\":\"ae.project.bit-depth.set\"", "bit-depth set capabilities response");
+  require_contains(bit_depth_set_capabilities,
+      "\"idempotency\":\"idempotency-key\"", "bit-depth set capabilities response");
+  require_contains(bit_depth_set_capabilities,
+      "\"contractDigest\":\"d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a\"",
+      "bit-depth set capabilities response");
+  require_contains(bit_depth_set_capabilities,
+      "\"targetDepth\":{\"enum\":[8,16,32]",
+      "bit-depth set capabilities response");
 
   send_json(sockets[0], invoke_json("invoke-read"));
   const std::string progress = read_body(sockets[0]);
@@ -407,47 +448,85 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
           == "0e82d012b2b7f26e310703c35b1d82e744809137f1ea5e6d1920aa29c0baca77",
       "read terminal evidence was not deterministic and verified");
 
-  send_json(sockets[0], folder_invoke_json("invoke-folder"));
-  require_contains(read_body(sockets[0]), "\"event\":\"progress\"", "folder progress");
-  wait_until([&] { return dispatcher.queued() == 1; }, "queued folder invoke");
-  const auto folder_batch = dispatcher.drain(host);
-  require(folder_batch.completions.size() == 1 && folder_batch.completions[0].ok,
-      "owner dispatcher did not produce the folder result");
-  const std::string folder = read_body(sockets[0]);
-  require_contains(folder, "\"capabilityId\":\"ae.project.folder.create\"",
-      "folder response");
-  require_contains(folder, "\"effect\":\"committed\"", "folder response");
-  require_contains(folder, "\"undo\":{\"available\":true,\"verified\":false}",
-      "folder response");
-  require_contains(folder, "\"folderItemId\":101", "folder response");
-  require_contains(folder, "\"parentItemId\":0", "folder response");
-  require(folder.find("groupId") == std::string::npos,
-      "folder response fabricated an SDK undo token");
-  wait_until([&] { return !observer.terminal("invoke-folder").request_id.empty(); },
-      "folder terminal audit");
-  const TerminalRecord folder_terminal = observer.terminal("invoke-folder");
-  require(folder_terminal.ok && folder_terminal.request_digest.size() == 64
-      && folder_terminal.postcondition_digest
-          == "92e14ba749b30d80db977fed12c075e208c353aa7159213944475a2e007ab7cd"
-      && host.write_calls == 1 && host.observed_folder_name == "AI Assets",
-      "folder terminal evidence was not deterministic and verified");
+  send_json(sockets[0], bit_depth_read_invoke_json("invoke-bit-depth-read"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "bit-depth read progress");
+  wait_until([&] { return dispatcher.queued() == 1; }, "queued bit-depth read invoke");
+  const auto bit_depth_read_batch = dispatcher.drain(host);
+  require(bit_depth_read_batch.completions.size() == 1
+          && bit_depth_read_batch.completions[0].ok,
+      "owner dispatcher did not produce the bit-depth read result");
+  const std::string bit_depth_read = read_body(sockets[0]);
+  require_contains(bit_depth_read,
+      "\"capabilityId\":\"ae.project.bit-depth.read\"", "bit-depth read response");
+  require_contains(bit_depth_read, "\"effect\":\"none\"", "bit-depth read response");
+  require_contains(bit_depth_read,
+      "\"bitsPerChannel\":8", "bit-depth read response");
+  require_contains(bit_depth_read,
+      "\"kind\":\"project-bit-depth-read\"", "bit-depth read response");
+  wait_until([&] {
+    return !observer.terminal("invoke-bit-depth-read").request_id.empty();
+  }, "bit-depth read terminal audit");
+  const TerminalRecord bit_depth_read_terminal =
+      observer.terminal("invoke-bit-depth-read");
+  require(bit_depth_read_terminal.ok
+      && bit_depth_read_terminal.request_digest.size() == 64
+      && bit_depth_read_terminal.postcondition_digest
+          == aemcp::native::rpc::digest_project_bit_depth_read_postcondition(8)
+      && host.bit_depth_read_calls == 1,
+      "bit-depth read terminal evidence was not deterministic and verified");
 
-  send_json(sockets[0], folder_invoke_json("invoke-folder-duplicate"));
+  send_json(sockets[0], bit_depth_set_invoke_json("invoke-bit-depth-set"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "bit-depth set progress");
+  wait_until([&] { return dispatcher.queued() == 1; }, "queued bit-depth set invoke");
+  const auto bit_depth_set_batch = dispatcher.drain(host);
+  require(bit_depth_set_batch.completions.size() == 1
+          && bit_depth_set_batch.completions[0].ok,
+      "owner dispatcher did not produce the bit-depth set result");
+  const std::string bit_depth_set = read_body(sockets[0]);
+  require_contains(bit_depth_set,
+      "\"capabilityId\":\"ae.project.bit-depth.set\"", "bit-depth set response");
+  require_contains(bit_depth_set,
+      "\"effect\":\"committed\"", "bit-depth set response");
+  require_contains(bit_depth_set,
+      "\"undo\":{\"available\":true,\"verified\":false}",
+      "bit-depth set response");
+  require_contains(bit_depth_set,
+      "\"kind\":\"project-bit-depth-set\"", "bit-depth set response");
+  require_contains(bit_depth_set,
+      "\"afterBitsPerChannel\":16,\"beforeBitsPerChannel\":8,\"changed\":true",
+      "bit-depth set response");
+  require(bit_depth_set.find("groupId") == std::string::npos,
+      "bit-depth set response fabricated an SDK undo token");
+  wait_until([&] {
+    return !observer.terminal("invoke-bit-depth-set").request_id.empty();
+  }, "bit-depth set terminal audit");
+  const TerminalRecord bit_depth_set_terminal =
+      observer.terminal("invoke-bit-depth-set");
+  require(bit_depth_set_terminal.ok
+      && bit_depth_set_terminal.request_digest.size() == 64
+      && bit_depth_set_terminal.postcondition_digest
+          == aemcp::native::rpc::digest_project_bit_depth_set_postcondition(true, 8, 16)
+      && host.write_calls == 1 && host.observed_target_depth == 16,
+      "bit-depth set terminal evidence was not deterministic and verified");
+
+  send_json(sockets[0], bit_depth_set_invoke_json("invoke-bit-depth-set-duplicate"));
   const std::string duplicate = read_body(sockets[0]);
   require_contains(duplicate, "\"code\":\"DUPLICATE_REQUEST\"",
-      "same-key folder duplicate");
+      "same-key bit-depth duplicate");
   require_contains(duplicate, "\"sideEffect\":\"not-started\"",
-      "same-key folder duplicate");
+      "same-key bit-depth duplicate");
   require_contains(duplicate, "\"field\":\"params.arguments.idempotencyKey\"",
-      "same-key folder duplicate");
+      "same-key bit-depth duplicate");
   require(host.write_calls == 1 && !wait_readable(sockets[0], 100ms),
       "same-key duplicate generated progress or a second host mutation");
 
-  send_json(sockets[0], folder_invoke_json(
-      "invoke-folder-conflict", "folder-intent-001", "Other"));
+  send_json(sockets[0], bit_depth_set_invoke_json(
+      "invoke-bit-depth-set-conflict", "bit-depth-intent-001", 32));
   const std::string conflict = read_body(sockets[0]);
   require_contains(conflict, "\"code\":\"DUPLICATE_REQUEST\"",
-      "different-args folder duplicate");
+      "different-args bit-depth duplicate");
   require(host.write_calls == 1, "different-args idempotency conflict reached HostApi");
 
   send_json(sockets[0], invoke_json("invoke-cancel"));
@@ -486,16 +565,17 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
 
   finish_connection(sockets[0], sockets[1], worker);
   require(dispatcher.enqueue(Request{
-      "folder-after-disconnect",
-      std::string(kProjectFolderCreateCapability),
+      "bit-depth-after-disconnect",
+      std::string(kProjectBitDepthSetCapability),
       dispatcher_clock.now() + 1s,
       "route-e2e",
       8,
-      "AI Assets",
-      "folder-intent-001",
-      "6e324ac691906ea2f87cfe960f0f5a51d38facb597e8b3499a93a76144727177",
+      16,
+      "bit-depth-intent-001",
+      aemcp::native::rpc::digest_project_bit_depth_set_arguments(
+          16, "bit-depth-intent-001"),
   }).code == EnqueueCode::kDuplicateRequest,
-      "successful folder business fence was lost across broker disconnect");
+      "successful bit-depth business fence was lost across broker disconnect");
   require(dispatcher.enqueue(Request{
       "old-generation",
       std::string(kProjectSummaryCapability),
@@ -548,37 +628,44 @@ void invalid_postcondition_becomes_structured_failure() {
   require(observer.has_event("terminal.validation", "invalid-result", "invalid-evidence"),
       "invalid postcondition did not emit a validation decision");
 
-  send_json(sockets[0], folder_invoke_json(
-      "invalid-folder-result", "folder-intent-901", "AI Assets"));
+  send_json(sockets[0], bit_depth_set_invoke_json(
+      "invalid-bit-depth-result", "bit-depth-intent-901", 16));
   require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
-      "invalid folder evidence progress");
-  wait_until([&] { return dispatcher.queued() == 1; }, "invalid folder evidence invoke");
-  host.folder_result.item_count_after = 5;
+      "invalid bit-depth evidence progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "invalid bit-depth evidence invoke");
+  // The HostApi reports a structurally valid transition to the wrong target.
+  // The dispatcher must bind the postcondition to the requested target=16 and
+  // treat this post-dispatch mismatch as possibly side effecting.
+  host.bit_depth_change.after_bits_per_channel = 32;
   require(dispatcher.drain(host).completions.size() == 1,
-      "invalid folder result did not reach transport validation");
-  const std::string folder_failure = read_body(sockets[0]);
-  require_contains(folder_failure, "\"code\":\"POSSIBLY_SIDE_EFFECTING_FAILURE\"",
-      "invalid folder evidence failure");
-  require_contains(folder_failure, "\"sideEffect\":\"may-have-occurred\"",
-      "invalid folder evidence failure");
-  require_contains(folder_failure, "\"capabilityId\":\"ae.project.folder.create\"",
-      "invalid folder evidence failure");
+      "invalid bit-depth result did not reach transport validation");
+  const std::string bit_depth_failure = read_body(sockets[0]);
+  require_contains(bit_depth_failure,
+      "\"code\":\"POSSIBLY_SIDE_EFFECTING_FAILURE\"",
+      "invalid bit-depth evidence failure");
+  require_contains(bit_depth_failure, "\"sideEffect\":\"may-have-occurred\"",
+      "invalid bit-depth evidence failure");
+  require_contains(bit_depth_failure,
+      "\"capabilityId\":\"ae.project.bit-depth.set\"",
+      "invalid bit-depth evidence failure");
   wait_until([&] {
-    return !observer.terminal("invalid-folder-result").request_id.empty();
-  }, "invalid folder terminal audit");
-  const TerminalRecord folder_terminal = observer.terminal("invalid-folder-result");
-  require(!folder_terminal.ok
-      && folder_terminal.error_code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
-      && folder_terminal.postcondition_digest.empty() && host.write_calls == 1,
-      "invalid folder evidence was mislabeled as a safe failure");
+    return !observer.terminal("invalid-bit-depth-result").request_id.empty();
+  }, "invalid bit-depth terminal audit");
+  const TerminalRecord bit_depth_terminal =
+      observer.terminal("invalid-bit-depth-result");
+  require(!bit_depth_terminal.ok
+      && bit_depth_terminal.error_code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+      && bit_depth_terminal.postcondition_digest.empty() && host.write_calls == 1,
+      "invalid bit-depth evidence was mislabeled as a safe failure");
 
-  send_json(sockets[0], folder_invoke_json(
-      "invalid-folder-retry", "folder-intent-901", "AI Assets"));
+  send_json(sockets[0], bit_depth_set_invoke_json(
+      "invalid-bit-depth-retry", "bit-depth-intent-901", 16));
   const std::string fenced = read_body(sockets[0]);
   require_contains(fenced, "\"code\":\"DUPLICATE_REQUEST\"",
-      "ambiguous folder retry fence");
+      "ambiguous bit-depth retry fence");
   require(host.write_calls == 1,
-      "ambiguous folder evidence allowed a second host mutation");
+      "ambiguous bit-depth evidence allowed a second host mutation");
 
   finish_connection(sockets[0], sockets[1], worker);
   (void)dispatcher.shutdown();

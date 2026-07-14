@@ -27,7 +27,8 @@ const blocked = new Set();
 const INTERNAL_CLIENT = 'panel-diagnostics/internal';
 const NATIVE_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 const PROJECT_SUMMARY_CAPABILITY = 'ae.project.summary';
-const PROJECT_FOLDER_CREATE_CAPABILITY = 'ae.project.folder.create';
+const PROJECT_BIT_DEPTH_READ_CAPABILITY = 'ae.project.bit-depth.read';
+const PROJECT_BIT_DEPTH_SET_CAPABILITY = 'ae.project.bit-depth.set';
 
 function setRuntimeDependencies(dependencies) {
     if (!dependencies || typeof dependencies.express !== 'function') {
@@ -231,10 +232,9 @@ function validDeadline(value) {
     return Number.isSafeInteger(value) && value > 0;
 }
 
-function validProjectFolderCreateArguments(value) {
-    return exactBody(value, ['name', 'idempotencyKey'])
-        && typeof value.name === 'string' && value.name.length >= 1 && value.name.length <= 31
-        && !/[\u0000-\u001f\u007f]/.test(value.name)
+function validProjectBitDepthSetArguments(value) {
+    return exactBody(value, ['targetDepth', 'idempotencyKey'])
+        && [8, 16, 32].includes(value.targetDepth)
         && typeof value.idempotencyKey === 'string'
         && value.idempotencyKey.length >= 16
         && NATIVE_REQUEST_ID_PATTERN.test(value.idempotencyKey);
@@ -246,11 +246,13 @@ function validNativeInvokeBody(body) {
     ])
         || typeof body.requestId !== 'string' || !NATIVE_REQUEST_ID_PATTERN.test(body.requestId)
         || !validDeadline(body.deadlineUnixMs)) return false;
-    if (body.capabilityId === PROJECT_SUMMARY_CAPABILITY && body.capabilityVersion === 1) {
+    if ((body.capabilityId === PROJECT_SUMMARY_CAPABILITY
+        || body.capabilityId === PROJECT_BIT_DEPTH_READ_CAPABILITY)
+        && body.capabilityVersion === 1) {
         return exactBody(body.arguments, []);
     }
-    if (body.capabilityId === PROJECT_FOLDER_CREATE_CAPABILITY && body.capabilityVersion === 1) {
-        return validProjectFolderCreateArguments(body.arguments);
+    if (body.capabilityId === PROJECT_BIT_DEPTH_SET_CAPABILITY && body.capabilityVersion === 1) {
+        return validProjectBitDepthSetArguments(body.arguments);
     }
     return false;
 }

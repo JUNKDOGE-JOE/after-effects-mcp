@@ -22,9 +22,11 @@ def test_exec_is_destructive_and_reads_are_readonly():
     assert VERB_ANNOTATIONS["ae.projectSummary"].readOnlyHint is True
     assert VERB_ANNOTATIONS["ae.projectSummary"].destructiveHint is False
     assert VERB_ANNOTATIONS["ae.projectSummary"].idempotentHint is True
-    assert VERB_ANNOTATIONS["ae.projectCreateFolder"].readOnlyHint is False
-    assert VERB_ANNOTATIONS["ae.projectCreateFolder"].destructiveHint is False
-    assert VERB_ANNOTATIONS["ae.projectCreateFolder"].idempotentHint is True
+    assert VERB_ANNOTATIONS["ae.getProjectBitDepth"].readOnlyHint is True
+    assert VERB_ANNOTATIONS["ae.getProjectBitDepth"].destructiveHint is False
+    assert VERB_ANNOTATIONS["ae.setProjectBitDepth"].readOnlyHint is False
+    assert VERB_ANNOTATIONS["ae.setProjectBitDepth"].destructiveHint is False
+    assert VERB_ANNOTATIONS["ae.setProjectBitDepth"].idempotentHint is True
 
 
 def test_no_verb_is_both_readonly_and_destructive():

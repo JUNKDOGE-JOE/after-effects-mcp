@@ -191,7 +191,8 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
       || runtime_.host_build == 0 || runtime_.host_instance_id.empty()
       || runtime_.capabilities_digest.size() != 64
       || runtime_.project_summary_contract_digest.size() != 64
-      || runtime_.project_folder_create_contract_digest.size() != 64) {
+      || runtime_.project_bit_depth_read_contract_digest.size() != 64
+      || runtime_.project_bit_depth_set_contract_digest.size() != 64) {
     throw std::invalid_argument("invalid native RPC runtime identity");
   }
 }
@@ -242,13 +243,14 @@ void NativeRpcConnectionHandler::serve(
                   completion.result.project_name,
                   static_cast<std::uint64_t>(completion.result.item_count));
               }
-            } else if (completion.capability_id == kProjectFolderCreateCapability) {
-              postcondition_digest = rpc::digest_project_folder_postcondition(
-                  completion.folder_result.folder_item_id,
-                  completion.folder_result.folder_name,
-                  completion.folder_result.parent_item_id,
-                  completion.folder_result.item_count_before,
-                  completion.folder_result.item_count_after);
+            } else if (completion.capability_id == kProjectBitDepthReadCapability) {
+              postcondition_digest = rpc::digest_project_bit_depth_read_postcondition(
+                  completion.bit_depth_result.bits_per_channel);
+            } else if (completion.capability_id == kProjectBitDepthSetCapability) {
+              postcondition_digest = rpc::digest_project_bit_depth_set_postcondition(
+                  completion.bit_depth_change_result.changed,
+                  completion.bit_depth_change_result.before_bits_per_channel,
+                  completion.bit_depth_change_result.after_bits_per_channel);
             } else {
               evidence_valid = false;
             }
@@ -258,7 +260,7 @@ void NativeRpcConnectionHandler::serve(
         }
         if (!evidence_valid) {
           completion.ok = false;
-          const bool mutating = completion.capability_id == kProjectFolderCreateCapability;
+          const bool mutating = completion.capability_id == kProjectBitDepthSetCapability;
           completion.error_code = mutating
               ? "POSSIBLY_SIDE_EFFECTING_FAILURE" : "CAPABILITY_FAILED";
           completion.message = "native result evidence failed validation";
@@ -295,16 +297,26 @@ void NativeRpcConnectionHandler::serve(
                 postcondition_digest,
                 false,
             });
-          } else {
-            response = rpc::encode_project_folder_create_success({
+          } else if (completion.capability_id == kProjectBitDepthReadCapability) {
+            response = rpc::encode_project_bit_depth_read_success({
                 completion.request_id,
                 connection.session_id,
                 runtime_.host_instance_id,
-                completion.folder_result.folder_item_id,
-                completion.folder_result.folder_name,
-                completion.folder_result.parent_item_id,
-                completion.folder_result.item_count_before,
-                completion.folder_result.item_count_after,
+                completion.bit_depth_result.bits_per_channel,
+                started_at,
+                completed_at,
+                request_digest,
+                postcondition_digest,
+                false,
+            });
+          } else {
+            response = rpc::encode_project_bit_depth_set_success({
+                completion.request_id,
+                connection.session_id,
+                runtime_.host_instance_id,
+                completion.bit_depth_change_result.changed,
+                completion.bit_depth_change_result.before_bits_per_channel,
+                completion.bit_depth_change_result.after_bits_per_channel,
                 started_at,
                 completed_at,
                 request_digest,
@@ -321,7 +333,8 @@ void NativeRpcConnectionHandler::serve(
               connection.session_id,
               completion.error_code,
               completion.message.empty() ? "native request failed" : completion.message,
-              completion.capability_id));
+              completion.capability_id,
+              completion.error_field));
         }
         if (!write_frame(connection.socket_fd, response)) {
           connected = false;
@@ -392,11 +405,15 @@ void NativeRpcConnectionHandler::serve(
           const auto& query = std::get<rpc::CapabilitiesParams>(request.params);
           const bool include_summary = !query.ids.has_value() || std::find(
               query.ids->begin(), query.ids->end(), "ae.project.summary") != query.ids->end();
-          const bool include_folder = !query.ids.has_value() || std::find(
-              query.ids->begin(), query.ids->end(), "ae.project.folder.create")
+          const bool include_bit_depth_read = !query.ids.has_value() || std::find(
+              query.ids->begin(), query.ids->end(), "ae.project.bit-depth.read")
+                  != query.ids->end();
+          const bool include_bit_depth_set = !query.ids.has_value() || std::find(
+              query.ids->begin(), query.ids->end(), "ae.project.bit-depth.set")
                   != query.ids->end();
           const std::size_t selected = static_cast<std::size_t>(include_summary)
-              + static_cast<std::size_t>(include_folder);
+              + static_cast<std::size_t>(include_bit_depth_read)
+              + static_cast<std::size_t>(include_bit_depth_set);
           if (selected > query.limit) {
             if (!write_frame(connection.socket_fd, rpc::encode_error_response(error_for(
                     request,
@@ -414,11 +431,13 @@ void NativeRpcConnectionHandler::serve(
                   connection.session_id,
                   query.detail,
                   include_summary,
-                  include_folder,
+                  include_bit_depth_read,
+                  include_bit_depth_set,
                   rpc::digest_capabilities_query(connection.session_id, query),
                   runtime_.capabilities_digest,
                   runtime_.project_summary_contract_digest,
-                  runtime_.project_folder_create_contract_digest,
+                  runtime_.project_bit_depth_read_contract_digest,
+                  runtime_.project_bit_depth_set_contract_digest,
               }))) {
             connected = false;
             break;
@@ -469,7 +488,7 @@ void NativeRpcConnectionHandler::serve(
             dispatcher_clock_.now() + std::chrono::milliseconds(ttl),
             connection.peer.connection_id,
             connection.session_generation,
-            invoke.folder_name,
+            invoke.target_depth,
             invoke.idempotency_key,
             invoke.arguments_fingerprint_sha256,
         });

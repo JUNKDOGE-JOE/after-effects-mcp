@@ -14,14 +14,16 @@ from ae_mcp.backends.native import (
     NativeCancellationToken,
     NativeInvokeBackend,
     NativeRecovery,
-    invoke_project_folder_create,
+    invoke_project_bit_depth_read,
+    invoke_project_bit_depth_set,
     invoke_project_summary,
 )
 from ae_mcp.handlers import register
 
 
 _PROJECT_SUMMARY_TIMEOUT_MS = 10_000
-_PROJECT_FOLDER_CREATE_TIMEOUT_MS = 10_000
+_PROJECT_BIT_DEPTH_READ_TIMEOUT_MS = 10_000
+_PROJECT_BIT_DEPTH_SET_TIMEOUT_MS = 10_000
 
 
 def _backend() -> NativeInvokeBackend:
@@ -118,19 +120,97 @@ async def _run_project_summary(
     }
 
 
-async def _run_project_create_folder(
-    args: schemas.AeProjectCreateFolderArgs,
+async def _run_get_project_bit_depth(
+    args: schemas.AeGetProjectBitDepthArgs,
     ctx: Any,
 ) -> dict[str, Any]:
+    del args
     cancellation = NativeCancellationToken()
-    deadline_unix_ms = int(time.time() * 1000) + _PROJECT_FOLDER_CREATE_TIMEOUT_MS
+    deadline_unix_ms = int(time.time() * 1000) + _PROJECT_BIT_DEPTH_READ_TIMEOUT_MS
     request_id = f"mcp-{uuid.uuid4().hex}"
 
     async def _call():
-        return await invoke_project_folder_create(
+        return await invoke_project_bit_depth_read(
             _backend(),
             request_id=request_id,
-            name=args.name,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    try:
+        execution = await progress.with_heartbeat(
+            ctx,
+            _call(),
+            start_msg="ae.getProjectBitDepth native AEGP read...",
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        raise
+
+    implementation = execution.implementation
+    audit = execution.audit_fields()
+    return {
+        "ok": True,
+        "value": execution.value.model_dump(mode="json", by_alias=True),
+        "implementation": {
+            "engine": execution.engine,
+            "capabilityId": implementation.capability_id,
+            "capabilityVersion": implementation.capability_version,
+            "contractDigest": implementation.contract_digest,
+            "risk": implementation.risk,
+            "mutability": implementation.mutability,
+            "idempotency": implementation.idempotency,
+        },
+        "provenance": {
+            key: audit[key]
+            for key in (
+                "engine",
+                "selectedWireVersion",
+                "pluginVersion",
+                "compiledSdkVersion",
+                "sourceCommit",
+                "hostInstanceId",
+                "sessionId",
+                "sessionGeneration",
+                "capabilitiesDigest",
+            )
+        },
+        "audit": {
+            key: audit[key]
+            for key in (
+                "requestId",
+                "capabilityId",
+                "capabilityVersion",
+                "contractDigest",
+                "effect",
+                "requestDigest",
+                "postconditionAlgorithm",
+                "postconditionDigest",
+                "startedAtUnixMs",
+                "completedAtUnixMs",
+            )
+        },
+        "evidence": execution.evidence.model_dump(
+            mode="json",
+            by_alias=True,
+            exclude_none=True,
+        ),
+    }
+
+
+async def _run_set_project_bit_depth(
+    args: schemas.AeSetProjectBitDepthArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _PROJECT_BIT_DEPTH_SET_TIMEOUT_MS
+    request_id = f"mcp-{uuid.uuid4().hex}"
+
+    async def _call():
+        return await invoke_project_bit_depth_set(
+            _backend(),
+            request_id=request_id,
+            target_depth=args.target_depth,
             idempotency_key=args.idempotency_key,
             deadline_unix_ms=deadline_unix_ms,
             cancellation=cancellation,
@@ -142,7 +222,7 @@ async def _run_project_create_folder(
             ctx,
             asyncio.shield(call_task),
             start_msg=(
-                "ae.projectCreateFolder native AEGP write; "
+                "ae.setProjectBitDepth native AEGP write; "
                 "after dispatch, wait for the verified terminal result..."
             ),
         )
@@ -157,20 +237,8 @@ async def _run_project_create_folder(
     value = execution.value.model_dump(mode="json", by_alias=True)
     return {
         "ok": True,
-        "created": value["created"],
         "replayed": execution.replayed,
         "value": value,
-        "state": {
-            "before": {"projectItemCount": value["itemCountBefore"]},
-            "after": {
-                "projectItemCount": value["itemCountAfter"],
-                "folder": {
-                    "itemId": value["folderItemId"],
-                    "name": value["folderName"],
-                    "parentItemId": value["parentItemId"],
-                },
-            },
-        },
         "implementation": {
             "engine": execution.engine,
             "capabilityId": implementation.capability_id,
@@ -232,10 +300,19 @@ register(
     _run_project_summary,
 )
 register(
-    "ae.projectCreateFolder",
-    schemas.AeProjectCreateFolderArgs,
-    _run_project_create_folder,
+    "ae.getProjectBitDepth",
+    schemas.AeGetProjectBitDepthArgs,
+    _run_get_project_bit_depth,
+)
+register(
+    "ae.setProjectBitDepth",
+    schemas.AeSetProjectBitDepthArgs,
+    _run_set_project_bit_depth,
 )
 
 
-__all__ = ["_run_project_create_folder", "_run_project_summary"]
+__all__ = [
+    "_run_get_project_bit_depth",
+    "_run_project_summary",
+    "_run_set_project_bit_depth",
+]

@@ -11,7 +11,7 @@
 | 入口 | `ae-mcp` |
 | Backend | `AE_MCP_BACKEND=ae-mcp` |
 | Plugin URL | `AE_MCP_PLUGIN_URL=http://127.0.0.1:11488` |
-| Handler count | 44 verbs，按 backend `supported_verbs()` 过滤 |
+| Handler count | 47 verbs，按 backend `supported_verbs()` 过滤 |
 | Skill storage | `~/.ae-mcp/skills/<name>.json` |
 | Tool Library | `~/.ae-mcp/tools`；legacy skill 保持原路径，不复制 |
 | Preview output | 默认位于操作系统临时目录的 `ae_mcp_previews/<session>/...png`，可用 `out_dir` 覆盖 |
@@ -68,6 +68,9 @@ MCP client
 | `ae.status` | none | 检查 backend 选择、已安装 backend 与 snapshotter 状态 |
 | `ae.diagnose` | none | 端到端检查 host、Python 握手、token 与 AE 响应 |
 | `ae.overview` | none | 项目和 comp 概览 |
+| `ae.projectSummary` | none | 通过原生 AEGP 返回带 provenance 与 postcondition 的工程摘要；不回退 JSX |
+| `ae.getProjectBitDepth` | none | 通过原生 AEGP 读取当前 `8/16/32` bits-per-channel；不回退 JSX |
+| `ae.setProjectBitDepth` | `target_depth`, `idempotency_key` | 通过原生 AEGP 设置 `8/16/32`，返回 before/after、Undo 可用性和审计；不回退 JSX |
 | `ae.layers` | `comp_id?`, `offset?`, `limit?`, `format?` | 获取图层列表（分页 + 可选紧凑文本） |
 | `ae.readProps` | `code` | 执行只读 JSX |
 | `ae.exec` | `code`, `undo_group_name?`, `checkpoint_label?`, `timeout_sec?` | 执行 JSX |
@@ -264,7 +267,7 @@ MVP 不生成任意二进制 `.ffx` 文件。
 以下是当前代码已覆盖的能力清单，不是 v0.9.2 双平台或四格实机验收证据：
 
 - CEP panel 到 AE bridge
-- 44 个已注册 `ae.*` handlers（42 个 backend verbs，加 `ae.status`/`ae.diagnose`）
+- 47 个已注册 `ae.*` handlers（45 个 backend verbs，加 `ae.status`/`ae.diagnose`）
 - read/mutate/search/checkpoint/revert
 - `ae.previewFrame` 快速 viewer preview
 - Python 侧持久化 skill system
@@ -296,7 +299,7 @@ ae-mcp 是独立实现，参考了 Atom 风格 AE 操作面和 FX Console 风格
 | Entry point | `ae-mcp` |
 | Backend | `AE_MCP_BACKEND=ae-mcp` |
 | Plugin URL | `AE_MCP_PLUGIN_URL=http://127.0.0.1:11488` |
-| Handler count | 44 verbs, filtered by backend `supported_verbs()` |
+| Handler count | 47 verbs, filtered by backend `supported_verbs()` |
 | Skill storage | `~/.ae-mcp/skills/<name>.json` |
 | Tool Library | `~/.ae-mcp/tools`; legacy skills remain canonical in place |
 | Preview output | `ae_mcp_previews/<session>/...png` in the operating-system temporary directory unless `out_dir` is set |
@@ -353,6 +356,9 @@ Unless noted otherwise, tools return JSON with `ok: true` on success, or `ok: fa
 | `ae.status` | none | inspect backend selection, installed backends, and snapshotter status |
 | `ae.diagnose` | none | end-to-end host, Python handshake, token, and AE responsiveness check |
 | `ae.overview` | none | project and comp overview |
+| `ae.projectSummary` | none | return a provenance-bound native AEGP project summary; never falls back to JSX |
+| `ae.getProjectBitDepth` | none | read native AEGP `8/16/32` bits per channel; never falls back to JSX |
+| `ae.setProjectBitDepth` | `target_depth`, `idempotency_key` | set native AEGP `8/16/32` with before/after, Undo availability, and audit evidence; never falls back to JSX |
 | `ae.layers` | `comp_id?`, `offset?`, `limit?`, `format?` | list layers (paginated + optional compact text) |
 | `ae.readProps` | `code` | run read-only JSX |
 | `ae.exec` | `code`, `undo_group_name?`, `checkpoint_label?`, `timeout_sec?` | run JSX |
@@ -543,7 +549,7 @@ The MVP does not generate arbitrary binary `.ffx` files.
 The following capabilities are present in the current code; this is not v0.9.2 dual-platform or four-cell hardware-acceptance evidence:
 
 - CEP panel to AE bridge
-- 44 registered `ae.*` handlers (42 backend verbs plus `ae.status`/`ae.diagnose`)
+- 47 registered `ae.*` handlers (45 backend verbs plus `ae.status`/`ae.diagnose`)
 - read/mutate/search/checkpoint/revert workflows
 - fast viewer preview via `ae.previewFrame`
 - persistent Python-side skill system

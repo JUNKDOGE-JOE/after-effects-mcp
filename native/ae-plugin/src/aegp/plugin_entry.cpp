@@ -50,9 +50,10 @@ using namespace std::chrono_literals;
 using aemcp::native::Completion;
 using aemcp::native::DrainBatch;
 using aemcp::native::HostApi;
+using aemcp::native::HostBitDepthReadResult;
+using aemcp::native::HostBitDepthWriteResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostReadResult;
-using aemcp::native::HostWriteResult;
 using aemcp::native::MacEndpointRegistry;
 using aemcp::native::MacIpcServer;
 using aemcp::native::NativeEndpointDescriptor;
@@ -62,24 +63,28 @@ using aemcp::native::NativeRpcObserver;
 using aemcp::native::NativeRpcRuntimeInfo;
 using aemcp::native::PairingGate;
 using aemcp::native::PairingUiDecision;
+using aemcp::native::ProjectBitDepth;
+using aemcp::native::ProjectBitDepthChanged;
 using aemcp::native::ProjectSummary;
-using aemcp::native::ProjectFolderCreated;
 using aemcp::native::Request;
 using aemcp::native::SystemClock;
 using aemcp::native::TimePoint;
+using aemcp::native::kProjectBitDepthReadCapability;
+using aemcp::native::kProjectBitDepthSetCapability;
 using aemcp::native::kProjectSummaryCapability;
-using aemcp::native::kProjectFolderCreateCapability;
 
 constexpr std::string_view kPluginVersion = "0.1.0-dev";
 constexpr std::string_view kSdkVersion = "25.6.61";
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::string_view kCapabilitiesDigest =
-    "33afff4311c76b6671101c9f2a15d2bbfe328c43dd7b539c0825b24ffa416be8";
+    "0fda4e1bfbc8657bcd0c676fb802aecc97ba2ee6268cc115ff6d12b74758c042";
 constexpr std::string_view kProjectSummaryContractDigest =
     "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
-constexpr std::string_view kProjectFolderCreateContractDigest =
-    "d9defb50a560e02ee4ca2e46abccf903136b2f65f51a74fd24baaafc8bedcb0f";
+constexpr std::string_view kProjectBitDepthReadContractDigest =
+    "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e";
+constexpr std::string_view kProjectBitDepthSetContractDigest =
+    "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a";
 constexpr std::int64_t kMaximumProjectItems = 100000;
 static_assert(kSourceCommit.size() == 40);
 
@@ -249,10 +254,27 @@ class SuiteLease final {
   const Suite* suite_{nullptr};
 };
 
+[[nodiscard]] std::optional<AEGP_ProjBitDepth> sdk_bit_depth(
+    std::int32_t bits_per_channel) {
+  switch (bits_per_channel) {
+    case 8: return static_cast<AEGP_ProjBitDepth>(AEGP_ProjBitDepth_8);
+    case 16: return static_cast<AEGP_ProjBitDepth>(AEGP_ProjBitDepth_16);
+    case 32: return static_cast<AEGP_ProjBitDepth>(AEGP_ProjBitDepth_32);
+    default: return std::nullopt;
+  }
+}
+
+[[nodiscard]] std::optional<std::int32_t> bits_per_channel(
+    AEGP_ProjBitDepth depth) {
+  if (depth == static_cast<AEGP_ProjBitDepth>(AEGP_ProjBitDepth_8)) return 8;
+  if (depth == static_cast<AEGP_ProjBitDepth>(AEGP_ProjBitDepth_16)) return 16;
+  if (depth == static_cast<AEGP_ProjBitDepth>(AEGP_ProjBitDepth_32)) return 32;
+  return std::nullopt;
+}
+
 class AegpHostApi final : public HostApi {
  public:
-  AegpHostApi(SPBasicSuite* basic, AEGP_PluginID plugin_id)
-      : basic_(basic), plugin_id_(plugin_id) {}
+  explicit AegpHostApi(SPBasicSuite* basic) : basic_(basic) {}
 
   [[nodiscard]] HostReadResult read_project_summary(TimePoint work_deadline) override {
     const auto budget_expired = [work_deadline] {
@@ -334,253 +356,173 @@ class AegpHostApi final : public HostApi {
         true, std::string(name.begin(), name_end), item_count});
   }
 
-  [[nodiscard]] HostWriteResult create_project_folder(
-      std::string_view name,
+  [[nodiscard]] HostBitDepthReadResult read_project_bit_depth(
       TimePoint work_deadline) override {
     const auto budget_expired = [work_deadline] {
       return std::chrono::steady_clock::now() >= work_deadline;
     };
     if (budget_expired()) {
-      return HostWriteResult::failure(
-          "DEADLINE_EXCEEDED", "project folder create budget elapsed");
+      return HostBitDepthReadResult::failure(
+          "DEADLINE_EXCEEDED", "project bit-depth read budget elapsed");
     }
 
-    const auto utf16_name = utf16_folder_name(name);
-    if (!utf16_name.has_value()) {
-      return HostWriteResult::failure(
-          "INVALID_ARGUMENT", "project folder name violates the host UTF-16 contract");
-    }
     SuiteLease<AEGP_ProjSuite6> project_suite(
         basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
-    SuiteLease<AEGP_ItemSuite9> item_suite(
-        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
-    SuiteLease<AEGP_UtilitySuite6> utility_suite(
-        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
-    SuiteLease<AEGP_MemorySuite1> memory_suite(
-        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
-    if (project_suite.get() == nullptr || item_suite.get() == nullptr
-        || utility_suite.get() == nullptr || memory_suite.get() == nullptr) {
-      return HostWriteResult::failure(
-          "NATIVE_UNSUPPORTED", "required project mutation suites unavailable");
+    if (project_suite.get() == nullptr) {
+      return HostBitDepthReadResult::failure(
+          "NATIVE_UNSUPPORTED", "required project suite unavailable");
     }
 
     A_long project_count = 0;
-    if (budget_expired()) {
-      return HostWriteResult::failure(
-          "DEADLINE_EXCEEDED", "project folder create budget elapsed");
-    }
     if (project_suite->AEGP_GetNumProjects(&project_count) != A_Err_NONE) {
-      return HostWriteResult::failure(
-          "CAPABILITY_FAILED", "could not read project count before mutation");
+      return HostBitDepthReadResult::failure(
+          "CAPABILITY_FAILED", "could not read project count");
     }
     if (project_count <= 0) {
-      return HostWriteResult::failure(
+      return HostBitDepthReadResult::failure(
           "PRECONDITION_FAILED", "an After Effects project must be open");
     }
 
     AEGP_ProjectH project = nullptr;
-    AEGP_ItemH root = nullptr;
     if (budget_expired()) {
-      return HostWriteResult::failure(
-          "DEADLINE_EXCEEDED", "project folder create budget elapsed");
+      return HostBitDepthReadResult::failure(
+          "DEADLINE_EXCEEDED", "project bit-depth read budget elapsed");
     }
     if (project_suite->AEGP_GetProjectByIndex(0, &project) != A_Err_NONE
-        || project == nullptr
-        || project_suite->AEGP_GetProjectRootFolder(project, &root) != A_Err_NONE
-        || root == nullptr) {
-      return HostWriteResult::failure(
-          "CAPABILITY_FAILED", "could not resolve the open project root");
+        || project == nullptr) {
+      return HostBitDepthReadResult::failure(
+          "CAPABILITY_FAILED", "could not resolve the open project");
     }
 
-    A_long root_id = -1;
-    if (item_suite->AEGP_GetItemID(root, &root_id) != A_Err_NONE || root_id < 0) {
-      return HostWriteResult::failure(
-          "CAPABILITY_FAILED", "could not read the project root item ID");
+    AEGP_ProjBitDepth observed = static_cast<AEGP_ProjBitDepth>(-1);
+    if (project_suite->AEGP_GetProjectBitDepth(project, &observed) != A_Err_NONE) {
+      return HostBitDepthReadResult::failure(
+          "CAPABILITY_FAILED", "could not read project bits per channel");
     }
-    const auto count_before = count_project_items(
-        project, root, *item_suite.get(), work_deadline);
-    if (!count_before.has_value()) {
-      return HostWriteResult::failure(
-          budget_expired() ? "DEADLINE_EXCEEDED" : "CAPABILITY_FAILED",
-          "could not count project items before mutation");
+    const auto mapped = bits_per_channel(observed);
+    if (!mapped.has_value()) {
+      return HostBitDepthReadResult::failure(
+          "CAPABILITY_FAILED", "project returned an unsupported bit-depth enum");
     }
     if (budget_expired()) {
-      return HostWriteResult::failure(
-          "DEADLINE_EXCEEDED", "project folder create budget elapsed");
+      return HostBitDepthReadResult::failure(
+          "DEADLINE_EXCEEDED", "project bit-depth read budget elapsed");
+    }
+    return HostBitDepthReadResult::success(ProjectBitDepth{*mapped});
+  }
+
+  [[nodiscard]] HostBitDepthWriteResult set_project_bit_depth(
+      std::int32_t target_depth,
+      TimePoint work_deadline) override {
+    const auto budget_expired = [work_deadline] {
+      return std::chrono::steady_clock::now() >= work_deadline;
+    };
+    const auto target = sdk_bit_depth(target_depth);
+    if (!target.has_value()) {
+      return HostBitDepthWriteResult::failure(
+          "INVALID_ARGUMENT",
+          "targetDepth must be one of 8, 16, or 32",
+          "params.arguments.targetDepth");
+    }
+    if (budget_expired()) {
+      return HostBitDepthWriteResult::failure(
+          "DEADLINE_EXCEEDED", "project bit-depth set budget elapsed");
     }
 
-    static constexpr char kUndoLabel[] = "ae-mcp: Create project folder";
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    if (project_suite.get() == nullptr || utility_suite.get() == nullptr) {
+      return HostBitDepthWriteResult::failure(
+          "NATIVE_UNSUPPORTED", "required project mutation suites unavailable");
+    }
+
+    A_long project_count = 0;
+    if (project_suite->AEGP_GetNumProjects(&project_count) != A_Err_NONE) {
+      return HostBitDepthWriteResult::failure(
+          "CAPABILITY_FAILED", "could not read project count before mutation");
+    }
+    if (project_count <= 0) {
+      return HostBitDepthWriteResult::failure(
+          "PRECONDITION_FAILED", "an After Effects project must be open");
+    }
+
+    AEGP_ProjectH project = nullptr;
+    if (budget_expired()) {
+      return HostBitDepthWriteResult::failure(
+          "DEADLINE_EXCEEDED", "project bit-depth set budget elapsed");
+    }
+    if (project_suite->AEGP_GetProjectByIndex(0, &project) != A_Err_NONE
+        || project == nullptr) {
+      return HostBitDepthWriteResult::failure(
+          "CAPABILITY_FAILED", "could not resolve the open project");
+    }
+
+    AEGP_ProjBitDepth before_sdk = static_cast<AEGP_ProjBitDepth>(-1);
+    if (project_suite->AEGP_GetProjectBitDepth(project, &before_sdk) != A_Err_NONE) {
+      return HostBitDepthWriteResult::failure(
+          "CAPABILITY_FAILED", "could not read project bit depth before mutation");
+    }
+    const auto before = bits_per_channel(before_sdk);
+    if (!before.has_value()) {
+      return HostBitDepthWriteResult::failure(
+          "CAPABILITY_FAILED", "project returned an unsupported bit-depth enum");
+    }
+    if (*before == target_depth) {
+      return HostBitDepthWriteResult::failure(
+          "INVALID_ARGUMENT",
+          "targetDepth already matches the project's current bits per channel",
+          "params.arguments.targetDepth");
+    }
+    if (budget_expired()) {
+      return HostBitDepthWriteResult::failure(
+          "DEADLINE_EXCEEDED", "project bit-depth set budget elapsed");
+    }
+
+    static constexpr char kUndoLabel[] = "ae-mcp: Set project bit depth";
     if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
-      return HostWriteResult::failure(
+      return HostBitDepthWriteResult::failure(
           "CAPABILITY_FAILED", "could not start the After Effects undo group");
     }
 
-    AEGP_ItemH folder = nullptr;
-    const A_Err create_error = item_suite->AEGP_CreateNewFolder(
-        utf16_name->data(), root, &folder);
-    // Every successful StartUndoGroup must be balanced, including an error or
-    // deadline path. Once CreateNewFolder was called, any failure is treated as
-    // possibly side-effecting because the SDK cannot prove rollback.
+    const A_Err set_error = project_suite->AEGP_SetProjectBitDepth(project, *target);
+    // A successful StartUndoGroup is always balanced. Once SetProjectBitDepth
+    // has been called, every failure is possibly side-effecting regardless of
+    // the SDK return code. Readback is still attempted to aid exact validation.
     const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
-    if (create_error != A_Err_NONE || folder == nullptr) {
-      return HostWriteResult::failure(
+    AEGP_ProjBitDepth after_sdk = static_cast<AEGP_ProjBitDepth>(-1);
+    const A_Err readback_error = project_suite->AEGP_GetProjectBitDepth(
+        project, &after_sdk);
+    const auto after = readback_error == A_Err_NONE
+        ? bits_per_channel(after_sdk) : std::nullopt;
+
+    if (set_error != A_Err_NONE) {
+      return HostBitDepthWriteResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
-          "project folder creation may have occurred; inspect project state");
+          "project bit depth may have changed despite an SDK error; inspect project state");
     }
     if (end_error != A_Err_NONE) {
-      return HostWriteResult::failure(
+      return HostBitDepthWriteResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
-          "project folder was created but its undo group did not close cleanly");
+          "project bit depth changed but its undo group did not close cleanly");
+    }
+    if (!after.has_value() || *after != target_depth || *after == *before) {
+      return HostBitDepthWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "project bit-depth readback did not verify the requested state transition");
     }
     if (budget_expired()) {
-      return HostWriteResult::failure(
+      return HostBitDepthWriteResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
-          "project folder was created after the validation budget elapsed");
+          "project bit depth changed after the validation budget elapsed");
     }
-
-    AEGP_ItemType item_type = AEGP_ItemType_NONE;
-    A_long folder_id = 0;
-    AEGP_ItemH parent = nullptr;
-    if (item_suite->AEGP_GetItemType(folder, &item_type) != A_Err_NONE
-        || item_type != AEGP_ItemType_FOLDER
-        || item_suite->AEGP_GetItemID(folder, &folder_id) != A_Err_NONE
-        || folder_id <= 0
-        || item_suite->AEGP_GetItemParentFolder(folder, &parent) != A_Err_NONE
-        || parent != root) {
-      return HostWriteResult::failure(
-          "POSSIBLY_SIDE_EFFECTING_FAILURE",
-          "created project folder failed type, ID, or root-parent verification");
-    }
-
-    const auto observed_name = read_item_name(folder, *item_suite.get(), *memory_suite.get());
-    if (!observed_name.has_value() || *observed_name != name) {
-      return HostWriteResult::failure(
-          "POSSIBLY_SIDE_EFFECTING_FAILURE",
-          "created project folder failed exact name verification");
-    }
-    const auto count_after = count_project_items(
-        project, root, *item_suite.get(), work_deadline);
-    if (!count_after.has_value() || *count_after != *count_before + 1) {
-      return HostWriteResult::failure(
-          "POSSIBLY_SIDE_EFFECTING_FAILURE",
-          "created project folder failed item-count verification");
-    }
-    if (budget_expired()) {
-      return HostWriteResult::failure(
-          "POSSIBLY_SIDE_EFFECTING_FAILURE",
-          "project folder verification exceeded the request budget");
-    }
-    return HostWriteResult::success(ProjectFolderCreated{
-        true,
-        static_cast<std::int64_t>(folder_id),
-        *observed_name,
-        static_cast<std::int64_t>(root_id),
-        *count_before,
-        *count_after,
-    });
+    return HostBitDepthWriteResult::success(ProjectBitDepthChanged{
+        true, *before, *after});
   }
 
  private:
-  [[nodiscard]] static std::optional<std::vector<A_UTF16Char>> utf16_folder_name(
-      std::string_view name) {
-    if (name.empty() || name.size() > 124 || name.find('\0') != std::string_view::npos) {
-      return std::nullopt;
-    }
-    const CFStringRef value = CFStringCreateWithBytes(
-        kCFAllocatorDefault,
-        reinterpret_cast<const UInt8*>(name.data()),
-        static_cast<CFIndex>(name.size()),
-        kCFStringEncodingUTF8,
-        false);
-    if (value == nullptr) return std::nullopt;
-    const CFIndex length = CFStringGetLength(value);
-    if (length < 1 || length > AEGP_MAX_ITEM_NAME_SIZE - 1) {
-      CFRelease(value);
-      return std::nullopt;
-    }
-    std::vector<A_UTF16Char> result(static_cast<std::size_t>(length) + 1, 0);
-    static_assert(sizeof(A_UTF16Char) == sizeof(UniChar));
-    CFStringGetCharacters(
-        value,
-        CFRangeMake(0, length),
-        reinterpret_cast<UniChar*>(result.data()));
-    CFRelease(value);
-    for (CFIndex index = 0; index < length; ++index) {
-      const auto unit = static_cast<std::uint16_t>(result[static_cast<std::size_t>(index)]);
-      if (unit <= 0x1fU || unit == 0x7fU) return std::nullopt;
-    }
-    return result;
-  }
-
-  [[nodiscard]] static std::optional<std::int64_t> count_project_items(
-      AEGP_ProjectH project,
-      AEGP_ItemH root,
-      const AEGP_ItemSuite9& item_suite,
-      TimePoint work_deadline) {
-    if (std::chrono::steady_clock::now() >= work_deadline) return std::nullopt;
-    AEGP_ItemH item = nullptr;
-    if (item_suite.AEGP_GetNextProjItem(project, root, &item) != A_Err_NONE) {
-      return std::nullopt;
-    }
-    std::int64_t count = 0;
-    while (item != nullptr) {
-      if (std::chrono::steady_clock::now() >= work_deadline
-          || ++count > kMaximumProjectItems) {
-        return std::nullopt;
-      }
-      AEGP_ItemH next = nullptr;
-      if (item_suite.AEGP_GetNextProjItem(project, item, &next) != A_Err_NONE) {
-        return std::nullopt;
-      }
-      item = next;
-    }
-    return count;
-  }
-
-  [[nodiscard]] std::optional<std::string> read_item_name(
-      AEGP_ItemH item,
-      const AEGP_ItemSuite9& item_suite,
-      const AEGP_MemorySuite1& memory_suite) const {
-    AEGP_MemHandle handle = nullptr;
-    if (item_suite.AEGP_GetItemName(plugin_id_, item, &handle) != A_Err_NONE
-        || handle == nullptr) {
-      return std::nullopt;
-    }
-    AEGP_MemSize bytes = 0;
-    void* pointer = nullptr;
-    bool locked = false;
-    std::optional<std::string> result;
-    if (memory_suite.AEGP_GetMemHandleSize(handle, &bytes) == A_Err_NONE
-        && bytes >= sizeof(A_UTF16Char)
-        && bytes <= AEGP_MAX_ITEM_NAME_SIZE * sizeof(A_UTF16Char)
-        && bytes % sizeof(A_UTF16Char) == 0
-        && memory_suite.AEGP_LockMemHandle(handle, &pointer) == A_Err_NONE
-        && pointer != nullptr) {
-      locked = true;
-      const auto* units = static_cast<const A_UTF16Char*>(pointer);
-      const std::size_t capacity = bytes / sizeof(A_UTF16Char);
-      std::size_t length = 0;
-      while (length < capacity && units[length] != 0) ++length;
-      if (length < capacity && length <= AEGP_MAX_ITEM_NAME_SIZE - 1) {
-        const CFStringRef value = CFStringCreateWithCharacters(
-            kCFAllocatorDefault,
-            reinterpret_cast<const UniChar*>(units),
-            static_cast<CFIndex>(length));
-        if (value != nullptr) {
-          result = cf_string(value);
-          CFRelease(value);
-        }
-      }
-    }
-    if (locked && memory_suite.AEGP_UnlockMemHandle(handle) != A_Err_NONE) {
-      result.reset();
-    }
-    if (memory_suite.AEGP_FreeMemHandle(handle) != A_Err_NONE) result.reset();
-    return result;
-  }
-
   SPBasicSuite* basic_{nullptr};
-  AEGP_PluginID plugin_id_{0};
 };
 
 struct PluginState final : NativeIpcObserver, NativeRpcObserver {
@@ -616,7 +558,8 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
             instance_id,
             std::string(kCapabilitiesDigest),
             std::string(kProjectSummaryContractDigest),
-            std::string(kProjectFolderCreateContractDigest),
+            std::string(kProjectBitDepthReadContractDigest),
+            std::string(kProjectBitDepthSetContractDigest),
         },
         *this);
     ipc_server = std::make_unique<MacIpcServer>(
@@ -684,7 +627,8 @@ void log_load(PluginState& state) {
          << ",\"host\":{\"version\":\"" << json_escape(state.host_identity.version)
          << "\",\"build\":\"" << json_escape(state.host_identity.build) << "\"}"
          << ",\"capabilities\":[\"" << kProjectSummaryCapability << "\",\""
-         << kProjectFolderCreateCapability << "\"]}"
+         << kProjectBitDepthReadCapability << "\",\""
+         << kProjectBitDepthSetCapability << "\"]}"
          ;
   state.log.append(output.str());
 }
@@ -710,13 +654,16 @@ void log_completion(
            << ",\"completedAtUnixMs\":" << completed_at_unix_ms;
   }
   if (completion.ok) {
-    if (completion.capability_id == kProjectFolderCreateCapability) {
-      output << ",\"result\":{\"created\":true,\"folderItemId\":"
-             << completion.folder_result.folder_item_id
-             << ",\"folderNameRedacted\":true,\"parentItemId\":"
-             << completion.folder_result.parent_item_id
-             << ",\"itemCountBefore\":" << completion.folder_result.item_count_before
-             << ",\"itemCountAfter\":" << completion.folder_result.item_count_after;
+    if (completion.capability_id == kProjectBitDepthSetCapability) {
+      output << ",\"result\":{\"changed\":"
+             << (completion.bit_depth_change_result.changed ? "true" : "false")
+             << ",\"beforeBitsPerChannel\":"
+             << completion.bit_depth_change_result.before_bits_per_channel
+             << ",\"afterBitsPerChannel\":"
+             << completion.bit_depth_change_result.after_bits_per_channel;
+    } else if (completion.capability_id == kProjectBitDepthReadCapability) {
+      output << ",\"result\":{\"bitsPerChannel\":"
+             << completion.bit_depth_result.bits_per_channel;
     } else {
       output << ",\"result\":{\"projectOpen\":"
              << (completion.result.project_open ? "true" : "false")
@@ -826,7 +773,7 @@ A_Err idle_hook(
     auto* state = reinterpret_cast<PluginState*>(idle_refcon);
     if (state == nullptr) state = reinterpret_cast<PluginState*>(global_refcon);
     if (state == nullptr) return A_Err_GENERIC;
-    AegpHostApi host(state->basic, state->plugin_id);
+    AegpHostApi host(state->basic);
     const DrainBatch batch = state->dispatcher.drain(host);
     if (batch.wrong_thread) {
       state->log.append(event_prefix(*state, "dispatch.wrong-thread") + "}");

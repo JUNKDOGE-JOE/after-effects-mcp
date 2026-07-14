@@ -36,46 +36,8 @@ bool valid_idempotency_key(std::string_view value) {
   });
 }
 
-bool valid_folder_name(std::string_view value) {
-  if (value.empty() || value.find('\0') != std::string_view::npos) return false;
-  std::size_t utf16_units = 0;
-  for (std::size_t offset = 0; offset < value.size();) {
-    const auto first = static_cast<unsigned char>(value[offset]);
-    std::size_t width = 0;
-    std::uint32_t scalar = 0;
-    if (first <= 0x7fU) {
-      width = 1;
-      scalar = first;
-    } else if (first >= 0xc2U && first <= 0xdfU) {
-      width = 2;
-      scalar = first & 0x1fU;
-    } else if (first >= 0xe0U && first <= 0xefU) {
-      width = 3;
-      scalar = first & 0x0fU;
-    } else if (first >= 0xf0U && first <= 0xf4U) {
-      width = 4;
-      scalar = first & 0x07U;
-    } else {
-      return false;
-    }
-    if (offset + width > value.size()) return false;
-    for (std::size_t index = 1; index < width; ++index) {
-      const auto next = static_cast<unsigned char>(value[offset + index]);
-      if ((next & 0xc0U) != 0x80U) return false;
-      scalar = (scalar << 6U) | (next & 0x3fU);
-    }
-    const std::uint32_t minimum = width == 1 ? 0U
-        : (width == 2 ? 0x80U : (width == 3 ? 0x800U : 0x10000U));
-    if (scalar < minimum || scalar > 0x10ffffU
-        || (scalar >= 0xd800U && scalar <= 0xdfffU)) {
-      return false;
-    }
-    if (scalar <= 0x1fU || scalar == 0x7fU) return false;
-    offset += width;
-    utf16_units += scalar > 0xffffU ? 2U : 1U;
-    if (utf16_units > 31) return false;
-  }
-  return utf16_units > 0;
+bool valid_bit_depth(std::int32_t value) {
+  return value == 8 || value == 16 || value == 32;
 }
 
 bool valid_sha256(std::string_view value) {
@@ -93,7 +55,11 @@ bool valid_route(std::string_view route_id, std::uint64_t session_generation) {
       && route_id.find('\0') == std::string_view::npos;
 }
 
-Completion failure_for(const Request& request, std::string code, std::string message) {
+Completion failure_for(
+    const Request& request,
+    std::string code,
+    std::string message,
+    std::string field = {}) {
   Completion completion;
   completion.request_id = request.request_id;
   completion.capability_id = request.capability_id;
@@ -102,6 +68,7 @@ Completion failure_for(const Request& request, std::string code, std::string mes
   completion.idempotency_key = request.idempotency_key;
   completion.error_code = std::move(code);
   completion.message = std::move(message);
+  completion.error_field = std::move(field);
   return completion;
 }
 
@@ -129,24 +96,45 @@ HostReadResult HostReadResult::failure(std::string code, std::string detail) {
   return result;
 }
 
-HostWriteResult HostWriteResult::success(ProjectFolderCreated value) {
-  HostWriteResult result;
+HostBitDepthReadResult HostBitDepthReadResult::success(ProjectBitDepth value) {
+  HostBitDepthReadResult result;
   result.ok = true;
   result.value = std::move(value);
   return result;
 }
 
-HostWriteResult HostWriteResult::failure(std::string code, std::string detail) {
-  HostWriteResult result;
+HostBitDepthReadResult HostBitDepthReadResult::failure(
+    std::string code, std::string detail) {
+  HostBitDepthReadResult result;
   result.error_code = std::move(code);
   result.message = std::move(detail);
   return result;
 }
 
-HostWriteResult HostApi::create_project_folder(
-    std::string_view, TimePoint) {
-  return HostWriteResult::failure(
-      "NATIVE_UNSUPPORTED", "project folder creation is unavailable");
+HostBitDepthWriteResult HostBitDepthWriteResult::success(ProjectBitDepthChanged value) {
+  HostBitDepthWriteResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
+HostBitDepthWriteResult HostBitDepthWriteResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostBitDepthWriteResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
+
+HostBitDepthReadResult HostApi::read_project_bit_depth(TimePoint) {
+  return HostBitDepthReadResult::failure(
+      "NATIVE_UNSUPPORTED", "project bit-depth reads are unavailable");
+}
+
+HostBitDepthWriteResult HostApi::set_project_bit_depth(std::int32_t, TimePoint) {
+  return HostBitDepthWriteResult::failure(
+      "NATIVE_UNSUPPORTED", "project bit-depth writes are unavailable");
 }
 
 std::size_t HostDispatcher::RequestKeyHash::operator()(const RequestKey& key) const noexcept {
@@ -181,20 +169,37 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
     return {EnqueueCode::kInvalidRequest, "INVALID_REQUEST"};
   }
   const bool project_summary = request.capability_id == kProjectSummaryCapability;
-  const bool project_folder_create = request.capability_id == kProjectFolderCreateCapability;
-  if (!project_summary && !project_folder_create) {
+  const bool project_bit_depth_read =
+      request.capability_id == kProjectBitDepthReadCapability;
+  const bool project_bit_depth_set =
+      request.capability_id == kProjectBitDepthSetCapability;
+  if (!project_summary && !project_bit_depth_read && !project_bit_depth_set) {
     return {EnqueueCode::kUnsupportedCapability, "NATIVE_UNSUPPORTED"};
   }
-  if ((project_summary && (!request.folder_name.empty() || !request.idempotency_key.empty()))
-      || (project_folder_create
-        && (!valid_folder_name(request.folder_name)
-          || !valid_idempotency_key(request.idempotency_key)
-          || !valid_sha256(request.arguments_fingerprint_sha256)))) {
+  if ((project_summary || project_bit_depth_read)
+      && (request.target_depth != 0 || !request.idempotency_key.empty()
+        || !request.arguments_fingerprint_sha256.empty())) {
     return {
         EnqueueCode::kInvalidRequest,
         "INVALID_ARGUMENT",
         "native capability arguments failed closed validation",
-        project_folder_create ? "params.arguments" : "params.arguments"};
+        "params.arguments"};
+  }
+  if (project_bit_depth_set && !valid_bit_depth(request.target_depth)) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "targetDepth must be one of 8, 16, or 32",
+        "params.arguments.targetDepth"};
+  }
+  if (project_bit_depth_set
+      && (!valid_idempotency_key(request.idempotency_key)
+        || !valid_sha256(request.arguments_fingerprint_sha256))) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "native capability arguments failed closed validation",
+        "params.arguments"};
   }
   const TimePoint now = clock_.now();
   if (request.deadline <= now) {
@@ -214,7 +219,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       || pending_outbound_locked(key)) {
     return {EnqueueCode::kDuplicateRequest, "DUPLICATE_REQUEST"};
   }
-  if (project_folder_create) {
+  if (project_bit_depth_set) {
     const auto existing = idempotency_ledger_.find(request.idempotency_key);
     if (existing != idempotency_ledger_.end()) {
       const bool same_arguments = existing->second.arguments_fingerprint_sha256
@@ -232,7 +237,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       || outbound_.size() + active_requests_.size() >= config_.max_outbound_depth) {
     return {EnqueueCode::kQueueFull, "QUEUE_FULL"};
   }
-  if (project_folder_create
+  if (project_bit_depth_set
       && idempotency_ledger_.size() >= config_.max_idempotency_entries) {
     return {
         EnqueueCode::kQueueFull,
@@ -247,7 +252,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
   bool idempotency_reserved = false;
   const std::string reserved_idempotency_key = request.idempotency_key;
   try {
-    if (project_folder_create) {
+    if (project_bit_depth_set) {
       const bool reserved = idempotency_ledger_.emplace(
           request.idempotency_key,
           IdempotencyEntry{
@@ -404,16 +409,11 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
             completion.ok = true;
             completion.result = std::move(host_result.value);
           }
-        } else {
-          HostWriteResult host_result = host.create_project_folder(
-              request.folder_name,
+        } else if (request.capability_id == kProjectBitDepthReadCapability) {
+          HostBitDepthReadResult host_result = host.read_project_bit_depth(
               std::min(request.deadline, idle_deadline));
           if (clock_.now() > request.deadline) {
-            completion = failure_for(
-                request,
-                "POSSIBLY_SIDE_EFFECTING_FAILURE",
-                "native write completed after its request deadline; inspect project state");
-            completion.late_result_discarded = true;
+            completion = expired(request, true);
           } else if (!host_result.ok) {
             completion = failure_for(
                 request,
@@ -424,15 +424,48 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
             completion.capability_id = request.capability_id;
             completion.route_id = request.route_id;
             completion.session_generation = request.session_generation;
+            completion.ok = true;
+            completion.bit_depth_result = std::move(host_result.value);
+          }
+        } else {
+          HostBitDepthWriteResult host_result = host.set_project_bit_depth(
+              request.target_depth, std::min(request.deadline, idle_deadline));
+          if (clock_.now() > request.deadline) {
+            completion = failure_for(
+                request,
+                "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write completed after its request deadline; inspect project state");
+            completion.late_result_discarded = true;
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else if (!host_result.value.changed
+              || !valid_bit_depth(host_result.value.before_bits_per_channel)
+              || !valid_bit_depth(host_result.value.after_bits_per_channel)
+              || host_result.value.before_bits_per_channel
+                == host_result.value.after_bits_per_channel
+              || host_result.value.after_bits_per_channel != request.target_depth) {
+            completion = failure_for(
+                request,
+                "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write result did not verify the requested project bit depth");
+          } else {
+            completion.request_id = request.request_id;
+            completion.capability_id = request.capability_id;
+            completion.route_id = request.route_id;
+            completion.session_generation = request.session_generation;
             completion.idempotency_key = request.idempotency_key;
             completion.ok = true;
-            completion.folder_result = std::move(host_result.value);
+            completion.bit_depth_change_result = std::move(host_result.value);
           }
         }
       } catch (...) {
         completion = failure_for(
             request,
-            request.capability_id == kProjectFolderCreateCapability
+            request.capability_id == kProjectBitDepthSetCapability
                 ? "POSSIBLY_SIDE_EFFECTING_FAILURE" : "CAPABILITY_FAILED",
             "native host adapter raised an exception");
       }
@@ -613,7 +646,7 @@ void HostDispatcher::finish_request_locked(
 
 void HostDispatcher::finish_idempotency_locked(
     const Request& request, const Completion& completion) {
-  if (request.capability_id != kProjectFolderCreateCapability
+  if (request.capability_id != kProjectBitDepthSetCapability
       || request.idempotency_key.empty()) {
     return;
   }
