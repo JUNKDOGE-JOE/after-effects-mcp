@@ -6,6 +6,10 @@ const BUILD_SCRIPT = await fs.promises.readFile(
   'native/ae-plugin/build-macos.mjs',
   'utf8',
 );
+const PLUGIN_ENTRY = await fs.promises.readFile(
+  'native/ae-plugin/src/aegp/plugin_entry.cpp',
+  'utf8',
+);
 
 test('native mac build consumes both locked SDK inputs and records combined evidence', () => {
   assert.match(BUILD_SCRIPT, /verifyAeSdkInput\(\{/u);
@@ -54,6 +58,29 @@ test('native mac build emits the AE-recognized AEGP package metadata', async () 
   assert.match(BUILD_SCRIPT, /Buffer\.from\('AEgxFXTC', 'ascii'\)/u);
   assert.match(verifier, /'Contents\/PkgInfo'/u);
   assert.match(verifier, /Buffer\.from\('AEgxFXTC', 'ascii'\)/u);
+});
+
+test('native boot probe starts its deadline at the first AE idle callback', () => {
+  const submitStart = PLUGIN_ENTRY.indexOf('void submit_boot_probe_once(');
+  const idleStart = PLUGIN_ENTRY.indexOf('A_Err idle_hook(');
+  const namespaceEnd = PLUGIN_ENTRY.indexOf('}  // namespace', idleStart);
+  const entryStart = PLUGIN_ENTRY.indexOf('extern "C"', namespaceEnd);
+  assert.notEqual(submitStart, -1);
+  assert.notEqual(idleStart, -1);
+  assert.notEqual(namespaceEnd, -1);
+  assert.notEqual(entryStart, -1);
+
+  const submitBootProbe = PLUGIN_ENTRY.slice(submitStart, idleStart);
+  const idleHook = PLUGIN_ENTRY.slice(idleStart, namespaceEnd);
+  const pluginEntry = PLUGIN_ENTRY.slice(entryStart);
+  assert.match(submitBootProbe, /PluginState& state\) noexcept/u);
+  assert.match(submitBootProbe, /if \(state\.boot_probe_submitted\) return;/u);
+  assert.match(submitBootProbe, /state\.boot_probe_submitted = true;\s*try \{/u);
+  assert.match(submitBootProbe, /"boot-project-summary"/u);
+  assert.match(submitBootProbe, /state\.clock\.now\(\) \+ 60s/u);
+  assert.match(submitBootProbe, /catch \(\.\.\.\)/u);
+  assert.match(idleHook, /submit_boot_probe_once\(\*state\)[\s\S]*dispatcher\.drain/u);
+  assert.doesNotMatch(pluginEntry, /"boot-project-summary"/u);
 });
 
 test('native README examples use safe shell variables and the complete build inputs', async () => {

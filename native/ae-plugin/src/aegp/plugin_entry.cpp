@@ -316,6 +316,7 @@ struct PluginState final {
   DiagnosticLog log;
   SystemClock clock;
   HostDispatcher dispatcher;
+  bool boot_probe_submitted{false};
 };
 
 std::string event_prefix(const PluginState& state, std::string_view event) {
@@ -381,12 +382,31 @@ A_Err death_hook(
   }
 }
 
+void submit_boot_probe_once(PluginState& state) noexcept {
+  if (state.boot_probe_submitted) return;
+  state.boot_probe_submitted = true;
+  try {
+    const auto admission = state.dispatcher.enqueue({
+        "boot-project-summary",
+        std::string(kProjectSummaryCapability),
+        state.clock.now() + 60s,
+    });
+    if (admission.code != aemcp::native::EnqueueCode::kAccepted) {
+      state.log.append(event_prefix(state, "boot-probe.rejected")
+          + ",\"errorCode\":\"" + json_escape(admission.error_code) + "\"}");
+    }
+  } catch (...) {
+    // This at-most-once boot diagnostic must never fail AE's idle callback.
+  }
+}
+
 A_Err idle_hook(
     AEGP_GlobalRefcon global_refcon, AEGP_IdleRefcon idle_refcon, A_long* max_sleep) noexcept {
   try {
     auto* state = reinterpret_cast<PluginState*>(idle_refcon);
     if (state == nullptr) state = reinterpret_cast<PluginState*>(global_refcon);
     if (state == nullptr) return A_Err_GENERIC;
+    submit_boot_probe_once(*state);
     AegpHostApi host(state->basic);
     const DrainBatch batch = state->dispatcher.drain(host);
     if (batch.wrong_thread) {
@@ -455,15 +475,6 @@ extern "C" __attribute__((visibility("default"))) A_Err AeMcpNativeMain(
 
     try {
       log_load(*lifecycle_state);
-      const auto admission = lifecycle_state->dispatcher.enqueue({
-          "boot-project-summary",
-          std::string(kProjectSummaryCapability),
-          lifecycle_state->clock.now() + 60s,
-      });
-      if (admission.code != aemcp::native::EnqueueCode::kAccepted) {
-        lifecycle_state->log.append(event_prefix(*lifecycle_state, "boot-probe.rejected")
-            + ",\"errorCode\":\"" + json_escape(admission.error_code) + "\"}");
-      }
     } catch (...) {
       // Hook registration is authoritative; optional boot diagnostics cannot
       // turn a live AE-owned state into a failed initialization.
