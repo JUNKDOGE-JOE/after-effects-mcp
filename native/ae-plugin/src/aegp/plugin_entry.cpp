@@ -615,6 +615,33 @@ A_Err command_hook(
   }
 }
 
+A_Err update_menu_hook(
+    AEGP_GlobalRefcon global_refcon,
+    AEGP_UpdateMenuRefcon,
+    AEGP_WindowType) noexcept {
+  try {
+    auto* state = reinterpret_cast<PluginState*>(global_refcon);
+    if (state == nullptr || state->pairing_command == 0) return A_Err_GENERIC;
+
+    const AEGP_CommandSuite1* command_suite = nullptr;
+    const SPErr acquire_error = state->basic->AcquireSuite(
+        kAEGPCommandSuite,
+        kAEGPCommandSuiteVersion1,
+        reinterpret_cast<const void**>(&command_suite));
+    if (acquire_error != 0 || command_suite == nullptr) return A_Err_GENERIC;
+
+    const A_Err enable_error = command_suite->AEGP_EnableCommand(
+        state->pairing_command);
+    const SPErr release_error = state->basic->ReleaseSuite(
+        kAEGPCommandSuite, kAEGPCommandSuiteVersion1);
+    return enable_error == A_Err_NONE && release_error == 0
+        ? A_Err_NONE
+        : A_Err_GENERIC;
+  } catch (...) {
+    return A_Err_GENERIC;
+  }
+}
+
 }  // namespace
 
 extern "C" __attribute__((visibility("default"))) A_Err AeMcpNativeMain(
@@ -682,6 +709,10 @@ extern "C" __attribute__((visibility("default"))) A_Err AeMcpNativeMain(
             AEGP_Command_ALL,
             command_hook,
             0);
+      }
+      if (menu_error == A_Err_NONE) {
+        menu_error = register_suite->AEGP_RegisterUpdateMenuHook(
+            plugin_id, update_menu_hook, 0);
       }
       const SPErr command_release_error = pica_basic->ReleaseSuite(
           kAEGPCommandSuite, kAEGPCommandSuiteVersion1);

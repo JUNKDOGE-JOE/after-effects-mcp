@@ -76,6 +76,18 @@ test('native idle hook drains only real authenticated requests', () => {
   assert.doesNotMatch(pluginEntry, /"boot-project-summary"/u);
 });
 
+test('native pairing command is enabled by the AE update-menu hook', () => {
+  assert.match(PLUGIN_ENTRY, /A_Err update_menu_hook\(/u);
+  assert.match(
+    PLUGIN_ENTRY,
+    /AEGP_EnableCommand\(\s*state->pairing_command\s*\)/u,
+  );
+  assert.match(
+    PLUGIN_ENTRY,
+    /AEGP_RegisterUpdateMenuHook\(\s*plugin_id, update_menu_hook, 0\s*\)/u,
+  );
+});
+
 test('native README examples use safe shell variables and the complete build inputs', async () => {
   for (const readmePath of ['README.md', 'README.zh-CN.md']) {
     const readme = await fs.promises.readFile(readmePath, 'utf8');
