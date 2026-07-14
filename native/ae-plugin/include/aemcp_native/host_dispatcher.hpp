@@ -10,11 +10,14 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace aemcp::native {
 
 inline constexpr std::string_view kProjectSummaryCapability = "ae.project.summary";
+inline constexpr std::string_view kProjectFolderCreateCapability =
+    "ae.project.folder.create";
 
 using TimePoint = std::chrono::steady_clock::time_point;
 
@@ -37,6 +40,15 @@ struct ProjectSummary {
   std::int64_t item_count{0};
 };
 
+struct ProjectFolderCreated {
+  bool created{true};
+  std::int64_t folder_item_id{0};
+  std::string folder_name;
+  std::int64_t parent_item_id{0};
+  std::int64_t item_count_before{0};
+  std::int64_t item_count_after{0};
+};
+
 struct HostReadResult {
   bool ok{false};
   ProjectSummary value;
@@ -47,13 +59,45 @@ struct HostReadResult {
   [[nodiscard]] static HostReadResult failure(std::string code, std::string detail);
 };
 
+struct HostWriteResult {
+  bool ok{false};
+  ProjectFolderCreated value;
+  std::string error_code;
+  std::string message;
+
+  [[nodiscard]] static HostWriteResult success(ProjectFolderCreated result);
+  [[nodiscard]] static HostWriteResult failure(std::string code, std::string detail);
+};
+
 class HostApi {
  public:
   virtual ~HostApi() = default;
   [[nodiscard]] virtual HostReadResult read_project_summary(TimePoint work_deadline) = 0;
+  [[nodiscard]] virtual HostWriteResult create_project_folder(
+      std::string_view name,
+      TimePoint work_deadline);
 };
 
 struct Request {
+  Request() = default;
+  Request(
+      std::string request_id_value,
+      std::string capability_id_value,
+      TimePoint deadline_value,
+      std::string route_id_value = {},
+      std::uint64_t session_generation_value = 0,
+      std::string folder_name_value = {},
+      std::string idempotency_key_value = {},
+      std::string arguments_fingerprint_value = {})
+      : request_id(std::move(request_id_value)),
+        capability_id(std::move(capability_id_value)),
+        deadline(deadline_value),
+        route_id(std::move(route_id_value)),
+        session_generation(session_generation_value),
+        folder_name(std::move(folder_name_value)),
+        idempotency_key(std::move(idempotency_key_value)),
+        arguments_fingerprint_sha256(std::move(arguments_fingerprint_value)) {}
+
   std::string request_id;
   std::string capability_id;
   TimePoint deadline;
@@ -62,6 +106,9 @@ struct Request {
   // route is re-bound.
   std::string route_id{};
   std::uint64_t session_generation{0};
+  std::string folder_name;
+  std::string idempotency_key;
+  std::string arguments_fingerprint_sha256;
 };
 
 enum class EnqueueCode {
@@ -76,8 +123,21 @@ enum class EnqueueCode {
 };
 
 struct EnqueueResult {
+  EnqueueResult() = default;
+  EnqueueResult(
+      EnqueueCode code_value,
+      std::string error_code_value = {},
+      std::string message_value = {},
+      std::string error_field_value = {})
+      : code(code_value),
+        error_code(std::move(error_code_value)),
+        message(std::move(message_value)),
+        error_field(std::move(error_field_value)) {}
+
   EnqueueCode code{EnqueueCode::kInvalidRequest};
   std::string error_code;
+  std::string message;
+  std::string error_field;
 };
 
 struct Completion {
@@ -87,6 +147,9 @@ struct Completion {
   std::uint64_t session_generation{0};
   bool ok{false};
   ProjectSummary result;
+  ProjectFolderCreated folder_result;
+  // Internal fence correlation only; never serialized or logged.
+  std::string idempotency_key;
   std::string error_code;
   std::string message;
   bool late_result_discarded{false};
@@ -133,6 +196,10 @@ struct DispatcherConfig {
   std::size_t max_terminal_tombstones{128};
   std::chrono::milliseconds terminal_ttl{60000};
   std::size_t max_route_fences{128};
+  // Idempotency fences are process-lifetime safety state. Successful or
+  // ambiguous entries are never evicted; saturation fails closed before any
+  // host mutation and an AE restart starts a fresh ledger.
+  std::size_t max_idempotency_entries{128};
 };
 
 class HostDispatcher final {
@@ -163,6 +230,7 @@ class HostDispatcher final {
       std::string_view route_id,
       std::uint64_t session_generation,
       std::string_view request_id);
+  void mark_idempotency_ambiguous(std::string_view idempotency_key);
   [[nodiscard]] bool running() const;
 
  private:
@@ -185,6 +253,13 @@ class HostDispatcher final {
     TimePoint expires_at;
   };
 
+  enum class IdempotencyState { kReserved, kSucceeded, kAmbiguous };
+
+  struct IdempotencyEntry {
+    std::string arguments_fingerprint_sha256;
+    IdempotencyState state{IdempotencyState::kReserved};
+  };
+
   [[nodiscard]] Completion expired(const Request& request, bool late) const;
   [[nodiscard]] static RequestKey key_for(const Request& request);
   [[nodiscard]] bool route_revoked_locked(
@@ -198,6 +273,7 @@ class HostDispatcher final {
   [[nodiscard]] bool fence_route_locked(
       std::string route_id, std::uint64_t session_generation);
   void finish_request_locked(const RequestKey& key, Completion& completion, TimePoint now);
+  void finish_idempotency_locked(const Request& request, const Completion& completion);
 
   const std::thread::id owner_thread_;
   Clock& clock_;
@@ -210,6 +286,7 @@ class HostDispatcher final {
   std::unordered_set<RequestKey, RequestKeyHash> active_requests_;
   std::unordered_set<RequestKey, RequestKeyHash> detached_requests_;
   std::unordered_map<std::string, std::uint64_t> route_fences_;
+  std::unordered_map<std::string, IdempotencyEntry> idempotency_ledger_;
   bool route_fences_saturated_{false};
 };
 

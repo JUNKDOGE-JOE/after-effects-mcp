@@ -29,6 +29,7 @@ using aemcp::native::EnqueueCode;
 using aemcp::native::HostApi;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostReadResult;
+using aemcp::native::HostWriteResult;
 using aemcp::native::NativeRpcConnectionHandler;
 using aemcp::native::NativeRpcObserver;
 using aemcp::native::NativeRpcRuntimeInfo;
@@ -36,6 +37,7 @@ using aemcp::native::ProjectSummary;
 using aemcp::native::Request;
 using aemcp::native::TimePoint;
 using aemcp::native::kProjectSummaryCapability;
+using aemcp::native::kProjectFolderCreateCapability;
 using aemcp::native::rpc::SessionClock;
 
 constexpr std::string_view kSession = "11111111-1111-4111-8111-111111111111";
@@ -76,10 +78,28 @@ class FakeSessionClock final : public SessionClock {
 class FakeHost final : public HostApi {
  public:
   [[nodiscard]] HostReadResult read_project_summary(TimePoint) override {
+    ++read_calls;
     return HostReadResult::success(summary);
   }
 
+  [[nodiscard]] HostWriteResult create_project_folder(
+      std::string_view name, TimePoint) override {
+    ++write_calls;
+    observed_folder_name = std::string(name);
+    if (!write_error_code.empty()) {
+      return HostWriteResult::failure(write_error_code, "fake write error");
+    }
+    auto result = folder_result;
+    result.folder_name = std::string(name);
+    return HostWriteResult::success(std::move(result));
+  }
+
   ProjectSummary summary{true, "fixture.aep", 3};
+  aemcp::native::ProjectFolderCreated folder_result{true, 101, "AI Assets", 0, 3, 4};
+  std::string write_error_code;
+  std::string observed_folder_name;
+  int read_calls{0};
+  int write_calls{0};
 };
 
 struct EventRecord {
@@ -163,8 +183,9 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      std::string(64, 'a'),
-      std::string(64, 'b'),
+      "33afff4311c76b6671101c9f2a15d2bbfe328c43dd7b539c0825b24ffa416be8",
+      "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
+      "d9defb50a560e02ee4ca2e46abccf903136b2f65f51a74fd24baaafc8bedcb0f",
   };
 }
 
@@ -265,6 +286,14 @@ std::string capabilities_json() {
         "\"params\":{\"ids\":[\"ae.project.summary\"],\"detail\":\"full\",\"limit\":1}}";
 }
 
+std::string folder_capabilities_json() {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession)
+      + "\",\"requestId\":\"capabilities-folder\",\"method\":\"capabilities\","
+        "\"params\":{\"ids\":[\"ae.project.folder.create\"],\"detail\":\"full\","
+        "\"limit\":1}}";
+}
+
 std::string invoke_json(
     std::string_view request_id,
     std::string_view session_id = kSession) {
@@ -273,6 +302,18 @@ std::string invoke_json(
       + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
         "\"params\":{\"capabilityId\":\"ae.project.summary\","
         "\"capabilityVersion\":1,\"arguments\":{}}}";
+}
+
+std::string folder_invoke_json(
+    std::string_view request_id,
+    std::string_view key = "folder-intent-001",
+    std::string_view name = "AI Assets") {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.project.folder.create\","
+        "\"capabilityVersion\":1,\"arguments\":{\"name\":\""
+      + std::string(name) + "\",\"idempotencyKey\":\"" + std::string(key) + "\"}}}";
 }
 
 std::string cancel_json(std::string_view request_id, std::string_view target_request_id) {
@@ -331,6 +372,16 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
       "\"queryDigest\":\"aa3c66bc21e50b6a35db9c3cb12fcb1627694cd8f9fc411f21f7e3de46b3e56a\"",
       "capabilities response");
 
+  send_json(sockets[0], folder_capabilities_json());
+  const std::string folder_capabilities = read_body(sockets[0]);
+  require_contains(folder_capabilities, "\"id\":\"ae.project.folder.create\"",
+      "folder capabilities response");
+  require_contains(folder_capabilities, "\"idempotency\":\"idempotency-key\"",
+      "folder capabilities response");
+  require_contains(folder_capabilities,
+      "\"contractDigest\":\"d9defb50a560e02ee4ca2e46abccf903136b2f65f51a74fd24baaafc8bedcb0f\"",
+      "folder capabilities response");
+
   send_json(sockets[0], invoke_json("invoke-read"));
   const std::string progress = read_body(sockets[0]);
   require_contains(progress, "\"event\":\"progress\"", "invoke progress");
@@ -352,6 +403,49 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
       && read_terminal.postcondition_digest
           == "0e82d012b2b7f26e310703c35b1d82e744809137f1ea5e6d1920aa29c0baca77",
       "read terminal evidence was not deterministic and verified");
+
+  send_json(sockets[0], folder_invoke_json("invoke-folder"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"", "folder progress");
+  wait_until([&] { return dispatcher.queued() == 1; }, "queued folder invoke");
+  const auto folder_batch = dispatcher.drain(host);
+  require(folder_batch.completions.size() == 1 && folder_batch.completions[0].ok,
+      "owner dispatcher did not produce the folder result");
+  const std::string folder = read_body(sockets[0]);
+  require_contains(folder, "\"capabilityId\":\"ae.project.folder.create\"",
+      "folder response");
+  require_contains(folder, "\"effect\":\"committed\"", "folder response");
+  require_contains(folder, "\"undo\":{\"available\":true,\"verified\":true}",
+      "folder response");
+  require_contains(folder, "\"folderItemId\":101", "folder response");
+  require_contains(folder, "\"parentItemId\":0", "folder response");
+  require(folder.find("groupId") == std::string::npos,
+      "folder response fabricated an SDK undo token");
+  wait_until([&] { return !observer.terminal("invoke-folder").request_id.empty(); },
+      "folder terminal audit");
+  const TerminalRecord folder_terminal = observer.terminal("invoke-folder");
+  require(folder_terminal.ok && folder_terminal.request_digest.size() == 64
+      && folder_terminal.postcondition_digest
+          == "92e14ba749b30d80db977fed12c075e208c353aa7159213944475a2e007ab7cd"
+      && host.write_calls == 1 && host.observed_folder_name == "AI Assets",
+      "folder terminal evidence was not deterministic and verified");
+
+  send_json(sockets[0], folder_invoke_json("invoke-folder-duplicate"));
+  const std::string duplicate = read_body(sockets[0]);
+  require_contains(duplicate, "\"code\":\"DUPLICATE_REQUEST\"",
+      "same-key folder duplicate");
+  require_contains(duplicate, "\"sideEffect\":\"not-started\"",
+      "same-key folder duplicate");
+  require_contains(duplicate, "\"field\":\"params.arguments.idempotencyKey\"",
+      "same-key folder duplicate");
+  require(host.write_calls == 1 && !wait_readable(sockets[0], 100ms),
+      "same-key duplicate generated progress or a second host mutation");
+
+  send_json(sockets[0], folder_invoke_json(
+      "invoke-folder-conflict", "folder-intent-001", "Other"));
+  const std::string conflict = read_body(sockets[0]);
+  require_contains(conflict, "\"code\":\"DUPLICATE_REQUEST\"",
+      "different-args folder duplicate");
+  require(host.write_calls == 1, "different-args idempotency conflict reached HostApi");
 
   send_json(sockets[0], invoke_json("invoke-cancel"));
   require_contains(read_body(sockets[0]), "\"event\":\"progress\"", "cancel setup progress");
@@ -388,6 +482,17 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
       "detached completion leaked a response onto the active connection");
 
   finish_connection(sockets[0], sockets[1], worker);
+  require(dispatcher.enqueue(Request{
+      "folder-after-disconnect",
+      std::string(kProjectFolderCreateCapability),
+      dispatcher_clock.now() + 1s,
+      "route-e2e",
+      8,
+      "AI Assets",
+      "folder-intent-001",
+      "6e324ac691906ea2f87cfe960f0f5a51d38facb597e8b3499a93a76144727177",
+  }).code == EnqueueCode::kDuplicateRequest,
+      "successful folder business fence was lost across broker disconnect");
   require(dispatcher.enqueue(Request{
       "old-generation",
       std::string(kProjectSummaryCapability),
@@ -439,6 +544,38 @@ void invalid_postcondition_becomes_structured_failure() {
       "invalid postcondition was audited as a verified success");
   require(observer.has_event("terminal.validation", "invalid-result", "invalid-evidence"),
       "invalid postcondition did not emit a validation decision");
+
+  send_json(sockets[0], folder_invoke_json(
+      "invalid-folder-result", "folder-intent-901", "AI Assets"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "invalid folder evidence progress");
+  wait_until([&] { return dispatcher.queued() == 1; }, "invalid folder evidence invoke");
+  host.folder_result.item_count_after = 5;
+  require(dispatcher.drain(host).completions.size() == 1,
+      "invalid folder result did not reach transport validation");
+  const std::string folder_failure = read_body(sockets[0]);
+  require_contains(folder_failure, "\"code\":\"POSSIBLY_SIDE_EFFECTING_FAILURE\"",
+      "invalid folder evidence failure");
+  require_contains(folder_failure, "\"sideEffect\":\"may-have-occurred\"",
+      "invalid folder evidence failure");
+  require_contains(folder_failure, "\"capabilityId\":\"ae.project.folder.create\"",
+      "invalid folder evidence failure");
+  wait_until([&] {
+    return !observer.terminal("invalid-folder-result").request_id.empty();
+  }, "invalid folder terminal audit");
+  const TerminalRecord folder_terminal = observer.terminal("invalid-folder-result");
+  require(!folder_terminal.ok
+      && folder_terminal.error_code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+      && folder_terminal.postcondition_digest.empty() && host.write_calls == 1,
+      "invalid folder evidence was mislabeled as a safe failure");
+
+  send_json(sockets[0], folder_invoke_json(
+      "invalid-folder-retry", "folder-intent-901", "AI Assets"));
+  const std::string fenced = read_body(sockets[0]);
+  require_contains(fenced, "\"code\":\"DUPLICATE_REQUEST\"",
+      "ambiguous folder retry fence");
+  require(host.write_calls == 1,
+      "ambiguous folder evidence allowed a second host mutation");
 
   finish_connection(sockets[0], sockets[1], worker);
   (void)dispatcher.shutdown();

@@ -9,7 +9,14 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple, Union
 
-from pydantic import BaseModel, ConfigDict, Field, constr, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    constr,
+    field_validator,
+    model_validator,
+)
 
 
 # Common literal set used by several schemas (effects / layer types).
@@ -53,6 +60,49 @@ class AeProjectSummaryArgs(_StrictModel):
     unavailable.
     """
     pass
+
+
+class AeProjectCreateFolderArgs(_StrictModel):
+    """ae.projectCreateFolder — create one root project folder through native AEGP.
+
+    This write never falls back to JSX. Reuse the same idempotency key only to
+    identify the same user intent; duplicate keys fail closed without creating
+    another folder.
+    """
+
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=31,
+        pattern=r"^[^\u0000-\u001f\u007f]+$",
+        description="Exact folder name; at most 31 UTF-16 code units; no C0/DEL controls.",
+        json_schema_extra={
+            "x-lengthUnit": "utf-16-code-units",
+            "x-maximumUtf16CodeUnits": 31,
+        },
+    )
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        description=(
+            "Stable 16-64 character key for this creation intent. Reusing a claimed "
+            "key returns DUPLICATE_REQUEST and never performs a second mutation."
+        ),
+    )
+
+    @field_validator("name")
+    @classmethod
+    def _name_fits_ae_sdk(cls, value: str) -> str:
+        try:
+            units = len(value.encode("utf-16-le")) // 2
+            value.encode("utf-8")
+        except UnicodeEncodeError as exc:
+            raise ValueError("name must contain valid Unicode scalar values") from exc
+        if units > 31:
+            raise ValueError("name exceeds 31 UTF-16 code units")
+        return value
 
 
 class AeLayersArgs(_StrictModel):
@@ -613,6 +663,7 @@ SCHEMAS = {
     "ae.init": AeInitArgs,
     "ae.overview": AeOverviewArgs,
     "ae.projectSummary": AeProjectSummaryArgs,
+    "ae.projectCreateFolder": AeProjectCreateFolderArgs,
     "ae.layers": AeLayersArgs,
     "ae.readProps": AeReadPropsArgs,
     "ae.exec": AeExecArgs,
@@ -657,4 +708,4 @@ SCHEMAS = {
     "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 45, f"expected 45 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 46, f"expected 46 verbs, got {len(SCHEMAS)}"

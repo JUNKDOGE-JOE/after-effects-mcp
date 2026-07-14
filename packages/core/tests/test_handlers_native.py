@@ -17,7 +17,13 @@ from ae_mcp.backends.native import (
     NativeInvokeBackend,
     NativeInvokeResult,
     NativeNegotiation,
+    NativeExecutionEvidence,
+    NativePostconditionEvidence,
     NativeRecovery,
+    NativeUndoEvidence,
+    ProjectFolderCreateExecution,
+    ProjectFolderCreateValue,
+    PROJECT_FOLDER_CREATE_CONTRACT_DIGEST,
     ProjectSummaryExecution,
     ProjectSummaryValue,
 )
@@ -49,12 +55,84 @@ def _execution() -> ProjectSummaryExecution:
         session_generation=hello["sessionGeneration"],
         capabilities_digest=hello["capabilitiesDigest"],
     )
-    result = NativeInvokeResult.model_validate(raw_result)
+    result = NativeInvokeResult.model_validate({**raw_result, "replayed": False})
     return ProjectSummaryExecution(
         implementation=descriptor,
         negotiation=negotiation,
         value=ProjectSummaryValue.model_validate(result.value),
         evidence=result.evidence,
+    )
+
+
+def _folder_execution() -> ProjectFolderCreateExecution:
+    summary = _execution()
+    descriptor = NativeCapabilityDescriptor(
+        detail="full",
+        id="ae.project.folder.create",
+        version=1,
+        schema_version=1,
+        summary="Create one folder at the root of the open After Effects project.",
+        risk="write",
+        mutability="mutating",
+        idempotency="idempotency-key",
+        cancellation="before-dispatch",
+        undo="ae-undo-group",
+        side_effect_summary=(
+            "Creates one root project folder and one After Effects undo step."
+        ),
+        preconditions=("An After Effects project must be open.",),
+        compatibility={
+            "status": "unverified",
+            "intendedPlatforms": ["macos-arm64", "windows-x64"],
+        },
+        input_contract_id="aemcp.contract.ae.project.folder.create.input.v1",
+        result_contract_id="aemcp.contract.ae.project.folder.create.result.v1",
+        contract_digest=PROJECT_FOLDER_CREATE_CONTRACT_DIGEST,
+        input_schema={"type": "object"},
+        result_schema={"type": "object"},
+        requirements=(
+            {
+                "id": "aemcp.requirement.native.project-folder-create",
+                "contractVersion": 1,
+            },
+        ),
+        examples=({"id": "folder-create"},),
+    )
+    value = ProjectFolderCreateValue(
+        created=True,
+        folder_item_id=17,
+        folder_name="AI Folder",
+        parent_item_id=0,
+        item_count_before=4,
+        item_count_after=5,
+    )
+    evidence = NativeExecutionEvidence(
+        engine="native-aegp",
+        host_instance_id=summary.negotiation.host_instance_id,
+        session_id=summary.negotiation.session_id,
+        request_id="core-folder-create-1",
+        capability_id="ae.project.folder.create",
+        capability_version=1,
+        started_at_unix_ms=1_900_000_000_000,
+        completed_at_unix_ms=1_900_000_000_025,
+        effect="committed",
+        request_digest="b" * 64,
+        postcondition=NativePostconditionEvidence(
+            verified=True,
+            kind="project-folder-created",
+            algorithm="sha256-rfc8785-jcs-v1",
+            digest="c" * 64,
+        ),
+        undo=NativeUndoEvidence(available=True, verified=True),
+    )
+    return ProjectFolderCreateExecution(
+        implementation=descriptor,
+        negotiation=summary.negotiation,
+        transport_request_id="core-folder-create-1",
+        idempotency_key="folder-intent-0001",
+        replayed=False,
+        value=value,
+        evidence=evidence,
     )
 
 
@@ -108,6 +186,69 @@ async def test_project_summary_returns_typed_value_provenance_and_evidence(monke
 
 
 @pytest.mark.asyncio
+async def test_project_folder_public_tool_returns_state_risk_undo_and_audit(monkeypatch):
+    execution = _folder_execution()
+    captured: dict[str, Any] = {}
+
+    async def _invoke(backend, **kwargs):
+        captured["backend"] = backend
+        captured.update(kwargs)
+        return execution
+
+    sentinel_backend = object()
+    monkeypatch.setattr(native_handler, "_backend", lambda: sentinel_backend)
+    monkeypatch.setattr(native_handler, "invoke_project_folder_create", _invoke)
+
+    result = await native_handler._run_project_create_folder(
+        schemas.AeProjectCreateFolderArgs(
+            name="AI Folder",
+            idempotency_key="folder-intent-0001",
+        ),
+        None,
+    )
+
+    assert captured["backend"] is sentinel_backend
+    assert captured["name"] == "AI Folder"
+    assert captured["idempotency_key"] == "folder-intent-0001"
+    assert captured["request_id"].startswith("mcp-")
+    assert result["created"] is True
+    assert result["replayed"] is False
+    assert result["state"] == {
+        "before": {"projectItemCount": 4},
+        "after": {
+            "projectItemCount": 5,
+            "folder": {"itemId": 17, "name": "AI Folder", "parentItemId": 0},
+        },
+    }
+    assert result["implementation"]["risk"] == "write"
+    assert result["implementation"]["mutability"] == "mutating"
+    assert result["implementation"]["idempotency"] == "idempotency-key"
+    assert result["implementation"]["undo"] == "ae-undo-group"
+    assert result["audit"]["effect"] == "committed"
+    assert result["audit"]["undoAvailable"] is True
+    assert result["audit"]["undoVerified"] is True
+    assert "groupId" not in result["evidence"]["undo"]
+
+
+@pytest.mark.asyncio
+async def test_project_folder_never_falls_back_to_legacy_exec(monkeypatch):
+    legacy = MockBackend()
+    monkeypatch.setattr(native_handler._discovery, "select_backend", lambda: legacy)
+
+    with pytest.raises(NativeBackendError) as raised:
+        await native_handler._run_project_create_folder(
+            schemas.AeProjectCreateFolderArgs(
+                name="AI Folder",
+                idempotency_key="folder-intent-0001",
+            ),
+            None,
+        )
+
+    assert raised.value.code == "NATIVE_UNAVAILABLE"
+    assert legacy.calls == []
+
+
+@pytest.mark.asyncio
 async def test_project_summary_never_falls_back_to_legacy_exec(monkeypatch):
     legacy = MockBackend()
     monkeypatch.setattr(native_handler._discovery, "select_backend", lambda: legacy)
@@ -125,6 +266,7 @@ async def test_project_summary_never_falls_back_to_legacy_exec(monkeypatch):
 def test_project_summary_registration_is_distinct_from_overview():
     assert HANDLERS["ae.projectSummary"][0] is schemas.AeProjectSummaryArgs
     assert HANDLERS["ae.projectSummary"][1] is not HANDLERS["ae.overview"][1]
+    assert HANDLERS["ae.projectCreateFolder"][0] is schemas.AeProjectCreateFolderArgs
 
 
 @pytest.mark.asyncio
@@ -240,7 +382,7 @@ class _NativeMock(MockBackend, NativeInvokeBackend):
         raise AssertionError("filtering must not invoke")
 
 
-def test_tool_filter_exposes_native_read_only_for_native_adapter(monkeypatch):
+def test_tool_filter_exposes_native_tools_only_for_native_adapter(monkeypatch):
     from ae_mcp import server as server_module
     from ae_mcp.backends import discovery as backend_discovery
     from ae_mcp.snapshot import discovery as snapshot_discovery
@@ -252,6 +394,8 @@ def test_tool_filter_exposes_native_read_only_for_native_adapter(monkeypatch):
     )
     monkeypatch.setattr(backend_discovery, "select_backend", lambda: MockBackend())
     assert "ae.projectSummary" not in server_module._filtered_tool_names()
+    assert "ae.projectCreateFolder" not in server_module._filtered_tool_names()
 
     monkeypatch.setattr(backend_discovery, "select_backend", lambda: _NativeMock())
     assert "ae.projectSummary" in server_module._filtered_tool_names()
+    assert "ae.projectCreateFolder" in server_module._filtered_tool_names()

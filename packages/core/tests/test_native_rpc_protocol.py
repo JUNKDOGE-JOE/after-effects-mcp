@@ -124,15 +124,76 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
     assert hashlib.sha256(_jcs_subset(contract)).hexdigest() == descriptor[
         "contractDigest"
     ]
-    descriptors = _json(FIXTURE_ROOT / "capabilities.json")["response"]["result"][
-        "items"
-    ]
-    assert hashlib.sha256(_jcs_subset(descriptors)).hexdigest() == _json(
-        FIXTURE_ROOT / "capabilities.json"
-    )["response"]["result"]["capabilitiesDigest"]
+    capabilities = _json(FIXTURE_ROOT / "capabilities.json")
+    hello = _json(FIXTURE_ROOT / "hello.json")
+    # This vector deliberately filters the returned page to project.summary.
+    # capabilitiesDigest binds the complete negotiated registry, not the
+    # filtered items page, and therefore must match hello's registry digest.
+    assert capabilities["request"]["params"] == {
+        "ids": ["ae.project.summary"],
+        "detail": "full",
+        "limit": 1,
+    }
+    assert capabilities["response"]["result"]["capabilitiesDigest"] == hello[
+        "response"
+    ]["result"]["capabilitiesDigest"]
+    assert capabilities["response"]["result"]["capabilitiesDigest"] == (
+        "33afff4311c76b6671101c9f2a15d2bbfe328c43dd7b539c0825b24ffa416be8"
+    )
     assert _jcs_subset({"\ue000": 1, "😀": 2}).decode("utf-8") == (
         '{"😀":2,"\ue000":1}'
     )
+
+
+def test_folder_mutation_success_can_never_be_a_transport_replay():
+    schema = _json(SCHEMA_PATH)
+    validator = Draft202012Validator(schema)
+    response = {
+        "wireVersion": 1,
+        "kind": "response",
+        "sessionId": "11111111-1111-4111-8111-111111111111",
+        "requestId": "folder-create-1",
+        "method": "invoke",
+        "ok": True,
+        "replayed": False,
+        "result": {
+            "capabilityId": "ae.project.folder.create",
+            "capabilityVersion": 1,
+            "engine": "native-aegp",
+            "outcome": "succeeded",
+            "value": {
+                "created": True,
+                "folderItemId": 17,
+                "folderName": "AI Folder",
+                "parentItemId": 0,
+                "itemCountBefore": 4,
+                "itemCountAfter": 5,
+            },
+            "evidence": {
+                "engine": "native-aegp",
+                "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                "sessionId": "11111111-1111-4111-8111-111111111111",
+                "requestId": "folder-create-1",
+                "capabilityId": "ae.project.folder.create",
+                "capabilityVersion": 1,
+                "startedAtUnixMs": 1_900_000_000_000,
+                "completedAtUnixMs": 1_900_000_000_025,
+                "effect": "committed",
+                "requestDigest": "a" * 64,
+                "postcondition": {
+                    "verified": True,
+                    "kind": "project-folder-created",
+                    "algorithm": "sha256-rfc8785-jcs-v1",
+                    "digest": "b" * 64,
+                },
+                "undo": {"available": True, "verified": True},
+            },
+        },
+    }
+    validator.validate(response)
+    response["replayed"] = True
+    with pytest.raises(ValidationError):
+        validator.validate(response)
 
 
 def test_native_rpc_negative_corpus_is_rejected_by_the_public_envelope():

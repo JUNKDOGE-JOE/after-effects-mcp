@@ -21,6 +21,7 @@ import {
   decodeFrame,
   encodeFrame,
   materializeDeadline,
+  nativeCapabilityRegistry,
   postconditionDigest,
   projectSummaryContractDigest,
   projectSummaryDescriptor,
@@ -608,7 +609,7 @@ test('capability discovery uses real canonical digests and keeps compatibility u
   const descriptor = capabilities.result.items[0];
   assert.equal(descriptor.contractDigest, projectSummaryContractDigest(schema));
   assert.deepEqual(descriptor, projectSummaryDescriptor(schema));
-  assert.equal(capabilities.result.capabilitiesDigest, capabilityDigest([projectSummaryDescriptor(schema)]));
+  assert.equal(capabilities.result.capabilitiesDigest, capabilityDigest(nativeCapabilityRegistry(schema)));
   assert.equal(capabilities.result.queryDigest, capabilityQueryDigest(exchange.request));
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, capabilities, schema), true);
   assert.equal(validateCapabilityDescriptor(descriptor, schema), true);
@@ -725,11 +726,11 @@ test('invoke is a closed capability-specific allowlist, including nested executa
     assert.deepEqual(classifyRequest(candidate), { ok: false, errorCode: 'INVALID_ARGUMENT' });
   }
   assert.equal(validateIdempotencyContract({ idempotency: 'idempotency-key' }, {
-    idempotencyKey: 'synthetic-key-0001',
+    arguments: { idempotencyKey: 'synthetic-key-0001' },
   }), true);
-  assert.equal(validateIdempotencyContract({ idempotency: 'idempotency-key' }, {}), false);
+  assert.equal(validateIdempotencyContract({ idempotency: 'idempotency-key' }, { arguments: {} }), false);
   assert.equal(validateIdempotencyContract({ idempotency: 'idempotent' }, {
-    idempotencyKey: 'synthetic-key-0001',
+    arguments: { idempotencyKey: 'synthetic-key-0001' },
   }), false);
 });
 
@@ -1148,9 +1149,13 @@ test('cancel states distinguish queued, running, terminal, and missing targets',
     maxTerminalCacheEntries: 128,
   };
   const descriptor = projectSummaryDescriptor(schema);
+  const registryFor = (capabilityDescriptor) => nativeCapabilityRegistry(schema).map((item) => (
+    item.id === capabilityDescriptor.id && item.version === capabilityDescriptor.version
+      ? capabilityDescriptor : item
+  ));
   const helloFor = (capabilityDescriptor) => {
     const hello = structuredClone(golden('hello.json'));
-    hello.response.result.capabilitiesDigest = capabilityDigest([capabilityDescriptor]);
+    hello.response.result.capabilitiesDigest = capabilityDigest(registryFor(capabilityDescriptor));
     return hello;
   };
   const responseFor = (request, state, terminalResponseExpected) => ({
@@ -1165,6 +1170,7 @@ test('cancel states distinguish queued, running, terminal, and missing targets',
   const contextFor = (decision, capabilityDescriptor, targetRequest, hello = helloFor(capabilityDescriptor)) => ({
     hello,
     descriptor: capabilityDescriptor,
+    registry: registryFor(capabilityDescriptor),
     schema,
     cancelDecision: decision.decisionReceipt,
     targetTranscriptContext: targetRequest ? {

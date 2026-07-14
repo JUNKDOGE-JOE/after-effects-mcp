@@ -213,10 +213,34 @@ function fakeNativeClient() {
         },
         invoke: async function (request) {
             calls.push(['invoke', request]);
+            if (request.capabilityId === 'ae.project.folder.create') {
+                return {
+                    capabilityId: 'ae.project.folder.create',
+                    capabilityVersion: 1,
+                    engine: 'native-aegp',
+                    replayed: false,
+                    evidence: {
+                        requestId: request.requestId,
+                        requestDigest: 'b'.repeat(64),
+                        effect: 'committed',
+                        postcondition: { verified: true, digest: 'c'.repeat(64) },
+                        undo: { available: true, verified: true },
+                    },
+                    value: {
+                        created: true,
+                        folderItemId: 17,
+                        folderName: request.arguments.name,
+                        parentItemId: 0,
+                        itemCountBefore: 4,
+                        itemCountAfter: 5,
+                    },
+                };
+            }
             return {
                 capabilityId: 'ae.project.summary',
                 capabilityVersion: 1,
                 engine: 'native-aegp',
+                replayed: false,
                 evidence: {
                     requestId: request.requestId,
                     requestDigest: 'b'.repeat(64),
@@ -288,6 +312,20 @@ test('native routes require the shared token and reject an open-ended invoke env
         });
         assert.strictEqual(oversizedRequestId.status, 400);
         assert.strictEqual(oversizedRequestId.body.error.code, 'INVALID_ARGUMENT');
+        const oversizedFolderName = await post(port, '/native/invoke', {
+            'X-AE-MCP-Token': 'known-secret-token',
+        }, {
+            requestId: 'core-folder-invalid',
+            capabilityId: 'ae.project.folder.create',
+            capabilityVersion: 1,
+            arguments: {
+                name: '😀'.repeat(16),
+                idempotencyKey: 'folder-intent-0002',
+            },
+            deadlineUnixMs: Date.now() + 10000,
+        });
+        assert.strictEqual(oversizedFolderName.status, 400);
+        assert.strictEqual(oversizedFolderName.body.error.code, 'INVALID_ARGUMENT');
         assert.doesNotMatch(JSON.stringify(server.activity.list()), /r{65}/);
         assert.deepStrictEqual(nativeClient.calls, []);
     } finally {
@@ -345,6 +383,24 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
         assert.strictEqual(invoked.status, 200);
         assert.strictEqual(invoked.body.result.value.itemCount, 2);
         assert.strictEqual(invoked.body.result.evidence.postcondition.verified, true);
+        const folderRequest = {
+            requestId: 'core-folder-create-1',
+            capabilityId: 'ae.project.folder.create',
+            capabilityVersion: 1,
+            arguments: {
+                name: 'AI Folder',
+                idempotencyKey: 'folder-intent-0001',
+            },
+            deadlineUnixMs,
+        };
+        const folder = await post(port, '/native/invoke', headers, folderRequest);
+        assert.strictEqual(folder.status, 200);
+        assert.strictEqual(folder.body.result.replayed, false);
+        assert.strictEqual(folder.body.result.value.parentItemId, 0);
+        assert.strictEqual(folder.body.result.evidence.effect, 'committed');
+        assert.deepStrictEqual(folder.body.result.evidence.undo, {
+            available: true, verified: true,
+        });
         assert.deepStrictEqual(nativeClient.calls, [
             'pair',
             ['negotiate', { deadlineUnixMs }],
@@ -356,6 +412,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
                 arguments: {},
                 deadlineUnixMs,
             }],
+            ['invoke', folderRequest],
         ]);
     } finally {
         srv.close();

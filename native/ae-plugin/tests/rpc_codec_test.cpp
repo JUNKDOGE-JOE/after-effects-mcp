@@ -31,6 +31,7 @@ using aemcp::native::rpc::ParsedRequest;
 using aemcp::native::rpc::ProgressEvent;
 using aemcp::native::rpc::ProgressPhase;
 using aemcp::native::rpc::ProjectSummarySuccess;
+using aemcp::native::rpc::ProjectFolderCreateSuccess;
 using aemcp::native::rpc::RpcErrorCode;
 using aemcp::native::rpc::RpcMethod;
 using aemcp::native::rpc::RpcSessionFrontDoor;
@@ -40,12 +41,15 @@ using aemcp::native::rpc::SessionIngressCode;
 using aemcp::native::rpc::decode_request_frame;
 using aemcp::native::rpc::digest_capabilities_query;
 using aemcp::native::rpc::digest_project_summary_postcondition;
+using aemcp::native::rpc::digest_project_folder_arguments;
+using aemcp::native::rpc::digest_project_folder_postcondition;
 using aemcp::native::rpc::encode_capabilities_success;
 using aemcp::native::rpc::encode_cancel_success;
 using aemcp::native::rpc::encode_error_response;
 using aemcp::native::rpc::encode_hello_success;
 using aemcp::native::rpc::encode_progress_event;
 using aemcp::native::rpc::encode_project_summary_success;
+using aemcp::native::rpc::encode_project_folder_create_success;
 using aemcp::native::rpc::kMaxFrameBytes;
 
 constexpr std::string_view kSession = "11111111-1111-4111-8111-111111111111";
@@ -53,6 +57,8 @@ constexpr std::string_view kHost = "22222222-2222-4222-8222-222222222222";
 constexpr std::string_view kClient = "33333333-3333-4333-8333-333333333333";
 constexpr std::string_view kDigest = "778a01733fcf37510f56894a46ec5bd87c7429de2e06d2d5eafb4cdbbae88557";
 constexpr std::string_view kContractDigest = "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
+constexpr std::string_view kFolderContractDigest =
+    "d9defb50a560e02ee4ca2e46abccf903136b2f65f51a74fd24baaafc8bedcb0f";
 
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "FAIL: " << message << '\n';
@@ -129,6 +135,20 @@ std::string invoke_json(
         "\"capabilityVersion\":1,\"arguments\":" + std::string(arguments) + "}}";
 }
 
+std::string folder_invoke_json(
+    std::string_view request_id = "invoke-folder-1",
+    std::string_view name = "AI Assets",
+    std::string_view idempotency_key = "folder-intent-001",
+    std::string_view extra = {}) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.project.folder.create\","
+        "\"capabilityVersion\":1,\"arguments\":{\"name\":\""
+      + std::string(name) + "\",\"idempotencyKey\":\""
+      + std::string(idempotency_key) + "\"" + std::string(extra) + "}}}";
+}
+
 void golden_requests_are_typed_and_closed() {
   const ParsedRequest hello = decode_request_frame(frame(hello_json()));
   require(hello.method == RpcMethod::kHello && !hello.session_id.has_value(), "hello classification failed");
@@ -197,6 +217,49 @@ void golden_requests_are_typed_and_closed() {
       + ",\"sessionId\":\"not-a-uuid\"}";
   expect_codec_error([&] { (void)decode_request_frame(frame(hello_with_session)); },
       "INVALID_REQUEST", "hello with forbidden session");
+}
+
+void project_folder_invoke_is_closed_and_host_bounded() {
+  const ParsedRequest parsed = decode_request_frame(frame(folder_invoke_json()));
+  const auto& invoke = std::get<InvokeParams>(parsed.params);
+  require(invoke.capability_id == "ae.project.folder.create"
+          && invoke.folder_name == "AI Assets"
+          && invoke.idempotency_key == "folder-intent-001",
+      "project folder invoke lost typed arguments");
+  require(invoke.arguments_fingerprint_sha256
+          == "6e324ac691906ea2f87cfe960f0f5a51d38facb597e8b3499a93a76144727177"
+          && invoke.arguments_fingerprint_sha256
+            == digest_project_folder_arguments("AI Assets", "folder-intent-001"),
+      "project folder argument fingerprint diverged from JCS");
+
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(folder_invoke_json(
+        "folder-short-key", "AI Assets", "too-short")));
+  }, "INVALID_ARGUMENT", "short folder idempotency key");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(folder_invoke_json(
+        "folder-long-key", "AI Assets", std::string(65, 'a'))));
+  }, "INVALID_ARGUMENT", "long folder idempotency key");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(folder_invoke_json(
+        "folder-leading-key", "AI Assets", ".folder-intent-01")));
+  }, "INVALID_ARGUMENT", "leading punctuation folder idempotency key");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(folder_invoke_json(
+        "folder-control", "AI\\u000aAssets", "folder-intent-002")));
+  }, "INVALID_ARGUMENT", "control character folder name");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(folder_invoke_json(
+        "folder-too-wide", "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀", "folder-intent-003")));
+  }, "INVALID_ARGUMENT", "folder name above 31 UTF-16 units");
+  require(decode_request_frame(frame(folder_invoke_json(
+      "folder-max-wide", "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀x", "folder-intent-004")))
+          .method == RpcMethod::kInvoke,
+      "folder name at 31 UTF-16 units was rejected");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(folder_invoke_json(
+        "folder-extra", "AI Assets", "folder-intent-005", ",\"jsx\":\"x\"")));
+  }, "INVALID_ARGUMENT", "unknown folder argument");
 }
 
 void framing_fragmentation_and_multiple_frames_work() {
@@ -429,9 +492,12 @@ void response_helpers_are_bounded_and_typed() {
   capabilities.query_digest = std::string(kDigest);
   capabilities.capabilities_digest = std::string(kDigest);
   capabilities.project_summary_contract_digest = std::string(kContractDigest);
+  capabilities.project_folder_create_contract_digest = std::string(kFolderContractDigest);
   const std::string capabilities_body = body(encode_capabilities_success(capabilities));
   require(capabilities_body.find("\"additionalProperties\":false") != std::string::npos
-      && capabilities_body.find("aemcp.requirement.native.project-read") != std::string::npos,
+      && capabilities_body.find("aemcp.requirement.native.project-read") != std::string::npos
+      && capabilities_body.find("aemcp.requirement.native.project-folder-create")
+          != std::string::npos,
       "full capability serializer omitted the closed contract");
 
   const std::string progress_body = body(encode_progress_event(ProgressEvent{
@@ -461,6 +527,40 @@ void response_helpers_are_bounded_and_typed() {
     (void)digest_project_summary_postcondition(
         true, "fixture.aep", aemcp::native::rpc::kMaxSafeInteger + 1);
   }, "unsafe postcondition item count");
+
+  ProjectFolderCreateSuccess folder;
+  folder.request_id = "invoke-folder-1";
+  folder.session_id = std::string(kSession);
+  folder.host_instance_id = std::string(kHost);
+  folder.folder_item_id = 101;
+  folder.folder_name = "AI Assets";
+  folder.parent_item_id = 0;
+  folder.item_count_before = 3;
+  folder.item_count_after = 4;
+  folder.started_at_unix_ms = 1'900'000'000'000ULL;
+  folder.completed_at_unix_ms = 1'900'000'000'025ULL;
+  folder.request_digest = std::string(kDigest);
+  folder.postcondition_digest =
+      digest_project_folder_postcondition(101, "AI Assets", 0, 3, 4);
+  require(folder.postcondition_digest
+          == "92e14ba749b30d80db977fed12c075e208c353aa7159213944475a2e007ab7cd",
+      "project folder postcondition digest diverged from JCS");
+  const std::string folder_body = body(encode_project_folder_create_success(folder));
+  require(folder_body.find("\"capabilityId\":\"ae.project.folder.create\"")
+          != std::string::npos
+          && folder_body.find("\"effect\":\"committed\"") != std::string::npos
+          && folder_body.find("\"undo\":{\"available\":true,\"verified\":true}")
+            != std::string::npos
+          && folder_body.find("groupId") == std::string::npos
+          && folder_body.find("\"parentItemId\":0") != std::string::npos,
+      "project folder serializer omitted native write or undo evidence");
+  folder.item_count_after = 5;
+  expect_argument_error([&] { (void)encode_project_folder_create_success(folder); },
+      "invalid folder count invariant");
+  folder.item_count_after = 4;
+  folder.replayed = true;
+  expect_argument_error([&] { (void)encode_project_folder_create_success(folder); },
+      "business key masquerading as transport replay");
 
   CancelSuccess cancel;
   cancel.request_id = "cancel-1";
@@ -547,6 +647,7 @@ void fixed_seed_mutation_fuzz_is_bounded() {
 
 int main() {
   golden_requests_are_typed_and_closed();
+  project_folder_invoke_is_closed_and_host_bounded();
   framing_fragmentation_and_multiple_frames_work();
   strict_json_and_frame_limits_fail_closed();
   negative_contract_vectors_are_classified();

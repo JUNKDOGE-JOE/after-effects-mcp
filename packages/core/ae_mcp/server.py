@@ -79,9 +79,9 @@ def _filtered_tool_names() -> set:
     if snapshotter is None:
         supported = supported - {"ae.snapshot"}
     if isinstance(backend, NativeInvokeBackend):
-        supported = supported | {"ae.projectSummary"}
+        supported = supported | {"ae.projectSummary", "ae.projectCreateFolder"}
     else:
-        supported = supported - {"ae.projectSummary"}
+        supported = supported - {"ae.projectSummary", "ae.projectCreateFolder"}
     return supported | {"ae.status", "ae.diagnose"}
 
 

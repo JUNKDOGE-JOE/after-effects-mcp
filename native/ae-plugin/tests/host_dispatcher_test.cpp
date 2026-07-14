@@ -22,10 +22,12 @@ using aemcp::native::EnqueueCode;
 using aemcp::native::HostApi;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostReadResult;
+using aemcp::native::HostWriteResult;
 using aemcp::native::Request;
 using aemcp::native::RouteRevocationResult;
 using aemcp::native::TimePoint;
 using aemcp::native::kProjectSummaryCapability;
+using aemcp::native::kProjectFolderCreateCapability;
 
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "FAIL: " << message << '\n';
@@ -64,12 +66,31 @@ class FakeHost final : public HostApi {
     return HostReadResult::success({true, "fixture.aep", 3});
   }
 
+  [[nodiscard]] HostWriteResult create_project_folder(
+      std::string_view name, TimePoint work_deadline) override {
+    require(std::this_thread::get_id() == expected_thread_, "write HostApi ran off owner thread");
+    observed_deadline = work_deadline;
+    observed_folder_name = std::string(name);
+    ++write_calls;
+    clock_.advance(delay);
+    if (clock_.now() >= work_deadline) {
+      return HostWriteResult::failure("DEADLINE_EXCEEDED", "fake write budget elapsed");
+    }
+    if (!write_error_code.empty()) {
+      return HostWriteResult::failure(write_error_code, "fake write error");
+    }
+    return HostWriteResult::success({true, 101, std::string(name), 0, 3, 4});
+  }
+
   FakeClock& clock_;
   std::thread::id expected_thread_;
   std::chrono::milliseconds delay{0};
   TimePoint observed_deadline{};
   std::string error_code;
+  std::string write_error_code;
+  std::string observed_folder_name;
   int calls{0};
+  int write_calls{0};
 };
 
 class BlockingHost final : public HostApi {
@@ -122,6 +143,27 @@ Request request(
   };
 }
 
+Request folder_request(
+    FakeClock& clock,
+    std::string id,
+    std::string key = "folder-intent-001",
+    std::string name = "AI Assets",
+    std::string fingerprint = std::string(64, 'a'),
+    std::chrono::milliseconds ttl = 100ms,
+    std::string route_id = {},
+    std::uint64_t session_generation = 0) {
+  return {
+      std::move(id),
+      std::string(kProjectFolderCreateCapability),
+      clock.now() + ttl,
+      std::move(route_id),
+      session_generation,
+      std::move(name),
+      std::move(key),
+      std::move(fingerprint),
+  };
+}
+
 DispatcherConfig config(
     std::size_t queue,
     std::size_t tasks,
@@ -129,8 +171,143 @@ DispatcherConfig config(
     std::size_t outbound = 64,
     std::size_t tombstones = 128,
     std::chrono::milliseconds tombstone_ttl = 60s,
-    std::size_t route_fences = 128) {
-  return {queue, tasks, budget, outbound, tombstones, tombstone_ttl, route_fences};
+    std::size_t route_fences = 128,
+    std::size_t idempotency_entries = 128) {
+  return {
+      queue,
+      tasks,
+      budget,
+      outbound,
+      tombstones,
+      tombstone_ttl,
+      route_fences,
+      idempotency_entries,
+  };
+}
+
+void folder_write_is_main_thread_bound_and_process_idempotent() {
+  FakeClock clock;
+  const auto owner = std::this_thread::get_id();
+  HostDispatcher dispatcher(owner, clock, config(8, 8, 4ms, 16, 16, 10ms));
+  FakeHost host(clock, owner);
+
+  require(dispatcher.enqueue(folder_request(
+      clock, "create-1", "folder-intent-001", "AI Assets", std::string(64, 'a'),
+      1s, "route-a", 1)).code == EnqueueCode::kAccepted,
+      "valid folder create was rejected");
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1 && batch.completions[0].ok,
+      "folder create did not complete");
+  const auto& result = batch.completions[0].folder_result;
+  require(result.created && result.folder_item_id == 101 && result.parent_item_id == 0
+          && result.folder_name == "AI Assets" && result.item_count_before == 3
+          && result.item_count_after == 4,
+      "folder create lost its verified result");
+  require(host.calls == 0 && host.write_calls == 1
+          && host.observed_folder_name == "AI Assets",
+      "folder create used the wrong HostApi path");
+
+  const auto same = dispatcher.enqueue(folder_request(
+      clock, "create-2", "folder-intent-001", "AI Assets", std::string(64, 'a'),
+      1s, "route-b", 1));
+  require(same.code == EnqueueCode::kDuplicateRequest
+          && same.error_field == "params.arguments.idempotencyKey",
+      "same business intent crossed its process-lifetime fence");
+  const auto different = dispatcher.enqueue(folder_request(
+      clock, "create-3", "folder-intent-001", "Other", std::string(64, 'b')));
+  require(different.code == EnqueueCode::kDuplicateRequest
+          && different.message.find("different arguments") != std::string::npos,
+      "idempotency key was rebound to different arguments");
+  require(host.write_calls == 1, "duplicate business intent reached HostApi");
+
+  require(dispatcher.take_outbound().size() == 1, "folder success was not observable");
+  clock.advance(11ms);
+  require(dispatcher.enqueue(folder_request(
+      clock, "create-4", "folder-intent-001", "AI Assets", std::string(64, 'a'),
+      1s, "route-c", 9)).code == EnqueueCode::kDuplicateRequest,
+      "terminal TTL or connection change evicted a successful business fence");
+}
+
+void folder_write_releases_only_safe_failures_and_fails_closed_when_full() {
+  FakeClock clock;
+  const auto owner = std::this_thread::get_id();
+  HostDispatcher dispatcher(owner, clock, config(8, 8, 4ms, 16, 16, 60s, 16, 2));
+  FakeHost host(clock, owner);
+
+  host.write_error_code = "PRECONDITION_FAILED";
+  require(dispatcher.enqueue(folder_request(
+      clock, "safe-1", "folder-intent-101", "AI Assets", std::string(64, 'a'))).code
+      == EnqueueCode::kAccepted, "safe failure setup was rejected");
+  auto batch = dispatcher.drain(host);
+  require(batch.completions[0].error_code == "PRECONDITION_FAILED",
+      "safe precondition failure changed type");
+  require(dispatcher.enqueue(folder_request(
+      clock, "safe-2", "folder-intent-101", "AI Assets", std::string(64, 'a'))).code
+      == EnqueueCode::kAccepted, "safe failure did not release its business key");
+  require(dispatcher.cancel({}, 0, "safe-2").code == CancelCode::kQueuedCancelled,
+      "queued write cancellation failed");
+  require(dispatcher.enqueue(folder_request(
+      clock, "safe-3", "folder-intent-101", "AI Assets", std::string(64, 'a'))).code
+      == EnqueueCode::kAccepted, "queued cancellation did not release its business key");
+  require(dispatcher.cancel({}, 0, "safe-3").code == CancelCode::kQueuedCancelled,
+      "second queued write cancellation failed");
+
+  host.write_error_code = "POSSIBLY_SIDE_EFFECTING_FAILURE";
+  require(dispatcher.enqueue(folder_request(
+      clock, "ambiguous-1", "folder-intent-102", "AI Assets", std::string(64, 'b'))).code
+      == EnqueueCode::kAccepted, "ambiguous write setup was rejected");
+  batch = dispatcher.drain(host);
+  require(batch.completions[0].error_code == "POSSIBLY_SIDE_EFFECTING_FAILURE",
+      "ambiguous write failure changed type");
+  require(dispatcher.enqueue(folder_request(
+      clock, "ambiguous-2", "folder-intent-102", "AI Assets", std::string(64, 'b'))).code
+      == EnqueueCode::kDuplicateRequest,
+      "ambiguous write key was allowed to mutate again");
+
+  // Only the ambiguous fence consumes permanent capacity; commit one more and
+  // prove a third key fails before HostApi rather than evicting either fence.
+  host.write_error_code.clear();
+  require(dispatcher.enqueue(folder_request(
+      clock, "success-1", "folder-intent-103", "AI Assets", std::string(64, 'c'))).code
+      == EnqueueCode::kAccepted, "second permanent fence setup failed");
+  require(dispatcher.drain(host).completions[0].ok, "second permanent fence did not commit");
+  const int calls_before_full = host.write_calls;
+  const auto full = dispatcher.enqueue(folder_request(
+      clock, "full-1", "folder-intent-104", "AI Assets", std::string(64, 'd')));
+  require(full.code == EnqueueCode::kQueueFull
+          && full.error_field == "params.arguments.idempotencyKey"
+          && host.write_calls == calls_before_full,
+      "full idempotency ledger did not fail closed before mutation");
+}
+
+void folder_write_validates_before_dispatch_and_late_results_are_ambiguous() {
+  FakeClock clock;
+  const auto owner = std::this_thread::get_id();
+  HostDispatcher dispatcher(owner, clock);
+  FakeHost host(clock, owner);
+
+  require(dispatcher.enqueue(folder_request(
+      clock, "bad-key", "short", "AI Assets", std::string(64, 'a'))).code
+      == EnqueueCode::kInvalidRequest, "short idempotency key reached dispatch");
+  require(dispatcher.enqueue(folder_request(
+      clock, "bad-name", "folder-intent-201", std::string(32, 'x'),
+      std::string(64, 'b'))).code == EnqueueCode::kInvalidRequest,
+      "oversized host folder name reached dispatch");
+  require(host.write_calls == 0, "invalid folder arguments reached HostApi");
+
+  host.delay = 3ms;
+  require(dispatcher.enqueue(folder_request(
+      clock, "late-write", "folder-intent-202", "AI Assets", std::string(64, 'c'),
+      2ms)).code == EnqueueCode::kAccepted, "late write setup was rejected");
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1
+          && batch.completions[0].error_code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+          && batch.completions[0].late_result_discarded,
+      "late write was mislabeled as side-effect-free");
+  require(dispatcher.enqueue(folder_request(
+      clock, "late-write-2", "folder-intent-202", "AI Assets", std::string(64, 'c'))).code
+      == EnqueueCode::kDuplicateRequest,
+      "late write key was allowed to mutate again");
 }
 
 void worker_to_owner_dispatch_and_outbound_transfer() {
@@ -475,6 +652,9 @@ void idle_budget_and_shutdown_are_bounded() {
 }  // namespace
 
 int main() {
+  folder_write_is_main_thread_bound_and_process_idempotent();
+  folder_write_releases_only_safe_failures_and_fails_closed_when_full();
+  folder_write_validates_before_dispatch_and_late_results_are_ambiguous();
   worker_to_owner_dispatch_and_outbound_transfer();
   admission_is_closed_and_bounded();
   request_identity_is_route_scoped_and_tombstones_expire();

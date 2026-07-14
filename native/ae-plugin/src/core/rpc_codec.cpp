@@ -389,6 +389,29 @@ bool valid_request_id(std::string_view value) {
   });
 }
 
+bool valid_idempotency_key(std::string_view value) {
+  if (value.size() < 16 || value.size() > 64 || !ascii_alphanumeric(value.front())) {
+    return false;
+  }
+  return std::all_of(value.begin() + 1, value.end(), [](char character) {
+    return ascii_alphanumeric(character) || character == '.' || character == '_'
+        || character == ':' || character == '-';
+  });
+}
+
+bool valid_folder_name(std::string_view value) {
+  if (value.empty()) return false;
+  std::size_t offset = 0;
+  std::size_t utf16_units = 0;
+  while (offset < value.size()) {
+    const std::uint32_t scalar = decode_utf8_scalar(value, offset);
+    if (scalar <= 0x1fU || scalar == 0x7fU) return false;
+    utf16_units += scalar > 0xffffU ? 2U : 1U;
+    if (utf16_units > 31) return false;
+  }
+  return utf16_units > 0;
+}
+
 bool valid_uuid(std::string_view value) {
   if (value.size() != 36 || value[8] != '-' || value[13] != '-'
       || value[18] != '-' || value[23] != '-') return false;
@@ -526,7 +549,13 @@ std::string canonical_request(const ParsedRequest& request) {
     }
     case RpcMethod::kInvoke: {
       const auto& value = std::get<InvokeParams>(request.params);
-      params = "{\"arguments\":{},\"capabilityId\":" + json_string(value.capability_id)
+      std::string arguments = "{}";
+      if (value.capability_id == "ae.project.folder.create") {
+        arguments = "{\"idempotencyKey\":" + json_string(value.idempotency_key)
+            + ",\"name\":" + json_string(value.folder_name) + "}";
+      }
+      params = "{\"arguments\":" + arguments + ",\"capabilityId\":"
+          + json_string(value.capability_id)
           + ",\"capabilityVersion\":" + std::to_string(value.capability_version) + "}";
       break;
     }
@@ -740,9 +769,41 @@ ParsedRequest classify_request(const JsonValue& root) {
           *params, "capabilityVersion", CodecErrorKind::kInvalidArgument, 1, kMaxSafeInteger);
       const JsonValue* arguments_value = member(*params, "arguments");
       const JsonValue::Object* arguments = arguments_value == nullptr ? nullptr : object_of(*arguments_value);
-      if (capability != "ae.project.summary" || version != 1 || arguments == nullptr
-          || !arguments->empty()) invalid_argument("invoke is not in the compile-time allowlist");
-      request.params = InvokeParams{};
+      if (version != 1 || arguments == nullptr) {
+        invalid_argument("invoke is not in the compile-time allowlist");
+      }
+      InvokeParams result;
+      result.capability_id = capability;
+      result.capability_version = 1;
+      if (capability == "ae.project.summary") {
+        if (!arguments->empty()) {
+          invalid_argument("project summary arguments must be empty");
+        }
+      } else if (capability == "ae.project.folder.create") {
+        if (!exact_keys(
+                *arguments,
+                {"name", "idempotencyKey"},
+                {"name", "idempotencyKey"})) {
+          invalid_argument("project folder create arguments are not closed");
+        }
+        result.folder_name = required_string(
+            *arguments, "name", CodecErrorKind::kInvalidArgument);
+        result.idempotency_key = required_string(
+            *arguments, "idempotencyKey", CodecErrorKind::kInvalidArgument);
+        if (!valid_folder_name(result.folder_name)) {
+          invalid_argument("project folder name violates the host name contract");
+        }
+        if (!valid_idempotency_key(result.idempotency_key)) {
+          invalid_argument("invalid project folder idempotency key");
+        }
+        const std::string canonical_arguments = "{\"idempotencyKey\":"
+            + json_string(result.idempotency_key) + ",\"name\":"
+            + json_string(result.folder_name) + "}";
+        result.arguments_fingerprint_sha256 = sha256_hex(canonical_arguments);
+      } else {
+        invalid_argument("invoke is not in the compile-time allowlist");
+      }
+      request.params = std::move(result);
     } else {
       if (!exact_keys(*params, {"targetRequestId"}, {"targetRequestId"})) {
         invalid_argument("invalid cancel params");
@@ -830,6 +891,42 @@ std::string digest_project_summary_postcondition(
       "\"capabilityVersion\":1,\"value\":{\"itemCount\":" + std::to_string(item_count)
       + ",\"projectName\":" + json_string(project_name)
       + ",\"projectOpen\":" + (project_open ? "true" : "false") + "}}";
+  return sha256_hex(canonical);
+}
+
+std::string digest_project_folder_arguments(
+    std::string_view name,
+    std::string_view idempotency_key) {
+  if (!valid_folder_name(name) || !valid_idempotency_key(idempotency_key)) {
+    invalid_argument("invalid project folder arguments digest input");
+  }
+  return sha256_hex("{\"idempotencyKey\":" + json_string(idempotency_key)
+      + ",\"name\":" + json_string(name) + "}");
+}
+
+std::string digest_project_folder_postcondition(
+    std::int64_t folder_item_id,
+    std::string_view folder_name,
+    std::int64_t parent_item_id,
+    std::int64_t item_count_before,
+    std::int64_t item_count_after) {
+  if (folder_item_id <= 0 || parent_item_id < 0 || item_count_before < 0
+      || item_count_before >= static_cast<std::int64_t>(kMaxSafeInteger)
+      || item_count_after != item_count_before + 1
+      || static_cast<std::uint64_t>(folder_item_id) > kMaxSafeInteger
+      || static_cast<std::uint64_t>(parent_item_id) > kMaxSafeInteger
+      || static_cast<std::uint64_t>(item_count_after) > kMaxSafeInteger
+      || !valid_folder_name(folder_name)) {
+    invalid_argument("project folder result violates its postcondition contract");
+  }
+  const std::string canonical =
+      "{\"capabilityId\":\"ae.project.folder.create\",\"capabilityVersion\":1,"
+      "\"value\":{\"created\":true,\"folderItemId\":"
+      + std::to_string(folder_item_id) + ",\"folderName\":"
+      + json_string(folder_name) + ",\"itemCountAfter\":"
+      + std::to_string(item_count_after) + ",\"itemCountBefore\":"
+      + std::to_string(item_count_before) + ",\"parentItemId\":"
+      + std::to_string(parent_item_id) + "}}";
   return sha256_hex(canonical);
 }
 
@@ -1113,7 +1210,7 @@ void validate_limits(const NegotiatedLimits& limits) {
   }
 }
 
-std::string capability_descriptor(const CapabilitiesSuccess& response) {
+std::string project_summary_descriptor(const CapabilitiesSuccess& response) {
   const std::string detail = response.detail == CapabilityDetail::kFull ? "full" : "summary";
   std::string descriptor = "{\"cancellation\":\"before-dispatch\","
       "\"compatibility\":{\"intendedPlatforms\":[\"macos-arm64\",\"windows-x64\"],"
@@ -1149,6 +1246,73 @@ std::string capability_descriptor(const CapabilitiesSuccess& response) {
           "\"type\":\"string\"},\"projectOpen\":{\"type\":\"boolean\"}},"
           "\"required\":[\"projectOpen\",\"projectName\",\"itemCount\"],"
           "\"type\":\"object\"}";
+  }
+  descriptor.push_back('}');
+  return descriptor;
+}
+
+std::string project_folder_create_descriptor(const CapabilitiesSuccess& response) {
+  const std::string detail = response.detail == CapabilityDetail::kFull ? "full" : "summary";
+  std::string descriptor = "{\"cancellation\":\"before-dispatch\","
+      "\"compatibility\":{\"intendedPlatforms\":[\"macos-arm64\",\"windows-x64\"],"
+      "\"status\":\"unverified\"},\"detail\":" + json_string(detail)
+      + ",\"id\":\"ae.project.folder.create\",\"idempotency\":\"idempotency-key\","
+        "\"mutability\":\"mutating\",\"preconditions\":["
+      + json_string("An After Effects project must be open.")
+      + "],\"risk\":\"write\",\"schemaVersion\":1,\"sideEffectSummary\":"
+      + json_string("Creates one root project folder and one After Effects undo step.")
+      + ",\"summary\":"
+      + json_string("Create one folder at the root of the open After Effects project.")
+      + ",\"undo\":\"ae-undo-group\",\"version\":1";
+  if (response.detail == CapabilityDetail::kFull) {
+    require_digest(response.project_folder_create_contract_digest, "contract digest");
+    descriptor += ",\"contractDigest\":"
+        + json_string(response.project_folder_create_contract_digest)
+        + ",\"examples\":[{\"arguments\":{\"idempotencyKey\":"
+        + json_string("synthetic-folder-0001") + ",\"name\":"
+        + json_string("AI Assets")
+        + "},\"expected\":{\"outcome\":\"succeeded\",\"value\":{"
+          "\"created\":true,\"folderItemId\":101,\"folderName\":\"AI Assets\","
+          "\"itemCountAfter\":3,\"itemCountBefore\":2,\"parentItemId\":1}},"
+          "\"id\":\"aemcp-example-project-folder-create\",\"kind\":\"positive\","
+          "\"summary\":"
+        + json_string("Create one synthetic root project folder.")
+        + "},{\"arguments\":{\"idempotencyKey\":"
+        + json_string("synthetic-folder-0002") + ",\"name\":"
+        + json_string("AI Assets")
+        + "},\"expected\":{\"errorCode\":\"PRECONDITION_FAILED\","
+          "\"recoveryAction\":\"open-project\"},"
+          "\"id\":\"aemcp-example-project-folder-no-project\",\"kind\":\"negative\","
+          "\"summary\":"
+        + json_string("Require an open project before native mutation.")
+        + "}],\"inputContractId\":\"aemcp.contract.ae.project.folder.create.input.v1\","
+          "\"inputSchema\":{\"additionalProperties\":false,\"properties\":{"
+          "\"idempotencyKey\":{\"maxLength\":64,\"minLength\":16,"
+          "\"pattern\":\"^[A-Za-z0-9][A-Za-z0-9._:-]*$\",\"type\":\"string\"},"
+          "\"name\":{\"maxLength\":31,\"minLength\":1,"
+          "\"pattern\":\"^[^\\u0000-\\u001f\\u007f]+$\",\"type\":\"string\","
+          "\"x-lengthUnit\":\"utf-16-code-units\",\"x-maximumUtf16CodeUnits\":31}},"
+          "\"required\":[\"name\",\"idempotencyKey\"],\"type\":\"object\","
+          "\"x-invariant\":\"name-must-not-exceed-31-utf16-code-units\"},"
+          "\"requirements\":[{\"contractVersion\":1,"
+          "\"id\":\"aemcp.requirement.native.project-folder-create\"}],"
+          "\"resultContractId\":\"aemcp.contract.ae.project.folder.create.result.v1\","
+          "\"resultSchema\":{\"additionalProperties\":false,\"properties\":{"
+          "\"created\":{\"const\":true},"
+          "\"folderItemId\":{\"maximum\":9007199254740991,\"minimum\":1,"
+          "\"type\":\"integer\"},"
+          "\"folderName\":{\"maxLength\":31,\"minLength\":1,\"type\":\"string\","
+          "\"x-lengthUnit\":\"utf-16-code-units\",\"x-maximumUtf16CodeUnits\":31},"
+          "\"itemCountAfter\":{\"maximum\":9007199254740991,\"minimum\":0,"
+          "\"type\":\"integer\"},"
+          "\"itemCountBefore\":{\"maximum\":9007199254740991,\"minimum\":0,"
+          "\"type\":\"integer\"},"
+          "\"parentItemId\":{\"maximum\":9007199254740991,\"minimum\":0,"
+          "\"type\":\"integer\"}},"
+          "\"required\":[\"created\",\"folderItemId\",\"folderName\","
+          "\"parentItemId\",\"itemCountBefore\",\"itemCountAfter\"],"
+          "\"type\":\"object\","
+          "\"x-invariant\":\"itemCountAfter-must-equal-itemCountBefore-plus-one\"}";
   }
   descriptor.push_back('}');
   return descriptor;
@@ -1262,7 +1426,15 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
   require_digest(response.capabilities_digest, "capabilities digest");
   const std::string detail = response.detail == CapabilityDetail::kFull ? "full" : "summary";
   std::string items = "[";
-  if (response.include_project_summary) items += capability_descriptor(response);
+  bool needs_comma = false;
+  if (response.include_project_summary) {
+    items += project_summary_descriptor(response);
+    needs_comma = true;
+  }
+  if (response.include_project_folder_create) {
+    if (needs_comma) items.push_back(',');
+    items += project_folder_create_descriptor(response);
+  }
   items.push_back(']');
   std::string json = "{\"kind\":\"response\",\"method\":\"capabilities\",\"ok\":true,"
       "\"replayed\":false,\"requestId\":" + json_string(response.request_id)
@@ -1322,6 +1494,53 @@ std::vector<std::uint8_t> encode_project_summary_success(
       + json_string(response.project_name) + ",\"projectOpen\":"
       + (response.project_open ? "true" : "false") + "}},\"sessionId\":"
       + json_string(response.session_id) + ",\"wireVersion\":1}";
+  return frame_output(std::move(json));
+}
+
+std::vector<std::uint8_t> encode_project_folder_create_success(
+    const ProjectFolderCreateSuccess& response) {
+  require_request_id(response.request_id);
+  require_uuid(response.session_id, "session ID");
+  require_uuid(response.host_instance_id, "host instance ID");
+  require_digest(response.request_digest, "request digest");
+  require_digest(response.postcondition_digest, "postcondition digest");
+  if (response.replayed || !valid_folder_name(response.folder_name)
+      || response.folder_item_id <= 0 || response.parent_item_id < 0
+      || response.item_count_before < 0
+      || response.item_count_before >= static_cast<std::int64_t>(kMaxSafeInteger)
+      || response.item_count_after != response.item_count_before + 1
+      || static_cast<std::uint64_t>(response.folder_item_id) > kMaxSafeInteger
+      || static_cast<std::uint64_t>(response.parent_item_id) > kMaxSafeInteger
+      || response.started_at_unix_ms < 1
+      || response.started_at_unix_ms > kMaxSafeInteger
+      || response.completed_at_unix_ms < response.started_at_unix_ms
+      || response.completed_at_unix_ms > kMaxSafeInteger) {
+    invalid_argument("invalid or unvalidated project folder create evidence");
+  }
+  std::string json = "{\"kind\":\"response\",\"method\":\"invoke\",\"ok\":true,"
+      "\"replayed\":false,\"requestId\":" + json_string(response.request_id)
+      + ",\"result\":{\"capabilityId\":\"ae.project.folder.create\","
+        "\"capabilityVersion\":1,\"engine\":\"native-aegp\",\"evidence\":{"
+        "\"capabilityId\":\"ae.project.folder.create\",\"capabilityVersion\":1,"
+        "\"completedAtUnixMs\":" + std::to_string(response.completed_at_unix_ms)
+      + ",\"effect\":\"committed\",\"engine\":\"native-aegp\","
+        "\"hostInstanceId\":" + json_string(response.host_instance_id)
+      + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\","
+        "\"digest\":" + json_string(response.postcondition_digest)
+      + ",\"kind\":\"project-folder-created\",\"verified\":true},"
+        "\"requestDigest\":" + json_string(response.request_digest)
+      + ",\"requestId\":" + json_string(response.request_id)
+      + ",\"sessionId\":" + json_string(response.session_id)
+      + ",\"startedAtUnixMs\":" + std::to_string(response.started_at_unix_ms)
+      + ",\"undo\":{\"available\":true,\"verified\":true}},"
+        "\"outcome\":\"succeeded\",\"value\":{\"created\":true,"
+        "\"folderItemId\":" + std::to_string(response.folder_item_id)
+      + ",\"folderName\":" + json_string(response.folder_name)
+      + ",\"itemCountAfter\":" + std::to_string(response.item_count_after)
+      + ",\"itemCountBefore\":" + std::to_string(response.item_count_before)
+      + ",\"parentItemId\":" + std::to_string(response.parent_item_id)
+      + "}},\"sessionId\":" + json_string(response.session_id)
+      + ",\"wireVersion\":1}";
   return frame_output(std::move(json));
 }
 

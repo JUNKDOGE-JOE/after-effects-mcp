@@ -167,6 +167,97 @@
         }
       }
     },
+    "projectFolderCreateArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "idempotencyKey"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 31,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+          "x-lengthUnit": "utf-16-code-units",
+          "x-maximumUtf16CodeUnits": 31
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      },
+      "x-invariant": "name-must-not-exceed-31-utf16-code-units"
+    },
+    "projectFolderCreateInputSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "idempotencyKey"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 31,
+            "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+            "x-lengthUnit": "utf-16-code-units",
+            "x-maximumUtf16CodeUnits": 31
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          }
+        },
+        "x-invariant": "name-must-not-exceed-31-utf16-code-units"
+      }
+    },
+    "projectFolderCreateResultSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "created",
+          "folderItemId",
+          "folderName",
+          "parentItemId",
+          "itemCountBefore",
+          "itemCountAfter"
+        ],
+        "properties": {
+          "created": { "const": true },
+          "folderItemId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "folderName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 31,
+            "x-lengthUnit": "utf-16-code-units",
+            "x-maximumUtf16CodeUnits": 31
+          },
+          "parentItemId": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "itemCountBefore": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "itemCountAfter": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "x-invariant": "itemCountAfter-must-equal-itemCountBefore-plus-one"
+      }
+    },
     "projectSummaryInvokeParams": {
       "type": "object",
       "additionalProperties": false,
@@ -177,9 +268,20 @@
         "arguments": { "$ref": "#/$defs/projectSummaryArguments" }
       }
     },
+    "projectFolderCreateInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.project.folder.create" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/projectFolderCreateArguments" }
+      }
+    },
     "invokeParams": {
       "oneOf": [
-        { "$ref": "#/$defs/projectSummaryInvokeParams" }
+        { "$ref": "#/$defs/projectSummaryInvokeParams" },
+        { "$ref": "#/$defs/projectFolderCreateInvokeParams" }
       ],
       "x-invariant": "every-invoke-variant-is-compile-time-allowlisted-and-closed"
     },
@@ -407,6 +509,30 @@
         { "$ref": "#/$defs/compatibilityVerified" }
       ]
     },
+    "capabilityArguments": {
+      "oneOf": [
+        { "$ref": "#/$defs/projectSummaryArguments" },
+        { "$ref": "#/$defs/projectFolderCreateArguments" }
+      ]
+    },
+    "capabilityValue": {
+      "oneOf": [
+        { "$ref": "#/$defs/projectSummaryValue" },
+        { "$ref": "#/$defs/projectFolderCreateValue" }
+      ]
+    },
+    "capabilityInputSchemaContract": {
+      "oneOf": [
+        { "$ref": "#/$defs/projectSummaryInputSchemaContract" },
+        { "$ref": "#/$defs/projectFolderCreateInputSchemaContract" }
+      ]
+    },
+    "capabilityResultSchemaContract": {
+      "oneOf": [
+        { "$ref": "#/$defs/projectSummaryResultSchemaContract" },
+        { "$ref": "#/$defs/projectFolderCreateResultSchemaContract" }
+      ]
+    },
     "positiveCapabilityExample": {
       "type": "object",
       "additionalProperties": false,
@@ -415,14 +541,14 @@
         "id": { "type": "string", "pattern": "^aemcp-example-[a-z0-9-]+$", "maxLength": 96 },
         "kind": { "const": "positive" },
         "summary": { "type": "string", "minLength": 1, "maxLength": 160 },
-        "arguments": { "$ref": "#/$defs/projectSummaryArguments" },
+        "arguments": { "$ref": "#/$defs/capabilityArguments" },
         "expected": {
           "type": "object",
           "additionalProperties": false,
           "required": ["outcome", "value"],
           "properties": {
             "outcome": { "const": "succeeded" },
-            "value": { "$ref": "#/$defs/projectSummaryValue" }
+            "value": { "$ref": "#/$defs/capabilityValue" }
           }
         }
       }
@@ -435,7 +561,7 @@
         "id": { "type": "string", "pattern": "^aemcp-example-[a-z0-9-]+$", "maxLength": 96 },
         "kind": { "const": "negative" },
         "summary": { "type": "string", "minLength": 1, "maxLength": 160 },
-        "arguments": { "$ref": "#/$defs/projectSummaryArguments" },
+        "arguments": { "$ref": "#/$defs/capabilityArguments" },
         "expected": {
           "type": "object",
           "additionalProperties": false,
@@ -504,8 +630,8 @@
         "inputContractId": { "$ref": "#/$defs/contractId" },
         "resultContractId": { "$ref": "#/$defs/contractId" },
         "contractDigest": { "$ref": "#/$defs/sha256" },
-        "inputSchema": { "$ref": "#/$defs/projectSummaryInputSchemaContract" },
-        "resultSchema": { "$ref": "#/$defs/projectSummaryResultSchemaContract" },
+        "inputSchema": { "$ref": "#/$defs/capabilityInputSchemaContract" },
+        "resultSchema": { "$ref": "#/$defs/capabilityResultSchemaContract" },
         "requirements": {
           "type": "array",
           "minItems": 1,
@@ -696,7 +822,34 @@
         "itemCount": { "$ref": "#/$defs/safeNonnegativeInteger" }
       }
     },
-    "invokeResult": {
+    "projectFolderCreateValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "created",
+        "folderItemId",
+        "folderName",
+        "parentItemId",
+        "itemCountBefore",
+        "itemCountAfter"
+      ],
+      "properties": {
+        "created": { "const": true },
+        "folderItemId": { "$ref": "#/$defs/safePositiveInteger" },
+        "folderName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 31,
+          "x-lengthUnit": "utf-16-code-units",
+          "x-maximumUtf16CodeUnits": 31
+        },
+        "parentItemId": { "$ref": "#/$defs/safeNonnegativeInteger" },
+        "itemCountBefore": { "$ref": "#/$defs/safeNonnegativeInteger" },
+        "itemCountAfter": { "$ref": "#/$defs/safeNonnegativeInteger" }
+      },
+      "x-invariant": "itemCountAfter-must-equal-itemCountBefore-plus-one"
+    },
+    "projectSummaryInvokeResult": {
       "type": "object",
       "additionalProperties": false,
       "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
@@ -708,6 +861,25 @@
         "value": { "$ref": "#/$defs/projectSummaryValue" },
         "evidence": { "$ref": "#/$defs/executionEvidence" }
       }
+    },
+    "projectFolderCreateInvokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.project.folder.create" },
+        "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" },
+        "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/projectFolderCreateValue" },
+        "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "invokeResult": {
+      "oneOf": [
+        { "$ref": "#/$defs/projectSummaryInvokeResult" },
+        { "$ref": "#/$defs/projectFolderCreateInvokeResult" }
+      ]
     },
     "cancelResult": {
       "type": "object",
@@ -969,6 +1141,23 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["wireVersion", "kind", "sessionId", "requestId", "method", "ok", "replayed", "result"],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "result": {
+                "properties": {
+                  "capabilityId": { "const": "ae.project.folder.create" }
+                },
+                "required": ["capabilityId"]
+              }
+            }
+          },
+          "then": {
+            "properties": { "replayed": { "const": false } }
+          }
+        }
+      ],
       "properties": {
         "wireVersion": { "$ref": "#/$defs/wireVersion" },
         "kind": { "const": "response" },

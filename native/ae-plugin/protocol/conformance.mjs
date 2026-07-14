@@ -43,6 +43,12 @@ export const INVOKE_REGISTRY = Object.freeze([
     inputContractId: 'aemcp.contract.ae.project.summary.input.v1',
     resultContractId: 'aemcp.contract.ae.project.summary.result.v1',
   }),
+  Object.freeze({
+    id: 'ae.project.folder.create',
+    version: 1,
+    inputContractId: 'aemcp.contract.ae.project.folder.create.input.v1',
+    resultContractId: 'aemcp.contract.ae.project.folder.create.result.v1',
+  }),
 ]);
 const ENVELOPE_KEYS = new Set([
   'wireVersion', 'kind', 'sessionId', 'requestId', 'method', 'deadlineUnixMs', 'params',
@@ -554,8 +560,22 @@ export function classifyRequest(message) {
       ['capabilityId', 'capabilityVersion', 'arguments'])) return { ok: false, errorCode: 'INVALID_ARGUMENT' };
     const registration = INVOKE_REGISTRY.find((item) => item.id === params.capabilityId
       && item.version === params.capabilityVersion);
-    if (!registration
-        || !exactKeys(params.arguments, new Set())) return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+    if (!registration) return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+    if (params.capabilityId === 'ae.project.summary') {
+      if (!exactKeys(params.arguments, new Set())) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set(['name', 'idempotencyKey']), ['name', 'idempotencyKey'])
+          || typeof args.name !== 'string' || hasLoneSurrogate(args.name)
+          || args.name.length < 1 || args.name.length > 31
+          || /[\u0000-\u001f\u007f]/u.test(args.name)
+          || typeof args.idempotencyKey !== 'string'
+          || !/^[A-Za-z0-9][A-Za-z0-9._:-]{15,63}$/u.test(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    }
     return { ok: true };
   }
   const params = message.params;
@@ -713,6 +733,12 @@ export function projectSummaryContractDigest(schema) {
   });
 }
 
+export function projectFolderCreateContractDigest(schema) {
+  const inputSchema = structuredClone(schema.$defs.projectFolderCreateInputSchemaContract.const);
+  const resultSchema = structuredClone(schema.$defs.projectFolderCreateResultSchemaContract.const);
+  return sha256Jcs({ inputSchema, resultSchema });
+}
+
 export function capabilityDigest(items) {
   return sha256Jcs(items);
 }
@@ -767,6 +793,67 @@ export function projectSummaryDescriptor(schema) {
   };
 }
 
+export function projectFolderCreateDescriptor(schema) {
+  const registration = INVOKE_REGISTRY[1];
+  return {
+    detail: 'full',
+    id: registration.id,
+    version: registration.version,
+    schemaVersion: 1,
+    summary: 'Create one folder at the root of the open After Effects project.',
+    risk: 'write',
+    mutability: 'mutating',
+    idempotency: 'idempotency-key',
+    cancellation: 'before-dispatch',
+    undo: 'ae-undo-group',
+    sideEffectSummary: 'Creates one root project folder and one After Effects undo step.',
+    preconditions: ['An After Effects project must be open.'],
+    compatibility: {
+      status: 'unverified',
+      intendedPlatforms: ['macos-arm64', 'windows-x64'],
+    },
+    inputContractId: registration.inputContractId,
+    resultContractId: registration.resultContractId,
+    contractDigest: projectFolderCreateContractDigest(schema),
+    inputSchema: structuredClone(schema.$defs.projectFolderCreateInputSchemaContract.const),
+    resultSchema: structuredClone(schema.$defs.projectFolderCreateResultSchemaContract.const),
+    requirements: [{
+      id: 'aemcp.requirement.native.project-folder-create',
+      contractVersion: 1,
+    }],
+    examples: [
+      {
+        id: 'aemcp-example-project-folder-create',
+        kind: 'positive',
+        summary: 'Create one synthetic root project folder.',
+        arguments: { idempotencyKey: 'synthetic-folder-0001', name: 'AI Assets' },
+        expected: {
+          outcome: 'succeeded',
+          value: {
+            created: true,
+            folderItemId: 101,
+            folderName: 'AI Assets',
+            itemCountAfter: 3,
+            itemCountBefore: 2,
+            parentItemId: 1,
+          },
+        },
+      },
+      {
+        id: 'aemcp-example-project-folder-no-project',
+        kind: 'negative',
+        summary: 'Require an open project before native mutation.',
+        arguments: { idempotencyKey: 'synthetic-folder-0002', name: 'AI Assets' },
+        expected: { errorCode: 'PRECONDITION_FAILED', recoveryAction: 'open-project' },
+      },
+    ],
+  };
+}
+
+export function nativeCapabilityRegistry(schema) {
+  return [projectSummaryDescriptor(schema), projectFolderCreateDescriptor(schema)];
+}
+
 export function capabilityQueryDigest(request) {
   if (classifyRequest(request).ok !== true || request.method !== 'capabilities') {
     fail('INVALID_ARGUMENT', 'invalid capabilities request');
@@ -816,7 +903,7 @@ export function validateCapabilitiesExchange(
   const detail = request.params.detail ?? 'summary';
   let registry;
   try {
-    registry = registryOverride ?? [projectSummaryDescriptor(schema)];
+    registry = registryOverride ?? nativeCapabilityRegistry(schema);
   } catch {
     return false;
   }
@@ -878,10 +965,10 @@ export function validateCapabilityDescriptor(descriptor, schema) {
 
 export function validateIdempotencyContract(descriptor, invokeParams) {
   if (descriptor.idempotency === 'idempotency-key') {
-    return typeof invokeParams.idempotencyKey === 'string'
-      && /^[A-Za-z0-9._:-]{16,128}$/u.test(invokeParams.idempotencyKey);
+    return typeof invokeParams?.arguments?.idempotencyKey === 'string'
+      && /^[A-Za-z0-9][A-Za-z0-9._:-]{15,63}$/u.test(invokeParams.arguments.idempotencyKey);
   }
-  return invokeParams.idempotencyKey === undefined;
+  return invokeParams?.arguments?.idempotencyKey === undefined;
 }
 
 export function validateCancelResult(result, schema) {
@@ -982,6 +1069,7 @@ export function validateCancelExchange(
     ...context.targetTranscriptContext,
     hello: helloContext,
     descriptor,
+    registry: context.registry,
     schema,
   };
   if (!validateTranscript(transcriptContext, targetRequest, targetMessages)) return false;
@@ -1020,16 +1108,28 @@ export function validateTranscript(context, request, messages) {
     return false;
   }
   let descriptorDigest;
+  let registeredDescriptor;
   let requestDigest;
   try {
-    descriptorDigest = capabilityDigest([descriptor]);
+    const registry = context?.registry ?? nativeCapabilityRegistry(schema);
+    descriptorDigest = capabilityDigest(registry);
+    registeredDescriptor = registry.find((item) => item.id === descriptor?.id
+      && item.version === descriptor?.version);
     requestDigest = sha256Jcs(request);
   } catch {
     return false;
   }
+  let descriptorIsRegistered = false;
+  try {
+    descriptorIsRegistered = registeredDescriptor !== undefined
+      && canonicalize(registeredDescriptor) === canonicalize(descriptor);
+  } catch {
+    descriptorIsRegistered = false;
+  }
   if (!Array.isArray(messages) || !validateHelloContext(helloContext, schema)
       || validateRequestComposite(request, schema).ok !== true
       || request.method !== 'invoke' || !validateCapabilityDescriptor(descriptor, schema)
+      || !descriptorIsRegistered
       || descriptor.id !== request.params.capabilityId
       || descriptor.version !== request.params.capabilityVersion
       || descriptorDigest !== helloContext.response.result.capabilitiesDigest

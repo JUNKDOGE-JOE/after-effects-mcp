@@ -19,6 +19,7 @@ struct NativeRpcRuntimeInfo {
   std::string host_instance_id;
   std::string capabilities_digest;
   std::string project_summary_contract_digest;
+  std::string project_folder_create_contract_digest;
 };
 
 class NativeRpcObserver {

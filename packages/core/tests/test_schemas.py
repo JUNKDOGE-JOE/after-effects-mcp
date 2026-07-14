@@ -9,9 +9,10 @@ from ae_mcp import schemas as S
 
 
 def test_registry_has_all_verbs():
-    assert len(S.SCHEMAS) == 45, f"expected 45 verbs, got {len(S.SCHEMAS)}"
+    assert len(S.SCHEMAS) == 46, f"expected 46 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
-        "ae.init", "ae.overview", "ae.projectSummary", "ae.layers", "ae.readProps", "ae.exec",
+        "ae.init", "ae.overview", "ae.projectSummary", "ae.projectCreateFolder",
+        "ae.layers", "ae.readProps", "ae.exec",
         "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.previewFrame",
         "ae.applyEffect", "ae.ping", "ae.status", "ae.diagnose",
         "ae.createLayer", "ae.setProperty", "ae.moveLayer", "ae.selectLayers",
@@ -49,6 +50,21 @@ def test_native_project_summary_is_empty_and_distinct_from_overview():
     assert S.AeProjectSummaryArgs() != S.AeOverviewArgs()
     with pytest.raises(ValidationError):
         S.AeProjectSummaryArgs(foo=1)
+
+
+def test_native_project_folder_has_bounded_name_and_explicit_idempotency_key():
+    args = S.AeProjectCreateFolderArgs(
+        name="AI_😀_Folder",
+        idempotency_key="folder-intent-0001",
+    )
+    assert args.name == "AI_😀_Folder"
+    with pytest.raises(ValidationError):
+        S.AeProjectCreateFolderArgs(
+            name="😀" * 16,
+            idempotency_key="folder-intent-0001",
+        )
+    with pytest.raises(ValidationError):
+        S.AeProjectCreateFolderArgs(name="bad\nname", idempotency_key="too-short")
 
 
 def test_layers_optional_comp_id():

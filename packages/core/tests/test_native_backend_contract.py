@@ -26,6 +26,9 @@ from ae_mcp.backends.native import (
     NativeInvokeResult,
     NativeNegotiation,
     ProjectSummaryExecution,
+    PROJECT_FOLDER_CREATE_CONTRACT_DIGEST,
+    _PROJECT_FOLDER_CREATE_INPUT_SCHEMA,
+    _PROJECT_FOLDER_CREATE_RESULT_SCHEMA,
     invoke_project_summary,
 )
 
@@ -58,6 +61,75 @@ def _descriptor() -> NativeCapabilityDescriptor:
     return NativeCapabilityDescriptor.model_validate(raw)
 
 
+def _folder_descriptor() -> NativeCapabilityDescriptor:
+    return NativeCapabilityDescriptor(
+        detail="full",
+        id="ae.project.folder.create",
+        version=1,
+        schema_version=1,
+        summary="Create one folder at the root of the open After Effects project.",
+        risk="write",
+        mutability="mutating",
+        idempotency="idempotency-key",
+        cancellation="before-dispatch",
+        undo="ae-undo-group",
+        side_effect_summary=(
+            "Creates one root project folder and one After Effects undo step."
+        ),
+        preconditions=("An After Effects project must be open.",),
+        compatibility={
+            "status": "unverified",
+            "intendedPlatforms": ["macos-arm64", "windows-x64"],
+        },
+        input_contract_id="aemcp.contract.ae.project.folder.create.input.v1",
+        result_contract_id="aemcp.contract.ae.project.folder.create.result.v1",
+        contract_digest=PROJECT_FOLDER_CREATE_CONTRACT_DIGEST,
+        input_schema=_PROJECT_FOLDER_CREATE_INPUT_SCHEMA,
+        result_schema=_PROJECT_FOLDER_CREATE_RESULT_SCHEMA,
+        requirements=(
+            {
+                "id": "aemcp.requirement.native.project-folder-create",
+                "contractVersion": 1,
+            },
+        ),
+        examples=(
+            {
+                "id": "aemcp-example-project-folder-create",
+                "kind": "positive",
+                "summary": "Create one synthetic root project folder.",
+                "arguments": {
+                    "name": "AI Assets",
+                    "idempotencyKey": "synthetic-folder-0001",
+                },
+                "expected": {
+                    "outcome": "succeeded",
+                    "value": {
+                        "created": True,
+                        "folderItemId": 101,
+                        "folderName": "AI Assets",
+                        "parentItemId": 1,
+                        "itemCountBefore": 2,
+                        "itemCountAfter": 3,
+                    },
+                },
+            },
+            {
+                "id": "aemcp-example-project-folder-no-project",
+                "kind": "negative",
+                "summary": "Require an open project before native mutation.",
+                "arguments": {
+                    "name": "AI Assets",
+                    "idempotencyKey": "synthetic-folder-0002",
+                },
+                "expected": {
+                    "errorCode": "PRECONDITION_FAILED",
+                    "recoveryAction": "open-project",
+                },
+            },
+        ),
+    )
+
+
 def _capabilities(
     descriptor: NativeCapabilityDescriptor | None = None,
 ) -> NativeCapabilities:
@@ -66,7 +138,7 @@ def _capabilities(
     return NativeCapabilities(
         session_id=response["sessionId"],
         detail=result["detail"],
-        items=(descriptor or _descriptor(),),
+        items=(descriptor or _descriptor(), _folder_descriptor()),
         next_cursor=result["nextCursor"],
         query_digest=_jcs_digest(
             {
@@ -102,6 +174,7 @@ def _invoke_result() -> NativeInvokeResult:
         capability_version=raw["capabilityVersion"],
         engine=raw["engine"],
         outcome=raw["outcome"],
+        replayed=False,
         value=raw["value"],
         evidence=raw["evidence"],
     )
@@ -116,6 +189,7 @@ def _invoke_result_with_evidence(**updates: Any) -> NativeInvokeResult:
         capability_version=raw["capabilityVersion"],
         engine=raw["engine"],
         outcome=raw["outcome"],
+        replayed=False,
         value=raw["value"],
         evidence=evidence,
     )
@@ -274,6 +348,13 @@ def test_fixture_models_preserve_descriptor_result_and_error_policy():
     assert error.details == {"capabilityId": "ae.project.set_current_time"}
 
 
+def test_http_native_invoke_result_requires_explicit_replay_status():
+    raw = _fixture("invoke-project-summary.json")["response"]["result"]
+
+    with pytest.raises(ValidationError):
+        NativeInvokeResult.model_validate(raw)
+
+
 def test_native_descriptor_cannot_be_relabelled_as_jsx():
     raw = _fixture("capabilities.json")["response"]["result"]["items"][0]
     raw["engine"] = "maintained-jsx"
@@ -382,8 +463,8 @@ async def test_project_summary_binding_is_explicit_native_and_deadline_bound():
         "sessionId": "11111111-1111-4111-8111-111111111111",
         "sessionGeneration": 1,
         "capabilitiesDigest": (
-            "778a01733fcf37510f56894a46ec5bd87"
-            "c7429de2e06d2d5eafb4cdbbae88557"
+            "33afff4311c76b6671101c9f2a15d2b"
+            "bfe328c43dd7b539c0825b24ffa416be8"
         ),
         "requestId": "invoke-summary-1",
         "effect": "none",
@@ -535,6 +616,7 @@ async def test_project_summary_rejects_result_bound_to_another_request():
             capability_version=fixture_result["capabilityVersion"],
             engine=fixture_result["engine"],
             outcome=fixture_result["outcome"],
+            replayed=False,
             value=fixture_result["value"],
             evidence=evidence,
         )
@@ -597,6 +679,7 @@ async def test_project_summary_maps_invalid_value_to_structured_contract_error()
         capability_version=raw["capabilityVersion"],
         engine=raw["engine"],
         outcome=raw["outcome"],
+        replayed=False,
         value={"projectOpen": False, "projectName": "missing item count"},
         evidence=raw["evidence"],
     )

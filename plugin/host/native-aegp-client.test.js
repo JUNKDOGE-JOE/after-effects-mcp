@@ -21,7 +21,8 @@ const HOST = '22222222-2222-4222-8222-222222222222';
 const SESSION = '11111111-1111-4111-8111-111111111111';
 const CLIENT = '33333333-3333-4333-8333-333333333333';
 const SOURCE = 'a'.repeat(40);
-const DIGEST = 'b'.repeat(64);
+const DIGEST = '33afff4311c76b6671101c9f2a15d2bbfe328c43dd7b539c0825b24ffa416be8';
+const FOLDER_DIGEST = 'd9defb50a560e02ee4ca2e46abccf903136b2f65f51a74fd24baaafc8bedcb0f';
 
 function descriptor(socketName) {
     return [
@@ -94,18 +95,40 @@ async function endpointFixture(t) {
 }
 
 function invokeRequestDigest(request) {
+    const argumentsValue = request.params.capabilityId === 'ae.project.folder.create'
+        ? {
+            idempotencyKey: request.params.arguments.idempotencyKey,
+            name: request.params.arguments.name,
+        }
+        : {};
     const canonical = {
         deadlineUnixMs: request.deadlineUnixMs,
         kind: request.kind,
         method: request.method,
         params: {
-            arguments: request.params.arguments,
+            arguments: argumentsValue,
             capabilityId: request.params.capabilityId,
             capabilityVersion: request.params.capabilityVersion,
         },
         requestId: request.requestId,
         sessionId: request.sessionId,
         wireVersion: request.wireVersion,
+    };
+    return crypto.createHash('sha256').update(JSON.stringify(canonical), 'utf8').digest('hex');
+}
+
+function folderPostconditionDigest(value) {
+    const canonical = {
+        capabilityId: 'ae.project.folder.create',
+        capabilityVersion: 1,
+        value: {
+            created: value.created,
+            folderItemId: value.folderItemId,
+            folderName: value.folderName,
+            itemCountAfter: value.itemCountAfter,
+            itemCountBefore: value.itemCountBefore,
+            parentItemId: value.parentItemId,
+        },
     };
     return crypto.createHash('sha256').update(JSON.stringify(canonical), 'utf8').digest('hex');
 }
@@ -175,13 +198,57 @@ function installProtocol(server, options) {
                         capabilitiesDigest: DIGEST,
                         queryDigest: capabilitiesRequestDigest(request),
                         nextCursor: null,
-                        items: [{
-                            id: 'ae.project.summary',
-                            version: 1,
-                            detail: 'full',
-                            contractDigest: 'd'.repeat(64),
-                        }],
+                        items: [
+                            {
+                                id: 'ae.project.summary',
+                                version: 1,
+                                detail: 'full',
+                                contractDigest: 'd'.repeat(64),
+                            },
+                            {
+                                id: 'ae.project.folder.create',
+                                version: 1,
+                                detail: 'full',
+                                contractDigest: FOLDER_DIGEST,
+                            },
+                        ],
                     };
+                } else if (request.params.capabilityId === 'ae.project.folder.create') {
+                    const value = {
+                        created: true,
+                        folderItemId: 17,
+                        folderName: request.params.arguments.name,
+                        parentItemId: 0,
+                        itemCountBefore: 4,
+                        itemCountAfter: 5,
+                    };
+                    result = {
+                        capabilityId: 'ae.project.folder.create',
+                        capabilityVersion: 1,
+                        engine: 'native-aegp',
+                        outcome: 'succeeded',
+                        evidence: {
+                            engine: 'native-aegp',
+                            hostInstanceId: HOST,
+                            sessionId: SESSION,
+                            requestId: request.requestId,
+                            capabilityId: 'ae.project.folder.create',
+                            capabilityVersion: 1,
+                            startedAtUnixMs: 1900000000000,
+                            completedAtUnixMs: 1900000000001,
+                            effect: 'committed',
+                            requestDigest: invokeRequestDigest(request),
+                            postcondition: {
+                                verified: true,
+                                kind: 'project-folder-created',
+                                algorithm: 'sha256-rfc8785-jcs-v1',
+                                digest: folderPostconditionDigest(value),
+                            },
+                            undo: { available: true, verified: true },
+                        },
+                        value,
+                    };
+                    if (input.mutateInvoke) input.mutateInvoke(result, request);
                 } else {
                     result = {
                         capabilityId: 'ae.project.summary',
@@ -219,7 +286,11 @@ function installProtocol(server, options) {
                     requestId: request.requestId,
                     method: request.method,
                     ok: responseError ? false : true,
-                    replayed: false,
+                    replayed: responseError
+                        ? input.errorReplayed === true
+                        : request.method === 'invoke'
+                            && request.params.capabilityId === 'ae.project.summary'
+                            && input.summaryReplayed === true,
                     ...(responseError ? { error: responseError } : { result }),
                 }));
             }
@@ -259,7 +330,7 @@ test('CEP client completes pairing, hello, capabilities, and verified native pro
     skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
 }, async (t) => {
     const fixture = await endpointFixture(t);
-    const protocol = installProtocol(fixture.server);
+    const protocol = installProtocol(fixture.server, { summaryReplayed: true });
     const deterministic = Buffer.from('00112233445566778899aabbccddeeff0011223344556677', 'hex');
     const client = createNativeAegpClient({
         runtime: { platform: 'darwin', arch: 'arm64' },
@@ -306,6 +377,7 @@ test('CEP client completes pairing, hello, capabilities, and verified native pro
         projectOpen: true, projectName: 'Fixture.aep', itemCount: 3,
     });
     assert.equal(summary.engine, 'native-aegp');
+    assert.equal(summary.replayed, true);
     assert.equal(summary.evidence.postcondition.verified, true);
     assert.equal(client.status().projectSummaryContractDigest, 'd'.repeat(64));
     assert.deepEqual(protocol.requests.map(function (request) { return request.method; }), [
@@ -316,6 +388,34 @@ test('CEP client completes pairing, hello, capabilities, and verified native pro
     assert.equal(protocol.requests[2].requestId, 'core-project-summary-1');
     assert.equal(protocol.requests[2].deadlineUnixMs, 1900000002000);
     assert.equal(summary.evidence.requestDigest, invokeRequestDigest(protocol.requests[2]));
+
+    const folder = await client.invoke({
+        requestId: 'core-folder-create-1',
+        capabilityId: 'ae.project.folder.create',
+        capabilityVersion: 1,
+        arguments: {
+            name: 'AI_😀_Folder',
+            idempotencyKey: 'folder-intent-0001',
+        },
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.equal(folder.replayed, false);
+    assert.deepEqual(folder.value, {
+        created: true,
+        folderItemId: 17,
+        folderName: 'AI_😀_Folder',
+        parentItemId: 0,
+        itemCountBefore: 4,
+        itemCountAfter: 5,
+    });
+    assert.deepEqual(folder.evidence.undo, { available: true, verified: true });
+    assert.equal(folder.evidence.requestDigest, invokeRequestDigest(protocol.requests[3]));
+    assert.deepEqual(protocol.requests[3].params.arguments, {
+        name: 'AI_😀_Folder', idempotencyKey: 'folder-intent-0001',
+    });
+    assert.deepEqual(protocol.requests.map(function (request) { return request.method; }), [
+        'hello', 'capabilities', 'invoke', 'invoke',
+    ]);
 });
 
 test('CEP client preserves the complete structured native error contract', {
@@ -390,12 +490,28 @@ for (const errorFixture of [
         expectedCode: 'NATIVE_CONTRACT_MISMATCH',
         expectedAction: 'refresh-capabilities',
     },
+    {
+        name: 'rejects replayed failure envelopes as a broker contract mismatch',
+        error: {
+            code: 'INVALID_REQUEST',
+            message: 'native request was invalid',
+            retryable: false,
+            sideEffect: 'not-started',
+            recovery: { action: 'none', hint: 'Do not retry this request.' },
+        },
+        errorReplayed: true,
+        expectedCode: 'NATIVE_CONTRACT_MISMATCH',
+        expectedAction: 'refresh-capabilities',
+    },
 ]) {
     test('CEP client ' + errorFixture.name, {
         skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
     }, async (t) => {
         const fixture = await endpointFixture(t);
-        const protocol = installProtocol(fixture.server, { invokeError: errorFixture.error });
+        const protocol = installProtocol(fixture.server, {
+            invokeError: errorFixture.error,
+            errorReplayed: errorFixture.errorReplayed,
+        });
         const client = createNativeAegpClient({
             runtime: { platform: 'darwin', arch: 'arm64' },
             runtimeRoot: fixture.root,

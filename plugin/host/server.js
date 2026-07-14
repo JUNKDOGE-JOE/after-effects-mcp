@@ -26,6 +26,8 @@ const blocked = new Set();
 // the x-ae-mcp-client header in plugin/panel/src/cep/diagnostics.js.
 const INTERNAL_CLIENT = 'panel-diagnostics/internal';
 const NATIVE_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
+const PROJECT_SUMMARY_CAPABILITY = 'ae.project.summary';
+const PROJECT_FOLDER_CREATE_CAPABILITY = 'ae.project.folder.create';
 
 function setRuntimeDependencies(dependencies) {
     if (!dependencies || typeof dependencies.express !== 'function') {
@@ -227,6 +229,30 @@ function exactBody(value, required, optional) {
 
 function validDeadline(value) {
     return Number.isSafeInteger(value) && value > 0;
+}
+
+function validProjectFolderCreateArguments(value) {
+    return exactBody(value, ['name', 'idempotencyKey'])
+        && typeof value.name === 'string' && value.name.length >= 1 && value.name.length <= 31
+        && !/[\u0000-\u001f\u007f]/.test(value.name)
+        && typeof value.idempotencyKey === 'string'
+        && value.idempotencyKey.length >= 16
+        && NATIVE_REQUEST_ID_PATTERN.test(value.idempotencyKey);
+}
+
+function validNativeInvokeBody(body) {
+    if (!exactBody(body, [
+        'requestId', 'capabilityId', 'capabilityVersion', 'arguments', 'deadlineUnixMs',
+    ])
+        || typeof body.requestId !== 'string' || !NATIVE_REQUEST_ID_PATTERN.test(body.requestId)
+        || !validDeadline(body.deadlineUnixMs)) return false;
+    if (body.capabilityId === PROJECT_SUMMARY_CAPABILITY && body.capabilityVersion === 1) {
+        return exactBody(body.arguments, []);
+    }
+    if (body.capabilityId === PROJECT_FOLDER_CREATE_CAPABILITY && body.capabilityVersion === 1) {
+        return validProjectFolderCreateArguments(body.arguments);
+    }
+    return false;
 }
 
 function nativeGateError(code, message, retryable, action, hint) {
@@ -604,15 +630,7 @@ function buildApp() {
         const clientLabel = nativeRequestGate(req, res);
         if (clientLabel === null) return;
         const body = req.body || {};
-        if (!exactBody(body, [
-            'requestId', 'capabilityId', 'capabilityVersion', 'arguments', 'deadlineUnixMs',
-        ])
-            || typeof body.requestId !== 'string' || !NATIVE_REQUEST_ID_PATTERN.test(body.requestId)
-            || body.capabilityId !== 'ae.project.summary'
-            || body.capabilityVersion !== 1
-            || !body.arguments || typeof body.arguments !== 'object'
-            || Array.isArray(body.arguments) || Object.keys(body.arguments).length !== 0
-            || !validDeadline(body.deadlineUnixMs)) {
+        if (!validNativeInvokeBody(body)) {
             return res.status(400).json({
                 ok: false,
                 error: nativeErrorPayload(Object.assign(

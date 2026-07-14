@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 import respx
-from httpx import Response
+from httpx import ReadTimeout, Response
 
 import ae_mcp_bridge
 from ae_mcp.backends.native import (
@@ -64,7 +64,10 @@ def _capabilities() -> dict:
 
 
 def _invoke_result() -> dict:
-    return _fixture("invoke-project-summary.json")["response"]["result"]
+    return {
+        **_fixture("invoke-project-summary.json")["response"]["result"],
+        "replayed": False,
+    }
 
 
 @pytest.mark.asyncio
@@ -119,6 +122,95 @@ async def test_native_backend_posts_lossless_typed_contract(token_file):
     )
     assert all(item["token"] == "native-test-token" for item in captured.values())
     assert all(item["client"] for item in captured.values())
+
+
+@pytest.mark.asyncio
+async def test_native_folder_write_preserves_key_replay_and_undo_evidence(token_file):
+    request = NativeInvokeRequest(
+        request_id="core-folder-create-1",
+        capability_id="ae.project.folder.create",
+        capability_version=1,
+        arguments={
+            "name": "AI Folder",
+            "idempotencyKey": "folder-intent-0001",
+        },
+        deadline_unix_ms=_DEADLINE,
+    )
+    captured: dict = {}
+    raw = {
+        "capabilityId": "ae.project.folder.create",
+        "capabilityVersion": 1,
+        "engine": "native-aegp",
+        "outcome": "succeeded",
+        "replayed": False,
+        "value": {
+            "created": True,
+            "folderItemId": 17,
+            "folderName": "AI Folder",
+            "parentItemId": 0,
+            "itemCountBefore": 4,
+            "itemCountAfter": 5,
+        },
+        "evidence": {
+            "engine": "native-aegp",
+            "hostInstanceId": _HOST,
+            "sessionId": _SESSION,
+            "requestId": request.request_id,
+            "capabilityId": request.capability_id,
+            "capabilityVersion": 1,
+            "startedAtUnixMs": _DEADLINE - 100,
+            "completedAtUnixMs": _DEADLINE - 50,
+            "effect": "committed",
+            "requestDigest": "b" * 64,
+            "postcondition": {
+                "verified": True,
+                "kind": "project-folder-created",
+                "algorithm": "sha256-rfc8785-jcs-v1",
+                "digest": "c" * 64,
+            },
+            "undo": {"available": True, "verified": True},
+        },
+    }
+
+    def respond(http_request):
+        captured.update(json.loads(http_request.content))
+        return Response(200, json={"ok": True, "result": raw})
+
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/invoke").mock(side_effect=respond)
+        result = await HttpBridge("http://127.0.0.1:11488").invoke(request)
+
+    assert captured == request.model_dump(mode="json", by_alias=True)
+    assert result.replayed is False
+    assert result.value["parentItemId"] == 0
+    assert result.evidence.effect == "committed"
+    assert result.evidence.undo is not None
+    assert result.evidence.undo.available is True
+    assert result.evidence.undo.group_id is None
+
+
+@pytest.mark.asyncio
+async def test_native_folder_transport_loss_preserves_side_effect_uncertainty(token_file):
+    request = NativeInvokeRequest(
+        request_id="core-folder-timeout",
+        capability_id="ae.project.folder.create",
+        capability_version=1,
+        arguments={
+            "name": "AI Folder",
+            "idempotencyKey": "folder-intent-0003",
+        },
+        deadline_unix_ms=_DEADLINE,
+    )
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/invoke").mock(side_effect=ReadTimeout("lost response"))
+        with pytest.raises(NativeBackendError) as raised:
+            await HttpBridge("http://127.0.0.1:11488").invoke(request)
+
+    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert raised.value.side_effect == "may-have-occurred"
+    assert raised.value.retryable is False
+    assert raised.value.recovery.action == "inspect-state"
+    assert raised.value.details == {"capabilityId": request.capability_id}
 
 
 @pytest.mark.asyncio

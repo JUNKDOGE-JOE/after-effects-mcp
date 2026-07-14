@@ -17,6 +17,9 @@ const SOCKET_PATTERN = /^s-[0-9a-f]{12}\.sock$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const TOKEN_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const PROJECT_SUMMARY_CAPABILITY = 'ae.project.summary';
+const PROJECT_FOLDER_CREATE_CAPABILITY = 'ae.project.folder.create';
+const PROJECT_FOLDER_CREATE_CONTRACT_DIGEST = 'd9defb50a560e02ee4ca2e46abccf903136b2f65f51a74fd24baaafc8bedcb0f';
 const NATIVE_WIRE_ERROR_CODES = new Set([
     'NATIVE_UNAVAILABLE', 'NATIVE_UNSUPPORTED', 'WIRE_VERSION_MISMATCH',
     'INVALID_REQUEST', 'INVALID_ARGUMENT', 'DUPLICATE_REQUEST',
@@ -48,6 +51,23 @@ function nativeContractMismatch(message, cause) {
                 action: 'refresh-capabilities',
                 hint: 'Refresh the authenticated native contract before retrying.',
             },
+        },
+    );
+}
+
+function nativeMutationUncertain(message, cause) {
+    return nativeError(
+        'POSSIBLY_SIDE_EFFECTING_FAILURE',
+        message,
+        false,
+        cause,
+        {
+            sideEffect: 'may-have-occurred',
+            recovery: {
+                action: 'inspect-state',
+                hint: 'Inspect the project folders and Undo stack before retrying.',
+            },
+            details: { capabilityId: PROJECT_FOLDER_CREATE_CAPABILITY },
         },
     );
 }
@@ -237,16 +257,45 @@ function projectSummaryPostconditionDigest(value) {
     });
 }
 
-// This client currently exposes one closed invoke contract. Construct the
+function projectFolderCreatePostconditionDigest(value) {
+    return sha256Canonical({
+        capabilityId: PROJECT_FOLDER_CREATE_CAPABILITY,
+        capabilityVersion: 1,
+        value: {
+            created: value.created,
+            folderItemId: value.folderItemId,
+            folderName: value.folderName,
+            itemCountAfter: value.itemCountAfter,
+            itemCountBefore: value.itemCountBefore,
+            parentItemId: value.parentItemId,
+        },
+    });
+}
+
+function validProjectFolderCreateArguments(value) {
+    return exactKeys(value, ['name', 'idempotencyKey'])
+        && typeof value.name === 'string' && value.name.length >= 1 && value.name.length <= 31
+        && !/[\u0000-\u001f\u007f]/.test(value.name)
+        && typeof value.idempotencyKey === 'string'
+        && value.idempotencyKey.length >= 16 && TOKEN_PATTERN.test(value.idempotencyKey);
+}
+
+// Construct the closed invoke request in canonical member order. Construct the
 // RFC 8785 member order explicitly so the broker can bind native evidence to
 // the exact request it sent instead of trusting a digest-shaped string.
-function projectSummaryRequestDigest(request) {
+function invokeRequestDigest(request) {
+    const argumentsValue = request.params.capabilityId === PROJECT_FOLDER_CREATE_CAPABILITY
+        ? {
+            idempotencyKey: request.params.arguments.idempotencyKey,
+            name: request.params.arguments.name,
+        }
+        : {};
     return sha256Canonical({
         deadlineUnixMs: request.deadlineUnixMs,
         kind: request.kind,
         method: request.method,
         params: {
-            arguments: request.params.arguments,
+            arguments: argumentsValue,
             capabilityId: request.params.capabilityId,
             capabilityVersion: request.params.capabilityVersion,
         },
@@ -280,6 +329,7 @@ function createNativeAegpClient(options) {
     let sessionGeneration = 0;
     let capabilitiesDigest = null;
     let projectSummaryContractDigest = null;
+    let projectFolderCreateContractDigest = null;
     let helloIdentity = null;
     let nextRequest = 1;
     let inputBuffer = Buffer.alloc(0);
@@ -290,6 +340,12 @@ function createNativeAegpClient(options) {
     let pairingPromise = null;
     let connectedPromise = null;
     const pendingRequests = new Map();
+
+    function pendingTransportFailure(pending, error, message) {
+        return pending && pending.mutating
+            ? nativeMutationUncertain(message, error)
+            : error;
+    }
 
     function fail(error) {
         const protocolCodes = new Set([
@@ -305,7 +361,11 @@ function createNativeAegpClient(options) {
         connectedReject = null;
         for (const pending of pendingRequests.values()) {
             clearTimeout(pending.timer);
-            pending.reject(failure);
+            pending.reject(pendingTransportFailure(
+                pending,
+                failure,
+                'Native AEGP connection failed after mutation dispatch.',
+            ));
         }
         pendingRequests.clear();
         if (state !== 'closed') state = 'disconnected';
@@ -313,6 +373,7 @@ function createNativeAegpClient(options) {
         sessionGeneration = 0;
         capabilitiesDigest = null;
         projectSummaryContractDigest = null;
+        projectFolderCreateContractDigest = null;
         helloIdentity = null;
         if (socket) {
             const current = socket;
@@ -345,8 +406,12 @@ function createNativeAegpClient(options) {
         }
         if (response.kind === 'event') return;
         const pending = pendingRequests.get(response.requestId);
+        const replayValid = pending?.method === 'invoke' && response.ok === true
+            ? typeof response.replayed === 'boolean'
+            : response.replayed === false;
         if (!pending || response.wireVersion !== 1 || response.kind !== 'response'
             || response.method !== pending.method
+            || !replayValid
             || (pending.method !== 'hello' && response.sessionId !== sessionId)) {
             throw nativeContractMismatch('native AEGP response did not match an active request');
         }
@@ -354,15 +419,19 @@ function createNativeAegpClient(options) {
             const evidence = response.result?.evidence;
             if (evidence?.requestId !== response.requestId
                 || evidence?.sessionId !== sessionId
-                || evidence?.capabilityId !== 'ae.project.summary'
-                || evidence?.capabilityVersion !== 1
+                || evidence?.capabilityId !== pending.capabilityId
+                || evidence?.capabilityVersion !== pending.capabilityVersion
                 || evidence?.requestDigest !== pending.requestDigest) {
                 throw nativeContractMismatch('native AEGP evidence did not match its response envelope');
             }
         }
         pendingRequests.delete(response.requestId);
         clearTimeout(pending.timer);
-        if (response.ok === true) pending.resolve(response.result);
+        if (response.ok === true) {
+            pending.resolve(pending.method === 'invoke'
+                ? { ...response.result, replayed: response.replayed }
+                : response.result);
+        }
         else pending.reject(responseError(response));
     }
 
@@ -400,15 +469,28 @@ function createNativeAegpClient(options) {
         const request = { wireVersion: 1, kind: 'request', requestId, method, params };
         if (method !== 'hello') request.sessionId = sessionId;
         if (deadlineUnixMs !== undefined) request.deadlineUnixMs = deadlineUnixMs;
-        const requestDigest = method === 'invoke' ? projectSummaryRequestDigest(request) : null;
+        const requestDigest = method === 'invoke' ? invokeRequestDigest(request) : null;
+        const mutating = method === 'invoke'
+            && params.capabilityId === PROJECT_FOLDER_CREATE_CAPABILITY;
         return new Promise(function (resolve, reject) {
             const remainingMs = deadlineUnixMs === undefined
                 ? requestTimeoutMs : Math.max(1, deadlineUnixMs - now());
             const timer = setTimeout(function () {
                 pendingRequests.delete(requestId);
-                reject(nativeError('DEADLINE_EXCEEDED', 'native AEGP request timed out', true));
+                reject(mutating
+                    ? nativeMutationUncertain('Native mutation response timed out after dispatch.')
+                    : nativeError('DEADLINE_EXCEEDED', 'native AEGP request timed out', true));
             }, Math.min(requestTimeoutMs, remainingMs));
-            pendingRequests.set(requestId, { method, requestDigest, resolve, reject, timer });
+            pendingRequests.set(requestId, {
+                method,
+                requestDigest,
+                capabilityId: method === 'invoke' ? params.capabilityId : null,
+                capabilityVersion: method === 'invoke' ? params.capabilityVersion : null,
+                mutating,
+                resolve,
+                reject,
+                timer,
+            });
             try {
                 socket.write(encodeFrame(request), function (error) {
                     if (!error) return;
@@ -416,12 +498,20 @@ function createNativeAegpClient(options) {
                     if (!pending) return;
                     pendingRequests.delete(requestId);
                     clearTimeout(pending.timer);
-                    pending.reject(nativeError('NATIVE_UNAVAILABLE', 'native AEGP request write failed', true, error));
+                    pending.reject(pendingTransportFailure(
+                        pending,
+                        nativeError('NATIVE_UNAVAILABLE', 'native AEGP request write failed', true, error),
+                        'Native mutation transport write failed after dispatch may have begun.',
+                    ));
                 });
             } catch (cause) {
                 pendingRequests.delete(requestId);
                 clearTimeout(timer);
-                reject(nativeError('NATIVE_UNAVAILABLE', 'native AEGP request write failed', true, cause));
+                reject(mutating
+                    ? nativeMutationUncertain(
+                        'Native mutation transport write failed after dispatch may have begun.', cause,
+                    )
+                    : nativeError('NATIVE_UNAVAILABLE', 'native AEGP request write failed', true, cause));
             }
         });
     }
@@ -628,34 +718,58 @@ function createNativeAegpClient(options) {
         const result = await send('capabilities', params, {
             deadlineUnixMs: call.deadlineUnixMs,
         });
-        const item = Array.isArray(result?.items)
-            ? result.items.find(function (candidate) { return candidate?.id === 'ae.project.summary'; })
+        const summaryItem = Array.isArray(result?.items)
+            ? result.items.find(function (candidate) { return candidate?.id === PROJECT_SUMMARY_CAPABILITY; })
             : null;
+        const folderItem = Array.isArray(result?.items)
+            ? result.items.find(function (candidate) { return candidate?.id === PROJECT_FOLDER_CREATE_CAPABILITY; })
+            : null;
+        const requiresSummary = ids === undefined || ids.includes(PROJECT_SUMMARY_CAPABILITY);
+        const requiresFolder = ids === undefined || ids.includes(PROJECT_FOLDER_CREATE_CAPABILITY);
         if (!exactKeys(result, ['detail', 'items', 'nextCursor', 'queryDigest', 'capabilitiesDigest'])
             || result.detail !== requestedDetail || result.nextCursor !== null
             || result.queryDigest !== capabilitiesQueryDigest(sessionId, ids, requestedDetail, limit)
             || result.capabilitiesDigest !== capabilitiesDigest
-            || (ids === undefined && !item)
-            || (item && (item.version !== 1 || item.detail !== requestedDetail
-                || (requestedDetail === 'full' && !SHA256_PATTERN.test(item.contractDigest))))) {
+            || (requiresSummary && !summaryItem) || (requiresFolder && !folderItem)
+            || (summaryItem && (summaryItem.version !== 1 || summaryItem.detail !== requestedDetail
+                || (requestedDetail === 'full' && !SHA256_PATTERN.test(summaryItem.contractDigest))))
+            || (folderItem && (folderItem.version !== 1 || folderItem.detail !== requestedDetail
+                || (requestedDetail === 'full'
+                    && folderItem.contractDigest !== PROJECT_FOLDER_CREATE_CONTRACT_DIGEST)))) {
             throw nativeContractMismatch('native capabilities result was malformed');
         }
-        if (requestedDetail === 'full' && item) projectSummaryContractDigest = item.contractDigest;
+        if (requestedDetail === 'full' && summaryItem) {
+            projectSummaryContractDigest = summaryItem.contractDigest;
+        }
+        if (requestedDetail === 'full' && folderItem) {
+            projectFolderCreateContractDigest = folderItem.contractDigest;
+        }
         return result;
     }
 
     async function invoke(options) {
         const call = options || {};
+        const summaryCall = call.capabilityId === PROJECT_SUMMARY_CAPABILITY
+            && call.capabilityVersion === 1
+            && call.arguments && typeof call.arguments === 'object'
+            && !Array.isArray(call.arguments) && Object.keys(call.arguments).length === 0;
+        const folderCall = call.capabilityId === PROJECT_FOLDER_CREATE_CAPABILITY
+            && call.capabilityVersion === 1
+            && validProjectFolderCreateArguments(call.arguments);
         if (!exactKeys(call, [
             'requestId', 'capabilityId', 'capabilityVersion', 'arguments', 'deadlineUnixMs',
         ]) || !TOKEN_PATTERN.test(call.requestId || '')
-            || call.capabilityId !== 'ae.project.summary' || call.capabilityVersion !== 1
-            || !call.arguments || typeof call.arguments !== 'object' || Array.isArray(call.arguments)
-            || Object.keys(call.arguments).length !== 0
+            || (!summaryCall && !folderCall)
             || !Number.isSafeInteger(call.deadlineUnixMs) || call.deadlineUnixMs <= 0) {
             throw nativeError('INVALID_ARGUMENT', 'native invoke request is invalid', false);
         }
         if (state !== 'connected') await waitUntilConnected(call.deadlineUnixMs);
+        if (folderCall
+            && projectFolderCreateContractDigest !== PROJECT_FOLDER_CREATE_CONTRACT_DIGEST) {
+            throw nativeContractMismatch(
+                'native project-folder capability was not verified before dispatch',
+            );
+        }
         const result = await send('invoke', {
             capabilityId: call.capabilityId,
             capabilityVersion: call.capabilityVersion,
@@ -663,25 +777,58 @@ function createNativeAegpClient(options) {
         }, { requestId: call.requestId, deadlineUnixMs: call.deadlineUnixMs });
         const value = result?.value;
         const evidence = result?.evidence;
-        if (result?.capabilityId !== 'ae.project.summary' || result?.capabilityVersion !== 1
-            || result?.engine !== 'native-aegp' || result?.outcome !== 'succeeded'
-            || evidence?.engine !== 'native-aegp' || evidence?.hostInstanceId !== endpoint.hostInstanceId
-            || evidence?.sessionId !== sessionId || evidence?.effect !== 'none'
-            || !TOKEN_PATTERN.test(evidence?.requestId || '')
-            || !SHA256_PATTERN.test(evidence?.requestDigest || '')
-            || !Number.isSafeInteger(evidence?.startedAtUnixMs) || evidence.startedAtUnixMs <= 0
-            || !Number.isSafeInteger(evidence?.completedAtUnixMs)
-            || evidence.completedAtUnixMs < evidence.startedAtUnixMs
-            || evidence?.postcondition?.verified !== true
+        const commonValid = result?.capabilityId === call.capabilityId
+            && result?.capabilityVersion === call.capabilityVersion
+            && result?.engine === 'native-aegp' && result?.outcome === 'succeeded'
+            && evidence?.engine === 'native-aegp'
+            && evidence?.hostInstanceId === endpoint.hostInstanceId;
+        const evidenceValid = evidence?.sessionId === sessionId
+            && evidence?.requestId === call.requestId
+            && evidence?.capabilityId === call.capabilityId
+            && evidence?.capabilityVersion === call.capabilityVersion
+            && SHA256_PATTERN.test(evidence?.requestDigest || '')
+            && Number.isSafeInteger(evidence?.startedAtUnixMs) && evidence.startedAtUnixMs > 0
+            && Number.isSafeInteger(evidence?.completedAtUnixMs)
+            && evidence.completedAtUnixMs >= evidence.startedAtUnixMs
+            && evidence?.postcondition?.verified === true
+            && evidence.postcondition.algorithm === 'sha256-rfc8785-jcs-v1'
+            && SHA256_PATTERN.test(evidence.postcondition.digest || '');
+        if (!commonValid || !evidenceValid) {
+            if (folderCall) {
+                throw nativeMutationUncertain('Native project-folder result lacked verified AEGP evidence.');
+            }
+            throw nativeContractMismatch('native project summary result lacked verified AEGP evidence');
+        }
+        if (summaryCall && (evidence.effect !== 'none'
+            || evidence.undo !== undefined
             || evidence.postcondition.kind !== 'project-summary'
-            || evidence.postcondition.algorithm !== 'sha256-rfc8785-jcs-v1'
-            || !SHA256_PATTERN.test(evidence.postcondition.digest || '')
             || typeof value?.projectOpen !== 'boolean' || typeof value?.projectName !== 'string'
             || value.projectName.length > 1024
             || !Number.isSafeInteger(value?.itemCount) || value.itemCount < 0
             || !SHA256_PATTERN.test(projectSummaryContractDigest || '')
-            || evidence.postcondition.digest !== projectSummaryPostconditionDigest(value)) {
+            || evidence.postcondition.digest !== projectSummaryPostconditionDigest(value))) {
             throw nativeContractMismatch('native project summary result lacked verified AEGP evidence');
+        }
+        if (folderCall && (result.replayed !== false
+            || evidence.effect !== 'committed'
+            || evidence.postcondition.kind !== 'project-folder-created'
+            || !exactKeys(evidence.undo, ['available', 'verified'])
+            || evidence.undo.available !== true || evidence.undo.verified !== true
+            || !exactKeys(value, [
+                'created', 'folderItemId', 'folderName', 'parentItemId',
+                'itemCountBefore', 'itemCountAfter',
+            ])
+            || value.created !== true
+            || !Number.isSafeInteger(value.folderItemId) || value.folderItemId < 1
+            || typeof value.folderName !== 'string' || value.folderName !== call.arguments.name
+            || value.folderName.length < 1 || value.folderName.length > 31
+            || !Number.isSafeInteger(value.parentItemId) || value.parentItemId < 0
+            || !Number.isSafeInteger(value.itemCountBefore) || value.itemCountBefore < 0
+            || !Number.isSafeInteger(value.itemCountAfter)
+            || value.itemCountAfter !== value.itemCountBefore + 1
+            || projectFolderCreateContractDigest !== PROJECT_FOLDER_CREATE_CONTRACT_DIGEST
+            || evidence.postcondition.digest !== projectFolderCreatePostconditionDigest(value))) {
+            throw nativeMutationUncertain('Native project-folder result failed post-dispatch verification.');
         }
         return result;
     }
@@ -720,6 +867,7 @@ function createNativeAegpClient(options) {
                 sessionGeneration: sessionGeneration || null,
                 capabilitiesDigest,
                 projectSummaryContractDigest,
+                projectFolderCreateContractDigest,
             });
         },
     });
