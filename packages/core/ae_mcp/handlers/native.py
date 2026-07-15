@@ -15,6 +15,7 @@ from ae_mcp.backends.native import (
     NativeInvokeBackend,
     NativeRecovery,
     invoke_composition_layers_list,
+    invoke_composition_time_read,
     invoke_layer_properties_list,
     invoke_project_bit_depth_read,
     invoke_project_bit_depth_set,
@@ -29,6 +30,7 @@ _PROJECT_BIT_DEPTH_READ_TIMEOUT_MS = 10_000
 _PROJECT_BIT_DEPTH_SET_TIMEOUT_MS = 10_000
 _PROJECT_ITEMS_LIST_TIMEOUT_MS = 10_000
 _COMPOSITION_LAYERS_LIST_TIMEOUT_MS = 10_000
+_COMPOSITION_TIME_READ_TIMEOUT_MS = 10_000
 _LAYER_PROPERTIES_LIST_TIMEOUT_MS = 10_000
 
 
@@ -241,6 +243,38 @@ async def _run_list_composition_layers(
             ctx,
             _call(),
             start_msg="ae.listCompositionLayers native AEGP read...",
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        raise
+    return _native_read_response(execution)
+
+
+async def _run_get_composition_time(
+    args: schemas.AeGetCompositionTimeArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _COMPOSITION_TIME_READ_TIMEOUT_MS
+    request_id = f"mcp-{uuid.uuid4().hex}"
+    composition_locator = args.composition_locator.model_dump(
+        mode="json", by_alias=True
+    )
+
+    async def _call():
+        return await invoke_composition_time_read(
+            _backend(),
+            request_id=request_id,
+            composition_locator=composition_locator,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    try:
+        execution = await progress.with_heartbeat(
+            ctx,
+            _call(),
+            start_msg="ae.getCompositionTime native AEGP read...",
         )
     except asyncio.CancelledError:
         cancellation.cancel()
@@ -476,6 +510,11 @@ register(
     _run_list_composition_layers,
 )
 register(
+    "ae.getCompositionTime",
+    schemas.AeGetCompositionTimeArgs,
+    _run_get_composition_time,
+)
+register(
     "ae.listLayerProperties",
     schemas.AeListLayerPropertiesArgs,
     _run_list_layer_properties,
@@ -493,6 +532,7 @@ register(
 
 
 __all__ = [
+    "_run_get_composition_time",
     "_run_get_project_bit_depth",
     "_run_list_composition_layers",
     "_run_list_layer_properties",

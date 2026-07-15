@@ -25,6 +25,8 @@ import {
   postconditionDigest,
   compositionLayersListContractDigest,
   compositionLayersListDescriptor,
+  compositionTimeReadContractDigest,
+  compositionTimeReadDescriptor,
   layerPropertiesListContractDigest,
   layerPropertiesListDescriptor,
   projectBitDepthReadDescriptor,
@@ -210,6 +212,8 @@ test('all checked-in vectors are synthetic and contain no host or Adobe suite cl
     'invoke-project-bit-depth-set.json',
     'invoke-project-items-list.json',
     'invoke-composition-layers-list.json',
+    'invoke-composition-time-read.json',
+    'invoke-layer-properties-list.json',
     'cancel.json',
     'errors.json',
     'negative-corpus.json',
@@ -242,6 +246,8 @@ test('golden requests, events, responses, and bound error policies validate', ()
     'invoke-project-bit-depth-set.json',
     'invoke-project-items-list.json',
     'invoke-composition-layers-list.json',
+    'invoke-composition-time-read.json',
+    'invoke-layer-properties-list.json',
     'cancel.json',
   ]) {
     const fixture = golden(name);
@@ -443,6 +449,8 @@ test('schema shape and composite request validation have an explicit differentia
     golden('invoke-project-bit-depth-set.json').request,
     golden('invoke-project-items-list.json').request,
     golden('invoke-composition-layers-list.json').request,
+    golden('invoke-composition-time-read.json').request,
+    golden('invoke-layer-properties-list.json').request,
     golden('cancel.json').request,
   ];
   for (const request of validRequests) {
@@ -675,6 +683,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
   const bitDepthSetDescriptor = projectBitDepthSetDescriptor(schema);
   const projectItemsDescriptor = projectItemsListDescriptor(schema);
   const compositionLayersDescriptor = compositionLayersListDescriptor(schema);
+  const compositionTimeDescriptor = compositionTimeReadDescriptor(schema);
   const layerPropertiesDescriptor = layerPropertiesListDescriptor(schema);
   const containsRef = (value) => {
     if (Array.isArray(value)) return value.some(containsRef);
@@ -708,6 +717,8 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     '64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e');
   assert.equal(compositionLayersDescriptor.contractDigest,
     '3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75');
+  assert.equal(compositionTimeDescriptor.contractDigest,
+    'fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd');
   assert.equal(layerPropertiesDescriptor.contractDigest,
     'a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba');
   assert.equal(capabilityDigest([
@@ -716,8 +727,9 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     bitDepthSetDescriptor,
     projectItemsDescriptor,
     compositionLayersDescriptor,
+    compositionTimeDescriptor,
     layerPropertiesDescriptor,
-  ]), '25d8d4b950ce74184855c780d90686b3f52b3f90302c9b065e3c45a5574a22c9');
+  ]), '781a620eac1310fb85dc0ac74ae9655fdab0512d370e1039074cd0ff2fb4d7fb');
   assert.ok(Buffer.byteLength(canonicalize(descriptor), 'utf8') < LIMITS.maxFrameBytes);
 });
 
@@ -726,7 +738,7 @@ test('v1 capability discovery is single-page, fail-closed, and never replayed', 
   const exchange = golden('capabilities.json');
   assert.equal(exchange.request.params.limit, 100);
   assert.equal(Object.hasOwn(exchange.request.params, 'ids'), false);
-  assert.equal(exchange.response.result.items.length, 6);
+  assert.equal(exchange.response.result.items.length, 7);
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, exchange.response, schema), true);
 
   const zeroLimit = structuredClone(exchange.request);
@@ -1214,10 +1226,90 @@ test('bit-depth invoke vectors bind native read and undoable set semantics', () 
   assert.equal(validateTranscript(setContext, set.request, [...set.events, wrongTarget]), false);
 });
 
+test('composition time read binds one locator to an exact reduced rational', () => {
+  const fixture = golden('invoke-composition-time-read.json');
+  const descriptor = compositionTimeReadDescriptor(schema);
+  const context = {
+    hello: golden('hello.json'),
+    descriptor,
+    schema,
+    brokerSendUnixMs: 1900000000000,
+    effectiveDeadlineUnixMs: fixture.request.deadlineUnixMs,
+    terminalObservedUnixMs: 1900000000030,
+  };
+  assert.equal(descriptor.contractDigest, compositionTimeReadContractDigest(schema));
+  assert.equal(descriptor.contractDigest,
+    'fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd');
+  assert.deepEqual(descriptor.inputSchema.required, ['compositionLocator']);
+  assert.deepEqual(descriptor.resultSchema.required, ['compositionLocator', 'currentTime']);
+  assert.equal(Object.hasOwn(descriptor.resultSchema.properties, 'compositionName'), false);
+  assert.equal(fixture.response.result.evidence.requestDigest, sha256Jcs(fixture.request));
+  assert.equal(fixture.response.result.evidence.postcondition.digest,
+    postconditionDigest(fixture.response.result));
+  assert.equal(validateTranscript(
+    context, fixture.request, [...fixture.events, fixture.response],
+  ), true);
+
+  for (const mutate of [
+    (request) => { delete request.params.arguments.compositionLocator; },
+    (request) => { request.params.arguments.compositionLocator.kind = 'layer'; },
+    (request) => { request.params.arguments.extra = true; },
+  ]) {
+    const malformed = structuredClone(fixture.request);
+    mutate(malformed);
+    assert.equal(schemaAccepts(schema.$defs.request, malformed), false);
+    assert.deepEqual(classifyRequest(malformed), { ok: false, errorCode: 'INVALID_ARGUMENT' });
+  }
+
+  const int32Minimum = structuredClone(fixture.response);
+  int32Minimum.result.value.currentTime = {
+    value: -2147483648,
+    scale: 4294967295,
+    secondsRational: '-2147483648/4294967295',
+  };
+  int32Minimum.result.evidence.postcondition.digest = postconditionDigest(int32Minimum.result);
+  assert.equal(validateTranscript(
+    context, fixture.request, [...fixture.events, int32Minimum],
+  ), true, 'INT32_MIN is reduced without signed-overflow ambiguity');
+
+  for (const mutate of [
+    (value) => { value.currentTime.value = 3004; },
+    (value) => { value.currentTime.scale = 2000; },
+    (value) => { value.currentTime.secondsRational = '6006/2000'; },
+    (value) => { value.currentTime.secondsRational = '3003/1'; },
+    (value) => { value.currentTime.value = 2147483648; },
+    (value) => { value.currentTime.value = -2147483649; },
+    (value) => { value.currentTime.scale = 0; },
+    (value) => { value.currentTime.scale = 4294967296; },
+    (value) => { value.currentTime.secondsRational = '-0'; },
+    (value) => { value.compositionName = 'SYNTHETIC_COMPOSITION'; },
+  ]) {
+    const malformed = structuredClone(fixture.response);
+    mutate(malformed.result.value);
+    malformed.result.evidence.postcondition.digest = postconditionDigest(malformed.result);
+    assert.equal(validateTranscript(
+      context, fixture.request, [...fixture.events, malformed],
+    ), false);
+  }
+
+  const stale = structuredClone(golden('errors.json').responses.staleLocator);
+  stale.requestId = fixture.request.requestId;
+  stale.error.details.capabilityId = fixture.request.params.capabilityId;
+  stale.error.details.field = 'params.arguments.compositionLocator';
+  assert.equal(validateFailureExchange(
+    golden('hello.json'), fixture.request, stale, descriptor, schema,
+  ), true);
+  stale.error.details.field = 'params.arguments.layerLocator';
+  assert.equal(validateFailureExchange(
+    golden('hello.json'), fixture.request, stale, descriptor, schema,
+  ), false);
+});
+
 test('native project navigation vectors bind bounded pagination and locator provenance', () => {
   for (const [name, descriptor] of [
     ['invoke-project-items-list.json', projectItemsListDescriptor(schema)],
     ['invoke-composition-layers-list.json', compositionLayersListDescriptor(schema)],
+    ['invoke-composition-time-read.json', compositionTimeReadDescriptor(schema)],
     ['invoke-layer-properties-list.json', layerPropertiesListDescriptor(schema)],
   ]) {
     const fixture = golden(name);

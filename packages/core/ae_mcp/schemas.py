@@ -187,6 +187,21 @@ class AeListCompositionLayersArgs(_StrictModel):
     )
 
 
+class AeGetCompositionTimeArgs(_StrictModel):
+    """ae.getCompositionTime — read exact composition time through native AEGP.
+
+    Copy composition_locator from ae_listProjectItems. This native-only read
+    never accepts a composition name/id and never falls back to JSX.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    composition_locator: AeCompositionLocator = Field(
+        ...,
+        description="Composition locator returned by ae_listProjectItems.",
+    )
+
+
 class AeListLayerPropertiesArgs(_StrictModel):
     """ae.listLayerProperties — list direct native properties on a layer/group.
 
@@ -783,6 +798,7 @@ SCHEMAS = {
     "ae.setProjectBitDepth": AeSetProjectBitDepthArgs,
     "ae.listProjectItems": AeListProjectItemsArgs,
     "ae.listCompositionLayers": AeListCompositionLayersArgs,
+    "ae.getCompositionTime": AeGetCompositionTimeArgs,
     "ae.listLayerProperties": AeListLayerPropertiesArgs,
     "ae.layers": AeLayersArgs,
     "ae.readProps": AeReadPropsArgs,
@@ -828,4 +844,4 @@ SCHEMAS = {
     "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 50, f"expected 50 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 51, f"expected 51 verbs, got {len(SCHEMAS)}"

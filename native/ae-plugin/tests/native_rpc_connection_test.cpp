@@ -30,6 +30,7 @@ using aemcp::native::HostApi;
 using aemcp::native::HostBitDepthReadResult;
 using aemcp::native::HostBitDepthWriteResult;
 using aemcp::native::HostCompositionLayersResult;
+using aemcp::native::HostCompositionTimeResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostLayerPropertiesResult;
 using aemcp::native::HostReadResult;
@@ -153,6 +154,15 @@ class FakeHost final : public HostApi {
     return HostCompositionLayersResult::success(std::move(page));
   }
 
+  [[nodiscard]] HostCompositionTimeResult read_composition_time(
+      const aemcp::native::CompositionTimeQuery& query, TimePoint) override {
+    ++composition_time_calls;
+    aemcp::native::CompositionTimeRead result;
+    result.composition_locator = query.composition_locator;
+    result.current_time = {3003, 1000, "3003/1000"};
+    return HostCompositionTimeResult::success(std::move(result));
+  }
+
   [[nodiscard]] HostLayerPropertiesResult list_layer_properties(
       const aemcp::native::LayerPropertiesQuery& query, TimePoint) override {
     ++layer_properties_calls;
@@ -209,6 +219,7 @@ class FakeHost final : public HostApi {
   int write_calls{0};
   int project_items_calls{0};
   int composition_layers_calls{0};
+  int composition_time_calls{0};
   int layer_properties_calls{0};
 };
 
@@ -293,12 +304,13 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      "25d8d4b950ce74184855c780d90686b3f52b3f90302c9b065e3c45a5574a22c9",
+      "781a620eac1310fb85dc0ac74ae9655fdab0512d370e1039074cd0ff2fb4d7fb",
       "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
       "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
       "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
       "64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e",
       "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
+      "fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd",
       "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba",
   };
 }
@@ -467,6 +479,16 @@ std::string composition_layers_invoke_json(std::string_view request_id) {
       + ",\"offset\":0,\"limit\":25}}}";
 }
 
+std::string composition_time_invoke_json(std::string_view request_id) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.composition.time.read\","
+        "\"capabilityVersion\":1,\"arguments\":{\"compositionLocator\":"
+      + graph_locator_json("composition", "66666666-6666-4666-8666-666666666666")
+      + "}}}";
+}
+
 std::string layer_properties_invoke_json(std::string_view request_id) {
   return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
       + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
@@ -587,6 +609,18 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
       "\"compositionLocator\"", "composition-layers capabilities response");
 
   send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-composition-time", "ae.composition.time.read"));
+  const std::string composition_time_capabilities = read_body(sockets[0]);
+  require_contains(composition_time_capabilities,
+      "\"id\":\"ae.composition.time.read\"",
+      "composition-time capabilities response");
+  require_contains(composition_time_capabilities,
+      "\"contractDigest\":\"fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd\"",
+      "composition-time capabilities response");
+  require_contains(composition_time_capabilities,
+      "\"secondsRational\"", "composition-time capabilities response");
+
+  send_json(sockets[0], bit_depth_capabilities_json(
       "capabilities-layer-properties", "ae.layer.properties.list"));
   const std::string layer_properties_capabilities = read_body(sockets[0]);
   require_contains(layer_properties_capabilities,
@@ -705,6 +739,37 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
           && composition_layers_terminal.postcondition_digest.size() == 64
           && host.composition_layers_calls == 1,
       "composition-layers terminal evidence was not verified");
+
+  send_json(sockets[0], composition_time_invoke_json("invoke-composition-time"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "composition-time progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued composition-time invoke");
+  const auto composition_time_batch = dispatcher.drain(host);
+  require(composition_time_batch.completions.size() == 1
+          && composition_time_batch.completions[0].ok,
+      "owner dispatcher did not produce the composition-time result");
+  const std::string composition_time = read_body(sockets[0]);
+  require_contains(composition_time,
+      "\"capabilityId\":\"ae.composition.time.read\"",
+      "composition-time response");
+  require_contains(composition_time,
+      "\"kind\":\"composition-time-read\"", "composition-time response");
+  require_contains(composition_time,
+      "\"currentTime\":{\"scale\":1000,\"secondsRational\":\"3003/1000\","
+      "\"value\":3003}",
+      "composition-time response");
+  wait_until([&] {
+    return !observer.terminal("invoke-composition-time").request_id.empty();
+  }, "composition-time terminal audit");
+  const TerminalRecord composition_time_terminal =
+      observer.terminal("invoke-composition-time");
+  require(composition_time_terminal.ok
+          && composition_time_terminal.request_digest.size() == 64
+          && composition_time_terminal.postcondition_digest
+              == "809ed0109922812d59208d5f366714f6005abb600f6a1ef5f71d4bc5adc55cef"
+          && host.composition_time_calls == 1,
+      "composition-time terminal evidence was not deterministic and verified");
 
   send_json(sockets[0], layer_properties_invoke_json("invoke-layer-properties"));
   require_contains(read_body(sockets[0]), "\"event\":\"progress\"",

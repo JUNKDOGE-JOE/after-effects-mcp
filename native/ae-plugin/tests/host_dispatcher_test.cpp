@@ -6,6 +6,7 @@
 #include <condition_variable>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -25,6 +26,7 @@ using aemcp::native::HostApi;
 using aemcp::native::HostBitDepthReadResult;
 using aemcp::native::HostBitDepthWriteResult;
 using aemcp::native::HostCompositionLayersResult;
+using aemcp::native::HostCompositionTimeResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostProjectItemsResult;
 using aemcp::native::HostReadResult;
@@ -37,9 +39,11 @@ using aemcp::native::TimePoint;
 using aemcp::native::kProjectBitDepthReadCapability;
 using aemcp::native::kProjectBitDepthSetCapability;
 using aemcp::native::kCompositionLayersListCapability;
+using aemcp::native::kCompositionTimeReadCapability;
 using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kProjectSummaryCapability;
 using aemcp::native::json_encoded_string_size;
+using aemcp::native::canonical_seconds_rational;
 using aemcp::native::select_effective_layer_name;
 
 [[noreturn]] void fail(const std::string& message) {
@@ -89,6 +93,27 @@ void effective_layer_name_uses_sdk_source_fallback() {
   require(!select_effective_layer_name(
               std::nullopt, std::nullopt, std::nullopt).has_value(),
       "missing layer, source, and source Item handles produced a name");
+}
+
+void composition_time_rational_is_exact_and_overflow_safe() {
+  require(canonical_seconds_rational(3003, 1000) == "3003/1000",
+      "composition time rational changed an already reduced value");
+  require(canonical_seconds_rational(-6, 4) == "-3/2"
+          && canonical_seconds_rational(12, 4) == "3"
+          && canonical_seconds_rational(0, std::numeric_limits<std::uint32_t>::max())
+              == "0",
+      "composition time rational was not canonical");
+  require(canonical_seconds_rational(
+              std::numeric_limits<std::int32_t>::min(), 2)
+          == "-1073741824",
+      "INT32_MIN composition time overflowed during reduction");
+  bool rejected_zero_scale = false;
+  try {
+    (void)canonical_seconds_rational(1, 0);
+  } catch (const std::invalid_argument&) {
+    rejected_zero_scale = true;
+  }
+  require(rejected_zero_scale, "zero composition time scale was accepted");
 }
 
 void project_epoch_fences_reused_aegp_handles() {
@@ -236,6 +261,32 @@ class FakeHost final : public HostApi {
     return HostCompositionLayersResult::success(std::move(page));
   }
 
+  [[nodiscard]] HostCompositionTimeResult read_composition_time(
+      const aemcp::native::CompositionTimeQuery& query,
+      TimePoint work_deadline) override {
+    require(std::this_thread::get_id() == expected_thread_,
+        "composition time HostApi ran off owner thread");
+    observed_deadline = work_deadline;
+    observed_time_query = query;
+    ++composition_time_calls;
+    if (!composition_time_error_code.empty()) {
+      return HostCompositionTimeResult::failure(
+          composition_time_error_code,
+          "fake composition time error",
+          composition_time_error_field);
+    }
+    aemcp::native::CompositionTimeRead result;
+    result.composition_locator = query.composition_locator;
+    result.current_time.value = composition_time_value;
+    result.current_time.scale = composition_time_scale;
+    result.current_time.seconds_rational = canonical_seconds_rational(
+        result.current_time.value, result.current_time.scale);
+    if (mismatch_composition_time) {
+      result.current_time.seconds_rational = "1/2";
+    }
+    return HostCompositionTimeResult::success(std::move(result));
+  }
+
   [[nodiscard]] static ObjectLocator locator(std::string kind, std::string object_id) {
     return {
         std::move(kind),
@@ -254,6 +305,8 @@ class FakeHost final : public HostApi {
   std::string bit_depth_read_error_code;
   std::string write_error_code;
   std::string write_error_field;
+  std::string composition_time_error_code;
+  std::string composition_time_error_field;
   std::int32_t current_bits_per_channel{8};
   std::int32_t observed_target_depth{0};
   int calls{0};
@@ -261,10 +314,15 @@ class FakeHost final : public HostApi {
   int write_calls{0};
   int project_items_calls{0};
   int composition_layers_calls{0};
+  int composition_time_calls{0};
+  std::int32_t composition_time_value{3003};
+  std::uint32_t composition_time_scale{1000};
   bool mismatch_project_page{false};
   bool mismatch_composition_page{false};
+  bool mismatch_composition_time{false};
   aemcp::native::ProjectItemsQuery observed_items_query;
   aemcp::native::CompositionLayersQuery observed_layers_query;
+  aemcp::native::CompositionTimeQuery observed_time_query;
 };
 
 class BlockingHost final : public HostApi {
@@ -398,6 +456,27 @@ Request composition_layers_request(
       std::move(composition_locator)};
 }
 
+Request composition_time_request(
+    FakeClock& clock,
+    std::string id,
+    ObjectLocator composition_locator) {
+  return {
+      std::move(id),
+      std::string(kCompositionTimeReadCapability),
+      clock.now() + 100ms,
+      "route-time",
+      7,
+      0,
+      {},
+      {},
+      "22222222-2222-4222-8222-222222222222",
+      "11111111-1111-4111-8111-111111111111",
+      0,
+      0,
+      std::nullopt,
+      std::move(composition_locator)};
+}
+
 DispatcherConfig config(
     std::size_t queue,
     std::size_t tasks,
@@ -488,6 +567,79 @@ void project_graph_reads_validate_arguments_and_dispatch_on_owner_thread() {
           && !mismatched.completions[1].ok
           && mismatched.completions[1].error_code == "CAPABILITY_FAILED",
       "dispatcher signed a host page that was not bound to its invoke arguments");
+}
+
+void composition_time_read_is_closed_main_thread_bound_and_verified() {
+  FakeClock clock;
+  const auto owner = std::this_thread::get_id();
+  HostDispatcher dispatcher(owner, clock, config(8, 8, 4ms));
+  FakeHost host(clock, owner);
+  const ObjectLocator composition = FakeHost::locator(
+      "composition", "66666666-6666-4666-8666-666666666666");
+
+  require(dispatcher.enqueue(composition_time_request(
+          clock, "time-read", composition)).code == EnqueueCode::kAccepted,
+      "valid composition time read was rejected");
+
+  ObjectLocator wrong_session = composition;
+  wrong_session.session_id = "33333333-3333-4333-8333-333333333333";
+  const auto stale = dispatcher.enqueue(composition_time_request(
+      clock, "time-stale", wrong_session));
+  require(stale.code == EnqueueCode::kInvalidRequest
+          && stale.error_code == "STALE_LOCATOR"
+          && stale.error_field == "params.arguments.compositionLocator",
+      "composition time did not fail closed on a cross-session locator");
+
+  ObjectLocator wrong_kind = composition;
+  wrong_kind.kind = "item";
+  const auto invalid_kind = dispatcher.enqueue(composition_time_request(
+      clock, "time-kind", wrong_kind));
+  require(invalid_kind.code == EnqueueCode::kInvalidRequest
+          && invalid_kind.error_code == "INVALID_ARGUMENT"
+          && invalid_kind.error_field == "params.arguments.compositionLocator",
+      "composition time accepted a non-composition locator");
+
+  Request unexpected_page = composition_time_request(clock, "time-page", composition);
+  unexpected_page.limit = 1;
+  const auto invalid_page = dispatcher.enqueue(std::move(unexpected_page));
+  require(invalid_page.code == EnqueueCode::kInvalidRequest
+          && invalid_page.error_field == "params.arguments",
+      "composition time accepted pagination arguments outside its contract");
+
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1 && batch.completions[0].ok
+          && host.composition_time_calls == 1,
+      "composition time did not dispatch exactly once on the owner thread");
+  const auto& result = batch.completions[0].composition_time_result;
+  require(result.composition_locator == composition
+          && result.current_time.value == 3003
+          && result.current_time.scale == 1000
+          && result.current_time.seconds_rational == "3003/1000"
+          && host.observed_time_query.composition_locator == composition,
+      "composition time lost its locator or exact rational result");
+
+  host.mismatch_composition_time = true;
+  require(dispatcher.enqueue(composition_time_request(
+          clock, "time-mismatch", composition)).code == EnqueueCode::kAccepted,
+      "composition time mismatch setup was rejected");
+  const auto mismatch = dispatcher.drain(host);
+  require(mismatch.completions.size() == 1
+          && !mismatch.completions[0].ok
+          && mismatch.completions[0].error_code == "CAPABILITY_FAILED",
+      "dispatcher signed a non-canonical composition time result");
+
+  host.mismatch_composition_time = false;
+  host.composition_time_error_code = "STALE_LOCATOR";
+  host.composition_time_error_field = "params.arguments.compositionLocator";
+  require(dispatcher.enqueue(composition_time_request(
+          clock, "time-host-stale", composition)).code == EnqueueCode::kAccepted,
+      "composition time host error setup was rejected");
+  const auto failed = dispatcher.drain(host);
+  require(failed.completions.size() == 1
+          && failed.completions[0].error_code == "STALE_LOCATOR"
+          && failed.completions[0].error_field
+              == "params.arguments.compositionLocator",
+      "composition time host error lost its typed locator field");
 }
 
 void bit_depth_read_and_write_are_main_thread_bound_and_write_is_idempotent() {
@@ -1023,8 +1175,10 @@ void idle_budget_and_shutdown_are_bounded() {
 int main() {
   bounded_page_budget_counts_codec_escaping_and_stops_before_overflow();
   effective_layer_name_uses_sdk_source_fallback();
+  composition_time_rational_is_exact_and_overflow_safe();
   project_epoch_fences_reused_aegp_handles();
   project_graph_reads_validate_arguments_and_dispatch_on_owner_thread();
+  composition_time_read_is_closed_main_thread_bound_and_verified();
   bit_depth_read_and_write_are_main_thread_bound_and_write_is_idempotent();
   bit_depth_write_releases_only_safe_failures_and_fails_closed_when_full();
   bit_depth_write_validates_before_dispatch_and_late_results_are_ambiguous();

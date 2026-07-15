@@ -116,6 +116,8 @@ struct ParsedRequest {
     const ProjectItemsPage& page);
 [[nodiscard]] std::string digest_composition_layers_postcondition(
     const CompositionLayersPage& page);
+[[nodiscard]] std::string digest_composition_time_postcondition(
+    const CompositionTimeRead& value);
 [[nodiscard]] std::string digest_layer_properties_postcondition(
     const LayerPropertiesPage& page);
 
@@ -280,6 +282,7 @@ struct CapabilitiesSuccess {
   bool include_project_bit_depth_set{true};
   bool include_project_items_list{true};
   bool include_composition_layers_list{true};
+  bool include_composition_time_read{true};
   bool include_layer_properties_list{true};
   std::string query_digest;
   std::string capabilities_digest;
@@ -289,6 +292,7 @@ struct CapabilitiesSuccess {
   std::string project_bit_depth_set_contract_digest;
   std::string project_items_list_contract_digest;
   std::string composition_layers_list_contract_digest;
+  std::string composition_time_read_contract_digest;
   std::string layer_properties_list_contract_digest;
 };
 
@@ -360,6 +364,18 @@ struct CompositionLayersSuccess {
   std::string session_id;
   std::string host_instance_id;
   CompositionLayersPage value;
+  std::uint64_t started_at_unix_ms{0};
+  std::uint64_t completed_at_unix_ms{0};
+  std::string request_digest;
+  std::string postcondition_digest;
+  bool replayed{false};
+};
+
+struct CompositionTimeSuccess {
+  std::string request_id;
+  std::string session_id;
+  std::string host_instance_id;
+  CompositionTimeRead value;
   std::uint64_t started_at_unix_ms{0};
   std::uint64_t completed_at_unix_ms{0};
   std::string request_digest;
@@ -446,6 +462,8 @@ struct ErrorResponse {
     const ProjectItemsSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_composition_layers_success(
     const CompositionLayersSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_composition_time_success(
+    const CompositionTimeSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_layer_properties_success(
     const LayerPropertiesSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_cancel_success(

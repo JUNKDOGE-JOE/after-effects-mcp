@@ -30,6 +30,7 @@ def test_exec_is_destructive_and_reads_are_readonly():
     for verb in (
         "ae.listProjectItems",
         "ae.listCompositionLayers",
+        "ae.getCompositionTime",
         "ae.listLayerProperties",
     ):
         assert VERB_ANNOTATIONS[verb].readOnlyHint is True

@@ -19,11 +19,11 @@ The published v0.9.2 asset targets this verified release scope:
 
 ```text
 Embedded panel chat or external MCP client
-  -> packages/core (ae_mcp, Python stdio MCP server, 49 ae_ tools)
+  -> packages/core (ae_mcp, Python stdio MCP server, 51 ae_ tools)
   -> backend (packages/bridge, httpx)
   -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
-  -> CSInterface.evalScript
-  -> ExtendScript (plugin/jsx/runtime.jsx + jsx_templates/*.jsx)
+     -> native RPC -> AEGP main-thread dispatcher
+     -> CSInterface.evalScript -> ExtendScript (legacy JSX tools)
   -> After Effects
 ```
 
@@ -108,7 +108,7 @@ External clients must run on the same machine as After Effects, or otherwise be 
 
 | Category | Tools |
 |---|---|
-| Project | `ae_init`, `ae_overview`, `ae_layers`, `ae_listProjectItems`, `ae_listCompositionLayers`, `ae_listLayerProperties`, `ae_readProps`, `ae_searchProject` |
+| Project | `ae_init`, `ae_overview`, `ae_layers`, `ae_listProjectItems`, `ae_listCompositionLayers`, `ae_getCompositionTime`, `ae_listLayerProperties`, `ae_readProps`, `ae_searchProject` |
 | Mutation | `ae_exec`, `ae_applyEffect`, `ae_createLayer`, `ae_setProperty`, `ae_moveLayer`, `ae_selectLayers`, `ae_setTime` |
 | Read-typed | `ae_getTime`, `ae_getProperties`, `ae_scanPropertyTree`, `ae_inspectPropertyCapabilities`, `ae_getExpressions`, `ae_validateExpressions`, `ae_getKeyframes` |
 | Preview / capture | `ae_previewFrame`, `ae_snapshot` |
@@ -238,8 +238,10 @@ development-native surface is intentionally small: `ae_projectSummary` reads a p
 `ae_getProjectBitDepth` reads the current 8/16/32 bits-per-channel value, and
 `ae_setProjectBitDepth` performs the SDK-declared undoable change with an idempotency key and
 verified native readback. `ae_listProjectItems` returns bounded project-item pages; copy a returned
-composition locator into `ae_listCompositionLayers` to read its bounded layer pages (default 25,
-maximum 50). Copy a returned layer locator into `ae_listLayerProperties` to list one bounded page of
+composition locator into `ae_getCompositionTime` to read its exact current time as signed
+`value`, positive `scale`, and canonical reduced `secondsRational`; or copy it into
+`ae_listCompositionLayers` to read its bounded layer pages (default 25, maximum 50). Copy a returned
+layer locator into `ae_listLayerProperties` to list one bounded page of
 its direct properties (default and maximum 25); pass a returned property locator to descend exactly
 one group only when its `groupingType` is `named-group` or `indexed-group`. Primitive values are
 sampled at the current composition time and encoded as explicit decimal strings, while complex SDK

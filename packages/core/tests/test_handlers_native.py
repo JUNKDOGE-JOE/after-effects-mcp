@@ -229,6 +229,81 @@ def _project_graph_execution(*, layers: bool):
     )
 
 
+def _composition_time_execution() -> N.CompositionTimeReadExecution:
+    summary = _summary_execution()
+    locator = {
+        "kind": "composition",
+        "hostInstanceId": summary.negotiation.host_instance_id,
+        "sessionId": summary.negotiation.session_id,
+        "projectId": "33333333-3333-4333-8333-333333333333",
+        "generation": 7,
+        "objectId": "66666666-6666-4666-8666-666666666666",
+    }
+    value = N.CompositionTimeReadValue.model_validate({
+        "compositionLocator": locator,
+        "currentTime": {
+            "value": 60,
+            "scale": 24,
+            "secondsRational": "5/2",
+        },
+    })
+    return N.CompositionTimeReadExecution(
+        implementation=N.NativeCapabilityDescriptor(
+            detail="full",
+            id=N.COMPOSITION_TIME_READ_CAPABILITY_ID,
+            version=1,
+            schema_version=1,
+            summary="Read the current time of one After Effects composition.",
+            risk="read",
+            mutability="read-only",
+            idempotency="idempotent",
+            cancellation="before-dispatch",
+            undo="not-applicable",
+            side_effect_summary=(
+                "Reads composition time without changing After Effects state."
+            ),
+            preconditions=(
+                "An After Effects project must be open.",
+                "compositionLocator must come from ae.project.items.list@1.",
+            ),
+            compatibility={
+                "status": "unverified",
+                "intendedPlatforms": ["macos-arm64", "windows-x64"],
+            },
+            input_contract_id=N.COMPOSITION_TIME_READ_INPUT_CONTRACT_ID,
+            result_contract_id=N.COMPOSITION_TIME_READ_RESULT_CONTRACT_ID,
+            contract_digest=N.COMPOSITION_TIME_READ_CONTRACT_DIGEST,
+            input_schema=N._COMPOSITION_TIME_READ_INPUT_SCHEMA,
+            result_schema=N._COMPOSITION_TIME_READ_RESULT_SCHEMA,
+            requirements=({
+                "id": "aemcp.requirement.native.composition-time-read",
+                "contractVersion": 1,
+            },),
+            examples=({"id": "composition-time-read"},),
+        ),
+        negotiation=summary.negotiation,
+        value=value,
+        evidence=N.NativeExecutionEvidence(
+            engine="native-aegp",
+            host_instance_id=summary.negotiation.host_instance_id,
+            session_id=summary.negotiation.session_id,
+            request_id="composition-time-read-1",
+            capability_id=N.COMPOSITION_TIME_READ_CAPABILITY_ID,
+            capability_version=1,
+            started_at_unix_ms=1_900_000_000_000,
+            completed_at_unix_ms=1_900_000_000_001,
+            effect="none",
+            request_digest="b" * 64,
+            postcondition=N.NativePostconditionEvidence(
+                verified=True,
+                kind="composition-time-read",
+                algorithm="sha256-rfc8785-jcs-v1",
+                digest=N._composition_time_read_digest(value),
+            ),
+        ),
+    )
+
+
 @pytest.fixture(autouse=True)
 def _load_handlers():
     load_all()
@@ -393,6 +468,149 @@ async def test_composition_layers_public_tool_forwards_exact_locator(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_composition_time_public_tool_forwards_locator_and_exact_time(monkeypatch):
+    execution = _composition_time_execution()
+    captured: dict[str, Any] = {}
+
+    async def _invoke(backend, **kwargs):
+        captured["backend"] = backend
+        captured.update(kwargs)
+        return execution
+
+    sentinel_backend = object()
+    locator = execution.value.composition_locator.model_dump(
+        mode="json", by_alias=True
+    )
+    monkeypatch.setattr(native_handler, "_backend", lambda: sentinel_backend)
+    monkeypatch.setattr(native_handler, "invoke_composition_time_read", _invoke)
+    result = await native_handler._run_get_composition_time(
+        schemas.AeGetCompositionTimeArgs(composition_locator=locator), None
+    )
+
+    assert captured["backend"] is sentinel_backend
+    assert captured["composition_locator"] == locator
+    assert result["value"] == {
+        "compositionLocator": locator,
+        "currentTime": {
+            "value": 60,
+            "scale": 24,
+            "secondsRational": "5/2",
+        },
+    }
+    assert "compositionName" not in result["value"]
+    assert result["implementation"]["capabilityId"] == "ae.composition.time.read"
+    assert result["implementation"]["engine"] == "native-aegp"
+    assert result["evidence"]["postcondition"]["verified"] is True
+    assert result["evidence"]["effect"] == "none"
+
+
+@pytest.mark.asyncio
+async def test_composition_time_real_mcp_surface_is_strict_and_structured(monkeypatch):
+    from mcp.shared.memory import create_connected_server_and_client_session
+
+    from ae_mcp import server as server_module
+
+    load_all()
+    schema_cls, _ = HANDLERS["ae.getCompositionTime"]
+    dispatches: list[schemas.AeGetCompositionTimeArgs] = []
+
+    async def _run(validated, _ctx):
+        dispatches.append(validated)
+        return {
+            "ok": True,
+            "value": {
+                "compositionLocator": validated.composition_locator.model_dump(
+                    mode="json", by_alias=True
+                ),
+                "currentTime": {
+                    "value": 60,
+                    "scale": 24,
+                    "secondsRational": "5/2",
+                },
+            },
+        }
+
+    monkeypatch.setitem(
+        HANDLERS,
+        "ae.getCompositionTime",
+        (schema_cls, _run),
+    )
+    monkeypatch.setattr(
+        server_module,
+        "_filtered_tool_names",
+        lambda: {"ae.getCompositionTime"},
+    )
+    monkeypatch.setattr(
+        server_module.approval_gate,
+        "enforce",
+        lambda *_args, **_kwargs: _none(),
+    )
+    server = server_module.build_server()
+    valid_locator = _composition_time_execution().value.composition_locator.model_dump(
+        mode="json", by_alias=True
+    )
+
+    async with create_connected_server_and_client_session(server) as client:
+        listed = await client.list_tools()
+        assert [tool.name for tool in listed.tools] == ["ae_getCompositionTime"]
+        public_schema = listed.tools[0].inputSchema
+        assert public_schema["required"] == ["composition_locator"]
+        assert set(public_schema["properties"]) == {"composition_locator"}
+        assert public_schema["additionalProperties"] is False
+
+        invalid_cases = (
+            ({}, "arguments.composition_locator"),
+            (
+                {
+                    "composition_locator": {
+                        **valid_locator,
+                        "kind": "project",
+                    }
+                },
+                "arguments.composition_locator.kind",
+            ),
+            (
+                {
+                    "composition_locator": valid_locator,
+                    "comp_id": 1,
+                },
+                "arguments.comp_id",
+            ),
+        )
+        for arguments, expected_field in invalid_cases:
+            rejected = await client.call_tool("ae_getCompositionTime", arguments)
+            assert rejected.isError is True
+            payload = json.loads(rejected.content[0].text)
+            assert payload["ok"] is False
+            assert payload["error"]["code"] == "INVALID_ARGUMENT"
+            assert payload["error"]["sideEffect"] == "not-started"
+            assert payload["error"]["recovery"] == {
+                "action": "change-arguments",
+                "hint": (
+                    "Copy an unmodified composition_locator from "
+                    "ae_listProjectItems and retry."
+                ),
+            }
+            assert payload["error"]["details"] == {
+                "field": expected_field,
+                "capabilityId": "ae.composition.time.read",
+            }
+        assert dispatches == []
+
+        accepted = await client.call_tool(
+            "ae_getCompositionTime",
+            {"composition_locator": valid_locator},
+        )
+        assert accepted.isError is False
+        assert json.loads(accepted.content[0].text)["value"]["currentTime"] == {
+            "value": 60,
+            "scale": 24,
+            "secondsRational": "5/2",
+        }
+        assert len(dispatches) == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("runner", "args"),
     [
@@ -401,6 +619,19 @@ async def test_composition_layers_public_tool_forwards_exact_locator(monkeypatch
         (
             native_handler._run_list_composition_layers,
             schemas.AeListCompositionLayersArgs(
+                composition_locator={
+                    "kind": "composition",
+                    "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                    "sessionId": "11111111-1111-4111-8111-111111111111",
+                    "projectId": "44444444-4444-4444-8444-444444444444",
+                    "generation": 8,
+                    "objectId": "66666666-6666-4666-8666-666666666666",
+                }
+            ),
+        ),
+        (
+            native_handler._run_get_composition_time,
+            schemas.AeGetCompositionTimeArgs(
                 composition_locator={
                     "kind": "composition",
                     "hostInstanceId": "22222222-2222-4222-8222-222222222222",
@@ -439,6 +670,7 @@ def test_native_tool_registration_is_explicit():
         HANDLERS["ae.listCompositionLayers"][0]
         is schemas.AeListCompositionLayersArgs
     )
+    assert HANDLERS["ae.getCompositionTime"][0] is schemas.AeGetCompositionTimeArgs
     assert HANDLERS["ae.getProjectBitDepth"][0] is schemas.AeGetProjectBitDepthArgs
     assert HANDLERS["ae.setProjectBitDepth"][0] is schemas.AeSetProjectBitDepthArgs
     assert HANDLERS["ae.projectSummary"][1] is not HANDLERS["ae.overview"][1]

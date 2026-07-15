@@ -73,6 +73,7 @@ MCP client
 | `ae.setProjectBitDepth` | `target_depth`, `idempotency_key` | 通过原生 AEGP 设置 `8/16/32`，返回 before/after、Undo 可用性和审计；不回退 JSX |
 | `ae_listProjectItems` | `project_locator?`, `offset?`, `limit?` | 通过原生 AEGP 分页列出工程项；默认 25、最多 50；不回退 JSX |
 | `ae_listCompositionLayers` | `composition_locator`, `offset?`, `limit?` | 通过原生 AEGP 分页列出指定合成的图层；默认 25、最多 50；不回退 JSX |
+| `ae_getCompositionTime` | `composition_locator` | 通过原生 AEGP 读取指定合成的精确当前时间；不回退 JSX |
 | `ae_listLayerProperties` | `layer_locator`, `parent_property_locator?`, `offset?`, `limit?` | 通过原生 AEGP 分页列出图层或属性组的一层直接子属性；默认/最多 25；不回退 JSX |
 | `ae.layers` | `comp_id?`, `offset?`, `limit?`, `format?` | legacy JSX 图层列表（行为保持不变） |
 | `ae.readProps` | `code` | 执行只读 JSX |
@@ -117,15 +118,17 @@ MCP client
 
 ### 原生工程与属性导航
 
-公开 MCP 工具 `ae_listProjectItems`、`ae_listCompositionLayers` 和 `ae_listLayerProperties` 分别调用 canonical Core verb `ae.listProjectItems`、`ae.listCompositionLayers` 与 `ae.listLayerProperties`，并固定走 `MCP -> Core -> native RPC -> AEGP -> AE`。三者均为严格的原生只读工具；原生能力、契约或传输不可用时返回结构化错误，**不会回退到 JSX**。
+公开 MCP 工具 `ae_listProjectItems`、`ae_listCompositionLayers`、`ae_getCompositionTime` 和 `ae_listLayerProperties` 分别调用 canonical Core verb `ae.listProjectItems`、`ae.listCompositionLayers`、`ae.getCompositionTime` 与 `ae.listLayerProperties`，并固定走 `MCP -> Core -> native RPC -> AEGP -> AE`。四者均为严格的原生只读工具；原生能力、契约或传输不可用时返回结构化错误，**不会回退到 JSX**。
 
 - 首次调用 `ae_listProjectItems` 时省略 `project_locator`；`offset` 默认为 `0`，`limit` 默认为 `25`、最大为 `50`。续页时传回上一页的 `projectLocator`，且 `offset > 0` 时该 locator 必填。
 - `ae_listCompositionLayers` 的 `composition_locator` 必须来自工程项结果中 `type="composition"` 的 `locator`；同样使用 `offset` 分页，`limit` 默认为 `25`、最大为 `50`。
+- `ae_getCompositionTime` 使用同一种 `composition_locator`，只返回回显的 `compositionLocator` 与 `currentTime`。`currentTime.value/scale` 是 SDK 时间基准的精确有理数，`secondsRational` 是其规范约分形式（例如 `60/24` 返回 `5/2`），不会转换成有精度损失的浮点秒数。它读取 item CTI，不代表实时播放/渲染时钟；Adobe SDK 明确说明渲染期间该值不会更新。
 - `ae_listLayerProperties` 的 `layer_locator` 必须来自合成图层结果。省略 `parent_property_locator` 时读取图层属性根；仅可传入本工具返回且 `groupingType` 为 `named-group` 或 `indexed-group` 的 property locator，并只列该 group 的直接子项。默认和最大 `limit` 均为 `25`，不会递归返回整棵属性树；leaf locator 会得到结构化 `INVALID_ARGUMENT`。
 - 原始 primitive 值绑定返回的精确 `sampleTime.value/scale`，并使用带类型的十进制字符串编码；复杂、handle-backed 的 SDK 值会明确返回 `valueStatus="unsupported"` 和 `value=null`。
 - Locator 是服务端签发的不透明标识，绑定当前 host、session、project 与 generation；它不是跨请求保留的 AEGP handle。不要拆解、改写或跨工程切换/重启缓存。成功结果携带 `native-aegp` provenance、已验证 postcondition 与 audit evidence。
 
 现有 `ae.layers` 是 legacy JSX 工具，继续保留原参数、数值 ID、`limit=0` 全量返回及可选文本格式语义。它没有被改造成原生工具，也不与上述 locator 契约混用。
+现有 `ae.getTime` 同样保持原 legacy JSX 参数和返回值；它没有被重定向到 `ae_getCompositionTime`。
 
 ### `ae.layers`
 
@@ -376,6 +379,7 @@ Unless noted otherwise, tools return JSON with `ok: true` on success, or `ok: fa
 | `ae.setProjectBitDepth` | `target_depth`, `idempotency_key` | set native AEGP `8/16/32` with before/after, Undo availability, and audit evidence; never falls back to JSX |
 | `ae_listProjectItems` | `project_locator?`, `offset?`, `limit?` | page through project items via native AEGP; default 25, maximum 50; never falls back to JSX |
 | `ae_listCompositionLayers` | `composition_locator`, `offset?`, `limit?` | page through one composition's layers via native AEGP; default 25, maximum 50; never falls back to JSX |
+| `ae_getCompositionTime` | `composition_locator` | read one composition's exact current time via native AEGP; never falls back to JSX |
 | `ae_listLayerProperties` | `layer_locator`, `parent_property_locator?`, `offset?`, `limit?` | page through one direct level of layer/group properties via native AEGP; default/maximum 25; never falls back to JSX |
 | `ae.layers` | `comp_id?`, `offset?`, `limit?`, `format?` | legacy JSX layer listing (behavior unchanged) |
 | `ae.readProps` | `code` | run read-only JSX |
@@ -420,15 +424,17 @@ Unless noted otherwise, tools return JSON with `ok: true` on success, or `ok: fa
 
 ### Native Project and Property Navigation
 
-The public MCP tools `ae_listProjectItems`, `ae_listCompositionLayers`, and `ae_listLayerProperties` call the canonical Core verbs `ae.listProjectItems`, `ae.listCompositionLayers`, and `ae.listLayerProperties`, respectively, over the fixed `MCP -> Core -> native RPC -> AEGP -> AE` path. All three are strict native reads: if the native capability, contract, or transport is unavailable, they return a structured error and **never fall back to JSX**.
+The public MCP tools `ae_listProjectItems`, `ae_listCompositionLayers`, `ae_getCompositionTime`, and `ae_listLayerProperties` call the canonical Core verbs `ae.listProjectItems`, `ae.listCompositionLayers`, `ae.getCompositionTime`, and `ae.listLayerProperties`, respectively, over the fixed `MCP -> Core -> native RPC -> AEGP -> AE` path. All four are strict native reads: if the native capability, contract, or transport is unavailable, they return a structured error and **never fall back to JSX**.
 
 - Omit `project_locator` on the first `ae_listProjectItems` call. `offset` defaults to `0`; `limit` defaults to `25` and is capped at `50`. Pass the returned `projectLocator` on continuation pages; it is required when `offset > 0`.
 - `ae_listCompositionLayers` requires the `locator` of an item whose `type="composition"` in the project-items result. It uses the same offset pagination and default/max limits.
+- `ae_getCompositionTime` accepts the same `composition_locator` and returns only the echoed `compositionLocator` plus `currentTime`. `currentTime.value/scale` is the SDK timebase's exact rational value, and `secondsRational` is its canonical reduced form (for example, `60/24` is returned as `5/2`) rather than a lossy floating-point seconds value. This is the item CTI, not a live playback/render clock; Adobe documents that it is not updated while rendering.
 - `ae_listLayerProperties` requires a layer locator from the composition-layers result. Omit `parent_property_locator` for the layer root, or pass a locator returned by this tool only when its `groupingType` is `named-group` or `indexed-group`, to list exactly that group's direct children. Its default and maximum `limit` are both `25`; it never returns a recursive tree, and a leaf locator produces structured `INVALID_ARGUMENT`.
 - Primitive values are bound to the exact returned `sampleTime.value/scale` and use typed decimal-string encoding. Complex handle-backed SDK values explicitly return `valueStatus="unsupported"` with `value=null`.
 - Locators are server-issued opaque identifiers bound to the current host, session, project, and generation; they are not retained AEGP handles. Do not decompose, edit, or cache them across project changes or restarts. Successful results carry `native-aegp` provenance, a verified postcondition, and audit evidence.
 
 The existing `ae.layers` tool remains a legacy JSX tool with its original arguments, numeric IDs, `limit=0` all-items behavior, and optional text format. It was not converted to native and does not share the locator contract above.
+The existing `ae.getTime` tool likewise keeps its legacy JSX arguments and result; it is not redirected to `ae_getCompositionTime`.
 
 ### `ae.layers`
 

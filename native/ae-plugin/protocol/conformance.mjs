@@ -68,6 +68,12 @@ export const INVOKE_REGISTRY = Object.freeze([
     resultContractId: 'aemcp.contract.ae.composition.layers.list.result.v1',
   }),
   Object.freeze({
+    id: 'ae.composition.time.read',
+    version: 1,
+    inputContractId: 'aemcp.contract.ae.composition.time.read.input.v1',
+    resultContractId: 'aemcp.contract.ae.composition.time.read.result.v1',
+  }),
+  Object.freeze({
     id: 'ae.layer.properties.list',
     version: 1,
     inputContractId: 'aemcp.contract.ae.layer.properties.list.input.v1',
@@ -638,6 +644,15 @@ export function classifyRequest(message) {
           || !Number.isSafeInteger(args.limit) || args.limit < 1 || args.limit > 50) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
+    } else if (params.capabilityId === 'ae.composition.time.read') {
+      const args = params.arguments;
+      if (!exactKeys(
+        args,
+        new Set(['compositionLocator']),
+        ['compositionLocator'],
+      ) || !isLocatorShape(args.compositionLocator, ['composition'])) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
     } else {
       const args = params.arguments;
       if (!exactKeys(
@@ -757,10 +772,12 @@ export function validateFailureExchange(
   if (response.error.code === 'STALE_LOCATOR'
       && (capabilityId === 'ae.project.items.list'
         || capabilityId === 'ae.composition.layers.list'
+        || capabilityId === 'ae.composition.time.read'
         || capabilityId === 'ae.layer.properties.list')) {
     const expectedFields = capabilityId === 'ae.project.items.list'
       ? new Set(['params.arguments.projectLocator'])
       : capabilityId === 'ae.composition.layers.list'
+          || capabilityId === 'ae.composition.time.read'
         ? new Set(['params.arguments.compositionLocator'])
         : new Set([
           'params.arguments.layerLocator',
@@ -852,6 +869,12 @@ export function projectItemsListContractDigest(schema) {
 export function compositionLayersListContractDigest(schema) {
   const inputSchema = structuredClone(schema.$defs.compositionLayersListInputSchemaContract.const);
   const resultSchema = structuredClone(schema.$defs.compositionLayersListResultSchemaContract.const);
+  return sha256Jcs({ inputSchema, resultSchema });
+}
+
+export function compositionTimeReadContractDigest(schema) {
+  const inputSchema = structuredClone(schema.$defs.compositionTimeReadInputSchemaContract.const);
+  const resultSchema = structuredClone(schema.$defs.compositionTimeReadResultSchemaContract.const);
   return sha256Jcs({ inputSchema, resultSchema });
 }
 
@@ -1158,8 +1181,67 @@ export function compositionLayersListDescriptor(schema) {
   };
 }
 
-export function layerPropertiesListDescriptor(schema) {
+export function compositionTimeReadDescriptor(schema) {
   const registration = INVOKE_REGISTRY[5];
+  const compositionLocator = syntheticDescriptorLocator(
+    'composition', '66666666-6666-4666-8666-666666666666',
+  );
+  return {
+    detail: 'full',
+    id: registration.id,
+    version: registration.version,
+    schemaVersion: 1,
+    summary: 'Read the current time of one After Effects composition.',
+    risk: 'read',
+    mutability: 'read-only',
+    idempotency: 'idempotent',
+    cancellation: 'before-dispatch',
+    undo: 'not-applicable',
+    sideEffectSummary: 'Reads composition time without changing After Effects state.',
+    preconditions: [
+      'An After Effects project must be open.',
+      'compositionLocator must come from ae.project.items.list@1.',
+    ],
+    compatibility: {
+      status: 'unverified',
+      intendedPlatforms: ['macos-arm64', 'windows-x64'],
+    },
+    inputContractId: registration.inputContractId,
+    resultContractId: registration.resultContractId,
+    contractDigest: compositionTimeReadContractDigest(schema),
+    inputSchema: structuredClone(schema.$defs.compositionTimeReadInputSchemaContract.const),
+    resultSchema: structuredClone(schema.$defs.compositionTimeReadResultSchemaContract.const),
+    requirements: [{
+      id: 'aemcp.requirement.native.composition-time-read',
+      contractVersion: 1,
+    }],
+    examples: [
+      {
+        id: 'aemcp-example-composition-time-read',
+        kind: 'positive',
+        summary: 'Read an exact rational current time from a composition.',
+        arguments: { compositionLocator },
+        expected: {
+          outcome: 'succeeded',
+          value: {
+            compositionLocator,
+            currentTime: { value: 3003, scale: 1000, secondsRational: '3003/1000' },
+          },
+        },
+      },
+      {
+        id: 'aemcp-example-composition-time-read-stale',
+        kind: 'negative',
+        summary: 'Refresh a stale composition locator before reading current time.',
+        arguments: { compositionLocator },
+        expected: { errorCode: 'STALE_LOCATOR', recoveryAction: 'refresh-locator' },
+      },
+    ],
+  };
+}
+
+export function layerPropertiesListDescriptor(schema) {
+  const registration = INVOKE_REGISTRY[6];
   const layerLocator = syntheticDescriptorLocator(
     'layer', '88888888-8888-4888-8888-888888888888',
   );
@@ -1234,6 +1316,7 @@ export function nativeCapabilityRegistry(schema) {
     projectBitDepthSetDescriptor(schema),
     projectItemsListDescriptor(schema),
     compositionLayersListDescriptor(schema),
+    compositionTimeReadDescriptor(schema),
     layerPropertiesListDescriptor(schema),
   ];
 }
@@ -1359,19 +1442,45 @@ function validateLayerProperty(property, value, context, seenObjectIds, index, s
   return false;
 }
 
+function canonicalSecondsRational(value, scale) {
+  if (!Number.isSafeInteger(value) || !Number.isSafeInteger(scale)
+      || value < -2147483648 || value > 2147483647
+      || scale < 1 || scale > 4294967295) return null;
+  if (value === 0) return '0';
+  const numerator = BigInt(value);
+  const denominator = BigInt(scale);
+  let left = numerator < 0n ? -numerator : numerator;
+  let right = denominator;
+  while (right !== 0n) {
+    const remainder = left % right;
+    left = right;
+    right = remainder;
+  }
+  const reducedNumerator = numerator / left;
+  const reducedDenominator = denominator / left;
+  return reducedDenominator === 1n
+    ? String(reducedNumerator)
+    : `${String(reducedNumerator)}/${String(reducedDenominator)}`;
+}
+
 function validateNavigationResult(request, result, helloContext, schema) {
   const capabilityId = request.params.capabilityId;
   if (capabilityId !== 'ae.project.items.list'
       && capabilityId !== 'ae.composition.layers.list'
+      && capabilityId !== 'ae.composition.time.read'
       && capabilityId !== 'ae.layer.properties.list') return true;
   const value = result.value;
   const args = request.params.arguments;
   const rootLocator = capabilityId === 'ae.project.items.list'
     ? value.projectLocator
     : capabilityId === 'ae.composition.layers.list'
+        || capabilityId === 'ae.composition.time.read'
       ? value.compositionLocator : value.layerLocator;
   const expectedKind = capabilityId === 'ae.project.items.list'
-    ? 'project' : capabilityId === 'ae.composition.layers.list' ? 'composition' : 'layer';
+    ? 'project'
+    : capabilityId === 'ae.composition.layers.list'
+        || capabilityId === 'ae.composition.time.read'
+      ? 'composition' : 'layer';
   if (rootLocator?.kind !== expectedKind
       || rootLocator.hostInstanceId !== helloContext.response.result.host.instanceId
       || rootLocator.sessionId !== request.sessionId) return false;
@@ -1394,6 +1503,13 @@ function validateNavigationResult(request, result, helloContext, schema) {
       objectIds.add(item.locator.objectId);
     }
     return true;
+  }
+
+  if (capabilityId === 'ae.composition.time.read') {
+    return result.evidence.postcondition.kind === 'composition-time-read'
+      && jsonDeepEqual(args.compositionLocator, value.compositionLocator)
+      && canonicalSecondsRational(value.currentTime?.value, value.currentTime?.scale)
+        === value.currentTime?.secondsRational;
   }
 
   if (capabilityId === 'ae.layer.properties.list') {

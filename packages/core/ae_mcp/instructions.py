@@ -25,10 +25,11 @@ WORKFLOW — every task follows this loop:
                 comp or layer ids — read them first.
                 For a verified native project graph, call ae_listProjectItems,
                 then copy a returned composition locator into
-                ae_listCompositionLayers. Copy a returned layer locator into
-                ae_listLayerProperties; copy a returned property-group locator
-                back into that tool to descend one bounded level. These reads
-                fail explicitly when native AEGP is unavailable; they never fall back to JSX.
+                ae_getCompositionTime or ae_listCompositionLayers. Copy a
+                returned layer locator into ae_listLayerProperties; copy a
+                returned property-group locator back into that tool to descend
+                one bounded level. These reads fail explicitly when native AEGP
+                is unavailable; they never fall back to JSX.
   2. Act      — Prefer the typed verbs (ae_createLayer, ae_setProperty,
                 ae_applyEffect, ae_moveLayer, ae_createRig). Drop to ae_exec
                 only for logic the typed verbs can't express.
