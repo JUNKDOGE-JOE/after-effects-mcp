@@ -601,6 +601,9 @@ std::string canonical_request(const ParsedRequest& request) {
             + locator_json(*value.composition_locator)
             + ",\"limit\":" + std::to_string(value.limit)
             + ",\"offset\":" + std::to_string(value.offset) + "}";
+      } else if (value.capability_id == "ae.composition.time.read") {
+        arguments = "{\"compositionLocator\":"
+            + locator_json(*value.composition_locator) + "}";
       } else if (value.capability_id == "ae.layer.properties.list") {
         arguments = "{\"layerLocator\":" + locator_json(*value.layer_locator)
             + ",\"limit\":" + std::to_string(value.limit)
@@ -891,6 +894,15 @@ ParsedRequest classify_request(const JsonValue& root) {
             *arguments, "offset", CodecErrorKind::kInvalidArgument, 0, kMaxSafeInteger);
         result.limit = static_cast<std::uint16_t>(required_uint(
             *arguments, "limit", CodecErrorKind::kInvalidArgument, 1, 50));
+      } else if (capability == "ae.composition.time.read") {
+        if (!exact_keys(
+                *arguments,
+                {"compositionLocator"},
+                {"compositionLocator"})) {
+          invalid_argument("composition time read arguments are not closed");
+        }
+        result.composition_locator = parse_locator(
+            *member(*arguments, "compositionLocator"), "composition");
       } else if (capability == "ae.layer.properties.list") {
         if (!exact_keys(
                 *arguments,
@@ -1071,6 +1083,22 @@ std::string canonical_composition_layers_value(const CompositionLayersPage& page
       + ",\"offset\":" + std::to_string(page.offset)
       + ",\"returned\":" + std::to_string(returned)
       + ",\"total\":" + std::to_string(page.total) + "}";
+}
+
+std::string canonical_composition_time_value(const CompositionTimeRead& value) {
+  if (!valid_output_locator(value.composition_locator)
+      || value.composition_locator.kind != "composition"
+      || value.current_time.scale < 1
+      || value.current_time.seconds_rational
+          != canonical_seconds_rational(
+              static_cast<std::int64_t>(value.current_time.value),
+              value.current_time.scale)) {
+    invalid_argument("invalid composition time result");
+  }
+  return "{\"compositionLocator\":" + locator_json(value.composition_locator)
+      + ",\"currentTime\":{\"scale\":" + std::to_string(value.current_time.scale)
+      + ",\"secondsRational\":" + json_string(value.current_time.seconds_rational)
+      + ",\"value\":" + std::to_string(value.current_time.value) + "}}";
 }
 
 bool valid_decimal_string(std::string_view text) {
@@ -1414,6 +1442,13 @@ std::string digest_composition_layers_postcondition(
   return sha256_hex(
       "{\"capabilityId\":\"ae.composition.layers.list\",\"capabilityVersion\":1,\"value\":"
       + canonical_composition_layers_value(page) + "}");
+}
+
+std::string digest_composition_time_postcondition(
+    const CompositionTimeRead& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.composition.time.read\",\"capabilityVersion\":1,\"value\":"
+      + canonical_composition_time_value(value) + "}");
 }
 
 std::string digest_layer_properties_postcondition(
@@ -1863,6 +1898,19 @@ std::string composition_layers_list_descriptor(const CapabilitiesSuccess& respon
   }
   return R"aemcp({"detail":"full","id":"ae.composition.layers.list","version":1,"schemaVersion":1,"summary":"List a bounded page of layers in one After Effects composition.","risk":"read","mutability":"read-only","idempotency":"idempotent","cancellation":"before-dispatch","undo":"not-applicable","sideEffectSummary":"Reads composition layers without changing After Effects state.","preconditions":["An After Effects project must be open.","compositionLocator must come from ae.project.items.list@1."],"compatibility":{"status":"unverified","intendedPlatforms":["macos-arm64","windows-x64"]},"inputContractId":"aemcp.contract.ae.composition.layers.list.input.v1","resultContractId":"aemcp.contract.ae.composition.layers.list.result.v1","contractDigest":"3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75","inputSchema":{"type":"object","additionalProperties":false,"required":["compositionLocator","offset","limit"],"properties":{"compositionLocator":{"$ref":"#/$defs/compositionLocator"},"offset":{"type":"integer","minimum":0,"maximum":9007199254740991,"default":0,"x-omissionBehavior":0},"limit":{"type":"integer","minimum":1,"maximum":50,"default":25,"x-omissionBehavior":25}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"compositionLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"composition"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}}}},"resultSchema":{"type":"object","additionalProperties":false,"required":["compositionLocator","compositionName","total","offset","limit","returned","hasMore","nextOffset","layers"],"properties":{"compositionLocator":{"$ref":"#/$defs/compositionLocator"},"compositionName":{"type":"string","maxLength":1024},"total":{"type":"integer","minimum":0,"maximum":9007199254740991},"offset":{"type":"integer","minimum":0,"maximum":9007199254740991},"limit":{"type":"integer","minimum":1,"maximum":50},"returned":{"type":"integer","minimum":0,"maximum":50},"hasMore":{"type":"boolean"},"nextOffset":{"oneOf":[{"type":"null"},{"type":"integer","minimum":0,"maximum":9007199254740991}]},"layers":{"type":"array","maxItems":50,"items":{"type":"object","additionalProperties":false,"required":["locator","stackIndex","name","type","videoEnabled","isThreeD","locked","parentLocator","sourceItemLocator"],"properties":{"locator":{"$ref":"#/$defs/layerLocator"},"stackIndex":{"type":"integer","minimum":1,"maximum":9007199254740991},"name":{"type":"string","maxLength":1024},"type":{"enum":["av","camera","light","text","shape","model3d","null","adjustment","unknown"]},"videoEnabled":{"type":"boolean"},"isThreeD":{"type":"boolean"},"locked":{"type":"boolean"},"parentLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/layerLocator"}]},"sourceItemLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/sourceItemLocator"}]}}}}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"locatorBase":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"enum":["project","item","composition","layer","stream"]},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}},"compositionLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"composition"}}}]},"layerLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"layer"}}}]},"sourceItemLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"enum":["item","composition"]}}}]}},"x-invariant":"returned-equals-layers-length-and-page-metadata-is-self-consistent"},"requirements":[{"id":"aemcp.requirement.native.composition-layers-list","contractVersion":1}],"examples":[{"id":"aemcp-example-composition-layers-list-empty","kind":"positive","summary":"List the first bounded page of an empty composition.","arguments":{"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"offset":0,"limit":25},"expected":{"outcome":"succeeded","value":{"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"compositionName":"SYNTHETIC_COMPOSITION","total":0,"offset":0,"limit":25,"returned":0,"hasMore":false,"nextOffset":null,"layers":[]}}},{"id":"aemcp-example-composition-layers-list-stale","kind":"negative","summary":"Refresh a stale composition locator before listing layers.","arguments":{"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"offset":0,"limit":25},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"}}]})aemcp";
 }
+std::string composition_time_read_descriptor(const CapabilitiesSuccess& response) {
+  if (response.detail == CapabilityDetail::kSummary) {
+    return R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"detail":"summary","id":"ae.composition.time.read","idempotency":"idempotent","mutability":"read-only","preconditions":["An After Effects project must be open.","compositionLocator must come from ae.project.items.list@1."],"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads composition time without changing After Effects state.","summary":"Read the current time of one After Effects composition.","undo":"not-applicable","version":1})aemcp";
+  }
+  require_digest(response.composition_time_read_contract_digest, "contract digest");
+  if (response.composition_time_read_contract_digest
+      != "fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd") {
+    invalid_argument(
+        "composition time contract digest does not match the compiled descriptor");
+  }
+  return R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd","detail":"full","examples":[{"arguments":{"compositionLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"composition","objectId":"66666666-6666-4666-8666-666666666666","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}},"expected":{"outcome":"succeeded","value":{"compositionLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"composition","objectId":"66666666-6666-4666-8666-666666666666","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"currentTime":{"scale":1000,"secondsRational":"3003/1000","value":3003}}},"id":"aemcp-example-composition-time-read","kind":"positive","summary":"Read an exact rational current time from a composition."},{"arguments":{"compositionLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"composition","objectId":"66666666-6666-4666-8666-666666666666","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"},"id":"aemcp-example-composition-time-read-stale","kind":"negative","summary":"Refresh a stale composition locator before reading current time."}],"id":"ae.composition.time.read","idempotency":"idempotent","inputContractId":"aemcp.contract.ae.composition.time.read.input.v1","inputSchema":{"$defs":{"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"composition"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"compositionLocator":{"$ref":"#/$defs/compositionLocator"}},"required":["compositionLocator"],"type":"object"},"mutability":"read-only","preconditions":["An After Effects project must be open.","compositionLocator must come from ae.project.items.list@1."],"requirements":[{"contractVersion":1,"id":"aemcp.requirement.native.composition-time-read"}],"resultContractId":"aemcp.contract.ae.composition.time.read.result.v1","resultSchema":{"$defs":{"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"composition"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"compositionLocator":{"$ref":"#/$defs/compositionLocator"},"currentTime":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"}},"required":["compositionLocator","currentTime"],"type":"object","x-invariant":"secondsRational-is-the-reduced-canonical-form-of-value-over-scale"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads composition time without changing After Effects state.","summary":"Read the current time of one After Effects composition.","undo":"not-applicable","version":1})aemcp";
+}
+
 std::string layer_properties_list_descriptor(const CapabilitiesSuccess& response) {
   if (response.detail == CapabilityDetail::kSummary) {
     return R"aemcp({"detail":"summary","id":"ae.layer.properties.list","version":1,"schemaVersion":1,"summary":"List a bounded page of direct properties on an After Effects layer or property group.","risk":"read","mutability":"read-only","idempotency":"idempotent","cancellation":"before-dispatch","undo":"not-applicable","sideEffectSummary":"Reads layer properties and safe primitive values without changing After Effects state.","preconditions":["An After Effects project must be open.","layerLocator must come from ae.composition.layers.list@1.","parentPropertyLocator must come from ae.layer.properties.list@1 for the same layer."],"compatibility":{"status":"unverified","intendedPlatforms":["macos-arm64","windows-x64"]}})aemcp";
@@ -2006,6 +2054,11 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
   if (response.include_composition_layers_list) {
     if (needs_comma) items.push_back(',');
     items += composition_layers_list_descriptor(response);
+    needs_comma = true;
+  }
+  if (response.include_composition_time_read) {
+    if (needs_comma) items.push_back(',');
+    items += composition_time_read_descriptor(response);
     needs_comma = true;
   }
   if (response.include_layer_properties_list) {
@@ -2220,6 +2273,44 @@ std::vector<std::uint8_t> encode_composition_layers_success(
       + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\",\"digest\":"
       + json_string(response.postcondition_digest)
       + ",\"kind\":\"composition-layers-list\",\"verified\":true},\"requestDigest\":"
+      + json_string(response.request_digest) + ",\"requestId\":"
+      + json_string(response.request_id) + ",\"sessionId\":"
+      + json_string(response.session_id) + ",\"startedAtUnixMs\":"
+      + std::to_string(response.started_at_unix_ms)
+      + "},\"outcome\":\"succeeded\",\"value\":" + value + "},\"sessionId\":"
+      + json_string(response.session_id) + ",\"wireVersion\":1}";
+  return frame_output(std::move(json));
+}
+
+std::vector<std::uint8_t> encode_composition_time_success(
+    const CompositionTimeSuccess& response) {
+  require_request_id(response.request_id);
+  require_uuid(response.session_id, "session ID");
+  require_uuid(response.host_instance_id, "host instance ID");
+  require_digest(response.request_digest, "request digest");
+  require_digest(response.postcondition_digest, "postcondition digest");
+  const std::string value = canonical_composition_time_value(response.value);
+  if (response.replayed || response.started_at_unix_ms < 1
+      || response.started_at_unix_ms > kMaxSafeInteger
+      || response.completed_at_unix_ms < response.started_at_unix_ms
+      || response.completed_at_unix_ms > kMaxSafeInteger
+      || response.value.composition_locator.host_instance_id != response.host_instance_id
+      || response.value.composition_locator.session_id != response.session_id
+      || response.postcondition_digest
+          != digest_composition_time_postcondition(response.value)) {
+    invalid_argument("invalid or unvalidated composition time evidence");
+  }
+  std::string json = "{\"kind\":\"response\",\"method\":\"invoke\",\"ok\":true,"
+      "\"replayed\":false,\"requestId\":" + json_string(response.request_id)
+      + ",\"result\":{\"capabilityId\":\"ae.composition.time.read\","
+        "\"capabilityVersion\":1,\"engine\":\"native-aegp\",\"evidence\":{"
+        "\"capabilityId\":\"ae.composition.time.read\",\"capabilityVersion\":1,"
+        "\"completedAtUnixMs\":" + std::to_string(response.completed_at_unix_ms)
+      + ",\"effect\":\"none\",\"engine\":\"native-aegp\",\"hostInstanceId\":"
+      + json_string(response.host_instance_id)
+      + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\",\"digest\":"
+      + json_string(response.postcondition_digest)
+      + ",\"kind\":\"composition-time-read\",\"verified\":true},\"requestDigest\":"
       + json_string(response.request_digest) + ",\"requestId\":"
       + json_string(response.request_id) + ",\"sessionId\":"
       + json_string(response.session_id) + ",\"startedAtUnixMs\":"

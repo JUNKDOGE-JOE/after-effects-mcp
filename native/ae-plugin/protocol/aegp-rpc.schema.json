@@ -56,6 +56,12 @@
       "minimum": 0,
       "maximum": 9007199254740991
     },
+    "secondsRational": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 28,
+      "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+    },
     "decimalString": {
       "type": "string",
       "minLength": 1,
@@ -325,6 +331,14 @@
         "compositionLocator": { "$ref": "#/$defs/compositionLocator" },
         "offset": { "$ref": "#/$defs/pageOffset" },
         "limit": { "$ref": "#/$defs/pageLimit" }
+      }
+    },
+    "compositionTimeReadArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compositionLocator"],
+      "properties": {
+        "compositionLocator": { "$ref": "#/$defs/compositionLocator" }
       }
     },
     "layerPropertiesListArguments": {
@@ -606,6 +620,80 @@
         "x-invariant": "returned-equals-layers-length-and-page-metadata-is-self-consistent"
       }
     },
+    "compositionTimeReadInputSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["compositionLocator"],
+        "properties": {
+          "compositionLocator": { "$ref": "#/$defs/compositionLocator" }
+        },
+        "$defs": {
+          "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "compositionLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "hostInstanceId", "sessionId", "projectId", "generation", "objectId"],
+            "properties": {
+              "kind": { "const": "composition" },
+              "hostInstanceId": { "$ref": "#/$defs/uuid" },
+              "sessionId": { "$ref": "#/$defs/uuid" },
+              "projectId": { "$ref": "#/$defs/uuid" },
+              "generation": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              "objectId": { "$ref": "#/$defs/uuid" }
+            }
+          }
+        }
+      }
+    },
+    "compositionTimeReadResultSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["compositionLocator", "currentTime"],
+        "properties": {
+          "compositionLocator": { "$ref": "#/$defs/compositionLocator" },
+          "currentTime": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["value", "scale", "secondsRational"],
+            "properties": {
+              "value": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+              "scale": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+              "secondsRational": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 28,
+                "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+              }
+            }
+          }
+        },
+        "$defs": {
+          "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "compositionLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "hostInstanceId", "sessionId", "projectId", "generation", "objectId"],
+            "properties": {
+              "kind": { "const": "composition" },
+              "hostInstanceId": { "$ref": "#/$defs/uuid" },
+              "sessionId": { "$ref": "#/$defs/uuid" },
+              "projectId": { "$ref": "#/$defs/uuid" },
+              "generation": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              "objectId": { "$ref": "#/$defs/uuid" }
+            }
+          }
+        },
+        "x-invariant": "secondsRational-is-the-reduced-canonical-form-of-value-over-scale"
+      }
+    },
     "layerPropertiesListInputSchemaContract": {
       "const": {
         "type": "object",
@@ -862,6 +950,16 @@
         "arguments": { "$ref": "#/$defs/compositionLayersListArguments" }
       }
     },
+    "compositionTimeReadInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.composition.time.read" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/compositionTimeReadArguments" }
+      }
+    },
     "layerPropertiesListInvokeParams": {
       "type": "object",
       "additionalProperties": false,
@@ -879,6 +977,7 @@
         { "$ref": "#/$defs/projectBitDepthSetInvokeParams" },
         { "$ref": "#/$defs/projectItemsListInvokeParams" },
         { "$ref": "#/$defs/compositionLayersListInvokeParams" },
+        { "$ref": "#/$defs/compositionTimeReadInvokeParams" },
         { "$ref": "#/$defs/layerPropertiesListInvokeParams" }
       ],
       "x-invariant": "every-invoke-variant-is-compile-time-allowlisted-and-closed"
@@ -1113,6 +1212,7 @@
         { "$ref": "#/$defs/projectBitDepthSetArguments" },
         { "$ref": "#/$defs/projectItemsListArguments" },
         { "$ref": "#/$defs/compositionLayersListArguments" },
+        { "$ref": "#/$defs/compositionTimeReadArguments" },
         { "$ref": "#/$defs/layerPropertiesListArguments" }
       ]
     },
@@ -1123,6 +1223,7 @@
         { "$ref": "#/$defs/projectBitDepthSetValue" },
         { "$ref": "#/$defs/projectItemsListValue" },
         { "$ref": "#/$defs/compositionLayersListValue" },
+        { "$ref": "#/$defs/compositionTimeReadValue" },
         { "$ref": "#/$defs/layerPropertiesListValue" }
       ]
     },
@@ -1132,6 +1233,7 @@
         { "$ref": "#/$defs/projectBitDepthSetInputSchemaContract" },
         { "$ref": "#/$defs/projectItemsListInputSchemaContract" },
         { "$ref": "#/$defs/compositionLayersListInputSchemaContract" },
+        { "$ref": "#/$defs/compositionTimeReadInputSchemaContract" },
         { "$ref": "#/$defs/layerPropertiesListInputSchemaContract" }
       ]
     },
@@ -1142,6 +1244,7 @@
         { "$ref": "#/$defs/projectBitDepthSetResultSchemaContract" },
         { "$ref": "#/$defs/projectItemsListResultSchemaContract" },
         { "$ref": "#/$defs/compositionLayersListResultSchemaContract" },
+        { "$ref": "#/$defs/compositionTimeReadResultSchemaContract" },
         { "$ref": "#/$defs/layerPropertiesListResultSchemaContract" }
       ]
     },
@@ -1547,6 +1650,25 @@
       },
       "x-invariant": "returned-equals-layers-length-and-page-metadata-is-self-consistent"
     },
+    "compositionTimeReadValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compositionLocator", "currentTime"],
+      "properties": {
+        "compositionLocator": { "$ref": "#/$defs/compositionLocator" },
+        "currentTime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "scale", "secondsRational"],
+          "properties": {
+            "value": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+            "scale": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+            "secondsRational": { "$ref": "#/$defs/secondsRational" }
+          }
+        }
+      },
+      "x-invariant": "secondsRational-is-the-reduced-canonical-form-of-value-over-scale"
+    },
     "layerPropertyValue": {
       "oneOf": [
         { "type": "null" },
@@ -1705,6 +1827,19 @@
         "evidence": { "$ref": "#/$defs/executionEvidence" }
       }
     },
+    "compositionTimeReadInvokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.composition.time.read" },
+        "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" },
+        "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/compositionTimeReadValue" },
+        "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
     "layerPropertiesListInvokeResult": {
       "type": "object",
       "additionalProperties": false,
@@ -1725,6 +1860,7 @@
         { "$ref": "#/$defs/projectBitDepthSetInvokeResult" },
         { "$ref": "#/$defs/projectItemsListInvokeResult" },
         { "$ref": "#/$defs/compositionLayersListInvokeResult" },
+        { "$ref": "#/$defs/compositionTimeReadInvokeResult" },
         { "$ref": "#/$defs/layerPropertiesListInvokeResult" }
       ]
     },

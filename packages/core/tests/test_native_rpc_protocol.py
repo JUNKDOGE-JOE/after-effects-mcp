@@ -62,6 +62,7 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
         "invoke-project-bit-depth-set.json",
         "invoke-project-items-list.json",
         "invoke-composition-layers-list.json",
+        "invoke-composition-time-read.json",
         "cancel.json",
     ):
         fixture = _json(FIXTURE_ROOT / name)
@@ -85,6 +86,7 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
         "invoke-project-bit-depth-set.json",
         "invoke-project-items-list.json",
         "invoke-composition-layers-list.json",
+        "invoke-composition-time-read.json",
         "cancel.json",
         "errors.json",
         "negative-corpus.json",
@@ -147,6 +149,7 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
         "ae.project.bit-depth.set",
         "ae.project.items.list",
         "ae.composition.layers.list",
+        "ae.composition.time.read",
         "ae.layer.properties.list",
     ]
     assert capabilities["response"]["result"]["capabilitiesDigest"] == hello[

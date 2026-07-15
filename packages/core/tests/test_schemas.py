@@ -9,11 +9,12 @@ from ae_mcp import schemas as S
 
 
 def test_registry_has_all_verbs():
-    assert len(S.SCHEMAS) == 50, f"expected 50 verbs, got {len(S.SCHEMAS)}"
+    assert len(S.SCHEMAS) == 51, f"expected 51 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.projectSummary",
         "ae.getProjectBitDepth", "ae.setProjectBitDepth",
-        "ae.listProjectItems", "ae.listCompositionLayers", "ae.listLayerProperties",
+        "ae.listProjectItems", "ae.listCompositionLayers", "ae.getCompositionTime",
+        "ae.listLayerProperties",
         "ae.layers", "ae.readProps", "ae.exec",
         "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.previewFrame",
         "ae.applyEffect", "ae.ping", "ae.status", "ae.diagnose",
@@ -132,6 +133,23 @@ def test_native_composition_layer_listing_requires_exact_composition_locator():
     with pytest.raises(ValidationError):
         S.AeListCompositionLayersArgs(
             composition_locator=_locator("composition"), offset=True
+        )
+
+
+def test_native_composition_time_requires_only_an_exact_composition_locator():
+    args = S.AeGetCompositionTimeArgs(
+        composition_locator=_locator("composition")
+    )
+    assert args.composition_locator.kind == "composition"
+
+    with pytest.raises(ValidationError):
+        S.AeGetCompositionTimeArgs()
+    with pytest.raises(ValidationError):
+        S.AeGetCompositionTimeArgs(composition_locator=_locator("project"))
+    with pytest.raises(ValidationError):
+        S.AeGetCompositionTimeArgs(
+            composition_locator=_locator("composition"),
+            comp_id=1,
         )
 
 

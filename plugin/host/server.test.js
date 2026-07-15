@@ -20,6 +20,9 @@ const projectItemsFixture = require(
 const compositionLayersFixture = require(
     '../../native/ae-plugin/protocol/fixtures/invoke-composition-layers-list.json'
 ).response.result;
+const compositionTimeFixture = require(
+    '../../native/ae-plugin/protocol/fixtures/invoke-composition-time-read.json'
+).response.result;
 const layerPropertiesVector = require(
     '../../native/ae-plugin/protocol/fixtures/invoke-layer-properties-list.json'
 );
@@ -222,12 +225,15 @@ function fakeNativeClient() {
             calls.push(['invoke', request]);
             if (request.capabilityId === 'ae.project.items.list'
                 || request.capabilityId === 'ae.composition.layers.list'
+                || request.capabilityId === 'ae.composition.time.read'
                 || request.capabilityId === 'ae.layer.properties.list') {
                 const result = structuredClone(
                     request.capabilityId === 'ae.project.items.list'
                         ? projectItemsFixture
                         : request.capabilityId === 'ae.composition.layers.list'
-                            ? compositionLayersFixture : layerPropertiesFixture,
+                            ? compositionLayersFixture
+                            : request.capabilityId === 'ae.composition.time.read'
+                                ? compositionTimeFixture : layerPropertiesFixture,
                 );
                 result.replayed = false;
                 result.evidence.requestId = request.requestId;
@@ -298,6 +304,10 @@ function fakeNativeClient() {
                     nativeCapabilitiesFixture.items[3].contractDigest,
                 compositionLayersListContractDigest:
                     nativeCapabilitiesFixture.items[4].contractDigest,
+                compositionTimeReadContractDigest:
+                    nativeCapabilitiesFixture.items.find(function (item) {
+                        return item.id === 'ae.composition.time.read';
+                    })?.contractDigest || null,
                 layerPropertiesListContractDigest:
                     nativeCapabilitiesFixture.items.find(function (item) {
                         return item.id === 'ae.layer.properties.list';
@@ -399,6 +409,20 @@ test('native routes require the shared token and reject an open-ended invoke env
         });
         assert.strictEqual(invalidLayerPage.status, 400);
         assert.strictEqual(invalidLayerPage.body.error.code, 'INVALID_ARGUMENT');
+        const invalidCompositionTime = await post(port, '/native/invoke', {
+            'X-AE-MCP-Token': 'known-secret-token',
+        }, {
+            requestId: 'core-composition-time-invalid',
+            capabilityId: 'ae.composition.time.read',
+            capabilityVersion: 1,
+            arguments: {
+                compositionLocator: compositionTimeFixture.value.compositionLocator,
+                compositionName: 'not-allowed',
+            },
+            deadlineUnixMs: Date.now() + 10000,
+        });
+        assert.strictEqual(invalidCompositionTime.status, 400);
+        assert.strictEqual(invalidCompositionTime.body.error.code, 'INVALID_ARGUMENT');
         const invalidPropertyPage = await post(port, '/native/invoke', {
             'X-AE-MCP-Token': 'known-secret-token',
         }, {
@@ -486,6 +510,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
                 'ae.project.bit-depth.set',
                 'ae.project.items.list',
                 'ae.composition.layers.list',
+                'ae.composition.time.read',
                 'ae.layer.properties.list',
             ],
         );
@@ -559,6 +584,28 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
         );
         assert.strictEqual(compositionLayers.status, 200);
         assert.strictEqual(compositionLayers.body.result.value.layers[0].locked, false);
+        const compositionTimeRequest = {
+            requestId: 'core-composition-time-1',
+            capabilityId: 'ae.composition.time.read',
+            capabilityVersion: 1,
+            arguments: {
+                compositionLocator: compositionTimeFixture.value.compositionLocator,
+            },
+            deadlineUnixMs,
+        };
+        const compositionTime = await post(
+            port, '/native/invoke', headers, compositionTimeRequest,
+        );
+        assert.strictEqual(compositionTime.status, 200);
+        assert.deepStrictEqual(compositionTime.body.result.value.currentTime, {
+            value: 3003,
+            scale: 1000,
+            secondsRational: '3003/1000',
+        });
+        assert.strictEqual(
+            Object.hasOwn(compositionTime.body.result.value, 'compositionName'),
+            false,
+        );
         const layerPropertiesRequest = {
             requestId: 'core-layer-properties-1',
             capabilityId: 'ae.layer.properties.list',
@@ -586,6 +633,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
             ['invoke', bitDepthSetRequest],
             ['invoke', projectItemsRequest],
             ['invoke', compositionLayersRequest],
+            ['invoke', compositionTimeRequest],
             ['invoke', layerPropertiesRequest],
         ]);
     } finally {

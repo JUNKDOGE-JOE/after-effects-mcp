@@ -5,7 +5,9 @@
 #include <cstdint>
 #include <deque>
 #include <mutex>
+#include <numeric>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -26,6 +28,8 @@ inline constexpr std::string_view kProjectItemsListCapability =
     "ae.project.items.list";
 inline constexpr std::string_view kCompositionLayersListCapability =
     "ae.composition.layers.list";
+inline constexpr std::string_view kCompositionTimeReadCapability =
+    "ae.composition.time.read";
 inline constexpr std::string_view kLayerPropertiesListCapability =
     "ae.layer.properties.list";
 inline constexpr std::size_t kNativePageValueBudgetBytes = 48U * 1024U;
@@ -149,6 +153,39 @@ struct CompositionLayersPage {
   std::vector<CompositionLayerEntry> layers;
 };
 
+struct CompositionCurrentTime {
+  std::int32_t value{0};
+  std::uint32_t scale{1};
+  std::string seconds_rational{"0"};
+};
+
+struct CompositionTimeRead {
+  ObjectLocator composition_locator;
+  CompositionCurrentTime current_time;
+};
+
+// Canonical reduced representation of value / scale. This deliberately
+// promotes signed SDK values before magnitude conversion so INT32_MIN is safe.
+[[nodiscard]] inline std::string canonical_seconds_rational(
+    std::int64_t value, std::uint64_t scale) {
+  if (scale == 0) {
+    throw std::invalid_argument("composition time scale must be positive");
+  }
+  if (value == 0) return "0";
+  const std::uint64_t magnitude = value < 0
+      ? static_cast<std::uint64_t>(-(value + 1)) + 1U
+      : static_cast<std::uint64_t>(value);
+  const std::uint64_t divisor = std::gcd(magnitude, scale);
+  std::string result = value < 0 ? "-" : "";
+  result += std::to_string(magnitude / divisor);
+  const std::uint64_t denominator = scale / divisor;
+  if (denominator != 1) {
+    result.push_back('/');
+    result += std::to_string(denominator);
+  }
+  return result;
+}
+
 struct LayerPropertySampleTime {
   std::int64_t value{0};
   std::uint64_t scale{1};
@@ -221,6 +258,12 @@ struct CompositionLayersQuery {
   ObjectLocator composition_locator;
 };
 
+struct CompositionTimeQuery {
+  std::string host_instance_id;
+  std::string session_id;
+  ObjectLocator composition_locator;
+};
+
 struct LayerPropertiesQuery {
   std::string host_instance_id;
   std::string session_id;
@@ -287,6 +330,18 @@ struct HostCompositionLayersResult {
       std::string code, std::string detail, std::string field = {});
 };
 
+struct HostCompositionTimeResult {
+  bool ok{false};
+  CompositionTimeRead value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostCompositionTimeResult success(CompositionTimeRead value);
+  [[nodiscard]] static HostCompositionTimeResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
 struct HostLayerPropertiesResult {
   bool ok{false};
   LayerPropertiesPage value;
@@ -311,6 +366,8 @@ class HostApi {
       const ProjectItemsQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostCompositionLayersResult list_composition_layers(
       const CompositionLayersQuery& query, TimePoint work_deadline);
+  [[nodiscard]] virtual HostCompositionTimeResult read_composition_time(
+      const CompositionTimeQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerPropertiesResult list_layer_properties(
       const LayerPropertiesQuery& query, TimePoint work_deadline);
 };
@@ -412,6 +469,7 @@ struct Completion {
   ProjectBitDepthChanged bit_depth_change_result;
   ProjectItemsPage project_items_result;
   CompositionLayersPage composition_layers_result;
+  CompositionTimeRead composition_time_result;
   LayerPropertiesPage layer_properties_result;
   // Internal fence correlation only; never serialized or logged.
   std::string idempotency_key;

@@ -106,6 +106,8 @@ SourceCommit = Annotated[StrictStr, Field(pattern=_SOURCE_COMMIT)]
 PositiveInt = Annotated[StrictInt, Field(ge=1, le=_SAFE_MAX)]
 NonNegativeInt = Annotated[StrictInt, Field(ge=0, le=_SAFE_MAX)]
 SignedInt = Annotated[StrictInt, Field(ge=-_SAFE_MAX, le=_SAFE_MAX)]
+SignedInt32 = Annotated[StrictInt, Field(ge=-2_147_483_648, le=2_147_483_647)]
+UnsignedInt32 = Annotated[StrictInt, Field(ge=1, le=4_294_967_295)]
 
 _DECIMAL_STRING = r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
 DecimalString = Annotated[
@@ -818,6 +820,52 @@ class CompositionLayersListArguments(_NativeModel):
         return self
 
 
+class CompositionTimeReadArguments(_NativeModel):
+    composition_locator: NativeLocator
+
+    @model_validator(mode="after")
+    def _composition_kind(self) -> "CompositionTimeReadArguments":
+        if self.composition_locator.kind != "composition":
+            raise ValueError("compositionLocator must have kind composition")
+        return self
+
+
+class CompositionCurrentTime(_NativeModel):
+    value: SignedInt32
+    scale: UnsignedInt32
+    seconds_rational: Annotated[
+        StrictStr,
+        Field(
+            min_length=1,
+            max_length=28,
+            pattern=r"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$",
+        ),
+    ]
+
+    @model_validator(mode="after")
+    def _exact_reduced_rational(self) -> "CompositionCurrentTime":
+        divisor = math.gcd(abs(self.value), self.scale)
+        numerator = self.value // divisor
+        denominator = self.scale // divisor
+        expected = str(numerator) if denominator == 1 else f"{numerator}/{denominator}"
+        if self.seconds_rational != expected:
+            raise ValueError(
+                "secondsRational must be the exact reduced form of value/scale"
+            )
+        return self
+
+
+class CompositionTimeReadValue(_NativeModel):
+    composition_locator: NativeLocator
+    current_time: CompositionCurrentTime
+
+    @model_validator(mode="after")
+    def _composition_kind(self) -> "CompositionTimeReadValue":
+        if self.composition_locator.kind != "composition":
+            raise ValueError("compositionLocator must have kind composition")
+        return self
+
+
 class CompositionLayer(_NativeModel):
     locator: NativeLocator
     stack_index: PositiveInt
@@ -1184,6 +1232,19 @@ class CompositionLayersListExecution(_NativeModel):
         )
 
 
+class CompositionTimeReadExecution(_NativeModel):
+    implementation: NativeCapabilityDescriptor
+    negotiation: NativeNegotiation
+    value: CompositionTimeReadValue
+    evidence: NativeExecutionEvidence
+    engine: Literal["native-aegp"] = "native-aegp"
+
+    def audit_fields(self) -> dict[str, Any]:
+        return _native_read_audit_fields(
+            self.implementation, self.negotiation, self.evidence
+        )
+
+
 class LayerPropertiesListExecution(_NativeModel):
     implementation: NativeCapabilityDescriptor
     negotiation: NativeNegotiation
@@ -1213,6 +1274,18 @@ COMPOSITION_LAYERS_LIST_INPUT_CONTRACT_ID = (
 )
 COMPOSITION_LAYERS_LIST_RESULT_CONTRACT_ID = (
     "aemcp.contract.ae.composition.layers.list.result.v1"
+)
+
+COMPOSITION_TIME_READ_CAPABILITY_ID = "ae.composition.time.read"
+COMPOSITION_TIME_READ_CAPABILITY_VERSION = 1
+COMPOSITION_TIME_READ_INPUT_CONTRACT_ID = (
+    "aemcp.contract.ae.composition.time.read.input.v1"
+)
+COMPOSITION_TIME_READ_RESULT_CONTRACT_ID = (
+    "aemcp.contract.ae.composition.time.read.result.v1"
+)
+COMPOSITION_TIME_READ_CONTRACT_DIGEST = (
+    "fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd"
 )
 
 LAYER_PROPERTIES_LIST_CAPABILITY_ID = "ae.layer.properties.list"
@@ -1557,6 +1630,103 @@ _COMPOSITION_LAYERS_LIST_RESULT_SCHEMA = {
         },
     },
     "x-invariant": "returned-equals-layers-length-and-page-metadata-is-self-consistent",
+}
+
+_COMPOSITION_TIME_READ_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["compositionLocator"],
+    "properties": {
+        "compositionLocator": {"$ref": "#/$defs/compositionLocator"},
+    },
+    "$defs": {
+        "uuid": {"type": "string", "pattern": _UUID},
+        "compositionLocator": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "kind",
+                "hostInstanceId",
+                "sessionId",
+                "projectId",
+                "generation",
+                "objectId",
+            ],
+            "properties": {
+                "kind": {"const": "composition"},
+                "hostInstanceId": {"$ref": "#/$defs/uuid"},
+                "sessionId": {"$ref": "#/$defs/uuid"},
+                "projectId": {"$ref": "#/$defs/uuid"},
+                "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": _SAFE_MAX,
+                },
+                "objectId": {"$ref": "#/$defs/uuid"},
+            },
+        },
+    },
+}
+_COMPOSITION_TIME_READ_RESULT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["compositionLocator", "currentTime"],
+    "properties": {
+        "compositionLocator": {"$ref": "#/$defs/compositionLocator"},
+        "currentTime": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["value", "scale", "secondsRational"],
+            "properties": {
+                "value": {
+                    "type": "integer",
+                    "minimum": -2_147_483_648,
+                    "maximum": 2_147_483_647,
+                },
+                "scale": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4_294_967_295,
+                },
+                "secondsRational": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 28,
+                    "pattern": r"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$",
+                },
+            },
+        },
+    },
+    "$defs": {
+        "uuid": {"type": "string", "pattern": _UUID},
+        "compositionLocator": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "kind",
+                "hostInstanceId",
+                "sessionId",
+                "projectId",
+                "generation",
+                "objectId",
+            ],
+            "properties": {
+                "kind": {"const": "composition"},
+                "hostInstanceId": {"$ref": "#/$defs/uuid"},
+                "sessionId": {"$ref": "#/$defs/uuid"},
+                "projectId": {"$ref": "#/$defs/uuid"},
+                "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": _SAFE_MAX,
+                },
+                "objectId": {"$ref": "#/$defs/uuid"},
+            },
+        },
+    },
+    "x-invariant": (
+        "secondsRational-is-the-reduced-canonical-form-of-value-over-scale"
+    ),
 }
 
 _LAYER_PROPERTIES_LIST_INPUT_SCHEMA = {
@@ -2332,6 +2502,33 @@ def _validate_composition_layers_list_descriptor(
     )
 
 
+def _validate_composition_time_read_descriptor(
+    descriptor: NativeCapabilityDescriptor,
+    *,
+    host_platform: NativePlatform,
+) -> None:
+    _validate_navigation_descriptor(
+        descriptor,
+        host_platform=host_platform,
+        capability_id=COMPOSITION_TIME_READ_CAPABILITY_ID,
+        capability_version=COMPOSITION_TIME_READ_CAPABILITY_VERSION,
+        summary="Read the current time of one After Effects composition.",
+        side_effect_summary=(
+            "Reads composition time without changing After Effects state."
+        ),
+        preconditions=(
+            "An After Effects project must be open.",
+            "compositionLocator must come from ae.project.items.list@1.",
+        ),
+        input_contract_id=COMPOSITION_TIME_READ_INPUT_CONTRACT_ID,
+        result_contract_id=COMPOSITION_TIME_READ_RESULT_CONTRACT_ID,
+        contract_digest=COMPOSITION_TIME_READ_CONTRACT_DIGEST,
+        input_schema=_COMPOSITION_TIME_READ_INPUT_SCHEMA,
+        result_schema=_COMPOSITION_TIME_READ_RESULT_SCHEMA,
+        requirement_id="aemcp.requirement.native.composition-time-read",
+    )
+
+
 def _validate_layer_properties_list_descriptor(
     descriptor: NativeCapabilityDescriptor,
     *,
@@ -2422,6 +2619,16 @@ def _composition_layers_list_digest(value: CompositionLayersListValue) -> str:
         {
             "capabilityId": COMPOSITION_LAYERS_LIST_CAPABILITY_ID,
             "capabilityVersion": COMPOSITION_LAYERS_LIST_CAPABILITY_VERSION,
+            "value": value.model_dump(mode="json", by_alias=True),
+        }
+    )
+
+
+def _composition_time_read_digest(value: CompositionTimeReadValue) -> str:
+    return _sha256_closed_json(
+        {
+            "capabilityId": COMPOSITION_TIME_READ_CAPABILITY_ID,
+            "capabilityVersion": COMPOSITION_TIME_READ_CAPABILITY_VERSION,
             "value": value.model_dump(mode="json", by_alias=True),
         }
     )
@@ -3178,6 +3385,64 @@ async def invoke_composition_layers_list(
     )
 
 
+async def invoke_composition_time_read(
+    backend: NativeInvokeBackend,
+    *,
+    request_id: str,
+    composition_locator: NativeLocator | Mapping[str, Any],
+    deadline_unix_ms: int,
+    cancellation: NativeCancellationToken | None = None,
+) -> CompositionTimeReadExecution:
+    """Read one composition's exact current time without consulting JSX."""
+
+    arguments = CompositionTimeReadArguments(
+        composition_locator=composition_locator,
+    )
+    wire_arguments = arguments.model_dump(mode="json", by_alias=True)
+    negotiation, descriptor, _request, result = await _invoke_native_read_request(
+        backend,
+        request_id=request_id,
+        capability_id=COMPOSITION_TIME_READ_CAPABILITY_ID,
+        capability_version=COMPOSITION_TIME_READ_CAPABILITY_VERSION,
+        arguments=wire_arguments,
+        locator=arguments.composition_locator,
+        locator_field="params.arguments.compositionLocator",
+        stale_locator_hint=(
+            "Discard the stale composition locator, then call "
+            "ae_listProjectItems and copy a fresh composition locator."
+        ),
+        descriptor_validator=_validate_composition_time_read_descriptor,
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    try:
+        value = CompositionTimeReadValue.model_validate(result.value)
+        postcondition_digest = _composition_time_read_digest(value)
+    except (ValidationError, TypeError, ValueError, UnicodeError) as exc:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native composition time did not match its typed contract.",
+        ) from exc
+    if (
+        value.composition_locator != arguments.composition_locator
+        or value.composition_locator.host_instance_id
+        != negotiation.host_instance_id
+        or value.composition_locator.session_id != negotiation.session_id
+        or result.evidence.postcondition.kind != "composition-time-read"
+        or result.evidence.postcondition.digest != postcondition_digest
+    ):
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native composition time was not bound to its request and evidence.",
+        )
+    return CompositionTimeReadExecution(
+        implementation=descriptor,
+        negotiation=negotiation,
+        value=value,
+        evidence=result.evidence,
+    )
+
+
 async def invoke_layer_properties_list(
     backend: NativeInvokeBackend,
     *,
@@ -3276,6 +3541,10 @@ __all__ = [
     "CompositionLayersListArguments",
     "CompositionLayersListExecution",
     "CompositionLayersListValue",
+    "CompositionCurrentTime",
+    "CompositionTimeReadArguments",
+    "CompositionTimeReadExecution",
+    "CompositionTimeReadValue",
     "ExecutionEngine",
     "NativeBackendError",
     "NativeBrokerErrorCode",
@@ -3334,6 +3603,11 @@ __all__ = [
     "COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST",
     "COMPOSITION_LAYERS_LIST_INPUT_CONTRACT_ID",
     "COMPOSITION_LAYERS_LIST_RESULT_CONTRACT_ID",
+    "COMPOSITION_TIME_READ_CAPABILITY_ID",
+    "COMPOSITION_TIME_READ_CAPABILITY_VERSION",
+    "COMPOSITION_TIME_READ_CONTRACT_DIGEST",
+    "COMPOSITION_TIME_READ_INPUT_CONTRACT_ID",
+    "COMPOSITION_TIME_READ_RESULT_CONTRACT_ID",
     "LAYER_PROPERTIES_LIST_CAPABILITY_ID",
     "LAYER_PROPERTIES_LIST_CAPABILITY_VERSION",
     "LAYER_PROPERTIES_LIST_CONTRACT_DIGEST",
@@ -3350,6 +3624,7 @@ __all__ = [
     "invoke_project_bit_depth_read",
     "invoke_project_bit_depth_set",
     "invoke_composition_layers_list",
+    "invoke_composition_time_read",
     "invoke_layer_properties_list",
     "invoke_project_items_list",
     "invoke_project_summary",

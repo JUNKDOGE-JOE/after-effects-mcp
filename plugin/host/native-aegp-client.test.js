@@ -29,6 +29,10 @@ const COMPOSITION_LAYERS_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
     '../../native/ae-plugin/protocol/fixtures/invoke-composition-layers-list.json',
 ), 'utf8'));
+const COMPOSITION_TIME_VECTOR = JSON.parse(fs.readFileSync(path.join(
+    __dirname,
+    '../../native/ae-plugin/protocol/fixtures/invoke-composition-time-read.json',
+), 'utf8'));
 const LAYER_PROPERTIES_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
     '../../native/ae-plugin/protocol/fixtures/invoke-layer-properties-list.json',
@@ -236,11 +240,14 @@ function installProtocol(server, options) {
                     };
                 } else if (request.params.capabilityId === 'ae.project.items.list'
                     || request.params.capabilityId === 'ae.composition.layers.list'
+                    || request.params.capabilityId === 'ae.composition.time.read'
                     || request.params.capabilityId === 'ae.layer.properties.list') {
                     const vector = request.params.capabilityId === 'ae.project.items.list'
                         ? PROJECT_ITEMS_VECTOR
                         : request.params.capabilityId === 'ae.composition.layers.list'
-                            ? COMPOSITION_LAYERS_VECTOR : LAYER_PROPERTIES_VECTOR;
+                            ? COMPOSITION_LAYERS_VECTOR
+                            : request.params.capabilityId === 'ae.composition.time.read'
+                                ? COMPOSITION_TIME_VECTOR : LAYER_PROPERTIES_VECTOR;
                     result = structuredClone(vector.response.result);
                     result.evidence.requestId = request.requestId;
                     result.evidence.requestDigest = invokeRequestDigest(request);
@@ -496,6 +503,12 @@ test('CEP client verifies native project summary and bit-depth read/write capabi
         }).contractDigest,
     );
     assert.equal(
+        client.status().compositionTimeReadContractDigest,
+        CAPABILITIES_VECTOR.items.find(function (item) {
+            return item.id === 'ae.composition.time.read';
+        }).contractDigest,
+    );
+    assert.equal(
         client.status().layerPropertiesListContractDigest,
         CAPABILITIES_VECTOR.items.find(function (item) {
             return item.id === 'ae.layer.properties.list';
@@ -572,6 +585,29 @@ test('CEP client verifies native project summary and bit-depth read/write capabi
         compositionLayers.evidence.requestDigest,
         invokeRequestDigest(protocol.requests[6]),
     );
+    const compositionTime = await client.invoke({
+        requestId: 'core-composition-time-1',
+        capabilityId: 'ae.composition.time.read',
+        capabilityVersion: 1,
+        arguments: { compositionLocator },
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.equal(compositionTime.replayed, false);
+    assert.deepEqual(compositionTime.value, {
+        compositionLocator,
+        currentTime: {
+            value: 3003,
+            scale: 1000,
+            secondsRational: '3003/1000',
+        },
+    });
+    assert.equal(Object.hasOwn(compositionTime.value, 'compositionName'), false);
+    assert.equal(compositionTime.evidence.effect, 'none');
+    assert.equal(compositionTime.evidence.undo, undefined);
+    assert.equal(
+        compositionTime.evidence.requestDigest,
+        invokeRequestDigest(protocol.requests[7]),
+    );
     const layerProperties = await client.invoke({
         requestId: 'core-layer-properties-1',
         capabilityId: 'ae.layer.properties.list',
@@ -587,10 +623,11 @@ test('CEP client verifies native project summary and bit-depth read/write capabi
     assert.equal(layerProperties.value.properties[0].propertyIndex, 1);
     assert.equal(
         layerProperties.evidence.requestDigest,
-        invokeRequestDigest(protocol.requests[7]),
+        invokeRequestDigest(protocol.requests[8]),
     );
     assert.deepEqual(protocol.requests.map(function (request) { return request.method; }), [
         'hello', 'capabilities', 'invoke', 'invoke', 'invoke', 'invoke', 'invoke', 'invoke',
+        'invoke',
     ]);
 });
 
@@ -642,6 +679,72 @@ test('CEP graph reads count Unicode scalars rather than UTF-16 code units', {
     });
     assert.equal(Array.from(properties.value.layerName).length, 1024);
     assert.equal(Array.from(properties.value.properties[0].name).length, 1024);
+});
+
+test('CEP composition-time read enforces exact rational and closed native evidence', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const ready = await readyNativeClient(t, {
+        mutateInvoke: function (result, request) {
+            if (result.capabilityId !== 'ae.composition.time.read') return;
+            if (request.requestId === 'composition-time-int32-min') {
+                result.value.currentTime = {
+                    value: -2147483648,
+                    scale: 4294967295,
+                    secondsRational: '-2147483648/4294967295',
+                };
+            } else if (request.requestId === 'composition-time-unreduced') {
+                result.value.currentTime = {
+                    value: 60,
+                    scale: 24,
+                    secondsRational: '60/24',
+                };
+            } else if (request.requestId === 'composition-time-extra-field') {
+                result.value.compositionName = 'Main';
+            } else if (request.requestId === 'composition-time-out-of-range') {
+                result.value.currentTime.value = 2147483648;
+                result.value.currentTime.secondsRational = '2147483648/1000';
+            }
+            rebindPostcondition(result);
+        },
+    });
+    const argumentsValue = structuredClone(COMPOSITION_TIME_VECTOR.request.params.arguments);
+    const accepted = await ready.client.invoke({
+        requestId: 'composition-time-int32-min',
+        capabilityId: 'ae.composition.time.read',
+        capabilityVersion: 1,
+        arguments: argumentsValue,
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.deepEqual(accepted.value.currentTime, {
+        value: -2147483648,
+        scale: 4294967295,
+        secondsRational: '-2147483648/4294967295',
+    });
+
+    for (const requestId of [
+        'composition-time-unreduced',
+        'composition-time-extra-field',
+        'composition-time-out-of-range',
+    ]) {
+        await assert.rejects(ready.client.invoke({
+            requestId,
+            capabilityId: 'ae.composition.time.read',
+            capabilityVersion: 1,
+            arguments: argumentsValue,
+            deadlineUnixMs: 1900000002000,
+        }), { code: 'NATIVE_CONTRACT_MISMATCH', retryable: false });
+    }
+
+    const beforeInvalidInput = ready.protocol.requests.length;
+    await assert.rejects(ready.client.invoke({
+        requestId: 'composition-time-extra-input',
+        capabilityId: 'ae.composition.time.read',
+        capabilityVersion: 1,
+        arguments: { ...argumentsValue, compositionName: 'Main' },
+        deadlineUnixMs: 1900000002000,
+    }), { code: 'INVALID_ARGUMENT', retryable: false });
+    assert.equal(ready.protocol.requests.length, beforeInvalidInput);
 });
 
 for (const invalidUnicode of [
@@ -906,6 +1009,21 @@ test('CEP stale-locator preflight reports the exact field without inventing gene
         assert.deepEqual(error.details, {
             field: 'params.arguments.compositionLocator',
             capabilityId: 'ae.composition.layers.list',
+        });
+        assert.equal(Object.hasOwn(error.details, 'currentGeneration'), false);
+        return true;
+    });
+    await assert.rejects(ready.client.invoke({
+        requestId: 'stale-composition-time-locator',
+        capabilityId: 'ae.composition.time.read',
+        capabilityVersion: 1,
+        arguments: { compositionLocator },
+        deadlineUnixMs: 1900000002000,
+    }), function (error) {
+        assert.equal(error.code, 'STALE_LOCATOR');
+        assert.deepEqual(error.details, {
+            field: 'params.arguments.compositionLocator',
+            capabilityId: 'ae.composition.time.read',
         });
         assert.equal(Object.hasOwn(error.details, 'currentGeneration'), false);
         return true;

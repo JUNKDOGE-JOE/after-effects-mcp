@@ -22,11 +22,13 @@ const PROJECT_BIT_DEPTH_READ_CAPABILITY = 'ae.project.bit-depth.read';
 const PROJECT_BIT_DEPTH_SET_CAPABILITY = 'ae.project.bit-depth.set';
 const PROJECT_ITEMS_LIST_CAPABILITY = 'ae.project.items.list';
 const COMPOSITION_LAYERS_LIST_CAPABILITY = 'ae.composition.layers.list';
+const COMPOSITION_TIME_READ_CAPABILITY = 'ae.composition.time.read';
 const LAYER_PROPERTIES_LIST_CAPABILITY = 'ae.layer.properties.list';
 const PROJECT_BIT_DEPTH_READ_CONTRACT_DIGEST = '936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e';
 const PROJECT_BIT_DEPTH_SET_CONTRACT_DIGEST = 'd5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a';
 const PROJECT_ITEMS_LIST_CONTRACT_DIGEST = '64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e';
 const COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST = '3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75';
+const COMPOSITION_TIME_READ_CONTRACT_DIGEST = 'fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd';
 // Kept in lockstep with the full descriptor in capabilities.json. The native
 // protocol build replaces this value only when the closed contract changes.
 const LAYER_PROPERTIES_LIST_CONTRACT_DIGEST = 'a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba';
@@ -368,6 +370,11 @@ function validCompositionLayersListArguments(value) {
         && Number.isSafeInteger(value.limit) && value.limit >= 1 && value.limit <= 50;
 }
 
+function validCompositionTimeReadArguments(value) {
+    return exactKeys(value, ['compositionLocator'])
+        && validLocator(value.compositionLocator, ['composition']);
+}
+
 function validLayerPropertiesListArguments(value) {
     return exactKeys(value, ['layerLocator', 'offset', 'limit'], ['parentPropertyLocator'])
         && validLocator(value.layerLocator, ['layer'])
@@ -458,6 +465,43 @@ function validCompositionLayersListValue(value, argumentsValue, hostInstanceId, 
         objectIds.add(layer.locator.objectId);
         return true;
     });
+}
+
+function reducedRational(value, scale) {
+    let left = Math.abs(value);
+    let right = scale;
+    while (right !== 0) {
+        const remainder = left % right;
+        left = right;
+        right = remainder;
+    }
+    const divisor = left;
+    const numerator = value / divisor;
+    const denominator = scale / divisor;
+    return denominator === 1 ? String(numerator) : String(numerator) + '/' + String(denominator);
+}
+
+function validCompositionTimeReadValue(value, argumentsValue, hostInstanceId, sessionId) {
+    if (!exactKeys(value, ['compositionLocator', 'currentTime'])
+        || !validLocator(value.compositionLocator, ['composition'])
+        || !locatorsEqual(value.compositionLocator, argumentsValue.compositionLocator)
+        || value.compositionLocator.hostInstanceId !== hostInstanceId
+        || value.compositionLocator.sessionId !== sessionId
+        || !exactKeys(value.currentTime, ['value', 'scale', 'secondsRational'])
+        || !Number.isInteger(value.currentTime.value)
+        || value.currentTime.value < -2147483648
+        || value.currentTime.value > 2147483647
+        || !Number.isInteger(value.currentTime.scale)
+        || value.currentTime.scale < 1
+        || value.currentTime.scale > 4294967295
+        || typeof value.currentTime.secondsRational !== 'string'
+        || value.currentTime.secondsRational.length < 1
+        || value.currentTime.secondsRational.length > 28
+        || !/^(?:0|-?[1-9][0-9]*(?:\/[1-9][0-9]*)?)$/.test(
+            value.currentTime.secondsRational,
+        )) return false;
+    return value.currentTime.secondsRational
+        === reducedRational(value.currentTime.value, value.currentTime.scale);
 }
 
 const LAYER_PROPERTY_GROUPING_TYPES = new Set([
@@ -638,6 +682,21 @@ function compositionLayersListPostconditionDigest(value) {
     });
 }
 
+function compositionTimeReadPostconditionDigest(value) {
+    return sha256Canonical({
+        capabilityId: COMPOSITION_TIME_READ_CAPABILITY,
+        capabilityVersion: 1,
+        value: {
+            compositionLocator: canonicalLocator(value.compositionLocator),
+            currentTime: {
+                scale: value.currentTime.scale,
+                secondsRational: value.currentTime.secondsRational,
+                value: value.currentTime.value,
+            },
+        },
+    });
+}
+
 function canonicalLayerPropertyValue(value) {
     if (value === null) return null;
     if (value.kind === 'scalar') return { kind: value.kind, value: value.value };
@@ -721,6 +780,10 @@ function invokeRequestDigest(request) {
             limit: request.params.arguments.limit,
             offset: request.params.arguments.offset,
         };
+    } else if (request.params.capabilityId === COMPOSITION_TIME_READ_CAPABILITY) {
+        argumentsValue = {
+            compositionLocator: canonicalLocator(request.params.arguments.compositionLocator),
+        };
     } else if (request.params.capabilityId === LAYER_PROPERTIES_LIST_CAPABILITY) {
         argumentsValue = {
             layerLocator: canonicalLocator(request.params.arguments.layerLocator),
@@ -777,6 +840,7 @@ function createNativeAegpClient(options) {
     let projectBitDepthSetContractDigest = null;
     let projectItemsListContractDigest = null;
     let compositionLayersListContractDigest = null;
+    let compositionTimeReadContractDigest = null;
     let layerPropertiesListContractDigest = null;
     let helloIdentity = null;
     let nextRequest = 1;
@@ -825,6 +889,7 @@ function createNativeAegpClient(options) {
         projectBitDepthSetContractDigest = null;
         projectItemsListContractDigest = null;
         compositionLayersListContractDigest = null;
+        compositionTimeReadContractDigest = null;
         layerPropertiesListContractDigest = null;
         helloIdentity = null;
         if (socket) {
@@ -1190,6 +1255,9 @@ function createNativeAegpClient(options) {
         const compositionLayersListItem = Array.isArray(result?.items)
             ? result.items.find(function (candidate) { return candidate?.id === COMPOSITION_LAYERS_LIST_CAPABILITY; })
             : null;
+        const compositionTimeReadItem = Array.isArray(result?.items)
+            ? result.items.find(function (candidate) { return candidate?.id === COMPOSITION_TIME_READ_CAPABILITY; })
+            : null;
         const layerPropertiesListItem = Array.isArray(result?.items)
             ? result.items.find(function (candidate) { return candidate?.id === LAYER_PROPERTIES_LIST_CAPABILITY; })
             : null;
@@ -1199,6 +1267,8 @@ function createNativeAegpClient(options) {
         const requiresProjectItemsList = ids === undefined || ids.includes(PROJECT_ITEMS_LIST_CAPABILITY);
         const requiresCompositionLayersList = ids === undefined
             || ids.includes(COMPOSITION_LAYERS_LIST_CAPABILITY);
+        const requiresCompositionTimeRead = ids === undefined
+            || ids.includes(COMPOSITION_TIME_READ_CAPABILITY);
         const requiresLayerPropertiesList = ids === undefined
             || ids.includes(LAYER_PROPERTIES_LIST_CAPABILITY);
         if (!exactKeys(result, ['detail', 'items', 'nextCursor', 'queryDigest', 'capabilitiesDigest'])
@@ -1210,6 +1280,7 @@ function createNativeAegpClient(options) {
             || (requiresBitDepthSet && !bitDepthSetItem)
             || (requiresProjectItemsList && !projectItemsListItem)
             || (requiresCompositionLayersList && !compositionLayersListItem)
+            || (requiresCompositionTimeRead && !compositionTimeReadItem)
             || (requiresLayerPropertiesList && !layerPropertiesListItem)
             || (summaryItem && (summaryItem.version !== 1 || summaryItem.detail !== requestedDetail
                 || (requestedDetail === 'full' && !SHA256_PATTERN.test(summaryItem.contractDigest))))
@@ -1230,6 +1301,11 @@ function createNativeAegpClient(options) {
                 || (requestedDetail === 'full'
                     && compositionLayersListItem.contractDigest
                         !== COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST)))
+            || (compositionTimeReadItem && (compositionTimeReadItem.version !== 1
+                || compositionTimeReadItem.detail !== requestedDetail
+                || (requestedDetail === 'full'
+                    && compositionTimeReadItem.contractDigest
+                        !== COMPOSITION_TIME_READ_CONTRACT_DIGEST)))
             || (layerPropertiesListItem && (layerPropertiesListItem.version !== 1
                 || layerPropertiesListItem.detail !== requestedDetail
                 || (requestedDetail === 'full'
@@ -1251,6 +1327,9 @@ function createNativeAegpClient(options) {
         }
         if (requestedDetail === 'full' && compositionLayersListItem) {
             compositionLayersListContractDigest = compositionLayersListItem.contractDigest;
+        }
+        if (requestedDetail === 'full' && compositionTimeReadItem) {
+            compositionTimeReadContractDigest = compositionTimeReadItem.contractDigest;
         }
         if (requestedDetail === 'full' && layerPropertiesListItem) {
             layerPropertiesListContractDigest = layerPropertiesListItem.contractDigest;
@@ -1277,6 +1356,9 @@ function createNativeAegpClient(options) {
         const compositionLayersListCall = call.capabilityId === COMPOSITION_LAYERS_LIST_CAPABILITY
             && call.capabilityVersion === 1
             && validCompositionLayersListArguments(call.arguments);
+        const compositionTimeReadCall = call.capabilityId === COMPOSITION_TIME_READ_CAPABILITY
+            && call.capabilityVersion === 1
+            && validCompositionTimeReadArguments(call.arguments);
         const layerPropertiesListCall = call.capabilityId === LAYER_PROPERTIES_LIST_CAPABILITY
             && call.capabilityVersion === 1
             && validLayerPropertiesListArguments(call.arguments);
@@ -1285,6 +1367,7 @@ function createNativeAegpClient(options) {
         ]) || !TOKEN_PATTERN.test(call.requestId || '')
             || (!summaryCall && !bitDepthReadCall && !bitDepthSetCall
                 && !projectItemsListCall && !compositionLayersListCall
+                && !compositionTimeReadCall
                 && !layerPropertiesListCall)
             || !Number.isSafeInteger(call.deadlineUnixMs) || call.deadlineUnixMs <= 0) {
             throw nativeError('INVALID_ARGUMENT', 'native invoke request is invalid', false);
@@ -1314,6 +1397,12 @@ function createNativeAegpClient(options) {
                 'native composition-layers list capability was not verified before dispatch',
             );
         }
+        if (compositionTimeReadCall
+            && compositionTimeReadContractDigest !== COMPOSITION_TIME_READ_CONTRACT_DIGEST) {
+            throw nativeContractMismatch(
+                'native composition-time read capability was not verified before dispatch',
+            );
+        }
         if (layerPropertiesListCall
             && layerPropertiesListContractDigest !== LAYER_PROPERTIES_LIST_CONTRACT_DIGEST) {
             throw nativeContractMismatch(
@@ -1323,7 +1412,7 @@ function createNativeAegpClient(options) {
         let locatorChecks = [];
         if (projectItemsListCall && call.arguments.projectLocator !== undefined) {
             locatorChecks = [[call.arguments.projectLocator, 'projectLocator', 'ae_listProjectItems']];
-        } else if (compositionLayersListCall) {
+        } else if (compositionLayersListCall || compositionTimeReadCall) {
             locatorChecks = [[
                 call.arguments.compositionLocator,
                 'compositionLocator',
@@ -1431,6 +1520,7 @@ function createNativeAegpClient(options) {
                 );
             }
             if (bitDepthReadCall || projectItemsListCall || compositionLayersListCall
+                || compositionTimeReadCall
                 || layerPropertiesListCall) {
                 throw nativeContractMismatch(
                     'native read result lacked verified AEGP evidence',
@@ -1478,7 +1568,7 @@ function createNativeAegpClient(options) {
             );
         }
         const navigationEvidenceValid = (projectItemsListCall || compositionLayersListCall
-            || layerPropertiesListCall)
+            || compositionTimeReadCall || layerPropertiesListCall)
             && exactKeys(evidence, [
                 'engine', 'hostInstanceId', 'sessionId', 'requestId', 'capabilityId',
                 'capabilityVersion', 'startedAtUnixMs', 'completedAtUnixMs', 'effect',
@@ -1508,6 +1598,18 @@ function createNativeAegpClient(options) {
             || evidence.postcondition.digest
                 !== compositionLayersListPostconditionDigest(value))) {
             throw nativeContractMismatch('native composition-layers page failed verification');
+        }
+        if (compositionTimeReadCall && (!navigationEvidenceValid
+            || result.replayed !== false || evidence.effect !== 'none'
+            || evidence.postcondition.kind !== 'composition-time-read'
+            || compositionTimeReadContractDigest
+                !== COMPOSITION_TIME_READ_CONTRACT_DIGEST
+            || !validCompositionTimeReadValue(
+                value, call.arguments, endpoint.hostInstanceId, sessionId,
+            )
+            || evidence.postcondition.digest
+                !== compositionTimeReadPostconditionDigest(value))) {
+            throw nativeContractMismatch('native composition-time read failed verification');
         }
         if (layerPropertiesListCall && (!navigationEvidenceValid
             || result.replayed !== false || evidence.effect !== 'none'
@@ -1562,6 +1664,7 @@ function createNativeAegpClient(options) {
                 projectBitDepthSetContractDigest,
                 projectItemsListContractDigest,
                 compositionLayersListContractDigest,
+                compositionTimeReadContractDigest,
                 layerPropertiesListContractDigest,
             });
         },

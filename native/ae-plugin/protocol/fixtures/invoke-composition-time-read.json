@@ -1,0 +1,118 @@
+{
+  "_fixture": {
+    "classification": "synthetic-contract-vector",
+    "runtimeEvidence": false,
+    "compatibilityEvidence": false
+  },
+  "request": {
+    "wireVersion": 1,
+    "kind": "request",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "requestId": "invoke-composition-time-1",
+    "method": "invoke",
+    "deadlineUnixMs": 1900000005000,
+    "params": {
+      "capabilityId": "ae.composition.time.read",
+      "capabilityVersion": 1,
+      "arguments": {
+        "compositionLocator": {
+          "kind": "composition",
+          "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+          "sessionId": "11111111-1111-4111-8111-111111111111",
+          "projectId": "44444444-4444-4444-8444-444444444444",
+          "generation": 8,
+          "objectId": "66666666-6666-4666-8666-666666666666"
+        }
+      }
+    }
+  },
+  "events": [
+    {
+      "wireVersion": 1,
+      "kind": "event",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-composition-time-1",
+      "event": "progress",
+      "sequence": 1,
+      "progress": {
+        "phase": "queued",
+        "fraction": 0,
+        "message": "Queued for the bounded main-thread dispatcher."
+      }
+    },
+    {
+      "wireVersion": 1,
+      "kind": "event",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-composition-time-1",
+      "event": "progress",
+      "sequence": 2,
+      "progress": {
+        "phase": "dispatched",
+        "fraction": 0.5,
+        "message": "Entered the synthetic host-thread dispatch phase."
+      }
+    },
+    {
+      "wireVersion": 1,
+      "kind": "event",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-composition-time-1",
+      "event": "progress",
+      "sequence": 3,
+      "progress": {
+        "phase": "validating",
+        "fraction": 0.9,
+        "message": "Validating the bounded synthetic result."
+      }
+    }
+  ],
+  "response": {
+    "wireVersion": 1,
+    "kind": "response",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "requestId": "invoke-composition-time-1",
+    "method": "invoke",
+    "ok": true,
+    "replayed": false,
+    "result": {
+      "capabilityId": "ae.composition.time.read",
+      "capabilityVersion": 1,
+      "engine": "native-aegp",
+      "outcome": "succeeded",
+      "value": {
+        "compositionLocator": {
+          "kind": "composition",
+          "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+          "sessionId": "11111111-1111-4111-8111-111111111111",
+          "projectId": "44444444-4444-4444-8444-444444444444",
+          "generation": 8,
+          "objectId": "66666666-6666-4666-8666-666666666666"
+        },
+        "currentTime": {
+          "value": 3003,
+          "scale": 1000,
+          "secondsRational": "3003/1000"
+        }
+      },
+      "evidence": {
+        "engine": "native-aegp",
+        "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+        "sessionId": "11111111-1111-4111-8111-111111111111",
+        "requestId": "invoke-composition-time-1",
+        "capabilityId": "ae.composition.time.read",
+        "capabilityVersion": 1,
+        "startedAtUnixMs": 1900000000000,
+        "completedAtUnixMs": 1900000000025,
+        "effect": "none",
+        "requestDigest": "e9fbcbcb1414f1b994da20b76256d64b732d4ecc4f9175a52dc10cebdf2fad58",
+        "postcondition": {
+          "verified": true,
+          "kind": "composition-time-read",
+          "algorithm": "sha256-rfc8785-jcs-v1",
+          "digest": "809ed0109922812d59208d5f366714f6005abb600f6a1ef5f71d4bc5adc55cef"
+        }
+      }
+    }
+  }
+}

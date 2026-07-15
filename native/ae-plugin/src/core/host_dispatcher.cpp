@@ -216,6 +216,23 @@ HostCompositionLayersResult HostCompositionLayersResult::failure(
   return result;
 }
 
+HostCompositionTimeResult HostCompositionTimeResult::success(
+    CompositionTimeRead value) {
+  HostCompositionTimeResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
+HostCompositionTimeResult HostCompositionTimeResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostCompositionTimeResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
+
 HostLayerPropertiesResult HostLayerPropertiesResult::success(
     LayerPropertiesPage value) {
   HostLayerPropertiesResult result;
@@ -253,6 +270,12 @@ HostCompositionLayersResult HostApi::list_composition_layers(
     const CompositionLayersQuery&, TimePoint) {
   return HostCompositionLayersResult::failure(
       "NATIVE_UNSUPPORTED", "composition layer reads are unavailable");
+}
+
+HostCompositionTimeResult HostApi::read_composition_time(
+    const CompositionTimeQuery&, TimePoint) {
+  return HostCompositionTimeResult::failure(
+      "NATIVE_UNSUPPORTED", "composition time reads are unavailable");
 }
 
 HostLayerPropertiesResult HostApi::list_layer_properties(
@@ -300,10 +323,13 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
   const bool project_items_list = request.capability_id == kProjectItemsListCapability;
   const bool composition_layers_list =
       request.capability_id == kCompositionLayersListCapability;
+  const bool composition_time_read =
+      request.capability_id == kCompositionTimeReadCapability;
   const bool layer_properties_list =
       request.capability_id == kLayerPropertiesListCapability;
   if (!project_summary && !project_bit_depth_read && !project_bit_depth_set
-      && !project_items_list && !composition_layers_list && !layer_properties_list) {
+      && !project_items_list && !composition_layers_list && !composition_time_read
+      && !layer_properties_list) {
     return {EnqueueCode::kUnsupportedCapability, "NATIVE_UNSUPPORTED"};
   }
   if ((project_summary || project_bit_depth_read)
@@ -343,6 +369,19 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         "native project graph arguments failed closed validation",
         "params.arguments"};
   }
+  if (composition_time_read
+      && (request.target_depth != 0 || !request.idempotency_key.empty()
+          || !request.arguments_fingerprint_sha256.empty()
+          || !valid_uuid(request.host_instance_id) || !valid_uuid(request.session_id)
+          || request.offset != 0 || request.limit != 0
+          || request.project_locator.has_value() || request.layer_locator.has_value()
+          || request.parent_property_locator.has_value())) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "native composition time arguments failed closed validation",
+        "params.arguments"};
+  }
   if (project_items_list
       && ((request.offset > 0 && !request.project_locator.has_value())
           || request.composition_locator.has_value())) {
@@ -370,15 +409,15 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           "params.arguments.projectLocator"};
     }
   }
-  if (composition_layers_list
+  if ((composition_layers_list || composition_time_read)
       && (request.project_locator.has_value() || !request.composition_locator.has_value())) {
     return {
         EnqueueCode::kInvalidRequest,
         "INVALID_ARGUMENT",
-        "compositionLocator is required for composition layer reads",
+        "compositionLocator is required for composition reads",
         "params.arguments.compositionLocator"};
   }
-  if (composition_layers_list) {
+  if (composition_layers_list || composition_time_read) {
     const ObjectLocator& locator = *request.composition_locator;
     if (!valid_locator(locator) || locator.kind != "composition") {
       return {
@@ -744,6 +783,40 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
             completion.session_generation = request.session_generation;
             completion.ok = true;
             completion.composition_layers_result = std::move(host_result.value);
+          }
+        } else if (request.capability_id == kCompositionTimeReadCapability) {
+          HostCompositionTimeResult host_result = host.read_composition_time(
+              CompositionTimeQuery{
+                  request.host_instance_id,
+                  request.session_id,
+                  *request.composition_locator},
+              std::min(request.deadline, idle_deadline));
+          if (clock_.now() > request.deadline) {
+            completion = expired(request, true);
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else if (host_result.value.composition_locator
+              != *request.composition_locator
+              || host_result.value.current_time.scale == 0
+              || host_result.value.current_time.seconds_rational
+                  != canonical_seconds_rational(
+                      host_result.value.current_time.value,
+                      host_result.value.current_time.scale)) {
+            completion = failure_for(
+                request,
+                "CAPABILITY_FAILED",
+                "native composition time result was not bound to its request");
+          } else {
+            completion.request_id = request.request_id;
+            completion.capability_id = request.capability_id;
+            completion.route_id = request.route_id;
+            completion.session_generation = request.session_generation;
+            completion.ok = true;
+            completion.composition_time_result = std::move(host_result.value);
           }
         } else if (request.capability_id == kLayerPropertiesListCapability) {
           HostLayerPropertiesResult host_result = host.list_layer_properties(
