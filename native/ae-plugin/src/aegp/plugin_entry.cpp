@@ -28,6 +28,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -56,8 +57,10 @@ using aemcp::native::DrainBatch;
 using aemcp::native::HostApi;
 using aemcp::native::HostBitDepthReadResult;
 using aemcp::native::HostBitDepthWriteResult;
+using aemcp::native::HostCompositionLayersResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostReadResult;
+using aemcp::native::HostProjectItemsResult;
 using aemcp::native::MacEndpointRegistry;
 using aemcp::native::MacIpcServer;
 using aemcp::native::NativeEndpointDescriptor;
@@ -70,25 +73,32 @@ using aemcp::native::PairingUiDecision;
 using aemcp::native::ProjectBitDepth;
 using aemcp::native::ProjectBitDepthChanged;
 using aemcp::native::ProjectSummary;
+using aemcp::native::ObjectLocator;
 using aemcp::native::Request;
 using aemcp::native::SystemClock;
 using aemcp::native::TimePoint;
 using aemcp::native::kProjectBitDepthReadCapability;
 using aemcp::native::kProjectBitDepthSetCapability;
 using aemcp::native::kProjectSummaryCapability;
+using aemcp::native::kCompositionLayersListCapability;
+using aemcp::native::kProjectItemsListCapability;
 
 constexpr std::string_view kPluginVersion = AE_MCP_PRODUCT_VERSION;
 constexpr std::string_view kSdkVersion = "25.6.61";
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::string_view kCapabilitiesDigest =
-    "0fda4e1bfbc8657bcd0c676fb802aecc97ba2ee6268cc115ff6d12b74758c042";
+    "1814ffa17e29919414094c3b9cb6fb331169a5084aed44abb7a55f5827ffe72a";
 constexpr std::string_view kProjectSummaryContractDigest =
     "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
 constexpr std::string_view kProjectBitDepthReadContractDigest =
     "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e";
 constexpr std::string_view kProjectBitDepthSetContractDigest =
     "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a";
+constexpr std::string_view kProjectItemsListContractDigest =
+    "64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e";
+constexpr std::string_view kCompositionLayersListContractDigest =
+    "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75";
 constexpr std::int64_t kMaximumProjectItems = 100000;
 static_assert(kSourceCommit.size() == 40);
 
@@ -258,6 +268,191 @@ class SuiteLease final {
   const Suite* suite_{nullptr};
 };
 
+class MemHandleOwner final {
+ public:
+  MemHandleOwner(const AEGP_MemorySuite1* suite, AEGP_MemHandle handle)
+      : suite_(suite), handle_(handle) {}
+  ~MemHandleOwner() {
+    if (suite_ != nullptr && handle_ != nullptr) {
+      if (locked_) (void)suite_->AEGP_UnlockMemHandle(handle_);
+      (void)suite_->AEGP_FreeMemHandle(handle_);
+    }
+  }
+  MemHandleOwner(const MemHandleOwner&) = delete;
+  MemHandleOwner& operator=(const MemHandleOwner&) = delete;
+
+  [[nodiscard]] std::optional<std::string> utf8() {
+    if (suite_ == nullptr || handle_ == nullptr) return std::string{};
+    AEGP_MemSize bytes = 0;
+    if (suite_->AEGP_GetMemHandleSize(handle_, &bytes) != A_Err_NONE
+        || bytes == 0 || bytes > 8192 || bytes % sizeof(A_UTF16Char) != 0) {
+      return std::nullopt;
+    }
+    void* raw = nullptr;
+    if (suite_->AEGP_LockMemHandle(handle_, &raw) != A_Err_NONE || raw == nullptr) {
+      return std::nullopt;
+    }
+    locked_ = true;
+    const auto* characters = static_cast<const A_UTF16Char*>(raw);
+    const std::size_t capacity = bytes / sizeof(A_UTF16Char);
+    std::size_t length = 0;
+    while (length < capacity && characters[length] != 0) ++length;
+    if (length == capacity) return std::nullopt;
+    std::size_t scalars = 0;
+    for (std::size_t index = 0; index < length;) {
+      const std::uint16_t unit = characters[index++];
+      if (unit >= 0xd800U && unit <= 0xdbffU) {
+        if (index >= length) return std::nullopt;
+        const std::uint16_t trailing = characters[index++];
+        if (trailing < 0xdc00U || trailing > 0xdfffU) return std::nullopt;
+      } else if (unit >= 0xdc00U && unit <= 0xdfffU) {
+        return std::nullopt;
+      }
+      if (++scalars > 1024) return std::nullopt;
+    }
+    CFStringRef value = CFStringCreateWithCharacters(
+        kCFAllocatorDefault,
+        reinterpret_cast<const UniChar*>(characters),
+        static_cast<CFIndex>(length));
+    if (value == nullptr) return std::nullopt;
+    const CFIndex maximum =
+        CFStringGetMaximumSizeForEncoding(
+            static_cast<CFIndex>(length), kCFStringEncodingUTF8) + 1;
+    if (maximum <= 0 || maximum > 8193) {
+      CFRelease(value);
+      return std::nullopt;
+    }
+    std::string output(static_cast<std::size_t>(maximum), '\0');
+    if (!CFStringGetCString(value, output.data(), maximum, kCFStringEncodingUTF8)) {
+      CFRelease(value);
+      return std::nullopt;
+    }
+    CFRelease(value);
+    const std::size_t utf8_bytes = std::char_traits<char>::length(output.c_str());
+    if (utf8_bytes > 4096) return std::nullopt;
+    output.resize(utf8_bytes);
+    return output;
+  }
+
+ private:
+  const AEGP_MemorySuite1* suite_{nullptr};
+  AEGP_MemHandle handle_{nullptr};
+  bool locked_{false};
+};
+
+class ProjectGraphRegistry final {
+ public:
+  void project_closed() {
+    if (!present_) return;
+    present_ = false;
+    project_identity_ = 0;
+    root_item_id_ = 0;
+    clear_objects();
+  }
+
+  void observe_project(std::uintptr_t identity, A_long root_item_id) {
+    if (identity == 0) throw std::invalid_argument("project identity is unavailable");
+    if (present_ && identity == project_identity_ && root_item_id == root_item_id_) return;
+    if (generation_ >= aemcp::native::rpc::kMaxSafeInteger) {
+      throw std::runtime_error("project locator generation exhausted");
+    }
+    present_ = true;
+    project_identity_ = identity;
+    root_item_id_ = root_item_id;
+    ++generation_;
+    project_id_ = aemcp::native::secure_uuid_v4();
+    project_object_id_ = aemcp::native::secure_uuid_v4();
+    clear_objects();
+  }
+
+  [[nodiscard]] ObjectLocator project_locator(
+      std::string_view host, std::string_view session) const {
+    return make_locator("project", project_object_id_, host, session);
+  }
+
+  [[nodiscard]] ObjectLocator item_locator(
+      A_long item_id,
+      bool composition,
+      std::string_view host,
+      std::string_view session) {
+    auto found = item_object_ids_.find(item_id);
+    if (found == item_object_ids_.end()) {
+      const std::string object_id = aemcp::native::secure_uuid_v4();
+      found = item_object_ids_.emplace(item_id, object_id).first;
+      item_ids_by_object_.emplace(object_id, item_id);
+    }
+    return make_locator(composition ? "composition" : "item", found->second, host, session);
+  }
+
+  [[nodiscard]] ObjectLocator layer_locator(
+      A_long composition_item_id,
+      AEGP_LayerIDVal layer_id,
+      std::string_view host,
+      std::string_view session) {
+    const std::string key = std::to_string(composition_item_id) + ":"
+        + std::to_string(static_cast<A_long>(layer_id));
+    auto found = layer_object_ids_.find(key);
+    if (found == layer_object_ids_.end()) {
+      found = layer_object_ids_.emplace(key, aemcp::native::secure_uuid_v4()).first;
+    }
+    return make_locator("layer", found->second, host, session);
+  }
+
+  [[nodiscard]] bool matches_project(
+      const ObjectLocator& locator,
+      std::string_view host,
+      std::string_view session) const {
+    return locator.kind == "project" && locator.host_instance_id == host
+        && locator.session_id == session && locator.project_id == project_id_
+        && locator.generation == generation_ && locator.object_id == project_object_id_;
+  }
+
+  [[nodiscard]] std::optional<A_long> resolve_composition(
+      const ObjectLocator& locator,
+      std::string_view host,
+      std::string_view session) const {
+    if (locator.kind != "composition" || locator.host_instance_id != host
+        || locator.session_id != session || locator.project_id != project_id_
+        || locator.generation != generation_) {
+      return std::nullopt;
+    }
+    const auto found = item_ids_by_object_.find(locator.object_id);
+    return found == item_ids_by_object_.end()
+        ? std::nullopt : std::optional<A_long>(found->second);
+  }
+
+ private:
+  [[nodiscard]] ObjectLocator make_locator(
+      std::string kind,
+      std::string object_id,
+      std::string_view host,
+      std::string_view session) const {
+    return {
+        std::move(kind),
+        std::string(host),
+        std::string(session),
+        project_id_,
+        generation_,
+        std::move(object_id)};
+  }
+
+  void clear_objects() {
+    item_object_ids_.clear();
+    item_ids_by_object_.clear();
+    layer_object_ids_.clear();
+  }
+
+  bool present_{false};
+  std::uintptr_t project_identity_{0};
+  A_long root_item_id_{0};
+  std::uint64_t generation_{0};
+  std::string project_id_;
+  std::string project_object_id_;
+  std::unordered_map<A_long, std::string> item_object_ids_;
+  std::unordered_map<std::string, A_long> item_ids_by_object_;
+  std::unordered_map<std::string, std::string> layer_object_ids_;
+};
+
 [[nodiscard]] std::optional<AEGP_ProjBitDepth> sdk_bit_depth(
     std::int32_t bits_per_channel) {
   switch (bits_per_channel) {
@@ -276,9 +471,90 @@ class SuiteLease final {
   return std::nullopt;
 }
 
+[[nodiscard]] std::string project_item_type(AEGP_ItemType type) {
+  if (type == AEGP_ItemType_FOLDER) return "folder";
+  if (type == AEGP_ItemType_COMP) return "composition";
+  if (type == AEGP_ItemType_FOOTAGE || type == AEGP_ItemType_SOLID_defunct) {
+    return "footage";
+  }
+  return "unknown";
+}
+
+[[nodiscard]] std::string layer_type(
+    AEGP_ObjectType object_type, AEGP_LayerFlags flags) {
+  if ((flags & AEGP_LayerFlag_ADJUSTMENT_LAYER) != 0) return "adjustment";
+  if ((flags & AEGP_LayerFlag_NULL_LAYER) != 0) return "null";
+  if (object_type == AEGP_ObjectType_AV) return "av";
+  if (object_type == AEGP_ObjectType_LIGHT) return "light";
+  if (object_type == AEGP_ObjectType_CAMERA) return "camera";
+  if (object_type == AEGP_ObjectType_TEXT) return "text";
+  if (object_type == AEGP_ObjectType_VECTOR) return "shape";
+  if (object_type == AEGP_ObjectType_3D_MODEL) return "model3d";
+  return "unknown";
+}
+
+template <std::size_t Size>
+constexpr std::size_t literal_size(const char (&)[Size]) noexcept {
+  return Size - 1;
+}
+
+[[nodiscard]] std::size_t locator_json_size(const ObjectLocator& locator) {
+  return literal_size("{\"generation\":")
+      + std::to_string(locator.generation).size()
+      + literal_size(",\"hostInstanceId\":")
+      + aemcp::native::json_encoded_string_size(locator.host_instance_id)
+      + literal_size(",\"kind\":")
+      + aemcp::native::json_encoded_string_size(locator.kind)
+      + literal_size(",\"objectId\":")
+      + aemcp::native::json_encoded_string_size(locator.object_id)
+      + literal_size(",\"projectId\":")
+      + aemcp::native::json_encoded_string_size(locator.project_id)
+      + literal_size(",\"sessionId\":")
+      + aemcp::native::json_encoded_string_size(locator.session_id)
+      + literal_size("}");
+}
+
+[[nodiscard]] std::size_t nullable_locator_json_size(
+    const std::optional<ObjectLocator>& locator) {
+  return locator.has_value() ? locator_json_size(*locator) : literal_size("null");
+}
+
+[[nodiscard]] std::size_t project_item_json_size(
+    const aemcp::native::ProjectItemEntry& item) {
+  return literal_size("{\"locator\":") + locator_json_size(item.locator)
+      + literal_size(",\"name\":")
+      + aemcp::native::json_encoded_string_size(item.name)
+      + literal_size(",\"parentLocator\":")
+      + nullable_locator_json_size(item.parent_locator)
+      + literal_size(",\"type\":")
+      + aemcp::native::json_encoded_string_size(item.type)
+      + literal_size("}");
+}
+
+[[nodiscard]] std::size_t composition_layer_json_size(
+    const aemcp::native::CompositionLayerEntry& layer) {
+  return literal_size("{\"isThreeD\":") + literal_size("false")
+      + literal_size(",\"locator\":") + locator_json_size(layer.locator)
+      + literal_size(",\"locked\":") + literal_size("false")
+      + literal_size(",\"name\":")
+      + aemcp::native::json_encoded_string_size(layer.name)
+      + literal_size(",\"parentLocator\":")
+      + nullable_locator_json_size(layer.parent_locator)
+      + literal_size(",\"sourceItemLocator\":")
+      + nullable_locator_json_size(layer.source_item_locator)
+      + literal_size(",\"stackIndex\":")
+      + std::to_string(layer.stack_index).size()
+      + literal_size(",\"type\":")
+      + aemcp::native::json_encoded_string_size(layer.type)
+      + literal_size(",\"videoEnabled\":") + literal_size("false")
+      + literal_size("}");
+}
+
 class AegpHostApi final : public HostApi {
  public:
-  explicit AegpHostApi(SPBasicSuite* basic) : basic_(basic) {}
+  AegpHostApi(
+      SPBasicSuite* basic, AEGP_PluginID plugin_id, ProjectGraphRegistry& graph)
+      : basic_(basic), plugin_id_(plugin_id), graph_(graph) {}
 
   [[nodiscard]] HostReadResult read_project_summary(TimePoint work_deadline) override {
     const auto budget_expired = [work_deadline] {
@@ -525,8 +801,416 @@ class AegpHostApi final : public HostApi {
         true, *before, *after});
   }
 
+  [[nodiscard]] HostProjectItemsResult list_project_items(
+      const aemcp::native::ProjectItemsQuery& query,
+      TimePoint work_deadline) override {
+    const auto budget_expired = [work_deadline] {
+      return std::chrono::steady_clock::now() >= work_deadline;
+    };
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || memory_suite.get() == nullptr) {
+      return HostProjectItemsResult::failure(
+          "NATIVE_UNSUPPORTED", "required project item suites are unavailable");
+    }
+    if (budget_expired()) {
+      return HostProjectItemsResult::failure(
+          "DEADLINE_EXCEEDED", "project item list budget elapsed");
+    }
+    A_long project_count = 0;
+    if (project_suite->AEGP_GetNumProjects(&project_count) != A_Err_NONE) {
+      return HostProjectItemsResult::failure(
+          "CAPABILITY_FAILED", "could not read project count");
+    }
+    if (project_count <= 0) {
+      graph_.project_closed();
+      return HostProjectItemsResult::failure(
+          "PRECONDITION_FAILED", "an After Effects project must be open");
+    }
+    AEGP_ProjectH project = nullptr;
+    AEGP_ItemH root = nullptr;
+    A_long root_id = 0;
+    if (project_suite->AEGP_GetProjectByIndex(0, &project) != A_Err_NONE
+        || project == nullptr
+        || project_suite->AEGP_GetProjectRootFolder(project, &root) != A_Err_NONE
+        || root == nullptr
+        || item_suite->AEGP_GetItemID(root, &root_id) != A_Err_NONE) {
+      return HostProjectItemsResult::failure(
+          "CAPABILITY_FAILED", "could not resolve the open project's root item");
+    }
+    try {
+      graph_.observe_project(reinterpret_cast<std::uintptr_t>(project), root_id);
+    } catch (...) {
+      return HostProjectItemsResult::failure(
+          "CAPABILITY_FAILED", "could not establish project locator identity");
+    }
+    if (query.project_locator.has_value()
+        && !graph_.matches_project(*query.project_locator, query.host_instance_id, query.session_id)) {
+      return HostProjectItemsResult::failure(
+          "STALE_LOCATOR",
+          "projectLocator does not identify the currently open project",
+          "params.arguments.projectLocator");
+    }
+
+    aemcp::native::ProjectItemsPage page;
+    page.project_locator = graph_.project_locator(query.host_instance_id, query.session_id);
+    page.offset = query.offset;
+    page.limit = query.limit;
+    aemcp::native::BoundedPageBudget page_budget(
+        1024U + locator_json_size(page.project_locator));
+    bool response_budget_exhausted = false;
+    AEGP_ItemH item = nullptr;
+    if (item_suite->AEGP_GetNextProjItem(project, root, &item) != A_Err_NONE) {
+      return HostProjectItemsResult::failure(
+          "CAPABILITY_FAILED", "could not begin project item traversal");
+    }
+    std::uint64_t position = 0;
+    while (item != nullptr) {
+      if (budget_expired()) {
+        return HostProjectItemsResult::failure(
+            "DEADLINE_EXCEEDED", "project item traversal budget elapsed");
+      }
+      if (position >= static_cast<std::uint64_t>(kMaximumProjectItems)) {
+        return HostProjectItemsResult::failure(
+            "CAPABILITY_FAILED", "project item bound exceeded");
+      }
+      if (position >= query.offset && page.items.size() < query.limit
+          && !response_budget_exhausted) {
+        AEGP_ItemType sdk_type = AEGP_ItemType_NONE;
+        A_long item_id = 0;
+        AEGP_ItemH parent = nullptr;
+        if (item_suite->AEGP_GetItemType(item, &sdk_type) != A_Err_NONE
+            || item_suite->AEGP_GetItemID(item, &item_id) != A_Err_NONE
+            || item_suite->AEGP_GetItemParentFolder(item, &parent) != A_Err_NONE) {
+          return HostProjectItemsResult::failure(
+              "CAPABILITY_FAILED", "could not read project item identity");
+        }
+        AEGP_MemHandle name_handle = nullptr;
+        const A_Err name_error = item_suite->AEGP_GetItemName(
+            plugin_id_, item, &name_handle);
+        MemHandleOwner name_owner(memory_suite.get(), name_handle);
+        if (name_error != A_Err_NONE || name_handle == nullptr) {
+          return HostProjectItemsResult::failure(
+              "CAPABILITY_FAILED", "could not read project item name");
+        }
+        const std::optional<std::string> name = name_owner.utf8();
+        if (!name.has_value()) {
+          return HostProjectItemsResult::failure(
+              "CAPABILITY_FAILED", "project item name is not bounded UTF-16 text");
+        }
+        const std::string type = project_item_type(sdk_type);
+        aemcp::native::ProjectItemEntry entry;
+        entry.locator = graph_.item_locator(
+            item_id, sdk_type == AEGP_ItemType_COMP,
+            query.host_instance_id, query.session_id);
+        entry.name = *name;
+        entry.type = type;
+        if (parent == nullptr || parent == root) {
+          entry.parent_locator = page.project_locator;
+        } else {
+          A_long parent_id = 0;
+          if (item_suite->AEGP_GetItemID(parent, &parent_id) != A_Err_NONE) {
+            return HostProjectItemsResult::failure(
+                "CAPABILITY_FAILED", "could not read project item parent identity");
+          }
+          entry.parent_locator = graph_.item_locator(
+              parent_id, false, query.host_instance_id, query.session_id);
+        }
+        const std::size_t entry_bytes = project_item_json_size(entry)
+            + (page.items.empty() ? 0U : 1U);
+        if (!page_budget.try_reserve(entry_bytes)) {
+          if (page.items.empty()) {
+            return HostProjectItemsResult::failure(
+                "CAPABILITY_FAILED",
+                "one project item exceeds the bounded native response budget");
+          }
+          response_budget_exhausted = true;
+        } else {
+          page.items.push_back(std::move(entry));
+        }
+      }
+      ++position;
+      AEGP_ItemH next = nullptr;
+      if (item_suite->AEGP_GetNextProjItem(project, item, &next) != A_Err_NONE) {
+        return HostProjectItemsResult::failure(
+            "CAPABILITY_FAILED", "project item traversal failed");
+      }
+      item = next;
+    }
+    page.total = position;
+    if (query.offset > page.total) {
+      return HostProjectItemsResult::failure(
+          "INVALID_ARGUMENT",
+          "offset exceeds the current project item total",
+          "params.arguments.offset");
+    }
+    page.has_more = query.offset + page.items.size() < page.total;
+    if (page.has_more) page.next_offset = query.offset + page.items.size();
+    return HostProjectItemsResult::success(std::move(page));
+  }
+
+  [[nodiscard]] HostCompositionLayersResult list_composition_layers(
+      const aemcp::native::CompositionLayersQuery& query,
+      TimePoint work_deadline) override {
+    const auto budget_expired = [work_deadline] {
+      return std::chrono::steady_clock::now() >= work_deadline;
+    };
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || memory_suite.get() == nullptr) {
+      return HostCompositionLayersResult::failure(
+          "NATIVE_UNSUPPORTED", "required composition layer suites are unavailable");
+    }
+    A_long project_count = 0;
+    if (budget_expired()) {
+      return HostCompositionLayersResult::failure(
+          "DEADLINE_EXCEEDED", "composition layer list budget elapsed");
+    }
+    if (project_suite->AEGP_GetNumProjects(&project_count) != A_Err_NONE) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "could not read project count");
+    }
+    if (project_count <= 0) {
+      graph_.project_closed();
+      return HostCompositionLayersResult::failure(
+          "PRECONDITION_FAILED", "an After Effects project must be open");
+    }
+    AEGP_ProjectH project = nullptr;
+    AEGP_ItemH root = nullptr;
+    A_long root_id = 0;
+    if (project_suite->AEGP_GetProjectByIndex(0, &project) != A_Err_NONE
+        || project == nullptr
+        || project_suite->AEGP_GetProjectRootFolder(project, &root) != A_Err_NONE
+        || root == nullptr
+        || item_suite->AEGP_GetItemID(root, &root_id) != A_Err_NONE) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "could not resolve the open project's root item");
+    }
+    try {
+      graph_.observe_project(reinterpret_cast<std::uintptr_t>(project), root_id);
+    } catch (...) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "could not establish project locator identity");
+    }
+    const std::optional<A_long> composition_id = graph_.resolve_composition(
+        query.composition_locator, query.host_instance_id, query.session_id);
+    if (!composition_id.has_value()) {
+      return HostCompositionLayersResult::failure(
+          "STALE_LOCATOR",
+          "compositionLocator does not identify an item in the currently open project",
+          "params.arguments.compositionLocator");
+    }
+
+    AEGP_ItemH item = nullptr;
+    if (item_suite->AEGP_GetNextProjItem(project, root, &item) != A_Err_NONE) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "could not begin composition lookup");
+    }
+    AEGP_ItemH composition_item = nullptr;
+    std::uint64_t visited = 0;
+    while (item != nullptr) {
+      if (budget_expired()) {
+        return HostCompositionLayersResult::failure(
+            "DEADLINE_EXCEEDED", "composition lookup budget elapsed");
+      }
+      if (++visited > static_cast<std::uint64_t>(kMaximumProjectItems)) {
+        return HostCompositionLayersResult::failure(
+            "CAPABILITY_FAILED", "project item bound exceeded during composition lookup");
+      }
+      A_long item_id = 0;
+      if (item_suite->AEGP_GetItemID(item, &item_id) != A_Err_NONE) {
+        return HostCompositionLayersResult::failure(
+            "CAPABILITY_FAILED", "could not read project item identity");
+      }
+      if (item_id == *composition_id) {
+        composition_item = item;
+        break;
+      }
+      AEGP_ItemH next = nullptr;
+      if (item_suite->AEGP_GetNextProjItem(project, item, &next) != A_Err_NONE) {
+        return HostCompositionLayersResult::failure(
+            "CAPABILITY_FAILED", "composition lookup traversal failed");
+      }
+      item = next;
+    }
+    if (composition_item == nullptr) {
+      return HostCompositionLayersResult::failure(
+          "STALE_LOCATOR",
+          "composition item no longer exists in the open project",
+          "params.arguments.compositionLocator");
+    }
+    AEGP_ItemType item_type = AEGP_ItemType_NONE;
+    if (item_suite->AEGP_GetItemType(composition_item, &item_type) != A_Err_NONE) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "could not verify composition item type");
+    }
+    if (item_type != AEGP_ItemType_COMP) {
+      return HostCompositionLayersResult::failure(
+          "PRECONDITION_FAILED",
+          "compositionLocator no longer identifies a composition",
+          "params.arguments.compositionLocator");
+    }
+    AEGP_MemHandle composition_name_handle = nullptr;
+    const A_Err composition_name_error = item_suite->AEGP_GetItemName(
+        plugin_id_, composition_item, &composition_name_handle);
+    MemHandleOwner composition_name_owner(
+        memory_suite.get(), composition_name_handle);
+    if (composition_name_error != A_Err_NONE || composition_name_handle == nullptr) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "could not read composition name");
+    }
+    const std::optional<std::string> composition_name = composition_name_owner.utf8();
+    if (!composition_name.has_value()) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "composition name is not bounded UTF-16 text");
+    }
+    AEGP_CompH composition = nullptr;
+    if (comp_suite->AEGP_GetCompFromItem(composition_item, &composition) != A_Err_NONE
+        || composition == nullptr) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "could not resolve composition handle");
+    }
+    A_long layer_count = 0;
+    if (layer_suite->AEGP_GetCompNumLayers(composition, &layer_count) != A_Err_NONE
+        || layer_count < 0) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "could not read composition layer count");
+    }
+
+    aemcp::native::CompositionLayersPage page;
+    page.composition_locator = query.composition_locator;
+    page.composition_name = *composition_name;
+    page.total = static_cast<std::uint64_t>(layer_count);
+    page.offset = query.offset;
+    page.limit = query.limit;
+    if (query.offset > page.total) {
+      return HostCompositionLayersResult::failure(
+          "INVALID_ARGUMENT",
+          "offset exceeds the current composition layer total",
+          "params.arguments.offset");
+    }
+    aemcp::native::BoundedPageBudget page_budget(
+        1024U + locator_json_size(page.composition_locator)
+            + aemcp::native::json_encoded_string_size(page.composition_name));
+    const std::uint64_t end = query.offset >= page.total
+        ? query.offset
+        : std::min(page.total, query.offset + query.limit);
+    for (std::uint64_t position = query.offset; position < end; ++position) {
+      if (budget_expired()) {
+        return HostCompositionLayersResult::failure(
+            "DEADLINE_EXCEEDED", "composition layer page budget elapsed");
+      }
+      AEGP_LayerH layer = nullptr;
+      if (layer_suite->AEGP_GetCompLayerByIndex(
+              composition, static_cast<A_long>(position), &layer) != A_Err_NONE
+          || layer == nullptr) {
+        return HostCompositionLayersResult::failure(
+            "CAPABILITY_FAILED", "could not resolve composition layer");
+      }
+      AEGP_LayerIDVal layer_id = 0;
+      AEGP_LayerFlags flags = 0;
+      AEGP_ObjectType object_type = AEGP_ObjectType_NONE;
+      if (layer_suite->AEGP_GetLayerID(layer, &layer_id) != A_Err_NONE
+          || layer_suite->AEGP_GetLayerFlags(layer, &flags) != A_Err_NONE
+          || layer_suite->AEGP_GetLayerObjectType(layer, &object_type) != A_Err_NONE) {
+        return HostCompositionLayersResult::failure(
+            "CAPABILITY_FAILED", "could not read composition layer identity");
+      }
+      AEGP_MemHandle layer_name_handle = nullptr;
+      AEGP_MemHandle source_name_handle = nullptr;
+      const A_Err layer_name_error = layer_suite->AEGP_GetLayerName(
+          plugin_id_, layer, &layer_name_handle, &source_name_handle);
+      MemHandleOwner source_name_owner(memory_suite.get(), source_name_handle);
+      MemHandleOwner layer_name_owner(memory_suite.get(), layer_name_handle);
+      if (layer_name_error != A_Err_NONE || layer_name_handle == nullptr) {
+        return HostCompositionLayersResult::failure(
+            "CAPABILITY_FAILED", "could not read composition layer name");
+      }
+      const std::optional<std::string> layer_name = layer_name_owner.utf8();
+      if (!layer_name.has_value()) {
+        return HostCompositionLayersResult::failure(
+            "CAPABILITY_FAILED", "layer name is not bounded UTF-16 text");
+      }
+      aemcp::native::CompositionLayerEntry entry;
+      entry.locator = graph_.layer_locator(
+          *composition_id, layer_id, query.host_instance_id, query.session_id);
+      entry.stack_index = position + 1;
+      entry.name = *layer_name;
+      entry.type = layer_type(object_type, flags);
+      entry.video_enabled = (flags & AEGP_LayerFlag_VIDEO_ACTIVE) != 0;
+      entry.is_three_d = (flags & AEGP_LayerFlag_LAYER_IS_3D) != 0;
+      entry.locked = (flags & AEGP_LayerFlag_LOCKED) != 0;
+
+      AEGP_LayerH parent = nullptr;
+      if (layer_suite->AEGP_GetLayerParent(layer, &parent) != A_Err_NONE) {
+        return HostCompositionLayersResult::failure(
+            "CAPABILITY_FAILED", "could not read parent layer");
+      }
+      if (parent != nullptr) {
+        AEGP_LayerIDVal parent_id = 0;
+        if (layer_suite->AEGP_GetLayerID(parent, &parent_id) != A_Err_NONE) {
+          return HostCompositionLayersResult::failure(
+              "CAPABILITY_FAILED", "could not read parent layer identity");
+        }
+        entry.parent_locator = graph_.layer_locator(
+            *composition_id, parent_id, query.host_instance_id, query.session_id);
+      }
+
+      AEGP_ItemH source_item = nullptr;
+      if (layer_suite->AEGP_GetLayerSourceItem(layer, &source_item) != A_Err_NONE) {
+        return HostCompositionLayersResult::failure(
+            "CAPABILITY_FAILED", "could not read layer source item");
+      }
+      if (source_item != nullptr) {
+        A_long source_id = 0;
+        AEGP_ItemType source_type = AEGP_ItemType_NONE;
+        if (item_suite->AEGP_GetItemID(source_item, &source_id) != A_Err_NONE
+            || item_suite->AEGP_GetItemType(source_item, &source_type) != A_Err_NONE) {
+          return HostCompositionLayersResult::failure(
+              "CAPABILITY_FAILED", "could not read layer source item identity");
+        }
+        entry.source_item_locator = graph_.item_locator(
+            source_id,
+            source_type == AEGP_ItemType_COMP,
+            query.host_instance_id,
+            query.session_id);
+      }
+      const std::size_t entry_bytes = composition_layer_json_size(entry)
+          + (page.layers.empty() ? 0U : 1U);
+      if (!page_budget.try_reserve(entry_bytes)) {
+        if (page.layers.empty()) {
+          return HostCompositionLayersResult::failure(
+              "CAPABILITY_FAILED",
+              "one composition layer exceeds the bounded native response budget");
+        }
+        break;
+      }
+      page.layers.push_back(std::move(entry));
+    }
+    page.has_more = query.offset + page.layers.size() < page.total;
+    if (page.has_more) page.next_offset = query.offset + page.layers.size();
+    return HostCompositionLayersResult::success(std::move(page));
+  }
+
  private:
   SPBasicSuite* basic_{nullptr};
+  AEGP_PluginID plugin_id_{0};
+  ProjectGraphRegistry& graph_;
 };
 
 struct PluginState final : NativeIpcObserver, NativeRpcObserver {
@@ -564,6 +1248,8 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
             std::string(kProjectSummaryContractDigest),
             std::string(kProjectBitDepthReadContractDigest),
             std::string(kProjectBitDepthSetContractDigest),
+            std::string(kProjectItemsListContractDigest),
+            std::string(kCompositionLayersListContractDigest),
         },
         *this);
     ipc_server = std::make_unique<MacIpcServer>(
@@ -599,6 +1285,7 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
   HostIdentity host_identity{read_host_identity()};
   DiagnosticLog log;
   SystemClock clock;
+  ProjectGraphRegistry project_graph;
   HostDispatcher dispatcher;
   aemcp::native::rpc::SystemSessionClock session_clock;
   aemcp::native::SystemPairingGateClock pairing_clock;
@@ -632,7 +1319,9 @@ void log_load(PluginState& state) {
          << "\",\"build\":\"" << json_escape(state.host_identity.build) << "\"}"
          << ",\"capabilities\":[\"" << kProjectSummaryCapability << "\",\""
          << kProjectBitDepthReadCapability << "\",\""
-         << kProjectBitDepthSetCapability << "\"]}"
+         << kProjectBitDepthSetCapability << "\",\""
+         << kProjectItemsListCapability << "\",\""
+         << kCompositionLayersListCapability << "\"]}"
          ;
   state.log.append(output.str());
 }
@@ -668,6 +1357,24 @@ void log_completion(
     } else if (completion.capability_id == kProjectBitDepthReadCapability) {
       output << ",\"result\":{\"bitsPerChannel\":"
              << completion.bit_depth_result.bits_per_channel;
+    } else if (completion.capability_id == kProjectItemsListCapability) {
+      output << ",\"result\":{\"total\":"
+             << completion.project_items_result.total
+             << ",\"offset\":" << completion.project_items_result.offset
+             << ",\"returned\":" << completion.project_items_result.items.size()
+             << ",\"hasMore\":"
+             << (completion.project_items_result.has_more ? "true" : "false")
+             << ",\"projectGeneration\":"
+             << completion.project_items_result.project_locator.generation;
+    } else if (completion.capability_id == kCompositionLayersListCapability) {
+      output << ",\"result\":{\"total\":"
+             << completion.composition_layers_result.total
+             << ",\"offset\":" << completion.composition_layers_result.offset
+             << ",\"returned\":" << completion.composition_layers_result.layers.size()
+             << ",\"hasMore\":"
+             << (completion.composition_layers_result.has_more ? "true" : "false")
+             << ",\"projectGeneration\":"
+             << completion.composition_layers_result.composition_locator.generation;
     } else {
       output << ",\"result\":{\"projectOpen\":"
              << (completion.result.project_open ? "true" : "false")
@@ -777,7 +1484,7 @@ A_Err idle_hook(
     auto* state = reinterpret_cast<PluginState*>(idle_refcon);
     if (state == nullptr) state = reinterpret_cast<PluginState*>(global_refcon);
     if (state == nullptr) return A_Err_GENERIC;
-    AegpHostApi host(state->basic);
+    AegpHostApi host(state->basic, state->plugin_id, state->project_graph);
     const DrainBatch batch = state->dispatcher.drain(host);
     if (batch.wrong_thread) {
       state->log.append(event_prefix(*state, "dispatch.wrong-thread") + "}");

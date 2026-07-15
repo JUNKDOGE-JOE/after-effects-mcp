@@ -11,7 +11,7 @@
 | 入口 | `ae-mcp` |
 | Backend | `AE_MCP_BACKEND=ae-mcp` |
 | Plugin URL | `AE_MCP_PLUGIN_URL=http://127.0.0.1:11488` |
-| Handler count | 47 verbs，按 backend `supported_verbs()` 过滤 |
+| Handler count | 49 verbs，按 backend `supported_verbs()` 过滤 |
 | Skill storage | `~/.ae-mcp/skills/<name>.json` |
 | Tool Library | `~/.ae-mcp/tools`；legacy skill 保持原路径，不复制 |
 | Preview output | 默认位于操作系统临时目录的 `ae_mcp_previews/<session>/...png`，可用 `out_dir` 覆盖 |
@@ -54,8 +54,8 @@ MCP client
   -> ae-mcp backend package
   -> HTTP 127.0.0.1:11488
   -> CEP panel Node host
-  -> CSInterface.evalScript
-  -> After Effects ExtendScript
+     -> native RPC -> AEGP main-thread dispatcher -> After Effects
+     -> CSInterface.evalScript -> After Effects ExtendScript（legacy JSX 工具）
 ```
 
 ### Verb Reference
@@ -71,7 +71,9 @@ MCP client
 | `ae.projectSummary` | none | 通过原生 AEGP 返回带 provenance 与 postcondition 的工程摘要；不回退 JSX |
 | `ae.getProjectBitDepth` | none | 通过原生 AEGP 读取当前 `8/16/32` bits-per-channel；不回退 JSX |
 | `ae.setProjectBitDepth` | `target_depth`, `idempotency_key` | 通过原生 AEGP 设置 `8/16/32`，返回 before/after、Undo 可用性和审计；不回退 JSX |
-| `ae.layers` | `comp_id?`, `offset?`, `limit?`, `format?` | 获取图层列表（分页 + 可选紧凑文本） |
+| `ae_listProjectItems` | `project_locator?`, `offset?`, `limit?` | 通过原生 AEGP 分页列出工程项；默认 25、最多 50；不回退 JSX |
+| `ae_listCompositionLayers` | `composition_locator`, `offset?`, `limit?` | 通过原生 AEGP 分页列出指定合成的图层；默认 25、最多 50；不回退 JSX |
+| `ae.layers` | `comp_id?`, `offset?`, `limit?`, `format?` | legacy JSX 图层列表（行为保持不变） |
 | `ae.readProps` | `code` | 执行只读 JSX |
 | `ae.exec` | `code`, `undo_group_name?`, `checkpoint_label?`, `timeout_sec?` | 执行 JSX |
 | `ae.checkpoint` | `action`, `label?`, `limit?` | 创建/列出 `.aep` checkpoint |
@@ -112,9 +114,19 @@ MCP client
 | `ae.createRig` | `comp_id?`, `target_layer_id`, `rig_type`, `name?`, `options?`, `controls?` | 创建 controller/effect/preset rig |
 | `ae.ping` | `expect?` | bridge 握手 |
 
+### 原生工程导航
+
+公开 MCP 工具 `ae_listProjectItems` 和 `ae_listCompositionLayers` 分别调用 canonical Core verb `ae.listProjectItems` 与 `ae.listCompositionLayers`，并固定走 `MCP -> Core -> native RPC -> AEGP -> AE`。两者均为严格的原生只读工具；原生能力、契约或传输不可用时返回结构化错误，**不会回退到 JSX**。
+
+- 首次调用 `ae_listProjectItems` 时省略 `project_locator`；`offset` 默认为 `0`，`limit` 默认为 `25`、最大为 `50`。续页时传回上一页的 `projectLocator`，且 `offset > 0` 时该 locator 必填。
+- `ae_listCompositionLayers` 的 `composition_locator` 必须来自工程项结果中 `type="composition"` 的 `locator`；同样使用 `offset` 分页，`limit` 默认为 `25`、最大为 `50`。
+- Locator 是不透明的原生句柄，绑定当前 host、session、project 与 generation；不要拆解、改写或跨重启缓存。成功结果携带 `native-aegp` provenance、已验证 postcondition 与 audit evidence。
+
+现有 `ae.layers` 是 legacy JSX 工具，继续保留原参数、数值 ID、`limit=0` 全量返回及可选文本格式语义。它没有被改造成原生工具，也不与上述 locator 契约混用。
+
 ### `ae.layers`
 
-默认一次返回**全部**图层（与旧行为兼容）。分页与紧凑输出均为可选：
+这是 legacy JSX 工具。默认一次返回**全部**图层（与旧行为兼容）。分页与紧凑输出均为可选：
 
 | 参数 | 说明 |
 |---|---|
@@ -267,7 +279,7 @@ MVP 不生成任意二进制 `.ffx` 文件。
 以下是当前代码已覆盖的能力清单，不是 v0.9.2 双平台或四格实机验收证据：
 
 - CEP panel 到 AE bridge
-- 47 个已注册 `ae.*` handlers（45 个 backend verbs，加 `ae.status`/`ae.diagnose`）
+- 49 个已注册 `ae.*` handlers（47 个 backend verbs，加 `ae.status`/`ae.diagnose`）
 - read/mutate/search/checkpoint/revert
 - `ae.previewFrame` 快速 viewer preview
 - Python 侧持久化 skill system
@@ -299,7 +311,7 @@ ae-mcp 是独立实现，参考了 Atom 风格 AE 操作面和 FX Console 风格
 | Entry point | `ae-mcp` |
 | Backend | `AE_MCP_BACKEND=ae-mcp` |
 | Plugin URL | `AE_MCP_PLUGIN_URL=http://127.0.0.1:11488` |
-| Handler count | 47 verbs, filtered by backend `supported_verbs()` |
+| Handler count | 49 verbs, filtered by backend `supported_verbs()` |
 | Skill storage | `~/.ae-mcp/skills/<name>.json` |
 | Tool Library | `~/.ae-mcp/tools`; legacy skills remain canonical in place |
 | Preview output | `ae_mcp_previews/<session>/...png` in the operating-system temporary directory unless `out_dir` is set |
@@ -342,8 +354,8 @@ MCP client
   -> ae-mcp backend package
   -> HTTP 127.0.0.1:11488
   -> CEP panel Node host
-  -> CSInterface.evalScript
-  -> After Effects ExtendScript
+     -> native RPC -> AEGP main-thread dispatcher -> After Effects
+     -> CSInterface.evalScript -> After Effects ExtendScript (legacy JSX tools)
 ```
 
 ### Verb Reference
@@ -359,7 +371,9 @@ Unless noted otherwise, tools return JSON with `ok: true` on success, or `ok: fa
 | `ae.projectSummary` | none | return a provenance-bound native AEGP project summary; never falls back to JSX |
 | `ae.getProjectBitDepth` | none | read native AEGP `8/16/32` bits per channel; never falls back to JSX |
 | `ae.setProjectBitDepth` | `target_depth`, `idempotency_key` | set native AEGP `8/16/32` with before/after, Undo availability, and audit evidence; never falls back to JSX |
-| `ae.layers` | `comp_id?`, `offset?`, `limit?`, `format?` | list layers (paginated + optional compact text) |
+| `ae_listProjectItems` | `project_locator?`, `offset?`, `limit?` | page through project items via native AEGP; default 25, maximum 50; never falls back to JSX |
+| `ae_listCompositionLayers` | `composition_locator`, `offset?`, `limit?` | page through one composition's layers via native AEGP; default 25, maximum 50; never falls back to JSX |
+| `ae.layers` | `comp_id?`, `offset?`, `limit?`, `format?` | legacy JSX layer listing (behavior unchanged) |
 | `ae.readProps` | `code` | run read-only JSX |
 | `ae.exec` | `code`, `undo_group_name?`, `checkpoint_label?`, `timeout_sec?` | run JSX |
 | `ae.checkpoint` | `action`, `label?`, `limit?` | create/list `.aep` checkpoints |
@@ -400,9 +414,19 @@ Unless noted otherwise, tools return JSON with `ok: true` on success, or `ok: fa
 | `ae.createRig` | `comp_id?`, `target_layer_id`, `rig_type`, `name?`, `options?`, `controls?` | create controller/effect/preset rigs |
 | `ae.ping` | `expect?` | bridge handshake |
 
+### Native Project Navigation
+
+The public MCP tools `ae_listProjectItems` and `ae_listCompositionLayers` call the canonical Core verbs `ae.listProjectItems` and `ae.listCompositionLayers`, respectively, over the fixed `MCP -> Core -> native RPC -> AEGP -> AE` path. Both are strict native reads: if the native capability, contract, or transport is unavailable, they return a structured error and **never fall back to JSX**.
+
+- Omit `project_locator` on the first `ae_listProjectItems` call. `offset` defaults to `0`; `limit` defaults to `25` and is capped at `50`. Pass the returned `projectLocator` on continuation pages; it is required when `offset > 0`.
+- `ae_listCompositionLayers` requires the `locator` of an item whose `type="composition"` in the project-items result. It uses the same offset pagination and default/max limits.
+- Locators are opaque native handles bound to the current host, session, project, and generation. Do not decompose, edit, or cache them across restarts. Successful results carry `native-aegp` provenance, a verified postcondition, and audit evidence.
+
+The existing `ae.layers` tool remains a legacy JSX tool with its original arguments, numeric IDs, `limit=0` all-items behavior, and optional text format. It was not converted to native and does not share the locator contract above.
+
 ### `ae.layers`
 
-Returns **all** layers by default (matching the historical behavior). Pagination
+This is a legacy JSX tool. It returns **all** layers by default (matching the historical behavior). Pagination
 and compact output are both opt-in:
 
 | Arg | Notes |

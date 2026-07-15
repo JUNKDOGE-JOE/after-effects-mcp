@@ -182,6 +182,53 @@ def _set_execution() -> N.ProjectBitDepthSetExecution:
     )
 
 
+def _project_graph_execution(*, layers: bool):
+    fixture_name = (
+        "invoke-composition-layers-list.json"
+        if layers
+        else "invoke-project-items-list.json"
+    )
+    capability_id = (
+        N.COMPOSITION_LAYERS_LIST_CAPABILITY_ID
+        if layers
+        else N.PROJECT_ITEMS_LIST_CAPABILITY_ID
+    )
+    hello = _fixture("hello.json")["response"]["result"]
+    raw_items = _fixture("capabilities.json")["response"]["result"]["items"]
+    descriptor = N.NativeCapabilityDescriptor.model_validate(
+        next(item for item in raw_items if item["id"] == capability_id)
+    )
+    negotiation = N.NativeNegotiation(
+        selected_wire_version=hello["selectedWireVersion"],
+        plugin_version=hello["pluginVersion"],
+        compiled_sdk_version=hello["compiledSdk"]["version"],
+        source_commit="a" * 40,
+        host_instance_id=hello["host"]["instanceId"],
+        host_platform=hello["host"]["platform"],
+        session_id=hello["sessionId"],
+        session_generation=hello["sessionGeneration"],
+        capabilities_digest=hello["capabilitiesDigest"],
+    )
+    fixture = _fixture(fixture_name)
+    raw_result = fixture["response"]["result"]
+    result = N.NativeInvokeResult.model_validate(
+        {**raw_result, "replayed": fixture["response"]["replayed"]}
+    )
+    if layers:
+        return N.CompositionLayersListExecution(
+            implementation=descriptor,
+            negotiation=negotiation,
+            value=N.CompositionLayersListValue.model_validate(result.value),
+            evidence=result.evidence,
+        )
+    return N.ProjectItemsListExecution(
+        implementation=descriptor,
+        negotiation=negotiation,
+        value=N.ProjectItemsListValue.model_validate(result.value),
+        evidence=result.evidence,
+    )
+
+
 @pytest.fixture(autouse=True)
 def _load_handlers():
     load_all()
@@ -292,10 +339,78 @@ async def test_bit_depth_set_public_tool_returns_transition_undo_and_audit(monke
 
 
 @pytest.mark.asyncio
+async def test_project_items_public_tool_returns_bounded_native_page(monkeypatch):
+    execution = _project_graph_execution(layers=False)
+    captured: dict[str, Any] = {}
+
+    async def _invoke(backend, **kwargs):
+        captured["backend"] = backend
+        captured.update(kwargs)
+        return execution
+
+    sentinel_backend = object()
+    monkeypatch.setattr(native_handler, "_backend", lambda: sentinel_backend)
+    monkeypatch.setattr(native_handler, "invoke_project_items_list", _invoke)
+    result = await native_handler._run_list_project_items(
+        schemas.AeListProjectItemsArgs(), None
+    )
+
+    assert captured["backend"] is sentinel_backend
+    assert captured["project_locator"] is None
+    assert captured["offset"] == 0
+    assert captured["limit"] == 25
+    assert result["value"]["returned"] == 2
+    assert result["value"]["items"][1]["type"] == "composition"
+    assert result["implementation"]["capabilityId"] == "ae.project.items.list"
+    assert result["audit"]["effect"] == "none"
+
+
+@pytest.mark.asyncio
+async def test_composition_layers_public_tool_forwards_exact_locator(monkeypatch):
+    execution = _project_graph_execution(layers=True)
+    captured: dict[str, Any] = {}
+
+    async def _invoke(backend, **kwargs):
+        captured["backend"] = backend
+        captured.update(kwargs)
+        return execution
+
+    sentinel_backend = object()
+    locator = execution.value.composition_locator.model_dump(
+        mode="json", by_alias=True
+    )
+    monkeypatch.setattr(native_handler, "_backend", lambda: sentinel_backend)
+    monkeypatch.setattr(native_handler, "invoke_composition_layers_list", _invoke)
+    result = await native_handler._run_list_composition_layers(
+        schemas.AeListCompositionLayersArgs(composition_locator=locator), None
+    )
+
+    assert captured["backend"] is sentinel_backend
+    assert captured["composition_locator"] == locator
+    assert result["value"]["layers"][0]["locked"] is False
+    assert result["implementation"]["capabilityId"] == "ae.composition.layers.list"
+    assert result["provenance"]["sourceCommit"] == "a" * 40
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("runner", "args"),
     [
         (native_handler._run_project_summary, schemas.AeProjectSummaryArgs()),
+        (native_handler._run_list_project_items, schemas.AeListProjectItemsArgs()),
+        (
+            native_handler._run_list_composition_layers,
+            schemas.AeListCompositionLayersArgs(
+                composition_locator={
+                    "kind": "composition",
+                    "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                    "sessionId": "11111111-1111-4111-8111-111111111111",
+                    "projectId": "44444444-4444-4444-8444-444444444444",
+                    "generation": 8,
+                    "objectId": "66666666-6666-4666-8666-666666666666",
+                }
+            ),
+        ),
         (native_handler._run_get_project_bit_depth, schemas.AeGetProjectBitDepthArgs()),
         (
             native_handler._run_set_project_bit_depth,
@@ -319,6 +434,11 @@ async def test_native_public_tools_never_fall_back_to_legacy_exec(
 
 def test_native_tool_registration_is_explicit():
     assert HANDLERS["ae.projectSummary"][0] is schemas.AeProjectSummaryArgs
+    assert HANDLERS["ae.listProjectItems"][0] is schemas.AeListProjectItemsArgs
+    assert (
+        HANDLERS["ae.listCompositionLayers"][0]
+        is schemas.AeListCompositionLayersArgs
+    )
     assert HANDLERS["ae.getProjectBitDepth"][0] is schemas.AeGetProjectBitDepthArgs
     assert HANDLERS["ae.setProjectBitDepth"][0] is schemas.AeSetProjectBitDepthArgs
     assert HANDLERS["ae.projectSummary"][1] is not HANDLERS["ae.overview"][1]

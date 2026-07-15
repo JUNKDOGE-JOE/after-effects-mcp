@@ -13,7 +13,7 @@ import hashlib
 import json
 import time
 from abc import ABC, abstractmethod
-from typing import Annotated, Any, Literal, Mapping, TypeAlias
+from typing import Annotated, Any, Callable, Literal, Mapping, TypeAlias
 
 from pydantic import (
     BaseModel,
@@ -708,6 +708,602 @@ class ProjectSummaryExecution(_NativeModel):
         }
 
 
+class NativeLocator(_NativeModel):
+    """Opaque, session-bound locator issued by the native AEGP host."""
+
+    kind: Literal["project", "item", "composition", "layer", "stream"]
+    host_instance_id: Uuid
+    session_id: Uuid
+    project_id: Uuid
+    generation: PositiveInt
+    object_id: Uuid
+
+    def context(self) -> tuple[str, str, str, int]:
+        return (
+            self.host_instance_id,
+            self.session_id,
+            self.project_id,
+            self.generation,
+        )
+
+
+class ProjectItemsListArguments(_NativeModel):
+    offset: NonNegativeInt
+    limit: Annotated[StrictInt, Field(ge=1, le=50)]
+    project_locator: NativeLocator | None = None
+
+    @model_validator(mode="after")
+    def _continuation_is_bound(self) -> "ProjectItemsListArguments":
+        if self.project_locator is not None and self.project_locator.kind != "project":
+            raise ValueError("projectLocator must have kind project")
+        if self.offset > 0 and self.project_locator is None:
+            raise ValueError("continuation pages require projectLocator")
+        return self
+
+
+class ProjectItem(_NativeModel):
+    locator: NativeLocator
+    name: Annotated[StrictStr, Field(max_length=1024)]
+    type: Literal["folder", "composition", "footage", "unknown"]
+    parent_locator: NativeLocator
+
+    @model_validator(mode="after")
+    def _locator_kinds_match_type(self) -> "ProjectItem":
+        expected_kind = "composition" if self.type == "composition" else "item"
+        if self.locator.kind != expected_kind:
+            raise ValueError("project item locator kind does not match its type")
+        if self.parent_locator.kind not in {"project", "item"}:
+            raise ValueError("project item parent must be a project or folder item")
+        return self
+
+
+class ProjectItemsListValue(_NativeModel):
+    project_locator: NativeLocator
+    total: NonNegativeInt
+    offset: NonNegativeInt
+    limit: Annotated[StrictInt, Field(ge=1, le=50)]
+    returned: Annotated[StrictInt, Field(ge=0, le=50)]
+    has_more: StrictBool
+    next_offset: NonNegativeInt | None
+    items: tuple[ProjectItem, ...] = Field(max_length=50)
+
+    @model_validator(mode="after")
+    def _verified_page(self) -> "ProjectItemsListValue":
+        if self.project_locator.kind != "project":
+            raise ValueError("projectLocator must have kind project")
+        if self.returned != len(self.items) or self.returned > self.limit:
+            raise ValueError("project item page count does not match returned")
+        consumed = self.offset + self.returned
+        if consumed > self.total:
+            raise ValueError("project item page exceeds total")
+        expected_more = consumed < self.total
+        expected_next = consumed if expected_more else None
+        if expected_more and self.returned == 0:
+            raise ValueError("project item continuation page made no progress")
+        if self.has_more is not expected_more or self.next_offset != expected_next:
+            raise ValueError("project item continuation metadata is inconsistent")
+        context = self.project_locator.context()
+        object_ids: set[str] = set()
+        for item in self.items:
+            if item.locator.context() != context or item.parent_locator.context() != context:
+                raise ValueError("project item locator escaped the project context")
+            if item.locator.object_id in object_ids:
+                raise ValueError("project item page contains duplicate locators")
+            if (
+                item.parent_locator.kind == "project"
+                and item.parent_locator != self.project_locator
+            ):
+                raise ValueError("root project parent must equal projectLocator")
+            object_ids.add(item.locator.object_id)
+        return self
+
+
+class CompositionLayersListArguments(_NativeModel):
+    composition_locator: NativeLocator
+    offset: NonNegativeInt
+    limit: Annotated[StrictInt, Field(ge=1, le=50)]
+
+    @model_validator(mode="after")
+    def _composition_kind(self) -> "CompositionLayersListArguments":
+        if self.composition_locator.kind != "composition":
+            raise ValueError("compositionLocator must have kind composition")
+        return self
+
+
+class CompositionLayer(_NativeModel):
+    locator: NativeLocator
+    stack_index: PositiveInt
+    name: Annotated[StrictStr, Field(max_length=1024)]
+    type: Literal[
+        "av",
+        "camera",
+        "light",
+        "text",
+        "shape",
+        "model3d",
+        "null",
+        "adjustment",
+        "unknown",
+    ]
+    video_enabled: StrictBool
+    is_three_d: StrictBool
+    locked: StrictBool
+    parent_locator: NativeLocator | None
+    source_item_locator: NativeLocator | None
+
+    @model_validator(mode="after")
+    def _locator_kinds(self) -> "CompositionLayer":
+        if self.locator.kind != "layer":
+            raise ValueError("composition layer locator must have kind layer")
+        if self.parent_locator is not None and self.parent_locator.kind != "layer":
+            raise ValueError("layer parentLocator must have kind layer")
+        if (
+            self.source_item_locator is not None
+            and self.source_item_locator.kind not in {"item", "composition"}
+        ):
+            raise ValueError("layer sourceItemLocator must identify a project item")
+        return self
+
+
+class CompositionLayersListValue(_NativeModel):
+    composition_locator: NativeLocator
+    composition_name: Annotated[StrictStr, Field(max_length=1024)]
+    total: NonNegativeInt
+    offset: NonNegativeInt
+    limit: Annotated[StrictInt, Field(ge=1, le=50)]
+    returned: Annotated[StrictInt, Field(ge=0, le=50)]
+    has_more: StrictBool
+    next_offset: NonNegativeInt | None
+    layers: tuple[CompositionLayer, ...] = Field(max_length=50)
+
+    @model_validator(mode="after")
+    def _verified_page(self) -> "CompositionLayersListValue":
+        if self.composition_locator.kind != "composition":
+            raise ValueError("compositionLocator must have kind composition")
+        if self.returned != len(self.layers) or self.returned > self.limit:
+            raise ValueError("composition layer page count does not match returned")
+        consumed = self.offset + self.returned
+        if consumed > self.total:
+            raise ValueError("composition layer page exceeds total")
+        expected_more = consumed < self.total
+        expected_next = consumed if expected_more else None
+        if expected_more and self.returned == 0:
+            raise ValueError("composition layer continuation page made no progress")
+        if self.has_more is not expected_more or self.next_offset != expected_next:
+            raise ValueError("composition layer continuation metadata is inconsistent")
+        context = self.composition_locator.context()
+        object_ids: set[str] = set()
+        stack_indices: set[int] = set()
+        for index, layer in enumerate(self.layers):
+            related = (layer.locator, layer.parent_locator, layer.source_item_locator)
+            if any(item is not None and item.context() != context for item in related):
+                raise ValueError("composition layer locator escaped the project context")
+            if layer.locator.object_id in object_ids:
+                raise ValueError("composition layer page contains duplicate locators")
+            if layer.stack_index in stack_indices:
+                raise ValueError("composition layer page contains duplicate stack indices")
+            if layer.stack_index != self.offset + index + 1:
+                raise ValueError("composition layer stackIndex does not match page order")
+            object_ids.add(layer.locator.object_id)
+            stack_indices.add(layer.stack_index)
+        return self
+
+
+def _native_read_audit_fields(
+    implementation: NativeCapabilityDescriptor,
+    negotiation: NativeNegotiation,
+    evidence: NativeExecutionEvidence,
+) -> dict[str, Any]:
+    return {
+        "engine": "native-aegp",
+        "capabilityId": evidence.capability_id,
+        "capabilityVersion": evidence.capability_version,
+        "contractDigest": implementation.contract_digest,
+        "selectedWireVersion": negotiation.selected_wire_version,
+        "pluginVersion": negotiation.plugin_version,
+        "compiledSdkVersion": negotiation.compiled_sdk_version,
+        "sourceCommit": negotiation.source_commit,
+        "hostInstanceId": evidence.host_instance_id,
+        "sessionId": evidence.session_id,
+        "sessionGeneration": negotiation.session_generation,
+        "capabilitiesDigest": negotiation.capabilities_digest,
+        "requestId": evidence.request_id,
+        "effect": evidence.effect,
+        "requestDigest": evidence.request_digest,
+        "postconditionAlgorithm": evidence.postcondition.algorithm,
+        "postconditionDigest": evidence.postcondition.digest,
+        "startedAtUnixMs": evidence.started_at_unix_ms,
+        "completedAtUnixMs": evidence.completed_at_unix_ms,
+    }
+
+
+class ProjectItemsListExecution(_NativeModel):
+    implementation: NativeCapabilityDescriptor
+    negotiation: NativeNegotiation
+    value: ProjectItemsListValue
+    evidence: NativeExecutionEvidence
+    engine: Literal["native-aegp"] = "native-aegp"
+
+    def audit_fields(self) -> dict[str, Any]:
+        return _native_read_audit_fields(
+            self.implementation, self.negotiation, self.evidence
+        )
+
+
+class CompositionLayersListExecution(_NativeModel):
+    implementation: NativeCapabilityDescriptor
+    negotiation: NativeNegotiation
+    value: CompositionLayersListValue
+    evidence: NativeExecutionEvidence
+    engine: Literal["native-aegp"] = "native-aegp"
+
+    def audit_fields(self) -> dict[str, Any]:
+        return _native_read_audit_fields(
+            self.implementation, self.negotiation, self.evidence
+        )
+
+
+PROJECT_ITEMS_LIST_CAPABILITY_ID = "ae.project.items.list"
+PROJECT_ITEMS_LIST_CAPABILITY_VERSION = 1
+PROJECT_ITEMS_LIST_INPUT_CONTRACT_ID = (
+    "aemcp.contract.ae.project.items.list.input.v1"
+)
+PROJECT_ITEMS_LIST_RESULT_CONTRACT_ID = (
+    "aemcp.contract.ae.project.items.list.result.v1"
+)
+
+COMPOSITION_LAYERS_LIST_CAPABILITY_ID = "ae.composition.layers.list"
+COMPOSITION_LAYERS_LIST_CAPABILITY_VERSION = 1
+COMPOSITION_LAYERS_LIST_INPUT_CONTRACT_ID = (
+    "aemcp.contract.ae.composition.layers.list.input.v1"
+)
+COMPOSITION_LAYERS_LIST_RESULT_CONTRACT_ID = (
+    "aemcp.contract.ae.composition.layers.list.result.v1"
+)
+
+_PROJECT_ITEMS_LIST_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["offset", "limit"],
+    "properties": {
+        "projectLocator": {"$ref": "#/$defs/projectLocator"},
+        "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": _SAFE_MAX,
+            "default": 0,
+            "x-omissionBehavior": 0,
+        },
+        "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 25,
+            "x-omissionBehavior": 25,
+        },
+    },
+    "allOf": [
+        {
+            "if": {"properties": {"offset": {"minimum": 1}}},
+            "then": {"required": ["projectLocator"]},
+        }
+    ],
+    "$defs": {
+        "uuid": {"type": "string", "pattern": _UUID},
+        "projectLocator": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "kind",
+                "hostInstanceId",
+                "sessionId",
+                "projectId",
+                "generation",
+                "objectId",
+            ],
+            "properties": {
+                "kind": {"const": "project"},
+                "hostInstanceId": {"$ref": "#/$defs/uuid"},
+                "sessionId": {"$ref": "#/$defs/uuid"},
+                "projectId": {"$ref": "#/$defs/uuid"},
+                "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": _SAFE_MAX,
+                },
+                "objectId": {"$ref": "#/$defs/uuid"},
+            },
+        },
+    },
+    "x-invariant": (
+        "offset-greater-than-zero-requires-the-project-locator-from-the-previous-page"
+    ),
+}
+_PROJECT_ITEMS_LIST_RESULT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "projectLocator",
+        "total",
+        "offset",
+        "limit",
+        "returned",
+        "hasMore",
+        "nextOffset",
+        "items",
+    ],
+    "properties": {
+        "projectLocator": {"$ref": "#/$defs/projectLocator"},
+        "total": {"type": "integer", "minimum": 0, "maximum": _SAFE_MAX},
+        "offset": {"type": "integer", "minimum": 0, "maximum": _SAFE_MAX},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+        "returned": {"type": "integer", "minimum": 0, "maximum": 50},
+        "hasMore": {"type": "boolean"},
+        "nextOffset": {
+            "oneOf": [
+                {"type": "null"},
+                {"type": "integer", "minimum": 0, "maximum": _SAFE_MAX},
+            ]
+        },
+        "items": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["locator", "name", "type", "parentLocator"],
+                "properties": {
+                    "locator": {"$ref": "#/$defs/projectItemLocator"},
+                    "name": {"type": "string", "maxLength": 1024},
+                    "type": {
+                        "enum": ["folder", "composition", "footage", "unknown"]
+                    },
+                    "parentLocator": {"$ref": "#/$defs/projectParentLocator"},
+                },
+            },
+        },
+    },
+    "$defs": {
+        "uuid": {"type": "string", "pattern": _UUID},
+        "locatorBase": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "kind",
+                "hostInstanceId",
+                "sessionId",
+                "projectId",
+                "generation",
+                "objectId",
+            ],
+            "properties": {
+                "kind": {
+                    "enum": ["project", "item", "composition", "layer", "stream"]
+                },
+                "hostInstanceId": {"$ref": "#/$defs/uuid"},
+                "sessionId": {"$ref": "#/$defs/uuid"},
+                "projectId": {"$ref": "#/$defs/uuid"},
+                "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": _SAFE_MAX,
+                },
+                "objectId": {"$ref": "#/$defs/uuid"},
+            },
+        },
+        "projectLocator": {
+            "allOf": [
+                {"$ref": "#/$defs/locatorBase"},
+                {"properties": {"kind": {"const": "project"}}},
+            ]
+        },
+        "projectItemLocator": {
+            "allOf": [
+                {"$ref": "#/$defs/locatorBase"},
+                {"properties": {"kind": {"enum": ["item", "composition"]}}},
+            ]
+        },
+        "projectParentLocator": {
+            "allOf": [
+                {"$ref": "#/$defs/locatorBase"},
+                {"properties": {"kind": {"enum": ["project", "item"]}}},
+            ]
+        },
+    },
+    "x-invariant": "returned-equals-items-length-and-page-metadata-is-self-consistent",
+}
+_COMPOSITION_LAYERS_LIST_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["compositionLocator", "offset", "limit"],
+    "properties": {
+        "compositionLocator": {"$ref": "#/$defs/compositionLocator"},
+        "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": _SAFE_MAX,
+            "default": 0,
+            "x-omissionBehavior": 0,
+        },
+        "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 25,
+            "x-omissionBehavior": 25,
+        },
+    },
+    "$defs": {
+        "uuid": {"type": "string", "pattern": _UUID},
+        "compositionLocator": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "kind",
+                "hostInstanceId",
+                "sessionId",
+                "projectId",
+                "generation",
+                "objectId",
+            ],
+            "properties": {
+                "kind": {"const": "composition"},
+                "hostInstanceId": {"$ref": "#/$defs/uuid"},
+                "sessionId": {"$ref": "#/$defs/uuid"},
+                "projectId": {"$ref": "#/$defs/uuid"},
+                "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": _SAFE_MAX,
+                },
+                "objectId": {"$ref": "#/$defs/uuid"},
+            },
+        },
+    },
+}
+_COMPOSITION_LAYERS_LIST_RESULT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "compositionLocator",
+        "compositionName",
+        "total",
+        "offset",
+        "limit",
+        "returned",
+        "hasMore",
+        "nextOffset",
+        "layers",
+    ],
+    "properties": {
+        "compositionLocator": {"$ref": "#/$defs/compositionLocator"},
+        "compositionName": {"type": "string", "maxLength": 1024},
+        "total": {"type": "integer", "minimum": 0, "maximum": _SAFE_MAX},
+        "offset": {"type": "integer", "minimum": 0, "maximum": _SAFE_MAX},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+        "returned": {"type": "integer", "minimum": 0, "maximum": 50},
+        "hasMore": {"type": "boolean"},
+        "nextOffset": {
+            "oneOf": [
+                {"type": "null"},
+                {"type": "integer", "minimum": 0, "maximum": _SAFE_MAX},
+            ]
+        },
+        "layers": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "locator",
+                    "stackIndex",
+                    "name",
+                    "type",
+                    "videoEnabled",
+                    "isThreeD",
+                    "locked",
+                    "parentLocator",
+                    "sourceItemLocator",
+                ],
+                "properties": {
+                    "locator": {"$ref": "#/$defs/layerLocator"},
+                    "stackIndex": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": _SAFE_MAX,
+                    },
+                    "name": {"type": "string", "maxLength": 1024},
+                    "type": {
+                        "enum": [
+                            "av",
+                            "camera",
+                            "light",
+                            "text",
+                            "shape",
+                            "model3d",
+                            "null",
+                            "adjustment",
+                            "unknown",
+                        ]
+                    },
+                    "videoEnabled": {"type": "boolean"},
+                    "isThreeD": {"type": "boolean"},
+                    "locked": {"type": "boolean"},
+                    "parentLocator": {
+                        "oneOf": [
+                            {"type": "null"},
+                            {"$ref": "#/$defs/layerLocator"},
+                        ]
+                    },
+                    "sourceItemLocator": {
+                        "oneOf": [
+                            {"type": "null"},
+                            {"$ref": "#/$defs/sourceItemLocator"},
+                        ]
+                    },
+                },
+            },
+        },
+    },
+    "$defs": {
+        "uuid": {"type": "string", "pattern": _UUID},
+        "locatorBase": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "kind",
+                "hostInstanceId",
+                "sessionId",
+                "projectId",
+                "generation",
+                "objectId",
+            ],
+            "properties": {
+                "kind": {
+                    "enum": ["project", "item", "composition", "layer", "stream"]
+                },
+                "hostInstanceId": {"$ref": "#/$defs/uuid"},
+                "sessionId": {"$ref": "#/$defs/uuid"},
+                "projectId": {"$ref": "#/$defs/uuid"},
+                "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": _SAFE_MAX,
+                },
+                "objectId": {"$ref": "#/$defs/uuid"},
+            },
+        },
+        "compositionLocator": {
+            "allOf": [
+                {"$ref": "#/$defs/locatorBase"},
+                {"properties": {"kind": {"const": "composition"}}},
+            ]
+        },
+        "layerLocator": {
+            "allOf": [
+                {"$ref": "#/$defs/locatorBase"},
+                {"properties": {"kind": {"const": "layer"}}},
+            ]
+        },
+        "sourceItemLocator": {
+            "allOf": [
+                {"$ref": "#/$defs/locatorBase"},
+                {"properties": {"kind": {"enum": ["item", "composition"]}}},
+            ]
+        },
+    },
+    "x-invariant": "returned-equals-layers-length-and-page-metadata-is-self-consistent",
+}
+
+PROJECT_ITEMS_LIST_CONTRACT_DIGEST = (
+    "64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e"
+)
+COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST = (
+    "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75"
+)
+
+
 PROJECT_BIT_DEPTH_READ_CAPABILITY_ID = "ae.project.bit-depth.read"
 PROJECT_BIT_DEPTH_READ_CAPABILITY_VERSION = 1
 PROJECT_BIT_DEPTH_READ_INPUT_CONTRACT_ID = (
@@ -883,8 +1479,22 @@ class ProjectBitDepthSetExecution(_NativeModel):
         }
 
 
-def _structured_error(code: NativeErrorCode, message: str) -> NativeBackendError:
+def _structured_error(
+    code: NativeErrorCode,
+    message: str,
+    *,
+    details: Mapping[str, Any] | None = None,
+) -> NativeBackendError:
     retryable, side_effect, action = _ERROR_POLICY[code]
+    hints = {
+        "refresh-capabilities": "Refresh negotiated native capabilities before retrying.",
+        "refresh-locator": (
+            "Discard the stale locator and call ae_listProjectItems again before retrying."
+        ),
+        "open-project": "Open the intended After Effects project, then retry.",
+        "change-arguments": "Correct the rejected arguments before retrying.",
+        "none": "Issue a new request only if the result is still needed.",
+    }
     return NativeBackendError(
         code,
         message,
@@ -892,14 +1502,11 @@ def _structured_error(code: NativeErrorCode, message: str) -> NativeBackendError
         side_effect=side_effect,
         recovery=NativeRecovery(
             action=action,
-            hint=(
-                "Refresh negotiated native capabilities before retrying."
-                if action == "refresh-capabilities"
-                else "Issue a new request only if the result is still needed."
-                if action == "none"
-                else "Retry only after the caller re-evaluates this failure."
+            hint=hints.get(
+                action, "Retry only after the caller re-evaluates this failure."
             ),
         ),
+        details=details,
     )
 
 
@@ -1052,6 +1659,112 @@ def _validate_project_bit_depth_set_descriptor(
         )
 
 
+def _validate_navigation_descriptor(
+    descriptor: NativeCapabilityDescriptor,
+    *,
+    host_platform: NativePlatform,
+    capability_id: str,
+    capability_version: int,
+    summary: str,
+    side_effect_summary: str,
+    preconditions: tuple[str, ...],
+    input_contract_id: str,
+    result_contract_id: str,
+    contract_digest: str,
+    input_schema: dict[str, Any],
+    result_schema: dict[str, Any],
+    requirement_id: str,
+) -> None:
+    schemas_digest = _sha256_closed_json(
+        {
+            "inputSchema": descriptor.input_schema,
+            "resultSchema": descriptor.result_schema,
+        }
+    )
+    requirements = tuple(
+        (requirement.id, requirement.contract_version)
+        for requirement in descriptor.requirements
+    )
+    expected = (
+        descriptor.capability_id == capability_id
+        and descriptor.capability_version == capability_version
+        and descriptor.schema_version == 1
+        and descriptor.engine == "native-aegp"
+        and descriptor.summary == summary
+        and descriptor.risk == "read"
+        and descriptor.mutability == "read-only"
+        and descriptor.idempotency == "idempotent"
+        and descriptor.cancellation == "before-dispatch"
+        and descriptor.undo == "not-applicable"
+        and descriptor.side_effect_summary == side_effect_summary
+        and descriptor.preconditions == preconditions
+        and descriptor.input_contract_id == input_contract_id
+        and descriptor.result_contract_id == result_contract_id
+        and descriptor.contract_digest == contract_digest
+        and schemas_digest == descriptor.contract_digest
+        and descriptor.input_schema == input_schema
+        and descriptor.result_schema == result_schema
+        and requirements == ((requirement_id, 1),)
+        and host_platform in descriptor.compatibility.intended_platforms
+    )
+    if not expected:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            f"Negotiated {capability_id} contract does not match Core.",
+        )
+
+
+def _validate_project_items_list_descriptor(
+    descriptor: NativeCapabilityDescriptor,
+    *,
+    host_platform: NativePlatform,
+) -> None:
+    _validate_navigation_descriptor(
+        descriptor,
+        host_platform=host_platform,
+        capability_id=PROJECT_ITEMS_LIST_CAPABILITY_ID,
+        capability_version=PROJECT_ITEMS_LIST_CAPABILITY_VERSION,
+        summary="List a bounded page of items in the open After Effects project.",
+        side_effect_summary=(
+            "Reads project items without changing After Effects state."
+        ),
+        preconditions=("An After Effects project must be open.",),
+        input_contract_id=PROJECT_ITEMS_LIST_INPUT_CONTRACT_ID,
+        result_contract_id=PROJECT_ITEMS_LIST_RESULT_CONTRACT_ID,
+        contract_digest=PROJECT_ITEMS_LIST_CONTRACT_DIGEST,
+        input_schema=_PROJECT_ITEMS_LIST_INPUT_SCHEMA,
+        result_schema=_PROJECT_ITEMS_LIST_RESULT_SCHEMA,
+        requirement_id="aemcp.requirement.native.project-items-list",
+    )
+
+
+def _validate_composition_layers_list_descriptor(
+    descriptor: NativeCapabilityDescriptor,
+    *,
+    host_platform: NativePlatform,
+) -> None:
+    _validate_navigation_descriptor(
+        descriptor,
+        host_platform=host_platform,
+        capability_id=COMPOSITION_LAYERS_LIST_CAPABILITY_ID,
+        capability_version=COMPOSITION_LAYERS_LIST_CAPABILITY_VERSION,
+        summary="List a bounded page of layers in one After Effects composition.",
+        side_effect_summary=(
+            "Reads composition layers without changing After Effects state."
+        ),
+        preconditions=(
+            "An After Effects project must be open.",
+            "compositionLocator must come from ae.project.items.list@1.",
+        ),
+        input_contract_id=COMPOSITION_LAYERS_LIST_INPUT_CONTRACT_ID,
+        result_contract_id=COMPOSITION_LAYERS_LIST_RESULT_CONTRACT_ID,
+        contract_digest=COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST,
+        input_schema=_COMPOSITION_LAYERS_LIST_INPUT_SCHEMA,
+        result_schema=_COMPOSITION_LAYERS_LIST_RESULT_SCHEMA,
+        requirement_id="aemcp.requirement.native.composition-layers-list",
+    )
+
+
 def _sha256_closed_json(value: Any) -> str:
     # All object member names in this closed contract are ASCII, so Python's
     # lexical key order is identical to RFC 8785's UTF-16 order here.
@@ -1089,6 +1802,26 @@ def _project_bit_depth_set_digest(value: ProjectBitDepthSetValue) -> str:
         {
             "capabilityId": PROJECT_BIT_DEPTH_SET_CAPABILITY_ID,
             "capabilityVersion": PROJECT_BIT_DEPTH_SET_CAPABILITY_VERSION,
+            "value": value.model_dump(mode="json", by_alias=True),
+        }
+    )
+
+
+def _project_items_list_digest(value: ProjectItemsListValue) -> str:
+    return _sha256_closed_json(
+        {
+            "capabilityId": PROJECT_ITEMS_LIST_CAPABILITY_ID,
+            "capabilityVersion": PROJECT_ITEMS_LIST_CAPABILITY_VERSION,
+            "value": value.model_dump(mode="json", by_alias=True),
+        }
+    )
+
+
+def _composition_layers_list_digest(value: CompositionLayersListValue) -> str:
+    return _sha256_closed_json(
+        {
+            "capabilityId": COMPOSITION_LAYERS_LIST_CAPABILITY_ID,
+            "capabilityVersion": COMPOSITION_LAYERS_LIST_CAPABILITY_VERSION,
             "value": value.model_dump(mode="json", by_alias=True),
         }
     )
@@ -1173,6 +1906,128 @@ def _validate_invoke_error_binding(
         "NATIVE_CONTRACT_MISMATCH",
         "Native failure was not bound to the requested capability.",
     ) from error
+
+
+async def _invoke_native_read_request(
+    backend: NativeInvokeBackend,
+    *,
+    request_id: str,
+    capability_id: str,
+    capability_version: int,
+    arguments: dict[str, Any],
+    locator: NativeLocator | None,
+    locator_field: str,
+    descriptor_validator: Callable[..., None],
+    deadline_unix_ms: int,
+    cancellation: NativeCancellationToken | None,
+) -> tuple[
+    NativeNegotiation,
+    NativeCapabilityDescriptor,
+    NativeInvokeRequest,
+    NativeInvokeResult,
+]:
+    """Negotiate and invoke one strict read-only native capability."""
+
+    _ensure_active(deadline_unix_ms, cancellation)
+    negotiation = await backend.negotiate(
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    _ensure_active(deadline_unix_ms, cancellation)
+    capability_ids: tuple[str, ...] | None = None
+    capability_detail: CapabilityDetail = "full"
+    capability_limit = 100
+    capabilities = await backend.capabilities(
+        ids=capability_ids,
+        detail=capability_detail,
+        limit=capability_limit,
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    expected_query_digest = _capabilities_query_digest(
+        session_id=negotiation.session_id,
+        ids=capability_ids,
+        detail=capability_detail,
+        limit=capability_limit,
+    )
+    try:
+        registry_digest = _capabilities_registry_digest(capabilities.items)
+    except (TypeError, ValueError, UnicodeError) as exc:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native capability registry could not be verified.",
+        ) from exc
+    if (
+        capabilities.session_id != negotiation.session_id
+        or capabilities.detail != capability_detail
+        or capabilities.next_cursor is not None
+        or capabilities.query_digest != expected_query_digest
+        or capabilities.capabilities_digest != registry_digest
+        or capabilities.capabilities_digest != negotiation.capabilities_digest
+    ):
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native capabilities were not bound to the negotiated session.",
+        )
+    matches = [
+        item
+        for item in capabilities.items
+        if item.capability_id == capability_id
+        and item.capability_version == capability_version
+    ]
+    descriptor = matches[0] if len(matches) == 1 else None
+    if descriptor is None:
+        raise _structured_error(
+            "NATIVE_UNSUPPORTED",
+            f"Native host did not advertise {capability_id}@{capability_version}.",
+        )
+    descriptor_validator(descriptor, host_platform=negotiation.host_platform)
+    if locator is not None and (
+        locator.host_instance_id != negotiation.host_instance_id
+        or locator.session_id != negotiation.session_id
+    ):
+        raise _structured_error(
+            "STALE_LOCATOR",
+            "Native locator does not belong to the negotiated host session.",
+            details={
+                "field": locator_field,
+                "capabilityId": capability_id,
+            },
+        )
+    _ensure_active(deadline_unix_ms, cancellation)
+
+    request = NativeInvokeRequest(
+        request_id=request_id,
+        capability_id=capability_id,
+        capability_version=capability_version,
+        arguments=arguments,
+        deadline_unix_ms=deadline_unix_ms,
+    )
+    try:
+        result = await backend.invoke(request, cancellation=cancellation)
+    except NativeBackendError as exc:
+        _validate_invoke_error_binding(exc, request)
+        raise
+    _ensure_active(deadline_unix_ms, cancellation)
+    expected_request_digest = _invoke_request_digest(request, negotiation)
+    if (
+        result.capability_id != request.capability_id
+        or result.capability_version != request.capability_version
+        or result.engine != "native-aegp"
+        or result.replayed is not False
+        or result.evidence.request_id != request.request_id
+        or result.evidence.host_instance_id != negotiation.host_instance_id
+        or result.evidence.session_id != negotiation.session_id
+        or result.evidence.effect != "none"
+        or result.evidence.undo is not None
+        or result.evidence.completed_at_unix_ms > deadline_unix_ms
+        or result.evidence.request_digest != expected_request_digest
+    ):
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            f"Native {capability_id} result did not match its negotiated request.",
+        )
+    return negotiation, descriptor, request, result
 
 
 async def invoke_project_summary(
@@ -1581,8 +2436,137 @@ async def invoke_project_bit_depth_set(
     )
 
 
+async def invoke_project_items_list(
+    backend: NativeInvokeBackend,
+    *,
+    request_id: str,
+    project_locator: NativeLocator | Mapping[str, Any] | None,
+    offset: int,
+    limit: int,
+    deadline_unix_ms: int,
+    cancellation: NativeCancellationToken | None = None,
+) -> ProjectItemsListExecution:
+    """List a bounded native project-item page; JSX is never consulted."""
+
+    arguments = ProjectItemsListArguments(
+        project_locator=project_locator,
+        offset=offset,
+        limit=limit,
+    )
+    wire_arguments = arguments.model_dump(
+        mode="json",
+        by_alias=True,
+        exclude_none=True,
+    )
+    negotiation, descriptor, _request, result = await _invoke_native_read_request(
+        backend,
+        request_id=request_id,
+        capability_id=PROJECT_ITEMS_LIST_CAPABILITY_ID,
+        capability_version=PROJECT_ITEMS_LIST_CAPABILITY_VERSION,
+        arguments=wire_arguments,
+        locator=arguments.project_locator,
+        locator_field="params.arguments.projectLocator",
+        descriptor_validator=_validate_project_items_list_descriptor,
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    try:
+        value = ProjectItemsListValue.model_validate(result.value)
+        postcondition_digest = _project_items_list_digest(value)
+    except (ValidationError, TypeError, ValueError, UnicodeError) as exc:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native project-item page did not match its typed contract.",
+        ) from exc
+    if (
+        value.offset != arguments.offset
+        or value.limit != arguments.limit
+        or (
+            arguments.project_locator is not None
+            and value.project_locator != arguments.project_locator
+        )
+        or value.project_locator.host_instance_id != negotiation.host_instance_id
+        or value.project_locator.session_id != negotiation.session_id
+        or result.evidence.postcondition.kind != "project-items-list"
+        or result.evidence.postcondition.digest != postcondition_digest
+    ):
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native project-item page was not bound to its request and evidence.",
+        )
+    return ProjectItemsListExecution(
+        implementation=descriptor,
+        negotiation=negotiation,
+        value=value,
+        evidence=result.evidence,
+    )
+
+
+async def invoke_composition_layers_list(
+    backend: NativeInvokeBackend,
+    *,
+    request_id: str,
+    composition_locator: NativeLocator | Mapping[str, Any],
+    offset: int,
+    limit: int,
+    deadline_unix_ms: int,
+    cancellation: NativeCancellationToken | None = None,
+) -> CompositionLayersListExecution:
+    """List a bounded native layer page for one exact composition locator."""
+
+    arguments = CompositionLayersListArguments(
+        composition_locator=composition_locator,
+        offset=offset,
+        limit=limit,
+    )
+    wire_arguments = arguments.model_dump(mode="json", by_alias=True)
+    negotiation, descriptor, _request, result = await _invoke_native_read_request(
+        backend,
+        request_id=request_id,
+        capability_id=COMPOSITION_LAYERS_LIST_CAPABILITY_ID,
+        capability_version=COMPOSITION_LAYERS_LIST_CAPABILITY_VERSION,
+        arguments=wire_arguments,
+        locator=arguments.composition_locator,
+        locator_field="params.arguments.compositionLocator",
+        descriptor_validator=_validate_composition_layers_list_descriptor,
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    try:
+        value = CompositionLayersListValue.model_validate(result.value)
+        postcondition_digest = _composition_layers_list_digest(value)
+    except (ValidationError, TypeError, ValueError, UnicodeError) as exc:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native composition-layer page did not match its typed contract.",
+        ) from exc
+    if (
+        value.composition_locator != arguments.composition_locator
+        or value.offset != arguments.offset
+        or value.limit != arguments.limit
+        or value.composition_locator.host_instance_id != negotiation.host_instance_id
+        or value.composition_locator.session_id != negotiation.session_id
+        or result.evidence.postcondition.kind != "composition-layers-list"
+        or result.evidence.postcondition.digest != postcondition_digest
+    ):
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native composition-layer page was not bound to its request and evidence.",
+        )
+    return CompositionLayersListExecution(
+        implementation=descriptor,
+        negotiation=negotiation,
+        value=value,
+        evidence=result.evidence,
+    )
+
+
 __all__ = [
     "CapabilityDetail",
+    "CompositionLayer",
+    "CompositionLayersListArguments",
+    "CompositionLayersListExecution",
+    "CompositionLayersListValue",
     "ExecutionEngine",
     "NativeBackendError",
     "NativeBrokerErrorCode",
@@ -1598,6 +2582,7 @@ __all__ = [
     "NativeInvokeBackend",
     "NativeInvokeRequest",
     "NativeInvokeResult",
+    "NativeLocator",
     "NativeNegotiation",
     "NativePostconditionEvidence",
     "NativePlatform",
@@ -1615,6 +2600,10 @@ __all__ = [
     "ProjectBitDepthSetArguments",
     "ProjectBitDepthSetExecution",
     "ProjectBitDepthSetValue",
+    "ProjectItem",
+    "ProjectItemsListArguments",
+    "ProjectItemsListExecution",
+    "ProjectItemsListValue",
     "ProjectSummaryExecution",
     "ProjectSummaryValue",
     "PROJECT_BIT_DEPTH_READ_CAPABILITY_ID",
@@ -1623,10 +2612,22 @@ __all__ = [
     "PROJECT_BIT_DEPTH_SET_CAPABILITY_ID",
     "PROJECT_BIT_DEPTH_SET_CAPABILITY_VERSION",
     "PROJECT_BIT_DEPTH_SET_CONTRACT_DIGEST",
+    "COMPOSITION_LAYERS_LIST_CAPABILITY_ID",
+    "COMPOSITION_LAYERS_LIST_CAPABILITY_VERSION",
+    "COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST",
+    "COMPOSITION_LAYERS_LIST_INPUT_CONTRACT_ID",
+    "COMPOSITION_LAYERS_LIST_RESULT_CONTRACT_ID",
+    "PROJECT_ITEMS_LIST_CAPABILITY_ID",
+    "PROJECT_ITEMS_LIST_CAPABILITY_VERSION",
+    "PROJECT_ITEMS_LIST_CONTRACT_DIGEST",
+    "PROJECT_ITEMS_LIST_INPUT_CONTRACT_ID",
+    "PROJECT_ITEMS_LIST_RESULT_CONTRACT_ID",
     "PROJECT_SUMMARY_CAPABILITY_ID",
     "PROJECT_SUMMARY_CAPABILITY_VERSION",
     "PROJECT_SUMMARY_CONTRACT_DIGEST",
     "invoke_project_bit_depth_read",
     "invoke_project_bit_depth_set",
+    "invoke_composition_layers_list",
+    "invoke_project_items_list",
     "invoke_project_summary",
 ]

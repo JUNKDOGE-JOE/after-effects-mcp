@@ -23,8 +23,12 @@ import {
   materializeDeadline,
   nativeCapabilityRegistry,
   postconditionDigest,
+  compositionLayersListContractDigest,
+  compositionLayersListDescriptor,
   projectBitDepthReadDescriptor,
   projectBitDepthSetDescriptor,
+  projectItemsListContractDigest,
+  projectItemsListDescriptor,
   projectSummaryContractDigest,
   projectSummaryDescriptor,
   schemaAccepts as productSchemaAccepts,
@@ -170,7 +174,7 @@ test('schema locks strict framing, bounded defaults, rate limits, and native pro
   });
   assert.equal(schema['x-lifecycle'].defaultDeadlineMs, 5000);
   assert.equal(schema['x-lifecycle'].maximumDeadlineMs, 30000);
-  assert.equal(schema['x-lifecycle'].pagination, 'unsupported-in-v1');
+  assert.equal(schema['x-lifecycle'].pagination, 'capability-owned-offset-limit-v1');
   assert.equal(schema['x-lifecycle'].terminalObservationClockToleranceMs, 0);
   assert.equal(schema['x-digests'].propertyNameSort, 'utf-16-code-units');
   assert.deepEqual(schema.$defs.method.enum, ['hello', 'capabilities', 'invoke', 'cancel']);
@@ -202,6 +206,8 @@ test('all checked-in vectors are synthetic and contain no host or Adobe suite cl
     'invoke-project-summary.json',
     'invoke-project-bit-depth-read.json',
     'invoke-project-bit-depth-set.json',
+    'invoke-project-items-list.json',
+    'invoke-composition-layers-list.json',
     'cancel.json',
     'errors.json',
     'negative-corpus.json',
@@ -232,6 +238,8 @@ test('golden requests, events, responses, and bound error policies validate', ()
     'invoke-project-summary.json',
     'invoke-project-bit-depth-read.json',
     'invoke-project-bit-depth-set.json',
+    'invoke-project-items-list.json',
+    'invoke-composition-layers-list.json',
     'cancel.json',
   ]) {
     const fixture = golden(name);
@@ -431,6 +439,8 @@ test('schema shape and composite request validation have an explicit differentia
     golden('invoke-project-summary.json').request,
     golden('invoke-project-bit-depth-read.json').request,
     golden('invoke-project-bit-depth-set.json').request,
+    golden('invoke-project-items-list.json').request,
+    golden('invoke-composition-layers-list.json').request,
     golden('cancel.json').request,
   ];
   for (const request of validRequests) {
@@ -661,6 +671,8 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
   const descriptor = projectSummaryDescriptor(schema);
   const bitDepthReadDescriptor = projectBitDepthReadDescriptor(schema);
   const bitDepthSetDescriptor = projectBitDepthSetDescriptor(schema);
+  const projectItemsDescriptor = projectItemsListDescriptor(schema);
+  const compositionLayersDescriptor = compositionLayersListDescriptor(schema);
   const containsRef = (value) => {
     if (Array.isArray(value)) return value.some(containsRef);
     if (value === null || typeof value !== 'object') return false;
@@ -689,8 +701,17 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     '936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e');
   assert.equal(bitDepthSetDescriptor.contractDigest,
     'd5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a');
-  assert.equal(capabilityDigest([descriptor, bitDepthReadDescriptor, bitDepthSetDescriptor]),
-    '0fda4e1bfbc8657bcd0c676fb802aecc97ba2ee6268cc115ff6d12b74758c042');
+  assert.equal(projectItemsDescriptor.contractDigest,
+    '64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e');
+  assert.equal(compositionLayersDescriptor.contractDigest,
+    '3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75');
+  assert.equal(capabilityDigest([
+    descriptor,
+    bitDepthReadDescriptor,
+    bitDepthSetDescriptor,
+    projectItemsDescriptor,
+    compositionLayersDescriptor,
+  ]), '1814ffa17e29919414094c3b9cb6fb331169a5084aed44abb7a55f5827ffe72a');
   assert.ok(Buffer.byteLength(canonicalize(descriptor), 'utf8') < LIMITS.maxFrameBytes);
 });
 
@@ -699,7 +720,7 @@ test('v1 capability discovery is single-page, fail-closed, and never replayed', 
   const exchange = golden('capabilities.json');
   assert.equal(exchange.request.params.limit, 100);
   assert.equal(Object.hasOwn(exchange.request.params, 'ids'), false);
-  assert.equal(exchange.response.result.items.length, 3);
+  assert.equal(exchange.response.result.items.length, 5);
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, exchange.response, schema), true);
 
   const zeroLimit = structuredClone(exchange.request);
@@ -1185,6 +1206,158 @@ test('bit-depth invoke vectors bind native read and undoable set semantics', () 
   wrongTarget.result.value.afterBitsPerChannel = 8;
   wrongTarget.result.evidence.postcondition.digest = postconditionDigest(wrongTarget.result);
   assert.equal(validateTranscript(setContext, set.request, [...set.events, wrongTarget]), false);
+});
+
+test('native project navigation vectors bind bounded pagination and locator provenance', () => {
+  for (const [name, descriptor] of [
+    ['invoke-project-items-list.json', projectItemsListDescriptor(schema)],
+    ['invoke-composition-layers-list.json', compositionLayersListDescriptor(schema)],
+  ]) {
+    const fixture = golden(name);
+    const context = {
+      hello: golden('hello.json'),
+      descriptor,
+      schema,
+      brokerSendUnixMs: 1900000000000,
+      effectiveDeadlineUnixMs: fixture.request.deadlineUnixMs,
+      terminalObservedUnixMs: 1900000000030,
+    };
+    assert.equal(fixture.response.result.evidence.requestDigest, sha256Jcs(fixture.request));
+    assert.equal(
+      fixture.response.result.evidence.postcondition.digest,
+      postconditionDigest(fixture.response.result),
+    );
+    assert.equal(validateTranscript(
+      context,
+      fixture.request,
+      [...fixture.events, fixture.response],
+    ), true, name);
+  }
+
+  const project = golden('invoke-project-items-list.json');
+  assert.equal(projectItemsListDescriptor(schema).contractDigest,
+    projectItemsListContractDigest(schema));
+  assert.deepEqual(projectItemsListDescriptor(schema).inputSchema.required, ['offset', 'limit']);
+  assert.equal(projectItemsListDescriptor(schema).inputSchema.properties.limit.default, 25);
+  assert.equal(projectItemsListDescriptor(schema).inputSchema.properties.limit.maximum, 50);
+  const unknownItem = structuredClone(project.response.result.value);
+  unknownItem.items[0].type = 'unknown';
+  assert.equal(schemaAccepts(
+    projectItemsListDescriptor(schema).resultSchema,
+    unknownItem,
+    projectItemsListDescriptor(schema).resultSchema,
+  ), true);
+
+  const secondPage = structuredClone(project.request);
+  secondPage.requestId = 'invoke-project-items-2';
+  secondPage.params.arguments = {
+    projectLocator: project.response.result.value.projectLocator,
+    offset: 1,
+    limit: 25,
+  };
+  assert.equal(schemaAccepts(schema.$defs.request, secondPage), true);
+  assert.deepEqual(validateRequestComposite(secondPage, schema), { ok: true });
+  for (const mutate of [
+    (request) => { delete request.params.arguments.offset; },
+    (request) => { delete request.params.arguments.limit; },
+    (request) => { request.params.arguments.offset = -1; },
+    (request) => { request.params.arguments.limit = 0; },
+    (request) => { request.params.arguments.limit = 51; },
+    (request) => { request.params.arguments.offset = 1; delete request.params.arguments.projectLocator; },
+    (request) => { request.params.arguments.projectLocator.kind = 'layer'; },
+  ]) {
+    const malformed = structuredClone(secondPage);
+    mutate(malformed);
+    assert.equal(schemaAccepts(schema.$defs.request, malformed), false);
+    assert.deepEqual(classifyRequest(malformed), { ok: false, errorCode: 'INVALID_ARGUMENT' });
+  }
+
+  const projectContext = {
+    hello: golden('hello.json'),
+    descriptor: projectItemsListDescriptor(schema),
+    schema,
+    brokerSendUnixMs: 1900000000000,
+    effectiveDeadlineUnixMs: project.request.deadlineUnixMs,
+    terminalObservedUnixMs: 1900000000030,
+  };
+  for (const mutate of [
+    (value) => { value.returned = 1; },
+    (value) => { value.hasMore = true; },
+    (value) => { value.nextOffset = 2; },
+    (value) => { value.offset = 1; },
+    (value) => { value.limit = 24; },
+    (value) => { value.total = 1; },
+    (value) => { value.items[1].locator.objectId = value.items[0].locator.objectId; },
+    (value) => { value.items[0].parentLocator.sessionId = '33333333-3333-4333-8333-333333333333'; },
+  ]) {
+    const malformed = structuredClone(project.response);
+    mutate(malformed.result.value);
+    malformed.result.evidence.postcondition.digest = postconditionDigest(malformed.result);
+    assert.equal(validateTranscript(
+      projectContext, project.request, [...project.events, malformed],
+    ), false);
+  }
+
+  const layers = golden('invoke-composition-layers-list.json');
+  assert.equal(compositionLayersListDescriptor(schema).contractDigest,
+    compositionLayersListContractDigest(schema));
+  const layersContext = {
+    hello: golden('hello.json'),
+    descriptor: compositionLayersListDescriptor(schema),
+    schema,
+    brokerSendUnixMs: 1900000000000,
+    effectiveDeadlineUnixMs: layers.request.deadlineUnixMs,
+    terminalObservedUnixMs: 1900000000030,
+  };
+  for (const mutate of [
+    (value) => { value.compositionLocator.objectId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'; },
+    (value) => { value.layers[1].stackIndex = 1; },
+    (value) => { value.layers[1].locator.objectId = value.layers[0].locator.objectId; },
+    (value) => { value.layers[1].sourceItemLocator.kind = 'layer'; },
+    (value) => { value.layers[1].parentLocator.generation = 9; },
+    (value) => { delete value.layers[0].locked; },
+  ]) {
+    const malformed = structuredClone(layers.response);
+    mutate(malformed.result.value);
+    malformed.result.evidence.postcondition.digest = postconditionDigest(malformed.result);
+    assert.equal(validateTranscript(
+      layersContext, layers.request, [...layers.events, malformed],
+    ), false);
+  }
+
+  const stale = structuredClone(golden('errors.json').responses.staleLocator);
+  stale.requestId = layers.request.requestId;
+  stale.error.details.capabilityId = layers.request.params.capabilityId;
+  stale.error.details.field = 'params.arguments.compositionLocator';
+  assert.equal(validateFailureExchange(
+    golden('hello.json'), layers.request, stale, compositionLayersListDescriptor(schema), schema,
+  ), true);
+  const omittedGeneration = structuredClone(stale);
+  delete omittedGeneration.error.details.currentGeneration;
+  assert.equal(validateFailureExchange(
+    golden('hello.json'), layers.request, omittedGeneration,
+    compositionLayersListDescriptor(schema), schema,
+  ), true);
+  for (const invalidGeneration of [0, 1.5, 9007199254740992, '8']) {
+    const malformed = structuredClone(omittedGeneration);
+    malformed.error.details.currentGeneration = invalidGeneration;
+    assert.equal(validateFailureExchange(
+      golden('hello.json'), layers.request, malformed,
+      compositionLayersListDescriptor(schema), schema,
+    ), false, `invalid currentGeneration: ${String(invalidGeneration)}`);
+  }
+  stale.error.details.field = 'arguments.layer';
+  assert.equal(validateFailureExchange(
+    golden('hello.json'), layers.request, stale, compositionLayersListDescriptor(schema), schema,
+  ), false);
+
+  const projectStale = structuredClone(omittedGeneration);
+  projectStale.requestId = secondPage.requestId;
+  projectStale.error.details.capabilityId = secondPage.params.capabilityId;
+  projectStale.error.details.field = 'params.arguments.projectLocator';
+  assert.equal(validateFailureExchange(
+    golden('hello.json'), secondPage, projectStale, projectItemsListDescriptor(schema), schema,
+  ), true);
 });
 
 test('server-issued locators reject pointer shapes and stale host/session/project/generation', () => {

@@ -21,6 +21,14 @@ const CAPABILITIES_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
     '../../native/ae-plugin/protocol/fixtures/capabilities.json',
 ), 'utf8')).response.result;
+const PROJECT_ITEMS_VECTOR = JSON.parse(fs.readFileSync(path.join(
+    __dirname,
+    '../../native/ae-plugin/protocol/fixtures/invoke-project-items-list.json',
+), 'utf8'));
+const COMPOSITION_LAYERS_VECTOR = JSON.parse(fs.readFileSync(path.join(
+    __dirname,
+    '../../native/ae-plugin/protocol/fixtures/invoke-composition-layers-list.json',
+), 'utf8'));
 const HOST = '22222222-2222-4222-8222-222222222222';
 const SESSION = '11111111-1111-4111-8111-111111111111';
 const CLIENT = '33333333-3333-4333-8333-333333333333';
@@ -104,26 +112,31 @@ async function endpointFixture(t) {
 }
 
 function invokeRequestDigest(request) {
-    const argumentsValue = request.params.capabilityId === 'ae.project.bit-depth.set'
-        ? {
-            idempotencyKey: request.params.arguments.idempotencyKey,
-            targetDepth: request.params.arguments.targetDepth,
-        }
-        : {};
-    const canonical = {
-        deadlineUnixMs: request.deadlineUnixMs,
-        kind: request.kind,
-        method: request.method,
-        params: {
-            arguments: argumentsValue,
-            capabilityId: request.params.capabilityId,
-            capabilityVersion: request.params.capabilityVersion,
-        },
-        requestId: request.requestId,
-        sessionId: request.sessionId,
-        wireVersion: request.wireVersion,
-    };
-    return crypto.createHash('sha256').update(JSON.stringify(canonical), 'utf8').digest('hex');
+    return jcsDigest(request);
+}
+
+function canonicalize(value) {
+    if (Array.isArray(value)) return value.map(canonicalize);
+    if (value && typeof value === 'object') {
+        return Object.keys(value).sort().reduce(function (result, key) {
+            result[key] = canonicalize(value[key]);
+            return result;
+        }, {});
+    }
+    return value;
+}
+
+function jcsDigest(value) {
+    return crypto.createHash('sha256')
+        .update(JSON.stringify(canonicalize(value)), 'utf8').digest('hex');
+}
+
+function rebindPostcondition(result) {
+    result.evidence.postcondition.digest = jcsDigest({
+        capabilityId: result.capabilityId,
+        capabilityVersion: result.capabilityVersion,
+        value: result.value,
+    });
 }
 
 function bitDepthReadPostconditionDigest(value) {
@@ -217,6 +230,19 @@ function installProtocol(server, options) {
                         nextCursor: null,
                         items: CAPABILITIES_VECTOR.items,
                     };
+                } else if (request.params.capabilityId === 'ae.project.items.list'
+                    || request.params.capabilityId === 'ae.composition.layers.list') {
+                    const vector = request.params.capabilityId === 'ae.project.items.list'
+                        ? PROJECT_ITEMS_VECTOR : COMPOSITION_LAYERS_VECTOR;
+                    result = structuredClone(vector.response.result);
+                    result.evidence.requestId = request.requestId;
+                    result.evidence.requestDigest = invokeRequestDigest(request);
+                    result.evidence.postcondition.digest = jcsDigest({
+                        capabilityId: result.capabilityId,
+                        capabilityVersion: result.capabilityVersion,
+                        value: result.value,
+                    });
+                    if (input.mutateInvoke) input.mutateInvoke(result, request);
                 } else if (request.params.capabilityId === 'ae.project.bit-depth.set') {
                     const value = {
                         changed: true,
@@ -328,6 +354,24 @@ function installProtocol(server, options) {
     return { authorize, requests };
 }
 
+async function readyNativeClient(t, protocolOptions) {
+    const endpoint = await endpointFixture(t);
+    const protocol = installProtocol(endpoint.server, protocolOptions);
+    const client = createNativeAegpClient({
+        runtime: { platform: 'darwin', arch: 'arm64' },
+        runtimeRoot: endpoint.root,
+        clientInstanceId: CLIENT,
+        requestTimeoutMs: 2000,
+        now: function () { return 1900000000000; },
+    });
+    t.after(function () { return client.close(); });
+    await client.beginPairing();
+    protocol.authorize();
+    await client.waitUntilConnected();
+    await client.capabilities({ detail: 'full', limit: 100 });
+    return { client, protocol };
+}
+
 test('descriptor and fixed transport messages are strict and closed', () => {
     assert.equal(endpointDescriptor(descriptor('s-123456abcdef.sock')).hostInstanceId, HOST);
     assert.equal(endpointDescriptor(descriptor('../escape.sock')), null);
@@ -414,6 +458,18 @@ test('CEP client verifies native project summary and bit-depth read/write capabi
     );
     assert.equal(client.status().projectBitDepthReadContractDigest, BIT_DEPTH_READ_DIGEST);
     assert.equal(client.status().projectBitDepthSetContractDigest, BIT_DEPTH_SET_DIGEST);
+    assert.equal(
+        client.status().projectItemsListContractDigest,
+        CAPABILITIES_VECTOR.items.find(function (item) {
+            return item.id === 'ae.project.items.list';
+        }).contractDigest,
+    );
+    assert.equal(
+        client.status().compositionLayersListContractDigest,
+        CAPABILITIES_VECTOR.items.find(function (item) {
+            return item.id === 'ae.composition.layers.list';
+        }).contractDigest,
+    );
     assert.deepEqual(protocol.requests.map(function (request) { return request.method; }), [
         'hello', 'capabilities', 'invoke',
     ]);
@@ -457,9 +513,187 @@ test('CEP client verifies native project summary and bit-depth read/write capabi
     assert.deepEqual(protocol.requests[4].params.arguments, {
         targetDepth: 16, idempotencyKey: 'bit-depth-intent-0001',
     });
+
+    const projectItems = await client.invoke({
+        requestId: 'core-project-items-1',
+        capabilityId: 'ae.project.items.list',
+        capabilityVersion: 1,
+        arguments: { offset: 0, limit: 25 },
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.equal(projectItems.replayed, false);
+    assert.equal(projectItems.value.returned, 2);
+    const compositionLocator = projectItems.value.items.find(function (item) {
+        return item.type === 'composition';
+    }).locator;
+    assert.equal(projectItems.evidence.requestDigest, invokeRequestDigest(protocol.requests[5]));
+
+    const compositionLayers = await client.invoke({
+        requestId: 'core-composition-layers-1',
+        capabilityId: 'ae.composition.layers.list',
+        capabilityVersion: 1,
+        arguments: { compositionLocator, offset: 0, limit: 25 },
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.equal(compositionLayers.replayed, false);
+    assert.equal(compositionLayers.value.layers[0].locked, false);
+    assert.equal(
+        compositionLayers.evidence.requestDigest,
+        invokeRequestDigest(protocol.requests[6]),
+    );
     assert.deepEqual(protocol.requests.map(function (request) { return request.method; }), [
-        'hello', 'capabilities', 'invoke', 'invoke', 'invoke',
+        'hello', 'capabilities', 'invoke', 'invoke', 'invoke', 'invoke', 'invoke',
     ]);
+});
+
+test('CEP graph reads count Unicode scalars rather than UTF-16 code units', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const astral = '😀'.repeat(1024);
+    const ready = await readyNativeClient(t, {
+        mutateInvoke: function (result) {
+            if (result.capabilityId === 'ae.project.items.list') {
+                result.value.items.forEach(function (item) { item.name = astral; });
+            } else if (result.capabilityId === 'ae.composition.layers.list') {
+                result.value.compositionName = astral;
+                result.value.layers.forEach(function (layer) { layer.name = astral; });
+            }
+            rebindPostcondition(result);
+        },
+    });
+    const project = await ready.client.invoke({
+        requestId: 'unicode-project-items',
+        capabilityId: 'ae.project.items.list',
+        capabilityVersion: 1,
+        arguments: { offset: 0, limit: 25 },
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.equal(Array.from(project.value.items[0].name).length, 1024);
+    const layers = await ready.client.invoke({
+        requestId: 'unicode-composition-layers',
+        capabilityId: 'ae.composition.layers.list',
+        capabilityVersion: 1,
+        arguments: {
+            compositionLocator: COMPOSITION_LAYERS_VECTOR.request.params.arguments.compositionLocator,
+            offset: 0,
+            limit: 25,
+        },
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.equal(Array.from(layers.value.compositionName).length, 1024);
+    assert.equal(Array.from(layers.value.layers[0].name).length, 1024);
+});
+
+for (const invalidUnicode of [
+    { name: '1025 astral scalars', value: '😀'.repeat(1025) },
+    { name: 'a lone surrogate', value: '\ud800' },
+]) {
+    test('CEP graph reads reject ' + invalidUnicode.name, {
+        skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+    }, async (t) => {
+        const ready = await readyNativeClient(t, {
+            mutateInvoke: function (result) {
+                if (result.capabilityId === 'ae.project.items.list') {
+                    result.value.items[0].name = invalidUnicode.value;
+                    rebindPostcondition(result);
+                }
+            },
+        });
+        await assert.rejects(ready.client.invoke({
+            requestId: 'invalid-unicode-project-items',
+            capabilityId: 'ae.project.items.list',
+            capabilityVersion: 1,
+            arguments: { offset: 0, limit: 25 },
+            deadlineUnixMs: 1900000002000,
+        }), { code: 'NATIVE_CONTRACT_MISMATCH', retryable: false });
+    });
+}
+
+test('CEP graph reads reject non-advancing pages for both native capabilities', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const ready = await readyNativeClient(t, {
+        mutateInvoke: function (result) {
+            if (!['ae.project.items.list', 'ae.composition.layers.list'].includes(
+                result.capabilityId,
+            )) return;
+            const member = result.capabilityId === 'ae.project.items.list' ? 'items' : 'layers';
+            result.value.total = 1;
+            result.value.returned = 0;
+            result.value.hasMore = true;
+            result.value.nextOffset = 0;
+            result.value[member] = [];
+            rebindPostcondition(result);
+        },
+    });
+    await assert.rejects(ready.client.invoke({
+        requestId: 'stalled-project-items',
+        capabilityId: 'ae.project.items.list',
+        capabilityVersion: 1,
+        arguments: { offset: 0, limit: 25 },
+        deadlineUnixMs: 1900000002000,
+    }), { code: 'NATIVE_CONTRACT_MISMATCH' });
+    await assert.rejects(ready.client.invoke({
+        requestId: 'stalled-composition-layers',
+        capabilityId: 'ae.composition.layers.list',
+        capabilityVersion: 1,
+        arguments: {
+            compositionLocator: COMPOSITION_LAYERS_VECTOR.request.params.arguments.compositionLocator,
+            offset: 0,
+            limit: 25,
+        },
+        deadlineUnixMs: 1900000002000,
+    }), { code: 'NATIVE_CONTRACT_MISMATCH' });
+});
+
+test('CEP stale-locator preflight reports the exact field without inventing generation', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const ready = await readyNativeClient(t);
+    const staleSession = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const projectLocator = structuredClone(
+        PROJECT_ITEMS_VECTOR.response.result.value.projectLocator,
+    );
+    projectLocator.sessionId = staleSession;
+    await assert.rejects(ready.client.invoke({
+        requestId: 'stale-project-locator',
+        capabilityId: 'ae.project.items.list',
+        capabilityVersion: 1,
+        arguments: { projectLocator, offset: 1, limit: 25 },
+        deadlineUnixMs: 1900000002000,
+    }), function (error) {
+        assert.equal(error.code, 'STALE_LOCATOR');
+        assert.deepEqual(error.details, {
+            field: 'params.arguments.projectLocator',
+            capabilityId: 'ae.project.items.list',
+        });
+        assert.equal(Object.hasOwn(error.details, 'currentGeneration'), false);
+        return true;
+    });
+
+    const compositionLocator = structuredClone(
+        COMPOSITION_LAYERS_VECTOR.request.params.arguments.compositionLocator,
+    );
+    compositionLocator.sessionId = staleSession;
+    await assert.rejects(ready.client.invoke({
+        requestId: 'stale-composition-locator',
+        capabilityId: 'ae.composition.layers.list',
+        capabilityVersion: 1,
+        arguments: { compositionLocator, offset: 0, limit: 25 },
+        deadlineUnixMs: 1900000002000,
+    }), function (error) {
+        assert.equal(error.code, 'STALE_LOCATOR');
+        assert.deepEqual(error.details, {
+            field: 'params.arguments.compositionLocator',
+            capabilityId: 'ae.composition.layers.list',
+        });
+        assert.equal(Object.hasOwn(error.details, 'currentGeneration'), false);
+        return true;
+    });
+    assert.deepEqual(
+        ready.protocol.requests.map(function (request) { return request.method; }),
+        ['hello', 'capabilities'],
+    );
 });
 
 test('CEP client preserves the bit-depth no-op INVALID_ARGUMENT contract', {

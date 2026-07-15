@@ -14,6 +14,12 @@ const brokerFailureFixtures = Object.values(require(
 const nativeCapabilitiesFixture = require(
     '../../native/ae-plugin/protocol/fixtures/capabilities.json'
 ).response.result;
+const projectItemsFixture = require(
+    '../../native/ae-plugin/protocol/fixtures/invoke-project-items-list.json'
+).response.result;
+const compositionLayersFixture = require(
+    '../../native/ae-plugin/protocol/fixtures/invoke-composition-layers-list.json'
+).response.result;
 
 const authToken = require('./auth-token');
 
@@ -210,6 +216,16 @@ function fakeNativeClient() {
         },
         invoke: async function (request) {
             calls.push(['invoke', request]);
+            if (request.capabilityId === 'ae.project.items.list'
+                || request.capabilityId === 'ae.composition.layers.list') {
+                const result = structuredClone(
+                    request.capabilityId === 'ae.project.items.list'
+                        ? projectItemsFixture : compositionLayersFixture,
+                );
+                result.replayed = false;
+                result.evidence.requestId = request.requestId;
+                return result;
+            }
             if (request.capabilityId === 'ae.project.bit-depth.set') {
                 return {
                     capabilityId: 'ae.project.bit-depth.set',
@@ -271,6 +287,10 @@ function fakeNativeClient() {
                     nativeCapabilitiesFixture.items[1].contractDigest,
                 projectBitDepthSetContractDigest:
                     nativeCapabilitiesFixture.items[2].contractDigest,
+                projectItemsListContractDigest:
+                    nativeCapabilitiesFixture.items[3].contractDigest,
+                compositionLayersListContractDigest:
+                    nativeCapabilitiesFixture.items[4].contractDigest,
             };
         },
         close: async function () { closed += 1; state = 'closed'; },
@@ -339,6 +359,35 @@ test('native routes require the shared token and reject an open-ended invoke env
         });
         assert.strictEqual(invalidBitDepth.status, 400);
         assert.strictEqual(invalidBitDepth.body.error.code, 'INVALID_ARGUMENT');
+        const invalidProjectPage = await post(port, '/native/invoke', {
+            'X-AE-MCP-Token': 'known-secret-token',
+        }, {
+            requestId: 'core-project-items-invalid',
+            capabilityId: 'ae.project.items.list',
+            capabilityVersion: 1,
+            arguments: { offset: 1, limit: 25 },
+            deadlineUnixMs: Date.now() + 10000,
+        });
+        assert.strictEqual(invalidProjectPage.status, 400);
+        assert.strictEqual(invalidProjectPage.body.error.code, 'INVALID_ARGUMENT');
+        const invalidLayerPage = await post(port, '/native/invoke', {
+            'X-AE-MCP-Token': 'known-secret-token',
+        }, {
+            requestId: 'core-composition-layers-invalid',
+            capabilityId: 'ae.composition.layers.list',
+            capabilityVersion: 1,
+            arguments: {
+                compositionLocator: {
+                    ...compositionLayersFixture.value.compositionLocator,
+                    kind: 'layer',
+                },
+                offset: 0,
+                limit: 25,
+            },
+            deadlineUnixMs: Date.now() + 10000,
+        });
+        assert.strictEqual(invalidLayerPage.status, 400);
+        assert.strictEqual(invalidLayerPage.body.error.code, 'INVALID_ARGUMENT');
         assert.doesNotMatch(JSON.stringify(server.activity.list()), /r{65}/);
         assert.deepStrictEqual(nativeClient.calls, []);
     } finally {
@@ -387,7 +436,13 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
         assert.strictEqual(capabilities.body.result.sessionId, '11111111-1111-4111-8111-111111111111');
         assert.deepStrictEqual(
             capabilities.body.result.items.map((item) => item.id),
-            ['ae.project.summary', 'ae.project.bit-depth.read', 'ae.project.bit-depth.set'],
+            [
+                'ae.project.summary',
+                'ae.project.bit-depth.read',
+                'ae.project.bit-depth.set',
+                'ae.project.items.list',
+                'ae.composition.layers.list',
+            ],
         );
 
         const invoked = await post(port, '/native/invoke', headers, {
@@ -431,6 +486,34 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
         assert.deepStrictEqual(bitDepthSet.body.result.evidence.undo, {
             available: true, verified: false,
         });
+        const projectItemsRequest = {
+            requestId: 'core-project-items-1',
+            capabilityId: 'ae.project.items.list',
+            capabilityVersion: 1,
+            arguments: { offset: 0, limit: 25 },
+            deadlineUnixMs,
+        };
+        const projectItems = await post(
+            port, '/native/invoke', headers, projectItemsRequest,
+        );
+        assert.strictEqual(projectItems.status, 200);
+        assert.strictEqual(projectItems.body.result.value.returned, 2);
+        const compositionLayersRequest = {
+            requestId: 'core-composition-layers-1',
+            capabilityId: 'ae.composition.layers.list',
+            capabilityVersion: 1,
+            arguments: {
+                compositionLocator: compositionLayersFixture.value.compositionLocator,
+                offset: 0,
+                limit: 25,
+            },
+            deadlineUnixMs,
+        };
+        const compositionLayers = await post(
+            port, '/native/invoke', headers, compositionLayersRequest,
+        );
+        assert.strictEqual(compositionLayers.status, 200);
+        assert.strictEqual(compositionLayers.body.result.value.layers[0].locked, false);
         assert.deepStrictEqual(nativeClient.calls, [
             'pair',
             ['negotiate', { deadlineUnixMs }],
@@ -444,6 +527,8 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
             }],
             ['invoke', bitDepthReadRequest],
             ['invoke', bitDepthSetRequest],
+            ['invoke', projectItemsRequest],
+            ['invoke', compositionLayersRequest],
         ]);
     } finally {
         srv.close();

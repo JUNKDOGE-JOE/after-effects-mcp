@@ -14,8 +14,10 @@ from ae_mcp.backends.native import (
     NativeCancellationToken,
     NativeInvokeBackend,
     NativeRecovery,
+    invoke_composition_layers_list,
     invoke_project_bit_depth_read,
     invoke_project_bit_depth_set,
+    invoke_project_items_list,
     invoke_project_summary,
 )
 from ae_mcp.handlers import register
@@ -24,6 +26,8 @@ from ae_mcp.handlers import register
 _PROJECT_SUMMARY_TIMEOUT_MS = 10_000
 _PROJECT_BIT_DEPTH_READ_TIMEOUT_MS = 10_000
 _PROJECT_BIT_DEPTH_SET_TIMEOUT_MS = 10_000
+_PROJECT_ITEMS_LIST_TIMEOUT_MS = 10_000
+_COMPOSITION_LAYERS_LIST_TIMEOUT_MS = 10_000
 
 
 def _backend() -> NativeInvokeBackend:
@@ -40,6 +44,58 @@ def _backend() -> NativeInvokeBackend:
             hint="Select the ae-mcp bridge with native AEGP support, then retry.",
         ),
     )
+
+
+def _native_read_response(execution: Any) -> dict[str, Any]:
+    implementation = execution.implementation
+    audit = execution.audit_fields()
+    return {
+        "ok": True,
+        "value": execution.value.model_dump(mode="json", by_alias=True),
+        "implementation": {
+            "engine": execution.engine,
+            "capabilityId": implementation.capability_id,
+            "capabilityVersion": implementation.capability_version,
+            "contractDigest": implementation.contract_digest,
+            "risk": implementation.risk,
+            "mutability": implementation.mutability,
+            "idempotency": implementation.idempotency,
+        },
+        "provenance": {
+            key: audit[key]
+            for key in (
+                "engine",
+                "selectedWireVersion",
+                "pluginVersion",
+                "compiledSdkVersion",
+                "sourceCommit",
+                "hostInstanceId",
+                "sessionId",
+                "sessionGeneration",
+                "capabilitiesDigest",
+            )
+        },
+        "audit": {
+            key: audit[key]
+            for key in (
+                "requestId",
+                "capabilityId",
+                "capabilityVersion",
+                "contractDigest",
+                "effect",
+                "requestDigest",
+                "postconditionAlgorithm",
+                "postconditionDigest",
+                "startedAtUnixMs",
+                "completedAtUnixMs",
+            )
+        },
+        "evidence": execution.evidence.model_dump(
+            mode="json",
+            by_alias=True,
+            exclude_none=True,
+        ),
+    }
 
 
 async def _run_project_summary(
@@ -118,6 +174,76 @@ async def _run_project_summary(
             exclude_none=True,
         ),
     }
+
+
+async def _run_list_project_items(
+    args: schemas.AeListProjectItemsArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _PROJECT_ITEMS_LIST_TIMEOUT_MS
+    request_id = f"mcp-{uuid.uuid4().hex}"
+    project_locator = (
+        args.project_locator.model_dump(mode="json", by_alias=True)
+        if args.project_locator is not None
+        else None
+    )
+
+    async def _call():
+        return await invoke_project_items_list(
+            _backend(),
+            request_id=request_id,
+            project_locator=project_locator,
+            offset=args.offset,
+            limit=args.limit,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    try:
+        execution = await progress.with_heartbeat(
+            ctx,
+            _call(),
+            start_msg="ae.listProjectItems native AEGP read...",
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        raise
+    return _native_read_response(execution)
+
+
+async def _run_list_composition_layers(
+    args: schemas.AeListCompositionLayersArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _COMPOSITION_LAYERS_LIST_TIMEOUT_MS
+    request_id = f"mcp-{uuid.uuid4().hex}"
+    composition_locator = args.composition_locator.model_dump(
+        mode="json", by_alias=True
+    )
+
+    async def _call():
+        return await invoke_composition_layers_list(
+            _backend(),
+            request_id=request_id,
+            composition_locator=composition_locator,
+            offset=args.offset,
+            limit=args.limit,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    try:
+        execution = await progress.with_heartbeat(
+            ctx,
+            _call(),
+            start_msg="ae.listCompositionLayers native AEGP read...",
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        raise
+    return _native_read_response(execution)
 
 
 async def _run_get_project_bit_depth(
@@ -300,6 +426,16 @@ register(
     _run_project_summary,
 )
 register(
+    "ae.listProjectItems",
+    schemas.AeListProjectItemsArgs,
+    _run_list_project_items,
+)
+register(
+    "ae.listCompositionLayers",
+    schemas.AeListCompositionLayersArgs,
+    _run_list_composition_layers,
+)
+register(
     "ae.getProjectBitDepth",
     schemas.AeGetProjectBitDepthArgs,
     _run_get_project_bit_depth,
@@ -313,6 +449,8 @@ register(
 
 __all__ = [
     "_run_get_project_bit_depth",
+    "_run_list_composition_layers",
+    "_run_list_project_items",
     "_run_project_summary",
     "_run_set_project_bit_depth",
 ]

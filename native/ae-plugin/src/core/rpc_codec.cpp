@@ -495,6 +495,50 @@ std::string json_string(std::string_view value) {
   return output;
 }
 
+ObjectLocator parse_locator(const JsonValue& value, std::string_view expected_kind) {
+  const JsonValue::Object* object = object_of(value);
+  if (object == nullptr || !exact_keys(
+          *object,
+          {"kind", "hostInstanceId", "sessionId", "projectId", "generation", "objectId"},
+          {"kind", "hostInstanceId", "sessionId", "projectId", "generation", "objectId"})) {
+    invalid_argument("locator must be a closed object");
+  }
+  ObjectLocator locator;
+  locator.kind = required_string(*object, "kind", CodecErrorKind::kInvalidArgument);
+  locator.host_instance_id = required_string(
+      *object, "hostInstanceId", CodecErrorKind::kInvalidArgument);
+  locator.session_id = required_string(*object, "sessionId", CodecErrorKind::kInvalidArgument);
+  locator.project_id = required_string(*object, "projectId", CodecErrorKind::kInvalidArgument);
+  locator.generation = required_uint(
+      *object, "generation", CodecErrorKind::kInvalidArgument, 1, kMaxSafeInteger);
+  locator.object_id = required_string(*object, "objectId", CodecErrorKind::kInvalidArgument);
+  if (locator.kind != expected_kind || !valid_uuid(locator.host_instance_id)
+      || !valid_uuid(locator.session_id) || !valid_uuid(locator.project_id)
+      || !valid_uuid(locator.object_id)) {
+    invalid_argument("locator identity is invalid");
+  }
+  return locator;
+}
+
+bool valid_output_locator(const ObjectLocator& locator) {
+  return (locator.kind == "project" || locator.kind == "item"
+          || locator.kind == "composition" || locator.kind == "layer")
+      && valid_uuid(locator.host_instance_id) && valid_uuid(locator.session_id)
+      && valid_uuid(locator.project_id) && locator.generation >= 1
+      && locator.generation <= kMaxSafeInteger && valid_uuid(locator.object_id);
+}
+
+std::string locator_json(const ObjectLocator& locator) {
+  if (!valid_output_locator(locator)) invalid_argument("invalid output locator");
+  // RFC 8785 key order.
+  return "{\"generation\":" + std::to_string(locator.generation)
+      + ",\"hostInstanceId\":" + json_string(locator.host_instance_id)
+      + ",\"kind\":" + json_string(locator.kind)
+      + ",\"objectId\":" + json_string(locator.object_id)
+      + ",\"projectId\":" + json_string(locator.project_id)
+      + ",\"sessionId\":" + json_string(locator.session_id) + "}";
+}
+
 std::string canonical_request(const ParsedRequest& request) {
   std::string params;
   switch (request.method) {
@@ -544,6 +588,18 @@ std::string canonical_request(const ParsedRequest& request) {
       if (value.capability_id == "ae.project.bit-depth.set") {
         arguments = "{\"idempotencyKey\":" + json_string(value.idempotency_key)
             + ",\"targetDepth\":" + std::to_string(value.target_depth) + "}";
+      } else if (value.capability_id == "ae.project.items.list") {
+        arguments = "{\"limit\":" + std::to_string(value.limit)
+            + ",\"offset\":" + std::to_string(value.offset);
+        if (value.project_locator.has_value()) {
+          arguments += ",\"projectLocator\":" + locator_json(*value.project_locator);
+        }
+        arguments.push_back('}');
+      } else if (value.capability_id == "ae.composition.layers.list") {
+        arguments = "{\"compositionLocator\":"
+            + locator_json(*value.composition_locator)
+            + ",\"limit\":" + std::to_string(value.limit)
+            + ",\"offset\":" + std::to_string(value.offset) + "}";
       }
       params = "{\"arguments\":" + arguments + ",\"capabilityId\":"
           + json_string(value.capability_id)
@@ -795,6 +851,36 @@ ParsedRequest classify_request(const JsonValue& root) {
             + json_string(result.idempotency_key) + ",\"targetDepth\":"
             + std::to_string(result.target_depth) + "}";
         result.arguments_fingerprint_sha256 = sha256_hex(canonical_arguments);
+      } else if (capability == "ae.project.items.list") {
+        if (!exact_keys(
+                *arguments,
+                {"offset", "limit", "projectLocator"},
+                {"offset", "limit"})) {
+          invalid_argument("project items list arguments are not closed");
+        }
+        result.offset = required_uint(
+            *arguments, "offset", CodecErrorKind::kInvalidArgument, 0, kMaxSafeInteger);
+        result.limit = static_cast<std::uint16_t>(required_uint(
+            *arguments, "limit", CodecErrorKind::kInvalidArgument, 1, 50));
+        if (const JsonValue* locator = member(*arguments, "projectLocator")) {
+          result.project_locator = parse_locator(*locator, "project");
+        }
+        if (result.offset > 0 && !result.project_locator.has_value()) {
+          invalid_argument("projectLocator is required for a non-zero offset");
+        }
+      } else if (capability == "ae.composition.layers.list") {
+        if (!exact_keys(
+                *arguments,
+                {"compositionLocator", "offset", "limit"},
+                {"compositionLocator", "offset", "limit"})) {
+          invalid_argument("composition layers list arguments are not closed");
+        }
+        const JsonValue* locator = member(*arguments, "compositionLocator");
+        result.composition_locator = parse_locator(*locator, "composition");
+        result.offset = required_uint(
+            *arguments, "offset", CodecErrorKind::kInvalidArgument, 0, kMaxSafeInteger);
+        result.limit = static_cast<std::uint16_t>(required_uint(
+            *arguments, "limit", CodecErrorKind::kInvalidArgument, 1, 50));
       } else {
         invalid_argument("invoke is not in the compile-time allowlist");
       }
@@ -812,6 +898,149 @@ ParsedRequest classify_request(const JsonValue& root) {
   }
   request.request_fingerprint_sha256 = sha256_hex(canonical_request(request));
   return request;
+}
+
+bool same_locator_scope(const ObjectLocator& value, const ObjectLocator& scope) {
+  return value.host_instance_id == scope.host_instance_id
+      && value.session_id == scope.session_id
+      && value.project_id == scope.project_id
+      && value.generation == scope.generation;
+}
+
+std::string nullable_locator_json(const std::optional<ObjectLocator>& value) {
+  return value.has_value() ? locator_json(*value) : "null";
+}
+
+std::string canonical_project_items_value(const ProjectItemsPage& page) {
+  if (!valid_output_locator(page.project_locator) || page.project_locator.kind != "project"
+      || page.total > kMaxSafeInteger || page.offset > kMaxSafeInteger
+      || page.limit < 1 || page.limit > 50 || page.items.size() > page.limit
+      || page.items.size() > kMaxSafeInteger) {
+    invalid_argument("invalid project items page");
+  }
+  const std::uint64_t returned = page.items.size();
+  if (page.offset > page.total || returned > page.total - page.offset) {
+    invalid_argument("project items page exceeds the reported total");
+  }
+  const bool expected_more = page.offset + returned < page.total;
+  if ((expected_more && returned == 0) || page.has_more != expected_more
+      || (expected_more
+          ? (!page.next_offset.has_value()
+              || *page.next_offset != page.offset + returned)
+          : page.next_offset.has_value())) {
+    invalid_argument("project items pagination invariant failed");
+  }
+  std::string items = "[";
+  std::set<std::string> object_ids;
+  for (std::size_t index = 0; index < page.items.size(); ++index) {
+    const ProjectItemEntry& item = page.items[index];
+    if (index != 0) items.push_back(',');
+    if (!valid_output_locator(item.locator) || !same_locator_scope(item.locator, page.project_locator)
+        || (item.type != "folder" && item.type != "composition"
+            && item.type != "footage" && item.type != "unknown")
+        || (item.type == "composition" ? item.locator.kind != "composition"
+                                        : item.locator.kind != "item")
+        || validate_utf8_and_count(item.name) > 1'024
+        || !object_ids.insert(item.locator.object_id).second) {
+      invalid_argument("invalid project item result");
+    }
+    if (!item.parent_locator.has_value()
+        || !valid_output_locator(*item.parent_locator)
+            || !same_locator_scope(*item.parent_locator, page.project_locator)
+            || (item.parent_locator->kind != "project"
+                && item.parent_locator->kind != "item")
+        || (item.parent_locator->kind == "project"
+            && *item.parent_locator != page.project_locator)) {
+      invalid_argument("invalid project item parent locator");
+    }
+    items += "{\"locator\":" + locator_json(item.locator)
+        + ",\"name\":" + json_string(item.name)
+        + ",\"parentLocator\":" + nullable_locator_json(item.parent_locator)
+        + ",\"type\":" + json_string(item.type) + "}";
+  }
+  items.push_back(']');
+  return "{\"hasMore\":" + std::string(page.has_more ? "true" : "false")
+      + ",\"items\":" + items + ",\"limit\":" + std::to_string(page.limit)
+      + ",\"nextOffset\":"
+      + (page.next_offset.has_value() ? std::to_string(*page.next_offset) : "null")
+      + ",\"offset\":" + std::to_string(page.offset)
+      + ",\"projectLocator\":" + locator_json(page.project_locator)
+      + ",\"returned\":" + std::to_string(returned)
+      + ",\"total\":" + std::to_string(page.total) + "}";
+}
+
+std::string canonical_composition_layers_value(const CompositionLayersPage& page) {
+  if (!valid_output_locator(page.composition_locator)
+      || page.composition_locator.kind != "composition"
+      || validate_utf8_and_count(page.composition_name) > 1'024
+      || page.total > kMaxSafeInteger || page.offset > kMaxSafeInteger
+      || page.limit < 1 || page.limit > 50 || page.layers.size() > page.limit
+      || page.layers.size() > kMaxSafeInteger) {
+    invalid_argument("invalid composition layers page");
+  }
+  const std::uint64_t returned = page.layers.size();
+  if (page.offset > page.total || returned > page.total - page.offset) {
+    invalid_argument("composition layers page exceeds the reported total");
+  }
+  const bool expected_more = page.offset + returned < page.total;
+  if ((expected_more && returned == 0) || page.has_more != expected_more
+      || (expected_more
+          ? (!page.next_offset.has_value()
+              || *page.next_offset != page.offset + returned)
+          : page.next_offset.has_value())) {
+    invalid_argument("composition layers pagination invariant failed");
+  }
+  std::string layers = "[";
+  std::set<std::string> object_ids;
+  for (std::size_t index = 0; index < page.layers.size(); ++index) {
+    const CompositionLayerEntry& layer = page.layers[index];
+    if (index != 0) layers.push_back(',');
+    const bool valid_type = layer.type == "av" || layer.type == "camera"
+        || layer.type == "light" || layer.type == "text" || layer.type == "shape"
+        || layer.type == "model3d" || layer.type == "null"
+        || layer.type == "adjustment" || layer.type == "unknown";
+    if (!valid_output_locator(layer.locator) || layer.locator.kind != "layer"
+        || !same_locator_scope(layer.locator, page.composition_locator)
+        || layer.stack_index != page.offset + index + 1
+        || layer.stack_index > kMaxSafeInteger
+        || validate_utf8_and_count(layer.name) > 1'024 || !valid_type
+        || !object_ids.insert(layer.locator.object_id).second) {
+      invalid_argument("invalid composition layer result");
+    }
+    if (layer.parent_locator.has_value()
+        && (!valid_output_locator(*layer.parent_locator)
+            || layer.parent_locator->kind != "layer"
+            || !same_locator_scope(*layer.parent_locator, page.composition_locator))) {
+      invalid_argument("invalid parent layer locator");
+    }
+    if (layer.source_item_locator.has_value()
+        && (!valid_output_locator(*layer.source_item_locator)
+            || (layer.source_item_locator->kind != "item"
+                && layer.source_item_locator->kind != "composition")
+            || !same_locator_scope(*layer.source_item_locator, page.composition_locator))) {
+      invalid_argument("invalid source item locator");
+    }
+    layers += "{\"isThreeD\":" + std::string(layer.is_three_d ? "true" : "false")
+        + ",\"locator\":" + locator_json(layer.locator)
+        + ",\"locked\":" + std::string(layer.locked ? "true" : "false")
+        + ",\"name\":" + json_string(layer.name)
+        + ",\"parentLocator\":" + nullable_locator_json(layer.parent_locator)
+        + ",\"sourceItemLocator\":" + nullable_locator_json(layer.source_item_locator)
+        + ",\"stackIndex\":" + std::to_string(layer.stack_index)
+        + ",\"type\":" + json_string(layer.type)
+        + ",\"videoEnabled\":" + std::string(layer.video_enabled ? "true" : "false")
+        + "}";
+  }
+  layers.push_back(']');
+  return "{\"compositionLocator\":" + locator_json(page.composition_locator)
+      + ",\"compositionName\":" + json_string(page.composition_name)
+      + ",\"hasMore\":" + std::string(page.has_more ? "true" : "false")
+      + ",\"layers\":" + layers + ",\"limit\":" + std::to_string(page.limit)
+      + ",\"nextOffset\":"
+      + (page.next_offset.has_value() ? std::to_string(*page.next_offset) : "null")
+      + ",\"offset\":" + std::to_string(page.offset)
+      + ",\"returned\":" + std::to_string(returned)
+      + ",\"total\":" + std::to_string(page.total) + "}";
 }
 
 std::uint32_t read_be32(Bytes bytes) {
@@ -924,6 +1153,19 @@ std::string digest_project_bit_depth_set_postcondition(
       + std::to_string(after_bits_per_channel) + ",\"beforeBitsPerChannel\":"
       + std::to_string(before_bits_per_channel) + ",\"changed\":true}}";
   return sha256_hex(canonical);
+}
+
+std::string digest_project_items_postcondition(const ProjectItemsPage& page) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.project.items.list\",\"capabilityVersion\":1,\"value\":"
+      + canonical_project_items_value(page) + "}");
+}
+
+std::string digest_composition_layers_postcondition(
+    const CompositionLayersPage& page) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.composition.layers.list\",\"capabilityVersion\":1,\"value\":"
+      + canonical_composition_layers_value(page) + "}");
 }
 
 std::vector<ParsedRequest> FrameDecoder::push(std::span<const std::uint8_t> chunk) {
@@ -1343,6 +1585,29 @@ std::string project_bit_depth_set_descriptor(const CapabilitiesSuccess& response
   return descriptor;
 }
 
+std::string project_items_list_descriptor(const CapabilitiesSuccess& response) {
+  if (response.detail == CapabilityDetail::kSummary) {
+    return R"aemcp({"detail":"summary","id":"ae.project.items.list","version":1,"schemaVersion":1,"summary":"List a bounded page of items in the open After Effects project.","risk":"read","mutability":"read-only","idempotency":"idempotent","cancellation":"before-dispatch","undo":"not-applicable","sideEffectSummary":"Reads project items without changing After Effects state.","preconditions":["An After Effects project must be open."],"compatibility":{"status":"unverified","intendedPlatforms":["macos-arm64","windows-x64"]}})aemcp";
+  }
+  require_digest(response.project_items_list_contract_digest, "contract digest");
+  if (response.project_items_list_contract_digest
+      != "64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e") {
+    invalid_argument("project items contract digest does not match the compiled descriptor");
+  }
+  return R"aemcp({"detail":"full","id":"ae.project.items.list","version":1,"schemaVersion":1,"summary":"List a bounded page of items in the open After Effects project.","risk":"read","mutability":"read-only","idempotency":"idempotent","cancellation":"before-dispatch","undo":"not-applicable","sideEffectSummary":"Reads project items without changing After Effects state.","preconditions":["An After Effects project must be open."],"compatibility":{"status":"unverified","intendedPlatforms":["macos-arm64","windows-x64"]},"inputContractId":"aemcp.contract.ae.project.items.list.input.v1","resultContractId":"aemcp.contract.ae.project.items.list.result.v1","contractDigest":"64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e","inputSchema":{"type":"object","additionalProperties":false,"required":["offset","limit"],"properties":{"projectLocator":{"$ref":"#/$defs/projectLocator"},"offset":{"type":"integer","minimum":0,"maximum":9007199254740991,"default":0,"x-omissionBehavior":0},"limit":{"type":"integer","minimum":1,"maximum":50,"default":25,"x-omissionBehavior":25}},"allOf":[{"if":{"properties":{"offset":{"minimum":1}}},"then":{"required":["projectLocator"]}}],"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"project"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}}},"x-invariant":"offset-greater-than-zero-requires-the-project-locator-from-the-previous-page"},"resultSchema":{"type":"object","additionalProperties":false,"required":["projectLocator","total","offset","limit","returned","hasMore","nextOffset","items"],"properties":{"projectLocator":{"$ref":"#/$defs/projectLocator"},"total":{"type":"integer","minimum":0,"maximum":9007199254740991},"offset":{"type":"integer","minimum":0,"maximum":9007199254740991},"limit":{"type":"integer","minimum":1,"maximum":50},"returned":{"type":"integer","minimum":0,"maximum":50},"hasMore":{"type":"boolean"},"nextOffset":{"oneOf":[{"type":"null"},{"type":"integer","minimum":0,"maximum":9007199254740991}]},"items":{"type":"array","maxItems":50,"items":{"type":"object","additionalProperties":false,"required":["locator","name","type","parentLocator"],"properties":{"locator":{"$ref":"#/$defs/projectItemLocator"},"name":{"type":"string","maxLength":1024},"type":{"enum":["folder","composition","footage","unknown"]},"parentLocator":{"$ref":"#/$defs/projectParentLocator"}}}}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"locatorBase":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"enum":["project","item","composition","layer","stream"]},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}},"projectLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"project"}}}]},"projectItemLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"enum":["item","composition"]}}}]},"projectParentLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"enum":["project","item"]}}}]}},"x-invariant":"returned-equals-items-length-and-page-metadata-is-self-consistent"},"requirements":[{"id":"aemcp.requirement.native.project-items-list","contractVersion":1}],"examples":[{"id":"aemcp-example-project-items-list-empty","kind":"positive","summary":"List the first bounded page of an empty project.","arguments":{"offset":0,"limit":25},"expected":{"outcome":"succeeded","value":{"projectLocator":{"kind":"project","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"77777777-7777-4777-8777-777777777777"},"total":0,"offset":0,"limit":25,"returned":0,"hasMore":false,"nextOffset":null,"items":[]}}},{"id":"aemcp-example-project-items-list-no-project","kind":"negative","summary":"Require an open project before listing items.","arguments":{"offset":0,"limit":25},"expected":{"errorCode":"PRECONDITION_FAILED","recoveryAction":"open-project"}}]})aemcp";
+}
+
+std::string composition_layers_list_descriptor(const CapabilitiesSuccess& response) {
+  if (response.detail == CapabilityDetail::kSummary) {
+    return R"aemcp({"detail":"summary","id":"ae.composition.layers.list","version":1,"schemaVersion":1,"summary":"List a bounded page of layers in one After Effects composition.","risk":"read","mutability":"read-only","idempotency":"idempotent","cancellation":"before-dispatch","undo":"not-applicable","sideEffectSummary":"Reads composition layers without changing After Effects state.","preconditions":["An After Effects project must be open.","compositionLocator must come from ae.project.items.list@1."],"compatibility":{"status":"unverified","intendedPlatforms":["macos-arm64","windows-x64"]}})aemcp";
+  }
+  require_digest(response.composition_layers_list_contract_digest, "contract digest");
+  if (response.composition_layers_list_contract_digest
+      != "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75") {
+    invalid_argument("composition layers contract digest does not match the compiled descriptor");
+  }
+  return R"aemcp({"detail":"full","id":"ae.composition.layers.list","version":1,"schemaVersion":1,"summary":"List a bounded page of layers in one After Effects composition.","risk":"read","mutability":"read-only","idempotency":"idempotent","cancellation":"before-dispatch","undo":"not-applicable","sideEffectSummary":"Reads composition layers without changing After Effects state.","preconditions":["An After Effects project must be open.","compositionLocator must come from ae.project.items.list@1."],"compatibility":{"status":"unverified","intendedPlatforms":["macos-arm64","windows-x64"]},"inputContractId":"aemcp.contract.ae.composition.layers.list.input.v1","resultContractId":"aemcp.contract.ae.composition.layers.list.result.v1","contractDigest":"3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75","inputSchema":{"type":"object","additionalProperties":false,"required":["compositionLocator","offset","limit"],"properties":{"compositionLocator":{"$ref":"#/$defs/compositionLocator"},"offset":{"type":"integer","minimum":0,"maximum":9007199254740991,"default":0,"x-omissionBehavior":0},"limit":{"type":"integer","minimum":1,"maximum":50,"default":25,"x-omissionBehavior":25}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"compositionLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"composition"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}}}},"resultSchema":{"type":"object","additionalProperties":false,"required":["compositionLocator","compositionName","total","offset","limit","returned","hasMore","nextOffset","layers"],"properties":{"compositionLocator":{"$ref":"#/$defs/compositionLocator"},"compositionName":{"type":"string","maxLength":1024},"total":{"type":"integer","minimum":0,"maximum":9007199254740991},"offset":{"type":"integer","minimum":0,"maximum":9007199254740991},"limit":{"type":"integer","minimum":1,"maximum":50},"returned":{"type":"integer","minimum":0,"maximum":50},"hasMore":{"type":"boolean"},"nextOffset":{"oneOf":[{"type":"null"},{"type":"integer","minimum":0,"maximum":9007199254740991}]},"layers":{"type":"array","maxItems":50,"items":{"type":"object","additionalProperties":false,"required":["locator","stackIndex","name","type","videoEnabled","isThreeD","locked","parentLocator","sourceItemLocator"],"properties":{"locator":{"$ref":"#/$defs/layerLocator"},"stackIndex":{"type":"integer","minimum":1,"maximum":9007199254740991},"name":{"type":"string","maxLength":1024},"type":{"enum":["av","camera","light","text","shape","model3d","null","adjustment","unknown"]},"videoEnabled":{"type":"boolean"},"isThreeD":{"type":"boolean"},"locked":{"type":"boolean"},"parentLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/layerLocator"}]},"sourceItemLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/sourceItemLocator"}]}}}}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"locatorBase":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"enum":["project","item","composition","layer","stream"]},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}},"compositionLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"composition"}}}]},"layerLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"layer"}}}]},"sourceItemLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"enum":["item","composition"]}}}]}},"x-invariant":"returned-equals-layers-length-and-page-metadata-is-self-consistent"},"requirements":[{"id":"aemcp.requirement.native.composition-layers-list","contractVersion":1}],"examples":[{"id":"aemcp-example-composition-layers-list-empty","kind":"positive","summary":"List the first bounded page of an empty composition.","arguments":{"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"offset":0,"limit":25},"expected":{"outcome":"succeeded","value":{"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"compositionName":"SYNTHETIC_COMPOSITION","total":0,"offset":0,"limit":25,"returned":0,"hasMore":false,"nextOffset":null,"layers":[]}}},{"id":"aemcp-example-composition-layers-list-stale","kind":"negative","summary":"Refresh a stale composition locator before listing layers.","arguments":{"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"offset":0,"limit":25},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"}}]})aemcp";
+}
 struct ErrorPolicy {
   const char* code;
   bool retryable;
@@ -1464,6 +1729,16 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
   if (response.include_project_bit_depth_set) {
     if (needs_comma) items.push_back(',');
     items += project_bit_depth_set_descriptor(response);
+    needs_comma = true;
+  }
+  if (response.include_project_items_list) {
+    if (needs_comma) items.push_back(',');
+    items += project_items_list_descriptor(response);
+    needs_comma = true;
+  }
+  if (response.include_composition_layers_list) {
+    if (needs_comma) items.push_back(',');
+    items += composition_layers_list_descriptor(response);
   }
   items.push_back(']');
   std::string json = "{\"kind\":\"response\",\"method\":\"capabilities\",\"ok\":true,"
@@ -1604,6 +1879,81 @@ std::vector<std::uint8_t> encode_project_bit_depth_set_success(
       + ",\"beforeBitsPerChannel\":" + std::to_string(response.before_bits_per_channel)
       + ",\"changed\":true}},\"sessionId\":" + json_string(response.session_id)
       + ",\"wireVersion\":1}";
+  return frame_output(std::move(json));
+}
+
+std::vector<std::uint8_t> encode_project_items_success(
+    const ProjectItemsSuccess& response) {
+  require_request_id(response.request_id);
+  require_uuid(response.session_id, "session ID");
+  require_uuid(response.host_instance_id, "host instance ID");
+  require_digest(response.request_digest, "request digest");
+  require_digest(response.postcondition_digest, "postcondition digest");
+  const std::string value = canonical_project_items_value(response.value);
+  if (response.replayed || response.started_at_unix_ms < 1
+      || response.started_at_unix_ms > kMaxSafeInteger
+      || response.completed_at_unix_ms < response.started_at_unix_ms
+      || response.completed_at_unix_ms > kMaxSafeInteger
+      || response.value.project_locator.host_instance_id != response.host_instance_id
+      || response.value.project_locator.session_id != response.session_id
+      || response.postcondition_digest != digest_project_items_postcondition(response.value)) {
+    invalid_argument("invalid or unvalidated project items evidence");
+  }
+  std::string json = "{\"kind\":\"response\",\"method\":\"invoke\",\"ok\":true,"
+      "\"replayed\":false,\"requestId\":" + json_string(response.request_id)
+      + ",\"result\":{\"capabilityId\":\"ae.project.items.list\","
+        "\"capabilityVersion\":1,\"engine\":\"native-aegp\",\"evidence\":{"
+        "\"capabilityId\":\"ae.project.items.list\",\"capabilityVersion\":1,"
+        "\"completedAtUnixMs\":" + std::to_string(response.completed_at_unix_ms)
+      + ",\"effect\":\"none\",\"engine\":\"native-aegp\",\"hostInstanceId\":"
+      + json_string(response.host_instance_id)
+      + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\",\"digest\":"
+      + json_string(response.postcondition_digest)
+      + ",\"kind\":\"project-items-list\",\"verified\":true},\"requestDigest\":"
+      + json_string(response.request_digest) + ",\"requestId\":"
+      + json_string(response.request_id) + ",\"sessionId\":"
+      + json_string(response.session_id) + ",\"startedAtUnixMs\":"
+      + std::to_string(response.started_at_unix_ms)
+      + "},\"outcome\":\"succeeded\",\"value\":" + value + "},\"sessionId\":"
+      + json_string(response.session_id) + ",\"wireVersion\":1}";
+  return frame_output(std::move(json));
+}
+
+std::vector<std::uint8_t> encode_composition_layers_success(
+    const CompositionLayersSuccess& response) {
+  require_request_id(response.request_id);
+  require_uuid(response.session_id, "session ID");
+  require_uuid(response.host_instance_id, "host instance ID");
+  require_digest(response.request_digest, "request digest");
+  require_digest(response.postcondition_digest, "postcondition digest");
+  const std::string value = canonical_composition_layers_value(response.value);
+  if (response.replayed || response.started_at_unix_ms < 1
+      || response.started_at_unix_ms > kMaxSafeInteger
+      || response.completed_at_unix_ms < response.started_at_unix_ms
+      || response.completed_at_unix_ms > kMaxSafeInteger
+      || response.value.composition_locator.host_instance_id != response.host_instance_id
+      || response.value.composition_locator.session_id != response.session_id
+      || response.postcondition_digest
+          != digest_composition_layers_postcondition(response.value)) {
+    invalid_argument("invalid or unvalidated composition layers evidence");
+  }
+  std::string json = "{\"kind\":\"response\",\"method\":\"invoke\",\"ok\":true,"
+      "\"replayed\":false,\"requestId\":" + json_string(response.request_id)
+      + ",\"result\":{\"capabilityId\":\"ae.composition.layers.list\","
+        "\"capabilityVersion\":1,\"engine\":\"native-aegp\",\"evidence\":{"
+        "\"capabilityId\":\"ae.composition.layers.list\",\"capabilityVersion\":1,"
+        "\"completedAtUnixMs\":" + std::to_string(response.completed_at_unix_ms)
+      + ",\"effect\":\"none\",\"engine\":\"native-aegp\",\"hostInstanceId\":"
+      + json_string(response.host_instance_id)
+      + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\",\"digest\":"
+      + json_string(response.postcondition_digest)
+      + ",\"kind\":\"composition-layers-list\",\"verified\":true},\"requestDigest\":"
+      + json_string(response.request_digest) + ",\"requestId\":"
+      + json_string(response.request_id) + ",\"sessionId\":"
+      + json_string(response.session_id) + ",\"startedAtUnixMs\":"
+      + std::to_string(response.started_at_unix_ms)
+      + "},\"outcome\":\"succeeded\",\"value\":" + value + "},\"sessionId\":"
+      + json_string(response.session_id) + ",\"wireVersion\":1}";
   return frame_output(std::move(json));
 }
 

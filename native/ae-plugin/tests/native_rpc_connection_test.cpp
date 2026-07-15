@@ -29,8 +29,10 @@ using aemcp::native::EnqueueCode;
 using aemcp::native::HostApi;
 using aemcp::native::HostBitDepthReadResult;
 using aemcp::native::HostBitDepthWriteResult;
+using aemcp::native::HostCompositionLayersResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostReadResult;
+using aemcp::native::HostProjectItemsResult;
 using aemcp::native::NativeRpcConnectionHandler;
 using aemcp::native::NativeRpcObserver;
 using aemcp::native::NativeRpcRuntimeInfo;
@@ -104,6 +106,65 @@ class FakeHost final : public HostApi {
     return HostBitDepthWriteResult::success(bit_depth_change);
   }
 
+  [[nodiscard]] HostProjectItemsResult list_project_items(
+      const aemcp::native::ProjectItemsQuery& query, TimePoint) override {
+    ++project_items_calls;
+    aemcp::native::ProjectItemsPage page;
+    page.project_locator = locator(
+        "project", "77777777-7777-4777-8777-777777777777", query);
+    page.total = 1;
+    page.offset = query.offset;
+    page.limit = query.limit;
+    if (query.offset == 0) {
+      page.items.push_back({
+          locator("composition", "66666666-6666-4666-8666-666666666666", query),
+          "Fixture Comp",
+          "composition",
+          page.project_locator});
+    }
+    return HostProjectItemsResult::success(std::move(page));
+  }
+
+  [[nodiscard]] HostCompositionLayersResult list_composition_layers(
+      const aemcp::native::CompositionLayersQuery& query, TimePoint) override {
+    ++composition_layers_calls;
+    aemcp::native::CompositionLayersPage page;
+    page.composition_locator = query.composition_locator;
+    page.composition_name = "Fixture Comp";
+    page.total = 1;
+    page.offset = query.offset;
+    page.limit = query.limit;
+    if (query.offset == 0) {
+      page.layers.push_back({
+          {"layer", query.host_instance_id, query.session_id,
+              query.composition_locator.project_id,
+              query.composition_locator.generation,
+              "88888888-8888-4888-8888-888888888888"},
+          1,
+          "Fixture Text",
+          "text",
+          true,
+          false,
+          true,
+          std::nullopt,
+          std::nullopt});
+    }
+    return HostCompositionLayersResult::success(std::move(page));
+  }
+
+  [[nodiscard]] static aemcp::native::ObjectLocator locator(
+      std::string kind,
+      std::string object_id,
+      const aemcp::native::ProjectItemsQuery& query) {
+    return {
+        std::move(kind),
+        query.host_instance_id,
+        query.session_id,
+        "44444444-4444-4444-8444-444444444444",
+        8,
+        std::move(object_id)};
+  }
+
   ProjectSummary summary{true, "fixture.aep", 3};
   ProjectBitDepthChanged bit_depth_change{true, 8, 16};
   std::int32_t bits_per_channel{8};
@@ -114,6 +175,8 @@ class FakeHost final : public HostApi {
   int read_calls{0};
   int bit_depth_read_calls{0};
   int write_calls{0};
+  int project_items_calls{0};
+  int composition_layers_calls{0};
 };
 
 struct EventRecord {
@@ -197,10 +260,12 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      "0fda4e1bfbc8657bcd0c676fb802aecc97ba2ee6268cc115ff6d12b74758c042",
+      "1814ffa17e29919414094c3b9cb6fb331169a5084aed44abb7a55f5827ffe72a",
       "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
       "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
       "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
+      "64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e",
+      "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
   };
 }
 
@@ -342,6 +407,32 @@ std::string bit_depth_set_invoke_json(
       + std::string(key) + "\"}}}";
 }
 
+std::string graph_locator_json(std::string_view kind, std::string_view object_id) {
+  return "{\"kind\":\"" + std::string(kind)
+      + "\",\"hostInstanceId\":\"" + std::string(kHost)
+      + "\",\"sessionId\":\"" + std::string(kSession)
+      + "\",\"projectId\":\"44444444-4444-4444-8444-444444444444\""
+        ",\"generation\":8,\"objectId\":\"" + std::string(object_id) + "\"}";
+}
+
+std::string project_items_invoke_json(std::string_view request_id) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.project.items.list\","
+        "\"capabilityVersion\":1,\"arguments\":{\"offset\":0,\"limit\":25}}}";
+}
+
+std::string composition_layers_invoke_json(std::string_view request_id) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.composition.layers.list\","
+        "\"capabilityVersion\":1,\"arguments\":{\"compositionLocator\":"
+      + graph_locator_json("composition", "66666666-6666-4666-8666-666666666666")
+      + ",\"offset\":0,\"limit\":25}}}";
+}
+
 std::string cancel_json(std::string_view request_id, std::string_view target_request_id) {
   return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
       + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
@@ -426,6 +517,29 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
       "\"targetDepth\":{\"enum\":[8,16,32]",
       "bit-depth set capabilities response");
 
+  send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-project-items", "ae.project.items.list"));
+  const std::string project_items_capabilities = read_body(sockets[0]);
+  require_contains(project_items_capabilities,
+      "\"id\":\"ae.project.items.list\"", "project-items capabilities response");
+  require_contains(project_items_capabilities,
+      "\"contractDigest\":\"64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e\"",
+      "project-items capabilities response");
+  require_contains(project_items_capabilities,
+      "\"projectLocator\"", "project-items capabilities response");
+
+  send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-composition-layers", "ae.composition.layers.list"));
+  const std::string composition_layers_capabilities = read_body(sockets[0]);
+  require_contains(composition_layers_capabilities,
+      "\"id\":\"ae.composition.layers.list\"",
+      "composition-layers capabilities response");
+  require_contains(composition_layers_capabilities,
+      "\"contractDigest\":\"3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75\"",
+      "composition-layers capabilities response");
+  require_contains(composition_layers_capabilities,
+      "\"compositionLocator\"", "composition-layers capabilities response");
+
   send_json(sockets[0], invoke_json("invoke-read"));
   const std::string progress = read_body(sockets[0]);
   require_contains(progress, "\"event\":\"progress\"", "invoke progress");
@@ -475,6 +589,64 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
           == aemcp::native::rpc::digest_project_bit_depth_read_postcondition(8)
       && host.bit_depth_read_calls == 1,
       "bit-depth read terminal evidence was not deterministic and verified");
+
+  send_json(sockets[0], project_items_invoke_json("invoke-project-items"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "project-items progress");
+  wait_until([&] { return dispatcher.queued() == 1; }, "queued project-items invoke");
+  const auto project_items_batch = dispatcher.drain(host);
+  require(project_items_batch.completions.size() == 1
+          && project_items_batch.completions[0].ok,
+      "owner dispatcher did not produce the project-items result");
+  const std::string project_items = read_body(sockets[0]);
+  require_contains(project_items,
+      "\"capabilityId\":\"ae.project.items.list\"", "project-items response");
+  require_contains(project_items,
+      "\"kind\":\"project-items-list\"", "project-items response");
+  require_contains(project_items,
+      "\"returned\":1", "project-items response");
+  require_contains(project_items,
+      "\"type\":\"composition\"", "project-items response");
+  wait_until([&] {
+    return !observer.terminal("invoke-project-items").request_id.empty();
+  }, "project-items terminal audit");
+  const TerminalRecord project_items_terminal =
+      observer.terminal("invoke-project-items");
+  require(project_items_terminal.ok
+          && project_items_terminal.request_digest.size() == 64
+          && project_items_terminal.postcondition_digest.size() == 64
+          && host.project_items_calls == 1,
+      "project-items terminal evidence was not verified");
+
+  send_json(sockets[0], composition_layers_invoke_json("invoke-composition-layers"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "composition-layers progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued composition-layers invoke");
+  const auto composition_layers_batch = dispatcher.drain(host);
+  require(composition_layers_batch.completions.size() == 1
+          && composition_layers_batch.completions[0].ok,
+      "owner dispatcher did not produce the composition-layers result");
+  const std::string composition_layers = read_body(sockets[0]);
+  require_contains(composition_layers,
+      "\"capabilityId\":\"ae.composition.layers.list\"",
+      "composition-layers response");
+  require_contains(composition_layers,
+      "\"kind\":\"composition-layers-list\"", "composition-layers response");
+  require_contains(composition_layers,
+      "\"locked\":true", "composition-layers response");
+  require_contains(composition_layers,
+      "\"stackIndex\":1", "composition-layers response");
+  wait_until([&] {
+    return !observer.terminal("invoke-composition-layers").request_id.empty();
+  }, "composition-layers terminal audit");
+  const TerminalRecord composition_layers_terminal =
+      observer.terminal("invoke-composition-layers");
+  require(composition_layers_terminal.ok
+          && composition_layers_terminal.request_digest.size() == 64
+          && composition_layers_terminal.postcondition_digest.size() == 64
+          && host.composition_layers_calls == 1,
+      "composition-layers terminal evidence was not verified");
 
   send_json(sockets[0], bit_depth_set_invoke_json("invoke-bit-depth-set"));
   require_contains(read_body(sockets[0]), "\"event\":\"progress\"",

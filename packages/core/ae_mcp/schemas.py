@@ -88,6 +88,97 @@ class AeSetProjectBitDepthArgs(_StrictModel):
     )
 
 
+_LOCATOR_UUID = r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+
+
+class _AeLocatorInput(BaseModel):
+    """Camel-case locator shape copied verbatim from native read results."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        strict=True,
+    )
+
+    host_instance_id: str = Field(alias="hostInstanceId", pattern=_LOCATOR_UUID)
+    session_id: str = Field(alias="sessionId", pattern=_LOCATOR_UUID)
+    project_id: str = Field(alias="projectId", pattern=_LOCATOR_UUID)
+    generation: int = Field(ge=1, le=9_007_199_254_740_991)
+    object_id: str = Field(alias="objectId", pattern=_LOCATOR_UUID)
+
+
+class AeProjectLocator(_AeLocatorInput):
+    kind: Literal["project"]
+
+
+class AeCompositionLocator(_AeLocatorInput):
+    kind: Literal["composition"]
+
+
+class AeListProjectItemsArgs(_StrictModel):
+    """ae.listProjectItems — list bounded project items through native AEGP only.
+
+    The first page needs no locator. For later pages, copy project_locator from
+    the prior result so a project/session change fails as STALE_LOCATOR rather
+    than silently continuing in another project. This tool never falls back to
+    JSX.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    project_locator: Optional[AeProjectLocator] = Field(
+        None,
+        description=(
+            "Project locator returned by this tool. Required when offset is non-zero."
+        ),
+    )
+    offset: int = Field(
+        0,
+        ge=0,
+        le=9_007_199_254_740_991,
+        description="Zero-based project-item offset.",
+    )
+    limit: int = Field(
+        25,
+        ge=1,
+        le=50,
+        description="Maximum items requested for this bounded page (default 25, max 50).",
+    )
+
+    @model_validator(mode="after")
+    def _continuation_requires_project(self) -> "AeListProjectItemsArgs":
+        if self.offset > 0 and self.project_locator is None:
+            raise ValueError("project_locator is required when offset is non-zero")
+        return self
+
+
+class AeListCompositionLayersArgs(_StrictModel):
+    """ae.listCompositionLayers — list a composition's layers through native AEGP only.
+
+    Copy composition_locator from ae_listProjectItems. Numeric comp ids and
+    names are intentionally not accepted, and this tool never falls back to JSX.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    composition_locator: AeCompositionLocator = Field(
+        ...,
+        description="Composition locator returned by ae_listProjectItems.",
+    )
+    offset: int = Field(
+        0,
+        ge=0,
+        le=9_007_199_254_740_991,
+        description="Zero-based layer offset; returned stackIndex values are one-based.",
+    )
+    limit: int = Field(
+        25,
+        ge=1,
+        le=50,
+        description="Maximum layers requested for this bounded page (default 25, max 50).",
+    )
+
+
 class AeLayersArgs(_StrictModel):
     """ae.layers — list layers in a comp (paginated)."""
     comp_id: Optional[str] = Field(
@@ -648,6 +739,8 @@ SCHEMAS = {
     "ae.projectSummary": AeProjectSummaryArgs,
     "ae.getProjectBitDepth": AeGetProjectBitDepthArgs,
     "ae.setProjectBitDepth": AeSetProjectBitDepthArgs,
+    "ae.listProjectItems": AeListProjectItemsArgs,
+    "ae.listCompositionLayers": AeListCompositionLayersArgs,
     "ae.layers": AeLayersArgs,
     "ae.readProps": AeReadPropsArgs,
     "ae.exec": AeExecArgs,
@@ -692,4 +785,4 @@ SCHEMAS = {
     "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 47, f"expected 47 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 49, f"expected 49 verbs, got {len(SCHEMAS)}"

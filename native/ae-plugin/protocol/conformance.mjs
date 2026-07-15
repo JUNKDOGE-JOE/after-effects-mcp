@@ -55,6 +55,18 @@ export const INVOKE_REGISTRY = Object.freeze([
     inputContractId: 'aemcp.contract.ae.project.bit-depth.set.input.v1',
     resultContractId: 'aemcp.contract.ae.project.bit-depth.set.result.v1',
   }),
+  Object.freeze({
+    id: 'ae.project.items.list',
+    version: 1,
+    inputContractId: 'aemcp.contract.ae.project.items.list.input.v1',
+    resultContractId: 'aemcp.contract.ae.project.items.list.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.composition.layers.list',
+    version: 1,
+    inputContractId: 'aemcp.contract.ae.composition.layers.list.input.v1',
+    resultContractId: 'aemcp.contract.ae.composition.layers.list.result.v1',
+  }),
 ]);
 const ENVELOPE_KEYS = new Set([
   'wireVersion', 'kind', 'sessionId', 'requestId', 'method', 'deadlineUnixMs', 'params',
@@ -107,6 +119,16 @@ function isBoundedScalarString(value, minimum, maximum) {
   } catch {
     return false;
   }
+}
+
+function isLocatorShape(value, allowedKinds) {
+  return exactKeys(value, new Set([
+    'kind', 'hostInstanceId', 'sessionId', 'projectId', 'generation', 'objectId',
+  ]), ['kind', 'hostInstanceId', 'sessionId', 'projectId', 'generation', 'objectId'])
+    && allowedKinds.includes(value.kind)
+    && ['hostInstanceId', 'sessionId', 'projectId', 'objectId']
+      .every((key) => UUID.test(value[key] ?? ''))
+    && Number.isSafeInteger(value.generation) && value.generation >= 1;
 }
 
 function resolveSchemaRef(root, reference) {
@@ -572,7 +594,7 @@ export function classifyRequest(message) {
       if (!exactKeys(params.arguments, new Set())) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
-    } else {
+    } else if (params.capabilityId === 'ae.project.bit-depth.set') {
       const args = params.arguments;
       if (!exactKeys(
         args,
@@ -582,6 +604,32 @@ export function classifyRequest(message) {
           || ![8, 16, 32].includes(args.targetDepth)
           || typeof args.idempotencyKey !== 'string'
           || !/^[A-Za-z0-9][A-Za-z0-9._:-]{15,63}$/u.test(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.project.items.list') {
+      const args = params.arguments;
+      if (!exactKeys(
+        args,
+        new Set(['projectLocator', 'offset', 'limit']),
+        ['offset', 'limit'],
+      )
+          || !Number.isSafeInteger(args.offset) || args.offset < 0
+          || !Number.isSafeInteger(args.limit) || args.limit < 1 || args.limit > 50
+          || (args.projectLocator !== undefined
+            && !isLocatorShape(args.projectLocator, ['project']))
+          || (args.offset > 0 && args.projectLocator === undefined)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else {
+      const args = params.arguments;
+      if (!exactKeys(
+        args,
+        new Set(['compositionLocator', 'offset', 'limit']),
+        ['compositionLocator', 'offset', 'limit'],
+      )
+          || !isLocatorShape(args.compositionLocator, ['composition'])
+          || !Number.isSafeInteger(args.offset) || args.offset < 0
+          || !Number.isSafeInteger(args.limit) || args.limit < 1 || args.limit > 50) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
     }
@@ -685,6 +733,18 @@ export function validateFailureExchange(
     if (capabilityId === null || response.error.details?.capabilityId !== capabilityId) return false;
   } else if (response.error.details?.capabilityId !== undefined
       && response.error.details.capabilityId !== capabilityId) return false;
+  if (response.error.code === 'STALE_LOCATOR'
+      && (capabilityId === 'ae.project.items.list'
+        || capabilityId === 'ae.composition.layers.list')) {
+    const expectedField = capabilityId === 'ae.project.items.list'
+      ? 'params.arguments.projectLocator' : 'params.arguments.compositionLocator';
+    const currentGeneration = response.error.details?.currentGeneration;
+    if (response.error.details?.field !== expectedField
+        || (currentGeneration !== undefined
+          && (!Number.isSafeInteger(currentGeneration) || currentGeneration < 1))
+        || (capabilityId === 'ae.project.items.list'
+          && request.params.arguments.projectLocator === undefined)) return false;
+  }
   if (descriptor !== null && (descriptor.id !== capabilityId
       || descriptor.version !== request.params.capabilityVersion)) return false;
   return true;
@@ -751,6 +811,18 @@ export function projectBitDepthReadContractDigest(schema) {
 export function projectBitDepthSetContractDigest(schema) {
   const inputSchema = structuredClone(schema.$defs.projectBitDepthSetInputSchemaContract.const);
   const resultSchema = structuredClone(schema.$defs.projectBitDepthSetResultSchemaContract.const);
+  return sha256Jcs({ inputSchema, resultSchema });
+}
+
+export function projectItemsListContractDigest(schema) {
+  const inputSchema = structuredClone(schema.$defs.projectItemsListInputSchemaContract.const);
+  const resultSchema = structuredClone(schema.$defs.projectItemsListResultSchemaContract.const);
+  return sha256Jcs({ inputSchema, resultSchema });
+}
+
+export function compositionLayersListContractDigest(schema) {
+  const inputSchema = structuredClone(schema.$defs.compositionLayersListInputSchemaContract.const);
+  const resultSchema = structuredClone(schema.$defs.compositionLayersListResultSchemaContract.const);
   return sha256Jcs({ inputSchema, resultSchema });
 }
 
@@ -912,11 +984,152 @@ export function projectBitDepthSetDescriptor(schema) {
   };
 }
 
+function syntheticDescriptorLocator(kind, objectId) {
+  return {
+    kind,
+    hostInstanceId: '22222222-2222-4222-8222-222222222222',
+    sessionId: '11111111-1111-4111-8111-111111111111',
+    projectId: '44444444-4444-4444-8444-444444444444',
+    generation: 8,
+    objectId,
+  };
+}
+
+export function projectItemsListDescriptor(schema) {
+  const registration = INVOKE_REGISTRY[3];
+  const projectLocator = syntheticDescriptorLocator(
+    'project', '77777777-7777-4777-8777-777777777777',
+  );
+  return {
+    detail: 'full',
+    id: registration.id,
+    version: registration.version,
+    schemaVersion: 1,
+    summary: 'List a bounded page of items in the open After Effects project.',
+    risk: 'read',
+    mutability: 'read-only',
+    idempotency: 'idempotent',
+    cancellation: 'before-dispatch',
+    undo: 'not-applicable',
+    sideEffectSummary: 'Reads project items without changing After Effects state.',
+    preconditions: ['An After Effects project must be open.'],
+    compatibility: {
+      status: 'unverified',
+      intendedPlatforms: ['macos-arm64', 'windows-x64'],
+    },
+    inputContractId: registration.inputContractId,
+    resultContractId: registration.resultContractId,
+    contractDigest: projectItemsListContractDigest(schema),
+    inputSchema: structuredClone(schema.$defs.projectItemsListInputSchemaContract.const),
+    resultSchema: structuredClone(schema.$defs.projectItemsListResultSchemaContract.const),
+    requirements: [{
+      id: 'aemcp.requirement.native.project-items-list',
+      contractVersion: 1,
+    }],
+    examples: [
+      {
+        id: 'aemcp-example-project-items-list-empty',
+        kind: 'positive',
+        summary: 'List the first bounded page of an empty project.',
+        arguments: { offset: 0, limit: 25 },
+        expected: {
+          outcome: 'succeeded',
+          value: {
+            projectLocator,
+            total: 0,
+            offset: 0,
+            limit: 25,
+            returned: 0,
+            hasMore: false,
+            nextOffset: null,
+            items: [],
+          },
+        },
+      },
+      {
+        id: 'aemcp-example-project-items-list-no-project',
+        kind: 'negative',
+        summary: 'Require an open project before listing items.',
+        arguments: { offset: 0, limit: 25 },
+        expected: { errorCode: 'PRECONDITION_FAILED', recoveryAction: 'open-project' },
+      },
+    ],
+  };
+}
+
+export function compositionLayersListDescriptor(schema) {
+  const registration = INVOKE_REGISTRY[4];
+  const compositionLocator = syntheticDescriptorLocator(
+    'composition', '66666666-6666-4666-8666-666666666666',
+  );
+  return {
+    detail: 'full',
+    id: registration.id,
+    version: registration.version,
+    schemaVersion: 1,
+    summary: 'List a bounded page of layers in one After Effects composition.',
+    risk: 'read',
+    mutability: 'read-only',
+    idempotency: 'idempotent',
+    cancellation: 'before-dispatch',
+    undo: 'not-applicable',
+    sideEffectSummary: 'Reads composition layers without changing After Effects state.',
+    preconditions: [
+      'An After Effects project must be open.',
+      'compositionLocator must come from ae.project.items.list@1.',
+    ],
+    compatibility: {
+      status: 'unverified',
+      intendedPlatforms: ['macos-arm64', 'windows-x64'],
+    },
+    inputContractId: registration.inputContractId,
+    resultContractId: registration.resultContractId,
+    contractDigest: compositionLayersListContractDigest(schema),
+    inputSchema: structuredClone(schema.$defs.compositionLayersListInputSchemaContract.const),
+    resultSchema: structuredClone(schema.$defs.compositionLayersListResultSchemaContract.const),
+    requirements: [{
+      id: 'aemcp.requirement.native.composition-layers-list',
+      contractVersion: 1,
+    }],
+    examples: [
+      {
+        id: 'aemcp-example-composition-layers-list-empty',
+        kind: 'positive',
+        summary: 'List the first bounded page of an empty composition.',
+        arguments: { compositionLocator, offset: 0, limit: 25 },
+        expected: {
+          outcome: 'succeeded',
+          value: {
+            compositionLocator,
+            compositionName: 'SYNTHETIC_COMPOSITION',
+            total: 0,
+            offset: 0,
+            limit: 25,
+            returned: 0,
+            hasMore: false,
+            nextOffset: null,
+            layers: [],
+          },
+        },
+      },
+      {
+        id: 'aemcp-example-composition-layers-list-stale',
+        kind: 'negative',
+        summary: 'Refresh a stale composition locator before listing layers.',
+        arguments: { compositionLocator, offset: 0, limit: 25 },
+        expected: { errorCode: 'STALE_LOCATOR', recoveryAction: 'refresh-locator' },
+      },
+    ],
+  };
+}
+
 export function nativeCapabilityRegistry(schema) {
   return [
     projectSummaryDescriptor(schema),
     projectBitDepthReadDescriptor(schema),
     projectBitDepthSetDescriptor(schema),
+    projectItemsListDescriptor(schema),
+    compositionLayersListDescriptor(schema),
   ];
 }
 
@@ -948,6 +1161,80 @@ export function postconditionDigest(result) {
     capabilityVersion: result.capabilityVersion,
     value: result.value,
   });
+}
+
+function validatePageMetadata(value, args, entriesKey) {
+  const entries = value?.[entriesKey];
+  if (!Array.isArray(entries)
+      || value.offset !== args.offset || value.limit !== args.limit
+      || value.returned !== entries.length || value.returned > value.limit) return false;
+  const endOffset = value.offset + value.returned;
+  if (!Number.isSafeInteger(endOffset) || value.total < endOffset) return false;
+  const expectedHasMore = endOffset < value.total;
+  return value.hasMore === expectedHasMore
+    && (expectedHasMore
+      ? value.returned > 0 && value.nextOffset === endOffset
+      : value.nextOffset === null);
+}
+
+function locatorContext(locator) {
+  return {
+    hostInstanceId: locator.hostInstanceId,
+    sessionId: locator.sessionId,
+    projectId: locator.projectId,
+    generation: locator.generation,
+  };
+}
+
+function validateNavigationResult(request, result, helloContext, schema) {
+  const capabilityId = request.params.capabilityId;
+  if (capabilityId !== 'ae.project.items.list'
+      && capabilityId !== 'ae.composition.layers.list') return true;
+  const value = result.value;
+  const args = request.params.arguments;
+  const rootLocator = capabilityId === 'ae.project.items.list'
+    ? value.projectLocator : value.compositionLocator;
+  const expectedKind = capabilityId === 'ae.project.items.list' ? 'project' : 'composition';
+  if (rootLocator?.kind !== expectedKind
+      || rootLocator.hostInstanceId !== helloContext.response.result.host.instanceId
+      || rootLocator.sessionId !== request.sessionId) return false;
+  const context = locatorContext(rootLocator);
+  if (!validateLocator(rootLocator, context, schema)) return false;
+
+  if (capabilityId === 'ae.project.items.list') {
+    if (!validatePageMetadata(value, args, 'items')
+        || result.evidence.postcondition.kind !== 'project-items-list'
+        || (args.projectLocator !== undefined
+          && !jsonDeepEqual(args.projectLocator, value.projectLocator))) return false;
+    const objectIds = new Set();
+    for (const item of value.items) {
+      if (!validateLocator(item.locator, context, schema)
+          || !validateLocator(item.parentLocator, context, schema)
+          || objectIds.has(item.locator.objectId)
+          || (item.type === 'composition') !== (item.locator.kind === 'composition')
+          || (item.parentLocator.kind === 'project'
+            && !jsonDeepEqual(item.parentLocator, value.projectLocator))) return false;
+      objectIds.add(item.locator.objectId);
+    }
+    return true;
+  }
+
+  if (!validatePageMetadata(value, args, 'layers')
+      || result.evidence.postcondition.kind !== 'composition-layers-list'
+      || !jsonDeepEqual(args.compositionLocator, value.compositionLocator)) return false;
+  const objectIds = new Set();
+  for (let index = 0; index < value.layers.length; index += 1) {
+    const layer = value.layers[index];
+    if (!validateLocator(layer.locator, context, schema)
+        || layer.stackIndex !== value.offset + index + 1
+        || objectIds.has(layer.locator.objectId)
+        || (layer.parentLocator !== null
+          && !validateLocator(layer.parentLocator, context, schema))
+        || (layer.sourceItemLocator !== null
+          && !validateLocator(layer.sourceItemLocator, context, schema))) return false;
+    objectIds.add(layer.locator.objectId);
+  }
+  return true;
 }
 
 export function validateCapabilitiesExchange(
@@ -1292,6 +1579,7 @@ export function validateTranscript(context, request, messages) {
       || request.params.capabilityVersion !== 1
       || (result.value.beforeBitsPerChannel !== result.value.afterBitsPerChannel
         && result.value.afterBitsPerChannel === request.params.arguments.targetDepth))
+    && validateNavigationResult(request, result, helloContext, schema)
     && evidence.postcondition.verified === true
     && evidence.requestDigest === requestDigest
     && evidence.postcondition.digest === resultDigest;

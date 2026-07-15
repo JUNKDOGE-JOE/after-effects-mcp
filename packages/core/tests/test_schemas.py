@@ -9,10 +9,11 @@ from ae_mcp import schemas as S
 
 
 def test_registry_has_all_verbs():
-    assert len(S.SCHEMAS) == 47, f"expected 47 verbs, got {len(S.SCHEMAS)}"
+    assert len(S.SCHEMAS) == 49, f"expected 49 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.projectSummary",
         "ae.getProjectBitDepth", "ae.setProjectBitDepth",
+        "ae.listProjectItems", "ae.listCompositionLayers",
         "ae.layers", "ae.readProps", "ae.exec",
         "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.previewFrame",
         "ae.applyEffect", "ae.ping", "ae.status", "ae.diagnose",
@@ -75,6 +76,63 @@ def test_native_project_bit_depth_read_is_empty_and_set_is_closed():
         )
     with pytest.raises(ValidationError):
         S.AeSetProjectBitDepthArgs(target_depth=16, idempotency_key="too-short")
+
+
+def _locator(kind: str = "project") -> dict[str, object]:
+    return {
+        "kind": kind,
+        "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+        "sessionId": "11111111-1111-4111-8111-111111111111",
+        "projectId": "33333333-3333-4333-8333-333333333333",
+        "generation": 7,
+        "objectId": "44444444-4444-4444-8444-444444444444",
+    }
+
+
+def test_native_project_item_listing_defaults_are_bounded_and_closed():
+    args = S.AeListProjectItemsArgs()
+    assert args.project_locator is None
+    assert args.offset == 0
+    assert args.limit == 25
+
+    with pytest.raises(ValidationError):
+        S.AeListProjectItemsArgs(extra=True)
+    with pytest.raises(ValidationError):
+        S.AeListProjectItemsArgs(limit=0)
+    with pytest.raises(ValidationError):
+        S.AeListProjectItemsArgs(limit=51)
+    with pytest.raises(ValidationError):
+        S.AeListProjectItemsArgs(limit="25")
+    with pytest.raises(ValidationError):
+        S.AeListProjectItemsArgs(offset=1)
+
+    continued = S.AeListProjectItemsArgs(
+        project_locator=_locator(), offset=25, limit=25
+    )
+    assert continued.project_locator is not None
+    assert continued.project_locator.host_instance_id.startswith("2222")
+
+
+def test_native_composition_layer_listing_requires_exact_composition_locator():
+    args = S.AeListCompositionLayersArgs(
+        composition_locator=_locator("composition")
+    )
+    assert args.offset == 0
+    assert args.limit == 25
+    assert args.composition_locator.kind == "composition"
+
+    with pytest.raises(ValidationError):
+        S.AeListCompositionLayersArgs()
+    with pytest.raises(ValidationError):
+        S.AeListCompositionLayersArgs(composition_locator=_locator("item"))
+    with pytest.raises(ValidationError):
+        S.AeListCompositionLayersArgs(
+            composition_locator=_locator("composition"), limit=51
+        )
+    with pytest.raises(ValidationError):
+        S.AeListCompositionLayersArgs(
+            composition_locator=_locator("composition"), offset=True
+        )
 
 
 def test_layers_optional_comp_id():

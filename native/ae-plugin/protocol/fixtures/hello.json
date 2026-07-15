@@ -10,7 +10,10 @@
     "requestId": "hello-1",
     "method": "hello",
     "params": {
-      "supportedWireVersions": { "minimum": 1, "maximum": 1 },
+      "supportedWireVersions": {
+        "minimum": 1,
+        "maximum": 1
+      },
       "client": {
         "component": "core-broker",
         "version": "0.9.2",
@@ -57,7 +60,7 @@
         "maxTerminalCacheEntries": 128,
         "terminalCacheTtlMs": 60000
       },
-      "capabilitiesDigest": "0fda4e1bfbc8657bcd0c676fb802aecc97ba2ee6268cc115ff6d12b74758c042",
+      "capabilitiesDigest": "1814ffa17e29919414094c3b9cb6fb331169a5084aed44abb7a55f5827ffe72a",
       "clientNonce": "abcdefghijklmnopqrstuvwxyzABCDEF"
     }
   }

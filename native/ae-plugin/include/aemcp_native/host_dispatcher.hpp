@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <deque>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -20,6 +21,31 @@ inline constexpr std::string_view kProjectBitDepthReadCapability =
     "ae.project.bit-depth.read";
 inline constexpr std::string_view kProjectBitDepthSetCapability =
     "ae.project.bit-depth.set";
+inline constexpr std::string_view kProjectItemsListCapability =
+    "ae.project.items.list";
+inline constexpr std::string_view kCompositionLayersListCapability =
+    "ae.composition.layers.list";
+inline constexpr std::size_t kNativePageValueBudgetBytes = 48U * 1024U;
+
+// Returns the exact byte count used by the codec's JSON string serializer,
+// including quotes and control-character escaping. It is intentionally
+// independent of AE SDK types so bounded page assembly is portable-testable.
+[[nodiscard]] std::size_t json_encoded_string_size(std::string_view value) noexcept;
+
+class BoundedPageBudget final {
+ public:
+  explicit BoundedPageBudget(
+      std::size_t initial_bytes,
+      std::size_t maximum_bytes = kNativePageValueBudgetBytes) noexcept;
+
+  [[nodiscard]] bool try_reserve(std::size_t bytes) noexcept;
+  [[nodiscard]] std::size_t used_bytes() const noexcept { return used_bytes_; }
+  [[nodiscard]] std::size_t maximum_bytes() const noexcept { return maximum_bytes_; }
+
+ private:
+  std::size_t used_bytes_{0};
+  std::size_t maximum_bytes_{0};
+};
 
 using TimePoint = std::chrono::steady_clock::time_point;
 
@@ -50,6 +76,73 @@ struct ProjectBitDepthChanged {
   bool changed{true};
   std::int32_t before_bits_per_channel{0};
   std::int32_t after_bits_per_channel{0};
+};
+
+struct ObjectLocator {
+  std::string kind;
+  std::string host_instance_id;
+  std::string session_id;
+  std::string project_id;
+  std::uint64_t generation{0};
+  std::string object_id;
+
+  [[nodiscard]] bool operator==(const ObjectLocator&) const = default;
+};
+
+struct ProjectItemEntry {
+  ObjectLocator locator;
+  std::string name;
+  std::string type;
+  std::optional<ObjectLocator> parent_locator;
+};
+
+struct ProjectItemsPage {
+  ObjectLocator project_locator;
+  std::uint64_t total{0};
+  std::uint64_t offset{0};
+  std::uint16_t limit{0};
+  bool has_more{false};
+  std::optional<std::uint64_t> next_offset;
+  std::vector<ProjectItemEntry> items;
+};
+
+struct CompositionLayerEntry {
+  ObjectLocator locator;
+  std::uint64_t stack_index{0};
+  std::string name;
+  std::string type;
+  bool video_enabled{false};
+  bool is_three_d{false};
+  bool locked{false};
+  std::optional<ObjectLocator> parent_locator;
+  std::optional<ObjectLocator> source_item_locator;
+};
+
+struct CompositionLayersPage {
+  ObjectLocator composition_locator;
+  std::string composition_name;
+  std::uint64_t total{0};
+  std::uint64_t offset{0};
+  std::uint16_t limit{0};
+  bool has_more{false};
+  std::optional<std::uint64_t> next_offset;
+  std::vector<CompositionLayerEntry> layers;
+};
+
+struct ProjectItemsQuery {
+  std::string host_instance_id;
+  std::string session_id;
+  std::uint64_t offset{0};
+  std::uint16_t limit{0};
+  std::optional<ObjectLocator> project_locator;
+};
+
+struct CompositionLayersQuery {
+  std::string host_instance_id;
+  std::string session_id;
+  std::uint64_t offset{0};
+  std::uint16_t limit{0};
+  ObjectLocator composition_locator;
 };
 
 struct HostReadResult {
@@ -85,6 +178,30 @@ struct HostBitDepthWriteResult {
       std::string code, std::string detail, std::string field = {});
 };
 
+struct HostProjectItemsResult {
+  bool ok{false};
+  ProjectItemsPage value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostProjectItemsResult success(ProjectItemsPage page);
+  [[nodiscard]] static HostProjectItemsResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostCompositionLayersResult {
+  bool ok{false};
+  CompositionLayersPage value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostCompositionLayersResult success(CompositionLayersPage page);
+  [[nodiscard]] static HostCompositionLayersResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
 class HostApi {
  public:
   virtual ~HostApi() = default;
@@ -93,6 +210,10 @@ class HostApi {
       TimePoint work_deadline);
   [[nodiscard]] virtual HostBitDepthWriteResult set_project_bit_depth(
       std::int32_t target_depth, TimePoint work_deadline);
+  [[nodiscard]] virtual HostProjectItemsResult list_project_items(
+      const ProjectItemsQuery& query, TimePoint work_deadline);
+  [[nodiscard]] virtual HostCompositionLayersResult list_composition_layers(
+      const CompositionLayersQuery& query, TimePoint work_deadline);
 };
 
 struct Request {
@@ -105,7 +226,13 @@ struct Request {
       std::uint64_t session_generation_value = 0,
       std::int32_t target_depth_value = 0,
       std::string idempotency_key_value = {},
-      std::string arguments_fingerprint_value = {})
+      std::string arguments_fingerprint_value = {},
+      std::string host_instance_id_value = {},
+      std::string session_id_value = {},
+      std::uint64_t offset_value = 0,
+      std::uint16_t limit_value = 0,
+      std::optional<ObjectLocator> project_locator_value = std::nullopt,
+      std::optional<ObjectLocator> composition_locator_value = std::nullopt)
       : request_id(std::move(request_id_value)),
         capability_id(std::move(capability_id_value)),
         deadline(deadline_value),
@@ -113,7 +240,13 @@ struct Request {
         session_generation(session_generation_value),
         target_depth(target_depth_value),
         idempotency_key(std::move(idempotency_key_value)),
-        arguments_fingerprint_sha256(std::move(arguments_fingerprint_value)) {}
+        arguments_fingerprint_sha256(std::move(arguments_fingerprint_value)),
+        host_instance_id(std::move(host_instance_id_value)),
+        session_id(std::move(session_id_value)),
+        offset(offset_value),
+        limit(limit_value),
+        project_locator(std::move(project_locator_value)),
+        composition_locator(std::move(composition_locator_value)) {}
 
   std::string request_id;
   std::string capability_id;
@@ -126,6 +259,12 @@ struct Request {
   std::int32_t target_depth{0};
   std::string idempotency_key;
   std::string arguments_fingerprint_sha256;
+  std::string host_instance_id;
+  std::string session_id;
+  std::uint64_t offset{0};
+  std::uint16_t limit{0};
+  std::optional<ObjectLocator> project_locator;
+  std::optional<ObjectLocator> composition_locator;
 };
 
 enum class EnqueueCode {
@@ -166,6 +305,8 @@ struct Completion {
   ProjectSummary result;
   ProjectBitDepth bit_depth_result;
   ProjectBitDepthChanged bit_depth_change_result;
+  ProjectItemsPage project_items_result;
+  CompositionLayersPage composition_layers_result;
   // Internal fence correlation only; never serialized or logged.
   std::string idempotency_key;
   std::string error_code;

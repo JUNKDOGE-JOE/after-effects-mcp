@@ -57,9 +57,9 @@ Adobe approval or completed host validation.
    SDK identity, actual AE host identity, instance/session IDs, limits, and a
    capability digest. No overlap returns `WIRE_VERSION_MISMATCH`.
 3. The broker requests compact capability summaries by default. It can request
-   full, bounded contracts for selected IDs. Version 1 has three compile-time
-   capabilities and deliberately does not support pagination: `cursor` is rejected
-   and `nextCursor` must be null. If the effective limit is smaller than the
+   full, bounded contracts for selected IDs. Version 1 has five compile-time
+   capabilities. Capability discovery deliberately does not support pagination:
+   `cursor` is rejected and `nextCursor` must be null. If the effective limit is smaller than the
    number of matching descriptors, the plug-in fails closed instead of returning
    an incomplete page. Unknown requested IDs produce an empty, digest-bound page.
    Responses bind the normalized ids/detail/limit query and session with
@@ -68,7 +68,11 @@ Adobe approval or completed host validation.
    input schemas. Version 1 permits `ae.project.summary` and
    `ae.project.bit-depth.read` with empty argument objects, plus
    `ae.project.bit-depth.set` with exactly `targetDepth` (`8`, `16`, or `32`)
-   and `idempotencyKey`. Future capabilities extend that allowlist with closed,
+   and `idempotencyKey`. It also permits `ae.project.items.list` with rendered
+   `offset`/`limit` and an optional first-page `projectLocator`, and
+   `ae.composition.layers.list` with a composition locator plus rendered
+   `offset`/`limit`. Those reads use bounded capability-owned pagination with a
+   default public page size of 25 and a maximum of 50. Future capabilities extend that allowlist with closed,
    bounded schemas; a generic argument bag or field-name blacklist is never a
    security boundary. Arbitrary C++, JSX, shell text, command lines, pointers,
    native handles, and unknown nested data are rejected before dispatch.
@@ -112,6 +116,8 @@ session after bounded tombstones expire or are evicted.
 - maximum frame size: 65,536 bytes;
 - omitted capability detail: `summary`;
 - omitted capability page size: 50, maximum 100;
+- public project-item and composition-layer page size: 25 by default, maximum
+  50; Core renders both `offset` and `limit` into every native invoke;
 - maximum in-flight requests: negotiated by `hello`, initially 8;
 - maximum plug-in queue depth: negotiated by `hello`, initially 32;
 - request rate and burst limits: negotiated by `hello`;

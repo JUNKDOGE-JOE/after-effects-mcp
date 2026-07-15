@@ -30,6 +30,13 @@ def test_instructions_cover_key_discipline():
     assert "NEVER let JSX throw" in text
 
 
+def test_instructions_explain_the_verified_native_graph_route_without_fallback():
+    assert "ae_listProjectItems" in SERVER_INSTRUCTIONS
+    assert "ae_listCompositionLayers" in SERVER_INSTRUCTIONS
+    assert "composition locator" in SERVER_INSTRUCTIONS
+    assert "never fall back to JSX" in SERVER_INSTRUCTIONS
+
+
 def test_instructions_cover_panel_runtime_and_file_hygiene():
     text = SERVER_INSTRUCTIONS
     assert "Do not switch to OS screenshots" in text

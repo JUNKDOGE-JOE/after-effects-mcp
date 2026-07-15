@@ -17,6 +17,7 @@ namespace {
 
 using aemcp::native::rpc::CapabilitiesParams;
 using aemcp::native::rpc::CapabilitiesSuccess;
+using aemcp::native::rpc::CompositionLayersSuccess;
 using aemcp::native::rpc::CapabilityDetail;
 using aemcp::native::rpc::CancelState;
 using aemcp::native::rpc::CancelSuccess;
@@ -32,6 +33,7 @@ using aemcp::native::rpc::ProgressEvent;
 using aemcp::native::rpc::ProgressPhase;
 using aemcp::native::rpc::ProjectBitDepthReadSuccess;
 using aemcp::native::rpc::ProjectBitDepthSetSuccess;
+using aemcp::native::rpc::ProjectItemsSuccess;
 using aemcp::native::rpc::ProjectSummarySuccess;
 using aemcp::native::rpc::RpcErrorCode;
 using aemcp::native::rpc::RpcMethod;
@@ -45,6 +47,8 @@ using aemcp::native::rpc::digest_project_bit_depth_read_postcondition;
 using aemcp::native::rpc::digest_project_bit_depth_set_arguments;
 using aemcp::native::rpc::digest_project_bit_depth_set_postcondition;
 using aemcp::native::rpc::digest_project_summary_postcondition;
+using aemcp::native::rpc::digest_composition_layers_postcondition;
+using aemcp::native::rpc::digest_project_items_postcondition;
 using aemcp::native::rpc::encode_capabilities_success;
 using aemcp::native::rpc::encode_cancel_success;
 using aemcp::native::rpc::encode_error_response;
@@ -53,6 +57,8 @@ using aemcp::native::rpc::encode_progress_event;
 using aemcp::native::rpc::encode_project_bit_depth_read_success;
 using aemcp::native::rpc::encode_project_bit_depth_set_success;
 using aemcp::native::rpc::encode_project_summary_success;
+using aemcp::native::rpc::encode_composition_layers_success;
+using aemcp::native::rpc::encode_project_items_success;
 using aemcp::native::rpc::kMaxFrameBytes;
 
 constexpr std::string_view kSession = "11111111-1111-4111-8111-111111111111";
@@ -64,6 +70,10 @@ constexpr std::string_view kProjectBitDepthReadContractDigest =
     "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e";
 constexpr std::string_view kProjectBitDepthSetContractDigest =
     "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a";
+constexpr std::string_view kProjectItemsContractDigest =
+    "64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e";
+constexpr std::string_view kCompositionLayersContractDigest =
+    "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75";
 
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "FAIL: " << message << '\n';
@@ -162,6 +172,58 @@ std::string bit_depth_set_invoke_json(
         "\"capabilityVersion\":1,\"arguments\":{\"targetDepth\":"
       + std::string(target_depth) + ",\"idempotencyKey\":\""
       + std::string(idempotency_key) + "\"" + std::string(extra) + "}}}";
+}
+
+std::string locator_json(
+    std::string_view kind,
+    std::string_view object_id,
+    std::string_view session_id = kSession) {
+  return "{\"kind\":\"" + std::string(kind) + "\",\"hostInstanceId\":\""
+      + std::string(kHost) + "\",\"sessionId\":\"" + std::string(session_id)
+      + "\",\"projectId\":\"44444444-4444-4444-8444-444444444444\","
+        "\"generation\":8,\"objectId\":\"" + std::string(object_id) + "\"}";
+}
+
+aemcp::native::ObjectLocator locator(std::string kind, std::string object_id) {
+  return {
+      std::move(kind),
+      std::string(kHost),
+      std::string(kSession),
+      "44444444-4444-4444-8444-444444444444",
+      8,
+      std::move(object_id)};
+}
+
+std::string project_items_invoke_json(
+    std::string_view request_id = "invoke-project-items-1",
+    std::uint64_t offset = 0,
+    std::uint16_t limit = 25,
+    std::string_view project_locator = {}) {
+  std::string arguments = "{\"offset\":" + std::to_string(offset)
+      + ",\"limit\":" + std::to_string(limit);
+  if (!project_locator.empty()) {
+    arguments += ",\"projectLocator\":" + std::string(project_locator);
+  }
+  arguments.push_back('}');
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.project.items.list\","
+        "\"capabilityVersion\":1,\"arguments\":" + arguments + "}}";
+}
+
+std::string composition_layers_invoke_json(
+    std::string_view request_id = "invoke-composition-layers-1",
+    std::string_view composition_locator = {}) {
+  const std::string locator_value = composition_locator.empty()
+      ? locator_json("composition", "66666666-6666-4666-8666-666666666666")
+      : std::string(composition_locator);
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.composition.layers.list\","
+        "\"capabilityVersion\":1,\"arguments\":{\"compositionLocator\":"
+      + locator_value + ",\"offset\":0,\"limit\":25}}}";
 }
 
 void golden_requests_are_typed_and_closed() {
@@ -288,6 +350,160 @@ void project_bit_depth_invokes_are_closed_and_explicitly_mapped() {
     (void)decode_request_frame(frame(bit_depth_set_invoke_json(
         "bit-depth-extra", "16", "bit-depth-intent-005", ",\"jsx\":\"x\"")));
   }, "INVALID_ARGUMENT", "unknown project bit-depth argument");
+}
+
+void project_graph_invokes_and_results_are_closed_and_deterministic() {
+  const ParsedRequest project_parsed = decode_request_frame(frame(project_items_invoke_json()));
+  const auto& project = std::get<InvokeParams>(project_parsed.params);
+  require(project.capability_id == "ae.project.items.list" && project.offset == 0
+          && project.limit == 25 && !project.project_locator.has_value(),
+      "project-items invoke lost typed pagination arguments");
+  const std::string project_value = locator_json(
+      "project", "77777777-7777-4777-8777-777777777777");
+  const auto continued = std::get<InvokeParams>(decode_request_frame(frame(
+      project_items_invoke_json("invoke-project-items-2", 25, 25, project_value))).params);
+  require(continued.project_locator.has_value()
+          && continued.project_locator->kind == "project"
+          && continued.project_locator->generation == 8,
+      "project-items continuation lost its locator");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(project_items_invoke_json(
+        "invoke-project-items-missing", 1, 25)));
+  }, "INVALID_ARGUMENT", "project-items continuation without locator");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(project_items_invoke_json(
+        "invoke-project-items-limit", 0, 51)));
+  }, "INVALID_ARGUMENT", "project-items limit above 50");
+
+  const ParsedRequest layers_parsed = decode_request_frame(frame(
+      composition_layers_invoke_json()));
+  const auto& layers = std::get<InvokeParams>(layers_parsed.params);
+  require(layers.capability_id == "ae.composition.layers.list"
+          && layers.composition_locator.has_value()
+          && layers.composition_locator->kind == "composition",
+      "composition-layers invoke lost its typed locator");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(composition_layers_invoke_json(
+        "invoke-composition-wrong-kind",
+        locator_json("item", "66666666-6666-4666-8666-666666666666"))));
+  }, "INVALID_ARGUMENT", "composition-layers item locator");
+
+  aemcp::native::ProjectItemsPage project_page;
+  project_page.project_locator = locator(
+      "project", "77777777-7777-4777-8777-777777777777");
+  project_page.total = 1;
+  project_page.offset = 0;
+  project_page.limit = 25;
+  project_page.items.push_back({
+      locator("composition", "66666666-6666-4666-8666-666666666666"),
+      "Fixture Comp",
+      "composition",
+      project_page.project_locator});
+  ProjectItemsSuccess project_success{
+      "invoke-project-items-1",
+      std::string(kSession),
+      std::string(kHost),
+      project_page,
+      1'900'000'000'000ULL,
+      1'900'000'000'025ULL,
+      std::string(kDigest),
+      digest_project_items_postcondition(project_page),
+      false};
+  const std::string project_body = body(encode_project_items_success(project_success));
+  require(project_body.find("\"capabilityId\":\"ae.project.items.list\"")
+          != std::string::npos
+          && project_body.find("\"kind\":\"project-items-list\"")
+          != std::string::npos
+          && project_body.find("\"type\":\"composition\"") != std::string::npos,
+      "project-items success omitted its typed native contract");
+
+  aemcp::native::CompositionLayersPage layer_page;
+  layer_page.composition_locator = project_page.items[0].locator;
+  layer_page.composition_name = "Fixture Comp";
+  layer_page.total = 1;
+  layer_page.offset = 0;
+  layer_page.limit = 25;
+  layer_page.layers.push_back({
+      locator("layer", "88888888-8888-4888-8888-888888888888"),
+      1,
+      "Fixture Text",
+      "text",
+      true,
+      false,
+      true,
+      std::nullopt,
+      std::nullopt});
+  CompositionLayersSuccess layers_success{
+      "invoke-composition-layers-1",
+      std::string(kSession),
+      std::string(kHost),
+      layer_page,
+      1'900'000'000'000ULL,
+      1'900'000'000'025ULL,
+      std::string(kDigest),
+      digest_composition_layers_postcondition(layer_page),
+      false};
+  const std::string layers_body = body(encode_composition_layers_success(layers_success));
+  require(layers_body.find("\"capabilityId\":\"ae.composition.layers.list\"")
+          != std::string::npos
+          && layers_body.find("\"kind\":\"composition-layers-list\"")
+          != std::string::npos
+          && layers_body.find("\"locked\":true") != std::string::npos,
+      "composition-layers success omitted locked native layer evidence");
+  const std::string original_digest = layers_success.postcondition_digest;
+  layer_page.layers[0].locked = false;
+  require(digest_composition_layers_postcondition(layer_page) != original_digest,
+      "composition-layers digest ignored a semantic layer flag");
+
+  ProjectItemsSuccess out_of_range = project_success;
+  out_of_range.value.offset = out_of_range.value.total + 1;
+  out_of_range.value.items.clear();
+  out_of_range.postcondition_digest = std::string(kDigest);
+  expect_codec_error([&] {
+    (void)encode_project_items_success(out_of_range);
+  }, "INVALID_ARGUMENT", "project-items response with offset beyond total");
+
+  CompositionLayersSuccess empty_nonterminal = layers_success;
+  empty_nonterminal.value.total = 2;
+  empty_nonterminal.value.layers.clear();
+  empty_nonterminal.value.has_more = true;
+  empty_nonterminal.value.next_offset = 0;
+  empty_nonterminal.postcondition_digest = std::string(kDigest);
+  expect_codec_error([&] {
+    (void)encode_composition_layers_success(empty_nonterminal);
+  }, "INVALID_ARGUMENT", "empty nonterminal composition-layers response");
+
+  ProjectItemsSuccess missing_parent = project_success;
+  missing_parent.value.items[0].parent_locator.reset();
+  missing_parent.postcondition_digest = std::string(kDigest);
+  expect_codec_error([&] {
+    (void)encode_project_items_success(missing_parent);
+  }, "INVALID_ARGUMENT", "project item without required parent locator");
+
+  ProjectItemsSuccess wrong_root_parent = project_success;
+  wrong_root_parent.value.items[0].parent_locator->object_id =
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  wrong_root_parent.postcondition_digest = std::string(kDigest);
+  expect_codec_error([&] {
+    (void)encode_project_items_success(wrong_root_parent);
+  }, "INVALID_ARGUMENT", "project-kind parent not equal to project locator");
+
+  ProjectItemsSuccess duplicate_item = project_success;
+  duplicate_item.value.total = 2;
+  duplicate_item.value.items.push_back(duplicate_item.value.items[0]);
+  duplicate_item.postcondition_digest = std::string(kDigest);
+  expect_codec_error([&] {
+    (void)encode_project_items_success(duplicate_item);
+  }, "INVALID_ARGUMENT", "duplicate project item locator");
+
+  CompositionLayersSuccess duplicate_layer = layers_success;
+  duplicate_layer.value.total = 2;
+  duplicate_layer.value.layers.push_back(duplicate_layer.value.layers[0]);
+  duplicate_layer.value.layers[1].stack_index = 2;
+  duplicate_layer.postcondition_digest = std::string(kDigest);
+  expect_codec_error([&] {
+    (void)encode_composition_layers_success(duplicate_layer);
+  }, "INVALID_ARGUMENT", "duplicate composition layer locator");
 }
 
 void framing_fragmentation_and_multiple_frames_work() {
@@ -524,6 +740,10 @@ void response_helpers_are_bounded_and_typed() {
       std::string(kProjectBitDepthReadContractDigest);
   capabilities.project_bit_depth_set_contract_digest =
       std::string(kProjectBitDepthSetContractDigest);
+  capabilities.project_items_list_contract_digest =
+      std::string(kProjectItemsContractDigest);
+  capabilities.composition_layers_list_contract_digest =
+      std::string(kCompositionLayersContractDigest);
   const std::string capabilities_body = body(encode_capabilities_success(capabilities));
   require(capabilities_body.find("\"additionalProperties\":false") != std::string::npos
       && capabilities_body.find("aemcp.requirement.native.project-read") != std::string::npos
@@ -558,6 +778,14 @@ void response_helpers_are_bounded_and_typed() {
       && capabilities_body.find(std::string(kProjectBitDepthReadContractDigest))
           != std::string::npos
       && capabilities_body.find(std::string(kProjectBitDepthSetContractDigest))
+          != std::string::npos
+      && capabilities_body.find(std::string(kProjectItemsContractDigest))
+          != std::string::npos
+      && capabilities_body.find(std::string(kCompositionLayersContractDigest))
+          != std::string::npos
+      && capabilities_body.find("\"id\":\"ae.project.items.list\"")
+          != std::string::npos
+      && capabilities_body.find("\"id\":\"ae.composition.layers.list\"")
           != std::string::npos,
       "full capability serializer omitted the closed contract");
 
@@ -756,6 +984,7 @@ void fixed_seed_mutation_fuzz_is_bounded() {
 int main() {
   golden_requests_are_typed_and_closed();
   project_bit_depth_invokes_are_closed_and_explicitly_mapped();
+  project_graph_invokes_and_results_are_closed_and_deterministic();
   framing_fragmentation_and_multiple_frames_work();
   strict_json_and_frame_limits_fail_closed();
   negative_contract_vectors_are_classified();
