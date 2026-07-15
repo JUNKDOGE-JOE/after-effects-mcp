@@ -320,8 +320,9 @@ function assertProductionFileSet(entries, platform) {
   const adobeSdkMaterial = entries.find((entry) => (
     ADOBE_SDK_LOCKED_FILE_DIGESTS.has(entry.sha256)
     || /(?:^|\/)(?:AfterEffectsSDK[^/]*|ae[0-9._]+\.AfterEffectsSDK)(?:\/|$)/iu.test(entry.path)
-    || /(?:^|\/)Examples\/(?:Headers|Resources|Util)(?:\/|$)/u.test(entry.path)
-    || /(?:^|\/)(?:AE_GeneralPlug(?:Old)?|AEGP_SuiteHandler|SPBasic)\.h$/iu.test(entry.path)
+    || /(?:^|\/)Examples(?:\/|$)/u.test(entry.path)
+    || /(?:^|\/)(?:AE_GeneralPlug(?:Old)?|AE_IO|AEGP_SuiteHandler|SPBasic)\.h$/iu.test(entry.path)
+    || /(?:^|\/)AE_General\.r$/iu.test(entry.path)
     || /(?:^|\/)(?:PiPLtool|AdobePIPL)(?:\.exe)?$/iu.test(entry.path)
     || /(?:^|\/)(?:documentation|after.?effects[^/]*sdk[^/]*)\.pdf$/iu.test(entry.path)
     || /(?:^|\/)ae-sdk-(?:extract|unpack)[^/]*$/iu.test(entry.path)

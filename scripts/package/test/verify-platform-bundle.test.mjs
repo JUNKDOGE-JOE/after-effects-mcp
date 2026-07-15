@@ -220,6 +220,10 @@ test('verification rejects representative Adobe SDK material paths from the stag
   for (const relative of [
     'AfterEffectsSDK_25.6_61_mac.zip',
     'sdk/Examples/Headers/AE_GeneralPlug.h',
+    'sdk/Examples/AEGP/Commando/main.cpp',
+    'sdk/Examples/Other/sample.txt',
+    'sdk/AE_IO.h',
+    'sdk/AE_General.r',
     'sdk/PiPLtool',
     'sdk/documentation.pdf',
     'tools/ae-sdk-extract-zstd',
