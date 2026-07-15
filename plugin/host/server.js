@@ -25,6 +25,7 @@ const blocked = new Set();
 // Self-reported label of the panel's own diagnostic /exec probes. Must match
 // the x-ae-mcp-client header in plugin/panel/src/cep/diagnostics.js.
 const INTERNAL_CLIENT = 'panel-diagnostics/internal';
+const NATIVE_MAX_REQUEST_WINDOW_MS = 30000;
 const NATIVE_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 const PROJECT_SUMMARY_CAPABILITY = 'ae.project.summary';
 const PROJECT_BIT_DEPTH_READ_CAPABILITY = 'ae.project.bit-depth.read';
@@ -135,6 +136,7 @@ function makeNativeAegpClient() {
         || typeof nativeAegpClient.negotiate !== 'function'
         || typeof nativeAegpClient.capabilities !== 'function'
         || typeof nativeAegpClient.invoke !== 'function'
+        || typeof nativeAegpClient.invalidateProjectGraph !== 'function'
         || typeof nativeAegpClient.status !== 'function'
         || typeof nativeAegpClient.close !== 'function') {
         nativeAegpClient = null;
@@ -144,6 +146,12 @@ function makeNativeAegpClient() {
         throw error;
     }
     return nativeAegpClient;
+}
+
+async function invalidateConnectedNativeProjectGraph(deadlineUnixMs) {
+    const client = nativeAegpClient;
+    if (!client || client.status()?.state !== 'connected') return;
+    await client.invalidateProjectGraph({ deadlineUnixMs });
 }
 
 function closeNativeAegpClient() {
@@ -782,6 +790,11 @@ function buildApp() {
 
         const startedAt = Date.now();
         try {
+            const invalidationDeadlineUnixMs = Math.min(
+                Number.MAX_SAFE_INTEGER,
+                startedAt + Math.min(Math.ceil(t), NATIVE_MAX_REQUEST_WINDOW_MS),
+            );
+            await invalidateConnectedNativeProjectGraph(invalidationDeadlineUnixMs);
             const encoded = await jsxBridge.evalScript(transported, t);
             const result = decodeEvalScriptTransportResult(encoded);
             activity.record({

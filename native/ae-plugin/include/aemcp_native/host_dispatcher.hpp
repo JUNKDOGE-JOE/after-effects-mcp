@@ -34,6 +34,11 @@ inline constexpr std::string_view kCompositionTimeReadCapability =
     "ae.composition.time.read";
 inline constexpr std::string_view kLayerPropertiesListCapability =
     "ae.layer.properties.list";
+// Authenticated broker control-plane operation. This is deliberately omitted
+// from model-facing capability discovery and can only fence native locator
+// cache state; it never changes the After Effects project.
+inline constexpr std::string_view kProjectGraphInvalidateControl =
+    "internal.project-graph.invalidate";
 inline constexpr std::size_t kNativePageValueBudgetBytes = 48U * 1024U;
 
 // Selects the logical effective AEGP name: a non-empty layer override, then a
@@ -102,6 +107,11 @@ struct ProjectBitDepthChanged {
   bool changed{true};
   std::int32_t before_bits_per_channel{0};
   std::int32_t after_bits_per_channel{0};
+};
+
+struct ProjectGraphInvalidation {
+  bool invalidated{false};
+  std::uint64_t generation{0};
 };
 
 struct ObjectLocator {
@@ -356,6 +366,18 @@ struct HostLayerPropertiesResult {
       std::string code, std::string detail, std::string field = {});
 };
 
+struct HostProjectGraphInvalidationResult {
+  bool ok{false};
+  ProjectGraphInvalidation value;
+  std::string error_code;
+  std::string message;
+
+  [[nodiscard]] static HostProjectGraphInvalidationResult success(
+      ProjectGraphInvalidation result);
+  [[nodiscard]] static HostProjectGraphInvalidationResult failure(
+      std::string code, std::string detail);
+};
+
 class HostApi {
  public:
   virtual ~HostApi() = default;
@@ -374,6 +396,8 @@ class HostApi {
       const CompositionTimeQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerPropertiesResult list_layer_properties(
       const LayerPropertiesQuery& query, TimePoint work_deadline);
+  [[nodiscard]] virtual HostProjectGraphInvalidationResult invalidate_project_graph(
+      TimePoint work_deadline);
 };
 
 struct Request {
@@ -476,6 +500,7 @@ struct Completion {
   CompositionLayersPage composition_selected_layers_result;
   CompositionTimeRead composition_time_result;
   LayerPropertiesPage layer_properties_result;
+  ProjectGraphInvalidation project_graph_invalidation_result;
   // Internal fence correlation only; never serialized or logged.
   std::string idempotency_key;
   std::string error_code;

@@ -34,6 +34,7 @@ using aemcp::native::HostCompositionTimeResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostIdleSignal;
 using aemcp::native::HostLayerPropertiesResult;
+using aemcp::native::HostProjectGraphInvalidationResult;
 using aemcp::native::HostReadResult;
 using aemcp::native::HostProjectItemsResult;
 using aemcp::native::NativeRpcConnectionHandler;
@@ -44,6 +45,7 @@ using aemcp::native::ProjectSummary;
 using aemcp::native::Request;
 using aemcp::native::TimePoint;
 using aemcp::native::kProjectBitDepthSetCapability;
+using aemcp::native::kProjectGraphInvalidateControl;
 using aemcp::native::kProjectSummaryCapability;
 using aemcp::native::rpc::SessionClock;
 
@@ -256,6 +258,13 @@ class FakeHost final : public HostApi {
     return HostLayerPropertiesResult::success(std::move(page));
   }
 
+  [[nodiscard]] HostProjectGraphInvalidationResult invalidate_project_graph(
+      TimePoint) override {
+    ++project_graph_invalidation_calls;
+    project_graph_invalidation_thread = std::this_thread::get_id();
+    return HostProjectGraphInvalidationResult::success({true, 9});
+  }
+
   [[nodiscard]] static aemcp::native::ObjectLocator locator(
       std::string kind,
       std::string object_id,
@@ -284,6 +293,8 @@ class FakeHost final : public HostApi {
   int composition_selected_layers_calls{0};
   int composition_time_calls{0};
   int layer_properties_calls{0};
+  int project_graph_invalidation_calls{0};
+  std::thread::id project_graph_invalidation_thread;
 };
 
 struct EventRecord {
@@ -494,6 +505,14 @@ std::string invoke_json(
       + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
         "\"params\":{\"capabilityId\":\"ae.project.summary\","
         "\"capabilityVersion\":1,\"arguments\":{}}}";
+}
+
+std::string invalidate_graph_json(
+    std::string_view request_id = "invalidate-graph-1") {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invalidateGraph\","
+        "\"params\":{\"reason\":\"cep-jsx\"}}";
 }
 
 std::string bit_depth_read_invoke_json(std::string_view request_id) {
@@ -1090,6 +1109,103 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   (void)dispatcher.shutdown();
 }
 
+void invalidate_graph_runs_only_on_owner_dispatcher_and_is_fenced() {
+  FakeDispatcherClock dispatcher_clock;
+  FakeSessionClock session_clock;
+  const std::thread::id owner_thread = std::this_thread::get_id();
+  HostDispatcher dispatcher(owner_thread, dispatcher_clock);
+  RecordingObserver observer;
+  RecordingIdleSignal idle_signal;
+  NativeRpcConnectionHandler handler(
+      dispatcher, dispatcher_clock, session_clock, runtime(), observer, idle_signal);
+  std::array<int, 2> sockets{};
+  require(::socketpair(AF_UNIX, SOCK_STREAM, 0, sockets.data()) == 0,
+      "invalidateGraph socketpair failed");
+  const AuthenticatedConnection authenticated =
+      connection(sockets[1], "route-invalidate", 11);
+  std::thread worker([&] { handler.serve(authenticated); });
+
+  send_json(sockets[0], hello_json());
+  require_contains(read_body(sockets[0]), "\"ok\":true", "invalidateGraph hello");
+
+  FakeHost host;
+  const std::string request = invalidate_graph_json();
+  send_json(sockets[0], request);
+  const std::string progress = read_body(sockets[0]);
+  require_contains(progress, "\"event\":\"progress\"", "invalidateGraph progress");
+  require_contains(progress, "\"phase\":\"queued\"", "invalidateGraph progress");
+  wait_until([&] { return dispatcher.queued() == 1; }, "queued invalidateGraph request");
+  wait_until([&] { return idle_signal.calls() == 1; }, "invalidateGraph idle wake");
+  require(host.project_graph_invalidation_calls == 0,
+      "invalidateGraph reached HostApi before dispatcher drain");
+  require(observer.has_event("invalidateGraph", "invalidate-graph-1", "queued")
+          && observer.has_event(
+              "dispatch.wake", "invalidate-graph-1", "scheduled"),
+      "invalidateGraph did not emit its queued and wake audit events");
+
+  bool wrong_thread = false;
+  std::size_t wrong_thread_completions = 0;
+  std::thread non_owner([&] {
+    const auto batch = dispatcher.drain(host);
+    wrong_thread = batch.wrong_thread;
+    wrong_thread_completions = batch.completions.size();
+  });
+  non_owner.join();
+  require(wrong_thread && wrong_thread_completions == 0
+          && host.project_graph_invalidation_calls == 0
+          && dispatcher.queued() == 1,
+      "non-owner dispatcher drain reached invalidateGraph HostApi");
+
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1
+          && batch.completions[0].ok
+          && batch.completions[0].capability_id == kProjectGraphInvalidateControl
+          && batch.completions[0].project_graph_invalidation_result.invalidated
+          && batch.completions[0].project_graph_invalidation_result.generation == 9,
+      "owner dispatcher did not produce the typed invalidateGraph completion");
+  require(host.project_graph_invalidation_calls == 1
+          && host.project_graph_invalidation_thread == owner_thread,
+      "invalidateGraph HostApi call did not run exactly once on the owner thread");
+
+  const std::string acknowledgement = read_body(sockets[0]);
+  require_contains(
+      acknowledgement, "\"method\":\"invalidateGraph\"", "invalidateGraph response");
+  require_contains(acknowledgement, "\"ok\":true", "invalidateGraph response");
+  require_contains(acknowledgement,
+      "\"result\":{\"generation\":9,\"invalidated\":true}",
+      "invalidateGraph response");
+  require(acknowledgement.find("\"capabilityId\"") == std::string::npos,
+      "invalidateGraph response exposed its internal dispatcher capability");
+
+  wait_until([&] {
+    return !observer.terminal("invalidate-graph-1").request_id.empty();
+  }, "invalidateGraph terminal audit");
+  const TerminalRecord terminal = observer.terminal("invalidate-graph-1");
+  require(terminal.ok
+          && terminal.request_digest
+              == "0be932440057b1f2509aee30f414f8fb45d6a637d3327c76cc75d9ca84222bd3"
+          && terminal.request_digest.size() == 64
+          && terminal.postcondition_digest.empty(),
+      "invalidateGraph terminal audit did not preserve its request-only evidence");
+
+  send_json(sockets[0], request);
+  const std::string duplicate = read_body(sockets[0]);
+  require_contains(
+      duplicate, "\"method\":\"invalidateGraph\"", "duplicate invalidateGraph");
+  require_contains(
+      duplicate, "\"code\":\"DUPLICATE_REQUEST\"", "duplicate invalidateGraph");
+  require_contains(duplicate,
+      "\"sideEffect\":\"not-started\"", "duplicate invalidateGraph");
+  require(host.project_graph_invalidation_calls == 1
+          && dispatcher.queued() == 0
+          && idle_signal.calls() == 1
+          && !wait_readable(sockets[0], 100ms),
+      "duplicate invalidateGraph reached HostApi or emitted extra work");
+
+  finish_connection(sockets[0], sockets[1], worker);
+  (void)dispatcher.shutdown();
+}
+
 void invalid_postcondition_becomes_structured_failure() {
   FakeDispatcherClock dispatcher_clock;
   FakeSessionClock session_clock;
@@ -1199,6 +1315,7 @@ void construction_failure_is_contained_by_noexcept_boundary() {
 
 int main() {
   hello_capabilities_invoke_cancel_and_fencing_work();
+  invalidate_graph_runs_only_on_owner_dispatcher_and_is_fenced();
   invalid_postcondition_becomes_structured_failure();
   construction_failure_is_contained_by_noexcept_boundary();
   std::cout << "native_rpc_connection_test: PASS\n";

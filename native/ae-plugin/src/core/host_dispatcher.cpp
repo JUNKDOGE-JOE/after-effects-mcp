@@ -250,6 +250,22 @@ HostLayerPropertiesResult HostLayerPropertiesResult::failure(
   return result;
 }
 
+HostProjectGraphInvalidationResult HostProjectGraphInvalidationResult::success(
+    ProjectGraphInvalidation value) {
+  HostProjectGraphInvalidationResult result;
+  result.ok = true;
+  result.value = value;
+  return result;
+}
+
+HostProjectGraphInvalidationResult HostProjectGraphInvalidationResult::failure(
+    std::string code, std::string detail) {
+  HostProjectGraphInvalidationResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  return result;
+}
+
 HostBitDepthReadResult HostApi::read_project_bit_depth(TimePoint) {
   return HostBitDepthReadResult::failure(
       "NATIVE_UNSUPPORTED", "project bit-depth reads are unavailable");
@@ -288,6 +304,11 @@ HostLayerPropertiesResult HostApi::list_layer_properties(
     const LayerPropertiesQuery&, TimePoint) {
   return HostLayerPropertiesResult::failure(
       "NATIVE_UNSUPPORTED", "layer property reads are unavailable");
+}
+
+HostProjectGraphInvalidationResult HostApi::invalidate_project_graph(TimePoint) {
+  return HostProjectGraphInvalidationResult::failure(
+      "NATIVE_UNSUPPORTED", "project graph invalidation is unavailable");
 }
 
 std::size_t HostDispatcher::RequestKeyHash::operator()(const RequestKey& key) const noexcept {
@@ -335,11 +356,28 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       request.capability_id == kCompositionTimeReadCapability;
   const bool layer_properties_list =
       request.capability_id == kLayerPropertiesListCapability;
+  const bool project_graph_invalidate =
+      request.capability_id == kProjectGraphInvalidateControl;
   if (!project_summary && !project_bit_depth_read && !project_bit_depth_set
       && !project_items_list && !composition_layers_list
       && !composition_selected_layers_list && !composition_time_read
-      && !layer_properties_list) {
+      && !layer_properties_list && !project_graph_invalidate) {
     return {EnqueueCode::kUnsupportedCapability, "NATIVE_UNSUPPORTED"};
+  }
+  if (project_graph_invalidate
+      && (request.target_depth != 0 || !request.idempotency_key.empty()
+          || !request.arguments_fingerprint_sha256.empty()
+          || !request.host_instance_id.empty() || !request.session_id.empty()
+          || request.offset != 0 || request.limit != 0
+          || request.project_locator.has_value()
+          || request.composition_locator.has_value()
+          || request.layer_locator.has_value()
+          || request.parent_property_locator.has_value())) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "project graph invalidation parameters are not closed",
+        "params"};
   }
   if ((project_summary || project_bit_depth_read)
       && (request.target_depth != 0 || !request.idempotency_key.empty()
@@ -691,7 +729,33 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
       completion = expired(request, false);
     } else {
       try {
-        if (request.capability_id == kProjectSummaryCapability) {
+        if (request.capability_id == kProjectGraphInvalidateControl) {
+          HostProjectGraphInvalidationResult host_result =
+              host.invalidate_project_graph(std::min(request.deadline, idle_deadline));
+          if (clock_.now() > request.deadline) {
+            completion = expired(request, true);
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty()
+                    ? "native graph invalidation failed" : host_result.message);
+          } else if (host_result.value.invalidated
+              ? host_result.value.generation < 1
+              : host_result.value.generation != 0) {
+            completion = failure_for(
+                request,
+                "CAPABILITY_FAILED",
+                "native graph invalidation result was inconsistent");
+          } else {
+            completion.request_id = request.request_id;
+            completion.capability_id = request.capability_id;
+            completion.route_id = request.route_id;
+            completion.session_generation = request.session_generation;
+            completion.ok = true;
+            completion.project_graph_invalidation_result = host_result.value;
+          }
+        } else if (request.capability_id == kProjectSummaryCapability) {
           HostReadResult host_result = host.read_project_summary(
               std::min(request.deadline, idle_deadline));
           if (clock_.now() > request.deadline) {

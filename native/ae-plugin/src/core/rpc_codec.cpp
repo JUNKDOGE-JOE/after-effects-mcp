@@ -453,6 +453,7 @@ std::string method_name(RpcMethod method) {
     case RpcMethod::kCapabilities: return "capabilities";
     case RpcMethod::kInvoke: return "invoke";
     case RpcMethod::kCancel: return "cancel";
+    case RpcMethod::kInvalidateGraph: return "invalidateGraph";
   }
   invalid_argument("unknown RPC method");
 }
@@ -625,6 +626,14 @@ std::string canonical_request(const ParsedRequest& request) {
       params = "{\"targetRequestId\":" + json_string(value.target_request_id) + "}";
       break;
     }
+    case RpcMethod::kInvalidateGraph: {
+      const auto& value = std::get<InvalidateGraphParams>(request.params);
+      if (value.reason != InvalidateGraphParams::Reason::kCepJsx) {
+        invalid_argument("unknown project graph invalidation reason");
+      }
+      params = "{\"reason\":\"cep-jsx\"}";
+      break;
+    }
   }
   std::vector<std::string> members;
   if (request.deadline_unix_ms.has_value()) {
@@ -732,6 +741,7 @@ ParsedRequest classify_request(const JsonValue& root) {
   else if (method == "capabilities") request.method = RpcMethod::kCapabilities;
   else if (method == "invoke") request.method = RpcMethod::kInvoke;
   else if (method == "cancel") request.method = RpcMethod::kCancel;
+  else if (method == "invalidateGraph") request.method = RpcMethod::kInvalidateGraph;
   else invalid_request("unknown RPC method");
 
   if (const JsonValue* value = member(*envelope, "deadlineUnixMs")) {
@@ -929,7 +939,7 @@ ParsedRequest classify_request(const JsonValue& root) {
         invalid_argument("invoke is not in the compile-time allowlist");
       }
       request.params = std::move(result);
-    } else {
+    } else if (request.method == RpcMethod::kCancel) {
       if (!exact_keys(*params, {"targetRequestId"}, {"targetRequestId"})) {
         invalid_argument("invalid cancel params");
       }
@@ -938,6 +948,13 @@ ParsedRequest classify_request(const JsonValue& root) {
           *params, "targetRequestId", CodecErrorKind::kInvalidArgument);
       if (!valid_request_id(result.target_request_id)) invalid_argument("invalid cancel target ID");
       request.params = std::move(result);
+    } else {
+      if (!exact_keys(*params, {"reason"}, {"reason"})
+          || required_string(*params, "reason", CodecErrorKind::kInvalidArgument)
+              != "cep-jsx") {
+        invalid_argument("invalid project graph invalidation params");
+      }
+      request.params = InvalidateGraphParams{};
     }
   }
   request.request_fingerprint_sha256 = sha256_hex(canonical_request(request));
@@ -1631,7 +1648,9 @@ SessionIngressResult RpcSessionFrontDoor::admit(const ParsedRequest& request) {
       || (request.method == RpcMethod::kInvoke
         && std::holds_alternative<InvokeParams>(request.params))
       || (request.method == RpcMethod::kCancel
-        && std::holds_alternative<CancelParams>(request.params));
+        && std::holds_alternative<CancelParams>(request.params))
+      || (request.method == RpcMethod::kInvalidateGraph
+        && std::holds_alternative<InvalidateGraphParams>(request.params));
   if (!params_match) {
     return {SessionIngressCode::kInvalidRequest, "INVALID_REQUEST", std::nullopt, false};
   }
@@ -2599,6 +2618,24 @@ std::vector<std::uint8_t> encode_cancel_success(const CancelSuccess& response) {
       + (response.terminal_response_expected ? "true" : "false")
       + "},\"sessionId\":" + json_string(response.session_id)
       + ",\"wireVersion\":1}";
+  return frame_output(std::move(json));
+}
+
+std::vector<std::uint8_t> encode_project_graph_invalidate_success(
+    const ProjectGraphInvalidateSuccess& response) {
+  require_request_id(response.request_id);
+  require_uuid(response.session_id, "session ID");
+  if (response.invalidated
+      ? response.generation < 1 || response.generation > kMaxSafeInteger
+      : response.generation != 0) {
+    invalid_argument("invalid project graph invalidation result");
+  }
+  std::string json = "{\"kind\":\"response\",\"method\":\"invalidateGraph\","
+      "\"ok\":true,\"replayed\":false,\"requestId\":"
+      + json_string(response.request_id) + ",\"result\":{\"generation\":"
+      + std::to_string(response.generation) + ",\"invalidated\":"
+      + (response.invalidated ? "true" : "false") + "},\"sessionId\":"
+      + json_string(response.session_id) + ",\"wireVersion\":1}";
   return frame_output(std::move(json));
 }
 

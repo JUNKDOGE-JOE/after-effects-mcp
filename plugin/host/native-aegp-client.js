@@ -1725,6 +1725,33 @@ function createNativeAegpClient(options) {
         return result;
     }
 
+    async function invalidateProjectGraph(options) {
+        const call = options || {};
+        if (!exactKeys(call, ['deadlineUnixMs'])
+            || !Number.isSafeInteger(call.deadlineUnixMs) || call.deadlineUnixMs <= 0) {
+            throw nativeError(
+                'INVALID_ARGUMENT',
+                'native project graph invalidation request is invalid',
+                false,
+            );
+        }
+        if (state !== 'connected') await waitUntilConnected(call.deadlineUnixMs);
+        const result = await send(
+            'invalidateGraph',
+            { reason: 'cep-jsx' },
+            { deadlineUnixMs: call.deadlineUnixMs },
+        );
+        if (!exactKeys(result, ['generation', 'invalidated'])
+            || !Number.isSafeInteger(result.generation) || result.generation < 0
+            || typeof result.invalidated !== 'boolean'
+            || (result.invalidated ? result.generation < 1 : result.generation !== 0)) {
+            throw nativeContractMismatch(
+                'native project graph invalidation result was malformed',
+            );
+        }
+        return result;
+    }
+
     async function projectSummary() {
         return invoke({
             requestId: 'invoke-' + String(nextRequest++) + '-' + randomBytes(4).toString('hex'),
@@ -1748,6 +1775,7 @@ function createNativeAegpClient(options) {
         negotiate,
         capabilities,
         invoke,
+        invalidateProjectGraph,
         projectSummary,
         close,
         status: function () {

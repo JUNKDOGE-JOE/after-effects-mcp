@@ -28,7 +28,8 @@
     "defaultTerminalCacheEntries": 128,
     "defaultTerminalCacheTtlMs": 60000,
     "terminalObservationClockToleranceMs": 0,
-    "cancelDecision": "atomic-one-use-controller-receipt"
+    "cancelDecision": "atomic-one-use-controller-receipt",
+    "graphInvalidation": "authenticated-internal-cep-jsx-boundary"
   },
   "x-digests": {
     "algorithm": "sha256",
@@ -92,7 +93,7 @@
       "enum": ["macos-arm64", "windows-x64"]
     },
     "method": {
-      "enum": ["hello", "capabilities", "invoke", "cancel"]
+      "enum": ["hello", "capabilities", "invoke", "invalidateGraph", "cancel"]
     },
     "wireRange": {
       "type": "object",
@@ -1001,6 +1002,14 @@
         "targetRequestId": { "$ref": "#/$defs/requestId" }
       }
     },
+    "invalidateGraphParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason"],
+      "properties": {
+        "reason": { "const": "cep-jsx" }
+      }
+    },
     "requestBase": {
       "type": "object",
       "additionalProperties": false,
@@ -1057,6 +1066,19 @@
         }
       ]
     },
+    "invalidateGraphRequest": {
+      "allOf": [
+        { "$ref": "#/$defs/requestBase" },
+        {
+          "type": "object",
+          "required": ["sessionId"],
+          "properties": {
+            "method": { "const": "invalidateGraph" },
+            "params": { "$ref": "#/$defs/invalidateGraphParams" }
+          }
+        }
+      ]
+    },
     "cancelRequest": {
       "allOf": [
         { "$ref": "#/$defs/requestBase" },
@@ -1075,6 +1097,7 @@
         { "$ref": "#/$defs/helloRequest" },
         { "$ref": "#/$defs/capabilitiesRequest" },
         { "$ref": "#/$defs/invokeRequest" },
+        { "$ref": "#/$defs/invalidateGraphRequest" },
         { "$ref": "#/$defs/cancelRequest" }
       ]
     },
@@ -1907,6 +1930,16 @@
         "terminalResponseExpected": { "type": "boolean" }
       }
     },
+    "invalidateGraphResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generation", "invalidated"],
+      "properties": {
+        "generation": { "$ref": "#/$defs/safeNonnegativeInteger" },
+        "invalidated": { "type": "boolean" }
+      },
+      "x-invariant": "invalidated-implies-positive-generation;not-invalidated-implies-zero-generation"
+    },
     "errorCode": {
       "enum": [
         "NATIVE_UNAVAILABLE",
@@ -2196,6 +2229,21 @@
         "result": { "$ref": "#/$defs/cancelResult" }
       }
     },
+    "invalidateGraphSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wireVersion", "kind", "sessionId", "requestId", "method", "ok", "replayed", "result"],
+      "properties": {
+        "wireVersion": { "$ref": "#/$defs/wireVersion" },
+        "kind": { "const": "response" },
+        "sessionId": { "$ref": "#/$defs/uuid" },
+        "requestId": { "$ref": "#/$defs/requestId" },
+        "method": { "const": "invalidateGraph" },
+        "ok": { "const": true },
+        "replayed": { "const": false },
+        "result": { "$ref": "#/$defs/invalidateGraphResult" }
+      }
+    },
     "failureBase": {
       "type": "object",
       "additionalProperties": false,
@@ -2237,7 +2285,7 @@
           "type": "object",
           "required": ["sessionId"],
           "properties": {
-            "method": { "enum": ["capabilities", "invoke", "cancel"] },
+            "method": { "enum": ["capabilities", "invoke", "invalidateGraph", "cancel"] },
             "error": {
               "properties": {
                 "code": { "not": { "const": "WIRE_VERSION_MISMATCH" } }
@@ -2252,6 +2300,7 @@
         { "$ref": "#/$defs/helloSuccess" },
         { "$ref": "#/$defs/capabilitiesSuccess" },
         { "$ref": "#/$defs/invokeSuccess" },
+        { "$ref": "#/$defs/invalidateGraphSuccess" },
         { "$ref": "#/$defs/cancelSuccess" },
         { "$ref": "#/$defs/helloFailure" },
         { "$ref": "#/$defs/sessionFailure" }

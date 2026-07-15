@@ -189,6 +189,22 @@ async function startNativeApp(nativeClient) {
     return { server, srv, port: srv.address().port };
 }
 
+async function startExecAppWithNative(nativeClient, evalScript) {
+    delete require.cache[require.resolve('./server')];
+    delete require.cache[require.resolve('./jsx-bridge')];
+    const server = bindRuntimeDependencies(require('./server'));
+    server.activity._reset();
+    server.setPaused(false);
+    server._setExecToken('known-secret-token');
+    server.setCSInterface({ evalScript });
+    server._setNativeAegpClientForTest(nativeClient);
+    const app = server.buildApp();
+    const srv = await new Promise((resolve) => {
+        const instance = app.listen(0, '127.0.0.1', () => resolve(instance));
+    });
+    return { server, srv, port: srv.address().port };
+}
+
 function fakeNativeClient() {
     let state = 'disconnected';
     let closed = 0;
@@ -293,6 +309,10 @@ function fakeNativeClient() {
                 },
                 value: { projectOpen: true, projectName: 'Fixture.aep', itemCount: 2 },
             };
+        },
+        invalidateProjectGraph: async function (options) {
+            calls.push(['invalidateProjectGraph', options]);
+            return { generation: 8, invalidated: true };
         },
         status: function () {
             return {
@@ -877,6 +897,106 @@ test('/exec returns 200 with the correct token', async () => {
         assert.strictEqual(r.body.result, 'stub-result');
     } finally {
         srv.close();
+    }
+});
+
+test('/exec awaits connected native project-graph invalidation before evalScript', async () => {
+    const events = [];
+    let invalidationOptions;
+    const nativeClient = {
+        status: function () { return { state: 'connected' }; },
+        invalidateProjectGraph: async function (options) {
+            invalidationOptions = options;
+            events.push('invalidate:start');
+            await Promise.resolve();
+            events.push('invalidate:ack');
+            return { generation: 8, invalidated: true };
+        },
+        close: async function () {},
+    };
+    const running = await startExecAppWithNative(nativeClient, function (_jsx, cb) {
+        events.push('evalScript');
+        cb('{"ok":true,"result":"stub-result"}');
+    });
+    try {
+        const response = await post(
+            running.port,
+            '/exec',
+            { 'X-AE-MCP-Token': 'known-secret-token' },
+            { code: '1', timeoutMs: 60000 },
+        );
+        assert.equal(response.status, 200);
+        assert.equal(response.body.ok, true);
+        assert.deepEqual(events, ['invalidate:start', 'invalidate:ack', 'evalScript']);
+        assert.deepEqual(Object.keys(invalidationOptions), ['deadlineUnixMs']);
+        assert.equal(Number.isSafeInteger(invalidationOptions.deadlineUnixMs), true);
+        assert.equal(invalidationOptions.deadlineUnixMs > 0, true);
+        assert.equal(invalidationOptions.deadlineUnixMs > Date.now(), true);
+        assert.equal(invalidationOptions.deadlineUnixMs <= Date.now() + 30000, true);
+    } finally {
+        running.srv.close();
+        running.server._setNativeAegpClientForTest(null);
+    }
+});
+
+test('/exec fails closed before evalScript when connected native invalidation fails', async () => {
+    let evalCalls = 0;
+    const nativeClient = {
+        status: function () { return { state: 'connected' }; },
+        invalidateProjectGraph: async function () {
+            const error = new Error('native graph fence failed');
+            error.code = 'NATIVE_UNAVAILABLE';
+            throw error;
+        },
+        close: async function () {},
+    };
+    const running = await startExecAppWithNative(nativeClient, function (_jsx, cb) {
+        evalCalls += 1;
+        cb('{"ok":true,"result":"must-not-run"}');
+    });
+    try {
+        const response = await post(
+            running.port,
+            '/exec',
+            { 'X-AE-MCP-Token': 'known-secret-token' },
+            { code: 'app.project.close();' },
+        );
+        assert.equal(response.status, 200);
+        assert.equal(response.body.ok, false);
+        assert.match(response.body.error, /native graph fence failed/);
+        assert.equal(evalCalls, 0);
+    } finally {
+        running.srv.close();
+        running.server._setNativeAegpClientForTest(null);
+    }
+});
+
+test('/exec keeps legacy evalScript behavior when the existing native client is disconnected', async () => {
+    let invalidationCalls = 0;
+    let evalCalls = 0;
+    const nativeClient = {
+        status: function () { return { state: 'disconnected' }; },
+        invalidateProjectGraph: async function () { invalidationCalls += 1; },
+        close: async function () {},
+    };
+    const running = await startExecAppWithNative(nativeClient, function (_jsx, cb) {
+        evalCalls += 1;
+        cb('{"ok":true,"result":"legacy-result"}');
+    });
+    try {
+        const response = await post(
+            running.port,
+            '/exec',
+            { 'X-AE-MCP-Token': 'known-secret-token' },
+            { code: '1' },
+        );
+        assert.equal(response.status, 200);
+        assert.deepEqual(response.body, { ok: true, result: 'legacy-result' });
+        assert.equal(invalidationCalls, 0);
+        assert.equal(evalCalls, 1);
+    } finally {
+        running.srv.close();
+        running.server._setNativeAegpClientForTest(null);
     }
 });
 

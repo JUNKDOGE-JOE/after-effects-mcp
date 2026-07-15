@@ -31,12 +31,14 @@ using aemcp::native::rpc::ErrorResponse;
 using aemcp::native::rpc::FrameDecoder;
 using aemcp::native::rpc::HelloParams;
 using aemcp::native::rpc::HelloSuccess;
+using aemcp::native::rpc::InvalidateGraphParams;
 using aemcp::native::rpc::InvokeParams;
 using aemcp::native::rpc::ParsedRequest;
 using aemcp::native::rpc::ProgressEvent;
 using aemcp::native::rpc::ProgressPhase;
 using aemcp::native::rpc::ProjectBitDepthReadSuccess;
 using aemcp::native::rpc::ProjectBitDepthSetSuccess;
+using aemcp::native::rpc::ProjectGraphInvalidateSuccess;
 using aemcp::native::rpc::ProjectItemsSuccess;
 using aemcp::native::rpc::ProjectSummarySuccess;
 using aemcp::native::rpc::RpcErrorCode;
@@ -63,6 +65,7 @@ using aemcp::native::rpc::encode_hello_success;
 using aemcp::native::rpc::encode_progress_event;
 using aemcp::native::rpc::encode_project_bit_depth_read_success;
 using aemcp::native::rpc::encode_project_bit_depth_set_success;
+using aemcp::native::rpc::encode_project_graph_invalidate_success;
 using aemcp::native::rpc::encode_project_summary_success;
 using aemcp::native::rpc::encode_composition_layers_success;
 using aemcp::native::rpc::encode_composition_selected_layers_success;
@@ -162,6 +165,14 @@ std::string invoke_json(
       + "\",\"method\":\"invoke\",\"deadlineUnixMs\":" + std::to_string(deadline)
       + ",\"params\":{\"capabilityId\":\"ae.project.summary\","
         "\"capabilityVersion\":1,\"arguments\":" + std::string(arguments) + "}}";
+}
+
+std::string invalidate_graph_json(
+    std::string_view request_id = "invalidate-graph-1",
+    std::string_view params = "{\"reason\":\"cep-jsx\"}") {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invalidateGraph\",\"params\":" + std::string(params) + "}";
 }
 
 std::string bit_depth_read_invoke_json(
@@ -409,6 +420,88 @@ void project_bit_depth_invokes_are_closed_and_explicitly_mapped() {
     (void)decode_request_frame(frame(bit_depth_set_invoke_json(
         "bit-depth-extra", "16", "bit-depth-intent-005", ",\"jsx\":\"x\"")));
   }, "INVALID_ARGUMENT", "unknown project bit-depth argument");
+}
+
+void invalidate_graph_requests_and_results_are_closed_and_deterministic() {
+  const std::string golden = invalidate_graph_json();
+  const ParsedRequest parsed = decode_request_frame(frame(golden));
+  require(parsed.method == RpcMethod::kInvalidateGraph
+          && parsed.session_id == kSession
+          && !parsed.deadline_unix_ms.has_value()
+          && std::holds_alternative<InvalidateGraphParams>(parsed.params)
+          && std::get<InvalidateGraphParams>(parsed.params).reason
+              == InvalidateGraphParams::Reason::kCepJsx,
+      "invalidateGraph request did not preserve its typed method and closed params");
+  require(parsed.request_fingerprint_sha256
+          == "0be932440057b1f2509aee30f414f8fb45d6a637d3327c76cc75d9ca84222bd3",
+      "invalidateGraph RFC 8785 request digest diverged from its fixture");
+  require(decode_request_frame(frame(" \n" + golden + "\t"))
+              .request_fingerprint_sha256 == parsed.request_fingerprint_sha256,
+      "invalidateGraph request digest changed across insignificant whitespace");
+
+  const std::string missing_params = "{\"wireVersion\":1,\"kind\":\"request\","
+      "\"sessionId\":\"" + std::string(kSession)
+      + "\",\"requestId\":\"invalidate-missing-params\","
+        "\"method\":\"invalidateGraph\"}";
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(missing_params));
+  }, "INVALID_REQUEST", "invalidateGraph missing params object");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(invalidate_graph_json("invalidate-missing-reason", "{}")));
+  }, "INVALID_ARGUMENT", "invalidateGraph missing reason");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(invalidate_graph_json(
+        "invalidate-wrong-type", "{\"reason\":true}")));
+  }, "INVALID_ARGUMENT", "invalidateGraph non-string reason");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(invalidate_graph_json(
+        "invalidate-wrong-reason", "{\"reason\":\"script\"}")));
+  }, "INVALID_ARGUMENT", "invalidateGraph unknown reason");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(invalidate_graph_json(
+        "invalidate-extra", "{\"reason\":\"cep-jsx\",\"extra\":true}")));
+  }, "INVALID_ARGUMENT", "invalidateGraph extra param");
+
+  std::string wrong_method = golden;
+  wrong_method.replace(
+      wrong_method.find("invalidateGraph"), std::string_view("invalidateGraph").size(),
+      "invalidategraph");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(wrong_method));
+  }, "INVALID_REQUEST", "invalidateGraph method case drift");
+
+  ProjectGraphInvalidateSuccess success{
+      "invalidate-graph-1", std::string(kSession), true, 9};
+  const std::string success_body = body(
+      encode_project_graph_invalidate_success(success));
+  require(success_body.find("\"method\":\"invalidateGraph\"") != std::string::npos
+          && success_body.find("\"replayed\":false") != std::string::npos
+          && success_body.find(
+              "\"result\":{\"generation\":9,\"invalidated\":true}")
+              != std::string::npos,
+      "invalidateGraph success encoder omitted its typed acknowledgement");
+
+  success.generation = 0;
+  expect_argument_error([&] {
+    (void)encode_project_graph_invalidate_success(success);
+  }, "invalidateGraph true result with generation zero");
+  success.generation = aemcp::native::rpc::kMaxSafeInteger + 1;
+  expect_argument_error([&] {
+    (void)encode_project_graph_invalidate_success(success);
+  }, "invalidateGraph true result with unsafe generation");
+
+  success.invalidated = false;
+  success.generation = 0;
+  const std::string no_project_body = body(
+      encode_project_graph_invalidate_success(success));
+  require(no_project_body.find(
+              "\"result\":{\"generation\":0,\"invalidated\":false}")
+              != std::string::npos,
+      "invalidateGraph no-project acknowledgement changed its zero-generation invariant");
+  success.generation = 1;
+  expect_argument_error([&] {
+    (void)encode_project_graph_invalidate_success(success);
+  }, "invalidateGraph false result with nonzero generation");
 }
 
 void project_graph_invokes_and_results_are_closed_and_deterministic() {
@@ -1312,6 +1405,7 @@ void fixed_seed_mutation_fuzz_is_bounded() {
 int main() {
   golden_requests_are_typed_and_closed();
   project_bit_depth_invokes_are_closed_and_explicitly_mapped();
+  invalidate_graph_requests_and_results_are_closed_and_deterministic();
   project_graph_invokes_and_results_are_closed_and_deterministic();
   framing_fragmentation_and_multiple_frames_work();
   strict_json_and_frame_limits_fail_closed();

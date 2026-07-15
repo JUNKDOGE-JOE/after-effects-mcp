@@ -66,6 +66,7 @@ using aemcp::native::HostCompositionTimeResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostReadResult;
 using aemcp::native::HostProjectItemsResult;
+using aemcp::native::HostProjectGraphInvalidationResult;
 using aemcp::native::HostLayerPropertiesResult;
 using aemcp::native::MacEndpointRegistry;
 using aemcp::native::MacIpcServer;
@@ -93,6 +94,7 @@ using aemcp::native::kCompositionSelectedLayersListCapability;
 using aemcp::native::kCompositionTimeReadCapability;
 using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kLayerPropertiesListCapability;
+using aemcp::native::kProjectGraphInvalidateControl;
 
 constexpr std::string_view kPluginVersion = AE_MCP_PRODUCT_VERSION;
 constexpr std::string_view kSdkVersion = "25.6.61";
@@ -513,6 +515,20 @@ class ProjectGraphRegistry final {
     clear_objects();
   }
 
+  [[nodiscard]] bool invalidate_project() {
+    if (!epoch_.present()) return false;
+
+    // Prepare every potentially-throwing value before advancing the epoch so
+    // callers never observe a new generation with the old locator registry.
+    std::string next_project_id = aemcp::native::secure_uuid_v4();
+    std::string next_project_object_id = aemcp::native::secure_uuid_v4();
+    if (!epoch_.invalidate()) return false;
+    project_id_ = std::move(next_project_id);
+    project_object_id_ = std::move(next_project_object_id);
+    clear_objects();
+    return true;
+  }
+
   void observe_project(
       std::uintptr_t identity,
       std::uintptr_t root_item_identity,
@@ -637,6 +653,10 @@ class ProjectGraphRegistry final {
         && locator.session_id == session && locator.project_id == project_id_
         && locator.generation == epoch_.generation()
         && locator.object_id == project_object_id_;
+  }
+
+  [[nodiscard]] std::uint64_t generation() const noexcept {
+    return epoch_.generation();
   }
 
   [[nodiscard]] std::optional<A_long> resolve_composition(
@@ -850,6 +870,24 @@ class AegpHostApi final : public HostApi {
   AegpHostApi(
       SPBasicSuite* basic, AEGP_PluginID plugin_id, ProjectGraphRegistry& graph)
       : basic_(basic), plugin_id_(plugin_id), graph_(graph) {}
+
+  [[nodiscard]] HostProjectGraphInvalidationResult invalidate_project_graph(
+      TimePoint work_deadline) override {
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostProjectGraphInvalidationResult::failure(
+          "DEADLINE_EXCEEDED", "project graph invalidation budget elapsed");
+    }
+    try {
+      const bool invalidated = graph_.invalidate_project();
+      return HostProjectGraphInvalidationResult::success({
+          invalidated,
+          invalidated ? graph_.generation() : 0,
+      });
+    } catch (...) {
+      return HostProjectGraphInvalidationResult::failure(
+          "NATIVE_UNAVAILABLE", "could not invalidate the native project graph");
+    }
+  }
 
   [[nodiscard]] HostReadResult read_project_summary(TimePoint work_deadline) override {
     const auto budget_expired = [work_deadline] {
@@ -2597,7 +2635,13 @@ void log_completion(
            << ",\"completedAtUnixMs\":" << completed_at_unix_ms;
   }
   if (completion.ok) {
-    if (completion.capability_id == kProjectBitDepthSetCapability) {
+    if (completion.capability_id == kProjectGraphInvalidateControl) {
+      output << ",\"result\":{\"invalidated\":"
+             << (completion.project_graph_invalidation_result.invalidated
+                    ? "true" : "false")
+             << ",\"generation\":"
+             << completion.project_graph_invalidation_result.generation;
+    } else if (completion.capability_id == kProjectBitDepthSetCapability) {
       output << ",\"result\":{\"changed\":"
              << (completion.bit_depth_change_result.changed ? "true" : "false")
              << ",\"beforeBitsPerChannel\":"
@@ -2789,9 +2833,18 @@ A_Err command_hook(
     A_Boolean* handled) noexcept {
   try {
     auto* state = reinterpret_cast<PluginState*>(global_refcon);
-    if (state == nullptr || handled == nullptr || command != state->pairing_command) {
+    if (state == nullptr) return A_Err_GENERIC;
+    if (command != state->pairing_command) {
+      const bool invalidated = state->project_graph.invalidate_project();
+      state->log.append(event_prefix(*state, "project.command-invalidation")
+          + ",\"command\":" + std::to_string(command)
+          + ",\"phase\":\"before-ae\",\"invalidated\":"
+          + (invalidated ? "true" : "false")
+          + ",\"generation\":"
+          + std::to_string(state->project_graph.generation()) + "}");
       return A_Err_NONE;
     }
+    if (handled == nullptr) return A_Err_GENERIC;
     *handled = TRUE;
     const auto pending = state->ipc_server
         ? state->ipc_server->pending_pairing() : std::nullopt;

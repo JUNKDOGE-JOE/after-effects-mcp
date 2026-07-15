@@ -242,6 +242,11 @@ function installProtocol(server, options) {
                         nextCursor: null,
                         items: CAPABILITIES_VECTOR.items,
                     };
+                } else if (request.method === 'invalidateGraph') {
+                    result = input.invalidateResult || {
+                        generation: 8,
+                        invalidated: true,
+                    };
                 } else if (request.params.capabilityId === 'ae.project.items.list'
                     || request.params.capabilityId === 'ae.composition.layers.list'
                     || request.params.capabilityId === 'ae.composition.selected-layers.list'
@@ -355,7 +360,10 @@ function installProtocol(server, options) {
                     if (input.mutateInvoke) input.mutateInvoke(result, request);
                 }
                 if (input.suppressHello && request.method === 'hello') continue;
-                const responseError = request.method === 'invoke' ? input.invokeError : null;
+                const responseError = request.method === 'invoke'
+                    ? input.invokeError
+                    : request.method === 'invalidateGraph'
+                        ? input.invalidateError : null;
                 socket.write(frame({
                     wireVersion: 1,
                     kind: 'response',
@@ -437,6 +445,56 @@ test('discovery accepts only a private descriptor and socket owned by this user'
 
     fs.chmodSync(path.join(fixture.root, 'aemcp-n1', 'd-' + HOST + '.endpoint'), 0o644);
     assert.deepEqual(discoverNativeEndpoints({ runtimeRoot: fixture.root }), []);
+});
+
+test('CEP client sends the closed internal project-graph invalidation contract', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const ready = await readyNativeClient(t);
+    const result = await ready.client.invalidateProjectGraph({
+        deadlineUnixMs: 1900000002000,
+    });
+
+    assert.deepEqual(result, { generation: 8, invalidated: true });
+    const request = ready.protocol.requests.at(-1);
+    assert.equal(request.method, 'invalidateGraph');
+    assert.deepEqual(request.params, { reason: 'cep-jsx' });
+    assert.equal(request.sessionId, SESSION);
+    assert.equal(request.deadlineUnixMs, 1900000002000);
+    assert.deepEqual(Object.keys(request).sort(), [
+        'deadlineUnixMs', 'kind', 'method', 'params', 'requestId', 'sessionId', 'wireVersion',
+    ]);
+});
+
+test('CEP client rejects an open project-graph invalidation result', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const ready = await readyNativeClient(t, {
+        invalidateResult: { generation: 8, invalidated: true, extra: 'open-contract' },
+    });
+
+    await assert.rejects(
+        ready.client.invalidateProjectGraph({ deadlineUnixMs: 1900000002000 }),
+        (error) => error?.code === 'NATIVE_CONTRACT_MISMATCH'
+            && /invalidation result was malformed/.test(error.message),
+    );
+});
+
+test('CEP client rejects inconsistent project-graph invalidation evidence', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    for (const invalidateResult of [
+        { generation: 0, invalidated: true },
+        { generation: 8, invalidated: false },
+    ]) {
+        const ready = await readyNativeClient(t, { invalidateResult });
+        await assert.rejects(
+            ready.client.invalidateProjectGraph({ deadlineUnixMs: 1900000002000 }),
+            (error) => error?.code === 'NATIVE_CONTRACT_MISMATCH'
+                && /invalidation result was malformed/.test(error.message),
+        );
+        await ready.client.close();
+    }
 });
 
 test('CEP client verifies native project summary and bit-depth read/write capabilities', {

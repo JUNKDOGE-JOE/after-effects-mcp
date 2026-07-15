@@ -57,7 +57,7 @@ Adobe approval or completed host validation.
    SDK identity, actual AE host identity, instance/session IDs, limits, and a
    capability digest. No overlap returns `WIRE_VERSION_MISMATCH`.
 3. The broker requests compact capability summaries by default. It can request
-   full, bounded contracts for selected IDs. Version 1 has five compile-time
+   full, bounded contracts for selected IDs. Version 1 has eight compile-time
    capabilities. Capability discovery deliberately does not support pagination:
    `cursor` is rejected and `nextCursor` must be null. If the effective limit is smaller than the
    number of matching descriptors, the plug-in fails closed instead of returning
@@ -76,9 +76,29 @@ Adobe approval or completed host validation.
    bounded schemas; a generic argument bag or field-name blacklist is never a
    security boundary. Arbitrary C++, JSX, shell text, command lines, pointers,
    native handles, and unknown nested data are rejected before dispatch.
-5. Zero or more ordered `progress` events may precede exactly one terminal
+5. `invalidateGraph` is an authenticated, internal lifecycle method used when the
+   trusted CEP host already has a connected native session and is about to start
+   accepted `/exec` JSX. The acknowledgment is a main-thread fence: in that
+   connected state, JSX is not evaluated unless the complete old locator namespace
+   has already been invalidated. This deliberately invalidates locators even when
+   the JSX later makes no project change or fails. With no native client, or after
+   that client disconnects, `/exec` keeps its legacy behavior; no native namespace
+   exists yet in the former case, while reconnecting establishes a new session that
+   makes locators from the disconnected session stale in the latter.
+   Its request params are exactly
+   `{ "reason": "cep-jsx" }`. The plug-in atomically invalidates the complete
+   project/item/composition/layer/stream locator namespace and returns exactly
+   `{ "generation": <safe nonnegative integer>, "invalidated": <boolean> }`.
+   When `invalidated` is true, `generation` is the resulting positive monotonic
+   graph generation. When no locator namespace was active, `invalidated` is
+   false and `generation` is the zero sentinel. The response is
+   bound to the authenticated session and request ID and is never replayed.
+   This method is not a capability descriptor, is never returned by
+   `capabilities`, and is not a model-facing or public MCP tool. No other reason
+   value or additional field is accepted.
+6. Zero or more ordered `progress` events may precede exactly one terminal
    response. Results include `engine=native-aegp` and machine-verifiable evidence.
-6. `cancel` is explicit. A timeout never implies that a dispatched mutation
+7. `cancel` is explicit. A timeout never implies that a dispatched mutation
    stopped, and an ambiguous mutation failure is never retried through JSX.
 
 Request IDs are unique per session. An in-flight or content-mismatched duplicate
@@ -154,6 +174,33 @@ Project objects use server-issued UUID locators bound to host instance, native
 session, project, and generation. A locator never contains or encodes an AEGP
 handle, pointer, address, or process-local object. Any host/session/project or
 generation mismatch returns `STALE_LOCATOR` before suite dispatch.
+An accepted `invalidateGraph` lifecycle boundary makes every previously issued
+locator stale as one atomic namespace transition; callers must rediscover fresh
+locators before the next graph operation.
+
+The lifecycle coverage is deliberately conservative because the fixed-SDK audit
+found neither an immutable project-instance identifier nor a documented project
+open/close notification:
+
+- Before After Effects handles a menu command, the registered
+  `AEGP_HP_BeforeAE` / `AEGP_Command_ALL` hook invalidates the active namespace.
+  This covers manual close, open, reopen, Undo, and Redo commands, while accepting
+  harmless false-positive invalidation for commands that do not replace a project.
+- When the trusted CEP `/exec` bridge has a connected native session, it waits for
+  an authenticated `invalidateGraph` main-thread acknowledgment before evaluating
+  JSX. If that connected-session fence fails, the JSX is not started. This covers
+  an atomic close-and-same-path-reopen carried by one bridge call, even if no graph
+  request observes the empty interval. An absent client has issued no native
+  namespace, and locators from a disconnected client are fenced by the new session
+  established on reconnect.
+- A native host/session restart continues to invalidate all locators through the
+  existing host and session binding.
+
+Scripts or plug-ins that mutate project lifecycle outside both the registered AE
+command path and the authenticated CEP `/exec` path are not claimed as covered.
+They must integrate an equivalent invalidation boundary before exposing native
+graph reads. Handle, root-item ID, and path equality alone are explicitly not
+treated as project-instance proof.
 
 ## Error and recovery contract
 

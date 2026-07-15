@@ -183,20 +183,29 @@ void project_epoch_fences_reused_aegp_handles() {
   require(!tracker.observe(saved) && tracker.generation() == 1,
       "an unchanged project observation rotated its generation");
 
+  require(tracker.present() && tracker.invalidate() && tracker.generation() == 2,
+      "a command invalidation did not rotate the active project generation");
+  require(!tracker.observe(saved) && tracker.generation() == 2,
+      "command invalidation discarded the current project observation");
+  require(tracker.invalidate() && tracker.generation() == 3,
+      "a second command invalidation did not remain monotonic");
+
   const ProjectObservation empty{
       saved.project_identity, saved.root_item_identity, saved.root_item_id, {}};
-  require(tracker.observe(empty) && tracker.generation() == 2,
+  require(tracker.observe(empty) && tracker.generation() == 4,
       "saved-to-empty project path transition was hidden by reused AEGP handles");
-  require(tracker.observe(saved) && tracker.generation() == 3,
+  require(tracker.observe(saved) && tracker.generation() == 5,
       "empty-to-reopened project path transition did not rotate its generation");
 
   const ProjectObservation replaced_root{
       saved.project_identity, 0x3000U, saved.root_item_id, saved.project_path};
-  require(tracker.observe(replaced_root) && tracker.generation() == 4,
+  require(tracker.observe(replaced_root) && tracker.generation() == 6,
       "a replaced root AEGP handle did not rotate the project generation");
   require(tracker.close() && !tracker.close(),
       "project close observation was not idempotent");
-  require(tracker.observe(replaced_root) && tracker.generation() == 5,
+  require(!tracker.present() && !tracker.invalidate() && tracker.generation() == 6,
+      "a command invalidation rotated an absent project generation");
+  require(tracker.observe(replaced_root) && tracker.generation() == 7,
       "reopening the same observed handles after close reused the old generation");
 }
 
