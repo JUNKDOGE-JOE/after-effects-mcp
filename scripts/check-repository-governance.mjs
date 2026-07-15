@@ -19,6 +19,18 @@ const REQUIRED_RULES = [
   'one worktree and one branch for each issue',
   '## 9. Completion evidence',
   '## 10. Stop conditions before starting the next issue',
+  'Do not implement issues by issue number or creation order.',
+  'Automated tests and CI never substitute for hardware validation.',
+  'After merge, repeat the relevant public MCP smoke test from a clean `main` build.',
+  'Never blindly repeat a possibly completed write.',
+];
+
+const FINAL_WORKTREES = [
+  '<repo-root>',
+  '<repo-root>/.worktrees/issue-73-rollback-29e7931',
+  '<repo-root>/.worktrees/issue-78-native-undoable-write',
+  '<repo-root>/.worktrees/issue-97-native-artifact-stage',
+  '<repo-root>/.worktrees/platform-contracts',
 ];
 
 const INITIAL_WORKTREES = [
@@ -63,7 +75,22 @@ export function validateGovernance({ agentsText, inventoryText, trackedPaths }) 
   for (const worktree of INITIAL_WORKTREES) {
     if (!inventoryText.includes(`\`${worktree}\``)) errors.push(`${INVENTORY_PATH} is missing ${worktree}`);
   }
+  const finalRows = extractFinalRetainedWorktrees(inventoryText);
+  const actualFinal = [...finalRows.keys()].sort();
+  const expectedFinal = [...FINAL_WORKTREES].sort();
+  if (JSON.stringify(actualFinal) !== JSON.stringify(expectedFinal)) {
+    errors.push(`${INVENTORY_PATH} final retained worktree set does not match the reviewed contract`);
+  }
   return errors;
+}
+
+export function extractFinalRetainedWorktrees(inventoryText) {
+  const section = inventoryText.match(/## Final retained registry\n([\s\S]*?)(?:\n## |$)/)?.[1] ?? '';
+  const rows = new Map();
+  for (const match of section.matchAll(/^\| `([^`]+)` \| ([^|]+) \|/gm)) {
+    rows.set(match[1], match[2].trim());
+  }
+  return rows;
 }
 
 export function parseWorktreePorcelain(text) {
@@ -91,12 +118,16 @@ function git(repoRoot, args) {
 
 export function inspectLiveWorktrees(repoRoot, inventoryText, canonicalRoot = repoRoot) {
   const errors = [];
+  const finalRows = extractFinalRetainedWorktrees(inventoryText);
   const rows = parseWorktreePorcelain(git(repoRoot, ['worktree', 'list', '--porcelain'])).map((entry) => {
     const normalized = normalizeWorktreePath(entry.worktree, canonicalRoot);
     const status = git(entry.worktree, ['status', '--porcelain', '--untracked-files=normal']).trim();
     const dirty = status.length > 0;
-    if (!inventoryText.includes(`\`${normalized}\``)) errors.push(`live worktree is undocumented: ${normalized}`);
-    if (dirty && !inventoryText.includes(`\`${normalized}\` | retain-dirty`)) {
+    const isInvokingWorktree = path.resolve(entry.worktree) === path.resolve(repoRoot);
+    if (!finalRows.has(normalized) && !isInvokingWorktree) {
+      errors.push(`live worktree is outside the final retained set: ${normalized}`);
+    }
+    if (dirty && finalRows.get(normalized) !== 'retain-dirty') {
       errors.push(`dirty worktree lacks an explicit retain-dirty disposition: ${normalized}`);
     }
     return { path: normalized, head: entry.HEAD, branch: entry.branch ?? 'detached', dirty };

@@ -47,6 +47,50 @@ This inventory was captured after #103 closed at `2532da2763d01a3e17c31c0db85f6e
 - The clean #78 and #97 worktrees remain registered because squash merging preserved their product result but not their individual branch commits as `origin/main` ancestors. Their branch refs and working trees are retained instead of treating PR state alone as proof that no unique history exists.
 - Root tracked dirt is archived as a patch before restoration. Disposable AEPs, autosaves, temporary JSX/Python helpers, and the obsolete smoke shell script are moved—not deleted—to `.local-workspace-archive/2026-07-16/root-pre-main/` with SHA-256 metadata.
 
+## Versioned HEAD, upstream, and patch inventory
+
+`main-only/branch-only` is `git rev-list --left-right --count origin/main...HEAD` at the `2532da2763d01a3e17c31c0db85f6e047bb77105` baseline. `patch + / -` is the count from `git cherry origin/main HEAD`; a plus is patch-distinct, while a minus has a patch-equivalent change on `origin/main`.
+
+| Path | Exact HEAD at audit | Branch / upstream at audit | main-only / branch-only | patch + / - | Dirty state |
+| --- | --- | --- | ---: | ---: | --- |
+| `<repo-root>` | `036d45ff6bb63294696fbab227bcb7ddb7721cb1` | `codex/macos-header-tools-release-design`; no upstream | 14 / 5 | 4 / 0 | 1 tracked + 7 untracked |
+| `<tmp>/ae-mcp-issue99-main-verify-1e6668a` | `1e6668a683eb08f4f6326b9ed76c5b704a7b7413` | detached | 4 / 0 | 0 / 0 | clean |
+| `<tmp>/ae-mcp-main-101-final-e075a70` | `e075a70a5797aaee93d6f9a6b818144dba548484` | detached | 3 / 0 | 0 / 0 | clean |
+| `<tmp>/ae-mcp-main-93-deploy` | `a7f7b2453fb62325d9a40ac22edbc05377882222` | detached | 8 / 0 | 0 / 0 | clean |
+| `<tmp>/ae-mcp-main-94-final-6c890776` | `6c890776a24b901559e57de3b7b8822ba4fea3fe` | detached | 6 / 0 | 0 / 0 | clean |
+| `<tmp>/ae-mcp-main-96-deploy` | `3c8204827fe546b4cc1a778934ac5ceea183c896` | detached | 7 / 0 | 0 / 0 | clean |
+| `<tmp>/ae-mcp-main-p0-verify` | `a7f7b2453fb62325d9a40ac22edbc05377882222` | detached | 8 / 0 | 0 / 0 | clean |
+| `<tmp>/ae-mcp-rollback-29e7931` | `29e7931fc9b1243896c1ff473b7c7ceb61b68825` | detached | 14 / 3 | 1 / 2 | clean |
+| `<repo-root>/.worktrees/issue-101-native-layer-properties` | `e600e371033f026b0f538934a66ef147c7d188b1` | `origin/codex/issue-101-native-layer-properties`; 0 / 0 | 4 / 4 | 4 / 0 | clean |
+| `<repo-root>/.worktrees/issue-104-clean-main-2a166552` | `2a166552c15f51b57e7ab662f61ae6cd7cfe4997` | detached | 2 / 0 | 0 / 0 | clean |
+| `<repo-root>/.worktrees/issue-104-native-composition-time` | `88916f8b3186b354c8e7aa3f3bbef5d1b48f6fe7` | `origin/codex/issue-104-native-composition-time`; 0 / 0 | 3 / 1 | 0 / 1 | clean |
+| `<repo-root>/.worktrees/issue-106-native-selected-layers` | `56e2ec348b1fa25d66739d790b6c3bf2886ca5bb` | `origin/codex/issue-106-native-selected-layers`; 0 / 0 | 2 / 4 | 4 / 0 | clean |
+| `<repo-root>/.worktrees/issue-109-repo-governance` | `2532da2763d01a3e17c31c0db85f6e047bb77105` | new branch; no upstream | 0 / 0 | 0 / 0 | clean |
+| `<repo-root>/.worktrees/issue-71-sdk-intake` | `8d0ce5865ce1509dfb0d372238be8dbae262e7a3` | `origin/codex/issue-71-sdk-intake`; 0 / 0 | 14 / 1 | 0 / 1 | clean |
+| `<repo-root>/.worktrees/issue-72-native-rpc` | `f7f97218a3349e72c3305e33eba3bbcc48c730f6` | `origin/codex/issue-72-native-rpc-contract`; 0 / 0 | 13 / 1 | 0 / 1 | clean |
+| `<repo-root>/.worktrees/issue-73-native-plugin` | `d31e3acb3038577dd2cf5d9ef5fb7cc9405bd7d4` | `origin/codex/issue-73-native-plugin-host`; 0 / 0 | 12 / 4 | 4 / 0 | clean |
+| `<repo-root>/.worktrees/issue-74-authenticated-ipc` | `fb1ea7f476ab9f80fc76247406da58db90e0075f` | `origin/codex/issue-74-authenticated-ipc`; 0 / 0 | 11 / 2 | 2 / 0 | clean |
+| `<repo-root>/.worktrees/issue-75-native-core-backend` | `a7e24f8bcf25c1e449493a3c0c4115c01b8a047f` | `origin/codex/issue-75-native-core-backend`; 0 / 0 | 10 / 1 | 0 / 1 | clean |
+| `<repo-root>/.worktrees/issue-76-public-native-read` | `e49503ad2eecad2c996074c43e4422b93eb9b648` | `origin/codex/issue-76-public-native-read`; 0 / 0 | 9 / 1 | 0 / 1 | clean |
+| `<repo-root>/.worktrees/issue-78-native-undoable-write` | `70c9cd9192cde1ae891e29cdb26fdfdb23d14374` | `origin/codex/issue-78-native-undoable-write`; 0 / 0 | 7 / 6 | 6 / 0 | clean |
+| `<repo-root>/.worktrees/issue-95-cep-scan-root` | `b7d71b2d48012647ba72d4dec114849ab733a011` | `origin/codex/issue-95-cep-scan-root`; 0 / 0 | 8 / 1 | 0 / 1 | clean |
+| `<repo-root>/.worktrees/issue-97-native-artifact-stage` | `7f52a841313b5c794efb92f7dfcf41e57451b0db` | `origin/codex/issue-97-native-artifact-stage`; 0 / 0 | 6 / 2 | 2 / 0 | clean |
+| `<repo-root>/.worktrees/issue-99-native-project-graph` | `533eae65a24ecc235cee37994779edf5acfb54d3` | `origin/codex/issue-99-native-project-graph`; 0 / 0 | 5 / 1 | 0 / 1 | clean |
+| `<repo-root>/.worktrees/macos-provider-integration` | `7afc85342ed9ddc95251b3df8c4205e82e0ae4fa` | upstream gone | 42 / 0 | 0 / 0 | clean |
+| `<repo-root>/.worktrees/platform-contracts` | `c8393232d4c372a18c10f3afddc7c882f8d0a9c1` | upstream gone | 69 / 18 | 2 / 16 | 4 untracked |
+| `<repo-root>/.worktrees/post107-main-5261cea9d735` | `5261cea9d735e2b043a4d331a9e80445663a0e26` | detached | 1 / 0 | 0 / 0 | clean |
+
+### Retained dirty-file identity
+
+The retained `platform-contracts` worktree was not modified. Its four untracked files at audit are:
+
+| Relative path | SHA-256 |
+| --- | --- |
+| `docs/superpowers/plans/2026-07-10-tool-library 2.md` | `b83a0c40bd36a08f3740753fc1abff6f3064827dbf93d9fcb1e547b1268c4745` |
+| `packages/core/ae_mcp/skill_store 2.py` | `14a7b3242150e1e20e2fdaaf97f0c77cf673d04cf8460c4df90a556a7fff278e` |
+| `packages/core/tests/test_skill_store 2.py` | `85e17af64c71f6188153dbd5affa67d8ef829f8b27ce2a7eeb49514d9a36edfb` |
+| `plugin/client/dist/app 2.js` | `74b8959381e575653363a0e6f301df708ded6e2a8cb429b72c8a5c9a1a7f1b7f` |
+
 ## Root artifact manifest before archival
 
 | Source | Bytes | SHA-256 | Classification |
@@ -59,18 +103,17 @@ This inventory was captured after #103 closed at `2532da2763d01a3e17c31c0db85f6e
 | `scripts/smoke-test-macos.sh` | 5634 | `446d13fc1c9a45256f934b0d877abf9a67866aaacbf13dbd36a370d71999e2f7` | obsolete/manual smoke script; archive |
 | `packages/core/ae_mcp/schemas.py` tracked diff | one-line change | recorded as patch | preserve local edit, then restore worktree file |
 
-## Final retained registry target
+## Final retained registry
 
 | Path | Required final state | Purpose |
 | --- | --- | --- |
 | `<repo-root>` | clean `main`, synchronized with `origin/main` | canonical integration checkout |
-| `<repo-root>/.worktrees/issue-109-repo-governance` | clean while PR is active; remove after closure | #109 isolated delivery worktree |
 | `<repo-root>/.worktrees/issue-73-rollback-29e7931` | clean detached snapshot | explicit #73 rollback evidence |
 | `<repo-root>/.worktrees/issue-78-native-undoable-write` | clean | retained patch-distinct #78 squash-merge history |
 | `<repo-root>/.worktrees/issue-97-native-artifact-stage` | clean | retained patch-distinct #97 squash-merge history |
 | `<repo-root>/.worktrees/platform-contracts` | retain-dirty | unmerged/superseded platform history and evidence |
 
-The local `--worktrees` governance check rejects undocumented live worktrees and rejects dirty worktrees unless this document explicitly marks their normalized path `retain-dirty`. CI runs the deterministic tracked-file contract; live worktree state remains a local closure gate because CI cannot see a developer machine's worktree registry.
+While a branch is under review, the worktree invoking the check is the sole allowed addition to this final set. Therefore candidate validation accepts the active #109 worktree, while the post-merge check invoked from root `main` rejects it until it is removed. The local `--worktrees` governance check rejects all other live worktree drift and rejects dirty worktrees unless the final table explicitly gives their state as `retain-dirty`. CI runs the deterministic tracked-file contract; live worktree state remains a local closure gate because CI cannot see a developer machine's worktree registry.
 
 ## Cleanup execution record
 

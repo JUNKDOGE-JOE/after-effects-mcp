@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import {
   GOVERNANCE_PATH,
   INVENTORY_PATH,
+  extractFinalRetainedWorktrees,
   normalizeWorktreePath,
   parseWorktreePorcelain,
   validateGovernance,
@@ -25,6 +26,22 @@ test('missing delivery rules and untracked governance files fail closed', () => 
   assert.ok(errors.some((error) => error.includes('public MCP surface')));
   assert.ok(errors.some((error) => error.includes('must be tracked by git')));
   assert.ok(errors.some((error) => error.includes('26-worktree baseline')));
+});
+
+test('semantic rule reversal and final retained-set removal fail closed', () => {
+  const agentsText = fs.readFileSync(GOVERNANCE_PATH, 'utf8');
+  const inventoryText = fs.readFileSync(INVENTORY_PATH, 'utf8');
+  const trackedPaths = new Set([GOVERNANCE_PATH, INVENTORY_PATH]);
+  const weakened = agentsText.replace(
+    'Automated tests and CI never substitute for hardware validation.',
+    'Automated tests and CI fully substitute for hardware validation.',
+  );
+  assert.ok(validateGovernance({ agentsText: weakened, inventoryText, trackedPaths })
+    .some((error) => error.includes('never substitute')));
+  const withoutFinalSet = inventoryText.replace(/## Final retained registry[\s\S]*?(?=\n## Cleanup execution record)/, '');
+  assert.ok(validateGovernance({ agentsText, inventoryText: withoutFinalSet, trackedPaths })
+    .some((error) => error.includes('final retained worktree set')));
+  assert.equal(extractFinalRetainedWorktrees(withoutFinalSet).size, 0);
 });
 
 test('worktree porcelain parsing and path normalization are deterministic', () => {
