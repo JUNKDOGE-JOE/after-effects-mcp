@@ -7,6 +7,7 @@
 #include "aemcp_native/peer_identity_macos.hpp"
 #include "aemcp_native/project_epoch.hpp"
 #include "aemcp_native/rpc_codec.hpp"
+#include "aemcp_native/selection_collection.hpp"
 #include "aemcp_native/secure_random_macos.hpp"
 
 #include <CoreFoundation/CoreFoundation.h>
@@ -88,6 +89,7 @@ using aemcp::native::kProjectBitDepthReadCapability;
 using aemcp::native::kProjectBitDepthSetCapability;
 using aemcp::native::kProjectSummaryCapability;
 using aemcp::native::kCompositionLayersListCapability;
+using aemcp::native::kCompositionSelectedLayersListCapability;
 using aemcp::native::kCompositionTimeReadCapability;
 using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kLayerPropertiesListCapability;
@@ -97,7 +99,7 @@ constexpr std::string_view kSdkVersion = "25.6.61";
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::string_view kCapabilitiesDigest =
-    "781a620eac1310fb85dc0ac74ae9655fdab0512d370e1039074cd0ff2fb4d7fb";
+    "04ad7c01ea1bf9c2837d7f55184fe0453b2edf6027c1ec36c44a8c8a17d46296";
 constexpr std::string_view kProjectSummaryContractDigest =
     "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
 constexpr std::string_view kProjectBitDepthReadContractDigest =
@@ -107,6 +109,8 @@ constexpr std::string_view kProjectBitDepthSetContractDigest =
 constexpr std::string_view kProjectItemsListContractDigest =
     "64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e";
 constexpr std::string_view kCompositionLayersListContractDigest =
+    "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75";
+constexpr std::string_view kCompositionSelectedLayersListContractDigest =
     "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75";
 constexpr std::string_view kCompositionTimeReadContractDigest =
     "fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd";
@@ -1511,6 +1515,342 @@ class AegpHostApi final : public HostApi {
     return HostCompositionLayersResult::success(std::move(page));
   }
 
+  [[nodiscard]] HostCompositionLayersResult list_selected_composition_layers(
+      const aemcp::native::CompositionLayersQuery& query,
+      TimePoint work_deadline) override {
+    const auto budget_expired = [work_deadline] {
+      return std::chrono::steady_clock::now() >= work_deadline;
+    };
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_CollectionSuite2> collection_suite(
+        basic_, kAEGPCollectionSuite, kAEGPCollectionSuiteVersion2);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || collection_suite.get() == nullptr || memory_suite.get() == nullptr) {
+      return HostCompositionLayersResult::failure(
+          "NATIVE_UNSUPPORTED",
+          "required composition selection suites are unavailable");
+    }
+    if (budget_expired()) {
+      return HostCompositionLayersResult::failure(
+          "DEADLINE_EXCEEDED", "selected layer list budget elapsed");
+    }
+
+    A_long project_count = 0;
+    if (project_suite->AEGP_GetNumProjects(&project_count) != A_Err_NONE) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "could not read project count");
+    }
+    if (project_count <= 0) {
+      graph_.project_closed();
+      return HostCompositionLayersResult::failure(
+          "PRECONDITION_FAILED", "an After Effects project must be open");
+    }
+
+    AEGP_ProjectH project = nullptr;
+    AEGP_ItemH root = nullptr;
+    A_long root_id = 0;
+    if (project_suite->AEGP_GetProjectByIndex(0, &project) != A_Err_NONE
+        || project == nullptr
+        || project_suite->AEGP_GetProjectRootFolder(project, &root) != A_Err_NONE
+        || root == nullptr
+        || item_suite->AEGP_GetItemID(root, &root_id) != A_Err_NONE) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "could not resolve the open project's root item");
+    }
+    std::optional<std::string> project_path = read_project_path(
+        project_suite.get(), memory_suite.get(), project);
+    if (!project_path.has_value()) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED",
+          "could not read the open project path for locator identity");
+    }
+    try {
+      graph_.observe_project(
+          reinterpret_cast<std::uintptr_t>(project),
+          reinterpret_cast<std::uintptr_t>(root),
+          root_id,
+          std::move(*project_path));
+    } catch (...) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "could not establish project locator identity");
+    }
+    const std::optional<A_long> composition_id = graph_.resolve_composition(
+        query.composition_locator, query.host_instance_id, query.session_id);
+    if (!composition_id.has_value()) {
+      return HostCompositionLayersResult::failure(
+          "STALE_LOCATOR",
+          "compositionLocator does not identify an item in the currently open project",
+          "params.arguments.compositionLocator");
+    }
+
+    AEGP_ItemH item = nullptr;
+    if (item_suite->AEGP_GetNextProjItem(project, root, &item) != A_Err_NONE) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "could not begin composition lookup");
+    }
+    AEGP_ItemH composition_item = nullptr;
+    std::uint64_t visited = 0;
+    while (item != nullptr) {
+      if (budget_expired()) {
+        return HostCompositionLayersResult::failure(
+            "DEADLINE_EXCEEDED", "composition lookup budget elapsed");
+      }
+      if (++visited > static_cast<std::uint64_t>(kMaximumProjectItems)) {
+        return HostCompositionLayersResult::failure(
+            "CAPABILITY_FAILED",
+            "project item bound exceeded during composition lookup");
+      }
+      A_long item_id = 0;
+      if (item_suite->AEGP_GetItemID(item, &item_id) != A_Err_NONE) {
+        return HostCompositionLayersResult::failure(
+            "CAPABILITY_FAILED", "could not read project item identity");
+      }
+      if (item_id == *composition_id) {
+        composition_item = item;
+        break;
+      }
+      AEGP_ItemH next = nullptr;
+      if (item_suite->AEGP_GetNextProjItem(project, item, &next) != A_Err_NONE) {
+        return HostCompositionLayersResult::failure(
+            "CAPABILITY_FAILED", "composition lookup traversal failed");
+      }
+      item = next;
+    }
+    if (composition_item == nullptr) {
+      return HostCompositionLayersResult::failure(
+          "STALE_LOCATOR",
+          "composition item no longer exists in the open project",
+          "params.arguments.compositionLocator");
+    }
+    AEGP_ItemType item_type = AEGP_ItemType_NONE;
+    if (item_suite->AEGP_GetItemType(composition_item, &item_type) != A_Err_NONE) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "could not verify composition item type");
+    }
+    if (item_type != AEGP_ItemType_COMP) {
+      return HostCompositionLayersResult::failure(
+          "PRECONDITION_FAILED",
+          "compositionLocator no longer identifies a composition",
+          "params.arguments.compositionLocator");
+    }
+    AEGP_MemHandle composition_name_handle = nullptr;
+    const A_Err composition_name_error = item_suite->AEGP_GetItemName(
+        plugin_id_, composition_item, &composition_name_handle);
+    MemHandleOwner composition_name_owner(
+        memory_suite.get(), composition_name_handle);
+    if (composition_name_error != A_Err_NONE || composition_name_handle == nullptr) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "could not read composition name");
+    }
+    const std::optional<std::string> composition_name = composition_name_owner.utf8();
+    if (!composition_name.has_value()) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "composition name is not bounded UTF-16 text");
+    }
+    AEGP_CompH composition = nullptr;
+    if (comp_suite->AEGP_GetCompFromItem(composition_item, &composition) != A_Err_NONE
+        || composition == nullptr) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "could not resolve composition handle");
+    }
+    if (budget_expired()) {
+      return HostCompositionLayersResult::failure(
+          "DEADLINE_EXCEEDED", "selected layer list budget elapsed");
+    }
+
+    AEGP_Collection2H collection = nullptr;
+    const A_Err collection_error =
+        comp_suite->AEGP_GetNewCollectionFromCompSelection(
+            plugin_id_, composition, &collection);
+    aemcp::native::OwnedSelectionCollection collection_owner(
+        collection,
+        [suite = collection_suite.get()](AEGP_Collection2H owned) noexcept {
+          (void)suite->AEGP_DisposeCollection(owned);
+        });
+    if (collection_error != A_Err_NONE || collection == nullptr) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "could not read the composition selection");
+    }
+    A_u_long collection_size = 0;
+    if (collection_suite->AEGP_GetCollectionNumItems(
+            collection_owner.get(), &collection_size) != A_Err_NONE) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "could not read the composition selection size");
+    }
+    if (collection_size > static_cast<A_u_long>(kMaximumProjectItems)) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "composition selection bound exceeded");
+    }
+
+    std::vector<aemcp::native::SelectionCollectionEntry> collection_entries;
+    collection_entries.reserve(static_cast<std::size_t>(collection_size));
+    for (A_u_long index = 0; index < collection_size; ++index) {
+      if (budget_expired()) {
+        return HostCompositionLayersResult::failure(
+            "DEADLINE_EXCEEDED", "composition selection traversal budget elapsed");
+      }
+      AEGP_CollectionItemV2 selection_item{};
+      if (collection_suite->AEGP_GetCollectionItemByIndex(
+              collection_owner.get(), index, &selection_item) != A_Err_NONE) {
+        return HostCompositionLayersResult::failure(
+            "CAPABILITY_FAILED", "could not read a composition selection item");
+      }
+      if (selection_item.type != AEGP_CollectionItemType_LAYER) {
+        collection_entries.push_back({
+            aemcp::native::SelectionCollectionEntryKind::kNonLayer, 0, 0, 0});
+        continue;
+      }
+      AEGP_LayerH layer = selection_item.u.layer.layerH;
+      if (layer == nullptr) {
+        return HostCompositionLayersResult::failure(
+            "CAPABILITY_FAILED", "After Effects returned an empty selected layer");
+      }
+      AEGP_CompH parent_composition = nullptr;
+      A_long layer_index = -1;
+      AEGP_LayerIDVal layer_id = 0;
+      if (layer_suite->AEGP_GetLayerParentComp(layer, &parent_composition)
+              != A_Err_NONE
+          || parent_composition != composition
+          || layer_suite->AEGP_GetLayerIndex(layer, &layer_index) != A_Err_NONE
+          || layer_index < 0
+          || layer_suite->AEGP_GetLayerID(layer, &layer_id) != A_Err_NONE) {
+        return HostCompositionLayersResult::failure(
+            "CAPABILITY_FAILED",
+            "selected layer does not belong to the requested composition");
+      }
+      collection_entries.push_back({
+          aemcp::native::SelectionCollectionEntryKind::kLayer,
+          reinterpret_cast<std::uintptr_t>(layer),
+          static_cast<std::int64_t>(layer_id),
+          static_cast<std::uint64_t>(layer_index) + 1U});
+    }
+    aemcp::native::NormalizedSelectedLayers normalized =
+        aemcp::native::normalize_selected_layer_collection(
+            std::move(collection_entries));
+    if (!normalized.ok) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", std::move(normalized.error));
+    }
+    const auto& selected = normalized.layers;
+
+    aemcp::native::CompositionLayersPage page;
+    page.composition_locator = query.composition_locator;
+    page.composition_name = *composition_name;
+    page.total = selected.size();
+    page.offset = query.offset;
+    page.limit = query.limit;
+    if (query.offset > page.total) {
+      return HostCompositionLayersResult::failure(
+          "INVALID_ARGUMENT",
+          "offset exceeds the current selected layer total",
+          "params.arguments.offset");
+    }
+    aemcp::native::BoundedPageBudget page_budget(
+        1024U + locator_json_size(page.composition_locator)
+            + aemcp::native::json_encoded_string_size(page.composition_name));
+    const std::uint64_t end = query.offset >= page.total
+        ? query.offset
+        : std::min(page.total, query.offset + query.limit);
+    for (std::uint64_t position = query.offset; position < end; ++position) {
+      if (budget_expired()) {
+        return HostCompositionLayersResult::failure(
+            "DEADLINE_EXCEEDED", "selected layer page budget elapsed");
+      }
+      const aemcp::native::SelectionCollectionEntry& candidate = selected[position];
+      AEGP_LayerH layer = reinterpret_cast<AEGP_LayerH>(candidate.opaque_layer);
+      AEGP_LayerFlags flags = 0;
+      AEGP_ObjectType object_type = AEGP_ObjectType_NONE;
+      if (layer_suite->AEGP_GetLayerFlags(layer, &flags) != A_Err_NONE
+          || layer_suite->AEGP_GetLayerObjectType(layer, &object_type)
+              != A_Err_NONE) {
+        return HostCompositionLayersResult::failure(
+            "CAPABILITY_FAILED", "could not read selected layer attributes");
+      }
+      std::string layer_name_error;
+      const std::optional<std::string> layer_name = read_effective_layer_name(
+          layer_suite.get(), item_suite.get(), memory_suite.get(), plugin_id_,
+          layer, layer_name_error);
+      if (!layer_name.has_value()) {
+        return HostCompositionLayersResult::failure(
+            "CAPABILITY_FAILED", layer_name_error);
+      }
+
+      aemcp::native::CompositionLayerEntry entry;
+      entry.locator = graph_.layer_locator(
+          *composition_id,
+          static_cast<AEGP_LayerIDVal>(candidate.layer_id),
+          query.host_instance_id,
+          query.session_id);
+      entry.stack_index = candidate.stack_index;
+      entry.name = *layer_name;
+      entry.type = layer_type(object_type, flags);
+      entry.video_enabled = (flags & AEGP_LayerFlag_VIDEO_ACTIVE) != 0;
+      entry.is_three_d = (flags & AEGP_LayerFlag_LAYER_IS_3D) != 0;
+      entry.locked = (flags & AEGP_LayerFlag_LOCKED) != 0;
+
+      AEGP_LayerH parent = nullptr;
+      if (layer_suite->AEGP_GetLayerParent(layer, &parent) != A_Err_NONE) {
+        return HostCompositionLayersResult::failure(
+            "CAPABILITY_FAILED", "could not read selected layer parent");
+      }
+      if (parent != nullptr) {
+        AEGP_LayerIDVal parent_id = 0;
+        if (layer_suite->AEGP_GetLayerID(parent, &parent_id) != A_Err_NONE) {
+          return HostCompositionLayersResult::failure(
+              "CAPABILITY_FAILED", "could not read parent layer identity");
+        }
+        entry.parent_locator = graph_.layer_locator(
+            *composition_id, parent_id, query.host_instance_id, query.session_id);
+      }
+
+      AEGP_ItemH source_item = nullptr;
+      if (layer_suite->AEGP_GetLayerSourceItem(layer, &source_item)
+              != A_Err_NONE) {
+        return HostCompositionLayersResult::failure(
+            "CAPABILITY_FAILED", "could not read selected layer source item");
+      }
+      if (source_item != nullptr) {
+        A_long source_id = 0;
+        AEGP_ItemType source_type = AEGP_ItemType_NONE;
+        if (item_suite->AEGP_GetItemID(source_item, &source_id) != A_Err_NONE
+            || item_suite->AEGP_GetItemType(source_item, &source_type)
+                != A_Err_NONE) {
+          return HostCompositionLayersResult::failure(
+              "CAPABILITY_FAILED", "could not read selected layer source identity");
+        }
+        entry.source_item_locator = graph_.item_locator(
+            source_id,
+            source_type == AEGP_ItemType_COMP,
+            query.host_instance_id,
+            query.session_id);
+      }
+      const std::size_t entry_bytes = composition_layer_json_size(entry)
+          + (page.layers.empty() ? 0U : 1U);
+      if (!page_budget.try_reserve(entry_bytes)) {
+        if (page.layers.empty()) {
+          return HostCompositionLayersResult::failure(
+              "CAPABILITY_FAILED",
+              "one selected layer exceeds the bounded native response budget");
+        }
+        break;
+      }
+      page.layers.push_back(std::move(entry));
+    }
+    page.has_more = query.offset + page.layers.size() < page.total;
+    if (page.has_more) page.next_offset = query.offset + page.layers.size();
+    return HostCompositionLayersResult::success(std::move(page));
+  }
+
   [[nodiscard]] HostCompositionTimeResult read_composition_time(
       const aemcp::native::CompositionTimeQuery& query,
       TimePoint work_deadline) override {
@@ -2094,6 +2434,21 @@ class AegpHostApi final : public HostApi {
   ProjectGraphRegistry& graph_;
 };
 
+class AegpHostIdleSignal final : public aemcp::native::HostIdleSignal {
+ public:
+  explicit AegpHostIdleSignal(const AEGP_UtilitySuite6* utility_suite) noexcept
+      : utility_suite_(utility_suite) {}
+
+  [[nodiscard]] bool request_idle() noexcept override {
+    return utility_suite_ != nullptr
+        && utility_suite_->AEGP_CauseIdleRoutinesToBeCalled != nullptr
+        && utility_suite_->AEGP_CauseIdleRoutinesToBeCalled() == A_Err_NONE;
+  }
+
+ private:
+  const AEGP_UtilitySuite6* utility_suite_{nullptr};
+};
+
 struct PluginState final : NativeIpcObserver, NativeRpcObserver {
   PluginState(SPBasicSuite* basic_suite, AEGP_PluginID plugin_id_value,
       A_long driver_major_value, A_long driver_minor_value)
@@ -2101,8 +2456,13 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
         plugin_id(plugin_id_value),
         driver_major(driver_major_value),
         driver_minor(driver_minor_value),
+        utility_suite(basic_suite, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6),
+        idle_signal(utility_suite.get()),
         dispatcher(std::this_thread::get_id(), clock),
         pairing_gate(pairing_clock, pairing_material) {
+    if (utility_suite.get() == nullptr) {
+      throw std::runtime_error("AEGP utility suite unavailable");
+    }
     instance_id = aemcp::native::secure_uuid_v4();
     peer_backend = aemcp::native::create_macos_peer_identity_backend();
     const auto host_process = aemcp::native::current_macos_process(*peer_backend);
@@ -2133,8 +2493,10 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
             std::string(kCompositionLayersListContractDigest),
             std::string(kCompositionTimeReadContractDigest),
             std::string(kLayerPropertiesListContractDigest),
+            std::string(kCompositionSelectedLayersListContractDigest),
         },
-        *this);
+        *this,
+        idle_signal);
     ipc_server = std::make_unique<MacIpcServer>(
         *endpoint,
         *peer_backend,
@@ -2168,6 +2530,8 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
   HostIdentity host_identity{read_host_identity()};
   DiagnosticLog log;
   SystemClock clock;
+  SuiteLease<AEGP_UtilitySuite6> utility_suite;
+  AegpHostIdleSignal idle_signal;
   ProjectGraphRegistry project_graph;
   HostDispatcher dispatcher;
   aemcp::native::rpc::SystemSessionClock session_clock;
@@ -2205,6 +2569,7 @@ void log_load(PluginState& state) {
          << kProjectBitDepthSetCapability << "\",\""
          << kProjectItemsListCapability << "\",\""
          << kCompositionLayersListCapability << "\",\""
+         << kCompositionSelectedLayersListCapability << "\",\""
          << kCompositionTimeReadCapability << "\",\""
          << kLayerPropertiesListCapability << "\"]}"
          ;
@@ -2260,6 +2625,20 @@ void log_completion(
              << (completion.composition_layers_result.has_more ? "true" : "false")
              << ",\"projectGeneration\":"
              << completion.composition_layers_result.composition_locator.generation;
+    } else if (completion.capability_id
+        == kCompositionSelectedLayersListCapability) {
+      output << ",\"result\":{\"total\":"
+             << completion.composition_selected_layers_result.total
+             << ",\"offset\":"
+             << completion.composition_selected_layers_result.offset
+             << ",\"returned\":"
+             << completion.composition_selected_layers_result.layers.size()
+             << ",\"hasMore\":"
+             << (completion.composition_selected_layers_result.has_more
+                    ? "true" : "false")
+             << ",\"projectGeneration\":"
+             << completion.composition_selected_layers_result
+                    .composition_locator.generation;
     } else if (completion.capability_id == kCompositionTimeReadCapability) {
       output << ",\"result\":{\"value\":"
              << completion.composition_time_result.current_time.value

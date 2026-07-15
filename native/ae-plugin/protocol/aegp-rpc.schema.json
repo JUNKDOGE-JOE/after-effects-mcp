@@ -950,6 +950,16 @@
         "arguments": { "$ref": "#/$defs/compositionLayersListArguments" }
       }
     },
+    "compositionSelectedLayersListInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.composition.selected-layers.list" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/compositionLayersListArguments" }
+      }
+    },
     "compositionTimeReadInvokeParams": {
       "type": "object",
       "additionalProperties": false,
@@ -977,6 +987,7 @@
         { "$ref": "#/$defs/projectBitDepthSetInvokeParams" },
         { "$ref": "#/$defs/projectItemsListInvokeParams" },
         { "$ref": "#/$defs/compositionLayersListInvokeParams" },
+        { "$ref": "#/$defs/compositionSelectedLayersListInvokeParams" },
         { "$ref": "#/$defs/compositionTimeReadInvokeParams" },
         { "$ref": "#/$defs/layerPropertiesListInvokeParams" }
       ],
@@ -1827,6 +1838,19 @@
         "evidence": { "$ref": "#/$defs/executionEvidence" }
       }
     },
+    "compositionSelectedLayersListInvokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.composition.selected-layers.list" },
+        "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" },
+        "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/compositionLayersListValue" },
+        "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
     "compositionTimeReadInvokeResult": {
       "type": "object",
       "additionalProperties": false,
@@ -1860,6 +1884,7 @@
         { "$ref": "#/$defs/projectBitDepthSetInvokeResult" },
         { "$ref": "#/$defs/projectItemsListInvokeResult" },
         { "$ref": "#/$defs/compositionLayersListInvokeResult" },
+        { "$ref": "#/$defs/compositionSelectedLayersListInvokeResult" },
         { "$ref": "#/$defs/compositionTimeReadInvokeResult" },
         { "$ref": "#/$defs/layerPropertiesListInvokeResult" }
       ]

@@ -596,7 +596,8 @@ std::string canonical_request(const ParsedRequest& request) {
           arguments += ",\"projectLocator\":" + locator_json(*value.project_locator);
         }
         arguments.push_back('}');
-      } else if (value.capability_id == "ae.composition.layers.list") {
+      } else if (value.capability_id == "ae.composition.layers.list"
+          || value.capability_id == "ae.composition.selected-layers.list") {
         arguments = "{\"compositionLocator\":"
             + locator_json(*value.composition_locator)
             + ",\"limit\":" + std::to_string(value.limit)
@@ -881,12 +882,13 @@ ParsedRequest classify_request(const JsonValue& root) {
         if (result.offset > 0 && !result.project_locator.has_value()) {
           invalid_argument("projectLocator is required for a non-zero offset");
         }
-      } else if (capability == "ae.composition.layers.list") {
+      } else if (capability == "ae.composition.layers.list"
+          || capability == "ae.composition.selected-layers.list") {
         if (!exact_keys(
                 *arguments,
                 {"compositionLocator", "offset", "limit"},
                 {"compositionLocator", "offset", "limit"})) {
-          invalid_argument("composition layers list arguments are not closed");
+          invalid_argument("composition layer list arguments are not closed");
         }
         const JsonValue* locator = member(*arguments, "compositionLocator");
         result.composition_locator = parse_locator(*locator, "composition");
@@ -1061,6 +1063,83 @@ std::string canonical_composition_layers_value(const CompositionLayersPage& page
                 && layer.source_item_locator->kind != "composition")
             || !same_locator_scope(*layer.source_item_locator, page.composition_locator))) {
       invalid_argument("invalid source item locator");
+    }
+    layers += "{\"isThreeD\":" + std::string(layer.is_three_d ? "true" : "false")
+        + ",\"locator\":" + locator_json(layer.locator)
+        + ",\"locked\":" + std::string(layer.locked ? "true" : "false")
+        + ",\"name\":" + json_string(layer.name)
+        + ",\"parentLocator\":" + nullable_locator_json(layer.parent_locator)
+        + ",\"sourceItemLocator\":" + nullable_locator_json(layer.source_item_locator)
+        + ",\"stackIndex\":" + std::to_string(layer.stack_index)
+        + ",\"type\":" + json_string(layer.type)
+        + ",\"videoEnabled\":" + std::string(layer.video_enabled ? "true" : "false")
+        + "}";
+  }
+  layers.push_back(']');
+  return "{\"compositionLocator\":" + locator_json(page.composition_locator)
+      + ",\"compositionName\":" + json_string(page.composition_name)
+      + ",\"hasMore\":" + std::string(page.has_more ? "true" : "false")
+      + ",\"layers\":" + layers + ",\"limit\":" + std::to_string(page.limit)
+      + ",\"nextOffset\":"
+      + (page.next_offset.has_value() ? std::to_string(*page.next_offset) : "null")
+      + ",\"offset\":" + std::to_string(page.offset)
+      + ",\"returned\":" + std::to_string(returned)
+      + ",\"total\":" + std::to_string(page.total) + "}";
+}
+
+std::string canonical_composition_selected_layers_value(
+    const CompositionLayersPage& page) {
+  if (!valid_output_locator(page.composition_locator)
+      || page.composition_locator.kind != "composition"
+      || validate_utf8_and_count(page.composition_name) > 1'024
+      || page.total > kMaxSafeInteger || page.offset > kMaxSafeInteger
+      || page.limit < 1 || page.limit > 50 || page.layers.size() > page.limit
+      || page.layers.size() > kMaxSafeInteger) {
+    invalid_argument("invalid composition selected layers page");
+  }
+  const std::uint64_t returned = page.layers.size();
+  if (page.offset > page.total || returned > page.total - page.offset) {
+    invalid_argument("composition selected layers page exceeds the reported total");
+  }
+  const bool expected_more = page.offset + returned < page.total;
+  if ((expected_more && returned == 0) || page.has_more != expected_more
+      || (expected_more
+          ? (!page.next_offset.has_value()
+              || *page.next_offset != page.offset + returned)
+          : page.next_offset.has_value())) {
+    invalid_argument("composition selected layers pagination invariant failed");
+  }
+  std::string layers = "[";
+  std::set<std::string> object_ids;
+  std::uint64_t previous_stack_index = 0;
+  for (std::size_t index = 0; index < page.layers.size(); ++index) {
+    const CompositionLayerEntry& layer = page.layers[index];
+    if (index != 0) layers.push_back(',');
+    const bool valid_type = layer.type == "av" || layer.type == "camera"
+        || layer.type == "light" || layer.type == "text" || layer.type == "shape"
+        || layer.type == "model3d" || layer.type == "null"
+        || layer.type == "adjustment" || layer.type == "unknown";
+    if (!valid_output_locator(layer.locator) || layer.locator.kind != "layer"
+        || !same_locator_scope(layer.locator, page.composition_locator)
+        || layer.stack_index < 1 || layer.stack_index > kMaxSafeInteger
+        || (index != 0 && layer.stack_index <= previous_stack_index)
+        || validate_utf8_and_count(layer.name) > 1'024 || !valid_type
+        || !object_ids.insert(layer.locator.object_id).second) {
+      invalid_argument("invalid composition selected layer result");
+    }
+    previous_stack_index = layer.stack_index;
+    if (layer.parent_locator.has_value()
+        && (!valid_output_locator(*layer.parent_locator)
+            || layer.parent_locator->kind != "layer"
+            || !same_locator_scope(*layer.parent_locator, page.composition_locator))) {
+      invalid_argument("invalid selected layer parent locator");
+    }
+    if (layer.source_item_locator.has_value()
+        && (!valid_output_locator(*layer.source_item_locator)
+            || (layer.source_item_locator->kind != "item"
+                && layer.source_item_locator->kind != "composition")
+            || !same_locator_scope(*layer.source_item_locator, page.composition_locator))) {
+      invalid_argument("invalid selected layer source item locator");
     }
     layers += "{\"isThreeD\":" + std::string(layer.is_three_d ? "true" : "false")
         + ",\"locator\":" + locator_json(layer.locator)
@@ -1442,6 +1521,14 @@ std::string digest_composition_layers_postcondition(
   return sha256_hex(
       "{\"capabilityId\":\"ae.composition.layers.list\",\"capabilityVersion\":1,\"value\":"
       + canonical_composition_layers_value(page) + "}");
+}
+
+std::string digest_composition_selected_layers_postcondition(
+    const CompositionLayersPage& page) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.composition.selected-layers.list\","
+      "\"capabilityVersion\":1,\"value\":"
+      + canonical_composition_selected_layers_value(page) + "}");
 }
 
 std::string digest_composition_time_postcondition(
@@ -1898,6 +1985,78 @@ std::string composition_layers_list_descriptor(const CapabilitiesSuccess& respon
   }
   return R"aemcp({"detail":"full","id":"ae.composition.layers.list","version":1,"schemaVersion":1,"summary":"List a bounded page of layers in one After Effects composition.","risk":"read","mutability":"read-only","idempotency":"idempotent","cancellation":"before-dispatch","undo":"not-applicable","sideEffectSummary":"Reads composition layers without changing After Effects state.","preconditions":["An After Effects project must be open.","compositionLocator must come from ae.project.items.list@1."],"compatibility":{"status":"unverified","intendedPlatforms":["macos-arm64","windows-x64"]},"inputContractId":"aemcp.contract.ae.composition.layers.list.input.v1","resultContractId":"aemcp.contract.ae.composition.layers.list.result.v1","contractDigest":"3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75","inputSchema":{"type":"object","additionalProperties":false,"required":["compositionLocator","offset","limit"],"properties":{"compositionLocator":{"$ref":"#/$defs/compositionLocator"},"offset":{"type":"integer","minimum":0,"maximum":9007199254740991,"default":0,"x-omissionBehavior":0},"limit":{"type":"integer","minimum":1,"maximum":50,"default":25,"x-omissionBehavior":25}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"compositionLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"composition"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}}}},"resultSchema":{"type":"object","additionalProperties":false,"required":["compositionLocator","compositionName","total","offset","limit","returned","hasMore","nextOffset","layers"],"properties":{"compositionLocator":{"$ref":"#/$defs/compositionLocator"},"compositionName":{"type":"string","maxLength":1024},"total":{"type":"integer","minimum":0,"maximum":9007199254740991},"offset":{"type":"integer","minimum":0,"maximum":9007199254740991},"limit":{"type":"integer","minimum":1,"maximum":50},"returned":{"type":"integer","minimum":0,"maximum":50},"hasMore":{"type":"boolean"},"nextOffset":{"oneOf":[{"type":"null"},{"type":"integer","minimum":0,"maximum":9007199254740991}]},"layers":{"type":"array","maxItems":50,"items":{"type":"object","additionalProperties":false,"required":["locator","stackIndex","name","type","videoEnabled","isThreeD","locked","parentLocator","sourceItemLocator"],"properties":{"locator":{"$ref":"#/$defs/layerLocator"},"stackIndex":{"type":"integer","minimum":1,"maximum":9007199254740991},"name":{"type":"string","maxLength":1024},"type":{"enum":["av","camera","light","text","shape","model3d","null","adjustment","unknown"]},"videoEnabled":{"type":"boolean"},"isThreeD":{"type":"boolean"},"locked":{"type":"boolean"},"parentLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/layerLocator"}]},"sourceItemLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/sourceItemLocator"}]}}}}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"locatorBase":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"enum":["project","item","composition","layer","stream"]},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}},"compositionLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"composition"}}}]},"layerLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"layer"}}}]},"sourceItemLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"enum":["item","composition"]}}}]}},"x-invariant":"returned-equals-layers-length-and-page-metadata-is-self-consistent"},"requirements":[{"id":"aemcp.requirement.native.composition-layers-list","contractVersion":1}],"examples":[{"id":"aemcp-example-composition-layers-list-empty","kind":"positive","summary":"List the first bounded page of an empty composition.","arguments":{"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"offset":0,"limit":25},"expected":{"outcome":"succeeded","value":{"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"compositionName":"SYNTHETIC_COMPOSITION","total":0,"offset":0,"limit":25,"returned":0,"hasMore":false,"nextOffset":null,"layers":[]}}},{"id":"aemcp-example-composition-layers-list-stale","kind":"negative","summary":"Refresh a stale composition locator before listing layers.","arguments":{"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"offset":0,"limit":25},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"}}]})aemcp";
 }
+
+std::string replace_descriptor_text(
+    std::string value, std::string_view from, std::string_view to) {
+  if (from.empty()) invalid_argument("descriptor replacement source is empty");
+  std::size_t offset = 0;
+  std::size_t replacements = 0;
+  while ((offset = value.find(from, offset)) != std::string::npos) {
+    value.replace(offset, from.size(), to);
+    offset += to.size();
+    ++replacements;
+  }
+  if (replacements == 0) invalid_argument("compiled descriptor replacement was not found");
+  return value;
+}
+
+std::string composition_selected_layers_list_descriptor(
+    const CapabilitiesSuccess& response) {
+  if (response.detail == CapabilityDetail::kFull) {
+    require_digest(
+        response.composition_selected_layers_list_contract_digest,
+        "contract digest");
+    if (response.composition_selected_layers_list_contract_digest
+        != "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75") {
+      invalid_argument(
+          "composition selected layers contract digest does not match the compiled descriptor");
+    }
+  }
+  CapabilitiesSuccess base = response;
+  base.composition_layers_list_contract_digest =
+      "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75";
+  std::string descriptor = composition_layers_list_descriptor(base);
+  descriptor = replace_descriptor_text(
+      std::move(descriptor),
+      "ae.composition.layers.list",
+      "ae.composition.selected-layers.list");
+  descriptor = replace_descriptor_text(
+      std::move(descriptor),
+      "List a bounded page of layers in one After Effects composition.",
+      "List a bounded page of selected layers in one After Effects composition.");
+  descriptor = replace_descriptor_text(
+      std::move(descriptor),
+      "Reads composition layers without changing After Effects state.",
+      "Reads selected composition layers without changing After Effects state.");
+  if (response.detail == CapabilityDetail::kFull) {
+    descriptor = replace_descriptor_text(
+        std::move(descriptor),
+        "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
+        response.composition_selected_layers_list_contract_digest);
+    descriptor = replace_descriptor_text(
+        std::move(descriptor),
+        "aemcp.requirement.native.composition-layers-list",
+        "aemcp.requirement.native.composition-selected-layers-list");
+    descriptor = replace_descriptor_text(
+        std::move(descriptor),
+        "aemcp-example-composition-layers-list-empty",
+        "aemcp-example-composition-selected-layers-list-empty");
+    descriptor = replace_descriptor_text(
+        std::move(descriptor),
+        "List the first bounded page of an empty composition.",
+        "List an empty selected-layer page for a composition.");
+    descriptor = replace_descriptor_text(
+        std::move(descriptor),
+        "aemcp-example-composition-layers-list-stale",
+        "aemcp-example-composition-selected-layers-list-stale");
+    descriptor = replace_descriptor_text(
+        std::move(descriptor),
+        "Refresh a stale composition locator before listing layers.",
+        "Refresh a stale composition locator before listing selected layers.");
+  }
+  return descriptor;
+}
+
 std::string composition_time_read_descriptor(const CapabilitiesSuccess& response) {
   if (response.detail == CapabilityDetail::kSummary) {
     return R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"detail":"summary","id":"ae.composition.time.read","idempotency":"idempotent","mutability":"read-only","preconditions":["An After Effects project must be open.","compositionLocator must come from ae.project.items.list@1."],"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads composition time without changing After Effects state.","summary":"Read the current time of one After Effects composition.","undo":"not-applicable","version":1})aemcp";
@@ -2054,6 +2213,11 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
   if (response.include_composition_layers_list) {
     if (needs_comma) items.push_back(',');
     items += composition_layers_list_descriptor(response);
+    needs_comma = true;
+  }
+  if (response.include_composition_selected_layers_list) {
+    if (needs_comma) items.push_back(',');
+    items += composition_selected_layers_list_descriptor(response);
     needs_comma = true;
   }
   if (response.include_composition_time_read) {
@@ -2273,6 +2437,46 @@ std::vector<std::uint8_t> encode_composition_layers_success(
       + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\",\"digest\":"
       + json_string(response.postcondition_digest)
       + ",\"kind\":\"composition-layers-list\",\"verified\":true},\"requestDigest\":"
+      + json_string(response.request_digest) + ",\"requestId\":"
+      + json_string(response.request_id) + ",\"sessionId\":"
+      + json_string(response.session_id) + ",\"startedAtUnixMs\":"
+      + std::to_string(response.started_at_unix_ms)
+      + "},\"outcome\":\"succeeded\",\"value\":" + value + "},\"sessionId\":"
+      + json_string(response.session_id) + ",\"wireVersion\":1}";
+  return frame_output(std::move(json));
+}
+
+std::vector<std::uint8_t> encode_composition_selected_layers_success(
+    const CompositionSelectedLayersSuccess& response) {
+  require_request_id(response.request_id);
+  require_uuid(response.session_id, "session ID");
+  require_uuid(response.host_instance_id, "host instance ID");
+  require_digest(response.request_digest, "request digest");
+  require_digest(response.postcondition_digest, "postcondition digest");
+  const std::string value = canonical_composition_selected_layers_value(response.value);
+  if (response.replayed || response.started_at_unix_ms < 1
+      || response.started_at_unix_ms > kMaxSafeInteger
+      || response.completed_at_unix_ms < response.started_at_unix_ms
+      || response.completed_at_unix_ms > kMaxSafeInteger
+      || response.value.composition_locator.host_instance_id != response.host_instance_id
+      || response.value.composition_locator.session_id != response.session_id
+      || response.postcondition_digest
+          != digest_composition_selected_layers_postcondition(response.value)) {
+    invalid_argument("invalid or unvalidated composition selected layers evidence");
+  }
+  std::string json = "{\"kind\":\"response\",\"method\":\"invoke\",\"ok\":true,"
+      "\"replayed\":false,\"requestId\":" + json_string(response.request_id)
+      + ",\"result\":{\"capabilityId\":\"ae.composition.selected-layers.list\","
+        "\"capabilityVersion\":1,\"engine\":\"native-aegp\",\"evidence\":{"
+        "\"capabilityId\":\"ae.composition.selected-layers.list\","
+        "\"capabilityVersion\":1,\"completedAtUnixMs\":"
+      + std::to_string(response.completed_at_unix_ms)
+      + ",\"effect\":\"none\",\"engine\":\"native-aegp\",\"hostInstanceId\":"
+      + json_string(response.host_instance_id)
+      + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\",\"digest\":"
+      + json_string(response.postcondition_digest)
+      + ",\"kind\":\"composition-selected-layers-list\",\"verified\":true},"
+        "\"requestDigest\":"
       + json_string(response.request_digest) + ",\"requestId\":"
       + json_string(response.request_id) + ",\"sessionId\":"
       + json_string(response.session_id) + ",\"startedAtUnixMs\":"

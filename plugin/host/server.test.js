@@ -20,6 +20,9 @@ const projectItemsFixture = require(
 const compositionLayersFixture = require(
     '../../native/ae-plugin/protocol/fixtures/invoke-composition-layers-list.json'
 ).response.result;
+const compositionSelectedLayersFixture = require(
+    '../../native/ae-plugin/protocol/fixtures/invoke-composition-selected-layers-list.json'
+).response.result;
 const compositionTimeFixture = require(
     '../../native/ae-plugin/protocol/fixtures/invoke-composition-time-read.json'
 ).response.result;
@@ -225,6 +228,7 @@ function fakeNativeClient() {
             calls.push(['invoke', request]);
             if (request.capabilityId === 'ae.project.items.list'
                 || request.capabilityId === 'ae.composition.layers.list'
+                || request.capabilityId === 'ae.composition.selected-layers.list'
                 || request.capabilityId === 'ae.composition.time.read'
                 || request.capabilityId === 'ae.layer.properties.list') {
                 const result = structuredClone(
@@ -232,6 +236,9 @@ function fakeNativeClient() {
                         ? projectItemsFixture
                         : request.capabilityId === 'ae.composition.layers.list'
                             ? compositionLayersFixture
+                            : request.capabilityId
+                                === 'ae.composition.selected-layers.list'
+                                ? compositionSelectedLayersFixture
                             : request.capabilityId === 'ae.composition.time.read'
                                 ? compositionTimeFixture : layerPropertiesFixture,
                 );
@@ -304,6 +311,10 @@ function fakeNativeClient() {
                     nativeCapabilitiesFixture.items[3].contractDigest,
                 compositionLayersListContractDigest:
                     nativeCapabilitiesFixture.items[4].contractDigest,
+                compositionSelectedLayersListContractDigest:
+                    nativeCapabilitiesFixture.items.find(function (item) {
+                        return item.id === 'ae.composition.selected-layers.list';
+                    })?.contractDigest || null,
                 compositionTimeReadContractDigest:
                     nativeCapabilitiesFixture.items.find(function (item) {
                         return item.id === 'ae.composition.time.read';
@@ -409,6 +420,23 @@ test('native routes require the shared token and reject an open-ended invoke env
         });
         assert.strictEqual(invalidLayerPage.status, 400);
         assert.strictEqual(invalidLayerPage.body.error.code, 'INVALID_ARGUMENT');
+        const invalidSelectedLayerPage = await post(port, '/native/invoke', {
+            'X-AE-MCP-Token': 'known-secret-token',
+        }, {
+            requestId: 'core-composition-selected-layers-invalid',
+            capabilityId: 'ae.composition.selected-layers.list',
+            capabilityVersion: 1,
+            arguments: {
+                compositionLocator:
+                    compositionSelectedLayersFixture.value.compositionLocator,
+                offset: 0,
+                limit: 25,
+                includeProperties: true,
+            },
+            deadlineUnixMs: Date.now() + 10000,
+        });
+        assert.strictEqual(invalidSelectedLayerPage.status, 400);
+        assert.strictEqual(invalidSelectedLayerPage.body.error.code, 'INVALID_ARGUMENT');
         const invalidCompositionTime = await post(port, '/native/invoke', {
             'X-AE-MCP-Token': 'known-secret-token',
         }, {
@@ -510,6 +538,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
                 'ae.project.bit-depth.set',
                 'ae.project.items.list',
                 'ae.composition.layers.list',
+                'ae.composition.selected-layers.list',
                 'ae.composition.time.read',
                 'ae.layer.properties.list',
             ],
@@ -584,6 +613,38 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
         );
         assert.strictEqual(compositionLayers.status, 200);
         assert.strictEqual(compositionLayers.body.result.value.layers[0].locked, false);
+        const compositionSelectedLayersRequest = {
+            requestId: 'core-composition-selected-layers-1',
+            capabilityId: 'ae.composition.selected-layers.list',
+            capabilityVersion: 1,
+            arguments: {
+                compositionLocator:
+                    compositionSelectedLayersFixture.value.compositionLocator,
+                offset: 0,
+                limit: 25,
+            },
+            deadlineUnixMs,
+        };
+        const compositionSelectedLayers = await post(
+            port, '/native/invoke', headers, compositionSelectedLayersRequest,
+        );
+        assert.strictEqual(compositionSelectedLayers.status, 200);
+        assert.deepStrictEqual(
+            compositionSelectedLayers.body.result.value.layers.map((layer) => layer.stackIndex),
+            [1, 3],
+        );
+        assert.strictEqual(
+            compositionSelectedLayers.body.result.evidence.postcondition.kind,
+            'composition-selected-layers-list',
+        );
+        const expectedSelectedEvidence = structuredClone(
+            compositionSelectedLayersFixture.evidence,
+        );
+        expectedSelectedEvidence.requestId = compositionSelectedLayersRequest.requestId;
+        assert.deepStrictEqual(
+            compositionSelectedLayers.body.result.evidence,
+            expectedSelectedEvidence,
+        );
         const compositionTimeRequest = {
             requestId: 'core-composition-time-1',
             capabilityId: 'ae.composition.time.read',
@@ -633,6 +694,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
             ['invoke', bitDepthSetRequest],
             ['invoke', projectItemsRequest],
             ['invoke', compositionLayersRequest],
+            ['invoke', compositionSelectedLayersRequest],
             ['invoke', compositionTimeRequest],
             ['invoke', layerPropertiesRequest],
         ]);

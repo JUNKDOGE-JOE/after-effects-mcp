@@ -820,6 +820,18 @@ class CompositionLayersListArguments(_NativeModel):
         return self
 
 
+class SelectedCompositionLayersListArguments(_NativeModel):
+    composition_locator: NativeLocator
+    offset: NonNegativeInt
+    limit: Annotated[StrictInt, Field(ge=1, le=50)]
+
+    @model_validator(mode="after")
+    def _composition_kind(self) -> "SelectedCompositionLayersListArguments":
+        if self.composition_locator.kind != "composition":
+            raise ValueError("compositionLocator must have kind composition")
+        return self
+
+
 class CompositionTimeReadArguments(_NativeModel):
     composition_locator: NativeLocator
 
@@ -942,6 +954,48 @@ class CompositionLayersListValue(_NativeModel):
                 raise ValueError("composition layer stackIndex does not match page order")
             object_ids.add(layer.locator.object_id)
             stack_indices.add(layer.stack_index)
+        return self
+
+
+class SelectedCompositionLayersListValue(_NativeModel):
+    composition_locator: NativeLocator
+    composition_name: Annotated[StrictStr, Field(max_length=1024)]
+    total: NonNegativeInt
+    offset: NonNegativeInt
+    limit: Annotated[StrictInt, Field(ge=1, le=50)]
+    returned: Annotated[StrictInt, Field(ge=0, le=50)]
+    has_more: StrictBool
+    next_offset: NonNegativeInt | None
+    layers: tuple[CompositionLayer, ...] = Field(max_length=50)
+
+    @model_validator(mode="after")
+    def _verified_page(self) -> "SelectedCompositionLayersListValue":
+        if self.composition_locator.kind != "composition":
+            raise ValueError("compositionLocator must have kind composition")
+        if self.returned != len(self.layers) or self.returned > self.limit:
+            raise ValueError("selected layer page count does not match returned")
+        consumed = self.offset + self.returned
+        if consumed > self.total:
+            raise ValueError("selected layer page exceeds total")
+        expected_more = consumed < self.total
+        expected_next = consumed if expected_more else None
+        if expected_more and self.returned == 0:
+            raise ValueError("selected layer continuation page made no progress")
+        if self.has_more is not expected_more or self.next_offset != expected_next:
+            raise ValueError("selected layer continuation metadata is inconsistent")
+        context = self.composition_locator.context()
+        object_ids: set[str] = set()
+        previous_stack_index = 0
+        for layer in self.layers:
+            related = (layer.locator, layer.parent_locator, layer.source_item_locator)
+            if any(item is not None and item.context() != context for item in related):
+                raise ValueError("selected layer locator escaped the project context")
+            if layer.locator.object_id in object_ids:
+                raise ValueError("selected layer page contains duplicate locators")
+            if layer.stack_index <= previous_stack_index:
+                raise ValueError("selected layers must be in strict stack order")
+            object_ids.add(layer.locator.object_id)
+            previous_stack_index = layer.stack_index
         return self
 
 
@@ -1232,6 +1286,19 @@ class CompositionLayersListExecution(_NativeModel):
         )
 
 
+class SelectedCompositionLayersListExecution(_NativeModel):
+    implementation: NativeCapabilityDescriptor
+    negotiation: NativeNegotiation
+    value: SelectedCompositionLayersListValue
+    evidence: NativeExecutionEvidence
+    engine: Literal["native-aegp"] = "native-aegp"
+
+    def audit_fields(self) -> dict[str, Any]:
+        return _native_read_audit_fields(
+            self.implementation, self.negotiation, self.evidence
+        )
+
+
 class CompositionTimeReadExecution(_NativeModel):
     implementation: NativeCapabilityDescriptor
     negotiation: NativeNegotiation
@@ -1274,6 +1341,17 @@ COMPOSITION_LAYERS_LIST_INPUT_CONTRACT_ID = (
 )
 COMPOSITION_LAYERS_LIST_RESULT_CONTRACT_ID = (
     "aemcp.contract.ae.composition.layers.list.result.v1"
+)
+
+SELECTED_COMPOSITION_LAYERS_LIST_CAPABILITY_ID = (
+    "ae.composition.selected-layers.list"
+)
+SELECTED_COMPOSITION_LAYERS_LIST_CAPABILITY_VERSION = 1
+SELECTED_COMPOSITION_LAYERS_LIST_INPUT_CONTRACT_ID = (
+    "aemcp.contract.ae.composition.selected-layers.list.input.v1"
+)
+SELECTED_COMPOSITION_LAYERS_LIST_RESULT_CONTRACT_ID = (
+    "aemcp.contract.ae.composition.selected-layers.list.result.v1"
 )
 
 COMPOSITION_TIME_READ_CAPABILITY_ID = "ae.composition.time.read"
@@ -1631,6 +1709,17 @@ _COMPOSITION_LAYERS_LIST_RESULT_SCHEMA = {
     },
     "x-invariant": "returned-equals-layers-length-and-page-metadata-is-self-consistent",
 }
+
+# Selected-layer listing intentionally reuses the same closed wire shapes as
+# composition-layer listing. Its result is the same complete CompositionLayer
+# tuple, while the typed value validator below applies the different semantic
+# invariant: selected stack indices are strictly increasing, not contiguous.
+_SELECTED_COMPOSITION_LAYERS_LIST_INPUT_SCHEMA = (
+    _COMPOSITION_LAYERS_LIST_INPUT_SCHEMA
+)
+_SELECTED_COMPOSITION_LAYERS_LIST_RESULT_SCHEMA = (
+    _COMPOSITION_LAYERS_LIST_RESULT_SCHEMA
+)
 
 _COMPOSITION_TIME_READ_INPUT_SCHEMA = {
     "type": "object",
@@ -2034,6 +2123,9 @@ PROJECT_ITEMS_LIST_CONTRACT_DIGEST = (
 )
 COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST = (
     "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75"
+)
+SELECTED_COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST = (
+    COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST
 )
 LAYER_PROPERTIES_LIST_CONTRACT_DIGEST = (
     "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba"
@@ -2502,6 +2594,38 @@ def _validate_composition_layers_list_descriptor(
     )
 
 
+def _validate_selected_composition_layers_list_descriptor(
+    descriptor: NativeCapabilityDescriptor,
+    *,
+    host_platform: NativePlatform,
+) -> None:
+    _validate_navigation_descriptor(
+        descriptor,
+        host_platform=host_platform,
+        capability_id=SELECTED_COMPOSITION_LAYERS_LIST_CAPABILITY_ID,
+        capability_version=SELECTED_COMPOSITION_LAYERS_LIST_CAPABILITY_VERSION,
+        summary=(
+            "List a bounded page of selected layers in one After Effects "
+            "composition."
+        ),
+        side_effect_summary=(
+            "Reads selected composition layers without changing After Effects state."
+        ),
+        preconditions=(
+            "An After Effects project must be open.",
+            "compositionLocator must come from ae.project.items.list@1.",
+        ),
+        input_contract_id=SELECTED_COMPOSITION_LAYERS_LIST_INPUT_CONTRACT_ID,
+        result_contract_id=SELECTED_COMPOSITION_LAYERS_LIST_RESULT_CONTRACT_ID,
+        contract_digest=SELECTED_COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST,
+        input_schema=_SELECTED_COMPOSITION_LAYERS_LIST_INPUT_SCHEMA,
+        result_schema=_SELECTED_COMPOSITION_LAYERS_LIST_RESULT_SCHEMA,
+        requirement_id=(
+            "aemcp.requirement.native.composition-selected-layers-list"
+        ),
+    )
+
+
 def _validate_composition_time_read_descriptor(
     descriptor: NativeCapabilityDescriptor,
     *,
@@ -2619,6 +2743,20 @@ def _composition_layers_list_digest(value: CompositionLayersListValue) -> str:
         {
             "capabilityId": COMPOSITION_LAYERS_LIST_CAPABILITY_ID,
             "capabilityVersion": COMPOSITION_LAYERS_LIST_CAPABILITY_VERSION,
+            "value": value.model_dump(mode="json", by_alias=True),
+        }
+    )
+
+
+def _selected_composition_layers_list_digest(
+    value: SelectedCompositionLayersListValue,
+) -> str:
+    return _sha256_closed_json(
+        {
+            "capabilityId": SELECTED_COMPOSITION_LAYERS_LIST_CAPABILITY_ID,
+            "capabilityVersion": (
+                SELECTED_COMPOSITION_LAYERS_LIST_CAPABILITY_VERSION
+            ),
             "value": value.model_dump(mode="json", by_alias=True),
         }
     )
@@ -3385,6 +3523,71 @@ async def invoke_composition_layers_list(
     )
 
 
+async def invoke_selected_composition_layers_list(
+    backend: NativeInvokeBackend,
+    *,
+    request_id: str,
+    composition_locator: NativeLocator | Mapping[str, Any],
+    offset: int,
+    limit: int,
+    deadline_unix_ms: int,
+    cancellation: NativeCancellationToken | None = None,
+) -> SelectedCompositionLayersListExecution:
+    """List selected layers for one exact composition locator without JSX."""
+
+    arguments = SelectedCompositionLayersListArguments(
+        composition_locator=composition_locator,
+        offset=offset,
+        limit=limit,
+    )
+    wire_arguments = arguments.model_dump(mode="json", by_alias=True)
+    negotiation, descriptor, _request, result = await _invoke_native_read_request(
+        backend,
+        request_id=request_id,
+        capability_id=SELECTED_COMPOSITION_LAYERS_LIST_CAPABILITY_ID,
+        capability_version=SELECTED_COMPOSITION_LAYERS_LIST_CAPABILITY_VERSION,
+        arguments=wire_arguments,
+        locator=arguments.composition_locator,
+        locator_field="params.arguments.compositionLocator",
+        stale_locator_hint=(
+            "Discard the stale composition locator, then call "
+            "ae_listProjectItems and copy a fresh composition locator."
+        ),
+        descriptor_validator=_validate_selected_composition_layers_list_descriptor,
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    try:
+        value = SelectedCompositionLayersListValue.model_validate(result.value)
+        postcondition_digest = _selected_composition_layers_list_digest(value)
+    except (ValidationError, TypeError, ValueError, UnicodeError) as exc:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native selected-layer page did not match its typed contract.",
+        ) from exc
+    if (
+        value.composition_locator != arguments.composition_locator
+        or value.offset != arguments.offset
+        or value.limit != arguments.limit
+        or value.composition_locator.host_instance_id
+        != negotiation.host_instance_id
+        or value.composition_locator.session_id != negotiation.session_id
+        or result.evidence.postcondition.kind
+        != "composition-selected-layers-list"
+        or result.evidence.postcondition.digest != postcondition_digest
+    ):
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native selected-layer page was not bound to its request and evidence.",
+        )
+    return SelectedCompositionLayersListExecution(
+        implementation=descriptor,
+        negotiation=negotiation,
+        value=value,
+        evidence=result.evidence,
+    )
+
+
 async def invoke_composition_time_read(
     backend: NativeInvokeBackend,
     *,
@@ -3541,6 +3744,9 @@ __all__ = [
     "CompositionLayersListArguments",
     "CompositionLayersListExecution",
     "CompositionLayersListValue",
+    "SelectedCompositionLayersListArguments",
+    "SelectedCompositionLayersListExecution",
+    "SelectedCompositionLayersListValue",
     "CompositionCurrentTime",
     "CompositionTimeReadArguments",
     "CompositionTimeReadExecution",
@@ -3603,6 +3809,11 @@ __all__ = [
     "COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST",
     "COMPOSITION_LAYERS_LIST_INPUT_CONTRACT_ID",
     "COMPOSITION_LAYERS_LIST_RESULT_CONTRACT_ID",
+    "SELECTED_COMPOSITION_LAYERS_LIST_CAPABILITY_ID",
+    "SELECTED_COMPOSITION_LAYERS_LIST_CAPABILITY_VERSION",
+    "SELECTED_COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST",
+    "SELECTED_COMPOSITION_LAYERS_LIST_INPUT_CONTRACT_ID",
+    "SELECTED_COMPOSITION_LAYERS_LIST_RESULT_CONTRACT_ID",
     "COMPOSITION_TIME_READ_CAPABILITY_ID",
     "COMPOSITION_TIME_READ_CAPABILITY_VERSION",
     "COMPOSITION_TIME_READ_CONTRACT_DIGEST",
@@ -3624,6 +3835,7 @@ __all__ = [
     "invoke_project_bit_depth_read",
     "invoke_project_bit_depth_set",
     "invoke_composition_layers_list",
+    "invoke_selected_composition_layers_list",
     "invoke_composition_time_read",
     "invoke_layer_properties_list",
     "invoke_project_items_list",

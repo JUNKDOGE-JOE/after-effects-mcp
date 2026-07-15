@@ -31,6 +31,7 @@ const PROJECT_BIT_DEPTH_READ_CAPABILITY = 'ae.project.bit-depth.read';
 const PROJECT_BIT_DEPTH_SET_CAPABILITY = 'ae.project.bit-depth.set';
 const PROJECT_ITEMS_LIST_CAPABILITY = 'ae.project.items.list';
 const COMPOSITION_LAYERS_LIST_CAPABILITY = 'ae.composition.layers.list';
+const COMPOSITION_SELECTED_LAYERS_LIST_CAPABILITY = 'ae.composition.selected-layers.list';
 const COMPOSITION_TIME_READ_CAPABILITY = 'ae.composition.time.read';
 const LAYER_PROPERTIES_LIST_CAPABILITY = 'ae.layer.properties.list';
 const NATIVE_LOCATOR_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -272,6 +273,13 @@ function validCompositionLayersListArguments(value) {
         && Number.isSafeInteger(value.limit) && value.limit >= 1 && value.limit <= 50;
 }
 
+function validCompositionSelectedLayersListArguments(value) {
+    return exactBody(value, ['compositionLocator', 'offset', 'limit'])
+        && validNativeLocator(value.compositionLocator, 'composition')
+        && Number.isSafeInteger(value.offset) && value.offset >= 0
+        && Number.isSafeInteger(value.limit) && value.limit >= 1 && value.limit <= 50;
+}
+
 function validCompositionTimeReadArguments(value) {
     return exactBody(value, ['compositionLocator'])
         && validNativeLocator(value.compositionLocator, 'composition');
@@ -307,6 +315,10 @@ function validNativeInvokeBody(body) {
     if (body.capabilityId === COMPOSITION_LAYERS_LIST_CAPABILITY
         && body.capabilityVersion === 1) {
         return validCompositionLayersListArguments(body.arguments);
+    }
+    if (body.capabilityId === COMPOSITION_SELECTED_LAYERS_LIST_CAPABILITY
+        && body.capabilityVersion === 1) {
+        return validCompositionSelectedLayersListArguments(body.arguments);
     }
     if (body.capabilityId === COMPOSITION_TIME_READ_CAPABILITY
         && body.capabilityVersion === 1) {

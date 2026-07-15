@@ -30,6 +30,7 @@ VERB_ANNOTATIONS: dict[str, ToolAnnotations] = {
     "ae.setProjectBitDepth": _ann(False, False, True),
     "ae.listProjectItems": _ann(True, False, True),
     "ae.listCompositionLayers": _ann(True, False, True),
+    "ae.listSelectedLayers": _ann(True, False, True),
     "ae.getCompositionTime": _ann(True, False, True),
     "ae.listLayerProperties": _ann(True, False, True),
     "ae.layers": _ann(True, False, True),

@@ -9,11 +9,12 @@ from ae_mcp import schemas as S
 
 
 def test_registry_has_all_verbs():
-    assert len(S.SCHEMAS) == 51, f"expected 51 verbs, got {len(S.SCHEMAS)}"
+    assert len(S.SCHEMAS) == 52, f"expected 52 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.projectSummary",
         "ae.getProjectBitDepth", "ae.setProjectBitDepth",
-        "ae.listProjectItems", "ae.listCompositionLayers", "ae.getCompositionTime",
+        "ae.listProjectItems", "ae.listCompositionLayers", "ae.listSelectedLayers",
+        "ae.getCompositionTime",
         "ae.listLayerProperties",
         "ae.layers", "ae.readProps", "ae.exec",
         "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.previewFrame",
@@ -134,6 +135,26 @@ def test_native_composition_layer_listing_requires_exact_composition_locator():
         S.AeListCompositionLayersArgs(
             composition_locator=_locator("composition"), offset=True
         )
+
+
+def test_native_selected_layer_listing_is_bounded_locator_only_and_closed():
+    args = S.AeListSelectedLayersArgs(
+        composition_locator=_locator("composition")
+    )
+    assert args.offset == 0
+    assert args.limit == 25
+    assert args.composition_locator.kind == "composition"
+
+    for invalid in (
+        {},
+        {"composition_locator": _locator("item")},
+        {"composition_locator": _locator("composition"), "offset": True},
+        {"composition_locator": _locator("composition"), "limit": 0},
+        {"composition_locator": _locator("composition"), "limit": 51},
+        {"composition_locator": _locator("composition"), "extra": True},
+    ):
+        with pytest.raises(ValidationError):
+            S.AeListSelectedLayersArgs(**invalid)
 
 
 def test_native_composition_time_requires_only_an_exact_composition_locator():

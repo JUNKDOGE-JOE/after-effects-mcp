@@ -15,7 +15,8 @@ EXECUTION_ENGINES: tuple[ExecutionEngine, ...] = (
 
 ALL_VERBS: Set[str] = {
     "ae.init", "ae.overview", "ae.layers", "ae.readProps", "ae.exec",
-    "ae.listProjectItems", "ae.listCompositionLayers", "ae.getCompositionTime",
+    "ae.listProjectItems", "ae.listCompositionLayers", "ae.listSelectedLayers",
+    "ae.getCompositionTime",
     "ae.listLayerProperties",
     "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.applyEffect",
     "ae.previewFrame",

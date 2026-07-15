@@ -29,6 +29,10 @@ const COMPOSITION_LAYERS_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
     '../../native/ae-plugin/protocol/fixtures/invoke-composition-layers-list.json',
 ), 'utf8'));
+const COMPOSITION_SELECTED_LAYERS_VECTOR = JSON.parse(fs.readFileSync(path.join(
+    __dirname,
+    '../../native/ae-plugin/protocol/fixtures/invoke-composition-selected-layers-list.json',
+), 'utf8'));
 const COMPOSITION_TIME_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
     '../../native/ae-plugin/protocol/fixtures/invoke-composition-time-read.json',
@@ -240,12 +244,16 @@ function installProtocol(server, options) {
                     };
                 } else if (request.params.capabilityId === 'ae.project.items.list'
                     || request.params.capabilityId === 'ae.composition.layers.list'
+                    || request.params.capabilityId === 'ae.composition.selected-layers.list'
                     || request.params.capabilityId === 'ae.composition.time.read'
                     || request.params.capabilityId === 'ae.layer.properties.list') {
                     const vector = request.params.capabilityId === 'ae.project.items.list'
                         ? PROJECT_ITEMS_VECTOR
                         : request.params.capabilityId === 'ae.composition.layers.list'
                             ? COMPOSITION_LAYERS_VECTOR
+                            : request.params.capabilityId
+                                === 'ae.composition.selected-layers.list'
+                                ? COMPOSITION_SELECTED_LAYERS_VECTOR
                             : request.params.capabilityId === 'ae.composition.time.read'
                                 ? COMPOSITION_TIME_VECTOR : LAYER_PROPERTIES_VECTOR;
                     result = structuredClone(vector.response.result);
@@ -503,6 +511,12 @@ test('CEP client verifies native project summary and bit-depth read/write capabi
         }).contractDigest,
     );
     assert.equal(
+        client.status().compositionSelectedLayersListContractDigest,
+        CAPABILITIES_VECTOR.items.find(function (item) {
+            return item.id === 'ae.composition.selected-layers.list';
+        }).contractDigest,
+    );
+    assert.equal(
         client.status().compositionTimeReadContractDigest,
         CAPABILITIES_VECTOR.items.find(function (item) {
             return item.id === 'ae.composition.time.read';
@@ -585,6 +599,24 @@ test('CEP client verifies native project summary and bit-depth read/write capabi
         compositionLayers.evidence.requestDigest,
         invokeRequestDigest(protocol.requests[6]),
     );
+    const compositionSelectedLayers = await client.invoke({
+        requestId: 'core-composition-selected-layers-1',
+        capabilityId: 'ae.composition.selected-layers.list',
+        capabilityVersion: 1,
+        arguments: { compositionLocator, offset: 0, limit: 25 },
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.equal(compositionSelectedLayers.replayed, false);
+    assert.deepEqual(
+        compositionSelectedLayers.value.layers.map(function (layer) {
+            return layer.stackIndex;
+        }),
+        [1, 3],
+    );
+    assert.equal(
+        compositionSelectedLayers.evidence.requestDigest,
+        invokeRequestDigest(protocol.requests[7]),
+    );
     const compositionTime = await client.invoke({
         requestId: 'core-composition-time-1',
         capabilityId: 'ae.composition.time.read',
@@ -606,7 +638,7 @@ test('CEP client verifies native project summary and bit-depth read/write capabi
     assert.equal(compositionTime.evidence.undo, undefined);
     assert.equal(
         compositionTime.evidence.requestDigest,
-        invokeRequestDigest(protocol.requests[7]),
+        invokeRequestDigest(protocol.requests[8]),
     );
     const layerProperties = await client.invoke({
         requestId: 'core-layer-properties-1',
@@ -623,11 +655,11 @@ test('CEP client verifies native project summary and bit-depth read/write capabi
     assert.equal(layerProperties.value.properties[0].propertyIndex, 1);
     assert.equal(
         layerProperties.evidence.requestDigest,
-        invokeRequestDigest(protocol.requests[8]),
+        invokeRequestDigest(protocol.requests[9]),
     );
     assert.deepEqual(protocol.requests.map(function (request) { return request.method; }), [
         'hello', 'capabilities', 'invoke', 'invoke', 'invoke', 'invoke', 'invoke', 'invoke',
-        'invoke',
+        'invoke', 'invoke',
     ]);
 });
 
@@ -679,6 +711,191 @@ test('CEP graph reads count Unicode scalars rather than UTF-16 code units', {
     });
     assert.equal(Array.from(properties.value.layerName).length, 1024);
     assert.equal(Array.from(properties.value.properties[0].name).length, 1024);
+});
+
+test('CEP selected-layer reads accept sparse stack order and reject open results', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const ready = await readyNativeClient(t, {
+        mutateInvoke: function (result, request) {
+            if (result.capabilityId !== 'ae.composition.selected-layers.list') return;
+            if (request.requestId === 'selected-layers-empty') {
+                result.value.total = 0;
+                result.value.returned = 0;
+                result.value.layers = [];
+            } else if (request.requestId === 'selected-layers-page-1') {
+                result.value.offset = 0;
+                result.value.limit = 1;
+                result.value.returned = 1;
+                result.value.hasMore = true;
+                result.value.nextOffset = 1;
+                result.value.layers = [result.value.layers[0]];
+            } else if (request.requestId === 'selected-layers-page-2') {
+                result.value.offset = 1;
+                result.value.limit = 1;
+                result.value.returned = 1;
+                result.value.hasMore = false;
+                result.value.nextOffset = null;
+                result.value.layers = [result.value.layers[1]];
+            } else if (request.requestId === 'selected-layers-reversed') {
+                result.value.layers.reverse();
+            } else if (request.requestId === 'selected-layers-extra-field') {
+                result.value.layers[0].selected = true;
+            } else if (request.requestId === 'selected-layers-wrong-kind') {
+                result.evidence.postcondition.kind = 'composition-layers-list';
+            }
+            rebindPostcondition(result);
+        },
+    });
+    const argumentsValue = structuredClone(
+        COMPOSITION_SELECTED_LAYERS_VECTOR.request.params.arguments,
+    );
+    const accepted = await ready.client.invoke({
+        requestId: 'selected-layers-sparse',
+        capabilityId: 'ae.composition.selected-layers.list',
+        capabilityVersion: 1,
+        arguments: argumentsValue,
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.deepEqual(accepted.value.layers.map(function (layer) {
+        return layer.stackIndex;
+    }), [1, 3]);
+    assert.equal(accepted.evidence.effect, 'none');
+    assert.equal(accepted.evidence.undo, undefined);
+    const firstPage = await ready.client.invoke({
+        requestId: 'selected-layers-page-1',
+        capabilityId: 'ae.composition.selected-layers.list',
+        capabilityVersion: 1,
+        arguments: { ...argumentsValue, offset: 0, limit: 1 },
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.deepEqual(firstPage.value.layers.map(function (layer) {
+        return layer.stackIndex;
+    }), [1]);
+    assert.equal(firstPage.value.returned, 1);
+    assert.equal(firstPage.value.hasMore, true);
+    assert.equal(firstPage.value.nextOffset, 1);
+    const firstPageRequest = ready.protocol.requests.at(-1);
+    assert.equal(firstPage.evidence.requestDigest, invokeRequestDigest(firstPageRequest));
+
+    const secondPage = await ready.client.invoke({
+        requestId: 'selected-layers-page-2',
+        capabilityId: 'ae.composition.selected-layers.list',
+        capabilityVersion: 1,
+        arguments: { ...argumentsValue, offset: 1, limit: 1 },
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.deepEqual(secondPage.value.layers.map(function (layer) {
+        return layer.stackIndex;
+    }), [3]);
+    assert.equal(secondPage.value.returned, 1);
+    assert.equal(secondPage.value.hasMore, false);
+    assert.equal(secondPage.value.nextOffset, null);
+    const secondPageRequest = ready.protocol.requests.at(-1);
+    assert.equal(secondPage.evidence.requestDigest, invokeRequestDigest(secondPageRequest));
+    assert.notEqual(firstPage.evidence.requestDigest, secondPage.evidence.requestDigest);
+    const empty = await ready.client.invoke({
+        requestId: 'selected-layers-empty',
+        capabilityId: 'ae.composition.selected-layers.list',
+        capabilityVersion: 1,
+        arguments: argumentsValue,
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.equal(empty.value.total, 0);
+    assert.deepEqual(empty.value.layers, []);
+
+    for (const requestId of [
+        'selected-layers-reversed',
+        'selected-layers-extra-field',
+        'selected-layers-wrong-kind',
+    ]) {
+        await assert.rejects(ready.client.invoke({
+            requestId,
+            capabilityId: 'ae.composition.selected-layers.list',
+            capabilityVersion: 1,
+            arguments: argumentsValue,
+            deadlineUnixMs: 1900000002000,
+        }), { code: 'NATIVE_CONTRACT_MISMATCH', retryable: false });
+    }
+
+    const beforeInvalidInput = ready.protocol.requests.length;
+    await assert.rejects(ready.client.invoke({
+        requestId: 'selected-layers-extra-input',
+        capabilityId: 'ae.composition.selected-layers.list',
+        capabilityVersion: 1,
+        arguments: { ...argumentsValue, includeProperties: true },
+        deadlineUnixMs: 1900000002000,
+    }), { code: 'INVALID_ARGUMENT', retryable: false });
+    assert.equal(ready.protocol.requests.length, beforeInvalidInput);
+});
+
+test('CEP forwards same-session forged selected-layer locators and preserves native stale recovery', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const ready = await readyNativeClient(t, {
+        invokeError: {
+            code: 'STALE_LOCATOR',
+            message: 'compositionLocator does not identify the open composition',
+            retryable: true,
+            sideEffect: 'not-started',
+            recovery: {
+                action: 'refresh-locator',
+                hint: 'Discard the stale locator and call ae_listProjectItems again.',
+            },
+            details: {
+                field: 'params.arguments.compositionLocator',
+                capabilityId: 'ae.composition.selected-layers.list',
+            },
+        },
+    });
+    const baseArguments = structuredClone(
+        COMPOSITION_SELECTED_LAYERS_VECTOR.request.params.arguments,
+    );
+    const forgedArguments = [
+        {
+            ...baseArguments,
+            compositionLocator: {
+                ...baseArguments.compositionLocator,
+                objectId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            },
+        },
+        {
+            ...baseArguments,
+            compositionLocator: {
+                ...baseArguments.compositionLocator,
+                generation: baseArguments.compositionLocator.generation + 1,
+            },
+        },
+    ];
+
+    for (let index = 0; index < forgedArguments.length; index += 1) {
+        const before = ready.protocol.requests.length;
+        await assert.rejects(ready.client.invoke({
+            requestId: 'selected-layers-forged-' + String(index + 1),
+            capabilityId: 'ae.composition.selected-layers.list',
+            capabilityVersion: 1,
+            arguments: forgedArguments[index],
+            deadlineUnixMs: 1900000002000,
+        }), function (error) {
+            assert.equal(error.code, 'STALE_LOCATOR');
+            assert.equal(error.retryable, true);
+            assert.equal(error.sideEffect, 'not-started');
+            assert.deepEqual(error.recovery, {
+                action: 'refresh-locator',
+                hint: 'Discard the stale locator and call ae_listProjectItems again.',
+            });
+            assert.deepEqual(error.details, {
+                field: 'params.arguments.compositionLocator',
+                capabilityId: 'ae.composition.selected-layers.list',
+            });
+            return true;
+        });
+        assert.equal(ready.protocol.requests.length, before + 1);
+        assert.deepEqual(
+            ready.protocol.requests.at(-1).params.arguments,
+            forgedArguments[index],
+        );
+    }
 });
 
 test('CEP composition-time read enforces exact rational and closed native evidence', {
@@ -779,12 +996,14 @@ test('CEP graph reads reject non-advancing pages for all paged native capabiliti
         mutateInvoke: function (result) {
             if (![
                 'ae.project.items.list', 'ae.composition.layers.list',
+                'ae.composition.selected-layers.list',
                 'ae.layer.properties.list',
             ].includes(
                 result.capabilityId,
             )) return;
             const member = result.capabilityId === 'ae.project.items.list'
                 ? 'items' : result.capabilityId === 'ae.composition.layers.list'
+                    || result.capabilityId === 'ae.composition.selected-layers.list'
                     ? 'layers' : 'properties';
             result.value.total = 1;
             result.value.returned = 0;
@@ -810,6 +1029,15 @@ test('CEP graph reads reject non-advancing pages for all paged native capabiliti
             offset: 0,
             limit: 25,
         },
+        deadlineUnixMs: 1900000002000,
+    }), { code: 'NATIVE_CONTRACT_MISMATCH' });
+    await assert.rejects(ready.client.invoke({
+        requestId: 'stalled-composition-selected-layers',
+        capabilityId: 'ae.composition.selected-layers.list',
+        capabilityVersion: 1,
+        arguments: structuredClone(
+            COMPOSITION_SELECTED_LAYERS_VECTOR.request.params.arguments,
+        ),
         deadlineUnixMs: 1900000002000,
     }), { code: 'NATIVE_CONTRACT_MISMATCH' });
     await assert.rejects(ready.client.invoke({
@@ -1009,6 +1237,21 @@ test('CEP stale-locator preflight reports the exact field without inventing gene
         assert.deepEqual(error.details, {
             field: 'params.arguments.compositionLocator',
             capabilityId: 'ae.composition.layers.list',
+        });
+        assert.equal(Object.hasOwn(error.details, 'currentGeneration'), false);
+        return true;
+    });
+    await assert.rejects(ready.client.invoke({
+        requestId: 'stale-selected-composition-locator',
+        capabilityId: 'ae.composition.selected-layers.list',
+        capabilityVersion: 1,
+        arguments: { compositionLocator, offset: 0, limit: 25 },
+        deadlineUnixMs: 1900000002000,
+    }), function (error) {
+        assert.equal(error.code, 'STALE_LOCATOR');
+        assert.deepEqual(error.details, {
+            field: 'params.arguments.compositionLocator',
+            capabilityId: 'ae.composition.selected-layers.list',
         });
         assert.equal(Object.hasOwn(error.details, 'currentGeneration'), false);
         return true;

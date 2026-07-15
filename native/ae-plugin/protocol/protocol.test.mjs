@@ -25,6 +25,8 @@ import {
   postconditionDigest,
   compositionLayersListContractDigest,
   compositionLayersListDescriptor,
+  compositionSelectedLayersListContractDigest,
+  compositionSelectedLayersListDescriptor,
   compositionTimeReadContractDigest,
   compositionTimeReadDescriptor,
   layerPropertiesListContractDigest,
@@ -212,6 +214,7 @@ test('all checked-in vectors are synthetic and contain no host or Adobe suite cl
     'invoke-project-bit-depth-set.json',
     'invoke-project-items-list.json',
     'invoke-composition-layers-list.json',
+    'invoke-composition-selected-layers-list.json',
     'invoke-composition-time-read.json',
     'invoke-layer-properties-list.json',
     'cancel.json',
@@ -246,6 +249,7 @@ test('golden requests, events, responses, and bound error policies validate', ()
     'invoke-project-bit-depth-set.json',
     'invoke-project-items-list.json',
     'invoke-composition-layers-list.json',
+    'invoke-composition-selected-layers-list.json',
     'invoke-composition-time-read.json',
     'invoke-layer-properties-list.json',
     'cancel.json',
@@ -449,6 +453,7 @@ test('schema shape and composite request validation have an explicit differentia
     golden('invoke-project-bit-depth-set.json').request,
     golden('invoke-project-items-list.json').request,
     golden('invoke-composition-layers-list.json').request,
+    golden('invoke-composition-selected-layers-list.json').request,
     golden('invoke-composition-time-read.json').request,
     golden('invoke-layer-properties-list.json').request,
     golden('cancel.json').request,
@@ -683,6 +688,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
   const bitDepthSetDescriptor = projectBitDepthSetDescriptor(schema);
   const projectItemsDescriptor = projectItemsListDescriptor(schema);
   const compositionLayersDescriptor = compositionLayersListDescriptor(schema);
+  const compositionSelectedLayersDescriptor = compositionSelectedLayersListDescriptor(schema);
   const compositionTimeDescriptor = compositionTimeReadDescriptor(schema);
   const layerPropertiesDescriptor = layerPropertiesListDescriptor(schema);
   const containsRef = (value) => {
@@ -717,6 +723,14 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     '64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e');
   assert.equal(compositionLayersDescriptor.contractDigest,
     '3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75');
+  assert.equal(compositionSelectedLayersDescriptor.contractDigest,
+    '3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75');
+  assert.equal(compositionSelectedLayersDescriptor.contractDigest,
+    compositionSelectedLayersListContractDigest(schema));
+  assert.deepEqual(compositionSelectedLayersDescriptor.inputSchema,
+    compositionLayersDescriptor.inputSchema);
+  assert.deepEqual(compositionSelectedLayersDescriptor.resultSchema,
+    compositionLayersDescriptor.resultSchema);
   assert.equal(compositionTimeDescriptor.contractDigest,
     'fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd');
   assert.equal(layerPropertiesDescriptor.contractDigest,
@@ -727,9 +741,10 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     bitDepthSetDescriptor,
     projectItemsDescriptor,
     compositionLayersDescriptor,
+    compositionSelectedLayersDescriptor,
     compositionTimeDescriptor,
     layerPropertiesDescriptor,
-  ]), '781a620eac1310fb85dc0ac74ae9655fdab0512d370e1039074cd0ff2fb4d7fb');
+  ]), '04ad7c01ea1bf9c2837d7f55184fe0453b2edf6027c1ec36c44a8c8a17d46296');
   assert.ok(Buffer.byteLength(canonicalize(descriptor), 'utf8') < LIMITS.maxFrameBytes);
 });
 
@@ -738,7 +753,7 @@ test('v1 capability discovery is single-page, fail-closed, and never replayed', 
   const exchange = golden('capabilities.json');
   assert.equal(exchange.request.params.limit, 100);
   assert.equal(Object.hasOwn(exchange.request.params, 'ids'), false);
-  assert.equal(exchange.response.result.items.length, 7);
+  assert.equal(exchange.response.result.items.length, 8);
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, exchange.response, schema), true);
 
   const zeroLimit = structuredClone(exchange.request);
@@ -1309,6 +1324,8 @@ test('native project navigation vectors bind bounded pagination and locator prov
   for (const [name, descriptor] of [
     ['invoke-project-items-list.json', projectItemsListDescriptor(schema)],
     ['invoke-composition-layers-list.json', compositionLayersListDescriptor(schema)],
+    ['invoke-composition-selected-layers-list.json',
+      compositionSelectedLayersListDescriptor(schema)],
     ['invoke-composition-time-read.json', compositionTimeReadDescriptor(schema)],
     ['invoke-layer-properties-list.json', layerPropertiesListDescriptor(schema)],
   ]) {
@@ -1421,6 +1438,37 @@ test('native project navigation vectors bind bounded pagination and locator prov
     malformed.result.evidence.postcondition.digest = postconditionDigest(malformed.result);
     assert.equal(validateTranscript(
       layersContext, layers.request, [...layers.events, malformed],
+    ), false);
+  }
+
+  const selectedLayers = golden('invoke-composition-selected-layers-list.json');
+  assert.equal(compositionSelectedLayersListDescriptor(schema).contractDigest,
+    compositionSelectedLayersListContractDigest(schema));
+  assert.deepEqual(
+    selectedLayers.response.result.value.layers.map((layer) => layer.stackIndex),
+    [1, 3],
+    'selected layers preserve strictly ascending, non-contiguous stack indices',
+  );
+  const selectedLayersContext = {
+    hello: golden('hello.json'),
+    descriptor: compositionSelectedLayersListDescriptor(schema),
+    schema,
+    brokerSendUnixMs: 1900000000000,
+    effectiveDeadlineUnixMs: selectedLayers.request.deadlineUnixMs,
+    terminalObservedUnixMs: 1900000000030,
+  };
+  for (const mutate of [
+    (value) => { value.layers[1].stackIndex = value.layers[0].stackIndex; },
+    (value) => { value.layers[1].stackIndex = value.layers[0].stackIndex - 1; },
+    (value) => { value.layers[1].locator.objectId = value.layers[0].locator.objectId; },
+  ]) {
+    const malformed = structuredClone(selectedLayers.response);
+    mutate(malformed.result.value);
+    malformed.result.evidence.postcondition.digest = postconditionDigest(malformed.result);
+    assert.equal(validateTranscript(
+      selectedLayersContext,
+      selectedLayers.request,
+      [...selectedLayers.events, malformed],
     ), false);
   }
 

@@ -19,6 +19,7 @@ namespace {
 using aemcp::native::rpc::CapabilitiesParams;
 using aemcp::native::rpc::CapabilitiesSuccess;
 using aemcp::native::rpc::CompositionLayersSuccess;
+using aemcp::native::rpc::CompositionSelectedLayersSuccess;
 using aemcp::native::rpc::CompositionTimeSuccess;
 using aemcp::native::rpc::LayerPropertiesSuccess;
 using aemcp::native::rpc::CapabilityDetail;
@@ -51,6 +52,7 @@ using aemcp::native::rpc::digest_project_bit_depth_set_arguments;
 using aemcp::native::rpc::digest_project_bit_depth_set_postcondition;
 using aemcp::native::rpc::digest_project_summary_postcondition;
 using aemcp::native::rpc::digest_composition_layers_postcondition;
+using aemcp::native::rpc::digest_composition_selected_layers_postcondition;
 using aemcp::native::rpc::digest_composition_time_postcondition;
 using aemcp::native::rpc::digest_layer_properties_postcondition;
 using aemcp::native::rpc::digest_project_items_postcondition;
@@ -63,6 +65,7 @@ using aemcp::native::rpc::encode_project_bit_depth_read_success;
 using aemcp::native::rpc::encode_project_bit_depth_set_success;
 using aemcp::native::rpc::encode_project_summary_success;
 using aemcp::native::rpc::encode_composition_layers_success;
+using aemcp::native::rpc::encode_composition_selected_layers_success;
 using aemcp::native::rpc::encode_composition_time_success;
 using aemcp::native::rpc::encode_layer_properties_success;
 using aemcp::native::rpc::encode_project_items_success;
@@ -233,6 +236,20 @@ std::string composition_layers_invoke_json(
       + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
       + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
         "\"params\":{\"capabilityId\":\"ae.composition.layers.list\","
+        "\"capabilityVersion\":1,\"arguments\":{\"compositionLocator\":"
+      + locator_value + ",\"offset\":0,\"limit\":25}}}";
+}
+
+std::string composition_selected_layers_invoke_json(
+    std::string_view request_id = "invoke-composition-selected-layers-1",
+    std::string_view composition_locator = {}) {
+  const std::string locator_value = composition_locator.empty()
+      ? locator_json("composition", "66666666-6666-4666-8666-666666666666")
+      : std::string(composition_locator);
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.composition.selected-layers.list\","
         "\"capabilityVersion\":1,\"arguments\":{\"compositionLocator\":"
       + locator_value + ",\"offset\":0,\"limit\":25}}}";
 }
@@ -430,6 +447,20 @@ void project_graph_invokes_and_results_are_closed_and_deterministic() {
         locator_json("item", "66666666-6666-4666-8666-666666666666"))));
   }, "INVALID_ARGUMENT", "composition-layers item locator");
 
+  const ParsedRequest selected_layers_parsed = decode_request_frame(frame(
+      composition_selected_layers_invoke_json()));
+  const auto& selected_layers = std::get<InvokeParams>(selected_layers_parsed.params);
+  require(selected_layers.capability_id == "ae.composition.selected-layers.list"
+          && selected_layers.composition_locator.has_value()
+          && selected_layers.composition_locator->kind == "composition"
+          && selected_layers.offset == 0 && selected_layers.limit == 25,
+      "composition-selected-layers invoke lost its closed locator or pagination");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(composition_selected_layers_invoke_json(
+        "invoke-composition-selected-wrong-kind",
+        locator_json("item", "66666666-6666-4666-8666-666666666666"))));
+  }, "INVALID_ARGUMENT", "composition-selected-layers item locator");
+
   const ParsedRequest time_parsed = decode_request_frame(frame(
       composition_time_invoke_json()));
   const auto& time = std::get<InvokeParams>(time_parsed.params);
@@ -535,6 +566,51 @@ void project_graph_invokes_and_results_are_closed_and_deterministic() {
   layer_page.layers[0].locked = false;
   require(digest_composition_layers_postcondition(layer_page) != original_digest,
       "composition-layers digest ignored a semantic layer flag");
+
+  aemcp::native::CompositionLayersPage selected_page = layer_page;
+  selected_page.total = 2;
+  selected_page.layers.push_back({
+      locator("layer", "99999999-9999-4999-8999-999999999999"),
+      3,
+      "Fixture Shape",
+      "shape",
+      true,
+      false,
+      false,
+      std::nullopt,
+      std::nullopt});
+  CompositionSelectedLayersSuccess selected_success{
+      "invoke-composition-selected-layers-1",
+      std::string(kSession),
+      std::string(kHost),
+      selected_page,
+      1'900'000'000'000ULL,
+      1'900'000'000'025ULL,
+      std::string(kDigest),
+      digest_composition_selected_layers_postcondition(selected_page),
+      false};
+  const std::string selected_body = body(
+      encode_composition_selected_layers_success(selected_success));
+  require(selected_body.find(
+              "\"capabilityId\":\"ae.composition.selected-layers.list\"")
+          != std::string::npos
+          && selected_body.find("\"kind\":\"composition-selected-layers-list\"")
+            != std::string::npos
+          && selected_body.find("\"stackIndex\":1") != std::string::npos
+          && selected_body.find("\"stackIndex\":3") != std::string::npos,
+      "composition-selected-layers success omitted non-contiguous native selection evidence");
+  CompositionSelectedLayersSuccess out_of_order_selected = selected_success;
+  out_of_order_selected.value.layers[1].stack_index = 1;
+  out_of_order_selected.postcondition_digest = std::string(kDigest);
+  expect_codec_error([&] {
+    (void)encode_composition_selected_layers_success(out_of_order_selected);
+  }, "INVALID_ARGUMENT", "non-increasing selected-layer stack index");
+  CompositionSelectedLayersSuccess duplicate_selected = selected_success;
+  duplicate_selected.value.layers[1].locator = duplicate_selected.value.layers[0].locator;
+  duplicate_selected.postcondition_digest = std::string(kDigest);
+  expect_codec_error([&] {
+    (void)encode_composition_selected_layers_success(duplicate_selected);
+  }, "INVALID_ARGUMENT", "duplicate selected-layer locator");
 
   aemcp::native::CompositionTimeRead time_value;
   time_value.composition_locator = project_page.items[0].locator;
@@ -976,6 +1052,9 @@ void response_helpers_are_bounded_and_typed() {
       std::string(kCompositionTimeContractDigest);
   capabilities.layer_properties_list_contract_digest =
       std::string(kLayerPropertiesContractDigest);
+  capabilities.include_composition_selected_layers_list = true;
+  capabilities.composition_selected_layers_list_contract_digest =
+      std::string(kCompositionLayersContractDigest);
   const std::string capabilities_body = body(encode_capabilities_success(capabilities));
   require(capabilities_body.find("\"additionalProperties\":false") != std::string::npos
       && capabilities_body.find("aemcp.requirement.native.project-read") != std::string::npos
@@ -1014,6 +1093,15 @@ void response_helpers_are_bounded_and_typed() {
       && capabilities_body.find(std::string(kProjectItemsContractDigest))
           != std::string::npos
       && capabilities_body.find(std::string(kCompositionLayersContractDigest))
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"ae.composition.selected-layers.list\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "List a bounded page of selected layers in one After Effects composition.")
+          != std::string::npos
+      && capabilities_body.find(
+          "aemcp.requirement.native.composition-selected-layers-list")
           != std::string::npos
       && capabilities_body.find(std::string(kCompositionTimeContractDigest))
           != std::string::npos

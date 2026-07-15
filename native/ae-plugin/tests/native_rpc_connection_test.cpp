@@ -32,6 +32,7 @@ using aemcp::native::HostBitDepthWriteResult;
 using aemcp::native::HostCompositionLayersResult;
 using aemcp::native::HostCompositionTimeResult;
 using aemcp::native::HostDispatcher;
+using aemcp::native::HostIdleSignal;
 using aemcp::native::HostLayerPropertiesResult;
 using aemcp::native::HostReadResult;
 using aemcp::native::HostProjectItemsResult;
@@ -79,6 +80,21 @@ class FakeSessionClock final : public SessionClock {
 
  private:
   std::atomic<std::uint64_t> now_ms_{1'900'000'000'000ULL};
+};
+
+class RecordingIdleSignal final : public HostIdleSignal {
+ public:
+  [[nodiscard]] bool request_idle() noexcept override {
+    ++calls_;
+    return succeeds_.load();
+  }
+
+  [[nodiscard]] int calls() const noexcept { return calls_.load(); }
+  void set_succeeds(bool succeeds) noexcept { succeeds_.store(succeeds); }
+
+ private:
+  std::atomic<int> calls_{0};
+  std::atomic<bool> succeeds_{true};
 };
 
 class FakeHost final : public HostApi {
@@ -154,6 +170,52 @@ class FakeHost final : public HostApi {
     return HostCompositionLayersResult::success(std::move(page));
   }
 
+  [[nodiscard]] HostCompositionLayersResult list_selected_composition_layers(
+      const aemcp::native::CompositionLayersQuery& query, TimePoint) override {
+    ++composition_selected_layers_calls;
+    if (query.offset > 2) {
+      return HostCompositionLayersResult::failure(
+          "INVALID_ARGUMENT",
+          "offset exceeds the current selected layer total",
+          "params.arguments.offset");
+    }
+    aemcp::native::CompositionLayersPage page;
+    page.composition_locator = query.composition_locator;
+    page.composition_name = "Fixture Comp";
+    page.total = 2;
+    page.offset = query.offset;
+    page.limit = query.limit;
+    if (query.offset == 0) {
+      page.layers.push_back({
+          {"layer", query.host_instance_id, query.session_id,
+              query.composition_locator.project_id,
+              query.composition_locator.generation,
+              "88888888-8888-4888-8888-888888888888"},
+          1,
+          "Fixture Text",
+          "text",
+          true,
+          false,
+          true,
+          std::nullopt,
+          std::nullopt});
+      page.layers.push_back({
+          {"layer", query.host_instance_id, query.session_id,
+              query.composition_locator.project_id,
+              query.composition_locator.generation,
+              "99999999-9999-4999-8999-999999999999"},
+          3,
+          "Fixture Shape",
+          "shape",
+          true,
+          false,
+          false,
+          std::nullopt,
+          std::nullopt});
+    }
+    return HostCompositionLayersResult::success(std::move(page));
+  }
+
   [[nodiscard]] HostCompositionTimeResult read_composition_time(
       const aemcp::native::CompositionTimeQuery& query, TimePoint) override {
     ++composition_time_calls;
@@ -219,6 +281,7 @@ class FakeHost final : public HostApi {
   int write_calls{0};
   int project_items_calls{0};
   int composition_layers_calls{0};
+  int composition_selected_layers_calls{0};
   int composition_time_calls{0};
   int layer_properties_calls{0};
 };
@@ -304,7 +367,7 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      "781a620eac1310fb85dc0ac74ae9655fdab0512d370e1039074cd0ff2fb4d7fb",
+      "04ad7c01ea1bf9c2837d7f55184fe0453b2edf6027c1ec36c44a8c8a17d46296",
       "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
       "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
       "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
@@ -312,6 +375,7 @@ NativeRpcRuntimeInfo runtime() {
       "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
       "fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd",
       "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba",
+      "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
   };
 }
 
@@ -479,6 +543,17 @@ std::string composition_layers_invoke_json(std::string_view request_id) {
       + ",\"offset\":0,\"limit\":25}}}";
 }
 
+std::string composition_selected_layers_invoke_json(
+    std::string_view request_id, std::uint64_t offset = 0) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.composition.selected-layers.list\","
+        "\"capabilityVersion\":1,\"arguments\":{\"compositionLocator\":"
+      + graph_locator_json("composition", "66666666-6666-4666-8666-666666666666")
+      + ",\"offset\":" + std::to_string(offset) + ",\"limit\":25}}}";
+}
+
 std::string composition_time_invoke_json(std::string_view request_id) {
   return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
       + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
@@ -525,8 +600,9 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   FakeSessionClock session_clock;
   HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
   RecordingObserver observer;
+  RecordingIdleSignal idle_signal;
   NativeRpcConnectionHandler handler(
-      dispatcher, dispatcher_clock, session_clock, runtime(), observer);
+      dispatcher, dispatcher_clock, session_clock, runtime(), observer, idle_signal);
   std::array<int, 2> sockets{};
   require(::socketpair(AF_UNIX, SOCK_STREAM, 0, sockets.data()) == 0, "socketpair failed");
   const AuthenticatedConnection authenticated = connection(sockets[1], "route-e2e", 7);
@@ -556,6 +632,8 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(capabilities,
       "\"queryDigest\":\"aa3c66bc21e50b6a35db9c3cb12fcb1627694cd8f9fc411f21f7e3de46b3e56a\"",
       "capabilities response");
+  require(idle_signal.calls() == 0,
+      "hello or capabilities unexpectedly scheduled an idle wake");
 
   send_json(sockets[0], bit_depth_capabilities_json(
       "capabilities-bit-depth-read", "ae.project.bit-depth.read"));
@@ -609,6 +687,23 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
       "\"compositionLocator\"", "composition-layers capabilities response");
 
   send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-composition-selected-layers",
+      "ae.composition.selected-layers.list"));
+  const std::string composition_selected_layers_capabilities = read_body(sockets[0]);
+  require_contains(composition_selected_layers_capabilities,
+      "\"id\":\"ae.composition.selected-layers.list\"",
+      "composition-selected-layers capabilities response");
+  require_contains(composition_selected_layers_capabilities,
+      "\"contractDigest\":\"3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75\"",
+      "composition-selected-layers capabilities response");
+  require_contains(composition_selected_layers_capabilities,
+      "aemcp.requirement.native.composition-selected-layers-list",
+      "composition-selected-layers capabilities response");
+  require_contains(composition_selected_layers_capabilities,
+      "List a bounded page of selected layers in one After Effects composition.",
+      "composition-selected-layers capabilities response");
+
+  send_json(sockets[0], bit_depth_capabilities_json(
       "capabilities-composition-time", "ae.composition.time.read"));
   const std::string composition_time_capabilities = read_body(sockets[0]);
   require_contains(composition_time_capabilities,
@@ -636,6 +731,10 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   const std::string progress = read_body(sockets[0]);
   require_contains(progress, "\"event\":\"progress\"", "invoke progress");
   require_contains(progress, "\"phase\":\"queued\"", "invoke progress");
+  wait_until([&] { return idle_signal.calls() == 1; }, "first invoke idle wake");
+  wait_until([&] {
+    return observer.has_event("dispatch.wake", "invoke-read", "scheduled");
+  }, "scheduled idle wake audit");
   wait_until([&] { return dispatcher.queued() == 1; }, "queued invoke");
   FakeHost host;
   const auto read_batch = dispatcher.drain(host);
@@ -739,6 +838,77 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
           && composition_layers_terminal.postcondition_digest.size() == 64
           && host.composition_layers_calls == 1,
       "composition-layers terminal evidence was not verified");
+
+  send_json(sockets[0], composition_selected_layers_invoke_json(
+      "invoke-composition-selected-layers"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "composition-selected-layers progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued composition-selected-layers invoke");
+  const auto composition_selected_layers_batch = dispatcher.drain(host);
+  require(composition_selected_layers_batch.completions.size() == 1
+          && composition_selected_layers_batch.completions[0].ok,
+      "owner dispatcher did not produce the composition-selected-layers result");
+  const std::string composition_selected_layers = read_body(sockets[0]);
+  require_contains(composition_selected_layers,
+      "\"capabilityId\":\"ae.composition.selected-layers.list\"",
+      "composition-selected-layers response");
+  require_contains(composition_selected_layers,
+      "\"kind\":\"composition-selected-layers-list\"",
+      "composition-selected-layers response");
+  require_contains(composition_selected_layers,
+      "\"stackIndex\":1", "composition-selected-layers response");
+  require_contains(composition_selected_layers,
+      "\"stackIndex\":3", "composition-selected-layers response");
+  wait_until([&] {
+    return !observer.terminal(
+        "invoke-composition-selected-layers").request_id.empty();
+  }, "composition-selected-layers terminal audit");
+  const TerminalRecord composition_selected_layers_terminal =
+      observer.terminal("invoke-composition-selected-layers");
+  require(composition_selected_layers_terminal.ok
+          && composition_selected_layers_terminal.request_digest.size() == 64
+          && composition_selected_layers_terminal.postcondition_digest.size() == 64
+          && host.composition_selected_layers_calls == 1,
+      "composition-selected-layers terminal evidence was not verified");
+
+  send_json(sockets[0], composition_selected_layers_invoke_json(
+      "invoke-composition-selected-layers-invalid-offset", 3));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "composition-selected-layers invalid offset progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued composition-selected-layers invalid offset invoke");
+  const auto invalid_selected_layers_batch = dispatcher.drain(host);
+  require(invalid_selected_layers_batch.completions.size() == 1
+          && !invalid_selected_layers_batch.completions[0].ok,
+      "owner dispatcher did not preserve the selected-layer offset failure");
+  const std::string invalid_selected_layers = read_body(sockets[0]);
+  require_contains(invalid_selected_layers, "\"code\":\"INVALID_ARGUMENT\"",
+      "composition-selected-layers invalid offset response");
+  require_contains(invalid_selected_layers, "\"retryable\":false",
+      "composition-selected-layers invalid offset response");
+  require_contains(invalid_selected_layers, "\"sideEffect\":\"not-started\"",
+      "composition-selected-layers invalid offset response");
+  require_contains(invalid_selected_layers, "\"action\":\"change-arguments\"",
+      "composition-selected-layers invalid offset response");
+  require_contains(invalid_selected_layers,
+      "\"capabilityId\":\"ae.composition.selected-layers.list\"",
+      "composition-selected-layers invalid offset response");
+  require_contains(invalid_selected_layers,
+      "\"field\":\"params.arguments.offset\"",
+      "composition-selected-layers invalid offset response");
+  wait_until([&] {
+    return !observer.terminal(
+        "invoke-composition-selected-layers-invalid-offset").request_id.empty();
+  }, "composition-selected-layers invalid offset terminal audit");
+  const TerminalRecord invalid_selected_layers_terminal = observer.terminal(
+      "invoke-composition-selected-layers-invalid-offset");
+  require(!invalid_selected_layers_terminal.ok
+          && invalid_selected_layers_terminal.error_code == "INVALID_ARGUMENT"
+          && invalid_selected_layers_terminal.request_digest.size() == 64
+          && invalid_selected_layers_terminal.postcondition_digest.empty()
+          && host.composition_selected_layers_calls == 2,
+      "composition-selected-layers invalid offset was not audited as a failure");
 
   send_json(sockets[0], composition_time_invoke_json("invoke-composition-time"));
   require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
@@ -863,6 +1033,8 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(cancel, "\"terminalResponseExpected\":true", "cancel response");
   const std::string cancelled_terminal = read_body(sockets[0]);
   require_contains(cancelled_terminal, "\"code\":\"CANCELLED\"", "cancel terminal");
+  require(idle_signal.calls() == 10,
+      "accepted invokes did not each schedule exactly one idle wake");
 
   require(dispatcher.enqueue(Request{
       "wrong-generation",
@@ -923,8 +1095,10 @@ void invalid_postcondition_becomes_structured_failure() {
   FakeSessionClock session_clock;
   HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
   RecordingObserver observer;
+  RecordingIdleSignal idle_signal;
+  idle_signal.set_succeeds(false);
   NativeRpcConnectionHandler handler(
-      dispatcher, dispatcher_clock, session_clock, runtime(), observer);
+      dispatcher, dispatcher_clock, session_clock, runtime(), observer, idle_signal);
   std::array<int, 2> sockets{};
   require(::socketpair(AF_UNIX, SOCK_STREAM, 0, sockets.data()) == 0, "socketpair failed");
   const AuthenticatedConnection authenticated = connection(sockets[1], "route-invalid", 3);
@@ -934,6 +1108,10 @@ void invalid_postcondition_becomes_structured_failure() {
   require_contains(read_body(sockets[0]), "\"ok\":true", "invalid evidence hello");
   send_json(sockets[0], invoke_json("invalid-result"));
   require_contains(read_body(sockets[0]), "\"event\":\"progress\"", "invalid evidence progress");
+  wait_until([&] {
+    return observer.has_event("dispatch.wake", "invalid-result", "failed");
+  }, "failed idle wake audit");
+  idle_signal.set_succeeds(true);
   wait_until([&] { return dispatcher.queued() == 1; }, "invalid evidence invoke");
   FakeHost host;
   host.summary.item_count = -1;
@@ -991,6 +1169,8 @@ void invalid_postcondition_becomes_structured_failure() {
       "ambiguous bit-depth retry fence");
   require(host.write_calls == 1,
       "ambiguous bit-depth evidence allowed a second host mutation");
+  require(idle_signal.calls() == 2,
+      "rejected retry scheduled an idle wake or an accepted invoke missed one");
 
   finish_connection(sockets[0], sockets[1], worker);
   (void)dispatcher.shutdown();
@@ -1001,14 +1181,17 @@ void construction_failure_is_contained_by_noexcept_boundary() {
   FakeSessionClock session_clock;
   HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
   RecordingObserver observer;
+  RecordingIdleSignal idle_signal;
   NativeRpcConnectionHandler handler(
-      dispatcher, dispatcher_clock, session_clock, runtime(), observer);
+      dispatcher, dispatcher_clock, session_clock, runtime(), observer, idle_signal);
   AuthenticatedConnection invalid = connection(-1, std::string(1'025, 'x'), 1);
   handler.serve(invalid);
   require(observer.has_event(
       "connection", "none", "codec-or-transport-failure"),
       "front-door construction exception escaped the noexcept serve boundary");
   require(dispatcher.running(), "construction failure changed dispatcher lifecycle state");
+  require(idle_signal.calls() == 0,
+      "invalid connection unexpectedly scheduled an idle wake");
   (void)dispatcher.shutdown();
 }
 
