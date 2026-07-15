@@ -147,6 +147,7 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
         "ae.project.bit-depth.set",
         "ae.project.items.list",
         "ae.composition.layers.list",
+        "ae.layer.properties.list",
     ]
     assert capabilities["response"]["result"]["capabilitiesDigest"] == hello[
         "response"

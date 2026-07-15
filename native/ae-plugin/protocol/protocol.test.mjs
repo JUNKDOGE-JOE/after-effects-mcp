@@ -25,6 +25,8 @@ import {
   postconditionDigest,
   compositionLayersListContractDigest,
   compositionLayersListDescriptor,
+  layerPropertiesListContractDigest,
+  layerPropertiesListDescriptor,
   projectBitDepthReadDescriptor,
   projectBitDepthSetDescriptor,
   projectItemsListContractDigest,
@@ -673,6 +675,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
   const bitDepthSetDescriptor = projectBitDepthSetDescriptor(schema);
   const projectItemsDescriptor = projectItemsListDescriptor(schema);
   const compositionLayersDescriptor = compositionLayersListDescriptor(schema);
+  const layerPropertiesDescriptor = layerPropertiesListDescriptor(schema);
   const containsRef = (value) => {
     if (Array.isArray(value)) return value.some(containsRef);
     if (value === null || typeof value !== 'object') return false;
@@ -705,13 +708,16 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     '64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e');
   assert.equal(compositionLayersDescriptor.contractDigest,
     '3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75');
+  assert.equal(layerPropertiesDescriptor.contractDigest,
+    'a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba');
   assert.equal(capabilityDigest([
     descriptor,
     bitDepthReadDescriptor,
     bitDepthSetDescriptor,
     projectItemsDescriptor,
     compositionLayersDescriptor,
-  ]), '1814ffa17e29919414094c3b9cb6fb331169a5084aed44abb7a55f5827ffe72a');
+    layerPropertiesDescriptor,
+  ]), '25d8d4b950ce74184855c780d90686b3f52b3f90302c9b065e3c45a5574a22c9');
   assert.ok(Buffer.byteLength(canonicalize(descriptor), 'utf8') < LIMITS.maxFrameBytes);
 });
 
@@ -720,7 +726,7 @@ test('v1 capability discovery is single-page, fail-closed, and never replayed', 
   const exchange = golden('capabilities.json');
   assert.equal(exchange.request.params.limit, 100);
   assert.equal(Object.hasOwn(exchange.request.params, 'ids'), false);
-  assert.equal(exchange.response.result.items.length, 5);
+  assert.equal(exchange.response.result.items.length, 6);
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, exchange.response, schema), true);
 
   const zeroLimit = structuredClone(exchange.request);
@@ -1212,6 +1218,7 @@ test('native project navigation vectors bind bounded pagination and locator prov
   for (const [name, descriptor] of [
     ['invoke-project-items-list.json', projectItemsListDescriptor(schema)],
     ['invoke-composition-layers-list.json', compositionLayersListDescriptor(schema)],
+    ['invoke-layer-properties-list.json', layerPropertiesListDescriptor(schema)],
   ]) {
     const fixture = golden(name);
     const context = {
@@ -1325,6 +1332,56 @@ test('native project navigation vectors bind bounded pagination and locator prov
     ), false);
   }
 
+  const properties = golden('invoke-layer-properties-list.json');
+  assert.equal(layerPropertiesListDescriptor(schema).contractDigest,
+    layerPropertiesListContractDigest(schema));
+  const propertiesContext = {
+    hello: golden('hello.json'),
+    descriptor: layerPropertiesListDescriptor(schema),
+    schema,
+    brokerSendUnixMs: 1900000000000,
+    effectiveDeadlineUnixMs: properties.request.deadlineUnixMs,
+    terminalObservedUnixMs: 1900000000030,
+  };
+  const explicitRoot = structuredClone(properties.request);
+  explicitRoot.requestId = 'invoke-layer-properties-root';
+  explicitRoot.params.arguments.parentPropertyLocator = null;
+  assert.equal(schemaAccepts(schema.$defs.request, explicitRoot), true);
+  assert.deepEqual(validateRequestComposite(explicitRoot, schema), { ok: true });
+  const unknownUnsupported = structuredClone(properties.response);
+  unknownUnsupported.result.value.properties[2].valueType = 'unknown';
+  unknownUnsupported.result.evidence.postcondition.digest = postconditionDigest(
+    unknownUnsupported.result,
+  );
+  assert.equal(validateTranscript(
+    propertiesContext,
+    properties.request,
+    [...properties.events, unknownUnsupported],
+  ), true);
+  for (const mutate of [
+    (value) => { value.layerLocator.objectId = '99999999-9999-4999-8999-999999999999'; },
+    (value) => { value.parentPropertyLocator.objectId = '99999999-9999-4999-8999-999999999999'; },
+    (value) => { value.sampleTime.scale = 0; },
+    (value) => { value.properties[1].propertyIndex = 1; },
+    (value) => { value.properties[0].propertyLocator.objectId = value.parentPropertyLocator.objectId; },
+    (value) => { value.properties[1].propertyLocator.objectId = value.properties[0].propertyLocator.objectId; },
+    (value) => { value.properties[0].value.components.push('30'); },
+    (value) => { value.properties[1].value.value = '-0'; },
+    (value) => { value.properties[1].value.value = '1e-999'; },
+    (value) => { value.properties[1].canVaryOverTime = null; },
+    (value) => {
+      value.properties[2].valueStatus = 'no-data';
+      value.properties[2].valueType = 'marker';
+    },
+  ]) {
+    const malformed = structuredClone(properties.response);
+    mutate(malformed.result.value);
+    malformed.result.evidence.postcondition.digest = postconditionDigest(malformed.result);
+    assert.equal(validateTranscript(
+      propertiesContext, properties.request, [...properties.events, malformed],
+    ), false);
+  }
+
   const stale = structuredClone(golden('errors.json').responses.staleLocator);
   stale.requestId = layers.request.requestId;
   stale.error.details.capabilityId = layers.request.params.capabilityId;
@@ -1357,6 +1414,20 @@ test('native project navigation vectors bind bounded pagination and locator prov
   projectStale.error.details.field = 'params.arguments.projectLocator';
   assert.equal(validateFailureExchange(
     golden('hello.json'), secondPage, projectStale, projectItemsListDescriptor(schema), schema,
+  ), true);
+
+  const propertyStale = structuredClone(omittedGeneration);
+  propertyStale.requestId = properties.request.requestId;
+  propertyStale.error.details.capabilityId = properties.request.params.capabilityId;
+  propertyStale.error.details.field = 'params.arguments.parentPropertyLocator';
+  assert.equal(validateFailureExchange(
+    golden('hello.json'), properties.request, propertyStale,
+    layerPropertiesListDescriptor(schema), schema,
+  ), true);
+  propertyStale.error.details.field = 'params.arguments.layerLocator';
+  assert.equal(validateFailureExchange(
+    golden('hello.json'), properties.request, propertyStale,
+    layerPropertiesListDescriptor(schema), schema,
   ), true);
 });
 

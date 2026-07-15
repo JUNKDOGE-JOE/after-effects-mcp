@@ -198,7 +198,8 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
       || runtime_.project_bit_depth_read_contract_digest.size() != 64
       || runtime_.project_bit_depth_set_contract_digest.size() != 64
       || runtime_.project_items_list_contract_digest.size() != 64
-      || runtime_.composition_layers_list_contract_digest.size() != 64) {
+      || runtime_.composition_layers_list_contract_digest.size() != 64
+      || runtime_.layer_properties_list_contract_digest.size() != 64) {
     throw std::invalid_argument("invalid native RPC runtime identity");
   }
 }
@@ -263,6 +264,9 @@ void NativeRpcConnectionHandler::serve(
             } else if (completion.capability_id == kCompositionLayersListCapability) {
               postcondition_digest = rpc::digest_composition_layers_postcondition(
                   completion.composition_layers_result);
+            } else if (completion.capability_id == kLayerPropertiesListCapability) {
+              postcondition_digest = rpc::digest_layer_properties_postcondition(
+                  completion.layer_properties_result);
             } else {
               evidence_valid = false;
             }
@@ -347,12 +351,24 @@ void NativeRpcConnectionHandler::serve(
                 postcondition_digest,
                 false,
             });
-          } else {
+          } else if (completion.capability_id == kCompositionLayersListCapability) {
             response = rpc::encode_composition_layers_success({
                 completion.request_id,
                 connection.session_id,
                 runtime_.host_instance_id,
                 completion.composition_layers_result,
+                started_at,
+                completed_at,
+                request_digest,
+                postcondition_digest,
+                false,
+            });
+          } else {
+            response = rpc::encode_layer_properties_success({
+                completion.request_id,
+                connection.session_id,
+                runtime_.host_instance_id,
+                completion.layer_properties_result,
                 started_at,
                 completed_at,
                 request_digest,
@@ -453,11 +469,15 @@ void NativeRpcConnectionHandler::serve(
           const bool include_composition_layers = !query.ids.has_value() || std::find(
               query.ids->begin(), query.ids->end(), "ae.composition.layers.list")
                   != query.ids->end();
+          const bool include_layer_properties = !query.ids.has_value() || std::find(
+              query.ids->begin(), query.ids->end(), "ae.layer.properties.list")
+                  != query.ids->end();
           const std::size_t selected = static_cast<std::size_t>(include_summary)
               + static_cast<std::size_t>(include_bit_depth_read)
               + static_cast<std::size_t>(include_bit_depth_set)
               + static_cast<std::size_t>(include_project_items)
-              + static_cast<std::size_t>(include_composition_layers);
+              + static_cast<std::size_t>(include_composition_layers)
+              + static_cast<std::size_t>(include_layer_properties);
           if (selected > query.limit) {
             if (!write_frame(connection.socket_fd, rpc::encode_error_response(error_for(
                     request,
@@ -479,6 +499,7 @@ void NativeRpcConnectionHandler::serve(
                   include_bit_depth_set,
                   include_project_items,
                   include_composition_layers,
+                  include_layer_properties,
                   rpc::digest_capabilities_query(connection.session_id, query),
                   runtime_.capabilities_digest,
                   runtime_.project_summary_contract_digest,
@@ -486,6 +507,7 @@ void NativeRpcConnectionHandler::serve(
                   runtime_.project_bit_depth_set_contract_digest,
                   runtime_.project_items_list_contract_digest,
                   runtime_.composition_layers_list_contract_digest,
+                  runtime_.layer_properties_list_contract_digest,
               }))) {
             connected = false;
             break;
@@ -545,6 +567,8 @@ void NativeRpcConnectionHandler::serve(
             invoke.limit,
             invoke.project_locator,
             invoke.composition_locator,
+            invoke.layer_locator,
+            invoke.parent_property_locator,
         });
         if (enqueued.code != EnqueueCode::kAccepted) {
           if (!write_frame(connection.socket_fd, rpc::encode_error_response(error_for(

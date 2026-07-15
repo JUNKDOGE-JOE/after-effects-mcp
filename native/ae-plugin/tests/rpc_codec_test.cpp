@@ -18,6 +18,7 @@ namespace {
 using aemcp::native::rpc::CapabilitiesParams;
 using aemcp::native::rpc::CapabilitiesSuccess;
 using aemcp::native::rpc::CompositionLayersSuccess;
+using aemcp::native::rpc::LayerPropertiesSuccess;
 using aemcp::native::rpc::CapabilityDetail;
 using aemcp::native::rpc::CancelState;
 using aemcp::native::rpc::CancelSuccess;
@@ -48,6 +49,7 @@ using aemcp::native::rpc::digest_project_bit_depth_set_arguments;
 using aemcp::native::rpc::digest_project_bit_depth_set_postcondition;
 using aemcp::native::rpc::digest_project_summary_postcondition;
 using aemcp::native::rpc::digest_composition_layers_postcondition;
+using aemcp::native::rpc::digest_layer_properties_postcondition;
 using aemcp::native::rpc::digest_project_items_postcondition;
 using aemcp::native::rpc::encode_capabilities_success;
 using aemcp::native::rpc::encode_cancel_success;
@@ -58,6 +60,7 @@ using aemcp::native::rpc::encode_project_bit_depth_read_success;
 using aemcp::native::rpc::encode_project_bit_depth_set_success;
 using aemcp::native::rpc::encode_project_summary_success;
 using aemcp::native::rpc::encode_composition_layers_success;
+using aemcp::native::rpc::encode_layer_properties_success;
 using aemcp::native::rpc::encode_project_items_success;
 using aemcp::native::rpc::kMaxFrameBytes;
 
@@ -74,6 +77,8 @@ constexpr std::string_view kProjectItemsContractDigest =
     "64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e";
 constexpr std::string_view kCompositionLayersContractDigest =
     "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75";
+constexpr std::string_view kLayerPropertiesContractDigest =
+    "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba";
 
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "FAIL: " << message << '\n';
@@ -224,6 +229,22 @@ std::string composition_layers_invoke_json(
         "\"params\":{\"capabilityId\":\"ae.composition.layers.list\","
         "\"capabilityVersion\":1,\"arguments\":{\"compositionLocator\":"
       + locator_value + ",\"offset\":0,\"limit\":25}}}";
+}
+
+std::string layer_properties_invoke_json(
+    std::string_view request_id = "invoke-layer-properties-1",
+    std::string_view parent_property_locator = {}) {
+  std::string arguments = "{\"layerLocator\":"
+      + locator_json("layer", "88888888-8888-4888-8888-888888888888");
+  if (!parent_property_locator.empty()) {
+    arguments += ",\"parentPropertyLocator\":" + std::string(parent_property_locator);
+  }
+  arguments += ",\"offset\":0,\"limit\":25}";
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.layer.properties.list\","
+        "\"capabilityVersion\":1,\"arguments\":" + arguments + "}}";
 }
 
 void golden_requests_are_typed_and_closed() {
@@ -388,6 +409,25 @@ void project_graph_invokes_and_results_are_closed_and_deterministic() {
         locator_json("item", "66666666-6666-4666-8666-666666666666"))));
   }, "INVALID_ARGUMENT", "composition-layers item locator");
 
+  const std::string parent_locator = locator_json(
+      "stream", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+  const ParsedRequest properties_parsed = decode_request_frame(frame(
+      layer_properties_invoke_json("invoke-layer-properties-1", parent_locator)));
+  const auto& property_args = std::get<InvokeParams>(properties_parsed.params);
+  require(property_args.capability_id == "ae.layer.properties.list"
+          && property_args.layer_locator.has_value()
+          && property_args.parent_property_locator.has_value()
+          && property_args.limit == 25,
+      "layer-properties invoke lost its typed locators");
+  const ParsedRequest omitted_parent = decode_request_frame(frame(
+      layer_properties_invoke_json("invoke-layer-properties-root")));
+  const ParsedRequest null_parent = decode_request_frame(frame(
+      layer_properties_invoke_json("invoke-layer-properties-root", "null")));
+  require(!std::get<InvokeParams>(null_parent.params).parent_property_locator.has_value()
+          && null_parent.request_fingerprint_sha256
+              == omitted_parent.request_fingerprint_sha256,
+      "explicit null parent locator was not normalized to omission");
+
   aemcp::native::ProjectItemsPage project_page;
   project_page.project_locator = locator(
       "project", "77777777-7777-4777-8777-777777777777");
@@ -454,6 +494,104 @@ void project_graph_invokes_and_results_are_closed_and_deterministic() {
   layer_page.layers[0].locked = false;
   require(digest_composition_layers_postcondition(layer_page) != original_digest,
       "composition-layers digest ignored a semantic layer flag");
+
+  aemcp::native::LayerPropertiesPage property_page;
+  property_page.layer_locator = layer_page.layers[0].locator;
+  property_page.parent_property_locator = locator(
+      "stream", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+  property_page.layer_name = "Fixture Text";
+  property_page.sample_time = {0, 1};
+  property_page.total = 3;
+  property_page.offset = 0;
+  property_page.limit = 25;
+  aemcp::native::LayerPropertyEntry position;
+  position.property_locator = locator(
+      "stream", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+  position.property_index = 1;
+  position.name = "Position";
+  position.match_name = "ADBE Position";
+  position.grouping_type = "leaf";
+  position.modified = true;
+  position.can_vary_over_time = true;
+  position.time_varying = true;
+  position.value_type = "two-d-spatial";
+  position.value_status = "sampled";
+  position.value = aemcp::native::LayerPropertyVectorValue{{"10", "20"}};
+  property_page.properties.push_back(position);
+  aemcp::native::LayerPropertyEntry marker;
+  marker.property_locator = locator(
+      "stream", "cccccccc-cccc-4ccc-8ccc-cccccccccccc");
+  marker.property_index = 2;
+  marker.name = "Marker";
+  marker.match_name = "ADBE Marker";
+  marker.grouping_type = "leaf";
+  marker.value_type = "marker";
+  marker.value_status = "unsupported";
+  property_page.properties.push_back(marker);
+  aemcp::native::LayerPropertyEntry group;
+  group.property_locator = locator(
+      "stream", "dddddddd-dddd-4ddd-8ddd-dddddddddddd");
+  group.property_index = 3;
+  group.name = "Transform";
+  group.match_name = "ADBE Transform Group";
+  group.grouping_type = "named-group";
+  group.child_count = 5;
+  group.value_type = "none";
+  group.value_status = "group";
+  property_page.properties.push_back(group);
+  LayerPropertiesSuccess properties_success{
+      "invoke-layer-properties-1",
+      std::string(kSession),
+      std::string(kHost),
+      property_page,
+      1'900'000'000'000ULL,
+      1'900'000'000'025ULL,
+      std::string(kDigest),
+      digest_layer_properties_postcondition(property_page),
+      false};
+  const std::string properties_body = body(
+      encode_layer_properties_success(properties_success));
+  require(properties_body.find("\"capabilityId\":\"ae.layer.properties.list\"")
+          != std::string::npos
+          && properties_body.find("\"kind\":\"layer-properties-list\"")
+            != std::string::npos
+          && properties_body.find("\"components\":[\"10\",\"20\"]")
+            != std::string::npos,
+      "layer-properties success omitted its typed native contract");
+  LayerPropertiesSuccess unknown_unsupported = properties_success;
+  unknown_unsupported.value.properties[1].value_type = "unknown";
+  unknown_unsupported.postcondition_digest =
+      digest_layer_properties_postcondition(unknown_unsupported.value);
+  const std::string unknown_body = body(
+      encode_layer_properties_success(unknown_unsupported));
+  require(unknown_body.find(
+              "\"valueStatus\":\"unsupported\",\"valueType\":\"unknown\"")
+          != std::string::npos,
+      "unknown unsupported layer property was rejected");
+  LayerPropertiesSuccess unknown_sampled = unknown_unsupported;
+  unknown_sampled.value.properties[1].value_status = "sampled";
+  unknown_sampled.value.properties[1].can_vary_over_time = false;
+  unknown_sampled.value.properties[1].time_varying = false;
+  unknown_sampled.value.properties[1].value =
+      aemcp::native::LayerPropertyScalarValue{"1"};
+  unknown_sampled.postcondition_digest = std::string(kDigest);
+  expect_codec_error([&] {
+    (void)encode_layer_properties_success(unknown_sampled);
+  }, "INVALID_ARGUMENT", "unknown sampled layer property");
+  LayerPropertiesSuccess wrong_arity = properties_success;
+  std::get<aemcp::native::LayerPropertyVectorValue>(
+      wrong_arity.value.properties[0].value).components.push_back("30");
+  wrong_arity.postcondition_digest = std::string(kDigest);
+  expect_codec_error([&] {
+    (void)encode_layer_properties_success(wrong_arity);
+  }, "INVALID_ARGUMENT", "2D layer property with three components");
+  LayerPropertiesSuccess parent_as_child = properties_success;
+  parent_as_child.value.properties[0].property_locator =
+      *parent_as_child.value.parent_property_locator;
+  parent_as_child.postcondition_digest = std::string(kDigest);
+  expect_codec_error([&] {
+    (void)encode_layer_properties_success(parent_as_child);
+  }, "INVALID_ARGUMENT", "layer property locator equal to its parent");
 
   ProjectItemsSuccess out_of_range = project_success;
   out_of_range.value.offset = out_of_range.value.total + 1;
@@ -744,6 +882,8 @@ void response_helpers_are_bounded_and_typed() {
       std::string(kProjectItemsContractDigest);
   capabilities.composition_layers_list_contract_digest =
       std::string(kCompositionLayersContractDigest);
+  capabilities.layer_properties_list_contract_digest =
+      std::string(kLayerPropertiesContractDigest);
   const std::string capabilities_body = body(encode_capabilities_success(capabilities));
   require(capabilities_body.find("\"additionalProperties\":false") != std::string::npos
       && capabilities_body.find("aemcp.requirement.native.project-read") != std::string::npos
@@ -783,9 +923,13 @@ void response_helpers_are_bounded_and_typed() {
           != std::string::npos
       && capabilities_body.find(std::string(kCompositionLayersContractDigest))
           != std::string::npos
+      && capabilities_body.find(std::string(kLayerPropertiesContractDigest))
+          != std::string::npos
       && capabilities_body.find("\"id\":\"ae.project.items.list\"")
           != std::string::npos
       && capabilities_body.find("\"id\":\"ae.composition.layers.list\"")
+          != std::string::npos
+      && capabilities_body.find("\"id\":\"ae.layer.properties.list\"")
           != std::string::npos,
       "full capability serializer omitted the closed contract");
 

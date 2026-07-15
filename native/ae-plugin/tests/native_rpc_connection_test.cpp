@@ -31,6 +31,7 @@ using aemcp::native::HostBitDepthReadResult;
 using aemcp::native::HostBitDepthWriteResult;
 using aemcp::native::HostCompositionLayersResult;
 using aemcp::native::HostDispatcher;
+using aemcp::native::HostLayerPropertiesResult;
 using aemcp::native::HostReadResult;
 using aemcp::native::HostProjectItemsResult;
 using aemcp::native::NativeRpcConnectionHandler;
@@ -152,6 +153,37 @@ class FakeHost final : public HostApi {
     return HostCompositionLayersResult::success(std::move(page));
   }
 
+  [[nodiscard]] HostLayerPropertiesResult list_layer_properties(
+      const aemcp::native::LayerPropertiesQuery& query, TimePoint) override {
+    ++layer_properties_calls;
+    aemcp::native::LayerPropertiesPage page;
+    page.layer_locator = query.layer_locator;
+    page.parent_property_locator = query.parent_property_locator;
+    page.layer_name = "Fixture Text";
+    page.sample_time = {0, 1};
+    page.total = 1;
+    page.offset = query.offset;
+    page.limit = query.limit;
+    if (query.offset == 0) {
+      aemcp::native::LayerPropertyEntry opacity;
+      opacity.property_locator = {
+          "stream", query.host_instance_id, query.session_id,
+          query.layer_locator.project_id, query.layer_locator.generation,
+          "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"};
+      opacity.property_index = 1;
+      opacity.name = "Opacity";
+      opacity.match_name = "ADBE Opacity";
+      opacity.grouping_type = "leaf";
+      opacity.can_vary_over_time = true;
+      opacity.time_varying = false;
+      opacity.value_type = "one-d";
+      opacity.value_status = "sampled";
+      opacity.value = aemcp::native::LayerPropertyScalarValue{"73.5"};
+      page.properties.push_back(std::move(opacity));
+    }
+    return HostLayerPropertiesResult::success(std::move(page));
+  }
+
   [[nodiscard]] static aemcp::native::ObjectLocator locator(
       std::string kind,
       std::string object_id,
@@ -177,6 +209,7 @@ class FakeHost final : public HostApi {
   int write_calls{0};
   int project_items_calls{0};
   int composition_layers_calls{0};
+  int layer_properties_calls{0};
 };
 
 struct EventRecord {
@@ -260,12 +293,13 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      "1814ffa17e29919414094c3b9cb6fb331169a5084aed44abb7a55f5827ffe72a",
+      "25d8d4b950ce74184855c780d90686b3f52b3f90302c9b065e3c45a5574a22c9",
       "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
       "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
       "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
       "64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e",
       "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
+      "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba",
   };
 }
 
@@ -433,6 +467,18 @@ std::string composition_layers_invoke_json(std::string_view request_id) {
       + ",\"offset\":0,\"limit\":25}}}";
 }
 
+std::string layer_properties_invoke_json(std::string_view request_id) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.layer.properties.list\","
+        "\"capabilityVersion\":1,\"arguments\":{\"layerLocator\":"
+      + graph_locator_json("layer", "88888888-8888-4888-8888-888888888888")
+      + ",\"parentPropertyLocator\":"
+      + graph_locator_json("stream", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+      + ",\"offset\":0,\"limit\":25}}}";
+}
+
 std::string cancel_json(std::string_view request_id, std::string_view target_request_id) {
   return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
       + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
@@ -539,6 +585,18 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
       "composition-layers capabilities response");
   require_contains(composition_layers_capabilities,
       "\"compositionLocator\"", "composition-layers capabilities response");
+
+  send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-layer-properties", "ae.layer.properties.list"));
+  const std::string layer_properties_capabilities = read_body(sockets[0]);
+  require_contains(layer_properties_capabilities,
+      "\"id\":\"ae.layer.properties.list\"",
+      "layer-properties capabilities response");
+  require_contains(layer_properties_capabilities,
+      "\"contractDigest\":\"a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba\"",
+      "layer-properties capabilities response");
+  require_contains(layer_properties_capabilities,
+      "\"parentPropertyLocator\"", "layer-properties capabilities response");
 
   send_json(sockets[0], invoke_json("invoke-read"));
   const std::string progress = read_body(sockets[0]);
@@ -647,6 +705,36 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
           && composition_layers_terminal.postcondition_digest.size() == 64
           && host.composition_layers_calls == 1,
       "composition-layers terminal evidence was not verified");
+
+  send_json(sockets[0], layer_properties_invoke_json("invoke-layer-properties"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "layer-properties progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued layer-properties invoke");
+  const auto layer_properties_batch = dispatcher.drain(host);
+  require(layer_properties_batch.completions.size() == 1
+          && layer_properties_batch.completions[0].ok,
+      "owner dispatcher did not produce the layer-properties result");
+  const std::string layer_properties = read_body(sockets[0]);
+  require_contains(layer_properties,
+      "\"capabilityId\":\"ae.layer.properties.list\"",
+      "layer-properties response");
+  require_contains(layer_properties,
+      "\"kind\":\"layer-properties-list\"", "layer-properties response");
+  require_contains(layer_properties,
+      "\"value\":\"73.5\"", "layer-properties response");
+  require_contains(layer_properties,
+      "\"parentPropertyLocator\":{", "layer-properties response");
+  wait_until([&] {
+    return !observer.terminal("invoke-layer-properties").request_id.empty();
+  }, "layer-properties terminal audit");
+  const TerminalRecord layer_properties_terminal =
+      observer.terminal("invoke-layer-properties");
+  require(layer_properties_terminal.ok
+          && layer_properties_terminal.request_digest.size() == 64
+          && layer_properties_terminal.postcondition_digest.size() == 64
+          && host.layer_properties_calls == 1,
+      "layer-properties terminal evidence was not verified");
 
   send_json(sockets[0], bit_depth_set_invoke_json("invoke-bit-depth-set"));
   require_contains(read_body(sockets[0]), "\"event\":\"progress\"",

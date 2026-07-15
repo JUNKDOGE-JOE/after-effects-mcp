@@ -73,6 +73,8 @@ struct InvokeParams {
   std::uint16_t limit{0};
   std::optional<ObjectLocator> project_locator;
   std::optional<ObjectLocator> composition_locator;
+  std::optional<ObjectLocator> layer_locator;
+  std::optional<ObjectLocator> parent_property_locator;
 };
 
 struct CancelParams {
@@ -114,6 +116,8 @@ struct ParsedRequest {
     const ProjectItemsPage& page);
 [[nodiscard]] std::string digest_composition_layers_postcondition(
     const CompositionLayersPage& page);
+[[nodiscard]] std::string digest_layer_properties_postcondition(
+    const LayerPropertiesPage& page);
 
 class FrameDecoder final {
  public:
@@ -276,6 +280,7 @@ struct CapabilitiesSuccess {
   bool include_project_bit_depth_set{true};
   bool include_project_items_list{true};
   bool include_composition_layers_list{true};
+  bool include_layer_properties_list{true};
   std::string query_digest;
   std::string capabilities_digest;
   // Required only for detail=full when the descriptor is included.
@@ -284,6 +289,7 @@ struct CapabilitiesSuccess {
   std::string project_bit_depth_set_contract_digest;
   std::string project_items_list_contract_digest;
   std::string composition_layers_list_contract_digest;
+  std::string layer_properties_list_contract_digest;
 };
 
 enum class ProgressPhase { kQueued, kDispatched, kRunning, kValidating };
@@ -361,6 +367,18 @@ struct CompositionLayersSuccess {
   bool replayed{false};
 };
 
+struct LayerPropertiesSuccess {
+  std::string request_id;
+  std::string session_id;
+  std::string host_instance_id;
+  LayerPropertiesPage value;
+  std::uint64_t started_at_unix_ms{0};
+  std::uint64_t completed_at_unix_ms{0};
+  std::string request_digest;
+  std::string postcondition_digest;
+  bool replayed{false};
+};
+
 enum class CancelState {
   kQueuedCancelled,
   kRunningCancelRequested,
@@ -428,6 +446,8 @@ struct ErrorResponse {
     const ProjectItemsSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_composition_layers_success(
     const CompositionLayersSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_properties_success(
+    const LayerPropertiesSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_cancel_success(
     const CancelSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_error_response(const ErrorResponse& response);

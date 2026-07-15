@@ -15,6 +15,7 @@ from ae_mcp.backends.native import (
     NativeInvokeBackend,
     NativeRecovery,
     invoke_composition_layers_list,
+    invoke_layer_properties_list,
     invoke_project_bit_depth_read,
     invoke_project_bit_depth_set,
     invoke_project_items_list,
@@ -28,6 +29,7 @@ _PROJECT_BIT_DEPTH_READ_TIMEOUT_MS = 10_000
 _PROJECT_BIT_DEPTH_SET_TIMEOUT_MS = 10_000
 _PROJECT_ITEMS_LIST_TIMEOUT_MS = 10_000
 _COMPOSITION_LAYERS_LIST_TIMEOUT_MS = 10_000
+_LAYER_PROPERTIES_LIST_TIMEOUT_MS = 10_000
 
 
 def _backend() -> NativeInvokeBackend:
@@ -246,6 +248,44 @@ async def _run_list_composition_layers(
     return _native_read_response(execution)
 
 
+async def _run_list_layer_properties(
+    args: schemas.AeListLayerPropertiesArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_PROPERTIES_LIST_TIMEOUT_MS
+    request_id = f"mcp-{uuid.uuid4().hex}"
+    layer_locator = args.layer_locator.model_dump(mode="json", by_alias=True)
+    parent_property_locator = (
+        args.parent_property_locator.model_dump(mode="json", by_alias=True)
+        if args.parent_property_locator is not None
+        else None
+    )
+
+    async def _call():
+        return await invoke_layer_properties_list(
+            _backend(),
+            request_id=request_id,
+            layer_locator=layer_locator,
+            parent_property_locator=parent_property_locator,
+            offset=args.offset,
+            limit=args.limit,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    try:
+        execution = await progress.with_heartbeat(
+            ctx,
+            _call(),
+            start_msg="ae.listLayerProperties native AEGP read...",
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        raise
+    return _native_read_response(execution)
+
+
 async def _run_get_project_bit_depth(
     args: schemas.AeGetProjectBitDepthArgs,
     ctx: Any,
@@ -436,6 +476,11 @@ register(
     _run_list_composition_layers,
 )
 register(
+    "ae.listLayerProperties",
+    schemas.AeListLayerPropertiesArgs,
+    _run_list_layer_properties,
+)
+register(
     "ae.getProjectBitDepth",
     schemas.AeGetProjectBitDepthArgs,
     _run_get_project_bit_depth,
@@ -450,6 +495,7 @@ register(
 __all__ = [
     "_run_get_project_bit_depth",
     "_run_list_composition_layers",
+    "_run_list_layer_properties",
     "_run_list_project_items",
     "_run_project_summary",
     "_run_set_project_bit_depth",

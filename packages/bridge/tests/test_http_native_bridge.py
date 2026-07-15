@@ -129,6 +129,7 @@ async def test_native_backend_posts_lossless_typed_contract(token_file):
     [
         ("invoke-project-items-list.json", "ae.project.items.list"),
         ("invoke-composition-layers-list.json", "ae.composition.layers.list"),
+        ("invoke-layer-properties-list.json", "ae.layer.properties.list"),
     ],
 )
 @pytest.mark.asyncio
@@ -172,6 +173,7 @@ async def test_native_navigation_reads_are_forwarded_losslessly(
     [
         ("invoke-project-items-list.json", "ae.project.items.list"),
         ("invoke-composition-layers-list.json", "ae.composition.layers.list"),
+        ("invoke-layer-properties-list.json", "ae.layer.properties.list"),
     ],
 )
 @pytest.mark.asyncio

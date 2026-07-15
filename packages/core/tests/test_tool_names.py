@@ -12,6 +12,7 @@ import re
 
 import mcp.types as types
 import pytest
+from mcp.shared.memory import create_connected_server_and_client_session
 
 from ae_mcp.handlers import HANDLERS, load_all
 from ae_mcp.server import (
@@ -357,3 +358,57 @@ async def test_sdk_call_tool_handler_preserves_call_tool_result_iserror(monkeypa
         "ok": False,
         "error": "semantic failure",
     }
+
+
+async def test_mcp_transport_keeps_json_schema_type_validation(monkeypatch):
+    """Disabling SDK pre-validation must not enable Pydantic coercion."""
+    from ae_mcp import server as srv
+
+    load_all()
+    schema_cls, _ = HANDLERS["ae.init"]
+    dispatches = 0
+
+    async def _fake_run(validated, _ctx):
+        nonlocal dispatches
+        dispatches += 1
+        return {"ok": True, "refreshOnly": validated.refresh_only}
+
+    monkeypatch.setitem(HANDLERS, "ae.init", (schema_cls, _fake_run))
+    monkeypatch.setattr(srv, "_filtered_tool_names", lambda: {"ae.init"})
+    server = build_server()
+
+    async with create_connected_server_and_client_session(server) as client:
+        listed = await client.list_tools()
+        tool = next(item for item in listed.tools if item.name == "ae_init")
+        assert tool.inputSchema["properties"]["refresh_only"]["type"] == "boolean"
+
+        rejected = await client.call_tool(
+            "ae_init",
+            {"refresh_only": "false"},
+        )
+        assert rejected.isError is True
+        assert rejected.content[0].text.startswith("Input validation error:")
+        assert "boolean" in rejected.content[0].text
+        assert dispatches == 0
+
+        rejected_dotted = await client.call_tool(
+            "ae.init",
+            {"refresh_only": "false"},
+        )
+        assert rejected_dotted.isError is True
+        assert rejected_dotted.content[0].text.startswith(
+            "Input validation error:"
+        )
+        assert "boolean" in rejected_dotted.content[0].text
+        assert dispatches == 0
+
+        accepted = await client.call_tool(
+            "ae_init",
+            {"refresh_only": False},
+        )
+        assert accepted.isError is False
+        assert json.loads(accepted.content[0].text) == {
+            "ok": True,
+            "refreshOnly": False,
+        }
+        assert dispatches == 1

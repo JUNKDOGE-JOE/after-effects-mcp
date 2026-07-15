@@ -108,7 +108,7 @@ External clients must run on the same machine as After Effects, or otherwise be 
 
 | Category | Tools |
 |---|---|
-| Project | `ae_init`, `ae_overview`, `ae_layers`, `ae_listProjectItems`, `ae_listCompositionLayers`, `ae_readProps`, `ae_searchProject` |
+| Project | `ae_init`, `ae_overview`, `ae_layers`, `ae_listProjectItems`, `ae_listCompositionLayers`, `ae_listLayerProperties`, `ae_readProps`, `ae_searchProject` |
 | Mutation | `ae_exec`, `ae_applyEffect`, `ae_createLayer`, `ae_setProperty`, `ae_moveLayer`, `ae_selectLayers`, `ae_setTime` |
 | Read-typed | `ae_getTime`, `ae_getProperties`, `ae_scanPropertyTree`, `ae_inspectPropertyCapabilities`, `ae_getExpressions`, `ae_validateExpressions`, `ae_getKeyframes` |
 | Preview / capture | `ae_previewFrame`, `ae_snapshot` |
@@ -239,8 +239,12 @@ development-native surface is intentionally small: `ae_projectSummary` reads a p
 `ae_setProjectBitDepth` performs the SDK-declared undoable change with an idempotency key and
 verified native readback. `ae_listProjectItems` returns bounded project-item pages; copy a returned
 composition locator into `ae_listCompositionLayers` to read its bounded layer pages (default 25,
-maximum 50). These native tools fail explicitly when the native plane is unavailable and never fall
-back to JSX.
+maximum 50). Copy a returned layer locator into `ae_listLayerProperties` to list one bounded page of
+its direct properties (default and maximum 25); pass a returned property locator to descend exactly
+one group only when its `groupingType` is `named-group` or `indexed-group`. Primitive values are
+sampled at the current composition time and encoded as explicit decimal strings, while complex SDK
+values are marked unsupported rather than leaking native handles.
+These native tools fail explicitly when the native plane is unavailable and never fall back to JSX.
 
 CEP panel macOS development setup:
 

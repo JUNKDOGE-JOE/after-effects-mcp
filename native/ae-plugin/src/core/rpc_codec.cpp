@@ -522,7 +522,8 @@ ObjectLocator parse_locator(const JsonValue& value, std::string_view expected_ki
 
 bool valid_output_locator(const ObjectLocator& locator) {
   return (locator.kind == "project" || locator.kind == "item"
-          || locator.kind == "composition" || locator.kind == "layer")
+          || locator.kind == "composition" || locator.kind == "layer"
+          || locator.kind == "stream")
       && valid_uuid(locator.host_instance_id) && valid_uuid(locator.session_id)
       && valid_uuid(locator.project_id) && locator.generation >= 1
       && locator.generation <= kMaxSafeInteger && valid_uuid(locator.object_id);
@@ -600,6 +601,15 @@ std::string canonical_request(const ParsedRequest& request) {
             + locator_json(*value.composition_locator)
             + ",\"limit\":" + std::to_string(value.limit)
             + ",\"offset\":" + std::to_string(value.offset) + "}";
+      } else if (value.capability_id == "ae.layer.properties.list") {
+        arguments = "{\"layerLocator\":" + locator_json(*value.layer_locator)
+            + ",\"limit\":" + std::to_string(value.limit)
+            + ",\"offset\":" + std::to_string(value.offset);
+        if (value.parent_property_locator.has_value()) {
+          arguments += ",\"parentPropertyLocator\":"
+              + locator_json(*value.parent_property_locator);
+        }
+        arguments.push_back('}');
       }
       params = "{\"arguments\":" + arguments + ",\"capabilityId\":"
           + json_string(value.capability_id)
@@ -881,6 +891,26 @@ ParsedRequest classify_request(const JsonValue& root) {
             *arguments, "offset", CodecErrorKind::kInvalidArgument, 0, kMaxSafeInteger);
         result.limit = static_cast<std::uint16_t>(required_uint(
             *arguments, "limit", CodecErrorKind::kInvalidArgument, 1, 50));
+      } else if (capability == "ae.layer.properties.list") {
+        if (!exact_keys(
+                *arguments,
+                {"layerLocator", "parentPropertyLocator", "offset", "limit"},
+                {"layerLocator", "offset", "limit"})) {
+          invalid_argument("layer properties list arguments are not closed");
+        }
+        result.layer_locator = parse_locator(
+            *member(*arguments, "layerLocator"), "layer");
+        if (const JsonValue* locator = member(*arguments, "parentPropertyLocator")) {
+          if (std::holds_alternative<std::nullptr_t>(locator->value)) {
+            result.parent_property_locator = std::nullopt;
+          } else {
+            result.parent_property_locator = parse_locator(*locator, "stream");
+          }
+        }
+        result.offset = required_uint(
+            *arguments, "offset", CodecErrorKind::kInvalidArgument, 0, kMaxSafeInteger);
+        result.limit = static_cast<std::uint16_t>(required_uint(
+            *arguments, "limit", CodecErrorKind::kInvalidArgument, 1, 25));
       } else {
         invalid_argument("invoke is not in the compile-time allowlist");
       }
@@ -1043,6 +1073,224 @@ std::string canonical_composition_layers_value(const CompositionLayersPage& page
       + ",\"total\":" + std::to_string(page.total) + "}";
 }
 
+bool valid_decimal_string(std::string_view text) {
+  if (text.empty() || text.size() > 32) return false;
+  std::size_t index = text.front() == '-' ? 1U : 0U;
+  if (index >= text.size()) return false;
+  if (text[index] == '0') {
+    ++index;
+    if (index < text.size() && text[index] >= '0' && text[index] <= '9') return false;
+  } else {
+    if (text[index] < '1' || text[index] > '9') return false;
+    while (index < text.size() && text[index] >= '0' && text[index] <= '9') ++index;
+  }
+  if (index < text.size() && text[index] == '.') {
+    const std::size_t fractional = ++index;
+    while (index < text.size() && text[index] >= '0' && text[index] <= '9') ++index;
+    if (index == fractional) return false;
+  }
+  if (index < text.size() && (text[index] == 'e' || text[index] == 'E')) {
+    ++index;
+    if (index < text.size() && (text[index] == '+' || text[index] == '-')) ++index;
+    const std::size_t exponent = index;
+    while (index < text.size() && text[index] >= '0' && text[index] <= '9') ++index;
+    if (index == exponent) return false;
+  }
+  if (index != text.size()) return false;
+  double parsed = 0;
+  std::istringstream stream{std::string(text)};
+  stream.imbue(std::locale::classic());
+  stream >> std::noskipws >> parsed;
+  if (!stream || stream.peek() != std::char_traits<char>::eof()
+      || !std::isfinite(parsed)) {
+    return false;
+  }
+  if (parsed == 0) {
+    if (text.front() == '-') return false;
+    const std::size_t exponent = text.find_first_of("eE");
+    const std::string_view significand = text.substr(0, exponent);
+    if (std::any_of(significand.begin(), significand.end(), [](char character) {
+          return character >= '1' && character <= '9';
+        })) return false;
+  }
+  return true;
+}
+
+std::string nullable_bool_json(const std::optional<bool>& value) {
+  if (!value.has_value()) return "null";
+  return *value ? "true" : "false";
+}
+
+std::string canonical_layer_property_value(const LayerPropertyValue& value) {
+  if (std::holds_alternative<std::monostate>(value)) return "null";
+  if (const auto* scalar = std::get_if<LayerPropertyScalarValue>(&value)) {
+    if (!valid_decimal_string(scalar->value)) invalid_argument("invalid scalar property value");
+    return "{\"kind\":\"scalar\",\"value\":" + json_string(scalar->value) + "}";
+  }
+  if (const auto* vector = std::get_if<LayerPropertyVectorValue>(&value)) {
+    if (vector->components.size() != 2 && vector->components.size() != 3) {
+      invalid_argument("invalid vector property arity");
+    }
+    std::string components = "[";
+    for (std::size_t index = 0; index < vector->components.size(); ++index) {
+      if (!valid_decimal_string(vector->components[index])) {
+        invalid_argument("invalid vector property value");
+      }
+      if (index != 0) components.push_back(',');
+      components += json_string(vector->components[index]);
+    }
+    components.push_back(']');
+    return "{\"components\":" + components + ",\"kind\":\"vector\"}";
+  }
+  const auto& color = std::get<LayerPropertyColorValue>(value);
+  if (!valid_decimal_string(color.alpha) || !valid_decimal_string(color.red)
+      || !valid_decimal_string(color.green) || !valid_decimal_string(color.blue)) {
+    invalid_argument("invalid color property value");
+  }
+  return "{\"alpha\":" + json_string(color.alpha) + ",\"blue\":"
+      + json_string(color.blue) + ",\"green\":" + json_string(color.green)
+      + ",\"kind\":\"color\",\"red\":" + json_string(color.red) + "}";
+}
+
+std::string canonical_layer_properties_value(const LayerPropertiesPage& page) {
+  if (!valid_output_locator(page.layer_locator) || page.layer_locator.kind != "layer"
+      || (page.parent_property_locator.has_value()
+          && (!valid_output_locator(*page.parent_property_locator)
+              || page.parent_property_locator->kind != "stream"
+              || !same_locator_scope(*page.parent_property_locator, page.layer_locator)))
+      || validate_utf8_and_count(page.layer_name) > 1'024
+      || page.sample_time.value < -static_cast<std::int64_t>(kMaxSafeInteger)
+      || page.sample_time.value > static_cast<std::int64_t>(kMaxSafeInteger)
+      || page.sample_time.scale < 1 || page.sample_time.scale > kMaxSafeInteger
+      || page.total > kMaxSafeInteger || page.offset > kMaxSafeInteger
+      || page.limit < 1 || page.limit > 25 || page.properties.size() > page.limit) {
+    invalid_argument("invalid layer properties page");
+  }
+  const std::uint64_t returned = page.properties.size();
+  if (page.offset > page.total || returned > page.total - page.offset) {
+    invalid_argument("layer properties page exceeds the reported total");
+  }
+  const bool expected_more = page.offset + returned < page.total;
+  if ((expected_more && returned == 0) || page.has_more != expected_more
+      || (expected_more
+          ? (!page.next_offset.has_value()
+              || *page.next_offset != page.offset + returned)
+          : page.next_offset.has_value())) {
+    invalid_argument("layer properties pagination invariant failed");
+  }
+  const auto known_value_type = [](std::string_view value) {
+    constexpr std::array<std::string_view, 14> values = {
+        "none", "one-d", "two-d", "two-d-spatial", "three-d", "three-d-spatial",
+        "color", "arb", "marker", "layer-id", "mask-id", "mask", "text-document",
+        "unknown"};
+    return std::find(values.begin(), values.end(), value) != values.end();
+  };
+  std::string properties = "[";
+  std::set<std::string> object_ids;
+  for (std::size_t index = 0; index < page.properties.size(); ++index) {
+    const LayerPropertyEntry& property = page.properties[index];
+    if (index != 0) properties.push_back(',');
+    const bool group = property.grouping_type == "named-group"
+        || property.grouping_type == "indexed-group";
+    const bool leaf = property.grouping_type == "leaf";
+    if (!valid_output_locator(property.property_locator)
+        || property.property_locator.kind != "stream"
+        || !same_locator_scope(property.property_locator, page.layer_locator)
+        || (page.parent_property_locator.has_value()
+            && property.property_locator.object_id
+                == page.parent_property_locator->object_id)
+        || property.property_index != page.offset + index + 1
+        || property.property_index > kMaxSafeInteger
+        || validate_utf8_and_count(property.name) > 1'024
+        || validate_utf8_and_count(property.match_name) > 40
+        || (!leaf && !group) || !known_value_type(property.value_type)
+        || !object_ids.insert(property.property_locator.object_id).second) {
+      invalid_argument("invalid layer property result");
+    }
+    const bool null_value = std::holds_alternative<std::monostate>(property.value);
+    if (group) {
+      if (property.value_type != "none" || property.value_status != "group"
+          || !null_value || property.can_vary_over_time.has_value()
+          || property.time_varying.has_value()) {
+        invalid_argument("invalid property group result");
+      }
+    } else {
+      if (property.child_count != 0
+          || (property.value_status != "sampled"
+              && property.value_status != "no-data"
+              && property.value_status != "unsupported")) {
+        invalid_argument("invalid leaf property result");
+      }
+      if (property.value_status == "sampled") {
+        if (!property.can_vary_over_time.has_value()
+            || !property.time_varying.has_value()) {
+          invalid_argument("sampled property must report time flags");
+        }
+        const bool scalar = property.value_type == "one-d"
+            && std::holds_alternative<LayerPropertyScalarValue>(property.value);
+        const auto* vector = std::get_if<LayerPropertyVectorValue>(&property.value);
+        const bool vector_matches = vector != nullptr
+            && (((property.value_type == "two-d" || property.value_type == "two-d-spatial")
+                  && vector->components.size() == 2)
+                || ((property.value_type == "three-d"
+                    || property.value_type == "three-d-spatial")
+                  && vector->components.size() == 3));
+        const bool color = property.value_type == "color"
+            && std::holds_alternative<LayerPropertyColorValue>(property.value);
+        if (!scalar && !vector_matches && !color) {
+          invalid_argument("sampled property type does not match its value");
+        }
+      } else if (property.value_status == "no-data") {
+        if (property.value_type != "none" || !null_value) {
+          invalid_argument("no-data property must have no typed value");
+        }
+      } else {
+        const bool complex_type = property.value_type == "arb"
+            || property.value_type == "marker"
+            || property.value_type == "layer-id"
+            || property.value_type == "mask-id"
+            || property.value_type == "mask"
+            || property.value_type == "text-document"
+            || property.value_type == "unknown";
+        if (!complex_type || !null_value) {
+          invalid_argument("unsupported property must have a complex value type");
+        }
+      }
+    }
+    properties += "{\"canVaryOverTime\":"
+        + nullable_bool_json(property.can_vary_over_time)
+        + ",\"childCount\":" + std::to_string(property.child_count)
+        + ",\"disabled\":" + (property.disabled ? "true" : "false")
+        + ",\"groupingType\":" + json_string(property.grouping_type)
+        + ",\"hidden\":" + (property.hidden ? "true" : "false")
+        + ",\"matchName\":" + json_string(property.match_name)
+        + ",\"modified\":" + (property.modified ? "true" : "false")
+        + ",\"name\":" + json_string(property.name)
+        + ",\"propertyIndex\":" + std::to_string(property.property_index)
+        + ",\"propertyLocator\":" + locator_json(property.property_locator)
+        + ",\"timeVarying\":" + nullable_bool_json(property.time_varying)
+        + ",\"value\":" + canonical_layer_property_value(property.value)
+        + ",\"valueStatus\":" + json_string(property.value_status)
+        + ",\"valueType\":" + json_string(property.value_type) + "}";
+  }
+  properties.push_back(']');
+  return "{\"hasMore\":" + std::string(page.has_more ? "true" : "false")
+      + ",\"layerLocator\":" + locator_json(page.layer_locator)
+      + ",\"layerName\":" + json_string(page.layer_name)
+      + ",\"limit\":" + std::to_string(page.limit)
+      + ",\"nextOffset\":"
+      + (page.next_offset.has_value() ? std::to_string(*page.next_offset) : "null")
+      + ",\"offset\":" + std::to_string(page.offset)
+      + ",\"parentPropertyLocator\":"
+      + nullable_locator_json(page.parent_property_locator)
+      + ",\"properties\":" + properties
+      + ",\"returned\":" + std::to_string(returned)
+      + ",\"sampleTime\":{\"mode\":\"comp-time\",\"scale\":"
+      + std::to_string(page.sample_time.scale) + ",\"value\":"
+      + std::to_string(page.sample_time.value) + "},\"total\":"
+      + std::to_string(page.total) + "}";
+}
+
 std::uint32_t read_be32(Bytes bytes) {
   return (static_cast<std::uint32_t>(bytes[0]) << 24U)
       | (static_cast<std::uint32_t>(bytes[1]) << 16U)
@@ -1166,6 +1414,13 @@ std::string digest_composition_layers_postcondition(
   return sha256_hex(
       "{\"capabilityId\":\"ae.composition.layers.list\",\"capabilityVersion\":1,\"value\":"
       + canonical_composition_layers_value(page) + "}");
+}
+
+std::string digest_layer_properties_postcondition(
+    const LayerPropertiesPage& page) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.properties.list\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_properties_value(page) + "}");
 }
 
 std::vector<ParsedRequest> FrameDecoder::push(std::span<const std::uint8_t> chunk) {
@@ -1608,6 +1863,18 @@ std::string composition_layers_list_descriptor(const CapabilitiesSuccess& respon
   }
   return R"aemcp({"detail":"full","id":"ae.composition.layers.list","version":1,"schemaVersion":1,"summary":"List a bounded page of layers in one After Effects composition.","risk":"read","mutability":"read-only","idempotency":"idempotent","cancellation":"before-dispatch","undo":"not-applicable","sideEffectSummary":"Reads composition layers without changing After Effects state.","preconditions":["An After Effects project must be open.","compositionLocator must come from ae.project.items.list@1."],"compatibility":{"status":"unverified","intendedPlatforms":["macos-arm64","windows-x64"]},"inputContractId":"aemcp.contract.ae.composition.layers.list.input.v1","resultContractId":"aemcp.contract.ae.composition.layers.list.result.v1","contractDigest":"3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75","inputSchema":{"type":"object","additionalProperties":false,"required":["compositionLocator","offset","limit"],"properties":{"compositionLocator":{"$ref":"#/$defs/compositionLocator"},"offset":{"type":"integer","minimum":0,"maximum":9007199254740991,"default":0,"x-omissionBehavior":0},"limit":{"type":"integer","minimum":1,"maximum":50,"default":25,"x-omissionBehavior":25}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"compositionLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"composition"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}}}},"resultSchema":{"type":"object","additionalProperties":false,"required":["compositionLocator","compositionName","total","offset","limit","returned","hasMore","nextOffset","layers"],"properties":{"compositionLocator":{"$ref":"#/$defs/compositionLocator"},"compositionName":{"type":"string","maxLength":1024},"total":{"type":"integer","minimum":0,"maximum":9007199254740991},"offset":{"type":"integer","minimum":0,"maximum":9007199254740991},"limit":{"type":"integer","minimum":1,"maximum":50},"returned":{"type":"integer","minimum":0,"maximum":50},"hasMore":{"type":"boolean"},"nextOffset":{"oneOf":[{"type":"null"},{"type":"integer","minimum":0,"maximum":9007199254740991}]},"layers":{"type":"array","maxItems":50,"items":{"type":"object","additionalProperties":false,"required":["locator","stackIndex","name","type","videoEnabled","isThreeD","locked","parentLocator","sourceItemLocator"],"properties":{"locator":{"$ref":"#/$defs/layerLocator"},"stackIndex":{"type":"integer","minimum":1,"maximum":9007199254740991},"name":{"type":"string","maxLength":1024},"type":{"enum":["av","camera","light","text","shape","model3d","null","adjustment","unknown"]},"videoEnabled":{"type":"boolean"},"isThreeD":{"type":"boolean"},"locked":{"type":"boolean"},"parentLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/layerLocator"}]},"sourceItemLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/sourceItemLocator"}]}}}}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"locatorBase":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"enum":["project","item","composition","layer","stream"]},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}},"compositionLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"composition"}}}]},"layerLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"layer"}}}]},"sourceItemLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"enum":["item","composition"]}}}]}},"x-invariant":"returned-equals-layers-length-and-page-metadata-is-self-consistent"},"requirements":[{"id":"aemcp.requirement.native.composition-layers-list","contractVersion":1}],"examples":[{"id":"aemcp-example-composition-layers-list-empty","kind":"positive","summary":"List the first bounded page of an empty composition.","arguments":{"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"offset":0,"limit":25},"expected":{"outcome":"succeeded","value":{"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"compositionName":"SYNTHETIC_COMPOSITION","total":0,"offset":0,"limit":25,"returned":0,"hasMore":false,"nextOffset":null,"layers":[]}}},{"id":"aemcp-example-composition-layers-list-stale","kind":"negative","summary":"Refresh a stale composition locator before listing layers.","arguments":{"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"offset":0,"limit":25},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"}}]})aemcp";
 }
+std::string layer_properties_list_descriptor(const CapabilitiesSuccess& response) {
+  if (response.detail == CapabilityDetail::kSummary) {
+    return R"aemcp({"detail":"summary","id":"ae.layer.properties.list","version":1,"schemaVersion":1,"summary":"List a bounded page of direct properties on an After Effects layer or property group.","risk":"read","mutability":"read-only","idempotency":"idempotent","cancellation":"before-dispatch","undo":"not-applicable","sideEffectSummary":"Reads layer properties and safe primitive values without changing After Effects state.","preconditions":["An After Effects project must be open.","layerLocator must come from ae.composition.layers.list@1.","parentPropertyLocator must come from ae.layer.properties.list@1 for the same layer."],"compatibility":{"status":"unverified","intendedPlatforms":["macos-arm64","windows-x64"]}})aemcp";
+  }
+  require_digest(response.layer_properties_list_contract_digest, "contract digest");
+  if (response.layer_properties_list_contract_digest
+      != "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba") {
+    invalid_argument("layer properties contract digest does not match the compiled descriptor");
+  }
+  return R"aemcp({"detail":"full","id":"ae.layer.properties.list","version":1,"schemaVersion":1,"summary":"List a bounded page of direct properties on an After Effects layer or property group.","risk":"read","mutability":"read-only","idempotency":"idempotent","cancellation":"before-dispatch","undo":"not-applicable","sideEffectSummary":"Reads layer properties and safe primitive values without changing After Effects state.","preconditions":["An After Effects project must be open.","layerLocator must come from ae.composition.layers.list@1.","parentPropertyLocator must come from ae.layer.properties.list@1 for the same layer."],"compatibility":{"status":"unverified","intendedPlatforms":["macos-arm64","windows-x64"]},"inputContractId":"aemcp.contract.ae.layer.properties.list.input.v1","resultContractId":"aemcp.contract.ae.layer.properties.list.result.v1","contractDigest":"a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba","inputSchema":{"type":"object","additionalProperties":false,"required":["layerLocator","offset","limit"],"properties":{"layerLocator":{"$ref":"#/$defs/layerLocator"},"parentPropertyLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/streamLocator"}]},"offset":{"type":"integer","minimum":0,"maximum":9007199254740991,"default":0,"x-omissionBehavior":0},"limit":{"type":"integer","minimum":1,"maximum":25,"default":25,"x-omissionBehavior":25}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}},"streamLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"stream"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}}}},"resultSchema":{"type":"object","additionalProperties":false,"required":["layerLocator","parentPropertyLocator","layerName","sampleTime","total","offset","limit","returned","hasMore","nextOffset","properties"],"properties":{"layerLocator":{"$ref":"#/$defs/layerLocator"},"parentPropertyLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/streamLocator"}]},"layerName":{"type":"string","maxLength":1024},"sampleTime":{"type":"object","additionalProperties":false,"required":["value","scale","mode"],"properties":{"value":{"type":"integer","minimum":-9007199254740991,"maximum":9007199254740991},"scale":{"type":"integer","minimum":1,"maximum":9007199254740991},"mode":{"const":"comp-time"}}},"total":{"type":"integer","minimum":0,"maximum":9007199254740991},"offset":{"type":"integer","minimum":0,"maximum":9007199254740991},"limit":{"type":"integer","minimum":1,"maximum":25},"returned":{"type":"integer","minimum":0,"maximum":25},"hasMore":{"type":"boolean"},"nextOffset":{"oneOf":[{"type":"null"},{"type":"integer","minimum":0,"maximum":9007199254740991}]},"properties":{"type":"array","maxItems":25,"items":{"type":"object","additionalProperties":false,"required":["propertyLocator","propertyIndex","name","matchName","groupingType","childCount","hidden","disabled","modified","canVaryOverTime","timeVarying","valueType","valueStatus","value"],"properties":{"propertyLocator":{"$ref":"#/$defs/streamLocator"},"propertyIndex":{"type":"integer","minimum":1,"maximum":9007199254740991},"name":{"type":"string","maxLength":1024},"matchName":{"type":"string","maxLength":40},"groupingType":{"enum":["leaf","named-group","indexed-group"]},"childCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"hidden":{"type":"boolean"},"disabled":{"type":"boolean"},"modified":{"type":"boolean"},"canVaryOverTime":{"oneOf":[{"type":"null"},{"type":"boolean"}]},"timeVarying":{"oneOf":[{"type":"null"},{"type":"boolean"}]},"valueType":{"enum":["none","one-d","two-d","two-d-spatial","three-d","three-d-spatial","color","arb","marker","layer-id","mask-id","mask","text-document","unknown"]},"valueStatus":{"enum":["group","sampled","no-data","unsupported"]},"value":{"oneOf":[{"type":"null"},{"type":"object","additionalProperties":false,"required":["kind","value"],"properties":{"kind":{"const":"scalar"},"value":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}},{"type":"object","additionalProperties":false,"required":["kind","components"],"properties":{"kind":{"const":"vector"},"components":{"type":"array","minItems":2,"maxItems":3,"items":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}}},{"type":"object","additionalProperties":false,"required":["kind","alpha","red","green","blue"],"properties":{"kind":{"const":"color"},"alpha":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"red":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"green":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"blue":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}}]}}}}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"locatorBase":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"enum":["project","item","composition","layer","stream"]},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}},"layerLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"layer"}}}]},"streamLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"stream"}}}]}},"x-invariant":"returned-equals-properties-length-and-page-metadata-and-value-types-are-self-consistent"},"requirements":[{"id":"aemcp.requirement.native.layer-properties-list","contractVersion":1}],"examples":[{"id":"aemcp-example-layer-properties-list-empty","kind":"positive","summary":"List the first bounded page of direct properties on a layer.","arguments":{"layerLocator":{"kind":"layer","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"88888888-8888-4888-8888-888888888888"},"offset":0,"limit":25},"expected":{"outcome":"succeeded","value":{"layerLocator":{"kind":"layer","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"88888888-8888-4888-8888-888888888888"},"parentPropertyLocator":null,"layerName":"SYNTHETIC_LAYER","sampleTime":{"value":0,"scale":1,"mode":"comp-time"},"total":0,"offset":0,"limit":25,"returned":0,"hasMore":false,"nextOffset":null,"properties":[]}}},{"id":"aemcp-example-layer-properties-list-stale","kind":"negative","summary":"Refresh stale layer and property locators before listing properties.","arguments":{"layerLocator":{"kind":"layer","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"88888888-8888-4888-8888-888888888888"},"offset":0,"limit":25},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"}}]})aemcp";
+}
+
 struct ErrorPolicy {
   const char* code;
   bool retryable;
@@ -1739,6 +2006,11 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
   if (response.include_composition_layers_list) {
     if (needs_comma) items.push_back(',');
     items += composition_layers_list_descriptor(response);
+    needs_comma = true;
+  }
+  if (response.include_layer_properties_list) {
+    if (needs_comma) items.push_back(',');
+    items += layer_properties_list_descriptor(response);
   }
   items.push_back(']');
   std::string json = "{\"kind\":\"response\",\"method\":\"capabilities\",\"ok\":true,"
@@ -1948,6 +2220,44 @@ std::vector<std::uint8_t> encode_composition_layers_success(
       + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\",\"digest\":"
       + json_string(response.postcondition_digest)
       + ",\"kind\":\"composition-layers-list\",\"verified\":true},\"requestDigest\":"
+      + json_string(response.request_digest) + ",\"requestId\":"
+      + json_string(response.request_id) + ",\"sessionId\":"
+      + json_string(response.session_id) + ",\"startedAtUnixMs\":"
+      + std::to_string(response.started_at_unix_ms)
+      + "},\"outcome\":\"succeeded\",\"value\":" + value + "},\"sessionId\":"
+      + json_string(response.session_id) + ",\"wireVersion\":1}";
+  return frame_output(std::move(json));
+}
+
+std::vector<std::uint8_t> encode_layer_properties_success(
+    const LayerPropertiesSuccess& response) {
+  require_request_id(response.request_id);
+  require_uuid(response.session_id, "session ID");
+  require_uuid(response.host_instance_id, "host instance ID");
+  require_digest(response.request_digest, "request digest");
+  require_digest(response.postcondition_digest, "postcondition digest");
+  const std::string value = canonical_layer_properties_value(response.value);
+  if (response.replayed || response.started_at_unix_ms < 1
+      || response.started_at_unix_ms > kMaxSafeInteger
+      || response.completed_at_unix_ms < response.started_at_unix_ms
+      || response.completed_at_unix_ms > kMaxSafeInteger
+      || response.value.layer_locator.host_instance_id != response.host_instance_id
+      || response.value.layer_locator.session_id != response.session_id
+      || response.postcondition_digest
+          != digest_layer_properties_postcondition(response.value)) {
+    invalid_argument("invalid or unvalidated layer properties evidence");
+  }
+  std::string json = "{\"kind\":\"response\",\"method\":\"invoke\",\"ok\":true,"
+      "\"replayed\":false,\"requestId\":" + json_string(response.request_id)
+      + ",\"result\":{\"capabilityId\":\"ae.layer.properties.list\","
+        "\"capabilityVersion\":1,\"engine\":\"native-aegp\",\"evidence\":{"
+        "\"capabilityId\":\"ae.layer.properties.list\",\"capabilityVersion\":1,"
+        "\"completedAtUnixMs\":" + std::to_string(response.completed_at_unix_ms)
+      + ",\"effect\":\"none\",\"engine\":\"native-aegp\",\"hostInstanceId\":"
+      + json_string(response.host_instance_id)
+      + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\",\"digest\":"
+      + json_string(response.postcondition_digest)
+      + ",\"kind\":\"layer-properties-list\",\"verified\":true},\"requestDigest\":"
       + json_string(response.request_digest) + ",\"requestId\":"
       + json_string(response.request_id) + ",\"sessionId\":"
       + json_string(response.session_id) + ",\"startedAtUnixMs\":"

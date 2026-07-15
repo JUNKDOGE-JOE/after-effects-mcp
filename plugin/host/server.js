@@ -31,6 +31,7 @@ const PROJECT_BIT_DEPTH_READ_CAPABILITY = 'ae.project.bit-depth.read';
 const PROJECT_BIT_DEPTH_SET_CAPABILITY = 'ae.project.bit-depth.set';
 const PROJECT_ITEMS_LIST_CAPABILITY = 'ae.project.items.list';
 const COMPOSITION_LAYERS_LIST_CAPABILITY = 'ae.composition.layers.list';
+const LAYER_PROPERTIES_LIST_CAPABILITY = 'ae.layer.properties.list';
 const NATIVE_LOCATOR_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function setRuntimeDependencies(dependencies) {
@@ -270,6 +271,16 @@ function validCompositionLayersListArguments(value) {
         && Number.isSafeInteger(value.limit) && value.limit >= 1 && value.limit <= 50;
 }
 
+function validLayerPropertiesListArguments(value) {
+    return exactBody(value, ['layerLocator', 'offset', 'limit'], ['parentPropertyLocator'])
+        && validNativeLocator(value.layerLocator, 'layer')
+        && Number.isSafeInteger(value.offset) && value.offset >= 0
+        && Number.isSafeInteger(value.limit) && value.limit >= 1 && value.limit <= 25
+        && (value.parentPropertyLocator === undefined
+            || value.parentPropertyLocator === null
+            || validNativeLocator(value.parentPropertyLocator, 'stream'));
+}
+
 function validNativeInvokeBody(body) {
     if (!exactBody(body, [
         'requestId', 'capabilityId', 'capabilityVersion', 'arguments', 'deadlineUnixMs',
@@ -290,6 +301,10 @@ function validNativeInvokeBody(body) {
     if (body.capabilityId === COMPOSITION_LAYERS_LIST_CAPABILITY
         && body.capabilityVersion === 1) {
         return validCompositionLayersListArguments(body.arguments);
+    }
+    if (body.capabilityId === LAYER_PROPERTIES_LIST_CAPABILITY
+        && body.capabilityVersion === 1) {
+        return validLayerPropertiesListArguments(body.arguments);
     }
     return false;
 }

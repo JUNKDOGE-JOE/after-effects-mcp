@@ -115,6 +115,14 @@ class AeCompositionLocator(_AeLocatorInput):
     kind: Literal["composition"]
 
 
+class AeLayerLocator(_AeLocatorInput):
+    kind: Literal["layer"]
+
+
+class AePropertyLocator(_AeLocatorInput):
+    kind: Literal["stream"]
+
+
 class AeListProjectItemsArgs(_StrictModel):
     """ae.listProjectItems — list bounded project items through native AEGP only.
 
@@ -176,6 +184,40 @@ class AeListCompositionLayersArgs(_StrictModel):
         ge=1,
         le=50,
         description="Maximum layers requested for this bounded page (default 25, max 50).",
+    )
+
+
+class AeListLayerPropertiesArgs(_StrictModel):
+    """ae.listLayerProperties — list direct native properties on a layer/group.
+
+    Copy layer_locator from ae_listCompositionLayers. To descend exactly one
+    level, copy parent_property_locator from a prior result. This bounded read
+    never recursively walks the tree and never falls back to JSX.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    layer_locator: AeLayerLocator = Field(
+        ...,
+        description="Layer locator returned by ae_listCompositionLayers.",
+    )
+    parent_property_locator: Optional[AePropertyLocator] = Field(
+        None,
+        description=(
+            "Property-group locator returned by this tool; omit for layer roots."
+        ),
+    )
+    offset: int = Field(
+        0,
+        ge=0,
+        le=9_007_199_254_740_991,
+        description="Zero-based direct-child property offset.",
+    )
+    limit: int = Field(
+        25,
+        ge=1,
+        le=25,
+        description="Maximum direct properties requested (default 25, max 25).",
     )
 
 
@@ -741,6 +783,7 @@ SCHEMAS = {
     "ae.setProjectBitDepth": AeSetProjectBitDepthArgs,
     "ae.listProjectItems": AeListProjectItemsArgs,
     "ae.listCompositionLayers": AeListCompositionLayersArgs,
+    "ae.listLayerProperties": AeListLayerPropertiesArgs,
     "ae.layers": AeLayersArgs,
     "ae.readProps": AeReadPropsArgs,
     "ae.exec": AeExecArgs,
@@ -785,4 +828,4 @@ SCHEMAS = {
     "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 49, f"expected 49 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 50, f"expected 50 verbs, got {len(SCHEMAS)}"

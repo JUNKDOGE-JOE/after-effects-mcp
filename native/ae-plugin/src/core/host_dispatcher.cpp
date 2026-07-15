@@ -68,7 +68,8 @@ bool valid_uuid(std::string_view value) {
 
 bool valid_locator(const ObjectLocator& locator) {
   return (locator.kind == "project" || locator.kind == "item"
-          || locator.kind == "composition" || locator.kind == "layer")
+          || locator.kind == "composition" || locator.kind == "layer"
+          || locator.kind == "stream")
       && valid_uuid(locator.host_instance_id) && valid_uuid(locator.session_id)
       && valid_uuid(locator.project_id) && locator.generation > 0
       && valid_uuid(locator.object_id);
@@ -215,6 +216,23 @@ HostCompositionLayersResult HostCompositionLayersResult::failure(
   return result;
 }
 
+HostLayerPropertiesResult HostLayerPropertiesResult::success(
+    LayerPropertiesPage value) {
+  HostLayerPropertiesResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
+HostLayerPropertiesResult HostLayerPropertiesResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostLayerPropertiesResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
+
 HostBitDepthReadResult HostApi::read_project_bit_depth(TimePoint) {
   return HostBitDepthReadResult::failure(
       "NATIVE_UNSUPPORTED", "project bit-depth reads are unavailable");
@@ -235,6 +253,12 @@ HostCompositionLayersResult HostApi::list_composition_layers(
     const CompositionLayersQuery&, TimePoint) {
   return HostCompositionLayersResult::failure(
       "NATIVE_UNSUPPORTED", "composition layer reads are unavailable");
+}
+
+HostLayerPropertiesResult HostApi::list_layer_properties(
+    const LayerPropertiesQuery&, TimePoint) {
+  return HostLayerPropertiesResult::failure(
+      "NATIVE_UNSUPPORTED", "layer property reads are unavailable");
 }
 
 std::size_t HostDispatcher::RequestKeyHash::operator()(const RequestKey& key) const noexcept {
@@ -276,8 +300,10 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
   const bool project_items_list = request.capability_id == kProjectItemsListCapability;
   const bool composition_layers_list =
       request.capability_id == kCompositionLayersListCapability;
+  const bool layer_properties_list =
+      request.capability_id == kLayerPropertiesListCapability;
   if (!project_summary && !project_bit_depth_read && !project_bit_depth_set
-      && !project_items_list && !composition_layers_list) {
+      && !project_items_list && !composition_layers_list && !layer_properties_list) {
     return {EnqueueCode::kUnsupportedCapability, "NATIVE_UNSUPPORTED"};
   }
   if ((project_summary || project_bit_depth_read)
@@ -305,11 +331,12 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         "native capability arguments failed closed validation",
         "params.arguments"};
   }
-  if ((project_items_list || composition_layers_list)
+  if ((project_items_list || composition_layers_list || layer_properties_list)
       && (request.target_depth != 0 || !request.idempotency_key.empty()
           || !request.arguments_fingerprint_sha256.empty()
           || !valid_uuid(request.host_instance_id) || !valid_uuid(request.session_id)
-          || request.limit < 1 || request.limit > 50)) {
+          || request.limit < 1
+          || request.limit > (layer_properties_list ? 25 : 50))) {
     return {
         EnqueueCode::kInvalidRequest,
         "INVALID_ARGUMENT",
@@ -368,6 +395,61 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           "compositionLocator belongs to another host or native session",
           "params.arguments.compositionLocator"};
     }
+  }
+  if (layer_properties_list
+      && (request.project_locator.has_value()
+          || request.composition_locator.has_value()
+          || !request.layer_locator.has_value())) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "layerLocator is required for layer property reads",
+        "params.arguments.layerLocator"};
+  }
+  if (layer_properties_list) {
+    const ObjectLocator& layer = *request.layer_locator;
+    if (!valid_locator(layer) || layer.kind != "layer") {
+      return {
+          EnqueueCode::kInvalidRequest,
+          "INVALID_ARGUMENT",
+          "layerLocator must be a closed layer locator",
+          "params.arguments.layerLocator"};
+    }
+    if (layer.host_instance_id != request.host_instance_id
+        || layer.session_id != request.session_id) {
+      return {
+          EnqueueCode::kInvalidRequest,
+          "STALE_LOCATOR",
+          "layerLocator belongs to another host or native session",
+          "params.arguments.layerLocator"};
+    }
+    if (request.parent_property_locator.has_value()) {
+      const ObjectLocator& parent = *request.parent_property_locator;
+      if (!valid_locator(parent) || parent.kind != "stream") {
+        return {
+            EnqueueCode::kInvalidRequest,
+            "INVALID_ARGUMENT",
+            "parentPropertyLocator must be a closed stream locator",
+            "params.arguments.parentPropertyLocator"};
+      }
+      if (parent.host_instance_id != request.host_instance_id
+          || parent.session_id != request.session_id
+          || parent.project_id != layer.project_id
+          || parent.generation != layer.generation) {
+        return {
+            EnqueueCode::kInvalidRequest,
+            "STALE_LOCATOR",
+            "parentPropertyLocator belongs to another layer session",
+            "params.arguments.parentPropertyLocator"};
+      }
+    }
+  } else if (request.layer_locator.has_value()
+      || request.parent_property_locator.has_value()) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "layer property locators are not accepted by this capability",
+        "params.arguments"};
   }
   const TimePoint now = clock_.now();
   if (request.deadline <= now) {
@@ -662,6 +744,41 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
             completion.session_generation = request.session_generation;
             completion.ok = true;
             completion.composition_layers_result = std::move(host_result.value);
+          }
+        } else if (request.capability_id == kLayerPropertiesListCapability) {
+          HostLayerPropertiesResult host_result = host.list_layer_properties(
+              LayerPropertiesQuery{
+                  request.host_instance_id,
+                  request.session_id,
+                  request.offset,
+                  request.limit,
+                  *request.layer_locator,
+                  request.parent_property_locator},
+              std::min(request.deadline, idle_deadline));
+          if (clock_.now() > request.deadline) {
+            completion = expired(request, true);
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else if (host_result.value.offset != request.offset
+              || host_result.value.limit != request.limit
+              || host_result.value.layer_locator != *request.layer_locator
+              || host_result.value.parent_property_locator
+                != request.parent_property_locator) {
+            completion = failure_for(
+                request,
+                "CAPABILITY_FAILED",
+                "native layer property page was not bound to its request");
+          } else {
+            completion.request_id = request.request_id;
+            completion.capability_id = request.capability_id;
+            completion.route_id = request.route_id;
+            completion.session_generation = request.session_generation;
+            completion.ok = true;
+            completion.layer_properties_result = std::move(host_result.value);
           }
         } else {
           // The idle budget decides whether another task may start in this
