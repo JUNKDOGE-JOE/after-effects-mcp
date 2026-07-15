@@ -428,8 +428,11 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
             completion.bit_depth_result = std::move(host_result.value);
           }
         } else {
+          // The idle budget decides whether another task may start in this
+          // batch. An AEGP write is synchronous and cannot be interrupted, so
+          // its semantic deadline remains the caller's request deadline.
           HostBitDepthWriteResult host_result = host.set_project_bit_depth(
-              request.target_depth, std::min(request.deadline, idle_deadline));
+              request.target_depth, request.deadline);
           if (clock_.now() > request.deadline) {
             completion = failure_for(
                 request,

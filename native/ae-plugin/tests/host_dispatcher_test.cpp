@@ -384,6 +384,38 @@ void bit_depth_write_validates_before_dispatch_and_late_results_are_ambiguous() 
       "late write key was allowed to mutate again");
 }
 
+void bit_depth_write_uses_request_deadline_and_stops_an_overrun_idle_batch() {
+  FakeClock clock;
+  const auto owner = std::this_thread::get_id();
+  HostDispatcher dispatcher(owner, clock, config(8, 8, 4ms));
+  FakeHost host(clock, owner);
+  host.delay = 5ms;
+
+  require(dispatcher.enqueue(bit_depth_set_request(
+      clock, "budgeted-write", "bit-depth-intent-301", 16,
+      std::string(64, 'e'), 1s)).code == EnqueueCode::kAccepted,
+      "over-budget atomic write setup was rejected");
+  require(dispatcher.enqueue(bit_depth_read_request(
+      clock, "after-budgeted-write", 1s)).code == EnqueueCode::kAccepted,
+      "post-write queued read setup was rejected");
+
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1 && batch.completions[0].ok
+          && batch.completions[0].bit_depth_change_result.changed
+          && batch.completions[0].bit_depth_change_result.before_bits_per_channel == 8
+          && batch.completions[0].bit_depth_change_result.after_bits_per_channel == 16,
+      "idle budget mislabeled a verified atomic write as failed");
+  require(batch.budget_exhausted && batch.remaining == 1
+          && host.write_calls == 1 && host.bit_depth_read_calls == 0,
+      "idle budget started another task after the atomic write completed");
+  require(host.observed_deadline == clock.now() - host.delay + 1s,
+      "atomic write did not receive the caller's request deadline");
+
+  const auto stopped = dispatcher.shutdown();
+  require(stopped.size() == 1 && stopped[0].error_code == "AE_SHUTTING_DOWN",
+      "overrun idle batch cleanup lost the queued request");
+}
+
 void worker_to_owner_dispatch_and_outbound_transfer() {
   FakeClock clock;
   const auto owner = std::this_thread::get_id();
@@ -729,6 +761,7 @@ int main() {
   bit_depth_read_and_write_are_main_thread_bound_and_write_is_idempotent();
   bit_depth_write_releases_only_safe_failures_and_fails_closed_when_full();
   bit_depth_write_validates_before_dispatch_and_late_results_are_ambiguous();
+  bit_depth_write_uses_request_deadline_and_stops_an_overrun_idle_batch();
   worker_to_owner_dispatch_and_outbound_transfer();
   admission_is_closed_and_bounded();
   request_identity_is_route_scoped_and_tombstones_expire();
