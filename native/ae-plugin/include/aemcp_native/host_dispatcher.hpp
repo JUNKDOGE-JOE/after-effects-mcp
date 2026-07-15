@@ -30,6 +30,23 @@ inline constexpr std::string_view kLayerPropertiesListCapability =
     "ae.layer.properties.list";
 inline constexpr std::size_t kNativePageValueBudgetBytes = 48U * 1024U;
 
+// Selects the logical effective AEGP name: a non-empty layer override, then a
+// non-empty GetLayerName source result, then the associated source Item name.
+// This does not infer the current Layer Name/Source Name UI column toggle.
+[[nodiscard]] inline std::optional<std::string> select_effective_layer_name(
+    const std::optional<std::string>& layer_name,
+    const std::optional<std::string>& source_name,
+    const std::optional<std::string>& source_item_name) {
+  if (layer_name.has_value() && !layer_name->empty()) return layer_name;
+  if (source_name.has_value() && !source_name->empty()) return source_name;
+  if (source_item_name.has_value() && !source_item_name->empty()) {
+    return source_item_name;
+  }
+  if (layer_name.has_value()) return layer_name;
+  if (source_name.has_value()) return source_name;
+  return source_item_name;
+}
+
 // Returns the exact byte count used by the codec's JSON string serializer,
 // including quotes and control-character escaping. It is intentionally
 // independent of AE SDK types so bounded page assembly is portable-testable.

@@ -37,6 +37,7 @@ using aemcp::native::kCompositionLayersListCapability;
 using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kProjectSummaryCapability;
 using aemcp::native::json_encoded_string_size;
+using aemcp::native::select_effective_layer_name;
 
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "FAIL: " << message << '\n';
@@ -64,6 +65,27 @@ void bounded_page_budget_counts_codec_escaping_and_stops_before_overflow() {
   BoundedPageBudget invalid_initial(21, 20);
   require(!invalid_initial.try_reserve(0),
       "page budget accepted an already oversized envelope");
+}
+
+void effective_layer_name_uses_sdk_source_fallback() {
+  require(select_effective_layer_name("Custom Layer", "Source Handle", "Source Item")
+              == std::optional<std::string>{"Custom Layer"},
+      "custom layer name did not take precedence over the source name");
+  require(select_effective_layer_name("", "Source Handle", "Source Item")
+              == std::optional<std::string>{"Source Handle"},
+      "empty layer override did not fall back to the source handle name");
+  require(select_effective_layer_name("", "", "SOLID")
+              == std::optional<std::string>{"SOLID"},
+      "empty layer and source handles suppressed the source Item name fallback");
+  require(select_effective_layer_name(std::nullopt, std::nullopt, "Source Item")
+              == std::optional<std::string>{"Source Item"},
+      "absent GetLayerName handles did not fall back to the source Item name");
+  require(select_effective_layer_name("", std::nullopt, std::nullopt)
+              == std::optional<std::string>{""},
+      "valid empty layer name was confused with a missing handle");
+  require(!select_effective_layer_name(
+              std::nullopt, std::nullopt, std::nullopt).has_value(),
+      "missing layer, source, and source Item handles produced a name");
 }
 
 class FakeClock final : public aemcp::native::Clock {
@@ -971,6 +993,7 @@ void idle_budget_and_shutdown_are_bounded() {
 
 int main() {
   bounded_page_budget_counts_codec_escaping_and_stops_before_overflow();
+  effective_layer_name_uses_sdk_source_fallback();
   project_graph_reads_validate_arguments_and_dispatch_on_owner_thread();
   bit_depth_read_and_write_are_main_thread_bound_and_write_is_idempotent();
   bit_depth_write_releases_only_safe_failures_and_fails_closed_when_full();

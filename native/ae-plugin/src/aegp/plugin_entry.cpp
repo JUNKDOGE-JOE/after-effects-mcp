@@ -346,6 +346,76 @@ class MemHandleOwner final {
   bool locked_{false};
 };
 
+[[nodiscard]] std::optional<std::string> read_effective_layer_name(
+    const AEGP_LayerSuite9* layer_suite,
+    const AEGP_ItemSuite9* item_suite,
+    const AEGP_MemorySuite1* memory_suite,
+    AEGP_PluginID plugin_id,
+    AEGP_LayerH layer,
+    std::string& error) {
+  AEGP_MemHandle layer_name_handle = nullptr;
+  AEGP_MemHandle source_name_handle = nullptr;
+  const A_Err name_error = layer_suite->AEGP_GetLayerName(
+      plugin_id, layer, &layer_name_handle, &source_name_handle);
+  MemHandleOwner source_name_owner(memory_suite, source_name_handle);
+  MemHandleOwner layer_name_owner(memory_suite, layer_name_handle);
+  if (name_error != A_Err_NONE) {
+    error = "could not read layer and source names";
+    return std::nullopt;
+  }
+
+  std::optional<std::string> layer_name;
+  if (layer_name_handle != nullptr) {
+    layer_name = layer_name_owner.utf8();
+    if (!layer_name.has_value()) {
+      error = "layer name is not bounded UTF-16 text";
+      return std::nullopt;
+    }
+    if (!layer_name->empty()) return layer_name;
+  }
+  std::optional<std::string> source_name;
+  if (source_name_handle != nullptr) {
+    source_name = source_name_owner.utf8();
+    if (!source_name.has_value()) {
+      error = "layer source name is not bounded UTF-16 text";
+      return std::nullopt;
+    }
+    if (!source_name->empty()) return source_name;
+  }
+
+  AEGP_ItemH source_item = nullptr;
+  if (layer_suite->AEGP_GetLayerSourceItem(layer, &source_item) != A_Err_NONE) {
+    error = "could not resolve the layer source item name fallback";
+    return std::nullopt;
+  }
+  std::optional<std::string> source_item_name;
+  if (source_item != nullptr) {
+    AEGP_MemHandle source_item_name_handle = nullptr;
+    const A_Err source_item_name_error = item_suite->AEGP_GetItemName(
+        plugin_id, source_item, &source_item_name_handle);
+    MemHandleOwner source_item_name_owner(memory_suite, source_item_name_handle);
+    if (source_item_name_error != A_Err_NONE
+        || source_item_name_handle == nullptr) {
+      error = "could not read the layer source item name fallback";
+      return std::nullopt;
+    }
+    source_item_name = source_item_name_owner.utf8();
+    if (!source_item_name.has_value()) {
+      error = "layer source item name is not bounded UTF-16 text";
+      return std::nullopt;
+    }
+  }
+
+  const std::optional<std::string> effective_name =
+      aemcp::native::select_effective_layer_name(
+          layer_name, source_name, source_item_name);
+  if (!effective_name.has_value()) {
+    error = "After Effects returned no layer or source name";
+    return std::nullopt;
+  }
+  return effective_name;
+}
+
 class StreamRefOwner final {
  public:
   StreamRefOwner(const AEGP_StreamSuite6* suite, AEGP_StreamRefH stream)
@@ -1333,20 +1403,13 @@ class AegpHostApi final : public HostApi {
         return HostCompositionLayersResult::failure(
             "CAPABILITY_FAILED", "could not read composition layer identity");
       }
-      AEGP_MemHandle layer_name_handle = nullptr;
-      AEGP_MemHandle source_name_handle = nullptr;
-      const A_Err layer_name_error = layer_suite->AEGP_GetLayerName(
-          plugin_id_, layer, &layer_name_handle, &source_name_handle);
-      MemHandleOwner source_name_owner(memory_suite.get(), source_name_handle);
-      MemHandleOwner layer_name_owner(memory_suite.get(), layer_name_handle);
-      if (layer_name_error != A_Err_NONE || layer_name_handle == nullptr) {
-        return HostCompositionLayersResult::failure(
-            "CAPABILITY_FAILED", "could not read composition layer name");
-      }
-      const std::optional<std::string> layer_name = layer_name_owner.utf8();
+      std::string layer_name_error;
+      const std::optional<std::string> layer_name = read_effective_layer_name(
+          layer_suite.get(), item_suite.get(), memory_suite.get(), plugin_id_, layer,
+          layer_name_error);
       if (!layer_name.has_value()) {
         return HostCompositionLayersResult::failure(
-            "CAPABILITY_FAILED", "layer name is not bounded UTF-16 text");
+            "CAPABILITY_FAILED", layer_name_error);
       }
       aemcp::native::CompositionLayerEntry entry;
       entry.locator = graph_.layer_locator(
@@ -1528,20 +1591,13 @@ class AegpHostApi final : public HostApi {
           "STALE_LOCATOR", "layer no longer exists in its composition",
           "params.arguments.layerLocator");
     }
-    AEGP_MemHandle layer_name_handle = nullptr;
-    AEGP_MemHandle source_name_handle = nullptr;
-    const A_Err layer_name_error = layer_suite->AEGP_GetLayerName(
-        plugin_id_, layer, &layer_name_handle, &source_name_handle);
-    MemHandleOwner source_name_owner(memory_suite.get(), source_name_handle);
-    MemHandleOwner layer_name_owner(memory_suite.get(), layer_name_handle);
-    if (layer_name_error != A_Err_NONE || layer_name_handle == nullptr) {
-      return HostLayerPropertiesResult::failure(
-          "CAPABILITY_FAILED", "could not read layer name");
-    }
-    const std::optional<std::string> layer_name = layer_name_owner.utf8();
+    std::string layer_name_error;
+    const std::optional<std::string> layer_name = read_effective_layer_name(
+        layer_suite.get(), item_suite.get(), memory_suite.get(), plugin_id_, layer,
+        layer_name_error);
     if (!layer_name.has_value()) {
       return HostLayerPropertiesResult::failure(
-          "CAPABILITY_FAILED", "layer name is not bounded UTF-16 text");
+          "CAPABILITY_FAILED", layer_name_error);
     }
     A_Time sample_time{};
     if (layer_suite->AEGP_GetLayerCurrentTime(
