@@ -116,6 +116,8 @@ struct ParsedRequest {
     const ProjectItemsPage& page);
 [[nodiscard]] std::string digest_composition_layers_postcondition(
     const CompositionLayersPage& page);
+[[nodiscard]] std::string digest_composition_selected_layers_postcondition(
+    const CompositionLayersPage& page);
 [[nodiscard]] std::string digest_composition_time_postcondition(
     const CompositionTimeRead& value);
 [[nodiscard]] std::string digest_layer_properties_postcondition(
@@ -294,6 +296,8 @@ struct CapabilitiesSuccess {
   std::string composition_layers_list_contract_digest;
   std::string composition_time_read_contract_digest;
   std::string layer_properties_list_contract_digest;
+  bool include_composition_selected_layers_list{false};
+  std::string composition_selected_layers_list_contract_digest;
 };
 
 enum class ProgressPhase { kQueued, kDispatched, kRunning, kValidating };
@@ -370,6 +374,8 @@ struct CompositionLayersSuccess {
   std::string postcondition_digest;
   bool replayed{false};
 };
+
+using CompositionSelectedLayersSuccess = CompositionLayersSuccess;
 
 struct CompositionTimeSuccess {
   std::string request_id;
@@ -462,6 +468,8 @@ struct ErrorResponse {
     const ProjectItemsSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_composition_layers_success(
     const CompositionLayersSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_composition_selected_layers_success(
+    const CompositionSelectedLayersSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_composition_time_success(
     const CompositionTimeSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_layer_properties_success(

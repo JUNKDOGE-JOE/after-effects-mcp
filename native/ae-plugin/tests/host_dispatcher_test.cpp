@@ -1,5 +1,6 @@
 #include "aemcp_native/host_dispatcher.hpp"
 #include "aemcp_native/project_epoch.hpp"
+#include "aemcp_native/selection_collection.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -39,11 +40,16 @@ using aemcp::native::TimePoint;
 using aemcp::native::kProjectBitDepthReadCapability;
 using aemcp::native::kProjectBitDepthSetCapability;
 using aemcp::native::kCompositionLayersListCapability;
+using aemcp::native::kCompositionSelectedLayersListCapability;
 using aemcp::native::kCompositionTimeReadCapability;
 using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kProjectSummaryCapability;
 using aemcp::native::json_encoded_string_size;
 using aemcp::native::canonical_seconds_rational;
+using aemcp::native::normalize_selected_layer_collection;
+using aemcp::native::NormalizedSelectedLayers;
+using aemcp::native::OwnedSelectionCollection;
+using aemcp::native::SelectionCollectionEntryKind;
 using aemcp::native::select_effective_layer_name;
 
 [[noreturn]] void fail(const std::string& message) {
@@ -93,6 +99,58 @@ void effective_layer_name_uses_sdk_source_fallback() {
   require(!select_effective_layer_name(
               std::nullopt, std::nullopt, std::nullopt).has_value(),
       "missing layer, source, and source Item handles produced a name");
+}
+
+void selected_collection_ownership_and_mixed_filter_are_portable_tested() {
+  struct FakeCollectionSuite {
+    std::uintptr_t expected{0};
+    int dispose_calls{0};
+
+    void dispose(std::uintptr_t collection) noexcept {
+      if (collection == expected) ++dispose_calls;
+    }
+  } suite;
+  suite.expected = 17;
+  const auto run_scope = [&](bool fail_early) {
+    OwnedSelectionCollection owner(
+        suite.expected,
+        [&suite](std::uintptr_t collection) noexcept { suite.dispose(collection); });
+    require(owner.get() == suite.expected, "owned selection collection lost its handle");
+    if (fail_early) return false;
+    return true;
+  };
+  require(run_scope(false) && suite.dispose_calls == 1,
+      "selection collection was not disposed on the success path");
+  require(!run_scope(true) && suite.dispose_calls == 2,
+      "selection collection was not disposed on an early failure path");
+  {
+    OwnedSelectionCollection empty(
+        std::uintptr_t{0},
+        [&suite](std::uintptr_t collection) noexcept { suite.dispose(collection); });
+    require(empty.get() == 0, "empty selection collection acquired a handle");
+  }
+  require(suite.dispose_calls == 2,
+      "empty selection collection called the fake suite disposer");
+
+  NormalizedSelectedLayers mixed = normalize_selected_layer_collection({
+      {SelectionCollectionEntryKind::kNonLayer, 91, 7, 4},
+      {SelectionCollectionEntryKind::kLayer, 11, 101, 3},
+      {SelectionCollectionEntryKind::kNonLayer, 92, 101, 3},
+      {SelectionCollectionEntryKind::kLayer, 12, 102, 1},
+      {SelectionCollectionEntryKind::kLayer, 13, 101, 9},
+  });
+  require(mixed.ok && mixed.layers.size() == 2
+          && mixed.layers[0].opaque_layer == 12 && mixed.layers[0].stack_index == 1
+          && mixed.layers[1].opaque_layer == 11 && mixed.layers[1].stack_index == 3,
+      "mixed selection entries were not filtered, deduplicated, and stack-sorted");
+
+  NormalizedSelectedLayers conflicting = normalize_selected_layer_collection({
+      {SelectionCollectionEntryKind::kLayer, 11, 101, 2},
+      {SelectionCollectionEntryKind::kLayer, 12, 102, 2},
+  });
+  require(!conflicting.ok && conflicting.layers.empty()
+          && conflicting.error == "selected layers have conflicting stack indexes",
+      "selection normalization accepted conflicting stack indexes");
 }
 
 void composition_time_rational_is_exact_and_overflow_safe() {
@@ -261,6 +319,49 @@ class FakeHost final : public HostApi {
     return HostCompositionLayersResult::success(std::move(page));
   }
 
+  [[nodiscard]] HostCompositionLayersResult list_selected_composition_layers(
+      const aemcp::native::CompositionLayersQuery& query,
+      TimePoint work_deadline) override {
+    require(std::this_thread::get_id() == expected_thread_,
+        "selected layers HostApi ran off owner thread");
+    observed_deadline = work_deadline;
+    observed_selected_layers_query = query;
+    ++composition_selected_layers_calls;
+    aemcp::native::CompositionLayersPage page;
+    page.composition_locator = query.composition_locator;
+    page.composition_name = "Fixture Comp";
+    page.total = 2;
+    page.offset = query.offset;
+    page.limit = query.limit;
+    if (mismatch_selected_composition_page) {
+      page.composition_locator.object_id =
+          "99999999-9999-4999-8999-999999999999";
+    }
+    if (query.offset == 0) {
+      page.layers.push_back({
+          locator("layer", "88888888-8888-4888-8888-888888888888"),
+          1,
+          "First Selected Layer",
+          "text",
+          true,
+          false,
+          true,
+          std::nullopt,
+          std::nullopt});
+      page.layers.push_back({
+          locator("layer", "99999999-9999-4999-8999-999999999999"),
+          3,
+          "Third Selected Layer",
+          "shape",
+          true,
+          false,
+          false,
+          std::nullopt,
+          std::nullopt});
+    }
+    return HostCompositionLayersResult::success(std::move(page));
+  }
+
   [[nodiscard]] HostCompositionTimeResult read_composition_time(
       const aemcp::native::CompositionTimeQuery& query,
       TimePoint work_deadline) override {
@@ -314,14 +415,17 @@ class FakeHost final : public HostApi {
   int write_calls{0};
   int project_items_calls{0};
   int composition_layers_calls{0};
+  int composition_selected_layers_calls{0};
   int composition_time_calls{0};
   std::int32_t composition_time_value{3003};
   std::uint32_t composition_time_scale{1000};
   bool mismatch_project_page{false};
   bool mismatch_composition_page{false};
+  bool mismatch_selected_composition_page{false};
   bool mismatch_composition_time{false};
   aemcp::native::ProjectItemsQuery observed_items_query;
   aemcp::native::CompositionLayersQuery observed_layers_query;
+  aemcp::native::CompositionLayersQuery observed_selected_layers_query;
   aemcp::native::CompositionTimeQuery observed_time_query;
 };
 
@@ -456,6 +560,29 @@ Request composition_layers_request(
       std::move(composition_locator)};
 }
 
+Request composition_selected_layers_request(
+    FakeClock& clock,
+    std::string id,
+    ObjectLocator composition_locator,
+    std::uint64_t offset = 0,
+    std::uint16_t limit = 25) {
+  return {
+      std::move(id),
+      std::string(kCompositionSelectedLayersListCapability),
+      clock.now() + 100ms,
+      "route-selected-layers",
+      7,
+      0,
+      {},
+      {},
+      "22222222-2222-4222-8222-222222222222",
+      "11111111-1111-4111-8111-111111111111",
+      offset,
+      limit,
+      std::nullopt,
+      std::move(composition_locator)};
+}
+
 Request composition_time_request(
     FakeClock& clock,
     std::string id,
@@ -567,6 +694,52 @@ void project_graph_reads_validate_arguments_and_dispatch_on_owner_thread() {
           && !mismatched.completions[1].ok
           && mismatched.completions[1].error_code == "CAPABILITY_FAILED",
       "dispatcher signed a host page that was not bound to its invoke arguments");
+}
+
+void selected_layers_read_is_closed_main_thread_bound_and_request_verified() {
+  FakeClock clock;
+  const auto owner = std::this_thread::get_id();
+  HostDispatcher dispatcher(owner, clock, config(8, 8, 4ms));
+  FakeHost host(clock, owner);
+  const ObjectLocator composition = FakeHost::locator(
+      "composition", "66666666-6666-4666-8666-666666666666");
+
+  require(dispatcher.enqueue(composition_selected_layers_request(
+          clock, "selected-layers", composition, 0, 25)).code
+          == EnqueueCode::kAccepted,
+      "valid selected-layer page was rejected");
+  ObjectLocator wrong_kind = composition;
+  wrong_kind.kind = "item";
+  const auto invalid_kind = dispatcher.enqueue(composition_selected_layers_request(
+      clock, "selected-kind", wrong_kind));
+  require(invalid_kind.code == EnqueueCode::kInvalidRequest
+          && invalid_kind.error_field == "params.arguments.compositionLocator",
+      "selected-layer read accepted a non-composition locator");
+  const auto excessive_limit = dispatcher.enqueue(composition_selected_layers_request(
+      clock, "selected-limit", composition, 0, 51));
+  require(excessive_limit.code == EnqueueCode::kInvalidRequest,
+      "selected-layer read accepted a limit above 50");
+
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1 && batch.completions[0].ok
+          && host.composition_selected_layers_calls == 1,
+      "selected-layer read did not dispatch exactly once on the owner thread");
+  const auto& result = batch.completions[0].composition_selected_layers_result;
+  require(result.composition_locator == composition && result.layers.size() == 2
+          && result.layers[0].stack_index == 1
+          && result.layers[1].stack_index == 3
+          && host.observed_selected_layers_query.composition_locator == composition,
+      "selected-layer read lost its locator or non-contiguous stack order");
+
+  host.mismatch_selected_composition_page = true;
+  require(dispatcher.enqueue(composition_selected_layers_request(
+          clock, "selected-mismatch", composition)).code == EnqueueCode::kAccepted,
+      "selected-layer mismatch setup was rejected before the host call");
+  const auto mismatched = dispatcher.drain(host);
+  require(mismatched.completions.size() == 1
+          && !mismatched.completions[0].ok
+          && mismatched.completions[0].error_code == "CAPABILITY_FAILED",
+      "dispatcher signed a selected-layer page not bound to its request");
 }
 
 void composition_time_read_is_closed_main_thread_bound_and_verified() {
@@ -1175,9 +1348,11 @@ void idle_budget_and_shutdown_are_bounded() {
 int main() {
   bounded_page_budget_counts_codec_escaping_and_stops_before_overflow();
   effective_layer_name_uses_sdk_source_fallback();
+  selected_collection_ownership_and_mixed_filter_are_portable_tested();
   composition_time_rational_is_exact_and_overflow_safe();
   project_epoch_fences_reused_aegp_handles();
   project_graph_reads_validate_arguments_and_dispatch_on_owner_thread();
+  selected_layers_read_is_closed_main_thread_bound_and_request_verified();
   composition_time_read_is_closed_main_thread_bound_and_verified();
   bit_depth_read_and_write_are_main_thread_bound_and_write_is_idempotent();
   bit_depth_write_releases_only_safe_failures_and_fails_closed_when_full();

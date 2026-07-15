@@ -68,6 +68,12 @@ export const INVOKE_REGISTRY = Object.freeze([
     resultContractId: 'aemcp.contract.ae.composition.layers.list.result.v1',
   }),
   Object.freeze({
+    id: 'ae.composition.selected-layers.list',
+    version: 1,
+    inputContractId: 'aemcp.contract.ae.composition.selected-layers.list.input.v1',
+    resultContractId: 'aemcp.contract.ae.composition.selected-layers.list.result.v1',
+  }),
+  Object.freeze({
     id: 'ae.composition.time.read',
     version: 1,
     inputContractId: 'aemcp.contract.ae.composition.time.read.input.v1',
@@ -632,7 +638,8 @@ export function classifyRequest(message) {
           || (args.offset > 0 && args.projectLocator === undefined)) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
-    } else if (params.capabilityId === 'ae.composition.layers.list') {
+    } else if (params.capabilityId === 'ae.composition.layers.list'
+        || params.capabilityId === 'ae.composition.selected-layers.list') {
       const args = params.arguments;
       if (!exactKeys(
         args,
@@ -772,11 +779,13 @@ export function validateFailureExchange(
   if (response.error.code === 'STALE_LOCATOR'
       && (capabilityId === 'ae.project.items.list'
         || capabilityId === 'ae.composition.layers.list'
+        || capabilityId === 'ae.composition.selected-layers.list'
         || capabilityId === 'ae.composition.time.read'
         || capabilityId === 'ae.layer.properties.list')) {
     const expectedFields = capabilityId === 'ae.project.items.list'
       ? new Set(['params.arguments.projectLocator'])
       : capabilityId === 'ae.composition.layers.list'
+          || capabilityId === 'ae.composition.selected-layers.list'
           || capabilityId === 'ae.composition.time.read'
         ? new Set(['params.arguments.compositionLocator'])
         : new Set([
@@ -870,6 +879,10 @@ export function compositionLayersListContractDigest(schema) {
   const inputSchema = structuredClone(schema.$defs.compositionLayersListInputSchemaContract.const);
   const resultSchema = structuredClone(schema.$defs.compositionLayersListResultSchemaContract.const);
   return sha256Jcs({ inputSchema, resultSchema });
+}
+
+export function compositionSelectedLayersListContractDigest(schema) {
+  return compositionLayersListContractDigest(schema);
 }
 
 export function compositionTimeReadContractDigest(schema) {
@@ -1181,8 +1194,74 @@ export function compositionLayersListDescriptor(schema) {
   };
 }
 
-export function compositionTimeReadDescriptor(schema) {
+export function compositionSelectedLayersListDescriptor(schema) {
   const registration = INVOKE_REGISTRY[5];
+  const compositionLocator = syntheticDescriptorLocator(
+    'composition', '66666666-6666-4666-8666-666666666666',
+  );
+  return {
+    detail: 'full',
+    id: registration.id,
+    version: registration.version,
+    schemaVersion: 1,
+    summary: 'List a bounded page of selected layers in one After Effects composition.',
+    risk: 'read',
+    mutability: 'read-only',
+    idempotency: 'idempotent',
+    cancellation: 'before-dispatch',
+    undo: 'not-applicable',
+    sideEffectSummary: 'Reads selected composition layers without changing After Effects state.',
+    preconditions: [
+      'An After Effects project must be open.',
+      'compositionLocator must come from ae.project.items.list@1.',
+    ],
+    compatibility: {
+      status: 'unverified',
+      intendedPlatforms: ['macos-arm64', 'windows-x64'],
+    },
+    inputContractId: registration.inputContractId,
+    resultContractId: registration.resultContractId,
+    contractDigest: compositionSelectedLayersListContractDigest(schema),
+    inputSchema: structuredClone(schema.$defs.compositionLayersListInputSchemaContract.const),
+    resultSchema: structuredClone(schema.$defs.compositionLayersListResultSchemaContract.const),
+    requirements: [{
+      id: 'aemcp.requirement.native.composition-selected-layers-list',
+      contractVersion: 1,
+    }],
+    examples: [
+      {
+        id: 'aemcp-example-composition-selected-layers-list-empty',
+        kind: 'positive',
+        summary: 'List an empty selected-layer page for a composition.',
+        arguments: { compositionLocator, offset: 0, limit: 25 },
+        expected: {
+          outcome: 'succeeded',
+          value: {
+            compositionLocator,
+            compositionName: 'SYNTHETIC_COMPOSITION',
+            total: 0,
+            offset: 0,
+            limit: 25,
+            returned: 0,
+            hasMore: false,
+            nextOffset: null,
+            layers: [],
+          },
+        },
+      },
+      {
+        id: 'aemcp-example-composition-selected-layers-list-stale',
+        kind: 'negative',
+        summary: 'Refresh a stale composition locator before listing selected layers.',
+        arguments: { compositionLocator, offset: 0, limit: 25 },
+        expected: { errorCode: 'STALE_LOCATOR', recoveryAction: 'refresh-locator' },
+      },
+    ],
+  };
+}
+
+export function compositionTimeReadDescriptor(schema) {
+  const registration = INVOKE_REGISTRY[6];
   const compositionLocator = syntheticDescriptorLocator(
     'composition', '66666666-6666-4666-8666-666666666666',
   );
@@ -1241,7 +1320,7 @@ export function compositionTimeReadDescriptor(schema) {
 }
 
 export function layerPropertiesListDescriptor(schema) {
-  const registration = INVOKE_REGISTRY[6];
+  const registration = INVOKE_REGISTRY[7];
   const layerLocator = syntheticDescriptorLocator(
     'layer', '88888888-8888-4888-8888-888888888888',
   );
@@ -1316,6 +1395,7 @@ export function nativeCapabilityRegistry(schema) {
     projectBitDepthSetDescriptor(schema),
     projectItemsListDescriptor(schema),
     compositionLayersListDescriptor(schema),
+    compositionSelectedLayersListDescriptor(schema),
     compositionTimeReadDescriptor(schema),
     layerPropertiesListDescriptor(schema),
   ];
@@ -1467,6 +1547,7 @@ function validateNavigationResult(request, result, helloContext, schema) {
   const capabilityId = request.params.capabilityId;
   if (capabilityId !== 'ae.project.items.list'
       && capabilityId !== 'ae.composition.layers.list'
+      && capabilityId !== 'ae.composition.selected-layers.list'
       && capabilityId !== 'ae.composition.time.read'
       && capabilityId !== 'ae.layer.properties.list') return true;
   const value = result.value;
@@ -1474,11 +1555,13 @@ function validateNavigationResult(request, result, helloContext, schema) {
   const rootLocator = capabilityId === 'ae.project.items.list'
     ? value.projectLocator
     : capabilityId === 'ae.composition.layers.list'
+        || capabilityId === 'ae.composition.selected-layers.list'
         || capabilityId === 'ae.composition.time.read'
       ? value.compositionLocator : value.layerLocator;
   const expectedKind = capabilityId === 'ae.project.items.list'
     ? 'project'
     : capabilityId === 'ae.composition.layers.list'
+        || capabilityId === 'ae.composition.selected-layers.list'
         || capabilityId === 'ae.composition.time.read'
       ? 'composition' : 'layer';
   if (rootLocator?.kind !== expectedKind
@@ -1530,20 +1613,27 @@ function validateNavigationResult(request, result, helloContext, schema) {
     ));
   }
 
+  const selectedLayers = capabilityId === 'ae.composition.selected-layers.list';
   if (!validatePageMetadata(value, args, 'layers')
-      || result.evidence.postcondition.kind !== 'composition-layers-list'
+      || result.evidence.postcondition.kind !== (selectedLayers
+        ? 'composition-selected-layers-list' : 'composition-layers-list')
       || !jsonDeepEqual(args.compositionLocator, value.compositionLocator)) return false;
   const objectIds = new Set();
+  let previousStackIndex = 0;
   for (let index = 0; index < value.layers.length; index += 1) {
     const layer = value.layers[index];
     if (!validateLocator(layer.locator, context, schema)
-        || layer.stackIndex !== value.offset + index + 1
+        || (selectedLayers
+          ? (!Number.isSafeInteger(layer.stackIndex)
+            || layer.stackIndex < 1 || layer.stackIndex <= previousStackIndex)
+          : layer.stackIndex !== value.offset + index + 1)
         || objectIds.has(layer.locator.objectId)
         || (layer.parentLocator !== null
           && !validateLocator(layer.parentLocator, context, schema))
         || (layer.sourceItemLocator !== null
           && !validateLocator(layer.sourceItemLocator, context, schema))) return false;
     objectIds.add(layer.locator.objectId);
+    previousStackIndex = layer.stackIndex;
   }
   return true;
 }

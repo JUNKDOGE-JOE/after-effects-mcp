@@ -187,6 +187,37 @@ class AeListCompositionLayersArgs(_StrictModel):
     )
 
 
+class AeListSelectedLayersArgs(_StrictModel):
+    """ae.listSelectedLayers — list selected composition layers through native AEGP only.
+
+    Copy composition_locator from ae_listProjectItems. The result contains only
+    selected layers (in stack order), never property/mask/effect/keyframe
+    selections, and this tool never falls back to JSX.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    composition_locator: AeCompositionLocator = Field(
+        ...,
+        description="Composition locator returned by ae_listProjectItems.",
+    )
+    offset: int = Field(
+        0,
+        ge=0,
+        le=9_007_199_254_740_991,
+        description="Zero-based offset within the selected-layer result set.",
+    )
+    limit: int = Field(
+        25,
+        ge=1,
+        le=50,
+        description=(
+            "Maximum selected layers requested for this bounded page "
+            "(default 25, max 50)."
+        ),
+    )
+
+
 class AeGetCompositionTimeArgs(_StrictModel):
     """ae.getCompositionTime — read exact composition time through native AEGP.
 
@@ -798,6 +829,7 @@ SCHEMAS = {
     "ae.setProjectBitDepth": AeSetProjectBitDepthArgs,
     "ae.listProjectItems": AeListProjectItemsArgs,
     "ae.listCompositionLayers": AeListCompositionLayersArgs,
+    "ae.listSelectedLayers": AeListSelectedLayersArgs,
     "ae.getCompositionTime": AeGetCompositionTimeArgs,
     "ae.listLayerProperties": AeListLayerPropertiesArgs,
     "ae.layers": AeLayersArgs,
@@ -844,4 +876,4 @@ SCHEMAS = {
     "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 51, f"expected 51 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 52, f"expected 52 verbs, got {len(SCHEMAS)}"

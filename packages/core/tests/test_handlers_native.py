@@ -630,6 +630,19 @@ async def test_composition_time_real_mcp_surface_is_strict_and_structured(monkey
             ),
         ),
         (
+            native_handler._run_list_selected_layers,
+            schemas.AeListSelectedLayersArgs(
+                composition_locator={
+                    "kind": "composition",
+                    "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                    "sessionId": "11111111-1111-4111-8111-111111111111",
+                    "projectId": "44444444-4444-4444-8444-444444444444",
+                    "generation": 8,
+                    "objectId": "66666666-6666-4666-8666-666666666666",
+                }
+            ),
+        ),
+        (
             native_handler._run_get_composition_time,
             schemas.AeGetCompositionTimeArgs(
                 composition_locator={
@@ -669,6 +682,10 @@ def test_native_tool_registration_is_explicit():
     assert (
         HANDLERS["ae.listCompositionLayers"][0]
         is schemas.AeListCompositionLayersArgs
+    )
+    assert (
+        HANDLERS["ae.listSelectedLayers"][0]
+        is schemas.AeListSelectedLayersArgs
     )
     assert HANDLERS["ae.getCompositionTime"][0] is schemas.AeGetCompositionTimeArgs
     assert HANDLERS["ae.getProjectBitDepth"][0] is schemas.AeGetProjectBitDepthArgs
@@ -786,9 +803,11 @@ def test_tool_filter_exposes_native_tools_only_for_native_adapter(monkeypatch):
     assert "ae.projectSummary" not in names
     assert "ae.getProjectBitDepth" not in names
     assert "ae.setProjectBitDepth" not in names
+    assert "ae.listSelectedLayers" not in names
 
     monkeypatch.setattr(backend_discovery, "select_backend", lambda: _NativeMock())
     names = server_module._filtered_tool_names()
     assert "ae.projectSummary" in names
     assert "ae.getProjectBitDepth" in names
     assert "ae.setProjectBitDepth" in names
+    assert "ae.listSelectedLayers" in names

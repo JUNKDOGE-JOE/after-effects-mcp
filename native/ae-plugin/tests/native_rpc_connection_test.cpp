@@ -154,6 +154,46 @@ class FakeHost final : public HostApi {
     return HostCompositionLayersResult::success(std::move(page));
   }
 
+  [[nodiscard]] HostCompositionLayersResult list_selected_composition_layers(
+      const aemcp::native::CompositionLayersQuery& query, TimePoint) override {
+    ++composition_selected_layers_calls;
+    aemcp::native::CompositionLayersPage page;
+    page.composition_locator = query.composition_locator;
+    page.composition_name = "Fixture Comp";
+    page.total = 2;
+    page.offset = query.offset;
+    page.limit = query.limit;
+    if (query.offset == 0) {
+      page.layers.push_back({
+          {"layer", query.host_instance_id, query.session_id,
+              query.composition_locator.project_id,
+              query.composition_locator.generation,
+              "88888888-8888-4888-8888-888888888888"},
+          1,
+          "Fixture Text",
+          "text",
+          true,
+          false,
+          true,
+          std::nullopt,
+          std::nullopt});
+      page.layers.push_back({
+          {"layer", query.host_instance_id, query.session_id,
+              query.composition_locator.project_id,
+              query.composition_locator.generation,
+              "99999999-9999-4999-8999-999999999999"},
+          3,
+          "Fixture Shape",
+          "shape",
+          true,
+          false,
+          false,
+          std::nullopt,
+          std::nullopt});
+    }
+    return HostCompositionLayersResult::success(std::move(page));
+  }
+
   [[nodiscard]] HostCompositionTimeResult read_composition_time(
       const aemcp::native::CompositionTimeQuery& query, TimePoint) override {
     ++composition_time_calls;
@@ -219,6 +259,7 @@ class FakeHost final : public HostApi {
   int write_calls{0};
   int project_items_calls{0};
   int composition_layers_calls{0};
+  int composition_selected_layers_calls{0};
   int composition_time_calls{0};
   int layer_properties_calls{0};
 };
@@ -304,7 +345,7 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      "781a620eac1310fb85dc0ac74ae9655fdab0512d370e1039074cd0ff2fb4d7fb",
+      "04ad7c01ea1bf9c2837d7f55184fe0453b2edf6027c1ec36c44a8c8a17d46296",
       "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
       "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
       "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
@@ -312,6 +353,7 @@ NativeRpcRuntimeInfo runtime() {
       "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
       "fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd",
       "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba",
+      "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
   };
 }
 
@@ -479,6 +521,16 @@ std::string composition_layers_invoke_json(std::string_view request_id) {
       + ",\"offset\":0,\"limit\":25}}}";
 }
 
+std::string composition_selected_layers_invoke_json(std::string_view request_id) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.composition.selected-layers.list\","
+        "\"capabilityVersion\":1,\"arguments\":{\"compositionLocator\":"
+      + graph_locator_json("composition", "66666666-6666-4666-8666-666666666666")
+      + ",\"offset\":0,\"limit\":25}}}";
+}
+
 std::string composition_time_invoke_json(std::string_view request_id) {
   return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
       + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
@@ -607,6 +659,23 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
       "composition-layers capabilities response");
   require_contains(composition_layers_capabilities,
       "\"compositionLocator\"", "composition-layers capabilities response");
+
+  send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-composition-selected-layers",
+      "ae.composition.selected-layers.list"));
+  const std::string composition_selected_layers_capabilities = read_body(sockets[0]);
+  require_contains(composition_selected_layers_capabilities,
+      "\"id\":\"ae.composition.selected-layers.list\"",
+      "composition-selected-layers capabilities response");
+  require_contains(composition_selected_layers_capabilities,
+      "\"contractDigest\":\"3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75\"",
+      "composition-selected-layers capabilities response");
+  require_contains(composition_selected_layers_capabilities,
+      "aemcp.requirement.native.composition-selected-layers-list",
+      "composition-selected-layers capabilities response");
+  require_contains(composition_selected_layers_capabilities,
+      "List a bounded page of selected layers in one After Effects composition.",
+      "composition-selected-layers capabilities response");
 
   send_json(sockets[0], bit_depth_capabilities_json(
       "capabilities-composition-time", "ae.composition.time.read"));
@@ -739,6 +808,39 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
           && composition_layers_terminal.postcondition_digest.size() == 64
           && host.composition_layers_calls == 1,
       "composition-layers terminal evidence was not verified");
+
+  send_json(sockets[0], composition_selected_layers_invoke_json(
+      "invoke-composition-selected-layers"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "composition-selected-layers progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued composition-selected-layers invoke");
+  const auto composition_selected_layers_batch = dispatcher.drain(host);
+  require(composition_selected_layers_batch.completions.size() == 1
+          && composition_selected_layers_batch.completions[0].ok,
+      "owner dispatcher did not produce the composition-selected-layers result");
+  const std::string composition_selected_layers = read_body(sockets[0]);
+  require_contains(composition_selected_layers,
+      "\"capabilityId\":\"ae.composition.selected-layers.list\"",
+      "composition-selected-layers response");
+  require_contains(composition_selected_layers,
+      "\"kind\":\"composition-selected-layers-list\"",
+      "composition-selected-layers response");
+  require_contains(composition_selected_layers,
+      "\"stackIndex\":1", "composition-selected-layers response");
+  require_contains(composition_selected_layers,
+      "\"stackIndex\":3", "composition-selected-layers response");
+  wait_until([&] {
+    return !observer.terminal(
+        "invoke-composition-selected-layers").request_id.empty();
+  }, "composition-selected-layers terminal audit");
+  const TerminalRecord composition_selected_layers_terminal =
+      observer.terminal("invoke-composition-selected-layers");
+  require(composition_selected_layers_terminal.ok
+          && composition_selected_layers_terminal.request_digest.size() == 64
+          && composition_selected_layers_terminal.postcondition_digest.size() == 64
+          && host.composition_selected_layers_calls == 1,
+      "composition-selected-layers terminal evidence was not verified");
 
   send_json(sockets[0], composition_time_invoke_json("invoke-composition-time"));
   require_contains(read_body(sockets[0]), "\"event\":\"progress\"",

@@ -199,6 +199,7 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
       || runtime_.project_bit_depth_set_contract_digest.size() != 64
       || runtime_.project_items_list_contract_digest.size() != 64
       || runtime_.composition_layers_list_contract_digest.size() != 64
+      || runtime_.composition_selected_layers_list_contract_digest.size() != 64
       || runtime_.composition_time_read_contract_digest.size() != 64
       || runtime_.layer_properties_list_contract_digest.size() != 64) {
     throw std::invalid_argument("invalid native RPC runtime identity");
@@ -265,6 +266,11 @@ void NativeRpcConnectionHandler::serve(
             } else if (completion.capability_id == kCompositionLayersListCapability) {
               postcondition_digest = rpc::digest_composition_layers_postcondition(
                   completion.composition_layers_result);
+            } else if (completion.capability_id
+                == kCompositionSelectedLayersListCapability) {
+              postcondition_digest =
+                  rpc::digest_composition_selected_layers_postcondition(
+                      completion.composition_selected_layers_result);
             } else if (completion.capability_id == kCompositionTimeReadCapability) {
               postcondition_digest = rpc::digest_composition_time_postcondition(
                   completion.composition_time_result);
@@ -361,6 +367,19 @@ void NativeRpcConnectionHandler::serve(
                 connection.session_id,
                 runtime_.host_instance_id,
                 completion.composition_layers_result,
+                started_at,
+                completed_at,
+                request_digest,
+                postcondition_digest,
+                false,
+            });
+          } else if (completion.capability_id
+              == kCompositionSelectedLayersListCapability) {
+            response = rpc::encode_composition_selected_layers_success({
+                completion.request_id,
+                connection.session_id,
+                runtime_.host_instance_id,
+                completion.composition_selected_layers_result,
                 started_at,
                 completed_at,
                 request_digest,
@@ -485,6 +504,10 @@ void NativeRpcConnectionHandler::serve(
           const bool include_composition_layers = !query.ids.has_value() || std::find(
               query.ids->begin(), query.ids->end(), "ae.composition.layers.list")
                   != query.ids->end();
+          const bool include_composition_selected_layers = !query.ids.has_value()
+              || std::find(
+                  query.ids->begin(), query.ids->end(),
+                  "ae.composition.selected-layers.list") != query.ids->end();
           const bool include_composition_time = !query.ids.has_value() || std::find(
               query.ids->begin(), query.ids->end(), "ae.composition.time.read")
                   != query.ids->end();
@@ -496,6 +519,7 @@ void NativeRpcConnectionHandler::serve(
               + static_cast<std::size_t>(include_bit_depth_set)
               + static_cast<std::size_t>(include_project_items)
               + static_cast<std::size_t>(include_composition_layers)
+              + static_cast<std::size_t>(include_composition_selected_layers)
               + static_cast<std::size_t>(include_composition_time)
               + static_cast<std::size_t>(include_layer_properties);
           if (selected > query.limit) {
@@ -530,6 +554,8 @@ void NativeRpcConnectionHandler::serve(
                   runtime_.composition_layers_list_contract_digest,
                   runtime_.composition_time_read_contract_digest,
                   runtime_.layer_properties_list_contract_digest,
+                  include_composition_selected_layers,
+                  runtime_.composition_selected_layers_list_contract_digest,
               }))) {
             connected = false;
             break;

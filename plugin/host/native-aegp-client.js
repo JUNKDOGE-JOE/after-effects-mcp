@@ -22,12 +22,14 @@ const PROJECT_BIT_DEPTH_READ_CAPABILITY = 'ae.project.bit-depth.read';
 const PROJECT_BIT_DEPTH_SET_CAPABILITY = 'ae.project.bit-depth.set';
 const PROJECT_ITEMS_LIST_CAPABILITY = 'ae.project.items.list';
 const COMPOSITION_LAYERS_LIST_CAPABILITY = 'ae.composition.layers.list';
+const COMPOSITION_SELECTED_LAYERS_LIST_CAPABILITY = 'ae.composition.selected-layers.list';
 const COMPOSITION_TIME_READ_CAPABILITY = 'ae.composition.time.read';
 const LAYER_PROPERTIES_LIST_CAPABILITY = 'ae.layer.properties.list';
 const PROJECT_BIT_DEPTH_READ_CONTRACT_DIGEST = '936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e';
 const PROJECT_BIT_DEPTH_SET_CONTRACT_DIGEST = 'd5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a';
 const PROJECT_ITEMS_LIST_CONTRACT_DIGEST = '64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e';
 const COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST = '3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75';
+const COMPOSITION_SELECTED_LAYERS_LIST_CONTRACT_DIGEST = '3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75';
 const COMPOSITION_TIME_READ_CONTRACT_DIGEST = 'fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd';
 // Kept in lockstep with the full descriptor in capabilities.json. The native
 // protocol build replaces this value only when the closed contract changes.
@@ -370,6 +372,13 @@ function validCompositionLayersListArguments(value) {
         && Number.isSafeInteger(value.limit) && value.limit >= 1 && value.limit <= 50;
 }
 
+function validCompositionSelectedLayersListArguments(value) {
+    return exactKeys(value, ['compositionLocator', 'offset', 'limit'])
+        && validLocator(value.compositionLocator, ['composition'])
+        && Number.isSafeInteger(value.offset) && value.offset >= 0
+        && Number.isSafeInteger(value.limit) && value.limit >= 1 && value.limit <= 50;
+}
+
 function validCompositionTimeReadArguments(value) {
     return exactKeys(value, ['compositionLocator'])
         && validLocator(value.compositionLocator, ['composition']);
@@ -441,30 +450,58 @@ function validCompositionLayersListValue(value, argumentsValue, hostInstanceId, 
         || !validPageMetadata(value, value.layers, argumentsValue)) return false;
     const objectIds = new Set();
     return value.layers.every(function (layer, index) {
-        if (!exactKeys(layer, [
-            'locator', 'stackIndex', 'name', 'type', 'videoEnabled', 'isThreeD',
-            'locked', 'parentLocator', 'sourceItemLocator',
-        ]) || !validLocator(layer.locator, ['layer'])
-            || layer.stackIndex !== value.offset + index + 1
-            || !validBoundedUnicodeString(layer.name, 1024)
-            || ![
-                'av', 'camera', 'light', 'text', 'shape', 'model3d', 'null',
-                'adjustment', 'unknown',
-            ].includes(layer.type)
-            || typeof layer.videoEnabled !== 'boolean'
-            || typeof layer.isThreeD !== 'boolean' || typeof layer.locked !== 'boolean'
-            || (layer.parentLocator !== null && !validLocator(layer.parentLocator, ['layer']))
-            || (layer.sourceItemLocator !== null
-                && !validLocator(layer.sourceItemLocator, ['item', 'composition']))
-            || !locatorContextMatches(layer.locator, value.compositionLocator)
-            || (layer.parentLocator !== null
-                && !locatorContextMatches(layer.parentLocator, value.compositionLocator))
-            || (layer.sourceItemLocator !== null
-                && !locatorContextMatches(layer.sourceItemLocator, value.compositionLocator))
-            || objectIds.has(layer.locator.objectId)) return false;
-        objectIds.add(layer.locator.objectId);
+        return layer.stackIndex === value.offset + index + 1
+            && validCompositionLayer(layer, value.compositionLocator, objectIds);
+    });
+}
+
+function validCompositionSelectedLayersListValue(
+    value, argumentsValue, hostInstanceId, sessionId,
+) {
+    if (!exactKeys(value, [
+        'compositionLocator', 'compositionName', 'total', 'offset', 'limit',
+        'returned', 'hasMore', 'nextOffset', 'layers',
+    ]) || !validLocator(value.compositionLocator, ['composition'])
+        || !locatorsEqual(value.compositionLocator, argumentsValue.compositionLocator)
+        || value.compositionLocator.hostInstanceId !== hostInstanceId
+        || value.compositionLocator.sessionId !== sessionId
+        || !validBoundedUnicodeString(value.compositionName, 1024)
+        || !Array.isArray(value.layers) || value.layers.length > 50
+        || !validPageMetadata(value, value.layers, argumentsValue)) return false;
+    const objectIds = new Set();
+    let previousStackIndex = 0;
+    return value.layers.every(function (layer) {
+        if (!Number.isSafeInteger(layer?.stackIndex) || layer.stackIndex <= previousStackIndex
+            || !validCompositionLayer(layer, value.compositionLocator, objectIds)) return false;
+        previousStackIndex = layer.stackIndex;
         return true;
     });
+}
+
+function validCompositionLayer(layer, compositionLocator, objectIds) {
+    if (!exactKeys(layer, [
+        'locator', 'stackIndex', 'name', 'type', 'videoEnabled', 'isThreeD',
+        'locked', 'parentLocator', 'sourceItemLocator',
+    ]) || !validLocator(layer.locator, ['layer'])
+        || !Number.isSafeInteger(layer.stackIndex) || layer.stackIndex < 1
+        || !validBoundedUnicodeString(layer.name, 1024)
+        || ![
+            'av', 'camera', 'light', 'text', 'shape', 'model3d', 'null',
+            'adjustment', 'unknown',
+        ].includes(layer.type)
+        || typeof layer.videoEnabled !== 'boolean'
+        || typeof layer.isThreeD !== 'boolean' || typeof layer.locked !== 'boolean'
+        || (layer.parentLocator !== null && !validLocator(layer.parentLocator, ['layer']))
+        || (layer.sourceItemLocator !== null
+            && !validLocator(layer.sourceItemLocator, ['item', 'composition']))
+        || !locatorContextMatches(layer.locator, compositionLocator)
+        || (layer.parentLocator !== null
+            && !locatorContextMatches(layer.parentLocator, compositionLocator))
+        || (layer.sourceItemLocator !== null
+            && !locatorContextMatches(layer.sourceItemLocator, compositionLocator))
+        || objectIds.has(layer.locator.objectId)) return false;
+    objectIds.add(layer.locator.objectId);
+    return true;
 }
 
 function reducedRational(value, scale) {
@@ -654,32 +691,44 @@ function compositionLayersListPostconditionDigest(value) {
     return sha256Canonical({
         capabilityId: COMPOSITION_LAYERS_LIST_CAPABILITY,
         capabilityVersion: 1,
-        value: {
-            compositionLocator: canonicalLocator(value.compositionLocator),
-            compositionName: value.compositionName,
-            hasMore: value.hasMore,
-            layers: value.layers.map(function (layer) {
-                return {
-                    isThreeD: layer.isThreeD,
-                    locator: canonicalLocator(layer.locator),
-                    locked: layer.locked,
-                    name: layer.name,
-                    parentLocator: layer.parentLocator === null
-                        ? null : canonicalLocator(layer.parentLocator),
-                    sourceItemLocator: layer.sourceItemLocator === null
-                        ? null : canonicalLocator(layer.sourceItemLocator),
-                    stackIndex: layer.stackIndex,
-                    type: layer.type,
-                    videoEnabled: layer.videoEnabled,
-                };
-            }),
-            limit: value.limit,
-            nextOffset: value.nextOffset,
-            offset: value.offset,
-            returned: value.returned,
-            total: value.total,
-        },
+        value: canonicalCompositionLayerPage(value),
     });
+}
+
+function compositionSelectedLayersListPostconditionDigest(value) {
+    return sha256Canonical({
+        capabilityId: COMPOSITION_SELECTED_LAYERS_LIST_CAPABILITY,
+        capabilityVersion: 1,
+        value: canonicalCompositionLayerPage(value),
+    });
+}
+
+function canonicalCompositionLayerPage(value) {
+    return {
+        compositionLocator: canonicalLocator(value.compositionLocator),
+        compositionName: value.compositionName,
+        hasMore: value.hasMore,
+        layers: value.layers.map(function (layer) {
+            return {
+                isThreeD: layer.isThreeD,
+                locator: canonicalLocator(layer.locator),
+                locked: layer.locked,
+                name: layer.name,
+                parentLocator: layer.parentLocator === null
+                    ? null : canonicalLocator(layer.parentLocator),
+                sourceItemLocator: layer.sourceItemLocator === null
+                    ? null : canonicalLocator(layer.sourceItemLocator),
+                stackIndex: layer.stackIndex,
+                type: layer.type,
+                videoEnabled: layer.videoEnabled,
+            };
+        }),
+        limit: value.limit,
+        nextOffset: value.nextOffset,
+        offset: value.offset,
+        returned: value.returned,
+        total: value.total,
+    };
 }
 
 function compositionTimeReadPostconditionDigest(value) {
@@ -774,7 +823,8 @@ function invokeRequestDigest(request) {
                 request.params.arguments.projectLocator,
             );
         }
-    } else if (request.params.capabilityId === COMPOSITION_LAYERS_LIST_CAPABILITY) {
+    } else if (request.params.capabilityId === COMPOSITION_LAYERS_LIST_CAPABILITY
+        || request.params.capabilityId === COMPOSITION_SELECTED_LAYERS_LIST_CAPABILITY) {
         argumentsValue = {
             compositionLocator: canonicalLocator(request.params.arguments.compositionLocator),
             limit: request.params.arguments.limit,
@@ -840,6 +890,7 @@ function createNativeAegpClient(options) {
     let projectBitDepthSetContractDigest = null;
     let projectItemsListContractDigest = null;
     let compositionLayersListContractDigest = null;
+    let compositionSelectedLayersListContractDigest = null;
     let compositionTimeReadContractDigest = null;
     let layerPropertiesListContractDigest = null;
     let helloIdentity = null;
@@ -889,6 +940,7 @@ function createNativeAegpClient(options) {
         projectBitDepthSetContractDigest = null;
         projectItemsListContractDigest = null;
         compositionLayersListContractDigest = null;
+        compositionSelectedLayersListContractDigest = null;
         compositionTimeReadContractDigest = null;
         layerPropertiesListContractDigest = null;
         helloIdentity = null;
@@ -1255,6 +1307,11 @@ function createNativeAegpClient(options) {
         const compositionLayersListItem = Array.isArray(result?.items)
             ? result.items.find(function (candidate) { return candidate?.id === COMPOSITION_LAYERS_LIST_CAPABILITY; })
             : null;
+        const compositionSelectedLayersListItem = Array.isArray(result?.items)
+            ? result.items.find(function (candidate) {
+                return candidate?.id === COMPOSITION_SELECTED_LAYERS_LIST_CAPABILITY;
+            })
+            : null;
         const compositionTimeReadItem = Array.isArray(result?.items)
             ? result.items.find(function (candidate) { return candidate?.id === COMPOSITION_TIME_READ_CAPABILITY; })
             : null;
@@ -1267,6 +1324,8 @@ function createNativeAegpClient(options) {
         const requiresProjectItemsList = ids === undefined || ids.includes(PROJECT_ITEMS_LIST_CAPABILITY);
         const requiresCompositionLayersList = ids === undefined
             || ids.includes(COMPOSITION_LAYERS_LIST_CAPABILITY);
+        const requiresCompositionSelectedLayersList = ids === undefined
+            || ids.includes(COMPOSITION_SELECTED_LAYERS_LIST_CAPABILITY);
         const requiresCompositionTimeRead = ids === undefined
             || ids.includes(COMPOSITION_TIME_READ_CAPABILITY);
         const requiresLayerPropertiesList = ids === undefined
@@ -1280,6 +1339,7 @@ function createNativeAegpClient(options) {
             || (requiresBitDepthSet && !bitDepthSetItem)
             || (requiresProjectItemsList && !projectItemsListItem)
             || (requiresCompositionLayersList && !compositionLayersListItem)
+            || (requiresCompositionSelectedLayersList && !compositionSelectedLayersListItem)
             || (requiresCompositionTimeRead && !compositionTimeReadItem)
             || (requiresLayerPropertiesList && !layerPropertiesListItem)
             || (summaryItem && (summaryItem.version !== 1 || summaryItem.detail !== requestedDetail
@@ -1301,6 +1361,12 @@ function createNativeAegpClient(options) {
                 || (requestedDetail === 'full'
                     && compositionLayersListItem.contractDigest
                         !== COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST)))
+            || (compositionSelectedLayersListItem
+                && (compositionSelectedLayersListItem.version !== 1
+                    || compositionSelectedLayersListItem.detail !== requestedDetail
+                    || (requestedDetail === 'full'
+                        && compositionSelectedLayersListItem.contractDigest
+                            !== COMPOSITION_SELECTED_LAYERS_LIST_CONTRACT_DIGEST)))
             || (compositionTimeReadItem && (compositionTimeReadItem.version !== 1
                 || compositionTimeReadItem.detail !== requestedDetail
                 || (requestedDetail === 'full'
@@ -1327,6 +1393,10 @@ function createNativeAegpClient(options) {
         }
         if (requestedDetail === 'full' && compositionLayersListItem) {
             compositionLayersListContractDigest = compositionLayersListItem.contractDigest;
+        }
+        if (requestedDetail === 'full' && compositionSelectedLayersListItem) {
+            compositionSelectedLayersListContractDigest =
+                compositionSelectedLayersListItem.contractDigest;
         }
         if (requestedDetail === 'full' && compositionTimeReadItem) {
             compositionTimeReadContractDigest = compositionTimeReadItem.contractDigest;
@@ -1356,6 +1426,10 @@ function createNativeAegpClient(options) {
         const compositionLayersListCall = call.capabilityId === COMPOSITION_LAYERS_LIST_CAPABILITY
             && call.capabilityVersion === 1
             && validCompositionLayersListArguments(call.arguments);
+        const compositionSelectedLayersListCall =
+            call.capabilityId === COMPOSITION_SELECTED_LAYERS_LIST_CAPABILITY
+            && call.capabilityVersion === 1
+            && validCompositionSelectedLayersListArguments(call.arguments);
         const compositionTimeReadCall = call.capabilityId === COMPOSITION_TIME_READ_CAPABILITY
             && call.capabilityVersion === 1
             && validCompositionTimeReadArguments(call.arguments);
@@ -1367,6 +1441,7 @@ function createNativeAegpClient(options) {
         ]) || !TOKEN_PATTERN.test(call.requestId || '')
             || (!summaryCall && !bitDepthReadCall && !bitDepthSetCall
                 && !projectItemsListCall && !compositionLayersListCall
+                && !compositionSelectedLayersListCall
                 && !compositionTimeReadCall
                 && !layerPropertiesListCall)
             || !Number.isSafeInteger(call.deadlineUnixMs) || call.deadlineUnixMs <= 0) {
@@ -1397,6 +1472,13 @@ function createNativeAegpClient(options) {
                 'native composition-layers list capability was not verified before dispatch',
             );
         }
+        if (compositionSelectedLayersListCall
+            && compositionSelectedLayersListContractDigest
+                !== COMPOSITION_SELECTED_LAYERS_LIST_CONTRACT_DIGEST) {
+            throw nativeContractMismatch(
+                'native selected-composition-layers list capability was not verified before dispatch',
+            );
+        }
         if (compositionTimeReadCall
             && compositionTimeReadContractDigest !== COMPOSITION_TIME_READ_CONTRACT_DIGEST) {
             throw nativeContractMismatch(
@@ -1412,7 +1494,8 @@ function createNativeAegpClient(options) {
         let locatorChecks = [];
         if (projectItemsListCall && call.arguments.projectLocator !== undefined) {
             locatorChecks = [[call.arguments.projectLocator, 'projectLocator', 'ae_listProjectItems']];
-        } else if (compositionLayersListCall || compositionTimeReadCall) {
+        } else if (compositionLayersListCall || compositionSelectedLayersListCall
+            || compositionTimeReadCall) {
             locatorChecks = [[
                 call.arguments.compositionLocator,
                 'compositionLocator',
@@ -1520,6 +1603,7 @@ function createNativeAegpClient(options) {
                 );
             }
             if (bitDepthReadCall || projectItemsListCall || compositionLayersListCall
+                || compositionSelectedLayersListCall
                 || compositionTimeReadCall
                 || layerPropertiesListCall) {
                 throw nativeContractMismatch(
@@ -1568,6 +1652,7 @@ function createNativeAegpClient(options) {
             );
         }
         const navigationEvidenceValid = (projectItemsListCall || compositionLayersListCall
+            || compositionSelectedLayersListCall
             || compositionTimeReadCall || layerPropertiesListCall)
             && exactKeys(evidence, [
                 'engine', 'hostInstanceId', 'sessionId', 'requestId', 'capabilityId',
@@ -1598,6 +1683,20 @@ function createNativeAegpClient(options) {
             || evidence.postcondition.digest
                 !== compositionLayersListPostconditionDigest(value))) {
             throw nativeContractMismatch('native composition-layers page failed verification');
+        }
+        if (compositionSelectedLayersListCall && (!navigationEvidenceValid
+            || result.replayed !== false || evidence.effect !== 'none'
+            || evidence.postcondition.kind !== 'composition-selected-layers-list'
+            || compositionSelectedLayersListContractDigest
+                !== COMPOSITION_SELECTED_LAYERS_LIST_CONTRACT_DIGEST
+            || !validCompositionSelectedLayersListValue(
+                value, call.arguments, endpoint.hostInstanceId, sessionId,
+            )
+            || evidence.postcondition.digest
+                !== compositionSelectedLayersListPostconditionDigest(value))) {
+            throw nativeContractMismatch(
+                'native selected-composition-layers page failed verification',
+            );
         }
         if (compositionTimeReadCall && (!navigationEvidenceValid
             || result.replayed !== false || evidence.effect !== 'none'
@@ -1664,6 +1763,7 @@ function createNativeAegpClient(options) {
                 projectBitDepthSetContractDigest,
                 projectItemsListContractDigest,
                 compositionLayersListContractDigest,
+                compositionSelectedLayersListContractDigest,
                 compositionTimeReadContractDigest,
                 layerPropertiesListContractDigest,
             });

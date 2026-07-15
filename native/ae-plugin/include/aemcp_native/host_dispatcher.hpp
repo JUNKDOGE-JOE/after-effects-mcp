@@ -28,6 +28,8 @@ inline constexpr std::string_view kProjectItemsListCapability =
     "ae.project.items.list";
 inline constexpr std::string_view kCompositionLayersListCapability =
     "ae.composition.layers.list";
+inline constexpr std::string_view kCompositionSelectedLayersListCapability =
+    "ae.composition.selected-layers.list";
 inline constexpr std::string_view kCompositionTimeReadCapability =
     "ae.composition.time.read";
 inline constexpr std::string_view kLayerPropertiesListCapability =
@@ -366,6 +368,8 @@ class HostApi {
       const ProjectItemsQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostCompositionLayersResult list_composition_layers(
       const CompositionLayersQuery& query, TimePoint work_deadline);
+  [[nodiscard]] virtual HostCompositionLayersResult list_selected_composition_layers(
+      const CompositionLayersQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostCompositionTimeResult read_composition_time(
       const CompositionTimeQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerPropertiesResult list_layer_properties(
@@ -469,6 +473,7 @@ struct Completion {
   ProjectBitDepthChanged bit_depth_change_result;
   ProjectItemsPage project_items_result;
   CompositionLayersPage composition_layers_result;
+  CompositionLayersPage composition_selected_layers_result;
   CompositionTimeRead composition_time_result;
   LayerPropertiesPage layer_properties_result;
   // Internal fence correlation only; never serialized or logged.
