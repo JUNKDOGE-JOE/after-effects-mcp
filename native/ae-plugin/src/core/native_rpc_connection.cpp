@@ -184,12 +184,14 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
     Clock& dispatcher_clock,
     rpc::SessionClock& session_clock,
     NativeRpcRuntimeInfo runtime,
-    NativeRpcObserver& observer)
+    NativeRpcObserver& observer,
+    HostIdleSignal& idle_signal)
     : dispatcher_(dispatcher),
       dispatcher_clock_(dispatcher_clock),
       session_clock_(session_clock),
       runtime_(std::move(runtime)),
-      observer_(observer) {
+      observer_(observer),
+      idle_signal_(idle_signal) {
   if (runtime_.plugin_version.empty() || runtime_.compiled_sdk_version.empty()
       || runtime_.compiled_sdk_build == 0 || runtime_.host_version.empty()
       || runtime_.host_build == 0 || runtime_.host_instance_id.empty()
@@ -649,6 +651,10 @@ void NativeRpcConnectionHandler::serve(
           break;
         }
         observer_.on_rpc_event("invoke", request.request_id, "queued");
+        observer_.on_rpc_event(
+            "dispatch.wake",
+            request.request_id,
+            idle_signal_.request_idle() ? "scheduled" : "failed");
       }
     }
     front_door.close();

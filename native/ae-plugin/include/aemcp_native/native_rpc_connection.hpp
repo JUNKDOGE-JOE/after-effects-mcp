@@ -43,8 +43,18 @@ class NativeRpcObserver {
       std::uint64_t completed_at_unix_ms) noexcept = 0;
 };
 
+// Signals After Effects that its registered idle hooks should run. Production
+// uses the SDK's worker-safe asynchronous wake routine; tests provide a fake.
+// The signal never performs host work itself.
+class HostIdleSignal {
+ public:
+  virtual ~HostIdleSignal() = default;
+  [[nodiscard]] virtual bool request_idle() noexcept = 0;
+};
+
 // Owns #72 framing/session state on the single IPC worker and bridges only
-// admitted invoke/cancel requests to HostDispatcher. It never calls HostApi.
+// admitted invoke/cancel requests to HostDispatcher. It never calls HostApi;
+// after a queued progress frame is delivered it only schedules AE's idle hook.
 class NativeRpcConnectionHandler final : public AuthenticatedConnectionHandler {
  public:
   NativeRpcConnectionHandler(
@@ -52,7 +62,8 @@ class NativeRpcConnectionHandler final : public AuthenticatedConnectionHandler {
       Clock& dispatcher_clock,
       rpc::SessionClock& session_clock,
       NativeRpcRuntimeInfo runtime,
-      NativeRpcObserver& observer);
+      NativeRpcObserver& observer,
+      HostIdleSignal& idle_signal);
 
   void serve(const AuthenticatedConnection& connection) noexcept override;
 
@@ -62,6 +73,7 @@ class NativeRpcConnectionHandler final : public AuthenticatedConnectionHandler {
   rpc::SessionClock& session_clock_;
   const NativeRpcRuntimeInfo runtime_;
   NativeRpcObserver& observer_;
+  HostIdleSignal& idle_signal_;
 };
 
 }  // namespace aemcp::native

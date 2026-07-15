@@ -32,6 +32,7 @@ using aemcp::native::HostBitDepthWriteResult;
 using aemcp::native::HostCompositionLayersResult;
 using aemcp::native::HostCompositionTimeResult;
 using aemcp::native::HostDispatcher;
+using aemcp::native::HostIdleSignal;
 using aemcp::native::HostLayerPropertiesResult;
 using aemcp::native::HostReadResult;
 using aemcp::native::HostProjectItemsResult;
@@ -79,6 +80,21 @@ class FakeSessionClock final : public SessionClock {
 
  private:
   std::atomic<std::uint64_t> now_ms_{1'900'000'000'000ULL};
+};
+
+class RecordingIdleSignal final : public HostIdleSignal {
+ public:
+  [[nodiscard]] bool request_idle() noexcept override {
+    ++calls_;
+    return succeeds_.load();
+  }
+
+  [[nodiscard]] int calls() const noexcept { return calls_.load(); }
+  void set_succeeds(bool succeeds) noexcept { succeeds_.store(succeeds); }
+
+ private:
+  std::atomic<int> calls_{0};
+  std::atomic<bool> succeeds_{true};
 };
 
 class FakeHost final : public HostApi {
@@ -577,8 +593,9 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   FakeSessionClock session_clock;
   HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
   RecordingObserver observer;
+  RecordingIdleSignal idle_signal;
   NativeRpcConnectionHandler handler(
-      dispatcher, dispatcher_clock, session_clock, runtime(), observer);
+      dispatcher, dispatcher_clock, session_clock, runtime(), observer, idle_signal);
   std::array<int, 2> sockets{};
   require(::socketpair(AF_UNIX, SOCK_STREAM, 0, sockets.data()) == 0, "socketpair failed");
   const AuthenticatedConnection authenticated = connection(sockets[1], "route-e2e", 7);
@@ -608,6 +625,8 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(capabilities,
       "\"queryDigest\":\"aa3c66bc21e50b6a35db9c3cb12fcb1627694cd8f9fc411f21f7e3de46b3e56a\"",
       "capabilities response");
+  require(idle_signal.calls() == 0,
+      "hello or capabilities unexpectedly scheduled an idle wake");
 
   send_json(sockets[0], bit_depth_capabilities_json(
       "capabilities-bit-depth-read", "ae.project.bit-depth.read"));
@@ -705,6 +724,10 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   const std::string progress = read_body(sockets[0]);
   require_contains(progress, "\"event\":\"progress\"", "invoke progress");
   require_contains(progress, "\"phase\":\"queued\"", "invoke progress");
+  wait_until([&] { return idle_signal.calls() == 1; }, "first invoke idle wake");
+  wait_until([&] {
+    return observer.has_event("dispatch.wake", "invoke-read", "scheduled");
+  }, "scheduled idle wake audit");
   wait_until([&] { return dispatcher.queued() == 1; }, "queued invoke");
   FakeHost host;
   const auto read_batch = dispatcher.drain(host);
@@ -965,6 +988,8 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(cancel, "\"terminalResponseExpected\":true", "cancel response");
   const std::string cancelled_terminal = read_body(sockets[0]);
   require_contains(cancelled_terminal, "\"code\":\"CANCELLED\"", "cancel terminal");
+  require(idle_signal.calls() == 9,
+      "accepted invokes did not each schedule exactly one idle wake");
 
   require(dispatcher.enqueue(Request{
       "wrong-generation",
@@ -1025,8 +1050,10 @@ void invalid_postcondition_becomes_structured_failure() {
   FakeSessionClock session_clock;
   HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
   RecordingObserver observer;
+  RecordingIdleSignal idle_signal;
+  idle_signal.set_succeeds(false);
   NativeRpcConnectionHandler handler(
-      dispatcher, dispatcher_clock, session_clock, runtime(), observer);
+      dispatcher, dispatcher_clock, session_clock, runtime(), observer, idle_signal);
   std::array<int, 2> sockets{};
   require(::socketpair(AF_UNIX, SOCK_STREAM, 0, sockets.data()) == 0, "socketpair failed");
   const AuthenticatedConnection authenticated = connection(sockets[1], "route-invalid", 3);
@@ -1036,6 +1063,10 @@ void invalid_postcondition_becomes_structured_failure() {
   require_contains(read_body(sockets[0]), "\"ok\":true", "invalid evidence hello");
   send_json(sockets[0], invoke_json("invalid-result"));
   require_contains(read_body(sockets[0]), "\"event\":\"progress\"", "invalid evidence progress");
+  wait_until([&] {
+    return observer.has_event("dispatch.wake", "invalid-result", "failed");
+  }, "failed idle wake audit");
+  idle_signal.set_succeeds(true);
   wait_until([&] { return dispatcher.queued() == 1; }, "invalid evidence invoke");
   FakeHost host;
   host.summary.item_count = -1;
@@ -1093,6 +1124,8 @@ void invalid_postcondition_becomes_structured_failure() {
       "ambiguous bit-depth retry fence");
   require(host.write_calls == 1,
       "ambiguous bit-depth evidence allowed a second host mutation");
+  require(idle_signal.calls() == 2,
+      "rejected retry scheduled an idle wake or an accepted invoke missed one");
 
   finish_connection(sockets[0], sockets[1], worker);
   (void)dispatcher.shutdown();
@@ -1103,14 +1136,17 @@ void construction_failure_is_contained_by_noexcept_boundary() {
   FakeSessionClock session_clock;
   HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
   RecordingObserver observer;
+  RecordingIdleSignal idle_signal;
   NativeRpcConnectionHandler handler(
-      dispatcher, dispatcher_clock, session_clock, runtime(), observer);
+      dispatcher, dispatcher_clock, session_clock, runtime(), observer, idle_signal);
   AuthenticatedConnection invalid = connection(-1, std::string(1'025, 'x'), 1);
   handler.serve(invalid);
   require(observer.has_event(
       "connection", "none", "codec-or-transport-failure"),
       "front-door construction exception escaped the noexcept serve boundary");
   require(dispatcher.running(), "construction failure changed dispatcher lifecycle state");
+  require(idle_signal.calls() == 0,
+      "invalid connection unexpectedly scheduled an idle wake");
   (void)dispatcher.shutdown();
 }
 

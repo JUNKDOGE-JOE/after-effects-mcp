@@ -2434,6 +2434,21 @@ class AegpHostApi final : public HostApi {
   ProjectGraphRegistry& graph_;
 };
 
+class AegpHostIdleSignal final : public aemcp::native::HostIdleSignal {
+ public:
+  explicit AegpHostIdleSignal(const AEGP_UtilitySuite6* utility_suite) noexcept
+      : utility_suite_(utility_suite) {}
+
+  [[nodiscard]] bool request_idle() noexcept override {
+    return utility_suite_ != nullptr
+        && utility_suite_->AEGP_CauseIdleRoutinesToBeCalled != nullptr
+        && utility_suite_->AEGP_CauseIdleRoutinesToBeCalled() == A_Err_NONE;
+  }
+
+ private:
+  const AEGP_UtilitySuite6* utility_suite_{nullptr};
+};
+
 struct PluginState final : NativeIpcObserver, NativeRpcObserver {
   PluginState(SPBasicSuite* basic_suite, AEGP_PluginID plugin_id_value,
       A_long driver_major_value, A_long driver_minor_value)
@@ -2441,8 +2456,13 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
         plugin_id(plugin_id_value),
         driver_major(driver_major_value),
         driver_minor(driver_minor_value),
+        utility_suite(basic_suite, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6),
+        idle_signal(utility_suite.get()),
         dispatcher(std::this_thread::get_id(), clock),
         pairing_gate(pairing_clock, pairing_material) {
+    if (utility_suite.get() == nullptr) {
+      throw std::runtime_error("AEGP utility suite unavailable");
+    }
     instance_id = aemcp::native::secure_uuid_v4();
     peer_backend = aemcp::native::create_macos_peer_identity_backend();
     const auto host_process = aemcp::native::current_macos_process(*peer_backend);
@@ -2475,7 +2495,8 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
             std::string(kLayerPropertiesListContractDigest),
             std::string(kCompositionSelectedLayersListContractDigest),
         },
-        *this);
+        *this,
+        idle_signal);
     ipc_server = std::make_unique<MacIpcServer>(
         *endpoint,
         *peer_backend,
@@ -2509,6 +2530,8 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
   HostIdentity host_identity{read_host_identity()};
   DiagnosticLog log;
   SystemClock clock;
+  SuiteLease<AEGP_UtilitySuite6> utility_suite;
+  AegpHostIdleSignal idle_signal;
   ProjectGraphRegistry project_graph;
   HostDispatcher dispatcher;
   aemcp::native::rpc::SystemSessionClock session_clock;
