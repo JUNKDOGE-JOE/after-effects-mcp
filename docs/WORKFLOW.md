@@ -8,7 +8,7 @@
 
 ```text
 MCP 客户端或面板内嵌 AI
-  -> packages/core (ae_mcp, Python stdio MCP server, 47 ae_ tools)
+  -> packages/core (ae_mcp, Python stdio MCP server, 49 ae_ tools)
   -> backend (packages/bridge, httpx)
   -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
   -> CSInterface.evalScript
@@ -18,7 +18,7 @@ MCP 客户端或面板内嵌 AI
 
 ```mermaid
 flowchart LR
-    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>47 ae_ tools"]
+    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>49 ae_ tools"]
     B --> C["ae-mcp bridge<br/>httpx backend"]
     C --> D["127.0.0.1:11488"]
     D --> E["CEP panel host<br/>Express"]
@@ -212,7 +212,7 @@ This document describes the two v0.9.2 (unreleased candidate) usage paths: built
 
 ```text
 MCP client or panel-embedded AI
-  -> packages/core (ae_mcp, Python stdio MCP server, 47 ae_ tools)
+  -> packages/core (ae_mcp, Python stdio MCP server, 49 ae_ tools)
   -> backend (packages/bridge, httpx)
   -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
   -> CSInterface.evalScript
@@ -222,7 +222,7 @@ MCP client or panel-embedded AI
 
 ```mermaid
 flowchart LR
-    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>47 ae_ tools"]
+    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>49 ae_ tools"]
     B --> C["ae-mcp bridge<br/>httpx backend"]
     C --> D["127.0.0.1:11488"]
     D --> E["CEP panel host<br/>Express"]

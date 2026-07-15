@@ -83,12 +83,16 @@ def _filtered_tool_names() -> set:
             "ae.projectSummary",
             "ae.getProjectBitDepth",
             "ae.setProjectBitDepth",
+            "ae.listProjectItems",
+            "ae.listCompositionLayers",
         }
     else:
         supported = supported - {
             "ae.projectSummary",
             "ae.getProjectBitDepth",
             "ae.setProjectBitDepth",
+            "ae.listProjectItems",
+            "ae.listCompositionLayers",
         }
     return supported | {"ae.status", "ae.diagnose"}
 

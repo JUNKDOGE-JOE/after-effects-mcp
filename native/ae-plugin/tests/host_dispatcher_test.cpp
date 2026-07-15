@@ -17,19 +17,26 @@ namespace {
 using namespace std::chrono_literals;
 using aemcp::native::CancelCode;
 using aemcp::native::CancelResult;
+using aemcp::native::BoundedPageBudget;
 using aemcp::native::DispatcherConfig;
 using aemcp::native::EnqueueCode;
 using aemcp::native::HostApi;
 using aemcp::native::HostBitDepthReadResult;
 using aemcp::native::HostBitDepthWriteResult;
+using aemcp::native::HostCompositionLayersResult;
 using aemcp::native::HostDispatcher;
+using aemcp::native::HostProjectItemsResult;
 using aemcp::native::HostReadResult;
+using aemcp::native::ObjectLocator;
 using aemcp::native::Request;
 using aemcp::native::RouteRevocationResult;
 using aemcp::native::TimePoint;
 using aemcp::native::kProjectBitDepthReadCapability;
 using aemcp::native::kProjectBitDepthSetCapability;
+using aemcp::native::kCompositionLayersListCapability;
+using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kProjectSummaryCapability;
+using aemcp::native::json_encoded_string_size;
 
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "FAIL: " << message << '\n';
@@ -38,6 +45,25 @@ using aemcp::native::kProjectSummaryCapability;
 
 void require(bool condition, const std::string& message) {
   if (!condition) fail(message);
+}
+
+void bounded_page_budget_counts_codec_escaping_and_stops_before_overflow() {
+  const std::string escaped = std::string("A\"\n") + static_cast<char>(1);
+  require(json_encoded_string_size(escaped) == 13,
+      "page budget did not mirror JSON string escaping");
+
+  BoundedPageBudget budget(10, 20);
+  require(budget.try_reserve(6) && budget.used_bytes() == 16,
+      "page budget rejected a fitting entry");
+  require(!budget.try_reserve(5) && budget.used_bytes() == 16,
+      "page budget overflow changed its committed size");
+  require(budget.try_reserve(4) && budget.used_bytes() == 20
+          && !budget.try_reserve(1),
+      "page budget boundary was not exact");
+
+  BoundedPageBudget invalid_initial(21, 20);
+  require(!invalid_initial.try_reserve(0),
+      "page budget accepted an already oversized envelope");
 }
 
 class FakeClock final : public aemcp::native::Clock {
@@ -105,6 +131,70 @@ class FakeHost final : public HostApi {
     return HostBitDepthWriteResult::success({true, before, target_depth});
   }
 
+  [[nodiscard]] HostProjectItemsResult list_project_items(
+      const aemcp::native::ProjectItemsQuery& query, TimePoint work_deadline) override {
+    require(std::this_thread::get_id() == expected_thread_, "items HostApi ran off owner thread");
+    observed_deadline = work_deadline;
+    observed_items_query = query;
+    ++project_items_calls;
+    aemcp::native::ProjectItemsPage page;
+    page.project_locator = locator("project", "77777777-7777-4777-8777-777777777777");
+    page.total = 1;
+    page.offset = query.offset;
+    page.limit = query.limit;
+    if (mismatch_project_page) ++page.offset;
+    if (query.offset == 0) {
+      page.items.push_back({
+          locator("composition", "66666666-6666-4666-8666-666666666666"),
+          "Fixture Comp",
+          "composition",
+          page.project_locator});
+    }
+    return HostProjectItemsResult::success(std::move(page));
+  }
+
+  [[nodiscard]] HostCompositionLayersResult list_composition_layers(
+      const aemcp::native::CompositionLayersQuery& query,
+      TimePoint work_deadline) override {
+    require(std::this_thread::get_id() == expected_thread_, "layers HostApi ran off owner thread");
+    observed_deadline = work_deadline;
+    observed_layers_query = query;
+    ++composition_layers_calls;
+    aemcp::native::CompositionLayersPage page;
+    page.composition_locator = query.composition_locator;
+    page.composition_name = "Fixture Comp";
+    page.total = 1;
+    page.offset = query.offset;
+    page.limit = query.limit;
+    if (mismatch_composition_page) {
+      page.composition_locator.object_id =
+          "99999999-9999-4999-8999-999999999999";
+    }
+    if (query.offset == 0) {
+      page.layers.push_back({
+          locator("layer", "88888888-8888-4888-8888-888888888888"),
+          1,
+          "Fixture Layer",
+          "text",
+          true,
+          false,
+          true,
+          std::nullopt,
+          std::nullopt});
+    }
+    return HostCompositionLayersResult::success(std::move(page));
+  }
+
+  [[nodiscard]] static ObjectLocator locator(std::string kind, std::string object_id) {
+    return {
+        std::move(kind),
+        "22222222-2222-4222-8222-222222222222",
+        "11111111-1111-4111-8111-111111111111",
+        "44444444-4444-4444-8444-444444444444",
+        8,
+        std::move(object_id)};
+  }
+
   FakeClock& clock_;
   std::thread::id expected_thread_;
   std::chrono::milliseconds delay{0};
@@ -118,6 +208,12 @@ class FakeHost final : public HostApi {
   int calls{0};
   int bit_depth_read_calls{0};
   int write_calls{0};
+  int project_items_calls{0};
+  int composition_layers_calls{0};
+  bool mismatch_project_page{false};
+  bool mismatch_composition_page{false};
+  aemcp::native::ProjectItemsQuery observed_items_query;
+  aemcp::native::CompositionLayersQuery observed_layers_query;
 };
 
 class BlockingHost final : public HostApi {
@@ -206,6 +302,51 @@ Request bit_depth_set_request(
   };
 }
 
+Request project_items_request(
+    FakeClock& clock,
+    std::string id,
+    std::uint64_t offset = 0,
+    std::uint16_t limit = 25,
+    std::optional<ObjectLocator> project_locator = std::nullopt) {
+  return {
+      std::move(id),
+      std::string(kProjectItemsListCapability),
+      clock.now() + 100ms,
+      "route-items",
+      7,
+      0,
+      {},
+      {},
+      "22222222-2222-4222-8222-222222222222",
+      "11111111-1111-4111-8111-111111111111",
+      offset,
+      limit,
+      std::move(project_locator)};
+}
+
+Request composition_layers_request(
+    FakeClock& clock,
+    std::string id,
+    ObjectLocator composition_locator,
+    std::uint64_t offset = 0,
+    std::uint16_t limit = 25) {
+  return {
+      std::move(id),
+      std::string(kCompositionLayersListCapability),
+      clock.now() + 100ms,
+      "route-layers",
+      7,
+      0,
+      {},
+      {},
+      "22222222-2222-4222-8222-222222222222",
+      "11111111-1111-4111-8111-111111111111",
+      offset,
+      limit,
+      std::nullopt,
+      std::move(composition_locator)};
+}
+
 DispatcherConfig config(
     std::size_t queue,
     std::size_t tasks,
@@ -225,6 +366,77 @@ DispatcherConfig config(
       route_fences,
       idempotency_entries,
   };
+}
+
+void project_graph_reads_validate_arguments_and_dispatch_on_owner_thread() {
+  FakeClock clock;
+  const auto owner = std::this_thread::get_id();
+  HostDispatcher dispatcher(owner, clock, config(8, 8, 4ms));
+  FakeHost host(clock, owner);
+  const ObjectLocator project = FakeHost::locator(
+      "project", "77777777-7777-4777-8777-777777777777");
+  const ObjectLocator composition = FakeHost::locator(
+      "composition", "66666666-6666-4666-8666-666666666666");
+
+  require(dispatcher.enqueue(project_items_request(clock, "items-first"))
+          .code == EnqueueCode::kAccepted,
+      "first project-items page was rejected");
+  require(dispatcher.enqueue(project_items_request(clock, "items-next", 1, 25, project))
+          .code == EnqueueCode::kAccepted,
+      "continued project-items page was rejected");
+  require(dispatcher.enqueue(project_items_request(clock, "items-refresh", 0, 25, project))
+          .code == EnqueueCode::kAccepted,
+      "offset-zero project-items refresh rejected its optional locator");
+  require(dispatcher.enqueue(composition_layers_request(
+          clock, "layers-first", composition, 0, 50)).code == EnqueueCode::kAccepted,
+      "composition-layers page was rejected");
+
+  const auto missing_project = dispatcher.enqueue(
+      project_items_request(clock, "items-missing-locator", 1));
+  require(missing_project.code == EnqueueCode::kInvalidRequest
+          && missing_project.error_code == "INVALID_ARGUMENT",
+      "non-zero project offset did not require its project locator");
+  const auto excessive_limit = dispatcher.enqueue(
+      composition_layers_request(clock, "layers-limit", composition, 0, 51));
+  require(excessive_limit.code == EnqueueCode::kInvalidRequest,
+      "composition layers accepted a limit above 50");
+  ObjectLocator wrong_session = composition;
+  wrong_session.session_id = "33333333-3333-4333-8333-333333333333";
+  const auto stale_session = dispatcher.enqueue(
+      composition_layers_request(clock, "layers-session", wrong_session));
+  require(stale_session.code == EnqueueCode::kInvalidRequest
+          && stale_session.error_code == "STALE_LOCATOR",
+      "dispatcher did not reject a locator from another session");
+
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 4
+          && batch.completions[0].ok && batch.completions[1].ok
+          && batch.completions[2].ok && batch.completions[3].ok,
+      "project graph reads did not complete");
+  require(host.project_items_calls == 3 && host.composition_layers_calls == 1,
+      "project graph reads did not enter their exact host adapter methods");
+  require(batch.completions[0].project_items_result.items.size() == 1
+          && batch.completions[0].project_items_result.items[0].type == "composition",
+      "project item result was not preserved");
+  require(batch.completions[3].composition_layers_result.layers.size() == 1
+          && batch.completions[3].composition_layers_result.layers[0].locked,
+      "composition layer flags were not preserved");
+
+  host.mismatch_project_page = true;
+  host.mismatch_composition_page = true;
+  require(dispatcher.enqueue(project_items_request(clock, "items-mismatch"))
+          .code == EnqueueCode::kAccepted,
+      "mismatched project page setup was rejected before the host call");
+  require(dispatcher.enqueue(composition_layers_request(
+          clock, "layers-mismatch", composition)).code == EnqueueCode::kAccepted,
+      "mismatched composition page setup was rejected before the host call");
+  const auto mismatched = dispatcher.drain(host);
+  require(mismatched.completions.size() == 2
+          && !mismatched.completions[0].ok
+          && mismatched.completions[0].error_code == "CAPABILITY_FAILED"
+          && !mismatched.completions[1].ok
+          && mismatched.completions[1].error_code == "CAPABILITY_FAILED",
+      "dispatcher signed a host page that was not bound to its invoke arguments");
 }
 
 void bit_depth_read_and_write_are_main_thread_bound_and_write_is_idempotent() {
@@ -758,6 +970,8 @@ void idle_budget_and_shutdown_are_bounded() {
 }  // namespace
 
 int main() {
+  bounded_page_budget_counts_codec_escaping_and_stops_before_overflow();
+  project_graph_reads_validate_arguments_and_dispatch_on_owner_thread();
   bit_depth_read_and_write_are_main_thread_bound_and_write_is_idempotent();
   bit_depth_write_releases_only_safe_failures_and_fails_closed_when_full();
   bit_depth_write_validates_before_dispatch_and_late_results_are_ambiguous();

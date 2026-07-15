@@ -27,6 +27,10 @@ def test_exec_is_destructive_and_reads_are_readonly():
     assert VERB_ANNOTATIONS["ae.setProjectBitDepth"].readOnlyHint is False
     assert VERB_ANNOTATIONS["ae.setProjectBitDepth"].destructiveHint is False
     assert VERB_ANNOTATIONS["ae.setProjectBitDepth"].idempotentHint is True
+    for verb in ("ae.listProjectItems", "ae.listCompositionLayers"):
+        assert VERB_ANNOTATIONS[verb].readOnlyHint is True
+        assert VERB_ANNOTATIONS[verb].destructiveHint is False
+        assert VERB_ANNOTATIONS[verb].idempotentHint is True
 
 
 def test_no_verb_is_both_readonly_and_destructive():

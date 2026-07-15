@@ -29,6 +29,9 @@ const NATIVE_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 const PROJECT_SUMMARY_CAPABILITY = 'ae.project.summary';
 const PROJECT_BIT_DEPTH_READ_CAPABILITY = 'ae.project.bit-depth.read';
 const PROJECT_BIT_DEPTH_SET_CAPABILITY = 'ae.project.bit-depth.set';
+const PROJECT_ITEMS_LIST_CAPABILITY = 'ae.project.items.list';
+const COMPOSITION_LAYERS_LIST_CAPABILITY = 'ae.composition.layers.list';
+const NATIVE_LOCATOR_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function setRuntimeDependencies(dependencies) {
     if (!dependencies || typeof dependencies.express !== 'function') {
@@ -240,6 +243,33 @@ function validProjectBitDepthSetArguments(value) {
         && NATIVE_REQUEST_ID_PATTERN.test(value.idempotencyKey);
 }
 
+function validNativeLocator(value, kind) {
+    return exactBody(value, [
+        'kind', 'hostInstanceId', 'sessionId', 'projectId', 'generation', 'objectId',
+    ])
+        && value.kind === kind
+        && NATIVE_LOCATOR_UUID_PATTERN.test(value.hostInstanceId)
+        && NATIVE_LOCATOR_UUID_PATTERN.test(value.sessionId)
+        && NATIVE_LOCATOR_UUID_PATTERN.test(value.projectId)
+        && Number.isSafeInteger(value.generation) && value.generation > 0
+        && NATIVE_LOCATOR_UUID_PATTERN.test(value.objectId);
+}
+
+function validProjectItemsListArguments(value) {
+    return exactBody(value, ['offset', 'limit'], ['projectLocator'])
+        && Number.isSafeInteger(value.offset) && value.offset >= 0
+        && Number.isSafeInteger(value.limit) && value.limit >= 1 && value.limit <= 50
+        && (value.projectLocator === undefined
+            ? value.offset === 0 : validNativeLocator(value.projectLocator, 'project'));
+}
+
+function validCompositionLayersListArguments(value) {
+    return exactBody(value, ['compositionLocator', 'offset', 'limit'])
+        && validNativeLocator(value.compositionLocator, 'composition')
+        && Number.isSafeInteger(value.offset) && value.offset >= 0
+        && Number.isSafeInteger(value.limit) && value.limit >= 1 && value.limit <= 50;
+}
+
 function validNativeInvokeBody(body) {
     if (!exactBody(body, [
         'requestId', 'capabilityId', 'capabilityVersion', 'arguments', 'deadlineUnixMs',
@@ -253,6 +283,13 @@ function validNativeInvokeBody(body) {
     }
     if (body.capabilityId === PROJECT_BIT_DEPTH_SET_CAPABILITY && body.capabilityVersion === 1) {
         return validProjectBitDepthSetArguments(body.arguments);
+    }
+    if (body.capabilityId === PROJECT_ITEMS_LIST_CAPABILITY && body.capabilityVersion === 1) {
+        return validProjectItemsListArguments(body.arguments);
+    }
+    if (body.capabilityId === COMPOSITION_LAYERS_LIST_CAPABILITY
+        && body.capabilityVersion === 1) {
+        return validCompositionLayersListArguments(body.arguments);
     }
     return false;
 }

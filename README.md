@@ -19,7 +19,7 @@ The published v0.9.2 asset targets this verified release scope:
 
 ```text
 Embedded panel chat or external MCP client
-  -> packages/core (ae_mcp, Python stdio MCP server, 47 ae_ tools)
+  -> packages/core (ae_mcp, Python stdio MCP server, 49 ae_ tools)
   -> backend (packages/bridge, httpx)
   -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
   -> CSInterface.evalScript
@@ -108,7 +108,7 @@ External clients must run on the same machine as After Effects, or otherwise be 
 
 | Category | Tools |
 |---|---|
-| Project | `ae_init`, `ae_overview`, `ae_layers`, `ae_readProps`, `ae_searchProject` |
+| Project | `ae_init`, `ae_overview`, `ae_layers`, `ae_listProjectItems`, `ae_listCompositionLayers`, `ae_readProps`, `ae_searchProject` |
 | Mutation | `ae_exec`, `ae_applyEffect`, `ae_createLayer`, `ae_setProperty`, `ae_moveLayer`, `ae_selectLayers`, `ae_setTime` |
 | Read-typed | `ae_getTime`, `ae_getProperties`, `ae_scanPropertyTree`, `ae_inspectPropertyCapabilities`, `ae_getExpressions`, `ae_validateExpressions`, `ae_getKeyframes` |
 | Preview / capture | `ae_previewFrame`, `ae_snapshot` |
@@ -237,8 +237,10 @@ each candidate still requires an exact-commit real-AE gate through the public MC
 development-native surface is intentionally small: `ae_projectSummary` reads a project summary,
 `ae_getProjectBitDepth` reads the current 8/16/32 bits-per-channel value, and
 `ae_setProjectBitDepth` performs the SDK-declared undoable change with an idempotency key and
-verified native readback. These tools fail explicitly when the native plane is unavailable; they do
-not fall back to JSX.
+verified native readback. `ae_listProjectItems` returns bounded project-item pages; copy a returned
+composition locator into `ae_listCompositionLayers` to read its bounded layer pages (default 25,
+maximum 50). These native tools fail explicitly when the native plane is unavailable and never fall
+back to JSX.
 
 CEP panel macOS development setup:
 

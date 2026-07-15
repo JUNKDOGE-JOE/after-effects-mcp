@@ -23,6 +23,10 @@ WORKFLOW — every task follows this loop:
                 Discover properties with ae_scanPropertyTree (structure /
                 matchName paths) and ae_getProperties (values). Never guess
                 comp or layer ids — read them first.
+                For a verified native project graph, call ae_listProjectItems,
+                then copy a returned composition locator into
+                ae_listCompositionLayers. These bounded reads fail explicitly
+                when native AEGP is unavailable; they never fall back to JSX.
   2. Act      — Prefer the typed verbs (ae_createLayer, ae_setProperty,
                 ae_applyEffect, ae_moveLayer, ae_createRig). Drop to ae_exec
                 only for logic the typed verbs can't express.

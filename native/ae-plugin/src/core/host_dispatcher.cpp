@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
@@ -47,6 +48,32 @@ bool valid_sha256(std::string_view value) {
   });
 }
 
+bool valid_uuid(std::string_view value) {
+  if (value.size() != 36 || value[8] != '-' || value[13] != '-'
+      || value[18] != '-' || value[23] != '-') {
+    return false;
+  }
+  for (std::size_t index = 0; index < value.size(); ++index) {
+    if (index == 8 || index == 13 || index == 18 || index == 23) continue;
+    const char character = value[index];
+    if (!((character >= '0' && character <= '9')
+          || (character >= 'a' && character <= 'f'))) {
+      return false;
+    }
+  }
+  return value[14] >= '1' && value[14] <= '5'
+      && (value[19] == '8' || value[19] == '9'
+          || value[19] == 'a' || value[19] == 'b');
+}
+
+bool valid_locator(const ObjectLocator& locator) {
+  return (locator.kind == "project" || locator.kind == "item"
+          || locator.kind == "composition" || locator.kind == "layer")
+      && valid_uuid(locator.host_instance_id) && valid_uuid(locator.session_id)
+      && valid_uuid(locator.project_id) && locator.generation > 0
+      && valid_uuid(locator.object_id);
+}
+
 bool valid_route(std::string_view route_id, std::uint64_t session_generation) {
   // Empty/zero is the one legacy in-process route. The authenticated transport
   // supplies an opaque, bounded route; its syntax is deliberately not parsed.
@@ -80,6 +107,34 @@ void hash_combine(std::size_t& seed, std::size_t value) noexcept {
 
 TimePoint SystemClock::now() const noexcept {
   return std::chrono::steady_clock::now();
+}
+
+std::size_t json_encoded_string_size(std::string_view value) noexcept {
+  std::size_t result = 2;
+  for (const unsigned char character : value) {
+    const std::size_t additional = character == '"' || character == '\\'
+            || character == '\b' || character == '\f' || character == '\n'
+            || character == '\r' || character == '\t'
+        ? 2U
+        : (character < 0x20U ? 6U : 1U);
+    if (result > std::numeric_limits<std::size_t>::max() - additional) {
+      return std::numeric_limits<std::size_t>::max();
+    }
+    result += additional;
+  }
+  return result;
+}
+
+BoundedPageBudget::BoundedPageBudget(
+    std::size_t initial_bytes, std::size_t maximum_bytes) noexcept
+    : used_bytes_(initial_bytes), maximum_bytes_(maximum_bytes) {}
+
+bool BoundedPageBudget::try_reserve(std::size_t bytes) noexcept {
+  if (used_bytes_ > maximum_bytes_ || bytes > maximum_bytes_ - used_bytes_) {
+    return false;
+  }
+  used_bytes_ += bytes;
+  return true;
 }
 
 HostReadResult HostReadResult::success(ProjectSummary summary) {
@@ -127,6 +182,39 @@ HostBitDepthWriteResult HostBitDepthWriteResult::failure(
   return result;
 }
 
+HostProjectItemsResult HostProjectItemsResult::success(ProjectItemsPage value) {
+  HostProjectItemsResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
+HostProjectItemsResult HostProjectItemsResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostProjectItemsResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
+
+HostCompositionLayersResult HostCompositionLayersResult::success(
+    CompositionLayersPage value) {
+  HostCompositionLayersResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
+HostCompositionLayersResult HostCompositionLayersResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostCompositionLayersResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
+
 HostBitDepthReadResult HostApi::read_project_bit_depth(TimePoint) {
   return HostBitDepthReadResult::failure(
       "NATIVE_UNSUPPORTED", "project bit-depth reads are unavailable");
@@ -135,6 +223,18 @@ HostBitDepthReadResult HostApi::read_project_bit_depth(TimePoint) {
 HostBitDepthWriteResult HostApi::set_project_bit_depth(std::int32_t, TimePoint) {
   return HostBitDepthWriteResult::failure(
       "NATIVE_UNSUPPORTED", "project bit-depth writes are unavailable");
+}
+
+HostProjectItemsResult HostApi::list_project_items(
+    const ProjectItemsQuery&, TimePoint) {
+  return HostProjectItemsResult::failure(
+      "NATIVE_UNSUPPORTED", "project item reads are unavailable");
+}
+
+HostCompositionLayersResult HostApi::list_composition_layers(
+    const CompositionLayersQuery&, TimePoint) {
+  return HostCompositionLayersResult::failure(
+      "NATIVE_UNSUPPORTED", "composition layer reads are unavailable");
 }
 
 std::size_t HostDispatcher::RequestKeyHash::operator()(const RequestKey& key) const noexcept {
@@ -173,7 +273,11 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       request.capability_id == kProjectBitDepthReadCapability;
   const bool project_bit_depth_set =
       request.capability_id == kProjectBitDepthSetCapability;
-  if (!project_summary && !project_bit_depth_read && !project_bit_depth_set) {
+  const bool project_items_list = request.capability_id == kProjectItemsListCapability;
+  const bool composition_layers_list =
+      request.capability_id == kCompositionLayersListCapability;
+  if (!project_summary && !project_bit_depth_read && !project_bit_depth_set
+      && !project_items_list && !composition_layers_list) {
     return {EnqueueCode::kUnsupportedCapability, "NATIVE_UNSUPPORTED"};
   }
   if ((project_summary || project_bit_depth_read)
@@ -200,6 +304,70 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         "INVALID_ARGUMENT",
         "native capability arguments failed closed validation",
         "params.arguments"};
+  }
+  if ((project_items_list || composition_layers_list)
+      && (request.target_depth != 0 || !request.idempotency_key.empty()
+          || !request.arguments_fingerprint_sha256.empty()
+          || !valid_uuid(request.host_instance_id) || !valid_uuid(request.session_id)
+          || request.limit < 1 || request.limit > 50)) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "native project graph arguments failed closed validation",
+        "params.arguments"};
+  }
+  if (project_items_list
+      && ((request.offset > 0 && !request.project_locator.has_value())
+          || request.composition_locator.has_value())) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "projectLocator must be supplied for non-zero offsets",
+        "params.arguments.projectLocator"};
+  }
+  if (project_items_list && request.project_locator.has_value()) {
+    const ObjectLocator& locator = *request.project_locator;
+    if (!valid_locator(locator) || locator.kind != "project") {
+      return {
+          EnqueueCode::kInvalidRequest,
+          "INVALID_ARGUMENT",
+          "projectLocator must be a closed project locator",
+          "params.arguments.projectLocator"};
+    }
+    if (locator.host_instance_id != request.host_instance_id
+        || locator.session_id != request.session_id) {
+      return {
+          EnqueueCode::kInvalidRequest,
+          "STALE_LOCATOR",
+          "projectLocator belongs to another host or native session",
+          "params.arguments.projectLocator"};
+    }
+  }
+  if (composition_layers_list
+      && (request.project_locator.has_value() || !request.composition_locator.has_value())) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "compositionLocator is required for composition layer reads",
+        "params.arguments.compositionLocator"};
+  }
+  if (composition_layers_list) {
+    const ObjectLocator& locator = *request.composition_locator;
+    if (!valid_locator(locator) || locator.kind != "composition") {
+      return {
+          EnqueueCode::kInvalidRequest,
+          "INVALID_ARGUMENT",
+          "compositionLocator must be a closed composition locator",
+          "params.arguments.compositionLocator"};
+    }
+    if (locator.host_instance_id != request.host_instance_id
+        || locator.session_id != request.session_id) {
+      return {
+          EnqueueCode::kInvalidRequest,
+          "STALE_LOCATOR",
+          "compositionLocator belongs to another host or native session",
+          "params.arguments.compositionLocator"};
+    }
   }
   const TimePoint now = clock_.now();
   if (request.deadline <= now) {
@@ -426,6 +594,74 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
             completion.session_generation = request.session_generation;
             completion.ok = true;
             completion.bit_depth_result = std::move(host_result.value);
+          }
+        } else if (request.capability_id == kProjectItemsListCapability) {
+          HostProjectItemsResult host_result = host.list_project_items(
+              ProjectItemsQuery{
+                  request.host_instance_id,
+                  request.session_id,
+                  request.offset,
+                  request.limit,
+                  request.project_locator},
+              std::min(request.deadline, idle_deadline));
+          if (clock_.now() > request.deadline) {
+            completion = expired(request, true);
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else if (host_result.value.offset != request.offset
+              || host_result.value.limit != request.limit
+              || host_result.value.project_locator.host_instance_id
+                != request.host_instance_id
+              || host_result.value.project_locator.session_id != request.session_id
+              || (request.project_locator.has_value()
+                && host_result.value.project_locator != *request.project_locator)) {
+            completion = failure_for(
+                request,
+                "CAPABILITY_FAILED",
+                "native project item page was not bound to its request");
+          } else {
+            completion.request_id = request.request_id;
+            completion.capability_id = request.capability_id;
+            completion.route_id = request.route_id;
+            completion.session_generation = request.session_generation;
+            completion.ok = true;
+            completion.project_items_result = std::move(host_result.value);
+          }
+        } else if (request.capability_id == kCompositionLayersListCapability) {
+          HostCompositionLayersResult host_result = host.list_composition_layers(
+              CompositionLayersQuery{
+                  request.host_instance_id,
+                  request.session_id,
+                  request.offset,
+                  request.limit,
+                  *request.composition_locator},
+              std::min(request.deadline, idle_deadline));
+          if (clock_.now() > request.deadline) {
+            completion = expired(request, true);
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else if (host_result.value.offset != request.offset
+              || host_result.value.limit != request.limit
+              || host_result.value.composition_locator != *request.composition_locator) {
+            completion = failure_for(
+                request,
+                "CAPABILITY_FAILED",
+                "native composition layer page was not bound to its request");
+          } else {
+            completion.request_id = request.request_id;
+            completion.capability_id = request.capability_id;
+            completion.route_id = request.route_id;
+            completion.session_generation = request.session_generation;
+            completion.ok = true;
+            completion.composition_layers_result = std::move(host_result.value);
           }
         } else {
           // The idle budget decides whether another task may start in this

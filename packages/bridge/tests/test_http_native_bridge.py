@@ -124,6 +124,83 @@ async def test_native_backend_posts_lossless_typed_contract(token_file):
     assert all(item["client"] for item in captured.values())
 
 
+@pytest.mark.parametrize(
+    ("fixture_name", "capability_id"),
+    [
+        ("invoke-project-items-list.json", "ae.project.items.list"),
+        ("invoke-composition-layers-list.json", "ae.composition.layers.list"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_native_navigation_reads_are_forwarded_losslessly(
+    token_file,
+    fixture_name,
+    capability_id,
+):
+    vector = _fixture(fixture_name)
+    wire_request = vector["request"]
+    raw = {
+        **vector["response"]["result"],
+        "replayed": vector["response"]["replayed"],
+    }
+    request = NativeInvokeRequest(
+        request_id=wire_request["requestId"],
+        capability_id=capability_id,
+        capability_version=wire_request["params"]["capabilityVersion"],
+        arguments=wire_request["params"]["arguments"],
+        deadline_unix_ms=wire_request["deadlineUnixMs"],
+    )
+    captured: dict = {}
+
+    def respond(http_request):
+        captured.update(json.loads(http_request.content))
+        return Response(200, json={"ok": True, "result": raw})
+
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/invoke").mock(side_effect=respond)
+        result = await HttpBridge("http://127.0.0.1:11488").invoke(request)
+
+    assert captured == request.model_dump(mode="json", by_alias=True)
+    assert result.model_dump(mode="json", by_alias=True, exclude_none=True) == raw
+    assert result.value == vector["response"]["result"]["value"]
+    assert result.evidence.effect == "none"
+    assert result.evidence.undo is None
+
+
+@pytest.mark.parametrize(
+    ("fixture_name", "capability_id"),
+    [
+        ("invoke-project-items-list.json", "ae.project.items.list"),
+        ("invoke-composition-layers-list.json", "ae.composition.layers.list"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_native_navigation_read_timeout_is_safe_to_retry(
+    token_file,
+    fixture_name,
+    capability_id,
+):
+    wire_request = _fixture(fixture_name)["request"]
+    request = NativeInvokeRequest(
+        request_id=wire_request["requestId"],
+        capability_id=capability_id,
+        capability_version=wire_request["params"]["capabilityVersion"],
+        arguments=wire_request["params"]["arguments"],
+        deadline_unix_ms=wire_request["deadlineUnixMs"],
+    )
+
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/invoke").mock(side_effect=ReadTimeout("lost response"))
+        with pytest.raises(NativeBackendError) as raised:
+            await HttpBridge("http://127.0.0.1:11488").invoke(request)
+
+    assert raised.value.code == "DEADLINE_EXCEEDED"
+    assert raised.value.side_effect == "not-started"
+    assert raised.value.retryable is True
+    assert raised.value.recovery.action == "retry"
+    assert raised.value.details is None
+
+
 @pytest.mark.asyncio
 async def test_native_bit_depth_set_preserves_key_replay_and_undo_evidence(token_file):
     request = NativeInvokeRequest(

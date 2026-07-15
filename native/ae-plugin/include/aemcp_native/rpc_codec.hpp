@@ -1,5 +1,7 @@
 #pragma once
 
+#include "aemcp_native/host_dispatcher.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -67,6 +69,10 @@ struct InvokeParams {
   // mutation fence identity and is deliberately distinct from the complete
   // transport request fingerprint.
   std::string arguments_fingerprint_sha256;
+  std::uint64_t offset{0};
+  std::uint16_t limit{0};
+  std::optional<ObjectLocator> project_locator;
+  std::optional<ObjectLocator> composition_locator;
 };
 
 struct CancelParams {
@@ -104,6 +110,10 @@ struct ParsedRequest {
     bool changed,
     std::int32_t before_bits_per_channel,
     std::int32_t after_bits_per_channel);
+[[nodiscard]] std::string digest_project_items_postcondition(
+    const ProjectItemsPage& page);
+[[nodiscard]] std::string digest_composition_layers_postcondition(
+    const CompositionLayersPage& page);
 
 class FrameDecoder final {
  public:
@@ -264,12 +274,16 @@ struct CapabilitiesSuccess {
   bool include_project_summary{true};
   bool include_project_bit_depth_read{true};
   bool include_project_bit_depth_set{true};
+  bool include_project_items_list{true};
+  bool include_composition_layers_list{true};
   std::string query_digest;
   std::string capabilities_digest;
   // Required only for detail=full when the descriptor is included.
   std::string project_summary_contract_digest;
   std::string project_bit_depth_read_contract_digest;
   std::string project_bit_depth_set_contract_digest;
+  std::string project_items_list_contract_digest;
+  std::string composition_layers_list_contract_digest;
 };
 
 enum class ProgressPhase { kQueued, kDispatched, kRunning, kValidating };
@@ -316,6 +330,30 @@ struct ProjectBitDepthSetSuccess {
   bool changed{true};
   std::int32_t before_bits_per_channel{0};
   std::int32_t after_bits_per_channel{0};
+  std::uint64_t started_at_unix_ms{0};
+  std::uint64_t completed_at_unix_ms{0};
+  std::string request_digest;
+  std::string postcondition_digest;
+  bool replayed{false};
+};
+
+struct ProjectItemsSuccess {
+  std::string request_id;
+  std::string session_id;
+  std::string host_instance_id;
+  ProjectItemsPage value;
+  std::uint64_t started_at_unix_ms{0};
+  std::uint64_t completed_at_unix_ms{0};
+  std::string request_digest;
+  std::string postcondition_digest;
+  bool replayed{false};
+};
+
+struct CompositionLayersSuccess {
+  std::string request_id;
+  std::string session_id;
+  std::string host_instance_id;
+  CompositionLayersPage value;
   std::uint64_t started_at_unix_ms{0};
   std::uint64_t completed_at_unix_ms{0};
   std::string request_digest;
@@ -386,6 +424,10 @@ struct ErrorResponse {
     const ProjectBitDepthReadSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_project_bit_depth_set_success(
     const ProjectBitDepthSetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_project_items_success(
+    const ProjectItemsSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_composition_layers_success(
+    const CompositionLayersSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_cancel_success(
     const CancelSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_error_response(const ErrorResponse& response);

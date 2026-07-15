@@ -95,6 +95,8 @@ async def test_status_reports_native_plane_without_claiming_active_routing(monke
     monkeypatch.setattr("ae_mcp.snapshot.discovery.select_snapshotter", lambda: None)
 
     assert "ae.projectSummary" in _filtered_tool_names()
+    assert "ae.listProjectItems" in _filtered_tool_names()
+    assert "ae.listCompositionLayers" in _filtered_tool_names()
     schema_cls, run_fn = _load_status_handler()
     result = await run_fn(schema_cls(), None)
 

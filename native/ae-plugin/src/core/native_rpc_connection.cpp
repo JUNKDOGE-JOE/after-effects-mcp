@@ -62,6 +62,7 @@ RpcErrorCode rpc_error_code(std::string_view code) {
   if (code == "INVALID_ARGUMENT") return RpcErrorCode::kInvalidArgument;
   if (code == "DUPLICATE_REQUEST") return RpcErrorCode::kDuplicateRequest;
   if (code == "PRECONDITION_FAILED") return RpcErrorCode::kPreconditionFailed;
+  if (code == "STALE_LOCATOR") return RpcErrorCode::kStaleLocator;
   if (code == "DEADLINE_EXCEEDED") return RpcErrorCode::kDeadlineExceeded;
   if (code == "CANCELLED") return RpcErrorCode::kCancelled;
   if (code == "QUEUE_FULL") return RpcErrorCode::kQueueFull;
@@ -82,6 +83,8 @@ std::string recovery_hint(RpcErrorCode code) {
     case RpcErrorCode::kInvalidArgument: return "Change the invalid request arguments.";
     case RpcErrorCode::kDuplicateRequest: return "Inspect the original request state.";
     case RpcErrorCode::kPreconditionFailed: return "Open an After Effects project first.";
+    case RpcErrorCode::kStaleLocator:
+      return "Refresh the project graph locator before retrying.";
     case RpcErrorCode::kDeadlineExceeded: return "Retry only if the result is still needed.";
     case RpcErrorCode::kCancelled: return "Issue a new request only if the result is still needed.";
     case RpcErrorCode::kQueueFull: return "Retry after the bounded native queue drains.";
@@ -132,6 +135,7 @@ rpc::ErrorResponse error_for(
   }
   if (mapped == RpcErrorCode::kNativeUnsupported
       || mapped == RpcErrorCode::kPreconditionFailed
+      || mapped == RpcErrorCode::kStaleLocator
       || mapped == RpcErrorCode::kCapabilityFailed
       || mapped == RpcErrorCode::kPossiblySideEffectingFailure) {
     response.details = rpc::ErrorDetails{};
@@ -192,7 +196,9 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
       || runtime_.capabilities_digest.size() != 64
       || runtime_.project_summary_contract_digest.size() != 64
       || runtime_.project_bit_depth_read_contract_digest.size() != 64
-      || runtime_.project_bit_depth_set_contract_digest.size() != 64) {
+      || runtime_.project_bit_depth_set_contract_digest.size() != 64
+      || runtime_.project_items_list_contract_digest.size() != 64
+      || runtime_.composition_layers_list_contract_digest.size() != 64) {
     throw std::invalid_argument("invalid native RPC runtime identity");
   }
 }
@@ -251,6 +257,12 @@ void NativeRpcConnectionHandler::serve(
                   completion.bit_depth_change_result.changed,
                   completion.bit_depth_change_result.before_bits_per_channel,
                   completion.bit_depth_change_result.after_bits_per_channel);
+            } else if (completion.capability_id == kProjectItemsListCapability) {
+              postcondition_digest = rpc::digest_project_items_postcondition(
+                  completion.project_items_result);
+            } else if (completion.capability_id == kCompositionLayersListCapability) {
+              postcondition_digest = rpc::digest_composition_layers_postcondition(
+                  completion.composition_layers_result);
             } else {
               evidence_valid = false;
             }
@@ -309,7 +321,7 @@ void NativeRpcConnectionHandler::serve(
                 postcondition_digest,
                 false,
             });
-          } else {
+          } else if (completion.capability_id == kProjectBitDepthSetCapability) {
             response = rpc::encode_project_bit_depth_set_success({
                 completion.request_id,
                 connection.session_id,
@@ -317,6 +329,30 @@ void NativeRpcConnectionHandler::serve(
                 completion.bit_depth_change_result.changed,
                 completion.bit_depth_change_result.before_bits_per_channel,
                 completion.bit_depth_change_result.after_bits_per_channel,
+                started_at,
+                completed_at,
+                request_digest,
+                postcondition_digest,
+                false,
+            });
+          } else if (completion.capability_id == kProjectItemsListCapability) {
+            response = rpc::encode_project_items_success({
+                completion.request_id,
+                connection.session_id,
+                runtime_.host_instance_id,
+                completion.project_items_result,
+                started_at,
+                completed_at,
+                request_digest,
+                postcondition_digest,
+                false,
+            });
+          } else {
+            response = rpc::encode_composition_layers_success({
+                completion.request_id,
+                connection.session_id,
+                runtime_.host_instance_id,
+                completion.composition_layers_result,
                 started_at,
                 completed_at,
                 request_digest,
@@ -411,9 +447,17 @@ void NativeRpcConnectionHandler::serve(
           const bool include_bit_depth_set = !query.ids.has_value() || std::find(
               query.ids->begin(), query.ids->end(), "ae.project.bit-depth.set")
                   != query.ids->end();
+          const bool include_project_items = !query.ids.has_value() || std::find(
+              query.ids->begin(), query.ids->end(), "ae.project.items.list")
+                  != query.ids->end();
+          const bool include_composition_layers = !query.ids.has_value() || std::find(
+              query.ids->begin(), query.ids->end(), "ae.composition.layers.list")
+                  != query.ids->end();
           const std::size_t selected = static_cast<std::size_t>(include_summary)
               + static_cast<std::size_t>(include_bit_depth_read)
-              + static_cast<std::size_t>(include_bit_depth_set);
+              + static_cast<std::size_t>(include_bit_depth_set)
+              + static_cast<std::size_t>(include_project_items)
+              + static_cast<std::size_t>(include_composition_layers);
           if (selected > query.limit) {
             if (!write_frame(connection.socket_fd, rpc::encode_error_response(error_for(
                     request,
@@ -433,11 +477,15 @@ void NativeRpcConnectionHandler::serve(
                   include_summary,
                   include_bit_depth_read,
                   include_bit_depth_set,
+                  include_project_items,
+                  include_composition_layers,
                   rpc::digest_capabilities_query(connection.session_id, query),
                   runtime_.capabilities_digest,
                   runtime_.project_summary_contract_digest,
                   runtime_.project_bit_depth_read_contract_digest,
                   runtime_.project_bit_depth_set_contract_digest,
+                  runtime_.project_items_list_contract_digest,
+                  runtime_.composition_layers_list_contract_digest,
               }))) {
             connected = false;
             break;
@@ -491,6 +539,12 @@ void NativeRpcConnectionHandler::serve(
             invoke.target_depth,
             invoke.idempotency_key,
             invoke.arguments_fingerprint_sha256,
+            runtime_.host_instance_id,
+            connection.session_id,
+            invoke.offset,
+            invoke.limit,
+            invoke.project_locator,
+            invoke.composition_locator,
         });
         if (enqueued.code != EnqueueCode::kAccepted) {
           if (!write_frame(connection.socket_fd, rpc::encode_error_response(error_for(
