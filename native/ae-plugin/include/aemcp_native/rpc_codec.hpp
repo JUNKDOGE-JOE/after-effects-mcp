@@ -39,7 +39,7 @@ class CodecError final : public std::runtime_error {
   CodecErrorKind kind_;
 };
 
-enum class RpcMethod { kHello, kCapabilities, kInvoke, kCancel };
+enum class RpcMethod { kHello, kCapabilities, kInvoke, kCancel, kInvalidateGraph };
 enum class ClientComponent { kCoreBroker, kDevelopmentSmoke };
 enum class CapabilityDetail { kSummary, kFull };
 
@@ -81,7 +81,18 @@ struct CancelParams {
   std::string target_request_id;
 };
 
-using RequestParams = std::variant<HelloParams, CapabilitiesParams, InvokeParams, CancelParams>;
+struct InvalidateGraphParams {
+  // Closed v1 reason allowlist. Kept typed so future lifecycle sources cannot
+  // silently acquire this authenticated main-thread fence.
+  enum class Reason { kCepJsx } reason{Reason::kCepJsx};
+};
+
+using RequestParams = std::variant<
+    HelloParams,
+    CapabilitiesParams,
+    InvokeParams,
+    CancelParams,
+    InvalidateGraphParams>;
 
 struct ParsedRequest {
   RpcMethod method{RpcMethod::kHello};
@@ -417,6 +428,13 @@ struct CancelSuccess {
   bool terminal_response_expected{false};
 };
 
+struct ProjectGraphInvalidateSuccess {
+  std::string request_id;
+  std::string session_id;
+  bool invalidated{false};
+  std::uint64_t generation{0};
+};
+
 enum class RpcErrorCode {
   kNativeUnavailable,
   kNativeUnsupported,
@@ -476,6 +494,8 @@ struct ErrorResponse {
     const LayerPropertiesSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_cancel_success(
     const CancelSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_project_graph_invalidate_success(
+    const ProjectGraphInvalidateSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_error_response(const ErrorResponse& response);
 
 }  // namespace aemcp::native::rpc

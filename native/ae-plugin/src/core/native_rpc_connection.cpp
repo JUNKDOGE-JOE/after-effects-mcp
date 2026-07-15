@@ -28,6 +28,7 @@ using rpc::RpcMethod;
 constexpr std::chrono::milliseconds kSocketWriteTimeout{1500};
 
 struct ActiveEvidence {
+  RpcMethod method{RpcMethod::kInvoke};
   std::string request_digest;
   std::uint64_t started_at_unix_ms{0};
 };
@@ -240,11 +241,19 @@ void NativeRpcConnectionHandler::serve(
         const std::uint64_t completed_at = session_clock_.now_unix_ms();
         const std::string& request_digest = evidence->second.request_digest;
         const std::uint64_t started_at = evidence->second.started_at_unix_ms;
+        const bool graph_invalidation =
+            completion.capability_id == kProjectGraphInvalidateControl;
         std::string postcondition_digest;
         bool evidence_valid = valid_timing_evidence(evidence->second, completed_at);
         if (completion.ok && evidence_valid) {
           try {
-            if (completion.capability_id == kProjectSummaryCapability) {
+            if (graph_invalidation) {
+              evidence_valid = completion.project_graph_invalidation_result.invalidated
+                  ? completion.project_graph_invalidation_result.generation >= 1
+                    && completion.project_graph_invalidation_result.generation
+                      <= rpc::kMaxSafeInteger
+                  : completion.project_graph_invalidation_result.generation == 0;
+            } else if (completion.capability_id == kProjectSummaryCapability) {
               if (completion.result.item_count < 0
                   || static_cast<std::uint64_t>(completion.result.item_count)
                       > rpc::kMaxSafeInteger) {
@@ -291,7 +300,8 @@ void NativeRpcConnectionHandler::serve(
           completion.ok = false;
           const bool mutating = completion.capability_id == kProjectBitDepthSetCapability;
           completion.error_code = mutating
-              ? "POSSIBLY_SIDE_EFFECTING_FAILURE" : "CAPABILITY_FAILED";
+              ? "POSSIBLY_SIDE_EFFECTING_FAILURE"
+              : graph_invalidation ? "NATIVE_UNAVAILABLE" : "CAPABILITY_FAILED";
           completion.message = "native result evidence failed validation";
           postcondition_digest.clear();
           if (mutating) {
@@ -312,7 +322,14 @@ void NativeRpcConnectionHandler::serve(
         }
         std::vector<std::uint8_t> response;
         if (completion.ok) {
-          if (completion.capability_id == kProjectSummaryCapability) {
+          if (graph_invalidation) {
+            response = rpc::encode_project_graph_invalidate_success({
+                completion.request_id,
+                connection.session_id,
+                completion.project_graph_invalidation_result.invalidated,
+                completion.project_graph_invalidation_result.generation,
+            });
+          } else if (completion.capability_id == kProjectSummaryCapability) {
             response = rpc::encode_project_summary_success({
                 completion.request_id,
                 connection.session_id,
@@ -416,14 +433,17 @@ void NativeRpcConnectionHandler::serve(
           }
         } else {
           ParsedRequest synthetic;
-          synthetic.method = RpcMethod::kInvoke;
+          synthetic.method = evidence->second.method;
           synthetic.request_id = completion.request_id;
+          const std::string capability = graph_invalidation
+              ? std::string{} : completion.capability_id;
           response = rpc::encode_error_response(error_for(
               synthetic,
               connection.session_id,
-              completion.error_code,
+              graph_invalidation && completion.error_code == "CAPABILITY_FAILED"
+                  ? "NATIVE_UNAVAILABLE" : completion.error_code,
               completion.message.empty() ? "native request failed" : completion.message,
-              completion.capability_id,
+              capability,
               completion.error_field));
         }
         if (!write_frame(connection.socket_fd, response)) {
@@ -602,33 +622,48 @@ void NativeRpcConnectionHandler::serve(
         const std::uint64_t effective_deadline = *ingress.effective_deadline_unix_ms;
         const std::uint64_t ttl = effective_deadline > now_unix
             ? effective_deadline - now_unix : 0;
-        const auto& invoke = std::get<rpc::InvokeParams>(request.params);
-        const EnqueueResult enqueued = dispatcher_.enqueue({
-            request.request_id,
-            invoke.capability_id,
-            dispatcher_clock_.now() + std::chrono::milliseconds(ttl),
-            connection.peer.connection_id,
-            connection.session_generation,
-            invoke.target_depth,
-            invoke.idempotency_key,
-            invoke.arguments_fingerprint_sha256,
-            runtime_.host_instance_id,
-            connection.session_id,
-            invoke.offset,
-            invoke.limit,
-            invoke.project_locator,
-            invoke.composition_locator,
-            invoke.layer_locator,
-            invoke.parent_property_locator,
-        });
+        Request dispatch_request;
+        if (request.method == RpcMethod::kInvalidateGraph) {
+          dispatch_request = {
+              request.request_id,
+              std::string(kProjectGraphInvalidateControl),
+              dispatcher_clock_.now() + std::chrono::milliseconds(ttl),
+              connection.peer.connection_id,
+              connection.session_generation,
+          };
+        } else {
+          const auto& invoke = std::get<rpc::InvokeParams>(request.params);
+          dispatch_request = {
+              request.request_id,
+              invoke.capability_id,
+              dispatcher_clock_.now() + std::chrono::milliseconds(ttl),
+              connection.peer.connection_id,
+              connection.session_generation,
+              invoke.target_depth,
+              invoke.idempotency_key,
+              invoke.arguments_fingerprint_sha256,
+              runtime_.host_instance_id,
+              connection.session_id,
+              invoke.offset,
+              invoke.limit,
+              invoke.project_locator,
+              invoke.composition_locator,
+              invoke.layer_locator,
+              invoke.parent_property_locator,
+          };
+        }
+        const std::string dispatched_capability = dispatch_request.capability_id;
+        const EnqueueResult enqueued = dispatcher_.enqueue(std::move(dispatch_request));
         if (enqueued.code != EnqueueCode::kAccepted) {
+          const std::string capability = request.method == RpcMethod::kInvoke
+              ? dispatched_capability : std::string{};
           if (!write_frame(connection.socket_fd, rpc::encode_error_response(error_for(
                   request,
                   connection.session_id,
                   enqueued.error_code,
                   enqueued.message.empty()
                       ? "native dispatcher rejected the request" : enqueued.message,
-                  invoke.capability_id,
+                  capability,
                   enqueued.error_field)))) {
             connected = false;
             break;
@@ -637,6 +672,7 @@ void NativeRpcConnectionHandler::serve(
           continue;
         }
         active.emplace(request.request_id, ActiveEvidence{
+            request.method,
             request.request_fingerprint_sha256,
             now_unix,
         });
@@ -651,7 +687,10 @@ void NativeRpcConnectionHandler::serve(
           connected = false;
           break;
         }
-        observer_.on_rpc_event("invoke", request.request_id, "queued");
+        observer_.on_rpc_event(
+            request.method == RpcMethod::kInvalidateGraph ? "invalidateGraph" : "invoke",
+            request.request_id,
+            "queued");
         observer_.on_rpc_event(
             "dispatch.wake",
             request.request_id,

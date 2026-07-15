@@ -28,12 +28,18 @@ class ProjectEpochTracker final {
       throw std::invalid_argument("project identity is unavailable");
     }
     if (present_ && observation == observation_) return false;
-    if (generation_ >= kMaxGeneration) {
-      throw std::runtime_error("project locator generation exhausted");
-    }
+    advance_generation();
     present_ = true;
     observation_ = std::move(observation);
-    ++generation_;
+    return true;
+  }
+
+  // A command hook can invalidate every locator immediately before AE handles
+  // a command without claiming that the command is a project lifecycle event.
+  // Keep the last observation so the next identical poll does not rotate twice.
+  [[nodiscard]] bool invalidate() {
+    if (!present_) return false;
+    advance_generation();
     return true;
   }
 
@@ -44,9 +50,17 @@ class ProjectEpochTracker final {
     return true;
   }
 
+  [[nodiscard]] bool present() const noexcept { return present_; }
   [[nodiscard]] std::uint64_t generation() const noexcept { return generation_; }
 
  private:
+  void advance_generation() {
+    if (generation_ >= kMaxGeneration) {
+      throw std::runtime_error("project locator generation exhausted");
+    }
+    ++generation_;
+  }
+
   bool present_{false};
   ProjectObservation observation_;
   std::uint64_t generation_{0};

@@ -31,7 +31,7 @@ export const ERROR_POLICIES = Object.freeze({
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/u;
-const METHODS = new Set(['hello', 'capabilities', 'invoke', 'cancel']);
+const METHODS = new Set(['hello', 'capabilities', 'invoke', 'invalidateGraph', 'cancel']);
 const PROGRESS_PHASE = Object.freeze({ queued: 0, dispatched: 1, running: 2, validating: 3 });
 const VALID_REPLAY_RECEIPTS = new WeakSet();
 const VALID_CANCEL_DECISIONS = new WeakSet();
@@ -675,6 +675,13 @@ export function classifyRequest(message) {
           || !Number.isSafeInteger(args.limit) || args.limit < 1 || args.limit > 25) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
+    }
+    return { ok: true };
+  }
+  if (message.method === 'invalidateGraph') {
+    const params = message.params;
+    if (!exactKeys(params, new Set(['reason']), ['reason']) || params.reason !== 'cep-jsx') {
+      return { ok: false, errorCode: 'INVALID_ARGUMENT' };
     }
     return { ok: true };
   }
@@ -1735,6 +1742,24 @@ export function validateCancelResult(result, schema) {
     'not-found': false,
   }[result?.state];
   return expected !== undefined && result.terminalResponseExpected === expected;
+}
+
+export function validateInvalidateGraphExchange(helloContext, request, response, schema) {
+  const result = response?.result;
+  return validateHelloContext(helloContext, schema)
+    && validateRequestComposite(request, schema).ok === true
+    && request.method === 'invalidateGraph'
+    && request.sessionId === helloContext.response.sessionId
+    && validateResponseShape(response, schema)
+    && response?.ok === true
+    && response.kind === 'response'
+    && response.method === 'invalidateGraph'
+    && response.sessionId === request.sessionId
+    && response.requestId === request.requestId
+    && response.wireVersion === request.wireVersion
+    && response.replayed === false
+    && schemaAccepts(schema?.$defs?.invalidateGraphResult, result, schema)
+    && (result.invalidated ? result.generation >= 1 : result.generation === 0);
 }
 
 export function validateProgressEvent(message, request, schema) {

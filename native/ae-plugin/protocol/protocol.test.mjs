@@ -51,6 +51,7 @@ import {
   validateHelloFailure,
   validateHelloExchange,
   validateIdempotencyContract,
+  validateInvalidateGraphExchange,
   validateLocator,
   validateProgressEvent,
   validateRequestComposite,
@@ -183,7 +184,13 @@ test('schema locks strict framing, bounded defaults, rate limits, and native pro
   assert.equal(schema['x-lifecycle'].pagination, 'capability-owned-offset-limit-v1');
   assert.equal(schema['x-lifecycle'].terminalObservationClockToleranceMs, 0);
   assert.equal(schema['x-digests'].propertyNameSort, 'utf-16-code-units');
-  assert.deepEqual(schema.$defs.method.enum, ['hello', 'capabilities', 'invoke', 'cancel']);
+  assert.deepEqual(schema.$defs.method.enum, [
+    'hello', 'capabilities', 'invoke', 'invalidateGraph', 'cancel',
+  ]);
+  assert.equal(
+    schema['x-lifecycle'].graphInvalidation,
+    'authenticated-internal-cep-jsx-boundary',
+  );
   assert.equal(schema.$defs.executionEvidence.properties.engine.const, 'native-aegp');
   assert.equal(schema.$defs.negotiatedLimits.required.includes('maxRequestsPerSecond'), true);
   assert.equal(schema.$defs.negotiatedLimits.required.includes('maxBurst'), true);
@@ -217,6 +224,7 @@ test('all checked-in vectors are synthetic and contain no host or Adobe suite cl
     'invoke-composition-selected-layers-list.json',
     'invoke-composition-time-read.json',
     'invoke-layer-properties-list.json',
+    'invalidate-graph.json',
     'cancel.json',
     'errors.json',
     'negative-corpus.json',
@@ -252,6 +260,7 @@ test('golden requests, events, responses, and bound error policies validate', ()
     'invoke-composition-selected-layers-list.json',
     'invoke-composition-time-read.json',
     'invoke-layer-properties-list.json',
+    'invalidate-graph.json',
     'cancel.json',
   ]) {
     const fixture = golden(name);
@@ -456,6 +465,7 @@ test('schema shape and composite request validation have an explicit differentia
     golden('invoke-composition-selected-layers-list.json').request,
     golden('invoke-composition-time-read.json').request,
     golden('invoke-layer-properties-list.json').request,
+    golden('invalidate-graph.json').request,
     golden('cancel.json').request,
   ];
   for (const request of validRequests) {
@@ -515,6 +525,69 @@ test('schema shape and composite request validation have an explicit differentia
   assert.equal(schemaAccepts(schema.$defs.progressEvent, wrongSession), true);
   assert.equal(validateProgressEvent(wrongSession, invoke.request, schema), false,
     'composite validation adds request/session binding');
+});
+
+test('graph invalidation is an exact authenticated internal lifecycle exchange', () => {
+  const hello = golden('hello.json');
+  const fixture = golden('invalidate-graph.json');
+  assert.equal(validateInvalidateGraphExchange(
+    hello, fixture.request, fixture.response, schema,
+  ), true);
+
+  const noSession = structuredClone(fixture.request);
+  delete noSession.sessionId;
+  assert.equal(schemaAccepts(schema.$defs.request, noSession), false);
+  assert.deepEqual(classifyRequest(noSession), { ok: false, errorCode: 'SESSION_STALE' });
+
+  const wrongReason = structuredClone(fixture.request);
+  wrongReason.params.reason = 'manual';
+  const extraParam = structuredClone(fixture.request);
+  extraParam.params.extra = true;
+  const missingReason = structuredClone(fixture.request);
+  delete missingReason.params.reason;
+  for (const request of [wrongReason, extraParam, missingReason]) {
+    assert.equal(schemaAccepts(schema.$defs.request, request), false);
+    assert.deepEqual(classifyRequest(request), { ok: false, errorCode: 'INVALID_ARGUMENT' });
+  }
+
+  const noActiveNamespace = structuredClone(fixture.response);
+  noActiveNamespace.result = { generation: 0, invalidated: false };
+  assert.equal(validateInvalidateGraphExchange(
+    hello, fixture.request, noActiveNamespace, schema,
+  ), true);
+
+  const wrongSession = structuredClone(fixture.response);
+  wrongSession.sessionId = '77777777-7777-4777-8777-777777777777';
+  const replayed = { ...fixture.response, replayed: true };
+  const negativeGeneration = structuredClone(fixture.response);
+  negativeGeneration.result.generation = -1;
+  const unsafeGeneration = structuredClone(fixture.response);
+  unsafeGeneration.result.generation = 9007199254740992;
+  const zeroInvalidationGeneration = structuredClone(fixture.response);
+  zeroInvalidationGeneration.result.generation = 0;
+  const nonzeroNoopGeneration = structuredClone(noActiveNamespace);
+  nonzeroNoopGeneration.result.generation = 9;
+  const extraResult = structuredClone(fixture.response);
+  extraResult.result.extra = true;
+  const missingInvalidated = structuredClone(fixture.response);
+  delete missingInvalidated.result.invalidated;
+  for (const response of [
+    wrongSession, replayed, negativeGeneration, unsafeGeneration, zeroInvalidationGeneration,
+    nonzeroNoopGeneration, extraResult, missingInvalidated,
+  ]) {
+    assert.equal(validateInvalidateGraphExchange(
+      hello, fixture.request, response, schema,
+    ), false);
+  }
+
+  assert.equal(nativeCapabilityRegistry(schema).length, 8);
+  assert.doesNotMatch(JSON.stringify(golden('capabilities.json')), /invalidateGraph/u);
+  const disguisedInvoke = structuredClone(golden('invoke-project-summary.json').request);
+  disguisedInvoke.params.capabilityId = 'ae.invalidateGraph';
+  assert.equal(schemaAccepts(schema.$defs.request, disguisedInvoke), false);
+  assert.deepEqual(classifyRequest(disguisedInvoke), {
+    ok: false, errorCode: 'INVALID_ARGUMENT',
+  });
 });
 
 test('response and event decode composites enforce closed root shapes before semantics', () => {
