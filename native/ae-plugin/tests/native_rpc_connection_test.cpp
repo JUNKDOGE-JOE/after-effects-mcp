@@ -173,6 +173,12 @@ class FakeHost final : public HostApi {
   [[nodiscard]] HostCompositionLayersResult list_selected_composition_layers(
       const aemcp::native::CompositionLayersQuery& query, TimePoint) override {
     ++composition_selected_layers_calls;
+    if (query.offset > 2) {
+      return HostCompositionLayersResult::failure(
+          "INVALID_ARGUMENT",
+          "offset exceeds the current selected layer total",
+          "params.arguments.offset");
+    }
     aemcp::native::CompositionLayersPage page;
     page.composition_locator = query.composition_locator;
     page.composition_name = "Fixture Comp";
@@ -537,14 +543,15 @@ std::string composition_layers_invoke_json(std::string_view request_id) {
       + ",\"offset\":0,\"limit\":25}}}";
 }
 
-std::string composition_selected_layers_invoke_json(std::string_view request_id) {
+std::string composition_selected_layers_invoke_json(
+    std::string_view request_id, std::uint64_t offset = 0) {
   return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
       + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
       + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
         "\"params\":{\"capabilityId\":\"ae.composition.selected-layers.list\","
         "\"capabilityVersion\":1,\"arguments\":{\"compositionLocator\":"
       + graph_locator_json("composition", "66666666-6666-4666-8666-666666666666")
-      + ",\"offset\":0,\"limit\":25}}}";
+      + ",\"offset\":" + std::to_string(offset) + ",\"limit\":25}}}";
 }
 
 std::string composition_time_invoke_json(std::string_view request_id) {
@@ -865,6 +872,44 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
           && host.composition_selected_layers_calls == 1,
       "composition-selected-layers terminal evidence was not verified");
 
+  send_json(sockets[0], composition_selected_layers_invoke_json(
+      "invoke-composition-selected-layers-invalid-offset", 3));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "composition-selected-layers invalid offset progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued composition-selected-layers invalid offset invoke");
+  const auto invalid_selected_layers_batch = dispatcher.drain(host);
+  require(invalid_selected_layers_batch.completions.size() == 1
+          && !invalid_selected_layers_batch.completions[0].ok,
+      "owner dispatcher did not preserve the selected-layer offset failure");
+  const std::string invalid_selected_layers = read_body(sockets[0]);
+  require_contains(invalid_selected_layers, "\"code\":\"INVALID_ARGUMENT\"",
+      "composition-selected-layers invalid offset response");
+  require_contains(invalid_selected_layers, "\"retryable\":false",
+      "composition-selected-layers invalid offset response");
+  require_contains(invalid_selected_layers, "\"sideEffect\":\"not-started\"",
+      "composition-selected-layers invalid offset response");
+  require_contains(invalid_selected_layers, "\"action\":\"change-arguments\"",
+      "composition-selected-layers invalid offset response");
+  require_contains(invalid_selected_layers,
+      "\"capabilityId\":\"ae.composition.selected-layers.list\"",
+      "composition-selected-layers invalid offset response");
+  require_contains(invalid_selected_layers,
+      "\"field\":\"params.arguments.offset\"",
+      "composition-selected-layers invalid offset response");
+  wait_until([&] {
+    return !observer.terminal(
+        "invoke-composition-selected-layers-invalid-offset").request_id.empty();
+  }, "composition-selected-layers invalid offset terminal audit");
+  const TerminalRecord invalid_selected_layers_terminal = observer.terminal(
+      "invoke-composition-selected-layers-invalid-offset");
+  require(!invalid_selected_layers_terminal.ok
+          && invalid_selected_layers_terminal.error_code == "INVALID_ARGUMENT"
+          && invalid_selected_layers_terminal.request_digest.size() == 64
+          && invalid_selected_layers_terminal.postcondition_digest.empty()
+          && host.composition_selected_layers_calls == 2,
+      "composition-selected-layers invalid offset was not audited as a failure");
+
   send_json(sockets[0], composition_time_invoke_json("invoke-composition-time"));
   require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
       "composition-time progress");
@@ -988,7 +1033,7 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(cancel, "\"terminalResponseExpected\":true", "cancel response");
   const std::string cancelled_terminal = read_body(sockets[0]);
   require_contains(cancelled_terminal, "\"code\":\"CANCELLED\"", "cancel terminal");
-  require(idle_signal.calls() == 9,
+  require(idle_signal.calls() == 10,
       "accepted invokes did not each schedule exactly one idle wake");
 
   require(dispatcher.enqueue(Request{

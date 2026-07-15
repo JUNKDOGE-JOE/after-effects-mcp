@@ -133,7 +133,8 @@ rpc::ErrorResponse error_for(
       capability_id = invoke->capability_id;
     }
   }
-  if (mapped == RpcErrorCode::kNativeUnsupported
+  if ((mapped == RpcErrorCode::kInvalidArgument && !capability_id.empty())
+      || mapped == RpcErrorCode::kNativeUnsupported
       || mapped == RpcErrorCode::kPreconditionFailed
       || mapped == RpcErrorCode::kStaleLocator
       || mapped == RpcErrorCode::kCapabilityFailed
