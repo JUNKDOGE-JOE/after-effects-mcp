@@ -19,6 +19,8 @@ const MAX_DIRECTORY_DEPTH = 8;
 const MAX_ENTRIES = 32;
 const MAX_FILE_BYTES = 128 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 160 * 1024 * 1024;
+const PRODUCT_VERSION_PATTERN = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u;
+const PIPL_COMPATIBILITY_VERSION = 0x00010000;
 
 function verificationError(code, message) {
   const error = new Error(message);
@@ -144,7 +146,17 @@ function plistValue(plist, key) {
 export async function verifyMacPlugin({
   bundlePath,
   allowManagedDisabledName = false,
+  expectedProductVersion,
 }) {
+  if (expectedProductVersion !== undefined
+      && (typeof expectedProductVersion !== 'string'
+        || expectedProductVersion.length > 64
+        || !PRODUCT_VERSION_PATTERN.test(expectedProductVersion))) {
+    throw verificationError(
+      'AE_PLUGIN_ARGUMENT_INVALID',
+      'expected product version must be a numeric semantic version',
+    );
+  }
   const bundleName = bundlePath ? path.basename(bundlePath) : '';
   const nameIsAllowed = bundleName === 'AeMcpNative.plugin'
     || (allowManagedDisabledName && MANAGED_DISABLED_BUNDLE.test(bundleName));
@@ -175,7 +187,6 @@ export async function verifyMacPlugin({
     CFBundleIdentifier: 'dev.aemcp.native-plugin',
     CFBundlePackageType: 'AEgx',
     CFBundleSignature: 'FXTC',
-    CFBundleShortVersionString: '0.1.0',
     CFBundleVersion: '1',
     LSMinimumSystemVersion: '14.0',
   };
@@ -183,6 +194,19 @@ export async function verifyMacPlugin({
     if (plistValue(plist, key) !== expected) {
       throw verificationError('AE_PLUGIN_PLIST_INVALID', `unexpected ${key} in native plug-in`);
     }
+  }
+  const productVersion = plistValue(plist, 'CFBundleShortVersionString');
+  if (productVersion.length > 64 || !PRODUCT_VERSION_PATTERN.test(productVersion)) {
+    throw verificationError(
+      'AE_PLUGIN_PRODUCT_VERSION_INVALID',
+      'native plug-in product version is not numeric semantic version text',
+    );
+  }
+  if (expectedProductVersion !== undefined && productVersion !== expectedProductVersion) {
+    throw verificationError(
+      'AE_PLUGIN_PRODUCT_VERSION_MISMATCH',
+      'native plug-in product version does not match the exact repository build version',
+    );
   }
   if (!(await fs.promises.readFile(pkgInfo)).equals(Buffer.from('AEgxFXTC', 'ascii'))) {
     throw verificationError('AE_PLUGIN_PLIST_INVALID', 'native plug-in PkgInfo is invalid');
@@ -197,6 +221,13 @@ export async function verifyMacPlugin({
   if (JSON.stringify(exported) !== JSON.stringify(['_AeMcpNativeMain'])) {
     throw verificationError('AE_PLUGIN_EXPORT_INVALID', 'native plug-in exports an unexpected symbol set');
   }
+  const executableBytes = await fs.promises.readFile(executable);
+  if (!executableBytes.includes(Buffer.from(productVersion, 'ascii'))) {
+    throw verificationError(
+      'AE_PLUGIN_PRODUCT_VERSION_MISMATCH',
+      'native executable does not embed the Info.plist product version used by runtime provenance',
+    );
+  }
 
   const deRez = command('/usr/bin/xcrun', ['--find', 'DeRez']).trim();
   const resourceDump = command(deRez, ['-useDF', resource]);
@@ -205,6 +236,9 @@ export async function verifyMacPlugin({
     throw verificationError('AE_PLUGIN_PIPL_INVALID', 'native plug-in PiPL is missing required metadata');
   }
   assertPiplProperty(resourceBytes, 'kind', Buffer.from('AEgx', 'ascii'));
+  const piplCompatibilityVersion = Buffer.alloc(4);
+  piplCompatibilityVersion.writeUInt32BE(PIPL_COMPATIBILITY_VERSION);
+  assertPiplProperty(resourceBytes, 'vers', piplCompatibilityVersion);
   const entryPoint = Buffer.from('AeMcpNativeMain', 'ascii');
   assertPiplProperty(
     resourceBytes,

@@ -10,6 +10,7 @@ import {
 } from './lib/runtime-evidence.mjs';
 import { validateRuntimeManifest } from './lib/runtime-manifest.mjs';
 import {
+  NATIVE_PLUGIN_MANIFEST_PATH,
   PLATFORM_IDS,
   SHA256_PATTERN,
   assertPortableRelativePath,
@@ -22,6 +23,18 @@ import {
   sha256File,
   validateBundleManifest,
 } from './lib/manifest.mjs';
+import {
+  NATIVE_PLUGIN_ROOT,
+  verifyNativePluginStage,
+} from './lib/native-plugin-manifest.mjs';
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const ADOBE_SDK_LOCKED_FILE_DIGESTS = new Set([
+  'c6abccd52ae25936b819b78c4fea2858bd161f216f72f75184fe9ec55a49756e',
+  'e02fa2b488c3cceb238866b648eb9a2526d308a260744367915a2f173663c36c',
+  '3d3a39175a09d07f6f9734284636f9eadce968b05161650e3cba097a95905330',
+  '640b513bfdfdab264057f3fce0356ced468cdb6d3bd3e2666e6743ec8be1fdba',
+]);
 
 function validateHelperManifest(value, platform) {
   const expectedTop = ['entrypoints', 'files', 'helperId', 'platform', 'schemaVersion'];
@@ -304,9 +317,31 @@ function assertProductionFileSet(entries, platform) {
     : /(?:darwin-|macos-|linux-|win32-arm64)/i;
   const foreignEntry = entries.find((entry) => foreign.test(entry.path));
   if (foreignEntry) throw bundleError('BUNDLE_FOREIGN_PLATFORM', `foreign platform payload: ${foreignEntry.path}`);
+  const adobeSdkMaterial = entries.find((entry) => (
+    ADOBE_SDK_LOCKED_FILE_DIGESTS.has(entry.sha256)
+    || /(?:^|\/)(?:AfterEffectsSDK[^/]*|ae[0-9._]+\.AfterEffectsSDK)(?:\/|$)/iu.test(entry.path)
+    || /(?:^|\/)Examples\/(?:Headers|Resources|Util)(?:\/|$)/u.test(entry.path)
+    || /(?:^|\/)(?:AE_GeneralPlug(?:Old)?|AEGP_SuiteHandler|SPBasic)\.h$/iu.test(entry.path)
+    || /(?:^|\/)(?:PiPLtool|AdobePIPL)(?:\.exe)?$/iu.test(entry.path)
+    || /(?:^|\/)(?:documentation|after.?effects[^/]*sdk[^/]*)\.pdf$/iu.test(entry.path)
+    || /(?:^|\/)ae-sdk-(?:extract|unpack)[^/]*$/iu.test(entry.path)
+  ));
+  if (adobeSdkMaterial) {
+    throw bundleError(
+      'BUNDLE_ADOBE_SDK_MATERIAL_FORBIDDEN',
+      `Adobe SDK material is forbidden in the staged product: ${adobeSdkMaterial.path}`,
+    );
+  }
 }
 
-export async function verifyPlatformBundle({ root, platform, version, sourceCommitSha } = {}) {
+export async function verifyPlatformBundle({
+  root,
+  platform,
+  version,
+  sourceCommitSha,
+  candidateRepoRoot = REPO_ROOT,
+  dependencies = {},
+} = {}) {
   if (!PLATFORM_IDS.has(platform)) throw bundleError('BUNDLE_PLATFORM_INVALID', `unsupported platform: ${platform}`);
   const resolvedRoot = path.resolve(String(root ?? ''));
   const manifestPath = path.join(resolvedRoot, 'bundle-manifest.json');
@@ -327,6 +362,45 @@ export async function verifyPlatformBundle({ root, platform, version, sourceComm
     throw bundleError('BUNDLE_FILE_SET_MISMATCH', 'bundle file set does not match manifest');
   }
   for (const entry of manifest.files) await verifyEntry(entry, actualByPath.get(entry.path));
+  const nativeNamespace = path.posix.dirname(NATIVE_PLUGIN_ROOT);
+  const nativeNamespaceEntries = actual.filter((entry) => (
+    entry.path === nativeNamespace
+    || entry.path.startsWith(`${nativeNamespace}/`)
+  ));
+  if (!manifest.nativePlugin && nativeNamespaceEntries.length > 0) {
+    throw bundleError(
+      'BUNDLE_NATIVE_PLUGIN_REFERENCE_MISSING',
+      'native plug-in payload exists without a top-level manifest reference',
+    );
+  }
+  if (manifest.nativePlugin) {
+    const unexpectedNativeEntry = nativeNamespaceEntries.find((entry) => (
+      entry.path !== NATIVE_PLUGIN_ROOT
+      && !entry.path.startsWith(`${NATIVE_PLUGIN_ROOT}/`)
+    ));
+    if (unexpectedNativeEntry) {
+      throw bundleError(
+        'BUNDLE_NATIVE_PLUGIN_FILE_SET_MISMATCH',
+        `unexpected native plug-in namespace entry: ${unexpectedNativeEntry.path}`,
+      );
+    }
+    const nativeManifestEntry = actualByPath.get(NATIVE_PLUGIN_MANIFEST_PATH);
+    if (!nativeManifestEntry
+        || nativeManifestEntry.type !== 'file'
+        || nativeManifestEntry.sha256 !== manifest.nativePlugin.manifestSha256) {
+      throw bundleError(
+        'BUNDLE_NATIVE_PLUGIN_HASH_MISMATCH',
+        'native plug-in manifest reference does not match the staged file',
+      );
+    }
+    await verifyNativePluginStage({
+      root: path.join(resolvedRoot, ...NATIVE_PLUGIN_ROOT.split('/')),
+      productVersion: manifest.version,
+      sourceCommitSha: manifest.sourceCommitSha,
+      candidateRepoRoot,
+      dependencies,
+    });
+  }
 
   const runtimeManifestPath = path.join(resolvedRoot, 'runtime', platform, 'runtime-manifest.json');
   if (await sha256File(runtimeManifestPath) !== manifest.runtime.manifestSha256) {

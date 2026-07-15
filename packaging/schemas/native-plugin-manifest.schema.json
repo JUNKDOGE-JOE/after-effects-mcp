@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NativePluginManifestV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "productVersion",
+    "sourceCommitSha",
+    "platform",
+    "architecture",
+    "artifact",
+    "sdk",
+    "protocol",
+    "build"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "productVersion": { "$ref": "#/$defs/semver" },
+    "sourceCommitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "platform": { "const": "macos-arm64" },
+    "architecture": { "const": "arm64" },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "payloadRoot",
+        "bundlePath",
+        "receiptPath",
+        "receiptSha256",
+        "bundleName",
+        "bundleIdentifier",
+        "bundleType",
+        "entryPoint",
+        "fileCount",
+        "bundleTreeSha256",
+        "executablePath",
+        "executableSha256",
+        "piplPath",
+        "piplResourceId",
+        "piplCompatibilityVersion",
+        "piplSha256"
+      ],
+      "properties": {
+        "payloadRoot": { "const": "payload" },
+        "bundlePath": { "const": "payload/AeMcpNative.plugin" },
+        "receiptPath": { "const": "payload/build-receipt.json" },
+        "receiptSha256": { "$ref": "#/$defs/sha256" },
+        "bundleName": { "const": "AeMcpNative.plugin" },
+        "bundleIdentifier": { "const": "dev.aemcp.native-plugin" },
+        "bundleType": { "const": "AEgx" },
+        "entryPoint": { "const": "AeMcpNativeMain" },
+        "fileCount": { "const": 5 },
+        "bundleTreeSha256": { "$ref": "#/$defs/sha256" },
+        "executablePath": {
+          "const": "payload/AeMcpNative.plugin/Contents/MacOS/AeMcpNative"
+        },
+        "executableSha256": { "$ref": "#/$defs/sha256" },
+        "piplPath": {
+          "const": "payload/AeMcpNative.plugin/Contents/Resources/AeMcpNative.rsrc"
+        },
+        "piplResourceId": { "const": 16000 },
+        "piplCompatibilityVersion": { "const": 65536 },
+        "piplSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "sdk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "claimedVersion",
+        "claimedBuild",
+        "policySha256",
+        "archiveSha256",
+        "rootContentSha256",
+        "verification",
+        "materialIncluded"
+      ],
+      "properties": {
+        "name": { "const": "Adobe After Effects C/C++ Plug-in SDK" },
+        "claimedVersion": { "const": "25.6.61" },
+        "claimedBuild": { "const": 61 },
+        "policySha256": { "$ref": "#/$defs/sha256" },
+        "archiveSha256": { "$ref": "#/$defs/sha256" },
+        "rootContentSha256": { "$ref": "#/$defs/sha256" },
+        "verification": {
+          "const": "archive-byte-identity-plus-canonical-root-content"
+        },
+        "materialIncluded": { "const": false }
+      }
+    },
+    "protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaSha256"],
+      "properties": {
+        "schemaSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configuration",
+        "signing",
+        "signatureVerification",
+        "distributionApproved"
+      ],
+      "properties": {
+        "configuration": { "const": "development" },
+        "signing": { "const": "ad-hoc" },
+        "signatureVerification": { "const": "ad-hoc-verified" },
+        "distributionApproved": { "const": false }
+      }
+    }
+  },
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

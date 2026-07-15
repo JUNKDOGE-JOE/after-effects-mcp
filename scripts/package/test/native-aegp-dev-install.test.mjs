@@ -29,6 +29,7 @@ const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(import.meta.dirname, '../../..');
 const installerPath = path.join(repoRoot, 'native/ae-plugin/install-dev-macos.mjs');
 const SOURCE_COMMIT = 'a'.repeat(40);
+const PRODUCT_VERSION = '0.9.2';
 const TX1 = '00000000-0000-4000-8000-000000000001';
 const TX2 = '00000000-0000-4000-8000-000000000002';
 
@@ -52,7 +53,10 @@ function artifactFor(payload) {
   };
 }
 
-async function makeArtifact(root, name, payload, { receiptArtifact } = {}) {
+async function makeArtifact(root, name, payload, {
+  receiptArtifact,
+  receiptProductVersion = PRODUCT_VERSION,
+} = {}) {
   const artifactDir = path.join(root, name);
   const bundle = path.join(artifactDir, 'AeMcpNative.plugin');
   await mkdir(path.join(bundle, 'Contents', 'MacOS'), { recursive: true });
@@ -65,6 +69,7 @@ async function makeArtifact(root, name, payload, { receiptArtifact } = {}) {
   const receipt = {
     schemaVersion: 1,
     artifact: receiptArtifact ?? artifactFor(payload),
+    productVersion: receiptProductVersion,
     sourceCommit: SOURCE_COMMIT,
     source: {
       commit: SOURCE_COMMIT,
@@ -111,7 +116,11 @@ async function fixture(t) {
 }
 
 function fakeVerifier(calls = []) {
-  return async ({ bundlePath, allowManagedDisabledName = false }) => {
+  return async ({
+    bundlePath,
+    allowManagedDisabledName = false,
+    expectedProductVersion,
+  }) => {
     const name = path.basename(bundlePath);
     const disabled = /^\.AeMcpNative\.(?:stage|backup|failed|replaced)\..+\.disabled$/u;
     if (name !== 'AeMcpNative.plugin' && !(allowManagedDisabledName && disabled.test(name))) {
@@ -120,7 +129,12 @@ function fakeVerifier(calls = []) {
       throw error;
     }
     const payload = await readFile(path.join(bundlePath, 'payload.txt'), 'utf8');
-    calls.push({ allowManagedDisabledName, name, payload });
+    if (expectedProductVersion !== undefined && expectedProductVersion !== PRODUCT_VERSION) {
+      const error = new Error('unexpected product version');
+      error.code = 'AE_PLUGIN_PRODUCT_VERSION_MISMATCH';
+      throw error;
+    }
+    calls.push({ allowManagedDisabledName, expectedProductVersion, name, payload });
     return artifactFor(payload);
   };
 }
@@ -331,6 +345,7 @@ test('fresh install is receipt-bound, triple-gated, and rolls back without delet
   });
   assert.equal(gateCalls, 3);
   assert.equal(installed.transactionId, TX1);
+  assert.equal(installed.productVersion, PRODUCT_VERSION);
   assert.equal(installed.previous.present, false);
   assert.equal(await payloadAt(state.target), 'one');
   await assertScanRootExactly(state, true);
@@ -389,6 +404,41 @@ test('upgrade keeps a hash-bound disabled backup and rollback restores it', asyn
   });
   assert.equal(result.restoredPrevious, true);
   assert.equal(await payloadAt(state.target), 'one');
+  await assertScanRootExactly(state, true);
+});
+
+test('a committed #94 artifact-v1 transaction and current pointer remain upgrade-compatible', async (t) => {
+  const state = await fixture(t);
+  const first = await makeArtifact(state.root, 'issue-94-build', 'one');
+  const second = await makeArtifact(state.root, 'issue-97-build', 'two');
+  await installDevMacPlugin({
+    artifactDir: first,
+    mediaCoreRoot: state.mediaCoreRoot,
+    dependencies: dependencies({ transactionId: TX1 }),
+  });
+
+  const transaction = JSON.parse(await readFile(
+    path.join(state.stateStore, `.AeMcpNative.transaction.${TX1}.json`),
+    'utf8',
+  ));
+  const current = JSON.parse(await readFile(
+    path.join(state.stateStore, '.AeMcpNative.current.json'),
+    'utf8',
+  ));
+  assert.equal(transaction.status, 'committed');
+  assert.equal(current.transactionId, TX1);
+  assert.deepEqual(transaction.installedArtifact, artifactFor('one'));
+  assert.equal(Object.hasOwn(transaction.installedArtifact, 'productVersion'), false);
+  assert.equal(Object.hasOwn(transaction.installedArtifact, 'piplCompatibilityVersion'), false);
+
+  const upgraded = await installDevMacPlugin({
+    artifactDir: second,
+    mediaCoreRoot: state.mediaCoreRoot,
+    dependencies: dependencies({ transactionId: TX2 }),
+  });
+  assert.equal(upgraded.transactionId, TX2);
+  assert.equal(upgraded.productVersion, PRODUCT_VERSION);
+  assert.equal(await payloadAt(state.target), 'two');
   await assertScanRootExactly(state, true);
 });
 
@@ -711,6 +761,24 @@ test('complete artifact receipt comparison rejects a single changed hash', async
       dependencies: dependencies(),
     }),
     { code: 'AE_PLUGIN_RECEIPT_MISMATCH' },
+  );
+});
+
+test('receipt product version is bound to the verified native bundle identity', async (t) => {
+  const state = await fixture(t);
+  const artifactDir = await makeArtifact(
+    state.root,
+    'build-version-mismatch',
+    'one',
+    { receiptProductVersion: '0.1.0' },
+  );
+  await assert.rejects(
+    installDevMacPlugin({
+      artifactDir,
+      mediaCoreRoot: state.mediaCoreRoot,
+      dependencies: dependencies(),
+    }),
+    { code: 'AE_PLUGIN_PRODUCT_VERSION_MISMATCH' },
   );
 });
 

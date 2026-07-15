@@ -104,6 +104,36 @@ test('Panel source, generated bundle, and CEP manifest use the release version',
   assert.equal(manifest.match(/<Host Name="AEFT" Version="([^"]+)"/)?.[1], '[25.0,26.9]');
 });
 
+test('native product version is injected from the exact repository product manifest', async () => {
+  const [build, entry, infoPlist, installer, verifier] = await Promise.all([
+    text('native/ae-plugin/build-macos.mjs'),
+    text('native/ae-plugin/src/aegp/plugin_entry.cpp'),
+    text('native/ae-plugin/resources/Info.plist'),
+    text('native/ae-plugin/install-dev-macos.mjs'),
+    text('native/ae-plugin/verify-macos.mjs'),
+  ]);
+
+  assert.match(build, /PRODUCT_MANIFEST_PATH = 'plugin\/host\/package\.json'/u);
+  assert.match(build, /gitFileBytes\(sourceCommit, PRODUCT_MANIFEST_PATH\)/u);
+  assert.match(build, /-DAE_MCP_PRODUCT_VERSION=/u);
+  assert.match(entry, /kPluginVersion = AE_MCP_PRODUCT_VERSION/u);
+  assert.equal(infoPlist.match(/__AE_MCP_PRODUCT_VERSION__/gu)?.length, 1);
+  assert.match(build, /expectedProductVersion: productVersion/u);
+  assert.match(verifier, /PIPL_COMPATIBILITY_VERSION = 0x00010000/u);
+  assert.match(build, /productVersion,/u);
+  assert.match(installer, /expectedProductVersion: receipt\.productVersion/u);
+  assert.match(installer, /productVersion: source\.receipt\.productVersion/u);
+
+  for (const [relativePath, source] of [
+    ['native/ae-plugin/build-macos.mjs', build],
+    ['native/ae-plugin/src/aegp/plugin_entry.cpp', entry],
+    ['native/ae-plugin/resources/Info.plist', infoPlist],
+    ['native/ae-plugin/verify-macos.mjs', verifier],
+  ]) {
+    assert.doesNotMatch(source, /0\.1\.0(?:-dev)?/u, relativePath);
+  }
+});
+
 test('user docs describe the v0.9.2 platform assets and optional AI channel CLIs', async () => {
   for (const relativePath of USER_DOCS) {
     const body = await text(relativePath);

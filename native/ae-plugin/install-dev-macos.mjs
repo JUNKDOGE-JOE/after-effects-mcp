@@ -25,6 +25,7 @@ const MAX_JSON_BYTES = 64 * 1024;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const SHA256 = /^[0-9a-f]{64}$/u;
 const COMMIT_SHA = /^[0-9a-f]{40}$/u;
+const PRODUCT_VERSION = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u;
 const MANAGED_BUNDLE_NAME = /^\.AeMcpNative\.(?:stage|backup|failed|replaced)\.([0-9a-f-]+)\.disabled$/u;
 const TRANSACTION_FILE_NAME = /^\.AeMcpNative\.transaction\.([0-9a-f-]+)\.json$/u;
 const STALE_LOCK_FILE_NAME = /^\.AeMcpNative\.stale-lock\.([0-9a-f-]+)\.json$/u;
@@ -120,6 +121,7 @@ function validateReceipt(value) {
     [
       'artifact',
       'build',
+      'productVersion',
       'protocolSchemaSha256',
       'schemaVersion',
       'sdk',
@@ -158,6 +160,9 @@ function validateReceipt(value) {
       || !COMMIT_SHA.test(value.sourceCommit)
       || value.source.commit !== value.sourceCommit
       || value.source.repositoryClean !== true
+      || typeof value.productVersion !== 'string'
+      || value.productVersion.length > 64
+      || !PRODUCT_VERSION.test(value.productVersion ?? '')
       || !SHA256.test(value.protocolSchemaSha256)
       || value.sdk.name !== 'Adobe After Effects C/C++ Plug-in SDK'
       || value.sdk.claimedVersion !== '25.6.61'
@@ -301,7 +306,10 @@ async function loadSourceArtifact(artifactDir, dependencies) {
     throw installerError('AE_PLUGIN_RECEIPT_INVALID', 'build receipt is not valid JSON');
   }
   const observed = validateArtifact(
-    await dependencies.verifyBundle({ bundlePath }),
+    await dependencies.verifyBundle({
+      bundlePath,
+      expectedProductVersion: receipt.productVersion,
+    }),
     'verified source artifact',
   );
   if (!isDeepStrictEqual(observed, receipt.artifact)) {
@@ -1597,6 +1605,7 @@ export async function installDevMacPlugin({
         action: 'install',
         transactionId,
         target,
+        productVersion: source.receipt.productVersion,
         sourceCommit: source.receipt.sourceCommit,
         artifact: source.receipt.artifact,
         previous: {

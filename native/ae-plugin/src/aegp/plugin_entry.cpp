@@ -44,6 +44,10 @@
 #error "AE_MCP_SOURCE_COMMIT must bind the native binary to a clean repository commit"
 #endif
 
+#ifndef AE_MCP_PRODUCT_VERSION
+#error "AE_MCP_PRODUCT_VERSION must bind the native binary to the repository product version"
+#endif
+
 namespace {
 
 using namespace std::chrono_literals;
@@ -73,7 +77,7 @@ using aemcp::native::kProjectBitDepthReadCapability;
 using aemcp::native::kProjectBitDepthSetCapability;
 using aemcp::native::kProjectSummaryCapability;
 
-constexpr std::string_view kPluginVersion = "0.1.0-dev";
+constexpr std::string_view kPluginVersion = AE_MCP_PRODUCT_VERSION;
 constexpr std::string_view kSdkVersion = "25.6.61";
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
