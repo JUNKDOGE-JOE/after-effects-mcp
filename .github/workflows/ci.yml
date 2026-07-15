@@ -162,5 +162,8 @@ jobs:
       - name: Run packaging contract tests
         run: node --test scripts/package/test/*.test.mjs
 
+      - name: Enforce repository delivery rules and audited worktree baseline
+        run: node scripts/check-repository-governance.mjs
+
       - name: Run release contract tests
         run: node --test scripts/release/test/*.test.mjs
