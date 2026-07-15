@@ -1,4 +1,5 @@
 #include "aemcp_native/host_dispatcher.hpp"
+#include "aemcp_native/project_epoch.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -28,6 +29,8 @@ using aemcp::native::HostDispatcher;
 using aemcp::native::HostProjectItemsResult;
 using aemcp::native::HostReadResult;
 using aemcp::native::ObjectLocator;
+using aemcp::native::ProjectEpochTracker;
+using aemcp::native::ProjectObservation;
 using aemcp::native::Request;
 using aemcp::native::RouteRevocationResult;
 using aemcp::native::TimePoint;
@@ -86,6 +89,32 @@ void effective_layer_name_uses_sdk_source_fallback() {
   require(!select_effective_layer_name(
               std::nullopt, std::nullopt, std::nullopt).has_value(),
       "missing layer, source, and source Item handles produced a name");
+}
+
+void project_epoch_fences_reused_aegp_handles() {
+  ProjectEpochTracker tracker;
+  const ProjectObservation saved{
+      0x1000U, 0x2000U, 1, "/private/tmp/fixture.aep"};
+  require(tracker.observe(saved) && tracker.generation() == 1,
+      "first project observation did not establish generation one");
+  require(!tracker.observe(saved) && tracker.generation() == 1,
+      "an unchanged project observation rotated its generation");
+
+  const ProjectObservation empty{
+      saved.project_identity, saved.root_item_identity, saved.root_item_id, {}};
+  require(tracker.observe(empty) && tracker.generation() == 2,
+      "saved-to-empty project path transition was hidden by reused AEGP handles");
+  require(tracker.observe(saved) && tracker.generation() == 3,
+      "empty-to-reopened project path transition did not rotate its generation");
+
+  const ProjectObservation replaced_root{
+      saved.project_identity, 0x3000U, saved.root_item_id, saved.project_path};
+  require(tracker.observe(replaced_root) && tracker.generation() == 4,
+      "a replaced root AEGP handle did not rotate the project generation");
+  require(tracker.close() && !tracker.close(),
+      "project close observation was not idempotent");
+  require(tracker.observe(replaced_root) && tracker.generation() == 5,
+      "reopening the same observed handles after close reused the old generation");
 }
 
 class FakeClock final : public aemcp::native::Clock {
@@ -994,6 +1023,7 @@ void idle_budget_and_shutdown_are_bounded() {
 int main() {
   bounded_page_budget_counts_codec_escaping_and_stops_before_overflow();
   effective_layer_name_uses_sdk_source_fallback();
+  project_epoch_fences_reused_aegp_handles();
   project_graph_reads_validate_arguments_and_dispatch_on_owner_thread();
   bit_depth_read_and_write_are_main_thread_bound_and_write_is_idempotent();
   bit_depth_write_releases_only_safe_failures_and_fails_closed_when_full();

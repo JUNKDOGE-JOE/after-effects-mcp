@@ -5,6 +5,7 @@
 #include "aemcp_native/pairing_gate.hpp"
 #include "aemcp_native/pairing_ui_macos.hpp"
 #include "aemcp_native/peer_identity_macos.hpp"
+#include "aemcp_native/project_epoch.hpp"
 #include "aemcp_native/rpc_codec.hpp"
 #include "aemcp_native/secure_random_macos.hpp"
 
@@ -75,6 +76,8 @@ using aemcp::native::PairingGate;
 using aemcp::native::PairingUiDecision;
 using aemcp::native::ProjectBitDepth;
 using aemcp::native::ProjectBitDepthChanged;
+using aemcp::native::ProjectEpochTracker;
+using aemcp::native::ProjectObservation;
 using aemcp::native::ProjectSummary;
 using aemcp::native::ObjectLocator;
 using aemcp::native::Request;
@@ -346,6 +349,18 @@ class MemHandleOwner final {
   bool locked_{false};
 };
 
+[[nodiscard]] std::optional<std::string> read_project_path(
+    const AEGP_ProjSuite6* project_suite,
+    const AEGP_MemorySuite1* memory_suite,
+    AEGP_ProjectH project) {
+  AEGP_MemHandle path_handle = nullptr;
+  const A_Err path_error = project_suite->AEGP_GetProjectPath(
+      project, &path_handle);
+  MemHandleOwner path_owner(memory_suite, path_handle);
+  if (path_error != A_Err_NONE) return std::nullopt;
+  return path_owner.utf8();
+}
+
 [[nodiscard]] std::optional<std::string> read_effective_layer_name(
     const AEGP_LayerSuite9* layer_suite,
     const AEGP_ItemSuite9* item_suite,
@@ -471,6 +486,9 @@ class StreamValueOwner final {
 
 class ProjectGraphRegistry final {
  public:
+  static_assert(
+      ProjectEpochTracker::kMaxGeneration == aemcp::native::rpc::kMaxSafeInteger);
+
   struct LayerAddress {
     A_long composition_item_id{0};
     AEGP_LayerIDVal layer_id{0};
@@ -483,23 +501,22 @@ class ProjectGraphRegistry final {
   };
 
   void project_closed() {
-    if (!present_) return;
-    present_ = false;
-    project_identity_ = 0;
-    root_item_id_ = 0;
+    if (!epoch_.close()) return;
     clear_objects();
   }
 
-  void observe_project(std::uintptr_t identity, A_long root_item_id) {
-    if (identity == 0) throw std::invalid_argument("project identity is unavailable");
-    if (present_ && identity == project_identity_ && root_item_id == root_item_id_) return;
-    if (generation_ >= aemcp::native::rpc::kMaxSafeInteger) {
-      throw std::runtime_error("project locator generation exhausted");
+  void observe_project(
+      std::uintptr_t identity,
+      std::uintptr_t root_item_identity,
+      A_long root_item_id,
+      std::string project_path) {
+    if (!epoch_.observe(ProjectObservation{
+            identity,
+            root_item_identity,
+            static_cast<std::int64_t>(root_item_id),
+            std::move(project_path)})) {
+      return;
     }
-    present_ = true;
-    project_identity_ = identity;
-    root_item_id_ = root_item_id;
-    ++generation_;
     project_id_ = aemcp::native::secure_uuid_v4();
     project_object_id_ = aemcp::native::secure_uuid_v4();
     clear_objects();
@@ -546,7 +563,7 @@ class ProjectGraphRegistry final {
       std::string_view session) const {
     if (locator.kind != "layer" || locator.host_instance_id != host
         || locator.session_id != session || locator.project_id != project_id_
-        || locator.generation != generation_) {
+        || locator.generation != epoch_.generation()) {
       return std::nullopt;
     }
     const auto found = layers_by_object_.find(locator.object_id);
@@ -593,7 +610,7 @@ class ProjectGraphRegistry final {
       std::string_view session) const {
     if (locator.kind != "stream" || locator.host_instance_id != host
         || locator.session_id != session || locator.project_id != project_id_
-        || locator.generation != generation_) {
+        || locator.generation != epoch_.generation()) {
       return std::nullopt;
     }
     const auto found = stream_addresses_.find(locator.object_id);
@@ -610,7 +627,8 @@ class ProjectGraphRegistry final {
       std::string_view session) const {
     return locator.kind == "project" && locator.host_instance_id == host
         && locator.session_id == session && locator.project_id == project_id_
-        && locator.generation == generation_ && locator.object_id == project_object_id_;
+        && locator.generation == epoch_.generation()
+        && locator.object_id == project_object_id_;
   }
 
   [[nodiscard]] std::optional<A_long> resolve_composition(
@@ -619,7 +637,7 @@ class ProjectGraphRegistry final {
       std::string_view session) const {
     if (locator.kind != "composition" || locator.host_instance_id != host
         || locator.session_id != session || locator.project_id != project_id_
-        || locator.generation != generation_) {
+        || locator.generation != epoch_.generation()) {
       return std::nullopt;
     }
     const auto found = item_ids_by_object_.find(locator.object_id);
@@ -638,7 +656,7 @@ class ProjectGraphRegistry final {
         std::string(host),
         std::string(session),
         project_id_,
-        generation_,
+        epoch_.generation(),
         std::move(object_id)};
   }
 
@@ -651,10 +669,7 @@ class ProjectGraphRegistry final {
     stream_addresses_.clear();
   }
 
-  bool present_{false};
-  std::uintptr_t project_identity_{0};
-  A_long root_item_id_{0};
-  std::uint64_t generation_{0};
+  ProjectEpochTracker epoch_;
   std::string project_id_;
   std::string project_object_id_;
   std::unordered_map<A_long, std::string> item_object_ids_;
@@ -1115,8 +1130,18 @@ class AegpHostApi final : public HostApi {
       return HostProjectItemsResult::failure(
           "CAPABILITY_FAILED", "could not resolve the open project's root item");
     }
+    std::optional<std::string> project_path = read_project_path(
+        project_suite.get(), memory_suite.get(), project);
+    if (!project_path.has_value()) {
+      return HostProjectItemsResult::failure(
+          "CAPABILITY_FAILED", "could not read the open project path for locator identity");
+    }
     try {
-      graph_.observe_project(reinterpret_cast<std::uintptr_t>(project), root_id);
+      graph_.observe_project(
+          reinterpret_cast<std::uintptr_t>(project),
+          reinterpret_cast<std::uintptr_t>(root),
+          root_id,
+          std::move(*project_path));
     } catch (...) {
       return HostProjectItemsResult::failure(
           "CAPABILITY_FAILED", "could not establish project locator identity");
@@ -1273,8 +1298,18 @@ class AegpHostApi final : public HostApi {
       return HostCompositionLayersResult::failure(
           "CAPABILITY_FAILED", "could not resolve the open project's root item");
     }
+    std::optional<std::string> project_path = read_project_path(
+        project_suite.get(), memory_suite.get(), project);
+    if (!project_path.has_value()) {
+      return HostCompositionLayersResult::failure(
+          "CAPABILITY_FAILED", "could not read the open project path for locator identity");
+    }
     try {
-      graph_.observe_project(reinterpret_cast<std::uintptr_t>(project), root_id);
+      graph_.observe_project(
+          reinterpret_cast<std::uintptr_t>(project),
+          reinterpret_cast<std::uintptr_t>(root),
+          root_id,
+          std::move(*project_path));
     } catch (...) {
       return HostCompositionLayersResult::failure(
           "CAPABILITY_FAILED", "could not establish project locator identity");
@@ -1524,8 +1559,18 @@ class AegpHostApi final : public HostApi {
       return HostLayerPropertiesResult::failure(
           "CAPABILITY_FAILED", "could not resolve the open project's root item");
     }
+    std::optional<std::string> project_path = read_project_path(
+        project_suite.get(), memory_suite.get(), project);
+    if (!project_path.has_value()) {
+      return HostLayerPropertiesResult::failure(
+          "CAPABILITY_FAILED", "could not read the open project path for locator identity");
+    }
     try {
-      graph_.observe_project(reinterpret_cast<std::uintptr_t>(project), root_id);
+      graph_.observe_project(
+          reinterpret_cast<std::uintptr_t>(project),
+          reinterpret_cast<std::uintptr_t>(root_item),
+          root_id,
+          std::move(*project_path));
     } catch (...) {
       return HostLayerPropertiesResult::failure(
           "CAPABILITY_FAILED", "could not establish project locator identity");
