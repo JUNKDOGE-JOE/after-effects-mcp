@@ -7,6 +7,19 @@ import { canonicalJson } from '../../lib/manifest.mjs';
 import { buildLicenseInventory, buildRuntimeSpdx } from '../../lib/runtime-evidence.mjs';
 
 export const SOURCE_COMMIT_SHA = '0123456789abcdef0123456789abcdef01234567';
+export const PRODUCT_VERSION = '0.9.2';
+
+const NATIVE_PLUGIN_ROOT = 'artifacts/native-plugin/macos-arm64';
+const NATIVE_PLUGIN_MANIFEST = `${NATIVE_PLUGIN_ROOT}/native-plugin-manifest.json`;
+const NATIVE_PLUGIN_PAYLOAD = `${NATIVE_PLUGIN_ROOT}/payload`;
+const NATIVE_PLUGIN_RECEIPT = `${NATIVE_PLUGIN_PAYLOAD}/build-receipt.json`;
+const NATIVE_PLUGIN_BUNDLE = `${NATIVE_PLUGIN_PAYLOAD}/AeMcpNative.plugin`;
+const NATIVE_EXECUTABLE = `${NATIVE_PLUGIN_BUNDLE}/Contents/MacOS/AeMcpNative`;
+
+const FIXTURE_PROTOCOL = canonicalJson({
+  schemaVersion: 1,
+  title: 'Synthetic AEGP RPC fixture',
+});
 
 export function sha256Bytes(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
@@ -238,6 +251,165 @@ async function writePackaging(repoRoot) {
     'packages/core/ae_mcp/skills_bundled/fixture.json',
     '{"name":"fixture-tool"}\n',
   );
+  await writeFixtureFile(
+    repoRoot,
+    'packaging/ae-sdk-inputs.json',
+    canonicalJson({
+      schemaVersion: 1,
+      sdk: {
+        name: 'Adobe After Effects C/C++ Plug-in SDK',
+        claimedVersion: '25.6.61',
+        claimedBuild: 61,
+        platforms: {
+          'macos-arm64': {
+            archive: { sha256: 'd'.repeat(64) },
+            rootContentLock: {
+              status: 'canonical-file-tree-verified',
+              sha256: 'e'.repeat(64),
+            },
+          },
+        },
+      },
+    }),
+  );
+  await writeFixtureFile(
+    repoRoot,
+    'native/ae-plugin/protocol/aegp-rpc.schema.json',
+    FIXTURE_PROTOCOL,
+  );
+}
+
+async function writeNativePluginFixture(h) {
+  const nativePluginRoot = path.join(h.root, 'native-plugin-build');
+  const bundleRoot = path.join(nativePluginRoot, 'AeMcpNative.plugin');
+  const executableBytes = Buffer.concat([
+    machoArm64Bytes(),
+    Buffer.from(`fixture:${SOURCE_COMMIT_SHA}`, 'ascii'),
+  ]);
+  const piplBytes = Buffer.from(
+    'fixture-pipl:16000:AEgx:AeMcpNativeMain:compatibility=65536',
+    'ascii',
+  );
+  const bundleFiles = [
+    ['Contents/Info.plist', [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<plist version="1.0"><dict>',
+      '<key>CFBundleIdentifier</key><string>dev.aemcp.native-plugin</string>',
+      '<key>CFBundleShortVersionString</key><string>0.9.2</string>',
+      '<key>CFBundleExecutable</key><string>AeMcpNative</string>',
+      '<key>CFBundlePackageType</key><string>AEgx</string>',
+      '</dict></plist>',
+      '',
+    ].join('\n'), 0o644],
+    ['Contents/MacOS/AeMcpNative', executableBytes, 0o755],
+    ['Contents/PkgInfo', Buffer.from('AEgxFXTC', 'ascii'), 0o644],
+    ['Contents/Resources/AeMcpNative.rsrc', piplBytes, 0o644],
+    ['Contents/_CodeSignature/CodeResources', 'synthetic ad-hoc signature\n', 0o644],
+  ];
+  for (const [relative, bytes, mode] of bundleFiles) {
+    await writeFixtureFile(bundleRoot, relative, bytes, mode);
+  }
+
+  const executableSha256 = sha256Bytes(executableBytes);
+  const piplSha256 = sha256Bytes(piplBytes);
+  const artifact = {
+    schemaVersion: 1,
+    bundleName: 'AeMcpNative.plugin',
+    platform: 'macos-arm64',
+    architecture: 'arm64',
+    bundleType: 'AEgx',
+    entryPoint: 'AeMcpNativeMain',
+    fileCount: 5,
+    bundleTreeSha256: sha256Bytes(Buffer.from(canonicalJson(
+      bundleFiles.map(([relative, bytes, mode]) => ({
+        path: relative,
+        sha256: sha256Bytes(Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes)),
+        mode,
+      })),
+    ), 'utf8')),
+    executableSha256,
+    piplSha256,
+    codeSignature: 'ad-hoc-verified',
+  };
+  const receipt = {
+    schemaVersion: 1,
+    productVersion: PRODUCT_VERSION,
+    artifact,
+    sourceCommit: SOURCE_COMMIT_SHA,
+    source: {
+      commit: SOURCE_COMMIT_SHA,
+      repositoryClean: true,
+    },
+    protocolSchemaSha256: sha256Bytes(Buffer.from(FIXTURE_PROTOCOL, 'utf8')),
+    sdk: {
+      name: 'Adobe After Effects C/C++ Plug-in SDK',
+      claimedVersion: '25.6.61',
+      claimedBuild: 61,
+      materialIncluded: false,
+      archiveVerification: 'sha256-verified',
+      rootVerification: 'layout-and-content-verified',
+      inputProvenance: 'archive-byte-identity-plus-canonical-root-content',
+    },
+    build: {
+      configuration: 'development',
+      signing: 'ad-hoc',
+      distributionApproved: false,
+      runtimeEvidence: false,
+      compatibilityEvidence: false,
+    },
+  };
+  await writeFixtureFile(
+    nativePluginRoot,
+    'build-receipt.json',
+    `${JSON.stringify(receipt, null, 2)}\n`,
+    0o600,
+  );
+
+  const verifyMacPlugin = async ({ bundlePath, expectedProductVersion }) => {
+    if (path.basename(bundlePath) !== 'AeMcpNative.plugin'
+        || expectedProductVersion !== PRODUCT_VERSION
+        || await sha256File(path.join(bundlePath, 'Contents/MacOS/AeMcpNative'))
+          !== executableSha256
+        || await sha256File(path.join(
+          bundlePath,
+          'Contents/Resources/AeMcpNative.rsrc',
+        )) !== piplSha256) {
+      const error = new Error('synthetic native verifier rejected the bundle');
+      error.code = 'AE_PLUGIN_FIXTURE_INVALID';
+      throw error;
+    }
+    return structuredClone(artifact);
+  };
+
+  h.nativePluginRoot = nativePluginRoot;
+  h.input.inputs = { ...h.input.inputs, nativePluginRoot };
+  h.input.dependencies = { verifyMacPlugin };
+  h.verifyInput = {
+    ...h.verifyInput,
+    candidateRepoRoot: h.repoRoot,
+    dependencies: { verifyMacPlugin },
+  };
+  h.nativePath = (relative = '') => path.join(
+    h.outDir,
+    ...NATIVE_PLUGIN_ROOT.split('/'),
+    ...(relative ? relative.split('/') : []),
+  );
+  h.nativeManifest = () => JSON.parse(
+    fs.readFileSync(path.join(h.outDir, ...NATIVE_PLUGIN_MANIFEST.split('/')), 'utf8'),
+  );
+  h.mutateNativeReceipt = async (mutate) => {
+    const receiptPath = path.join(h.outDir, ...NATIVE_PLUGIN_RECEIPT.split('/'));
+    const receipt = JSON.parse(await fs.promises.readFile(receiptPath, 'utf8'));
+    mutate(receipt);
+    await fs.promises.writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
+    const manifestPath = path.join(h.outDir, ...NATIVE_PLUGIN_MANIFEST.split('/'));
+    const manifest = JSON.parse(await fs.promises.readFile(manifestPath, 'utf8'));
+    manifest.artifact.receiptSha256 = await sha256File(receiptPath);
+    await fs.promises.writeFile(manifestPath, canonicalJson(manifest));
+    await rewriteStageManifests(h);
+  };
+  h.nativeExecutablePath = path.join(h.outDir, ...NATIVE_EXECUTABLE.split('/'));
+  return h;
 }
 
 export async function makeStageHarness(t, platform = 'macos-arm64', overrides = {}) {
@@ -252,7 +424,7 @@ export async function makeStageHarness(t, platform = 'macos-arm64', overrides = 
   const helperRoot = await writeHelper(repoRoot, platform);
   const input = {
     platform,
-    version: '0.9.2',
+    version: PRODUCT_VERSION,
     outDir,
     repoRoot,
     sourceCommitSha: SOURCE_COMMIT_SHA,
@@ -265,7 +437,7 @@ export async function makeStageHarness(t, platform = 'macos-arm64', overrides = 
     runtimeRoot,
     helperRoot,
     input,
-    verifyInput: { root: outDir, platform, version: '0.9.2' },
+    verifyInput: { root: outDir, platform, version: PRODUCT_VERSION },
     exists(relative) {
       return fs.existsSync(path.join(outDir, ...relative.split('/')));
     },
@@ -279,6 +451,10 @@ export async function makeStageHarness(t, platform = 'macos-arm64', overrides = 
       await fs.promises.writeFile(target, bytes);
     },
   };
+}
+
+export async function makeNativeStageHarness(t, platform = 'macos-arm64', overrides = {}) {
+  return writeNativePluginFixture(await makeStageHarness(t, platform, overrides));
 }
 
 export async function inventoryFixtureTree(root, omitted = new Set()) {
@@ -313,6 +489,11 @@ export async function rewriteStageManifests(h, { helper = false } = {}) {
     path.join(runtimeRoot, 'license-inventory.json'),
   );
   bundleManifest.helper.manifestSha256 = await sha256File(helperManifestPath);
+  if (bundleManifest.nativePlugin) {
+    bundleManifest.nativePlugin.manifestSha256 = await sha256File(
+      path.join(h.outDir, ...NATIVE_PLUGIN_MANIFEST.split('/')),
+    );
+  }
   bundleManifest.files = await inventory(h.outDir, new Set(['bundle-manifest.json']));
   await fs.promises.writeFile(bundleManifestPath, canonicalJson(bundleManifest));
 }

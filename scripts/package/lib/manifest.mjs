@@ -6,6 +6,7 @@ export const PLATFORM_IDS = new Set(['macos-arm64', 'windows-x64']);
 export const SOURCE_SHA_PATTERN = /^[0-9a-f]{40}$/;
 export const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 export const SEMVER_PATTERN = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+export const NATIVE_PLUGIN_MANIFEST_PATH = 'artifacts/native-plugin/macos-arm64/native-plugin-manifest.json';
 
 export function bundleError(code, message) {
   const error = new Error(message);
@@ -295,7 +296,10 @@ export function validateBundleManifest(value) {
     throw bundleError('BUNDLE_MANIFEST_INVALID', 'bundle manifest must be an object');
   }
   const exactTop = ['files', 'helper', 'platform', 'runtime', 'schemaVersion', 'sourceCommitSha', 'version'];
-  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(exactTop)) {
+  const observedTop = Object.keys(value).sort();
+  const expectedTop = Object.hasOwn(value, 'nativePlugin')
+    ? [...exactTop, 'nativePlugin'].sort() : exactTop;
+  if (JSON.stringify(observedTop) !== JSON.stringify(expectedTop)) {
     throw bundleError('BUNDLE_MANIFEST_INVALID', 'bundle manifest has unexpected fields');
   }
   if (value.schemaVersion !== 1
@@ -326,6 +330,16 @@ export function validateBundleManifest(value) {
       || value.helper.helperId !== 'com.junkdoge.ae-mcp.platform-helper'
       || !SHA256_PATTERN.test(value.helper.manifestSha256 ?? '')) {
     throw bundleError('BUNDLE_MANIFEST_INVALID', 'bundle helper identity is invalid');
+  }
+  if (Object.hasOwn(value, 'nativePlugin')) {
+    if (value.platform !== 'macos-arm64'
+        || !value.nativePlugin
+        || JSON.stringify(Object.keys(value.nativePlugin).sort())
+          !== JSON.stringify(['manifestPath', 'manifestSha256'])
+        || value.nativePlugin.manifestPath !== NATIVE_PLUGIN_MANIFEST_PATH
+        || !SHA256_PATTERN.test(value.nativePlugin.manifestSha256 ?? '')) {
+      throw bundleError('BUNDLE_MANIFEST_INVALID', 'bundle native plug-in reference is invalid');
+    }
   }
   if (!Array.isArray(value.files) || value.files.length === 0) {
     throw bundleError('BUNDLE_MANIFEST_INVALID', 'bundle file inventory is empty');

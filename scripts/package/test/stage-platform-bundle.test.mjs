@@ -9,7 +9,13 @@ import {
   resolveCliSourceCommit,
   stagePlatformBundle,
 } from '../stage-platform-bundle.mjs';
-import { makeStageHarness, SOURCE_COMMIT_SHA } from './helpers/platform-bundle-fixture.mjs';
+import { verifyPlatformBundle } from '../verify-platform-bundle.mjs';
+import {
+  makeNativeStageHarness,
+  makeStageHarness,
+  PRODUCT_VERSION,
+  SOURCE_COMMIT_SHA,
+} from './helpers/platform-bundle-fixture.mjs';
 
 test('stage contains one platform and omits development files', async (t) => {
   const h = await makeStageHarness(t, 'macos-arm64');
@@ -27,6 +33,80 @@ test('stage contains one platform and omits development files', async (t) => {
   assert.equal(h.exists('bundled-tools/fixture.json'), true);
   assert.equal(h.exists('platform/macos-arm64/helper-manifest.json'), true);
   assert.equal(h.manifest().files.some((entry) => entry.path.endsWith('.node')), false);
+  assert.equal(Object.hasOwn(h.manifest(), 'nativePlugin'), false);
+  assert.equal(h.exists('artifacts/native-plugin'), false);
+});
+
+test('macOS stage explicitly opts in a verified native plug-in artifact', async (t) => {
+  const h = await makeNativeStageHarness(t);
+
+  await stagePlatformBundle(h.input);
+  const bundleManifest = h.manifest();
+  const nativeManifest = h.nativeManifest();
+
+  assert.deepEqual(Object.keys(bundleManifest.nativePlugin).sort(), [
+    'manifestPath',
+    'manifestSha256',
+  ]);
+  assert.equal(
+    bundleManifest.nativePlugin.manifestPath,
+    'artifacts/native-plugin/macos-arm64/native-plugin-manifest.json',
+  );
+  assert.equal(nativeManifest.productVersion, PRODUCT_VERSION);
+  assert.equal(nativeManifest.sourceCommitSha, SOURCE_COMMIT_SHA);
+  assert.equal(nativeManifest.platform, 'macos-arm64');
+  assert.equal(nativeManifest.artifact.bundleName, 'AeMcpNative.plugin');
+  assert.equal(nativeManifest.sdk.materialIncluded, false);
+  assert.equal(bundleManifest.files.some(({ path: relative }) => (
+    /AfterEffectsSDK_|ae25\.6_61\.64bit\.AfterEffectsSDK|AE_GeneralPlug|PiPLtool|\.pdf$/iu
+      .test(relative)
+  )), false);
+  assert.equal(h.exists(
+    'artifacts/native-plugin/macos-arm64/payload/AeMcpNative.plugin/Contents/MacOS/AeMcpNative',
+  ), true);
+  assert.equal(h.exists(
+    'artifacts/native-plugin/macos-arm64/payload/build-receipt.json',
+  ), true);
+  await assert.doesNotReject(verifyPlatformBundle(h.verifyInput));
+});
+
+test('identical native inputs produce byte-identical native and bundle manifests', async (t) => {
+  const left = await makeNativeStageHarness(t);
+  const right = await makeNativeStageHarness(t);
+  await stagePlatformBundle(left.input);
+  await stagePlatformBundle(right.input);
+
+  for (const relative of [
+    'bundle-manifest.json',
+    'artifacts/native-plugin/macos-arm64/native-plugin-manifest.json',
+  ]) {
+    assert.deepEqual(
+      await fs.promises.readFile(path.join(left.outDir, ...relative.split('/'))),
+      await fs.promises.readFile(path.join(right.outDir, ...relative.split('/'))),
+      relative,
+    );
+  }
+});
+
+test('Windows stage rejects the macOS-only native plug-in input', async (t) => {
+  const h = await makeNativeStageHarness(t, 'windows-x64');
+
+  await assert.rejects(
+    stagePlatformBundle(h.input),
+    { code: 'BUNDLE_NATIVE_PLUGIN_PLATFORM_INVALID' },
+  );
+  assert.equal(fs.existsSync(h.outDir), false);
+});
+
+test('native stage rejects an incomplete build output and publishes nothing', async (t) => {
+  const h = await makeNativeStageHarness(t);
+  await fs.promises.rm(path.join(h.nativePluginRoot, 'build-receipt.json'));
+
+  await assert.rejects(
+    stagePlatformBundle(h.input),
+    { code: 'BUNDLE_NATIVE_PLUGIN_FILE_SET_MISMATCH' },
+  );
+  assert.equal(fs.existsSync(h.outDir), false);
 });
 
 test('stage rejects a noncanonical source commit SHA', async (t) => {
@@ -215,6 +295,20 @@ test('CLI candidate resolution requires exact clean HEAD and strict arguments', 
       '--platform=macos-arm64', '--version', '0.9.2', '--out', 'build/stage',
     ]),
     { platform: 'macos-arm64', version: '0.9.2', outDir: 'build/stage' },
+  );
+  assert.deepEqual(
+    parseStagePlatformBundleArgs([
+      '--platform', 'macos-arm64',
+      '--version', '0.9.2',
+      '--out', 'build/stage',
+      '--native-plugin-artifact', '/private/tmp/native-build',
+    ]),
+    {
+      platform: 'macos-arm64',
+      version: '0.9.2',
+      outDir: 'build/stage',
+      inputs: { nativePluginRoot: '/private/tmp/native-build' },
+    },
   );
   assert.throws(
     () => parseStagePlatformBundleArgs([

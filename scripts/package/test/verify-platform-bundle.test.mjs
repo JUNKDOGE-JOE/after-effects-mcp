@@ -10,6 +10,7 @@ import { buildLicenseInventory, buildRuntimeSpdx } from '../lib/runtime-evidence
 import {
   SOURCE_COMMIT_SHA,
   machoX64Bytes,
+  makeNativeStageHarness,
   makeStageHarness,
   rewriteStageManifests,
 } from './helpers/platform-bundle-fixture.mjs';
@@ -21,8 +22,225 @@ test('verification accepts an untouched platform bundle without network access',
   globalThis.fetch = async () => { throw new Error('network access is forbidden'); };
   try {
     await verifyPlatformBundle(h.verifyInput);
+    assert.equal(Object.hasOwn(h.manifest(), 'nativePlugin'), false);
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test('verification rejects missing and extra native payload entries after outer rehash', async (t) => {
+  await t.test('missing receipt', async (subtest) => {
+    const h = await makeNativeStageHarness(subtest);
+    await stagePlatformBundle(h.input);
+    await fs.promises.rm(h.nativePath('payload/build-receipt.json'));
+    await rewriteStageManifests(h);
+
+    await assert.rejects(
+      verifyPlatformBundle(h.verifyInput),
+      { code: 'BUNDLE_NATIVE_PLUGIN_FILE_SET_MISMATCH' },
+    );
+  });
+
+  await t.test('extra native stage file', async (subtest) => {
+    const h = await makeNativeStageHarness(subtest);
+    await stagePlatformBundle(h.input);
+    await fs.promises.writeFile(h.nativePath('unexpected.txt'), 'unexpected\n');
+    await rewriteStageManifests(h);
+
+    await assert.rejects(
+      verifyPlatformBundle(h.verifyInput),
+      { code: 'BUNDLE_NATIVE_PLUGIN_FILE_SET_MISMATCH' },
+    );
+  });
+});
+
+test('native payload and its top-level reference are a bidirectional invariant', async (t) => {
+  await t.test('referenced payload cannot be made unreferenced', async (subtest) => {
+    const h = await makeNativeStageHarness(subtest);
+    await stagePlatformBundle(h.input);
+    const manifestPath = path.join(h.outDir, 'bundle-manifest.json');
+    const manifest = h.manifest();
+    delete manifest.nativePlugin;
+    await fs.promises.writeFile(manifestPath, canonicalJson(manifest));
+
+    await assert.rejects(
+      verifyPlatformBundle(h.verifyInput),
+      { code: 'BUNDLE_NATIVE_PLUGIN_REFERENCE_MISSING' },
+    );
+  });
+
+  await t.test('unreferenced native namespace content is rejected', async (subtest) => {
+    const h = await makeStageHarness(subtest, 'macos-arm64');
+    await stagePlatformBundle(h.input);
+    const unbound = path.join(h.outDir, 'artifacts', 'native-plugin', 'unbound.txt');
+    await fs.promises.mkdir(path.dirname(unbound), { recursive: true });
+    await fs.promises.writeFile(unbound, 'unbound native payload\n');
+    await rewriteStageManifests(h);
+
+    await assert.rejects(
+      verifyPlatformBundle(h.verifyInput),
+      { code: 'BUNDLE_NATIVE_PLUGIN_REFERENCE_MISSING' },
+    );
+  });
+
+  await t.test('referenced platform payload excludes sibling namespace files', async (subtest) => {
+    const h = await makeNativeStageHarness(subtest);
+    await stagePlatformBundle(h.input);
+    const sibling = path.join(h.outDir, 'artifacts', 'native-plugin', 'unbound.txt');
+    await fs.promises.writeFile(sibling, 'unexpected native sibling\n');
+    await rewriteStageManifests(h);
+
+    await assert.rejects(
+      verifyPlatformBundle(h.verifyInput),
+      { code: 'BUNDLE_NATIVE_PLUGIN_FILE_SET_MISMATCH' },
+    );
+  });
+});
+
+test('verification rejects a tampered native executable byte', async (t) => {
+  const h = await makeNativeStageHarness(t);
+  await stagePlatformBundle(h.input);
+  const executable = await fs.promises.readFile(h.nativeExecutablePath);
+  executable[executable.length - 1] ^= 0xff;
+  await fs.promises.writeFile(h.nativeExecutablePath, executable);
+
+  await assert.rejects(
+    verifyPlatformBundle(h.verifyInput),
+    { code: 'BUNDLE_HASH_MISMATCH' },
+  );
+});
+
+test('verification rejects native semantic drift after outer digests are refreshed', async (t) => {
+  const cases = [
+    {
+      name: 'source commit',
+      code: 'BUNDLE_NATIVE_PLUGIN_SOURCE_MISMATCH',
+      mutate(receipt) {
+        receipt.sourceCommit = 'f'.repeat(40);
+        receipt.source.commit = receipt.sourceCommit;
+      },
+    },
+    {
+      name: 'product version',
+      code: 'BUNDLE_NATIVE_PLUGIN_VERSION_MISMATCH',
+      mutate(receipt) {
+        receipt.productVersion = '0.1.0';
+      },
+    },
+    {
+      name: 'RPC protocol digest',
+      code: 'BUNDLE_NATIVE_PLUGIN_PROTOCOL_MISMATCH',
+      mutate(receipt) {
+        receipt.protocolSchemaSha256 = 'f'.repeat(64);
+      },
+    },
+    {
+      name: 'SDK build evidence',
+      code: 'BUNDLE_NATIVE_PLUGIN_RECEIPT_INVALID',
+      mutate(receipt) {
+        receipt.sdk.claimedBuild = 60;
+      },
+    },
+    {
+      name: 'plug-in entry point identity',
+      code: 'BUNDLE_NATIVE_PLUGIN_ARTIFACT_INVALID',
+      mutate(receipt) {
+        receipt.artifact.entryPoint = 'WrongNativeMain';
+      },
+    },
+    {
+      name: 'native plug-in architecture',
+      code: 'BUNDLE_NATIVE_PLUGIN_ARTIFACT_INVALID',
+      mutate(receipt) {
+        receipt.artifact.architecture = 'x86_64';
+      },
+    },
+    {
+      name: 'native bundle type',
+      code: 'BUNDLE_NATIVE_PLUGIN_ARTIFACT_INVALID',
+      mutate(receipt) {
+        receipt.artifact.bundleType = 'eFKT';
+      },
+    },
+    {
+      name: 'development signature identity',
+      code: 'BUNDLE_NATIVE_PLUGIN_ARTIFACT_INVALID',
+      mutate(receipt) {
+        receipt.artifact.codeSignature = 'developer-id';
+      },
+    },
+  ];
+
+  for (const fixture of cases) {
+    await t.test(fixture.name, async (subtest) => {
+      const h = await makeNativeStageHarness(subtest);
+      await stagePlatformBundle(h.input);
+      await h.mutateNativeReceipt(fixture.mutate);
+
+      await assert.rejects(
+        verifyPlatformBundle(h.verifyInput),
+        { code: fixture.code },
+      );
+    });
+  }
+});
+
+test('verification detects the staged AEGP executable architecture from bytes', async (t) => {
+  const h = await makeNativeStageHarness(t);
+  await stagePlatformBundle(h.input);
+  const executableBytes = Buffer.concat([
+    machoX64Bytes(),
+    Buffer.from(SOURCE_COMMIT_SHA, 'ascii'),
+  ]);
+  await fs.promises.writeFile(h.nativeExecutablePath, executableBytes);
+
+  const receiptPath = h.nativePath('payload/build-receipt.json');
+  const receipt = JSON.parse(await fs.promises.readFile(receiptPath, 'utf8'));
+  receipt.artifact.executableSha256 = await sha256File(h.nativeExecutablePath);
+  await fs.promises.writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
+
+  const manifestPath = h.nativePath('native-plugin-manifest.json');
+  const nativeManifest = JSON.parse(await fs.promises.readFile(manifestPath, 'utf8'));
+  nativeManifest.artifact.executableSha256 = receipt.artifact.executableSha256;
+  nativeManifest.artifact.bundleTreeSha256 = receipt.artifact.bundleTreeSha256;
+  nativeManifest.artifact.receiptSha256 = await sha256File(receiptPath);
+  await fs.promises.writeFile(manifestPath, canonicalJson(nativeManifest));
+  await rewriteStageManifests(h);
+
+  h.verifyInput.dependencies.verifyMacPlugin = async () => (
+    structuredClone(JSON.parse(await fs.promises.readFile(receiptPath, 'utf8')).artifact)
+  );
+  await assert.rejects(
+    verifyPlatformBundle(h.verifyInput),
+    { code: 'BUNDLE_ARCH_MISMATCH' },
+  );
+});
+
+test('verification rejects representative Adobe SDK material paths from the stage', async (t) => {
+  for (const relative of [
+    'AfterEffectsSDK_25.6_61_mac.zip',
+    'sdk/Examples/Headers/AE_GeneralPlug.h',
+    'sdk/Examples/AEGP/Commando/main.cpp',
+    'sdk/Examples/Other/sample.txt',
+    'sdk/AE_IO.h',
+    'sdk/AE_General.r',
+    'sdk/PiPLtool',
+    'sdk/documentation.pdf',
+    'tools/ae-sdk-extract-zstd',
+  ]) {
+    await t.test(relative, async (subtest) => {
+      const h = await makeNativeStageHarness(subtest);
+      await stagePlatformBundle(h.input);
+      const material = path.join(h.outDir, ...relative.split('/'));
+      await fs.promises.mkdir(path.dirname(material), { recursive: true });
+      await fs.promises.writeFile(material, 'synthetic forbidden SDK material\n');
+      await rewriteStageManifests(h);
+
+      await assert.rejects(
+        verifyPlatformBundle(h.verifyInput),
+        { code: 'BUNDLE_ADOBE_SDK_MATERIAL_FORBIDDEN' },
+      );
+    });
   }
 });
 

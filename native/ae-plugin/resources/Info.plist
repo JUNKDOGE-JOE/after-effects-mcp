@@ -19,7 +19,7 @@
   <key>CFBundleSignature</key>
   <string>FXTC</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.0</string>
+  <string>__AE_MCP_PRODUCT_VERSION__</string>
   <key>CFBundleSupportedPlatforms</key>
   <array><string>MacOSX</string></array>
   <key>CFBundleVersion</key>

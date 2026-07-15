@@ -16,6 +16,9 @@ import { verifyMacPlugin } from './verify-macos.mjs';
 const MODULE_PATH = fileURLToPath(import.meta.url);
 const MODULE_ROOT = path.dirname(MODULE_PATH);
 const REPO_ROOT = path.resolve(MODULE_ROOT, '../..');
+const PRODUCT_MANIFEST_PATH = 'plugin/host/package.json';
+const PRODUCT_VERSION_PATTERN = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u;
+const PRODUCT_VERSION_TOKEN = Buffer.from('__AE_MCP_PRODUCT_VERSION__', 'ascii');
 
 function buildError(code, message) {
   const error = new Error(message);
@@ -74,6 +77,50 @@ function gitFileBytes(sourceCommit, relativePath) {
   return commandBytes('/usr/bin/git', [
     '-C', REPO_ROOT, 'show', `${sourceCommit}:${relativePath}`,
   ], [REPO_ROOT]);
+}
+
+function productVersionFromCommit(sourceCommit) {
+  const bytes = gitFileBytes(sourceCommit, PRODUCT_MANIFEST_PATH);
+  if (bytes.length === 0 || bytes.length > 64 * 1024) {
+    throw buildError(
+      'AE_PLUGIN_PRODUCT_VERSION_INVALID',
+      'repository product manifest is not a bounded file',
+    );
+  }
+  let manifest;
+  try {
+    manifest = JSON.parse(bytes.toString('utf8'));
+  } catch {
+    throw buildError(
+      'AE_PLUGIN_PRODUCT_VERSION_INVALID',
+      'repository product manifest is not valid JSON',
+    );
+  }
+  const productVersion = manifest?.version;
+  if (typeof productVersion !== 'string'
+      || productVersion.length > 64
+      || !PRODUCT_VERSION_PATTERN.test(productVersion)) {
+    throw buildError(
+      'AE_PLUGIN_PRODUCT_VERSION_INVALID',
+      'repository product manifest does not declare a numeric semantic version',
+    );
+  }
+  return productVersion;
+}
+
+function replaceExactlyOnce(bytes, token, replacement, label) {
+  const offset = bytes.indexOf(token);
+  if (offset < 0 || bytes.indexOf(token, offset + token.length) >= 0) {
+    throw buildError(
+      'AE_PLUGIN_PRODUCT_VERSION_INVALID',
+      `${label} must contain exactly one product version token`,
+    );
+  }
+  return Buffer.concat([
+    bytes.subarray(0, offset),
+    replacement,
+    bytes.subarray(offset + token.length),
+  ]);
 }
 
 async function snapshotProductFile(sourceCommit, relativePath, snapshotRoot) {
@@ -255,12 +302,14 @@ async function writeReceipt(
   stage,
   verification,
   sourceCommit,
+  productVersion,
   sdkVerification,
   schemaBytes,
 ) {
   const receipt = {
     schemaVersion: 1,
     artifact: verification,
+    productVersion,
     sourceCommit,
     source: {
       commit: sourceCommit,
@@ -301,6 +350,7 @@ async function buildMacPluginInternal({
     throw buildError('AE_PLUGIN_PLATFORM_UNSUPPORTED', 'macOS arm64 is required for this development build');
   }
   const sourceCommit = readCleanSourceCommit();
+  const productVersion = productVersionFromCommit(sourceCommit);
   const boundaries = await repositoryBoundaries();
   const policy = await loadAeSdkPolicy();
   const verification = await verifyAeSdkInput({
@@ -428,11 +478,21 @@ async function buildMacPluginInternal({
     await fs.promises.mkdir(path.join(contents, 'MacOS'), { recursive: true, mode: 0o700 });
     await fs.promises.mkdir(path.join(contents, 'Resources'), { recursive: true, mode: 0o700 });
     await fs.promises.mkdir(objects, { mode: 0o700 });
-    await fs.promises.copyFile(
+    const infoPlist = path.join(contents, 'Info.plist');
+    const infoTemplate = await fs.promises.readFile(
       productInputs.get('native/ae-plugin/resources/Info.plist'),
-      path.join(contents, 'Info.plist'),
-      fs.constants.COPYFILE_EXCL,
     );
+    await fs.promises.writeFile(
+      infoPlist,
+      replaceExactlyOnce(
+        infoTemplate,
+        PRODUCT_VERSION_TOKEN,
+        Buffer.from(productVersion, 'ascii'),
+        'native Info.plist template',
+      ),
+      { flag: 'wx', mode: 0o600 },
+    );
+    await fs.promises.chmod(infoPlist, 0o644);
     await fs.promises.writeFile(
       path.join(contents, 'PkgInfo'),
       Buffer.from('AEgxFXTC', 'ascii'),
@@ -452,6 +512,7 @@ async function buildMacPluginInternal({
       '-std=c++20', '-stdlib=libc++', '-arch', 'arm64', '-mmacosx-version-min=14.0',
       '-isysroot', sysroot,
       `-DAE_MCP_SOURCE_COMMIT="${sourceCommit}"`,
+      `-DAE_MCP_PRODUCT_VERSION="${productVersion}"`,
       '-pthread', '-fPIC', '-fvisibility=hidden', '-fvisibility-inlines-hidden',
       '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-O0',
       ...includes,
@@ -502,12 +563,20 @@ async function buildMacPluginInternal({
     await fs.promises.rm(sourceSnapshot, { recursive: true });
     await fs.promises.rm(sdkSnapshot, { recursive: true });
     command('/usr/bin/codesign', ['--force', '--sign', '-', '--timestamp=none', bundle], redactions);
-    const artifactVerification = await verifyMacPlugin({ bundlePath: bundle });
+    const artifactVerification = await verifyMacPlugin({
+      bundlePath: bundle,
+      expectedProductVersion: productVersion,
+    });
     if (readCleanSourceCommit() !== sourceCommit) {
       throw buildError('AE_PLUGIN_SOURCE_CHANGED', 'repository HEAD changed during native build');
     }
     const receipt = await writeReceipt(
-      stage, artifactVerification, sourceCommit, verification, schemaBytes,
+      stage,
+      artifactVerification,
+      sourceCommit,
+      productVersion,
+      verification,
+      schemaBytes,
     );
     await fs.promises.rename(stage, canonicalOutput);
     return Object.freeze({
@@ -516,6 +585,7 @@ async function buildMacPluginInternal({
       bundle: path.join(canonicalOutput, 'AeMcpNative.plugin'),
       receipt: path.join(canonicalOutput, 'build-receipt.json'),
       artifact: artifactVerification,
+      productVersion: receipt.productVersion,
       sourceCommit: receipt.sourceCommit,
       runtimeEvidence: false,
     });

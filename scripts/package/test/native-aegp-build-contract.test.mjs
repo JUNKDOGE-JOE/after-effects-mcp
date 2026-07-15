@@ -10,6 +10,14 @@ const PLUGIN_ENTRY = await fs.promises.readFile(
   'native/ae-plugin/src/aegp/plugin_entry.cpp',
   'utf8',
 );
+const INFO_PLIST = await fs.promises.readFile(
+  'native/ae-plugin/resources/Info.plist',
+  'utf8',
+);
+const VERIFIER = await fs.promises.readFile(
+  'native/ae-plugin/verify-macos.mjs',
+  'utf8',
+);
 
 test('native mac build consumes both locked SDK inputs and records combined evidence', () => {
   assert.match(BUILD_SCRIPT, /verifyAeSdkInput\(\{/u);
@@ -49,15 +57,45 @@ test('native mac build compiles product Git blobs from a private minimal SDK sna
   assert.doesNotMatch(BUILD_SCRIPT, /cleanup did not complete.*stage/u);
 });
 
+test('native product version is derived from the exact commit and bound across the artifact', () => {
+  assert.match(BUILD_SCRIPT, /PRODUCT_MANIFEST_PATH = 'plugin\/host\/package\.json'/u);
+  assert.match(
+    BUILD_SCRIPT,
+    /gitFileBytes\(sourceCommit, PRODUCT_MANIFEST_PATH\)/u,
+  );
+  assert.match(BUILD_SCRIPT, /PRODUCT_VERSION_TOKEN/u);
+  assert.match(BUILD_SCRIPT, /replaceExactlyOnce\(/u);
+  assert.match(BUILD_SCRIPT, /-DAE_MCP_PRODUCT_VERSION=/u);
+  assert.match(BUILD_SCRIPT, /expectedProductVersion: productVersion/u);
+  assert.doesNotMatch(BUILD_SCRIPT, /AE_MCP_PRODUCT_VERSION[^\n]*(?:process\.env|environment)/u);
+  assert.doesNotMatch(BUILD_SCRIPT, /--product-version/u);
+
+  assert.equal(
+    INFO_PLIST.match(/__AE_MCP_PRODUCT_VERSION__/gu)?.length,
+    1,
+    'Info.plist must contain exactly one deterministic product version token',
+  );
+  assert.match(PLUGIN_ENTRY, /#ifndef AE_MCP_PRODUCT_VERSION/u);
+  assert.match(PLUGIN_ENTRY, /kPluginVersion = AE_MCP_PRODUCT_VERSION/u);
+  assert.match(VERIFIER, /CFBundleShortVersionString/u);
+  assert.match(VERIFIER, /PIPL_COMPATIBILITY_VERSION = 0x00010000/u);
+  assert.match(VERIFIER, /JSON\.stringify\(exported\).*\['_AeMcpNativeMain'\]/u);
+  assert.match(VERIFIER, /data 'PiPL' \(16000\)/u);
+  assert.match(
+    VERIFIER,
+    /assertPiplProperty\(resourceBytes, 'vers', piplCompatibilityVersion\)/u,
+  );
+
+  for (const source of [BUILD_SCRIPT, INFO_PLIST, PLUGIN_ENTRY, VERIFIER]) {
+    assert.doesNotMatch(source, /0\.1\.0(?:-dev)?/u);
+  }
+});
+
 test('native mac build emits the AE-recognized AEGP package metadata', async () => {
-  const [verifier, plist] = await Promise.all([
-    fs.promises.readFile('native/ae-plugin/verify-macos.mjs', 'utf8'),
-    fs.promises.readFile('native/ae-plugin/resources/Info.plist', 'utf8'),
-  ]);
-  assert.match(plist, /<key>CFBundleSignature<\/key>\s*<string>FXTC<\/string>/u);
+  assert.match(INFO_PLIST, /<key>CFBundleSignature<\/key>\s*<string>FXTC<\/string>/u);
   assert.match(BUILD_SCRIPT, /Buffer\.from\('AEgxFXTC', 'ascii'\)/u);
-  assert.match(verifier, /'Contents\/PkgInfo'/u);
-  assert.match(verifier, /Buffer\.from\('AEgxFXTC', 'ascii'\)/u);
+  assert.match(VERIFIER, /'Contents\/PkgInfo'/u);
+  assert.match(VERIFIER, /Buffer\.from\('AEgxFXTC', 'ascii'\)/u);
 });
 
 test('native idle hook drains only real authenticated requests', () => {

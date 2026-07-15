@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
   PLATFORM_IDS,
+  NATIVE_PLUGIN_MANIFEST_PATH,
   SEMVER_PATTERN,
   SOURCE_SHA_PATTERN,
   assertPortableRelativePath,
@@ -17,6 +18,10 @@ import {
   validateBundleManifest,
   writeCanonicalJson,
 } from './lib/manifest.mjs';
+import {
+  NATIVE_PLUGIN_ROOT,
+  stageNativePluginArtifact,
+} from './lib/native-plugin-manifest.mjs';
 import { validateRuntimeManifest } from './lib/runtime-manifest.mjs';
 import { verifyPlatformBundle } from './verify-platform-bundle.mjs';
 
@@ -134,6 +139,7 @@ export async function stagePlatformBundle({
   repoRoot,
   sourceCommitSha,
   inputs = {},
+  dependencies = {},
 } = {}) {
   if (!PLATFORM_IDS.has(platform)) throw bundleError('BUNDLE_PLATFORM_INVALID', `unsupported platform: ${platform}`);
   if (!SEMVER_PATTERN.test(version ?? '')) throw bundleError('BUNDLE_VERSION_INVALID', `invalid semver: ${version}`);
@@ -156,6 +162,14 @@ export async function stagePlatformBundle({
     ?? path.join(resolvedRepoRoot, 'packages', 'core', 'ae_mcp', 'skills_bundled'));
   const supportMatrixPath = path.resolve(inputs.supportMatrixPath
     ?? path.join(resolvedRepoRoot, 'packaging', 'support-matrix.json'));
+  const nativePluginRoot = inputs.nativePluginRoot === undefined
+    ? undefined : path.resolve(inputs.nativePluginRoot);
+  if (nativePluginRoot !== undefined && platform !== 'macos-arm64') {
+    throw bundleError(
+      'BUNDLE_NATIVE_PLUGIN_PLATFORM_INVALID',
+      'the AEGP native plug-in artifact is only valid for macos-arm64',
+    );
+  }
   await requiredDirectory(pluginRoot, 'plugin');
   await requiredDirectory(runtimeRoot, 'runtime');
   await requiredDirectory(helperRoot, 'helper');
@@ -187,6 +201,16 @@ export async function stagePlatformBundle({
       path.join(temporary, 'metadata', 'support-matrix.json'),
       fs.constants.COPYFILE_EXCL,
     );
+    const nativePlugin = nativePluginRoot === undefined
+      ? undefined
+      : await stageNativePluginArtifact({
+        sourceRoot: nativePluginRoot,
+        destinationRoot: path.join(temporary, ...NATIVE_PLUGIN_ROOT.split('/')),
+        productVersion: version,
+        sourceCommitSha,
+        candidateRepoRoot: resolvedRepoRoot,
+        dependencies,
+      });
     const runtimeManifestPath = path.join(temporary, 'runtime', platform, 'runtime-manifest.json');
     const runtimeSbomPath = path.join(temporary, 'runtime', platform, 'sbom.spdx.json');
     const licenseInventoryPath = path.join(
@@ -201,6 +225,12 @@ export async function stagePlatformBundle({
       version,
       platform,
       sourceCommitSha,
+      ...(nativePlugin ? {
+        nativePlugin: {
+          manifestPath: NATIVE_PLUGIN_MANIFEST_PATH,
+          manifestSha256: nativePlugin.manifestSha256,
+        },
+      } : {}),
       runtime: {
         nodeVersion: runtimeManifest.node.version,
         pythonVersion: runtimeManifest.python.version,
@@ -215,7 +245,14 @@ export async function stagePlatformBundle({
       files: await collectManifestEntries(temporary),
     });
     await writeCanonicalJson(path.join(temporary, 'bundle-manifest.json'), manifest);
-    await verifyPlatformBundle({ root: temporary, platform, version, sourceCommitSha });
+    await verifyPlatformBundle({
+      root: temporary,
+      platform,
+      version,
+      sourceCommitSha,
+      candidateRepoRoot: resolvedRepoRoot,
+      dependencies,
+    });
     await fs.promises.rename(temporary, destination);
     return { root: destination, manifestPath: path.join(destination, 'bundle-manifest.json') };
   } catch (error) {
@@ -274,7 +311,12 @@ export async function resolveCliSourceCommit(repoRoot, environment = process.env
 
 function parseArgs(argv) {
   const values = new Map();
-  const allowed = new Set(['--platform', '--version', '--out']);
+  const allowed = new Set([
+    '--native-plugin-artifact',
+    '--out',
+    '--platform',
+    '--version',
+  ]);
   for (let index = 0; index < argv.length; index += 1) {
     const item = argv[index];
     const equal = item.indexOf('=');
@@ -283,12 +325,18 @@ function parseArgs(argv) {
     if (!allowed.has(key) || !value || values.has(key)) throw new Error(`invalid argument: ${item}`);
     values.set(key, value);
   }
-  for (const key of allowed) if (!values.has(key)) throw new Error(`${key} is required`);
-  return {
+  for (const key of ['--platform', '--version', '--out']) {
+    if (!values.has(key)) throw new Error(`${key} is required`);
+  }
+  const parsed = {
     platform: values.get('--platform'),
     version: values.get('--version'),
     outDir: values.get('--out'),
   };
+  if (values.has('--native-plugin-artifact')) {
+    parsed.inputs = { nativePluginRoot: values.get('--native-plugin-artifact') };
+  }
+  return parsed;
 }
 
 async function main() {
