@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from mcp.shared.memory import create_connected_server_and_client_session
 from pydantic import ValidationError
 
 from ae_mcp import schemas
@@ -535,3 +536,85 @@ async def test_public_mcp_schema_rejections_are_structured_and_never_dispatch(
             },
         },
     }
+
+
+@pytest.mark.asyncio
+async def test_public_mcp_transport_preserves_structured_limit_rejection(
+    monkeypatch,
+):
+    """The SDK transport must not replace ae-mcp's structured validation.
+
+    MCP SDK input validation runs before the registered handler by default and
+    reduces JSON Schema failures to a plain ``Input validation error`` string.
+    Drive a real initialized ClientSession so this regression cannot pass by
+    exercising only ``_ae_call_tool`` directly.
+    """
+    from ae_mcp import server as server_module
+
+    load_all()
+    schema_cls, _ = HANDLERS["ae.listLayerProperties"]
+    dispatches = 0
+
+    async def _run(validated, _ctx):
+        nonlocal dispatches
+        dispatches += 1
+        return {"ok": True, "limit": validated.limit}
+
+    monkeypatch.setitem(
+        HANDLERS,
+        "ae.listLayerProperties",
+        (schema_cls, _run),
+    )
+    monkeypatch.setattr(
+        server_module,
+        "_filtered_tool_names",
+        lambda: {"ae.listLayerProperties"},
+    )
+    server = build_server()
+
+    async with create_connected_server_and_client_session(server) as client:
+        listed = await client.list_tools()
+        tool = next(
+            item for item in listed.tools
+            if item.name == "ae_listLayerProperties"
+        )
+        assert tool.inputSchema["properties"]["limit"]["maximum"] == 25
+
+        rejected = await client.call_tool(
+            "ae_listLayerProperties",
+            {"layer_locator": LAYER_LOCATOR, "limit": 26},
+        )
+        assert rejected.isError is True
+        assert json.loads(rejected.content[0].text) == {
+            "ok": False,
+            "error": {
+                "code": "INVALID_ARGUMENT",
+                "message": (
+                    "ae.listLayerProperties arguments did not match the "
+                    "published schema."
+                ),
+                "retryable": False,
+                "sideEffect": "not-started",
+                "recovery": {
+                    "action": "change-arguments",
+                    "hint": (
+                        "Use a layer locator from ae_listCompositionLayers, an "
+                        "optional property locator from this tool, offset >= 0, "
+                        "and limit 1..25."
+                    ),
+                },
+                "details": {
+                    "field": "arguments.limit",
+                    "capabilityId": "ae.layer.properties.list",
+                },
+            },
+        }
+        assert dispatches == 0
+
+        accepted = await client.call_tool(
+            "ae_listLayerProperties",
+            {"layer_locator": LAYER_LOCATOR, "limit": 25},
+        )
+        assert accepted.isError is False
+        assert json.loads(accepted.content[0].text) == {"ok": True, "limit": 25}
+        assert dispatches == 1

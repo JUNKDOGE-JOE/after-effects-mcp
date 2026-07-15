@@ -18,10 +18,12 @@ import re
 import time
 from typing import Any, List
 
+from jsonschema import ValidationError as JsonSchemaValidationError
+from jsonschema import validate as validate_json_schema
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import CallToolResult, TextContent, Tool
-from pydantic import ValidationError
+from pydantic import ValidationError as PydanticValidationError
 
 from ae_mcp import approval_gate, client_identity
 from ae_mcp.annotations import VERB_ANNOTATIONS
@@ -180,6 +182,52 @@ def resolve_tool_name(name: str, handlers, reverse_map=None) -> "str | None":
     return None
 
 
+def _layer_properties_validation_error(
+    error: JsonSchemaValidationError | PydanticValidationError,
+) -> dict[str, Any]:
+    """Map either validation layer to the public native error contract."""
+    path: list[Any] = []
+    if isinstance(error, PydanticValidationError):
+        errors = error.errors(include_url=False, include_input=False)
+        if errors:
+            path = list(errors[0].get("loc") or ())
+    else:
+        path = list(error.absolute_path)
+        if (
+            error.validator == "required"
+            and isinstance(error.instance, dict)
+            and isinstance(error.validator_value, list)
+        ):
+            missing = [
+                key for key in error.validator_value
+                if key not in error.instance
+            ]
+            if len(missing) == 1:
+                path.append(missing[0])
+
+    field = "arguments"
+    if path:
+        field += "." + ".".join(str(part) for part in path)
+    structured = NativeBackendError(
+        "INVALID_ARGUMENT",
+        "ae.listLayerProperties arguments did not match the published schema.",
+        retryable=False,
+        side_effect="not-started",
+        recovery={
+            "action": "change-arguments",
+            "hint": (
+                "Use a layer locator from ae_listCompositionLayers, an optional "
+                "property locator from this tool, offset >= 0, and limit 1..25."
+            ),
+        },
+        details={
+            "field": field[:128],
+            "capabilityId": "ae.layer.properties.list",
+        },
+    )
+    return structured.public_dict()
+
+
 def build_server() -> Server:
     """Construct the low-level MCP Server with all registered verbs."""
     load_all()
@@ -207,10 +255,18 @@ def build_server() -> Server:
 
     server: Server = Server("ae", instructions=build_server_instructions())
 
+    # Runtime JSON Schema validation must use the exact schema advertised by
+    # tools/list. The MCP SDK still populates its tool cache before invoking
+    # our call handler even when its own pre-validation is disabled; this map
+    # lets the handler apply the same schema without reaching into SDK internals.
+    advertised_input_schemas: dict[str, dict[str, Any]] = {}
+
     @server.list_tools()
     async def _list_tools() -> List[Tool]:
+        nonlocal advertised_input_schemas
         allowed = _filtered_tool_names()
         tools: List[Tool] = []
+        next_input_schemas: dict[str, dict[str, Any]] = {}
         for verb_name, (schema_cls, _run_fn) in HANDLERS.items():
             if verb_name not in allowed:
                 continue
@@ -230,9 +286,15 @@ def build_server() -> Server:
                     annotations=VERB_ANNOTATIONS.get(verb_name),
                 )
             )
+            next_input_schemas[expose_tool_name(verb_name)] = input_schema
+        advertised_input_schemas = next_input_schemas
         return tools
 
-    @server.call_tool()
+    # Keep JSON Schema on the advertised Tool definition and enforce that same
+    # schema locally before Pydantic model validation. The SDK's default
+    # pre-validation returns before this handler, which prevents native tools
+    # from preserving ae-mcp's structured error and recovery contract.
+    @server.call_tool(validate_input=False)
     async def _call_tool(name: str, arguments: dict | None) -> CallToolResult:
         try:
             params = server.request_context.session.client_params  # type: ignore[union-attr]
@@ -257,34 +319,36 @@ def build_server() -> Server:
 
         schema_cls, run_fn = HANDLERS[name]
 
+        # The SDK's default validation happens before this handler and reduces
+        # every schema failure to unstructured text. Reapply the same
+        # jsonschema validation here using the exact tools/list schema: the
+        # native layer-property tool can then expose its structured recovery
+        # contract, while established tools keep the SDK's original text error.
+        input_schema = advertised_input_schemas.get(expose_tool_name(name))
+        if input_schema is not None:
+            try:
+                validate_json_schema(
+                    instance=arguments or {},
+                    schema=input_schema,
+                )
+            except JsonSchemaValidationError as error:
+                if name == "ae.listLayerProperties":
+                    public_error: Any = _layer_properties_validation_error(error)
+                    payload = _format_result({"ok": False, "error": public_error})
+                else:
+                    payload = f"Input validation error: {error.message}"
+                return CallToolResult(
+                    content=[TextContent(type="text", text=payload)],
+                    isError=True,
+                )
+
         try:
             validated = schema_cls(**(arguments or {}))
         except Exception as e:  # noqa: BLE001
-            if name == "ae.listLayerProperties" and isinstance(e, ValidationError):
-                errors = e.errors(include_url=False, include_input=False)
-                field = "arguments"
-                if errors and errors[0].get("loc"):
-                    field += "." + ".".join(
-                        str(part) for part in errors[0]["loc"]
-                    )
-                structured = NativeBackendError(
-                    "INVALID_ARGUMENT",
-                    "ae.listLayerProperties arguments did not match the published schema.",
-                    retryable=False,
-                    side_effect="not-started",
-                    recovery={
-                        "action": "change-arguments",
-                        "hint": (
-                            "Use a layer locator from ae_listCompositionLayers, an optional "
-                            "property locator from this tool, offset >= 0, and limit 1..25."
-                        ),
-                    },
-                    details={
-                        "field": field[:128],
-                        "capabilityId": "ae.layer.properties.list",
-                    },
-                )
-                error: Any = structured.public_dict()
+            if name == "ae.listLayerProperties" and isinstance(
+                e, PydanticValidationError
+            ):
+                error: Any = _layer_properties_validation_error(e)
             else:
                 error = f"schema: {e}"
             payload = _format_result({"ok": False, "error": error})

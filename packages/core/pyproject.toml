@@ -10,6 +10,8 @@ dependencies = [
     # CallToolResult direct return needs >=1.19.0 (python-sdk #1459);
     # older SDKs silently mangle it (pydantic models are iterable).
     "mcp>=1.19.0",
+    # Runtime validation mirrors the MCP SDK's advertised-schema semantics.
+    "jsonschema>=4.20.0",
     "pydantic>=2.5.0",
     "pillow>=10.0.0",
 ]
