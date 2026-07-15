@@ -1,4 +1,4 @@
-"""Pydantic schemas for the 22 ae-mcp verbs.
+"""Pydantic schemas for the registered ae-mcp verbs.
 
 Each schema corresponds 1:1 with a verb in HANDLERS. pydantic generates
 JSON schema for MCP tools/list at runtime; keep field docstrings short — the
@@ -9,7 +9,13 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple, Union
 
-from pydantic import BaseModel, ConfigDict, Field, constr, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    constr,
+    model_validator,
+)
 
 
 # Common literal set used by several schemas (effects / layer types).
@@ -53,6 +59,33 @@ class AeProjectSummaryArgs(_StrictModel):
     unavailable.
     """
     pass
+
+
+class AeGetProjectBitDepthArgs(_StrictModel):
+    """ae.getProjectBitDepth — read project bits per channel through native AEGP."""
+
+
+class AeSetProjectBitDepthArgs(_StrictModel):
+    """ae.setProjectBitDepth — set project bits per channel through native AEGP.
+
+    This write never falls back to JSX. Use one stable idempotency key for one
+    user intent; a claimed key cannot dispatch a second mutation.
+    """
+
+    target_depth: Literal[8, 16, 32] = Field(
+        ...,
+        description="Required target bits per channel: exactly 8, 16, or 32.",
+    )
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        description=(
+            "Stable 16-64 character key for this bit-depth intent. Reusing a claimed "
+            "key returns DUPLICATE_REQUEST and cannot perform a second mutation."
+        ),
+    )
 
 
 class AeLayersArgs(_StrictModel):
@@ -613,6 +646,8 @@ SCHEMAS = {
     "ae.init": AeInitArgs,
     "ae.overview": AeOverviewArgs,
     "ae.projectSummary": AeProjectSummaryArgs,
+    "ae.getProjectBitDepth": AeGetProjectBitDepthArgs,
+    "ae.setProjectBitDepth": AeSetProjectBitDepthArgs,
     "ae.layers": AeLayersArgs,
     "ae.readProps": AeReadPropsArgs,
     "ae.exec": AeExecArgs,
@@ -657,4 +692,4 @@ SCHEMAS = {
     "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 45, f"expected 45 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 47, f"expected 47 verbs, got {len(SCHEMAS)}"

@@ -21,6 +21,7 @@ from ae_mcp.backends.native import (
     NativeInvokeResult,
     NativeNegotiation,
     NativeRecovery,
+    PROJECT_BIT_DEPTH_SET_CAPABILITY_ID,
 )
 
 # Header carrying the shared-secret token on /exec requests. Must match the
@@ -128,6 +129,23 @@ class HttpBridge(Backend, NativeInvokeBackend):
                 action="retry",
                 hint="Issue a new request only if the native result is still needed.",
             ),
+        )
+
+    @staticmethod
+    def _possibly_side_effecting_error(
+        message: str,
+        capability_id: str,
+    ) -> NativeBackendError:
+        return NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            message,
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery=NativeRecovery(
+                action="inspect-state",
+                hint="Inspect the project bit depth and Undo stack before retrying.",
+            ),
+            details={"capabilityId": capability_id},
         )
 
     @staticmethod
@@ -385,6 +403,7 @@ class HttpBridge(Backend, NativeInvokeBackend):
         *,
         deadline_unix_ms: int,
         cancellation: NativeCancellationToken | None,
+        uncertain_capability_id: str | None = None,
     ) -> Mapping[str, Any]:
         if cancellation is not None and cancellation.is_cancelled:
             raise self._cancelled_error()
@@ -412,10 +431,20 @@ class HttpBridge(Backend, NativeInvokeBackend):
                     headers=self._headers(token),
                 )
         except httpx.TimeoutException as error:
+            if uncertain_capability_id is not None:
+                raise self._possibly_side_effecting_error(
+                    "The broker response was lost after native mutation dispatch.",
+                    uncertain_capability_id,
+                ) from error
             raise self._deadline_error(
                 "Authenticated CEP native request exceeded its deadline."
             ) from error
         except httpx.HTTPError as error:
+            if uncertain_capability_id is not None:
+                raise self._possibly_side_effecting_error(
+                    "The native transport failed after mutation dispatch may have begun.",
+                    uncertain_capability_id,
+                ) from error
             raise self._unavailable_error(
                 "Authenticated CEP native transport is unavailable.",
                 "Confirm the panel is running, then reconnect and retry.",
@@ -502,15 +531,32 @@ class HttpBridge(Backend, NativeInvokeBackend):
         *,
         cancellation: NativeCancellationToken | None = None,
     ) -> NativeInvokeResult:
-        raw = await self._native_post(
-            "/native/invoke",
-            request.model_dump(mode="json", by_alias=True),
-            deadline_unix_ms=request.deadline_unix_ms,
-            cancellation=cancellation,
-        )
+        mutating = request.capability_id == PROJECT_BIT_DEPTH_SET_CAPABILITY_ID
         try:
+            raw = await self._native_post(
+                "/native/invoke",
+                request.model_dump(mode="json", by_alias=True),
+                deadline_unix_ms=request.deadline_unix_ms,
+                cancellation=cancellation,
+                uncertain_capability_id=(request.capability_id if mutating else None),
+            )
+        except NativeBackendError as error:
+            if mutating and error.code == "NATIVE_CONTRACT_MISMATCH":
+                raise self._possibly_side_effecting_error(
+                    "The broker returned an unverifiable native mutation response.",
+                    request.capability_id,
+                ) from error
+            raise
+        try:
+            if mutating and not isinstance(raw.get("replayed"), bool):
+                raise ValueError("native mutation result omitted replay status")
             return NativeInvokeResult.model_validate(raw)
         except (TypeError, ValueError) as error:
+            if mutating:
+                raise self._possibly_side_effecting_error(
+                    "The native mutation result failed Core validation.",
+                    request.capability_id,
+                ) from error
             raise self._contract_error(
                 "CEP native invocation result failed Core validation."
             ) from error

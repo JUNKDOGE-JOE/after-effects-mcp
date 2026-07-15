@@ -8,7 +8,7 @@
 
 ```text
 MCP 客户端或面板内嵌 AI
-  -> packages/core (ae_mcp, Python stdio MCP server, 44 ae_ tools)
+  -> packages/core (ae_mcp, Python stdio MCP server, 47 ae_ tools)
   -> backend (packages/bridge, httpx)
   -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
   -> CSInterface.evalScript
@@ -18,7 +18,7 @@ MCP 客户端或面板内嵌 AI
 
 ```mermaid
 flowchart LR
-    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>44 ae_ tools"]
+    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>47 ae_ tools"]
     B --> C["ae-mcp bridge<br/>httpx backend"]
     C --> D["127.0.0.1:11488"]
     D --> E["CEP panel host<br/>Express"]
@@ -140,6 +140,10 @@ flowchart TD
 
 1. 先用只读工具建立上下文。常用：`ae_overview`、`ae_layers`、`ae_getProperties`、`ae_scanPropertyTree`。大型 comp 可给 `ae_layers` 传 `format='text'` + `offset`/`limit`。
 
+   原生 AEGP 开发验证使用独立的一次性工程：先调用 `ae_getProjectBitDepth {}` 记录初始值，再选择一个
+   与初始值不同的 `8/16/32` 目标，用唯一 `idempotency_key` 调用 `ae_setProjectBitDepth`，随后再次只读确认。
+   响应中的 `undo.available=true` 不等于已经执行 Undo；真实 Undo/Redo 必须另行操作并用只读工具核对。
+
 2. 再做窄范围写操作。常用：`ae_setProperty`、`ae_applyEffect`、`ae_createLayer`、`ae_exec`。
 
 3. 涉及表达式时先做机器校验。常用：`ae_validateExpressions`。
@@ -208,7 +212,7 @@ This document describes the two v0.9.2 (unreleased candidate) usage paths: built
 
 ```text
 MCP client or panel-embedded AI
-  -> packages/core (ae_mcp, Python stdio MCP server, 44 ae_ tools)
+  -> packages/core (ae_mcp, Python stdio MCP server, 47 ae_ tools)
   -> backend (packages/bridge, httpx)
   -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
   -> CSInterface.evalScript
@@ -218,7 +222,7 @@ MCP client or panel-embedded AI
 
 ```mermaid
 flowchart LR
-    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>44 ae_ tools"]
+    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>47 ae_ tools"]
     B --> C["ae-mcp bridge<br/>httpx backend"]
     C --> D["127.0.0.1:11488"]
     D --> E["CEP panel host<br/>Express"]
@@ -339,6 +343,13 @@ Network notes:
 A stable working rhythm is:
 
 1. Use read tools to establish context first. Common: `ae_overview`, `ae_layers`, `ae_getProperties`, `ae_scanPropertyTree`. For large comps, use `ae_layers` with `format='text'` + `offset`/`limit`.
+
+   Native AEGP development qualification uses a disposable project: call
+   `ae_getProjectBitDepth {}` for the baseline, choose a different `8/16/32`
+   target, invoke `ae_setProjectBitDepth` with a unique `idempotency_key`, then
+   read again. `undo.available=true` does not mean Undo
+   was executed; real Undo/Redo must be performed separately and checked with
+   the read tool.
 
 2. Then do narrow write operations. Common: `ae_setProperty`, `ae_applyEffect`, `ae_createLayer`, `ae_exec`.
 

@@ -167,6 +167,77 @@
         }
       }
     },
+    "projectBitDepthReadArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [],
+      "properties": {}
+    },
+    "projectBitDepthReadInputSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {}
+      }
+    },
+    "projectBitDepthReadResultSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["bitsPerChannel"],
+        "properties": {
+          "bitsPerChannel": { "enum": [8, 16, 32] }
+        }
+      }
+    },
+    "projectBitDepthSetArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetDepth", "idempotencyKey"],
+      "properties": {
+        "targetDepth": { "enum": [8, 16, 32] },
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      }
+    },
+    "projectBitDepthSetInputSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["targetDepth", "idempotencyKey"],
+        "properties": {
+          "targetDepth": { "enum": [8, 16, 32] },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          }
+        }
+      }
+    },
+    "projectBitDepthSetResultSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "changed",
+          "beforeBitsPerChannel",
+          "afterBitsPerChannel"
+        ],
+        "properties": {
+          "changed": { "const": true },
+          "beforeBitsPerChannel": { "enum": [8, 16, 32] },
+          "afterBitsPerChannel": { "enum": [8, 16, 32] }
+        },
+        "x-invariant": "beforeBitsPerChannel-must-differ-from-afterBitsPerChannel"
+      }
+    },
     "projectSummaryInvokeParams": {
       "type": "object",
       "additionalProperties": false,
@@ -177,9 +248,31 @@
         "arguments": { "$ref": "#/$defs/projectSummaryArguments" }
       }
     },
+    "projectBitDepthReadInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.project.bit-depth.read" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/projectBitDepthReadArguments" }
+      }
+    },
+    "projectBitDepthSetInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.project.bit-depth.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/projectBitDepthSetArguments" }
+      }
+    },
     "invokeParams": {
       "oneOf": [
-        { "$ref": "#/$defs/projectSummaryInvokeParams" }
+        { "$ref": "#/$defs/projectSummaryInvokeParams" },
+        { "$ref": "#/$defs/projectBitDepthReadInvokeParams" },
+        { "$ref": "#/$defs/projectBitDepthSetInvokeParams" }
       ],
       "x-invariant": "every-invoke-variant-is-compile-time-allowlisted-and-closed"
     },
@@ -407,6 +500,32 @@
         { "$ref": "#/$defs/compatibilityVerified" }
       ]
     },
+    "capabilityArguments": {
+      "oneOf": [
+        { "$ref": "#/$defs/projectSummaryArguments" },
+        { "$ref": "#/$defs/projectBitDepthSetArguments" }
+      ]
+    },
+    "capabilityValue": {
+      "oneOf": [
+        { "$ref": "#/$defs/projectSummaryValue" },
+        { "$ref": "#/$defs/projectBitDepthReadValue" },
+        { "$ref": "#/$defs/projectBitDepthSetValue" }
+      ]
+    },
+    "capabilityInputSchemaContract": {
+      "oneOf": [
+        { "$ref": "#/$defs/projectSummaryInputSchemaContract" },
+        { "$ref": "#/$defs/projectBitDepthSetInputSchemaContract" }
+      ]
+    },
+    "capabilityResultSchemaContract": {
+      "oneOf": [
+        { "$ref": "#/$defs/projectSummaryResultSchemaContract" },
+        { "$ref": "#/$defs/projectBitDepthReadResultSchemaContract" },
+        { "$ref": "#/$defs/projectBitDepthSetResultSchemaContract" }
+      ]
+    },
     "positiveCapabilityExample": {
       "type": "object",
       "additionalProperties": false,
@@ -415,14 +534,14 @@
         "id": { "type": "string", "pattern": "^aemcp-example-[a-z0-9-]+$", "maxLength": 96 },
         "kind": { "const": "positive" },
         "summary": { "type": "string", "minLength": 1, "maxLength": 160 },
-        "arguments": { "$ref": "#/$defs/projectSummaryArguments" },
+        "arguments": { "$ref": "#/$defs/capabilityArguments" },
         "expected": {
           "type": "object",
           "additionalProperties": false,
           "required": ["outcome", "value"],
           "properties": {
             "outcome": { "const": "succeeded" },
-            "value": { "$ref": "#/$defs/projectSummaryValue" }
+            "value": { "$ref": "#/$defs/capabilityValue" }
           }
         }
       }
@@ -435,7 +554,7 @@
         "id": { "type": "string", "pattern": "^aemcp-example-[a-z0-9-]+$", "maxLength": 96 },
         "kind": { "const": "negative" },
         "summary": { "type": "string", "minLength": 1, "maxLength": 160 },
-        "arguments": { "$ref": "#/$defs/projectSummaryArguments" },
+        "arguments": { "$ref": "#/$defs/capabilityArguments" },
         "expected": {
           "type": "object",
           "additionalProperties": false,
@@ -504,8 +623,8 @@
         "inputContractId": { "$ref": "#/$defs/contractId" },
         "resultContractId": { "$ref": "#/$defs/contractId" },
         "contractDigest": { "$ref": "#/$defs/sha256" },
-        "inputSchema": { "$ref": "#/$defs/projectSummaryInputSchemaContract" },
-        "resultSchema": { "$ref": "#/$defs/projectSummaryResultSchemaContract" },
+        "inputSchema": { "$ref": "#/$defs/capabilityInputSchemaContract" },
+        "resultSchema": { "$ref": "#/$defs/capabilityResultSchemaContract" },
         "requirements": {
           "type": "array",
           "minItems": 1,
@@ -649,8 +768,14 @@
       "additionalProperties": false,
       "required": ["available", "verified"],
       "properties": {
-        "available": { "type": "boolean" },
-        "verified": { "type": "boolean" },
+        "available": {
+          "type": "boolean",
+          "description": "True when the native capability uses an SDK operation documented as undoable and AE accepted its balanced Undo group; this alone does not verify the reverse transition."
+        },
+        "verified": {
+          "type": "boolean",
+          "description": "True only when the reverse state transition was executed and verified for this invocation. The v1 bit-depth set path leaves this false because it does not consume the user's global Undo stack."
+        },
         "groupId": { "type": "string", "minLength": 1, "maxLength": 128 }
       }
     },
@@ -696,7 +821,26 @@
         "itemCount": { "$ref": "#/$defs/safeNonnegativeInteger" }
       }
     },
-    "invokeResult": {
+    "projectBitDepthReadValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bitsPerChannel"],
+      "properties": {
+        "bitsPerChannel": { "enum": [8, 16, 32] }
+      }
+    },
+    "projectBitDepthSetValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changed", "beforeBitsPerChannel", "afterBitsPerChannel"],
+      "properties": {
+        "changed": { "const": true },
+        "beforeBitsPerChannel": { "enum": [8, 16, 32] },
+        "afterBitsPerChannel": { "enum": [8, 16, 32] }
+      },
+      "x-invariant": "beforeBitsPerChannel-must-differ-from-afterBitsPerChannel"
+    },
+    "projectSummaryInvokeResult": {
       "type": "object",
       "additionalProperties": false,
       "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
@@ -708,6 +852,39 @@
         "value": { "$ref": "#/$defs/projectSummaryValue" },
         "evidence": { "$ref": "#/$defs/executionEvidence" }
       }
+    },
+    "projectBitDepthReadInvokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.project.bit-depth.read" },
+        "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" },
+        "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/projectBitDepthReadValue" },
+        "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "projectBitDepthSetInvokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.project.bit-depth.set" },
+        "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" },
+        "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/projectBitDepthSetValue" },
+        "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "invokeResult": {
+      "oneOf": [
+        { "$ref": "#/$defs/projectSummaryInvokeResult" },
+        { "$ref": "#/$defs/projectBitDepthReadInvokeResult" },
+        { "$ref": "#/$defs/projectBitDepthSetInvokeResult" }
+      ]
     },
     "cancelResult": {
       "type": "object",
@@ -969,6 +1146,23 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["wireVersion", "kind", "sessionId", "requestId", "method", "ok", "replayed", "result"],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "result": {
+                "properties": {
+                  "capabilityId": { "const": "ae.project.bit-depth.set" }
+                },
+                "required": ["capabilityId"]
+              }
+            }
+          },
+          "then": {
+            "properties": { "replayed": { "const": false } }
+          }
+        }
+      ],
       "properties": {
         "wireVersion": { "$ref": "#/$defs/wireVersion" },
         "kind": { "const": "response" },

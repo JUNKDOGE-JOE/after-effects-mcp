@@ -17,11 +17,21 @@ const {
     parseAuthDecision,
 } = require('./native-aegp-client');
 
+const CAPABILITIES_VECTOR = JSON.parse(fs.readFileSync(path.join(
+    __dirname,
+    '../../native/ae-plugin/protocol/fixtures/capabilities.json',
+), 'utf8')).response.result;
 const HOST = '22222222-2222-4222-8222-222222222222';
 const SESSION = '11111111-1111-4111-8111-111111111111';
 const CLIENT = '33333333-3333-4333-8333-333333333333';
 const SOURCE = 'a'.repeat(40);
-const DIGEST = 'b'.repeat(64);
+const DIGEST = CAPABILITIES_VECTOR.capabilitiesDigest;
+const BIT_DEPTH_READ_DIGEST = CAPABILITIES_VECTOR.items.find(function (item) {
+    return item.id === 'ae.project.bit-depth.read';
+}).contractDigest;
+const BIT_DEPTH_SET_DIGEST = CAPABILITIES_VECTOR.items.find(function (item) {
+    return item.id === 'ae.project.bit-depth.set';
+}).contractDigest;
 
 function descriptor(socketName) {
     return [
@@ -94,18 +104,48 @@ async function endpointFixture(t) {
 }
 
 function invokeRequestDigest(request) {
+    const argumentsValue = request.params.capabilityId === 'ae.project.bit-depth.set'
+        ? {
+            idempotencyKey: request.params.arguments.idempotencyKey,
+            targetDepth: request.params.arguments.targetDepth,
+        }
+        : {};
     const canonical = {
         deadlineUnixMs: request.deadlineUnixMs,
         kind: request.kind,
         method: request.method,
         params: {
-            arguments: request.params.arguments,
+            arguments: argumentsValue,
             capabilityId: request.params.capabilityId,
             capabilityVersion: request.params.capabilityVersion,
         },
         requestId: request.requestId,
         sessionId: request.sessionId,
         wireVersion: request.wireVersion,
+    };
+    return crypto.createHash('sha256').update(JSON.stringify(canonical), 'utf8').digest('hex');
+}
+
+function bitDepthReadPostconditionDigest(value) {
+    const canonical = {
+        capabilityId: 'ae.project.bit-depth.read',
+        capabilityVersion: 1,
+        value: {
+            bitsPerChannel: value.bitsPerChannel,
+        },
+    };
+    return crypto.createHash('sha256').update(JSON.stringify(canonical), 'utf8').digest('hex');
+}
+
+function bitDepthSetPostconditionDigest(value) {
+    const canonical = {
+        capabilityId: 'ae.project.bit-depth.set',
+        capabilityVersion: 1,
+        value: {
+            afterBitsPerChannel: value.afterBitsPerChannel,
+            beforeBitsPerChannel: value.beforeBitsPerChannel,
+            changed: value.changed,
+        },
     };
     return crypto.createHash('sha256').update(JSON.stringify(canonical), 'utf8').digest('hex');
 }
@@ -175,13 +215,69 @@ function installProtocol(server, options) {
                         capabilitiesDigest: DIGEST,
                         queryDigest: capabilitiesRequestDigest(request),
                         nextCursor: null,
-                        items: [{
-                            id: 'ae.project.summary',
-                            version: 1,
-                            detail: 'full',
-                            contractDigest: 'd'.repeat(64),
-                        }],
+                        items: CAPABILITIES_VECTOR.items,
                     };
+                } else if (request.params.capabilityId === 'ae.project.bit-depth.set') {
+                    const value = {
+                        changed: true,
+                        beforeBitsPerChannel: 8,
+                        afterBitsPerChannel: request.params.arguments.targetDepth,
+                    };
+                    result = {
+                        capabilityId: 'ae.project.bit-depth.set',
+                        capabilityVersion: 1,
+                        engine: 'native-aegp',
+                        outcome: 'succeeded',
+                        evidence: {
+                            engine: 'native-aegp',
+                            hostInstanceId: HOST,
+                            sessionId: SESSION,
+                            requestId: request.requestId,
+                            capabilityId: 'ae.project.bit-depth.set',
+                            capabilityVersion: 1,
+                            startedAtUnixMs: 1900000000000,
+                            completedAtUnixMs: 1900000000001,
+                            effect: 'committed',
+                            requestDigest: invokeRequestDigest(request),
+                            postcondition: {
+                                verified: true,
+                                kind: 'project-bit-depth-set',
+                                algorithm: 'sha256-rfc8785-jcs-v1',
+                                digest: bitDepthSetPostconditionDigest(value),
+                            },
+                            undo: { available: true, verified: false },
+                        },
+                        value,
+                    };
+                    if (input.mutateInvoke) input.mutateInvoke(result, request);
+                } else if (request.params.capabilityId === 'ae.project.bit-depth.read') {
+                    const value = { bitsPerChannel: 8 };
+                    result = {
+                        capabilityId: 'ae.project.bit-depth.read',
+                        capabilityVersion: 1,
+                        engine: 'native-aegp',
+                        outcome: 'succeeded',
+                        evidence: {
+                            engine: 'native-aegp',
+                            hostInstanceId: HOST,
+                            sessionId: SESSION,
+                            requestId: request.requestId,
+                            capabilityId: 'ae.project.bit-depth.read',
+                            capabilityVersion: 1,
+                            startedAtUnixMs: 1900000000000,
+                            completedAtUnixMs: 1900000000001,
+                            effect: 'none',
+                            requestDigest: invokeRequestDigest(request),
+                            postcondition: {
+                                verified: true,
+                                kind: 'project-bit-depth-read',
+                                algorithm: 'sha256-rfc8785-jcs-v1',
+                                digest: bitDepthReadPostconditionDigest(value),
+                            },
+                        },
+                        value,
+                    };
+                    if (input.mutateInvoke) input.mutateInvoke(result, request);
                 } else {
                     result = {
                         capabilityId: 'ae.project.summary',
@@ -219,7 +315,11 @@ function installProtocol(server, options) {
                     requestId: request.requestId,
                     method: request.method,
                     ok: responseError ? false : true,
-                    replayed: false,
+                    replayed: responseError
+                        ? input.errorReplayed === true
+                        : request.method === 'invoke'
+                            && request.params.capabilityId === 'ae.project.summary'
+                            && input.summaryReplayed === true,
                     ...(responseError ? { error: responseError } : { result }),
                 }));
             }
@@ -255,11 +355,11 @@ test('discovery accepts only a private descriptor and socket owned by this user'
     assert.deepEqual(discoverNativeEndpoints({ runtimeRoot: fixture.root }), []);
 });
 
-test('CEP client completes pairing, hello, capabilities, and verified native project summary', {
+test('CEP client verifies native project summary and bit-depth read/write capabilities', {
     skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
 }, async (t) => {
     const fixture = await endpointFixture(t);
-    const protocol = installProtocol(fixture.server);
+    const protocol = installProtocol(fixture.server, { summaryReplayed: true });
     const deterministic = Buffer.from('00112233445566778899aabbccddeeff0011223344556677', 'hex');
     const client = createNativeAegpClient({
         runtime: { platform: 'darwin', arch: 'arm64' },
@@ -306,8 +406,14 @@ test('CEP client completes pairing, hello, capabilities, and verified native pro
         projectOpen: true, projectName: 'Fixture.aep', itemCount: 3,
     });
     assert.equal(summary.engine, 'native-aegp');
+    assert.equal(summary.replayed, true);
     assert.equal(summary.evidence.postcondition.verified, true);
-    assert.equal(client.status().projectSummaryContractDigest, 'd'.repeat(64));
+    assert.equal(
+        client.status().projectSummaryContractDigest,
+        CAPABILITIES_VECTOR.items[0].contractDigest,
+    );
+    assert.equal(client.status().projectBitDepthReadContractDigest, BIT_DEPTH_READ_DIGEST);
+    assert.equal(client.status().projectBitDepthSetContractDigest, BIT_DEPTH_SET_DIGEST);
     assert.deepEqual(protocol.requests.map(function (request) { return request.method; }), [
         'hello', 'capabilities', 'invoke',
     ]);
@@ -316,6 +422,142 @@ test('CEP client completes pairing, hello, capabilities, and verified native pro
     assert.equal(protocol.requests[2].requestId, 'core-project-summary-1');
     assert.equal(protocol.requests[2].deadlineUnixMs, 1900000002000);
     assert.equal(summary.evidence.requestDigest, invokeRequestDigest(protocol.requests[2]));
+
+    const bitDepthRead = await client.invoke({
+        requestId: 'core-bit-depth-read-1',
+        capabilityId: 'ae.project.bit-depth.read',
+        capabilityVersion: 1,
+        arguments: {},
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.equal(bitDepthRead.replayed, false);
+    assert.deepEqual(bitDepthRead.value, { bitsPerChannel: 8 });
+    assert.equal(bitDepthRead.evidence.effect, 'none');
+    assert.equal(bitDepthRead.evidence.undo, undefined);
+    assert.equal(bitDepthRead.evidence.requestDigest, invokeRequestDigest(protocol.requests[3]));
+
+    const bitDepthSet = await client.invoke({
+        requestId: 'core-bit-depth-set-1',
+        capabilityId: 'ae.project.bit-depth.set',
+        capabilityVersion: 1,
+        arguments: {
+            targetDepth: 16,
+            idempotencyKey: 'bit-depth-intent-0001',
+        },
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.equal(bitDepthSet.replayed, false);
+    assert.deepEqual(bitDepthSet.value, {
+        changed: true,
+        beforeBitsPerChannel: 8,
+        afterBitsPerChannel: 16,
+    });
+    assert.deepEqual(bitDepthSet.evidence.undo, { available: true, verified: false });
+    assert.equal(bitDepthSet.evidence.requestDigest, invokeRequestDigest(protocol.requests[4]));
+    assert.deepEqual(protocol.requests[4].params.arguments, {
+        targetDepth: 16, idempotencyKey: 'bit-depth-intent-0001',
+    });
+    assert.deepEqual(protocol.requests.map(function (request) { return request.method; }), [
+        'hello', 'capabilities', 'invoke', 'invoke', 'invoke',
+    ]);
+});
+
+test('CEP client preserves the bit-depth no-op INVALID_ARGUMENT contract', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const fixture = await endpointFixture(t);
+    const protocol = installProtocol(fixture.server, {
+        invokeError: {
+            code: 'INVALID_ARGUMENT',
+            message: 'targetDepth already matches the open project.',
+            retryable: false,
+            sideEffect: 'not-started',
+            recovery: {
+                action: 'change-arguments',
+                hint: 'Choose a targetDepth that differs from the current project bit depth.',
+            },
+            details: { field: 'params.arguments.targetDepth' },
+        },
+    });
+    const client = createNativeAegpClient({
+        runtime: { platform: 'darwin', arch: 'arm64' },
+        runtimeRoot: fixture.root,
+        clientInstanceId: CLIENT,
+        requestTimeoutMs: 2000,
+        now: function () { return 1900000000000; },
+    });
+    t.after(function () { return client.close(); });
+    await client.beginPairing();
+    protocol.authorize();
+    await client.waitUntilConnected();
+    await client.capabilities({ detail: 'full', limit: 100 });
+
+    await assert.rejects(
+        client.invoke({
+            requestId: 'core-bit-depth-no-op',
+            capabilityId: 'ae.project.bit-depth.set',
+            capabilityVersion: 1,
+            arguments: {
+                targetDepth: 16,
+                idempotencyKey: 'bit-depth-intent-no-op',
+            },
+            deadlineUnixMs: 1900000002000,
+        }),
+        function (error) {
+            assert.equal(error.code, 'INVALID_ARGUMENT');
+            assert.equal(error.retryable, false);
+            assert.equal(error.sideEffect, 'not-started');
+            assert.equal(error.recovery.action, 'change-arguments');
+            assert.deepEqual(error.details, { field: 'params.arguments.targetDepth' });
+            return true;
+        },
+    );
+});
+
+test('CEP client treats unverifiable bit-depth write evidence as side-effect uncertain', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const fixture = await endpointFixture(t);
+    const protocol = installProtocol(fixture.server, {
+        mutateInvoke: function (result, request) {
+            if (request.params.capabilityId === 'ae.project.bit-depth.set') {
+                result.value.beforeBitsPerChannel = result.value.afterBitsPerChannel;
+            }
+        },
+    });
+    const client = createNativeAegpClient({
+        runtime: { platform: 'darwin', arch: 'arm64' },
+        runtimeRoot: fixture.root,
+        clientInstanceId: CLIENT,
+        requestTimeoutMs: 2000,
+        now: function () { return 1900000000000; },
+    });
+    t.after(function () { return client.close(); });
+    await client.beginPairing();
+    protocol.authorize();
+    await client.waitUntilConnected();
+    await client.capabilities({ detail: 'full', limit: 100 });
+
+    await assert.rejects(
+        client.invoke({
+            requestId: 'core-bit-depth-unverifiable',
+            capabilityId: 'ae.project.bit-depth.set',
+            capabilityVersion: 1,
+            arguments: {
+                targetDepth: 16,
+                idempotencyKey: 'bit-depth-intent-bad-evidence',
+            },
+            deadlineUnixMs: 1900000002000,
+        }),
+        function (error) {
+            assert.equal(error.code, 'POSSIBLY_SIDE_EFFECTING_FAILURE');
+            assert.equal(error.retryable, false);
+            assert.equal(error.sideEffect, 'may-have-occurred');
+            assert.equal(error.recovery.action, 'inspect-state');
+            assert.deepEqual(error.details, { capabilityId: 'ae.project.bit-depth.set' });
+            return true;
+        },
+    );
 });
 
 test('CEP client preserves the complete structured native error contract', {
@@ -390,12 +632,28 @@ for (const errorFixture of [
         expectedCode: 'NATIVE_CONTRACT_MISMATCH',
         expectedAction: 'refresh-capabilities',
     },
+    {
+        name: 'rejects replayed failure envelopes as a broker contract mismatch',
+        error: {
+            code: 'INVALID_REQUEST',
+            message: 'native request was invalid',
+            retryable: false,
+            sideEffect: 'not-started',
+            recovery: { action: 'none', hint: 'Do not retry this request.' },
+        },
+        errorReplayed: true,
+        expectedCode: 'NATIVE_CONTRACT_MISMATCH',
+        expectedAction: 'refresh-capabilities',
+    },
 ]) {
     test('CEP client ' + errorFixture.name, {
         skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
     }, async (t) => {
         const fixture = await endpointFixture(t);
-        const protocol = installProtocol(fixture.server, { invokeError: errorFixture.error });
+        const protocol = installProtocol(fixture.server, {
+            invokeError: errorFixture.error,
+            errorReplayed: errorFixture.errorReplayed,
+        });
         const client = createNativeAegpClient({
             runtime: { platform: 'darwin', arch: 'arm64' },
             runtimeRoot: fixture.root,

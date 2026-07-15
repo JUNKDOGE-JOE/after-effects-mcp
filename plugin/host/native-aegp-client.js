@@ -17,6 +17,11 @@ const SOCKET_PATTERN = /^s-[0-9a-f]{12}\.sock$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const TOKEN_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const PROJECT_SUMMARY_CAPABILITY = 'ae.project.summary';
+const PROJECT_BIT_DEPTH_READ_CAPABILITY = 'ae.project.bit-depth.read';
+const PROJECT_BIT_DEPTH_SET_CAPABILITY = 'ae.project.bit-depth.set';
+const PROJECT_BIT_DEPTH_READ_CONTRACT_DIGEST = '936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e';
+const PROJECT_BIT_DEPTH_SET_CONTRACT_DIGEST = 'd5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a';
 const NATIVE_WIRE_ERROR_CODES = new Set([
     'NATIVE_UNAVAILABLE', 'NATIVE_UNSUPPORTED', 'WIRE_VERSION_MISMATCH',
     'INVALID_REQUEST', 'INVALID_ARGUMENT', 'DUPLICATE_REQUEST',
@@ -48,6 +53,23 @@ function nativeContractMismatch(message, cause) {
                 action: 'refresh-capabilities',
                 hint: 'Refresh the authenticated native contract before retrying.',
             },
+        },
+    );
+}
+
+function nativeMutationUncertain(message, capabilityId, cause) {
+    return nativeError(
+        'POSSIBLY_SIDE_EFFECTING_FAILURE',
+        message,
+        false,
+        cause,
+        {
+            sideEffect: 'may-have-occurred',
+            recovery: {
+                action: 'inspect-state',
+                hint: 'Inspect the project bit depth and Undo stack before retrying.',
+            },
+            details: { capabilityId },
         },
     );
 }
@@ -237,16 +259,51 @@ function projectSummaryPostconditionDigest(value) {
     });
 }
 
-// This client currently exposes one closed invoke contract. Construct the
+function projectBitDepthReadPostconditionDigest(value) {
+    return sha256Canonical({
+        capabilityId: PROJECT_BIT_DEPTH_READ_CAPABILITY,
+        capabilityVersion: 1,
+        value: {
+            bitsPerChannel: value.bitsPerChannel,
+        },
+    });
+}
+
+function projectBitDepthSetPostconditionDigest(value) {
+    return sha256Canonical({
+        capabilityId: PROJECT_BIT_DEPTH_SET_CAPABILITY,
+        capabilityVersion: 1,
+        value: {
+            afterBitsPerChannel: value.afterBitsPerChannel,
+            beforeBitsPerChannel: value.beforeBitsPerChannel,
+            changed: value.changed,
+        },
+    });
+}
+
+function validProjectBitDepthSetArguments(value) {
+    return exactKeys(value, ['targetDepth', 'idempotencyKey'])
+        && [8, 16, 32].includes(value.targetDepth)
+        && typeof value.idempotencyKey === 'string'
+        && value.idempotencyKey.length >= 16 && TOKEN_PATTERN.test(value.idempotencyKey);
+}
+
+// Construct the closed invoke request in canonical member order. Construct the
 // RFC 8785 member order explicitly so the broker can bind native evidence to
 // the exact request it sent instead of trusting a digest-shaped string.
-function projectSummaryRequestDigest(request) {
+function invokeRequestDigest(request) {
+    const argumentsValue = request.params.capabilityId === PROJECT_BIT_DEPTH_SET_CAPABILITY
+        ? {
+            idempotencyKey: request.params.arguments.idempotencyKey,
+            targetDepth: request.params.arguments.targetDepth,
+        }
+        : {};
     return sha256Canonical({
         deadlineUnixMs: request.deadlineUnixMs,
         kind: request.kind,
         method: request.method,
         params: {
-            arguments: request.params.arguments,
+            arguments: argumentsValue,
             capabilityId: request.params.capabilityId,
             capabilityVersion: request.params.capabilityVersion,
         },
@@ -280,6 +337,8 @@ function createNativeAegpClient(options) {
     let sessionGeneration = 0;
     let capabilitiesDigest = null;
     let projectSummaryContractDigest = null;
+    let projectBitDepthReadContractDigest = null;
+    let projectBitDepthSetContractDigest = null;
     let helloIdentity = null;
     let nextRequest = 1;
     let inputBuffer = Buffer.alloc(0);
@@ -290,6 +349,12 @@ function createNativeAegpClient(options) {
     let pairingPromise = null;
     let connectedPromise = null;
     const pendingRequests = new Map();
+
+    function pendingTransportFailure(pending, error, message) {
+        return pending && pending.mutating
+            ? nativeMutationUncertain(message, pending.capabilityId, error)
+            : error;
+    }
 
     function fail(error) {
         const protocolCodes = new Set([
@@ -305,7 +370,11 @@ function createNativeAegpClient(options) {
         connectedReject = null;
         for (const pending of pendingRequests.values()) {
             clearTimeout(pending.timer);
-            pending.reject(failure);
+            pending.reject(pendingTransportFailure(
+                pending,
+                failure,
+                'Native AEGP connection failed after mutation dispatch.',
+            ));
         }
         pendingRequests.clear();
         if (state !== 'closed') state = 'disconnected';
@@ -313,6 +382,8 @@ function createNativeAegpClient(options) {
         sessionGeneration = 0;
         capabilitiesDigest = null;
         projectSummaryContractDigest = null;
+        projectBitDepthReadContractDigest = null;
+        projectBitDepthSetContractDigest = null;
         helloIdentity = null;
         if (socket) {
             const current = socket;
@@ -345,8 +416,12 @@ function createNativeAegpClient(options) {
         }
         if (response.kind === 'event') return;
         const pending = pendingRequests.get(response.requestId);
+        const replayValid = pending?.method === 'invoke' && response.ok === true
+            ? typeof response.replayed === 'boolean'
+            : response.replayed === false;
         if (!pending || response.wireVersion !== 1 || response.kind !== 'response'
             || response.method !== pending.method
+            || !replayValid
             || (pending.method !== 'hello' && response.sessionId !== sessionId)) {
             throw nativeContractMismatch('native AEGP response did not match an active request');
         }
@@ -354,15 +429,19 @@ function createNativeAegpClient(options) {
             const evidence = response.result?.evidence;
             if (evidence?.requestId !== response.requestId
                 || evidence?.sessionId !== sessionId
-                || evidence?.capabilityId !== 'ae.project.summary'
-                || evidence?.capabilityVersion !== 1
+                || evidence?.capabilityId !== pending.capabilityId
+                || evidence?.capabilityVersion !== pending.capabilityVersion
                 || evidence?.requestDigest !== pending.requestDigest) {
                 throw nativeContractMismatch('native AEGP evidence did not match its response envelope');
             }
         }
         pendingRequests.delete(response.requestId);
         clearTimeout(pending.timer);
-        if (response.ok === true) pending.resolve(response.result);
+        if (response.ok === true) {
+            pending.resolve(pending.method === 'invoke'
+                ? { ...response.result, replayed: response.replayed }
+                : response.result);
+        }
         else pending.reject(responseError(response));
     }
 
@@ -400,15 +479,31 @@ function createNativeAegpClient(options) {
         const request = { wireVersion: 1, kind: 'request', requestId, method, params };
         if (method !== 'hello') request.sessionId = sessionId;
         if (deadlineUnixMs !== undefined) request.deadlineUnixMs = deadlineUnixMs;
-        const requestDigest = method === 'invoke' ? projectSummaryRequestDigest(request) : null;
+        const requestDigest = method === 'invoke' ? invokeRequestDigest(request) : null;
+        const mutating = method === 'invoke'
+            && params.capabilityId === PROJECT_BIT_DEPTH_SET_CAPABILITY;
         return new Promise(function (resolve, reject) {
             const remainingMs = deadlineUnixMs === undefined
                 ? requestTimeoutMs : Math.max(1, deadlineUnixMs - now());
             const timer = setTimeout(function () {
                 pendingRequests.delete(requestId);
-                reject(nativeError('DEADLINE_EXCEEDED', 'native AEGP request timed out', true));
+                reject(mutating
+                    ? nativeMutationUncertain(
+                        'Native mutation response timed out after dispatch.',
+                        params.capabilityId,
+                    )
+                    : nativeError('DEADLINE_EXCEEDED', 'native AEGP request timed out', true));
             }, Math.min(requestTimeoutMs, remainingMs));
-            pendingRequests.set(requestId, { method, requestDigest, resolve, reject, timer });
+            pendingRequests.set(requestId, {
+                method,
+                requestDigest,
+                capabilityId: method === 'invoke' ? params.capabilityId : null,
+                capabilityVersion: method === 'invoke' ? params.capabilityVersion : null,
+                mutating,
+                resolve,
+                reject,
+                timer,
+            });
             try {
                 socket.write(encodeFrame(request), function (error) {
                     if (!error) return;
@@ -416,12 +511,22 @@ function createNativeAegpClient(options) {
                     if (!pending) return;
                     pendingRequests.delete(requestId);
                     clearTimeout(pending.timer);
-                    pending.reject(nativeError('NATIVE_UNAVAILABLE', 'native AEGP request write failed', true, error));
+                    pending.reject(pendingTransportFailure(
+                        pending,
+                        nativeError('NATIVE_UNAVAILABLE', 'native AEGP request write failed', true, error),
+                        'Native mutation transport write failed after dispatch may have begun.',
+                    ));
                 });
             } catch (cause) {
                 pendingRequests.delete(requestId);
                 clearTimeout(timer);
-                reject(nativeError('NATIVE_UNAVAILABLE', 'native AEGP request write failed', true, cause));
+                reject(mutating
+                    ? nativeMutationUncertain(
+                        'Native mutation transport write failed after dispatch may have begun.',
+                        params.capabilityId,
+                        cause,
+                    )
+                    : nativeError('NATIVE_UNAVAILABLE', 'native AEGP request write failed', true, cause));
             }
         });
     }
@@ -628,34 +733,82 @@ function createNativeAegpClient(options) {
         const result = await send('capabilities', params, {
             deadlineUnixMs: call.deadlineUnixMs,
         });
-        const item = Array.isArray(result?.items)
-            ? result.items.find(function (candidate) { return candidate?.id === 'ae.project.summary'; })
+        const summaryItem = Array.isArray(result?.items)
+            ? result.items.find(function (candidate) { return candidate?.id === PROJECT_SUMMARY_CAPABILITY; })
             : null;
+        const bitDepthReadItem = Array.isArray(result?.items)
+            ? result.items.find(function (candidate) { return candidate?.id === PROJECT_BIT_DEPTH_READ_CAPABILITY; })
+            : null;
+        const bitDepthSetItem = Array.isArray(result?.items)
+            ? result.items.find(function (candidate) { return candidate?.id === PROJECT_BIT_DEPTH_SET_CAPABILITY; })
+            : null;
+        const requiresSummary = ids === undefined || ids.includes(PROJECT_SUMMARY_CAPABILITY);
+        const requiresBitDepthRead = ids === undefined || ids.includes(PROJECT_BIT_DEPTH_READ_CAPABILITY);
+        const requiresBitDepthSet = ids === undefined || ids.includes(PROJECT_BIT_DEPTH_SET_CAPABILITY);
         if (!exactKeys(result, ['detail', 'items', 'nextCursor', 'queryDigest', 'capabilitiesDigest'])
             || result.detail !== requestedDetail || result.nextCursor !== null
             || result.queryDigest !== capabilitiesQueryDigest(sessionId, ids, requestedDetail, limit)
             || result.capabilitiesDigest !== capabilitiesDigest
-            || (ids === undefined && !item)
-            || (item && (item.version !== 1 || item.detail !== requestedDetail
-                || (requestedDetail === 'full' && !SHA256_PATTERN.test(item.contractDigest))))) {
+            || (requiresSummary && !summaryItem)
+            || (requiresBitDepthRead && !bitDepthReadItem)
+            || (requiresBitDepthSet && !bitDepthSetItem)
+            || (summaryItem && (summaryItem.version !== 1 || summaryItem.detail !== requestedDetail
+                || (requestedDetail === 'full' && !SHA256_PATTERN.test(summaryItem.contractDigest))))
+            || (bitDepthReadItem && (bitDepthReadItem.version !== 1
+                || bitDepthReadItem.detail !== requestedDetail
+                || (requestedDetail === 'full'
+                    && bitDepthReadItem.contractDigest !== PROJECT_BIT_DEPTH_READ_CONTRACT_DIGEST)))
+            || (bitDepthSetItem && (bitDepthSetItem.version !== 1
+                || bitDepthSetItem.detail !== requestedDetail
+                || (requestedDetail === 'full'
+                    && bitDepthSetItem.contractDigest !== PROJECT_BIT_DEPTH_SET_CONTRACT_DIGEST)))) {
             throw nativeContractMismatch('native capabilities result was malformed');
         }
-        if (requestedDetail === 'full' && item) projectSummaryContractDigest = item.contractDigest;
+        if (requestedDetail === 'full' && summaryItem) {
+            projectSummaryContractDigest = summaryItem.contractDigest;
+        }
+        if (requestedDetail === 'full' && bitDepthReadItem) {
+            projectBitDepthReadContractDigest = bitDepthReadItem.contractDigest;
+        }
+        if (requestedDetail === 'full' && bitDepthSetItem) {
+            projectBitDepthSetContractDigest = bitDepthSetItem.contractDigest;
+        }
         return result;
     }
 
     async function invoke(options) {
         const call = options || {};
+        const summaryCall = call.capabilityId === PROJECT_SUMMARY_CAPABILITY
+            && call.capabilityVersion === 1
+            && call.arguments && typeof call.arguments === 'object'
+            && !Array.isArray(call.arguments) && Object.keys(call.arguments).length === 0;
+        const bitDepthReadCall = call.capabilityId === PROJECT_BIT_DEPTH_READ_CAPABILITY
+            && call.capabilityVersion === 1
+            && call.arguments && typeof call.arguments === 'object'
+            && !Array.isArray(call.arguments) && Object.keys(call.arguments).length === 0;
+        const bitDepthSetCall = call.capabilityId === PROJECT_BIT_DEPTH_SET_CAPABILITY
+            && call.capabilityVersion === 1
+            && validProjectBitDepthSetArguments(call.arguments);
         if (!exactKeys(call, [
             'requestId', 'capabilityId', 'capabilityVersion', 'arguments', 'deadlineUnixMs',
         ]) || !TOKEN_PATTERN.test(call.requestId || '')
-            || call.capabilityId !== 'ae.project.summary' || call.capabilityVersion !== 1
-            || !call.arguments || typeof call.arguments !== 'object' || Array.isArray(call.arguments)
-            || Object.keys(call.arguments).length !== 0
+            || (!summaryCall && !bitDepthReadCall && !bitDepthSetCall)
             || !Number.isSafeInteger(call.deadlineUnixMs) || call.deadlineUnixMs <= 0) {
             throw nativeError('INVALID_ARGUMENT', 'native invoke request is invalid', false);
         }
         if (state !== 'connected') await waitUntilConnected(call.deadlineUnixMs);
+        if (bitDepthReadCall
+            && projectBitDepthReadContractDigest !== PROJECT_BIT_DEPTH_READ_CONTRACT_DIGEST) {
+            throw nativeContractMismatch(
+                'native project-bit-depth read capability was not verified before dispatch',
+            );
+        }
+        if (bitDepthSetCall
+            && projectBitDepthSetContractDigest !== PROJECT_BIT_DEPTH_SET_CONTRACT_DIGEST) {
+            throw nativeContractMismatch(
+                'native project-bit-depth set capability was not verified before dispatch',
+            );
+        }
         const result = await send('invoke', {
             capabilityId: call.capabilityId,
             capabilityVersion: call.capabilityVersion,
@@ -663,25 +816,74 @@ function createNativeAegpClient(options) {
         }, { requestId: call.requestId, deadlineUnixMs: call.deadlineUnixMs });
         const value = result?.value;
         const evidence = result?.evidence;
-        if (result?.capabilityId !== 'ae.project.summary' || result?.capabilityVersion !== 1
-            || result?.engine !== 'native-aegp' || result?.outcome !== 'succeeded'
-            || evidence?.engine !== 'native-aegp' || evidence?.hostInstanceId !== endpoint.hostInstanceId
-            || evidence?.sessionId !== sessionId || evidence?.effect !== 'none'
-            || !TOKEN_PATTERN.test(evidence?.requestId || '')
-            || !SHA256_PATTERN.test(evidence?.requestDigest || '')
-            || !Number.isSafeInteger(evidence?.startedAtUnixMs) || evidence.startedAtUnixMs <= 0
-            || !Number.isSafeInteger(evidence?.completedAtUnixMs)
-            || evidence.completedAtUnixMs < evidence.startedAtUnixMs
-            || evidence?.postcondition?.verified !== true
+        const commonValid = result?.capabilityId === call.capabilityId
+            && result?.capabilityVersion === call.capabilityVersion
+            && result?.engine === 'native-aegp' && result?.outcome === 'succeeded'
+            && evidence?.engine === 'native-aegp'
+            && evidence?.hostInstanceId === endpoint.hostInstanceId;
+        const evidenceValid = evidence?.sessionId === sessionId
+            && evidence?.requestId === call.requestId
+            && evidence?.capabilityId === call.capabilityId
+            && evidence?.capabilityVersion === call.capabilityVersion
+            && SHA256_PATTERN.test(evidence?.requestDigest || '')
+            && Number.isSafeInteger(evidence?.startedAtUnixMs) && evidence.startedAtUnixMs > 0
+            && Number.isSafeInteger(evidence?.completedAtUnixMs)
+            && evidence.completedAtUnixMs >= evidence.startedAtUnixMs
+            && evidence?.postcondition?.verified === true
+            && evidence.postcondition.algorithm === 'sha256-rfc8785-jcs-v1'
+            && SHA256_PATTERN.test(evidence.postcondition.digest || '');
+        if (!commonValid || !evidenceValid) {
+            if (bitDepthSetCall) {
+                throw nativeMutationUncertain(
+                    'Native project-bit-depth set result lacked verified AEGP evidence.',
+                    PROJECT_BIT_DEPTH_SET_CAPABILITY,
+                );
+            }
+            if (bitDepthReadCall) {
+                throw nativeContractMismatch(
+                    'native project-bit-depth read result lacked verified AEGP evidence',
+                );
+            }
+            throw nativeContractMismatch('native project summary result lacked verified AEGP evidence');
+        }
+        if (summaryCall && (evidence.effect !== 'none'
+            || evidence.undo !== undefined
             || evidence.postcondition.kind !== 'project-summary'
-            || evidence.postcondition.algorithm !== 'sha256-rfc8785-jcs-v1'
-            || !SHA256_PATTERN.test(evidence.postcondition.digest || '')
             || typeof value?.projectOpen !== 'boolean' || typeof value?.projectName !== 'string'
             || value.projectName.length > 1024
             || !Number.isSafeInteger(value?.itemCount) || value.itemCount < 0
             || !SHA256_PATTERN.test(projectSummaryContractDigest || '')
-            || evidence.postcondition.digest !== projectSummaryPostconditionDigest(value)) {
+            || evidence.postcondition.digest !== projectSummaryPostconditionDigest(value))) {
             throw nativeContractMismatch('native project summary result lacked verified AEGP evidence');
+        }
+        if (bitDepthReadCall && (evidence.effect !== 'none'
+            || evidence.undo !== undefined
+            || evidence.postcondition.kind !== 'project-bit-depth-read'
+            || !exactKeys(value, ['bitsPerChannel'])
+            || ![8, 16, 32].includes(value.bitsPerChannel)
+            || projectBitDepthReadContractDigest !== PROJECT_BIT_DEPTH_READ_CONTRACT_DIGEST
+            || evidence.postcondition.digest !== projectBitDepthReadPostconditionDigest(value))) {
+            throw nativeContractMismatch(
+                'native project-bit-depth read result failed verification',
+            );
+        }
+        if (bitDepthSetCall && (result.replayed !== false
+            || evidence.effect !== 'committed'
+            || evidence.postcondition.kind !== 'project-bit-depth-set'
+            || !exactKeys(evidence.undo, ['available', 'verified'])
+            || evidence.undo.available !== true || evidence.undo.verified !== false
+            || !exactKeys(value, ['changed', 'beforeBitsPerChannel', 'afterBitsPerChannel'])
+            || value.changed !== true
+            || ![8, 16, 32].includes(value.beforeBitsPerChannel)
+            || ![8, 16, 32].includes(value.afterBitsPerChannel)
+            || value.beforeBitsPerChannel === value.afterBitsPerChannel
+            || value.afterBitsPerChannel !== call.arguments.targetDepth
+            || projectBitDepthSetContractDigest !== PROJECT_BIT_DEPTH_SET_CONTRACT_DIGEST
+            || evidence.postcondition.digest !== projectBitDepthSetPostconditionDigest(value))) {
+            throw nativeMutationUncertain(
+                'Native project-bit-depth set result failed post-dispatch verification.',
+                PROJECT_BIT_DEPTH_SET_CAPABILITY,
+            );
         }
         return result;
     }
@@ -720,6 +922,8 @@ function createNativeAegpClient(options) {
                 sessionGeneration: sessionGeneration || null,
                 capabilitiesDigest,
                 projectSummaryContractDigest,
+                projectBitDepthReadContractDigest,
+                projectBitDepthSetContractDigest,
             });
         },
     });

@@ -61,6 +61,12 @@ struct CapabilitiesParams {
 struct InvokeParams {
   std::string capability_id{"ae.project.summary"};
   std::uint16_t capability_version{1};
+  std::int32_t target_depth{0};
+  std::string idempotency_key;
+  // SHA-256 over the JCS-canonical capability arguments only. This is the
+  // mutation fence identity and is deliberately distinct from the complete
+  // transport request fingerprint.
+  std::string arguments_fingerprint_sha256;
 };
 
 struct CancelParams {
@@ -89,6 +95,15 @@ struct ParsedRequest {
     bool project_open,
     std::string_view project_name,
     std::uint64_t item_count);
+[[nodiscard]] std::string digest_project_bit_depth_read_postcondition(
+    std::int32_t bits_per_channel);
+[[nodiscard]] std::string digest_project_bit_depth_set_arguments(
+    std::int32_t target_depth,
+    std::string_view idempotency_key);
+[[nodiscard]] std::string digest_project_bit_depth_set_postcondition(
+    bool changed,
+    std::int32_t before_bits_per_channel,
+    std::int32_t after_bits_per_channel);
 
 class FrameDecoder final {
  public:
@@ -247,10 +262,14 @@ struct CapabilitiesSuccess {
   std::string session_id;
   CapabilityDetail detail{CapabilityDetail::kSummary};
   bool include_project_summary{true};
+  bool include_project_bit_depth_read{true};
+  bool include_project_bit_depth_set{true};
   std::string query_digest;
   std::string capabilities_digest;
   // Required only for detail=full when the descriptor is included.
   std::string project_summary_contract_digest;
+  std::string project_bit_depth_read_contract_digest;
+  std::string project_bit_depth_set_contract_digest;
 };
 
 enum class ProgressPhase { kQueued, kDispatched, kRunning, kValidating };
@@ -271,6 +290,32 @@ struct ProjectSummarySuccess {
   bool project_open{false};
   std::string project_name;
   std::uint64_t item_count{0};
+  std::uint64_t started_at_unix_ms{0};
+  std::uint64_t completed_at_unix_ms{0};
+  std::string request_digest;
+  std::string postcondition_digest;
+  bool replayed{false};
+};
+
+struct ProjectBitDepthReadSuccess {
+  std::string request_id;
+  std::string session_id;
+  std::string host_instance_id;
+  std::int32_t bits_per_channel{0};
+  std::uint64_t started_at_unix_ms{0};
+  std::uint64_t completed_at_unix_ms{0};
+  std::string request_digest;
+  std::string postcondition_digest;
+  bool replayed{false};
+};
+
+struct ProjectBitDepthSetSuccess {
+  std::string request_id;
+  std::string session_id;
+  std::string host_instance_id;
+  bool changed{true};
+  std::int32_t before_bits_per_channel{0};
+  std::int32_t after_bits_per_channel{0};
   std::uint64_t started_at_unix_ms{0};
   std::uint64_t completed_at_unix_ms{0};
   std::string request_digest;
@@ -337,6 +382,10 @@ struct ErrorResponse {
 [[nodiscard]] std::vector<std::uint8_t> encode_progress_event(const ProgressEvent& event);
 [[nodiscard]] std::vector<std::uint8_t> encode_project_summary_success(
     const ProjectSummarySuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_project_bit_depth_read_success(
+    const ProjectBitDepthReadSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_project_bit_depth_set_success(
+    const ProjectBitDepthSetSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_cancel_success(
     const CancelSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_error_response(const ErrorResponse& response);

@@ -9,9 +9,11 @@ from ae_mcp import schemas as S
 
 
 def test_registry_has_all_verbs():
-    assert len(S.SCHEMAS) == 45, f"expected 45 verbs, got {len(S.SCHEMAS)}"
+    assert len(S.SCHEMAS) == 47, f"expected 47 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
-        "ae.init", "ae.overview", "ae.projectSummary", "ae.layers", "ae.readProps", "ae.exec",
+        "ae.init", "ae.overview", "ae.projectSummary",
+        "ae.getProjectBitDepth", "ae.setProjectBitDepth",
+        "ae.layers", "ae.readProps", "ae.exec",
         "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.previewFrame",
         "ae.applyEffect", "ae.ping", "ae.status", "ae.diagnose",
         "ae.createLayer", "ae.setProperty", "ae.moveLayer", "ae.selectLayers",
@@ -49,6 +51,30 @@ def test_native_project_summary_is_empty_and_distinct_from_overview():
     assert S.AeProjectSummaryArgs() != S.AeOverviewArgs()
     with pytest.raises(ValidationError):
         S.AeProjectSummaryArgs(foo=1)
+
+
+def test_native_project_bit_depth_read_is_empty_and_set_is_closed():
+    S.AeGetProjectBitDepthArgs()
+    with pytest.raises(ValidationError):
+        S.AeGetProjectBitDepthArgs(extra=True)
+
+    args = S.AeSetProjectBitDepthArgs(
+        target_depth=16,
+        idempotency_key="bit-depth-intent-0001",
+    )
+    assert args.target_depth == 16
+    with pytest.raises(ValidationError):
+        S.AeSetProjectBitDepthArgs(
+            target_depth=24,
+            idempotency_key="bit-depth-intent-0001",
+        )
+    with pytest.raises(ValidationError):
+        S.AeSetProjectBitDepthArgs(
+            target_depth="16",
+            idempotency_key="bit-depth-intent-0001",
+        )
+    with pytest.raises(ValidationError):
+        S.AeSetProjectBitDepthArgs(target_depth=16, idempotency_key="too-short")
 
 
 def test_layers_optional_comp_id():

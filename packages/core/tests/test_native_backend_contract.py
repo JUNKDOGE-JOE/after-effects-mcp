@@ -52,7 +52,8 @@ def _jcs_digest(value: Any) -> str:
 
 
 def _descriptor() -> NativeCapabilityDescriptor:
-    raw = _fixture("capabilities.json")["response"]["result"]["items"][0]
+    items = _fixture("capabilities.json")["response"]["result"]["items"]
+    raw = next(item for item in items if item["id"] == "ae.project.summary")
     # The model deliberately accepts protocol aliases (id/version and camel
     # case) so transport adapters need no lossy hand-written field mapping.
     return NativeCapabilityDescriptor.model_validate(raw)
@@ -63,10 +64,19 @@ def _capabilities(
 ) -> NativeCapabilities:
     response = _fixture("capabilities.json")["response"]
     result = response["result"]
+    items = tuple(
+        NativeCapabilityDescriptor.model_validate(item)
+        for item in result["items"]
+    )
+    if descriptor is not None:
+        items = tuple(
+            descriptor if item.capability_id == "ae.project.summary" else item
+            for item in items
+        )
     return NativeCapabilities(
         session_id=response["sessionId"],
         detail=result["detail"],
-        items=(descriptor or _descriptor(),),
+        items=items,
         next_cursor=result["nextCursor"],
         query_digest=_jcs_digest(
             {
@@ -102,6 +112,7 @@ def _invoke_result() -> NativeInvokeResult:
         capability_version=raw["capabilityVersion"],
         engine=raw["engine"],
         outcome=raw["outcome"],
+        replayed=False,
         value=raw["value"],
         evidence=raw["evidence"],
     )
@@ -116,6 +127,7 @@ def _invoke_result_with_evidence(**updates: Any) -> NativeInvokeResult:
         capability_version=raw["capabilityVersion"],
         engine=raw["engine"],
         outcome=raw["outcome"],
+        replayed=False,
         value=raw["value"],
         evidence=evidence,
     )
@@ -274,6 +286,13 @@ def test_fixture_models_preserve_descriptor_result_and_error_policy():
     assert error.details == {"capabilityId": "ae.project.set_current_time"}
 
 
+def test_http_native_invoke_result_requires_explicit_replay_status():
+    raw = _fixture("invoke-project-summary.json")["response"]["result"]
+
+    with pytest.raises(ValidationError):
+        NativeInvokeResult.model_validate(raw)
+
+
 def test_native_descriptor_cannot_be_relabelled_as_jsx():
     raw = _fixture("capabilities.json")["response"]["result"]["items"][0]
     raw["engine"] = "maintained-jsx"
@@ -381,10 +400,7 @@ async def test_project_summary_binding_is_explicit_native_and_deadline_bound():
         "hostInstanceId": "22222222-2222-4222-8222-222222222222",
         "sessionId": "11111111-1111-4111-8111-111111111111",
         "sessionGeneration": 1,
-        "capabilitiesDigest": (
-            "778a01733fcf37510f56894a46ec5bd87"
-            "c7429de2e06d2d5eafb4cdbbae88557"
-        ),
+        "capabilitiesDigest": _negotiation().capabilities_digest,
         "requestId": "invoke-summary-1",
         "effect": "none",
         "requestDigest": (
@@ -535,6 +551,7 @@ async def test_project_summary_rejects_result_bound_to_another_request():
             capability_version=fixture_result["capabilityVersion"],
             engine=fixture_result["engine"],
             outcome=fixture_result["outcome"],
+            replayed=False,
             value=fixture_result["value"],
             evidence=evidence,
         )
@@ -597,6 +614,7 @@ async def test_project_summary_maps_invalid_value_to_structured_contract_error()
         capability_version=raw["capabilityVersion"],
         engine=raw["engine"],
         outcome=raw["outcome"],
+        replayed=False,
         value={"projectOpen": False, "projectName": "missing item count"},
         evidence=raw["evidence"],
     )

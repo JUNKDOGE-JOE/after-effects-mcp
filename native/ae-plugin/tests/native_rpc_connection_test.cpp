@@ -27,14 +27,18 @@ using aemcp::native::Clock;
 using aemcp::native::Completion;
 using aemcp::native::EnqueueCode;
 using aemcp::native::HostApi;
+using aemcp::native::HostBitDepthReadResult;
+using aemcp::native::HostBitDepthWriteResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostReadResult;
 using aemcp::native::NativeRpcConnectionHandler;
 using aemcp::native::NativeRpcObserver;
 using aemcp::native::NativeRpcRuntimeInfo;
+using aemcp::native::ProjectBitDepthChanged;
 using aemcp::native::ProjectSummary;
 using aemcp::native::Request;
 using aemcp::native::TimePoint;
+using aemcp::native::kProjectBitDepthSetCapability;
 using aemcp::native::kProjectSummaryCapability;
 using aemcp::native::rpc::SessionClock;
 
@@ -76,10 +80,40 @@ class FakeSessionClock final : public SessionClock {
 class FakeHost final : public HostApi {
  public:
   [[nodiscard]] HostReadResult read_project_summary(TimePoint) override {
+    ++read_calls;
     return HostReadResult::success(summary);
   }
 
+  [[nodiscard]] HostBitDepthReadResult read_project_bit_depth(TimePoint) override {
+    ++bit_depth_read_calls;
+    if (!bit_depth_read_error_code.empty()) {
+      return HostBitDepthReadResult::failure(
+          bit_depth_read_error_code, "fake bit-depth read error");
+    }
+    return HostBitDepthReadResult::success({bits_per_channel});
+  }
+
+  [[nodiscard]] HostBitDepthWriteResult set_project_bit_depth(
+      std::int32_t target_depth, TimePoint) override {
+    ++write_calls;
+    observed_target_depth = target_depth;
+    if (!write_error_code.empty()) {
+      return HostBitDepthWriteResult::failure(
+          write_error_code, "fake write error", write_error_field);
+    }
+    return HostBitDepthWriteResult::success(bit_depth_change);
+  }
+
   ProjectSummary summary{true, "fixture.aep", 3};
+  ProjectBitDepthChanged bit_depth_change{true, 8, 16};
+  std::int32_t bits_per_channel{8};
+  std::string bit_depth_read_error_code;
+  std::string write_error_code;
+  std::string write_error_field;
+  std::int32_t observed_target_depth{0};
+  int read_calls{0};
+  int bit_depth_read_calls{0};
+  int write_calls{0};
 };
 
 struct EventRecord {
@@ -163,8 +197,10 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      std::string(64, 'a'),
-      std::string(64, 'b'),
+      "0fda4e1bfbc8657bcd0c676fb802aecc97ba2ee6268cc115ff6d12b74758c042",
+      "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
+      "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
+      "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
   };
 }
 
@@ -265,6 +301,16 @@ std::string capabilities_json() {
         "\"params\":{\"ids\":[\"ae.project.summary\"],\"detail\":\"full\",\"limit\":1}}";
 }
 
+std::string bit_depth_capabilities_json(
+    std::string_view request_id, std::string_view capability_id) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession)
+      + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"capabilities\",\"params\":{\"ids\":[\""
+      + std::string(capability_id) + "\"],\"detail\":\"full\","
+        "\"limit\":1}}";
+}
+
 std::string invoke_json(
     std::string_view request_id,
     std::string_view session_id = kSession) {
@@ -273,6 +319,27 @@ std::string invoke_json(
       + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
         "\"params\":{\"capabilityId\":\"ae.project.summary\","
         "\"capabilityVersion\":1,\"arguments\":{}}}";
+}
+
+std::string bit_depth_read_invoke_json(std::string_view request_id) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.project.bit-depth.read\","
+        "\"capabilityVersion\":1,\"arguments\":{}}}";
+}
+
+std::string bit_depth_set_invoke_json(
+    std::string_view request_id,
+    std::string_view key = "bit-depth-intent-001",
+    std::int32_t target_depth = 16) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.project.bit-depth.set\","
+        "\"capabilityVersion\":1,\"arguments\":{\"targetDepth\":"
+      + std::to_string(target_depth) + ",\"idempotencyKey\":\""
+      + std::string(key) + "\"}}}";
 }
 
 std::string cancel_json(std::string_view request_id, std::string_view target_request_id) {
@@ -331,6 +398,34 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
       "\"queryDigest\":\"aa3c66bc21e50b6a35db9c3cb12fcb1627694cd8f9fc411f21f7e3de46b3e56a\"",
       "capabilities response");
 
+  send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-bit-depth-read", "ae.project.bit-depth.read"));
+  const std::string bit_depth_read_capabilities = read_body(sockets[0]);
+  require_contains(bit_depth_read_capabilities,
+      "\"id\":\"ae.project.bit-depth.read\"", "bit-depth read capabilities response");
+  require_contains(bit_depth_read_capabilities,
+      "\"idempotency\":\"idempotent\"", "bit-depth read capabilities response");
+  require_contains(bit_depth_read_capabilities,
+      "\"contractDigest\":\"936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e\"",
+      "bit-depth read capabilities response");
+  require_contains(bit_depth_read_capabilities,
+      "\"bitsPerChannel\":{\"enum\":[8,16,32]",
+      "bit-depth read capabilities response");
+
+  send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-bit-depth-set", "ae.project.bit-depth.set"));
+  const std::string bit_depth_set_capabilities = read_body(sockets[0]);
+  require_contains(bit_depth_set_capabilities,
+      "\"id\":\"ae.project.bit-depth.set\"", "bit-depth set capabilities response");
+  require_contains(bit_depth_set_capabilities,
+      "\"idempotency\":\"idempotency-key\"", "bit-depth set capabilities response");
+  require_contains(bit_depth_set_capabilities,
+      "\"contractDigest\":\"d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a\"",
+      "bit-depth set capabilities response");
+  require_contains(bit_depth_set_capabilities,
+      "\"targetDepth\":{\"enum\":[8,16,32]",
+      "bit-depth set capabilities response");
+
   send_json(sockets[0], invoke_json("invoke-read"));
   const std::string progress = read_body(sockets[0]);
   require_contains(progress, "\"event\":\"progress\"", "invoke progress");
@@ -352,6 +447,87 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
       && read_terminal.postcondition_digest
           == "0e82d012b2b7f26e310703c35b1d82e744809137f1ea5e6d1920aa29c0baca77",
       "read terminal evidence was not deterministic and verified");
+
+  send_json(sockets[0], bit_depth_read_invoke_json("invoke-bit-depth-read"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "bit-depth read progress");
+  wait_until([&] { return dispatcher.queued() == 1; }, "queued bit-depth read invoke");
+  const auto bit_depth_read_batch = dispatcher.drain(host);
+  require(bit_depth_read_batch.completions.size() == 1
+          && bit_depth_read_batch.completions[0].ok,
+      "owner dispatcher did not produce the bit-depth read result");
+  const std::string bit_depth_read = read_body(sockets[0]);
+  require_contains(bit_depth_read,
+      "\"capabilityId\":\"ae.project.bit-depth.read\"", "bit-depth read response");
+  require_contains(bit_depth_read, "\"effect\":\"none\"", "bit-depth read response");
+  require_contains(bit_depth_read,
+      "\"bitsPerChannel\":8", "bit-depth read response");
+  require_contains(bit_depth_read,
+      "\"kind\":\"project-bit-depth-read\"", "bit-depth read response");
+  wait_until([&] {
+    return !observer.terminal("invoke-bit-depth-read").request_id.empty();
+  }, "bit-depth read terminal audit");
+  const TerminalRecord bit_depth_read_terminal =
+      observer.terminal("invoke-bit-depth-read");
+  require(bit_depth_read_terminal.ok
+      && bit_depth_read_terminal.request_digest.size() == 64
+      && bit_depth_read_terminal.postcondition_digest
+          == aemcp::native::rpc::digest_project_bit_depth_read_postcondition(8)
+      && host.bit_depth_read_calls == 1,
+      "bit-depth read terminal evidence was not deterministic and verified");
+
+  send_json(sockets[0], bit_depth_set_invoke_json("invoke-bit-depth-set"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "bit-depth set progress");
+  wait_until([&] { return dispatcher.queued() == 1; }, "queued bit-depth set invoke");
+  const auto bit_depth_set_batch = dispatcher.drain(host);
+  require(bit_depth_set_batch.completions.size() == 1
+          && bit_depth_set_batch.completions[0].ok,
+      "owner dispatcher did not produce the bit-depth set result");
+  const std::string bit_depth_set = read_body(sockets[0]);
+  require_contains(bit_depth_set,
+      "\"capabilityId\":\"ae.project.bit-depth.set\"", "bit-depth set response");
+  require_contains(bit_depth_set,
+      "\"effect\":\"committed\"", "bit-depth set response");
+  require_contains(bit_depth_set,
+      "\"undo\":{\"available\":true,\"verified\":false}",
+      "bit-depth set response");
+  require_contains(bit_depth_set,
+      "\"kind\":\"project-bit-depth-set\"", "bit-depth set response");
+  require_contains(bit_depth_set,
+      "\"afterBitsPerChannel\":16,\"beforeBitsPerChannel\":8,\"changed\":true",
+      "bit-depth set response");
+  require(bit_depth_set.find("groupId") == std::string::npos,
+      "bit-depth set response fabricated an SDK undo token");
+  wait_until([&] {
+    return !observer.terminal("invoke-bit-depth-set").request_id.empty();
+  }, "bit-depth set terminal audit");
+  const TerminalRecord bit_depth_set_terminal =
+      observer.terminal("invoke-bit-depth-set");
+  require(bit_depth_set_terminal.ok
+      && bit_depth_set_terminal.request_digest.size() == 64
+      && bit_depth_set_terminal.postcondition_digest
+          == aemcp::native::rpc::digest_project_bit_depth_set_postcondition(true, 8, 16)
+      && host.write_calls == 1 && host.observed_target_depth == 16,
+      "bit-depth set terminal evidence was not deterministic and verified");
+
+  send_json(sockets[0], bit_depth_set_invoke_json("invoke-bit-depth-set-duplicate"));
+  const std::string duplicate = read_body(sockets[0]);
+  require_contains(duplicate, "\"code\":\"DUPLICATE_REQUEST\"",
+      "same-key bit-depth duplicate");
+  require_contains(duplicate, "\"sideEffect\":\"not-started\"",
+      "same-key bit-depth duplicate");
+  require_contains(duplicate, "\"field\":\"params.arguments.idempotencyKey\"",
+      "same-key bit-depth duplicate");
+  require(host.write_calls == 1 && !wait_readable(sockets[0], 100ms),
+      "same-key duplicate generated progress or a second host mutation");
+
+  send_json(sockets[0], bit_depth_set_invoke_json(
+      "invoke-bit-depth-set-conflict", "bit-depth-intent-001", 32));
+  const std::string conflict = read_body(sockets[0]);
+  require_contains(conflict, "\"code\":\"DUPLICATE_REQUEST\"",
+      "different-args bit-depth duplicate");
+  require(host.write_calls == 1, "different-args idempotency conflict reached HostApi");
 
   send_json(sockets[0], invoke_json("invoke-cancel"));
   require_contains(read_body(sockets[0]), "\"event\":\"progress\"", "cancel setup progress");
@@ -388,6 +564,18 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
       "detached completion leaked a response onto the active connection");
 
   finish_connection(sockets[0], sockets[1], worker);
+  require(dispatcher.enqueue(Request{
+      "bit-depth-after-disconnect",
+      std::string(kProjectBitDepthSetCapability),
+      dispatcher_clock.now() + 1s,
+      "route-e2e",
+      8,
+      16,
+      "bit-depth-intent-001",
+      aemcp::native::rpc::digest_project_bit_depth_set_arguments(
+          16, "bit-depth-intent-001"),
+  }).code == EnqueueCode::kDuplicateRequest,
+      "successful bit-depth business fence was lost across broker disconnect");
   require(dispatcher.enqueue(Request{
       "old-generation",
       std::string(kProjectSummaryCapability),
@@ -439,6 +627,45 @@ void invalid_postcondition_becomes_structured_failure() {
       "invalid postcondition was audited as a verified success");
   require(observer.has_event("terminal.validation", "invalid-result", "invalid-evidence"),
       "invalid postcondition did not emit a validation decision");
+
+  send_json(sockets[0], bit_depth_set_invoke_json(
+      "invalid-bit-depth-result", "bit-depth-intent-901", 16));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "invalid bit-depth evidence progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "invalid bit-depth evidence invoke");
+  // The HostApi reports a structurally valid transition to the wrong target.
+  // The dispatcher must bind the postcondition to the requested target=16 and
+  // treat this post-dispatch mismatch as possibly side effecting.
+  host.bit_depth_change.after_bits_per_channel = 32;
+  require(dispatcher.drain(host).completions.size() == 1,
+      "invalid bit-depth result did not reach transport validation");
+  const std::string bit_depth_failure = read_body(sockets[0]);
+  require_contains(bit_depth_failure,
+      "\"code\":\"POSSIBLY_SIDE_EFFECTING_FAILURE\"",
+      "invalid bit-depth evidence failure");
+  require_contains(bit_depth_failure, "\"sideEffect\":\"may-have-occurred\"",
+      "invalid bit-depth evidence failure");
+  require_contains(bit_depth_failure,
+      "\"capabilityId\":\"ae.project.bit-depth.set\"",
+      "invalid bit-depth evidence failure");
+  wait_until([&] {
+    return !observer.terminal("invalid-bit-depth-result").request_id.empty();
+  }, "invalid bit-depth terminal audit");
+  const TerminalRecord bit_depth_terminal =
+      observer.terminal("invalid-bit-depth-result");
+  require(!bit_depth_terminal.ok
+      && bit_depth_terminal.error_code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+      && bit_depth_terminal.postcondition_digest.empty() && host.write_calls == 1,
+      "invalid bit-depth evidence was mislabeled as a safe failure");
+
+  send_json(sockets[0], bit_depth_set_invoke_json(
+      "invalid-bit-depth-retry", "bit-depth-intent-901", 16));
+  const std::string fenced = read_body(sockets[0]);
+  require_contains(fenced, "\"code\":\"DUPLICATE_REQUEST\"",
+      "ambiguous bit-depth retry fence");
+  require(host.write_calls == 1,
+      "ambiguous bit-depth evidence allowed a second host mutation");
 
   finish_connection(sockets[0], sockets[1], worker);
   (void)dispatcher.shutdown();

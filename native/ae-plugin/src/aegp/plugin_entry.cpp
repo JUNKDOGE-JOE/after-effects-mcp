@@ -29,6 +29,7 @@
 #include <string_view>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -49,6 +50,8 @@ using namespace std::chrono_literals;
 using aemcp::native::Completion;
 using aemcp::native::DrainBatch;
 using aemcp::native::HostApi;
+using aemcp::native::HostBitDepthReadResult;
+using aemcp::native::HostBitDepthWriteResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostReadResult;
 using aemcp::native::MacEndpointRegistry;
@@ -60,10 +63,14 @@ using aemcp::native::NativeRpcObserver;
 using aemcp::native::NativeRpcRuntimeInfo;
 using aemcp::native::PairingGate;
 using aemcp::native::PairingUiDecision;
+using aemcp::native::ProjectBitDepth;
+using aemcp::native::ProjectBitDepthChanged;
 using aemcp::native::ProjectSummary;
 using aemcp::native::Request;
 using aemcp::native::SystemClock;
 using aemcp::native::TimePoint;
+using aemcp::native::kProjectBitDepthReadCapability;
+using aemcp::native::kProjectBitDepthSetCapability;
 using aemcp::native::kProjectSummaryCapability;
 
 constexpr std::string_view kPluginVersion = "0.1.0-dev";
@@ -71,9 +78,13 @@ constexpr std::string_view kSdkVersion = "25.6.61";
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::string_view kCapabilitiesDigest =
-    "778a01733fcf37510f56894a46ec5bd87c7429de2e06d2d5eafb4cdbbae88557";
+    "0fda4e1bfbc8657bcd0c676fb802aecc97ba2ee6268cc115ff6d12b74758c042";
 constexpr std::string_view kProjectSummaryContractDigest =
     "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
+constexpr std::string_view kProjectBitDepthReadContractDigest =
+    "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e";
+constexpr std::string_view kProjectBitDepthSetContractDigest =
+    "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a";
 constexpr std::int64_t kMaximumProjectItems = 100000;
 static_assert(kSourceCommit.size() == 40);
 
@@ -243,6 +254,24 @@ class SuiteLease final {
   const Suite* suite_{nullptr};
 };
 
+[[nodiscard]] std::optional<AEGP_ProjBitDepth> sdk_bit_depth(
+    std::int32_t bits_per_channel) {
+  switch (bits_per_channel) {
+    case 8: return static_cast<AEGP_ProjBitDepth>(AEGP_ProjBitDepth_8);
+    case 16: return static_cast<AEGP_ProjBitDepth>(AEGP_ProjBitDepth_16);
+    case 32: return static_cast<AEGP_ProjBitDepth>(AEGP_ProjBitDepth_32);
+    default: return std::nullopt;
+  }
+}
+
+[[nodiscard]] std::optional<std::int32_t> bits_per_channel(
+    AEGP_ProjBitDepth depth) {
+  if (depth == static_cast<AEGP_ProjBitDepth>(AEGP_ProjBitDepth_8)) return 8;
+  if (depth == static_cast<AEGP_ProjBitDepth>(AEGP_ProjBitDepth_16)) return 16;
+  if (depth == static_cast<AEGP_ProjBitDepth>(AEGP_ProjBitDepth_32)) return 32;
+  return std::nullopt;
+}
+
 class AegpHostApi final : public HostApi {
  public:
   explicit AegpHostApi(SPBasicSuite* basic) : basic_(basic) {}
@@ -327,6 +356,171 @@ class AegpHostApi final : public HostApi {
         true, std::string(name.begin(), name_end), item_count});
   }
 
+  [[nodiscard]] HostBitDepthReadResult read_project_bit_depth(
+      TimePoint work_deadline) override {
+    const auto budget_expired = [work_deadline] {
+      return std::chrono::steady_clock::now() >= work_deadline;
+    };
+    if (budget_expired()) {
+      return HostBitDepthReadResult::failure(
+          "DEADLINE_EXCEEDED", "project bit-depth read budget elapsed");
+    }
+
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    if (project_suite.get() == nullptr) {
+      return HostBitDepthReadResult::failure(
+          "NATIVE_UNSUPPORTED", "required project suite unavailable");
+    }
+
+    A_long project_count = 0;
+    if (project_suite->AEGP_GetNumProjects(&project_count) != A_Err_NONE) {
+      return HostBitDepthReadResult::failure(
+          "CAPABILITY_FAILED", "could not read project count");
+    }
+    if (project_count <= 0) {
+      return HostBitDepthReadResult::failure(
+          "PRECONDITION_FAILED", "an After Effects project must be open");
+    }
+
+    AEGP_ProjectH project = nullptr;
+    if (budget_expired()) {
+      return HostBitDepthReadResult::failure(
+          "DEADLINE_EXCEEDED", "project bit-depth read budget elapsed");
+    }
+    if (project_suite->AEGP_GetProjectByIndex(0, &project) != A_Err_NONE
+        || project == nullptr) {
+      return HostBitDepthReadResult::failure(
+          "CAPABILITY_FAILED", "could not resolve the open project");
+    }
+
+    AEGP_ProjBitDepth observed = static_cast<AEGP_ProjBitDepth>(-1);
+    if (project_suite->AEGP_GetProjectBitDepth(project, &observed) != A_Err_NONE) {
+      return HostBitDepthReadResult::failure(
+          "CAPABILITY_FAILED", "could not read project bits per channel");
+    }
+    const auto mapped = bits_per_channel(observed);
+    if (!mapped.has_value()) {
+      return HostBitDepthReadResult::failure(
+          "CAPABILITY_FAILED", "project returned an unsupported bit-depth enum");
+    }
+    if (budget_expired()) {
+      return HostBitDepthReadResult::failure(
+          "DEADLINE_EXCEEDED", "project bit-depth read budget elapsed");
+    }
+    return HostBitDepthReadResult::success(ProjectBitDepth{*mapped});
+  }
+
+  [[nodiscard]] HostBitDepthWriteResult set_project_bit_depth(
+      std::int32_t target_depth,
+      TimePoint work_deadline) override {
+    const auto budget_expired = [work_deadline] {
+      return std::chrono::steady_clock::now() >= work_deadline;
+    };
+    const auto target = sdk_bit_depth(target_depth);
+    if (!target.has_value()) {
+      return HostBitDepthWriteResult::failure(
+          "INVALID_ARGUMENT",
+          "targetDepth must be one of 8, 16, or 32",
+          "params.arguments.targetDepth");
+    }
+    if (budget_expired()) {
+      return HostBitDepthWriteResult::failure(
+          "DEADLINE_EXCEEDED", "project bit-depth set budget elapsed");
+    }
+
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    if (project_suite.get() == nullptr || utility_suite.get() == nullptr) {
+      return HostBitDepthWriteResult::failure(
+          "NATIVE_UNSUPPORTED", "required project mutation suites unavailable");
+    }
+
+    A_long project_count = 0;
+    if (project_suite->AEGP_GetNumProjects(&project_count) != A_Err_NONE) {
+      return HostBitDepthWriteResult::failure(
+          "CAPABILITY_FAILED", "could not read project count before mutation");
+    }
+    if (project_count <= 0) {
+      return HostBitDepthWriteResult::failure(
+          "PRECONDITION_FAILED", "an After Effects project must be open");
+    }
+
+    AEGP_ProjectH project = nullptr;
+    if (budget_expired()) {
+      return HostBitDepthWriteResult::failure(
+          "DEADLINE_EXCEEDED", "project bit-depth set budget elapsed");
+    }
+    if (project_suite->AEGP_GetProjectByIndex(0, &project) != A_Err_NONE
+        || project == nullptr) {
+      return HostBitDepthWriteResult::failure(
+          "CAPABILITY_FAILED", "could not resolve the open project");
+    }
+
+    AEGP_ProjBitDepth before_sdk = static_cast<AEGP_ProjBitDepth>(-1);
+    if (project_suite->AEGP_GetProjectBitDepth(project, &before_sdk) != A_Err_NONE) {
+      return HostBitDepthWriteResult::failure(
+          "CAPABILITY_FAILED", "could not read project bit depth before mutation");
+    }
+    const auto before = bits_per_channel(before_sdk);
+    if (!before.has_value()) {
+      return HostBitDepthWriteResult::failure(
+          "CAPABILITY_FAILED", "project returned an unsupported bit-depth enum");
+    }
+    if (*before == target_depth) {
+      return HostBitDepthWriteResult::failure(
+          "INVALID_ARGUMENT",
+          "targetDepth already matches the project's current bits per channel",
+          "params.arguments.targetDepth");
+    }
+    if (budget_expired()) {
+      return HostBitDepthWriteResult::failure(
+          "DEADLINE_EXCEEDED", "project bit-depth set budget elapsed");
+    }
+
+    static constexpr char kUndoLabel[] = "ae-mcp: Set project bit depth";
+    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+      return HostBitDepthWriteResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+
+    const A_Err set_error = project_suite->AEGP_SetProjectBitDepth(project, *target);
+    // A successful StartUndoGroup is always balanced. Once SetProjectBitDepth
+    // has been called, every failure is possibly side-effecting regardless of
+    // the SDK return code. Readback is still attempted to aid exact validation.
+    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    AEGP_ProjBitDepth after_sdk = static_cast<AEGP_ProjBitDepth>(-1);
+    const A_Err readback_error = project_suite->AEGP_GetProjectBitDepth(
+        project, &after_sdk);
+    const auto after = readback_error == A_Err_NONE
+        ? bits_per_channel(after_sdk) : std::nullopt;
+
+    if (set_error != A_Err_NONE) {
+      return HostBitDepthWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "project bit depth may have changed despite an SDK error; inspect project state");
+    }
+    if (end_error != A_Err_NONE) {
+      return HostBitDepthWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "project bit depth changed but its undo group did not close cleanly");
+    }
+    if (!after.has_value() || *after != target_depth || *after == *before) {
+      return HostBitDepthWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "project bit-depth readback did not verify the requested state transition");
+    }
+    if (budget_expired()) {
+      return HostBitDepthWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "project bit depth changed after the validation budget elapsed");
+    }
+    return HostBitDepthWriteResult::success(ProjectBitDepthChanged{
+        true, *before, *after});
+  }
+
  private:
   SPBasicSuite* basic_{nullptr};
 };
@@ -364,6 +558,8 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
             instance_id,
             std::string(kCapabilitiesDigest),
             std::string(kProjectSummaryContractDigest),
+            std::string(kProjectBitDepthReadContractDigest),
+            std::string(kProjectBitDepthSetContractDigest),
         },
         *this);
     ipc_server = std::make_unique<MacIpcServer>(
@@ -430,7 +626,9 @@ void log_load(PluginState& state) {
          << ",\"minor\":" << state.driver_minor << "}"
          << ",\"host\":{\"version\":\"" << json_escape(state.host_identity.version)
          << "\",\"build\":\"" << json_escape(state.host_identity.build) << "\"}"
-         << ",\"capabilities\":[\"" << kProjectSummaryCapability << "\"]}"
+         << ",\"capabilities\":[\"" << kProjectSummaryCapability << "\",\""
+         << kProjectBitDepthReadCapability << "\",\""
+         << kProjectBitDepthSetCapability << "\"]}"
          ;
   state.log.append(output.str());
 }
@@ -456,11 +654,23 @@ void log_completion(
            << ",\"completedAtUnixMs\":" << completed_at_unix_ms;
   }
   if (completion.ok) {
-    output << ",\"result\":{\"projectOpen\":"
-           << (completion.result.project_open ? "true" : "false")
-           << ",\"projectNameRedacted\":"
-           << (completion.result.project_name.empty() ? "false" : "true")
-           << ",\"itemCount\":" << completion.result.item_count;
+    if (completion.capability_id == kProjectBitDepthSetCapability) {
+      output << ",\"result\":{\"changed\":"
+             << (completion.bit_depth_change_result.changed ? "true" : "false")
+             << ",\"beforeBitsPerChannel\":"
+             << completion.bit_depth_change_result.before_bits_per_channel
+             << ",\"afterBitsPerChannel\":"
+             << completion.bit_depth_change_result.after_bits_per_channel;
+    } else if (completion.capability_id == kProjectBitDepthReadCapability) {
+      output << ",\"result\":{\"bitsPerChannel\":"
+             << completion.bit_depth_result.bits_per_channel;
+    } else {
+      output << ",\"result\":{\"projectOpen\":"
+             << (completion.result.project_open ? "true" : "false")
+             << ",\"projectNameRedacted\":"
+             << (completion.result.project_name.empty() ? "false" : "true")
+             << ",\"itemCount\":" << completion.result.item_count;
+    }
     if (!postcondition_digest.empty()) {
       output << ",\"postconditionDigest\":\""
              << json_escape(postcondition_digest) << "\"";

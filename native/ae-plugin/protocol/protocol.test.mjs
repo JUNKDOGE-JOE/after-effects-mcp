@@ -21,7 +21,10 @@ import {
   decodeFrame,
   encodeFrame,
   materializeDeadline,
+  nativeCapabilityRegistry,
   postconditionDigest,
+  projectBitDepthReadDescriptor,
+  projectBitDepthSetDescriptor,
   projectSummaryContractDigest,
   projectSummaryDescriptor,
   schemaAccepts as productSchemaAccepts,
@@ -197,6 +200,8 @@ test('all checked-in vectors are synthetic and contain no host or Adobe suite cl
     'hello.json',
     'capabilities.json',
     'invoke-project-summary.json',
+    'invoke-project-bit-depth-read.json',
+    'invoke-project-bit-depth-set.json',
     'cancel.json',
     'errors.json',
     'negative-corpus.json',
@@ -221,7 +226,14 @@ test('all checked-in vectors are synthetic and contain no host or Adobe suite cl
 });
 
 test('golden requests, events, responses, and bound error policies validate', () => {
-  for (const name of ['hello.json', 'capabilities.json', 'invoke-project-summary.json', 'cancel.json']) {
+  for (const name of [
+    'hello.json',
+    'capabilities.json',
+    'invoke-project-summary.json',
+    'invoke-project-bit-depth-read.json',
+    'invoke-project-bit-depth-set.json',
+    'cancel.json',
+  ]) {
     const fixture = golden(name);
     assert.equal(schemaAccepts(schema.$defs.request, fixture.request), true, `${name} request`);
     for (const event of fixture.events ?? []) {
@@ -417,6 +429,8 @@ test('schema shape and composite request validation have an explicit differentia
     golden('hello.json').request,
     golden('capabilities.json').request,
     golden('invoke-project-summary.json').request,
+    golden('invoke-project-bit-depth-read.json').request,
+    golden('invoke-project-bit-depth-set.json').request,
     golden('cancel.json').request,
   ];
   for (const request of validRequests) {
@@ -606,9 +620,10 @@ test('capability discovery uses real canonical digests and keeps compatibility u
   const exchange = golden('capabilities.json');
   const capabilities = exchange.response;
   const descriptor = capabilities.result.items[0];
+  assert.deepEqual(capabilities.result.items, nativeCapabilityRegistry(schema));
   assert.equal(descriptor.contractDigest, projectSummaryContractDigest(schema));
   assert.deepEqual(descriptor, projectSummaryDescriptor(schema));
-  assert.equal(capabilities.result.capabilitiesDigest, capabilityDigest([projectSummaryDescriptor(schema)]));
+  assert.equal(capabilities.result.capabilitiesDigest, capabilityDigest(nativeCapabilityRegistry(schema)));
   assert.equal(capabilities.result.queryDigest, capabilityQueryDigest(exchange.request));
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, capabilities, schema), true);
   assert.equal(validateCapabilityDescriptor(descriptor, schema), true);
@@ -644,6 +659,8 @@ test('capability discovery uses real canonical digests and keeps compatibility u
 
 test('full descriptors are bounded, self-contained direct-run contracts', () => {
   const descriptor = projectSummaryDescriptor(schema);
+  const bitDepthReadDescriptor = projectBitDepthReadDescriptor(schema);
+  const bitDepthSetDescriptor = projectBitDepthSetDescriptor(schema);
   const containsRef = (value) => {
     if (Array.isArray(value)) return value.some(containsRef);
     if (value === null || typeof value !== 'object') return false;
@@ -664,13 +681,25 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     inputSchema: descriptor.inputSchema,
     resultSchema: descriptor.resultSchema,
   }));
+  assert.deepEqual(bitDepthReadDescriptor.resultSchema.properties.bitsPerChannel.enum,
+    [8, 16, 32]);
+  assert.deepEqual(bitDepthSetDescriptor.inputSchema.properties.targetDepth.enum,
+    [8, 16, 32]);
+  assert.equal(bitDepthReadDescriptor.contractDigest,
+    '936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e');
+  assert.equal(bitDepthSetDescriptor.contractDigest,
+    'd5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a');
+  assert.equal(capabilityDigest([descriptor, bitDepthReadDescriptor, bitDepthSetDescriptor]),
+    '0fda4e1bfbc8657bcd0c676fb802aecc97ba2ee6268cc115ff6d12b74758c042');
   assert.ok(Buffer.byteLength(canonicalize(descriptor), 'utf8') < LIMITS.maxFrameBytes);
 });
 
 test('v1 capability discovery is single-page, fail-closed, and never replayed', () => {
   const hello = golden('hello.json');
   const exchange = golden('capabilities.json');
-  assert.equal(exchange.request.params.limit, 1);
+  assert.equal(exchange.request.params.limit, 100);
+  assert.equal(Object.hasOwn(exchange.request.params, 'ids'), false);
+  assert.equal(exchange.response.result.items.length, 3);
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, exchange.response, schema), true);
 
   const zeroLimit = structuredClone(exchange.request);
@@ -688,20 +717,18 @@ test('v1 capability discovery is single-page, fail-closed, and never replayed', 
   assert.equal(validateCapabilitiesExchange(hello, unknownRequest, unknownResponse, schema), true,
     'an unknown explicit ID yields an empty, digest-bound single page');
 
-  const secondDescriptor = {
-    ...projectSummaryDescriptor(schema),
-    id: 'ae.project.second',
-    inputContractId: 'aemcp.contract.ae.project.second.input.v1',
-    resultContractId: 'aemcp.contract.ae.project.second.result.v1',
-  };
-  const multiRequest = structuredClone(exchange.request);
-  delete multiRequest.params.ids;
+  const lowLimitRequest = structuredClone(exchange.request);
+  lowLimitRequest.requestId = 'capabilities-low-limit';
+  lowLimitRequest.params.limit = 1;
+  const lowLimitResponse = structuredClone(exchange.response);
+  lowLimitResponse.requestId = lowLimitRequest.requestId;
+  lowLimitResponse.result.items = [projectSummaryDescriptor(schema)];
+  lowLimitResponse.result.queryDigest = capabilityQueryDigest(lowLimitRequest);
   assert.equal(validateCapabilitiesExchange(
     hello,
-    multiRequest,
-    exchange.response,
+    lowLimitRequest,
+    lowLimitResponse,
     schema,
-    [projectSummaryDescriptor(schema), secondDescriptor],
   ), false, 'v1 refuses truncation when the requested limit is smaller than matching entries');
 
   const replayed = { ...exchange.response, replayed: true };
@@ -725,11 +752,11 @@ test('invoke is a closed capability-specific allowlist, including nested executa
     assert.deepEqual(classifyRequest(candidate), { ok: false, errorCode: 'INVALID_ARGUMENT' });
   }
   assert.equal(validateIdempotencyContract({ idempotency: 'idempotency-key' }, {
-    idempotencyKey: 'synthetic-key-0001',
+    arguments: { idempotencyKey: 'synthetic-key-0001' },
   }), true);
-  assert.equal(validateIdempotencyContract({ idempotency: 'idempotency-key' }, {}), false);
+  assert.equal(validateIdempotencyContract({ idempotency: 'idempotency-key' }, { arguments: {} }), false);
   assert.equal(validateIdempotencyContract({ idempotency: 'idempotent' }, {
-    idempotencyKey: 'synthetic-key-0001',
+    arguments: { idempotencyKey: 'synthetic-key-0001' },
   }), false);
 });
 
@@ -1096,6 +1123,70 @@ test('invoke transcript binds progress order, one terminal result, identities, t
   assert.equal(schemaAccepts(schema.$defs.response, unverified), false);
 });
 
+test('bit-depth invoke vectors bind native read and undoable set semantics', () => {
+  for (const [name, descriptor] of [
+    ['invoke-project-bit-depth-read.json', projectBitDepthReadDescriptor(schema)],
+    ['invoke-project-bit-depth-set.json', projectBitDepthSetDescriptor(schema)],
+  ]) {
+    const fixture = golden(name);
+    const context = {
+      hello: golden('hello.json'),
+      descriptor,
+      schema,
+      brokerSendUnixMs: 1900000000000,
+      effectiveDeadlineUnixMs: fixture.request.deadlineUnixMs,
+      terminalObservedUnixMs: 1900000000030,
+    };
+    assert.equal(fixture.response.result.evidence.requestDigest, sha256Jcs(fixture.request));
+    assert.equal(
+      fixture.response.result.evidence.postcondition.digest,
+      postconditionDigest(fixture.response.result),
+    );
+    assert.equal(validateTranscript(
+      context,
+      fixture.request,
+      [...fixture.events, fixture.response],
+    ), true, name);
+  }
+
+  const read = golden('invoke-project-bit-depth-read.json');
+  const readWithUndo = structuredClone(read.response);
+  readWithUndo.result.evidence.undo = { available: true, verified: false };
+  assert.equal(validateTranscript({
+    hello: golden('hello.json'),
+    descriptor: projectBitDepthReadDescriptor(schema),
+    schema,
+    brokerSendUnixMs: 1900000000000,
+    effectiveDeadlineUnixMs: read.request.deadlineUnixMs,
+    terminalObservedUnixMs: 1900000000030,
+  }, read.request, [...read.events, readWithUndo]), false);
+
+  const set = golden('invoke-project-bit-depth-set.json');
+  const setContext = {
+    hello: golden('hello.json'),
+    descriptor: projectBitDepthSetDescriptor(schema),
+    schema,
+    brokerSendUnixMs: 1900000000000,
+    effectiveDeadlineUnixMs: set.request.deadlineUnixMs,
+    terminalObservedUnixMs: 1900000000030,
+  };
+  const setWithVerifiedUndo = structuredClone(set.response);
+  setWithVerifiedUndo.result.evidence.undo.verified = true;
+  assert.equal(validateTranscript(
+    setContext,
+    set.request,
+    [...set.events, setWithVerifiedUndo],
+  ), false);
+  const noChange = structuredClone(set.response);
+  noChange.result.value.beforeBitsPerChannel = noChange.result.value.afterBitsPerChannel;
+  noChange.result.evidence.postcondition.digest = postconditionDigest(noChange.result);
+  assert.equal(validateTranscript(setContext, set.request, [...set.events, noChange]), false);
+  const wrongTarget = structuredClone(set.response);
+  wrongTarget.result.value.afterBitsPerChannel = 8;
+  wrongTarget.result.evidence.postcondition.digest = postconditionDigest(wrongTarget.result);
+  assert.equal(validateTranscript(setContext, set.request, [...set.events, wrongTarget]), false);
+});
+
 test('server-issued locators reject pointer shapes and stale host/session/project/generation', () => {
   const locator = {
     kind: 'layer',
@@ -1148,9 +1239,13 @@ test('cancel states distinguish queued, running, terminal, and missing targets',
     maxTerminalCacheEntries: 128,
   };
   const descriptor = projectSummaryDescriptor(schema);
+  const registryFor = (capabilityDescriptor) => nativeCapabilityRegistry(schema).map((item) => (
+    item.id === capabilityDescriptor.id && item.version === capabilityDescriptor.version
+      ? capabilityDescriptor : item
+  ));
   const helloFor = (capabilityDescriptor) => {
     const hello = structuredClone(golden('hello.json'));
-    hello.response.result.capabilitiesDigest = capabilityDigest([capabilityDescriptor]);
+    hello.response.result.capabilitiesDigest = capabilityDigest(registryFor(capabilityDescriptor));
     return hello;
   };
   const responseFor = (request, state, terminalResponseExpected) => ({
@@ -1165,6 +1260,7 @@ test('cancel states distinguish queued, running, terminal, and missing targets',
   const contextFor = (decision, capabilityDescriptor, targetRequest, hello = helloFor(capabilityDescriptor)) => ({
     hello,
     descriptor: capabilityDescriptor,
+    registry: registryFor(capabilityDescriptor),
     schema,
     cancelDecision: decision.decisionReceipt,
     targetTranscriptContext: targetRequest ? {

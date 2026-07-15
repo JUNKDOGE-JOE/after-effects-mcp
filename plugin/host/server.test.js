@@ -11,6 +11,9 @@ const bundledExpressFixture = require('express');
 const brokerFailureFixtures = Object.values(require(
     '../../native/ae-plugin/protocol/fixtures/broker-http-errors.json'
 ));
+const nativeCapabilitiesFixture = require(
+    '../../native/ae-plugin/protocol/fixtures/capabilities.json'
+).response.result;
 
 const authToken = require('./auth-token');
 
@@ -198,25 +201,55 @@ function fakeNativeClient() {
                 host: { instanceId: pending.hostInstanceId, platform: 'macos-arm64' },
                 sessionId,
                 sessionGeneration: 7,
-                capabilitiesDigest: 'd'.repeat(64),
+                capabilitiesDigest: nativeCapabilitiesFixture.capabilitiesDigest,
             };
         },
         capabilities: async function (options) {
             calls.push(['capabilities', options]);
-            return {
-                detail: 'full',
-                items: [],
-                nextCursor: null,
-                queryDigest: 'f'.repeat(64),
-                capabilitiesDigest: 'd'.repeat(64),
-            };
+            return nativeCapabilitiesFixture;
         },
         invoke: async function (request) {
             calls.push(['invoke', request]);
+            if (request.capabilityId === 'ae.project.bit-depth.set') {
+                return {
+                    capabilityId: 'ae.project.bit-depth.set',
+                    capabilityVersion: 1,
+                    engine: 'native-aegp',
+                    replayed: false,
+                    evidence: {
+                        requestId: request.requestId,
+                        requestDigest: 'b'.repeat(64),
+                        effect: 'committed',
+                        postcondition: { verified: true, digest: 'c'.repeat(64) },
+                        undo: { available: true, verified: false },
+                    },
+                    value: {
+                        changed: true,
+                        beforeBitsPerChannel: 8,
+                        afterBitsPerChannel: request.arguments.targetDepth,
+                    },
+                };
+            }
+            if (request.capabilityId === 'ae.project.bit-depth.read') {
+                return {
+                    capabilityId: 'ae.project.bit-depth.read',
+                    capabilityVersion: 1,
+                    engine: 'native-aegp',
+                    replayed: false,
+                    evidence: {
+                        requestId: request.requestId,
+                        requestDigest: 'b'.repeat(64),
+                        effect: 'none',
+                        postcondition: { verified: true, digest: 'c'.repeat(64) },
+                    },
+                    value: { bitsPerChannel: 8 },
+                };
+            }
             return {
                 capabilityId: 'ae.project.summary',
                 capabilityVersion: 1,
                 engine: 'native-aegp',
+                replayed: false,
                 evidence: {
                     requestId: request.requestId,
                     requestDigest: 'b'.repeat(64),
@@ -232,8 +265,12 @@ function fakeNativeClient() {
                 sourceCommit: pending.sourceCommit,
                 sessionId: state === 'connected' ? sessionId : null,
                 sessionGeneration: state === 'connected' ? 7 : null,
-                capabilitiesDigest: 'd'.repeat(64),
-                projectSummaryContractDigest: 'e'.repeat(64),
+                capabilitiesDigest: nativeCapabilitiesFixture.capabilitiesDigest,
+                projectSummaryContractDigest: nativeCapabilitiesFixture.items[0].contractDigest,
+                projectBitDepthReadContractDigest:
+                    nativeCapabilitiesFixture.items[1].contractDigest,
+                projectBitDepthSetContractDigest:
+                    nativeCapabilitiesFixture.items[2].contractDigest,
             };
         },
         close: async function () { closed += 1; state = 'closed'; },
@@ -288,6 +325,20 @@ test('native routes require the shared token and reject an open-ended invoke env
         });
         assert.strictEqual(oversizedRequestId.status, 400);
         assert.strictEqual(oversizedRequestId.body.error.code, 'INVALID_ARGUMENT');
+        const invalidBitDepth = await post(port, '/native/invoke', {
+            'X-AE-MCP-Token': 'known-secret-token',
+        }, {
+            requestId: 'core-bit-depth-invalid',
+            capabilityId: 'ae.project.bit-depth.set',
+            capabilityVersion: 1,
+            arguments: {
+                targetDepth: 24,
+                idempotencyKey: 'bit-depth-intent-0002',
+            },
+            deadlineUnixMs: Date.now() + 10000,
+        });
+        assert.strictEqual(invalidBitDepth.status, 400);
+        assert.strictEqual(invalidBitDepth.body.error.code, 'INVALID_ARGUMENT');
         assert.doesNotMatch(JSON.stringify(server.activity.list()), /r{65}/);
         assert.deepStrictEqual(nativeClient.calls, []);
     } finally {
@@ -334,6 +385,10 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
         });
         assert.strictEqual(capabilities.status, 200);
         assert.strictEqual(capabilities.body.result.sessionId, '11111111-1111-4111-8111-111111111111');
+        assert.deepStrictEqual(
+            capabilities.body.result.items.map((item) => item.id),
+            ['ae.project.summary', 'ae.project.bit-depth.read', 'ae.project.bit-depth.set'],
+        );
 
         const invoked = await post(port, '/native/invoke', headers, {
             requestId: 'core-project-summary-1',
@@ -345,6 +400,37 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
         assert.strictEqual(invoked.status, 200);
         assert.strictEqual(invoked.body.result.value.itemCount, 2);
         assert.strictEqual(invoked.body.result.evidence.postcondition.verified, true);
+        const bitDepthReadRequest = {
+            requestId: 'core-bit-depth-read-1',
+            capabilityId: 'ae.project.bit-depth.read',
+            capabilityVersion: 1,
+            arguments: {},
+            deadlineUnixMs,
+        };
+        const bitDepthRead = await post(port, '/native/invoke', headers, bitDepthReadRequest);
+        assert.strictEqual(bitDepthRead.status, 200);
+        assert.strictEqual(bitDepthRead.body.result.value.bitsPerChannel, 8);
+        assert.strictEqual(bitDepthRead.body.result.evidence.effect, 'none');
+        const bitDepthSetRequest = {
+            requestId: 'core-bit-depth-set-1',
+            capabilityId: 'ae.project.bit-depth.set',
+            capabilityVersion: 1,
+            arguments: {
+                targetDepth: 16,
+                idempotencyKey: 'bit-depth-intent-0001',
+            },
+            deadlineUnixMs,
+        };
+        const bitDepthSet = await post(port, '/native/invoke', headers, bitDepthSetRequest);
+        assert.strictEqual(bitDepthSet.status, 200);
+        assert.strictEqual(bitDepthSet.body.result.replayed, false);
+        assert.deepStrictEqual(bitDepthSet.body.result.value, {
+            changed: true, beforeBitsPerChannel: 8, afterBitsPerChannel: 16,
+        });
+        assert.strictEqual(bitDepthSet.body.result.evidence.effect, 'committed');
+        assert.deepStrictEqual(bitDepthSet.body.result.evidence.undo, {
+            available: true, verified: false,
+        });
         assert.deepStrictEqual(nativeClient.calls, [
             'pair',
             ['negotiate', { deadlineUnixMs }],
@@ -356,6 +442,8 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
                 arguments: {},
                 deadlineUnixMs,
             }],
+            ['invoke', bitDepthReadRequest],
+            ['invoke', bitDepthSetRequest],
         ]);
     } finally {
         srv.close();

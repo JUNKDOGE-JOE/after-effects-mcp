@@ -19,7 +19,7 @@ v0.9.2 已发布资产面向以下已验证范围：
 
 ```text
 面板内对话或外部 MCP 客户端
-  -> packages/core (ae_mcp, Python stdio MCP server, 44 个 ae_ 工具)
+  -> packages/core (ae_mcp, Python stdio MCP server, 47 个 ae_ 工具)
   -> backend (packages/bridge, httpx)
   -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
   -> CSInterface.evalScript
@@ -254,8 +254,11 @@ node native/ae-plugin/install-dev-macos.mjs recover
 ```
 
 Ad-hoc 签名和本地构建成功只属于开发证据。生成的回执会刻意保持
-`distributionApproved`、`runtimeEvidence` 和 `compatibilityEvidence` 为 false；真实 AE 加载以及公开
-MCP 到 AEGP 的读写门禁仍需另行完成。
+`distributionApproved`、`runtimeEvidence` 和 `compatibilityEvidence` 为 false；每个候选提交仍必须通过
+精确 commit 的真实 AE + 公开 MCP 门禁。当前开发态原生 surface 刻意保持很小：
+`ae_projectSummary` 读取工程摘要，`ae_getProjectBitDepth` 读取当前 8/16/32 bits-per-channel，
+`ae_setProjectBitDepth` 使用幂等键执行 SDK 明确标记为可撤销的修改，并做原生 readback 验证。
+原生通道不可用时这些工具会明确失败，不会回退到 JSX。
 
 CEP 面板 macOS 开发环境：
 

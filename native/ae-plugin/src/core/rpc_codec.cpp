@@ -389,6 +389,20 @@ bool valid_request_id(std::string_view value) {
   });
 }
 
+bool valid_idempotency_key(std::string_view value) {
+  if (value.size() < 16 || value.size() > 64 || !ascii_alphanumeric(value.front())) {
+    return false;
+  }
+  return std::all_of(value.begin() + 1, value.end(), [](char character) {
+    return ascii_alphanumeric(character) || character == '.' || character == '_'
+        || character == ':' || character == '-';
+  });
+}
+
+bool valid_bit_depth(std::int32_t value) {
+  return value == 8 || value == 16 || value == 32;
+}
+
 bool valid_uuid(std::string_view value) {
   if (value.size() != 36 || value[8] != '-' || value[13] != '-'
       || value[18] != '-' || value[23] != '-') return false;
@@ -526,7 +540,13 @@ std::string canonical_request(const ParsedRequest& request) {
     }
     case RpcMethod::kInvoke: {
       const auto& value = std::get<InvokeParams>(request.params);
-      params = "{\"arguments\":{},\"capabilityId\":" + json_string(value.capability_id)
+      std::string arguments = "{}";
+      if (value.capability_id == "ae.project.bit-depth.set") {
+        arguments = "{\"idempotencyKey\":" + json_string(value.idempotency_key)
+            + ",\"targetDepth\":" + std::to_string(value.target_depth) + "}";
+      }
+      params = "{\"arguments\":" + arguments + ",\"capabilityId\":"
+          + json_string(value.capability_id)
           + ",\"capabilityVersion\":" + std::to_string(value.capability_version) + "}";
       break;
     }
@@ -740,9 +760,45 @@ ParsedRequest classify_request(const JsonValue& root) {
           *params, "capabilityVersion", CodecErrorKind::kInvalidArgument, 1, kMaxSafeInteger);
       const JsonValue* arguments_value = member(*params, "arguments");
       const JsonValue::Object* arguments = arguments_value == nullptr ? nullptr : object_of(*arguments_value);
-      if (capability != "ae.project.summary" || version != 1 || arguments == nullptr
-          || !arguments->empty()) invalid_argument("invoke is not in the compile-time allowlist");
-      request.params = InvokeParams{};
+      if (version != 1 || arguments == nullptr) {
+        invalid_argument("invoke is not in the compile-time allowlist");
+      }
+      InvokeParams result;
+      result.capability_id = capability;
+      result.capability_version = 1;
+      if (capability == "ae.project.summary") {
+        if (!arguments->empty()) {
+          invalid_argument("project summary arguments must be empty");
+        }
+      } else if (capability == "ae.project.bit-depth.read") {
+        if (!arguments->empty()) {
+          invalid_argument("project bit-depth read arguments must be empty");
+        }
+      } else if (capability == "ae.project.bit-depth.set") {
+        if (!exact_keys(
+                *arguments,
+                {"targetDepth", "idempotencyKey"},
+                {"targetDepth", "idempotencyKey"})) {
+          invalid_argument("project bit-depth set arguments are not closed");
+        }
+        result.target_depth = static_cast<std::int32_t>(required_uint(
+            *arguments, "targetDepth", CodecErrorKind::kInvalidArgument, 0, 32));
+        result.idempotency_key = required_string(
+            *arguments, "idempotencyKey", CodecErrorKind::kInvalidArgument);
+        if (!valid_bit_depth(result.target_depth)) {
+          invalid_argument("targetDepth must be one of 8, 16, or 32");
+        }
+        if (!valid_idempotency_key(result.idempotency_key)) {
+          invalid_argument("invalid project bit-depth idempotency key");
+        }
+        const std::string canonical_arguments = "{\"idempotencyKey\":"
+            + json_string(result.idempotency_key) + ",\"targetDepth\":"
+            + std::to_string(result.target_depth) + "}";
+        result.arguments_fingerprint_sha256 = sha256_hex(canonical_arguments);
+      } else {
+        invalid_argument("invoke is not in the compile-time allowlist");
+      }
+      request.params = std::move(result);
     } else {
       if (!exact_keys(*params, {"targetRequestId"}, {"targetRequestId"})) {
         invalid_argument("invalid cancel params");
@@ -830,6 +886,43 @@ std::string digest_project_summary_postcondition(
       "\"capabilityVersion\":1,\"value\":{\"itemCount\":" + std::to_string(item_count)
       + ",\"projectName\":" + json_string(project_name)
       + ",\"projectOpen\":" + (project_open ? "true" : "false") + "}}";
+  return sha256_hex(canonical);
+}
+
+std::string digest_project_bit_depth_read_postcondition(
+    std::int32_t bits_per_channel) {
+  if (!valid_bit_depth(bits_per_channel)) {
+    invalid_argument("invalid project bit-depth read result");
+  }
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.project.bit-depth.read\",\"capabilityVersion\":1,"
+      "\"value\":{\"bitsPerChannel\":" + std::to_string(bits_per_channel) + "}}");
+}
+
+std::string digest_project_bit_depth_set_arguments(
+    std::int32_t target_depth,
+    std::string_view idempotency_key) {
+  if (!valid_bit_depth(target_depth) || !valid_idempotency_key(idempotency_key)) {
+    invalid_argument("invalid project bit-depth arguments digest input");
+  }
+  return sha256_hex("{\"idempotencyKey\":" + json_string(idempotency_key)
+      + ",\"targetDepth\":" + std::to_string(target_depth) + "}");
+}
+
+std::string digest_project_bit_depth_set_postcondition(
+    bool changed,
+    std::int32_t before_bits_per_channel,
+    std::int32_t after_bits_per_channel) {
+  if (!changed || !valid_bit_depth(before_bits_per_channel)
+      || !valid_bit_depth(after_bits_per_channel)
+      || before_bits_per_channel == after_bits_per_channel) {
+    invalid_argument("project bit-depth result violates its postcondition contract");
+  }
+  const std::string canonical =
+      "{\"capabilityId\":\"ae.project.bit-depth.set\",\"capabilityVersion\":1,"
+      "\"value\":{\"afterBitsPerChannel\":"
+      + std::to_string(after_bits_per_channel) + ",\"beforeBitsPerChannel\":"
+      + std::to_string(before_bits_per_channel) + ",\"changed\":true}}";
   return sha256_hex(canonical);
 }
 
@@ -1113,7 +1206,7 @@ void validate_limits(const NegotiatedLimits& limits) {
   }
 }
 
-std::string capability_descriptor(const CapabilitiesSuccess& response) {
+std::string project_summary_descriptor(const CapabilitiesSuccess& response) {
   const std::string detail = response.detail == CapabilityDetail::kFull ? "full" : "summary";
   std::string descriptor = "{\"cancellation\":\"before-dispatch\","
       "\"compatibility\":{\"intendedPlatforms\":[\"macos-arm64\",\"windows-x64\"],"
@@ -1149,6 +1242,102 @@ std::string capability_descriptor(const CapabilitiesSuccess& response) {
           "\"type\":\"string\"},\"projectOpen\":{\"type\":\"boolean\"}},"
           "\"required\":[\"projectOpen\",\"projectName\",\"itemCount\"],"
           "\"type\":\"object\"}";
+  }
+  descriptor.push_back('}');
+  return descriptor;
+}
+
+std::string project_bit_depth_read_descriptor(const CapabilitiesSuccess& response) {
+  const std::string detail = response.detail == CapabilityDetail::kFull ? "full" : "summary";
+  std::string descriptor = "{\"cancellation\":\"before-dispatch\","
+      "\"compatibility\":{\"intendedPlatforms\":[\"macos-arm64\",\"windows-x64\"],"
+      "\"status\":\"unverified\"},\"detail\":" + json_string(detail)
+      + ",\"id\":\"ae.project.bit-depth.read\",\"idempotency\":\"idempotent\","
+        "\"mutability\":\"read-only\",\"preconditions\":["
+      + json_string("An After Effects project must be open.")
+      + "],\"risk\":\"read\",\"schemaVersion\":1,\"sideEffectSummary\":"
+      + json_string("Reads project bit depth without changing After Effects state.")
+      + ",\"summary\":"
+      + json_string("Read the open After Effects project's bit depth.")
+      + ",\"undo\":\"not-applicable\",\"version\":1";
+  if (response.detail == CapabilityDetail::kFull) {
+    require_digest(response.project_bit_depth_read_contract_digest, "contract digest");
+    descriptor += ",\"contractDigest\":"
+        + json_string(response.project_bit_depth_read_contract_digest)
+        + ",\"examples\":[{\"arguments\":{},\"expected\":{\"outcome\":\"succeeded\","
+          "\"value\":{\"bitsPerChannel\":16}},"
+          "\"id\":\"aemcp-example-project-bit-depth-read\",\"kind\":\"positive\","
+          "\"summary\":"
+        + json_string("Read the project bits per channel.")
+        + "},{\"arguments\":{},\"expected\":{\"errorCode\":\"PRECONDITION_FAILED\","
+          "\"recoveryAction\":\"open-project\"},"
+          "\"id\":\"aemcp-example-project-bit-depth-read-no-project\","
+          "\"kind\":\"negative\","
+          "\"summary\":"
+        + json_string("Require an open project before reading bit depth.")
+        + "}],\"inputContractId\":\"aemcp.contract.ae.project.bit-depth.read.input.v1\","
+          "\"inputSchema\":{\"additionalProperties\":false,\"properties\":{},"
+          "\"required\":[],\"type\":\"object\"},\"requirements\":[{"
+          "\"contractVersion\":1,"
+          "\"id\":\"aemcp.requirement.native.project-bit-depth-read\"}],"
+          "\"resultContractId\":\"aemcp.contract.ae.project.bit-depth.read.result.v1\","
+          "\"resultSchema\":{\"additionalProperties\":false,\"properties\":{"
+          "\"bitsPerChannel\":{\"enum\":[8,16,32]}},"
+          "\"required\":[\"bitsPerChannel\"],\"type\":\"object\"}";
+  }
+  descriptor.push_back('}');
+  return descriptor;
+}
+
+std::string project_bit_depth_set_descriptor(const CapabilitiesSuccess& response) {
+  const std::string detail = response.detail == CapabilityDetail::kFull ? "full" : "summary";
+  std::string descriptor = "{\"cancellation\":\"before-dispatch\","
+      "\"compatibility\":{\"intendedPlatforms\":[\"macos-arm64\",\"windows-x64\"],"
+      "\"status\":\"unverified\"},\"detail\":" + json_string(detail)
+      + ",\"id\":\"ae.project.bit-depth.set\",\"idempotency\":\"idempotency-key\","
+        "\"mutability\":\"mutating\",\"preconditions\":["
+      + json_string("An After Effects project must be open.") + ","
+      + json_string("targetDepth must differ from the current project bit depth.")
+      + "],\"risk\":\"write\",\"schemaVersion\":1,\"sideEffectSummary\":"
+      + json_string("Changes project bit depth and creates one After Effects Undo step.")
+      + ",\"summary\":"
+      + json_string("Set the open After Effects project's bit depth.")
+      + ",\"undo\":\"ae-undo-group\",\"version\":1";
+  if (response.detail == CapabilityDetail::kFull) {
+    require_digest(response.project_bit_depth_set_contract_digest, "contract digest");
+    descriptor += ",\"contractDigest\":"
+        + json_string(response.project_bit_depth_set_contract_digest)
+        + ",\"examples\":[{\"arguments\":{\"idempotencyKey\":"
+        + json_string("synthetic-bit-depth-0001") + ",\"targetDepth\":16},"
+          "\"expected\":{\"outcome\":\"succeeded\",\"value\":{"
+          "\"afterBitsPerChannel\":16,\"beforeBitsPerChannel\":8,\"changed\":true}},"
+          "\"id\":\"aemcp-example-project-bit-depth-set\",\"kind\":\"positive\","
+          "\"summary\":"
+        + json_string("Change the project from 8 to 16 bits per channel.")
+        + "},{\"arguments\":{\"idempotencyKey\":"
+        + json_string("synthetic-bit-depth-0002") + ",\"targetDepth\":16},"
+          "\"expected\":{\"errorCode\":\"INVALID_ARGUMENT\","
+          "\"recoveryAction\":\"change-arguments\"},"
+          "\"id\":\"aemcp-example-project-bit-depth-no-change\","
+          "\"kind\":\"negative\",\"summary\":"
+        + json_string("Reject a target that already matches the project bit depth.")
+        + "}],\"inputContractId\":\"aemcp.contract.ae.project.bit-depth.set.input.v1\","
+          "\"inputSchema\":{\"additionalProperties\":false,\"properties\":{"
+          "\"idempotencyKey\":{\"maxLength\":64,\"minLength\":16,"
+          "\"pattern\":\"^[A-Za-z0-9][A-Za-z0-9._:-]*$\",\"type\":\"string\"},"
+          "\"targetDepth\":{\"enum\":[8,16,32]}},"
+          "\"required\":[\"targetDepth\",\"idempotencyKey\"],\"type\":\"object\"},"
+          "\"requirements\":[{\"contractVersion\":1,"
+          "\"id\":\"aemcp.requirement.native.project-bit-depth-set\"}],"
+          "\"resultContractId\":\"aemcp.contract.ae.project.bit-depth.set.result.v1\","
+          "\"resultSchema\":{\"additionalProperties\":false,\"properties\":{"
+          "\"afterBitsPerChannel\":{\"enum\":[8,16,32]},"
+          "\"beforeBitsPerChannel\":{\"enum\":[8,16,32]},"
+          "\"changed\":{\"const\":true}},"
+          "\"required\":[\"changed\",\"beforeBitsPerChannel\","
+          "\"afterBitsPerChannel\"],\"type\":\"object\","
+          "\"x-invariant\":"
+          "\"beforeBitsPerChannel-must-differ-from-afterBitsPerChannel\"}";
   }
   descriptor.push_back('}');
   return descriptor;
@@ -1262,7 +1451,20 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
   require_digest(response.capabilities_digest, "capabilities digest");
   const std::string detail = response.detail == CapabilityDetail::kFull ? "full" : "summary";
   std::string items = "[";
-  if (response.include_project_summary) items += capability_descriptor(response);
+  bool needs_comma = false;
+  if (response.include_project_summary) {
+    items += project_summary_descriptor(response);
+    needs_comma = true;
+  }
+  if (response.include_project_bit_depth_read) {
+    if (needs_comma) items.push_back(',');
+    items += project_bit_depth_read_descriptor(response);
+    needs_comma = true;
+  }
+  if (response.include_project_bit_depth_set) {
+    if (needs_comma) items.push_back(',');
+    items += project_bit_depth_set_descriptor(response);
+  }
   items.push_back(']');
   std::string json = "{\"kind\":\"response\",\"method\":\"capabilities\",\"ok\":true,"
       "\"replayed\":false,\"requestId\":" + json_string(response.request_id)
@@ -1322,6 +1524,86 @@ std::vector<std::uint8_t> encode_project_summary_success(
       + json_string(response.project_name) + ",\"projectOpen\":"
       + (response.project_open ? "true" : "false") + "}},\"sessionId\":"
       + json_string(response.session_id) + ",\"wireVersion\":1}";
+  return frame_output(std::move(json));
+}
+
+std::vector<std::uint8_t> encode_project_bit_depth_read_success(
+    const ProjectBitDepthReadSuccess& response) {
+  require_request_id(response.request_id);
+  require_uuid(response.session_id, "session ID");
+  require_uuid(response.host_instance_id, "host instance ID");
+  require_digest(response.request_digest, "request digest");
+  require_digest(response.postcondition_digest, "postcondition digest");
+  if (response.replayed || !valid_bit_depth(response.bits_per_channel)
+      || response.started_at_unix_ms < 1
+      || response.started_at_unix_ms > kMaxSafeInteger
+      || response.completed_at_unix_ms < response.started_at_unix_ms
+      || response.completed_at_unix_ms > kMaxSafeInteger) {
+    invalid_argument("invalid or unvalidated project bit-depth read evidence");
+  }
+  std::string json = "{\"kind\":\"response\",\"method\":\"invoke\",\"ok\":true,"
+      "\"replayed\":false,\"requestId\":" + json_string(response.request_id)
+      + ",\"result\":{\"capabilityId\":\"ae.project.bit-depth.read\","
+        "\"capabilityVersion\":1,\"engine\":\"native-aegp\",\"evidence\":{"
+        "\"capabilityId\":\"ae.project.bit-depth.read\",\"capabilityVersion\":1,"
+        "\"completedAtUnixMs\":" + std::to_string(response.completed_at_unix_ms)
+      + ",\"effect\":\"none\",\"engine\":\"native-aegp\","
+        "\"hostInstanceId\":" + json_string(response.host_instance_id)
+      + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\","
+        "\"digest\":" + json_string(response.postcondition_digest)
+      + ",\"kind\":\"project-bit-depth-read\",\"verified\":true},"
+        "\"requestDigest\":" + json_string(response.request_digest)
+      + ",\"requestId\":" + json_string(response.request_id)
+      + ",\"sessionId\":" + json_string(response.session_id)
+      + ",\"startedAtUnixMs\":" + std::to_string(response.started_at_unix_ms)
+      + "},\"outcome\":\"succeeded\",\"value\":{\"bitsPerChannel\":"
+      + std::to_string(response.bits_per_channel)
+      + "}},\"sessionId\":" + json_string(response.session_id)
+      + ",\"wireVersion\":1}";
+  return frame_output(std::move(json));
+}
+
+std::vector<std::uint8_t> encode_project_bit_depth_set_success(
+    const ProjectBitDepthSetSuccess& response) {
+  require_request_id(response.request_id);
+  require_uuid(response.session_id, "session ID");
+  require_uuid(response.host_instance_id, "host instance ID");
+  require_digest(response.request_digest, "request digest");
+  require_digest(response.postcondition_digest, "postcondition digest");
+  if (response.replayed || !response.changed
+      || !valid_bit_depth(response.before_bits_per_channel)
+      || !valid_bit_depth(response.after_bits_per_channel)
+      || response.before_bits_per_channel == response.after_bits_per_channel
+      || response.started_at_unix_ms < 1
+      || response.started_at_unix_ms > kMaxSafeInteger
+      || response.completed_at_unix_ms < response.started_at_unix_ms
+      || response.completed_at_unix_ms > kMaxSafeInteger) {
+    invalid_argument("invalid or unvalidated project bit-depth set evidence");
+  }
+  std::string json = "{\"kind\":\"response\",\"method\":\"invoke\",\"ok\":true,"
+      "\"replayed\":false,\"requestId\":" + json_string(response.request_id)
+      + ",\"result\":{\"capabilityId\":\"ae.project.bit-depth.set\","
+        "\"capabilityVersion\":1,\"engine\":\"native-aegp\",\"evidence\":{"
+        "\"capabilityId\":\"ae.project.bit-depth.set\",\"capabilityVersion\":1,"
+        "\"completedAtUnixMs\":" + std::to_string(response.completed_at_unix_ms)
+      + ",\"effect\":\"committed\",\"engine\":\"native-aegp\","
+        "\"hostInstanceId\":" + json_string(response.host_instance_id)
+      + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\","
+        "\"digest\":" + json_string(response.postcondition_digest)
+      + ",\"kind\":\"project-bit-depth-set\",\"verified\":true},"
+        "\"requestDigest\":" + json_string(response.request_digest)
+      + ",\"requestId\":" + json_string(response.request_id)
+      + ",\"sessionId\":" + json_string(response.session_id)
+      + ",\"startedAtUnixMs\":" + std::to_string(response.started_at_unix_ms)
+      // A balanced native Undo group makes the SDK-documented undo available.
+      // Hardware qualification verifies the reverse transition separately so
+      // the tool never consumes the user's global Undo stack itself.
+      + ",\"undo\":{\"available\":true,\"verified\":false}},"
+        "\"outcome\":\"succeeded\",\"value\":{\"afterBitsPerChannel\":"
+      + std::to_string(response.after_bits_per_channel)
+      + ",\"beforeBitsPerChannel\":" + std::to_string(response.before_bits_per_channel)
+      + ",\"changed\":true}},\"sessionId\":" + json_string(response.session_id)
+      + ",\"wireVersion\":1}";
   return frame_output(std::move(json));
 }
 

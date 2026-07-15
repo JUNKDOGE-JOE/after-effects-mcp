@@ -300,6 +300,7 @@ class NativeInvokeResult(_NativeModel):
     capability_version: PositiveInt
     engine: Literal["native-aegp"]
     outcome: Literal["succeeded"]
+    replayed: StrictBool
     value: dict[str, Any]
     evidence: NativeExecutionEvidence
 
@@ -707,6 +708,181 @@ class ProjectSummaryExecution(_NativeModel):
         }
 
 
+PROJECT_BIT_DEPTH_READ_CAPABILITY_ID = "ae.project.bit-depth.read"
+PROJECT_BIT_DEPTH_READ_CAPABILITY_VERSION = 1
+PROJECT_BIT_DEPTH_READ_INPUT_CONTRACT_ID = (
+    "aemcp.contract.ae.project.bit-depth.read.input.v1"
+)
+PROJECT_BIT_DEPTH_READ_RESULT_CONTRACT_ID = (
+    "aemcp.contract.ae.project.bit-depth.read.result.v1"
+)
+PROJECT_BIT_DEPTH_READ_CONTRACT_DIGEST = (
+    "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e"
+)
+
+PROJECT_BIT_DEPTH_SET_CAPABILITY_ID = "ae.project.bit-depth.set"
+PROJECT_BIT_DEPTH_SET_CAPABILITY_VERSION = 1
+PROJECT_BIT_DEPTH_SET_INPUT_CONTRACT_ID = (
+    "aemcp.contract.ae.project.bit-depth.set.input.v1"
+)
+PROJECT_BIT_DEPTH_SET_RESULT_CONTRACT_ID = (
+    "aemcp.contract.ae.project.bit-depth.set.result.v1"
+)
+PROJECT_BIT_DEPTH_SET_CONTRACT_DIGEST = (
+    "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a"
+)
+
+_IDEMPOTENCY_KEY_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+_PROJECT_BIT_DEPTH_READ_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [],
+    "properties": {},
+}
+_PROJECT_BIT_DEPTH_READ_RESULT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["bitsPerChannel"],
+    "properties": {
+        "bitsPerChannel": {"enum": [8, 16, 32]},
+    },
+}
+_PROJECT_BIT_DEPTH_SET_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["targetDepth", "idempotencyKey"],
+    "properties": {
+        "targetDepth": {"enum": [8, 16, 32]},
+        "idempotencyKey": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 64,
+            "pattern": _IDEMPOTENCY_KEY_PATTERN,
+        },
+    },
+}
+_PROJECT_BIT_DEPTH_SET_RESULT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "changed",
+        "beforeBitsPerChannel",
+        "afterBitsPerChannel",
+    ],
+    "properties": {
+        "changed": {"const": True},
+        "beforeBitsPerChannel": {"enum": [8, 16, 32]},
+        "afterBitsPerChannel": {"enum": [8, 16, 32]},
+    },
+    "x-invariant": "beforeBitsPerChannel-must-differ-from-afterBitsPerChannel",
+}
+
+
+ProjectBitDepth: TypeAlias = Literal[8, 16, 32]
+
+
+class ProjectBitDepthReadArguments(_NativeModel):
+    pass
+
+
+class ProjectBitDepthReadValue(_NativeModel):
+    bits_per_channel: ProjectBitDepth
+
+
+class ProjectBitDepthReadExecution(_NativeModel):
+    implementation: NativeCapabilityDescriptor
+    negotiation: NativeNegotiation
+    value: ProjectBitDepthReadValue
+    evidence: NativeExecutionEvidence
+    engine: Literal["native-aegp"] = "native-aegp"
+
+    def audit_fields(self) -> dict[str, Any]:
+        return {
+            "engine": self.engine,
+            "capabilityId": self.evidence.capability_id,
+            "capabilityVersion": self.evidence.capability_version,
+            "contractDigest": self.implementation.contract_digest,
+            "selectedWireVersion": self.negotiation.selected_wire_version,
+            "pluginVersion": self.negotiation.plugin_version,
+            "compiledSdkVersion": self.negotiation.compiled_sdk_version,
+            "sourceCommit": self.negotiation.source_commit,
+            "hostInstanceId": self.evidence.host_instance_id,
+            "sessionId": self.evidence.session_id,
+            "sessionGeneration": self.negotiation.session_generation,
+            "capabilitiesDigest": self.negotiation.capabilities_digest,
+            "requestId": self.evidence.request_id,
+            "effect": self.evidence.effect,
+            "requestDigest": self.evidence.request_digest,
+            "postconditionAlgorithm": self.evidence.postcondition.algorithm,
+            "postconditionDigest": self.evidence.postcondition.digest,
+            "startedAtUnixMs": self.evidence.started_at_unix_ms,
+            "completedAtUnixMs": self.evidence.completed_at_unix_ms,
+        }
+
+
+class ProjectBitDepthSetArguments(_NativeModel):
+    target_depth: ProjectBitDepth
+    idempotency_key: Annotated[
+        StrictStr,
+        Field(min_length=16, max_length=64, pattern=_IDEMPOTENCY_KEY_PATTERN),
+    ]
+
+
+class ProjectBitDepthSetValue(_NativeModel):
+    changed: Literal[True]
+    before_bits_per_channel: ProjectBitDepth
+    after_bits_per_channel: ProjectBitDepth
+
+    @model_validator(mode="after")
+    def _verified_transition(self) -> "ProjectBitDepthSetValue":
+        if self.before_bits_per_channel == self.after_bits_per_channel:
+            raise ValueError("project bit depth did not change")
+        return self
+
+
+class ProjectBitDepthSetExecution(_NativeModel):
+    implementation: NativeCapabilityDescriptor
+    negotiation: NativeNegotiation
+    transport_request_id: RequestId
+    idempotency_key: Annotated[
+        StrictStr,
+        Field(min_length=16, max_length=64, pattern=_IDEMPOTENCY_KEY_PATTERN),
+    ]
+    replayed: StrictBool
+    value: ProjectBitDepthSetValue
+    evidence: NativeExecutionEvidence
+    engine: Literal["native-aegp"] = "native-aegp"
+
+    def audit_fields(self) -> dict[str, Any]:
+        undo = self.evidence.undo
+        return {
+            "engine": self.engine,
+            "capabilityId": self.evidence.capability_id,
+            "capabilityVersion": self.evidence.capability_version,
+            "contractDigest": self.implementation.contract_digest,
+            "selectedWireVersion": self.negotiation.selected_wire_version,
+            "pluginVersion": self.negotiation.plugin_version,
+            "compiledSdkVersion": self.negotiation.compiled_sdk_version,
+            "sourceCommit": self.negotiation.source_commit,
+            "hostInstanceId": self.evidence.host_instance_id,
+            "sessionId": self.evidence.session_id,
+            "sessionGeneration": self.negotiation.session_generation,
+            "capabilitiesDigest": self.negotiation.capabilities_digest,
+            "requestId": self.transport_request_id,
+            "evidenceRequestId": self.evidence.request_id,
+            "idempotencyKey": self.idempotency_key,
+            "replayed": self.replayed,
+            "effect": self.evidence.effect,
+            "requestDigest": self.evidence.request_digest,
+            "postconditionAlgorithm": self.evidence.postcondition.algorithm,
+            "postconditionDigest": self.evidence.postcondition.digest,
+            "undoAvailable": undo.available if undo is not None else False,
+            "undoVerified": undo.verified if undo is not None else False,
+            "startedAtUnixMs": self.evidence.started_at_unix_ms,
+            "completedAtUnixMs": self.evidence.completed_at_unix_ms,
+        }
+
+
 def _structured_error(code: NativeErrorCode, message: str) -> NativeBackendError:
     retryable, side_effect, action = _ERROR_POLICY[code]
     return NativeBackendError(
@@ -775,6 +951,107 @@ def _validate_project_summary_descriptor(
         )
 
 
+def _validate_project_bit_depth_read_descriptor(
+    descriptor: NativeCapabilityDescriptor,
+    *,
+    host_platform: NativePlatform,
+) -> None:
+    schemas_digest = _sha256_closed_json(
+        {
+            "inputSchema": descriptor.input_schema,
+            "resultSchema": descriptor.result_schema,
+        }
+    )
+    expected_requirement = ("aemcp.requirement.native.project-bit-depth-read", 1)
+    requirements = tuple(
+        (requirement.id, requirement.contract_version)
+        for requirement in descriptor.requirements
+    )
+    expected = (
+        descriptor.capability_id == PROJECT_BIT_DEPTH_READ_CAPABILITY_ID
+        and descriptor.capability_version == PROJECT_BIT_DEPTH_READ_CAPABILITY_VERSION
+        and descriptor.engine == "native-aegp"
+        and descriptor.summary
+        == "Read the open After Effects project's bit depth."
+        and descriptor.risk == "read"
+        and descriptor.mutability == "read-only"
+        and descriptor.idempotency == "idempotent"
+        and descriptor.cancellation == "before-dispatch"
+        and descriptor.undo == "not-applicable"
+        and descriptor.side_effect_summary
+        == "Reads project bit depth without changing After Effects state."
+        and descriptor.preconditions
+        == ("An After Effects project must be open.",)
+        and descriptor.input_contract_id
+        == PROJECT_BIT_DEPTH_READ_INPUT_CONTRACT_ID
+        and descriptor.result_contract_id
+        == PROJECT_BIT_DEPTH_READ_RESULT_CONTRACT_ID
+        and descriptor.contract_digest == PROJECT_BIT_DEPTH_READ_CONTRACT_DIGEST
+        and schemas_digest == descriptor.contract_digest
+        and descriptor.input_schema == _PROJECT_BIT_DEPTH_READ_INPUT_SCHEMA
+        and descriptor.result_schema == _PROJECT_BIT_DEPTH_READ_RESULT_SCHEMA
+        and requirements == (expected_requirement,)
+        and host_platform in descriptor.compatibility.intended_platforms
+    )
+    if not expected:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Negotiated ae.project.bit-depth.read contract does not match Core.",
+        )
+
+
+def _validate_project_bit_depth_set_descriptor(
+    descriptor: NativeCapabilityDescriptor,
+    *,
+    host_platform: NativePlatform,
+) -> None:
+    schemas_digest = _sha256_closed_json(
+        {
+            "inputSchema": descriptor.input_schema,
+            "resultSchema": descriptor.result_schema,
+        }
+    )
+    expected_requirement = ("aemcp.requirement.native.project-bit-depth-set", 1)
+    requirements = tuple(
+        (requirement.id, requirement.contract_version)
+        for requirement in descriptor.requirements
+    )
+    expected = (
+        descriptor.capability_id == PROJECT_BIT_DEPTH_SET_CAPABILITY_ID
+        and descriptor.capability_version == PROJECT_BIT_DEPTH_SET_CAPABILITY_VERSION
+        and descriptor.engine == "native-aegp"
+        and descriptor.summary
+        == "Set the open After Effects project's bit depth."
+        and descriptor.risk == "write"
+        and descriptor.mutability == "mutating"
+        and descriptor.idempotency == "idempotency-key"
+        and descriptor.cancellation == "before-dispatch"
+        and descriptor.undo == "ae-undo-group"
+        and descriptor.side_effect_summary
+        == "Changes project bit depth and creates one After Effects Undo step."
+        and descriptor.preconditions
+        == (
+            "An After Effects project must be open.",
+            "targetDepth must differ from the current project bit depth.",
+        )
+        and descriptor.input_contract_id
+        == PROJECT_BIT_DEPTH_SET_INPUT_CONTRACT_ID
+        and descriptor.result_contract_id
+        == PROJECT_BIT_DEPTH_SET_RESULT_CONTRACT_ID
+        and descriptor.contract_digest == PROJECT_BIT_DEPTH_SET_CONTRACT_DIGEST
+        and schemas_digest == descriptor.contract_digest
+        and descriptor.input_schema == _PROJECT_BIT_DEPTH_SET_INPUT_SCHEMA
+        and descriptor.result_schema == _PROJECT_BIT_DEPTH_SET_RESULT_SCHEMA
+        and requirements == (expected_requirement,)
+        and host_platform in descriptor.compatibility.intended_platforms
+    )
+    if not expected:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Negotiated ae.project.bit-depth.set contract does not match Core.",
+        )
+
+
 def _sha256_closed_json(value: Any) -> str:
     # All object member names in this closed contract are ASCII, so Python's
     # lexical key order is identical to RFC 8785's UTF-16 order here.
@@ -792,6 +1069,26 @@ def _project_summary_digest(value: ProjectSummaryValue) -> str:
         {
             "capabilityId": PROJECT_SUMMARY_CAPABILITY_ID,
             "capabilityVersion": PROJECT_SUMMARY_CAPABILITY_VERSION,
+            "value": value.model_dump(mode="json", by_alias=True),
+        }
+    )
+
+
+def _project_bit_depth_read_digest(value: ProjectBitDepthReadValue) -> str:
+    return _sha256_closed_json(
+        {
+            "capabilityId": PROJECT_BIT_DEPTH_READ_CAPABILITY_ID,
+            "capabilityVersion": PROJECT_BIT_DEPTH_READ_CAPABILITY_VERSION,
+            "value": value.model_dump(mode="json", by_alias=True),
+        }
+    )
+
+
+def _project_bit_depth_set_digest(value: ProjectBitDepthSetValue) -> str:
+    return _sha256_closed_json(
+        {
+            "capabilityId": PROJECT_BIT_DEPTH_SET_CAPABILITY_ID,
+            "capabilityVersion": PROJECT_BIT_DEPTH_SET_CAPABILITY_VERSION,
             "value": value.model_dump(mode="json", by_alias=True),
         }
     )
@@ -1000,6 +1297,290 @@ async def invoke_project_summary(
     )
 
 
+async def invoke_project_bit_depth_read(
+    backend: NativeInvokeBackend,
+    *,
+    request_id: str,
+    deadline_unix_ms: int,
+    cancellation: NativeCancellationToken | None = None,
+) -> ProjectBitDepthReadExecution:
+    """Read the open project's bits per channel through the native plane only."""
+
+    arguments = ProjectBitDepthReadArguments()
+    _ensure_active(deadline_unix_ms, cancellation)
+    negotiation = await backend.negotiate(
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    _ensure_active(deadline_unix_ms, cancellation)
+    capability_ids: tuple[str, ...] | None = None
+    capability_detail: CapabilityDetail = "full"
+    capability_limit = 100
+    capabilities = await backend.capabilities(
+        ids=capability_ids,
+        detail=capability_detail,
+        limit=capability_limit,
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    expected_query_digest = _capabilities_query_digest(
+        session_id=negotiation.session_id,
+        ids=capability_ids,
+        detail=capability_detail,
+        limit=capability_limit,
+    )
+    try:
+        registry_digest = _capabilities_registry_digest(capabilities.items)
+    except (TypeError, ValueError, UnicodeError) as exc:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native capability registry could not be verified.",
+        ) from exc
+    if (
+        capabilities.session_id != negotiation.session_id
+        or capabilities.detail != capability_detail
+        or capabilities.next_cursor is not None
+        or capabilities.query_digest != expected_query_digest
+        or capabilities.capabilities_digest != registry_digest
+        or capabilities.capabilities_digest != negotiation.capabilities_digest
+    ):
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native capabilities were not bound to the negotiated session.",
+        )
+    matches = [
+        item
+        for item in capabilities.items
+        if item.capability_id == PROJECT_BIT_DEPTH_READ_CAPABILITY_ID
+        and item.capability_version == PROJECT_BIT_DEPTH_READ_CAPABILITY_VERSION
+    ]
+    descriptor = matches[0] if len(matches) == 1 else None
+    if descriptor is None:
+        raise _structured_error(
+            "NATIVE_UNSUPPORTED",
+            "Native host did not advertise ae.project.bit-depth.read@1.",
+        )
+    _validate_project_bit_depth_read_descriptor(
+        descriptor,
+        host_platform=negotiation.host_platform,
+    )
+    _ensure_active(deadline_unix_ms, cancellation)
+
+    request = NativeInvokeRequest(
+        request_id=request_id,
+        capability_id=PROJECT_BIT_DEPTH_READ_CAPABILITY_ID,
+        capability_version=PROJECT_BIT_DEPTH_READ_CAPABILITY_VERSION,
+        arguments=arguments.model_dump(mode="json", by_alias=True),
+        deadline_unix_ms=deadline_unix_ms,
+    )
+    try:
+        result = await backend.invoke(request, cancellation=cancellation)
+    except NativeBackendError as exc:
+        _validate_invoke_error_binding(exc, request)
+        raise
+    _ensure_active(deadline_unix_ms, cancellation)
+    expected_request_digest = _invoke_request_digest(request, negotiation)
+    if (
+        result.capability_id != request.capability_id
+        or result.capability_version != request.capability_version
+        or result.engine != "native-aegp"
+        or result.replayed is not False
+        or result.evidence.request_id != request.request_id
+        or result.evidence.host_instance_id != negotiation.host_instance_id
+        or result.evidence.session_id != negotiation.session_id
+        or result.evidence.effect != "none"
+        or result.evidence.undo is not None
+        or result.evidence.completed_at_unix_ms > deadline_unix_ms
+        or result.evidence.request_digest != expected_request_digest
+    ):
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native project bit-depth read did not match its negotiated request.",
+        )
+    try:
+        value = ProjectBitDepthReadValue.model_validate(result.value)
+        postcondition_digest = _project_bit_depth_read_digest(value)
+    except (ValidationError, TypeError, ValueError, UnicodeError) as exc:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native project bit-depth value did not match its typed contract.",
+        ) from exc
+    if (
+        result.evidence.postcondition.kind != "project-bit-depth-read"
+        or result.evidence.postcondition.digest != postcondition_digest
+    ):
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native project bit-depth read postcondition did not verify.",
+        )
+    return ProjectBitDepthReadExecution(
+        implementation=descriptor,
+        negotiation=negotiation,
+        value=value,
+        evidence=result.evidence,
+    )
+
+
+async def invoke_project_bit_depth_set(
+    backend: NativeInvokeBackend,
+    *,
+    request_id: str,
+    target_depth: int,
+    idempotency_key: str,
+    deadline_unix_ms: int,
+    cancellation: NativeCancellationToken | None = None,
+) -> ProjectBitDepthSetExecution:
+    """Set the open project's bits per channel through the native plane only."""
+
+    arguments = ProjectBitDepthSetArguments(
+        target_depth=target_depth,
+        idempotency_key=idempotency_key,
+    )
+    _ensure_active(deadline_unix_ms, cancellation)
+    negotiation = await backend.negotiate(
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    _ensure_active(deadline_unix_ms, cancellation)
+    capability_ids: tuple[str, ...] | None = None
+    capability_detail: CapabilityDetail = "full"
+    capability_limit = 100
+    capabilities = await backend.capabilities(
+        ids=capability_ids,
+        detail=capability_detail,
+        limit=capability_limit,
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    expected_query_digest = _capabilities_query_digest(
+        session_id=negotiation.session_id,
+        ids=capability_ids,
+        detail=capability_detail,
+        limit=capability_limit,
+    )
+    try:
+        registry_digest = _capabilities_registry_digest(capabilities.items)
+    except (TypeError, ValueError, UnicodeError) as exc:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native capability registry could not be verified.",
+        ) from exc
+    if (
+        capabilities.session_id != negotiation.session_id
+        or capabilities.detail != capability_detail
+        or capabilities.next_cursor is not None
+        or capabilities.query_digest != expected_query_digest
+        or capabilities.capabilities_digest != registry_digest
+        or capabilities.capabilities_digest != negotiation.capabilities_digest
+    ):
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native capabilities were not bound to the negotiated session.",
+        )
+    matches = [
+        item
+        for item in capabilities.items
+        if item.capability_id == PROJECT_BIT_DEPTH_SET_CAPABILITY_ID
+        and item.capability_version == PROJECT_BIT_DEPTH_SET_CAPABILITY_VERSION
+    ]
+    descriptor = matches[0] if len(matches) == 1 else None
+    if descriptor is None:
+        raise _structured_error(
+            "NATIVE_UNSUPPORTED",
+            "Native host did not advertise ae.project.bit-depth.set@1.",
+        )
+    _validate_project_bit_depth_set_descriptor(
+        descriptor,
+        host_platform=negotiation.host_platform,
+    )
+    _ensure_active(deadline_unix_ms, cancellation)
+
+    request = NativeInvokeRequest(
+        request_id=request_id,
+        capability_id=PROJECT_BIT_DEPTH_SET_CAPABILITY_ID,
+        capability_version=PROJECT_BIT_DEPTH_SET_CAPABILITY_VERSION,
+        arguments=arguments.model_dump(mode="json", by_alias=True),
+        deadline_unix_ms=deadline_unix_ms,
+    )
+    try:
+        result = await backend.invoke(request, cancellation=cancellation)
+    except NativeBackendError as exc:
+        _validate_invoke_error_binding(exc, request)
+        raise
+    expected_request_digest = _invoke_request_digest(request, negotiation)
+    undo = result.evidence.undo
+    if (
+        result.capability_id != request.capability_id
+        or result.capability_version != request.capability_version
+        or result.engine != "native-aegp"
+        or result.replayed is not False
+        or result.evidence.request_id != request.request_id
+        or result.evidence.host_instance_id != negotiation.host_instance_id
+        or result.evidence.session_id != negotiation.session_id
+        or result.evidence.effect != "committed"
+        or undo is None
+        # Availability is based on the SDK's explicit UNDOABLE contract plus a
+        # successfully closed AE undo group. This invocation does not consume
+        # the global Undo stack to verify the reverse transition.
+        or undo.available is not True
+        or undo.verified is not False
+        or undo.group_id is not None
+        or result.evidence.completed_at_unix_ms > deadline_unix_ms
+        or result.evidence.request_digest != expected_request_digest
+    ):
+        raise NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "Native project bit-depth result could not be verified after dispatch.",
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery=NativeRecovery(
+                action="inspect-state",
+                hint="Inspect project bit depth and the Undo stack before retrying.",
+            ),
+            details={"capabilityId": PROJECT_BIT_DEPTH_SET_CAPABILITY_ID},
+        )
+    try:
+        value = ProjectBitDepthSetValue.model_validate(result.value)
+        postcondition_digest = _project_bit_depth_set_digest(value)
+    except (ValidationError, TypeError, ValueError, UnicodeError) as exc:
+        raise NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "Native project bit-depth value was malformed after dispatch.",
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery=NativeRecovery(
+                action="inspect-state",
+                hint="Inspect project bit depth and the Undo stack before retrying.",
+            ),
+            details={"capabilityId": PROJECT_BIT_DEPTH_SET_CAPABILITY_ID},
+        ) from exc
+    if (
+        value.after_bits_per_channel != arguments.target_depth
+        or result.evidence.postcondition.kind != "project-bit-depth-set"
+        or result.evidence.postcondition.digest != postcondition_digest
+    ):
+        raise NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "Native project bit-depth postcondition evidence did not verify.",
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery=NativeRecovery(
+                action="inspect-state",
+                hint="Inspect project bit depth and the Undo stack before retrying.",
+            ),
+            details={"capabilityId": PROJECT_BIT_DEPTH_SET_CAPABILITY_ID},
+        )
+    return ProjectBitDepthSetExecution(
+        implementation=descriptor,
+        negotiation=negotiation,
+        transport_request_id=request.request_id,
+        idempotency_key=arguments.idempotency_key,
+        replayed=result.replayed,
+        value=value,
+        evidence=result.evidence,
+    )
+
+
 __all__ = [
     "CapabilityDetail",
     "ExecutionEngine",
@@ -1027,10 +1608,25 @@ __all__ = [
     "NativeUndoEvidence",
     "NativeWireErrorCode",
     "NativeWireRange",
+    "ProjectBitDepth",
+    "ProjectBitDepthReadArguments",
+    "ProjectBitDepthReadExecution",
+    "ProjectBitDepthReadValue",
+    "ProjectBitDepthSetArguments",
+    "ProjectBitDepthSetExecution",
+    "ProjectBitDepthSetValue",
     "ProjectSummaryExecution",
     "ProjectSummaryValue",
+    "PROJECT_BIT_DEPTH_READ_CAPABILITY_ID",
+    "PROJECT_BIT_DEPTH_READ_CAPABILITY_VERSION",
+    "PROJECT_BIT_DEPTH_READ_CONTRACT_DIGEST",
+    "PROJECT_BIT_DEPTH_SET_CAPABILITY_ID",
+    "PROJECT_BIT_DEPTH_SET_CAPABILITY_VERSION",
+    "PROJECT_BIT_DEPTH_SET_CONTRACT_DIGEST",
     "PROJECT_SUMMARY_CAPABILITY_ID",
     "PROJECT_SUMMARY_CAPABILITY_VERSION",
     "PROJECT_SUMMARY_CONTRACT_DIGEST",
+    "invoke_project_bit_depth_read",
+    "invoke_project_bit_depth_set",
     "invoke_project_summary",
 ]

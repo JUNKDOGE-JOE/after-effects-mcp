@@ -26,6 +26,8 @@ VERB_ANNOTATIONS: dict[str, ToolAnnotations] = {
     "ae.init": _ann(True, False, True),
     "ae.overview": _ann(True, False, True),
     "ae.projectSummary": _ann(True, False, True),
+    "ae.getProjectBitDepth": _ann(True, False, True),
+    "ae.setProjectBitDepth": _ann(False, False, True),
     "ae.layers": _ann(True, False, True),
     "ae.readProps": _ann(True, False, True),
     "ae.exec": _ann(False, True, False),

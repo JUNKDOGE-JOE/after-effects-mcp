@@ -61,12 +61,16 @@ RpcErrorCode rpc_error_code(std::string_view code) {
   if (code == "WIRE_VERSION_MISMATCH") return RpcErrorCode::kWireVersionMismatch;
   if (code == "INVALID_ARGUMENT") return RpcErrorCode::kInvalidArgument;
   if (code == "DUPLICATE_REQUEST") return RpcErrorCode::kDuplicateRequest;
+  if (code == "PRECONDITION_FAILED") return RpcErrorCode::kPreconditionFailed;
   if (code == "DEADLINE_EXCEEDED") return RpcErrorCode::kDeadlineExceeded;
   if (code == "CANCELLED") return RpcErrorCode::kCancelled;
   if (code == "QUEUE_FULL") return RpcErrorCode::kQueueFull;
   if (code == "AE_SHUTTING_DOWN") return RpcErrorCode::kAeShuttingDown;
   if (code == "SESSION_STALE") return RpcErrorCode::kSessionStale;
   if (code == "CAPABILITY_FAILED") return RpcErrorCode::kCapabilityFailed;
+  if (code == "POSSIBLY_SIDE_EFFECTING_FAILURE") {
+    return RpcErrorCode::kPossiblySideEffectingFailure;
+  }
   return RpcErrorCode::kInvalidRequest;
 }
 
@@ -77,12 +81,15 @@ std::string recovery_hint(RpcErrorCode code) {
     case RpcErrorCode::kWireVersionMismatch: return "Reconnect with a supported wire version.";
     case RpcErrorCode::kInvalidArgument: return "Change the invalid request arguments.";
     case RpcErrorCode::kDuplicateRequest: return "Inspect the original request state.";
+    case RpcErrorCode::kPreconditionFailed: return "Open an After Effects project first.";
     case RpcErrorCode::kDeadlineExceeded: return "Retry only if the result is still needed.";
     case RpcErrorCode::kCancelled: return "Issue a new request only if the result is still needed.";
     case RpcErrorCode::kQueueFull: return "Retry after the bounded native queue drains.";
     case RpcErrorCode::kAeShuttingDown: return "Reconnect after After Effects restarts.";
     case RpcErrorCode::kSessionStale: return "Reconnect and establish a fresh session.";
     case RpcErrorCode::kCapabilityFailed: return "Inspect After Effects state before retrying.";
+    case RpcErrorCode::kPossiblySideEffectingFailure:
+      return "Inspect After Effects state and do not retry this idempotency key.";
     default: return "Correct the request before retrying.";
   }
 }
@@ -91,7 +98,9 @@ rpc::ErrorResponse error_for(
     const ParsedRequest& request,
     const std::string& session_id,
     std::string code,
-    std::string message) {
+    std::string message,
+    std::string capability_id = {},
+    std::string field = {}) {
   RpcErrorCode mapped = rpc_error_code(code);
   // A repeated hello is a malformed handshake, not a session-scoped failure.
   // Keep the response inside the closed hello error union instead of letting
@@ -116,10 +125,22 @@ rpc::ErrorResponse error_for(
     response.details->supported_wire_minimum = 1;
     response.details->supported_wire_maximum = 1;
   }
+  if (capability_id.empty() && request.method == RpcMethod::kInvoke) {
+    if (const auto* invoke = std::get_if<rpc::InvokeParams>(&request.params)) {
+      capability_id = invoke->capability_id;
+    }
+  }
   if (mapped == RpcErrorCode::kNativeUnsupported
-      || mapped == RpcErrorCode::kCapabilityFailed) {
+      || mapped == RpcErrorCode::kPreconditionFailed
+      || mapped == RpcErrorCode::kCapabilityFailed
+      || mapped == RpcErrorCode::kPossiblySideEffectingFailure) {
     response.details = rpc::ErrorDetails{};
-    response.details->capability_id = "ae.project.summary";
+    response.details->capability_id = capability_id.empty()
+        ? std::string(kProjectSummaryCapability) : std::move(capability_id);
+  }
+  if (!field.empty()) {
+    if (!response.details.has_value()) response.details = rpc::ErrorDetails{};
+    response.details->field = std::move(field);
   }
   return response;
 }
@@ -169,7 +190,9 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
       || runtime_.compiled_sdk_build == 0 || runtime_.host_version.empty()
       || runtime_.host_build == 0 || runtime_.host_instance_id.empty()
       || runtime_.capabilities_digest.size() != 64
-      || runtime_.project_summary_contract_digest.size() != 64) {
+      || runtime_.project_summary_contract_digest.size() != 64
+      || runtime_.project_bit_depth_read_contract_digest.size() != 64
+      || runtime_.project_bit_depth_set_contract_digest.size() != 64) {
     throw std::invalid_argument("invalid native RPC runtime identity");
   }
 }
@@ -208,26 +231,43 @@ void NativeRpcConnectionHandler::serve(
         std::string postcondition_digest;
         bool evidence_valid = valid_timing_evidence(evidence->second, completed_at);
         if (completion.ok && evidence_valid) {
-          if (completion.result.item_count < 0
-              || static_cast<std::uint64_t>(completion.result.item_count)
-                  > rpc::kMaxSafeInteger) {
-            evidence_valid = false;
-          } else {
-            try {
+          try {
+            if (completion.capability_id == kProjectSummaryCapability) {
+              if (completion.result.item_count < 0
+                  || static_cast<std::uint64_t>(completion.result.item_count)
+                      > rpc::kMaxSafeInteger) {
+                evidence_valid = false;
+              } else {
               postcondition_digest = rpc::digest_project_summary_postcondition(
                   completion.result.project_open,
                   completion.result.project_name,
                   static_cast<std::uint64_t>(completion.result.item_count));
-            } catch (...) {
+              }
+            } else if (completion.capability_id == kProjectBitDepthReadCapability) {
+              postcondition_digest = rpc::digest_project_bit_depth_read_postcondition(
+                  completion.bit_depth_result.bits_per_channel);
+            } else if (completion.capability_id == kProjectBitDepthSetCapability) {
+              postcondition_digest = rpc::digest_project_bit_depth_set_postcondition(
+                  completion.bit_depth_change_result.changed,
+                  completion.bit_depth_change_result.before_bits_per_channel,
+                  completion.bit_depth_change_result.after_bits_per_channel);
+            } else {
               evidence_valid = false;
             }
+          } catch (...) {
+            evidence_valid = false;
           }
         }
         if (!evidence_valid) {
           completion.ok = false;
-          completion.error_code = "CAPABILITY_FAILED";
+          const bool mutating = completion.capability_id == kProjectBitDepthSetCapability;
+          completion.error_code = mutating
+              ? "POSSIBLY_SIDE_EFFECTING_FAILURE" : "CAPABILITY_FAILED";
           completion.message = "native result evidence failed validation";
           postcondition_digest.clear();
+          if (mutating) {
+            dispatcher_.mark_idempotency_ambiguous(completion.idempotency_key);
+          }
           observer_.on_rpc_event(
               "terminal.validation", completion.request_id, "invalid-evidence");
         }
@@ -243,19 +283,47 @@ void NativeRpcConnectionHandler::serve(
         }
         std::vector<std::uint8_t> response;
         if (completion.ok) {
-          response = rpc::encode_project_summary_success({
-              completion.request_id,
-              connection.session_id,
-              runtime_.host_instance_id,
-              completion.result.project_open,
-              completion.result.project_name,
-              static_cast<std::uint64_t>(completion.result.item_count),
-              started_at,
-              completed_at,
-              request_digest,
-              postcondition_digest,
-              false,
-          });
+          if (completion.capability_id == kProjectSummaryCapability) {
+            response = rpc::encode_project_summary_success({
+                completion.request_id,
+                connection.session_id,
+                runtime_.host_instance_id,
+                completion.result.project_open,
+                completion.result.project_name,
+                static_cast<std::uint64_t>(completion.result.item_count),
+                started_at,
+                completed_at,
+                request_digest,
+                postcondition_digest,
+                false,
+            });
+          } else if (completion.capability_id == kProjectBitDepthReadCapability) {
+            response = rpc::encode_project_bit_depth_read_success({
+                completion.request_id,
+                connection.session_id,
+                runtime_.host_instance_id,
+                completion.bit_depth_result.bits_per_channel,
+                started_at,
+                completed_at,
+                request_digest,
+                postcondition_digest,
+                false,
+            });
+          } else {
+            response = rpc::encode_project_bit_depth_set_success({
+                completion.request_id,
+                connection.session_id,
+                runtime_.host_instance_id,
+                completion.bit_depth_change_result.changed,
+                completion.bit_depth_change_result.before_bits_per_channel,
+                completion.bit_depth_change_result.after_bits_per_channel,
+                started_at,
+                completed_at,
+                request_digest,
+                postcondition_digest,
+                false,
+            });
+          }
         } else {
           ParsedRequest synthetic;
           synthetic.method = RpcMethod::kInvoke;
@@ -264,7 +332,9 @@ void NativeRpcConnectionHandler::serve(
               synthetic,
               connection.session_id,
               completion.error_code,
-              completion.message.empty() ? "native request failed" : completion.message));
+              completion.message.empty() ? "native request failed" : completion.message,
+              completion.capability_id,
+              completion.error_field));
         }
         if (!write_frame(connection.socket_fd, response)) {
           connected = false;
@@ -333,16 +403,41 @@ void NativeRpcConnectionHandler::serve(
 
         if (request.method == RpcMethod::kCapabilities) {
           const auto& query = std::get<rpc::CapabilitiesParams>(request.params);
-          bool include = !query.ids.has_value() || std::find(
+          const bool include_summary = !query.ids.has_value() || std::find(
               query.ids->begin(), query.ids->end(), "ae.project.summary") != query.ids->end();
+          const bool include_bit_depth_read = !query.ids.has_value() || std::find(
+              query.ids->begin(), query.ids->end(), "ae.project.bit-depth.read")
+                  != query.ids->end();
+          const bool include_bit_depth_set = !query.ids.has_value() || std::find(
+              query.ids->begin(), query.ids->end(), "ae.project.bit-depth.set")
+                  != query.ids->end();
+          const std::size_t selected = static_cast<std::size_t>(include_summary)
+              + static_cast<std::size_t>(include_bit_depth_read)
+              + static_cast<std::size_t>(include_bit_depth_set);
+          if (selected > query.limit) {
+            if (!write_frame(connection.socket_fd, rpc::encode_error_response(error_for(
+                    request,
+                    connection.session_id,
+                    "INVALID_ARGUMENT",
+                    "capability limit is smaller than the selected descriptor set")))) {
+              connected = false;
+              break;
+            }
+            (void)front_door.complete_request(request.request_id);
+            continue;
+          }
           if (!write_frame(connection.socket_fd, rpc::encode_capabilities_success({
                   request.request_id,
                   connection.session_id,
                   query.detail,
-                  include,
+                  include_summary,
+                  include_bit_depth_read,
+                  include_bit_depth_set,
                   rpc::digest_capabilities_query(connection.session_id, query),
                   runtime_.capabilities_digest,
                   runtime_.project_summary_contract_digest,
+                  runtime_.project_bit_depth_read_contract_digest,
+                  runtime_.project_bit_depth_set_contract_digest,
               }))) {
             connected = false;
             break;
@@ -386,19 +481,26 @@ void NativeRpcConnectionHandler::serve(
         const std::uint64_t effective_deadline = *ingress.effective_deadline_unix_ms;
         const std::uint64_t ttl = effective_deadline > now_unix
             ? effective_deadline - now_unix : 0;
+        const auto& invoke = std::get<rpc::InvokeParams>(request.params);
         const EnqueueResult enqueued = dispatcher_.enqueue({
             request.request_id,
-            std::string(kProjectSummaryCapability),
+            invoke.capability_id,
             dispatcher_clock_.now() + std::chrono::milliseconds(ttl),
             connection.peer.connection_id,
             connection.session_generation,
+            invoke.target_depth,
+            invoke.idempotency_key,
+            invoke.arguments_fingerprint_sha256,
         });
         if (enqueued.code != EnqueueCode::kAccepted) {
           if (!write_frame(connection.socket_fd, rpc::encode_error_response(error_for(
                   request,
                   connection.session_id,
                   enqueued.error_code,
-                  "native dispatcher rejected the request")))) {
+                  enqueued.message.empty()
+                      ? "native dispatcher rejected the request" : enqueued.message,
+                  invoke.capability_id,
+                  enqueued.error_field)))) {
             connected = false;
             break;
           }

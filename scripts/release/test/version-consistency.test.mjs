@@ -185,7 +185,7 @@ test('user docs distinguish the Windows v0.9.2 release from deferred v0.9.3 work
   assert.doesNotMatch(reference, /203 passed/);
   assert.doesNotMatch(reference, /24 passed/);
   assert.doesNotMatch(reference, /\| Handler count \| 30 verbs/);
-  assert.match(reference, /\| Handler count \| 44 verbs/);
+  assert.match(reference, /\| Handler count \| 47 verbs/);
   assert.equal((reference.match(/\| `ae\.status` \|/g) || []).length, 2);
   assert.equal((reference.match(/\| `ae\.diagnose` \|/g) || []).length, 2);
   assert.match(reference, /operating-system temporary directory/i);
