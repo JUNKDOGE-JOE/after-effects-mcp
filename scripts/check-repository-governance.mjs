@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import process from 'node:process';
 import { execFileSync } from 'node:child_process';
@@ -8,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 export const GOVERNANCE_PATH = 'AGENTS.md';
 export const INVENTORY_PATH = 'docs/checkpoints/2026-07-16-worktree-audit.md';
+export const GOVERNANCE_SHA256 = '48f64cbdeff4618367a3770ebbf6ae234e70ea16f375427764a1967b17c05fc0';
 
 const REQUIRED_RULES = [
   '# Repository Development and Delivery Rules',
@@ -25,7 +27,7 @@ const REQUIRED_RULES = [
   'Never blindly repeat a possibly completed write.',
 ];
 
-const FINAL_WORKTREES = [
+export const FINAL_WORKTREES = [
   '<repo-root>',
   '<repo-root>/.worktrees/issue-73-rollback-29e7931',
   '<repo-root>/.worktrees/issue-78-native-undoable-write',
@@ -64,6 +66,10 @@ const INITIAL_WORKTREES = [
 
 export function validateGovernance({ agentsText, inventoryText, trackedPaths }) {
   const errors = [];
+  const agentsSha256 = createHash('sha256').update(agentsText).digest('hex');
+  if (agentsSha256 !== GOVERNANCE_SHA256) {
+    errors.push(`${GOVERNANCE_PATH} content changed; review and update the locked SHA-256 deliberately`);
+  }
   for (const required of REQUIRED_RULES) {
     if (!agentsText.includes(required)) errors.push(`${GOVERNANCE_PATH} is missing required rule: ${required}`);
   }
@@ -132,7 +138,15 @@ export function inspectLiveWorktrees(repoRoot, inventoryText, canonicalRoot = re
     }
     return { path: normalized, head: entry.HEAD, branch: entry.branch ?? 'detached', dirty };
   });
+  const livePaths = new Set(rows.map((row) => row.path));
+  for (const missing of missingFinalWorktrees(livePaths)) {
+    errors.push(`required retained worktree is missing: ${missing}`);
+  }
   return { errors, rows };
+}
+
+export function missingFinalWorktrees(livePaths) {
+  return FINAL_WORKTREES.filter((worktree) => !livePaths.has(worktree));
 }
 
 function main() {

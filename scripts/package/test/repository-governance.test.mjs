@@ -3,9 +3,11 @@ import { test } from 'node:test';
 import fs from 'node:fs';
 import {
   GOVERNANCE_PATH,
+  FINAL_WORKTREES,
   INVENTORY_PATH,
   extractFinalRetainedWorktrees,
   normalizeWorktreePath,
+  missingFinalWorktrees,
   parseWorktreePorcelain,
   validateGovernance,
 } from '../../check-repository-governance.mjs';
@@ -37,11 +39,25 @@ test('semantic rule reversal and final retained-set removal fail closed', () => 
     'Automated tests and CI fully substitute for hardware validation.',
   );
   assert.ok(validateGovernance({ agentsText: weakened, inventoryText, trackedPaths })
-    .some((error) => error.includes('never substitute')));
+    .some((error) => error.includes('locked SHA-256')));
+  const otherWeakening = agentsText.replace(
+    'Use one worktree and one branch for each issue.',
+    'Do not use one worktree and one branch for each issue.',
+  );
+  assert.ok(validateGovernance({ agentsText: otherWeakening, inventoryText, trackedPaths })
+    .some((error) => error.includes('locked SHA-256')));
   const withoutFinalSet = inventoryText.replace(/## Final retained registry[\s\S]*?(?=\n## Cleanup execution record)/, '');
   assert.ok(validateGovernance({ agentsText, inventoryText: withoutFinalSet, trackedPaths })
     .some((error) => error.includes('final retained worktree set')));
   assert.equal(extractFinalRetainedWorktrees(withoutFinalSet).size, 0);
+});
+
+test('live registry validation rejects a missing required retained worktree', () => {
+  assert.deepEqual(missingFinalWorktrees(new Set(FINAL_WORKTREES)), []);
+  assert.deepEqual(
+    missingFinalWorktrees(new Set(FINAL_WORKTREES.slice(1))),
+    [FINAL_WORKTREES[0]],
+  );
 });
 
 test('worktree porcelain parsing and path normalization are deterministic', () => {
