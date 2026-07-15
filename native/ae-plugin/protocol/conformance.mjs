@@ -67,6 +67,12 @@ export const INVOKE_REGISTRY = Object.freeze([
     inputContractId: 'aemcp.contract.ae.composition.layers.list.input.v1',
     resultContractId: 'aemcp.contract.ae.composition.layers.list.result.v1',
   }),
+  Object.freeze({
+    id: 'ae.layer.properties.list',
+    version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.properties.list.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.properties.list.result.v1',
+  }),
 ]);
 const ENVELOPE_KEYS = new Set([
   'wireVersion', 'kind', 'sessionId', 'requestId', 'method', 'deadlineUnixMs', 'params',
@@ -620,7 +626,7 @@ export function classifyRequest(message) {
           || (args.offset > 0 && args.projectLocator === undefined)) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
-    } else {
+    } else if (params.capabilityId === 'ae.composition.layers.list') {
       const args = params.arguments;
       if (!exactKeys(
         args,
@@ -630,6 +636,21 @@ export function classifyRequest(message) {
           || !isLocatorShape(args.compositionLocator, ['composition'])
           || !Number.isSafeInteger(args.offset) || args.offset < 0
           || !Number.isSafeInteger(args.limit) || args.limit < 1 || args.limit > 50) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else {
+      const args = params.arguments;
+      if (!exactKeys(
+        args,
+        new Set(['layerLocator', 'parentPropertyLocator', 'offset', 'limit']),
+        ['layerLocator', 'offset', 'limit'],
+      )
+          || !isLocatorShape(args.layerLocator, ['layer'])
+          || (args.parentPropertyLocator !== undefined
+            && args.parentPropertyLocator !== null
+            && !isLocatorShape(args.parentPropertyLocator, ['stream']))
+          || !Number.isSafeInteger(args.offset) || args.offset < 0
+          || !Number.isSafeInteger(args.limit) || args.limit < 1 || args.limit > 25) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
     }
@@ -735,11 +756,19 @@ export function validateFailureExchange(
       && response.error.details.capabilityId !== capabilityId) return false;
   if (response.error.code === 'STALE_LOCATOR'
       && (capabilityId === 'ae.project.items.list'
-        || capabilityId === 'ae.composition.layers.list')) {
-    const expectedField = capabilityId === 'ae.project.items.list'
-      ? 'params.arguments.projectLocator' : 'params.arguments.compositionLocator';
+        || capabilityId === 'ae.composition.layers.list'
+        || capabilityId === 'ae.layer.properties.list')) {
+    const expectedFields = capabilityId === 'ae.project.items.list'
+      ? new Set(['params.arguments.projectLocator'])
+      : capabilityId === 'ae.composition.layers.list'
+        ? new Set(['params.arguments.compositionLocator'])
+        : new Set([
+          'params.arguments.layerLocator',
+          ...(request.params.arguments.parentPropertyLocator
+            ? ['params.arguments.parentPropertyLocator'] : []),
+        ]);
     const currentGeneration = response.error.details?.currentGeneration;
-    if (response.error.details?.field !== expectedField
+    if (!expectedFields.has(response.error.details?.field)
         || (currentGeneration !== undefined
           && (!Number.isSafeInteger(currentGeneration) || currentGeneration < 1))
         || (capabilityId === 'ae.project.items.list'
@@ -823,6 +852,12 @@ export function projectItemsListContractDigest(schema) {
 export function compositionLayersListContractDigest(schema) {
   const inputSchema = structuredClone(schema.$defs.compositionLayersListInputSchemaContract.const);
   const resultSchema = structuredClone(schema.$defs.compositionLayersListResultSchemaContract.const);
+  return sha256Jcs({ inputSchema, resultSchema });
+}
+
+export function layerPropertiesListContractDigest(schema) {
+  const inputSchema = structuredClone(schema.$defs.layerPropertiesListInputSchemaContract.const);
+  const resultSchema = structuredClone(schema.$defs.layerPropertiesListResultSchemaContract.const);
   return sha256Jcs({ inputSchema, resultSchema });
 }
 
@@ -1123,6 +1158,75 @@ export function compositionLayersListDescriptor(schema) {
   };
 }
 
+export function layerPropertiesListDescriptor(schema) {
+  const registration = INVOKE_REGISTRY[5];
+  const layerLocator = syntheticDescriptorLocator(
+    'layer', '88888888-8888-4888-8888-888888888888',
+  );
+  return {
+    detail: 'full',
+    id: registration.id,
+    version: registration.version,
+    schemaVersion: 1,
+    summary: 'List a bounded page of direct properties on an After Effects layer or property group.',
+    risk: 'read',
+    mutability: 'read-only',
+    idempotency: 'idempotent',
+    cancellation: 'before-dispatch',
+    undo: 'not-applicable',
+    sideEffectSummary: 'Reads layer properties and safe primitive values without changing After Effects state.',
+    preconditions: [
+      'An After Effects project must be open.',
+      'layerLocator must come from ae.composition.layers.list@1.',
+      'parentPropertyLocator must come from ae.layer.properties.list@1 for the same layer.',
+    ],
+    compatibility: {
+      status: 'unverified',
+      intendedPlatforms: ['macos-arm64', 'windows-x64'],
+    },
+    inputContractId: registration.inputContractId,
+    resultContractId: registration.resultContractId,
+    contractDigest: layerPropertiesListContractDigest(schema),
+    inputSchema: structuredClone(schema.$defs.layerPropertiesListInputSchemaContract.const),
+    resultSchema: structuredClone(schema.$defs.layerPropertiesListResultSchemaContract.const),
+    requirements: [{
+      id: 'aemcp.requirement.native.layer-properties-list',
+      contractVersion: 1,
+    }],
+    examples: [
+      {
+        id: 'aemcp-example-layer-properties-list-empty',
+        kind: 'positive',
+        summary: 'List the first bounded page of direct properties on a layer.',
+        arguments: { layerLocator, offset: 0, limit: 25 },
+        expected: {
+          outcome: 'succeeded',
+          value: {
+            layerLocator,
+            parentPropertyLocator: null,
+            layerName: 'SYNTHETIC_LAYER',
+            sampleTime: { value: 0, scale: 1, mode: 'comp-time' },
+            total: 0,
+            offset: 0,
+            limit: 25,
+            returned: 0,
+            hasMore: false,
+            nextOffset: null,
+            properties: [],
+          },
+        },
+      },
+      {
+        id: 'aemcp-example-layer-properties-list-stale',
+        kind: 'negative',
+        summary: 'Refresh stale layer and property locators before listing properties.',
+        arguments: { layerLocator, offset: 0, limit: 25 },
+        expected: { errorCode: 'STALE_LOCATOR', recoveryAction: 'refresh-locator' },
+      },
+    ],
+  };
+}
+
 export function nativeCapabilityRegistry(schema) {
   return [
     projectSummaryDescriptor(schema),
@@ -1130,6 +1234,7 @@ export function nativeCapabilityRegistry(schema) {
     projectBitDepthSetDescriptor(schema),
     projectItemsListDescriptor(schema),
     compositionLayersListDescriptor(schema),
+    layerPropertiesListDescriptor(schema),
   ];
 }
 
@@ -1186,15 +1291,87 @@ function locatorContext(locator) {
   };
 }
 
+const DECIMAL_WIRE_VALUE = /^(-?)(0|[1-9][0-9]*)(?:\.([0-9]+))?(?:[eE][+-]?[0-9]+)?$/;
+
+function validateDecimalWireValue(value) {
+  if (typeof value !== 'string' || value.length < 1 || value.length > 32) return false;
+  const match = DECIMAL_WIRE_VALUE.exec(value);
+  if (!match) return false;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return false;
+  if (numeric === 0) {
+    const isTextualZero = !/[1-9]/.test(`${match[2]}${match[3] ?? ''}`);
+    if (match[1] === '-' || !isTextualZero) return false;
+  }
+  return true;
+}
+
+function validateSampledPropertyValue(property) {
+  const value = property.value;
+  if (property.valueType === 'one-d') {
+    return value?.kind === 'scalar' && validateDecimalWireValue(value.value);
+  }
+  if (property.valueType === 'two-d' || property.valueType === 'two-d-spatial'
+      || property.valueType === 'three-d' || property.valueType === 'three-d-spatial') {
+    const expectedArity = property.valueType.startsWith('two-d') ? 2 : 3;
+    return value?.kind === 'vector' && Array.isArray(value.components)
+      && value.components.length === expectedArity
+      && value.components.every(validateDecimalWireValue);
+  }
+  if (property.valueType === 'color') {
+    return value?.kind === 'color'
+      && ['alpha', 'red', 'green', 'blue'].every(
+        (component) => validateDecimalWireValue(value[component]),
+      );
+  }
+  return false;
+}
+
+function validateLayerProperty(property, value, context, seenObjectIds, index, schema) {
+  if (!validateLocator(property.propertyLocator, context, schema)
+      || property.propertyLocator.kind !== 'stream'
+      || property.propertyIndex !== value.offset + index + 1
+      || seenObjectIds.has(property.propertyLocator.objectId)
+      || (value.parentPropertyLocator !== null
+        && property.propertyLocator.objectId === value.parentPropertyLocator.objectId)) return false;
+  seenObjectIds.add(property.propertyLocator.objectId);
+
+  if (property.groupingType === 'named-group' || property.groupingType === 'indexed-group') {
+    return property.valueType === 'none' && property.valueStatus === 'group'
+      && property.value === null && property.canVaryOverTime === null
+      && property.timeVarying === null;
+  }
+  if (property.groupingType !== 'leaf' || property.childCount !== 0) return false;
+  if (property.valueStatus === 'sampled') {
+    return typeof property.canVaryOverTime === 'boolean'
+      && typeof property.timeVarying === 'boolean'
+      && validateSampledPropertyValue(property);
+  }
+  if (property.valueStatus === 'no-data') {
+    return property.valueType === 'none' && property.value === null;
+  }
+  if (property.valueStatus === 'unsupported') {
+    return new Set([
+      'arb', 'marker', 'layer-id', 'mask-id', 'mask', 'text-document', 'unknown',
+    ])
+      .has(property.valueType) && property.value === null;
+  }
+  return false;
+}
+
 function validateNavigationResult(request, result, helloContext, schema) {
   const capabilityId = request.params.capabilityId;
   if (capabilityId !== 'ae.project.items.list'
-      && capabilityId !== 'ae.composition.layers.list') return true;
+      && capabilityId !== 'ae.composition.layers.list'
+      && capabilityId !== 'ae.layer.properties.list') return true;
   const value = result.value;
   const args = request.params.arguments;
   const rootLocator = capabilityId === 'ae.project.items.list'
-    ? value.projectLocator : value.compositionLocator;
-  const expectedKind = capabilityId === 'ae.project.items.list' ? 'project' : 'composition';
+    ? value.projectLocator
+    : capabilityId === 'ae.composition.layers.list'
+      ? value.compositionLocator : value.layerLocator;
+  const expectedKind = capabilityId === 'ae.project.items.list'
+    ? 'project' : capabilityId === 'ae.composition.layers.list' ? 'composition' : 'layer';
   if (rootLocator?.kind !== expectedKind
       || rootLocator.hostInstanceId !== helloContext.response.result.host.instanceId
       || rootLocator.sessionId !== request.sessionId) return false;
@@ -1217,6 +1394,24 @@ function validateNavigationResult(request, result, helloContext, schema) {
       objectIds.add(item.locator.objectId);
     }
     return true;
+  }
+
+  if (capabilityId === 'ae.layer.properties.list') {
+    const expectedParent = args.parentPropertyLocator ?? null;
+    if (!validatePageMetadata(value, args, 'properties')
+        || result.evidence.postcondition.kind !== 'layer-properties-list'
+        || !jsonDeepEqual(args.layerLocator, value.layerLocator)
+        || !jsonDeepEqual(expectedParent, value.parentPropertyLocator)
+        || (value.parentPropertyLocator !== null
+          && (!validateLocator(value.parentPropertyLocator, context, schema)
+            || value.parentPropertyLocator.kind !== 'stream'))
+        || !Number.isSafeInteger(value.sampleTime?.value)
+        || !Number.isSafeInteger(value.sampleTime?.scale)
+        || value.sampleTime.scale < 1 || value.sampleTime.mode !== 'comp-time') return false;
+    const objectIds = new Set();
+    return value.properties.every((property, index) => validateLayerProperty(
+      property, value, context, objectIds, index, schema,
+    ));
   }
 
   if (!validatePageMetadata(value, args, 'layers')

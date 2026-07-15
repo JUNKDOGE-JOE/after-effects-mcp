@@ -73,6 +73,7 @@ MCP client
 | `ae.setProjectBitDepth` | `target_depth`, `idempotency_key` | 通过原生 AEGP 设置 `8/16/32`，返回 before/after、Undo 可用性和审计；不回退 JSX |
 | `ae_listProjectItems` | `project_locator?`, `offset?`, `limit?` | 通过原生 AEGP 分页列出工程项；默认 25、最多 50；不回退 JSX |
 | `ae_listCompositionLayers` | `composition_locator`, `offset?`, `limit?` | 通过原生 AEGP 分页列出指定合成的图层；默认 25、最多 50；不回退 JSX |
+| `ae_listLayerProperties` | `layer_locator`, `parent_property_locator?`, `offset?`, `limit?` | 通过原生 AEGP 分页列出图层或属性组的一层直接子属性；默认/最多 25；不回退 JSX |
 | `ae.layers` | `comp_id?`, `offset?`, `limit?`, `format?` | legacy JSX 图层列表（行为保持不变） |
 | `ae.readProps` | `code` | 执行只读 JSX |
 | `ae.exec` | `code`, `undo_group_name?`, `checkpoint_label?`, `timeout_sec?` | 执行 JSX |
@@ -114,13 +115,15 @@ MCP client
 | `ae.createRig` | `comp_id?`, `target_layer_id`, `rig_type`, `name?`, `options?`, `controls?` | 创建 controller/effect/preset rig |
 | `ae.ping` | `expect?` | bridge 握手 |
 
-### 原生工程导航
+### 原生工程与属性导航
 
-公开 MCP 工具 `ae_listProjectItems` 和 `ae_listCompositionLayers` 分别调用 canonical Core verb `ae.listProjectItems` 与 `ae.listCompositionLayers`，并固定走 `MCP -> Core -> native RPC -> AEGP -> AE`。两者均为严格的原生只读工具；原生能力、契约或传输不可用时返回结构化错误，**不会回退到 JSX**。
+公开 MCP 工具 `ae_listProjectItems`、`ae_listCompositionLayers` 和 `ae_listLayerProperties` 分别调用 canonical Core verb `ae.listProjectItems`、`ae.listCompositionLayers` 与 `ae.listLayerProperties`，并固定走 `MCP -> Core -> native RPC -> AEGP -> AE`。三者均为严格的原生只读工具；原生能力、契约或传输不可用时返回结构化错误，**不会回退到 JSX**。
 
 - 首次调用 `ae_listProjectItems` 时省略 `project_locator`；`offset` 默认为 `0`，`limit` 默认为 `25`、最大为 `50`。续页时传回上一页的 `projectLocator`，且 `offset > 0` 时该 locator 必填。
 - `ae_listCompositionLayers` 的 `composition_locator` 必须来自工程项结果中 `type="composition"` 的 `locator`；同样使用 `offset` 分页，`limit` 默认为 `25`、最大为 `50`。
-- Locator 是不透明的原生句柄，绑定当前 host、session、project 与 generation；不要拆解、改写或跨重启缓存。成功结果携带 `native-aegp` provenance、已验证 postcondition 与 audit evidence。
+- `ae_listLayerProperties` 的 `layer_locator` 必须来自合成图层结果。省略 `parent_property_locator` 时读取图层属性根；仅可传入本工具返回且 `groupingType` 为 `named-group` 或 `indexed-group` 的 property locator，并只列该 group 的直接子项。默认和最大 `limit` 均为 `25`，不会递归返回整棵属性树；leaf locator 会得到结构化 `INVALID_ARGUMENT`。
+- 原始 primitive 值绑定返回的精确 `sampleTime.value/scale`，并使用带类型的十进制字符串编码；复杂、handle-backed 的 SDK 值会明确返回 `valueStatus="unsupported"` 和 `value=null`。
+- Locator 是服务端签发的不透明标识，绑定当前 host、session、project 与 generation；它不是跨请求保留的 AEGP handle。不要拆解、改写或跨工程切换/重启缓存。成功结果携带 `native-aegp` provenance、已验证 postcondition 与 audit evidence。
 
 现有 `ae.layers` 是 legacy JSX 工具，继续保留原参数、数值 ID、`limit=0` 全量返回及可选文本格式语义。它没有被改造成原生工具，也不与上述 locator 契约混用。
 
@@ -373,6 +376,7 @@ Unless noted otherwise, tools return JSON with `ok: true` on success, or `ok: fa
 | `ae.setProjectBitDepth` | `target_depth`, `idempotency_key` | set native AEGP `8/16/32` with before/after, Undo availability, and audit evidence; never falls back to JSX |
 | `ae_listProjectItems` | `project_locator?`, `offset?`, `limit?` | page through project items via native AEGP; default 25, maximum 50; never falls back to JSX |
 | `ae_listCompositionLayers` | `composition_locator`, `offset?`, `limit?` | page through one composition's layers via native AEGP; default 25, maximum 50; never falls back to JSX |
+| `ae_listLayerProperties` | `layer_locator`, `parent_property_locator?`, `offset?`, `limit?` | page through one direct level of layer/group properties via native AEGP; default/maximum 25; never falls back to JSX |
 | `ae.layers` | `comp_id?`, `offset?`, `limit?`, `format?` | legacy JSX layer listing (behavior unchanged) |
 | `ae.readProps` | `code` | run read-only JSX |
 | `ae.exec` | `code`, `undo_group_name?`, `checkpoint_label?`, `timeout_sec?` | run JSX |
@@ -414,13 +418,15 @@ Unless noted otherwise, tools return JSON with `ok: true` on success, or `ok: fa
 | `ae.createRig` | `comp_id?`, `target_layer_id`, `rig_type`, `name?`, `options?`, `controls?` | create controller/effect/preset rigs |
 | `ae.ping` | `expect?` | bridge handshake |
 
-### Native Project Navigation
+### Native Project and Property Navigation
 
-The public MCP tools `ae_listProjectItems` and `ae_listCompositionLayers` call the canonical Core verbs `ae.listProjectItems` and `ae.listCompositionLayers`, respectively, over the fixed `MCP -> Core -> native RPC -> AEGP -> AE` path. Both are strict native reads: if the native capability, contract, or transport is unavailable, they return a structured error and **never fall back to JSX**.
+The public MCP tools `ae_listProjectItems`, `ae_listCompositionLayers`, and `ae_listLayerProperties` call the canonical Core verbs `ae.listProjectItems`, `ae.listCompositionLayers`, and `ae.listLayerProperties`, respectively, over the fixed `MCP -> Core -> native RPC -> AEGP -> AE` path. All three are strict native reads: if the native capability, contract, or transport is unavailable, they return a structured error and **never fall back to JSX**.
 
 - Omit `project_locator` on the first `ae_listProjectItems` call. `offset` defaults to `0`; `limit` defaults to `25` and is capped at `50`. Pass the returned `projectLocator` on continuation pages; it is required when `offset > 0`.
 - `ae_listCompositionLayers` requires the `locator` of an item whose `type="composition"` in the project-items result. It uses the same offset pagination and default/max limits.
-- Locators are opaque native handles bound to the current host, session, project, and generation. Do not decompose, edit, or cache them across restarts. Successful results carry `native-aegp` provenance, a verified postcondition, and audit evidence.
+- `ae_listLayerProperties` requires a layer locator from the composition-layers result. Omit `parent_property_locator` for the layer root, or pass a locator returned by this tool only when its `groupingType` is `named-group` or `indexed-group`, to list exactly that group's direct children. Its default and maximum `limit` are both `25`; it never returns a recursive tree, and a leaf locator produces structured `INVALID_ARGUMENT`.
+- Primitive values are bound to the exact returned `sampleTime.value/scale` and use typed decimal-string encoding. Complex handle-backed SDK values explicitly return `valueStatus="unsupported"` with `value=null`.
+- Locators are server-issued opaque identifiers bound to the current host, session, project, and generation; they are not retained AEGP handles. Do not decompose, edit, or cache them across project changes or restarts. Successful results carry `native-aegp` provenance, a verified postcondition, and audit evidence.
 
 The existing `ae.layers` tool remains a legacy JSX tool with its original arguments, numeric IDs, `limit=0` all-items behavior, and optional text format. It was not converted to native and does not share the locator contract above.
 

@@ -21,6 +21,7 @@ from typing import Any, List
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import CallToolResult, TextContent, Tool
+from pydantic import ValidationError
 
 from ae_mcp import approval_gate, client_identity
 from ae_mcp.annotations import VERB_ANNOTATIONS
@@ -85,6 +86,7 @@ def _filtered_tool_names() -> set:
             "ae.setProjectBitDepth",
             "ae.listProjectItems",
             "ae.listCompositionLayers",
+            "ae.listLayerProperties",
         }
     else:
         supported = supported - {
@@ -93,6 +95,7 @@ def _filtered_tool_names() -> set:
             "ae.setProjectBitDepth",
             "ae.listProjectItems",
             "ae.listCompositionLayers",
+            "ae.listLayerProperties",
         }
     return supported | {"ae.status", "ae.diagnose"}
 
@@ -257,7 +260,34 @@ def build_server() -> Server:
         try:
             validated = schema_cls(**(arguments or {}))
         except Exception as e:  # noqa: BLE001
-            payload = _format_result({"ok": False, "error": f"schema: {e}"})
+            if name == "ae.listLayerProperties" and isinstance(e, ValidationError):
+                errors = e.errors(include_url=False, include_input=False)
+                field = "arguments"
+                if errors and errors[0].get("loc"):
+                    field += "." + ".".join(
+                        str(part) for part in errors[0]["loc"]
+                    )
+                structured = NativeBackendError(
+                    "INVALID_ARGUMENT",
+                    "ae.listLayerProperties arguments did not match the published schema.",
+                    retryable=False,
+                    side_effect="not-started",
+                    recovery={
+                        "action": "change-arguments",
+                        "hint": (
+                            "Use a layer locator from ae_listCompositionLayers, an optional "
+                            "property locator from this tool, offset >= 0, and limit 1..25."
+                        ),
+                    },
+                    details={
+                        "field": field[:128],
+                        "capabilityId": "ae.layer.properties.list",
+                    },
+                )
+                error: Any = structured.public_dict()
+            else:
+                error = f"schema: {e}"
+            payload = _format_result({"ok": False, "error": error})
             return CallToolResult(
                 content=[TextContent(type="text", text=payload)],
                 isError=True,

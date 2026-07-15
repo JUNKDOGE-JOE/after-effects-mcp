@@ -15,10 +15,12 @@
 #include <cerrno>
 #include <charconv>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <iomanip>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -61,6 +63,7 @@ using aemcp::native::HostCompositionLayersResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostReadResult;
 using aemcp::native::HostProjectItemsResult;
+using aemcp::native::HostLayerPropertiesResult;
 using aemcp::native::MacEndpointRegistry;
 using aemcp::native::MacIpcServer;
 using aemcp::native::NativeEndpointDescriptor;
@@ -82,13 +85,14 @@ using aemcp::native::kProjectBitDepthSetCapability;
 using aemcp::native::kProjectSummaryCapability;
 using aemcp::native::kCompositionLayersListCapability;
 using aemcp::native::kProjectItemsListCapability;
+using aemcp::native::kLayerPropertiesListCapability;
 
 constexpr std::string_view kPluginVersion = AE_MCP_PRODUCT_VERSION;
 constexpr std::string_view kSdkVersion = "25.6.61";
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::string_view kCapabilitiesDigest =
-    "1814ffa17e29919414094c3b9cb6fb331169a5084aed44abb7a55f5827ffe72a";
+    "25d8d4b950ce74184855c780d90686b3f52b3f90302c9b065e3c45a5574a22c9";
 constexpr std::string_view kProjectSummaryContractDigest =
     "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
 constexpr std::string_view kProjectBitDepthReadContractDigest =
@@ -99,6 +103,8 @@ constexpr std::string_view kProjectItemsListContractDigest =
     "64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e";
 constexpr std::string_view kCompositionLayersListContractDigest =
     "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75";
+constexpr std::string_view kLayerPropertiesListContractDigest =
+    "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba";
 constexpr std::int64_t kMaximumProjectItems = 100000;
 static_assert(kSourceCommit.size() == 40);
 
@@ -340,8 +346,72 @@ class MemHandleOwner final {
   bool locked_{false};
 };
 
+class StreamRefOwner final {
+ public:
+  StreamRefOwner(const AEGP_StreamSuite6* suite, AEGP_StreamRefH stream)
+      : suite_(suite), stream_(stream) {}
+  ~StreamRefOwner() { reset(); }
+  StreamRefOwner(const StreamRefOwner&) = delete;
+  StreamRefOwner& operator=(const StreamRefOwner&) = delete;
+  StreamRefOwner(StreamRefOwner&& other) noexcept
+      : suite_(other.suite_), stream_(other.stream_) {
+    other.stream_ = nullptr;
+  }
+  StreamRefOwner& operator=(StreamRefOwner&& other) noexcept {
+    if (this != &other) {
+      reset();
+      suite_ = other.suite_;
+      stream_ = other.stream_;
+      other.stream_ = nullptr;
+    }
+    return *this;
+  }
+  [[nodiscard]] AEGP_StreamRefH get() const noexcept { return stream_; }
+
+ private:
+  void reset() noexcept {
+    if (suite_ != nullptr && stream_ != nullptr) {
+      (void)suite_->AEGP_DisposeStream(stream_);
+      stream_ = nullptr;
+    }
+  }
+  const AEGP_StreamSuite6* suite_{nullptr};
+  AEGP_StreamRefH stream_{nullptr};
+};
+
+class StreamValueOwner final {
+ public:
+  explicit StreamValueOwner(const AEGP_StreamSuite6* suite) : suite_(suite) {}
+  ~StreamValueOwner() {
+    if (initialized_ && suite_ != nullptr) {
+      (void)suite_->AEGP_DisposeStreamValue(&value_);
+    }
+  }
+  StreamValueOwner(const StreamValueOwner&) = delete;
+  StreamValueOwner& operator=(const StreamValueOwner&) = delete;
+  [[nodiscard]] AEGP_StreamValue2* out() noexcept { return &value_; }
+  void mark_initialized() noexcept { initialized_ = true; }
+  [[nodiscard]] const AEGP_StreamValue2& value() const noexcept { return value_; }
+
+ private:
+  const AEGP_StreamSuite6* suite_{nullptr};
+  AEGP_StreamValue2 value_{};
+  bool initialized_{false};
+};
+
 class ProjectGraphRegistry final {
  public:
+  struct LayerAddress {
+    A_long composition_item_id{0};
+    AEGP_LayerIDVal layer_id{0};
+  };
+
+  struct StreamAddress {
+    std::string layer_object_id;
+    std::vector<A_long> child_indices;
+    std::vector<std::int32_t> unique_ids;
+  };
+
   void project_closed() {
     if (!present_) return;
     present_ = false;
@@ -394,8 +464,74 @@ class ProjectGraphRegistry final {
     auto found = layer_object_ids_.find(key);
     if (found == layer_object_ids_.end()) {
       found = layer_object_ids_.emplace(key, aemcp::native::secure_uuid_v4()).first;
+      layers_by_object_.emplace(
+          found->second, LayerAddress{composition_item_id, layer_id});
     }
     return make_locator("layer", found->second, host, session);
+  }
+
+  [[nodiscard]] std::optional<LayerAddress> resolve_layer(
+      const ObjectLocator& locator,
+      std::string_view host,
+      std::string_view session) const {
+    if (locator.kind != "layer" || locator.host_instance_id != host
+        || locator.session_id != session || locator.project_id != project_id_
+        || locator.generation != generation_) {
+      return std::nullopt;
+    }
+    const auto found = layers_by_object_.find(locator.object_id);
+    return found == layers_by_object_.end()
+        ? std::nullopt : std::optional<LayerAddress>(found->second);
+  }
+
+  [[nodiscard]] ObjectLocator stream_locator(
+      const ObjectLocator& layer_locator_value,
+      std::vector<A_long> child_indices,
+      std::vector<std::int32_t> unique_ids,
+      std::string_view host,
+      std::string_view session) {
+    if (child_indices.empty() || child_indices.size() != unique_ids.size()
+        || child_indices.size() > 32) {
+      throw std::runtime_error("stream locator registry bound exceeded");
+    }
+    std::string key = layer_locator_value.object_id;
+    for (std::size_t index = 0; index < child_indices.size(); ++index) {
+      key += ":" + std::to_string(child_indices[index])
+          + "@" + std::to_string(unique_ids[index]);
+    }
+    auto found = stream_object_ids_.find(key);
+    if (found == stream_object_ids_.end()) {
+      if (stream_addresses_.size() >= 16'384) {
+        throw std::runtime_error("stream locator registry bound exceeded");
+      }
+      const std::string object_id = aemcp::native::secure_uuid_v4();
+      found = stream_object_ids_.emplace(key, object_id).first;
+      stream_addresses_.emplace(
+          object_id,
+          StreamAddress{
+              layer_locator_value.object_id,
+              std::move(child_indices),
+              std::move(unique_ids)});
+    }
+    return make_locator("stream", found->second, host, session);
+  }
+
+  [[nodiscard]] std::optional<StreamAddress> resolve_stream(
+      const ObjectLocator& locator,
+      const ObjectLocator& layer_locator_value,
+      std::string_view host,
+      std::string_view session) const {
+    if (locator.kind != "stream" || locator.host_instance_id != host
+        || locator.session_id != session || locator.project_id != project_id_
+        || locator.generation != generation_) {
+      return std::nullopt;
+    }
+    const auto found = stream_addresses_.find(locator.object_id);
+    if (found == stream_addresses_.end()
+        || found->second.layer_object_id != layer_locator_value.object_id) {
+      return std::nullopt;
+    }
+    return found->second;
   }
 
   [[nodiscard]] bool matches_project(
@@ -440,6 +576,9 @@ class ProjectGraphRegistry final {
     item_object_ids_.clear();
     item_ids_by_object_.clear();
     layer_object_ids_.clear();
+    layers_by_object_.clear();
+    stream_object_ids_.clear();
+    stream_addresses_.clear();
   }
 
   bool present_{false};
@@ -451,6 +590,9 @@ class ProjectGraphRegistry final {
   std::unordered_map<A_long, std::string> item_object_ids_;
   std::unordered_map<std::string, A_long> item_ids_by_object_;
   std::unordered_map<std::string, std::string> layer_object_ids_;
+  std::unordered_map<std::string, LayerAddress> layers_by_object_;
+  std::unordered_map<std::string, std::string> stream_object_ids_;
+  std::unordered_map<std::string, StreamAddress> stream_addresses_;
 };
 
 [[nodiscard]] std::optional<AEGP_ProjBitDepth> sdk_bit_depth(
@@ -491,6 +633,41 @@ class ProjectGraphRegistry final {
   if (object_type == AEGP_ObjectType_VECTOR) return "shape";
   if (object_type == AEGP_ObjectType_3D_MODEL) return "model3d";
   return "unknown";
+}
+
+[[nodiscard]] std::optional<std::string> decimal_string(A_FpLong value) {
+  if (!std::isfinite(value)) return std::nullopt;
+  if (value == 0) return std::string("0");
+  std::array<char, 64> buffer{};
+  const auto [end, error] = std::to_chars(
+      buffer.data(),
+      buffer.data() + buffer.size(),
+      value,
+      std::chars_format::general,
+      std::numeric_limits<A_FpLong>::max_digits10);
+  if (error != std::errc{}) return std::nullopt;
+  std::string result(buffer.data(), end);
+  if (result.empty() || result.size() > 32) return std::nullopt;
+  return result;
+}
+
+[[nodiscard]] std::string stream_type_name(AEGP_StreamType type) {
+  switch (type) {
+    case AEGP_StreamType_NO_DATA: return "none";
+    case AEGP_StreamType_OneD: return "one-d";
+    case AEGP_StreamType_TwoD: return "two-d";
+    case AEGP_StreamType_TwoD_SPATIAL: return "two-d-spatial";
+    case AEGP_StreamType_ThreeD: return "three-d";
+    case AEGP_StreamType_ThreeD_SPATIAL: return "three-d-spatial";
+    case AEGP_StreamType_COLOR: return "color";
+    case AEGP_StreamType_ARB: return "arb";
+    case AEGP_StreamType_MARKER: return "marker";
+    case AEGP_StreamType_LAYER_ID: return "layer-id";
+    case AEGP_StreamType_MASK_ID: return "mask-id";
+    case AEGP_StreamType_MASK: return "mask";
+    case AEGP_StreamType_TEXT_DOCUMENT: return "text-document";
+    default: return "unknown";
+  }
 }
 
 template <std::size_t Size>
@@ -548,6 +725,31 @@ constexpr std::size_t literal_size(const char (&)[Size]) noexcept {
       + aemcp::native::json_encoded_string_size(layer.type)
       + literal_size(",\"videoEnabled\":") + literal_size("false")
       + literal_size("}");
+}
+
+[[nodiscard]] std::size_t layer_property_json_size(
+    const aemcp::native::LayerPropertyEntry& property) {
+  std::size_t value_size = literal_size("null");
+  if (const auto* scalar =
+          std::get_if<aemcp::native::LayerPropertyScalarValue>(&property.value)) {
+    value_size = 32U + aemcp::native::json_encoded_string_size(scalar->value);
+  } else if (const auto* vector =
+                 std::get_if<aemcp::native::LayerPropertyVectorValue>(&property.value)) {
+    value_size = 32U;
+    for (const std::string& component : vector->components) {
+      value_size += aemcp::native::json_encoded_string_size(component) + 1U;
+    }
+  } else if (const auto* color =
+                 std::get_if<aemcp::native::LayerPropertyColorValue>(&property.value)) {
+    value_size = 64U + aemcp::native::json_encoded_string_size(color->alpha)
+        + aemcp::native::json_encoded_string_size(color->red)
+        + aemcp::native::json_encoded_string_size(color->green)
+        + aemcp::native::json_encoded_string_size(color->blue);
+  }
+  return 512U + locator_json_size(property.property_locator)
+      + aemcp::native::json_encoded_string_size(property.name)
+      + aemcp::native::json_encoded_string_size(property.match_name)
+      + value_size;
 }
 
 class AegpHostApi final : public HostApi {
@@ -1207,6 +1409,428 @@ class AegpHostApi final : public HostApi {
     return HostCompositionLayersResult::success(std::move(page));
   }
 
+  [[nodiscard]] HostLayerPropertiesResult list_layer_properties(
+      const aemcp::native::LayerPropertiesQuery& query,
+      TimePoint work_deadline) override {
+    const auto budget_expired = [work_deadline] {
+      return std::chrono::steady_clock::now() >= work_deadline;
+    };
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    SuiteLease<AEGP_StreamSuite6> stream_suite(
+        basic_, kAEGPStreamSuite, kAEGPStreamSuiteVersion6);
+    SuiteLease<AEGP_DynamicStreamSuite4> dynamic_suite(
+        basic_, kAEGPDynamicStreamSuite, kAEGPDynamicStreamSuiteVersion4);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || memory_suite.get() == nullptr || stream_suite.get() == nullptr
+        || dynamic_suite.get() == nullptr) {
+      return HostLayerPropertiesResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer property suites are unavailable");
+    }
+    if (budget_expired()) {
+      return HostLayerPropertiesResult::failure(
+          "DEADLINE_EXCEEDED", "layer property list budget elapsed");
+    }
+    A_long project_count = 0;
+    if (project_suite->AEGP_GetNumProjects(&project_count) != A_Err_NONE) {
+      return HostLayerPropertiesResult::failure(
+          "CAPABILITY_FAILED", "could not read project count");
+    }
+    if (project_count <= 0) {
+      graph_.project_closed();
+      return HostLayerPropertiesResult::failure(
+          "PRECONDITION_FAILED", "an After Effects project must be open");
+    }
+    AEGP_ProjectH project = nullptr;
+    AEGP_ItemH root_item = nullptr;
+    A_long root_id = 0;
+    if (project_suite->AEGP_GetProjectByIndex(0, &project) != A_Err_NONE
+        || project == nullptr
+        || project_suite->AEGP_GetProjectRootFolder(project, &root_item) != A_Err_NONE
+        || root_item == nullptr
+        || item_suite->AEGP_GetItemID(root_item, &root_id) != A_Err_NONE) {
+      return HostLayerPropertiesResult::failure(
+          "CAPABILITY_FAILED", "could not resolve the open project's root item");
+    }
+    try {
+      graph_.observe_project(reinterpret_cast<std::uintptr_t>(project), root_id);
+    } catch (...) {
+      return HostLayerPropertiesResult::failure(
+          "CAPABILITY_FAILED", "could not establish project locator identity");
+    }
+    const auto layer_address = graph_.resolve_layer(
+        query.layer_locator, query.host_instance_id, query.session_id);
+    if (!layer_address.has_value()) {
+      return HostLayerPropertiesResult::failure(
+          "STALE_LOCATOR",
+          "layerLocator does not identify a layer in the currently open project",
+          "params.arguments.layerLocator");
+    }
+
+    AEGP_ItemH item = nullptr;
+    if (item_suite->AEGP_GetNextProjItem(project, root_item, &item) != A_Err_NONE) {
+      return HostLayerPropertiesResult::failure(
+          "CAPABILITY_FAILED", "could not begin composition lookup");
+    }
+    AEGP_ItemH composition_item = nullptr;
+    std::uint64_t visited = 0;
+    while (item != nullptr) {
+      if (budget_expired()) {
+        return HostLayerPropertiesResult::failure(
+            "DEADLINE_EXCEEDED", "composition lookup budget elapsed");
+      }
+      if (++visited > static_cast<std::uint64_t>(kMaximumProjectItems)) {
+        return HostLayerPropertiesResult::failure(
+            "CAPABILITY_FAILED", "project item bound exceeded during composition lookup");
+      }
+      A_long item_id = 0;
+      if (item_suite->AEGP_GetItemID(item, &item_id) != A_Err_NONE) {
+        return HostLayerPropertiesResult::failure(
+            "CAPABILITY_FAILED", "could not read project item identity");
+      }
+      if (item_id == layer_address->composition_item_id) {
+        composition_item = item;
+        break;
+      }
+      AEGP_ItemH next = nullptr;
+      if (item_suite->AEGP_GetNextProjItem(project, item, &next) != A_Err_NONE) {
+        return HostLayerPropertiesResult::failure(
+            "CAPABILITY_FAILED", "composition lookup traversal failed");
+      }
+      item = next;
+    }
+    if (composition_item == nullptr) {
+      return HostLayerPropertiesResult::failure(
+          "STALE_LOCATOR", "layer composition no longer exists",
+          "params.arguments.layerLocator");
+    }
+    AEGP_CompH composition = nullptr;
+    if (comp_suite->AEGP_GetCompFromItem(composition_item, &composition) != A_Err_NONE
+        || composition == nullptr) {
+      return HostLayerPropertiesResult::failure(
+          "STALE_LOCATOR", "layer composition can no longer be resolved",
+          "params.arguments.layerLocator");
+    }
+    AEGP_LayerH layer = nullptr;
+    if (layer_suite->AEGP_GetLayerFromLayerID(
+            composition, layer_address->layer_id, &layer) != A_Err_NONE
+        || layer == nullptr) {
+      return HostLayerPropertiesResult::failure(
+          "STALE_LOCATOR", "layer no longer exists in its composition",
+          "params.arguments.layerLocator");
+    }
+    AEGP_MemHandle layer_name_handle = nullptr;
+    AEGP_MemHandle source_name_handle = nullptr;
+    const A_Err layer_name_error = layer_suite->AEGP_GetLayerName(
+        plugin_id_, layer, &layer_name_handle, &source_name_handle);
+    MemHandleOwner source_name_owner(memory_suite.get(), source_name_handle);
+    MemHandleOwner layer_name_owner(memory_suite.get(), layer_name_handle);
+    if (layer_name_error != A_Err_NONE || layer_name_handle == nullptr) {
+      return HostLayerPropertiesResult::failure(
+          "CAPABILITY_FAILED", "could not read layer name");
+    }
+    const std::optional<std::string> layer_name = layer_name_owner.utf8();
+    if (!layer_name.has_value()) {
+      return HostLayerPropertiesResult::failure(
+          "CAPABILITY_FAILED", "layer name is not bounded UTF-16 text");
+    }
+    A_Time sample_time{};
+    if (layer_suite->AEGP_GetLayerCurrentTime(
+            layer, AEGP_LTimeMode_CompTime, &sample_time) != A_Err_NONE
+        || sample_time.scale <= 0) {
+      return HostLayerPropertiesResult::failure(
+          "CAPABILITY_FAILED", "could not read a bounded composition sample time");
+    }
+
+    AEGP_StreamRefH root_stream = nullptr;
+    if (dynamic_suite->AEGP_GetNewStreamRefForLayer(
+            plugin_id_, layer, &root_stream) != A_Err_NONE
+        || root_stream == nullptr) {
+      return HostLayerPropertiesResult::failure(
+          "CAPABILITY_FAILED", "could not resolve the layer property root");
+    }
+    StreamRefOwner parent_stream(stream_suite.get(), root_stream);
+    std::vector<A_long> parent_indices;
+    std::vector<std::int32_t> parent_unique_ids;
+    if (query.parent_property_locator.has_value()) {
+      const auto address = graph_.resolve_stream(
+          *query.parent_property_locator,
+          query.layer_locator,
+          query.host_instance_id,
+          query.session_id);
+      if (!address.has_value()) {
+        return HostLayerPropertiesResult::failure(
+            "STALE_LOCATOR",
+            "parentPropertyLocator does not identify a property on this layer",
+            "params.arguments.parentPropertyLocator");
+      }
+      for (std::size_t depth = 0; depth < address->child_indices.size(); ++depth) {
+        AEGP_StreamGroupingType grouping = AEGP_StreamGroupingType_NONE;
+        A_long child_count = 0;
+        if (dynamic_suite->AEGP_GetStreamGroupingType(
+                parent_stream.get(), &grouping) != A_Err_NONE
+            || grouping == AEGP_StreamGroupingType_LEAF
+            || dynamic_suite->AEGP_GetNumStreamsInGroup(
+                parent_stream.get(), &child_count) != A_Err_NONE
+            || address->child_indices[depth] < 0
+            || address->child_indices[depth] >= child_count) {
+          return HostLayerPropertiesResult::failure(
+              "STALE_LOCATOR", "parent property path no longer exists",
+              "params.arguments.parentPropertyLocator");
+        }
+        AEGP_StreamRefH next_stream = nullptr;
+        if (dynamic_suite->AEGP_GetNewStreamRefByIndex(
+                plugin_id_, parent_stream.get(), address->child_indices[depth],
+                &next_stream) != A_Err_NONE
+            || next_stream == nullptr) {
+          return HostLayerPropertiesResult::failure(
+              "STALE_LOCATOR", "parent property path could not be reacquired",
+              "params.arguments.parentPropertyLocator");
+        }
+        StreamRefOwner next_owner(stream_suite.get(), next_stream);
+        std::int32_t unique_id = 0;
+        if (stream_suite->AEGP_GetUniqueStreamID(next_owner.get(), &unique_id)
+                != A_Err_NONE
+            || unique_id != address->unique_ids[depth]) {
+          return HostLayerPropertiesResult::failure(
+              "STALE_LOCATOR", "parent property identity changed",
+              "params.arguments.parentPropertyLocator");
+        }
+        parent_stream = std::move(next_owner);
+      }
+      parent_indices = address->child_indices;
+      parent_unique_ids = address->unique_ids;
+    }
+    AEGP_StreamGroupingType parent_grouping = AEGP_StreamGroupingType_NONE;
+    if (dynamic_suite->AEGP_GetStreamGroupingType(
+            parent_stream.get(), &parent_grouping) != A_Err_NONE) {
+      return HostLayerPropertiesResult::failure(
+          "CAPABILITY_FAILED", "could not inspect the parent property grouping");
+    }
+    if (parent_grouping == AEGP_StreamGroupingType_LEAF) {
+      return HostLayerPropertiesResult::failure(
+          "INVALID_ARGUMENT", "parentPropertyLocator identifies a leaf property",
+          "params.arguments.parentPropertyLocator");
+    }
+    A_long child_count = 0;
+    if (dynamic_suite->AEGP_GetNumStreamsInGroup(
+            parent_stream.get(), &child_count) != A_Err_NONE
+        || child_count < 0) {
+      return HostLayerPropertiesResult::failure(
+          "CAPABILITY_FAILED", "could not read direct property count");
+    }
+
+    aemcp::native::LayerPropertiesPage page;
+    page.layer_locator = query.layer_locator;
+    page.parent_property_locator = query.parent_property_locator;
+    page.layer_name = *layer_name;
+    page.sample_time.value = sample_time.value;
+    page.sample_time.scale = static_cast<std::uint64_t>(sample_time.scale);
+    page.total = static_cast<std::uint64_t>(child_count);
+    page.offset = query.offset;
+    page.limit = query.limit;
+    if (query.offset > page.total) {
+      return HostLayerPropertiesResult::failure(
+          "INVALID_ARGUMENT", "offset exceeds the current direct property total",
+          "params.arguments.offset");
+    }
+    aemcp::native::BoundedPageBudget page_budget(
+        2048U + locator_json_size(page.layer_locator)
+            + nullable_locator_json_size(page.parent_property_locator)
+            + aemcp::native::json_encoded_string_size(page.layer_name));
+    const std::uint64_t end = query.offset >= page.total
+        ? query.offset : std::min(page.total, query.offset + query.limit);
+    for (std::uint64_t position = query.offset; position < end; ++position) {
+      if (budget_expired()) {
+        return HostLayerPropertiesResult::failure(
+            "DEADLINE_EXCEEDED", "layer property page budget elapsed");
+      }
+      AEGP_StreamRefH child_stream = nullptr;
+      if (dynamic_suite->AEGP_GetNewStreamRefByIndex(
+              plugin_id_, parent_stream.get(), static_cast<A_long>(position),
+              &child_stream) != A_Err_NONE
+          || child_stream == nullptr) {
+        return HostLayerPropertiesResult::failure(
+            "CAPABILITY_FAILED", "could not resolve a direct layer property");
+      }
+      StreamRefOwner child_owner(stream_suite.get(), child_stream);
+      AEGP_StreamGroupingType grouping = AEGP_StreamGroupingType_NONE;
+      AEGP_DynStreamFlags flags = 0;
+      A_Boolean modified = FALSE;
+      std::int32_t unique_id = 0;
+      if (dynamic_suite->AEGP_GetStreamGroupingType(child_owner.get(), &grouping)
+              != A_Err_NONE
+          || dynamic_suite->AEGP_GetDynamicStreamFlags(child_owner.get(), &flags)
+              != A_Err_NONE
+          || dynamic_suite->AEGP_GetStreamIsModified(child_owner.get(), &modified)
+              != A_Err_NONE
+          || stream_suite->AEGP_GetUniqueStreamID(child_owner.get(), &unique_id)
+              != A_Err_NONE) {
+        return HostLayerPropertiesResult::failure(
+            "CAPABILITY_FAILED", "could not inspect a direct layer property");
+      }
+      std::array<A_char, AEGP_MAX_STREAM_MATCH_NAME_SIZE> match_name{};
+      if (dynamic_suite->AEGP_GetMatchName(child_owner.get(), match_name.data())
+              != A_Err_NONE
+          || std::find(match_name.begin(), match_name.end(), '\0') == match_name.end()) {
+        return HostLayerPropertiesResult::failure(
+            "CAPABILITY_FAILED", "could not read bounded property match name");
+      }
+      AEGP_MemHandle property_name_handle = nullptr;
+      const A_Err property_name_error = stream_suite->AEGP_GetStreamName(
+          plugin_id_, child_owner.get(), FALSE, &property_name_handle);
+      MemHandleOwner property_name_owner(memory_suite.get(), property_name_handle);
+      if (property_name_error != A_Err_NONE || property_name_handle == nullptr) {
+        return HostLayerPropertiesResult::failure(
+            "CAPABILITY_FAILED", "could not read property name");
+      }
+      const std::optional<std::string> property_name = property_name_owner.utf8();
+      if (!property_name.has_value()) {
+        return HostLayerPropertiesResult::failure(
+            "CAPABILITY_FAILED", "property name is not bounded UTF-16 text");
+      }
+      aemcp::native::LayerPropertyEntry entry;
+      entry.property_index = position + 1;
+      entry.name = *property_name;
+      entry.match_name.assign(match_name.data());
+      entry.hidden = (flags & AEGP_DynStreamFlag_HIDDEN) != 0;
+      entry.disabled = (flags & AEGP_DynStreamFlag_DISABLED) != 0;
+      entry.modified = modified != FALSE;
+      std::vector<A_long> child_indices = parent_indices;
+      child_indices.push_back(static_cast<A_long>(position));
+      std::vector<std::int32_t> child_unique_ids = parent_unique_ids;
+      child_unique_ids.push_back(unique_id);
+      try {
+        entry.property_locator = graph_.stream_locator(
+            query.layer_locator,
+            std::move(child_indices),
+            std::move(child_unique_ids),
+            query.host_instance_id,
+            query.session_id);
+      } catch (...) {
+        return HostLayerPropertiesResult::failure(
+            "CAPABILITY_FAILED", "could not allocate a bounded stream locator");
+      }
+      if (grouping == AEGP_StreamGroupingType_NAMED_GROUP
+          || grouping == AEGP_StreamGroupingType_INDEXED_GROUP) {
+        entry.grouping_type = grouping == AEGP_StreamGroupingType_NAMED_GROUP
+            ? "named-group" : "indexed-group";
+        A_long grandchildren = 0;
+        if (dynamic_suite->AEGP_GetNumStreamsInGroup(
+                child_owner.get(), &grandchildren) != A_Err_NONE
+            || grandchildren < 0) {
+          return HostLayerPropertiesResult::failure(
+              "CAPABILITY_FAILED", "could not read property group child count");
+        }
+        entry.child_count = static_cast<std::uint64_t>(grandchildren);
+        entry.value_type = "none";
+        entry.value_status = "group";
+      } else if (grouping == AEGP_StreamGroupingType_LEAF) {
+        entry.grouping_type = "leaf";
+        A_Boolean can_vary = FALSE;
+        A_Boolean time_varying = FALSE;
+        AEGP_StreamType type = AEGP_StreamType_NO_DATA;
+        if (stream_suite->AEGP_CanVaryOverTime(child_owner.get(), &can_vary)
+                != A_Err_NONE
+            || stream_suite->AEGP_IsStreamTimevarying(
+                child_owner.get(), &time_varying) != A_Err_NONE
+            || stream_suite->AEGP_GetStreamType(child_owner.get(), &type) != A_Err_NONE) {
+          return HostLayerPropertiesResult::failure(
+              "CAPABILITY_FAILED", "could not inspect leaf property value type");
+        }
+        entry.can_vary_over_time = can_vary != FALSE;
+        entry.time_varying = time_varying != FALSE;
+        entry.value_type = stream_type_name(type);
+        if (type == AEGP_StreamType_NO_DATA) {
+          entry.value_status = "no-data";
+        } else if (type == AEGP_StreamType_OneD
+            || type == AEGP_StreamType_TwoD
+            || type == AEGP_StreamType_TwoD_SPATIAL
+            || type == AEGP_StreamType_ThreeD
+            || type == AEGP_StreamType_ThreeD_SPATIAL
+            || type == AEGP_StreamType_COLOR) {
+          StreamValueOwner sampled(stream_suite.get());
+          if (stream_suite->AEGP_GetNewStreamValue(
+                  plugin_id_, child_owner.get(), AEGP_LTimeMode_CompTime,
+                  &sample_time, FALSE, sampled.out()) != A_Err_NONE) {
+            return HostLayerPropertiesResult::failure(
+                "CAPABILITY_FAILED", "could not sample primitive property value");
+          }
+          sampled.mark_initialized();
+          entry.value_status = "sampled";
+          if (type == AEGP_StreamType_OneD) {
+            const auto value = decimal_string(sampled.value().val.one_d);
+            if (!value.has_value()) {
+              return HostLayerPropertiesResult::failure(
+                  "CAPABILITY_FAILED", "sampled scalar is not finite decimal data");
+            }
+            entry.value = aemcp::native::LayerPropertyScalarValue{*value};
+          } else if (type == AEGP_StreamType_TwoD
+              || type == AEGP_StreamType_TwoD_SPATIAL) {
+            const auto x = decimal_string(sampled.value().val.two_d.x);
+            const auto y = decimal_string(sampled.value().val.two_d.y);
+            if (!x.has_value() || !y.has_value()) {
+              return HostLayerPropertiesResult::failure(
+                  "CAPABILITY_FAILED", "sampled vector is not finite decimal data");
+            }
+            entry.value = aemcp::native::LayerPropertyVectorValue{{*x, *y}};
+          } else if (type == AEGP_StreamType_ThreeD
+              || type == AEGP_StreamType_ThreeD_SPATIAL) {
+            const auto x = decimal_string(sampled.value().val.three_d.x);
+            const auto y = decimal_string(sampled.value().val.three_d.y);
+            const auto z = decimal_string(sampled.value().val.three_d.z);
+            if (!x.has_value() || !y.has_value() || !z.has_value()) {
+              return HostLayerPropertiesResult::failure(
+                  "CAPABILITY_FAILED", "sampled vector is not finite decimal data");
+            }
+            entry.value = aemcp::native::LayerPropertyVectorValue{{*x, *y, *z}};
+          } else {
+            const AEGP_ColorVal& color = sampled.value().val.color;
+            const auto alpha = decimal_string(color.alphaF);
+            const auto red = decimal_string(color.redF);
+            const auto green = decimal_string(color.greenF);
+            const auto blue = decimal_string(color.blueF);
+            if (!alpha.has_value() || !red.has_value()
+                || !green.has_value() || !blue.has_value()) {
+              return HostLayerPropertiesResult::failure(
+                  "CAPABILITY_FAILED", "sampled color is not finite decimal data");
+            }
+            entry.value = aemcp::native::LayerPropertyColorValue{
+                *alpha, *red, *green, *blue};
+          }
+        } else {
+          entry.value_status = "unsupported";
+        }
+      } else {
+        return HostLayerPropertiesResult::failure(
+            "CAPABILITY_FAILED", "property grouping type is unsupported");
+      }
+      const std::size_t entry_bytes = layer_property_json_size(entry)
+          + (page.properties.empty() ? 0U : 1U);
+      if (!page_budget.try_reserve(entry_bytes)) {
+        if (page.properties.empty()) {
+          return HostLayerPropertiesResult::failure(
+              "CAPABILITY_FAILED",
+              "one layer property exceeds the bounded native response budget");
+        }
+        break;
+      }
+      page.properties.push_back(std::move(entry));
+    }
+    page.has_more = query.offset + page.properties.size() < page.total;
+    if (page.has_more) page.next_offset = query.offset + page.properties.size();
+    return HostLayerPropertiesResult::success(std::move(page));
+  }
+
  private:
   SPBasicSuite* basic_{nullptr};
   AEGP_PluginID plugin_id_{0};
@@ -1250,6 +1874,7 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
             std::string(kProjectBitDepthSetContractDigest),
             std::string(kProjectItemsListContractDigest),
             std::string(kCompositionLayersListContractDigest),
+            std::string(kLayerPropertiesListContractDigest),
         },
         *this);
     ipc_server = std::make_unique<MacIpcServer>(
@@ -1321,7 +1946,8 @@ void log_load(PluginState& state) {
          << kProjectBitDepthReadCapability << "\",\""
          << kProjectBitDepthSetCapability << "\",\""
          << kProjectItemsListCapability << "\",\""
-         << kCompositionLayersListCapability << "\"]}"
+         << kCompositionLayersListCapability << "\",\""
+         << kLayerPropertiesListCapability << "\"]}"
          ;
   state.log.append(output.str());
 }
@@ -1375,6 +2001,15 @@ void log_completion(
              << (completion.composition_layers_result.has_more ? "true" : "false")
              << ",\"projectGeneration\":"
              << completion.composition_layers_result.composition_locator.generation;
+    } else if (completion.capability_id == kLayerPropertiesListCapability) {
+      output << ",\"result\":{\"total\":"
+             << completion.layer_properties_result.total
+             << ",\"offset\":" << completion.layer_properties_result.offset
+             << ",\"returned\":" << completion.layer_properties_result.properties.size()
+             << ",\"hasMore\":"
+             << (completion.layer_properties_result.has_more ? "true" : "false")
+             << ",\"projectGeneration\":"
+             << completion.layer_properties_result.layer_locator.generation;
     } else {
       output << ",\"result\":{\"projectOpen\":"
              << (completion.result.project_open ? "true" : "false")

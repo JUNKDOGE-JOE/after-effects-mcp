@@ -12,6 +12,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace aemcp::native {
@@ -25,6 +26,8 @@ inline constexpr std::string_view kProjectItemsListCapability =
     "ae.project.items.list";
 inline constexpr std::string_view kCompositionLayersListCapability =
     "ae.composition.layers.list";
+inline constexpr std::string_view kLayerPropertiesListCapability =
+    "ae.layer.properties.list";
 inline constexpr std::size_t kNativePageValueBudgetBytes = 48U * 1024U;
 
 // Returns the exact byte count used by the codec's JSON string serializer,
@@ -129,6 +132,62 @@ struct CompositionLayersPage {
   std::vector<CompositionLayerEntry> layers;
 };
 
+struct LayerPropertySampleTime {
+  std::int64_t value{0};
+  std::uint64_t scale{1};
+};
+
+struct LayerPropertyScalarValue {
+  std::string value;
+};
+
+struct LayerPropertyVectorValue {
+  std::vector<std::string> components;
+};
+
+struct LayerPropertyColorValue {
+  std::string alpha;
+  std::string red;
+  std::string green;
+  std::string blue;
+};
+
+using LayerPropertyValue = std::variant<
+    std::monostate,
+    LayerPropertyScalarValue,
+    LayerPropertyVectorValue,
+    LayerPropertyColorValue>;
+
+struct LayerPropertyEntry {
+  ObjectLocator property_locator;
+  std::uint64_t property_index{0};
+  std::string name;
+  std::string match_name;
+  std::string grouping_type;
+  std::uint64_t child_count{0};
+  bool hidden{false};
+  bool disabled{false};
+  bool modified{false};
+  std::optional<bool> can_vary_over_time;
+  std::optional<bool> time_varying;
+  std::string value_type;
+  std::string value_status;
+  LayerPropertyValue value;
+};
+
+struct LayerPropertiesPage {
+  ObjectLocator layer_locator;
+  std::optional<ObjectLocator> parent_property_locator;
+  std::string layer_name;
+  LayerPropertySampleTime sample_time;
+  std::uint64_t total{0};
+  std::uint64_t offset{0};
+  std::uint16_t limit{0};
+  bool has_more{false};
+  std::optional<std::uint64_t> next_offset;
+  std::vector<LayerPropertyEntry> properties;
+};
+
 struct ProjectItemsQuery {
   std::string host_instance_id;
   std::string session_id;
@@ -143,6 +202,15 @@ struct CompositionLayersQuery {
   std::uint64_t offset{0};
   std::uint16_t limit{0};
   ObjectLocator composition_locator;
+};
+
+struct LayerPropertiesQuery {
+  std::string host_instance_id;
+  std::string session_id;
+  std::uint64_t offset{0};
+  std::uint16_t limit{0};
+  ObjectLocator layer_locator;
+  std::optional<ObjectLocator> parent_property_locator;
 };
 
 struct HostReadResult {
@@ -202,6 +270,18 @@ struct HostCompositionLayersResult {
       std::string code, std::string detail, std::string field = {});
 };
 
+struct HostLayerPropertiesResult {
+  bool ok{false};
+  LayerPropertiesPage value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostLayerPropertiesResult success(LayerPropertiesPage page);
+  [[nodiscard]] static HostLayerPropertiesResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
 class HostApi {
  public:
   virtual ~HostApi() = default;
@@ -214,6 +294,8 @@ class HostApi {
       const ProjectItemsQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostCompositionLayersResult list_composition_layers(
       const CompositionLayersQuery& query, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerPropertiesResult list_layer_properties(
+      const LayerPropertiesQuery& query, TimePoint work_deadline);
 };
 
 struct Request {
@@ -232,7 +314,9 @@ struct Request {
       std::uint64_t offset_value = 0,
       std::uint16_t limit_value = 0,
       std::optional<ObjectLocator> project_locator_value = std::nullopt,
-      std::optional<ObjectLocator> composition_locator_value = std::nullopt)
+      std::optional<ObjectLocator> composition_locator_value = std::nullopt,
+      std::optional<ObjectLocator> layer_locator_value = std::nullopt,
+      std::optional<ObjectLocator> parent_property_locator_value = std::nullopt)
       : request_id(std::move(request_id_value)),
         capability_id(std::move(capability_id_value)),
         deadline(deadline_value),
@@ -246,7 +330,9 @@ struct Request {
         offset(offset_value),
         limit(limit_value),
         project_locator(std::move(project_locator_value)),
-        composition_locator(std::move(composition_locator_value)) {}
+        composition_locator(std::move(composition_locator_value)),
+        layer_locator(std::move(layer_locator_value)),
+        parent_property_locator(std::move(parent_property_locator_value)) {}
 
   std::string request_id;
   std::string capability_id;
@@ -265,6 +351,8 @@ struct Request {
   std::uint16_t limit{0};
   std::optional<ObjectLocator> project_locator;
   std::optional<ObjectLocator> composition_locator;
+  std::optional<ObjectLocator> layer_locator;
+  std::optional<ObjectLocator> parent_property_locator;
 };
 
 enum class EnqueueCode {
@@ -307,6 +395,7 @@ struct Completion {
   ProjectBitDepthChanged bit_depth_change_result;
   ProjectItemsPage project_items_result;
   CompositionLayersPage composition_layers_result;
+  LayerPropertiesPage layer_properties_result;
   // Internal fence correlation only; never serialized or logged.
   std::string idempotency_key;
   std::string error_code;

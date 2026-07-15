@@ -9,11 +9,11 @@ from ae_mcp import schemas as S
 
 
 def test_registry_has_all_verbs():
-    assert len(S.SCHEMAS) == 49, f"expected 49 verbs, got {len(S.SCHEMAS)}"
+    assert len(S.SCHEMAS) == 50, f"expected 50 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.projectSummary",
         "ae.getProjectBitDepth", "ae.setProjectBitDepth",
-        "ae.listProjectItems", "ae.listCompositionLayers",
+        "ae.listProjectItems", "ae.listCompositionLayers", "ae.listLayerProperties",
         "ae.layers", "ae.readProps", "ae.exec",
         "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.previewFrame",
         "ae.applyEffect", "ae.ping", "ae.status", "ae.diagnose",
@@ -133,6 +133,40 @@ def test_native_composition_layer_listing_requires_exact_composition_locator():
         S.AeListCompositionLayersArgs(
             composition_locator=_locator("composition"), offset=True
         )
+
+
+def test_native_layer_property_listing_is_bounded_and_locator_only():
+    args = S.AeListLayerPropertiesArgs(layer_locator=_locator("layer"))
+    assert args.parent_property_locator is None
+    assert args.offset == 0
+    assert args.limit == 25
+    assert args.layer_locator.kind == "layer"
+
+    nested = S.AeListLayerPropertiesArgs(
+        layer_locator=_locator("layer"),
+        parent_property_locator={
+            **_locator("stream"),
+            "objectId": "55555555-5555-4555-8555-555555555555",
+        },
+        offset=1,
+        limit=1,
+    )
+    assert nested.parent_property_locator is not None
+    assert nested.parent_property_locator.kind == "stream"
+
+    with pytest.raises(ValidationError):
+        S.AeListLayerPropertiesArgs()
+    with pytest.raises(ValidationError):
+        S.AeListLayerPropertiesArgs(layer_locator=_locator("composition"))
+    with pytest.raises(ValidationError):
+        S.AeListLayerPropertiesArgs(
+            layer_locator=_locator("layer"),
+            parent_property_locator=_locator("layer"),
+        )
+    with pytest.raises(ValidationError):
+        S.AeListLayerPropertiesArgs(layer_locator=_locator("layer"), limit=26)
+    with pytest.raises(ValidationError):
+        S.AeListLayerPropertiesArgs(layer_locator=_locator("layer"), offset=True)
 
 
 def test_layers_optional_comp_id():

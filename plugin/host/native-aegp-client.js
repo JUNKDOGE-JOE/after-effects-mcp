@@ -22,10 +22,14 @@ const PROJECT_BIT_DEPTH_READ_CAPABILITY = 'ae.project.bit-depth.read';
 const PROJECT_BIT_DEPTH_SET_CAPABILITY = 'ae.project.bit-depth.set';
 const PROJECT_ITEMS_LIST_CAPABILITY = 'ae.project.items.list';
 const COMPOSITION_LAYERS_LIST_CAPABILITY = 'ae.composition.layers.list';
+const LAYER_PROPERTIES_LIST_CAPABILITY = 'ae.layer.properties.list';
 const PROJECT_BIT_DEPTH_READ_CONTRACT_DIGEST = '936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e';
 const PROJECT_BIT_DEPTH_SET_CONTRACT_DIGEST = 'd5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a';
 const PROJECT_ITEMS_LIST_CONTRACT_DIGEST = '64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e';
 const COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST = '3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75';
+// Kept in lockstep with the full descriptor in capabilities.json. The native
+// protocol build replaces this value only when the closed contract changes.
+const LAYER_PROPERTIES_LIST_CONTRACT_DIGEST = 'a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba';
 const NATIVE_WIRE_ERROR_CODES = new Set([
     'NATIVE_UNAVAILABLE', 'NATIVE_UNSUPPORTED', 'WIRE_VERSION_MISMATCH',
     'INVALID_REQUEST', 'INVALID_ARGUMENT', 'DUPLICATE_REQUEST',
@@ -364,6 +368,16 @@ function validCompositionLayersListArguments(value) {
         && Number.isSafeInteger(value.limit) && value.limit >= 1 && value.limit <= 50;
 }
 
+function validLayerPropertiesListArguments(value) {
+    return exactKeys(value, ['layerLocator', 'offset', 'limit'], ['parentPropertyLocator'])
+        && validLocator(value.layerLocator, ['layer'])
+        && Number.isSafeInteger(value.offset) && value.offset >= 0
+        && Number.isSafeInteger(value.limit) && value.limit >= 1 && value.limit <= 25
+        && (value.parentPropertyLocator === undefined
+            || value.parentPropertyLocator === null
+            || validLocator(value.parentPropertyLocator, ['stream']));
+}
+
 function validPageMetadata(value, members, argumentsValue) {
     if (!Number.isSafeInteger(value.total) || value.total < 0
         || value.offset !== argumentsValue.offset || value.limit !== argumentsValue.limit
@@ -446,6 +460,128 @@ function validCompositionLayersListValue(value, argumentsValue, hostInstanceId, 
     });
 }
 
+const LAYER_PROPERTY_GROUPING_TYPES = new Set([
+    'named-group', 'indexed-group', 'leaf',
+]);
+const LAYER_PROPERTY_VALUE_TYPES = new Set([
+    'none', 'one-d', 'two-d', 'two-d-spatial', 'three-d', 'three-d-spatial',
+    'color', 'arb', 'marker', 'layer-id', 'mask-id', 'mask', 'text-document',
+    'unknown',
+]);
+const LAYER_PROPERTY_VALUE_STATUSES = new Set([
+    'group', 'sampled', 'no-data', 'unsupported',
+]);
+
+function validDecimalString(value) {
+    if (typeof value !== 'string' || value.length === 0 || value.length > 32) return false;
+    if (!/^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$/.test(value)) {
+        return false;
+    }
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return false;
+    if (parsed === 0 && value[0] === '-') return false;
+    if (parsed !== 0) return true;
+    // A mathematically non-zero decimal that underflows to binary64 zero is
+    // not a valid sampled value. Redundant but mathematically-zero spellings
+    // remain schema-valid even though the native encoder emits just "0".
+    const coefficient = value.split(/[eE]/, 1)[0];
+    return !/[1-9]/.test(coefficient);
+}
+
+function validLayerPropertySample(value, valueType) {
+    if (valueType === 'one-d') {
+        return exactKeys(value, ['kind', 'value'])
+            && value.kind === 'scalar' && validDecimalString(value.value);
+    }
+    if (['two-d', 'two-d-spatial', 'three-d', 'three-d-spatial'].includes(valueType)) {
+        const expectedLength = valueType.startsWith('two-') ? 2 : 3;
+        return exactKeys(value, ['kind', 'components'])
+            && value.kind === 'vector' && Array.isArray(value.components)
+            && value.components.length === expectedLength
+            && value.components.every(validDecimalString);
+    }
+    if (valueType === 'color') {
+        return exactKeys(value, ['kind', 'alpha', 'red', 'green', 'blue'])
+            && value.kind === 'color'
+            && validDecimalString(value.alpha)
+            && validDecimalString(value.red)
+            && validDecimalString(value.green)
+            && validDecimalString(value.blue);
+    }
+    return false;
+}
+
+function validLayerPropertyEntry(property, value, argumentsValue, index, objectIds) {
+    if (!exactKeys(property, [
+        'propertyLocator', 'propertyIndex', 'name', 'matchName', 'groupingType',
+        'childCount', 'hidden', 'disabled', 'modified', 'canVaryOverTime',
+        'timeVarying', 'valueType', 'valueStatus', 'value',
+    ]) || !validLocator(property.propertyLocator, ['stream'])
+        || !locatorContextMatches(property.propertyLocator, value.layerLocator)
+        || !Number.isSafeInteger(property.propertyIndex) || property.propertyIndex < 1
+        || property.propertyIndex !== value.offset + index + 1
+        || !validBoundedUnicodeString(property.name, 1024)
+        || !validBoundedUnicodeString(property.matchName, 40)
+        || !LAYER_PROPERTY_GROUPING_TYPES.has(property.groupingType)
+        || !Number.isSafeInteger(property.childCount) || property.childCount < 0
+        || typeof property.hidden !== 'boolean' || typeof property.disabled !== 'boolean'
+        || typeof property.modified !== 'boolean'
+        || (property.canVaryOverTime !== null
+            && typeof property.canVaryOverTime !== 'boolean')
+        || (property.timeVarying !== null && typeof property.timeVarying !== 'boolean')
+        || !LAYER_PROPERTY_VALUE_TYPES.has(property.valueType)
+        || !LAYER_PROPERTY_VALUE_STATUSES.has(property.valueStatus)
+        || (value.parentPropertyLocator !== null
+            && locatorsEqual(property.propertyLocator, value.parentPropertyLocator))
+        || objectIds.has(property.propertyLocator.objectId)) return false;
+    objectIds.add(property.propertyLocator.objectId);
+
+    if (property.groupingType !== 'leaf') {
+        return property.valueType === 'none' && property.valueStatus === 'group'
+            && property.value === null && property.canVaryOverTime === null
+            && property.timeVarying === null;
+    }
+    if (property.childCount !== 0) return false;
+    if (property.valueStatus === 'sampled') {
+        return validLayerPropertySample(property.value, property.valueType)
+            && property.canVaryOverTime !== null && property.timeVarying !== null;
+    }
+    if (property.value !== null) return false;
+    if (property.valueStatus === 'no-data') return property.valueType === 'none';
+    if (property.valueStatus !== 'unsupported') return false;
+    return [
+        'arb', 'marker', 'layer-id', 'mask-id', 'mask', 'text-document', 'unknown',
+    ].includes(property.valueType);
+}
+
+function validLayerPropertiesListValue(value, argumentsValue, hostInstanceId, sessionId) {
+    const expectedParent = argumentsValue.parentPropertyLocator;
+    if (!exactKeys(value, [
+        'layerLocator', 'parentPropertyLocator', 'layerName', 'sampleTime',
+        'total', 'offset', 'limit', 'returned', 'hasMore', 'nextOffset', 'properties',
+    ]) || !validLocator(value.layerLocator, ['layer'])
+        || !locatorsEqual(value.layerLocator, argumentsValue.layerLocator)
+        || value.layerLocator.hostInstanceId !== hostInstanceId
+        || value.layerLocator.sessionId !== sessionId
+        || (expectedParent === undefined || expectedParent === null
+            ? value.parentPropertyLocator !== null
+            : !validLocator(value.parentPropertyLocator, ['stream'])
+                || !locatorsEqual(value.parentPropertyLocator, expectedParent))
+        || !validBoundedUnicodeString(value.layerName, 1024)
+        || !exactKeys(value.sampleTime, ['value', 'scale', 'mode'])
+        || !Number.isSafeInteger(value.sampleTime.value)
+        || !Number.isSafeInteger(value.sampleTime.scale) || value.sampleTime.scale < 1
+        || value.sampleTime.mode !== 'comp-time'
+        || !Array.isArray(value.properties) || value.properties.length > 25
+        || !validPageMetadata(value, value.properties, argumentsValue)) return false;
+    if (value.parentPropertyLocator !== null
+        && !locatorContextMatches(value.parentPropertyLocator, value.layerLocator)) return false;
+    const objectIds = new Set();
+    return value.properties.every(function (property, index) {
+        return validLayerPropertyEntry(property, value, argumentsValue, index, objectIds);
+    });
+}
+
 function projectItemsListPostconditionDigest(value) {
     return sha256Canonical({
         capabilityId: PROJECT_ITEMS_LIST_CAPABILITY,
@@ -502,6 +638,63 @@ function compositionLayersListPostconditionDigest(value) {
     });
 }
 
+function canonicalLayerPropertyValue(value) {
+    if (value === null) return null;
+    if (value.kind === 'scalar') return { kind: value.kind, value: value.value };
+    if (value.kind === 'vector') {
+        return { components: value.components.slice(), kind: value.kind };
+    }
+    return {
+        alpha: value.alpha,
+        blue: value.blue,
+        green: value.green,
+        kind: value.kind,
+        red: value.red,
+    };
+}
+
+function layerPropertiesListPostconditionDigest(value) {
+    return sha256Canonical({
+        capabilityId: LAYER_PROPERTIES_LIST_CAPABILITY,
+        capabilityVersion: 1,
+        value: {
+            hasMore: value.hasMore,
+            layerLocator: canonicalLocator(value.layerLocator),
+            layerName: value.layerName,
+            limit: value.limit,
+            nextOffset: value.nextOffset,
+            offset: value.offset,
+            parentPropertyLocator: value.parentPropertyLocator === null
+                ? null : canonicalLocator(value.parentPropertyLocator),
+            properties: value.properties.map(function (property) {
+                return {
+                    canVaryOverTime: property.canVaryOverTime,
+                    childCount: property.childCount,
+                    disabled: property.disabled,
+                    groupingType: property.groupingType,
+                    hidden: property.hidden,
+                    matchName: property.matchName,
+                    modified: property.modified,
+                    name: property.name,
+                    propertyIndex: property.propertyIndex,
+                    propertyLocator: canonicalLocator(property.propertyLocator),
+                    timeVarying: property.timeVarying,
+                    value: canonicalLayerPropertyValue(property.value),
+                    valueStatus: property.valueStatus,
+                    valueType: property.valueType,
+                };
+            }),
+            returned: value.returned,
+            sampleTime: {
+                mode: value.sampleTime.mode,
+                scale: value.sampleTime.scale,
+                value: value.sampleTime.value,
+            },
+            total: value.total,
+        },
+    });
+}
+
 // Construct the closed invoke request in canonical member order. Construct the
 // RFC 8785 member order explicitly so the broker can bind native evidence to
 // the exact request it sent instead of trusting a digest-shaped string.
@@ -528,6 +721,18 @@ function invokeRequestDigest(request) {
             limit: request.params.arguments.limit,
             offset: request.params.arguments.offset,
         };
+    } else if (request.params.capabilityId === LAYER_PROPERTIES_LIST_CAPABILITY) {
+        argumentsValue = {
+            layerLocator: canonicalLocator(request.params.arguments.layerLocator),
+            limit: request.params.arguments.limit,
+            offset: request.params.arguments.offset,
+        };
+        if (request.params.arguments.parentPropertyLocator !== undefined
+            && request.params.arguments.parentPropertyLocator !== null) {
+            argumentsValue.parentPropertyLocator = canonicalLocator(
+                request.params.arguments.parentPropertyLocator,
+            );
+        }
     }
     return sha256Canonical({
         deadlineUnixMs: request.deadlineUnixMs,
@@ -572,6 +777,7 @@ function createNativeAegpClient(options) {
     let projectBitDepthSetContractDigest = null;
     let projectItemsListContractDigest = null;
     let compositionLayersListContractDigest = null;
+    let layerPropertiesListContractDigest = null;
     let helloIdentity = null;
     let nextRequest = 1;
     let inputBuffer = Buffer.alloc(0);
@@ -619,6 +825,7 @@ function createNativeAegpClient(options) {
         projectBitDepthSetContractDigest = null;
         projectItemsListContractDigest = null;
         compositionLayersListContractDigest = null;
+        layerPropertiesListContractDigest = null;
         helloIdentity = null;
         if (socket) {
             const current = socket;
@@ -983,12 +1190,17 @@ function createNativeAegpClient(options) {
         const compositionLayersListItem = Array.isArray(result?.items)
             ? result.items.find(function (candidate) { return candidate?.id === COMPOSITION_LAYERS_LIST_CAPABILITY; })
             : null;
+        const layerPropertiesListItem = Array.isArray(result?.items)
+            ? result.items.find(function (candidate) { return candidate?.id === LAYER_PROPERTIES_LIST_CAPABILITY; })
+            : null;
         const requiresSummary = ids === undefined || ids.includes(PROJECT_SUMMARY_CAPABILITY);
         const requiresBitDepthRead = ids === undefined || ids.includes(PROJECT_BIT_DEPTH_READ_CAPABILITY);
         const requiresBitDepthSet = ids === undefined || ids.includes(PROJECT_BIT_DEPTH_SET_CAPABILITY);
         const requiresProjectItemsList = ids === undefined || ids.includes(PROJECT_ITEMS_LIST_CAPABILITY);
         const requiresCompositionLayersList = ids === undefined
             || ids.includes(COMPOSITION_LAYERS_LIST_CAPABILITY);
+        const requiresLayerPropertiesList = ids === undefined
+            || ids.includes(LAYER_PROPERTIES_LIST_CAPABILITY);
         if (!exactKeys(result, ['detail', 'items', 'nextCursor', 'queryDigest', 'capabilitiesDigest'])
             || result.detail !== requestedDetail || result.nextCursor !== null
             || result.queryDigest !== capabilitiesQueryDigest(sessionId, ids, requestedDetail, limit)
@@ -998,6 +1210,7 @@ function createNativeAegpClient(options) {
             || (requiresBitDepthSet && !bitDepthSetItem)
             || (requiresProjectItemsList && !projectItemsListItem)
             || (requiresCompositionLayersList && !compositionLayersListItem)
+            || (requiresLayerPropertiesList && !layerPropertiesListItem)
             || (summaryItem && (summaryItem.version !== 1 || summaryItem.detail !== requestedDetail
                 || (requestedDetail === 'full' && !SHA256_PATTERN.test(summaryItem.contractDigest))))
             || (bitDepthReadItem && (bitDepthReadItem.version !== 1
@@ -1016,7 +1229,12 @@ function createNativeAegpClient(options) {
                 || compositionLayersListItem.detail !== requestedDetail
                 || (requestedDetail === 'full'
                     && compositionLayersListItem.contractDigest
-                        !== COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST)))) {
+                        !== COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST)))
+            || (layerPropertiesListItem && (layerPropertiesListItem.version !== 1
+                || layerPropertiesListItem.detail !== requestedDetail
+                || (requestedDetail === 'full'
+                    && layerPropertiesListItem.contractDigest
+                        !== LAYER_PROPERTIES_LIST_CONTRACT_DIGEST)))) {
             throw nativeContractMismatch('native capabilities result was malformed');
         }
         if (requestedDetail === 'full' && summaryItem) {
@@ -1033,6 +1251,9 @@ function createNativeAegpClient(options) {
         }
         if (requestedDetail === 'full' && compositionLayersListItem) {
             compositionLayersListContractDigest = compositionLayersListItem.contractDigest;
+        }
+        if (requestedDetail === 'full' && layerPropertiesListItem) {
+            layerPropertiesListContractDigest = layerPropertiesListItem.contractDigest;
         }
         return result;
     }
@@ -1056,11 +1277,15 @@ function createNativeAegpClient(options) {
         const compositionLayersListCall = call.capabilityId === COMPOSITION_LAYERS_LIST_CAPABILITY
             && call.capabilityVersion === 1
             && validCompositionLayersListArguments(call.arguments);
+        const layerPropertiesListCall = call.capabilityId === LAYER_PROPERTIES_LIST_CAPABILITY
+            && call.capabilityVersion === 1
+            && validLayerPropertiesListArguments(call.arguments);
         if (!exactKeys(call, [
             'requestId', 'capabilityId', 'capabilityVersion', 'arguments', 'deadlineUnixMs',
         ]) || !TOKEN_PATTERN.test(call.requestId || '')
             || (!summaryCall && !bitDepthReadCall && !bitDepthSetCall
-                && !projectItemsListCall && !compositionLayersListCall)
+                && !projectItemsListCall && !compositionLayersListCall
+                && !layerPropertiesListCall)
             || !Number.isSafeInteger(call.deadlineUnixMs) || call.deadlineUnixMs <= 0) {
             throw nativeError('INVALID_ARGUMENT', 'native invoke request is invalid', false);
         }
@@ -1089,11 +1314,41 @@ function createNativeAegpClient(options) {
                 'native composition-layers list capability was not verified before dispatch',
             );
         }
-        const locator = compositionLayersListCall
-            ? call.arguments.compositionLocator : call.arguments.projectLocator;
-        if ((projectItemsListCall || compositionLayersListCall) && locator !== undefined
-            && (locator.hostInstanceId !== endpoint.hostInstanceId
-                || locator.sessionId !== sessionId)) {
+        if (layerPropertiesListCall
+            && layerPropertiesListContractDigest !== LAYER_PROPERTIES_LIST_CONTRACT_DIGEST) {
+            throw nativeContractMismatch(
+                'native layer-properties list capability was not verified before dispatch',
+            );
+        }
+        let locatorChecks = [];
+        if (projectItemsListCall && call.arguments.projectLocator !== undefined) {
+            locatorChecks = [[call.arguments.projectLocator, 'projectLocator', 'ae_listProjectItems']];
+        } else if (compositionLayersListCall) {
+            locatorChecks = [[
+                call.arguments.compositionLocator,
+                'compositionLocator',
+                'ae_listProjectItems',
+            ]];
+        } else if (layerPropertiesListCall) {
+            locatorChecks = [[
+                call.arguments.layerLocator,
+                'layerLocator',
+                'ae_listCompositionLayers',
+            ]];
+            if (call.arguments.parentPropertyLocator !== undefined
+                && call.arguments.parentPropertyLocator !== null) {
+                locatorChecks.push([
+                    call.arguments.parentPropertyLocator,
+                    'parentPropertyLocator',
+                    'ae_listLayerProperties',
+                ]);
+            }
+        }
+        const staleLocator = locatorChecks.find(function (entry) {
+            return entry[0].hostInstanceId !== endpoint.hostInstanceId
+                || entry[0].sessionId !== sessionId;
+        });
+        if (staleLocator) {
             throw nativeError(
                 'STALE_LOCATOR',
                 'native locator does not belong to the connected host session',
@@ -1103,21 +1358,52 @@ function createNativeAegpClient(options) {
                     sideEffect: 'not-started',
                     recovery: {
                         action: 'refresh-locator',
-                        hint: 'Discard the stale locator and call ae_listProjectItems again.',
+                        hint: 'Discard the stale locator and call '
+                            + staleLocator[2] + ' again.',
                     },
                     details: {
-                        field: compositionLayersListCall
-                            ? 'params.arguments.compositionLocator'
-                            : 'params.arguments.projectLocator',
+                        field: 'params.arguments.' + staleLocator[1],
                         capabilityId: call.capabilityId,
                     },
                 },
             );
         }
+        if (layerPropertiesListCall
+            && call.arguments.parentPropertyLocator !== undefined
+            && call.arguments.parentPropertyLocator !== null
+            && !locatorContextMatches(
+                call.arguments.parentPropertyLocator, call.arguments.layerLocator,
+            )) {
+            throw nativeError(
+                'STALE_LOCATOR',
+                'parent property locator does not belong to the requested layer context',
+                true,
+                undefined,
+                {
+                    sideEffect: 'not-started',
+                    recovery: {
+                        action: 'refresh-locator',
+                        hint: 'Discard the stale parent and call ae_listLayerProperties again.',
+                    },
+                    details: {
+                        field: 'params.arguments.parentPropertyLocator',
+                        capabilityId: call.capabilityId,
+                    },
+                },
+            );
+        }
+        const normalizedArguments = layerPropertiesListCall
+            && call.arguments.parentPropertyLocator === null
+            ? {
+                layerLocator: call.arguments.layerLocator,
+                offset: call.arguments.offset,
+                limit: call.arguments.limit,
+            }
+            : call.arguments;
         const result = await send('invoke', {
             capabilityId: call.capabilityId,
             capabilityVersion: call.capabilityVersion,
-            arguments: call.arguments,
+            arguments: normalizedArguments,
         }, { requestId: call.requestId, deadlineUnixMs: call.deadlineUnixMs });
         const value = result?.value;
         const evidence = result?.evidence;
@@ -1144,7 +1430,8 @@ function createNativeAegpClient(options) {
                     PROJECT_BIT_DEPTH_SET_CAPABILITY,
                 );
             }
-            if (bitDepthReadCall || projectItemsListCall || compositionLayersListCall) {
+            if (bitDepthReadCall || projectItemsListCall || compositionLayersListCall
+                || layerPropertiesListCall) {
                 throw nativeContractMismatch(
                     'native read result lacked verified AEGP evidence',
                 );
@@ -1190,7 +1477,8 @@ function createNativeAegpClient(options) {
                 PROJECT_BIT_DEPTH_SET_CAPABILITY,
             );
         }
-        const navigationEvidenceValid = (projectItemsListCall || compositionLayersListCall)
+        const navigationEvidenceValid = (projectItemsListCall || compositionLayersListCall
+            || layerPropertiesListCall)
             && exactKeys(evidence, [
                 'engine', 'hostInstanceId', 'sessionId', 'requestId', 'capabilityId',
                 'capabilityVersion', 'startedAtUnixMs', 'completedAtUnixMs', 'effect',
@@ -1220,6 +1508,18 @@ function createNativeAegpClient(options) {
             || evidence.postcondition.digest
                 !== compositionLayersListPostconditionDigest(value))) {
             throw nativeContractMismatch('native composition-layers page failed verification');
+        }
+        if (layerPropertiesListCall && (!navigationEvidenceValid
+            || result.replayed !== false || evidence.effect !== 'none'
+            || evidence.postcondition.kind !== 'layer-properties-list'
+            || layerPropertiesListContractDigest
+                !== LAYER_PROPERTIES_LIST_CONTRACT_DIGEST
+            || !validLayerPropertiesListValue(
+                value, call.arguments, endpoint.hostInstanceId, sessionId,
+            )
+            || evidence.postcondition.digest
+                !== layerPropertiesListPostconditionDigest(value))) {
+            throw nativeContractMismatch('native layer-properties page failed verification');
         }
         return result;
     }
@@ -1262,6 +1562,7 @@ function createNativeAegpClient(options) {
                 projectBitDepthSetContractDigest,
                 projectItemsListContractDigest,
                 compositionLayersListContractDigest,
+                layerPropertiesListContractDigest,
             });
         },
     });

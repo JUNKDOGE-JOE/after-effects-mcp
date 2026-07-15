@@ -20,6 +20,10 @@ const projectItemsFixture = require(
 const compositionLayersFixture = require(
     '../../native/ae-plugin/protocol/fixtures/invoke-composition-layers-list.json'
 ).response.result;
+const layerPropertiesVector = require(
+    '../../native/ae-plugin/protocol/fixtures/invoke-layer-properties-list.json'
+);
+const layerPropertiesFixture = layerPropertiesVector.response.result;
 
 const authToken = require('./auth-token');
 
@@ -217,10 +221,13 @@ function fakeNativeClient() {
         invoke: async function (request) {
             calls.push(['invoke', request]);
             if (request.capabilityId === 'ae.project.items.list'
-                || request.capabilityId === 'ae.composition.layers.list') {
+                || request.capabilityId === 'ae.composition.layers.list'
+                || request.capabilityId === 'ae.layer.properties.list') {
                 const result = structuredClone(
                     request.capabilityId === 'ae.project.items.list'
-                        ? projectItemsFixture : compositionLayersFixture,
+                        ? projectItemsFixture
+                        : request.capabilityId === 'ae.composition.layers.list'
+                            ? compositionLayersFixture : layerPropertiesFixture,
                 );
                 result.replayed = false;
                 result.evidence.requestId = request.requestId;
@@ -291,6 +298,10 @@ function fakeNativeClient() {
                     nativeCapabilitiesFixture.items[3].contractDigest,
                 compositionLayersListContractDigest:
                     nativeCapabilitiesFixture.items[4].contractDigest,
+                layerPropertiesListContractDigest:
+                    nativeCapabilitiesFixture.items.find(function (item) {
+                        return item.id === 'ae.layer.properties.list';
+                    })?.contractDigest || null,
             };
         },
         close: async function () { closed += 1; state = 'closed'; },
@@ -388,6 +399,39 @@ test('native routes require the shared token and reject an open-ended invoke env
         });
         assert.strictEqual(invalidLayerPage.status, 400);
         assert.strictEqual(invalidLayerPage.body.error.code, 'INVALID_ARGUMENT');
+        const invalidPropertyPage = await post(port, '/native/invoke', {
+            'X-AE-MCP-Token': 'known-secret-token',
+        }, {
+            requestId: 'core-layer-properties-invalid',
+            capabilityId: 'ae.layer.properties.list',
+            capabilityVersion: 1,
+            arguments: {
+                layerLocator: {
+                    ...layerPropertiesFixture.value.layerLocator,
+                    kind: 'composition',
+                },
+                offset: 0,
+                limit: 25,
+            },
+            deadlineUnixMs: Date.now() + 10000,
+        });
+        assert.strictEqual(invalidPropertyPage.status, 400);
+        assert.strictEqual(invalidPropertyPage.body.error.code, 'INVALID_ARGUMENT');
+        const overLimitPropertyPage = await post(port, '/native/invoke', {
+            'X-AE-MCP-Token': 'known-secret-token',
+        }, {
+            requestId: 'core-layer-properties-over-limit',
+            capabilityId: 'ae.layer.properties.list',
+            capabilityVersion: 1,
+            arguments: {
+                layerLocator: layerPropertiesFixture.value.layerLocator,
+                offset: 0,
+                limit: 26,
+            },
+            deadlineUnixMs: Date.now() + 10000,
+        });
+        assert.strictEqual(overLimitPropertyPage.status, 400);
+        assert.strictEqual(overLimitPropertyPage.body.error.code, 'INVALID_ARGUMENT');
         assert.doesNotMatch(JSON.stringify(server.activity.list()), /r{65}/);
         assert.deepStrictEqual(nativeClient.calls, []);
     } finally {
@@ -442,6 +486,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
                 'ae.project.bit-depth.set',
                 'ae.project.items.list',
                 'ae.composition.layers.list',
+                'ae.layer.properties.list',
             ],
         );
 
@@ -514,6 +559,18 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
         );
         assert.strictEqual(compositionLayers.status, 200);
         assert.strictEqual(compositionLayers.body.result.value.layers[0].locked, false);
+        const layerPropertiesRequest = {
+            requestId: 'core-layer-properties-1',
+            capabilityId: 'ae.layer.properties.list',
+            capabilityVersion: 1,
+            arguments: structuredClone(layerPropertiesVector.request.params.arguments),
+            deadlineUnixMs,
+        };
+        const layerProperties = await post(
+            port, '/native/invoke', headers, layerPropertiesRequest,
+        );
+        assert.strictEqual(layerProperties.status, 200);
+        assert.strictEqual(layerProperties.body.result.value.properties[1].value.value, '73.5');
         assert.deepStrictEqual(nativeClient.calls, [
             'pair',
             ['negotiate', { deadlineUnixMs }],
@@ -529,6 +586,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
             ['invoke', bitDepthSetRequest],
             ['invoke', projectItemsRequest],
             ['invoke', compositionLayersRequest],
+            ['invoke', layerPropertiesRequest],
         ]);
     } finally {
         srv.close();

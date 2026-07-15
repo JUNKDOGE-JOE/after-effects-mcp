@@ -11,8 +11,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import math
 import time
 from abc import ABC, abstractmethod
+from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, Callable, Literal, Mapping, TypeAlias
 
 from pydantic import (
@@ -103,6 +105,12 @@ Sha256 = Annotated[StrictStr, Field(pattern=_SHA256)]
 SourceCommit = Annotated[StrictStr, Field(pattern=_SOURCE_COMMIT)]
 PositiveInt = Annotated[StrictInt, Field(ge=1, le=_SAFE_MAX)]
 NonNegativeInt = Annotated[StrictInt, Field(ge=0, le=_SAFE_MAX)]
+SignedInt = Annotated[StrictInt, Field(ge=-_SAFE_MAX, le=_SAFE_MAX)]
+
+_DECIMAL_STRING = r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+DecimalString = Annotated[
+    StrictStr, Field(min_length=1, max_length=32, pattern=_DECIMAL_STRING)
+]
 
 
 def _camel(name: str) -> str:
@@ -889,6 +897,239 @@ class CompositionLayersListValue(_NativeModel):
         return self
 
 
+class LayerPropertiesListArguments(_NativeModel):
+    layer_locator: NativeLocator
+    parent_property_locator: NativeLocator | None = None
+    offset: NonNegativeInt
+    limit: Annotated[StrictInt, Field(ge=1, le=25)]
+
+    @model_validator(mode="after")
+    def _locator_kinds(self) -> "LayerPropertiesListArguments":
+        if self.layer_locator.kind != "layer":
+            raise ValueError("layerLocator must have kind layer")
+        if (
+            self.parent_property_locator is not None
+            and self.parent_property_locator.kind != "stream"
+        ):
+            raise ValueError("parentPropertyLocator must have kind stream")
+        return self
+
+
+class LayerPropertySampleTime(_NativeModel):
+    value: SignedInt
+    scale: PositiveInt
+    mode: Literal["comp-time"]
+
+
+def _validate_decimal_string(value: str) -> None:
+    try:
+        decimal_value = Decimal(value)
+        binary_value = float(value)
+    except (InvalidOperation, OverflowError, ValueError) as exc:
+        raise ValueError("property decimal string is not finite") from exc
+    if not decimal_value.is_finite() or not math.isfinite(binary_value):
+        raise ValueError("property decimal string is not finite binary64")
+    if binary_value == 0 and not decimal_value.is_zero():
+        raise ValueError("property decimal string underflows binary64")
+    if binary_value == 0 and value.startswith("-"):
+        raise ValueError("property decimal string must normalize negative zero to 0")
+
+
+class LayerPropertyScalarValue(_NativeModel):
+    kind: Literal["scalar"]
+    value: DecimalString
+
+    @model_validator(mode="after")
+    def _canonical_decimal(self) -> "LayerPropertyScalarValue":
+        _validate_decimal_string(self.value)
+        return self
+
+
+class LayerPropertyVectorValue(_NativeModel):
+    kind: Literal["vector"]
+    components: tuple[DecimalString, ...] = Field(min_length=2, max_length=3)
+
+    @model_validator(mode="after")
+    def _canonical_decimals(self) -> "LayerPropertyVectorValue":
+        for component in self.components:
+            _validate_decimal_string(component)
+        return self
+
+
+class LayerPropertyColorValue(_NativeModel):
+    kind: Literal["color"]
+    alpha: DecimalString
+    red: DecimalString
+    green: DecimalString
+    blue: DecimalString
+
+    @model_validator(mode="after")
+    def _canonical_decimals(self) -> "LayerPropertyColorValue":
+        for component in (self.alpha, self.red, self.green, self.blue):
+            _validate_decimal_string(component)
+        return self
+
+
+LayerPropertyPrimitiveValue: TypeAlias = (
+    LayerPropertyScalarValue | LayerPropertyVectorValue | LayerPropertyColorValue
+)
+LayerPropertyGroupingType: TypeAlias = Literal[
+    "named-group", "indexed-group", "leaf"
+]
+LayerPropertyValueType: TypeAlias = Literal[
+    "none",
+    "one-d",
+    "two-d",
+    "two-d-spatial",
+    "three-d",
+    "three-d-spatial",
+    "color",
+    "arb",
+    "marker",
+    "layer-id",
+    "mask-id",
+    "mask",
+    "text-document",
+    "unknown",
+]
+LayerPropertyValueStatus: TypeAlias = Literal[
+    "group", "sampled", "no-data", "unsupported"
+]
+
+
+class LayerProperty(_NativeModel):
+    property_locator: NativeLocator
+    property_index: PositiveInt
+    name: Annotated[StrictStr, Field(max_length=1024)]
+    match_name: Annotated[StrictStr, Field(max_length=40)]
+    grouping_type: LayerPropertyGroupingType
+    child_count: NonNegativeInt
+    hidden: StrictBool
+    disabled: StrictBool
+    modified: StrictBool
+    can_vary_over_time: StrictBool | None
+    time_varying: StrictBool | None
+    value_type: LayerPropertyValueType
+    value_status: LayerPropertyValueStatus
+    value: LayerPropertyPrimitiveValue | None
+
+    @model_validator(mode="after")
+    def _verified_shape(self) -> "LayerProperty":
+        if self.property_locator.kind != "stream":
+            raise ValueError("propertyLocator must have kind stream")
+        if self.grouping_type != "leaf":
+            if (
+                self.value_type != "none"
+                or self.value_status != "group"
+                or self.value is not None
+                or self.can_vary_over_time is not None
+                or self.time_varying is not None
+            ):
+                raise ValueError("property group value metadata is inconsistent")
+            return self
+        if self.child_count != 0:
+            raise ValueError("leaf property cannot report child properties")
+        if self.value_status == "group":
+            raise ValueError("leaf property cannot use group value metadata")
+        if self.value_status == "no-data":
+            if self.value_type != "none" or self.value is not None:
+                raise ValueError("no-data property value metadata is inconsistent")
+            return self
+        if self.value_status == "unsupported":
+            if self.value is not None or self.value_type not in {
+                "arb",
+                "marker",
+                "layer-id",
+                "mask-id",
+                "mask",
+                "text-document",
+                "unknown",
+            }:
+                raise ValueError("unsupported property value metadata is inconsistent")
+            return self
+        if self.can_vary_over_time is None or self.time_varying is None:
+            raise ValueError("sampled property requires time-variance metadata")
+        if self.value_type == "one-d":
+            valid_value = isinstance(self.value, LayerPropertyScalarValue)
+        elif self.value_type in {"two-d", "two-d-spatial"}:
+            valid_value = (
+                isinstance(self.value, LayerPropertyVectorValue)
+                and len(self.value.components) == 2
+            )
+        elif self.value_type in {"three-d", "three-d-spatial"}:
+            valid_value = (
+                isinstance(self.value, LayerPropertyVectorValue)
+                and len(self.value.components) == 3
+            )
+        elif self.value_type == "color":
+            valid_value = isinstance(self.value, LayerPropertyColorValue)
+        else:
+            valid_value = False
+        if not valid_value:
+            raise ValueError("sampled property value does not match valueType")
+        return self
+
+
+class LayerPropertiesListValue(_NativeModel):
+    layer_locator: NativeLocator
+    parent_property_locator: NativeLocator | None
+    layer_name: Annotated[StrictStr, Field(max_length=1024)]
+    sample_time: LayerPropertySampleTime
+    total: NonNegativeInt
+    offset: NonNegativeInt
+    limit: Annotated[StrictInt, Field(ge=1, le=25)]
+    returned: Annotated[StrictInt, Field(ge=0, le=25)]
+    has_more: StrictBool
+    next_offset: NonNegativeInt | None
+    properties: tuple[LayerProperty, ...] = Field(max_length=25)
+
+    @model_validator(mode="after")
+    def _verified_page(self) -> "LayerPropertiesListValue":
+        if self.layer_locator.kind != "layer":
+            raise ValueError("layerLocator must have kind layer")
+        if (
+            self.parent_property_locator is not None
+            and self.parent_property_locator.kind != "stream"
+        ):
+            raise ValueError("parentPropertyLocator must have kind stream")
+        if self.returned != len(self.properties) or self.returned > self.limit:
+            raise ValueError("layer property page count does not match returned")
+        consumed = self.offset + self.returned
+        if consumed > self.total:
+            raise ValueError("layer property page exceeds total")
+        expected_more = consumed < self.total
+        expected_next = consumed if expected_more else None
+        if expected_more and self.returned == 0:
+            raise ValueError("layer property continuation page made no progress")
+        if self.has_more is not expected_more or self.next_offset != expected_next:
+            raise ValueError("layer property continuation metadata is inconsistent")
+        context = self.layer_locator.context()
+        if (
+            self.parent_property_locator is not None
+            and self.parent_property_locator.context() != context
+        ):
+            raise ValueError("parent property locator escaped the layer context")
+        object_ids: set[str] = set()
+        property_indices: set[int] = set()
+        for index, prop in enumerate(self.properties):
+            if prop.property_locator.context() != context:
+                raise ValueError("property locator escaped the layer context")
+            if (
+                self.parent_property_locator is not None
+                and prop.property_locator == self.parent_property_locator
+            ):
+                raise ValueError("child property locator cannot equal its parent")
+            if prop.property_locator.object_id in object_ids:
+                raise ValueError("layer property page contains duplicate locators")
+            if prop.property_index in property_indices:
+                raise ValueError("layer property page contains duplicate property indices")
+            if prop.property_index != self.offset + index + 1:
+                raise ValueError("propertyIndex does not match page order")
+            object_ids.add(prop.property_locator.object_id)
+            property_indices.add(prop.property_index)
+        return self
+
+
 def _native_read_audit_fields(
     implementation: NativeCapabilityDescriptor,
     negotiation: NativeNegotiation,
@@ -943,6 +1184,19 @@ class CompositionLayersListExecution(_NativeModel):
         )
 
 
+class LayerPropertiesListExecution(_NativeModel):
+    implementation: NativeCapabilityDescriptor
+    negotiation: NativeNegotiation
+    value: LayerPropertiesListValue
+    evidence: NativeExecutionEvidence
+    engine: Literal["native-aegp"] = "native-aegp"
+
+    def audit_fields(self) -> dict[str, Any]:
+        return _native_read_audit_fields(
+            self.implementation, self.negotiation, self.evidence
+        )
+
+
 PROJECT_ITEMS_LIST_CAPABILITY_ID = "ae.project.items.list"
 PROJECT_ITEMS_LIST_CAPABILITY_VERSION = 1
 PROJECT_ITEMS_LIST_INPUT_CONTRACT_ID = (
@@ -959,6 +1213,15 @@ COMPOSITION_LAYERS_LIST_INPUT_CONTRACT_ID = (
 )
 COMPOSITION_LAYERS_LIST_RESULT_CONTRACT_ID = (
     "aemcp.contract.ae.composition.layers.list.result.v1"
+)
+
+LAYER_PROPERTIES_LIST_CAPABILITY_ID = "ae.layer.properties.list"
+LAYER_PROPERTIES_LIST_CAPABILITY_VERSION = 1
+LAYER_PROPERTIES_LIST_INPUT_CONTRACT_ID = (
+    "aemcp.contract.ae.layer.properties.list.input.v1"
+)
+LAYER_PROPERTIES_LIST_RESULT_CONTRACT_ID = (
+    "aemcp.contract.ae.layer.properties.list.result.v1"
 )
 
 _PROJECT_ITEMS_LIST_INPUT_SCHEMA = {
@@ -1296,11 +1559,314 @@ _COMPOSITION_LAYERS_LIST_RESULT_SCHEMA = {
     "x-invariant": "returned-equals-layers-length-and-page-metadata-is-self-consistent",
 }
 
+_LAYER_PROPERTIES_LIST_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["layerLocator", "offset", "limit"],
+    "properties": {
+        "layerLocator": {"$ref": "#/$defs/layerLocator"},
+        "parentPropertyLocator": {
+            "oneOf": [
+                {"type": "null"},
+                {"$ref": "#/$defs/streamLocator"},
+            ]
+        },
+        "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": _SAFE_MAX,
+            "default": 0,
+            "x-omissionBehavior": 0,
+        },
+        "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 25,
+            "default": 25,
+            "x-omissionBehavior": 25,
+        },
+    },
+    "$defs": {
+        "uuid": {"type": "string", "pattern": _UUID},
+        "layerLocator": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "kind",
+                "hostInstanceId",
+                "sessionId",
+                "projectId",
+                "generation",
+                "objectId",
+            ],
+            "properties": {
+                "kind": {"const": "layer"},
+                "hostInstanceId": {"$ref": "#/$defs/uuid"},
+                "sessionId": {"$ref": "#/$defs/uuid"},
+                "projectId": {"$ref": "#/$defs/uuid"},
+                "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": _SAFE_MAX,
+                },
+                "objectId": {"$ref": "#/$defs/uuid"},
+            },
+        },
+        "streamLocator": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "kind",
+                "hostInstanceId",
+                "sessionId",
+                "projectId",
+                "generation",
+                "objectId",
+            ],
+            "properties": {
+                "kind": {"const": "stream"},
+                "hostInstanceId": {"$ref": "#/$defs/uuid"},
+                "sessionId": {"$ref": "#/$defs/uuid"},
+                "projectId": {"$ref": "#/$defs/uuid"},
+                "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": _SAFE_MAX,
+                },
+                "objectId": {"$ref": "#/$defs/uuid"},
+            },
+        },
+    },
+}
+
+_LAYER_PROPERTY_DECIMAL_SCHEMA = {
+    "type": "string",
+    "minLength": 1,
+    "maxLength": 32,
+    "pattern": _DECIMAL_STRING,
+}
+_LAYER_PROPERTIES_LIST_RESULT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "layerLocator",
+        "parentPropertyLocator",
+        "layerName",
+        "sampleTime",
+        "total",
+        "offset",
+        "limit",
+        "returned",
+        "hasMore",
+        "nextOffset",
+        "properties",
+    ],
+    "properties": {
+        "layerLocator": {"$ref": "#/$defs/layerLocator"},
+        "parentPropertyLocator": {
+            "oneOf": [
+                {"type": "null"},
+                {"$ref": "#/$defs/streamLocator"},
+            ]
+        },
+        "layerName": {"type": "string", "maxLength": 1024},
+        "sampleTime": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["value", "scale", "mode"],
+            "properties": {
+                "value": {
+                    "type": "integer",
+                    "minimum": -_SAFE_MAX,
+                    "maximum": _SAFE_MAX,
+                },
+                "scale": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": _SAFE_MAX,
+                },
+                "mode": {"const": "comp-time"},
+            },
+        },
+        "total": {"type": "integer", "minimum": 0, "maximum": _SAFE_MAX},
+        "offset": {"type": "integer", "minimum": 0, "maximum": _SAFE_MAX},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 25},
+        "returned": {"type": "integer", "minimum": 0, "maximum": 25},
+        "hasMore": {"type": "boolean"},
+        "nextOffset": {
+            "oneOf": [
+                {"type": "null"},
+                {"type": "integer", "minimum": 0, "maximum": _SAFE_MAX},
+            ]
+        },
+        "properties": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "propertyLocator",
+                    "propertyIndex",
+                    "name",
+                    "matchName",
+                    "groupingType",
+                    "childCount",
+                    "hidden",
+                    "disabled",
+                    "modified",
+                    "canVaryOverTime",
+                    "timeVarying",
+                    "valueType",
+                    "valueStatus",
+                    "value",
+                ],
+                "properties": {
+                    "propertyLocator": {"$ref": "#/$defs/streamLocator"},
+                    "propertyIndex": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": _SAFE_MAX,
+                    },
+                    "name": {"type": "string", "maxLength": 1024},
+                    "matchName": {"type": "string", "maxLength": 40},
+                    "groupingType": {
+                        "enum": ["leaf", "named-group", "indexed-group"]
+                    },
+                    "childCount": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": _SAFE_MAX,
+                    },
+                    "hidden": {"type": "boolean"},
+                    "disabled": {"type": "boolean"},
+                    "modified": {"type": "boolean"},
+                    "canVaryOverTime": {
+                        "oneOf": [{"type": "null"}, {"type": "boolean"}]
+                    },
+                    "timeVarying": {
+                        "oneOf": [{"type": "null"}, {"type": "boolean"}]
+                    },
+                    "valueType": {
+                        "enum": [
+                            "none",
+                            "one-d",
+                            "two-d",
+                            "two-d-spatial",
+                            "three-d",
+                            "three-d-spatial",
+                            "color",
+                            "arb",
+                            "marker",
+                            "layer-id",
+                            "mask-id",
+                            "mask",
+                            "text-document",
+                            "unknown",
+                        ]
+                    },
+                    "valueStatus": {
+                        "enum": ["group", "sampled", "no-data", "unsupported"]
+                    },
+                    "value": {
+                        "oneOf": [
+                            {"type": "null"},
+                            {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "required": ["kind", "value"],
+                                "properties": {
+                                    "kind": {"const": "scalar"},
+                                    "value": _LAYER_PROPERTY_DECIMAL_SCHEMA,
+                                },
+                            },
+                            {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "required": ["kind", "components"],
+                                "properties": {
+                                    "kind": {"const": "vector"},
+                                    "components": {
+                                        "type": "array",
+                                        "minItems": 2,
+                                        "maxItems": 3,
+                                        "items": _LAYER_PROPERTY_DECIMAL_SCHEMA,
+                                    },
+                                },
+                            },
+                            {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "required": ["kind", "alpha", "red", "green", "blue"],
+                                "properties": {
+                                    "kind": {"const": "color"},
+                                    "alpha": _LAYER_PROPERTY_DECIMAL_SCHEMA,
+                                    "red": _LAYER_PROPERTY_DECIMAL_SCHEMA,
+                                    "green": _LAYER_PROPERTY_DECIMAL_SCHEMA,
+                                    "blue": _LAYER_PROPERTY_DECIMAL_SCHEMA,
+                                },
+                            },
+                        ]
+                    },
+                },
+            },
+        },
+    },
+    "$defs": {
+        "uuid": {"type": "string", "pattern": _UUID},
+        "locatorBase": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "kind",
+                "hostInstanceId",
+                "sessionId",
+                "projectId",
+                "generation",
+                "objectId",
+            ],
+            "properties": {
+                "kind": {
+                    "enum": ["project", "item", "composition", "layer", "stream"]
+                },
+                "hostInstanceId": {"$ref": "#/$defs/uuid"},
+                "sessionId": {"$ref": "#/$defs/uuid"},
+                "projectId": {"$ref": "#/$defs/uuid"},
+                "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": _SAFE_MAX,
+                },
+                "objectId": {"$ref": "#/$defs/uuid"},
+            },
+        },
+        "layerLocator": {
+            "allOf": [
+                {"$ref": "#/$defs/locatorBase"},
+                {"properties": {"kind": {"const": "layer"}}},
+            ]
+        },
+        "streamLocator": {
+            "allOf": [
+                {"$ref": "#/$defs/locatorBase"},
+                {"properties": {"kind": {"const": "stream"}}},
+            ]
+        },
+    },
+    "x-invariant": (
+        "returned-equals-properties-length-and-page-metadata-and-value-types-"
+        "are-self-consistent"
+    ),
+}
+
 PROJECT_ITEMS_LIST_CONTRACT_DIGEST = (
     "64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e"
 )
 COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST = (
     "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75"
+)
+LAYER_PROPERTIES_LIST_CONTRACT_DIGEST = (
+    "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba"
 )
 
 
@@ -1484,6 +2050,7 @@ def _structured_error(
     message: str,
     *,
     details: Mapping[str, Any] | None = None,
+    recovery_hint: str | None = None,
 ) -> NativeBackendError:
     retryable, side_effect, action = _ERROR_POLICY[code]
     hints = {
@@ -1502,7 +2069,7 @@ def _structured_error(
         side_effect=side_effect,
         recovery=NativeRecovery(
             action=action,
-            hint=hints.get(
+            hint=recovery_hint or hints.get(
                 action, "Retry only after the caller re-evaluates this failure."
             ),
         ),
@@ -1765,6 +2332,39 @@ def _validate_composition_layers_list_descriptor(
     )
 
 
+def _validate_layer_properties_list_descriptor(
+    descriptor: NativeCapabilityDescriptor,
+    *,
+    host_platform: NativePlatform,
+) -> None:
+    _validate_navigation_descriptor(
+        descriptor,
+        host_platform=host_platform,
+        capability_id=LAYER_PROPERTIES_LIST_CAPABILITY_ID,
+        capability_version=LAYER_PROPERTIES_LIST_CAPABILITY_VERSION,
+        summary=(
+            "List a bounded page of direct properties on an After Effects layer "
+            "or property group."
+        ),
+        side_effect_summary=(
+            "Reads layer properties and safe primitive values without changing "
+            "After Effects state."
+        ),
+        preconditions=(
+            "An After Effects project must be open.",
+            "layerLocator must come from ae.composition.layers.list@1.",
+            "parentPropertyLocator must come from ae.layer.properties.list@1 "
+            "for the same layer.",
+        ),
+        input_contract_id=LAYER_PROPERTIES_LIST_INPUT_CONTRACT_ID,
+        result_contract_id=LAYER_PROPERTIES_LIST_RESULT_CONTRACT_ID,
+        contract_digest=LAYER_PROPERTIES_LIST_CONTRACT_DIGEST,
+        input_schema=_LAYER_PROPERTIES_LIST_INPUT_SCHEMA,
+        result_schema=_LAYER_PROPERTIES_LIST_RESULT_SCHEMA,
+        requirement_id="aemcp.requirement.native.layer-properties-list",
+    )
+
+
 def _sha256_closed_json(value: Any) -> str:
     # All object member names in this closed contract are ASCII, so Python's
     # lexical key order is identical to RFC 8785's UTF-16 order here.
@@ -1822,6 +2422,16 @@ def _composition_layers_list_digest(value: CompositionLayersListValue) -> str:
         {
             "capabilityId": COMPOSITION_LAYERS_LIST_CAPABILITY_ID,
             "capabilityVersion": COMPOSITION_LAYERS_LIST_CAPABILITY_VERSION,
+            "value": value.model_dump(mode="json", by_alias=True),
+        }
+    )
+
+
+def _layer_properties_list_digest(value: LayerPropertiesListValue) -> str:
+    return _sha256_closed_json(
+        {
+            "capabilityId": LAYER_PROPERTIES_LIST_CAPABILITY_ID,
+            "capabilityVersion": LAYER_PROPERTIES_LIST_CAPABILITY_VERSION,
             "value": value.model_dump(mode="json", by_alias=True),
         }
     )
@@ -1917,6 +2527,8 @@ async def _invoke_native_read_request(
     arguments: dict[str, Any],
     locator: NativeLocator | None,
     locator_field: str,
+    additional_locators: tuple[tuple[NativeLocator, str], ...] = (),
+    stale_locator_hint: str | None = None,
     descriptor_validator: Callable[..., None],
     deadline_unix_ms: int,
     cancellation: NativeCancellationToken | None,
@@ -1982,18 +2594,23 @@ async def _invoke_native_read_request(
             f"Native host did not advertise {capability_id}@{capability_version}.",
         )
     descriptor_validator(descriptor, host_platform=negotiation.host_platform)
-    if locator is not None and (
-        locator.host_instance_id != negotiation.host_instance_id
-        or locator.session_id != negotiation.session_id
-    ):
-        raise _structured_error(
-            "STALE_LOCATOR",
-            "Native locator does not belong to the negotiated host session.",
-            details={
-                "field": locator_field,
-                "capabilityId": capability_id,
-            },
-        )
+    bound_locators = additional_locators
+    if locator is not None:
+        bound_locators = ((locator, locator_field), *bound_locators)
+    for bound_locator, bound_field in bound_locators:
+        if (
+            bound_locator.host_instance_id != negotiation.host_instance_id
+            or bound_locator.session_id != negotiation.session_id
+        ):
+            raise _structured_error(
+                "STALE_LOCATOR",
+                "Native locator does not belong to the negotiated host session.",
+                details={
+                    "field": bound_field,
+                    "capabilityId": capability_id,
+                },
+                recovery_hint=stale_locator_hint,
+            )
     _ensure_active(deadline_unix_ms, cancellation)
 
     request = NativeInvokeRequest(
@@ -2561,6 +3178,98 @@ async def invoke_composition_layers_list(
     )
 
 
+async def invoke_layer_properties_list(
+    backend: NativeInvokeBackend,
+    *,
+    request_id: str,
+    layer_locator: NativeLocator | Mapping[str, Any],
+    parent_property_locator: NativeLocator | Mapping[str, Any] | None,
+    offset: int,
+    limit: int,
+    deadline_unix_ms: int,
+    cancellation: NativeCancellationToken | None = None,
+) -> LayerPropertiesListExecution:
+    """List one bounded page of direct layer/group properties without JSX."""
+
+    arguments = LayerPropertiesListArguments(
+        layer_locator=layer_locator,
+        parent_property_locator=parent_property_locator,
+        offset=offset,
+        limit=limit,
+    )
+    stale_hint = (
+        "Discard stale property locators, then call ae_listProjectItems, "
+        "ae_listCompositionLayers, and ae_listLayerProperties again."
+    )
+    if (
+        arguments.parent_property_locator is not None
+        and arguments.parent_property_locator.context()
+        != arguments.layer_locator.context()
+    ):
+        raise _structured_error(
+            "STALE_LOCATOR",
+            "parentPropertyLocator does not belong to the layer locator context.",
+            details={
+                "field": "params.arguments.parentPropertyLocator",
+                "capabilityId": LAYER_PROPERTIES_LIST_CAPABILITY_ID,
+            },
+            recovery_hint=stale_hint,
+        )
+    wire_arguments = arguments.model_dump(
+        mode="json",
+        by_alias=True,
+        exclude_none=True,
+    )
+    additional_locators: tuple[tuple[NativeLocator, str], ...] = ()
+    if arguments.parent_property_locator is not None:
+        additional_locators = ((
+            arguments.parent_property_locator,
+            "params.arguments.parentPropertyLocator",
+        ),)
+    negotiation, descriptor, _request, result = await _invoke_native_read_request(
+        backend,
+        request_id=request_id,
+        capability_id=LAYER_PROPERTIES_LIST_CAPABILITY_ID,
+        capability_version=LAYER_PROPERTIES_LIST_CAPABILITY_VERSION,
+        arguments=wire_arguments,
+        locator=arguments.layer_locator,
+        locator_field="params.arguments.layerLocator",
+        additional_locators=additional_locators,
+        stale_locator_hint=stale_hint,
+        descriptor_validator=_validate_layer_properties_list_descriptor,
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    try:
+        value = LayerPropertiesListValue.model_validate(result.value)
+        postcondition_digest = _layer_properties_list_digest(value)
+    except (ValidationError, TypeError, ValueError, UnicodeError) as exc:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native layer-property page did not match its typed contract.",
+        ) from exc
+    if (
+        value.layer_locator != arguments.layer_locator
+        or value.parent_property_locator != arguments.parent_property_locator
+        or value.offset != arguments.offset
+        or value.limit != arguments.limit
+        or value.layer_locator.host_instance_id != negotiation.host_instance_id
+        or value.layer_locator.session_id != negotiation.session_id
+        or result.evidence.postcondition.kind != "layer-properties-list"
+        or result.evidence.postcondition.digest != postcondition_digest
+    ):
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native layer-property page was not bound to its request and evidence.",
+        )
+    return LayerPropertiesListExecution(
+        implementation=descriptor,
+        negotiation=negotiation,
+        value=value,
+        evidence=result.evidence,
+    )
+
+
 __all__ = [
     "CapabilityDetail",
     "CompositionLayer",
@@ -2604,6 +3313,14 @@ __all__ = [
     "ProjectItemsListArguments",
     "ProjectItemsListExecution",
     "ProjectItemsListValue",
+    "LayerPropertiesListArguments",
+    "LayerPropertiesListExecution",
+    "LayerPropertiesListValue",
+    "LayerProperty",
+    "LayerPropertyColorValue",
+    "LayerPropertySampleTime",
+    "LayerPropertyScalarValue",
+    "LayerPropertyVectorValue",
     "ProjectSummaryExecution",
     "ProjectSummaryValue",
     "PROJECT_BIT_DEPTH_READ_CAPABILITY_ID",
@@ -2617,6 +3334,11 @@ __all__ = [
     "COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST",
     "COMPOSITION_LAYERS_LIST_INPUT_CONTRACT_ID",
     "COMPOSITION_LAYERS_LIST_RESULT_CONTRACT_ID",
+    "LAYER_PROPERTIES_LIST_CAPABILITY_ID",
+    "LAYER_PROPERTIES_LIST_CAPABILITY_VERSION",
+    "LAYER_PROPERTIES_LIST_CONTRACT_DIGEST",
+    "LAYER_PROPERTIES_LIST_INPUT_CONTRACT_ID",
+    "LAYER_PROPERTIES_LIST_RESULT_CONTRACT_ID",
     "PROJECT_ITEMS_LIST_CAPABILITY_ID",
     "PROJECT_ITEMS_LIST_CAPABILITY_VERSION",
     "PROJECT_ITEMS_LIST_CONTRACT_DIGEST",
@@ -2628,6 +3350,7 @@ __all__ = [
     "invoke_project_bit_depth_read",
     "invoke_project_bit_depth_set",
     "invoke_composition_layers_list",
+    "invoke_layer_properties_list",
     "invoke_project_items_list",
     "invoke_project_summary",
 ]

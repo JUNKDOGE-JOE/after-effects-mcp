@@ -29,6 +29,10 @@ const COMPOSITION_LAYERS_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
     '../../native/ae-plugin/protocol/fixtures/invoke-composition-layers-list.json',
 ), 'utf8'));
+const LAYER_PROPERTIES_VECTOR = JSON.parse(fs.readFileSync(path.join(
+    __dirname,
+    '../../native/ae-plugin/protocol/fixtures/invoke-layer-properties-list.json',
+), 'utf8'));
 const HOST = '22222222-2222-4222-8222-222222222222';
 const SESSION = '11111111-1111-4111-8111-111111111111';
 const CLIENT = '33333333-3333-4333-8333-333333333333';
@@ -231,9 +235,12 @@ function installProtocol(server, options) {
                         items: CAPABILITIES_VECTOR.items,
                     };
                 } else if (request.params.capabilityId === 'ae.project.items.list'
-                    || request.params.capabilityId === 'ae.composition.layers.list') {
+                    || request.params.capabilityId === 'ae.composition.layers.list'
+                    || request.params.capabilityId === 'ae.layer.properties.list') {
                     const vector = request.params.capabilityId === 'ae.project.items.list'
-                        ? PROJECT_ITEMS_VECTOR : COMPOSITION_LAYERS_VECTOR;
+                        ? PROJECT_ITEMS_VECTOR
+                        : request.params.capabilityId === 'ae.composition.layers.list'
+                            ? COMPOSITION_LAYERS_VECTOR : LAYER_PROPERTIES_VECTOR;
                     result = structuredClone(vector.response.result);
                     result.evidence.requestId = request.requestId;
                     result.evidence.requestDigest = invokeRequestDigest(request);
@@ -384,6 +391,24 @@ test('descriptor and fixed transport messages are strict and closed', () => {
     });
     assert.equal(parseAuthPending(Buffer.alloc(57)), null);
     assert.equal(parseAuthDecision(decisionMessage(1, SESSION, 0)), null);
+
+    const layerPropertiesDescriptor = CAPABILITIES_VECTOR.items.find(function (item) {
+        return item.id === 'ae.layer.properties.list';
+    });
+    const valueVariants = layerPropertiesDescriptor.resultSchema.properties
+        .properties.items.properties.value.oneOf;
+    const scalarSchema = valueVariants.find(function (variant) {
+        return variant.properties?.kind?.const === 'scalar';
+    });
+    const vectorSchema = valueVariants.find(function (variant) {
+        return variant.properties?.kind?.const === 'vector';
+    });
+    assert.deepEqual(vectorSchema.properties.components, {
+        type: 'array',
+        minItems: 2,
+        maxItems: 3,
+        items: scalarSchema.properties.value,
+    });
 });
 
 test('discovery accepts only a private descriptor and socket owned by this user', {
@@ -470,6 +495,12 @@ test('CEP client verifies native project summary and bit-depth read/write capabi
             return item.id === 'ae.composition.layers.list';
         }).contractDigest,
     );
+    assert.equal(
+        client.status().layerPropertiesListContractDigest,
+        CAPABILITIES_VECTOR.items.find(function (item) {
+            return item.id === 'ae.layer.properties.list';
+        }).contractDigest,
+    );
     assert.deepEqual(protocol.requests.map(function (request) { return request.method; }), [
         'hello', 'capabilities', 'invoke',
     ]);
@@ -541,8 +572,25 @@ test('CEP client verifies native project summary and bit-depth read/write capabi
         compositionLayers.evidence.requestDigest,
         invokeRequestDigest(protocol.requests[6]),
     );
+    const layerProperties = await client.invoke({
+        requestId: 'core-layer-properties-1',
+        capabilityId: 'ae.layer.properties.list',
+        capabilityVersion: 1,
+        arguments: structuredClone(LAYER_PROPERTIES_VECTOR.request.params.arguments),
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.equal(layerProperties.replayed, false);
+    assert.deepEqual(
+        layerProperties.value.parentPropertyLocator,
+        LAYER_PROPERTIES_VECTOR.request.params.arguments.parentPropertyLocator,
+    );
+    assert.equal(layerProperties.value.properties[0].propertyIndex, 1);
+    assert.equal(
+        layerProperties.evidence.requestDigest,
+        invokeRequestDigest(protocol.requests[7]),
+    );
     assert.deepEqual(protocol.requests.map(function (request) { return request.method; }), [
-        'hello', 'capabilities', 'invoke', 'invoke', 'invoke', 'invoke', 'invoke',
+        'hello', 'capabilities', 'invoke', 'invoke', 'invoke', 'invoke', 'invoke', 'invoke',
     ]);
 });
 
@@ -557,6 +605,9 @@ test('CEP graph reads count Unicode scalars rather than UTF-16 code units', {
             } else if (result.capabilityId === 'ae.composition.layers.list') {
                 result.value.compositionName = astral;
                 result.value.layers.forEach(function (layer) { layer.name = astral; });
+            } else if (result.capabilityId === 'ae.layer.properties.list') {
+                result.value.layerName = astral;
+                result.value.properties.forEach(function (property) { property.name = astral; });
             }
             rebindPostcondition(result);
         },
@@ -582,6 +633,15 @@ test('CEP graph reads count Unicode scalars rather than UTF-16 code units', {
     });
     assert.equal(Array.from(layers.value.compositionName).length, 1024);
     assert.equal(Array.from(layers.value.layers[0].name).length, 1024);
+    const properties = await ready.client.invoke({
+        requestId: 'unicode-layer-properties',
+        capabilityId: 'ae.layer.properties.list',
+        capabilityVersion: 1,
+        arguments: structuredClone(LAYER_PROPERTIES_VECTOR.request.params.arguments),
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.equal(Array.from(properties.value.layerName).length, 1024);
+    assert.equal(Array.from(properties.value.properties[0].name).length, 1024);
 });
 
 for (const invalidUnicode of [
@@ -609,15 +669,20 @@ for (const invalidUnicode of [
     });
 }
 
-test('CEP graph reads reject non-advancing pages for both native capabilities', {
+test('CEP graph reads reject non-advancing pages for all paged native capabilities', {
     skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
 }, async (t) => {
     const ready = await readyNativeClient(t, {
         mutateInvoke: function (result) {
-            if (!['ae.project.items.list', 'ae.composition.layers.list'].includes(
+            if (![
+                'ae.project.items.list', 'ae.composition.layers.list',
+                'ae.layer.properties.list',
+            ].includes(
                 result.capabilityId,
             )) return;
-            const member = result.capabilityId === 'ae.project.items.list' ? 'items' : 'layers';
+            const member = result.capabilityId === 'ae.project.items.list'
+                ? 'items' : result.capabilityId === 'ae.composition.layers.list'
+                    ? 'layers' : 'properties';
             result.value.total = 1;
             result.value.returned = 0;
             result.value.hasMore = true;
@@ -644,6 +709,150 @@ test('CEP graph reads reject non-advancing pages for both native capabilities', 
         },
         deadlineUnixMs: 1900000002000,
     }), { code: 'NATIVE_CONTRACT_MISMATCH' });
+    await assert.rejects(ready.client.invoke({
+        requestId: 'stalled-layer-properties',
+        capabilityId: 'ae.layer.properties.list',
+        capabilityVersion: 1,
+        arguments: structuredClone(LAYER_PROPERTIES_VECTOR.request.params.arguments),
+        deadlineUnixMs: 1900000002000,
+    }), { code: 'NATIVE_CONTRACT_MISMATCH' });
+});
+
+test('CEP layer-property reads enforce the closed locator and decimal value union', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const mutations = new Map([
+        ['decimal-wide-valid', function (value) {
+            value.properties[1].value.value = '0.20000000000000001';
+        }],
+        ['vector-three-d-valid', function (value) {
+            value.properties[0].valueType = 'three-d';
+            value.properties[0].value.components.push('30');
+        }],
+        ['root-parent-omitted', function (value) {
+            value.parentPropertyLocator = null;
+        }],
+        ['root-parent-null', function (value) {
+            value.parentPropertyLocator = null;
+        }],
+        ['decimal-negative-zero', function (value) {
+            value.properties[1].value.value = '-0.0';
+        }],
+        ['decimal-underflow', function (value) {
+            value.properties[1].value.value = '1e-999';
+        }],
+        ['decimal-non-finite', function (value) {
+            value.properties[1].value.value = '1e999';
+        }],
+        ['vector-wrong-dimension', function (value) {
+            value.properties[0].value.components = ['10'];
+        }],
+        ['two-d-three-components', function (value) {
+            value.properties[0].value.components.push('30');
+        }],
+        ['three-d-two-components', function (value) {
+            value.properties[0].valueType = 'three-d';
+        }],
+        ['unsupported-has-value', function (value) {
+            value.properties[2].value = { kind: 'scalar', value: '1' };
+        }],
+        ['property-context-drift', function (value) {
+            value.properties[0].propertyLocator.projectId =
+                'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+        }],
+        ['duplicate-property-locator', function (value) {
+            value.properties[1].propertyLocator = structuredClone(
+                value.properties[0].propertyLocator,
+            );
+        }],
+        ['property-index-drift', function (value) {
+            value.properties[0].propertyIndex = 2;
+        }],
+        ['sample-time-scale-zero', function (value) {
+            value.sampleTime.scale = 0;
+        }],
+        ['group-carries-sample', function (value) {
+            value.properties[0].groupingType = 'named-group';
+            value.properties[0].childCount = 1;
+        }],
+    ]);
+    const ready = await readyNativeClient(t, {
+        mutateInvoke: function (result, request) {
+            if (result.capabilityId !== 'ae.layer.properties.list') return;
+            const mutate = mutations.get(request.requestId);
+            if (mutate) mutate(result.value);
+            rebindPostcondition(result);
+        },
+    });
+    const argumentsValue = structuredClone(
+        LAYER_PROPERTIES_VECTOR.request.params.arguments,
+    );
+    const accepted = await ready.client.invoke({
+        requestId: 'decimal-wide-valid',
+        capabilityId: 'ae.layer.properties.list',
+        capabilityVersion: 1,
+        arguments: argumentsValue,
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.equal(accepted.value.properties[1].value.value, '0.20000000000000001');
+    const acceptedThreeD = await ready.client.invoke({
+        requestId: 'vector-three-d-valid',
+        capabilityId: 'ae.layer.properties.list',
+        capabilityVersion: 1,
+        arguments: argumentsValue,
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.deepEqual(
+        acceptedThreeD.value.properties[0].value.components,
+        ['10', '20', '30'],
+    );
+    const rootArguments = structuredClone(argumentsValue);
+    delete rootArguments.parentPropertyLocator;
+    const rootPage = await ready.client.invoke({
+        requestId: 'root-parent-omitted',
+        capabilityId: 'ae.layer.properties.list',
+        capabilityVersion: 1,
+        arguments: rootArguments,
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.equal(rootPage.value.parentPropertyLocator, null);
+    const omittedParentRequest = ready.protocol.requests.at(-1);
+    assert.equal(
+        Object.hasOwn(omittedParentRequest.params.arguments, 'parentPropertyLocator'),
+        false,
+    );
+    const explicitNullArguments = structuredClone(argumentsValue);
+    explicitNullArguments.parentPropertyLocator = null;
+    const explicitNullPage = await ready.client.invoke({
+        requestId: 'root-parent-null',
+        capabilityId: 'ae.layer.properties.list',
+        capabilityVersion: 1,
+        arguments: explicitNullArguments,
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.equal(explicitNullPage.value.parentPropertyLocator, null);
+    const explicitNullRequest = ready.protocol.requests.at(-1);
+    assert.equal(
+        Object.hasOwn(explicitNullRequest.params.arguments, 'parentPropertyLocator'),
+        false,
+    );
+    const comparableOmittedRequest = structuredClone(omittedParentRequest);
+    comparableOmittedRequest.requestId = explicitNullRequest.requestId;
+    assert.deepEqual(explicitNullRequest, comparableOmittedRequest);
+    assert.equal(
+        explicitNullPage.evidence.requestDigest,
+        invokeRequestDigest(explicitNullRequest),
+    );
+
+    for (const requestId of Array.from(mutations.keys()).slice(4)) {
+        await assert.rejects(ready.client.invoke({
+            requestId,
+            capabilityId: 'ae.layer.properties.list',
+            capabilityVersion: 1,
+            arguments: argumentsValue,
+            deadlineUnixMs: 1900000002000,
+        }), { code: 'NATIVE_CONTRACT_MISMATCH', retryable: false });
+    }
 });
 
 test('CEP stale-locator preflight reports the exact field without inventing generation', {
@@ -651,6 +860,17 @@ test('CEP stale-locator preflight reports the exact field without inventing gene
 }, async (t) => {
     const ready = await readyNativeClient(t);
     const staleSession = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const overLimitArguments = structuredClone(
+        LAYER_PROPERTIES_VECTOR.request.params.arguments,
+    );
+    overLimitArguments.limit = 26;
+    await assert.rejects(ready.client.invoke({
+        requestId: 'over-limit-layer-properties',
+        capabilityId: 'ae.layer.properties.list',
+        capabilityVersion: 1,
+        arguments: overLimitArguments,
+        deadlineUnixMs: 1900000002000,
+    }), { code: 'INVALID_ARGUMENT', retryable: false });
     const projectLocator = structuredClone(
         PROJECT_ITEMS_VECTOR.response.result.value.projectLocator,
     );
@@ -688,6 +908,46 @@ test('CEP stale-locator preflight reports the exact field without inventing gene
             capabilityId: 'ae.composition.layers.list',
         });
         assert.equal(Object.hasOwn(error.details, 'currentGeneration'), false);
+        return true;
+    });
+
+    const staleLayerArguments = structuredClone(
+        LAYER_PROPERTIES_VECTOR.request.params.arguments,
+    );
+    staleLayerArguments.layerLocator.sessionId = staleSession;
+    staleLayerArguments.parentPropertyLocator.sessionId = staleSession;
+    await assert.rejects(ready.client.invoke({
+        requestId: 'stale-layer-locator',
+        capabilityId: 'ae.layer.properties.list',
+        capabilityVersion: 1,
+        arguments: staleLayerArguments,
+        deadlineUnixMs: 1900000002000,
+    }), function (error) {
+        assert.equal(error.code, 'STALE_LOCATOR');
+        assert.deepEqual(error.details, {
+            field: 'params.arguments.layerLocator',
+            capabilityId: 'ae.layer.properties.list',
+        });
+        return true;
+    });
+
+    const crossLayerArguments = structuredClone(
+        LAYER_PROPERTIES_VECTOR.request.params.arguments,
+    );
+    crossLayerArguments.parentPropertyLocator.projectId =
+        'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    await assert.rejects(ready.client.invoke({
+        requestId: 'cross-layer-parent-locator',
+        capabilityId: 'ae.layer.properties.list',
+        capabilityVersion: 1,
+        arguments: crossLayerArguments,
+        deadlineUnixMs: 1900000002000,
+    }), function (error) {
+        assert.equal(error.code, 'STALE_LOCATOR');
+        assert.deepEqual(error.details, {
+            field: 'params.arguments.parentPropertyLocator',
+            capabilityId: 'ae.layer.properties.list',
+        });
         return true;
     });
     assert.deepEqual(
