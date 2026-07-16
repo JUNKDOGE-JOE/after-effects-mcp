@@ -3651,6 +3651,413 @@
         },
         {
           "detail": "full",
+          "id": "ae.layer.property.keyframes.list",
+          "version": 1,
+          "schemaVersion": 1,
+          "summary": "List a bounded page of exact keyframes on one After Effects layer property.",
+          "risk": "read",
+          "mutability": "read-only",
+          "idempotency": "idempotent",
+          "cancellation": "before-dispatch",
+          "undo": "not-applicable",
+          "sideEffectSummary": "Reads native keyframe times, primitive values, and interpolation without changing After Effects state.",
+          "preconditions": [
+            "An After Effects project must be open.",
+            "propertyLocator must come from ae.layer.properties.list@1 in the current native session.",
+            "The property must be a keyframeable primitive scalar, vector, or color leaf stream."
+          ],
+          "compatibility": {
+            "status": "unverified",
+            "intendedPlatforms": [
+              "macos-arm64",
+              "windows-x64"
+            ]
+          },
+          "inputContractId": "aemcp.contract.ae.layer.property.keyframes.list.input.v1",
+          "resultContractId": "aemcp.contract.ae.layer.property.keyframes.list.result.v1",
+          "contractDigest": "f089d4cd1d35f492df660cbd83667968b2add70b5353172253691e33758e42bb",
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "propertyLocator",
+              "offset",
+              "limit"
+            ],
+            "properties": {
+              "propertyLocator": {
+                "$ref": "#/$defs/streamLocator"
+              },
+              "offset": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "default": 0,
+                "x-omissionBehavior": 0
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 25,
+                "default": 25,
+                "x-omissionBehavior": 25
+              }
+            },
+            "$defs": {
+              "uuid": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "streamLocator": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "hostInstanceId",
+                  "sessionId",
+                  "projectId",
+                  "generation",
+                  "objectId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "stream"
+                  },
+                  "hostInstanceId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "sessionId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "projectId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "objectId": {
+                    "$ref": "#/$defs/uuid"
+                  }
+                }
+              }
+            }
+          },
+          "resultSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "propertyLocator",
+              "valueType",
+              "total",
+              "offset",
+              "limit",
+              "returned",
+              "hasMore",
+              "nextOffset",
+              "keyframes"
+            ],
+            "properties": {
+              "propertyLocator": {
+                "$ref": "#/$defs/streamLocator"
+              },
+              "valueType": {
+                "enum": [
+                  "one-d",
+                  "two-d",
+                  "two-d-spatial",
+                  "three-d",
+                  "three-d-spatial",
+                  "color"
+                ]
+              },
+              "total": {
+                "$ref": "#/$defs/safeNonnegativeInteger"
+              },
+              "offset": {
+                "$ref": "#/$defs/safeNonnegativeInteger"
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 25
+              },
+              "returned": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 25
+              },
+              "hasMore": {
+                "type": "boolean"
+              },
+              "nextOffset": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/safeNonnegativeInteger"
+                  }
+                ]
+              },
+              "keyframes": {
+                "type": "array",
+                "maxItems": 25,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "keyframeIndex",
+                    "time",
+                    "value",
+                    "inInterpolation",
+                    "outInterpolation"
+                  ],
+                  "properties": {
+                    "keyframeIndex": {
+                      "$ref": "#/$defs/safePositiveInteger"
+                    },
+                    "time": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "value",
+                        "scale",
+                        "mode"
+                      ],
+                      "properties": {
+                        "value": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "scale": {
+                          "$ref": "#/$defs/safePositiveInteger"
+                        },
+                        "mode": {
+                          "const": "comp-time"
+                        }
+                      }
+                    },
+                    "value": {
+                      "$ref": "#/$defs/primitiveValue"
+                    },
+                    "inInterpolation": {
+                      "enum": [
+                        "none",
+                        "linear",
+                        "bezier",
+                        "hold"
+                      ]
+                    },
+                    "outInterpolation": {
+                      "enum": [
+                        "none",
+                        "linear",
+                        "bezier",
+                        "hold"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "$defs": {
+              "uuid": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "safeNonnegativeInteger": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "safePositiveInteger": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "decimalString": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32,
+                "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+              },
+              "streamLocator": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "hostInstanceId",
+                  "sessionId",
+                  "projectId",
+                  "generation",
+                  "objectId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "stream"
+                  },
+                  "hostInstanceId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "sessionId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "projectId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "generation": {
+                    "$ref": "#/$defs/safePositiveInteger"
+                  },
+                  "objectId": {
+                    "$ref": "#/$defs/uuid"
+                  }
+                }
+              },
+              "primitiveValue": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "value"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "scalar"
+                      },
+                      "value": {
+                        "$ref": "#/$defs/decimalString"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "components"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "vector"
+                      },
+                      "components": {
+                        "type": "array",
+                        "minItems": 2,
+                        "maxItems": 3,
+                        "items": {
+                          "$ref": "#/$defs/decimalString"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "alpha",
+                      "red",
+                      "green",
+                      "blue"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "color"
+                      },
+                      "alpha": {
+                        "$ref": "#/$defs/decimalString"
+                      },
+                      "red": {
+                        "$ref": "#/$defs/decimalString"
+                      },
+                      "green": {
+                        "$ref": "#/$defs/decimalString"
+                      },
+                      "blue": {
+                        "$ref": "#/$defs/decimalString"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "x-invariant": "returned-equals-keyframes-length-and-index-page-time-order-and-value-types-are-self-consistent"
+          },
+          "requirements": [
+            {
+              "id": "aemcp.requirement.native.layer-property-keyframes-list",
+              "contractVersion": 1
+            }
+          ],
+          "examples": [
+            {
+              "id": "aemcp-example-layer-property-keyframes-list-empty",
+              "kind": "positive",
+              "summary": "Read an empty first keyframe page from a keyframeable property.",
+              "arguments": {
+                "propertyLocator": {
+                  "kind": "stream",
+                  "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                  "sessionId": "11111111-1111-4111-8111-111111111111",
+                  "projectId": "44444444-4444-4444-8444-444444444444",
+                  "generation": 8,
+                  "objectId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+                },
+                "offset": 0,
+                "limit": 25
+              },
+              "expected": {
+                "outcome": "succeeded",
+                "value": {
+                  "propertyLocator": {
+                    "kind": "stream",
+                    "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                    "sessionId": "11111111-1111-4111-8111-111111111111",
+                    "projectId": "44444444-4444-4444-8444-444444444444",
+                    "generation": 8,
+                    "objectId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+                  },
+                  "valueType": "one-d",
+                  "total": 0,
+                  "offset": 0,
+                  "limit": 25,
+                  "returned": 0,
+                  "hasMore": false,
+                  "nextOffset": null,
+                  "keyframes": []
+                }
+              }
+            },
+            {
+              "id": "aemcp-example-layer-property-keyframes-list-unsupported",
+              "kind": "negative",
+              "summary": "Reject a property whose native value cannot be represented safely.",
+              "arguments": {
+                "propertyLocator": {
+                  "kind": "stream",
+                  "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                  "sessionId": "11111111-1111-4111-8111-111111111111",
+                  "projectId": "44444444-4444-4444-8444-444444444444",
+                  "generation": 8,
+                  "objectId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+                },
+                "offset": 0,
+                "limit": 25
+              },
+              "expected": {
+                "errorCode": "PRECONDITION_FAILED",
+                "recoveryAction": "change-arguments"
+              }
+            }
+          ]
+        },
+        {
+          "detail": "full",
           "id": "ae.layer.property.set",
           "version": 1,
           "schemaVersion": 1,
@@ -4164,7 +4571,7 @@
       ],
       "nextCursor": null,
       "queryDigest": "1c9d06b8b5f876c7b41fb00204efe2f5c5e62502bb188fa8a1e5eae5e59d0c3b",
-      "capabilitiesDigest": "b54fa28c9d04b248db56b27d652ab3fd37016bb3c44904f4949258f72e25d65b"
+      "capabilitiesDigest": "f2dfe6b726efb02a371ee45cfa814050e87122e81dd282a6b7797862c2a4638a"
     }
   }
 }

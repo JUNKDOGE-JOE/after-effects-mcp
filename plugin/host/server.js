@@ -39,6 +39,7 @@ const COMPOSITION_CREATE_CAPABILITY = 'ae.composition.create';
 const COMPOSITION_LAYER_CREATE_CAPABILITY = 'ae.composition.layer.create';
 const LAYER_EFFECT_APPLY_CAPABILITY = 'ae.layer.effect.apply';
 const LAYER_PROPERTIES_LIST_CAPABILITY = 'ae.layer.properties.list';
+const LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY = 'ae.layer.property.keyframes.list';
 const LAYER_PROPERTY_SET_CAPABILITY = 'ae.layer.property.set';
 const NATIVE_LOCATOR_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -411,6 +412,13 @@ function validLayerPropertiesListArguments(value) {
             || validNativeLocator(value.parentPropertyLocator, 'stream'));
 }
 
+function validLayerPropertyKeyframesListArguments(value) {
+    return exactBody(value, ['propertyLocator', 'offset', 'limit'])
+        && validNativeLocator(value.propertyLocator, 'stream')
+        && Number.isSafeInteger(value.offset) && value.offset >= 0
+        && Number.isSafeInteger(value.limit) && value.limit >= 1 && value.limit <= 25;
+}
+
 function validNativeDecimal(value) {
     return typeof value === 'string' && value.length >= 1 && value.length <= 32
         && /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$/.test(value)
@@ -496,6 +504,10 @@ function validNativeInvokeBody(body) {
     if (body.capabilityId === LAYER_PROPERTIES_LIST_CAPABILITY
         && body.capabilityVersion === 1) {
         return validLayerPropertiesListArguments(body.arguments);
+    }
+    if (body.capabilityId === LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY
+        && body.capabilityVersion === 1) {
+        return validLayerPropertyKeyframesListArguments(body.arguments);
     }
     if (body.capabilityId === LAYER_PROPERTY_SET_CAPABILITY
         && body.capabilityVersion === 1) {

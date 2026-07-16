@@ -744,6 +744,11 @@ std::string canonical_request(const ParsedRequest& request) {
               + locator_json(*value.parent_property_locator);
         }
         arguments.push_back('}');
+      } else if (value.capability_id == "ae.layer.property.keyframes.list") {
+        arguments = "{\"limit\":" + std::to_string(value.limit)
+            + ",\"offset\":" + std::to_string(value.offset)
+            + ",\"propertyLocator\":" + locator_json(*value.property_locator)
+            + "}";
       } else if (value.capability_id == "ae.layer.property.set") {
         arguments = "{\"idempotencyKey\":" + json_string(value.idempotency_key)
             + ",\"layerLocator\":" + locator_json(*value.layer_locator)
@@ -1288,6 +1293,19 @@ ParsedRequest classify_request(const JsonValue& root) {
             result.parent_property_locator = parse_locator(*locator, "stream");
           }
         }
+        result.offset = required_uint(
+            *arguments, "offset", CodecErrorKind::kInvalidArgument, 0, kMaxSafeInteger);
+        result.limit = static_cast<std::uint16_t>(required_uint(
+            *arguments, "limit", CodecErrorKind::kInvalidArgument, 1, 25));
+      } else if (capability == "ae.layer.property.keyframes.list") {
+        if (!exact_keys(
+                *arguments,
+                {"propertyLocator", "offset", "limit"},
+                {"propertyLocator", "offset", "limit"})) {
+          invalid_argument("layer property keyframes list arguments are not closed");
+        }
+        result.property_locator = parse_locator(
+            *member(*arguments, "propertyLocator"), "stream");
         result.offset = required_uint(
             *arguments, "offset", CodecErrorKind::kInvalidArgument, 0, kMaxSafeInteger);
         result.limit = static_cast<std::uint16_t>(required_uint(
@@ -2105,6 +2123,87 @@ std::string canonical_layer_properties_value(const LayerPropertiesPage& page) {
       + std::to_string(page.total) + "}";
 }
 
+std::string canonical_layer_property_keyframes_value(
+    const LayerPropertyKeyframesPage& page) {
+  if (!valid_output_locator(page.property_locator)
+      || page.property_locator.kind != "stream"
+      || page.total > kMaxSafeInteger || page.offset > kMaxSafeInteger
+      || page.limit < 1 || page.limit > 25
+      || page.keyframes.size() > page.limit) {
+    invalid_argument("invalid layer property keyframe page");
+  }
+  constexpr std::array<std::string_view, 6> primitive_types = {
+      "one-d", "two-d", "two-d-spatial", "three-d", "three-d-spatial", "color"};
+  if (std::find(primitive_types.begin(), primitive_types.end(), page.value_type)
+      == primitive_types.end()) {
+    invalid_argument("invalid keyframe value type");
+  }
+  const std::uint64_t returned = page.keyframes.size();
+  if (page.offset > page.total || returned > page.total - page.offset) {
+    invalid_argument("layer property keyframe page exceeds the reported total");
+  }
+  const bool expected_more = page.offset + returned < page.total;
+  if ((expected_more && returned == 0) || page.has_more != expected_more
+      || (expected_more
+          ? (!page.next_offset.has_value()
+              || *page.next_offset != page.offset + returned)
+          : page.next_offset.has_value())) {
+    invalid_argument("layer property keyframe pagination invariant failed");
+  }
+  const auto known_interpolation = [](std::string_view value) {
+    return value == "none" || value == "linear"
+        || value == "bezier" || value == "hold";
+  };
+  const auto type_matches = [&](const LayerPropertyValue& candidate) {
+    if (page.value_type == "one-d") {
+      return std::holds_alternative<LayerPropertyScalarValue>(candidate);
+    }
+    if (page.value_type == "color") {
+      return std::holds_alternative<LayerPropertyColorValue>(candidate);
+    }
+    const auto* vector = std::get_if<LayerPropertyVectorValue>(&candidate);
+    if (vector == nullptr) return false;
+    if (page.value_type == "two-d" || page.value_type == "two-d-spatial") {
+      return vector->components.size() == 2;
+    }
+    return vector->components.size() == 3;
+  };
+  std::string keyframes = "[";
+  for (std::size_t index = 0; index < page.keyframes.size(); ++index) {
+    const LayerPropertyKeyframeEntry& keyframe = page.keyframes[index];
+    if (index != 0) keyframes.push_back(',');
+    if (keyframe.keyframe_index != page.offset + index + 1
+        || keyframe.keyframe_index > kMaxSafeInteger
+        || keyframe.time.value < -static_cast<std::int64_t>(kMaxSafeInteger)
+        || keyframe.time.value > static_cast<std::int64_t>(kMaxSafeInteger)
+        || keyframe.time.scale < 1 || keyframe.time.scale > kMaxSafeInteger
+        || !type_matches(keyframe.value)
+        || !known_interpolation(keyframe.in_interpolation)
+        || !known_interpolation(keyframe.out_interpolation)) {
+      invalid_argument("invalid layer property keyframe entry");
+    }
+    keyframes += "{\"inInterpolation\":"
+        + json_string(keyframe.in_interpolation)
+        + ",\"keyframeIndex\":" + std::to_string(keyframe.keyframe_index)
+        + ",\"outInterpolation\":" + json_string(keyframe.out_interpolation)
+        + ",\"time\":{\"mode\":\"comp-time\",\"scale\":"
+        + std::to_string(keyframe.time.scale)
+        + ",\"value\":" + std::to_string(keyframe.time.value)
+        + "},\"value\":" + canonical_layer_property_value(keyframe.value) + "}";
+  }
+  keyframes.push_back(']');
+  return "{\"hasMore\":" + std::string(page.has_more ? "true" : "false")
+      + ",\"keyframes\":" + keyframes
+      + ",\"limit\":" + std::to_string(page.limit)
+      + ",\"nextOffset\":"
+      + (page.next_offset.has_value() ? std::to_string(*page.next_offset) : "null")
+      + ",\"offset\":" + std::to_string(page.offset)
+      + ",\"propertyLocator\":" + locator_json(page.property_locator)
+      + ",\"returned\":" + std::to_string(returned)
+      + ",\"total\":" + std::to_string(page.total)
+      + ",\"valueType\":" + json_string(page.value_type) + "}";
+}
+
 std::uint32_t read_be32(Bytes bytes) {
   return (static_cast<std::uint32_t>(bytes[0]) << 24U)
       | (static_cast<std::uint32_t>(bytes[1]) << 16U)
@@ -2336,6 +2435,14 @@ std::string digest_layer_properties_postcondition(
   return sha256_hex(
       "{\"capabilityId\":\"ae.layer.properties.list\",\"capabilityVersion\":1,\"value\":"
       + canonical_layer_properties_value(page) + "}");
+}
+
+std::string digest_layer_property_keyframes_postcondition(
+    const LayerPropertyKeyframesPage& page) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.property.keyframes.list\","
+      "\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_property_keyframes_value(page) + "}");
 }
 
 std::string digest_layer_property_set_arguments(
@@ -2987,6 +3094,18 @@ std::string layer_properties_list_descriptor(const CapabilitiesSuccess& response
   return R"aemcp({"detail":"full","id":"ae.layer.properties.list","version":1,"schemaVersion":1,"summary":"List a bounded page of direct properties on an After Effects layer or property group.","risk":"read","mutability":"read-only","idempotency":"idempotent","cancellation":"before-dispatch","undo":"not-applicable","sideEffectSummary":"Reads layer properties and safe primitive values without changing After Effects state.","preconditions":["An After Effects project must be open.","layerLocator must come from ae.composition.layers.list@1.","parentPropertyLocator must come from ae.layer.properties.list@1 for the same layer."],"compatibility":{"status":"unverified","intendedPlatforms":["macos-arm64","windows-x64"]},"inputContractId":"aemcp.contract.ae.layer.properties.list.input.v1","resultContractId":"aemcp.contract.ae.layer.properties.list.result.v1","contractDigest":"a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba","inputSchema":{"type":"object","additionalProperties":false,"required":["layerLocator","offset","limit"],"properties":{"layerLocator":{"$ref":"#/$defs/layerLocator"},"parentPropertyLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/streamLocator"}]},"offset":{"type":"integer","minimum":0,"maximum":9007199254740991,"default":0,"x-omissionBehavior":0},"limit":{"type":"integer","minimum":1,"maximum":25,"default":25,"x-omissionBehavior":25}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}},"streamLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"stream"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}}}},"resultSchema":{"type":"object","additionalProperties":false,"required":["layerLocator","parentPropertyLocator","layerName","sampleTime","total","offset","limit","returned","hasMore","nextOffset","properties"],"properties":{"layerLocator":{"$ref":"#/$defs/layerLocator"},"parentPropertyLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/streamLocator"}]},"layerName":{"type":"string","maxLength":1024},"sampleTime":{"type":"object","additionalProperties":false,"required":["value","scale","mode"],"properties":{"value":{"type":"integer","minimum":-9007199254740991,"maximum":9007199254740991},"scale":{"type":"integer","minimum":1,"maximum":9007199254740991},"mode":{"const":"comp-time"}}},"total":{"type":"integer","minimum":0,"maximum":9007199254740991},"offset":{"type":"integer","minimum":0,"maximum":9007199254740991},"limit":{"type":"integer","minimum":1,"maximum":25},"returned":{"type":"integer","minimum":0,"maximum":25},"hasMore":{"type":"boolean"},"nextOffset":{"oneOf":[{"type":"null"},{"type":"integer","minimum":0,"maximum":9007199254740991}]},"properties":{"type":"array","maxItems":25,"items":{"type":"object","additionalProperties":false,"required":["propertyLocator","propertyIndex","name","matchName","groupingType","childCount","hidden","disabled","modified","canVaryOverTime","timeVarying","valueType","valueStatus","value"],"properties":{"propertyLocator":{"$ref":"#/$defs/streamLocator"},"propertyIndex":{"type":"integer","minimum":1,"maximum":9007199254740991},"name":{"type":"string","maxLength":1024},"matchName":{"type":"string","maxLength":40},"groupingType":{"enum":["leaf","named-group","indexed-group"]},"childCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"hidden":{"type":"boolean"},"disabled":{"type":"boolean"},"modified":{"type":"boolean"},"canVaryOverTime":{"oneOf":[{"type":"null"},{"type":"boolean"}]},"timeVarying":{"oneOf":[{"type":"null"},{"type":"boolean"}]},"valueType":{"enum":["none","one-d","two-d","two-d-spatial","three-d","three-d-spatial","color","arb","marker","layer-id","mask-id","mask","text-document","unknown"]},"valueStatus":{"enum":["group","sampled","no-data","unsupported"]},"value":{"oneOf":[{"type":"null"},{"type":"object","additionalProperties":false,"required":["kind","value"],"properties":{"kind":{"const":"scalar"},"value":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}},{"type":"object","additionalProperties":false,"required":["kind","components"],"properties":{"kind":{"const":"vector"},"components":{"type":"array","minItems":2,"maxItems":3,"items":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}}},{"type":"object","additionalProperties":false,"required":["kind","alpha","red","green","blue"],"properties":{"kind":{"const":"color"},"alpha":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"red":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"green":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"blue":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}}]}}}}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"locatorBase":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"enum":["project","item","composition","layer","stream"]},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}},"layerLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"layer"}}}]},"streamLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"stream"}}}]}},"x-invariant":"returned-equals-properties-length-and-page-metadata-and-value-types-are-self-consistent"},"requirements":[{"id":"aemcp.requirement.native.layer-properties-list","contractVersion":1}],"examples":[{"id":"aemcp-example-layer-properties-list-empty","kind":"positive","summary":"List the first bounded page of direct properties on a layer.","arguments":{"layerLocator":{"kind":"layer","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"88888888-8888-4888-8888-888888888888"},"offset":0,"limit":25},"expected":{"outcome":"succeeded","value":{"layerLocator":{"kind":"layer","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"88888888-8888-4888-8888-888888888888"},"parentPropertyLocator":null,"layerName":"SYNTHETIC_LAYER","sampleTime":{"value":0,"scale":1,"mode":"comp-time"},"total":0,"offset":0,"limit":25,"returned":0,"hasMore":false,"nextOffset":null,"properties":[]}}},{"id":"aemcp-example-layer-properties-list-stale","kind":"negative","summary":"Refresh stale layer and property locators before listing properties.","arguments":{"layerLocator":{"kind":"layer","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"88888888-8888-4888-8888-888888888888"},"offset":0,"limit":25},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"}}]})aemcp";
 }
 
+std::string layer_property_keyframes_list_descriptor(const CapabilitiesSuccess& response) {
+  if (response.detail == CapabilityDetail::kSummary) {
+    return R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"detail":"summary","id":"ae.layer.property.keyframes.list","idempotency":"idempotent","mutability":"read-only","preconditions":["An After Effects project must be open.","propertyLocator must come from ae.layer.properties.list@1 in the current native session.","The property must be a keyframeable primitive scalar, vector, or color leaf stream."],"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads native keyframe times, primitive values, and interpolation without changing After Effects state.","summary":"List a bounded page of exact keyframes on one After Effects layer property.","undo":"not-applicable","version":1})aemcp";
+  }
+  require_digest(response.layer_property_keyframes_list_contract_digest, "contract digest");
+  if (response.layer_property_keyframes_list_contract_digest
+      != "f089d4cd1d35f492df660cbd83667968b2add70b5353172253691e33758e42bb") {
+    invalid_argument("layer property keyframes contract digest does not match the compiled descriptor");
+  }
+  return R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"f089d4cd1d35f492df660cbd83667968b2add70b5353172253691e33758e42bb","detail":"full","examples":[{"arguments":{"limit":25,"offset":0,"propertyLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"stream","objectId":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}},"expected":{"outcome":"succeeded","value":{"hasMore":false,"keyframes":[],"limit":25,"nextOffset":null,"offset":0,"propertyLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"stream","objectId":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"returned":0,"total":0,"valueType":"one-d"}},"id":"aemcp-example-layer-property-keyframes-list-empty","kind":"positive","summary":"Read an empty first keyframe page from a keyframeable property."},{"arguments":{"limit":25,"offset":0,"propertyLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"stream","objectId":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}},"expected":{"errorCode":"PRECONDITION_FAILED","recoveryAction":"change-arguments"},"id":"aemcp-example-layer-property-keyframes-list-unsupported","kind":"negative","summary":"Reject a property whose native value cannot be represented safely."}],"id":"ae.layer.property.keyframes.list","idempotency":"idempotent","inputContractId":"aemcp.contract.ae.layer.property.keyframes.list.input.v1","inputSchema":{"$defs":{"streamLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"stream"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"limit":{"default":25,"maximum":25,"minimum":1,"type":"integer","x-omissionBehavior":25},"offset":{"default":0,"maximum":9007199254740991,"minimum":0,"type":"integer","x-omissionBehavior":0},"propertyLocator":{"$ref":"#/$defs/streamLocator"}},"required":["propertyLocator","offset","limit"],"type":"object"},"mutability":"read-only","preconditions":["An After Effects project must be open.","propertyLocator must come from ae.layer.properties.list@1 in the current native session.","The property must be a keyframeable primitive scalar, vector, or color leaf stream."],"requirements":[{"contractVersion":1,"id":"aemcp.requirement.native.layer-property-keyframes-list"}],"resultContractId":"aemcp.contract.ae.layer.property.keyframes.list.result.v1","resultSchema":{"$defs":{"decimalString":{"maxLength":32,"minLength":1,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$","type":"string"},"primitiveValue":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"scalar"},"value":{"$ref":"#/$defs/decimalString"}},"required":["kind","value"],"type":"object"},{"additionalProperties":false,"properties":{"components":{"items":{"$ref":"#/$defs/decimalString"},"maxItems":3,"minItems":2,"type":"array"},"kind":{"const":"vector"}},"required":["kind","components"],"type":"object"},{"additionalProperties":false,"properties":{"alpha":{"$ref":"#/$defs/decimalString"},"blue":{"$ref":"#/$defs/decimalString"},"green":{"$ref":"#/$defs/decimalString"},"kind":{"const":"color"},"red":{"$ref":"#/$defs/decimalString"}},"required":["kind","alpha","red","green","blue"],"type":"object"}]},"safeNonnegativeInteger":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"safePositiveInteger":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"streamLocator":{"additionalProperties":false,"properties":{"generation":{"$ref":"#/$defs/safePositiveInteger"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"stream"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"hasMore":{"type":"boolean"},"keyframes":{"items":{"additionalProperties":false,"properties":{"inInterpolation":{"enum":["none","linear","bezier","hold"]},"keyframeIndex":{"$ref":"#/$defs/safePositiveInteger"},"outInterpolation":{"enum":["none","linear","bezier","hold"]},"time":{"additionalProperties":false,"properties":{"mode":{"const":"comp-time"},"scale":{"$ref":"#/$defs/safePositiveInteger"},"value":{"maximum":9007199254740991,"minimum":-9007199254740991,"type":"integer"}},"required":["value","scale","mode"],"type":"object"},"value":{"$ref":"#/$defs/primitiveValue"}},"required":["keyframeIndex","time","value","inInterpolation","outInterpolation"],"type":"object"},"maxItems":25,"type":"array"},"limit":{"maximum":25,"minimum":1,"type":"integer"},"nextOffset":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/safeNonnegativeInteger"}]},"offset":{"$ref":"#/$defs/safeNonnegativeInteger"},"propertyLocator":{"$ref":"#/$defs/streamLocator"},"returned":{"maximum":25,"minimum":0,"type":"integer"},"total":{"$ref":"#/$defs/safeNonnegativeInteger"},"valueType":{"enum":["one-d","two-d","two-d-spatial","three-d","three-d-spatial","color"]}},"required":["propertyLocator","valueType","total","offset","limit","returned","hasMore","nextOffset","keyframes"],"type":"object","x-invariant":"returned-equals-keyframes-length-and-index-page-time-order-and-value-types-are-self-consistent"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads native keyframe times, primitive values, and interpolation without changing After Effects state.","summary":"List a bounded page of exact keyframes on one After Effects layer property.","undo":"not-applicable","version":1})aemcp";
+}
+
 std::string layer_property_set_descriptor(const CapabilitiesSuccess& response) {
   if (response.detail == CapabilityDetail::kSummary) {
     return R"aemcp({"detail":"summary","id":"ae.layer.property.set","version":1,"schemaVersion":1,"summary":"Set one non-keyframed primitive After Effects layer property value.","risk":"write","mutability":"mutating","idempotency":"idempotency-key","cancellation":"before-dispatch","undo":"ae-undo-group","sideEffectSummary":"Changes one primitive layer property and creates one After Effects Undo step.","preconditions":["An After Effects project must be open.","Both locators must come from ae.layer.properties.list@1 for the same layer.","The property must be a non-keyframed scalar, vector, or color leaf stream.","value must differ from the property's current sampled value."],"compatibility":{"status":"unverified","intendedPlatforms":["macos-arm64","windows-x64"]}})aemcp";
@@ -3167,6 +3286,11 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
   if (response.include_layer_properties_list) {
     if (needs_comma) items.push_back(',');
     items += layer_properties_list_descriptor(response);
+    needs_comma = true;
+  }
+  if (response.include_layer_property_keyframes_list) {
+    if (needs_comma) items.push_back(',');
+    items += layer_property_keyframes_list_descriptor(response);
     needs_comma = true;
   }
   if (response.include_layer_property_set) {
@@ -3668,6 +3792,44 @@ std::vector<std::uint8_t> encode_layer_properties_success(
       + json_string(response.request_id) + ",\"sessionId\":"
       + json_string(response.session_id) + ",\"startedAtUnixMs\":"
       + std::to_string(response.started_at_unix_ms)
+      + "},\"outcome\":\"succeeded\",\"value\":" + value + "},\"sessionId\":"
+      + json_string(response.session_id) + ",\"wireVersion\":1}";
+  return frame_output(std::move(json));
+}
+
+std::vector<std::uint8_t> encode_layer_property_keyframes_success(
+    const LayerPropertyKeyframesSuccess& response) {
+  require_request_id(response.request_id);
+  require_uuid(response.session_id, "session ID");
+  require_uuid(response.host_instance_id, "host instance ID");
+  require_digest(response.request_digest, "request digest");
+  require_digest(response.postcondition_digest, "postcondition digest");
+  const std::string value = canonical_layer_property_keyframes_value(response.value);
+  if (response.replayed || response.started_at_unix_ms < 1
+      || response.started_at_unix_ms > kMaxSafeInteger
+      || response.completed_at_unix_ms < response.started_at_unix_ms
+      || response.completed_at_unix_ms > kMaxSafeInteger
+      || response.value.property_locator.host_instance_id != response.host_instance_id
+      || response.value.property_locator.session_id != response.session_id
+      || response.postcondition_digest
+          != digest_layer_property_keyframes_postcondition(response.value)) {
+    invalid_argument("invalid or unvalidated layer property keyframe evidence");
+  }
+  std::string json = "{\"kind\":\"response\",\"method\":\"invoke\",\"ok\":true,"
+      "\"replayed\":false,\"requestId\":" + json_string(response.request_id)
+      + ",\"result\":{\"capabilityId\":\"ae.layer.property.keyframes.list\","
+        "\"capabilityVersion\":1,\"engine\":\"native-aegp\",\"evidence\":{"
+        "\"capabilityId\":\"ae.layer.property.keyframes.list\",\"capabilityVersion\":1,"
+        "\"completedAtUnixMs\":" + std::to_string(response.completed_at_unix_ms)
+      + ",\"effect\":\"none\",\"engine\":\"native-aegp\",\"hostInstanceId\":"
+      + json_string(response.host_instance_id)
+      + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\",\"digest\":"
+      + json_string(response.postcondition_digest)
+      + ",\"kind\":\"layer-property-keyframes-list\",\"verified\":true},"
+        "\"requestDigest\":" + json_string(response.request_digest)
+      + ",\"requestId\":" + json_string(response.request_id)
+      + ",\"sessionId\":" + json_string(response.session_id)
+      + ",\"startedAtUnixMs\":" + std::to_string(response.started_at_unix_ms)
       + "},\"outcome\":\"succeeded\",\"value\":" + value + "},\"sessionId\":"
       + json_string(response.session_id) + ",\"wireVersion\":1}";
   return frame_output(std::move(json));

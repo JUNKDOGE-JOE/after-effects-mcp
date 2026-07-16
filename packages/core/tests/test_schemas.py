@@ -9,7 +9,7 @@ from ae_mcp import schemas as S
 
 
 def test_registry_has_all_verbs():
-    assert len(S.SCHEMAS) == 57, f"expected 57 verbs, got {len(S.SCHEMAS)}"
+    assert len(S.SCHEMAS) == 58, f"expected 58 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.projectSummary",
         "ae.getProjectBitDepth", "ae.setProjectBitDepth",
@@ -17,6 +17,7 @@ def test_registry_has_all_verbs():
         "ae.getCompositionTime", "ae.setCompositionTime",
         "ae.createComposition",
         "ae.listLayerProperties",
+        "ae.listLayerPropertyKeyframes",
         "ae.setLayerPropertyValue",
         "ae.createCompositionLayer",
         "ae.applyLayerEffect",
@@ -210,6 +211,28 @@ def test_native_layer_property_listing_is_bounded_and_locator_only():
         S.AeListLayerPropertiesArgs(layer_locator=_locator("layer"), limit=26)
     with pytest.raises(ValidationError):
         S.AeListLayerPropertiesArgs(layer_locator=_locator("layer"), offset=True)
+
+
+def test_native_layer_property_keyframes_require_only_a_bounded_stream_locator():
+    args = S.AeListLayerPropertyKeyframesArgs(
+        property_locator=_locator("stream")
+    )
+    assert args.offset == 0
+    assert args.limit == 25
+    assert args.property_locator.kind == "stream"
+
+    with pytest.raises(ValidationError):
+        S.AeListLayerPropertyKeyframesArgs()
+    with pytest.raises(ValidationError):
+        S.AeListLayerPropertyKeyframesArgs(property_locator=_locator("layer"))
+    with pytest.raises(ValidationError):
+        S.AeListLayerPropertyKeyframesArgs(
+            property_locator=_locator("stream"), limit=26
+        )
+    with pytest.raises(ValidationError):
+        S.AeListLayerPropertyKeyframesArgs(
+            property_locator=_locator("stream"), offset=True
+        )
 
 
 def test_native_layer_property_set_is_typed_closed_and_requires_stable_intent():

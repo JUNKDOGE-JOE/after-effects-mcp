@@ -108,7 +108,7 @@ External clients must run on the same machine as After Effects, or otherwise be 
 
 | Category | Tools |
 |---|---|
-| Project | `ae_init`, `ae_overview`, `ae_layers`, `ae_listProjectItems`, `ae_listCompositionLayers`, `ae_listSelectedLayers`, `ae_getCompositionTime`, `ae_listLayerProperties`, `ae_setLayerPropertyValue`, `ae_readProps`, `ae_searchProject` |
+| Project | `ae_init`, `ae_overview`, `ae_layers`, `ae_listProjectItems`, `ae_listCompositionLayers`, `ae_listSelectedLayers`, `ae_getCompositionTime`, `ae_listLayerProperties`, `ae_listLayerPropertyKeyframes`, `ae_setLayerPropertyValue`, `ae_readProps`, `ae_searchProject` |
 | Mutation | `ae_exec`, `ae_applyEffect`, `ae_applyLayerEffect`, `ae_createLayer`, `ae_createComposition`, `ae_createCompositionLayer`, `ae_setProperty`, `ae_moveLayer`, `ae_selectLayers`, `ae_setTime` |
 | Read-typed | `ae_getTime`, `ae_getProperties`, `ae_scanPropertyTree`, `ae_inspectPropertyCapabilities`, `ae_getExpressions`, `ae_validateExpressions`, `ae_getKeyframes` |
 | Preview / capture | `ae_previewFrame`, `ae_snapshot` |
@@ -249,6 +249,10 @@ its direct properties (default and maximum 25); pass a returned property locator
 one group only when its `groupingType` is `named-group` or `indexed-group`. Primitive values are
 sampled at the current composition time and encoded as explicit decimal strings, while complex SDK
 values are marked unsupported rather than leaking native handles.
+Pass a returned primitive leaf locator to `ae_listLayerPropertyKeyframes` to read one bounded page
+of native keyframes (default and maximum 25). Each entry includes its one-based index, exact
+composition-time `value/scale`, typed primitive value, and native in/out interpolation; the tool
+never falls back to JSX.
 Pass a returned layer locator and primitive leaf locator to `ae_setLayerPropertyValue` with a stable
 idempotency key to perform a native `AEGP_SetStreamValue` write. The result includes verified
 before/after values, audit provenance, and AE Undo availability. If a post-dispatch response is

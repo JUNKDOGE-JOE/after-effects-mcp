@@ -6,7 +6,7 @@
     "lengthPrefixBytes": 4,
     "byteOrder": "big-endian",
     "encoding": "utf-8",
-    "maxFrameBytes": 65536,
+    "maxFrameBytes": 131072,
     "maxJsonDepth": 16,
     "maxJsonNodes": 4096,
     "maxStringLength": 8192,
@@ -468,6 +468,22 @@
             { "$ref": "#/$defs/streamLocator" }
           ]
         },
+        "offset": { "$ref": "#/$defs/pageOffset" },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 25,
+          "default": 25,
+          "x-omissionBehavior": 25
+        }
+      }
+    },
+    "layerPropertyKeyframesListArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["propertyLocator", "offset", "limit"],
+      "properties": {
+        "propertyLocator": { "$ref": "#/$defs/streamLocator" },
         "offset": { "$ref": "#/$defs/pageOffset" },
         "limit": {
           "type": "integer",
@@ -1143,6 +1159,103 @@
         "x-invariant": "returned-equals-properties-length-and-page-metadata-and-value-types-are-self-consistent"
       }
     },
+    "layerPropertyKeyframesListInputSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["propertyLocator", "offset", "limit"],
+        "properties": {
+          "propertyLocator": { "$ref": "#/$defs/streamLocator" },
+          "offset": { "type": "integer", "minimum": 0, "maximum": 9007199254740991, "default": 0, "x-omissionBehavior": 0 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 25, "default": 25, "x-omissionBehavior": 25 }
+        },
+        "$defs": {
+          "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+          "streamLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "hostInstanceId", "sessionId", "projectId", "generation", "objectId"],
+            "properties": {
+              "kind": { "const": "stream" },
+              "hostInstanceId": { "$ref": "#/$defs/uuid" },
+              "sessionId": { "$ref": "#/$defs/uuid" },
+              "projectId": { "$ref": "#/$defs/uuid" },
+              "generation": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              "objectId": { "$ref": "#/$defs/uuid" }
+            }
+          }
+        }
+      }
+    },
+    "layerPropertyKeyframesListResultSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["propertyLocator", "valueType", "total", "offset", "limit", "returned", "hasMore", "nextOffset", "keyframes"],
+        "properties": {
+          "propertyLocator": { "$ref": "#/$defs/streamLocator" },
+          "valueType": { "enum": ["one-d", "two-d", "two-d-spatial", "three-d", "three-d-spatial", "color"] },
+          "total": { "$ref": "#/$defs/safeNonnegativeInteger" },
+          "offset": { "$ref": "#/$defs/safeNonnegativeInteger" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 25 },
+          "returned": { "type": "integer", "minimum": 0, "maximum": 25 },
+          "hasMore": { "type": "boolean" },
+          "nextOffset": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/safeNonnegativeInteger" }] },
+          "keyframes": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["keyframeIndex", "time", "value", "inInterpolation", "outInterpolation"],
+              "properties": {
+                "keyframeIndex": { "$ref": "#/$defs/safePositiveInteger" },
+                "time": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["value", "scale", "mode"],
+                  "properties": {
+                    "value": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
+                    "scale": { "$ref": "#/$defs/safePositiveInteger" },
+                    "mode": { "const": "comp-time" }
+                  }
+                },
+                "value": { "$ref": "#/$defs/primitiveValue" },
+                "inInterpolation": { "enum": ["none", "linear", "bezier", "hold"] },
+                "outInterpolation": { "enum": ["none", "linear", "bezier", "hold"] }
+              }
+            }
+          }
+        },
+        "$defs": {
+          "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+          "safeNonnegativeInteger": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "safePositiveInteger": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+          "decimalString": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$" },
+          "streamLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "hostInstanceId", "sessionId", "projectId", "generation", "objectId"],
+            "properties": {
+              "kind": { "const": "stream" },
+              "hostInstanceId": { "$ref": "#/$defs/uuid" },
+              "sessionId": { "$ref": "#/$defs/uuid" },
+              "projectId": { "$ref": "#/$defs/uuid" },
+              "generation": { "$ref": "#/$defs/safePositiveInteger" },
+              "objectId": { "$ref": "#/$defs/uuid" }
+            }
+          },
+          "primitiveValue": {
+            "oneOf": [
+              { "type": "object", "additionalProperties": false, "required": ["kind", "value"], "properties": { "kind": { "const": "scalar" }, "value": { "$ref": "#/$defs/decimalString" } } },
+              { "type": "object", "additionalProperties": false, "required": ["kind", "components"], "properties": { "kind": { "const": "vector" }, "components": { "type": "array", "minItems": 2, "maxItems": 3, "items": { "$ref": "#/$defs/decimalString" } } } },
+              { "type": "object", "additionalProperties": false, "required": ["kind", "alpha", "red", "green", "blue"], "properties": { "kind": { "const": "color" }, "alpha": { "$ref": "#/$defs/decimalString" }, "red": { "$ref": "#/$defs/decimalString" }, "green": { "$ref": "#/$defs/decimalString" }, "blue": { "$ref": "#/$defs/decimalString" } } }
+            ]
+          }
+        },
+        "x-invariant": "returned-equals-keyframes-length-and-index-page-time-order-and-value-types-are-self-consistent"
+      }
+    },
     "layerPropertySetInputSchemaContract": {
       "const": {
         "type": "object",
@@ -1353,6 +1466,16 @@
         "arguments": { "$ref": "#/$defs/layerPropertiesListArguments" }
       }
     },
+    "layerPropertyKeyframesListInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.property.keyframes.list" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/layerPropertyKeyframesListArguments" }
+      }
+    },
     "layerPropertySetInvokeParams": {
       "type": "object",
       "additionalProperties": false,
@@ -1377,6 +1500,7 @@
         { "$ref": "#/$defs/compositionLayerCreateInvokeParams" },
         { "$ref": "#/$defs/layerEffectApplyInvokeParams" },
         { "$ref": "#/$defs/layerPropertiesListInvokeParams" },
+        { "$ref": "#/$defs/layerPropertyKeyframesListInvokeParams" },
         { "$ref": "#/$defs/layerPropertySetInvokeParams" }
       ],
       "x-invariant": "every-invoke-variant-is-compile-time-allowlisted-and-closed"
@@ -1527,7 +1651,7 @@
         "terminalCacheTtlMs"
       ],
       "properties": {
-        "maxFrameBytes": { "type": "integer", "minimum": 4096, "maximum": 65536 },
+        "maxFrameBytes": { "type": "integer", "minimum": 4096, "maximum": 131072 },
         "maxInFlight": { "type": "integer", "minimum": 1, "maximum": 64 },
         "maxQueueDepth": { "type": "integer", "minimum": 1, "maximum": 256 },
         "maxDeadlineMs": { "type": "integer", "minimum": 100, "maximum": 30000 },
@@ -1639,6 +1763,7 @@
         { "$ref": "#/$defs/compositionLayerCreateArguments" },
         { "$ref": "#/$defs/layerEffectApplyArguments" },
         { "$ref": "#/$defs/layerPropertiesListArguments" },
+        { "$ref": "#/$defs/layerPropertyKeyframesListArguments" },
         { "$ref": "#/$defs/layerPropertySetArguments" }
       ]
     },
@@ -1655,6 +1780,7 @@
         { "$ref": "#/$defs/compositionLayerCreateValue" },
         { "$ref": "#/$defs/layerEffectApplyValue" },
         { "$ref": "#/$defs/layerPropertiesListValue" },
+        { "$ref": "#/$defs/layerPropertyKeyframesListValue" },
         { "$ref": "#/$defs/layerPropertySetValue" }
       ]
     },
@@ -1670,6 +1796,7 @@
         { "$ref": "#/$defs/compositionLayerCreateInputSchemaContract" },
         { "$ref": "#/$defs/layerEffectApplyInputSchemaContract" },
         { "$ref": "#/$defs/layerPropertiesListInputSchemaContract" },
+        { "$ref": "#/$defs/layerPropertyKeyframesListInputSchemaContract" },
         { "$ref": "#/$defs/layerPropertySetInputSchemaContract" }
       ]
     },
@@ -1686,6 +1813,7 @@
         { "$ref": "#/$defs/compositionLayerCreateResultSchemaContract" },
         { "$ref": "#/$defs/layerEffectApplyResultSchemaContract" },
         { "$ref": "#/$defs/layerPropertiesListResultSchemaContract" },
+        { "$ref": "#/$defs/layerPropertyKeyframesListResultSchemaContract" },
         { "$ref": "#/$defs/layerPropertySetResultSchemaContract" }
       ]
     },
@@ -2366,6 +2494,48 @@
       },
       "x-invariant": "returned-equals-properties-length-and-page-metadata-and-value-types-are-self-consistent"
     },
+    "layerPropertyKeyframeValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["keyframeIndex", "time", "value", "inInterpolation", "outInterpolation"],
+      "properties": {
+        "keyframeIndex": { "$ref": "#/$defs/safePositiveInteger" },
+        "time": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "scale", "mode"],
+          "properties": {
+            "value": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
+            "scale": { "$ref": "#/$defs/safePositiveInteger" },
+            "mode": { "const": "comp-time" }
+          }
+        },
+        "value": { "$ref": "#/$defs/layerPropertyPrimitiveValue" },
+        "inInterpolation": { "enum": ["none", "linear", "bezier", "hold"] },
+        "outInterpolation": { "enum": ["none", "linear", "bezier", "hold"] }
+      }
+    },
+    "layerPropertyKeyframesListValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["propertyLocator", "valueType", "total", "offset", "limit", "returned", "hasMore", "nextOffset", "keyframes"],
+      "properties": {
+        "propertyLocator": { "$ref": "#/$defs/streamLocator" },
+        "valueType": { "enum": ["one-d", "two-d", "two-d-spatial", "three-d", "three-d-spatial", "color"] },
+        "total": { "$ref": "#/$defs/safeNonnegativeInteger" },
+        "offset": { "$ref": "#/$defs/safeNonnegativeInteger" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 25 },
+        "returned": { "type": "integer", "minimum": 0, "maximum": 25 },
+        "hasMore": { "type": "boolean" },
+        "nextOffset": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/safeNonnegativeInteger" }] },
+        "keyframes": {
+          "type": "array",
+          "maxItems": 25,
+          "items": { "$ref": "#/$defs/layerPropertyKeyframeValue" }
+        }
+      },
+      "x-invariant": "returned-equals-keyframes-length-and-index-page-time-order-and-value-types-are-self-consistent"
+    },
     "projectSummaryInvokeResult": {
       "type": "object",
       "additionalProperties": false,
@@ -2522,6 +2692,19 @@
         "evidence": { "$ref": "#/$defs/executionEvidence" }
       }
     },
+    "layerPropertyKeyframesListInvokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.property.keyframes.list" },
+        "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" },
+        "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/layerPropertyKeyframesListValue" },
+        "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
     "layerPropertySetInvokeResult": {
       "type": "object",
       "additionalProperties": false,
@@ -2549,6 +2732,7 @@
         { "$ref": "#/$defs/compositionLayerCreateInvokeResult" },
         { "$ref": "#/$defs/layerEffectApplyInvokeResult" },
         { "$ref": "#/$defs/layerPropertiesListInvokeResult" },
+        { "$ref": "#/$defs/layerPropertyKeyframesListInvokeResult" },
         { "$ref": "#/$defs/layerPropertySetInvokeResult" }
       ]
     },

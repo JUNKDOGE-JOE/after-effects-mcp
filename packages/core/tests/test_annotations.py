@@ -45,6 +45,7 @@ def test_exec_is_destructive_and_reads_are_readonly():
         "ae.listSelectedLayers",
         "ae.getCompositionTime",
         "ae.listLayerProperties",
+        "ae.listLayerPropertyKeyframes",
     ):
         assert VERB_ANNOTATIONS[verb].readOnlyHint is True
         assert VERB_ANNOTATIONS[verb].destructiveHint is False

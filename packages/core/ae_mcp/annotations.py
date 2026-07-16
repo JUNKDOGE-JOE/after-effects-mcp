@@ -37,6 +37,7 @@ VERB_ANNOTATIONS: dict[str, ToolAnnotations] = {
     "ae.createCompositionLayer": _ann(False, False, True),
     "ae.applyLayerEffect": _ann(False, False, True),
     "ae.listLayerProperties": _ann(True, False, True),
+    "ae.listLayerPropertyKeyframes": _ann(True, False, True),
     "ae.setLayerPropertyValue": _ann(False, False, True),
     "ae.layers": _ann(True, False, True),
     "ae.readProps": _ann(True, False, True),

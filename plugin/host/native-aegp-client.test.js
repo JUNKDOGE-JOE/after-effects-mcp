@@ -57,6 +57,10 @@ const LAYER_PROPERTIES_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
     '../../native/ae-plugin/protocol/fixtures/invoke-layer-properties-list.json',
 ), 'utf8'));
+const LAYER_PROPERTY_KEYFRAMES_VECTOR = JSON.parse(fs.readFileSync(path.join(
+    __dirname,
+    '../../native/ae-plugin/protocol/fixtures/invoke-layer-property-keyframes-list.json',
+), 'utf8'));
 const LAYER_PROPERTY_SET_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
     '../../native/ae-plugin/protocol/fixtures/invoke-layer-property-set.json',
@@ -250,7 +254,7 @@ function installProtocol(server, options) {
                         },
                         sessionId: SESSION,
                         sessionGeneration: 7,
-                        limits: { maxFrameBytes: 65536 },
+                        limits: { maxFrameBytes: 131072 },
                         capabilitiesDigest: DIGEST,
                         clientNonce: request.params.nonce,
                     };
@@ -309,6 +313,19 @@ function installProtocol(server, options) {
                     if (input.mutateInvoke) input.mutateInvoke(result, request);
                 } else if (request.params.capabilityId === 'ae.layer.property.set') {
                     result = structuredClone(LAYER_PROPERTY_SET_VECTOR.response.result);
+                    result.evidence.requestId = request.requestId;
+                    result.evidence.requestDigest = invokeRequestDigest(request);
+                    result.evidence.postcondition.digest = jcsDigest({
+                        capabilityId: result.capabilityId,
+                        capabilityVersion: result.capabilityVersion,
+                        value: result.value,
+                    });
+                    if (input.mutateInvoke) input.mutateInvoke(result, request);
+                } else if (request.params.capabilityId
+                    === 'ae.layer.property.keyframes.list') {
+                    result = structuredClone(
+                        LAYER_PROPERTY_KEYFRAMES_VECTOR.response.result,
+                    );
                     result.evidence.requestId = request.requestId;
                     result.evidence.requestDigest = invokeRequestDigest(request);
                     result.evidence.postcondition.digest = jcsDigest({
@@ -672,6 +689,12 @@ test('CEP client verifies native project summary and bit-depth read/write capabi
             return item.id === 'ae.layer.properties.list';
         }).contractDigest,
     );
+    assert.equal(
+        client.status().layerPropertyKeyframesListContractDigest,
+        CAPABILITIES_VECTOR.items.find(function (item) {
+            return item.id === 'ae.layer.property.keyframes.list';
+        }).contractDigest,
+    );
     assert.deepEqual(protocol.requests.map(function (request) { return request.method; }), [
         'hello', 'capabilities', 'invoke',
     ]);
@@ -801,9 +824,29 @@ test('CEP client verifies native project summary and bit-depth read/write capabi
         layerProperties.evidence.requestDigest,
         invokeRequestDigest(protocol.requests[9]),
     );
+    const layerPropertyKeyframes = await client.invoke({
+        requestId: 'core-layer-property-keyframes-1',
+        capabilityId: 'ae.layer.property.keyframes.list',
+        capabilityVersion: 1,
+        arguments: structuredClone(
+            LAYER_PROPERTY_KEYFRAMES_VECTOR.request.params.arguments,
+        ),
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.equal(layerPropertyKeyframes.replayed, false);
+    assert.equal(layerPropertyKeyframes.value.keyframes[1].time.value, 5);
+    assert.equal(layerPropertyKeyframes.value.keyframes[1].time.scale, 2);
+    assert.equal(
+        layerPropertyKeyframes.value.keyframes[1].outInterpolation,
+        'hold',
+    );
+    assert.equal(
+        layerPropertyKeyframes.evidence.requestDigest,
+        invokeRequestDigest(protocol.requests[10]),
+    );
     assert.deepEqual(protocol.requests.map(function (request) { return request.method; }), [
         'hello', 'capabilities', 'invoke', 'invoke', 'invoke', 'invoke', 'invoke', 'invoke',
-        'invoke', 'invoke',
+        'invoke', 'invoke', 'invoke',
     ]);
 });
 
@@ -1142,13 +1185,16 @@ test('CEP graph reads reject non-advancing pages for all paged native capabiliti
                 'ae.project.items.list', 'ae.composition.layers.list',
                 'ae.composition.selected-layers.list',
                 'ae.layer.properties.list',
+                'ae.layer.property.keyframes.list',
             ].includes(
                 result.capabilityId,
             )) return;
             const member = result.capabilityId === 'ae.project.items.list'
                 ? 'items' : result.capabilityId === 'ae.composition.layers.list'
                     || result.capabilityId === 'ae.composition.selected-layers.list'
-                    ? 'layers' : 'properties';
+                    ? 'layers' : result.capabilityId
+                        === 'ae.layer.property.keyframes.list'
+                        ? 'keyframes' : 'properties';
             result.value.total = 1;
             result.value.returned = 0;
             result.value.hasMore = true;
@@ -1191,6 +1237,80 @@ test('CEP graph reads reject non-advancing pages for all paged native capabiliti
         arguments: structuredClone(LAYER_PROPERTIES_VECTOR.request.params.arguments),
         deadlineUnixMs: 1900000002000,
     }), { code: 'NATIVE_CONTRACT_MISMATCH' });
+    await assert.rejects(ready.client.invoke({
+        requestId: 'stalled-layer-property-keyframes',
+        capabilityId: 'ae.layer.property.keyframes.list',
+        capabilityVersion: 1,
+        arguments: structuredClone(
+            LAYER_PROPERTY_KEYFRAMES_VECTOR.request.params.arguments,
+        ),
+        deadlineUnixMs: 1900000002000,
+    }), { code: 'NATIVE_CONTRACT_MISMATCH' });
+});
+
+test('CEP keyframe reads enforce exact order, time, primitive type, and interpolation', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const mutations = new Map([
+        ['keyframe-bad-index', function (value) {
+            value.keyframes[1].keyframeIndex = 3;
+        }],
+        ['keyframe-bad-time', function (value) {
+            value.keyframes[1].time = { value: 0, scale: 24, mode: 'comp-time' };
+        }],
+        ['keyframe-bad-type', function (value) {
+            value.keyframes[0].value = { kind: 'vector', components: ['1', '2'] };
+        }],
+        ['keyframe-bad-interpolation', function (value) {
+            value.keyframes[0].inInterpolation = 'auto';
+        }],
+        ['keyframe-locator-drift', function (value) {
+            value.propertyLocator.objectId =
+                '99999999-9999-4999-8999-999999999999';
+        }],
+        ['keyframe-bad-pagination', function (value) {
+            value.nextOffset = 1;
+        }],
+    ]);
+    const ready = await readyNativeClient(t, {
+        mutateInvoke: function (result, request) {
+            if (result.capabilityId !== 'ae.layer.property.keyframes.list') return;
+            const mutate = mutations.get(request.requestId);
+            if (mutate) mutate(result.value);
+            rebindPostcondition(result);
+        },
+    });
+    const argumentsValue = structuredClone(
+        LAYER_PROPERTY_KEYFRAMES_VECTOR.request.params.arguments,
+    );
+    const accepted = await ready.client.invoke({
+        requestId: 'keyframe-good',
+        capabilityId: 'ae.layer.property.keyframes.list',
+        capabilityVersion: 1,
+        arguments: argumentsValue,
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.equal(accepted.value.keyframes[1].outInterpolation, 'hold');
+
+    for (const requestId of mutations.keys()) {
+        await assert.rejects(ready.client.invoke({
+            requestId,
+            capabilityId: 'ae.layer.property.keyframes.list',
+            capabilityVersion: 1,
+            arguments: argumentsValue,
+            deadlineUnixMs: 1900000002000,
+        }), { code: 'NATIVE_CONTRACT_MISMATCH', retryable: false });
+    }
+
+    const beforeInvalid = ready.protocol.requests.length;
+    await assert.rejects(ready.client.invoke({
+        requestId: 'keyframe-extra-input',
+        capabilityId: 'ae.layer.property.keyframes.list',
+        capabilityVersion: 1,
+        arguments: { ...argumentsValue, layerLocator: argumentsValue.propertyLocator },
+        deadlineUnixMs: 1900000002000,
+    }), { code: 'INVALID_ARGUMENT', retryable: false });
+    assert.equal(ready.protocol.requests.length, beforeInvalid);
 });
 
 test('CEP layer-property reads enforce the closed locator and decimal value union', {

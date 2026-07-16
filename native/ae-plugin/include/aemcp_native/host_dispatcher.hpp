@@ -42,6 +42,8 @@ inline constexpr std::string_view kLayerEffectApplyCapability =
     "ae.layer.effect.apply";
 inline constexpr std::string_view kLayerPropertiesListCapability =
     "ae.layer.properties.list";
+inline constexpr std::string_view kLayerPropertyKeyframesListCapability =
+    "ae.layer.property.keyframes.list";
 inline constexpr std::string_view kLayerPropertySetCapability =
     "ae.layer.property.set";
 // Authenticated broker control-plane operation. This is deliberately omitted
@@ -348,6 +350,25 @@ struct LayerPropertiesPage {
   std::vector<LayerPropertyEntry> properties;
 };
 
+struct LayerPropertyKeyframeEntry {
+  std::uint64_t keyframe_index{0};
+  LayerPropertySampleTime time;
+  LayerPropertyValue value;
+  std::string in_interpolation;
+  std::string out_interpolation;
+};
+
+struct LayerPropertyKeyframesPage {
+  ObjectLocator property_locator;
+  std::string value_type;
+  std::uint64_t total{0};
+  std::uint64_t offset{0};
+  std::uint16_t limit{0};
+  bool has_more{false};
+  std::optional<std::uint64_t> next_offset;
+  std::vector<LayerPropertyKeyframeEntry> keyframes;
+};
+
 struct ProjectItemsQuery {
   std::string host_instance_id;
   std::string session_id;
@@ -414,6 +435,14 @@ struct LayerPropertiesQuery {
   std::uint16_t limit{0};
   ObjectLocator layer_locator;
   std::optional<ObjectLocator> parent_property_locator;
+};
+
+struct LayerPropertyKeyframesQuery {
+  std::string host_instance_id;
+  std::string session_id;
+  std::uint64_t offset{0};
+  std::uint16_t limit{0};
+  ObjectLocator property_locator;
 };
 
 struct LayerPropertySetCommand {
@@ -556,6 +585,19 @@ struct HostLayerPropertiesResult {
       std::string code, std::string detail, std::string field = {});
 };
 
+struct HostLayerPropertyKeyframesResult {
+  bool ok{false};
+  LayerPropertyKeyframesPage value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostLayerPropertyKeyframesResult success(
+      LayerPropertyKeyframesPage page);
+  [[nodiscard]] static HostLayerPropertyKeyframesResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
 struct HostLayerPropertyWriteResult {
   bool ok{false};
   LayerPropertyChanged value;
@@ -607,6 +649,8 @@ class HostApi {
       const LayerEffectApplyCommand& command, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerPropertiesResult list_layer_properties(
       const LayerPropertiesQuery& query, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerPropertyKeyframesResult list_layer_property_keyframes(
+      const LayerPropertyKeyframesQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerPropertyWriteResult set_layer_property(
       const LayerPropertySetCommand& command, TimePoint work_deadline);
   [[nodiscard]] virtual HostProjectGraphInvalidationResult invalidate_project_graph(
@@ -766,6 +810,7 @@ struct Completion {
   CompositionLayerCreated composition_layer_create_result;
   LayerEffectApplied layer_effect_apply_result;
   LayerPropertiesPage layer_properties_result;
+  LayerPropertyKeyframesPage layer_property_keyframes_result;
   LayerPropertyChanged layer_property_change_result;
   ProjectGraphInvalidation project_graph_invalidation_result;
   // Internal fence correlation only; never serialized or logged.

@@ -35,6 +35,7 @@ using aemcp::native::HostCompositionCreateResult;
 using aemcp::native::HostCompositionLayerCreateResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostLayerEffectApplyResult;
+using aemcp::native::HostLayerPropertyKeyframesResult;
 using aemcp::native::HostLayerPropertyWriteResult;
 using aemcp::native::HostProjectItemsResult;
 using aemcp::native::HostReadResult;
@@ -53,6 +54,7 @@ using aemcp::native::kCompositionTimeSetCapability;
 using aemcp::native::kCompositionCreateCapability;
 using aemcp::native::kCompositionLayerCreateCapability;
 using aemcp::native::kLayerEffectApplyCapability;
+using aemcp::native::kLayerPropertyKeyframesListCapability;
 using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kProjectSummaryCapability;
 using aemcp::native::kLayerPropertySetCapability;
@@ -580,6 +582,39 @@ class FakeHost final : public HostApi {
     return HostLayerPropertyWriteResult::success(std::move(changed));
   }
 
+  [[nodiscard]] HostLayerPropertyKeyframesResult list_layer_property_keyframes(
+      const aemcp::native::LayerPropertyKeyframesQuery& query,
+      TimePoint work_deadline) override {
+    require(std::this_thread::get_id() == expected_thread_,
+        "keyframe read HostApi ran off owner thread");
+    observed_deadline = work_deadline;
+    observed_keyframes_query = query;
+    ++layer_property_keyframes_calls;
+    aemcp::native::LayerPropertyKeyframesPage page;
+    page.property_locator = query.property_locator;
+    page.value_type = "one-d";
+    page.total = 2;
+    page.offset = query.offset;
+    page.limit = query.limit;
+    page.has_more = false;
+    page.next_offset = std::nullopt;
+    if (query.offset == 0) {
+      page.keyframes.push_back({
+          1,
+          {0, 1},
+          aemcp::native::LayerPropertyScalarValue{"10"},
+          "linear",
+          "linear"});
+      page.keyframes.push_back({
+          2,
+          {5, 2},
+          aemcp::native::LayerPropertyScalarValue{"20.5"},
+          "bezier",
+          "hold"});
+    }
+    return HostLayerPropertyKeyframesResult::success(std::move(page));
+  }
+
   [[nodiscard]] static ObjectLocator locator(std::string kind, std::string object_id) {
     return {
         std::move(kind),
@@ -620,6 +655,7 @@ class FakeHost final : public HostApi {
   int composition_create_calls{0};
   int composition_layer_create_calls{0};
   int layer_effect_apply_calls{0};
+  int layer_property_keyframes_calls{0};
   int layer_property_write_calls{0};
   std::int32_t composition_time_value{3003};
   std::uint32_t composition_time_scale{1000};
@@ -639,6 +675,7 @@ class FakeHost final : public HostApi {
   aemcp::native::CompositionCreateCommand observed_composition_create_command;
   aemcp::native::CompositionLayerCreateCommand observed_layer_create_command;
   aemcp::native::LayerEffectApplyCommand observed_layer_effect_apply_command;
+  aemcp::native::LayerPropertyKeyframesQuery observed_keyframes_query;
   aemcp::native::LayerPropertySetCommand observed_property_command;
 };
 
@@ -747,6 +784,26 @@ Request layer_property_set_request(
   result.property_locator = FakeHost::locator(
       "stream", "cccccccc-cccc-4ccc-8ccc-cccccccccccc");
   result.property_value = aemcp::native::LayerPropertyScalarValue{std::move(value)};
+  return result;
+}
+
+Request layer_property_keyframes_request(
+    FakeClock& clock,
+    std::string id,
+    std::uint64_t offset = 0,
+    std::uint16_t limit = 25) {
+  Request result;
+  result.request_id = std::move(id);
+  result.capability_id = std::string(kLayerPropertyKeyframesListCapability);
+  result.deadline = clock.now() + 100ms;
+  result.route_id = "route-keyframes";
+  result.session_generation = 7;
+  result.host_instance_id = "22222222-2222-4222-8222-222222222222";
+  result.session_id = "11111111-1111-4111-8111-111111111111";
+  result.offset = offset;
+  result.limit = limit;
+  result.property_locator = FakeHost::locator(
+      "stream", "cccccccc-cccc-4ccc-8ccc-cccccccccccc");
   return result;
 }
 
@@ -1703,6 +1760,44 @@ void layer_property_write_is_typed_context_bound_and_idempotent() {
       "successful layer property idempotency key was allowed to mutate again");
 }
 
+void layer_property_keyframes_are_bounded_main_thread_and_locator_bound() {
+  FakeClock clock;
+  const auto owner = std::this_thread::get_id();
+  HostDispatcher dispatcher(owner, clock, config(4, 4, 4ms));
+  FakeHost host(clock, owner);
+
+  Request missing_locator = layer_property_keyframes_request(
+      clock, "keyframes-missing");
+  missing_locator.property_locator = std::nullopt;
+  auto rejected = dispatcher.enqueue(std::move(missing_locator));
+  require(rejected.code == EnqueueCode::kInvalidRequest
+          && rejected.error_field == "params.arguments.propertyLocator",
+      "keyframe read accepted a missing property locator");
+
+  rejected = dispatcher.enqueue(layer_property_keyframes_request(
+      clock, "keyframes-too-large", 0, 26));
+  require(rejected.code == EnqueueCode::kInvalidRequest
+          && rejected.error_field == "params.arguments",
+      "keyframe read accepted an unbounded page");
+
+  require(dispatcher.enqueue(layer_property_keyframes_request(
+      clock, "keyframes-list", 0, 2)).code == EnqueueCode::kAccepted,
+      "valid keyframe read was rejected");
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1 && batch.completions[0].ok
+          && host.layer_property_keyframes_calls == 1,
+      "keyframe read did not run exactly once on the owner thread");
+  const auto& page = batch.completions[0].layer_property_keyframes_result;
+  require(page.property_locator == host.observed_keyframes_query.property_locator
+          && page.total == 2 && page.offset == 0 && page.limit == 2
+          && page.keyframes.size() == 2
+          && page.keyframes[1].keyframe_index == 2
+          && page.keyframes[1].time.value == 5
+          && page.keyframes[1].time.scale == 2
+          && page.keyframes[1].out_interpolation == "hold",
+      "keyframe read lost its locator, exact time, order, or interpolation");
+}
+
 void worker_to_owner_dispatch_and_outbound_transfer() {
   FakeClock clock;
   const auto owner = std::this_thread::get_id();
@@ -2062,6 +2157,7 @@ int main() {
   bit_depth_write_releases_only_safe_failures_and_fails_closed_when_full();
   bit_depth_write_validates_before_dispatch_and_late_results_are_ambiguous();
   bit_depth_write_uses_request_deadline_and_stops_an_overrun_idle_batch();
+  layer_property_keyframes_are_bounded_main_thread_and_locator_bound();
   layer_property_write_is_typed_context_bound_and_idempotent();
   worker_to_owner_dispatch_and_outbound_transfer();
   admission_is_closed_and_bounded();

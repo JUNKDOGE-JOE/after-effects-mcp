@@ -214,6 +214,7 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
       || runtime_.composition_time_set_contract_digest.size() != 64
       || runtime_.layer_effect_apply_contract_digest.size() != 64
       || runtime_.layer_properties_list_contract_digest.size() != 64
+      || runtime_.layer_property_keyframes_list_contract_digest.size() != 64
       || runtime_.layer_property_set_contract_digest.size() != 64) {
     throw std::invalid_argument("invalid native RPC runtime identity");
   }
@@ -312,6 +313,11 @@ void NativeRpcConnectionHandler::serve(
             } else if (completion.capability_id == kLayerPropertiesListCapability) {
               postcondition_digest = rpc::digest_layer_properties_postcondition(
                   completion.layer_properties_result);
+            } else if (completion.capability_id
+                == kLayerPropertyKeyframesListCapability) {
+              postcondition_digest =
+                  rpc::digest_layer_property_keyframes_postcondition(
+                      completion.layer_property_keyframes_result);
             } else if (completion.capability_id == kLayerPropertySetCapability) {
               postcondition_digest = rpc::digest_layer_property_set_postcondition(
                   completion.layer_property_change_result);
@@ -510,6 +516,19 @@ void NativeRpcConnectionHandler::serve(
                 postcondition_digest,
                 false,
             });
+          } else if (completion.capability_id
+              == kLayerPropertyKeyframesListCapability) {
+            response = rpc::encode_layer_property_keyframes_success({
+                completion.request_id,
+                connection.session_id,
+                runtime_.host_instance_id,
+                completion.layer_property_keyframes_result,
+                started_at,
+                completed_at,
+                request_digest,
+                postcondition_digest,
+                false,
+            });
           } else {
             response = rpc::encode_layer_property_set_success({
                 completion.request_id,
@@ -642,6 +661,10 @@ void NativeRpcConnectionHandler::serve(
           const bool include_layer_properties = !query.ids.has_value() || std::find(
               query.ids->begin(), query.ids->end(), "ae.layer.properties.list")
                   != query.ids->end();
+          const bool include_layer_property_keyframes = !query.ids.has_value()
+              || std::find(
+                  query.ids->begin(), query.ids->end(),
+                  "ae.layer.property.keyframes.list") != query.ids->end();
           const bool include_layer_property_set = !query.ids.has_value() || std::find(
               query.ids->begin(), query.ids->end(), "ae.layer.property.set")
                   != query.ids->end();
@@ -657,6 +680,7 @@ void NativeRpcConnectionHandler::serve(
               + static_cast<std::size_t>(include_composition_layer_create)
               + static_cast<std::size_t>(include_layer_effect_apply)
               + static_cast<std::size_t>(include_layer_properties)
+              + static_cast<std::size_t>(include_layer_property_keyframes)
               + static_cast<std::size_t>(include_layer_property_set);
           if (selected > query.limit) {
             if (!write_frame(connection.socket_fd, rpc::encode_error_response(error_for(
@@ -684,6 +708,7 @@ void NativeRpcConnectionHandler::serve(
                   include_composition_create,
                   include_composition_layer_create,
                   include_layer_properties,
+                  include_layer_property_keyframes,
                   include_layer_property_set,
                   rpc::digest_capabilities_query(connection.session_id, query),
                   runtime_.capabilities_digest,
@@ -697,6 +722,7 @@ void NativeRpcConnectionHandler::serve(
                   runtime_.composition_create_contract_digest,
                   runtime_.composition_layer_create_contract_digest,
                   runtime_.layer_properties_list_contract_digest,
+                  runtime_.layer_property_keyframes_list_contract_digest,
                   runtime_.layer_property_set_contract_digest,
                   include_composition_selected_layers,
                   runtime_.composition_selected_layers_list_contract_digest,
