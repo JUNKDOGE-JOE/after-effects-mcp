@@ -22,6 +22,7 @@ using aemcp::native::rpc::CompositionLayersSuccess;
 using aemcp::native::rpc::CompositionSelectedLayersSuccess;
 using aemcp::native::rpc::CompositionTimeSuccess;
 using aemcp::native::rpc::CompositionTimeSetSuccess;
+using aemcp::native::rpc::CompositionCreateSuccess;
 using aemcp::native::rpc::CompositionLayerCreateSuccess;
 using aemcp::native::rpc::LayerPropertiesSuccess;
 using aemcp::native::rpc::LayerPropertySetSuccess;
@@ -60,6 +61,7 @@ using aemcp::native::rpc::digest_composition_layers_postcondition;
 using aemcp::native::rpc::digest_composition_selected_layers_postcondition;
 using aemcp::native::rpc::digest_composition_time_postcondition;
 using aemcp::native::rpc::digest_composition_time_set_postcondition;
+using aemcp::native::rpc::digest_composition_create_postcondition;
 using aemcp::native::rpc::digest_composition_layer_create_postcondition;
 using aemcp::native::rpc::digest_layer_properties_postcondition;
 using aemcp::native::rpc::digest_layer_property_set_postcondition;
@@ -77,6 +79,7 @@ using aemcp::native::rpc::encode_composition_layers_success;
 using aemcp::native::rpc::encode_composition_selected_layers_success;
 using aemcp::native::rpc::encode_composition_time_success;
 using aemcp::native::rpc::encode_composition_time_set_success;
+using aemcp::native::rpc::encode_composition_create_success;
 using aemcp::native::rpc::encode_composition_layer_create_success;
 using aemcp::native::rpc::encode_layer_properties_success;
 using aemcp::native::rpc::encode_layer_property_set_success;
@@ -100,6 +103,8 @@ constexpr std::string_view kCompositionTimeContractDigest =
     "fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd";
 constexpr std::string_view kCompositionTimeSetContractDigest =
     "724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308";
+constexpr std::string_view kCompositionCreateContractDigest =
+    "a5e0ccfc15086d1b10987246048e539cf6332a4e24114ac81783f4a9758ab6f6";
 constexpr std::string_view kCompositionLayerCreateContractDigest =
     "d48b5c0fcf9871ee579bf518679bc36277e2fd5194e70d9cc6fa1b2c573edeee";
 constexpr std::string_view kLayerPropertiesContractDigest =
@@ -308,6 +313,21 @@ std::string composition_layer_create_invoke_json(
         "\"color\":{\"red\":12,\"green\":34,\"blue\":56,\"alpha\":255},"
         "\"width\":640,\"height\":360,\"duration\":{\"value\":5,\"scale\":1},"
         "\"idempotencyKey\":\"synthetic-layer-create-0001\""
+      + std::string(arguments_suffix) + "}}}";
+}
+
+std::string composition_create_invoke_json(
+    std::string_view request_id = "invoke-composition-create-1",
+    std::string_view arguments_suffix = {}) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.composition.create\","
+        "\"capabilityVersion\":1,\"arguments\":{\"name\":\"SYNTHETIC_COMP\","
+        "\"width\":1920,\"height\":1080,\"duration\":{\"value\":5,\"scale\":1},"
+        "\"frameRate\":{\"numerator\":24,\"denominator\":1},"
+        "\"pixelAspectRatio\":{\"numerator\":1,\"denominator\":1},"
+        "\"idempotencyKey\":\"synthetic-comp-create-0001\""
       + std::string(arguments_suffix) + "}}}";
 }
 
@@ -605,6 +625,24 @@ void project_graph_invokes_and_results_are_closed_and_deterministic() {
         "invoke-composition-time-extra", {}, ",\"offset\":0")));
   }, "INVALID_ARGUMENT", "composition-time pagination argument");
 
+  const ParsedRequest composition_create_parsed = decode_request_frame(frame(
+      composition_create_invoke_json()));
+  const auto& composition_create = std::get<InvokeParams>(
+      composition_create_parsed.params);
+  require(composition_create.capability_id == "ae.composition.create"
+          && composition_create.composition_create_name == "SYNTHETIC_COMP"
+          && composition_create.composition_create_width == 1920
+          && composition_create.composition_create_height == 1080
+          && composition_create.composition_create_duration.seconds_rational == "5"
+          && composition_create.composition_create_frame_rate.rational == "24"
+          && composition_create.composition_create_pixel_aspect_ratio.rational == "1"
+          && composition_create.idempotency_key == "synthetic-comp-create-0001",
+      "composition create lost its closed typed arguments");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(composition_create_invoke_json(
+        "invoke-composition-create-extra", ",\"extra\":true")));
+  }, "INVALID_ARGUMENT", "composition create extra argument");
+
   const ParsedRequest create_parsed = decode_request_frame(frame(
       composition_layer_create_invoke_json()));
   const auto& create = std::get<InvokeParams>(create_parsed.params);
@@ -836,6 +874,57 @@ void project_graph_invokes_and_results_are_closed_and_deterministic() {
   expect_codec_error([&] {
     (void)encode_composition_time_set_success(equal_time);
   }, "INVALID_ARGUMENT", "composition-time write without a transition");
+
+  aemcp::native::CompositionCreated composition_created;
+  composition_created.name = "SYNTHETIC_COMP";
+  composition_created.composition_locator = locator(
+      "composition", "77777777-7777-4777-8777-777777777777");
+  composition_created.composition_locator.project_id =
+      "55555555-5555-4555-8555-555555555555";
+  composition_created.composition_locator.generation = 9;
+  composition_created.project_item_count_before = 1;
+  composition_created.project_item_count_after = 2;
+  composition_created.layer_count = 0;
+  composition_created.width = 1920;
+  composition_created.height = 1080;
+  composition_created.duration = {5, 1, "5"};
+  composition_created.frame_rate = {24, 1, "24"};
+  composition_created.pixel_aspect_ratio = {1, 1, "1"};
+  CompositionCreateSuccess composition_create_success{
+      "invoke-composition-create-1",
+      std::string(kSession),
+      std::string(kHost),
+      composition_created,
+      1'900'000'000'000ULL,
+      1'900'000'000'025ULL,
+      std::string(kDigest),
+      digest_composition_create_postcondition(composition_created),
+      false};
+  require(composition_create_success.postcondition_digest
+          == "7a33afaf29bbb5d6c91746433880a7b6af31c66c9f26a3d070b6e36b9a13fd71",
+      "composition-create postcondition digest diverged from JCS");
+  const std::string composition_create_body = body(
+      encode_composition_create_success(composition_create_success));
+  require(composition_create_body.find(
+              "\"capabilityId\":\"ae.composition.create\"")
+              != std::string::npos
+          && composition_create_body.find("\"kind\":\"composition-create\"")
+              != std::string::npos
+          && composition_create_body.find("\"replayed\":false")
+              != std::string::npos
+          && composition_create_body.find("\"projectItemCountAfter\":2")
+              != std::string::npos,
+      "composition create success omitted typed mutation evidence");
+  composition_create_success.replayed = true;
+  require(body(encode_composition_create_success(composition_create_success)).find(
+              "\"replayed\":true") != std::string::npos,
+      "verified composition create replay was not serializable");
+  CompositionCreateSuccess bad_composition_count = composition_create_success;
+  bad_composition_count.value.project_item_count_after = 3;
+  bad_composition_count.postcondition_digest = std::string(kDigest);
+  expect_codec_error([&] {
+    (void)encode_composition_create_success(bad_composition_count);
+  }, "INVALID_ARGUMENT", "composition create invalid count transition");
 
   aemcp::native::CompositionLayerCreated layer_created;
   layer_created.kind = "solid";
@@ -1310,6 +1399,8 @@ void response_helpers_are_bounded_and_typed() {
       std::string(kCompositionTimeContractDigest);
   capabilities.composition_time_set_contract_digest =
       std::string(kCompositionTimeSetContractDigest);
+  capabilities.composition_create_contract_digest =
+      std::string(kCompositionCreateContractDigest);
   capabilities.composition_layer_create_contract_digest =
       std::string(kCompositionLayerCreateContractDigest);
   capabilities.layer_properties_list_contract_digest =
@@ -1371,6 +1462,8 @@ void response_helpers_are_bounded_and_typed() {
           != std::string::npos
       && capabilities_body.find(std::string(kCompositionTimeSetContractDigest))
           != std::string::npos
+      && capabilities_body.find(std::string(kCompositionCreateContractDigest))
+          != std::string::npos
       && capabilities_body.find(std::string(kLayerPropertiesContractDigest))
           != std::string::npos
       && capabilities_body.find("\"id\":\"ae.project.items.list\"")
@@ -1380,6 +1473,8 @@ void response_helpers_are_bounded_and_typed() {
       && capabilities_body.find("\"id\":\"ae.composition.time.read\"")
           != std::string::npos
       && capabilities_body.find("\"id\":\"ae.composition.time.set\"")
+          != std::string::npos
+      && capabilities_body.find("\"id\":\"ae.composition.create\"")
           != std::string::npos
       && capabilities_body.find("\"id\":\"ae.composition.layer.create\"")
           != std::string::npos

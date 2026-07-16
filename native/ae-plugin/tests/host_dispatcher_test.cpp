@@ -29,6 +29,7 @@ using aemcp::native::HostBitDepthWriteResult;
 using aemcp::native::HostCompositionLayersResult;
 using aemcp::native::HostCompositionTimeResult;
 using aemcp::native::HostCompositionTimeWriteResult;
+using aemcp::native::HostCompositionCreateResult;
 using aemcp::native::HostCompositionLayerCreateResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostLayerPropertyWriteResult;
@@ -46,6 +47,7 @@ using aemcp::native::kCompositionLayersListCapability;
 using aemcp::native::kCompositionSelectedLayersListCapability;
 using aemcp::native::kCompositionTimeReadCapability;
 using aemcp::native::kCompositionTimeSetCapability;
+using aemcp::native::kCompositionCreateCapability;
 using aemcp::native::kCompositionLayerCreateCapability;
 using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kProjectSummaryCapability;
@@ -475,6 +477,32 @@ class FakeHost final : public HostApi {
     return HostCompositionLayerCreateResult::success(std::move(created));
   }
 
+  [[nodiscard]] HostCompositionCreateResult create_composition(
+      const aemcp::native::CompositionCreateCommand& command,
+      TimePoint work_deadline) override {
+    require(std::this_thread::get_id() == expected_thread_,
+        "composition create HostApi ran off owner thread");
+    observed_deadline = work_deadline;
+    observed_composition_create_command = command;
+    ++composition_create_calls;
+    aemcp::native::CompositionCreated created;
+    created.name = command.name;
+    created.composition_locator = locator(
+        "composition", "77777777-7777-4777-8777-777777777777");
+    created.composition_locator.project_id =
+        "55555555-5555-4555-8555-555555555555";
+    created.composition_locator.generation = 9;
+    created.project_item_count_before = 1;
+    created.project_item_count_after = mismatch_composition_create ? 3 : 2;
+    created.layer_count = 0;
+    created.width = command.width;
+    created.height = command.height;
+    created.duration = command.duration;
+    created.frame_rate = command.frame_rate;
+    created.pixel_aspect_ratio = command.pixel_aspect_ratio;
+    return HostCompositionCreateResult::success(std::move(created));
+  }
+
   [[nodiscard]] HostLayerPropertyWriteResult set_layer_property(
       const aemcp::native::LayerPropertySetCommand& command,
       TimePoint work_deadline) override {
@@ -538,6 +566,7 @@ class FakeHost final : public HostApi {
   int composition_selected_layers_calls{0};
   int composition_time_calls{0};
   int composition_time_write_calls{0};
+  int composition_create_calls{0};
   int composition_layer_create_calls{0};
   int layer_property_write_calls{0};
   std::int32_t composition_time_value{3003};
@@ -547,12 +576,14 @@ class FakeHost final : public HostApi {
   bool mismatch_selected_composition_page{false};
   bool mismatch_composition_time{false};
   bool mismatch_composition_time_write{false};
+  bool mismatch_composition_create{false};
   bool mismatch_layer_create{false};
   aemcp::native::ProjectItemsQuery observed_items_query;
   aemcp::native::CompositionLayersQuery observed_layers_query;
   aemcp::native::CompositionLayersQuery observed_selected_layers_query;
   aemcp::native::CompositionTimeQuery observed_time_query;
   aemcp::native::CompositionTimeSetCommand observed_time_set_command;
+  aemcp::native::CompositionCreateCommand observed_composition_create_command;
   aemcp::native::CompositionLayerCreateCommand observed_layer_create_command;
   aemcp::native::LayerPropertySetCommand observed_property_command;
 };
@@ -773,6 +804,30 @@ Request composition_time_set_request(
   result.session_id = "11111111-1111-4111-8111-111111111111";
   result.composition_locator = std::move(composition_locator);
   result.target_time = std::move(target);
+  return result;
+}
+
+Request composition_create_request(
+    FakeClock& clock,
+    std::string id,
+    std::string key = "composition-create-intent-001",
+    std::string fingerprint = std::string(64, 'c')) {
+  Request result;
+  result.request_id = std::move(id);
+  result.capability_id = std::string(kCompositionCreateCapability);
+  result.deadline = clock.now() + 100ms;
+  result.route_id = "route-composition-create";
+  result.session_generation = 7;
+  result.idempotency_key = std::move(key);
+  result.arguments_fingerprint_sha256 = std::move(fingerprint);
+  result.host_instance_id = "22222222-2222-4222-8222-222222222222";
+  result.session_id = "11111111-1111-4111-8111-111111111111";
+  result.composition_create_name = "SYNTHETIC_COMP";
+  result.composition_create_width = 1920;
+  result.composition_create_height = 1080;
+  result.composition_create_duration = {5, 1, "5"};
+  result.composition_create_frame_rate = {24, 1, "24"};
+  result.composition_create_pixel_aspect_ratio = {1, 1, "1"};
   return result;
 }
 
@@ -1081,6 +1136,75 @@ void composition_time_write_is_typed_main_thread_bound_and_idempotent() {
       "unverified composition time write was mislabeled side-effect free");
 }
 
+void composition_create_is_verified_and_replays_without_duplicate_mutation() {
+  FakeClock clock;
+  const auto owner = std::this_thread::get_id();
+  HostDispatcher dispatcher(owner, clock, config(8, 8, 4ms));
+  FakeHost host(clock, owner);
+
+  Request invalid = composition_create_request(
+      clock, "composition-create-invalid", "composition-create-intent-invalid");
+  invalid.composition_create_duration.seconds_rational = "4";
+  const auto invalid_result = dispatcher.enqueue(std::move(invalid));
+  require(invalid_result.code == EnqueueCode::kInvalidRequest
+          && invalid_result.error_field == "params.arguments",
+      "non-canonical composition create reached HostApi");
+
+  require(dispatcher.enqueue(composition_create_request(
+      clock, "composition-create-1")).code == EnqueueCode::kAccepted,
+      "valid composition create was rejected");
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1 && batch.completions[0].ok
+          && host.composition_create_calls == 1,
+      "composition create did not run exactly once on the owner thread");
+  const auto& created = batch.completions[0].composition_create_result;
+  require(created.name == "SYNTHETIC_COMP"
+          && created.project_item_count_before == 1
+          && created.project_item_count_after == 2
+          && created.layer_count == 0
+          && created.width == 1920 && created.height == 1080
+          && created.duration.seconds_rational == "5"
+          && created.frame_rate.rational == "24"
+          && created.pixel_aspect_ratio.rational == "1"
+          && created.composition_locator.kind == "composition"
+          && created.composition_locator.generation == 9,
+      "composition create lost verified settings or fresh locator evidence");
+
+  const auto original_outbound = dispatcher.take_outbound();
+  require(original_outbound.size() == 1 && !original_outbound[0].replayed,
+      "original composition creation terminal was not observable");
+  const auto replay = dispatcher.enqueue(composition_create_request(
+      clock, "composition-create-replay"));
+  require(replay.code == EnqueueCode::kAccepted
+          && host.composition_create_calls == 1,
+      "identical composition create replay reached HostApi");
+  const auto replay_outbound = dispatcher.take_outbound();
+  require(replay_outbound.size() == 1 && replay_outbound[0].ok
+          && replay_outbound[0].replayed
+          && replay_outbound[0].request_id == "composition-create-replay"
+          && replay_outbound[0].composition_create_result.composition_locator
+              == created.composition_locator,
+      "composition create replay did not return the cached verified terminal");
+
+  dispatcher.invalidate_composition_creation_replays();
+  const auto stale_replay = dispatcher.enqueue(composition_create_request(
+      clock, "composition-create-after-invalidation"));
+  require(stale_replay.code == EnqueueCode::kDuplicateRequest
+          && stale_replay.message.find("current-state inspection") != std::string::npos,
+      "graph invalidation retained a stale composition-create replay");
+
+  host.mismatch_composition_create = true;
+  require(dispatcher.enqueue(composition_create_request(
+      clock, "composition-create-mismatch", "composition-create-intent-002",
+      std::string(64, 'd'))).code == EnqueueCode::kAccepted,
+      "composition create mismatch setup was rejected before HostApi");
+  const auto mismatch = dispatcher.drain(host);
+  require(mismatch.completions.size() == 1
+          && mismatch.completions[0].error_code
+              == "POSSIBLY_SIDE_EFFECTING_FAILURE",
+      "unverified composition creation was mislabeled side-effect free");
+}
+
 void composition_layer_create_is_verified_and_replays_without_duplicate_mutation() {
   FakeClock clock;
   const auto owner = std::this_thread::get_id();
@@ -1136,7 +1260,7 @@ void composition_layer_create_is_verified_and_replays_without_duplicate_mutation
           && host.composition_layer_create_calls == 1,
       "layer create replay did not return the cached verified terminal");
 
-  dispatcher.invalidate_composition_layer_replays();
+  dispatcher.invalidate_composition_creation_replays();
   const auto stale_replay = dispatcher.enqueue(composition_layer_create_request(
       clock, "create-solid-after-invalidation", composition));
   require(stale_replay.code == EnqueueCode::kDuplicateRequest
@@ -1743,6 +1867,7 @@ int main() {
   selected_layers_read_is_closed_main_thread_bound_and_request_verified();
   composition_time_read_is_closed_main_thread_bound_and_verified();
   composition_time_write_is_typed_main_thread_bound_and_idempotent();
+  composition_create_is_verified_and_replays_without_duplicate_mutation();
   composition_layer_create_is_verified_and_replays_without_duplicate_mutation();
   bit_depth_read_and_write_are_main_thread_bound_and_write_is_idempotent();
   bit_depth_write_releases_only_safe_failures_and_fails_closed_when_full();

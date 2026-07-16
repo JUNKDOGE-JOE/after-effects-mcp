@@ -1,0 +1,147 @@
+{
+  "_fixture": {
+    "classification": "synthetic-contract-vector",
+    "runtimeEvidence": false,
+    "compatibilityEvidence": false
+  },
+  "request": {
+    "wireVersion": 1,
+    "kind": "request",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "requestId": "invoke-composition-create-1",
+    "method": "invoke",
+    "deadlineUnixMs": 1900000005000,
+    "params": {
+      "capabilityId": "ae.composition.create",
+      "capabilityVersion": 1,
+      "arguments": {
+        "name": "SYNTHETIC_COMP",
+        "width": 1920,
+        "height": 1080,
+        "duration": {
+          "value": 5,
+          "scale": 1
+        },
+        "frameRate": {
+          "numerator": 24,
+          "denominator": 1
+        },
+        "pixelAspectRatio": {
+          "numerator": 1,
+          "denominator": 1
+        },
+        "idempotencyKey": "synthetic-comp-create-0001"
+      }
+    }
+  },
+  "events": [
+    {
+      "wireVersion": 1,
+      "kind": "event",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-composition-create-1",
+      "event": "progress",
+      "sequence": 1,
+      "progress": {
+        "phase": "queued",
+        "fraction": 0,
+        "message": "Queued for the bounded main-thread dispatcher."
+      }
+    },
+    {
+      "wireVersion": 1,
+      "kind": "event",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-composition-create-1",
+      "event": "progress",
+      "sequence": 2,
+      "progress": {
+        "phase": "dispatched",
+        "fraction": 0.5,
+        "message": "Entered the synthetic host-thread dispatch phase."
+      }
+    },
+    {
+      "wireVersion": 1,
+      "kind": "event",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-composition-create-1",
+      "event": "progress",
+      "sequence": 3,
+      "progress": {
+        "phase": "validating",
+        "fraction": 0.9,
+        "message": "Validating the bounded synthetic result."
+      }
+    }
+  ],
+  "response": {
+    "wireVersion": 1,
+    "kind": "response",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "requestId": "invoke-composition-create-1",
+    "method": "invoke",
+    "ok": true,
+    "replayed": false,
+    "result": {
+      "capabilityId": "ae.composition.create",
+      "capabilityVersion": 1,
+      "engine": "native-aegp",
+      "outcome": "succeeded",
+      "value": {
+        "changed": true,
+        "name": "SYNTHETIC_COMP",
+        "compositionLocator": {
+          "kind": "composition",
+          "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+          "sessionId": "11111111-1111-4111-8111-111111111111",
+          "projectId": "55555555-5555-4555-8555-555555555555",
+          "generation": 9,
+          "objectId": "77777777-7777-4777-8777-777777777777"
+        },
+        "projectItemCountBefore": 1,
+        "projectItemCountAfter": 2,
+        "layerCount": 0,
+        "width": 1920,
+        "height": 1080,
+        "duration": {
+          "value": 5,
+          "scale": 1,
+          "secondsRational": "5"
+        },
+        "frameRate": {
+          "numerator": 24,
+          "denominator": 1,
+          "rational": "24"
+        },
+        "pixelAspectRatio": {
+          "numerator": 1,
+          "denominator": 1,
+          "rational": "1"
+        }
+      },
+      "evidence": {
+        "engine": "native-aegp",
+        "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+        "sessionId": "11111111-1111-4111-8111-111111111111",
+        "requestId": "invoke-composition-create-1",
+        "capabilityId": "ae.composition.create",
+        "capabilityVersion": 1,
+        "startedAtUnixMs": 1900000000000,
+        "completedAtUnixMs": 1900000000025,
+        "effect": "committed",
+        "requestDigest": "48dd1ce610d71b0c9cf142ca73836dbe92c9255c26aecbf129606613f540ada5",
+        "postcondition": {
+          "verified": true,
+          "kind": "composition-create",
+          "algorithm": "sha256-rfc8785-jcs-v1",
+          "digest": "7a33afaf29bbb5d6c91746433880a7b6af31c66c9f26a3d070b6e36b9a13fd71"
+        },
+        "undo": {
+          "available": true,
+          "verified": false
+        }
+      }
+    }
+  }
+}

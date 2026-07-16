@@ -41,6 +41,10 @@ const COMPOSITION_TIME_SET_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
     '../../native/ae-plugin/protocol/fixtures/invoke-composition-time-set.json',
 ), 'utf8'));
+const COMPOSITION_CREATE_VECTOR = JSON.parse(fs.readFileSync(path.join(
+    __dirname,
+    '../../native/ae-plugin/protocol/fixtures/invoke-composition-create.json',
+), 'utf8'));
 const COMPOSITION_LAYER_CREATE_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
     '../../native/ae-plugin/protocol/fixtures/invoke-composition-layer-create.json',
@@ -259,6 +263,16 @@ function installProtocol(server, options) {
                         generation: 8,
                         invalidated: true,
                     };
+                } else if (request.params.capabilityId === 'ae.composition.create') {
+                    result = structuredClone(COMPOSITION_CREATE_VECTOR.response.result);
+                    result.evidence.requestId = request.requestId;
+                    result.evidence.requestDigest = invokeRequestDigest(request);
+                    result.evidence.postcondition.digest = jcsDigest({
+                        capabilityId: result.capabilityId,
+                        capabilityVersion: result.capabilityVersion,
+                        value: result.value,
+                    });
+                    if (input.mutateInvoke) input.mutateInvoke(result, request);
                 } else if (request.params.capabilityId === 'ae.composition.layer.create') {
                     result = structuredClone(COMPOSITION_LAYER_CREATE_VECTOR.response.result);
                     result.evidence.requestId = request.requestId;
@@ -409,6 +423,9 @@ function installProtocol(server, options) {
                 const replayed = responseError
                     ? input.errorReplayed === true
                     : (request.method === 'invoke'
+                        && request.params.capabilityId === 'ae.composition.create'
+                        && request.requestId === input.compositionCreateReplayedRequestId)
+                        || (request.method === 'invoke'
                         && request.params.capabilityId === 'ae.composition.layer.create'
                         && request.requestId === input.createReplayedRequestId)
                         || (request.method === 'invoke'
@@ -1437,6 +1454,78 @@ test('CEP composition-time mutation preserves exact rational intent and uncertai
         capabilityVersion: 1,
         arguments: uncertainArguments,
         deadlineUnixMs: 1900000002000,
+    }), {
+        code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
+        retryable: false,
+        sideEffect: 'may-have-occurred',
+    });
+});
+
+test('CEP composition create verifies settings, replay, and uncertain failures', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const ready = await readyNativeClient(t, {
+        compositionCreateReplayedRequestId: 'composition-create-client-replay',
+        mutateInvoke: function (result, request) {
+            if (request.requestId === 'composition-create-client-uncertain') {
+                result.evidence.postcondition.digest = '0'.repeat(64);
+            }
+        },
+    });
+    const argumentsValue = structuredClone(
+        COMPOSITION_CREATE_VECTOR.request.params.arguments,
+    );
+    const created = await ready.client.invoke({
+        requestId: 'composition-create-client-1',
+        capabilityId: 'ae.composition.create',
+        capabilityVersion: 1,
+        arguments: argumentsValue,
+        deadlineUnixMs: 1900000005000,
+    });
+    assert.equal(created.replayed, false);
+    assert.equal(created.value.name, 'SYNTHETIC_COMP');
+    assert.equal(created.value.projectItemCountAfter, 2);
+    assert.deepEqual(created.value.duration, {
+        value: 5, scale: 1, secondsRational: '5',
+    });
+    assert.deepEqual(created.value.frameRate, {
+        numerator: 24, denominator: 1, rational: '24',
+    });
+    assert.deepEqual(created.evidence.undo, { available: true, verified: false });
+    const sent = ready.protocol.requests.at(-1);
+    assert.deepEqual(sent.params.arguments, argumentsValue);
+    assert.equal(created.evidence.requestDigest, invokeRequestDigest(sent));
+
+    const replayed = await ready.client.invoke({
+        requestId: 'composition-create-client-replay',
+        capabilityId: 'ae.composition.create',
+        capabilityVersion: 1,
+        arguments: argumentsValue,
+        deadlineUnixMs: 1900000005000,
+    });
+    assert.equal(replayed.replayed, true);
+    assert.deepEqual(replayed.value, created.value);
+
+    const requestCount = ready.protocol.requests.length;
+    const invalidArguments = structuredClone(argumentsValue);
+    invalidArguments.duration.value = 0;
+    await assert.rejects(ready.client.invoke({
+        requestId: 'composition-create-client-invalid',
+        capabilityId: 'ae.composition.create',
+        capabilityVersion: 1,
+        arguments: invalidArguments,
+        deadlineUnixMs: 1900000005000,
+    }), { code: 'INVALID_ARGUMENT', retryable: false });
+    assert.equal(ready.protocol.requests.length, requestCount);
+
+    const uncertainArguments = structuredClone(argumentsValue);
+    uncertainArguments.idempotencyKey = 'synthetic-comp-create-uncertain-0001';
+    await assert.rejects(ready.client.invoke({
+        requestId: 'composition-create-client-uncertain',
+        capabilityId: 'ae.composition.create',
+        capabilityVersion: 1,
+        arguments: uncertainArguments,
+        deadlineUnixMs: 1900000005000,
     }), {
         code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
         retryable: false,

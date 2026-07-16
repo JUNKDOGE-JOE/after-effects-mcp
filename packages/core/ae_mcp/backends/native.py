@@ -1504,6 +1504,14 @@ COMPOSITION_TIME_SET_CONTRACT_DIGEST = (
     "724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308"
 )
 
+COMPOSITION_CREATE_CAPABILITY_ID = "ae.composition.create"
+COMPOSITION_CREATE_CAPABILITY_VERSION = 1
+COMPOSITION_CREATE_INPUT_CONTRACT_ID = "aemcp.contract.ae.composition.create.input.v1"
+COMPOSITION_CREATE_RESULT_CONTRACT_ID = "aemcp.contract.ae.composition.create.result.v1"
+COMPOSITION_CREATE_CONTRACT_DIGEST = (
+    "a5e0ccfc15086d1b10987246048e539cf6332a4e24114ac81783f4a9758ab6f6"
+)
+
 COMPOSITION_LAYER_CREATE_CAPABILITY_ID = "ae.composition.layer.create"
 COMPOSITION_LAYER_CREATE_CAPABILITY_VERSION = 1
 COMPOSITION_LAYER_CREATE_INPUT_CONTRACT_ID = (
@@ -2038,6 +2046,95 @@ _COMPOSITION_TIME_SET_RESULT_SCHEMA = {
     "x-invariant": (
         "beforeTime-must-differ-from-afterTime-and-afterTime-must-equal-targetTime"
     ),
+}
+
+_POSITIVE_RATIO_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["numerator", "denominator"],
+    "properties": {
+        "numerator": {"type": "integer", "minimum": 1, "maximum": 2_147_483_647},
+        "denominator": {"type": "integer", "minimum": 1, "maximum": 2_147_483_647},
+    },
+}
+_POSITIVE_RATIO_RESULT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["numerator", "denominator", "rational"],
+    "properties": {
+        "numerator": {"type": "integer", "minimum": 1, "maximum": 2_147_483_647},
+        "denominator": {"type": "integer", "minimum": 1, "maximum": 2_147_483_647},
+        "rational": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 28,
+            "pattern": r"^[1-9][0-9]*(?:/[1-9][0-9]*)?$",
+        },
+    },
+    "x-invariant": "rational-is-the-reduced-canonical-form-of-numerator-over-denominator",
+}
+_COMPOSITION_CREATE_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "name", "width", "height", "duration", "frameRate",
+        "pixelAspectRatio", "idempotencyKey",
+    ],
+    "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 255},
+        "width": {"type": "integer", "minimum": 1, "maximum": 30_000},
+        "height": {"type": "integer", "minimum": 1, "maximum": 30_000},
+        "duration": {"$ref": "#/$defs/positiveTime"},
+        "frameRate": {"$ref": "#/$defs/positiveRatio"},
+        "pixelAspectRatio": {"$ref": "#/$defs/positiveRatio"},
+        "idempotencyKey": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 64,
+            "pattern": _IDEMPOTENCY_KEY_PATTERN,
+        },
+    },
+    "$defs": {
+        "positiveTime": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["value", "scale"],
+            "properties": {
+                "value": {"type": "integer", "minimum": 1, "maximum": 2_147_483_647},
+                "scale": {"type": "integer", "minimum": 1, "maximum": 4_294_967_295},
+            },
+        },
+        "positiveRatio": _POSITIVE_RATIO_INPUT_SCHEMA,
+    },
+}
+_COMPOSITION_CREATE_RESULT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "changed", "name", "compositionLocator", "projectItemCountBefore",
+        "projectItemCountAfter", "layerCount", "width", "height", "duration",
+        "frameRate", "pixelAspectRatio",
+    ],
+    "properties": {
+        "changed": {"const": True},
+        "name": {"type": "string", "minLength": 1, "maxLength": 255},
+        "compositionLocator": {"$ref": "#/$defs/compositionLocator"},
+        "projectItemCountBefore": {"type": "integer", "minimum": 0, "maximum": _SAFE_MAX},
+        "projectItemCountAfter": {"type": "integer", "minimum": 1, "maximum": _SAFE_MAX},
+        "layerCount": {"const": 0},
+        "width": {"type": "integer", "minimum": 1, "maximum": 30_000},
+        "height": {"type": "integer", "minimum": 1, "maximum": 30_000},
+        "duration": {"$ref": "#/$defs/currentTime"},
+        "frameRate": {"$ref": "#/$defs/positiveRatio"},
+        "pixelAspectRatio": {"$ref": "#/$defs/positiveRatio"},
+    },
+    "$defs": {
+        "uuid": {"type": "string", "pattern": _UUID},
+        "compositionLocator": _COMPOSITION_TIME_READ_INPUT_SCHEMA["$defs"]["compositionLocator"],
+        "currentTime": _COMPOSITION_TIME_READ_RESULT_SCHEMA["properties"]["currentTime"],
+        "positiveRatio": _POSITIVE_RATIO_RESULT_SCHEMA,
+    },
+    "x-invariant": "projectItemCountAfter-equals-projectItemCountBefore-plus-one;layerCount-is-zero;all-settings-match-the-request",
 }
 
 _COMPOSITION_LAYER_CREATE_INPUT_SCHEMA = {
@@ -2841,6 +2938,118 @@ class ProjectBitDepthSetExecution(_NativeModel):
         }
 
 
+class PositiveRatioTarget(_NativeModel):
+    numerator: Annotated[StrictInt, Field(ge=1, le=2_147_483_647)]
+    denominator: Annotated[StrictInt, Field(ge=1, le=2_147_483_647)]
+
+
+class PositiveRatioValue(PositiveRatioTarget):
+    rational: Annotated[
+        StrictStr,
+        Field(min_length=1, max_length=28, pattern=r"^[1-9][0-9]*(?:/[1-9][0-9]*)?$"),
+    ]
+
+    @model_validator(mode="after")
+    def _exact_reduced_rational(self) -> "PositiveRatioValue":
+        divisor = math.gcd(self.numerator, self.denominator)
+        numerator = self.numerator // divisor
+        denominator = self.denominator // divisor
+        expected = str(numerator) if denominator == 1 else f"{numerator}/{denominator}"
+        if self.rational != expected:
+            raise ValueError("rational must be the exact reduced ratio")
+        return self
+
+
+class CompositionCreateArguments(_NativeModel):
+    name: Annotated[StrictStr, Field(min_length=1, max_length=255)]
+    width: Annotated[StrictInt, Field(ge=1, le=30_000)]
+    height: Annotated[StrictInt, Field(ge=1, le=30_000)]
+    duration: CompositionTimeTarget
+    frame_rate: PositiveRatioTarget
+    pixel_aspect_ratio: PositiveRatioTarget
+    idempotency_key: Annotated[
+        StrictStr,
+        Field(min_length=16, max_length=64, pattern=_IDEMPOTENCY_KEY_PATTERN),
+    ]
+
+    @model_validator(mode="after")
+    def _valid_create_shape(self) -> "CompositionCreateArguments":
+        if any(0xD800 <= ord(character) <= 0xDFFF for character in self.name):
+            raise ValueError("name must contain only Unicode scalar values")
+        if self.duration.value <= 0:
+            raise ValueError("duration must be positive")
+        return self
+
+
+class CompositionCreateValue(_NativeModel):
+    changed: Literal[True]
+    name: Annotated[StrictStr, Field(min_length=1, max_length=255)]
+    composition_locator: NativeLocator
+    project_item_count_before: NonNegativeInt
+    project_item_count_after: PositiveInt
+    layer_count: Literal[0]
+    width: Annotated[StrictInt, Field(ge=1, le=30_000)]
+    height: Annotated[StrictInt, Field(ge=1, le=30_000)]
+    duration: CompositionCurrentTime
+    frame_rate: PositiveRatioValue
+    pixel_aspect_ratio: PositiveRatioValue
+
+    @model_validator(mode="after")
+    def _verified_create(self) -> "CompositionCreateValue":
+        if any(0xD800 <= ord(character) <= 0xDFFF for character in self.name):
+            raise ValueError("name must contain only Unicode scalar values")
+        if self.composition_locator.kind != "composition":
+            raise ValueError("compositionLocator must have kind composition")
+        if self.project_item_count_after != self.project_item_count_before + 1:
+            raise ValueError("native composition create must add exactly one project item")
+        if self.duration.value <= 0:
+            raise ValueError("created composition duration must be positive")
+        return self
+
+
+class CompositionCreateExecution(_NativeModel):
+    implementation: NativeCapabilityDescriptor
+    negotiation: NativeNegotiation
+    transport_request_id: RequestId
+    idempotency_key: Annotated[
+        StrictStr,
+        Field(min_length=16, max_length=64, pattern=_IDEMPOTENCY_KEY_PATTERN),
+    ]
+    replayed: StrictBool
+    value: CompositionCreateValue
+    evidence: NativeExecutionEvidence
+    engine: Literal["native-aegp"] = "native-aegp"
+
+    def audit_fields(self) -> dict[str, Any]:
+        undo = self.evidence.undo
+        return {
+            "engine": self.engine,
+            "capabilityId": self.evidence.capability_id,
+            "capabilityVersion": self.evidence.capability_version,
+            "contractDigest": self.implementation.contract_digest,
+            "selectedWireVersion": self.negotiation.selected_wire_version,
+            "pluginVersion": self.negotiation.plugin_version,
+            "compiledSdkVersion": self.negotiation.compiled_sdk_version,
+            "sourceCommit": self.negotiation.source_commit,
+            "hostInstanceId": self.evidence.host_instance_id,
+            "sessionId": self.evidence.session_id,
+            "sessionGeneration": self.negotiation.session_generation,
+            "capabilitiesDigest": self.negotiation.capabilities_digest,
+            "requestId": self.transport_request_id,
+            "evidenceRequestId": self.evidence.request_id,
+            "idempotencyKey": self.idempotency_key,
+            "replayed": self.replayed,
+            "effect": self.evidence.effect,
+            "requestDigest": self.evidence.request_digest,
+            "postconditionAlgorithm": self.evidence.postcondition.algorithm,
+            "postconditionDigest": self.evidence.postcondition.digest,
+            "undoAvailable": undo.available if undo is not None else False,
+            "undoVerified": undo.verified if undo is not None else False,
+            "startedAtUnixMs": self.evidence.started_at_unix_ms,
+            "completedAtUnixMs": self.evidence.completed_at_unix_ms,
+        }
+
+
 class CompositionLayerCreateColor(_NativeModel):
     red: Annotated[StrictInt, Field(ge=0, le=255)]
     green: Annotated[StrictInt, Field(ge=0, le=255)]
@@ -3482,6 +3691,48 @@ def _validate_composition_time_set_descriptor(
         )
 
 
+def _validate_composition_create_descriptor(
+    descriptor: NativeCapabilityDescriptor,
+    *,
+    host_platform: NativePlatform,
+) -> None:
+    schemas_digest = _sha256_closed_json(
+        {"inputSchema": descriptor.input_schema, "resultSchema": descriptor.result_schema}
+    )
+    requirements = tuple(
+        (requirement.id, requirement.contract_version)
+        for requirement in descriptor.requirements
+    )
+    expected = (
+        descriptor.capability_id == COMPOSITION_CREATE_CAPABILITY_ID
+        and descriptor.capability_version == COMPOSITION_CREATE_CAPABILITY_VERSION
+        and descriptor.schema_version == 1
+        and descriptor.engine == "native-aegp"
+        and descriptor.summary == "Create one root composition in After Effects."
+        and descriptor.risk == "write"
+        and descriptor.mutability == "mutating"
+        and descriptor.idempotency == "idempotency-key"
+        and descriptor.cancellation == "before-dispatch"
+        and descriptor.undo == "ae-undo-group"
+        and descriptor.side_effect_summary
+        == "Creates one root composition and one After Effects Undo step."
+        and descriptor.preconditions == ("An After Effects project must be open.",)
+        and descriptor.input_contract_id == COMPOSITION_CREATE_INPUT_CONTRACT_ID
+        and descriptor.result_contract_id == COMPOSITION_CREATE_RESULT_CONTRACT_ID
+        and descriptor.contract_digest == COMPOSITION_CREATE_CONTRACT_DIGEST
+        and schemas_digest == descriptor.contract_digest
+        and descriptor.input_schema == _COMPOSITION_CREATE_INPUT_SCHEMA
+        and descriptor.result_schema == _COMPOSITION_CREATE_RESULT_SCHEMA
+        and requirements == (("aemcp.requirement.native.composition-create", 1),)
+        and host_platform in descriptor.compatibility.intended_platforms
+    )
+    if not expected:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Negotiated ae.composition.create contract does not match Core.",
+        )
+
+
 def _validate_composition_layer_create_descriptor(
     descriptor: NativeCapabilityDescriptor,
     *,
@@ -3711,6 +3962,16 @@ def _composition_time_set_digest(value: CompositionTimeSetValue) -> str:
         {
             "capabilityId": COMPOSITION_TIME_SET_CAPABILITY_ID,
             "capabilityVersion": COMPOSITION_TIME_SET_CAPABILITY_VERSION,
+            "value": value.model_dump(mode="json", by_alias=True),
+        }
+    )
+
+
+def _composition_create_digest(value: CompositionCreateValue) -> str:
+    return _sha256_closed_json(
+        {
+            "capabilityId": COMPOSITION_CREATE_CAPABILITY_ID,
+            "capabilityVersion": COMPOSITION_CREATE_CAPABILITY_VERSION,
             "value": value.model_dump(mode="json", by_alias=True),
         }
     )
@@ -5036,6 +5297,182 @@ async def invoke_composition_time_set(
     )
 
 
+async def invoke_composition_create(
+    backend: NativeInvokeBackend,
+    *,
+    request_id: str,
+    name: str,
+    width: int,
+    height: int,
+    duration: CompositionTimeTarget | Mapping[str, Any],
+    frame_rate: PositiveRatioTarget | Mapping[str, Any],
+    pixel_aspect_ratio: PositiveRatioTarget | Mapping[str, Any],
+    idempotency_key: str,
+    deadline_unix_ms: int,
+    cancellation: NativeCancellationToken | None = None,
+) -> CompositionCreateExecution:
+    """Create one root composition through the negotiated native AEGP plane."""
+
+    inspect_hint = (
+        "Call ae_listProjectItems and inspect the After Effects Undo stack before "
+        "issuing another composition create."
+    )
+    try:
+        arguments = CompositionCreateArguments(
+            name=name,
+            width=width,
+            height=height,
+            duration=duration,
+            frame_rate=frame_rate,
+            pixel_aspect_ratio=pixel_aspect_ratio,
+            idempotency_key=idempotency_key,
+        )
+    except ValidationError as exc:
+        raise _structured_error(
+            "INVALID_ARGUMENT",
+            "Composition create arguments did not match the published contract.",
+            details={"capabilityId": COMPOSITION_CREATE_CAPABILITY_ID},
+            recovery_hint=(
+                "Provide a bounded Unicode name, 1 to 30000 dimensions, positive "
+                "exact duration and ratios, and a stable 16 to 64 character key."
+            ),
+        ) from exc
+
+    _ensure_active(deadline_unix_ms, cancellation)
+    negotiation = await backend.negotiate(
+        deadline_unix_ms=deadline_unix_ms, cancellation=cancellation
+    )
+    _ensure_active(deadline_unix_ms, cancellation)
+    capabilities = await backend.capabilities(
+        ids=None,
+        detail="full",
+        limit=100,
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    expected_query_digest = _capabilities_query_digest(
+        session_id=negotiation.session_id, ids=None, detail="full", limit=100
+    )
+    try:
+        registry_digest = _capabilities_registry_digest(capabilities.items)
+    except (TypeError, ValueError, UnicodeError) as exc:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native capability registry could not be verified.",
+        ) from exc
+    if (
+        capabilities.session_id != negotiation.session_id
+        or capabilities.detail != "full"
+        or capabilities.next_cursor is not None
+        or capabilities.query_digest != expected_query_digest
+        or capabilities.capabilities_digest != registry_digest
+        or capabilities.capabilities_digest != negotiation.capabilities_digest
+    ):
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native capabilities were not bound to the negotiated session.",
+        )
+    matches = [
+        item
+        for item in capabilities.items
+        if item.capability_id == COMPOSITION_CREATE_CAPABILITY_ID
+        and item.capability_version == COMPOSITION_CREATE_CAPABILITY_VERSION
+    ]
+    descriptor = matches[0] if len(matches) == 1 else None
+    if descriptor is None:
+        raise _structured_error(
+            "NATIVE_UNSUPPORTED",
+            "Native host did not advertise ae.composition.create@1.",
+        )
+    _validate_composition_create_descriptor(
+        descriptor, host_platform=negotiation.host_platform
+    )
+    _ensure_active(deadline_unix_ms, cancellation)
+
+    request = NativeInvokeRequest(
+        request_id=request_id,
+        capability_id=COMPOSITION_CREATE_CAPABILITY_ID,
+        capability_version=COMPOSITION_CREATE_CAPABILITY_VERSION,
+        arguments=arguments.model_dump(mode="json", by_alias=True),
+        deadline_unix_ms=deadline_unix_ms,
+    )
+    try:
+        result = await backend.invoke(request, cancellation=cancellation)
+    except NativeBackendError as exc:
+        _validate_invoke_error_binding(exc, request)
+        raise
+    expected_request_digest = _invoke_request_digest(request, negotiation)
+    undo = result.evidence.undo
+    if (
+        result.capability_id != request.capability_id
+        or result.capability_version != request.capability_version
+        or result.engine != "native-aegp"
+        or result.evidence.request_id != request.request_id
+        or result.evidence.host_instance_id != negotiation.host_instance_id
+        or result.evidence.session_id != negotiation.session_id
+        or result.evidence.effect != "committed"
+        or undo is None
+        or undo.available is not True
+        or undo.verified is not False
+        or undo.group_id is not None
+        or result.evidence.completed_at_unix_ms > deadline_unix_ms
+        or result.evidence.request_digest != expected_request_digest
+    ):
+        raise NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "Native composition-create result could not be verified after dispatch.",
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery=NativeRecovery(action="inspect-state", hint=inspect_hint),
+            details={"capabilityId": COMPOSITION_CREATE_CAPABILITY_ID},
+        )
+    try:
+        created = CompositionCreateValue.model_validate(result.value)
+        postcondition_digest = _composition_create_digest(created)
+    except (ValidationError, TypeError, ValueError, UnicodeError) as exc:
+        raise NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "Native composition-create value was malformed after dispatch.",
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery=NativeRecovery(action="inspect-state", hint=inspect_hint),
+            details={"capabilityId": COMPOSITION_CREATE_CAPABILITY_ID},
+        ) from exc
+
+    def _ratio_matches(value: PositiveRatioValue, target: PositiveRatioTarget) -> bool:
+        return value.numerator * target.denominator == target.numerator * value.denominator
+
+    if (
+        created.name != arguments.name
+        or created.width != arguments.width
+        or created.height != arguments.height
+        or not _composition_times_equal(created.duration, arguments.duration)
+        or not _ratio_matches(created.frame_rate, arguments.frame_rate)
+        or not _ratio_matches(created.pixel_aspect_ratio, arguments.pixel_aspect_ratio)
+        or created.composition_locator.host_instance_id != negotiation.host_instance_id
+        or created.composition_locator.session_id != negotiation.session_id
+        or result.evidence.postcondition.kind != "composition-create"
+        or result.evidence.postcondition.digest != postcondition_digest
+    ):
+        raise NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "Native composition-create postcondition evidence did not verify.",
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery=NativeRecovery(action="inspect-state", hint=inspect_hint),
+            details={"capabilityId": COMPOSITION_CREATE_CAPABILITY_ID},
+        )
+    return CompositionCreateExecution(
+        implementation=descriptor,
+        negotiation=negotiation,
+        transport_request_id=request.request_id,
+        idempotency_key=arguments.idempotency_key,
+        replayed=result.replayed,
+        value=created,
+        evidence=result.evidence,
+    )
+
+
 async def invoke_composition_layer_create(
     backend: NativeInvokeBackend,
     *,
@@ -5443,6 +5880,11 @@ __all__ = [
     "COMPOSITION_TIME_SET_CONTRACT_DIGEST",
     "COMPOSITION_TIME_SET_INPUT_CONTRACT_ID",
     "COMPOSITION_TIME_SET_RESULT_CONTRACT_ID",
+    "COMPOSITION_CREATE_CAPABILITY_ID",
+    "COMPOSITION_CREATE_CAPABILITY_VERSION",
+    "COMPOSITION_CREATE_CONTRACT_DIGEST",
+    "COMPOSITION_CREATE_INPUT_CONTRACT_ID",
+    "COMPOSITION_CREATE_RESULT_CONTRACT_ID",
     "COMPOSITION_LAYER_CREATE_CAPABILITY_ID",
     "COMPOSITION_LAYER_CREATE_CAPABILITY_VERSION",
     "COMPOSITION_LAYER_CREATE_CONTRACT_DIGEST",
@@ -5472,6 +5914,7 @@ __all__ = [
     "invoke_selected_composition_layers_list",
     "invoke_composition_time_read",
     "invoke_composition_time_set",
+    "invoke_composition_create",
     "invoke_composition_layer_create",
     "invoke_layer_properties_list",
     "invoke_layer_property_set",

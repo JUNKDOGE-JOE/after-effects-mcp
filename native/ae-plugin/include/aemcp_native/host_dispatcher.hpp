@@ -34,6 +34,8 @@ inline constexpr std::string_view kCompositionTimeReadCapability =
     "ae.composition.time.read";
 inline constexpr std::string_view kCompositionTimeSetCapability =
     "ae.composition.time.set";
+inline constexpr std::string_view kCompositionCreateCapability =
+    "ae.composition.create";
 inline constexpr std::string_view kCompositionLayerCreateCapability =
     "ae.composition.layer.create";
 inline constexpr std::string_view kLayerPropertiesListCapability =
@@ -189,6 +191,28 @@ struct CompositionTimeChanged {
   CompositionCurrentTime after_time;
 };
 
+struct CompositionPositiveRatio {
+  std::int32_t numerator{1};
+  std::int32_t denominator{1};
+  std::string rational{"1"};
+
+  [[nodiscard]] bool operator==(const CompositionPositiveRatio&) const = default;
+};
+
+struct CompositionCreated {
+  bool changed{true};
+  std::string name;
+  ObjectLocator composition_locator;
+  std::uint64_t project_item_count_before{0};
+  std::uint64_t project_item_count_after{0};
+  std::uint64_t layer_count{0};
+  std::uint32_t width{0};
+  std::uint32_t height{0};
+  CompositionCurrentTime duration;
+  CompositionPositiveRatio frame_rate;
+  CompositionPositiveRatio pixel_aspect_ratio;
+};
+
 struct CompositionLayerCreateColor {
   std::uint16_t red{255};
   std::uint16_t green{255};
@@ -339,6 +363,17 @@ struct CompositionTimeSetCommand {
   CompositionCurrentTime target_time;
 };
 
+struct CompositionCreateCommand {
+  std::string host_instance_id;
+  std::string session_id;
+  std::string name;
+  std::uint32_t width{0};
+  std::uint32_t height{0};
+  CompositionCurrentTime duration;
+  CompositionPositiveRatio frame_rate;
+  CompositionPositiveRatio pixel_aspect_ratio;
+};
+
 struct CompositionLayerCreateCommand {
   std::string host_instance_id;
   std::string session_id;
@@ -450,6 +485,18 @@ struct HostCompositionTimeWriteResult {
       std::string code, std::string detail, std::string field = {});
 };
 
+struct HostCompositionCreateResult {
+  bool ok{false};
+  CompositionCreated value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostCompositionCreateResult success(CompositionCreated value);
+  [[nodiscard]] static HostCompositionCreateResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
 struct HostCompositionLayerCreateResult {
   bool ok{false};
   CompositionLayerCreated value;
@@ -518,6 +565,8 @@ class HostApi {
       const CompositionTimeQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostCompositionTimeWriteResult set_composition_time(
       const CompositionTimeSetCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostCompositionCreateResult create_composition(
+      const CompositionCreateCommand& command, TimePoint work_deadline);
   [[nodiscard]] virtual HostCompositionLayerCreateResult create_composition_layer(
       const CompositionLayerCreateCommand& command, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerPropertiesResult list_layer_properties(
@@ -555,7 +604,13 @@ struct Request {
       std::optional<CompositionLayerCreateColor> layer_create_color_value = std::nullopt,
       std::optional<std::uint32_t> layer_create_width_value = std::nullopt,
       std::optional<std::uint32_t> layer_create_height_value = std::nullopt,
-      std::optional<CompositionCurrentTime> layer_create_duration_value = std::nullopt)
+      std::optional<CompositionCurrentTime> layer_create_duration_value = std::nullopt,
+      std::string composition_create_name_value = {},
+      std::uint32_t composition_create_width_value = 0,
+      std::uint32_t composition_create_height_value = 0,
+      CompositionCurrentTime composition_create_duration_value = {},
+      CompositionPositiveRatio composition_create_frame_rate_value = {},
+      CompositionPositiveRatio composition_create_pixel_aspect_ratio_value = {})
       : request_id(std::move(request_id_value)),
         capability_id(std::move(capability_id_value)),
         deadline(deadline_value),
@@ -580,7 +635,14 @@ struct Request {
         layer_create_color(std::move(layer_create_color_value)),
         layer_create_width(layer_create_width_value),
         layer_create_height(layer_create_height_value),
-        layer_create_duration(std::move(layer_create_duration_value)) {}
+        layer_create_duration(std::move(layer_create_duration_value)),
+        composition_create_name(std::move(composition_create_name_value)),
+        composition_create_width(composition_create_width_value),
+        composition_create_height(composition_create_height_value),
+        composition_create_duration(std::move(composition_create_duration_value)),
+        composition_create_frame_rate(std::move(composition_create_frame_rate_value)),
+        composition_create_pixel_aspect_ratio(
+            std::move(composition_create_pixel_aspect_ratio_value)) {}
 
   std::string request_id;
   std::string capability_id;
@@ -610,6 +672,12 @@ struct Request {
   std::optional<std::uint32_t> layer_create_width;
   std::optional<std::uint32_t> layer_create_height;
   std::optional<CompositionCurrentTime> layer_create_duration;
+  std::string composition_create_name;
+  std::uint32_t composition_create_width{0};
+  std::uint32_t composition_create_height{0};
+  CompositionCurrentTime composition_create_duration;
+  CompositionPositiveRatio composition_create_frame_rate;
+  CompositionPositiveRatio composition_create_pixel_aspect_ratio;
 };
 
 enum class EnqueueCode {
@@ -655,6 +723,7 @@ struct Completion {
   CompositionLayersPage composition_selected_layers_result;
   CompositionTimeRead composition_time_result;
   CompositionTimeChanged composition_time_change_result;
+  CompositionCreated composition_create_result;
   CompositionLayerCreated composition_layer_create_result;
   LayerPropertiesPage layer_properties_result;
   LayerPropertyChanged layer_property_change_result;
@@ -744,7 +813,7 @@ class HostDispatcher final {
       std::uint64_t session_generation,
       std::string_view request_id);
   void mark_idempotency_ambiguous(std::string_view idempotency_key);
-  void invalidate_composition_layer_replays();
+  void invalidate_composition_creation_replays();
   [[nodiscard]] bool running() const;
 
  private:
@@ -785,7 +854,7 @@ class HostDispatcher final {
   [[nodiscard]] bool terminal_locked(const RequestKey& key) const;
   void purge_terminal_locked(TimePoint now);
   void remember_terminal_locked(RequestKey key, TimePoint now);
-  void invalidate_composition_layer_replays_locked();
+  void invalidate_composition_creation_replays_locked();
   [[nodiscard]] bool fence_route_locked(
       std::string route_id, std::uint64_t session_generation);
   void finish_request_locked(const RequestKey& key, Completion& completion, TimePoint now);

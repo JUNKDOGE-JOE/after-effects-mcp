@@ -30,6 +30,10 @@ const compositionTimeSetVector = require(
     '../../native/ae-plugin/protocol/fixtures/invoke-composition-time-set.json'
 );
 const compositionTimeSetFixture = compositionTimeSetVector.response.result;
+const compositionCreateVector = require(
+    '../../native/ae-plugin/protocol/fixtures/invoke-composition-create.json'
+);
+const compositionCreateFixture = compositionCreateVector.response.result;
 const compositionLayerCreateVector = require(
     '../../native/ae-plugin/protocol/fixtures/invoke-composition-layer-create.json'
 );
@@ -254,6 +258,12 @@ function fakeNativeClient() {
         },
         invoke: async function (request) {
             calls.push(['invoke', request]);
+            if (request.capabilityId === 'ae.composition.create') {
+                const result = structuredClone(compositionCreateFixture);
+                result.replayed = false;
+                result.evidence.requestId = request.requestId;
+                return result;
+            }
             if (request.capabilityId === 'ae.composition.time.set') {
                 const result = structuredClone(compositionTimeSetFixture);
                 result.replayed = false;
@@ -606,6 +616,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
                 'ae.composition.selected-layers.list',
                 'ae.composition.time.read',
                 'ae.composition.time.set',
+                'ae.composition.create',
                 'ae.composition.layer.create',
                 'ae.layer.properties.list',
                 'ae.layer.property.set',
@@ -753,6 +764,23 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
         assert.deepStrictEqual(compositionTimeSet.body.result.evidence.undo, {
             available: true, verified: false,
         });
+        const compositionCreateRequest = {
+            requestId: 'core-composition-create-1',
+            capabilityId: 'ae.composition.create',
+            capabilityVersion: 1,
+            arguments: structuredClone(compositionCreateVector.request.params.arguments),
+            deadlineUnixMs,
+        };
+        const compositionCreate = await post(
+            port, '/native/invoke', headers, compositionCreateRequest,
+        );
+        assert.strictEqual(compositionCreate.status, 200);
+        assert.strictEqual(compositionCreate.body.result.value.name, 'SYNTHETIC_COMP');
+        assert.strictEqual(compositionCreate.body.result.value.projectItemCountAfter, 2);
+        assert.strictEqual(compositionCreate.body.result.evidence.effect, 'committed');
+        assert.deepStrictEqual(compositionCreate.body.result.evidence.undo, {
+            available: true, verified: false,
+        });
         const compositionLayerCreateRequest = {
             requestId: 'core-composition-layer-create-1',
             capabilityId: 'ae.composition.layer.create',
@@ -815,6 +843,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
             ['invoke', compositionSelectedLayersRequest],
             ['invoke', compositionTimeRequest],
             ['invoke', compositionTimeSetRequest],
+            ['invoke', compositionCreateRequest],
             ['invoke', compositionLayerCreateRequest],
             ['invoke', layerPropertiesRequest],
             ['invoke', layerPropertySetRequest],

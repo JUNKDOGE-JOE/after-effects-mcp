@@ -38,6 +38,11 @@ WORKFLOW — every task follows this loop:
                 ae_setCompositionTime likewise requires an exact value/scale,
                 a fresh composition locator, and one stable idempotency key;
                 verify it with ae_getCompositionTime before any retry.
+                To create a native root composition, call
+                ae_createComposition with a name, stable idempotency key, and
+                optional exact dimensions, duration, frame rate, and pixel
+                aspect ratio. Use its returned fresh locator for later native
+                composition and layer calls.
                 To create one native null or solid, call
                 ae_createCompositionLayer with a fresh composition locator,
                 exact name, and stable idempotency key. Solid-only options are

@@ -144,7 +144,7 @@ v0.9.2 最终 Panel 生成的最小配置形态如下：
 | 分类 | Tools |
 |---|---|
 | Project | `ae_init`, `ae_overview`, `ae_layers`, `ae_listProjectItems`, `ae_listCompositionLayers`, `ae_listSelectedLayers`, `ae_getCompositionTime`, `ae_listLayerProperties`, `ae_setLayerPropertyValue`, `ae_readProps`, `ae_searchProject` |
-| Mutation | `ae_exec`, `ae_applyEffect`, `ae_createLayer`, `ae_createCompositionLayer`, `ae_setProperty`, `ae_moveLayer`, `ae_selectLayers`, `ae_setTime` |
+| Mutation | `ae_exec`, `ae_applyEffect`, `ae_createLayer`, `ae_createComposition`, `ae_createCompositionLayer`, `ae_setProperty`, `ae_moveLayer`, `ae_selectLayers`, `ae_setTime` |
 | Read-typed | `ae_getTime`, `ae_getProperties`, `ae_scanPropertyTree`, `ae_inspectPropertyCapabilities`, `ae_getExpressions`, `ae_validateExpressions`, `ae_getKeyframes` |
 | Preview / capture | `ae_previewFrame`, `ae_snapshot` |
 | Rigging | `ae_createRig` |
@@ -271,7 +271,10 @@ locator 再传回并只向下进入一层 group。原始值绑定当前合成时
 泄露原生 handle。将返回的 layer locator 与 primitive leaf locator 交给
 `ae_setLayerPropertyValue`，并提供稳定的幂等键，即可通过原生 `AEGP_SetStreamValue` 写入。
 结果包含已验证的 before/after、审计 provenance 与 AE Undo 可用性；若写入后的响应不确定，
-必须先检查 AE 状态再考虑重试。将新鲜的 composition locator 传给
+必须先检查 AE 状态再考虑重试。`ae_createComposition` 接受精确名称和稳定幂等键，通过
+`AEGP_CreateComp` 直接创建根级合成；尺寸默认 1920x1080、时长默认 5/1 秒、帧率默认 24/1、
+像素宽高比默认 1/1，也可全部用整数或精确有理数覆盖。结果返回新 composition locator、已验证
+的设置与数量、原生 provenance 和 Undo 可用性，且不会回退 JSX。将新鲜的 composition locator 传给
 `ae_createCompositionLayer`，可用精确名称与稳定幂等键创建一个原生 null 或 solid 图层；solid
 的颜色、尺寸与时长可选，省略时使用契约声明的默认值。结果返回修改后的新 locator、数量证据、
 原生 provenance 与 Undo 可用性；同一 intent 的 replay 不会重复创建。成功后旧图结构 generation

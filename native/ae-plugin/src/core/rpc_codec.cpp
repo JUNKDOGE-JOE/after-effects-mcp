@@ -625,6 +625,15 @@ std::string canonical_composition_layer_create_arguments(
     const std::optional<CompositionCurrentTime>& duration,
     std::string_view idempotency_key);
 
+std::string canonical_composition_create_arguments(
+    std::string_view name,
+    std::uint32_t width,
+    std::uint32_t height,
+    const CompositionCurrentTime& duration,
+    const CompositionPositiveRatio& frame_rate,
+    const CompositionPositiveRatio& pixel_aspect_ratio,
+    std::string_view idempotency_key);
+
 std::string canonical_request(const ParsedRequest& request) {
   std::string params;
   switch (request.method) {
@@ -697,6 +706,15 @@ std::string canonical_request(const ParsedRequest& request) {
             + ",\"targetTime\":{\"scale\":"
             + std::to_string(value.target_time.scale) + ",\"value\":"
             + std::to_string(value.target_time.value) + "}}";
+      } else if (value.capability_id == "ae.composition.create") {
+        arguments = canonical_composition_create_arguments(
+            value.composition_create_name,
+            value.composition_create_width,
+            value.composition_create_height,
+            value.composition_create_duration,
+            value.composition_create_frame_rate,
+            value.composition_create_pixel_aspect_ratio,
+            value.idempotency_key);
       } else if (value.capability_id == "ae.composition.layer.create") {
         arguments = canonical_composition_layer_create_arguments(
             *value.composition_locator,
@@ -1060,6 +1078,77 @@ ParsedRequest classify_request(const JsonValue& root) {
         result.arguments_fingerprint_sha256 = digest_composition_time_set_arguments(
             *result.composition_locator,
             result.target_time,
+            result.idempotency_key);
+      } else if (capability == "ae.composition.create") {
+        if (!exact_keys(
+                *arguments,
+                {"name", "width", "height", "duration", "frameRate",
+                    "pixelAspectRatio", "idempotencyKey"},
+                {"name", "width", "height", "duration", "frameRate",
+                    "pixelAspectRatio", "idempotencyKey"})) {
+          invalid_argument("composition create arguments are not closed");
+        }
+        result.composition_create_name = required_string(
+            *arguments, "name", CodecErrorKind::kInvalidArgument);
+        if (validate_utf8_and_count(result.composition_create_name) < 1
+            || validate_utf8_and_count(result.composition_create_name) > 255) {
+          invalid_argument("invalid composition name");
+        }
+        result.composition_create_width = static_cast<std::uint32_t>(required_uint(
+            *arguments, "width", CodecErrorKind::kInvalidArgument, 1, 30000));
+        result.composition_create_height = static_cast<std::uint32_t>(required_uint(
+            *arguments, "height", CodecErrorKind::kInvalidArgument, 1, 30000));
+        const JsonValue* duration_value = member(*arguments, "duration");
+        const JsonValue::Object* duration = duration_value == nullptr
+            ? nullptr : object_of(*duration_value);
+        if (duration == nullptr
+            || !exact_keys(*duration, {"value", "scale"}, {"value", "scale"})) {
+          invalid_argument("composition duration must be a closed exact time pair");
+        }
+        result.composition_create_duration.value = static_cast<std::int32_t>(required_int(
+            *duration, "value", CodecErrorKind::kInvalidArgument, 1,
+            std::numeric_limits<std::int32_t>::max()));
+        result.composition_create_duration.scale = static_cast<std::uint32_t>(required_uint(
+            *duration, "scale", CodecErrorKind::kInvalidArgument, 1,
+            std::numeric_limits<std::uint32_t>::max()));
+        result.composition_create_duration.seconds_rational = canonical_seconds_rational(
+            result.composition_create_duration.value,
+            result.composition_create_duration.scale);
+        const auto parse_ratio = [&](std::string_view member_name) {
+          const JsonValue* ratio_value = member(*arguments, member_name);
+          const JsonValue::Object* ratio = ratio_value == nullptr
+              ? nullptr : object_of(*ratio_value);
+          if (ratio == nullptr
+              || !exact_keys(
+                  *ratio, {"numerator", "denominator"},
+                  {"numerator", "denominator"})) {
+            invalid_argument("composition ratio must be a closed positive pair");
+          }
+          CompositionPositiveRatio parsed;
+          parsed.numerator = static_cast<std::int32_t>(required_int(
+              *ratio, "numerator", CodecErrorKind::kInvalidArgument, 1,
+              std::numeric_limits<std::int32_t>::max()));
+          parsed.denominator = static_cast<std::int32_t>(required_int(
+              *ratio, "denominator", CodecErrorKind::kInvalidArgument, 1,
+              std::numeric_limits<std::int32_t>::max()));
+          parsed.rational = canonical_seconds_rational(
+              parsed.numerator, static_cast<std::uint32_t>(parsed.denominator));
+          return parsed;
+        };
+        result.composition_create_frame_rate = parse_ratio("frameRate");
+        result.composition_create_pixel_aspect_ratio = parse_ratio("pixelAspectRatio");
+        result.idempotency_key = required_string(
+            *arguments, "idempotencyKey", CodecErrorKind::kInvalidArgument);
+        if (!valid_idempotency_key(result.idempotency_key)) {
+          invalid_argument("invalid composition create idempotency key");
+        }
+        result.arguments_fingerprint_sha256 = digest_composition_create_arguments(
+            result.composition_create_name,
+            result.composition_create_width,
+            result.composition_create_height,
+            result.composition_create_duration,
+            result.composition_create_frame_rate,
+            result.composition_create_pixel_aspect_ratio,
             result.idempotency_key);
       } else if (capability == "ae.composition.layer.create") {
         if (!exact_keys(
@@ -1487,6 +1576,73 @@ std::string canonical_composition_time_set_value(
       + ",\"beforeTime\":" + canonical_current_time(value.before_time)
       + ",\"changed\":true,\"compositionLocator\":"
       + locator_json(value.composition_locator) + "}";
+}
+
+std::string canonical_positive_ratio(
+    const CompositionPositiveRatio& value,
+    bool include_rational) {
+  if (value.numerator <= 0 || value.denominator <= 0
+      || value.rational != canonical_seconds_rational(
+          value.numerator, static_cast<std::uint32_t>(value.denominator))) {
+    invalid_argument("invalid positive ratio");
+  }
+  std::string result = "{\"denominator\":" + std::to_string(value.denominator)
+      + ",\"numerator\":" + std::to_string(value.numerator);
+  if (include_rational) {
+    result += ",\"rational\":" + json_string(value.rational);
+  }
+  result.push_back('}');
+  return result;
+}
+
+std::string canonical_composition_create_arguments(
+    std::string_view name,
+    std::uint32_t width,
+    std::uint32_t height,
+    const CompositionCurrentTime& duration,
+    const CompositionPositiveRatio& frame_rate,
+    const CompositionPositiveRatio& pixel_aspect_ratio,
+    std::string_view idempotency_key) {
+  if (validate_utf8_and_count(name) < 1 || validate_utf8_and_count(name) > 255
+      || width < 1 || width > 30000 || height < 1 || height > 30000
+      || duration.value <= 0 || !valid_idempotency_key(idempotency_key)) {
+    invalid_argument("invalid composition create arguments");
+  }
+  (void)canonical_current_time(duration);
+  return "{\"duration\":{\"scale\":" + std::to_string(duration.scale)
+      + ",\"value\":" + std::to_string(duration.value)
+      + "},\"frameRate\":" + canonical_positive_ratio(frame_rate, false)
+      + ",\"height\":" + std::to_string(height)
+      + ",\"idempotencyKey\":" + json_string(idempotency_key)
+      + ",\"name\":" + json_string(name)
+      + ",\"pixelAspectRatio\":"
+      + canonical_positive_ratio(pixel_aspect_ratio, false)
+      + ",\"width\":" + std::to_string(width) + "}";
+}
+
+std::string canonical_composition_create_value(const CompositionCreated& value) {
+  if (!value.changed || validate_utf8_and_count(value.name) < 1
+      || validate_utf8_and_count(value.name) > 255
+      || !valid_output_locator(value.composition_locator)
+      || value.composition_locator.kind != "composition"
+      || value.project_item_count_after != value.project_item_count_before + 1
+      || value.layer_count != 0 || value.width < 1 || value.width > 30000
+      || value.height < 1 || value.height > 30000 || value.duration.value <= 0) {
+    invalid_argument("invalid composition create result");
+  }
+  return "{\"changed\":true,\"compositionLocator\":"
+      + locator_json(value.composition_locator)
+      + ",\"duration\":" + canonical_current_time(value.duration)
+      + ",\"frameRate\":" + canonical_positive_ratio(value.frame_rate, true)
+      + ",\"height\":" + std::to_string(value.height)
+      + ",\"layerCount\":0,\"name\":" + json_string(value.name)
+      + ",\"pixelAspectRatio\":"
+      + canonical_positive_ratio(value.pixel_aspect_ratio, true)
+      + ",\"projectItemCountAfter\":"
+      + std::to_string(value.project_item_count_after)
+      + ",\"projectItemCountBefore\":"
+      + std::to_string(value.project_item_count_before)
+      + ",\"width\":" + std::to_string(value.width) + "}";
 }
 
 std::string canonical_layer_create_color(
@@ -2027,6 +2183,26 @@ std::string digest_composition_time_set_postcondition(
   return sha256_hex(
       "{\"capabilityId\":\"ae.composition.time.set\",\"capabilityVersion\":1,\"value\":"
       + canonical_composition_time_set_value(value) + "}");
+}
+
+std::string digest_composition_create_arguments(
+    std::string_view name,
+    std::uint32_t width,
+    std::uint32_t height,
+    const CompositionCurrentTime& duration,
+    const CompositionPositiveRatio& frame_rate,
+    const CompositionPositiveRatio& pixel_aspect_ratio,
+    std::string_view idempotency_key) {
+  return sha256_hex(canonical_composition_create_arguments(
+      name, width, height, duration, frame_rate, pixel_aspect_ratio,
+      idempotency_key));
+}
+
+std::string digest_composition_create_postcondition(
+    const CompositionCreated& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.composition.create\",\"capabilityVersion\":1,\"value\":"
+      + canonical_composition_create_value(value) + "}");
 }
 
 std::string digest_composition_layer_create_arguments(
@@ -2628,6 +2804,19 @@ std::string composition_time_set_descriptor(const CapabilitiesSuccess& response)
   return R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308","detail":"full","examples":[{"arguments":{"compositionLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"composition","objectId":"66666666-6666-4666-8666-666666666666","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"idempotencyKey":"synthetic-comp-time-0001","targetTime":{"scale":1,"value":1}},"expected":{"outcome":"succeeded","value":{"afterTime":{"scale":1,"secondsRational":"1","value":1},"beforeTime":{"scale":1,"secondsRational":"0","value":0},"changed":true,"compositionLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"composition","objectId":"66666666-6666-4666-8666-666666666666","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}}},"id":"aemcp-example-composition-time-set","kind":"positive","summary":"Set and verify an exact rational composition time."},{"arguments":{"compositionLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"composition","objectId":"66666666-6666-4666-8666-666666666666","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"idempotencyKey":"synthetic-comp-time-0002","targetTime":{"scale":1,"value":1}},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"},"id":"aemcp-example-composition-time-set-stale","kind":"negative","summary":"Refresh a stale composition locator before setting current time."}],"id":"ae.composition.time.set","idempotency":"idempotency-key","inputContractId":"aemcp.contract.ae.composition.time.set.input.v1","inputSchema":{"$defs":{"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"composition"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"timeInput":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"compositionLocator":{"$ref":"#/$defs/compositionLocator"},"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"targetTime":{"$ref":"#/$defs/timeInput"}},"required":["compositionLocator","targetTime","idempotencyKey"],"type":"object"},"mutability":"mutating","preconditions":["An After Effects project must be open.","compositionLocator must come from ae.project.items.list@1.","targetTime must differ from the composition's current time."],"requirements":[{"contractVersion":1,"id":"aemcp.requirement.native.composition-time-set"}],"resultContractId":"aemcp.contract.ae.composition.time.set.result.v1","resultSchema":{"$defs":{"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"composition"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"currentTime":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"afterTime":{"$ref":"#/$defs/currentTime"},"beforeTime":{"$ref":"#/$defs/currentTime"},"changed":{"const":true},"compositionLocator":{"$ref":"#/$defs/compositionLocator"}},"required":["changed","compositionLocator","beforeTime","afterTime"],"type":"object","x-invariant":"beforeTime-must-differ-from-afterTime-and-afterTime-must-equal-targetTime"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes composition current time and creates one After Effects Undo step.","summary":"Set the current time of one After Effects composition.","undo":"ae-undo-group","version":1})aemcp";
 }
 
+std::string composition_create_descriptor(const CapabilitiesSuccess& response) {
+  if (response.detail == CapabilityDetail::kSummary) {
+    return R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"detail":"summary","id":"ae.composition.create","idempotency":"idempotency-key","mutability":"mutating","preconditions":["An After Effects project must be open."],"risk":"write","schemaVersion":1,"sideEffectSummary":"Creates one root composition and one After Effects Undo step.","summary":"Create one root composition in After Effects.","undo":"ae-undo-group","version":1})aemcp";
+  }
+  require_digest(response.composition_create_contract_digest, "contract digest");
+  if (response.composition_create_contract_digest
+      != "a5e0ccfc15086d1b10987246048e539cf6332a4e24114ac81783f4a9758ab6f6") {
+    invalid_argument(
+        "composition create contract digest does not match the compiled descriptor");
+  }
+  return R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"a5e0ccfc15086d1b10987246048e539cf6332a4e24114ac81783f4a9758ab6f6","detail":"full","examples":[{"arguments":{"duration":{"scale":1,"value":5},"frameRate":{"denominator":1,"numerator":24},"height":1080,"idempotencyKey":"synthetic-comp-create-0001","name":"SYNTHETIC_COMP","pixelAspectRatio":{"denominator":1,"numerator":1},"width":1920},"expected":{"outcome":"succeeded","value":{"changed":true,"compositionLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"composition","objectId":"77777777-7777-4777-8777-777777777777","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"duration":{"scale":1,"secondsRational":"5","value":5},"frameRate":{"denominator":1,"numerator":24,"rational":"24"},"height":1080,"layerCount":0,"name":"SYNTHETIC_COMP","pixelAspectRatio":{"denominator":1,"numerator":1,"rational":"1"},"projectItemCountAfter":2,"projectItemCountBefore":1,"width":1920}},"id":"aemcp-example-composition-create","kind":"positive","summary":"Create and verify one root composition with exact settings."},{"arguments":{"duration":{"scale":1,"value":5},"frameRate":{"denominator":1,"numerator":24},"height":1080,"idempotencyKey":"synthetic-comp-create-0002","name":"SYNTHETIC_COMP","pixelAspectRatio":{"denominator":1,"numerator":1},"width":1920},"expected":{"errorCode":"DUPLICATE_REQUEST","recoveryAction":"inspect-state"},"id":"aemcp-example-composition-create-duplicate","kind":"negative","summary":"Inspect state when an idempotency key is already bound."}],"id":"ae.composition.create","idempotency":"idempotency-key","inputContractId":"aemcp.contract.ae.composition.create.input.v1","inputSchema":{"$defs":{"positiveRatio":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"}},"required":["numerator","denominator"],"type":"object"},"positiveTime":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"value":{"maximum":2147483647,"minimum":1,"type":"integer"}},"required":["value","scale"],"type":"object"}},"additionalProperties":false,"properties":{"duration":{"$ref":"#/$defs/positiveTime"},"frameRate":{"$ref":"#/$defs/positiveRatio"},"height":{"maximum":30000,"minimum":1,"type":"integer"},"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"name":{"maxLength":255,"minLength":1,"type":"string"},"pixelAspectRatio":{"$ref":"#/$defs/positiveRatio"},"width":{"maximum":30000,"minimum":1,"type":"integer"}},"required":["name","width","height","duration","frameRate","pixelAspectRatio","idempotencyKey"],"type":"object"},"mutability":"mutating","preconditions":["An After Effects project must be open."],"requirements":[{"contractVersion":1,"id":"aemcp.requirement.native.composition-create"}],"resultContractId":"aemcp.contract.ae.composition.create.result.v1","resultSchema":{"$defs":{"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"composition"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"currentTime":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"positiveRatio":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"},"rational":{"maxLength":28,"minLength":1,"pattern":"^[1-9][0-9]*(?:/[1-9][0-9]*)?$","type":"string"}},"required":["numerator","denominator","rational"],"type":"object","x-invariant":"rational-is-the-reduced-canonical-form-of-numerator-over-denominator"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"changed":{"const":true},"compositionLocator":{"$ref":"#/$defs/compositionLocator"},"duration":{"$ref":"#/$defs/currentTime"},"frameRate":{"$ref":"#/$defs/positiveRatio"},"height":{"maximum":30000,"minimum":1,"type":"integer"},"layerCount":{"const":0},"name":{"maxLength":255,"minLength":1,"type":"string"},"pixelAspectRatio":{"$ref":"#/$defs/positiveRatio"},"projectItemCountAfter":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"projectItemCountBefore":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"width":{"maximum":30000,"minimum":1,"type":"integer"}},"required":["changed","name","compositionLocator","projectItemCountBefore","projectItemCountAfter","layerCount","width","height","duration","frameRate","pixelAspectRatio"],"type":"object","x-invariant":"projectItemCountAfter-equals-projectItemCountBefore-plus-one;layerCount-is-zero;all-settings-match-the-request"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Creates one root composition and one After Effects Undo step.","summary":"Create one root composition in After Effects.","undo":"ae-undo-group","version":1})aemcp";
+}
+
 std::string composition_layer_create_descriptor(const CapabilitiesSuccess& response) {
   if (response.detail == CapabilityDetail::kSummary) {
     return R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"detail":"summary","id":"ae.composition.layer.create","idempotency":"idempotency-key","mutability":"mutating","preconditions":["An After Effects project must be open.","compositionLocator must come from ae.project.items.list@1.","kind must be null or solid and solid-only options require kind solid."],"risk":"write","schemaVersion":1,"sideEffectSummary":"Creates one composition layer, may create one solid project item, and creates one After Effects Undo step.","summary":"Create one null or solid layer in an After Effects composition.","undo":"ae-undo-group","version":1})aemcp";
@@ -2847,6 +3036,11 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
   if (response.include_composition_time_set) {
     if (needs_comma) items.push_back(',');
     items += composition_time_set_descriptor(response);
+    needs_comma = true;
+  }
+  if (response.include_composition_create) {
+    if (needs_comma) items.push_back(',');
+    items += composition_create_descriptor(response);
     needs_comma = true;
   }
   if (response.include_composition_layer_create) {
@@ -3194,6 +3388,49 @@ std::vector<std::uint8_t> encode_composition_time_set_success(
       + ",\"undo\":{\"available\":true,\"verified\":false}},"
         "\"outcome\":\"succeeded\",\"value\":" + value
       + "},\"sessionId\":" + json_string(response.session_id) + ",\"wireVersion\":1}";
+  return frame_output(std::move(json));
+}
+
+std::vector<std::uint8_t> encode_composition_create_success(
+    const CompositionCreateSuccess& response) {
+  require_request_id(response.request_id);
+  require_uuid(response.session_id, "session ID");
+  require_uuid(response.host_instance_id, "host instance ID");
+  require_digest(response.request_digest, "request digest");
+  require_digest(response.postcondition_digest, "postcondition digest");
+  const std::string value = canonical_composition_create_value(response.value);
+  if (response.started_at_unix_ms < 1
+      || response.started_at_unix_ms > kMaxSafeInteger
+      || response.completed_at_unix_ms < response.started_at_unix_ms
+      || response.completed_at_unix_ms > kMaxSafeInteger
+      || response.value.composition_locator.host_instance_id
+          != response.host_instance_id
+      || response.value.composition_locator.session_id != response.session_id
+      || response.postcondition_digest
+          != digest_composition_create_postcondition(response.value)) {
+    invalid_argument("invalid or unvalidated composition create evidence");
+  }
+  const std::string replayed = response.replayed ? "true" : "false";
+  std::string json = "{\"kind\":\"response\",\"method\":\"invoke\",\"ok\":true,"
+      "\"replayed\":" + replayed + ",\"requestId\":"
+      + json_string(response.request_id)
+      + ",\"result\":{\"capabilityId\":\"ae.composition.create\","
+        "\"capabilityVersion\":1,\"engine\":\"native-aegp\",\"evidence\":{"
+        "\"capabilityId\":\"ae.composition.create\",\"capabilityVersion\":1,"
+        "\"completedAtUnixMs\":" + std::to_string(response.completed_at_unix_ms)
+      + ",\"effect\":\"committed\",\"engine\":\"native-aegp\",\"hostInstanceId\":"
+      + json_string(response.host_instance_id)
+      + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\",\"digest\":"
+      + json_string(response.postcondition_digest)
+      + ",\"kind\":\"composition-create\",\"verified\":true},\"requestDigest\":"
+      + json_string(response.request_digest) + ",\"requestId\":"
+      + json_string(response.request_id) + ",\"sessionId\":"
+      + json_string(response.session_id) + ",\"startedAtUnixMs\":"
+      + std::to_string(response.started_at_unix_ms)
+      + ",\"undo\":{\"available\":true,\"verified\":false}},"
+        "\"outcome\":\"succeeded\",\"value\":" + value
+      + "},\"sessionId\":" + json_string(response.session_id)
+      + ",\"wireVersion\":1}";
   return frame_output(std::move(json));
 }
 
