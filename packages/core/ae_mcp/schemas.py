@@ -233,6 +233,47 @@ class AeGetCompositionTimeArgs(_StrictModel):
     )
 
 
+class AeCompositionTimeInput(_StrictModel):
+    """Exact A_Time value/scale pair accepted by native composition writes."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    value: int = Field(..., ge=-2_147_483_648, le=2_147_483_647)
+    scale: int = Field(..., ge=1, le=4_294_967_295)
+
+
+class AeSetCompositionTimeArgs(_StrictModel):
+    """ae.setCompositionTime — set exact composition time through native AEGP.
+
+    Copy composition_locator from ae_listProjectItems. The exact value/scale
+    pair is passed to AEGP_SetItemCurrentTime, verified by native readback, and
+    never falls back to JSX.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    composition_locator: AeCompositionLocator = Field(
+        ...,
+        description="Composition locator returned by ae_listProjectItems.",
+    )
+    target_time: AeCompositionTimeInput = Field(
+        ...,
+        description=(
+            "Exact A_Time numerator/value and positive scale. For 2.5 seconds, "
+            "use value=5 and scale=2."
+        ),
+    )
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        description=(
+            "Stable key for one timeline-write intent. Never reuse it for a new time."
+        ),
+    )
+
+
 class AeListLayerPropertiesArgs(_StrictModel):
     """ae.listLayerProperties — list direct native properties on a layer/group.
 
@@ -893,6 +934,7 @@ SCHEMAS = {
     "ae.listCompositionLayers": AeListCompositionLayersArgs,
     "ae.listSelectedLayers": AeListSelectedLayersArgs,
     "ae.getCompositionTime": AeGetCompositionTimeArgs,
+    "ae.setCompositionTime": AeSetCompositionTimeArgs,
     "ae.listLayerProperties": AeListLayerPropertiesArgs,
     "ae.setLayerPropertyValue": AeSetLayerPropertyValueArgs,
     "ae.layers": AeLayersArgs,
@@ -939,4 +981,4 @@ SCHEMAS = {
     "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 53, f"expected 53 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 54, f"expected 54 verbs, got {len(SCHEMAS)}"

@@ -21,6 +21,7 @@ using aemcp::native::rpc::CapabilitiesSuccess;
 using aemcp::native::rpc::CompositionLayersSuccess;
 using aemcp::native::rpc::CompositionSelectedLayersSuccess;
 using aemcp::native::rpc::CompositionTimeSuccess;
+using aemcp::native::rpc::CompositionTimeSetSuccess;
 using aemcp::native::rpc::LayerPropertiesSuccess;
 using aemcp::native::rpc::LayerPropertySetSuccess;
 using aemcp::native::rpc::CapabilityDetail;
@@ -57,6 +58,7 @@ using aemcp::native::rpc::digest_project_summary_postcondition;
 using aemcp::native::rpc::digest_composition_layers_postcondition;
 using aemcp::native::rpc::digest_composition_selected_layers_postcondition;
 using aemcp::native::rpc::digest_composition_time_postcondition;
+using aemcp::native::rpc::digest_composition_time_set_postcondition;
 using aemcp::native::rpc::digest_layer_properties_postcondition;
 using aemcp::native::rpc::digest_layer_property_set_postcondition;
 using aemcp::native::rpc::digest_project_items_postcondition;
@@ -72,6 +74,7 @@ using aemcp::native::rpc::encode_project_summary_success;
 using aemcp::native::rpc::encode_composition_layers_success;
 using aemcp::native::rpc::encode_composition_selected_layers_success;
 using aemcp::native::rpc::encode_composition_time_success;
+using aemcp::native::rpc::encode_composition_time_set_success;
 using aemcp::native::rpc::encode_layer_properties_success;
 using aemcp::native::rpc::encode_layer_property_set_success;
 using aemcp::native::rpc::encode_project_items_success;
@@ -92,6 +95,8 @@ constexpr std::string_view kCompositionLayersContractDigest =
     "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75";
 constexpr std::string_view kCompositionTimeContractDigest =
     "fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd";
+constexpr std::string_view kCompositionTimeSetContractDigest =
+    "724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308";
 constexpr std::string_view kLayerPropertiesContractDigest =
     "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba";
 constexpr std::string_view kLayerPropertySetContractDigest =
@@ -759,6 +764,39 @@ void project_graph_invokes_and_results_are_closed_and_deterministic() {
           != std::string::npos,
       "INT32_MIN composition time did not serialize without overflow");
 
+  aemcp::native::CompositionTimeChanged time_changed;
+  time_changed.changed = true;
+  time_changed.composition_locator = time_value.composition_locator;
+  time_changed.before_time = {0, 1, "0"};
+  time_changed.after_time = {1, 1, "1"};
+  CompositionTimeSetSuccess time_set_success{
+      "invoke-composition-time-set-1",
+      std::string(kSession),
+      std::string(kHost),
+      time_changed,
+      1'900'000'000'000ULL,
+      1'900'000'000'025ULL,
+      std::string(kDigest),
+      digest_composition_time_set_postcondition(time_changed),
+      false};
+  const std::string time_set_body = body(
+      encode_composition_time_set_success(time_set_success));
+  require(time_set_body.find("\"capabilityId\":\"ae.composition.time.set\"")
+          != std::string::npos
+          && time_set_body.find("\"kind\":\"composition-time-set\"")
+              != std::string::npos
+          && time_set_body.find("\"effect\":\"committed\"")
+              != std::string::npos
+          && time_set_body.find("\"undo\":{\"available\":true,\"verified\":false}")
+              != std::string::npos,
+      "composition-time mutation success omitted committed Undo evidence");
+  CompositionTimeSetSuccess equal_time = time_set_success;
+  equal_time.value.after_time = equal_time.value.before_time;
+  equal_time.postcondition_digest = std::string(kDigest);
+  expect_codec_error([&] {
+    (void)encode_composition_time_set_success(equal_time);
+  }, "INVALID_ARGUMENT", "composition-time write without a transition");
+
   aemcp::native::LayerPropertiesPage property_page;
   property_page.layer_locator = layer_page.layers[0].locator;
   property_page.parent_property_locator = locator(
@@ -1173,6 +1211,8 @@ void response_helpers_are_bounded_and_typed() {
       std::string(kCompositionLayersContractDigest);
   capabilities.composition_time_read_contract_digest =
       std::string(kCompositionTimeContractDigest);
+  capabilities.composition_time_set_contract_digest =
+      std::string(kCompositionTimeSetContractDigest);
   capabilities.layer_properties_list_contract_digest =
       std::string(kLayerPropertiesContractDigest);
   capabilities.layer_property_set_contract_digest =
@@ -1230,6 +1270,8 @@ void response_helpers_are_bounded_and_typed() {
           != std::string::npos
       && capabilities_body.find(std::string(kCompositionTimeContractDigest))
           != std::string::npos
+      && capabilities_body.find(std::string(kCompositionTimeSetContractDigest))
+          != std::string::npos
       && capabilities_body.find(std::string(kLayerPropertiesContractDigest))
           != std::string::npos
       && capabilities_body.find("\"id\":\"ae.project.items.list\"")
@@ -1237,6 +1279,8 @@ void response_helpers_are_bounded_and_typed() {
       && capabilities_body.find("\"id\":\"ae.composition.layers.list\"")
           != std::string::npos
       && capabilities_body.find("\"id\":\"ae.composition.time.read\"")
+          != std::string::npos
+      && capabilities_body.find("\"id\":\"ae.composition.time.set\"")
           != std::string::npos
       && capabilities_body.find("\"id\":\"ae.layer.properties.list\"")
           != std::string::npos,

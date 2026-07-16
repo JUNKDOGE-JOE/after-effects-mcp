@@ -1353,6 +1353,91 @@ class CompositionTimeReadExecution(_NativeModel):
         )
 
 
+class CompositionTimeTarget(_NativeModel):
+    value: SignedInt32
+    scale: UnsignedInt32
+
+
+class CompositionTimeSetArguments(_NativeModel):
+    composition_locator: NativeLocator
+    target_time: CompositionTimeTarget
+    idempotency_key: Annotated[
+        StrictStr,
+        Field(min_length=16, max_length=64, pattern=_IDEMPOTENCY_KEY_PATTERN),
+    ]
+
+    @model_validator(mode="after")
+    def _composition_kind(self) -> "CompositionTimeSetArguments":
+        if self.composition_locator.kind != "composition":
+            raise ValueError("compositionLocator must have kind composition")
+        return self
+
+
+def _composition_times_equal(
+    left: CompositionCurrentTime | CompositionTimeTarget,
+    right: CompositionCurrentTime | CompositionTimeTarget,
+) -> bool:
+    return left.value * right.scale == right.value * left.scale
+
+
+class CompositionTimeSetValue(_NativeModel):
+    changed: Literal[True]
+    composition_locator: NativeLocator
+    before_time: CompositionCurrentTime
+    after_time: CompositionCurrentTime
+
+    @model_validator(mode="after")
+    def _verified_transition(self) -> "CompositionTimeSetValue":
+        if self.composition_locator.kind != "composition":
+            raise ValueError("compositionLocator must have kind composition")
+        if _composition_times_equal(self.before_time, self.after_time):
+            raise ValueError("composition current time did not change")
+        return self
+
+
+class CompositionTimeSetExecution(_NativeModel):
+    implementation: NativeCapabilityDescriptor
+    negotiation: NativeNegotiation
+    transport_request_id: RequestId
+    idempotency_key: Annotated[
+        StrictStr,
+        Field(min_length=16, max_length=64, pattern=_IDEMPOTENCY_KEY_PATTERN),
+    ]
+    replayed: StrictBool
+    value: CompositionTimeSetValue
+    evidence: NativeExecutionEvidence
+    engine: Literal["native-aegp"] = "native-aegp"
+
+    def audit_fields(self) -> dict[str, Any]:
+        undo = self.evidence.undo
+        return {
+            "engine": self.engine,
+            "capabilityId": self.evidence.capability_id,
+            "capabilityVersion": self.evidence.capability_version,
+            "contractDigest": self.implementation.contract_digest,
+            "selectedWireVersion": self.negotiation.selected_wire_version,
+            "pluginVersion": self.negotiation.plugin_version,
+            "compiledSdkVersion": self.negotiation.compiled_sdk_version,
+            "sourceCommit": self.negotiation.source_commit,
+            "hostInstanceId": self.evidence.host_instance_id,
+            "sessionId": self.evidence.session_id,
+            "sessionGeneration": self.negotiation.session_generation,
+            "capabilitiesDigest": self.negotiation.capabilities_digest,
+            "requestId": self.transport_request_id,
+            "evidenceRequestId": self.evidence.request_id,
+            "idempotencyKey": self.idempotency_key,
+            "replayed": self.replayed,
+            "effect": self.evidence.effect,
+            "requestDigest": self.evidence.request_digest,
+            "postconditionAlgorithm": self.evidence.postcondition.algorithm,
+            "postconditionDigest": self.evidence.postcondition.digest,
+            "undoAvailable": undo.available if undo is not None else False,
+            "undoVerified": undo.verified if undo is not None else False,
+            "startedAtUnixMs": self.evidence.started_at_unix_ms,
+            "completedAtUnixMs": self.evidence.completed_at_unix_ms,
+        }
+
+
 class LayerPropertiesListExecution(_NativeModel):
     implementation: NativeCapabilityDescriptor
     negotiation: NativeNegotiation
@@ -1405,6 +1490,18 @@ COMPOSITION_TIME_READ_RESULT_CONTRACT_ID = (
 )
 COMPOSITION_TIME_READ_CONTRACT_DIGEST = (
     "fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd"
+)
+
+COMPOSITION_TIME_SET_CAPABILITY_ID = "ae.composition.time.set"
+COMPOSITION_TIME_SET_CAPABILITY_VERSION = 1
+COMPOSITION_TIME_SET_INPUT_CONTRACT_ID = (
+    "aemcp.contract.ae.composition.time.set.input.v1"
+)
+COMPOSITION_TIME_SET_RESULT_CONTRACT_ID = (
+    "aemcp.contract.ae.composition.time.set.result.v1"
+)
+COMPOSITION_TIME_SET_CONTRACT_DIGEST = (
+    "724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308"
 )
 
 LAYER_PROPERTIES_LIST_CAPABILITY_ID = "ae.layer.properties.list"
@@ -1865,6 +1962,69 @@ _COMPOSITION_TIME_READ_RESULT_SCHEMA = {
     },
     "x-invariant": (
         "secondsRational-is-the-reduced-canonical-form-of-value-over-scale"
+    ),
+}
+
+_COMPOSITION_TIME_SET_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["compositionLocator", "targetTime", "idempotencyKey"],
+    "properties": {
+        "compositionLocator": {"$ref": "#/$defs/compositionLocator"},
+        "targetTime": {"$ref": "#/$defs/timeInput"},
+        "idempotencyKey": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 64,
+            "pattern": _IDEMPOTENCY_KEY_PATTERN,
+        },
+    },
+    "$defs": {
+        "uuid": {"type": "string", "pattern": _UUID},
+        "compositionLocator": _COMPOSITION_TIME_READ_INPUT_SCHEMA["$defs"][
+            "compositionLocator"
+        ],
+        "timeInput": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["value", "scale"],
+            "properties": {
+                "value": {
+                    "type": "integer",
+                    "minimum": -2_147_483_648,
+                    "maximum": 2_147_483_647,
+                },
+                "scale": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4_294_967_295,
+                },
+            },
+        },
+    },
+}
+
+_COMPOSITION_TIME_SET_RESULT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["changed", "compositionLocator", "beforeTime", "afterTime"],
+    "properties": {
+        "changed": {"const": True},
+        "compositionLocator": {"$ref": "#/$defs/compositionLocator"},
+        "beforeTime": {"$ref": "#/$defs/currentTime"},
+        "afterTime": {"$ref": "#/$defs/currentTime"},
+    },
+    "$defs": {
+        "uuid": {"type": "string", "pattern": _UUID},
+        "compositionLocator": _COMPOSITION_TIME_READ_INPUT_SCHEMA["$defs"][
+            "compositionLocator"
+        ],
+        "currentTime": _COMPOSITION_TIME_READ_RESULT_SCHEMA["properties"][
+            "currentTime"
+        ],
+    },
+    "x-invariant": (
+        "beforeTime-must-differ-from-afterTime-and-afterTime-must-equal-targetTime"
     ),
 }
 
@@ -2958,6 +3118,57 @@ def _validate_composition_time_read_descriptor(
     )
 
 
+def _validate_composition_time_set_descriptor(
+    descriptor: NativeCapabilityDescriptor,
+    *,
+    host_platform: NativePlatform,
+) -> None:
+    schemas_digest = _sha256_closed_json(
+        {
+            "inputSchema": descriptor.input_schema,
+            "resultSchema": descriptor.result_schema,
+        }
+    )
+    requirements = tuple(
+        (requirement.id, requirement.contract_version)
+        for requirement in descriptor.requirements
+    )
+    expected = (
+        descriptor.capability_id == COMPOSITION_TIME_SET_CAPABILITY_ID
+        and descriptor.capability_version == COMPOSITION_TIME_SET_CAPABILITY_VERSION
+        and descriptor.engine == "native-aegp"
+        and descriptor.summary
+        == "Set the current time of one After Effects composition."
+        and descriptor.risk == "write"
+        and descriptor.mutability == "mutating"
+        and descriptor.idempotency == "idempotency-key"
+        and descriptor.cancellation == "before-dispatch"
+        and descriptor.undo == "ae-undo-group"
+        and descriptor.side_effect_summary
+        == "Changes composition current time and creates one After Effects Undo step."
+        and descriptor.preconditions
+        == (
+            "An After Effects project must be open.",
+            "compositionLocator must come from ae.project.items.list@1.",
+            "targetTime must differ from the composition's current time.",
+        )
+        and descriptor.input_contract_id == COMPOSITION_TIME_SET_INPUT_CONTRACT_ID
+        and descriptor.result_contract_id == COMPOSITION_TIME_SET_RESULT_CONTRACT_ID
+        and descriptor.contract_digest == COMPOSITION_TIME_SET_CONTRACT_DIGEST
+        and schemas_digest == descriptor.contract_digest
+        and descriptor.input_schema == _COMPOSITION_TIME_SET_INPUT_SCHEMA
+        and descriptor.result_schema == _COMPOSITION_TIME_SET_RESULT_SCHEMA
+        and requirements
+        == (("aemcp.requirement.native.composition-time-set", 1),)
+        and host_platform in descriptor.compatibility.intended_platforms
+    )
+    if not expected:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Negotiated ae.composition.time.set contract does not match Core.",
+        )
+
+
 def _validate_layer_properties_list_descriptor(
     descriptor: NativeCapabilityDescriptor,
     *,
@@ -3125,6 +3336,16 @@ def _composition_time_read_digest(value: CompositionTimeReadValue) -> str:
         {
             "capabilityId": COMPOSITION_TIME_READ_CAPABILITY_ID,
             "capabilityVersion": COMPOSITION_TIME_READ_CAPABILITY_VERSION,
+            "value": value.model_dump(mode="json", by_alias=True),
+        }
+    )
+
+
+def _composition_time_set_digest(value: CompositionTimeSetValue) -> str:
+    return _sha256_closed_json(
+        {
+            "capabilityId": COMPOSITION_TIME_SET_CAPABILITY_ID,
+            "capabilityVersion": COMPOSITION_TIME_SET_CAPABILITY_VERSION,
             "value": value.model_dump(mode="json", by_alias=True),
         }
     )
@@ -4240,6 +4461,206 @@ async def invoke_composition_time_read(
     )
 
 
+async def invoke_composition_time_set(
+    backend: NativeInvokeBackend,
+    *,
+    request_id: str,
+    composition_locator: NativeLocator | Mapping[str, Any],
+    target_time: CompositionTimeTarget | Mapping[str, Any],
+    idempotency_key: str,
+    deadline_unix_ms: int,
+    cancellation: NativeCancellationToken | None = None,
+) -> CompositionTimeSetExecution:
+    """Set one composition's exact current time without consulting JSX."""
+
+    stale_hint = (
+        "Discard the stale composition locator, then call "
+        "ae_listProjectItems and copy a fresh composition locator."
+    )
+    try:
+        arguments = CompositionTimeSetArguments(
+            composition_locator=composition_locator,
+            target_time=target_time,
+            idempotency_key=idempotency_key,
+        )
+    except ValidationError as exc:
+        raise _structured_error(
+            "INVALID_ARGUMENT",
+            "Composition-time write arguments did not match the published contract.",
+            details={"capabilityId": COMPOSITION_TIME_SET_CAPABILITY_ID},
+            recovery_hint=(
+                "Use a fresh composition locator, an int32 value, a positive "
+                "uint32 scale, and a stable 16 to 64 character idempotency key."
+            ),
+        ) from exc
+    _ensure_active(deadline_unix_ms, cancellation)
+    negotiation = await backend.negotiate(
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    _ensure_active(deadline_unix_ms, cancellation)
+    capability_ids: tuple[str, ...] | None = None
+    capability_detail: CapabilityDetail = "full"
+    capability_limit = 100
+    capabilities = await backend.capabilities(
+        ids=capability_ids,
+        detail=capability_detail,
+        limit=capability_limit,
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    expected_query_digest = _capabilities_query_digest(
+        session_id=negotiation.session_id,
+        ids=capability_ids,
+        detail=capability_detail,
+        limit=capability_limit,
+    )
+    try:
+        registry_digest = _capabilities_registry_digest(capabilities.items)
+    except (TypeError, ValueError, UnicodeError) as exc:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native capability registry could not be verified.",
+        ) from exc
+    if (
+        capabilities.session_id != negotiation.session_id
+        or capabilities.detail != capability_detail
+        or capabilities.next_cursor is not None
+        or capabilities.query_digest != expected_query_digest
+        or capabilities.capabilities_digest != registry_digest
+        or capabilities.capabilities_digest != negotiation.capabilities_digest
+    ):
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native capabilities were not bound to the negotiated session.",
+        )
+    matches = [
+        item
+        for item in capabilities.items
+        if item.capability_id == COMPOSITION_TIME_SET_CAPABILITY_ID
+        and item.capability_version == COMPOSITION_TIME_SET_CAPABILITY_VERSION
+    ]
+    descriptor = matches[0] if len(matches) == 1 else None
+    if descriptor is None:
+        raise _structured_error(
+            "NATIVE_UNSUPPORTED",
+            "Native host did not advertise ae.composition.time.set@1.",
+        )
+    _validate_composition_time_set_descriptor(
+        descriptor,
+        host_platform=negotiation.host_platform,
+    )
+    locator = arguments.composition_locator
+    if (
+        locator.host_instance_id != negotiation.host_instance_id
+        or locator.session_id != negotiation.session_id
+    ):
+        raise _structured_error(
+            "STALE_LOCATOR",
+            "Native locator does not belong to the negotiated host session.",
+            details={
+                "field": "params.arguments.compositionLocator",
+                "capabilityId": COMPOSITION_TIME_SET_CAPABILITY_ID,
+            },
+            recovery_hint=stale_hint,
+        )
+    _ensure_active(deadline_unix_ms, cancellation)
+
+    request = NativeInvokeRequest(
+        request_id=request_id,
+        capability_id=COMPOSITION_TIME_SET_CAPABILITY_ID,
+        capability_version=COMPOSITION_TIME_SET_CAPABILITY_VERSION,
+        arguments=arguments.model_dump(mode="json", by_alias=True),
+        deadline_unix_ms=deadline_unix_ms,
+    )
+    try:
+        result = await backend.invoke(request, cancellation=cancellation)
+    except NativeBackendError as exc:
+        _validate_invoke_error_binding(exc, request)
+        raise
+    expected_request_digest = _invoke_request_digest(request, negotiation)
+    undo = result.evidence.undo
+    if (
+        result.capability_id != request.capability_id
+        or result.capability_version != request.capability_version
+        or result.engine != "native-aegp"
+        or result.replayed is not False
+        or result.evidence.request_id != request.request_id
+        or result.evidence.host_instance_id != negotiation.host_instance_id
+        or result.evidence.session_id != negotiation.session_id
+        or result.evidence.effect != "committed"
+        or undo is None
+        or undo.available is not True
+        or undo.verified is not False
+        or undo.group_id is not None
+        or result.evidence.completed_at_unix_ms > deadline_unix_ms
+        or result.evidence.request_digest != expected_request_digest
+    ):
+        raise NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "Native composition-time result could not be verified after dispatch.",
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery=NativeRecovery(
+                action="inspect-state",
+                hint=(
+                    "Read the composition time with a fresh locator and inspect "
+                    "the Undo stack before issuing another write."
+                ),
+            ),
+            details={"capabilityId": COMPOSITION_TIME_SET_CAPABILITY_ID},
+        )
+    try:
+        changed_value = CompositionTimeSetValue.model_validate(result.value)
+        postcondition_digest = _composition_time_set_digest(changed_value)
+    except (ValidationError, TypeError, ValueError, UnicodeError) as exc:
+        raise NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "Native composition-time value was malformed after dispatch.",
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery=NativeRecovery(
+                action="inspect-state",
+                hint=(
+                    "Read the composition time with a fresh locator and inspect "
+                    "the Undo stack before issuing another write."
+                ),
+            ),
+            details={"capabilityId": COMPOSITION_TIME_SET_CAPABILITY_ID},
+        ) from exc
+    if (
+        changed_value.composition_locator != arguments.composition_locator
+        or not _composition_times_equal(
+            changed_value.after_time, arguments.target_time
+        )
+        or result.evidence.postcondition.kind != "composition-time-set"
+        or result.evidence.postcondition.digest != postcondition_digest
+    ):
+        raise NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "Native composition-time postcondition evidence did not verify.",
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery=NativeRecovery(
+                action="inspect-state",
+                hint=(
+                    "Read the composition time with a fresh locator and inspect "
+                    "the Undo stack before issuing another write."
+                ),
+            ),
+            details={"capabilityId": COMPOSITION_TIME_SET_CAPABILITY_ID},
+        )
+    return CompositionTimeSetExecution(
+        implementation=descriptor,
+        negotiation=negotiation,
+        transport_request_id=request.request_id,
+        idempotency_key=arguments.idempotency_key,
+        replayed=result.replayed,
+        value=changed_value,
+        evidence=result.evidence,
+    )
+
+
 async def invoke_layer_properties_list(
     backend: NativeInvokeBackend,
     *,
@@ -4345,6 +4766,10 @@ __all__ = [
     "CompositionTimeReadArguments",
     "CompositionTimeReadExecution",
     "CompositionTimeReadValue",
+    "CompositionTimeSetArguments",
+    "CompositionTimeSetExecution",
+    "CompositionTimeSetValue",
+    "CompositionTimeTarget",
     "ExecutionEngine",
     "NativeBackendError",
     "NativeBrokerErrorCode",
@@ -4416,6 +4841,11 @@ __all__ = [
     "COMPOSITION_TIME_READ_CONTRACT_DIGEST",
     "COMPOSITION_TIME_READ_INPUT_CONTRACT_ID",
     "COMPOSITION_TIME_READ_RESULT_CONTRACT_ID",
+    "COMPOSITION_TIME_SET_CAPABILITY_ID",
+    "COMPOSITION_TIME_SET_CAPABILITY_VERSION",
+    "COMPOSITION_TIME_SET_CONTRACT_DIGEST",
+    "COMPOSITION_TIME_SET_INPUT_CONTRACT_ID",
+    "COMPOSITION_TIME_SET_RESULT_CONTRACT_ID",
     "LAYER_PROPERTIES_LIST_CAPABILITY_ID",
     "LAYER_PROPERTIES_LIST_CAPABILITY_VERSION",
     "LAYER_PROPERTIES_LIST_CONTRACT_DIGEST",
@@ -4439,6 +4869,7 @@ __all__ = [
     "invoke_composition_layers_list",
     "invoke_selected_composition_layers_list",
     "invoke_composition_time_read",
+    "invoke_composition_time_set",
     "invoke_layer_properties_list",
     "invoke_layer_property_set",
     "invoke_project_items_list",

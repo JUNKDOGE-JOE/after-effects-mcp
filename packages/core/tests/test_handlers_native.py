@@ -304,6 +304,28 @@ def _composition_time_execution() -> N.CompositionTimeReadExecution:
     )
 
 
+def _composition_time_set_execution() -> N.CompositionTimeSetExecution:
+    summary = _summary_execution()
+    descriptors = _fixture("capabilities.json")["response"]["result"]["items"]
+    descriptor = N.NativeCapabilityDescriptor.model_validate(
+        next(item for item in descriptors if item["id"] == "ae.composition.time.set")
+    )
+    fixture = _fixture("invoke-composition-time-set.json")
+    raw_result = fixture["response"]["result"]
+    result = N.NativeInvokeResult.model_validate(
+        {**raw_result, "replayed": fixture["response"]["replayed"]}
+    )
+    return N.CompositionTimeSetExecution(
+        implementation=descriptor,
+        negotiation=summary.negotiation,
+        transport_request_id=result.evidence.request_id,
+        idempotency_key=fixture["request"]["params"]["arguments"]["idempotencyKey"],
+        replayed=result.replayed,
+        value=N.CompositionTimeSetValue.model_validate(result.value),
+        evidence=result.evidence,
+    )
+
+
 @pytest.fixture(autouse=True)
 def _load_handlers():
     load_all()
@@ -505,6 +527,114 @@ async def test_composition_time_public_tool_forwards_locator_and_exact_time(monk
 
 
 @pytest.mark.asyncio
+async def test_composition_time_set_public_tool_returns_transition_undo_and_audit(monkeypatch):
+    execution = _composition_time_set_execution()
+    captured: dict[str, Any] = {}
+
+    async def _invoke(backend, **kwargs):
+        captured["backend"] = backend
+        captured.update(kwargs)
+        return execution
+
+    sentinel_backend = object()
+    locator = execution.value.composition_locator.model_dump(
+        mode="json", by_alias=True
+    )
+    monkeypatch.setattr(native_handler, "_backend", lambda: sentinel_backend)
+    monkeypatch.setattr(native_handler, "invoke_composition_time_set", _invoke)
+    result = await native_handler._run_set_composition_time(
+        schemas.AeSetCompositionTimeArgs(
+            composition_locator=locator,
+            target_time={"value": 1, "scale": 1},
+            idempotency_key="synthetic-comp-time-0001",
+        ),
+        None,
+    )
+
+    assert captured["backend"] is sentinel_backend
+    assert captured["composition_locator"] == locator
+    assert captured["target_time"] == {"value": 1, "scale": 1}
+    assert captured["idempotency_key"] == "synthetic-comp-time-0001"
+    assert result["value"]["beforeTime"] == {
+        "value": 0, "scale": 1, "secondsRational": "0",
+    }
+    assert result["value"]["afterTime"] == {
+        "value": 1, "scale": 1, "secondsRational": "1",
+    }
+    assert result["implementation"]["capabilityId"] == "ae.composition.time.set"
+    assert result["implementation"]["undo"] == "ae-undo-group"
+    assert result["audit"]["effect"] == "committed"
+    assert result["audit"]["undoAvailable"] is True
+    assert result["audit"]["undoVerified"] is False
+
+
+@pytest.mark.asyncio
+async def test_composition_time_set_real_mcp_surface_is_strict_and_structured(monkeypatch):
+    from mcp.shared.memory import create_connected_server_and_client_session
+
+    from ae_mcp import server as server_module
+
+    schema_cls, _ = HANDLERS["ae.setCompositionTime"]
+    dispatches: list[schemas.AeSetCompositionTimeArgs] = []
+
+    async def _run(validated, _ctx):
+        dispatches.append(validated)
+        return {"ok": True, "value": {"changed": True}}
+
+    monkeypatch.setitem(HANDLERS, "ae.setCompositionTime", (schema_cls, _run))
+    monkeypatch.setattr(
+        server_module, "_filtered_tool_names", lambda: {"ae.setCompositionTime"}
+    )
+    monkeypatch.setattr(
+        server_module.approval_gate,
+        "enforce",
+        lambda *_args, **_kwargs: _none(),
+    )
+    server = server_module.build_server()
+    locator = _composition_time_set_execution().value.composition_locator.model_dump(
+        mode="json", by_alias=True
+    )
+
+    async with create_connected_server_and_client_session(server) as client:
+        listed = await client.list_tools()
+        assert [tool.name for tool in listed.tools] == ["ae_setCompositionTime"]
+        public_schema = listed.tools[0].inputSchema
+        assert set(public_schema["required"]) == {
+            "composition_locator", "target_time", "idempotency_key",
+        }
+        assert public_schema["additionalProperties"] is False
+
+        rejected = await client.call_tool(
+            "ae_setCompositionTime",
+            {
+                "composition_locator": locator,
+                "target_time": {"value": 1, "scale": 0},
+                "idempotency_key": "synthetic-comp-time-0001",
+            },
+        )
+        assert rejected.isError is True
+        payload = json.loads(rejected.content[0].text)
+        assert payload["error"]["code"] == "INVALID_ARGUMENT"
+        assert payload["error"]["sideEffect"] == "not-started"
+        assert payload["error"]["details"] == {
+            "field": "arguments.target_time.scale",
+            "capabilityId": "ae.composition.time.set",
+        }
+        assert dispatches == []
+
+        accepted = await client.call_tool(
+            "ae_setCompositionTime",
+            {
+                "composition_locator": locator,
+                "target_time": {"value": 1, "scale": 1},
+                "idempotency_key": "synthetic-comp-time-0001",
+            },
+        )
+        assert accepted.isError is False
+        assert len(dispatches) == 1
+
+
+@pytest.mark.asyncio
 async def test_composition_time_real_mcp_surface_is_strict_and_structured(monkeypatch):
     from mcp.shared.memory import create_connected_server_and_client_session
 
@@ -655,6 +785,21 @@ async def test_composition_time_real_mcp_surface_is_strict_and_structured(monkey
                 }
             ),
         ),
+        (
+            native_handler._run_set_composition_time,
+            schemas.AeSetCompositionTimeArgs(
+                composition_locator={
+                    "kind": "composition",
+                    "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                    "sessionId": "11111111-1111-4111-8111-111111111111",
+                    "projectId": "44444444-4444-4444-8444-444444444444",
+                    "generation": 8,
+                    "objectId": "66666666-6666-4666-8666-666666666666",
+                },
+                target_time={"value": 1, "scale": 1},
+                idempotency_key="composition-time-intent-0001",
+            ),
+        ),
         (native_handler._run_get_project_bit_depth, schemas.AeGetProjectBitDepthArgs()),
         (
             native_handler._run_set_project_bit_depth,
@@ -711,6 +856,7 @@ def test_native_tool_registration_is_explicit():
         is schemas.AeListSelectedLayersArgs
     )
     assert HANDLERS["ae.getCompositionTime"][0] is schemas.AeGetCompositionTimeArgs
+    assert HANDLERS["ae.setCompositionTime"][0] is schemas.AeSetCompositionTimeArgs
     assert HANDLERS["ae.getProjectBitDepth"][0] is schemas.AeGetProjectBitDepthArgs
     assert HANDLERS["ae.setProjectBitDepth"][0] is schemas.AeSetProjectBitDepthArgs
     assert (

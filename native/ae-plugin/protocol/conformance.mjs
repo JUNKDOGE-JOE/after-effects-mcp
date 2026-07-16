@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 export const LIMITS = Object.freeze({
   maxFrameBytes: 65536,
   maxJsonDepth: 16,
-  maxJsonNodes: 2048,
+  maxJsonNodes: 4096,
   maxStringLength: 8192,
   defaultDeadlineMs: 5000,
   maximumDeadlineMs: 30000,
@@ -78,6 +78,12 @@ export const INVOKE_REGISTRY = Object.freeze([
     version: 1,
     inputContractId: 'aemcp.contract.ae.composition.time.read.input.v1',
     resultContractId: 'aemcp.contract.ae.composition.time.read.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.composition.time.set',
+    version: 1,
+    inputContractId: 'aemcp.contract.ae.composition.time.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.composition.time.set.result.v1',
   }),
   Object.freeze({
     id: 'ae.layer.properties.list',
@@ -671,6 +677,23 @@ export function classifyRequest(message) {
       ) || !isLocatorShape(args.compositionLocator, ['composition'])) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
+    } else if (params.capabilityId === 'ae.composition.time.set') {
+      const args = params.arguments;
+      if (!exactKeys(
+        args,
+        new Set(['compositionLocator', 'targetTime', 'idempotencyKey']),
+        ['compositionLocator', 'targetTime', 'idempotencyKey'],
+      )
+          || !isLocatorShape(args.compositionLocator, ['composition'])
+          || !exactKeys(args.targetTime, new Set(['value', 'scale']), ['value', 'scale'])
+          || !Number.isInteger(args.targetTime.value)
+          || args.targetTime.value < -2147483648 || args.targetTime.value > 2147483647
+          || !Number.isInteger(args.targetTime.scale)
+          || args.targetTime.scale < 1 || args.targetTime.scale > 4294967295
+          || typeof args.idempotencyKey !== 'string'
+          || !/^[A-Za-z0-9][A-Za-z0-9._:-]{15,63}$/u.test(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
     } else if (params.capabilityId === 'ae.layer.properties.list') {
       const args = params.arguments;
       if (!exactKeys(
@@ -931,6 +954,12 @@ export function compositionSelectedLayersListContractDigest(schema) {
 export function compositionTimeReadContractDigest(schema) {
   const inputSchema = structuredClone(schema.$defs.compositionTimeReadInputSchemaContract.const);
   const resultSchema = structuredClone(schema.$defs.compositionTimeReadResultSchemaContract.const);
+  return sha256Jcs({ inputSchema, resultSchema });
+}
+
+export function compositionTimeSetContractDigest(schema) {
+  const inputSchema = structuredClone(schema.$defs.compositionTimeSetInputSchemaContract.const);
+  const resultSchema = structuredClone(schema.$defs.compositionTimeSetResultSchemaContract.const);
   return sha256Jcs({ inputSchema, resultSchema });
 }
 
@@ -1368,8 +1397,78 @@ export function compositionTimeReadDescriptor(schema) {
   };
 }
 
-export function layerPropertiesListDescriptor(schema) {
+export function compositionTimeSetDescriptor(schema) {
   const registration = INVOKE_REGISTRY[7];
+  const compositionLocator = syntheticDescriptorLocator(
+    'composition', '66666666-6666-4666-8666-666666666666',
+  );
+  return {
+    detail: 'full',
+    id: registration.id,
+    version: registration.version,
+    schemaVersion: 1,
+    summary: 'Set the current time of one After Effects composition.',
+    risk: 'write',
+    mutability: 'mutating',
+    idempotency: 'idempotency-key',
+    cancellation: 'before-dispatch',
+    undo: 'ae-undo-group',
+    sideEffectSummary: 'Changes composition current time and creates one After Effects Undo step.',
+    preconditions: [
+      'An After Effects project must be open.',
+      'compositionLocator must come from ae.project.items.list@1.',
+      "targetTime must differ from the composition's current time.",
+    ],
+    compatibility: {
+      status: 'unverified',
+      intendedPlatforms: ['macos-arm64', 'windows-x64'],
+    },
+    inputContractId: registration.inputContractId,
+    resultContractId: registration.resultContractId,
+    contractDigest: compositionTimeSetContractDigest(schema),
+    inputSchema: structuredClone(schema.$defs.compositionTimeSetInputSchemaContract.const),
+    resultSchema: structuredClone(schema.$defs.compositionTimeSetResultSchemaContract.const),
+    requirements: [{
+      id: 'aemcp.requirement.native.composition-time-set',
+      contractVersion: 1,
+    }],
+    examples: [
+      {
+        id: 'aemcp-example-composition-time-set',
+        kind: 'positive',
+        summary: 'Set and verify an exact rational composition time.',
+        arguments: {
+          compositionLocator,
+          targetTime: { value: 1, scale: 1 },
+          idempotencyKey: 'synthetic-comp-time-0001',
+        },
+        expected: {
+          outcome: 'succeeded',
+          value: {
+            changed: true,
+            compositionLocator,
+            beforeTime: { value: 0, scale: 1, secondsRational: '0' },
+            afterTime: { value: 1, scale: 1, secondsRational: '1' },
+          },
+        },
+      },
+      {
+        id: 'aemcp-example-composition-time-set-stale',
+        kind: 'negative',
+        summary: 'Refresh a stale composition locator before setting current time.',
+        arguments: {
+          compositionLocator,
+          targetTime: { value: 1, scale: 1 },
+          idempotencyKey: 'synthetic-comp-time-0002',
+        },
+        expected: { errorCode: 'STALE_LOCATOR', recoveryAction: 'refresh-locator' },
+      },
+    ],
+  };
+}
+
+export function layerPropertiesListDescriptor(schema) {
+  const registration = INVOKE_REGISTRY[8];
   const layerLocator = syntheticDescriptorLocator(
     'layer', '88888888-8888-4888-8888-888888888888',
   );
@@ -1438,7 +1537,7 @@ export function layerPropertiesListDescriptor(schema) {
 }
 
 export function layerPropertySetDescriptor(schema) {
-  const registration = INVOKE_REGISTRY[8];
+  const registration = INVOKE_REGISTRY[9];
   const layerLocator = syntheticDescriptorLocator(
     'layer', '88888888-8888-4888-8888-888888888888',
   );
@@ -1524,6 +1623,7 @@ export function nativeCapabilityRegistry(schema) {
     compositionLayersListDescriptor(schema),
     compositionSelectedLayersListDescriptor(schema),
     compositionTimeReadDescriptor(schema),
+    compositionTimeSetDescriptor(schema),
     layerPropertiesListDescriptor(schema),
     layerPropertySetDescriptor(schema),
   ];
@@ -1710,6 +1810,13 @@ function canonicalSecondsRational(value, scale) {
     : `${String(reducedNumerator)}/${String(reducedDenominator)}`;
 }
 
+function compositionTimesEqual(left, right) {
+  if (canonicalSecondsRational(left?.value, left?.scale) === null
+      || canonicalSecondsRational(right?.value, right?.scale) === null) return false;
+  return BigInt(left.value) * BigInt(right.scale)
+    === BigInt(right.value) * BigInt(left.scale);
+}
+
 function validateNavigationResult(request, result, helloContext, schema) {
   const capabilityId = request.params.capabilityId;
   if (capabilityId !== 'ae.project.items.list'
@@ -1828,6 +1935,26 @@ function validateLayerPropertySetResult(request, result, helloContext, schema) {
     && value.layerLocator.sessionId === request.sessionId
     && validateLocator(value.layerLocator, context, schema)
     && validateLocator(value.propertyLocator, context, schema);
+}
+
+function validateCompositionTimeSetResult(request, result, helloContext, schema) {
+  if (request.params.capabilityId !== 'ae.composition.time.set') return true;
+  const args = request.params.arguments;
+  const value = result.value;
+  if (result.evidence.postcondition.kind !== 'composition-time-set'
+      || value.changed !== true
+      || !jsonDeepEqual(value.compositionLocator, args.compositionLocator)
+      || canonicalSecondsRational(value.beforeTime?.value, value.beforeTime?.scale)
+          !== value.beforeTime?.secondsRational
+      || canonicalSecondsRational(value.afterTime?.value, value.afterTime?.scale)
+          !== value.afterTime?.secondsRational
+      || compositionTimesEqual(value.beforeTime, value.afterTime)
+      || !compositionTimesEqual(value.afterTime, args.targetTime)) return false;
+  const context = locatorContext(value.compositionLocator);
+  return value.compositionLocator.kind === 'composition'
+    && value.compositionLocator.hostInstanceId === helloContext.response.result.host.instanceId
+    && value.compositionLocator.sessionId === request.sessionId
+    && validateLocator(value.compositionLocator, context, schema);
 }
 
 export function validateCapabilitiesExchange(
@@ -2183,7 +2310,7 @@ export function validateTranscript(context, request, messages) {
         && (descriptor.undo !== 'ae-undo-group'
           || (evidence.undo?.available === true
             && typeof evidence.undo?.verified === 'boolean'
-            && (!['ae.project.bit-depth.set', 'ae.layer.property.set']
+            && (!['ae.project.bit-depth.set', 'ae.composition.time.set', 'ae.layer.property.set']
               .includes(request.params.capabilityId)
               || request.params.capabilityVersion !== 1
               || evidence.undo.verified === false)))))
@@ -2192,6 +2319,7 @@ export function validateTranscript(context, request, messages) {
       || (result.value.beforeBitsPerChannel !== result.value.afterBitsPerChannel
         && result.value.afterBitsPerChannel === request.params.arguments.targetDepth))
     && validateNavigationResult(request, result, helloContext, schema)
+    && validateCompositionTimeSetResult(request, result, helloContext, schema)
     && validateLayerPropertySetResult(request, result, helloContext, schema)
     && evidence.postcondition.verified === true
     && evidence.requestDigest === requestDigest

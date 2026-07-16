@@ -90,6 +90,7 @@ def _filtered_tool_names() -> set:
             "ae.listCompositionLayers",
             "ae.listSelectedLayers",
             "ae.getCompositionTime",
+            "ae.setCompositionTime",
             "ae.listLayerProperties",
             "ae.setLayerPropertyValue",
         }
@@ -102,6 +103,7 @@ def _filtered_tool_names() -> set:
             "ae.listCompositionLayers",
             "ae.listSelectedLayers",
             "ae.getCompositionTime",
+            "ae.setCompositionTime",
             "ae.listLayerProperties",
             "ae.setLayerPropertyValue",
         }
@@ -345,6 +347,62 @@ def _composition_time_validation_error(
     return structured.public_dict()
 
 
+def _composition_time_set_validation_error(
+    error: JsonSchemaValidationError | PydanticValidationError,
+) -> dict[str, Any]:
+    """Preserve structured recovery for the native composition-time write."""
+    path: list[Any] = []
+    if isinstance(error, PydanticValidationError):
+        errors = error.errors(include_url=False, include_input=False)
+        if errors:
+            path = list(errors[0].get("loc") or ())
+    else:
+        path = list(error.absolute_path)
+        if (
+            error.validator == "required"
+            and isinstance(error.instance, dict)
+            and isinstance(error.validator_value, list)
+        ):
+            missing = [
+                key for key in error.validator_value if key not in error.instance
+            ]
+            if len(missing) == 1:
+                path.append(missing[0])
+        elif (
+            error.validator == "additionalProperties"
+            and isinstance(error.instance, dict)
+            and isinstance(error.schema, dict)
+        ):
+            properties = error.schema.get("properties")
+            if isinstance(properties, dict):
+                unexpected = sorted(set(error.instance) - set(properties))
+                if len(unexpected) == 1:
+                    path.append(unexpected[0])
+
+    field = "arguments"
+    if path:
+        field += "." + ".".join(str(part) for part in path)
+    structured = NativeBackendError(
+        "INVALID_ARGUMENT",
+        "ae.setCompositionTime arguments did not match the published schema.",
+        retryable=False,
+        side_effect="not-started",
+        recovery={
+            "action": "change-arguments",
+            "hint": (
+                "Copy an unmodified composition_locator from ae_listProjectItems, "
+                "provide int32 value and positive uint32 scale, and use a stable "
+                "16 to 64 character idempotency key."
+            ),
+        },
+        details={
+            "field": field[:128],
+            "capabilityId": "ae.composition.time.set",
+        },
+    )
+    return structured.public_dict()
+
+
 def _selected_layers_validation_error(
     error: JsonSchemaValidationError | PydanticValidationError,
 ) -> dict[str, Any]:
@@ -514,6 +572,9 @@ def build_server() -> Server:
                 elif name == "ae.getCompositionTime":
                     public_error = _composition_time_validation_error(error)
                     payload = _format_result({"ok": False, "error": public_error})
+                elif name == "ae.setCompositionTime":
+                    public_error = _composition_time_set_validation_error(error)
+                    payload = _format_result({"ok": False, "error": public_error})
                 elif name == "ae.listSelectedLayers":
                     public_error = _selected_layers_validation_error(error)
                     payload = _format_result({"ok": False, "error": public_error})
@@ -539,6 +600,10 @@ def build_server() -> Server:
                 e, PydanticValidationError
             ):
                 error = _composition_time_validation_error(e)
+            elif name == "ae.setCompositionTime" and isinstance(
+                e, PydanticValidationError
+            ):
+                error = _composition_time_set_validation_error(e)
             elif name == "ae.listSelectedLayers" and isinstance(
                 e, PydanticValidationError
             ):

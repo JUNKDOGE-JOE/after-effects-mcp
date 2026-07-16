@@ -26,6 +26,10 @@ const compositionSelectedLayersFixture = require(
 const compositionTimeFixture = require(
     '../../native/ae-plugin/protocol/fixtures/invoke-composition-time-read.json'
 ).response.result;
+const compositionTimeSetVector = require(
+    '../../native/ae-plugin/protocol/fixtures/invoke-composition-time-set.json'
+);
+const compositionTimeSetFixture = compositionTimeSetVector.response.result;
 const layerPropertiesVector = require(
     '../../native/ae-plugin/protocol/fixtures/invoke-layer-properties-list.json'
 );
@@ -246,6 +250,12 @@ function fakeNativeClient() {
         },
         invoke: async function (request) {
             calls.push(['invoke', request]);
+            if (request.capabilityId === 'ae.composition.time.set') {
+                const result = structuredClone(compositionTimeSetFixture);
+                result.replayed = false;
+                result.evidence.requestId = request.requestId;
+                return result;
+            }
             if (request.capabilityId === 'ae.layer.property.set') {
                 const result = structuredClone(layerPropertySetFixture);
                 result.replayed = false;
@@ -481,6 +491,21 @@ test('native routes require the shared token and reject an open-ended invoke env
         });
         assert.strictEqual(invalidCompositionTime.status, 400);
         assert.strictEqual(invalidCompositionTime.body.error.code, 'INVALID_ARGUMENT');
+        const invalidCompositionTimeSet = await post(port, '/native/invoke', {
+            'X-AE-MCP-Token': 'known-secret-token',
+        }, {
+            requestId: 'core-composition-time-set-invalid',
+            capabilityId: 'ae.composition.time.set',
+            capabilityVersion: 1,
+            arguments: {
+                compositionLocator: compositionTimeFixture.value.compositionLocator,
+                targetTime: { value: 1, scale: 0 },
+                idempotencyKey: 'composition-time-intent-0002',
+            },
+            deadlineUnixMs: Date.now() + 10000,
+        });
+        assert.strictEqual(invalidCompositionTimeSet.status, 400);
+        assert.strictEqual(invalidCompositionTimeSet.body.error.code, 'INVALID_ARGUMENT');
         const invalidPropertyPage = await post(port, '/native/invoke', {
             'X-AE-MCP-Token': 'known-secret-token',
         }, {
@@ -570,6 +595,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
                 'ae.composition.layers.list',
                 'ae.composition.selected-layers.list',
                 'ae.composition.time.read',
+                'ae.composition.time.set',
                 'ae.layer.properties.list',
                 'ae.layer.property.set',
             ],
@@ -698,6 +724,24 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
             Object.hasOwn(compositionTime.body.result.value, 'compositionName'),
             false,
         );
+        const compositionTimeSetRequest = {
+            requestId: 'core-composition-time-set-1',
+            capabilityId: 'ae.composition.time.set',
+            capabilityVersion: 1,
+            arguments: structuredClone(compositionTimeSetVector.request.params.arguments),
+            deadlineUnixMs,
+        };
+        const compositionTimeSet = await post(
+            port, '/native/invoke', headers, compositionTimeSetRequest,
+        );
+        assert.strictEqual(compositionTimeSet.status, 200);
+        assert.deepStrictEqual(compositionTimeSet.body.result.value.afterTime, {
+            value: 1, scale: 1, secondsRational: '1',
+        });
+        assert.strictEqual(compositionTimeSet.body.result.evidence.effect, 'committed');
+        assert.deepStrictEqual(compositionTimeSet.body.result.evidence.undo, {
+            available: true, verified: false,
+        });
         const layerPropertiesRequest = {
             requestId: 'core-layer-properties-1',
             capabilityId: 'ae.layer.properties.list',
@@ -740,6 +784,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
             ['invoke', compositionLayersRequest],
             ['invoke', compositionSelectedLayersRequest],
             ['invoke', compositionTimeRequest],
+            ['invoke', compositionTimeSetRequest],
             ['invoke', layerPropertiesRequest],
             ['invoke', layerPropertySetRequest],
         ]);

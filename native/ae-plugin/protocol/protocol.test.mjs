@@ -29,6 +29,8 @@ import {
   compositionSelectedLayersListDescriptor,
   compositionTimeReadContractDigest,
   compositionTimeReadDescriptor,
+  compositionTimeSetContractDigest,
+  compositionTimeSetDescriptor,
   layerPropertiesListContractDigest,
   layerPropertiesListDescriptor,
   layerPropertySetContractDigest,
@@ -176,7 +178,7 @@ test('schema locks strict framing, bounded defaults, rate limits, and native pro
     encoding: 'utf-8',
     maxFrameBytes: 65536,
     maxJsonDepth: 16,
-    maxJsonNodes: 2048,
+    maxJsonNodes: 4096,
     maxStringLength: 8192,
     stringLengthUnit: 'unicode-scalar-values',
     duplicateObjectKeys: 'reject',
@@ -225,6 +227,7 @@ test('all checked-in vectors are synthetic and contain no host or Adobe suite cl
     'invoke-composition-layers-list.json',
     'invoke-composition-selected-layers-list.json',
     'invoke-composition-time-read.json',
+    'invoke-composition-time-set.json',
     'invoke-layer-properties-list.json',
     'invoke-layer-property-set.json',
     'invalidate-graph.json',
@@ -262,6 +265,7 @@ test('golden requests, events, responses, and bound error policies validate', ()
     'invoke-composition-layers-list.json',
     'invoke-composition-selected-layers-list.json',
     'invoke-composition-time-read.json',
+    'invoke-composition-time-set.json',
     'invoke-layer-properties-list.json',
     'invoke-layer-property-set.json',
     'invalidate-graph.json',
@@ -328,7 +332,7 @@ test('strict framing handles UTF-8, fragments, multiple frames, and malformed JS
   }
   assert.throws(() => decodeFrame(frameFromText('{"a":1,"a":2}')), { code: 'INVALID_REQUEST' });
   assert.throws(() => strictParseJson(`${'['.repeat(17)}0${']'.repeat(17)}`), { code: 'INVALID_REQUEST' });
-  assert.throws(() => strictParseJson(`[${'0,'.repeat(2048)}0]`), { code: 'INVALID_REQUEST' });
+  assert.throws(() => strictParseJson(`[${'0,'.repeat(4096)}0]`), { code: 'INVALID_REQUEST' });
   assert.throws(() => strictParseJson(JSON.stringify('x'.repeat(8193))), { code: 'INVALID_REQUEST' });
   assert.throws(() => strictParseJson('{"n":9007199254740993}'), { code: 'INVALID_REQUEST' });
 });
@@ -341,9 +345,9 @@ test('input and output codecs enforce the same exact JSON limits', () => {
   assert.throws(() => assertJsonLimits(depth17), { code: 'INVALID_REQUEST' });
   assert.throws(() => encodeFrame(depth17), { code: 'INVALID_REQUEST' });
 
-  const nodes2048 = Array.from({ length: 2047 }, () => 0);
-  assert.equal(assertJsonLimits(nodes2048), true);
-  assert.throws(() => assertJsonLimits([...nodes2048, 0]), { code: 'INVALID_REQUEST' });
+  const nodes4096 = Array.from({ length: 4095 }, () => 0);
+  assert.equal(assertJsonLimits(nodes4096), true);
+  assert.throws(() => assertJsonLimits([...nodes4096, 0]), { code: 'INVALID_REQUEST' });
   assert.doesNotThrow(() => encodeFrame('x'.repeat(8192)));
   assert.throws(() => encodeFrame('x'.repeat(8193)), { code: 'INVALID_REQUEST' });
   assert.throws(() => encodeFrame({ ['x'.repeat(8193)]: true }), { code: 'INVALID_REQUEST' });
@@ -468,6 +472,7 @@ test('schema shape and composite request validation have an explicit differentia
     golden('invoke-composition-layers-list.json').request,
     golden('invoke-composition-selected-layers-list.json').request,
     golden('invoke-composition-time-read.json').request,
+    golden('invoke-composition-time-set.json').request,
     golden('invoke-layer-properties-list.json').request,
     golden('invoke-layer-property-set.json').request,
     golden('invalidate-graph.json').request,
@@ -585,7 +590,7 @@ test('graph invalidation is an exact authenticated internal lifecycle exchange',
     ), false);
   }
 
-  assert.equal(nativeCapabilityRegistry(schema).length, 9);
+  assert.equal(nativeCapabilityRegistry(schema).length, 10);
   assert.doesNotMatch(JSON.stringify(golden('capabilities.json')), /invalidateGraph/u);
   const disguisedInvoke = structuredClone(golden('invoke-project-summary.json').request);
   disguisedInvoke.params.capabilityId = 'ae.invalidateGraph';
@@ -768,6 +773,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
   const compositionLayersDescriptor = compositionLayersListDescriptor(schema);
   const compositionSelectedLayersDescriptor = compositionSelectedLayersListDescriptor(schema);
   const compositionTimeDescriptor = compositionTimeReadDescriptor(schema);
+  const compositionTimeSetCapability = compositionTimeSetDescriptor(schema);
   const layerPropertiesDescriptor = layerPropertiesListDescriptor(schema);
   const layerPropertyDescriptor = layerPropertySetDescriptor(schema);
   const containsRef = (value) => {
@@ -812,6 +818,10 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     compositionLayersDescriptor.resultSchema);
   assert.equal(compositionTimeDescriptor.contractDigest,
     'fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd');
+  assert.equal(compositionTimeSetCapability.contractDigest,
+    '724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308');
+  assert.equal(compositionTimeSetCapability.contractDigest,
+    compositionTimeSetContractDigest(schema));
   assert.equal(layerPropertiesDescriptor.contractDigest,
     'a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba');
   assert.equal(layerPropertyDescriptor.contractDigest,
@@ -826,9 +836,10 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     compositionLayersDescriptor,
     compositionSelectedLayersDescriptor,
     compositionTimeDescriptor,
+    compositionTimeSetCapability,
     layerPropertiesDescriptor,
     layerPropertyDescriptor,
-  ]), 'b32ad50eb0dcbe47098192787038a9cac6479aa948a487ae02dd18d307136a66');
+  ]), 'b256e21ccb0022c25ccd52b4b18a33f660d7ccc2fe971211280b67ab78030190');
   assert.ok(Buffer.byteLength(canonicalize(descriptor), 'utf8') < LIMITS.maxFrameBytes);
 });
 
@@ -837,7 +848,7 @@ test('v1 capability discovery is single-page, fail-closed, and never replayed', 
   const exchange = golden('capabilities.json');
   assert.equal(exchange.request.params.limit, 100);
   assert.equal(Object.hasOwn(exchange.request.params, 'ids'), false);
-  assert.equal(exchange.response.result.items.length, 9);
+  assert.equal(exchange.response.result.items.length, 10);
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, exchange.response, schema), true);
 
   const zeroLimit = structuredClone(exchange.request);
@@ -1443,6 +1454,72 @@ test('composition time read binds one locator to an exact reduced rational', () 
   assert.equal(validateFailureExchange(
     golden('hello.json'), fixture.request, stale, descriptor, schema,
   ), false);
+});
+
+test('composition time set binds exact rational state, Undo, and postcondition', () => {
+  const fixture = golden('invoke-composition-time-set.json');
+  const descriptor = compositionTimeSetDescriptor(schema);
+  const context = {
+    hello: golden('hello.json'),
+    descriptor,
+    schema,
+    brokerSendUnixMs: 1900000000000,
+    effectiveDeadlineUnixMs: fixture.request.deadlineUnixMs,
+    terminalObservedUnixMs: 1900000000030,
+  };
+  assert.equal(descriptor.contractDigest, compositionTimeSetContractDigest(schema));
+  assert.equal(descriptor.contractDigest,
+    '724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308');
+  assert.deepEqual(descriptor.inputSchema.required,
+    ['compositionLocator', 'targetTime', 'idempotencyKey']);
+  assert.deepEqual(descriptor.resultSchema.required,
+    ['changed', 'compositionLocator', 'beforeTime', 'afterTime']);
+  assert.equal(fixture.response.result.evidence.requestDigest, sha256Jcs(fixture.request));
+  assert.equal(fixture.response.result.evidence.postcondition.digest,
+    postconditionDigest(fixture.response.result));
+  assert.equal(validateTranscript(
+    context, fixture.request, [...fixture.events, fixture.response],
+  ), true);
+
+  for (const mutate of [
+    (request) => { delete request.params.arguments.targetTime.scale; },
+    (request) => { request.params.arguments.targetTime.scale = 0; },
+    (request) => { request.params.arguments.targetTime.value = 2147483648; },
+    (request) => { request.params.arguments.idempotencyKey = 'short'; },
+    (request) => { request.params.arguments.extra = true; },
+  ]) {
+    const malformed = structuredClone(fixture.request);
+    mutate(malformed);
+    assert.equal(schemaAccepts(schema.$defs.request, malformed), false);
+    assert.deepEqual(classifyRequest(malformed), { ok: false, errorCode: 'INVALID_ARGUMENT' });
+  }
+
+  for (const mutate of [
+    (value) => { value.afterTime = structuredClone(value.beforeTime); },
+    (value) => { value.afterTime = { value: 2, scale: 1, secondsRational: '2' }; },
+    (value) => { value.afterTime.secondsRational = '2/2'; },
+    (value) => { value.compositionLocator.kind = 'layer'; },
+  ]) {
+    const malformed = structuredClone(fixture.response);
+    mutate(malformed.result.value);
+    malformed.result.evidence.postcondition.digest = postconditionDigest(malformed.result);
+    assert.equal(validateTranscript(
+      context, fixture.request, [...fixture.events, malformed],
+    ), false);
+  }
+  const falselyVerifiedUndo = structuredClone(fixture.response);
+  falselyVerifiedUndo.result.evidence.undo.verified = true;
+  assert.equal(validateTranscript(
+    context, fixture.request, [...fixture.events, falselyVerifiedUndo],
+  ), false);
+
+  const stale = structuredClone(golden('errors.json').responses.staleLocator);
+  stale.requestId = fixture.request.requestId;
+  stale.error.details.capabilityId = fixture.request.params.capabilityId;
+  stale.error.details.field = 'params.arguments.compositionLocator';
+  assert.equal(validateFailureExchange(
+    golden('hello.json'), fixture.request, stale, descriptor, schema,
+  ), true);
 });
 
 test('native project navigation vectors bind bounded pagination and locator provenance', () => {

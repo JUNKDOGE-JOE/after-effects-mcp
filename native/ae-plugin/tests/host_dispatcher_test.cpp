@@ -28,6 +28,7 @@ using aemcp::native::HostBitDepthReadResult;
 using aemcp::native::HostBitDepthWriteResult;
 using aemcp::native::HostCompositionLayersResult;
 using aemcp::native::HostCompositionTimeResult;
+using aemcp::native::HostCompositionTimeWriteResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostLayerPropertyWriteResult;
 using aemcp::native::HostProjectItemsResult;
@@ -43,6 +44,7 @@ using aemcp::native::kProjectBitDepthSetCapability;
 using aemcp::native::kCompositionLayersListCapability;
 using aemcp::native::kCompositionSelectedLayersListCapability;
 using aemcp::native::kCompositionTimeReadCapability;
+using aemcp::native::kCompositionTimeSetCapability;
 using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kProjectSummaryCapability;
 using aemcp::native::kLayerPropertySetCapability;
@@ -399,6 +401,35 @@ class FakeHost final : public HostApi {
     return HostCompositionTimeResult::success(std::move(result));
   }
 
+  [[nodiscard]] HostCompositionTimeWriteResult set_composition_time(
+      const aemcp::native::CompositionTimeSetCommand& command,
+      TimePoint work_deadline) override {
+    require(std::this_thread::get_id() == expected_thread_,
+        "composition time write HostApi ran off owner thread");
+    observed_deadline = work_deadline;
+    observed_time_set_command = command;
+    ++composition_time_write_calls;
+    if (!composition_time_write_error_code.empty()) {
+      return HostCompositionTimeWriteResult::failure(
+          composition_time_write_error_code,
+          "fake composition time write error",
+          composition_time_write_error_field);
+    }
+    aemcp::native::CompositionTimeChanged changed;
+    changed.composition_locator = command.composition_locator;
+    changed.before_time = {
+        composition_time_value,
+        composition_time_scale,
+        canonical_seconds_rational(composition_time_value, composition_time_scale)};
+    changed.after_time = command.target_time;
+    if (mismatch_composition_time_write) {
+      changed.after_time = {2, 1, "2"};
+    }
+    composition_time_value = changed.after_time.value;
+    composition_time_scale = changed.after_time.scale;
+    return HostCompositionTimeWriteResult::success(std::move(changed));
+  }
+
   [[nodiscard]] HostLayerPropertyWriteResult set_layer_property(
       const aemcp::native::LayerPropertySetCommand& command,
       TimePoint work_deadline) override {
@@ -447,6 +478,8 @@ class FakeHost final : public HostApi {
   std::string write_error_field;
   std::string composition_time_error_code;
   std::string composition_time_error_field;
+  std::string composition_time_write_error_code;
+  std::string composition_time_write_error_field;
   std::string layer_property_write_error_code;
   std::int32_t current_bits_per_channel{8};
   std::int32_t observed_target_depth{0};
@@ -457,6 +490,7 @@ class FakeHost final : public HostApi {
   int composition_layers_calls{0};
   int composition_selected_layers_calls{0};
   int composition_time_calls{0};
+  int composition_time_write_calls{0};
   int layer_property_write_calls{0};
   std::int32_t composition_time_value{3003};
   std::uint32_t composition_time_scale{1000};
@@ -464,10 +498,12 @@ class FakeHost final : public HostApi {
   bool mismatch_composition_page{false};
   bool mismatch_selected_composition_page{false};
   bool mismatch_composition_time{false};
+  bool mismatch_composition_time_write{false};
   aemcp::native::ProjectItemsQuery observed_items_query;
   aemcp::native::CompositionLayersQuery observed_layers_query;
   aemcp::native::CompositionLayersQuery observed_selected_layers_query;
   aemcp::native::CompositionTimeQuery observed_time_query;
+  aemcp::native::CompositionTimeSetCommand observed_time_set_command;
   aemcp::native::LayerPropertySetCommand observed_property_command;
 };
 
@@ -666,6 +702,28 @@ Request composition_time_request(
       0,
       std::nullopt,
       std::move(composition_locator)};
+}
+
+Request composition_time_set_request(
+    FakeClock& clock,
+    std::string id,
+    ObjectLocator composition_locator,
+    std::string key = "composition-time-intent-001",
+    std::string fingerprint = std::string(64, 'f'),
+    aemcp::native::CompositionCurrentTime target = {1, 1, "1"}) {
+  Request result;
+  result.request_id = std::move(id);
+  result.capability_id = std::string(kCompositionTimeSetCapability);
+  result.deadline = clock.now() + 100ms;
+  result.route_id = "route-time-set";
+  result.session_generation = 7;
+  result.idempotency_key = std::move(key);
+  result.arguments_fingerprint_sha256 = std::move(fingerprint);
+  result.host_instance_id = "22222222-2222-4222-8222-222222222222";
+  result.session_id = "11111111-1111-4111-8111-111111111111";
+  result.composition_locator = std::move(composition_locator);
+  result.target_time = std::move(target);
+  return result;
 }
 
 DispatcherConfig config(
@@ -877,6 +935,71 @@ void composition_time_read_is_closed_main_thread_bound_and_verified() {
           && failed.completions[0].error_field
               == "params.arguments.compositionLocator",
       "composition time host error lost its typed locator field");
+}
+
+void composition_time_write_is_typed_main_thread_bound_and_idempotent() {
+  FakeClock clock;
+  const auto owner = std::this_thread::get_id();
+  HostDispatcher dispatcher(owner, clock, config(8, 8, 4ms));
+  FakeHost host(clock, owner);
+  const ObjectLocator composition = FakeHost::locator(
+      "composition", "66666666-6666-4666-8666-666666666666");
+
+  Request invalid_time = composition_time_set_request(
+      clock, "time-set-invalid", composition, "composition-time-intent-invalid");
+  invalid_time.target_time.seconds_rational = "2";
+  const auto invalid = dispatcher.enqueue(std::move(invalid_time));
+  require(invalid.code == EnqueueCode::kInvalidRequest
+          && invalid.error_field == "params.arguments",
+      "non-canonical composition target reached HostApi");
+
+  ObjectLocator wrong_session = composition;
+  wrong_session.session_id = "33333333-3333-4333-8333-333333333333";
+  const auto stale = dispatcher.enqueue(composition_time_set_request(
+      clock, "time-set-stale", wrong_session, "composition-time-intent-stale"));
+  require(stale.code == EnqueueCode::kInvalidRequest
+          && stale.error_code == "STALE_LOCATOR"
+          && stale.error_field == "params.arguments.compositionLocator",
+      "cross-session composition time write reached HostApi");
+
+  require(dispatcher.enqueue(composition_time_set_request(
+      clock, "time-set-1", composition)).code == EnqueueCode::kAccepted,
+      "valid composition time write was rejected");
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1 && batch.completions[0].ok
+          && host.composition_time_write_calls == 1,
+      "composition time write did not run exactly once on the owner thread");
+  const auto& changed = batch.completions[0].composition_time_change_result;
+  require(changed.changed && changed.composition_locator == composition
+          && changed.before_time.value == 3003
+          && changed.before_time.scale == 1000
+          && changed.before_time.seconds_rational == "3003/1000"
+          && changed.after_time.value == 1 && changed.after_time.scale == 1
+          && changed.after_time.seconds_rational == "1"
+          && host.observed_time_set_command.composition_locator == composition,
+      "composition time write lost exact before/after or locator evidence");
+
+  const auto duplicate = dispatcher.enqueue(composition_time_set_request(
+      clock, "time-set-duplicate", composition));
+  require(duplicate.code == EnqueueCode::kDuplicateRequest
+          && duplicate.error_field == "params.arguments.idempotencyKey"
+          && host.composition_time_write_calls == 1,
+      "successful composition time intent was allowed to mutate twice");
+
+  host.mismatch_composition_time_write = true;
+  require(dispatcher.enqueue(composition_time_set_request(
+      clock,
+      "time-set-mismatch",
+      composition,
+      "composition-time-intent-002",
+      std::string(64, 'a'),
+      {3, 1, "3"})).code == EnqueueCode::kAccepted,
+      "composition time mismatch setup was rejected before HostApi");
+  const auto mismatch = dispatcher.drain(host);
+  require(mismatch.completions.size() == 1
+          && mismatch.completions[0].error_code
+              == "POSSIBLY_SIDE_EFFECTING_FAILURE",
+      "unverified composition time write was mislabeled side-effect free");
 }
 
 void bit_depth_read_and_write_are_main_thread_bound_and_write_is_idempotent() {
@@ -1456,6 +1579,7 @@ int main() {
   project_graph_reads_validate_arguments_and_dispatch_on_owner_thread();
   selected_layers_read_is_closed_main_thread_bound_and_request_verified();
   composition_time_read_is_closed_main_thread_bound_and_verified();
+  composition_time_write_is_typed_main_thread_bound_and_idempotent();
   bit_depth_read_and_write_are_main_thread_bound_and_write_is_idempotent();
   bit_depth_write_releases_only_safe_failures_and_fails_closed_when_full();
   bit_depth_write_validates_before_dispatch_and_late_results_are_ambiguous();

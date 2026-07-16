@@ -34,6 +34,7 @@ const PROJECT_ITEMS_LIST_CAPABILITY = 'ae.project.items.list';
 const COMPOSITION_LAYERS_LIST_CAPABILITY = 'ae.composition.layers.list';
 const COMPOSITION_SELECTED_LAYERS_LIST_CAPABILITY = 'ae.composition.selected-layers.list';
 const COMPOSITION_TIME_READ_CAPABILITY = 'ae.composition.time.read';
+const COMPOSITION_TIME_SET_CAPABILITY = 'ae.composition.time.set';
 const LAYER_PROPERTIES_LIST_CAPABILITY = 'ae.layer.properties.list';
 const LAYER_PROPERTY_SET_CAPABILITY = 'ae.layer.property.set';
 const NATIVE_LOCATOR_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -294,6 +295,21 @@ function validCompositionTimeReadArguments(value) {
         && validNativeLocator(value.compositionLocator, 'composition');
 }
 
+function validCompositionTimeSetArguments(value) {
+    return exactBody(value, ['compositionLocator', 'targetTime', 'idempotencyKey'])
+        && validNativeLocator(value.compositionLocator, 'composition')
+        && exactBody(value.targetTime, ['value', 'scale'])
+        && Number.isInteger(value.targetTime.value)
+        && value.targetTime.value >= -2147483648
+        && value.targetTime.value <= 2147483647
+        && Number.isInteger(value.targetTime.scale)
+        && value.targetTime.scale >= 1
+        && value.targetTime.scale <= 4294967295
+        && typeof value.idempotencyKey === 'string'
+        && value.idempotencyKey.length >= 16
+        && NATIVE_REQUEST_ID_PATTERN.test(value.idempotencyKey);
+}
+
 function validLayerPropertiesListArguments(value) {
     return exactBody(value, ['layerLocator', 'offset', 'limit'], ['parentPropertyLocator'])
         && validNativeLocator(value.layerLocator, 'layer')
@@ -369,6 +385,10 @@ function validNativeInvokeBody(body) {
     if (body.capabilityId === COMPOSITION_TIME_READ_CAPABILITY
         && body.capabilityVersion === 1) {
         return validCompositionTimeReadArguments(body.arguments);
+    }
+    if (body.capabilityId === COMPOSITION_TIME_SET_CAPABILITY
+        && body.capabilityVersion === 1) {
+        return validCompositionTimeSetArguments(body.arguments);
     }
     if (body.capabilityId === LAYER_PROPERTIES_LIST_CAPABILITY
         && body.capabilityVersion === 1) {
