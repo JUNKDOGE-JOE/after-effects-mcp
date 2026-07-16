@@ -41,6 +41,10 @@ const LAYER_PROPERTIES_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
     '../../native/ae-plugin/protocol/fixtures/invoke-layer-properties-list.json',
 ), 'utf8'));
+const LAYER_PROPERTY_SET_VECTOR = JSON.parse(fs.readFileSync(path.join(
+    __dirname,
+    '../../native/ae-plugin/protocol/fixtures/invoke-layer-property-set.json',
+), 'utf8'));
 const HOST = '22222222-2222-4222-8222-222222222222';
 const SESSION = '11111111-1111-4111-8111-111111111111';
 const CLIENT = '33333333-3333-4333-8333-333333333333';
@@ -247,6 +251,16 @@ function installProtocol(server, options) {
                         generation: 8,
                         invalidated: true,
                     };
+                } else if (request.params.capabilityId === 'ae.layer.property.set') {
+                    result = structuredClone(LAYER_PROPERTY_SET_VECTOR.response.result);
+                    result.evidence.requestId = request.requestId;
+                    result.evidence.requestDigest = invokeRequestDigest(request);
+                    result.evidence.postcondition.digest = jcsDigest({
+                        capabilityId: result.capabilityId,
+                        capabilityVersion: result.capabilityVersion,
+                        value: result.value,
+                    });
+                    if (input.mutateInvoke) input.mutateInvoke(result, request);
                 } else if (request.params.capabilityId === 'ae.project.items.list'
                     || request.params.capabilityId === 'ae.composition.layers.list'
                     || request.params.capabilityId === 'ae.composition.selected-layers.list'
@@ -1244,6 +1258,94 @@ test('CEP layer-property reads enforce the closed locator and decimal value unio
     }
 });
 
+test('CEP layer-property mutation preserves typed native evidence and idempotency', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const ready = await readyNativeClient(t, {
+        mutateInvoke: function (result, request) {
+            if (request.requestId === 'layer-property-set-client-uncertain') {
+                result.evidence.postcondition.digest = '0'.repeat(64);
+            } else if (request.requestId === 'layer-property-set-client-vector') {
+                result.value.valueType = 'two-d';
+                result.value.beforeValue = { components: ['10', '20'], kind: 'vector' };
+                result.value.afterValue = { components: ['40', '50'], kind: 'vector' };
+                result.evidence.postcondition.digest = jcsDigest({
+                    capabilityId: result.capabilityId,
+                    capabilityVersion: result.capabilityVersion,
+                    value: result.value,
+                });
+            } else if (request.requestId === 'layer-property-set-client-color') {
+                result.value.valueType = 'color';
+                result.value.beforeValue = {
+                    alpha: '1', blue: '0.1', green: '0.1', kind: 'color', red: '0.1',
+                };
+                result.value.afterValue = {
+                    alpha: '1', blue: '0.3', green: '0.2', kind: 'color', red: '0.1',
+                };
+                result.evidence.postcondition.digest = jcsDigest({
+                    capabilityId: result.capabilityId,
+                    capabilityVersion: result.capabilityVersion,
+                    value: result.value,
+                });
+            }
+        },
+    });
+    const argumentsValue = structuredClone(
+        LAYER_PROPERTY_SET_VECTOR.request.params.arguments,
+    );
+    const result = await ready.client.invoke({
+        requestId: 'layer-property-set-client-1',
+        capabilityId: 'ae.layer.property.set',
+        capabilityVersion: 1,
+        arguments: argumentsValue,
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.equal(result.value.changed, true);
+    assert.deepEqual(result.value.afterValue, argumentsValue.value);
+    assert.deepEqual(result.evidence.undo, {
+        available: true,
+        verified: false,
+    });
+    const sent = ready.protocol.requests.at(-1);
+    assert.equal(sent.params.arguments.idempotencyKey, argumentsValue.idempotencyKey);
+    assert.equal(result.evidence.requestDigest, invokeRequestDigest(sent));
+
+    for (const [requestId, value] of [
+        ['layer-property-set-client-vector', {
+            kind: 'vector', components: ['4e1', '50.0'],
+        }],
+        ['layer-property-set-client-color', {
+            kind: 'color', alpha: '1.0', red: '0.10', green: '2e-1', blue: '0.30',
+        }],
+    ]) {
+        const typedArguments = structuredClone(argumentsValue);
+        typedArguments.value = value;
+        typedArguments.idempotencyKey = requestId + '-intent';
+        const typedResult = await ready.client.invoke({
+            requestId,
+            capabilityId: 'ae.layer.property.set',
+            capabilityVersion: 1,
+            arguments: typedArguments,
+            deadlineUnixMs: 1900000002000,
+        });
+        assert.equal(typedResult.value.afterValue.kind, value.kind);
+    }
+
+    const uncertainArguments = structuredClone(argumentsValue);
+    uncertainArguments.idempotencyKey = 'synthetic-property-uncertain-0001';
+    await assert.rejects(ready.client.invoke({
+        requestId: 'layer-property-set-client-uncertain',
+        capabilityId: 'ae.layer.property.set',
+        capabilityVersion: 1,
+        arguments: uncertainArguments,
+        deadlineUnixMs: 1900000002000,
+    }), {
+        code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
+        retryable: false,
+        sideEffect: 'may-have-occurred',
+    });
+});
+
 test('CEP stale-locator preflight reports the exact field without inventing generation', {
     skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
 }, async (t) => {
@@ -1597,6 +1699,43 @@ for (const errorFixture of [
         );
     });
 }
+
+test('CEP client treats a malformed mutation error as side-effect uncertain', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const fixture = await endpointFixture(t);
+    const protocol = installProtocol(fixture.server, {
+        invokeError: {
+            code: 'PRECONDITION_FAILED',
+            message: 'missing recovery fields',
+            retryable: false,
+            sideEffect: 'not-started',
+        },
+    });
+    const client = createNativeAegpClient({
+        runtime: { platform: 'darwin', arch: 'arm64' },
+        runtimeRoot: fixture.root,
+        clientInstanceId: CLIENT,
+        requestTimeoutMs: 2000,
+        now: function () { return 1900000000000; },
+    });
+    t.after(function () { return client.close(); });
+    await client.beginPairing();
+    protocol.authorize();
+    await client.waitUntilConnected();
+    await client.capabilities({ detail: 'full', limit: 100 });
+    await assert.rejects(client.invoke({
+        requestId: 'layer-property-malformed-error',
+        capabilityId: 'ae.layer.property.set',
+        capabilityVersion: 1,
+        arguments: structuredClone(LAYER_PROPERTY_SET_VECTOR.request.params.arguments),
+        deadlineUnixMs: 1900000002000,
+    }), {
+        code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
+        retryable: false,
+        sideEffect: 'may-have-occurred',
+    });
+});
 
 test('CEP client bounds an authenticating wait by the Core absolute deadline', {
     skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,

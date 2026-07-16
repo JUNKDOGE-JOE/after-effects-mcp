@@ -35,6 +35,7 @@ const COMPOSITION_LAYERS_LIST_CAPABILITY = 'ae.composition.layers.list';
 const COMPOSITION_SELECTED_LAYERS_LIST_CAPABILITY = 'ae.composition.selected-layers.list';
 const COMPOSITION_TIME_READ_CAPABILITY = 'ae.composition.time.read';
 const LAYER_PROPERTIES_LIST_CAPABILITY = 'ae.layer.properties.list';
+const LAYER_PROPERTY_SET_CAPABILITY = 'ae.layer.property.set';
 const NATIVE_LOCATOR_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function setRuntimeDependencies(dependencies) {
@@ -303,6 +304,43 @@ function validLayerPropertiesListArguments(value) {
             || validNativeLocator(value.parentPropertyLocator, 'stream'));
 }
 
+function validNativeDecimal(value) {
+    return typeof value === 'string' && value.length >= 1 && value.length <= 32
+        && /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$/.test(value)
+        && Number.isFinite(Number(value));
+}
+
+function validNativePrimitiveValue(value) {
+    if (exactBody(value, ['kind', 'value']) && value.kind === 'scalar') {
+        return validNativeDecimal(value.value);
+    }
+    if (exactBody(value, ['kind', 'components']) && value.kind === 'vector') {
+        return Array.isArray(value.components)
+            && (value.components.length === 2 || value.components.length === 3)
+            && value.components.every(validNativeDecimal);
+    }
+    return exactBody(value, ['kind', 'alpha', 'red', 'green', 'blue'])
+        && value.kind === 'color'
+        && validNativeDecimal(value.alpha) && validNativeDecimal(value.red)
+        && validNativeDecimal(value.green) && validNativeDecimal(value.blue);
+}
+
+function validLayerPropertySetArguments(value) {
+    return exactBody(value, [
+        'layerLocator', 'propertyLocator', 'value', 'idempotencyKey',
+    ])
+        && validNativeLocator(value.layerLocator, 'layer')
+        && validNativeLocator(value.propertyLocator, 'stream')
+        && value.layerLocator.hostInstanceId === value.propertyLocator.hostInstanceId
+        && value.layerLocator.sessionId === value.propertyLocator.sessionId
+        && value.layerLocator.projectId === value.propertyLocator.projectId
+        && value.layerLocator.generation === value.propertyLocator.generation
+        && validNativePrimitiveValue(value.value)
+        && typeof value.idempotencyKey === 'string'
+        && value.idempotencyKey.length >= 16
+        && NATIVE_REQUEST_ID_PATTERN.test(value.idempotencyKey);
+}
+
 function validNativeInvokeBody(body) {
     if (!exactBody(body, [
         'requestId', 'capabilityId', 'capabilityVersion', 'arguments', 'deadlineUnixMs',
@@ -335,6 +373,10 @@ function validNativeInvokeBody(body) {
     if (body.capabilityId === LAYER_PROPERTIES_LIST_CAPABILITY
         && body.capabilityVersion === 1) {
         return validLayerPropertiesListArguments(body.arguments);
+    }
+    if (body.capabilityId === LAYER_PROPERTY_SET_CAPABILITY
+        && body.capabilityVersion === 1) {
+        return validLayerPropertySetArguments(body.arguments);
     }
     return false;
 }

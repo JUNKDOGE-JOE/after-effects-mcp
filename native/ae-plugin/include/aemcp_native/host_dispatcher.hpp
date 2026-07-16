@@ -34,6 +34,8 @@ inline constexpr std::string_view kCompositionTimeReadCapability =
     "ae.composition.time.read";
 inline constexpr std::string_view kLayerPropertiesListCapability =
     "ae.layer.properties.list";
+inline constexpr std::string_view kLayerPropertySetCapability =
+    "ae.layer.property.set";
 // Authenticated broker control-plane operation. This is deliberately omitted
 // from model-facing capability discovery and can only fence native locator
 // cache state; it never changes the After Effects project.
@@ -205,10 +207,12 @@ struct LayerPropertySampleTime {
 
 struct LayerPropertyScalarValue {
   std::string value;
+  [[nodiscard]] bool operator==(const LayerPropertyScalarValue&) const = default;
 };
 
 struct LayerPropertyVectorValue {
   std::vector<std::string> components;
+  [[nodiscard]] bool operator==(const LayerPropertyVectorValue&) const = default;
 };
 
 struct LayerPropertyColorValue {
@@ -216,6 +220,7 @@ struct LayerPropertyColorValue {
   std::string red;
   std::string green;
   std::string blue;
+  [[nodiscard]] bool operator==(const LayerPropertyColorValue&) const = default;
 };
 
 using LayerPropertyValue = std::variant<
@@ -223,6 +228,15 @@ using LayerPropertyValue = std::variant<
     LayerPropertyScalarValue,
     LayerPropertyVectorValue,
     LayerPropertyColorValue>;
+
+struct LayerPropertyChanged {
+  bool changed{true};
+  ObjectLocator layer_locator;
+  ObjectLocator property_locator;
+  std::string value_type;
+  LayerPropertyValue before_value;
+  LayerPropertyValue after_value;
+};
 
 struct LayerPropertyEntry {
   ObjectLocator property_locator;
@@ -283,6 +297,14 @@ struct LayerPropertiesQuery {
   std::uint16_t limit{0};
   ObjectLocator layer_locator;
   std::optional<ObjectLocator> parent_property_locator;
+};
+
+struct LayerPropertySetCommand {
+  std::string host_instance_id;
+  std::string session_id;
+  ObjectLocator layer_locator;
+  ObjectLocator property_locator;
+  LayerPropertyValue value;
 };
 
 struct HostReadResult {
@@ -366,6 +388,19 @@ struct HostLayerPropertiesResult {
       std::string code, std::string detail, std::string field = {});
 };
 
+struct HostLayerPropertyWriteResult {
+  bool ok{false};
+  LayerPropertyChanged value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostLayerPropertyWriteResult success(
+      LayerPropertyChanged value);
+  [[nodiscard]] static HostLayerPropertyWriteResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
 struct HostProjectGraphInvalidationResult {
   bool ok{false};
   ProjectGraphInvalidation value;
@@ -396,6 +431,8 @@ class HostApi {
       const CompositionTimeQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerPropertiesResult list_layer_properties(
       const LayerPropertiesQuery& query, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerPropertyWriteResult set_layer_property(
+      const LayerPropertySetCommand& command, TimePoint work_deadline);
   [[nodiscard]] virtual HostProjectGraphInvalidationResult invalidate_project_graph(
       TimePoint work_deadline);
 };
@@ -418,7 +455,9 @@ struct Request {
       std::optional<ObjectLocator> project_locator_value = std::nullopt,
       std::optional<ObjectLocator> composition_locator_value = std::nullopt,
       std::optional<ObjectLocator> layer_locator_value = std::nullopt,
-      std::optional<ObjectLocator> parent_property_locator_value = std::nullopt)
+      std::optional<ObjectLocator> parent_property_locator_value = std::nullopt,
+      std::optional<ObjectLocator> property_locator_value = std::nullopt,
+      LayerPropertyValue property_value_value = {})
       : request_id(std::move(request_id_value)),
         capability_id(std::move(capability_id_value)),
         deadline(deadline_value),
@@ -434,7 +473,9 @@ struct Request {
         project_locator(std::move(project_locator_value)),
         composition_locator(std::move(composition_locator_value)),
         layer_locator(std::move(layer_locator_value)),
-        parent_property_locator(std::move(parent_property_locator_value)) {}
+        parent_property_locator(std::move(parent_property_locator_value)),
+        property_locator(std::move(property_locator_value)),
+        property_value(std::move(property_value_value)) {}
 
   std::string request_id;
   std::string capability_id;
@@ -455,6 +496,8 @@ struct Request {
   std::optional<ObjectLocator> composition_locator;
   std::optional<ObjectLocator> layer_locator;
   std::optional<ObjectLocator> parent_property_locator;
+  std::optional<ObjectLocator> property_locator;
+  LayerPropertyValue property_value;
 };
 
 enum class EnqueueCode {
@@ -500,6 +543,7 @@ struct Completion {
   CompositionLayersPage composition_selected_layers_result;
   CompositionTimeRead composition_time_result;
   LayerPropertiesPage layer_properties_result;
+  LayerPropertyChanged layer_property_change_result;
   ProjectGraphInvalidation project_graph_invalidation_result;
   // Internal fence correlation only; never serialized or logged.
   std::string idempotency_key;

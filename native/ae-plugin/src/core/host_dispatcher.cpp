@@ -1,8 +1,11 @@
 #include "aemcp_native/host_dispatcher.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <limits>
+#include <locale>
+#include <sstream>
 #include <stdexcept>
 #include <utility>
 
@@ -73,6 +76,99 @@ bool valid_locator(const ObjectLocator& locator) {
       && valid_uuid(locator.host_instance_id) && valid_uuid(locator.session_id)
       && valid_uuid(locator.project_id) && locator.generation > 0
       && valid_uuid(locator.object_id);
+}
+
+bool valid_property_value(const LayerPropertyValue& value) {
+  if (const auto* scalar = std::get_if<LayerPropertyScalarValue>(&value)) {
+    return !scalar->value.empty();
+  }
+  if (const auto* vector = std::get_if<LayerPropertyVectorValue>(&value)) {
+    return (vector->components.size() == 2 || vector->components.size() == 3)
+        && std::all_of(vector->components.begin(), vector->components.end(),
+            [](const std::string& component) { return !component.empty(); });
+  }
+  if (const auto* color = std::get_if<LayerPropertyColorValue>(&value)) {
+    return !color->alpha.empty() && !color->red.empty()
+        && !color->green.empty() && !color->blue.empty();
+  }
+  return false;
+}
+
+bool same_locator_context(const ObjectLocator& left, const ObjectLocator& right) {
+  return left.host_instance_id == right.host_instance_id
+      && left.session_id == right.session_id
+      && left.project_id == right.project_id
+      && left.generation == right.generation;
+}
+
+bool property_value_matches_type(
+    const LayerPropertyValue& value, std::string_view value_type) {
+  if (value_type == "one-d") {
+    return std::holds_alternative<LayerPropertyScalarValue>(value);
+  }
+  if (value_type == "color") {
+    return std::holds_alternative<LayerPropertyColorValue>(value);
+  }
+  const auto* vector = std::get_if<LayerPropertyVectorValue>(&value);
+  if (vector == nullptr) return false;
+  if (value_type == "two-d" || value_type == "two-d-spatial") {
+    return vector->components.size() == 2;
+  }
+  if (value_type == "three-d" || value_type == "three-d-spatial") {
+    return vector->components.size() == 3;
+  }
+  return false;
+}
+
+std::optional<double> parse_property_decimal(std::string_view value) {
+  std::istringstream input{std::string(value)};
+  input.imbue(std::locale::classic());
+  double parsed = 0.0;
+  input >> parsed;
+  if (!input || input.peek() != std::char_traits<char>::eof()
+      || !std::isfinite(parsed)) {
+    return std::nullopt;
+  }
+  return parsed;
+}
+
+bool property_decimals_equal(std::string_view left, std::string_view right) {
+  const auto left_value = parse_property_decimal(left);
+  const auto right_value = parse_property_decimal(right);
+  return left_value.has_value() && right_value.has_value()
+      && *left_value == *right_value;
+}
+
+bool property_values_semantically_equal(
+    const LayerPropertyValue& left, const LayerPropertyValue& right) {
+  if (const auto* left_scalar = std::get_if<LayerPropertyScalarValue>(&left)) {
+    const auto* right_scalar = std::get_if<LayerPropertyScalarValue>(&right);
+    return right_scalar != nullptr
+        && property_decimals_equal(left_scalar->value, right_scalar->value);
+  }
+  if (const auto* left_vector = std::get_if<LayerPropertyVectorValue>(&left)) {
+    const auto* right_vector = std::get_if<LayerPropertyVectorValue>(&right);
+    if (right_vector == nullptr
+        || left_vector->components.size() != right_vector->components.size()) {
+      return false;
+    }
+    for (std::size_t index = 0; index < left_vector->components.size(); ++index) {
+      if (!property_decimals_equal(
+              left_vector->components[index], right_vector->components[index])) {
+        return false;
+      }
+    }
+    return true;
+  }
+  if (const auto* left_color = std::get_if<LayerPropertyColorValue>(&left)) {
+    const auto* right_color = std::get_if<LayerPropertyColorValue>(&right);
+    return right_color != nullptr
+        && property_decimals_equal(left_color->alpha, right_color->alpha)
+        && property_decimals_equal(left_color->red, right_color->red)
+        && property_decimals_equal(left_color->green, right_color->green)
+        && property_decimals_equal(left_color->blue, right_color->blue);
+  }
+  return std::holds_alternative<std::monostate>(right);
 }
 
 bool valid_route(std::string_view route_id, std::uint64_t session_generation) {
@@ -250,6 +346,23 @@ HostLayerPropertiesResult HostLayerPropertiesResult::failure(
   return result;
 }
 
+HostLayerPropertyWriteResult HostLayerPropertyWriteResult::success(
+    LayerPropertyChanged value) {
+  HostLayerPropertyWriteResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
+HostLayerPropertyWriteResult HostLayerPropertyWriteResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostLayerPropertyWriteResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
+
 HostProjectGraphInvalidationResult HostProjectGraphInvalidationResult::success(
     ProjectGraphInvalidation value) {
   HostProjectGraphInvalidationResult result;
@@ -306,6 +419,12 @@ HostLayerPropertiesResult HostApi::list_layer_properties(
       "NATIVE_UNSUPPORTED", "layer property reads are unavailable");
 }
 
+HostLayerPropertyWriteResult HostApi::set_layer_property(
+    const LayerPropertySetCommand&, TimePoint) {
+  return HostLayerPropertyWriteResult::failure(
+      "NATIVE_UNSUPPORTED", "layer property writes are unavailable");
+}
+
 HostProjectGraphInvalidationResult HostApi::invalidate_project_graph(TimePoint) {
   return HostProjectGraphInvalidationResult::failure(
       "NATIVE_UNSUPPORTED", "project graph invalidation is unavailable");
@@ -356,12 +475,15 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       request.capability_id == kCompositionTimeReadCapability;
   const bool layer_properties_list =
       request.capability_id == kLayerPropertiesListCapability;
+  const bool layer_property_set =
+      request.capability_id == kLayerPropertySetCapability;
+  const bool mutation = project_bit_depth_set || layer_property_set;
   const bool project_graph_invalidate =
       request.capability_id == kProjectGraphInvalidateControl;
   if (!project_summary && !project_bit_depth_read && !project_bit_depth_set
       && !project_items_list && !composition_layers_list
       && !composition_selected_layers_list && !composition_time_read
-      && !layer_properties_list && !project_graph_invalidate) {
+      && !layer_properties_list && !layer_property_set && !project_graph_invalidate) {
     return {EnqueueCode::kUnsupportedCapability, "NATIVE_UNSUPPORTED"};
   }
   if (project_graph_invalidate
@@ -372,7 +494,9 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           || request.project_locator.has_value()
           || request.composition_locator.has_value()
           || request.layer_locator.has_value()
-          || request.parent_property_locator.has_value())) {
+          || request.parent_property_locator.has_value()
+          || request.property_locator.has_value()
+          || !std::holds_alternative<std::monostate>(request.property_value))) {
     return {
         EnqueueCode::kInvalidRequest,
         "INVALID_ARGUMENT",
@@ -402,6 +526,25 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         EnqueueCode::kInvalidRequest,
         "INVALID_ARGUMENT",
         "native capability arguments failed closed validation",
+        "params.arguments"};
+  }
+  if (layer_property_set
+      && (request.target_depth != 0
+          || !valid_idempotency_key(request.idempotency_key)
+          || !valid_sha256(request.arguments_fingerprint_sha256)
+          || !valid_uuid(request.host_instance_id)
+          || !valid_uuid(request.session_id)
+          || request.offset != 0 || request.limit != 0
+          || request.project_locator.has_value()
+          || request.composition_locator.has_value()
+          || request.parent_property_locator.has_value()
+          || !request.layer_locator.has_value()
+          || !request.property_locator.has_value()
+          || !valid_property_value(request.property_value))) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "native layer property write arguments failed closed validation",
         "params.arguments"};
   }
   if ((project_items_list || composition_layers_list
@@ -485,17 +628,17 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           "params.arguments.compositionLocator"};
     }
   }
-  if (layer_properties_list
+  if ((layer_properties_list || layer_property_set)
       && (request.project_locator.has_value()
           || request.composition_locator.has_value()
           || !request.layer_locator.has_value())) {
     return {
         EnqueueCode::kInvalidRequest,
         "INVALID_ARGUMENT",
-        "layerLocator is required for layer property reads",
+        "layerLocator is required for layer property access",
         "params.arguments.layerLocator"};
   }
-  if (layer_properties_list) {
+  if (layer_properties_list || layer_property_set) {
     const ObjectLocator& layer = *request.layer_locator;
     if (!valid_locator(layer) || layer.kind != "layer") {
       return {
@@ -512,7 +655,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           "layerLocator belongs to another host or native session",
           "params.arguments.layerLocator"};
     }
-    if (request.parent_property_locator.has_value()) {
+    if (layer_properties_list && request.parent_property_locator.has_value()) {
       const ObjectLocator& parent = *request.parent_property_locator;
       if (!valid_locator(parent) || parent.kind != "stream") {
         return {
@@ -532,8 +675,36 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
             "params.arguments.parentPropertyLocator"};
       }
     }
+    if (layer_properties_list
+        && (request.property_locator.has_value()
+            || !std::holds_alternative<std::monostate>(request.property_value))) {
+      return {
+          EnqueueCode::kInvalidRequest,
+          "INVALID_ARGUMENT",
+          "property write arguments are not accepted by the read capability",
+          "params.arguments"};
+    }
+    if (layer_property_set) {
+      const ObjectLocator& property = *request.property_locator;
+      if (!valid_locator(property) || property.kind != "stream") {
+        return {
+            EnqueueCode::kInvalidRequest,
+            "INVALID_ARGUMENT",
+            "propertyLocator must be a closed stream locator",
+            "params.arguments.propertyLocator"};
+      }
+      if (!same_locator_context(*request.layer_locator, property)) {
+        return {
+            EnqueueCode::kInvalidRequest,
+            "STALE_LOCATOR",
+            "propertyLocator belongs to another layer session",
+            "params.arguments.propertyLocator"};
+      }
+    }
   } else if (request.layer_locator.has_value()
-      || request.parent_property_locator.has_value()) {
+      || request.parent_property_locator.has_value()
+      || request.property_locator.has_value()
+      || !std::holds_alternative<std::monostate>(request.property_value)) {
     return {
         EnqueueCode::kInvalidRequest,
         "INVALID_ARGUMENT",
@@ -558,7 +729,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       || pending_outbound_locked(key)) {
     return {EnqueueCode::kDuplicateRequest, "DUPLICATE_REQUEST"};
   }
-  if (project_bit_depth_set) {
+  if (mutation) {
     const auto existing = idempotency_ledger_.find(request.idempotency_key);
     if (existing != idempotency_ledger_.end()) {
       const bool same_arguments = existing->second.arguments_fingerprint_sha256
@@ -576,7 +747,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       || outbound_.size() + active_requests_.size() >= config_.max_outbound_depth) {
     return {EnqueueCode::kQueueFull, "QUEUE_FULL"};
   }
-  if (project_bit_depth_set
+  if (mutation
       && idempotency_ledger_.size() >= config_.max_idempotency_entries) {
     return {
         EnqueueCode::kQueueFull,
@@ -591,7 +762,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
   bool idempotency_reserved = false;
   const std::string reserved_idempotency_key = request.idempotency_key;
   try {
-    if (project_bit_depth_set) {
+    if (mutation) {
       const bool reserved = idempotency_ledger_.emplace(
           request.idempotency_key,
           IdempotencyEntry{
@@ -963,6 +1134,51 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
             completion.ok = true;
             completion.layer_properties_result = std::move(host_result.value);
           }
+        } else if (request.capability_id == kLayerPropertySetCapability) {
+          HostLayerPropertyWriteResult host_result = host.set_layer_property(
+              LayerPropertySetCommand{
+                  request.host_instance_id,
+                  request.session_id,
+                  *request.layer_locator,
+                  *request.property_locator,
+                  request.property_value},
+              request.deadline);
+          if (clock_.now() > request.deadline) {
+            completion = failure_for(
+                request,
+                "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write completed after its request deadline; inspect property state");
+            completion.late_result_discarded = true;
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else if (!host_result.value.changed
+              || host_result.value.layer_locator != *request.layer_locator
+              || host_result.value.property_locator != *request.property_locator
+              || property_values_semantically_equal(
+                  host_result.value.before_value, host_result.value.after_value)
+              || !property_values_semantically_equal(
+                  host_result.value.after_value, request.property_value)
+              || !property_value_matches_type(
+                  host_result.value.before_value, host_result.value.value_type)
+              || !property_value_matches_type(
+                  host_result.value.after_value, host_result.value.value_type)) {
+            completion = failure_for(
+                request,
+                "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write result did not verify the requested layer property value");
+          } else {
+            completion.request_id = request.request_id;
+            completion.capability_id = request.capability_id;
+            completion.route_id = request.route_id;
+            completion.session_generation = request.session_generation;
+            completion.idempotency_key = request.idempotency_key;
+            completion.ok = true;
+            completion.layer_property_change_result = std::move(host_result.value);
+          }
         } else {
           // The idle budget decides whether another task may start in this
           // batch. An AEGP write is synchronous and cannot be interrupted, so
@@ -1004,7 +1220,8 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
       } catch (...) {
         completion = failure_for(
             request,
-            request.capability_id == kProjectBitDepthSetCapability
+            (request.capability_id == kProjectBitDepthSetCapability
+                || request.capability_id == kLayerPropertySetCapability)
                 ? "POSSIBLY_SIDE_EFFECTING_FAILURE" : "CAPABILITY_FAILED",
             "native host adapter raised an exception");
       }
@@ -1185,7 +1402,8 @@ void HostDispatcher::finish_request_locked(
 
 void HostDispatcher::finish_idempotency_locked(
     const Request& request, const Completion& completion) {
-  if (request.capability_id != kProjectBitDepthSetCapability
+  if ((request.capability_id != kProjectBitDepthSetCapability
+          && request.capability_id != kLayerPropertySetCapability)
       || request.idempotency_key.empty()) {
     return;
   }

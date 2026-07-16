@@ -3,8 +3,8 @@ import pytest
 from ae_mcp.backends.base import ALL_VERBS, Backend, LegacyExtendScriptBackend
 
 
-def test_all_verbs_constant_has_47_entries():
-    assert len(ALL_VERBS) == 47
+def test_all_verbs_constant_has_48_entries():
+    assert len(ALL_VERBS) == 48
     assert "ae.exec" in ALL_VERBS
     assert "ae.ping" in ALL_VERBS
     assert "ae.previewFrame" in ALL_VERBS
@@ -19,6 +19,7 @@ def test_all_verbs_constant_has_47_entries():
     assert "ae.listSelectedLayers" in ALL_VERBS
     assert "ae.getCompositionTime" in ALL_VERBS
     assert "ae.listLayerProperties" in ALL_VERBS
+    assert "ae.setLayerPropertyValue" in ALL_VERBS
     assert "ae.isolateToggle" not in ALL_VERBS
     assert "ae.toastQuery" not in ALL_VERBS
 

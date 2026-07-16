@@ -9,13 +9,14 @@ from ae_mcp import schemas as S
 
 
 def test_registry_has_all_verbs():
-    assert len(S.SCHEMAS) == 52, f"expected 52 verbs, got {len(S.SCHEMAS)}"
+    assert len(S.SCHEMAS) == 53, f"expected 53 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.projectSummary",
         "ae.getProjectBitDepth", "ae.setProjectBitDepth",
         "ae.listProjectItems", "ae.listCompositionLayers", "ae.listSelectedLayers",
         "ae.getCompositionTime",
         "ae.listLayerProperties",
+        "ae.setLayerPropertyValue",
         "ae.layers", "ae.readProps", "ae.exec",
         "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.previewFrame",
         "ae.applyEffect", "ae.ping", "ae.status", "ae.diagnose",
@@ -206,6 +207,50 @@ def test_native_layer_property_listing_is_bounded_and_locator_only():
         S.AeListLayerPropertiesArgs(layer_locator=_locator("layer"), limit=26)
     with pytest.raises(ValidationError):
         S.AeListLayerPropertiesArgs(layer_locator=_locator("layer"), offset=True)
+
+
+def test_native_layer_property_set_is_typed_closed_and_requires_stable_intent():
+    stream = {
+        **_locator("stream"),
+        "objectId": "55555555-5555-4555-8555-555555555555",
+    }
+    args = S.AeSetLayerPropertyValueArgs(
+        layer_locator=_locator("layer"),
+        property_locator=stream,
+        value={"kind": "vector", "components": ["12.5", "-3"]},
+        idempotency_key="property-intent-0001",
+    )
+    assert args.value.kind == "vector"
+    assert args.value.components == ["12.5", "-3"]
+
+    with pytest.raises(ValidationError):
+        S.AeSetLayerPropertyValueArgs(
+            layer_locator=_locator("layer"),
+            property_locator=_locator("layer"),
+            value={"kind": "scalar", "value": "10"},
+            idempotency_key="property-intent-0001",
+        )
+    with pytest.raises(ValidationError):
+        S.AeSetLayerPropertyValueArgs(
+            layer_locator=_locator("layer"),
+            property_locator=stream,
+            value={"kind": "vector", "components": ["1"]},
+            idempotency_key="property-intent-0001",
+        )
+    with pytest.raises(ValidationError):
+        S.AeSetLayerPropertyValueArgs(
+            layer_locator=_locator("layer"),
+            property_locator=stream,
+            value={"kind": "scalar", "value": "NaN"},
+            idempotency_key="property-intent-0001",
+        )
+    with pytest.raises(ValidationError):
+        S.AeSetLayerPropertyValueArgs(
+            layer_locator=_locator("layer"),
+            property_locator=stream,
+            value={"kind": "scalar", "value": "10"},
+            idempotency_key="short",
+        )
 
 
 def test_layers_optional_comp_id():

@@ -91,6 +91,7 @@ def _filtered_tool_names() -> set:
             "ae.listSelectedLayers",
             "ae.getCompositionTime",
             "ae.listLayerProperties",
+            "ae.setLayerPropertyValue",
         }
     else:
         supported = supported - {
@@ -102,6 +103,7 @@ def _filtered_tool_names() -> set:
             "ae.listSelectedLayers",
             "ae.getCompositionTime",
             "ae.listLayerProperties",
+            "ae.setLayerPropertyValue",
         }
     return supported | {"ae.status", "ae.diagnose"}
 
@@ -227,6 +229,61 @@ def _layer_properties_validation_error(
         details={
             "field": field[:128],
             "capabilityId": "ae.layer.properties.list",
+        },
+    )
+    return structured.public_dict()
+
+
+def _layer_property_set_validation_error(
+    error: JsonSchemaValidationError | PydanticValidationError,
+) -> dict[str, Any]:
+    """Preserve structured recovery for the native layer-property write."""
+    path: list[Any] = []
+    if isinstance(error, PydanticValidationError):
+        errors = error.errors(include_url=False, include_input=False)
+        if errors:
+            path = list(errors[0].get("loc") or ())
+    else:
+        path = list(error.absolute_path)
+        if (
+            error.validator == "required"
+            and isinstance(error.instance, dict)
+            and isinstance(error.validator_value, list)
+        ):
+            missing = [
+                key for key in error.validator_value if key not in error.instance
+            ]
+            if len(missing) == 1:
+                path.append(missing[0])
+        elif (
+            error.validator == "additionalProperties"
+            and isinstance(error.instance, dict)
+            and isinstance(error.schema, dict)
+        ):
+            properties = error.schema.get("properties")
+            if isinstance(properties, dict):
+                unexpected = sorted(set(error.instance) - set(properties))
+                if len(unexpected) == 1:
+                    path.append(unexpected[0])
+
+    field = "arguments"
+    if path:
+        field += "." + ".".join(str(part) for part in path)
+    structured = NativeBackendError(
+        "INVALID_ARGUMENT",
+        "ae.setLayerPropertyValue arguments did not match the published schema.",
+        retryable=False,
+        side_effect="not-started",
+        recovery={
+            "action": "change-arguments",
+            "hint": (
+                "Copy both locators from ae_listLayerProperties, match the typed "
+                "property value shape, and use a 16 to 64 character idempotency key."
+            ),
+        },
+        details={
+            "field": field[:128],
+            "capabilityId": "ae.layer.property.set",
         },
     )
     return structured.public_dict()
@@ -451,6 +508,9 @@ def build_server() -> Server:
                 if name == "ae.listLayerProperties":
                     public_error: Any = _layer_properties_validation_error(error)
                     payload = _format_result({"ok": False, "error": public_error})
+                elif name == "ae.setLayerPropertyValue":
+                    public_error = _layer_property_set_validation_error(error)
+                    payload = _format_result({"ok": False, "error": public_error})
                 elif name == "ae.getCompositionTime":
                     public_error = _composition_time_validation_error(error)
                     payload = _format_result({"ok": False, "error": public_error})
@@ -471,6 +531,10 @@ def build_server() -> Server:
                 e, PydanticValidationError
             ):
                 error: Any = _layer_properties_validation_error(e)
+            elif name == "ae.setLayerPropertyValue" and isinstance(
+                e, PydanticValidationError
+            ):
+                error = _layer_property_set_validation_error(e)
             elif name == "ae.getCompositionTime" and isinstance(
                 e, PydanticValidationError
             ):

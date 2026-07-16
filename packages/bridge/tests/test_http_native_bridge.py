@@ -303,6 +303,29 @@ async def test_native_bit_depth_transport_loss_preserves_side_effect_uncertainty
 
 
 @pytest.mark.asyncio
+async def test_native_layer_property_transport_loss_is_not_safe_to_retry(token_file):
+    wire_request = _fixture("invoke-layer-property-set.json")["request"]
+    request = NativeInvokeRequest(
+        request_id="core-layer-property-timeout",
+        capability_id="ae.layer.property.set",
+        capability_version=1,
+        arguments=wire_request["params"]["arguments"],
+        deadline_unix_ms=_DEADLINE,
+    )
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/invoke").mock(side_effect=ReadTimeout("lost response"))
+        with pytest.raises(NativeBackendError) as raised:
+            await HttpBridge("http://127.0.0.1:11488").invoke(request)
+
+    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert raised.value.side_effect == "may-have-occurred"
+    assert raised.value.retryable is False
+    assert raised.value.recovery.action == "inspect-state"
+    assert "property" in raised.value.recovery.hint
+    assert raised.value.details == {"capabilityId": request.capability_id}
+
+
+@pytest.mark.asyncio
 async def test_native_bit_depth_read_transport_loss_remains_safe_to_retry(token_file):
     request = NativeInvokeRequest(
         request_id="core-bit-depth-read-timeout",

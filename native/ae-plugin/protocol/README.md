@@ -57,7 +57,7 @@ Adobe approval or completed host validation.
    SDK identity, actual AE host identity, instance/session IDs, limits, and a
    capability digest. No overlap returns `WIRE_VERSION_MISMATCH`.
 3. The broker requests compact capability summaries by default. It can request
-   full, bounded contracts for selected IDs. Version 1 has eight compile-time
+   full, bounded contracts for selected IDs. Version 1 has nine compile-time
    capabilities. Capability discovery deliberately does not support pagination:
    `cursor` is rejected and `nextCursor` must be null. If the effective limit is smaller than the
    number of matching descriptors, the plug-in fails closed instead of returning

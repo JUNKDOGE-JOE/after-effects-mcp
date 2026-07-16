@@ -31,6 +31,8 @@ import {
   compositionTimeReadDescriptor,
   layerPropertiesListContractDigest,
   layerPropertiesListDescriptor,
+  layerPropertySetContractDigest,
+  layerPropertySetDescriptor,
   projectBitDepthReadDescriptor,
   projectBitDepthSetDescriptor,
   projectItemsListContractDigest,
@@ -224,6 +226,7 @@ test('all checked-in vectors are synthetic and contain no host or Adobe suite cl
     'invoke-composition-selected-layers-list.json',
     'invoke-composition-time-read.json',
     'invoke-layer-properties-list.json',
+    'invoke-layer-property-set.json',
     'invalidate-graph.json',
     'cancel.json',
     'errors.json',
@@ -260,6 +263,7 @@ test('golden requests, events, responses, and bound error policies validate', ()
     'invoke-composition-selected-layers-list.json',
     'invoke-composition-time-read.json',
     'invoke-layer-properties-list.json',
+    'invoke-layer-property-set.json',
     'invalidate-graph.json',
     'cancel.json',
   ]) {
@@ -465,6 +469,7 @@ test('schema shape and composite request validation have an explicit differentia
     golden('invoke-composition-selected-layers-list.json').request,
     golden('invoke-composition-time-read.json').request,
     golden('invoke-layer-properties-list.json').request,
+    golden('invoke-layer-property-set.json').request,
     golden('invalidate-graph.json').request,
     golden('cancel.json').request,
   ];
@@ -580,7 +585,7 @@ test('graph invalidation is an exact authenticated internal lifecycle exchange',
     ), false);
   }
 
-  assert.equal(nativeCapabilityRegistry(schema).length, 8);
+  assert.equal(nativeCapabilityRegistry(schema).length, 9);
   assert.doesNotMatch(JSON.stringify(golden('capabilities.json')), /invalidateGraph/u);
   const disguisedInvoke = structuredClone(golden('invoke-project-summary.json').request);
   disguisedInvoke.params.capabilityId = 'ae.invalidateGraph';
@@ -764,6 +769,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
   const compositionSelectedLayersDescriptor = compositionSelectedLayersListDescriptor(schema);
   const compositionTimeDescriptor = compositionTimeReadDescriptor(schema);
   const layerPropertiesDescriptor = layerPropertiesListDescriptor(schema);
+  const layerPropertyDescriptor = layerPropertySetDescriptor(schema);
   const containsRef = (value) => {
     if (Array.isArray(value)) return value.some(containsRef);
     if (value === null || typeof value !== 'object') return false;
@@ -808,6 +814,10 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     'fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd');
   assert.equal(layerPropertiesDescriptor.contractDigest,
     'a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba');
+  assert.equal(layerPropertyDescriptor.contractDigest,
+    '5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c');
+  assert.equal(layerPropertyDescriptor.contractDigest,
+    layerPropertySetContractDigest(schema));
   assert.equal(capabilityDigest([
     descriptor,
     bitDepthReadDescriptor,
@@ -817,7 +827,8 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     compositionSelectedLayersDescriptor,
     compositionTimeDescriptor,
     layerPropertiesDescriptor,
-  ]), '04ad7c01ea1bf9c2837d7f55184fe0453b2edf6027c1ec36c44a8c8a17d46296');
+    layerPropertyDescriptor,
+  ]), 'b32ad50eb0dcbe47098192787038a9cac6479aa948a487ae02dd18d307136a66');
   assert.ok(Buffer.byteLength(canonicalize(descriptor), 'utf8') < LIMITS.maxFrameBytes);
 });
 
@@ -826,7 +837,7 @@ test('v1 capability discovery is single-page, fail-closed, and never replayed', 
   const exchange = golden('capabilities.json');
   assert.equal(exchange.request.params.limit, 100);
   assert.equal(Object.hasOwn(exchange.request.params, 'ids'), false);
-  assert.equal(exchange.response.result.items.length, 8);
+  assert.equal(exchange.response.result.items.length, 9);
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, exchange.response, schema), true);
 
   const zeroLimit = structuredClone(exchange.request);
@@ -1312,6 +1323,47 @@ test('bit-depth invoke vectors bind native read and undoable set semantics', () 
   wrongTarget.result.value.afterBitsPerChannel = 8;
   wrongTarget.result.evidence.postcondition.digest = postconditionDigest(wrongTarget.result);
   assert.equal(validateTranscript(setContext, set.request, [...set.events, wrongTarget]), false);
+});
+
+test('layer property set binds fresh locators, typed values, Undo, and postcondition', () => {
+  const fixture = golden('invoke-layer-property-set.json');
+  const descriptor = layerPropertySetDescriptor(schema);
+  const context = {
+    hello: golden('hello.json'),
+    descriptor,
+    schema,
+    brokerSendUnixMs: 1900000000000,
+    effectiveDeadlineUnixMs: fixture.request.deadlineUnixMs,
+    terminalObservedUnixMs: 1900000000030,
+  };
+  assert.equal(fixture.response.result.evidence.requestDigest, sha256Jcs(fixture.request));
+  assert.equal(
+    fixture.response.result.evidence.postcondition.digest,
+    postconditionDigest(fixture.response.result),
+  );
+  assert.equal(validateTranscript(
+    context, fixture.request, [...fixture.events, fixture.response],
+  ), true);
+
+  const verifiedUndo = structuredClone(fixture.response);
+  verifiedUndo.result.evidence.undo.verified = true;
+  assert.equal(validateTranscript(
+    context, fixture.request, [...fixture.events, verifiedUndo],
+  ), false);
+
+  const wrongTarget = structuredClone(fixture.response);
+  wrongTarget.result.value.afterValue.value = '41';
+  wrongTarget.result.evidence.postcondition.digest = postconditionDigest(wrongTarget.result);
+  assert.equal(validateTranscript(
+    context, fixture.request, [...fixture.events, wrongTarget],
+  ), false);
+
+  const noChange = structuredClone(fixture.response);
+  noChange.result.value.beforeValue = structuredClone(noChange.result.value.afterValue);
+  noChange.result.evidence.postcondition.digest = postconditionDigest(noChange.result);
+  assert.equal(validateTranscript(
+    context, fixture.request, [...fixture.events, noChange],
+  ), false);
 });
 
 test('composition time read binds one locator to an exact reduced rational', () => {

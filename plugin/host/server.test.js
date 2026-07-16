@@ -30,6 +30,10 @@ const layerPropertiesVector = require(
     '../../native/ae-plugin/protocol/fixtures/invoke-layer-properties-list.json'
 );
 const layerPropertiesFixture = layerPropertiesVector.response.result;
+const layerPropertySetVector = require(
+    '../../native/ae-plugin/protocol/fixtures/invoke-layer-property-set.json'
+);
+const layerPropertySetFixture = layerPropertySetVector.response.result;
 
 const authToken = require('./auth-token');
 
@@ -242,6 +246,12 @@ function fakeNativeClient() {
         },
         invoke: async function (request) {
             calls.push(['invoke', request]);
+            if (request.capabilityId === 'ae.layer.property.set') {
+                const result = structuredClone(layerPropertySetFixture);
+                result.replayed = false;
+                result.evidence.requestId = request.requestId;
+                return result;
+            }
             if (request.capabilityId === 'ae.project.items.list'
                 || request.capabilityId === 'ae.composition.layers.list'
                 || request.capabilityId === 'ae.composition.selected-layers.list'
@@ -561,6 +571,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
                 'ae.composition.selected-layers.list',
                 'ae.composition.time.read',
                 'ae.layer.properties.list',
+                'ae.layer.property.set',
             ],
         );
 
@@ -699,6 +710,19 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
         );
         assert.strictEqual(layerProperties.status, 200);
         assert.strictEqual(layerProperties.body.result.value.properties[1].value.value, '73.5');
+        const layerPropertySetRequest = {
+            requestId: 'core-layer-property-set-1',
+            capabilityId: 'ae.layer.property.set',
+            capabilityVersion: 1,
+            arguments: structuredClone(layerPropertySetVector.request.params.arguments),
+            deadlineUnixMs,
+        };
+        const layerPropertySet = await post(
+            port, '/native/invoke', headers, layerPropertySetRequest,
+        );
+        assert.strictEqual(layerPropertySet.status, 200);
+        assert.strictEqual(layerPropertySet.body.result.value.changed, true);
+        assert.strictEqual(layerPropertySet.body.result.evidence.effect, 'committed');
         assert.deepStrictEqual(nativeClient.calls, [
             'pair',
             ['negotiate', { deadlineUnixMs }],
@@ -717,6 +741,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
             ['invoke', compositionSelectedLayersRequest],
             ['invoke', compositionTimeRequest],
             ['invoke', layerPropertiesRequest],
+            ['invoke', layerPropertySetRequest],
         ]);
     } finally {
         srv.close();
@@ -790,6 +815,50 @@ test('native invoke preserves complete structured native failures over HTTP', as
             sideEffect: 'not-started',
             recovery: { action: 'inspect-state', hint: 'Inspect the project state.' },
             details: { capabilityId: 'ae.project.summary' },
+        });
+    } finally {
+        srv.close();
+        server.stop();
+    }
+});
+
+test('native invoke preserves uncertain layer-property mutation failures over HTTP', async () => {
+    const nativeClient = fakeNativeClient();
+    nativeClient.authorize();
+    nativeClient.invoke = async function () {
+        const error = new Error('mutation error envelope could not be verified');
+        error.code = 'POSSIBLY_SIDE_EFFECTING_FAILURE';
+        error.retryable = false;
+        error.sideEffect = 'may-have-occurred';
+        error.recovery = {
+            action: 'inspect-state',
+            hint: 'Inspect After Effects state and the Undo stack before retrying.',
+        };
+        error.details = { capabilityId: 'ae.layer.property.set' };
+        throw error;
+    };
+    const { server, srv, port } = await startNativeApp(nativeClient);
+    try {
+        const response = await post(port, '/native/invoke', {
+            'X-AE-MCP-Token': 'known-secret-token',
+        }, {
+            requestId: 'core-layer-property-uncertain',
+            capabilityId: 'ae.layer.property.set',
+            capabilityVersion: 1,
+            arguments: structuredClone(layerPropertySetVector.request.params.arguments),
+            deadlineUnixMs: Date.now() + 10000,
+        });
+        assert.strictEqual(response.status, 503);
+        assert.deepStrictEqual(response.body.error, {
+            code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
+            message: 'mutation error envelope could not be verified',
+            retryable: false,
+            sideEffect: 'may-have-occurred',
+            recovery: {
+                action: 'inspect-state',
+                hint: 'Inspect After Effects state and the Undo stack before retrying.',
+            },
+            details: { capabilityId: 'ae.layer.property.set' },
         });
     } finally {
         srv.close();

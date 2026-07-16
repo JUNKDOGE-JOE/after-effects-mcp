@@ -18,6 +18,7 @@ ALL_VERBS: Set[str] = {
     "ae.listProjectItems", "ae.listCompositionLayers", "ae.listSelectedLayers",
     "ae.getCompositionTime",
     "ae.listLayerProperties",
+    "ae.setLayerPropertyValue",
     "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.applyEffect",
     "ae.previewFrame",
     "ae.createLayer", "ae.setProperty", "ae.moveLayer", "ae.selectLayers",

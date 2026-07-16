@@ -87,6 +87,7 @@ _UUID = r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{1
 _SHA256 = r"^[0-9a-f]{64}$"
 _SOURCE_COMMIT = r"^[0-9a-f]{40}$"
 _SAFE_MAX = 9_007_199_254_740_991
+_IDEMPOTENCY_KEY_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]*$"
 
 CapabilityId = Annotated[
     StrictStr, Field(min_length=3, max_length=96, pattern=_CAPABILITY_ID)
@@ -438,7 +439,14 @@ class NativeErrorPayload(_NativeModel):
     def _policy_matches_code(self) -> "NativeErrorPayload":
         expected = _ERROR_POLICY[self.code]
         actual = (self.retryable, self.side_effect, self.recovery.action)
-        if actual != expected:
+        property_precondition = (
+            self.code == "PRECONDITION_FAILED"
+            and self.details is not None
+            and self.details.capability_id == LAYER_PROPERTY_SET_CAPABILITY_ID
+            and self.details.field == "params.arguments.propertyLocator"
+            and actual == (False, "not-started", "change-arguments")
+        )
+        if actual != expected and not property_precondition:
             raise ValueError("native error policy does not match its code")
         if self.code == "QUEUE_FULL":
             if self.recovery.retry_after_ms is None:
@@ -1075,6 +1083,39 @@ class LayerPropertyColorValue(_NativeModel):
 LayerPropertyPrimitiveValue: TypeAlias = (
     LayerPropertyScalarValue | LayerPropertyVectorValue | LayerPropertyColorValue
 )
+
+
+def _layer_property_values_binary_equal(
+    left: LayerPropertyPrimitiveValue,
+    right: LayerPropertyPrimitiveValue,
+) -> bool:
+    """Compare the binary64 values AE receives, independent of wire spelling."""
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, LayerPropertyScalarValue) and isinstance(
+        right, LayerPropertyScalarValue
+    ):
+        return float(left.value) == float(right.value)
+    if isinstance(left, LayerPropertyVectorValue) and isinstance(
+        right, LayerPropertyVectorValue
+    ):
+        return len(left.components) == len(right.components) and all(
+            float(left_value) == float(right_value)
+            for left_value, right_value in zip(left.components, right.components)
+        )
+    if isinstance(left, LayerPropertyColorValue) and isinstance(
+        right, LayerPropertyColorValue
+    ):
+        return all(
+            float(left_value) == float(right_value)
+            for left_value, right_value in zip(
+                (left.alpha, left.red, left.green, left.blue),
+                (right.alpha, right.red, right.green, right.blue),
+            )
+        )
+    return False
+
+
 LayerPropertyGroupingType: TypeAlias = Literal[
     "named-group", "indexed-group", "leaf"
 ]
@@ -1373,6 +1414,15 @@ LAYER_PROPERTIES_LIST_INPUT_CONTRACT_ID = (
 )
 LAYER_PROPERTIES_LIST_RESULT_CONTRACT_ID = (
     "aemcp.contract.ae.layer.properties.list.result.v1"
+)
+
+LAYER_PROPERTY_SET_CAPABILITY_ID = "ae.layer.property.set"
+LAYER_PROPERTY_SET_CAPABILITY_VERSION = 1
+LAYER_PROPERTY_SET_INPUT_CONTRACT_ID = (
+    "aemcp.contract.ae.layer.property.set.input.v1"
+)
+LAYER_PROPERTY_SET_RESULT_CONTRACT_ID = (
+    "aemcp.contract.ae.layer.property.set.result.v1"
 )
 
 _PROJECT_ITEMS_LIST_INPUT_SCHEMA = {
@@ -2118,6 +2168,145 @@ _LAYER_PROPERTIES_LIST_RESULT_SCHEMA = {
     ),
 }
 
+_LAYER_PROPERTY_PRIMITIVE_VALUE_SCHEMA = {
+    "oneOf": [
+        {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["kind", "value"],
+            "properties": {
+                "kind": {"const": "scalar"},
+                "value": _LAYER_PROPERTY_DECIMAL_SCHEMA,
+            },
+        },
+        {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["kind", "components"],
+            "properties": {
+                "kind": {"const": "vector"},
+                "components": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 3,
+                    "items": _LAYER_PROPERTY_DECIMAL_SCHEMA,
+                },
+            },
+        },
+        {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["kind", "alpha", "red", "green", "blue"],
+            "properties": {
+                "kind": {"const": "color"},
+                "alpha": _LAYER_PROPERTY_DECIMAL_SCHEMA,
+                "red": _LAYER_PROPERTY_DECIMAL_SCHEMA,
+                "green": _LAYER_PROPERTY_DECIMAL_SCHEMA,
+                "blue": _LAYER_PROPERTY_DECIMAL_SCHEMA,
+            },
+        },
+    ]
+}
+
+_LAYER_PROPERTY_SET_LOCATOR_DEFS = {
+    "uuid": {"type": "string", "pattern": _UUID},
+    "locatorBase": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId",
+        ],
+        "properties": {
+            "kind": {"enum": ["layer", "stream"]},
+            "hostInstanceId": {"$ref": "#/$defs/uuid"},
+            "sessionId": {"$ref": "#/$defs/uuid"},
+            "projectId": {"$ref": "#/$defs/uuid"},
+            "generation": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": _SAFE_MAX,
+            },
+            "objectId": {"$ref": "#/$defs/uuid"},
+        },
+    },
+    "layerLocator": {
+        "allOf": [
+            {"$ref": "#/$defs/locatorBase"},
+            {"properties": {"kind": {"const": "layer"}}},
+        ]
+    },
+    "streamLocator": {
+        "allOf": [
+            {"$ref": "#/$defs/locatorBase"},
+            {"properties": {"kind": {"const": "stream"}}},
+        ]
+    },
+    "primitiveValue": _LAYER_PROPERTY_PRIMITIVE_VALUE_SCHEMA,
+}
+
+_LAYER_PROPERTY_SET_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "layerLocator",
+        "propertyLocator",
+        "value",
+        "idempotencyKey",
+    ],
+    "properties": {
+        "layerLocator": {"$ref": "#/$defs/layerLocator"},
+        "propertyLocator": {"$ref": "#/$defs/streamLocator"},
+        "value": {"$ref": "#/$defs/primitiveValue"},
+        "idempotencyKey": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 64,
+            "pattern": _IDEMPOTENCY_KEY_PATTERN,
+        },
+    },
+    "$defs": _LAYER_PROPERTY_SET_LOCATOR_DEFS,
+    "x-invariant": "both-locators-must-share-one-host-session-project-generation",
+}
+
+_LAYER_PROPERTY_SET_RESULT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "changed",
+        "layerLocator",
+        "propertyLocator",
+        "valueType",
+        "beforeValue",
+        "afterValue",
+    ],
+    "properties": {
+        "changed": {"const": True},
+        "layerLocator": {"$ref": "#/$defs/layerLocator"},
+        "propertyLocator": {"$ref": "#/$defs/streamLocator"},
+        "valueType": {
+            "enum": [
+                "one-d",
+                "two-d",
+                "two-d-spatial",
+                "three-d",
+                "three-d-spatial",
+                "color",
+            ]
+        },
+        "beforeValue": {"$ref": "#/$defs/primitiveValue"},
+        "afterValue": {"$ref": "#/$defs/primitiveValue"},
+    },
+    "$defs": _LAYER_PROPERTY_SET_LOCATOR_DEFS,
+    "x-invariant": (
+        "beforeValue-must-differ-from-afterValue-and-values-must-match-valueType"
+    ),
+}
+
 PROJECT_ITEMS_LIST_CONTRACT_DIGEST = (
     "64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e"
 )
@@ -2129,6 +2318,9 @@ SELECTED_COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST = (
 )
 LAYER_PROPERTIES_LIST_CONTRACT_DIGEST = (
     "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba"
+)
+LAYER_PROPERTY_SET_CONTRACT_DIGEST = (
+    "5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c"
 )
 
 
@@ -2156,7 +2348,6 @@ PROJECT_BIT_DEPTH_SET_CONTRACT_DIGEST = (
     "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a"
 )
 
-_IDEMPOTENCY_KEY_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]*$"
 _PROJECT_BIT_DEPTH_READ_INPUT_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -2274,6 +2465,120 @@ class ProjectBitDepthSetExecution(_NativeModel):
     ]
     replayed: StrictBool
     value: ProjectBitDepthSetValue
+    evidence: NativeExecutionEvidence
+    engine: Literal["native-aegp"] = "native-aegp"
+
+    def audit_fields(self) -> dict[str, Any]:
+        undo = self.evidence.undo
+        return {
+            "engine": self.engine,
+            "capabilityId": self.evidence.capability_id,
+            "capabilityVersion": self.evidence.capability_version,
+            "contractDigest": self.implementation.contract_digest,
+            "selectedWireVersion": self.negotiation.selected_wire_version,
+            "pluginVersion": self.negotiation.plugin_version,
+            "compiledSdkVersion": self.negotiation.compiled_sdk_version,
+            "sourceCommit": self.negotiation.source_commit,
+            "hostInstanceId": self.evidence.host_instance_id,
+            "sessionId": self.evidence.session_id,
+            "sessionGeneration": self.negotiation.session_generation,
+            "capabilitiesDigest": self.negotiation.capabilities_digest,
+            "requestId": self.transport_request_id,
+            "evidenceRequestId": self.evidence.request_id,
+            "idempotencyKey": self.idempotency_key,
+            "replayed": self.replayed,
+            "effect": self.evidence.effect,
+            "requestDigest": self.evidence.request_digest,
+            "postconditionAlgorithm": self.evidence.postcondition.algorithm,
+            "postconditionDigest": self.evidence.postcondition.digest,
+            "undoAvailable": undo.available if undo is not None else False,
+            "undoVerified": undo.verified if undo is not None else False,
+            "startedAtUnixMs": self.evidence.started_at_unix_ms,
+            "completedAtUnixMs": self.evidence.completed_at_unix_ms,
+        }
+
+
+class LayerPropertySetArguments(_NativeModel):
+    layer_locator: NativeLocator
+    property_locator: NativeLocator
+    value: LayerPropertyPrimitiveValue
+    idempotency_key: Annotated[
+        StrictStr,
+        Field(min_length=16, max_length=64, pattern=_IDEMPOTENCY_KEY_PATTERN),
+    ]
+
+    @model_validator(mode="after")
+    def _verified_locators(self) -> "LayerPropertySetArguments":
+        if self.layer_locator.kind != "layer":
+            raise ValueError("layerLocator must have kind layer")
+        if self.property_locator.kind != "stream":
+            raise ValueError("propertyLocator must have kind stream")
+        if self.layer_locator.context() != self.property_locator.context():
+            raise ValueError("propertyLocator must belong to the layer context")
+        return self
+
+
+class LayerPropertySetValue(_NativeModel):
+    changed: Literal[True]
+    layer_locator: NativeLocator
+    property_locator: NativeLocator
+    value_type: Literal[
+        "one-d",
+        "two-d",
+        "two-d-spatial",
+        "three-d",
+        "three-d-spatial",
+        "color",
+    ]
+    before_value: LayerPropertyPrimitiveValue
+    after_value: LayerPropertyPrimitiveValue
+
+    @model_validator(mode="after")
+    def _verified_transition(self) -> "LayerPropertySetValue":
+        if self.layer_locator.kind != "layer":
+            raise ValueError("layerLocator must have kind layer")
+        if self.property_locator.kind != "stream":
+            raise ValueError("propertyLocator must have kind stream")
+        if self.layer_locator.context() != self.property_locator.context():
+            raise ValueError("propertyLocator must belong to the layer context")
+        expected_kind = (
+            "scalar"
+            if self.value_type == "one-d"
+            else "color"
+            if self.value_type == "color"
+            else "vector"
+        )
+        for label, value in (
+            ("beforeValue", self.before_value),
+            ("afterValue", self.after_value),
+        ):
+            if value.kind != expected_kind:
+                raise ValueError(f"{label} does not match valueType")
+            if isinstance(value, LayerPropertyVectorValue):
+                expected_components = (
+                    2
+                    if self.value_type in {"two-d", "two-d-spatial"}
+                    else 3
+                )
+                if len(value.components) != expected_components:
+                    raise ValueError(f"{label} does not match valueType")
+        if _layer_property_values_binary_equal(
+            self.before_value, self.after_value
+        ):
+            raise ValueError("layer property value did not change")
+        return self
+
+
+class LayerPropertySetExecution(_NativeModel):
+    implementation: NativeCapabilityDescriptor
+    negotiation: NativeNegotiation
+    transport_request_id: RequestId
+    idempotency_key: Annotated[
+        StrictStr,
+        Field(min_length=16, max_length=64, pattern=_IDEMPOTENCY_KEY_PATTERN),
+    ]
+    replayed: StrictBool
+    value: LayerPropertySetValue
     evidence: NativeExecutionEvidence
     engine: Literal["native-aegp"] = "native-aegp"
 
@@ -2686,6 +2991,59 @@ def _validate_layer_properties_list_descriptor(
     )
 
 
+def _validate_layer_property_set_descriptor(
+    descriptor: NativeCapabilityDescriptor,
+    *,
+    host_platform: NativePlatform,
+) -> None:
+    schemas_digest = _sha256_closed_json(
+        {
+            "inputSchema": descriptor.input_schema,
+            "resultSchema": descriptor.result_schema,
+        }
+    )
+    requirements = tuple(
+        (requirement.id, requirement.contract_version)
+        for requirement in descriptor.requirements
+    )
+    expected = (
+        descriptor.capability_id == LAYER_PROPERTY_SET_CAPABILITY_ID
+        and descriptor.capability_version == LAYER_PROPERTY_SET_CAPABILITY_VERSION
+        and descriptor.schema_version == 1
+        and descriptor.engine == "native-aegp"
+        and descriptor.summary
+        == "Set one non-keyframed primitive After Effects layer property value."
+        and descriptor.risk == "write"
+        and descriptor.mutability == "mutating"
+        and descriptor.idempotency == "idempotency-key"
+        and descriptor.cancellation == "before-dispatch"
+        and descriptor.undo == "ae-undo-group"
+        and descriptor.side_effect_summary
+        == "Changes one primitive layer property and creates one After Effects Undo step."
+        and descriptor.preconditions
+        == (
+            "An After Effects project must be open.",
+            "Both locators must come from ae.layer.properties.list@1 for the same layer.",
+            "The property must be a non-keyframed scalar, vector, or color leaf stream.",
+            "value must differ from the property's current sampled value.",
+        )
+        and descriptor.input_contract_id == LAYER_PROPERTY_SET_INPUT_CONTRACT_ID
+        and descriptor.result_contract_id == LAYER_PROPERTY_SET_RESULT_CONTRACT_ID
+        and descriptor.contract_digest == LAYER_PROPERTY_SET_CONTRACT_DIGEST
+        and schemas_digest == descriptor.contract_digest
+        and descriptor.input_schema == _LAYER_PROPERTY_SET_INPUT_SCHEMA
+        and descriptor.result_schema == _LAYER_PROPERTY_SET_RESULT_SCHEMA
+        and requirements
+        == (("aemcp.requirement.native.layer-property-set", 1),)
+        and host_platform in descriptor.compatibility.intended_platforms
+    )
+    if not expected:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Negotiated ae.layer.property.set contract does not match Core.",
+        )
+
+
 def _sha256_closed_json(value: Any) -> str:
     # All object member names in this closed contract are ASCII, so Python's
     # lexical key order is identical to RFC 8785's UTF-16 order here.
@@ -2777,6 +3135,16 @@ def _layer_properties_list_digest(value: LayerPropertiesListValue) -> str:
         {
             "capabilityId": LAYER_PROPERTIES_LIST_CAPABILITY_ID,
             "capabilityVersion": LAYER_PROPERTIES_LIST_CAPABILITY_VERSION,
+            "value": value.model_dump(mode="json", by_alias=True),
+        }
+    )
+
+
+def _layer_property_set_digest(value: LayerPropertySetValue) -> str:
+    return _sha256_closed_json(
+        {
+            "capabilityId": LAYER_PROPERTY_SET_CAPABILITY_ID,
+            "capabilityVersion": LAYER_PROPERTY_SET_CAPABILITY_VERSION,
             "value": value.model_dump(mode="json", by_alias=True),
         }
     )
@@ -3398,6 +3766,232 @@ async def invoke_project_bit_depth_set(
     )
 
 
+async def invoke_layer_property_set(
+    backend: NativeInvokeBackend,
+    *,
+    request_id: str,
+    layer_locator: NativeLocator | Mapping[str, Any],
+    property_locator: NativeLocator | Mapping[str, Any],
+    value: LayerPropertyPrimitiveValue | Mapping[str, Any],
+    idempotency_key: str,
+    deadline_unix_ms: int,
+    cancellation: NativeCancellationToken | None = None,
+) -> LayerPropertySetExecution:
+    """Set one non-keyframed primitive stream through the native plane only."""
+
+    stale_hint = (
+        "Discard both locators, then call ae_listProjectItems, "
+        "ae_listCompositionLayers, and ae_listLayerProperties again."
+    )
+    try:
+        parsed_layer_locator = NativeLocator.model_validate(layer_locator)
+        parsed_property_locator = NativeLocator.model_validate(property_locator)
+    except ValidationError as exc:
+        raise _structured_error(
+            "INVALID_ARGUMENT",
+            "Layer-property locators did not match the published contract.",
+            details={"capabilityId": LAYER_PROPERTY_SET_CAPABILITY_ID},
+            recovery_hint="Copy both locators from ae_listLayerProperties.",
+        ) from exc
+    if parsed_layer_locator.context() != parsed_property_locator.context():
+        raise _structured_error(
+            "STALE_LOCATOR",
+            "propertyLocator does not belong to the layer locator context.",
+            details={
+                "field": "params.arguments.propertyLocator",
+                "capabilityId": LAYER_PROPERTY_SET_CAPABILITY_ID,
+            },
+            recovery_hint=stale_hint,
+        )
+    try:
+        arguments = LayerPropertySetArguments(
+            layer_locator=parsed_layer_locator,
+            property_locator=parsed_property_locator,
+            value=value,
+            idempotency_key=idempotency_key,
+        )
+    except ValidationError as exc:
+        raise _structured_error(
+            "INVALID_ARGUMENT",
+            "Layer-property write arguments did not match the published contract.",
+            details={"capabilityId": LAYER_PROPERTY_SET_CAPABILITY_ID},
+            recovery_hint=(
+                "Use fresh locators, a matching scalar/vector/color value, and a "
+                "stable idempotency key of 16 to 64 characters."
+            ),
+        ) from exc
+    _ensure_active(deadline_unix_ms, cancellation)
+    negotiation = await backend.negotiate(
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    _ensure_active(deadline_unix_ms, cancellation)
+    capability_ids: tuple[str, ...] | None = None
+    capability_detail: CapabilityDetail = "full"
+    capability_limit = 100
+    capabilities = await backend.capabilities(
+        ids=capability_ids,
+        detail=capability_detail,
+        limit=capability_limit,
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    expected_query_digest = _capabilities_query_digest(
+        session_id=negotiation.session_id,
+        ids=capability_ids,
+        detail=capability_detail,
+        limit=capability_limit,
+    )
+    try:
+        registry_digest = _capabilities_registry_digest(capabilities.items)
+    except (TypeError, ValueError, UnicodeError) as exc:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native capability registry could not be verified.",
+        ) from exc
+    if (
+        capabilities.session_id != negotiation.session_id
+        or capabilities.detail != capability_detail
+        or capabilities.next_cursor is not None
+        or capabilities.query_digest != expected_query_digest
+        or capabilities.capabilities_digest != registry_digest
+        or capabilities.capabilities_digest != negotiation.capabilities_digest
+    ):
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native capabilities were not bound to the negotiated session.",
+        )
+    matches = [
+        item
+        for item in capabilities.items
+        if item.capability_id == LAYER_PROPERTY_SET_CAPABILITY_ID
+        and item.capability_version == LAYER_PROPERTY_SET_CAPABILITY_VERSION
+    ]
+    descriptor = matches[0] if len(matches) == 1 else None
+    if descriptor is None:
+        raise _structured_error(
+            "NATIVE_UNSUPPORTED",
+            "Native host did not advertise ae.layer.property.set@1.",
+        )
+    _validate_layer_property_set_descriptor(
+        descriptor,
+        host_platform=negotiation.host_platform,
+    )
+    for locator, field in (
+        (arguments.layer_locator, "params.arguments.layerLocator"),
+        (arguments.property_locator, "params.arguments.propertyLocator"),
+    ):
+        if (
+            locator.host_instance_id != negotiation.host_instance_id
+            or locator.session_id != negotiation.session_id
+        ):
+            raise _structured_error(
+                "STALE_LOCATOR",
+                "Native locator does not belong to the negotiated host session.",
+                details={
+                    "field": field,
+                    "capabilityId": LAYER_PROPERTY_SET_CAPABILITY_ID,
+                },
+                recovery_hint=stale_hint,
+            )
+    _ensure_active(deadline_unix_ms, cancellation)
+
+    request = NativeInvokeRequest(
+        request_id=request_id,
+        capability_id=LAYER_PROPERTY_SET_CAPABILITY_ID,
+        capability_version=LAYER_PROPERTY_SET_CAPABILITY_VERSION,
+        arguments=arguments.model_dump(mode="json", by_alias=True),
+        deadline_unix_ms=deadline_unix_ms,
+    )
+    try:
+        result = await backend.invoke(request, cancellation=cancellation)
+    except NativeBackendError as exc:
+        _validate_invoke_error_binding(exc, request)
+        raise
+    expected_request_digest = _invoke_request_digest(request, negotiation)
+    undo = result.evidence.undo
+    if (
+        result.capability_id != request.capability_id
+        or result.capability_version != request.capability_version
+        or result.engine != "native-aegp"
+        or result.replayed is not False
+        or result.evidence.request_id != request.request_id
+        or result.evidence.host_instance_id != negotiation.host_instance_id
+        or result.evidence.session_id != negotiation.session_id
+        or result.evidence.effect != "committed"
+        or undo is None
+        or undo.available is not True
+        or undo.verified is not False
+        or undo.group_id is not None
+        or result.evidence.completed_at_unix_ms > deadline_unix_ms
+        or result.evidence.request_digest != expected_request_digest
+    ):
+        raise NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "Native layer-property result could not be verified after dispatch.",
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery=NativeRecovery(
+                action="inspect-state",
+                hint=(
+                    "Read the property with fresh locators and inspect the Undo "
+                    "stack before issuing any new write."
+                ),
+            ),
+            details={"capabilityId": LAYER_PROPERTY_SET_CAPABILITY_ID},
+        )
+    try:
+        changed_value = LayerPropertySetValue.model_validate(result.value)
+        postcondition_digest = _layer_property_set_digest(changed_value)
+    except (ValidationError, TypeError, ValueError, UnicodeError) as exc:
+        raise NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "Native layer-property value was malformed after dispatch.",
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery=NativeRecovery(
+                action="inspect-state",
+                hint=(
+                    "Read the property with fresh locators and inspect the Undo "
+                    "stack before issuing any new write."
+                ),
+            ),
+            details={"capabilityId": LAYER_PROPERTY_SET_CAPABILITY_ID},
+        ) from exc
+    if (
+        changed_value.layer_locator != arguments.layer_locator
+        or changed_value.property_locator != arguments.property_locator
+        or not _layer_property_values_binary_equal(
+            changed_value.after_value, arguments.value
+        )
+        or result.evidence.postcondition.kind != "layer-property-set"
+        or result.evidence.postcondition.digest != postcondition_digest
+    ):
+        raise NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "Native layer-property postcondition evidence did not verify.",
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery=NativeRecovery(
+                action="inspect-state",
+                hint=(
+                    "Read the property with fresh locators and inspect the Undo "
+                    "stack before issuing any new write."
+                ),
+            ),
+            details={"capabilityId": LAYER_PROPERTY_SET_CAPABILITY_ID},
+        )
+    return LayerPropertySetExecution(
+        implementation=descriptor,
+        negotiation=negotiation,
+        transport_request_id=request.request_id,
+        idempotency_key=arguments.idempotency_key,
+        replayed=result.replayed,
+        value=changed_value,
+        evidence=result.evidence,
+    )
+
+
 async def invoke_project_items_list(
     backend: NativeInvokeBackend,
     *,
@@ -3796,6 +4390,9 @@ __all__ = [
     "LayerPropertySampleTime",
     "LayerPropertyScalarValue",
     "LayerPropertyVectorValue",
+    "LayerPropertySetArguments",
+    "LayerPropertySetExecution",
+    "LayerPropertySetValue",
     "ProjectSummaryExecution",
     "ProjectSummaryValue",
     "PROJECT_BIT_DEPTH_READ_CAPABILITY_ID",
@@ -3824,6 +4421,11 @@ __all__ = [
     "LAYER_PROPERTIES_LIST_CONTRACT_DIGEST",
     "LAYER_PROPERTIES_LIST_INPUT_CONTRACT_ID",
     "LAYER_PROPERTIES_LIST_RESULT_CONTRACT_ID",
+    "LAYER_PROPERTY_SET_CAPABILITY_ID",
+    "LAYER_PROPERTY_SET_CAPABILITY_VERSION",
+    "LAYER_PROPERTY_SET_CONTRACT_DIGEST",
+    "LAYER_PROPERTY_SET_INPUT_CONTRACT_ID",
+    "LAYER_PROPERTY_SET_RESULT_CONTRACT_ID",
     "PROJECT_ITEMS_LIST_CAPABILITY_ID",
     "PROJECT_ITEMS_LIST_CAPABILITY_VERSION",
     "PROJECT_ITEMS_LIST_CONTRACT_DIGEST",
@@ -3838,6 +4440,7 @@ __all__ = [
     "invoke_selected_composition_layers_list",
     "invoke_composition_time_read",
     "invoke_layer_properties_list",
+    "invoke_layer_property_set",
     "invoke_project_items_list",
     "invoke_project_summary",
 ]
