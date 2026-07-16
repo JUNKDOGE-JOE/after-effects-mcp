@@ -211,6 +211,7 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
       || runtime_.composition_layers_list_contract_digest.size() != 64
       || runtime_.composition_selected_layers_list_contract_digest.size() != 64
       || runtime_.composition_time_read_contract_digest.size() != 64
+      || runtime_.composition_time_set_contract_digest.size() != 64
       || runtime_.layer_properties_list_contract_digest.size() != 64
       || runtime_.layer_property_set_contract_digest.size() != 64) {
     throw std::invalid_argument("invalid native RPC runtime identity");
@@ -293,6 +294,9 @@ void NativeRpcConnectionHandler::serve(
             } else if (completion.capability_id == kCompositionTimeReadCapability) {
               postcondition_digest = rpc::digest_composition_time_postcondition(
                   completion.composition_time_result);
+            } else if (completion.capability_id == kCompositionTimeSetCapability) {
+              postcondition_digest = rpc::digest_composition_time_set_postcondition(
+                  completion.composition_time_change_result);
             } else if (completion.capability_id == kLayerPropertiesListCapability) {
               postcondition_digest = rpc::digest_layer_properties_postcondition(
                   completion.layer_properties_result);
@@ -309,6 +313,7 @@ void NativeRpcConnectionHandler::serve(
         if (!evidence_valid) {
           completion.ok = false;
           const bool mutating = completion.capability_id == kProjectBitDepthSetCapability
+              || completion.capability_id == kCompositionTimeSetCapability
               || completion.capability_id == kLayerPropertySetCapability;
           completion.error_code = mutating
               ? "POSSIBLY_SIDE_EFFECTING_FAILURE"
@@ -423,6 +428,18 @@ void NativeRpcConnectionHandler::serve(
                 connection.session_id,
                 runtime_.host_instance_id,
                 completion.composition_time_result,
+                started_at,
+                completed_at,
+                request_digest,
+                postcondition_digest,
+                false,
+            });
+          } else if (completion.capability_id == kCompositionTimeSetCapability) {
+            response = rpc::encode_composition_time_set_success({
+                completion.request_id,
+                connection.session_id,
+                runtime_.host_instance_id,
+                completion.composition_time_change_result,
                 started_at,
                 completed_at,
                 request_digest,
@@ -557,6 +574,9 @@ void NativeRpcConnectionHandler::serve(
           const bool include_composition_time = !query.ids.has_value() || std::find(
               query.ids->begin(), query.ids->end(), "ae.composition.time.read")
                   != query.ids->end();
+          const bool include_composition_time_set = !query.ids.has_value() || std::find(
+              query.ids->begin(), query.ids->end(), "ae.composition.time.set")
+                  != query.ids->end();
           const bool include_layer_properties = !query.ids.has_value() || std::find(
               query.ids->begin(), query.ids->end(), "ae.layer.properties.list")
                   != query.ids->end();
@@ -570,6 +590,7 @@ void NativeRpcConnectionHandler::serve(
               + static_cast<std::size_t>(include_composition_layers)
               + static_cast<std::size_t>(include_composition_selected_layers)
               + static_cast<std::size_t>(include_composition_time)
+              + static_cast<std::size_t>(include_composition_time_set)
               + static_cast<std::size_t>(include_layer_properties)
               + static_cast<std::size_t>(include_layer_property_set);
           if (selected > query.limit) {
@@ -594,6 +615,7 @@ void NativeRpcConnectionHandler::serve(
                   include_project_items,
                   include_composition_layers,
                   include_composition_time,
+                  include_composition_time_set,
                   include_layer_properties,
                   include_layer_property_set,
                   rpc::digest_capabilities_query(connection.session_id, query),
@@ -604,6 +626,7 @@ void NativeRpcConnectionHandler::serve(
                   runtime_.project_items_list_contract_digest,
                   runtime_.composition_layers_list_contract_digest,
                   runtime_.composition_time_read_contract_digest,
+                  runtime_.composition_time_set_contract_digest,
                   runtime_.layer_properties_list_contract_digest,
                   runtime_.layer_property_set_contract_digest,
                   include_composition_selected_layers,
@@ -681,6 +704,7 @@ void NativeRpcConnectionHandler::serve(
               invoke.parent_property_locator,
               invoke.property_locator,
               invoke.property_value,
+              invoke.target_time,
           };
         }
         const std::string dispatched_capability = dispatch_request.capability_id;

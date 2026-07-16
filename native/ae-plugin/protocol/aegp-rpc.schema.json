@@ -8,7 +8,7 @@
     "encoding": "utf-8",
     "maxFrameBytes": 65536,
     "maxJsonDepth": 16,
-    "maxJsonNodes": 2048,
+    "maxJsonNodes": 4096,
     "maxStringLength": 8192,
     "stringLengthUnit": "unicode-scalar-values",
     "duplicateObjectKeys": "reject"
@@ -340,6 +340,29 @@
       "required": ["compositionLocator"],
       "properties": {
         "compositionLocator": { "$ref": "#/$defs/compositionLocator" }
+      }
+    },
+    "compositionTimeSetArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compositionLocator", "targetTime", "idempotencyKey"],
+      "properties": {
+        "compositionLocator": { "$ref": "#/$defs/compositionLocator" },
+        "targetTime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "scale"],
+          "properties": {
+            "value": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+            "scale": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
+          }
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
       }
     },
     "layerPropertiesListArguments": {
@@ -712,6 +735,99 @@
         "x-invariant": "secondsRational-is-the-reduced-canonical-form-of-value-over-scale"
       }
     },
+    "compositionTimeSetInputSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["compositionLocator", "targetTime", "idempotencyKey"],
+        "properties": {
+          "compositionLocator": { "$ref": "#/$defs/compositionLocator" },
+          "targetTime": { "$ref": "#/$defs/timeInput" },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          }
+        },
+        "$defs": {
+          "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "compositionLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "hostInstanceId", "sessionId", "projectId", "generation", "objectId"],
+            "properties": {
+              "kind": { "const": "composition" },
+              "hostInstanceId": { "$ref": "#/$defs/uuid" },
+              "sessionId": { "$ref": "#/$defs/uuid" },
+              "projectId": { "$ref": "#/$defs/uuid" },
+              "generation": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              "objectId": { "$ref": "#/$defs/uuid" }
+            }
+          },
+          "timeInput": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["value", "scale"],
+            "properties": {
+              "value": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+              "scale": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
+            }
+          }
+        }
+      }
+    },
+    "compositionTimeSetResultSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["changed", "compositionLocator", "beforeTime", "afterTime"],
+        "properties": {
+          "changed": { "const": true },
+          "compositionLocator": { "$ref": "#/$defs/compositionLocator" },
+          "beforeTime": { "$ref": "#/$defs/currentTime" },
+          "afterTime": { "$ref": "#/$defs/currentTime" }
+        },
+        "$defs": {
+          "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "compositionLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "hostInstanceId", "sessionId", "projectId", "generation", "objectId"],
+            "properties": {
+              "kind": { "const": "composition" },
+              "hostInstanceId": { "$ref": "#/$defs/uuid" },
+              "sessionId": { "$ref": "#/$defs/uuid" },
+              "projectId": { "$ref": "#/$defs/uuid" },
+              "generation": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              "objectId": { "$ref": "#/$defs/uuid" }
+            }
+          },
+          "currentTime": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["value", "scale", "secondsRational"],
+            "properties": {
+              "value": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+              "scale": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+              "secondsRational": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 28,
+                "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+              }
+            }
+          }
+        },
+        "x-invariant": "beforeTime-must-differ-from-afterTime-and-afterTime-must-equal-targetTime"
+      }
+    },
     "layerPropertiesListInputSchemaContract": {
       "const": {
         "type": "object",
@@ -1078,6 +1194,16 @@
         "arguments": { "$ref": "#/$defs/compositionTimeReadArguments" }
       }
     },
+    "compositionTimeSetInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.composition.time.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/compositionTimeSetArguments" }
+      }
+    },
     "layerPropertiesListInvokeParams": {
       "type": "object",
       "additionalProperties": false,
@@ -1107,6 +1233,7 @@
         { "$ref": "#/$defs/compositionLayersListInvokeParams" },
         { "$ref": "#/$defs/compositionSelectedLayersListInvokeParams" },
         { "$ref": "#/$defs/compositionTimeReadInvokeParams" },
+        { "$ref": "#/$defs/compositionTimeSetInvokeParams" },
         { "$ref": "#/$defs/layerPropertiesListInvokeParams" },
         { "$ref": "#/$defs/layerPropertySetInvokeParams" }
       ],
@@ -1365,6 +1492,7 @@
         { "$ref": "#/$defs/projectItemsListArguments" },
         { "$ref": "#/$defs/compositionLayersListArguments" },
         { "$ref": "#/$defs/compositionTimeReadArguments" },
+        { "$ref": "#/$defs/compositionTimeSetArguments" },
         { "$ref": "#/$defs/layerPropertiesListArguments" },
         { "$ref": "#/$defs/layerPropertySetArguments" }
       ]
@@ -1377,6 +1505,7 @@
         { "$ref": "#/$defs/projectItemsListValue" },
         { "$ref": "#/$defs/compositionLayersListValue" },
         { "$ref": "#/$defs/compositionTimeReadValue" },
+        { "$ref": "#/$defs/compositionTimeSetValue" },
         { "$ref": "#/$defs/layerPropertiesListValue" },
         { "$ref": "#/$defs/layerPropertySetValue" }
       ]
@@ -1388,6 +1517,7 @@
         { "$ref": "#/$defs/projectItemsListInputSchemaContract" },
         { "$ref": "#/$defs/compositionLayersListInputSchemaContract" },
         { "$ref": "#/$defs/compositionTimeReadInputSchemaContract" },
+        { "$ref": "#/$defs/compositionTimeSetInputSchemaContract" },
         { "$ref": "#/$defs/layerPropertiesListInputSchemaContract" },
         { "$ref": "#/$defs/layerPropertySetInputSchemaContract" }
       ]
@@ -1400,6 +1530,7 @@
         { "$ref": "#/$defs/projectItemsListResultSchemaContract" },
         { "$ref": "#/$defs/compositionLayersListResultSchemaContract" },
         { "$ref": "#/$defs/compositionTimeReadResultSchemaContract" },
+        { "$ref": "#/$defs/compositionTimeSetResultSchemaContract" },
         { "$ref": "#/$defs/layerPropertiesListResultSchemaContract" },
         { "$ref": "#/$defs/layerPropertySetResultSchemaContract" }
       ]
@@ -1825,6 +1956,29 @@
       },
       "x-invariant": "secondsRational-is-the-reduced-canonical-form-of-value-over-scale"
     },
+    "compositionTimeSetValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changed", "compositionLocator", "beforeTime", "afterTime"],
+      "properties": {
+        "changed": { "const": true },
+        "compositionLocator": { "$ref": "#/$defs/compositionLocator" },
+        "beforeTime": { "$ref": "#/$defs/compositionCurrentTime" },
+        "afterTime": { "$ref": "#/$defs/compositionCurrentTime" }
+      },
+      "x-invariant": "beforeTime-must-differ-from-afterTime-and-afterTime-must-equal-targetTime"
+    },
+    "compositionCurrentTime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "scale", "secondsRational"],
+      "properties": {
+        "value": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+        "scale": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "secondsRational": { "$ref": "#/$defs/secondsRational" }
+      },
+      "x-invariant": "secondsRational-is-the-reduced-canonical-form-of-value-over-scale"
+    },
     "layerPropertyValue": {
       "oneOf": [
         { "type": "null" },
@@ -2062,6 +2216,19 @@
         "evidence": { "$ref": "#/$defs/executionEvidence" }
       }
     },
+    "compositionTimeSetInvokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.composition.time.set" },
+        "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" },
+        "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/compositionTimeSetValue" },
+        "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
     "layerPropertiesListInvokeResult": {
       "type": "object",
       "additionalProperties": false,
@@ -2097,6 +2264,7 @@
         { "$ref": "#/$defs/compositionLayersListInvokeResult" },
         { "$ref": "#/$defs/compositionSelectedLayersListInvokeResult" },
         { "$ref": "#/$defs/compositionTimeReadInvokeResult" },
+        { "$ref": "#/$defs/compositionTimeSetInvokeResult" },
         { "$ref": "#/$defs/layerPropertiesListInvokeResult" },
         { "$ref": "#/$defs/layerPropertySetInvokeResult" }
       ]

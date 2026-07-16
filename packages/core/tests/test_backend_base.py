@@ -4,7 +4,7 @@ from ae_mcp.backends.base import ALL_VERBS, Backend, LegacyExtendScriptBackend
 
 
 def test_all_verbs_constant_has_48_entries():
-    assert len(ALL_VERBS) == 48
+    assert len(ALL_VERBS) == 49
     assert "ae.exec" in ALL_VERBS
     assert "ae.ping" in ALL_VERBS
     assert "ae.previewFrame" in ALL_VERBS

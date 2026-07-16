@@ -64,6 +64,7 @@ using aemcp::native::HostBitDepthReadResult;
 using aemcp::native::HostBitDepthWriteResult;
 using aemcp::native::HostCompositionLayersResult;
 using aemcp::native::HostCompositionTimeResult;
+using aemcp::native::HostCompositionTimeWriteResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostReadResult;
 using aemcp::native::HostProjectItemsResult;
@@ -94,6 +95,7 @@ using aemcp::native::kProjectSummaryCapability;
 using aemcp::native::kCompositionLayersListCapability;
 using aemcp::native::kCompositionSelectedLayersListCapability;
 using aemcp::native::kCompositionTimeReadCapability;
+using aemcp::native::kCompositionTimeSetCapability;
 using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kLayerPropertiesListCapability;
 using aemcp::native::kLayerPropertySetCapability;
@@ -104,7 +106,7 @@ constexpr std::string_view kSdkVersion = "25.6.61";
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::string_view kCapabilitiesDigest =
-    "b32ad50eb0dcbe47098192787038a9cac6479aa948a487ae02dd18d307136a66";
+    "b256e21ccb0022c25ccd52b4b18a33f660d7ccc2fe971211280b67ab78030190";
 constexpr std::string_view kProjectSummaryContractDigest =
     "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
 constexpr std::string_view kProjectBitDepthReadContractDigest =
@@ -119,6 +121,8 @@ constexpr std::string_view kCompositionSelectedLayersListContractDigest =
     "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75";
 constexpr std::string_view kCompositionTimeReadContractDigest =
     "fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd";
+constexpr std::string_view kCompositionTimeSetContractDigest =
+    "724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308";
 constexpr std::string_view kLayerPropertiesListContractDigest =
     "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba";
 constexpr std::string_view kLayerPropertySetContractDigest =
@@ -2160,6 +2164,205 @@ class AegpHostApi final : public HostApi {
     return HostCompositionTimeResult::success(std::move(result));
   }
 
+  [[nodiscard]] HostCompositionTimeWriteResult set_composition_time(
+      const aemcp::native::CompositionTimeSetCommand& command,
+      TimePoint work_deadline) override {
+    const auto budget_expired = [work_deadline] {
+      return std::chrono::steady_clock::now() >= work_deadline;
+    };
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || memory_suite.get() == nullptr || utility_suite.get() == nullptr) {
+      return HostCompositionTimeWriteResult::failure(
+          "NATIVE_UNSUPPORTED", "required composition time mutation suites are unavailable");
+    }
+    if (command.target_time.scale == 0
+        || command.target_time.seconds_rational
+            != aemcp::native::canonical_seconds_rational(
+                command.target_time.value, command.target_time.scale)) {
+      return HostCompositionTimeWriteResult::failure(
+          "INVALID_ARGUMENT", "targetTime must be a valid exact rational time",
+          "params.arguments.targetTime");
+    }
+    if (budget_expired()) {
+      return HostCompositionTimeWriteResult::failure(
+          "DEADLINE_EXCEEDED", "composition time mutation budget elapsed");
+    }
+
+    A_long project_count = 0;
+    if (project_suite->AEGP_GetNumProjects(&project_count) != A_Err_NONE) {
+      return HostCompositionTimeWriteResult::failure(
+          "CAPABILITY_FAILED", "could not read project count before mutation");
+    }
+    if (project_count <= 0) {
+      graph_.project_closed();
+      return HostCompositionTimeWriteResult::failure(
+          "PRECONDITION_FAILED", "an After Effects project must be open");
+    }
+
+    AEGP_ProjectH project = nullptr;
+    AEGP_ItemH root = nullptr;
+    A_long root_id = 0;
+    if (project_suite->AEGP_GetProjectByIndex(0, &project) != A_Err_NONE
+        || project == nullptr
+        || project_suite->AEGP_GetProjectRootFolder(project, &root) != A_Err_NONE
+        || root == nullptr
+        || item_suite->AEGP_GetItemID(root, &root_id) != A_Err_NONE) {
+      return HostCompositionTimeWriteResult::failure(
+          "CAPABILITY_FAILED", "could not resolve the open project's root item");
+    }
+    std::optional<std::string> project_path = read_project_path(
+        project_suite.get(), memory_suite.get(), project);
+    if (!project_path.has_value()) {
+      return HostCompositionTimeWriteResult::failure(
+          "CAPABILITY_FAILED", "could not read the open project path for locator identity");
+    }
+    try {
+      graph_.observe_project(
+          reinterpret_cast<std::uintptr_t>(project),
+          reinterpret_cast<std::uintptr_t>(root),
+          root_id,
+          std::move(*project_path));
+    } catch (...) {
+      return HostCompositionTimeWriteResult::failure(
+          "CAPABILITY_FAILED", "could not establish project locator identity");
+    }
+    const std::optional<A_long> composition_id = graph_.resolve_composition(
+        command.composition_locator, command.host_instance_id, command.session_id);
+    if (!composition_id.has_value()) {
+      return HostCompositionTimeWriteResult::failure(
+          "STALE_LOCATOR",
+          "compositionLocator does not identify an item in the currently open project",
+          "params.arguments.compositionLocator");
+    }
+
+    AEGP_ItemH item = nullptr;
+    if (item_suite->AEGP_GetNextProjItem(project, root, &item) != A_Err_NONE) {
+      return HostCompositionTimeWriteResult::failure(
+          "CAPABILITY_FAILED", "could not begin composition lookup");
+    }
+    AEGP_ItemH composition_item = nullptr;
+    std::uint64_t visited = 0;
+    while (item != nullptr) {
+      if (budget_expired()) {
+        return HostCompositionTimeWriteResult::failure(
+            "DEADLINE_EXCEEDED", "composition lookup budget elapsed");
+      }
+      if (++visited > static_cast<std::uint64_t>(kMaximumProjectItems)) {
+        return HostCompositionTimeWriteResult::failure(
+            "CAPABILITY_FAILED", "project item bound exceeded during composition lookup");
+      }
+      A_long item_id = 0;
+      if (item_suite->AEGP_GetItemID(item, &item_id) != A_Err_NONE) {
+        return HostCompositionTimeWriteResult::failure(
+            "CAPABILITY_FAILED", "could not read project item identity");
+      }
+      if (item_id == *composition_id) {
+        composition_item = item;
+        break;
+      }
+      AEGP_ItemH next = nullptr;
+      if (item_suite->AEGP_GetNextProjItem(project, item, &next) != A_Err_NONE) {
+        return HostCompositionTimeWriteResult::failure(
+            "CAPABILITY_FAILED", "composition lookup traversal failed");
+      }
+      item = next;
+    }
+    if (composition_item == nullptr) {
+      return HostCompositionTimeWriteResult::failure(
+          "STALE_LOCATOR", "composition item no longer exists in the open project",
+          "params.arguments.compositionLocator");
+    }
+    AEGP_ItemType item_type = AEGP_ItemType_NONE;
+    if (item_suite->AEGP_GetItemType(composition_item, &item_type) != A_Err_NONE) {
+      return HostCompositionTimeWriteResult::failure(
+          "CAPABILITY_FAILED", "could not verify composition item type");
+    }
+    if (item_type != AEGP_ItemType_COMP) {
+      return HostCompositionTimeWriteResult::failure(
+          "PRECONDITION_FAILED", "compositionLocator no longer identifies a composition",
+          "params.arguments.compositionLocator");
+    }
+
+    A_Time before_sdk{};
+    if (item_suite->AEGP_GetItemCurrentTime(composition_item, &before_sdk)
+            != A_Err_NONE
+        || before_sdk.scale <= 0) {
+      return HostCompositionTimeWriteResult::failure(
+          "CAPABILITY_FAILED", "could not read composition time before mutation");
+    }
+    aemcp::native::CompositionCurrentTime before;
+    before.value = static_cast<std::int32_t>(before_sdk.value);
+    before.scale = static_cast<std::uint32_t>(before_sdk.scale);
+    before.seconds_rational = aemcp::native::canonical_seconds_rational(
+        before.value, before.scale);
+    const auto same_time = [](const aemcp::native::CompositionCurrentTime& left,
+                              const aemcp::native::CompositionCurrentTime& right) {
+      return static_cast<std::int64_t>(left.value)
+              * static_cast<std::int64_t>(right.scale)
+          == static_cast<std::int64_t>(right.value)
+              * static_cast<std::int64_t>(left.scale);
+    };
+    if (same_time(before, command.target_time)) {
+      return HostCompositionTimeWriteResult::failure(
+          "INVALID_ARGUMENT", "targetTime already matches the composition's current time",
+          "params.arguments.targetTime");
+    }
+    if (budget_expired()) {
+      return HostCompositionTimeWriteResult::failure(
+          "DEADLINE_EXCEEDED", "composition time mutation budget elapsed");
+    }
+
+    A_Time desired{};
+    desired.value = static_cast<A_long>(command.target_time.value);
+    desired.scale = static_cast<A_u_long>(command.target_time.scale);
+    static constexpr char kUndoLabel[] = "ae-mcp: Set composition current time";
+    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+      return HostCompositionTimeWriteResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    const A_Err set_error = item_suite->AEGP_SetItemCurrentTime(
+        composition_item, &desired);
+    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    A_Time after_sdk{};
+    const A_Err readback_error = item_suite->AEGP_GetItemCurrentTime(
+        composition_item, &after_sdk);
+    if (set_error != A_Err_NONE || end_error != A_Err_NONE
+        || readback_error != A_Err_NONE || after_sdk.scale <= 0) {
+      return HostCompositionTimeWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "composition time may have changed but native readback or Undo validation failed");
+    }
+    aemcp::native::CompositionCurrentTime after;
+    after.value = static_cast<std::int32_t>(after_sdk.value);
+    after.scale = static_cast<std::uint32_t>(after_sdk.scale);
+    after.seconds_rational = aemcp::native::canonical_seconds_rational(
+        after.value, after.scale);
+    if (same_time(before, after) || !same_time(after, command.target_time)) {
+      return HostCompositionTimeWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "composition time readback did not verify the requested state transition");
+    }
+    if (budget_expired()) {
+      return HostCompositionTimeWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "composition time changed after the validation budget elapsed");
+    }
+    aemcp::native::CompositionTimeChanged changed;
+    changed.changed = true;
+    changed.composition_locator = command.composition_locator;
+    changed.before_time = std::move(before);
+    changed.after_time = std::move(after);
+    return HostCompositionTimeWriteResult::success(std::move(changed));
+  }
+
   [[nodiscard]] HostLayerPropertiesResult list_layer_properties(
       const aemcp::native::LayerPropertiesQuery& query,
       TimePoint work_deadline) override {
@@ -2929,6 +3132,7 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
             std::string(kProjectItemsListContractDigest),
             std::string(kCompositionLayersListContractDigest),
             std::string(kCompositionTimeReadContractDigest),
+            std::string(kCompositionTimeSetContractDigest),
             std::string(kLayerPropertiesListContractDigest),
             std::string(kLayerPropertySetContractDigest),
             std::string(kCompositionSelectedLayersListContractDigest),
@@ -3009,6 +3213,7 @@ void log_load(PluginState& state) {
          << kCompositionLayersListCapability << "\",\""
          << kCompositionSelectedLayersListCapability << "\",\""
          << kCompositionTimeReadCapability << "\",\""
+         << kCompositionTimeSetCapability << "\",\""
          << kLayerPropertiesListCapability << "\",\""
          << kLayerPropertySetCapability << "\"]}"
          ;
@@ -3094,6 +3299,18 @@ void log_completion(
                     completion.composition_time_result.current_time.seconds_rational)
              << "\",\"projectGeneration\":"
              << completion.composition_time_result.composition_locator.generation;
+    } else if (completion.capability_id == kCompositionTimeSetCapability) {
+      output << ",\"result\":{\"changed\":true,\"beforeTime\":{\"value\":"
+             << completion.composition_time_change_result.before_time.value
+             << ",\"scale\":"
+             << completion.composition_time_change_result.before_time.scale
+             << "},\"afterTime\":{\"value\":"
+             << completion.composition_time_change_result.after_time.value
+             << ",\"scale\":"
+             << completion.composition_time_change_result.after_time.scale
+             << "},\"projectGeneration\":"
+             << completion.composition_time_change_result
+                    .composition_locator.generation;
     } else if (completion.capability_id == kLayerPropertiesListCapability) {
       output << ",\"result\":{\"total\":"
              << completion.layer_properties_result.total

@@ -24,6 +24,7 @@ const PROJECT_ITEMS_LIST_CAPABILITY = 'ae.project.items.list';
 const COMPOSITION_LAYERS_LIST_CAPABILITY = 'ae.composition.layers.list';
 const COMPOSITION_SELECTED_LAYERS_LIST_CAPABILITY = 'ae.composition.selected-layers.list';
 const COMPOSITION_TIME_READ_CAPABILITY = 'ae.composition.time.read';
+const COMPOSITION_TIME_SET_CAPABILITY = 'ae.composition.time.set';
 const LAYER_PROPERTIES_LIST_CAPABILITY = 'ae.layer.properties.list';
 const LAYER_PROPERTY_SET_CAPABILITY = 'ae.layer.property.set';
 const PROJECT_BIT_DEPTH_READ_CONTRACT_DIGEST = '936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e';
@@ -32,6 +33,7 @@ const PROJECT_ITEMS_LIST_CONTRACT_DIGEST = '64e87abb4beec44bf6ad3223002602222f1e
 const COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST = '3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75';
 const COMPOSITION_SELECTED_LAYERS_LIST_CONTRACT_DIGEST = '3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75';
 const COMPOSITION_TIME_READ_CONTRACT_DIGEST = 'fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd';
+const COMPOSITION_TIME_SET_CONTRACT_DIGEST = '724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308';
 // Kept in lockstep with the full descriptor in capabilities.json. The native
 // protocol build replaces this value only when the closed contract changes.
 const LAYER_PROPERTIES_LIST_CONTRACT_DIGEST = 'a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba';
@@ -386,6 +388,36 @@ function validCompositionTimeReadArguments(value) {
         && validLocator(value.compositionLocator, ['composition']);
 }
 
+function validCompositionTime(value, includeRational) {
+    const required = includeRational
+        ? ['value', 'scale', 'secondsRational'] : ['value', 'scale'];
+    if (!exactKeys(value, required)
+        || !Number.isInteger(value.value)
+        || value.value < -2147483648 || value.value > 2147483647
+        || !Number.isInteger(value.scale)
+        || value.scale < 1 || value.scale > 4294967295) return false;
+    if (!includeRational) return true;
+    return typeof value.secondsRational === 'string'
+        && value.secondsRational.length >= 1
+        && value.secondsRational.length <= 28
+        && /^(?:0|-?[1-9][0-9]*(?:\/[1-9][0-9]*)?)$/.test(value.secondsRational)
+        && value.secondsRational === reducedRational(value.value, value.scale);
+}
+
+function compositionTimesEqual(left, right) {
+    return BigInt(left.value) * BigInt(right.scale)
+        === BigInt(right.value) * BigInt(left.scale);
+}
+
+function validCompositionTimeSetArguments(value) {
+    return exactKeys(value, ['compositionLocator', 'targetTime', 'idempotencyKey'])
+        && validLocator(value.compositionLocator, ['composition'])
+        && validCompositionTime(value.targetTime, false)
+        && typeof value.idempotencyKey === 'string'
+        && value.idempotencyKey.length >= 16
+        && TOKEN_PATTERN.test(value.idempotencyKey);
+}
+
 function validLayerPropertiesListArguments(value) {
     return exactKeys(value, ['layerLocator', 'offset', 'limit'], ['parentPropertyLocator'])
         && validLocator(value.layerLocator, ['layer'])
@@ -542,21 +574,21 @@ function validCompositionTimeReadValue(value, argumentsValue, hostInstanceId, se
         || !locatorsEqual(value.compositionLocator, argumentsValue.compositionLocator)
         || value.compositionLocator.hostInstanceId !== hostInstanceId
         || value.compositionLocator.sessionId !== sessionId
-        || !exactKeys(value.currentTime, ['value', 'scale', 'secondsRational'])
-        || !Number.isInteger(value.currentTime.value)
-        || value.currentTime.value < -2147483648
-        || value.currentTime.value > 2147483647
-        || !Number.isInteger(value.currentTime.scale)
-        || value.currentTime.scale < 1
-        || value.currentTime.scale > 4294967295
-        || typeof value.currentTime.secondsRational !== 'string'
-        || value.currentTime.secondsRational.length < 1
-        || value.currentTime.secondsRational.length > 28
-        || !/^(?:0|-?[1-9][0-9]*(?:\/[1-9][0-9]*)?)$/.test(
-            value.currentTime.secondsRational,
-        )) return false;
-    return value.currentTime.secondsRational
-        === reducedRational(value.currentTime.value, value.currentTime.scale);
+        || !validCompositionTime(value.currentTime, true)) return false;
+    return true;
+}
+
+function validCompositionTimeSetValue(value, argumentsValue, hostInstanceId, sessionId) {
+    return exactKeys(value, ['changed', 'compositionLocator', 'beforeTime', 'afterTime'])
+        && value.changed === true
+        && validLocator(value.compositionLocator, ['composition'])
+        && locatorsEqual(value.compositionLocator, argumentsValue.compositionLocator)
+        && value.compositionLocator.hostInstanceId === hostInstanceId
+        && value.compositionLocator.sessionId === sessionId
+        && validCompositionTime(value.beforeTime, true)
+        && validCompositionTime(value.afterTime, true)
+        && !compositionTimesEqual(value.beforeTime, value.afterTime)
+        && compositionTimesEqual(value.afterTime, argumentsValue.targetTime);
 }
 
 const LAYER_PROPERTY_GROUPING_TYPES = new Set([
@@ -764,6 +796,27 @@ function compositionTimeReadPostconditionDigest(value) {
     });
 }
 
+function compositionTimeSetPostconditionDigest(value) {
+    return sha256Canonical({
+        capabilityId: COMPOSITION_TIME_SET_CAPABILITY,
+        capabilityVersion: 1,
+        value: {
+            afterTime: {
+                scale: value.afterTime.scale,
+                secondsRational: value.afterTime.secondsRational,
+                value: value.afterTime.value,
+            },
+            beforeTime: {
+                scale: value.beforeTime.scale,
+                secondsRational: value.beforeTime.secondsRational,
+                value: value.beforeTime.value,
+            },
+            changed: value.changed,
+            compositionLocator: canonicalLocator(value.compositionLocator),
+        },
+    });
+}
+
 function canonicalLayerPropertyValue(value) {
     if (value === null) return null;
     if (value.kind === 'scalar') return { kind: value.kind, value: value.value };
@@ -908,6 +961,15 @@ function invokeRequestDigest(request) {
         argumentsValue = {
             compositionLocator: canonicalLocator(request.params.arguments.compositionLocator),
         };
+    } else if (request.params.capabilityId === COMPOSITION_TIME_SET_CAPABILITY) {
+        argumentsValue = {
+            compositionLocator: canonicalLocator(request.params.arguments.compositionLocator),
+            idempotencyKey: request.params.arguments.idempotencyKey,
+            targetTime: {
+                scale: request.params.arguments.targetTime.scale,
+                value: request.params.arguments.targetTime.value,
+            },
+        };
     } else if (request.params.capabilityId === LAYER_PROPERTIES_LIST_CAPABILITY) {
         argumentsValue = {
             layerLocator: canonicalLocator(request.params.arguments.layerLocator),
@@ -973,6 +1035,7 @@ function createNativeAegpClient(options) {
     let compositionLayersListContractDigest = null;
     let compositionSelectedLayersListContractDigest = null;
     let compositionTimeReadContractDigest = null;
+    let compositionTimeSetContractDigest = null;
     let layerPropertiesListContractDigest = null;
     let layerPropertySetContractDigest = null;
     let helloIdentity = null;
@@ -1024,6 +1087,7 @@ function createNativeAegpClient(options) {
         compositionLayersListContractDigest = null;
         compositionSelectedLayersListContractDigest = null;
         compositionTimeReadContractDigest = null;
+        compositionTimeSetContractDigest = null;
         layerPropertiesListContractDigest = null;
         layerPropertySetContractDigest = null;
         helloIdentity = null;
@@ -1128,6 +1192,7 @@ function createNativeAegpClient(options) {
         const requestDigest = method === 'invoke' ? invokeRequestDigest(request) : null;
         const mutating = method === 'invoke'
             && (params.capabilityId === PROJECT_BIT_DEPTH_SET_CAPABILITY
+                || params.capabilityId === COMPOSITION_TIME_SET_CAPABILITY
                 || params.capabilityId === LAYER_PROPERTY_SET_CAPABILITY);
         return new Promise(function (resolve, reject) {
             const remainingMs = deadlineUnixMs === undefined
@@ -1403,6 +1468,9 @@ function createNativeAegpClient(options) {
         const compositionTimeReadItem = Array.isArray(result?.items)
             ? result.items.find(function (candidate) { return candidate?.id === COMPOSITION_TIME_READ_CAPABILITY; })
             : null;
+        const compositionTimeSetItem = Array.isArray(result?.items)
+            ? result.items.find(function (candidate) { return candidate?.id === COMPOSITION_TIME_SET_CAPABILITY; })
+            : null;
         const layerPropertiesListItem = Array.isArray(result?.items)
             ? result.items.find(function (candidate) { return candidate?.id === LAYER_PROPERTIES_LIST_CAPABILITY; })
             : null;
@@ -1419,6 +1487,8 @@ function createNativeAegpClient(options) {
             || ids.includes(COMPOSITION_SELECTED_LAYERS_LIST_CAPABILITY);
         const requiresCompositionTimeRead = ids === undefined
             || ids.includes(COMPOSITION_TIME_READ_CAPABILITY);
+        const requiresCompositionTimeSet = ids === undefined
+            || ids.includes(COMPOSITION_TIME_SET_CAPABILITY);
         const requiresLayerPropertiesList = ids === undefined
             || ids.includes(LAYER_PROPERTIES_LIST_CAPABILITY);
         const requiresLayerPropertySet = ids === undefined
@@ -1434,6 +1504,7 @@ function createNativeAegpClient(options) {
             || (requiresCompositionLayersList && !compositionLayersListItem)
             || (requiresCompositionSelectedLayersList && !compositionSelectedLayersListItem)
             || (requiresCompositionTimeRead && !compositionTimeReadItem)
+            || (requiresCompositionTimeSet && !compositionTimeSetItem)
             || (requiresLayerPropertiesList && !layerPropertiesListItem)
             || (requiresLayerPropertySet && !layerPropertySetItem)
             || (summaryItem && (summaryItem.version !== 1 || summaryItem.detail !== requestedDetail
@@ -1466,6 +1537,11 @@ function createNativeAegpClient(options) {
                 || (requestedDetail === 'full'
                     && compositionTimeReadItem.contractDigest
                         !== COMPOSITION_TIME_READ_CONTRACT_DIGEST)))
+            || (compositionTimeSetItem && (compositionTimeSetItem.version !== 1
+                || compositionTimeSetItem.detail !== requestedDetail
+                || (requestedDetail === 'full'
+                    && compositionTimeSetItem.contractDigest
+                        !== COMPOSITION_TIME_SET_CONTRACT_DIGEST)))
             || (layerPropertiesListItem && (layerPropertiesListItem.version !== 1
                 || layerPropertiesListItem.detail !== requestedDetail
                 || (requestedDetail === 'full'
@@ -1499,6 +1575,9 @@ function createNativeAegpClient(options) {
         }
         if (requestedDetail === 'full' && compositionTimeReadItem) {
             compositionTimeReadContractDigest = compositionTimeReadItem.contractDigest;
+        }
+        if (requestedDetail === 'full' && compositionTimeSetItem) {
+            compositionTimeSetContractDigest = compositionTimeSetItem.contractDigest;
         }
         if (requestedDetail === 'full' && layerPropertiesListItem) {
             layerPropertiesListContractDigest = layerPropertiesListItem.contractDigest;
@@ -1535,6 +1614,9 @@ function createNativeAegpClient(options) {
         const compositionTimeReadCall = call.capabilityId === COMPOSITION_TIME_READ_CAPABILITY
             && call.capabilityVersion === 1
             && validCompositionTimeReadArguments(call.arguments);
+        const compositionTimeSetCall = call.capabilityId === COMPOSITION_TIME_SET_CAPABILITY
+            && call.capabilityVersion === 1
+            && validCompositionTimeSetArguments(call.arguments);
         const layerPropertiesListCall = call.capabilityId === LAYER_PROPERTIES_LIST_CAPABILITY
             && call.capabilityVersion === 1
             && validLayerPropertiesListArguments(call.arguments);
@@ -1548,6 +1630,7 @@ function createNativeAegpClient(options) {
                 && !projectItemsListCall && !compositionLayersListCall
                 && !compositionSelectedLayersListCall
                 && !compositionTimeReadCall
+                && !compositionTimeSetCall
                 && !layerPropertiesListCall && !layerPropertySetCall)
             || !Number.isSafeInteger(call.deadlineUnixMs) || call.deadlineUnixMs <= 0) {
             throw nativeError('INVALID_ARGUMENT', 'native invoke request is invalid', false);
@@ -1590,6 +1673,12 @@ function createNativeAegpClient(options) {
                 'native composition-time read capability was not verified before dispatch',
             );
         }
+        if (compositionTimeSetCall
+            && compositionTimeSetContractDigest !== COMPOSITION_TIME_SET_CONTRACT_DIGEST) {
+            throw nativeContractMismatch(
+                'native composition-time set capability was not verified before dispatch',
+            );
+        }
         if (layerPropertiesListCall
             && layerPropertiesListContractDigest !== LAYER_PROPERTIES_LIST_CONTRACT_DIGEST) {
             throw nativeContractMismatch(
@@ -1606,7 +1695,7 @@ function createNativeAegpClient(options) {
         if (projectItemsListCall && call.arguments.projectLocator !== undefined) {
             locatorChecks = [[call.arguments.projectLocator, 'projectLocator', 'ae_listProjectItems']];
         } else if (compositionLayersListCall || compositionSelectedLayersListCall
-            || compositionTimeReadCall) {
+            || compositionTimeReadCall || compositionTimeSetCall) {
             locatorChecks = [[
                 call.arguments.compositionLocator,
                 'compositionLocator',
@@ -1734,7 +1823,7 @@ function createNativeAegpClient(options) {
             && evidence.postcondition.algorithm === 'sha256-rfc8785-jcs-v1'
             && SHA256_PATTERN.test(evidence.postcondition.digest || '');
         if (!commonValid || !evidenceValid) {
-            if (bitDepthSetCall || layerPropertySetCall) {
+            if (bitDepthSetCall || compositionTimeSetCall || layerPropertySetCall) {
                 throw nativeMutationUncertain(
                     'Native mutation result lacked verified AEGP evidence.',
                     call.capabilityId,
@@ -1787,6 +1876,21 @@ function createNativeAegpClient(options) {
             throw nativeMutationUncertain(
                 'Native project-bit-depth set result failed post-dispatch verification.',
                 PROJECT_BIT_DEPTH_SET_CAPABILITY,
+            );
+        }
+        if (compositionTimeSetCall && (result.replayed !== false
+            || evidence.effect !== 'committed'
+            || evidence.postcondition.kind !== 'composition-time-set'
+            || !exactKeys(evidence.undo, ['available', 'verified'])
+            || evidence.undo.available !== true || evidence.undo.verified !== false
+            || compositionTimeSetContractDigest !== COMPOSITION_TIME_SET_CONTRACT_DIGEST
+            || !validCompositionTimeSetValue(
+                value, call.arguments, endpoint.hostInstanceId, sessionId,
+            )
+            || evidence.postcondition.digest !== compositionTimeSetPostconditionDigest(value))) {
+            throw nativeMutationUncertain(
+                'Native composition-time set result failed post-dispatch verification.',
+                COMPOSITION_TIME_SET_CAPABILITY,
             );
         }
         if (layerPropertySetCall && (result.replayed !== false
@@ -1946,6 +2050,7 @@ function createNativeAegpClient(options) {
                 compositionLayersListContractDigest,
                 compositionSelectedLayersListContractDigest,
                 compositionTimeReadContractDigest,
+                compositionTimeSetContractDigest,
                 layerPropertiesListContractDigest,
                 layerPropertySetContractDigest,
             });

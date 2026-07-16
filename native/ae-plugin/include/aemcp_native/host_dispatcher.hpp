@@ -32,6 +32,8 @@ inline constexpr std::string_view kCompositionSelectedLayersListCapability =
     "ae.composition.selected-layers.list";
 inline constexpr std::string_view kCompositionTimeReadCapability =
     "ae.composition.time.read";
+inline constexpr std::string_view kCompositionTimeSetCapability =
+    "ae.composition.time.set";
 inline constexpr std::string_view kLayerPropertiesListCapability =
     "ae.layer.properties.list";
 inline constexpr std::string_view kLayerPropertySetCapability =
@@ -178,6 +180,13 @@ struct CompositionTimeRead {
   CompositionCurrentTime current_time;
 };
 
+struct CompositionTimeChanged {
+  bool changed{true};
+  ObjectLocator composition_locator;
+  CompositionCurrentTime before_time;
+  CompositionCurrentTime after_time;
+};
+
 // Canonical reduced representation of value / scale. This deliberately
 // promotes signed SDK values before magnitude conversion so INT32_MIN is safe.
 [[nodiscard]] inline std::string canonical_seconds_rational(
@@ -290,6 +299,13 @@ struct CompositionTimeQuery {
   ObjectLocator composition_locator;
 };
 
+struct CompositionTimeSetCommand {
+  std::string host_instance_id;
+  std::string session_id;
+  ObjectLocator composition_locator;
+  CompositionCurrentTime target_time;
+};
+
 struct LayerPropertiesQuery {
   std::string host_instance_id;
   std::string session_id;
@@ -376,6 +392,19 @@ struct HostCompositionTimeResult {
       std::string code, std::string detail, std::string field = {});
 };
 
+struct HostCompositionTimeWriteResult {
+  bool ok{false};
+  CompositionTimeChanged value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostCompositionTimeWriteResult success(
+      CompositionTimeChanged value);
+  [[nodiscard]] static HostCompositionTimeWriteResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
 struct HostLayerPropertiesResult {
   bool ok{false};
   LayerPropertiesPage value;
@@ -429,6 +458,8 @@ class HostApi {
       const CompositionLayersQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostCompositionTimeResult read_composition_time(
       const CompositionTimeQuery& query, TimePoint work_deadline);
+  [[nodiscard]] virtual HostCompositionTimeWriteResult set_composition_time(
+      const CompositionTimeSetCommand& command, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerPropertiesResult list_layer_properties(
       const LayerPropertiesQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerPropertyWriteResult set_layer_property(
@@ -457,7 +488,8 @@ struct Request {
       std::optional<ObjectLocator> layer_locator_value = std::nullopt,
       std::optional<ObjectLocator> parent_property_locator_value = std::nullopt,
       std::optional<ObjectLocator> property_locator_value = std::nullopt,
-      LayerPropertyValue property_value_value = {})
+      LayerPropertyValue property_value_value = {},
+      CompositionCurrentTime target_time_value = {})
       : request_id(std::move(request_id_value)),
         capability_id(std::move(capability_id_value)),
         deadline(deadline_value),
@@ -475,7 +507,8 @@ struct Request {
         layer_locator(std::move(layer_locator_value)),
         parent_property_locator(std::move(parent_property_locator_value)),
         property_locator(std::move(property_locator_value)),
-        property_value(std::move(property_value_value)) {}
+        property_value(std::move(property_value_value)),
+        target_time(std::move(target_time_value)) {}
 
   std::string request_id;
   std::string capability_id;
@@ -498,6 +531,7 @@ struct Request {
   std::optional<ObjectLocator> parent_property_locator;
   std::optional<ObjectLocator> property_locator;
   LayerPropertyValue property_value;
+  CompositionCurrentTime target_time;
 };
 
 enum class EnqueueCode {
@@ -542,6 +576,7 @@ struct Completion {
   CompositionLayersPage composition_layers_result;
   CompositionLayersPage composition_selected_layers_result;
   CompositionTimeRead composition_time_result;
+  CompositionTimeChanged composition_time_change_result;
   LayerPropertiesPage layer_properties_result;
   LayerPropertyChanged layer_property_change_result;
   ProjectGraphInvalidation project_graph_invalidation_result;

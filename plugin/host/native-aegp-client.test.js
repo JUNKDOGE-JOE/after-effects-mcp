@@ -37,6 +37,10 @@ const COMPOSITION_TIME_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
     '../../native/ae-plugin/protocol/fixtures/invoke-composition-time-read.json',
 ), 'utf8'));
+const COMPOSITION_TIME_SET_VECTOR = JSON.parse(fs.readFileSync(path.join(
+    __dirname,
+    '../../native/ae-plugin/protocol/fixtures/invoke-composition-time-set.json',
+), 'utf8'));
 const LAYER_PROPERTIES_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
     '../../native/ae-plugin/protocol/fixtures/invoke-layer-properties-list.json',
@@ -251,6 +255,16 @@ function installProtocol(server, options) {
                         generation: 8,
                         invalidated: true,
                     };
+                } else if (request.params.capabilityId === 'ae.composition.time.set') {
+                    result = structuredClone(COMPOSITION_TIME_SET_VECTOR.response.result);
+                    result.evidence.requestId = request.requestId;
+                    result.evidence.requestDigest = invokeRequestDigest(request);
+                    result.evidence.postcondition.digest = jcsDigest({
+                        capabilityId: result.capabilityId,
+                        capabilityVersion: result.capabilityVersion,
+                        value: result.value,
+                    });
+                    if (input.mutateInvoke) input.mutateInvoke(result, request);
                 } else if (request.params.capabilityId === 'ae.layer.property.set') {
                     result = structuredClone(LAYER_PROPERTY_SET_VECTOR.response.result);
                     result.evidence.requestId = request.requestId;
@@ -592,6 +606,12 @@ test('CEP client verifies native project summary and bit-depth read/write capabi
         client.status().compositionTimeReadContractDigest,
         CAPABILITIES_VECTOR.items.find(function (item) {
             return item.id === 'ae.composition.time.read';
+        }).contractDigest,
+    );
+    assert.equal(
+        client.status().compositionTimeSetContractDigest,
+        CAPABILITIES_VECTOR.items.find(function (item) {
+            return item.id === 'ae.composition.time.set';
         }).contractDigest,
     );
     assert.equal(
@@ -1336,6 +1356,66 @@ test('CEP layer-property mutation preserves typed native evidence and idempotenc
     await assert.rejects(ready.client.invoke({
         requestId: 'layer-property-set-client-uncertain',
         capabilityId: 'ae.layer.property.set',
+        capabilityVersion: 1,
+        arguments: uncertainArguments,
+        deadlineUnixMs: 1900000002000,
+    }), {
+        code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
+        retryable: false,
+        sideEffect: 'may-have-occurred',
+    });
+});
+
+test('CEP composition-time mutation preserves exact rational intent and uncertain failures', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const ready = await readyNativeClient(t, {
+        mutateInvoke: function (result, request) {
+            if (request.requestId === 'composition-time-set-client-uncertain') {
+                result.evidence.postcondition.digest = '0'.repeat(64);
+            }
+        },
+    });
+    const argumentsValue = structuredClone(
+        COMPOSITION_TIME_SET_VECTOR.request.params.arguments,
+    );
+    const result = await ready.client.invoke({
+        requestId: 'composition-time-set-client-1',
+        capabilityId: 'ae.composition.time.set',
+        capabilityVersion: 1,
+        arguments: argumentsValue,
+        deadlineUnixMs: 1900000002000,
+    });
+    assert.equal(result.value.changed, true);
+    assert.deepEqual(result.value.afterTime, {
+        value: 1, scale: 1, secondsRational: '1',
+    });
+    assert.deepEqual(result.evidence.undo, {
+        available: true,
+        verified: false,
+    });
+    const sent = ready.protocol.requests.at(-1);
+    assert.deepEqual(sent.params.arguments.targetTime, { value: 1, scale: 1 });
+    assert.equal(sent.params.arguments.idempotencyKey, argumentsValue.idempotencyKey);
+    assert.equal(result.evidence.requestDigest, invokeRequestDigest(sent));
+
+    const requestCount = ready.protocol.requests.length;
+    const invalidArguments = structuredClone(argumentsValue);
+    invalidArguments.targetTime.scale = 0;
+    await assert.rejects(ready.client.invoke({
+        requestId: 'composition-time-set-client-invalid',
+        capabilityId: 'ae.composition.time.set',
+        capabilityVersion: 1,
+        arguments: invalidArguments,
+        deadlineUnixMs: 1900000002000,
+    }), { code: 'INVALID_ARGUMENT', retryable: false });
+    assert.equal(ready.protocol.requests.length, requestCount);
+
+    const uncertainArguments = structuredClone(argumentsValue);
+    uncertainArguments.idempotencyKey = 'synthetic-comp-time-uncertain-0001';
+    await assert.rejects(ready.client.invoke({
+        requestId: 'composition-time-set-client-uncertain',
+        capabilityId: 'ae.composition.time.set',
         capabilityVersion: 1,
         arguments: uncertainArguments,
         deadlineUnixMs: 1900000002000,

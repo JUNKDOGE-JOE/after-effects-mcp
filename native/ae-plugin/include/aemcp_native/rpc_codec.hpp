@@ -19,7 +19,7 @@ namespace aemcp::native::rpc {
 inline constexpr std::size_t kFramePrefixBytes = 4;
 inline constexpr std::size_t kMaxFrameBytes = 65'536;
 inline constexpr std::size_t kMaxJsonDepth = 16;
-inline constexpr std::size_t kMaxJsonNodes = 2'048;
+inline constexpr std::size_t kMaxJsonNodes = 4'096;
 inline constexpr std::size_t kMaxStringScalars = 8'192;
 inline constexpr std::uint64_t kMaxSafeInteger = 9'007'199'254'740'991ULL;
 
@@ -73,6 +73,7 @@ struct InvokeParams {
   std::uint16_t limit{0};
   std::optional<ObjectLocator> project_locator;
   std::optional<ObjectLocator> composition_locator;
+  CompositionCurrentTime target_time;
   std::optional<ObjectLocator> layer_locator;
   std::optional<ObjectLocator> parent_property_locator;
   std::optional<ObjectLocator> property_locator;
@@ -133,6 +134,12 @@ struct ParsedRequest {
     const CompositionLayersPage& page);
 [[nodiscard]] std::string digest_composition_time_postcondition(
     const CompositionTimeRead& value);
+[[nodiscard]] std::string digest_composition_time_set_arguments(
+    const ObjectLocator& composition_locator,
+    const CompositionCurrentTime& target_time,
+    std::string_view idempotency_key);
+[[nodiscard]] std::string digest_composition_time_set_postcondition(
+    const CompositionTimeChanged& value);
 [[nodiscard]] std::string digest_layer_properties_postcondition(
     const LayerPropertiesPage& page);
 [[nodiscard]] std::string digest_layer_property_set_arguments(
@@ -305,6 +312,7 @@ struct CapabilitiesSuccess {
   bool include_project_items_list{true};
   bool include_composition_layers_list{true};
   bool include_composition_time_read{true};
+  bool include_composition_time_set{true};
   bool include_layer_properties_list{true};
   bool include_layer_property_set{true};
   std::string query_digest;
@@ -316,6 +324,7 @@ struct CapabilitiesSuccess {
   std::string project_items_list_contract_digest;
   std::string composition_layers_list_contract_digest;
   std::string composition_time_read_contract_digest;
+  std::string composition_time_set_contract_digest;
   std::string layer_properties_list_contract_digest;
   std::string layer_property_set_contract_digest;
   bool include_composition_selected_layers_list{false};
@@ -404,6 +413,18 @@ struct CompositionTimeSuccess {
   std::string session_id;
   std::string host_instance_id;
   CompositionTimeRead value;
+  std::uint64_t started_at_unix_ms{0};
+  std::uint64_t completed_at_unix_ms{0};
+  std::string request_digest;
+  std::string postcondition_digest;
+  bool replayed{false};
+};
+
+struct CompositionTimeSetSuccess {
+  std::string request_id;
+  std::string session_id;
+  std::string host_instance_id;
+  CompositionTimeChanged value;
   std::uint64_t started_at_unix_ms{0};
   std::uint64_t completed_at_unix_ms{0};
   std::string request_digest;
@@ -514,6 +535,8 @@ struct ErrorResponse {
     const CompositionSelectedLayersSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_composition_time_success(
     const CompositionTimeSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_composition_time_set_success(
+    const CompositionTimeSetSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_layer_properties_success(
     const LayerPropertiesSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_layer_property_set_success(

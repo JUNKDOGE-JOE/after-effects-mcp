@@ -25,7 +25,8 @@ WORKFLOW — every task follows this loop:
                 comp or layer ids — read them first.
                 For a verified native project graph, call ae_listProjectItems,
                 then copy a returned composition locator into
-                ae_getCompositionTime, ae_listCompositionLayers, or
+                ae_getCompositionTime, ae_setCompositionTime,
+                ae_listCompositionLayers, or
                 ae_listSelectedLayers. Copy a
                 returned layer locator into ae_listLayerProperties; copy a
                 returned property-group locator back into that tool to descend
@@ -34,6 +35,9 @@ WORKFLOW — every task follows this loop:
                 ae_setLayerPropertyValue, supply one stable idempotency key,
                 then read the property again. ae_listSelectedLayers reports only selected
                 layers, not property, mask, effect, or keyframe selections.
+                ae_setCompositionTime likewise requires an exact value/scale,
+                a fresh composition locator, and one stable idempotency key;
+                verify it with ae_getCompositionTime before any retry.
                 These reads fail explicitly when native AEGP is unavailable;
                 they never fall back to JSX.
   2. Act      — Prefer the typed verbs (ae_createLayer, ae_setProperty,

@@ -31,6 +31,7 @@ using aemcp::native::HostBitDepthReadResult;
 using aemcp::native::HostBitDepthWriteResult;
 using aemcp::native::HostCompositionLayersResult;
 using aemcp::native::HostCompositionTimeResult;
+using aemcp::native::HostCompositionTimeWriteResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostIdleSignal;
 using aemcp::native::HostLayerPropertiesResult;
@@ -227,6 +228,17 @@ class FakeHost final : public HostApi {
     return HostCompositionTimeResult::success(std::move(result));
   }
 
+  [[nodiscard]] HostCompositionTimeWriteResult set_composition_time(
+      const aemcp::native::CompositionTimeSetCommand& command, TimePoint) override {
+    ++composition_time_write_calls;
+    observed_time_set_command = command;
+    aemcp::native::CompositionTimeChanged changed;
+    changed.composition_locator = command.composition_locator;
+    changed.before_time = {3003, 1000, "3003/1000"};
+    changed.after_time = command.target_time;
+    return HostCompositionTimeWriteResult::success(std::move(changed));
+  }
+
   [[nodiscard]] HostLayerPropertiesResult list_layer_properties(
       const aemcp::native::LayerPropertiesQuery& query, TimePoint) override {
     ++layer_properties_calls;
@@ -319,11 +331,13 @@ class FakeHost final : public HostApi {
   int composition_layers_calls{0};
   int composition_selected_layers_calls{0};
   int composition_time_calls{0};
+  int composition_time_write_calls{0};
   int layer_properties_calls{0};
   int layer_property_write_calls{0};
   int project_graph_invalidation_calls{0};
   std::thread::id project_graph_invalidation_thread;
   aemcp::native::LayerPropertySetCommand observed_property_command;
+  aemcp::native::CompositionTimeSetCommand observed_time_set_command;
 };
 
 struct EventRecord {
@@ -407,13 +421,14 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      "b32ad50eb0dcbe47098192787038a9cac6479aa948a487ae02dd18d307136a66",
+      "b256e21ccb0022c25ccd52b4b18a33f660d7ccc2fe971211280b67ab78030190",
       "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
       "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
       "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
       "64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e",
       "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
       "fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd",
+      "724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308",
       "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba",
       "5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c",
       "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
@@ -631,6 +646,19 @@ std::string composition_time_invoke_json(std::string_view request_id) {
       + "}}}";
 }
 
+std::string composition_time_set_invoke_json(
+    std::string_view request_id,
+    std::string_view key = "composition-time-intent-001") {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.composition.time.set\","
+        "\"capabilityVersion\":1,\"arguments\":{\"compositionLocator\":"
+      + graph_locator_json("composition", "66666666-6666-4666-8666-666666666666")
+      + ",\"targetTime\":{\"value\":1,\"scale\":1},\"idempotencyKey\":\""
+      + std::string(key) + "\"}}}";
+}
+
 std::string layer_properties_invoke_json(std::string_view request_id) {
   return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
       + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
@@ -794,6 +822,19 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
       "composition-time capabilities response");
   require_contains(composition_time_capabilities,
       "\"secondsRational\"", "composition-time capabilities response");
+
+  send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-composition-time-set", "ae.composition.time.set"));
+  const std::string composition_time_set_capabilities = read_body(sockets[0]);
+  require_contains(composition_time_set_capabilities,
+      "\"id\":\"ae.composition.time.set\"",
+      "composition-time set capabilities response");
+  require_contains(composition_time_set_capabilities,
+      "\"contractDigest\":\"724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308\"",
+      "composition-time set capabilities response");
+  require_contains(composition_time_set_capabilities,
+      "aemcp.requirement.native.composition-time-set",
+      "composition-time set capabilities response");
 
   send_json(sockets[0], bit_depth_capabilities_json(
       "capabilities-layer-properties", "ae.layer.properties.list"));
@@ -1021,6 +1062,49 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
           && host.composition_time_calls == 1,
       "composition-time terminal evidence was not deterministic and verified");
 
+  send_json(sockets[0], composition_time_set_invoke_json(
+      "invoke-composition-time-set"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "composition-time set progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued composition-time set invoke");
+  const auto composition_time_set_batch = dispatcher.drain(host);
+  require(composition_time_set_batch.completions.size() == 1
+          && composition_time_set_batch.completions[0].ok,
+      "owner dispatcher did not produce the composition-time set result");
+  const std::string composition_time_set = read_body(sockets[0]);
+  require_contains(composition_time_set,
+      "\"capabilityId\":\"ae.composition.time.set\"",
+      "composition-time set response");
+  require_contains(composition_time_set,
+      "\"effect\":\"committed\"", "composition-time set response");
+  require_contains(composition_time_set,
+      "\"undo\":{\"available\":true,\"verified\":false}",
+      "composition-time set response");
+  require_contains(composition_time_set,
+      "\"afterTime\":{\"scale\":1,\"secondsRational\":\"1\",\"value\":1}",
+      "composition-time set response");
+  wait_until([&] {
+    return !observer.terminal("invoke-composition-time-set").request_id.empty();
+  }, "composition-time set terminal audit");
+  const TerminalRecord composition_time_set_terminal =
+      observer.terminal("invoke-composition-time-set");
+  require(composition_time_set_terminal.ok
+          && composition_time_set_terminal.request_digest.size() == 64
+          && composition_time_set_terminal.postcondition_digest.size() == 64
+          && host.composition_time_write_calls == 1
+          && host.observed_time_set_command.target_time.value == 1
+          && host.observed_time_set_command.target_time.scale == 1,
+      "composition-time set terminal evidence was not deterministic and verified");
+
+  send_json(sockets[0], composition_time_set_invoke_json(
+      "invoke-composition-time-set-duplicate"));
+  const std::string composition_time_set_duplicate = read_body(sockets[0]);
+  require_contains(composition_time_set_duplicate, "\"code\":\"DUPLICATE_REQUEST\"",
+      "same-key composition-time duplicate");
+  require(host.composition_time_write_calls == 1 && !wait_readable(sockets[0], 100ms),
+      "same-key composition-time duplicate reached HostApi");
+
   send_json(sockets[0], layer_properties_invoke_json("invoke-layer-properties"));
   require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
       "layer-properties progress");
@@ -1188,7 +1272,7 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(cancel, "\"terminalResponseExpected\":true", "cancel response");
   const std::string cancelled_terminal = read_body(sockets[0]);
   require_contains(cancelled_terminal, "\"code\":\"CANCELLED\"", "cancel terminal");
-  require(idle_signal.calls() == 13,
+  require(idle_signal.calls() == 14,
       "accepted invokes did not each schedule exactly one idle wake");
 
   require(dispatcher.enqueue(Request{
