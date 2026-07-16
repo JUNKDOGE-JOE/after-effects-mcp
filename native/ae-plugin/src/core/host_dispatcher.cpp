@@ -908,7 +908,9 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       return {
           EnqueueCode::kDuplicateRequest,
           "DUPLICATE_REQUEST",
-          same_arguments
+          same_arguments && existing->second.state == IdempotencyState::kAmbiguous
+              ? "idempotency key outcome requires current-state inspection before any new intent"
+              : same_arguments
               ? "idempotency key already reserved or committed; inspect the original request"
               : "idempotency key is already bound to different arguments",
           "params.arguments.idempotencyKey"};
@@ -1532,6 +1534,10 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
     }
     {
       std::lock_guard lock(mutex_);
+      if (request.capability_id == kProjectGraphInvalidateControl
+          && completion.ok) {
+        invalidate_composition_layer_replays_locked();
+      }
       finish_idempotency_locked(request, completion);
       finish_request_locked(key_for(request), completion, clock_.now());
     }
@@ -1617,6 +1623,11 @@ void HostDispatcher::mark_idempotency_ambiguous(std::string_view idempotency_key
   }
 }
 
+void HostDispatcher::invalidate_composition_layer_replays() {
+  std::lock_guard lock(mutex_);
+  invalidate_composition_layer_replays_locked();
+}
+
 bool HostDispatcher::running() const {
   std::lock_guard lock(mutex_);
   return state_ == State::kRunning;
@@ -1674,6 +1685,16 @@ void HostDispatcher::remember_terminal_locked(RequestKey key, TimePoint now) {
   terminal_tombstones_.push_back({std::move(key), now + config_.terminal_ttl});
   while (terminal_tombstones_.size() > config_.max_terminal_tombstones) {
     terminal_tombstones_.pop_front();
+  }
+}
+
+void HostDispatcher::invalidate_composition_layer_replays_locked() {
+  for (auto& [idempotency_key, entry] : idempotency_ledger_) {
+    (void)idempotency_key;
+    if (entry.replay_completion.has_value()) {
+      entry.state = IdempotencyState::kAmbiguous;
+      entry.replay_completion.reset();
+    }
   }
 }
 

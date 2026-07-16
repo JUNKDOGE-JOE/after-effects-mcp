@@ -3913,6 +3913,7 @@ A_Err command_hook(
     if (state == nullptr) return A_Err_GENERIC;
     if (command != state->pairing_command) {
       const bool invalidated = state->project_graph.invalidate_project();
+      state->dispatcher.invalidate_composition_layer_replays();
       state->log.append(event_prefix(*state, "project.command-invalidation")
           + ",\"command\":" + std::to_string(command)
           + ",\"phase\":\"before-ae\",\"invalidated\":"

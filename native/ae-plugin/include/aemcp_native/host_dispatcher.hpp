@@ -744,6 +744,7 @@ class HostDispatcher final {
       std::uint64_t session_generation,
       std::string_view request_id);
   void mark_idempotency_ambiguous(std::string_view idempotency_key);
+  void invalidate_composition_layer_replays();
   [[nodiscard]] bool running() const;
 
  private:
@@ -784,6 +785,7 @@ class HostDispatcher final {
   [[nodiscard]] bool terminal_locked(const RequestKey& key) const;
   void purge_terminal_locked(TimePoint now);
   void remember_terminal_locked(RequestKey key, TimePoint now);
+  void invalidate_composition_layer_replays_locked();
   [[nodiscard]] bool fence_route_locked(
       std::string route_id, std::uint64_t session_generation);
   void finish_request_locked(const RequestKey& key, Completion& completion, TimePoint now);

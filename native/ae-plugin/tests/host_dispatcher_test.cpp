@@ -1136,6 +1136,14 @@ void composition_layer_create_is_verified_and_replays_without_duplicate_mutation
           && host.composition_layer_create_calls == 1,
       "layer create replay did not return the cached verified terminal");
 
+  dispatcher.invalidate_composition_layer_replays();
+  const auto stale_replay = dispatcher.enqueue(composition_layer_create_request(
+      clock, "create-solid-after-invalidation", composition));
+  require(stale_replay.code == EnqueueCode::kDuplicateRequest
+          && stale_replay.message.find("current-state inspection") != std::string::npos
+          && host.composition_layer_create_calls == 1,
+      "graph invalidation retained a stale verified create replay");
+
   const auto conflict = dispatcher.enqueue(composition_layer_create_request(
       clock, "create-solid-conflict", composition,
       "composition-layer-create-intent-001", std::string(64, '7')));

@@ -1225,6 +1225,36 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require(host.composition_layer_create_calls == 1 && !wait_readable(sockets[0], 100ms),
       "same-key composition-layer replay reached HostApi or emitted extra output");
 
+  send_json(sockets[0], invalidate_graph_json("invalidate-after-layer-create"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "post-create graph invalidation progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued post-create graph invalidation");
+  const auto post_create_invalidation = dispatcher.drain(host);
+  require(post_create_invalidation.completions.size() == 1
+          && post_create_invalidation.completions[0].ok
+          && post_create_invalidation.completions[0]
+              .project_graph_invalidation_result.invalidated,
+      "post-create graph invalidation did not complete");
+  require_contains(read_body(sockets[0]), "\"method\":\"invalidateGraph\"",
+      "post-create graph invalidation response");
+
+  send_json(sockets[0], composition_layer_create_invoke_json(
+      "invoke-composition-layer-create-after-invalidation"));
+  const std::string composition_layer_create_after_invalidation = read_body(sockets[0]);
+  require_contains(composition_layer_create_after_invalidation,
+      "\"code\":\"DUPLICATE_REQUEST\"",
+      "same-key composition-layer replay after graph invalidation");
+  require_contains(composition_layer_create_after_invalidation,
+      "current-state inspection",
+      "same-key composition-layer replay recovery hint");
+  require(composition_layer_create_after_invalidation.find("\"replayed\":true")
+          == std::string::npos
+          && composition_layer_create_after_invalidation.find("\"verified\":true")
+              == std::string::npos
+          && host.composition_layer_create_calls == 1,
+      "graph invalidation emitted stale verified create replay evidence");
+
   send_json(sockets[0], composition_layer_create_invoke_json(
       "invoke-composition-layer-create-conflict",
       "composition-layer-intent-001", "Different Solid"));
@@ -1402,7 +1432,7 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(cancel, "\"terminalResponseExpected\":true", "cancel response");
   const std::string cancelled_terminal = read_body(sockets[0]);
   require_contains(cancelled_terminal, "\"code\":\"CANCELLED\"", "cancel terminal");
-  require(idle_signal.calls() == 16,
+  require(idle_signal.calls() == 17,
       "accepted invokes did not each schedule exactly one idle wake");
 
   require(dispatcher.enqueue(Request{
