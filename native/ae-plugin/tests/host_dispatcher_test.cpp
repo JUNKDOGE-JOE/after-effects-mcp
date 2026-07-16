@@ -32,6 +32,7 @@ using aemcp::native::HostCompositionTimeWriteResult;
 using aemcp::native::HostCompositionCreateResult;
 using aemcp::native::HostCompositionLayerCreateResult;
 using aemcp::native::HostDispatcher;
+using aemcp::native::HostLayerEffectApplyResult;
 using aemcp::native::HostLayerPropertyWriteResult;
 using aemcp::native::HostProjectItemsResult;
 using aemcp::native::HostReadResult;
@@ -49,6 +50,7 @@ using aemcp::native::kCompositionTimeReadCapability;
 using aemcp::native::kCompositionTimeSetCapability;
 using aemcp::native::kCompositionCreateCapability;
 using aemcp::native::kCompositionLayerCreateCapability;
+using aemcp::native::kLayerEffectApplyCapability;
 using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kProjectSummaryCapability;
 using aemcp::native::kLayerPropertySetCapability;
@@ -477,6 +479,36 @@ class FakeHost final : public HostApi {
     return HostCompositionLayerCreateResult::success(std::move(created));
   }
 
+  [[nodiscard]] HostLayerEffectApplyResult apply_layer_effect(
+      const aemcp::native::LayerEffectApplyCommand& command,
+      TimePoint work_deadline) override {
+    require(std::this_thread::get_id() == expected_thread_,
+        "layer effect apply HostApi ran off owner thread");
+    observed_deadline = work_deadline;
+    observed_layer_effect_apply_command = command;
+    ++layer_effect_apply_calls;
+    if (!layer_effect_apply_error_code.empty()) {
+      return HostLayerEffectApplyResult::failure(
+          layer_effect_apply_error_code,
+          "fake layer effect apply error",
+          layer_effect_apply_error_field);
+    }
+    aemcp::native::LayerEffectApplied applied;
+    applied.changed = true;
+    applied.layer_locator = command.layer_locator;
+    applied.layer_locator.project_id =
+        "55555555-5555-4555-8555-555555555555";
+    applied.layer_locator.generation = 9;
+    applied.name = "Slider Control";
+    applied.match_name = command.effect_match_name;
+    applied.effect_index = 1;
+    applied.effect_count_before = 0;
+    applied.effect_count_after = mismatch_layer_effect_apply ? 2 : 1;
+    applied.matching_effect_count_before = 0;
+    applied.matching_effect_count_after = 1;
+    return HostLayerEffectApplyResult::success(std::move(applied));
+  }
+
   [[nodiscard]] HostCompositionCreateResult create_composition(
       const aemcp::native::CompositionCreateCommand& command,
       TimePoint work_deadline) override {
@@ -555,6 +587,8 @@ class FakeHost final : public HostApi {
   std::string composition_time_write_error_field;
   std::string composition_layer_create_error_code;
   std::string composition_layer_create_error_field;
+  std::string layer_effect_apply_error_code;
+  std::string layer_effect_apply_error_field;
   std::string layer_property_write_error_code;
   std::int32_t current_bits_per_channel{8};
   std::int32_t observed_target_depth{0};
@@ -568,6 +602,7 @@ class FakeHost final : public HostApi {
   int composition_time_write_calls{0};
   int composition_create_calls{0};
   int composition_layer_create_calls{0};
+  int layer_effect_apply_calls{0};
   int layer_property_write_calls{0};
   std::int32_t composition_time_value{3003};
   std::uint32_t composition_time_scale{1000};
@@ -578,6 +613,7 @@ class FakeHost final : public HostApi {
   bool mismatch_composition_time_write{false};
   bool mismatch_composition_create{false};
   bool mismatch_layer_create{false};
+  bool mismatch_layer_effect_apply{false};
   aemcp::native::ProjectItemsQuery observed_items_query;
   aemcp::native::CompositionLayersQuery observed_layers_query;
   aemcp::native::CompositionLayersQuery observed_selected_layers_query;
@@ -585,6 +621,7 @@ class FakeHost final : public HostApi {
   aemcp::native::CompositionTimeSetCommand observed_time_set_command;
   aemcp::native::CompositionCreateCommand observed_composition_create_command;
   aemcp::native::CompositionLayerCreateCommand observed_layer_create_command;
+  aemcp::native::LayerEffectApplyCommand observed_layer_effect_apply_command;
   aemcp::native::LayerPropertySetCommand observed_property_command;
 };
 
@@ -857,6 +894,28 @@ Request composition_layer_create_request(
     result.layer_create_height = 360;
     result.layer_create_duration = {5, 1, "5"};
   }
+  return result;
+}
+
+Request layer_effect_apply_request(
+    FakeClock& clock,
+    std::string id,
+    ObjectLocator layer_locator,
+    std::string key = "layer-effect-apply-intent-001",
+    std::string fingerprint = std::string(64, 'e'),
+    std::string match_name = "ADBE Slider Control") {
+  Request result;
+  result.request_id = std::move(id);
+  result.capability_id = std::string(kLayerEffectApplyCapability);
+  result.deadline = clock.now() + 100ms;
+  result.route_id = "route-layer-effect-apply";
+  result.session_generation = 7;
+  result.idempotency_key = std::move(key);
+  result.arguments_fingerprint_sha256 = std::move(fingerprint);
+  result.host_instance_id = "22222222-2222-4222-8222-222222222222";
+  result.session_id = "11111111-1111-4111-8111-111111111111";
+  result.layer_locator = std::move(layer_locator);
+  result.layer_effect_match_name = std::move(match_name);
   return result;
 }
 
@@ -1326,6 +1385,78 @@ void composition_layer_create_is_verified_and_replays_without_duplicate_mutation
           && mismatch.completions[0].error_code
               == "POSSIBLY_SIDE_EFFECTING_FAILURE",
       "unverified layer creation was mislabeled side-effect free");
+}
+
+void layer_effect_apply_is_verified_and_replays_without_duplicate_mutation() {
+  FakeClock clock;
+  const auto owner = std::this_thread::get_id();
+  HostDispatcher dispatcher(owner, clock, config(8, 8, 4ms));
+  FakeHost host(clock, owner);
+  const ObjectLocator layer = FakeHost::locator(
+      "layer", "88888888-8888-4888-8888-888888888888");
+
+  Request invalid = layer_effect_apply_request(
+      clock, "effect-invalid", layer);
+  invalid.layer_effect_match_name = std::string(48, 'x');
+  const auto invalid_result = dispatcher.enqueue(std::move(invalid));
+  require(invalid_result.code == EnqueueCode::kInvalidRequest
+          && invalid_result.error_field == "params.arguments"
+          && host.layer_effect_apply_calls == 0,
+      "invalid layer effect match name reached HostApi");
+
+  require(dispatcher.enqueue(layer_effect_apply_request(
+      clock, "effect-apply-1", layer)).code == EnqueueCode::kAccepted,
+      "valid layer effect apply was rejected");
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1 && batch.completions[0].ok
+          && host.layer_effect_apply_calls == 1,
+      "layer effect apply did not run exactly once on the owner thread");
+  const auto& applied = batch.completions[0].layer_effect_apply_result;
+  require(applied.changed && applied.match_name == "ADBE Slider Control"
+          && applied.name == "Slider Control" && applied.effect_index == 1
+          && applied.effect_count_before == 0 && applied.effect_count_after == 1
+          && applied.matching_effect_count_before == 0
+          && applied.matching_effect_count_after == 1
+          && applied.layer_locator.kind == "layer"
+          && applied.layer_locator.object_id == layer.object_id
+          && applied.layer_locator.generation == 9
+          && host.observed_layer_effect_apply_command.layer_locator == layer,
+      "layer effect apply lost verified count, identity, or locator evidence");
+
+  const auto original_outbound = dispatcher.take_outbound();
+  require(original_outbound.size() == 1 && !original_outbound[0].replayed,
+      "original layer effect terminal was not observable");
+  require(dispatcher.enqueue(layer_effect_apply_request(
+      clock, "effect-apply-replay", layer)).code == EnqueueCode::kAccepted,
+      "verified layer effect replay was rejected");
+  const auto replay_outbound = dispatcher.take_outbound();
+  require(replay_outbound.size() == 1 && replay_outbound[0].ok
+          && replay_outbound[0].replayed
+          && replay_outbound[0].request_id == "effect-apply-replay"
+          && replay_outbound[0].layer_effect_apply_result.match_name
+              == "ADBE Slider Control"
+          && host.layer_effect_apply_calls == 1,
+      "layer effect replay duplicated the host mutation");
+
+  const auto conflict = dispatcher.enqueue(layer_effect_apply_request(
+      clock, "effect-apply-conflict", layer,
+      "layer-effect-apply-intent-001", std::string(64, 'f')));
+  require(conflict.code == EnqueueCode::kDuplicateRequest
+          && conflict.error_field == "params.arguments.idempotencyKey"
+          && host.layer_effect_apply_calls == 1,
+      "layer effect idempotency key was rebound to different arguments");
+
+  host.mismatch_layer_effect_apply = true;
+  require(dispatcher.enqueue(layer_effect_apply_request(
+      clock, "effect-apply-mismatch", layer,
+      "layer-effect-apply-intent-002", std::string(64, 'a'))).code
+      == EnqueueCode::kAccepted,
+      "layer effect mismatch setup was rejected before HostApi");
+  const auto mismatch = dispatcher.drain(host);
+  require(mismatch.completions.size() == 1
+          && mismatch.completions[0].error_code
+              == "POSSIBLY_SIDE_EFFECTING_FAILURE",
+      "unverified layer effect apply was mislabeled side-effect free");
 }
 
 void bit_depth_read_and_write_are_main_thread_bound_and_write_is_idempotent() {
@@ -1908,6 +2039,7 @@ int main() {
   composition_time_write_is_typed_main_thread_bound_and_idempotent();
   composition_create_is_verified_and_replays_without_duplicate_mutation();
   composition_layer_create_is_verified_and_replays_without_duplicate_mutation();
+  layer_effect_apply_is_verified_and_replays_without_duplicate_mutation();
   bit_depth_read_and_write_are_main_thread_bound_and_write_is_idempotent();
   bit_depth_write_releases_only_safe_failures_and_fails_closed_when_full();
   bit_depth_write_validates_before_dispatch_and_late_results_are_ambiguous();

@@ -35,6 +35,8 @@ import {
   compositionCreateDescriptor,
   compositionLayerCreateContractDigest,
   compositionLayerCreateDescriptor,
+  layerEffectApplyContractDigest,
+  layerEffectApplyDescriptor,
   layerPropertiesListContractDigest,
   layerPropertiesListDescriptor,
   layerPropertySetContractDigest,
@@ -234,6 +236,7 @@ test('all checked-in vectors are synthetic and contain no host or Adobe suite cl
     'invoke-composition-time-set.json',
     'invoke-composition-create.json',
     'invoke-composition-layer-create.json',
+    'invoke-layer-effect-apply.json',
     'invoke-layer-properties-list.json',
     'invoke-layer-property-set.json',
     'invalidate-graph.json',
@@ -274,6 +277,7 @@ test('golden requests, events, responses, and bound error policies validate', ()
     'invoke-composition-time-set.json',
     'invoke-composition-create.json',
     'invoke-composition-layer-create.json',
+    'invoke-layer-effect-apply.json',
     'invoke-layer-properties-list.json',
     'invoke-layer-property-set.json',
     'invalidate-graph.json',
@@ -483,6 +487,7 @@ test('schema shape and composite request validation have an explicit differentia
     golden('invoke-composition-time-set.json').request,
     golden('invoke-composition-create.json').request,
     golden('invoke-composition-layer-create.json').request,
+    golden('invoke-layer-effect-apply.json').request,
     golden('invoke-layer-properties-list.json').request,
     golden('invoke-layer-property-set.json').request,
     golden('invalidate-graph.json').request,
@@ -600,7 +605,7 @@ test('graph invalidation is an exact authenticated internal lifecycle exchange',
     ), false);
   }
 
-  assert.equal(nativeCapabilityRegistry(schema).length, 12);
+  assert.equal(nativeCapabilityRegistry(schema).length, 13);
   assert.doesNotMatch(JSON.stringify(golden('capabilities.json')), /invalidateGraph/u);
   const disguisedInvoke = structuredClone(golden('invoke-project-summary.json').request);
   disguisedInvoke.params.capabilityId = 'ae.invalidateGraph';
@@ -786,6 +791,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
   const compositionTimeSetCapability = compositionTimeSetDescriptor(schema);
   const compositionCreateCapability = compositionCreateDescriptor(schema);
   const compositionLayerCreateCapability = compositionLayerCreateDescriptor(schema);
+  const layerEffectApplyCapability = layerEffectApplyDescriptor(schema);
   const layerPropertiesDescriptor = layerPropertiesListDescriptor(schema);
   const layerPropertyDescriptor = layerPropertySetDescriptor(schema);
   const containsRef = (value) => {
@@ -842,6 +848,10 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     'd48b5c0fcf9871ee579bf518679bc36277e2fd5194e70d9cc6fa1b2c573edeee');
   assert.equal(compositionLayerCreateCapability.contractDigest,
     compositionLayerCreateContractDigest(schema));
+  assert.equal(layerEffectApplyCapability.contractDigest,
+    '5de12c7cd4ede09122a837c85ff2e589f695dd5377490b97b9de9d975ce00d77');
+  assert.equal(layerEffectApplyCapability.contractDigest,
+    layerEffectApplyContractDigest(schema));
   assert.equal(layerPropertiesDescriptor.contractDigest,
     'a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba');
   assert.equal(layerPropertyDescriptor.contractDigest,
@@ -859,9 +869,10 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     compositionTimeSetCapability,
     compositionCreateCapability,
     compositionLayerCreateCapability,
+    layerEffectApplyCapability,
     layerPropertiesDescriptor,
     layerPropertyDescriptor,
-  ]), 'cee53bf620638964faf818c40dc22d13362ca33d6034a65cd9062a7d6c3c2f8c');
+  ]), 'b54fa28c9d04b248db56b27d652ab3fd37016bb3c44904f4949258f72e25d65b');
   assert.ok(Buffer.byteLength(canonicalize(descriptor), 'utf8') < LIMITS.maxFrameBytes);
 });
 
@@ -870,7 +881,7 @@ test('v1 capability discovery is single-page, fail-closed, and never replayed', 
   const exchange = golden('capabilities.json');
   assert.equal(exchange.request.params.limit, 100);
   assert.equal(Object.hasOwn(exchange.request.params, 'ids'), false);
-  assert.equal(exchange.response.result.items.length, 12);
+  assert.equal(exchange.response.result.items.length, 13);
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, exchange.response, schema), true);
 
   const zeroLimit = structuredClone(exchange.request);
@@ -1628,6 +1639,52 @@ test('composition layer create binds native state, fresh locators, Undo, and sol
     (value) => { value.layerLocator.projectId = '44444444-4444-4444-8444-444444444444'; },
     (value) => { value.solid.color.red = 13; },
     (value) => { value.projectItemCountAfter = value.projectItemCountBefore; },
+  ]) {
+    const malformed = structuredClone(fixture.response);
+    mutate(malformed.result.value);
+    malformed.result.evidence.postcondition.digest = postconditionDigest(malformed.result);
+    assert.equal(validateTranscript(
+      context, fixture.request, [...fixture.events, malformed],
+    ), false);
+  }
+});
+
+test('layer effect apply binds exact installed match, fresh locator, counts, and Undo', () => {
+  const fixture = golden('invoke-layer-effect-apply.json');
+  const descriptor = layerEffectApplyDescriptor(schema);
+  const context = {
+    hello: golden('hello.json'),
+    descriptor,
+    schema,
+    brokerSendUnixMs: 1900000000000,
+    effectiveDeadlineUnixMs: fixture.request.deadlineUnixMs,
+    terminalObservedUnixMs: 1900000000030,
+  };
+  assert.equal(descriptor.contractDigest, layerEffectApplyContractDigest(schema));
+  assert.equal(fixture.response.result.evidence.requestDigest, sha256Jcs(fixture.request));
+  assert.equal(fixture.response.result.evidence.postcondition.digest,
+    postconditionDigest(fixture.response.result));
+  assert.equal(validateTranscript(
+    context, fixture.request, [...fixture.events, fixture.response],
+  ), true);
+
+  for (const mutate of [
+    (request) => { request.params.arguments.effectMatchName = ''; },
+    (request) => { request.params.arguments.effectMatchName = 'x'.repeat(48); },
+    (request) => { request.params.arguments.idempotencyKey = 'short'; },
+    (request) => { request.params.arguments.extra = true; },
+  ]) {
+    const malformed = structuredClone(fixture.request);
+    mutate(malformed);
+    assert.equal(validateRequestComposite(malformed, schema).ok, false);
+  }
+
+  for (const mutate of [
+    (value) => { value.effectCountAfter += 1; },
+    (value) => { value.matchingEffectCountAfter += 1; },
+    (value) => { value.matchName = 'ADBE Point Control'; },
+    (value) => { value.effectIndex = 2; },
+    (value) => { value.layerLocator.generation = 8; },
   ]) {
     const malformed = structuredClone(fixture.response);
     mutate(malformed.result.value);

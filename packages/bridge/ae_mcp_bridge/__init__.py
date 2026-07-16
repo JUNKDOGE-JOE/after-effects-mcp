@@ -24,6 +24,7 @@ from ae_mcp.backends.native import (
     NativeRecovery,
     COMPOSITION_LAYER_CREATE_CAPABILITY_ID,
     COMPOSITION_TIME_SET_CAPABILITY_ID,
+    LAYER_EFFECT_APPLY_CAPABILITY_ID,
     LAYER_PROPERTY_SET_CAPABILITY_ID,
     PROJECT_BIT_DEPTH_SET_CAPABILITY_ID,
 )
@@ -159,6 +160,12 @@ class HttpBridge(Backend, NativeInvokeBackend):
             recovery_hint = (
                 "List project items and composition layers with fresh locators, "
                 "then inspect the Undo stack before retrying."
+            )
+        elif capability_id == LAYER_EFFECT_APPLY_CAPABILITY_ID:
+            recovery_hint = (
+                "List project items, composition layers, and layer properties "
+                "with fresh locators, then inspect the Effects group and Undo "
+                "stack before retrying."
             )
         else:
             recovery_hint = "Inspect the project bit depth and Undo stack before retrying."
@@ -562,6 +569,7 @@ class HttpBridge(Backend, NativeInvokeBackend):
             COMPOSITION_TIME_SET_CAPABILITY_ID,
             COMPOSITION_CREATE_CAPABILITY_ID,
             COMPOSITION_LAYER_CREATE_CAPABILITY_ID,
+            LAYER_EFFECT_APPLY_CAPABILITY_ID,
             LAYER_PROPERTY_SET_CAPABILITY_ID,
         }
         try:

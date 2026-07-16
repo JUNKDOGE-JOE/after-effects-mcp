@@ -412,6 +412,49 @@ class AeCreateCompositionLayerArgs(_StrictModel):
         return self
 
 
+class AeApplyLayerEffectArgs(_StrictModel):
+    """ae.applyLayerEffect — apply one installed effect through native AEGP.
+
+    Copy layer_locator from ae_listCompositionLayers and pass the installed
+    effect's exact, locale-independent match name. This native-only write never
+    falls back to JSX.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    layer_locator: AeLayerLocator = Field(
+        ...,
+        description="Fresh layer locator returned by ae_listCompositionLayers.",
+    )
+    effect_match_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=47,
+        description=(
+            "Exact installed effect matchName, for example 'ADBE Slider Control'."
+        ),
+    )
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        description=(
+            "Stable key for one apply intent. Reusing it replays the verified "
+            "result and never adds a duplicate effect."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _valid_match_name(self) -> "AeApplyLayerEffectArgs":
+        if any(
+            0xD800 <= ord(character) <= 0xDFFF
+            for character in self.effect_match_name
+        ):
+            raise ValueError("effect_match_name must contain only Unicode scalar values")
+        return self
+
+
 class AeListLayerPropertiesArgs(_StrictModel):
     """ae.listLayerProperties — list direct native properties on a layer/group.
 
@@ -1075,6 +1118,7 @@ SCHEMAS = {
     "ae.setCompositionTime": AeSetCompositionTimeArgs,
     "ae.createComposition": AeCreateCompositionArgs,
     "ae.createCompositionLayer": AeCreateCompositionLayerArgs,
+    "ae.applyLayerEffect": AeApplyLayerEffectArgs,
     "ae.listLayerProperties": AeListLayerPropertiesArgs,
     "ae.setLayerPropertyValue": AeSetLayerPropertyValueArgs,
     "ae.layers": AeLayersArgs,
@@ -1121,4 +1165,4 @@ SCHEMAS = {
     "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 56, f"expected 56 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 57, f"expected 57 verbs, got {len(SCHEMAS)}"

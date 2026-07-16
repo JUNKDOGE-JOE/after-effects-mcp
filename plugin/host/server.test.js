@@ -38,6 +38,10 @@ const compositionLayerCreateVector = require(
     '../../native/ae-plugin/protocol/fixtures/invoke-composition-layer-create.json'
 );
 const compositionLayerCreateFixture = compositionLayerCreateVector.response.result;
+const layerEffectApplyVector = require(
+    '../../native/ae-plugin/protocol/fixtures/invoke-layer-effect-apply.json'
+);
+const layerEffectApplyFixture = layerEffectApplyVector.response.result;
 const layerPropertiesVector = require(
     '../../native/ae-plugin/protocol/fixtures/invoke-layer-properties-list.json'
 );
@@ -272,6 +276,12 @@ function fakeNativeClient() {
             }
             if (request.capabilityId === 'ae.composition.layer.create') {
                 const result = structuredClone(compositionLayerCreateFixture);
+                result.replayed = false;
+                result.evidence.requestId = request.requestId;
+                return result;
+            }
+            if (request.capabilityId === 'ae.layer.effect.apply') {
+                const result = structuredClone(layerEffectApplyFixture);
                 result.replayed = false;
                 result.evidence.requestId = request.requestId;
                 return result;
@@ -526,6 +536,20 @@ test('native routes require the shared token and reject an open-ended invoke env
         });
         assert.strictEqual(invalidCompositionTimeSet.status, 400);
         assert.strictEqual(invalidCompositionTimeSet.body.error.code, 'INVALID_ARGUMENT');
+        const invalidLayerEffectApply = await post(port, '/native/invoke', {
+            'X-AE-MCP-Token': 'known-secret-token',
+        }, {
+            requestId: 'core-layer-effect-apply-invalid',
+            capabilityId: 'ae.layer.effect.apply',
+            capabilityVersion: 1,
+            arguments: {
+                ...structuredClone(layerEffectApplyVector.request.params.arguments),
+                effectMatchName: 'x'.repeat(48),
+            },
+            deadlineUnixMs: Date.now() + 10000,
+        });
+        assert.strictEqual(invalidLayerEffectApply.status, 400);
+        assert.strictEqual(invalidLayerEffectApply.body.error.code, 'INVALID_ARGUMENT');
         const invalidPropertyPage = await post(port, '/native/invoke', {
             'X-AE-MCP-Token': 'known-secret-token',
         }, {
@@ -618,6 +642,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
                 'ae.composition.time.set',
                 'ae.composition.create',
                 'ae.composition.layer.create',
+                'ae.layer.effect.apply',
                 'ae.layer.properties.list',
                 'ae.layer.property.set',
             ],
@@ -800,6 +825,23 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
         assert.deepStrictEqual(compositionLayerCreate.body.result.evidence.undo, {
             available: true, verified: false,
         });
+        const layerEffectApplyRequest = {
+            requestId: 'core-layer-effect-apply-1',
+            capabilityId: 'ae.layer.effect.apply',
+            capabilityVersion: 1,
+            arguments: structuredClone(layerEffectApplyVector.request.params.arguments),
+            deadlineUnixMs,
+        };
+        const layerEffectApply = await post(
+            port, '/native/invoke', headers, layerEffectApplyRequest,
+        );
+        assert.strictEqual(layerEffectApply.status, 200);
+        assert.strictEqual(layerEffectApply.body.result.value.matchName, 'ADBE Slider Control');
+        assert.strictEqual(layerEffectApply.body.result.value.effectCountAfter, 1);
+        assert.strictEqual(layerEffectApply.body.result.evidence.effect, 'committed');
+        assert.deepStrictEqual(layerEffectApply.body.result.evidence.undo, {
+            available: true, verified: false,
+        });
         const layerPropertiesRequest = {
             requestId: 'core-layer-properties-1',
             capabilityId: 'ae.layer.properties.list',
@@ -845,6 +887,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
             ['invoke', compositionTimeSetRequest],
             ['invoke', compositionCreateRequest],
             ['invoke', compositionLayerCreateRequest],
+            ['invoke', layerEffectApplyRequest],
             ['invoke', layerPropertiesRequest],
             ['invoke', layerPropertySetRequest],
         ]);

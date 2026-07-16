@@ -90,6 +90,7 @@ struct InvokeParams {
   CompositionCurrentTime composition_create_duration;
   CompositionPositiveRatio composition_create_frame_rate;
   CompositionPositiveRatio composition_create_pixel_aspect_ratio;
+  std::string layer_effect_match_name;
 };
 
 struct CancelParams {
@@ -173,6 +174,12 @@ struct ParsedRequest {
     std::string_view idempotency_key);
 [[nodiscard]] std::string digest_composition_layer_create_postcondition(
     const CompositionLayerCreated& value);
+[[nodiscard]] std::string digest_layer_effect_apply_arguments(
+    const ObjectLocator& layer_locator,
+    std::string_view effect_match_name,
+    std::string_view idempotency_key);
+[[nodiscard]] std::string digest_layer_effect_apply_postcondition(
+    const LayerEffectApplied& value);
 [[nodiscard]] std::string digest_layer_properties_postcondition(
     const LayerPropertiesPage& page);
 [[nodiscard]] std::string digest_layer_property_set_arguments(
@@ -366,6 +373,8 @@ struct CapabilitiesSuccess {
   std::string layer_property_set_contract_digest;
   bool include_composition_selected_layers_list{false};
   std::string composition_selected_layers_list_contract_digest;
+  bool include_layer_effect_apply{true};
+  std::string layer_effect_apply_contract_digest;
 };
 
 enum class ProgressPhase { kQueued, kDispatched, kRunning, kValidating };
@@ -493,6 +502,18 @@ struct CompositionLayerCreateSuccess {
   bool replayed{false};
 };
 
+struct LayerEffectApplySuccess {
+  std::string request_id;
+  std::string session_id;
+  std::string host_instance_id;
+  LayerEffectApplied value;
+  std::uint64_t started_at_unix_ms{0};
+  std::uint64_t completed_at_unix_ms{0};
+  std::string request_digest;
+  std::string postcondition_digest;
+  bool replayed{false};
+};
+
 struct LayerPropertiesSuccess {
   std::string request_id;
   std::string session_id;
@@ -602,6 +623,8 @@ struct ErrorResponse {
     const CompositionCreateSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_composition_layer_create_success(
     const CompositionLayerCreateSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_effect_apply_success(
+    const LayerEffectApplySuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_layer_properties_success(
     const LayerPropertiesSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_layer_property_set_success(

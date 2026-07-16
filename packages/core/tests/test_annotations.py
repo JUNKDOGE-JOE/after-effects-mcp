@@ -36,6 +36,9 @@ def test_exec_is_destructive_and_reads_are_readonly():
     assert VERB_ANNOTATIONS["ae.createCompositionLayer"].readOnlyHint is False
     assert VERB_ANNOTATIONS["ae.createCompositionLayer"].destructiveHint is False
     assert VERB_ANNOTATIONS["ae.createCompositionLayer"].idempotentHint is True
+    assert VERB_ANNOTATIONS["ae.applyLayerEffect"].readOnlyHint is False
+    assert VERB_ANNOTATIONS["ae.applyLayerEffect"].destructiveHint is False
+    assert VERB_ANNOTATIONS["ae.applyLayerEffect"].idempotentHint is True
     for verb in (
         "ae.listProjectItems",
         "ae.listCompositionLayers",

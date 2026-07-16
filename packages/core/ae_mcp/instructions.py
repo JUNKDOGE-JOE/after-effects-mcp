@@ -49,6 +49,12 @@ WORKFLOW — every task follows this loop:
                 optional; after success, use the returned fresh composition
                 locator. These native tools fail explicitly when AEGP is
                 unavailable and never fall back to JSX.
+                To apply one installed effect natively, call
+                ae_applyLayerEffect with a fresh layer locator, the exact
+                locale-independent effect matchName, and a stable idempotency
+                key. Use the returned fresh layer locator when reading the
+                Effects group. If the result is uncertain, inspect AE state
+                and audit before any retry.
   2. Act      — Prefer the typed verbs (ae_createLayer, ae_setProperty,
                 ae_applyEffect, ae_moveLayer, ae_createRig). Drop to ae_exec
                 only for logic the typed verbs can't express.

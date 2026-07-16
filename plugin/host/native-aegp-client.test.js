@@ -49,6 +49,10 @@ const COMPOSITION_LAYER_CREATE_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
     '../../native/ae-plugin/protocol/fixtures/invoke-composition-layer-create.json',
 ), 'utf8'));
+const LAYER_EFFECT_APPLY_VECTOR = JSON.parse(fs.readFileSync(path.join(
+    __dirname,
+    '../../native/ae-plugin/protocol/fixtures/invoke-layer-effect-apply.json',
+), 'utf8'));
 const LAYER_PROPERTIES_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
     '../../native/ae-plugin/protocol/fixtures/invoke-layer-properties-list.json',
@@ -283,6 +287,16 @@ function installProtocol(server, options) {
                         value: result.value,
                     });
                     if (input.mutateInvoke) input.mutateInvoke(result, request);
+                } else if (request.params.capabilityId === 'ae.layer.effect.apply') {
+                    result = structuredClone(LAYER_EFFECT_APPLY_VECTOR.response.result);
+                    result.evidence.requestId = request.requestId;
+                    result.evidence.requestDigest = invokeRequestDigest(request);
+                    result.evidence.postcondition.digest = jcsDigest({
+                        capabilityId: result.capabilityId,
+                        capabilityVersion: result.capabilityVersion,
+                        value: result.value,
+                    });
+                    if (input.mutateInvoke) input.mutateInvoke(result, request);
                 } else if (request.params.capabilityId === 'ae.composition.time.set') {
                     result = structuredClone(COMPOSITION_TIME_SET_VECTOR.response.result);
                     result.evidence.requestId = request.requestId;
@@ -428,6 +442,9 @@ function installProtocol(server, options) {
                         || (request.method === 'invoke'
                         && request.params.capabilityId === 'ae.composition.layer.create'
                         && request.requestId === input.createReplayedRequestId)
+                        || (request.method === 'invoke'
+                        && request.params.capabilityId === 'ae.layer.effect.apply'
+                        && request.requestId === input.effectApplyReplayedRequestId)
                         || (request.method === 'invoke'
                             && request.params.capabilityId === 'ae.project.summary'
                             && input.summaryReplayed === true);
@@ -1599,6 +1616,76 @@ test('CEP composition-layer create verifies options, replay, and uncertain failu
     await assert.rejects(ready.client.invoke({
         requestId: 'composition-layer-create-client-uncertain',
         capabilityId: 'ae.composition.layer.create',
+        capabilityVersion: 1,
+        arguments: uncertainArguments,
+        deadlineUnixMs: 1900000005000,
+    }), {
+        code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
+        retryable: false,
+        sideEffect: 'may-have-occurred',
+    });
+});
+
+test('CEP layer-effect apply verifies identity, replay, and uncertain failures', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const ready = await readyNativeClient(t, {
+        effectApplyReplayedRequestId: 'layer-effect-apply-client-replay',
+        mutateInvoke: function (result, request) {
+            if (request.requestId === 'layer-effect-apply-client-uncertain') {
+                result.evidence.postcondition.digest = '0'.repeat(64);
+            }
+        },
+    });
+    const argumentsValue = structuredClone(
+        LAYER_EFFECT_APPLY_VECTOR.request.params.arguments,
+    );
+    const applied = await ready.client.invoke({
+        requestId: 'layer-effect-apply-client-1',
+        capabilityId: 'ae.layer.effect.apply',
+        capabilityVersion: 1,
+        arguments: argumentsValue,
+        deadlineUnixMs: 1900000005000,
+    });
+    assert.equal(applied.replayed, false);
+    assert.equal(applied.value.matchName, 'ADBE Slider Control');
+    assert.equal(applied.value.effectCountAfter, applied.value.effectCountBefore + 1);
+    assert.equal(
+        applied.value.matchingEffectCountAfter,
+        applied.value.matchingEffectCountBefore + 1,
+    );
+    assert.deepEqual(applied.evidence.undo, { available: true, verified: false });
+    const sent = ready.protocol.requests.at(-1);
+    assert.deepEqual(sent.params.arguments, argumentsValue);
+    assert.equal(applied.evidence.requestDigest, invokeRequestDigest(sent));
+
+    const replayed = await ready.client.invoke({
+        requestId: 'layer-effect-apply-client-replay',
+        capabilityId: 'ae.layer.effect.apply',
+        capabilityVersion: 1,
+        arguments: argumentsValue,
+        deadlineUnixMs: 1900000005000,
+    });
+    assert.equal(replayed.replayed, true);
+    assert.deepEqual(replayed.value, applied.value);
+
+    const requestCount = ready.protocol.requests.length;
+    const invalidArguments = structuredClone(argumentsValue);
+    invalidArguments.effectMatchName = 'x'.repeat(48);
+    await assert.rejects(ready.client.invoke({
+        requestId: 'layer-effect-apply-client-invalid',
+        capabilityId: 'ae.layer.effect.apply',
+        capabilityVersion: 1,
+        arguments: invalidArguments,
+        deadlineUnixMs: 1900000005000,
+    }), { code: 'INVALID_ARGUMENT', retryable: false });
+    assert.equal(ready.protocol.requests.length, requestCount);
+
+    const uncertainArguments = structuredClone(argumentsValue);
+    uncertainArguments.idempotencyKey = 'synthetic-effect-apply-uncertain-0001';
+    await assert.rejects(ready.client.invoke({
+        requestId: 'layer-effect-apply-client-uncertain',
+        capabilityId: 'ae.layer.effect.apply',
         capabilityVersion: 1,
         arguments: uncertainArguments,
         deadlineUnixMs: 1900000005000,

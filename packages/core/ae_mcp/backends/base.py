@@ -19,6 +19,7 @@ ALL_VERBS: Set[str] = {
     "ae.getCompositionTime", "ae.setCompositionTime",
     "ae.createComposition",
     "ae.createCompositionLayer",
+    "ae.applyLayerEffect",
     "ae.listLayerProperties",
     "ae.setLayerPropertyValue",
     "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.applyEffect",

@@ -67,6 +67,7 @@ using aemcp::native::HostCompositionTimeResult;
 using aemcp::native::HostCompositionTimeWriteResult;
 using aemcp::native::HostCompositionCreateResult;
 using aemcp::native::HostCompositionLayerCreateResult;
+using aemcp::native::HostLayerEffectApplyResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostReadResult;
 using aemcp::native::HostProjectItemsResult;
@@ -100,6 +101,7 @@ using aemcp::native::kCompositionTimeReadCapability;
 using aemcp::native::kCompositionTimeSetCapability;
 using aemcp::native::kCompositionCreateCapability;
 using aemcp::native::kCompositionLayerCreateCapability;
+using aemcp::native::kLayerEffectApplyCapability;
 using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kLayerPropertiesListCapability;
 using aemcp::native::kLayerPropertySetCapability;
@@ -110,7 +112,7 @@ constexpr std::string_view kSdkVersion = "25.6.61";
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::string_view kCapabilitiesDigest =
-    "cee53bf620638964faf818c40dc22d13362ca33d6034a65cd9062a7d6c3c2f8c";
+    "b54fa28c9d04b248db56b27d652ab3fd37016bb3c44904f4949258f72e25d65b";
 constexpr std::string_view kProjectSummaryContractDigest =
     "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
 constexpr std::string_view kProjectBitDepthReadContractDigest =
@@ -131,11 +133,14 @@ constexpr std::string_view kCompositionCreateContractDigest =
     "a5e0ccfc15086d1b10987246048e539cf6332a4e24114ac81783f4a9758ab6f6";
 constexpr std::string_view kCompositionLayerCreateContractDigest =
     "d48b5c0fcf9871ee579bf518679bc36277e2fd5194e70d9cc6fa1b2c573edeee";
+constexpr std::string_view kLayerEffectApplyContractDigest =
+    "5de12c7cd4ede09122a837c85ff2e589f695dd5377490b97b9de9d975ce00d77";
 constexpr std::string_view kLayerPropertiesListContractDigest =
     "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba";
 constexpr std::string_view kLayerPropertySetContractDigest =
     "5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c";
 constexpr std::int64_t kMaximumProjectItems = 100000;
+constexpr A_long kMaximumLayerEffects = 4096;
 static_assert(kSourceCommit.size() == 40);
 
 std::string json_escape(std::string_view input) {
@@ -562,6 +567,24 @@ class StreamRefOwner final {
   AEGP_StreamRefH stream_{nullptr};
 };
 
+class EffectRefOwner final {
+ public:
+  EffectRefOwner(const AEGP_EffectSuite5* suite, AEGP_EffectRefH effect)
+      : suite_(suite), effect_(effect) {}
+  ~EffectRefOwner() {
+    if (suite_ != nullptr && effect_ != nullptr) {
+      (void)suite_->AEGP_DisposeEffect(effect_);
+    }
+  }
+  EffectRefOwner(const EffectRefOwner&) = delete;
+  EffectRefOwner& operator=(const EffectRefOwner&) = delete;
+  [[nodiscard]] AEGP_EffectRefH get() const noexcept { return effect_; }
+
+ private:
+  const AEGP_EffectSuite5* suite_{nullptr};
+  AEGP_EffectRefH effect_{nullptr};
+};
+
 class StreamValueOwner final {
  public:
   explicit StreamValueOwner(const AEGP_StreamSuite6* suite) : suite_(suite) {}
@@ -657,14 +680,24 @@ class ProjectGraphRegistry final {
       A_long composition_item_id,
       AEGP_LayerIDVal layer_id,
       std::string_view host,
-      std::string_view session) {
+      std::string_view session,
+      std::string_view preserved_object_id = {}) {
     const std::string key = std::to_string(composition_item_id) + ":"
         + std::to_string(static_cast<A_long>(layer_id));
     auto found = layer_object_ids_.find(key);
     if (found == layer_object_ids_.end()) {
-      found = layer_object_ids_.emplace(key, aemcp::native::secure_uuid_v4()).first;
+      const std::string object_id = preserved_object_id.empty()
+          ? aemcp::native::secure_uuid_v4()
+          : std::string(preserved_object_id);
+      if (layers_by_object_.contains(object_id)) {
+        throw std::runtime_error("layer locator object identity is already bound");
+      }
+      found = layer_object_ids_.emplace(key, object_id).first;
       layers_by_object_.emplace(
           found->second, LayerAddress{composition_item_id, layer_id});
+    } else if (!preserved_object_id.empty()
+        && found->second != preserved_object_id) {
+      throw std::runtime_error("layer locator object identity does not match");
     }
     return make_locator("layer", found->second, host, session);
   }
@@ -3047,6 +3080,390 @@ class AegpHostApi final : public HostApi {
     return HostCompositionLayerCreateResult::success(std::move(created));
   }
 
+  [[nodiscard]] HostLayerEffectApplyResult apply_layer_effect(
+      const aemcp::native::LayerEffectApplyCommand& command,
+      TimePoint work_deadline) override {
+    const auto budget_expired = [work_deadline] {
+      return std::chrono::steady_clock::now() >= work_deadline;
+    };
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    SuiteLease<AEGP_StreamSuite6> stream_suite(
+        basic_, kAEGPStreamSuite, kAEGPStreamSuiteVersion6);
+    SuiteLease<AEGP_DynamicStreamSuite4> dynamic_suite(
+        basic_, kAEGPDynamicStreamSuite, kAEGPDynamicStreamSuiteVersion4);
+    SuiteLease<AEGP_EffectSuite5> effect_suite(
+        basic_, kAEGPEffectSuite, kAEGPEffectSuiteVersion5);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || memory_suite.get() == nullptr || stream_suite.get() == nullptr
+        || dynamic_suite.get() == nullptr || effect_suite.get() == nullptr
+        || utility_suite.get() == nullptr) {
+      return HostLayerEffectApplyResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer effect suites are unavailable");
+    }
+    if (budget_expired()) {
+      return HostLayerEffectApplyResult::failure(
+          "DEADLINE_EXCEEDED", "layer effect application budget elapsed");
+    }
+
+    A_long project_count = 0;
+    if (project_suite->AEGP_GetNumProjects(&project_count) != A_Err_NONE) {
+      return HostLayerEffectApplyResult::failure(
+          "CAPABILITY_FAILED", "could not read project count");
+    }
+    if (project_count <= 0) {
+      graph_.project_closed();
+      return HostLayerEffectApplyResult::failure(
+          "PRECONDITION_FAILED", "an After Effects project must be open");
+    }
+    AEGP_ProjectH project = nullptr;
+    AEGP_ItemH root_item = nullptr;
+    A_long root_id = 0;
+    if (project_suite->AEGP_GetProjectByIndex(0, &project) != A_Err_NONE
+        || project == nullptr
+        || project_suite->AEGP_GetProjectRootFolder(project, &root_item) != A_Err_NONE
+        || root_item == nullptr
+        || item_suite->AEGP_GetItemID(root_item, &root_id) != A_Err_NONE) {
+      return HostLayerEffectApplyResult::failure(
+          "CAPABILITY_FAILED", "could not resolve the open project's root item");
+    }
+    std::optional<std::string> project_path = read_project_path(
+        project_suite.get(), memory_suite.get(), project);
+    if (!project_path.has_value()) {
+      return HostLayerEffectApplyResult::failure(
+          "CAPABILITY_FAILED", "could not read the open project path for locator identity");
+    }
+    try {
+      graph_.observe_project(
+          reinterpret_cast<std::uintptr_t>(project),
+          reinterpret_cast<std::uintptr_t>(root_item),
+          root_id,
+          std::move(*project_path));
+    } catch (...) {
+      return HostLayerEffectApplyResult::failure(
+          "CAPABILITY_FAILED", "could not establish project locator identity");
+    }
+    const auto layer_address = graph_.resolve_layer(
+        command.layer_locator, command.host_instance_id, command.session_id);
+    if (!layer_address.has_value()) {
+      return HostLayerEffectApplyResult::failure(
+          "STALE_LOCATOR",
+          "layerLocator does not identify a layer in the currently open project",
+          "params.arguments.layerLocator");
+    }
+
+    AEGP_ItemH item = nullptr;
+    if (item_suite->AEGP_GetNextProjItem(project, root_item, &item) != A_Err_NONE) {
+      return HostLayerEffectApplyResult::failure(
+          "CAPABILITY_FAILED", "could not begin composition lookup");
+    }
+    AEGP_ItemH composition_item = nullptr;
+    std::uint64_t visited = 0;
+    while (item != nullptr) {
+      if (budget_expired()) {
+        return HostLayerEffectApplyResult::failure(
+            "DEADLINE_EXCEEDED", "composition lookup budget elapsed");
+      }
+      if (++visited > static_cast<std::uint64_t>(kMaximumProjectItems)) {
+        return HostLayerEffectApplyResult::failure(
+            "CAPABILITY_FAILED", "project item bound exceeded during composition lookup");
+      }
+      A_long item_id = 0;
+      if (item_suite->AEGP_GetItemID(item, &item_id) != A_Err_NONE) {
+        return HostLayerEffectApplyResult::failure(
+            "CAPABILITY_FAILED", "could not read project item identity");
+      }
+      if (item_id == layer_address->composition_item_id) {
+        composition_item = item;
+        break;
+      }
+      AEGP_ItemH next = nullptr;
+      if (item_suite->AEGP_GetNextProjItem(project, item, &next) != A_Err_NONE) {
+        return HostLayerEffectApplyResult::failure(
+            "CAPABILITY_FAILED", "composition lookup traversal failed");
+      }
+      item = next;
+    }
+    if (composition_item == nullptr) {
+      return HostLayerEffectApplyResult::failure(
+          "STALE_LOCATOR", "layer composition no longer exists",
+          "params.arguments.layerLocator");
+    }
+    AEGP_CompH composition = nullptr;
+    AEGP_LayerH layer = nullptr;
+    if (comp_suite->AEGP_GetCompFromItem(composition_item, &composition) != A_Err_NONE
+        || composition == nullptr
+        || layer_suite->AEGP_GetLayerFromLayerID(
+            composition, layer_address->layer_id, &layer) != A_Err_NONE
+        || layer == nullptr) {
+      return HostLayerEffectApplyResult::failure(
+          "STALE_LOCATOR", "layer can no longer be resolved",
+          "params.arguments.layerLocator");
+    }
+
+    A_long installed_count = 0;
+    if (effect_suite->AEGP_GetNumInstalledEffects(&installed_count) != A_Err_NONE
+        || installed_count < 0 || installed_count > kMaximumLayerEffects) {
+      return HostLayerEffectApplyResult::failure(
+          "CAPABILITY_FAILED", "installed effect traversal bound was unavailable");
+    }
+    AEGP_InstalledEffectKey installed_key = AEGP_InstalledEffectKey_NONE;
+    AEGP_InstalledEffectKey matched_key = AEGP_InstalledEffectKey_NONE;
+    std::string matched_name;
+    for (A_long index = 0; index < installed_count; ++index) {
+      AEGP_InstalledEffectKey next_key = AEGP_InstalledEffectKey_NONE;
+      if (effect_suite->AEGP_GetNextInstalledEffect(
+              installed_key, &next_key) != A_Err_NONE
+          || next_key == AEGP_InstalledEffectKey_NONE) {
+        return HostLayerEffectApplyResult::failure(
+            "CAPABILITY_FAILED", "installed effect traversal failed");
+      }
+      installed_key = next_key;
+      std::array<A_char, AEGP_MAX_EFFECT_MATCH_NAME_SIZE> match_name{};
+      if (effect_suite->AEGP_GetEffectMatchName(
+              installed_key, match_name.data()) != A_Err_NONE
+          || std::find(match_name.begin(), match_name.end(), '\0')
+              == match_name.end()) {
+        return HostLayerEffectApplyResult::failure(
+            "CAPABILITY_FAILED", "installed effect match name was not bounded");
+      }
+      if (command.effect_match_name != std::string_view(match_name.data())) continue;
+      if (matched_key != AEGP_InstalledEffectKey_NONE) {
+        return HostLayerEffectApplyResult::failure(
+            "PRECONDITION_FAILED", "effect match name is not unique in this host",
+            "params.arguments.effectMatchName");
+      }
+      matched_key = installed_key;
+    }
+    if (matched_key == AEGP_InstalledEffectKey_NONE) {
+      return HostLayerEffectApplyResult::failure(
+          "PRECONDITION_FAILED", "effect match name is not installed in After Effects",
+          "params.arguments.effectMatchName");
+    }
+    std::array<A_char, AEGP_MAX_EFFECT_MATCH_NAME_SIZE> verified_match_name{};
+    if (effect_suite->AEGP_GetEffectMatchName(
+            matched_key, verified_match_name.data()) != A_Err_NONE
+        || std::find(verified_match_name.begin(), verified_match_name.end(), '\0')
+            == verified_match_name.end()
+        || std::string_view(verified_match_name.data()) != command.effect_match_name) {
+      return HostLayerEffectApplyResult::failure(
+          "CAPABILITY_FAILED", "installed effect metadata could not be verified");
+    }
+
+    const auto read_effect_keys = [&]() -> std::optional<std::vector<AEGP_InstalledEffectKey>> {
+      A_long count = 0;
+      if (effect_suite->AEGP_GetLayerNumEffects(layer, &count) != A_Err_NONE
+          || count < 0 || count > kMaximumLayerEffects) {
+        return std::nullopt;
+      }
+      std::vector<AEGP_InstalledEffectKey> keys;
+      keys.reserve(static_cast<std::size_t>(count));
+      for (A_long index = 0; index < count; ++index) {
+        AEGP_EffectRefH effect_ref = nullptr;
+        if (effect_suite->AEGP_GetLayerEffectByIndex(
+                plugin_id_, layer, index, &effect_ref) != A_Err_NONE
+            || effect_ref == nullptr) {
+          return std::nullopt;
+        }
+        EffectRefOwner effect_owner(effect_suite.get(), effect_ref);
+        AEGP_InstalledEffectKey key = AEGP_InstalledEffectKey_NONE;
+        if (effect_suite->AEGP_GetInstalledKeyFromLayerEffect(
+                effect_owner.get(), &key) != A_Err_NONE
+            || key == AEGP_InstalledEffectKey_NONE) {
+          return std::nullopt;
+        }
+        keys.push_back(key);
+      }
+      return keys;
+    };
+    const auto before_keys = read_effect_keys();
+    if (!before_keys.has_value()) {
+      return HostLayerEffectApplyResult::failure(
+          "CAPABILITY_FAILED", "could not read layer effects before mutation");
+    }
+    const std::uint64_t matching_before = static_cast<std::uint64_t>(
+        std::count(before_keys->begin(), before_keys->end(), matched_key));
+    if (budget_expired()) {
+      return HostLayerEffectApplyResult::failure(
+          "DEADLINE_EXCEEDED", "layer effect application budget elapsed");
+    }
+
+    static constexpr char kUndoLabel[] = "ae-mcp: Apply layer effect";
+    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+      return HostLayerEffectApplyResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    AEGP_EffectRefH applied_ref = nullptr;
+    const A_Err apply_error = effect_suite->AEGP_ApplyEffect(
+        plugin_id_, layer, matched_key, &applied_ref);
+    EffectRefOwner applied_owner(effect_suite.get(), applied_ref);
+    AEGP_InstalledEffectKey applied_key = AEGP_InstalledEffectKey_NONE;
+    const A_Err applied_key_error = applied_ref == nullptr
+        ? A_Err_GENERIC
+        : effect_suite->AEGP_GetInstalledKeyFromLayerEffect(
+            applied_owner.get(), &applied_key);
+    // Effect refs identify instances even when several effects have the same
+    // installed key. Move the returned instance to the end of the stack while
+    // the apply Undo group is still open so its public index and dynamic stream
+    // can be reacquired without depending on the effect having a user-visible
+    // parameter stream. This also supports effects whose only parameter is the
+    // implicit input layer.
+    A_Err reorder_error = A_Err_GENERIC;
+    if (apply_error == A_Err_NONE && applied_ref != nullptr
+        && applied_key_error == A_Err_NONE && applied_key == matched_key) {
+      reorder_error = effect_suite->AEGP_ReorderEffect(
+          applied_owner.get(), static_cast<A_long>(before_keys->size()));
+    }
+    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    const auto after_keys = read_effect_keys();
+    if (apply_error != A_Err_NONE || applied_ref == nullptr
+        || applied_key_error != A_Err_NONE || applied_key != matched_key
+        || reorder_error != A_Err_NONE || end_error != A_Err_NONE
+        || !after_keys.has_value()) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "effect may have been applied but native readback or Undo validation failed");
+    }
+    const std::uint64_t matching_after = static_cast<std::uint64_t>(
+        std::count(after_keys->begin(), after_keys->end(), matched_key));
+    if (after_keys->size() != before_keys->size() + 1
+        || matching_after != matching_before + 1
+        || !std::equal(
+            before_keys->begin(), before_keys->end(), after_keys->begin())
+        || after_keys->back() != matched_key) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "effect application did not produce one exact native effect");
+    }
+
+    AEGP_StreamRefH root_stream = nullptr;
+    if (dynamic_suite->AEGP_GetNewStreamRefForLayer(
+            plugin_id_, layer, &root_stream) != A_Err_NONE
+        || root_stream == nullptr) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "applied effect layer property root could not be resolved");
+    }
+    StreamRefOwner root_stream_owner(stream_suite.get(), root_stream);
+    AEGP_StreamRefH effect_group_stream = nullptr;
+    if (dynamic_suite->AEGP_GetNewStreamRefByMatchname(
+            plugin_id_, root_stream_owner.get(), "ADBE Effect Parade",
+            &effect_group_stream) != A_Err_NONE
+        || effect_group_stream == nullptr) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "applied effect group could not be resolved");
+    }
+    StreamRefOwner effect_group_owner(stream_suite.get(), effect_group_stream);
+    AEGP_StreamGroupingType effect_grouping = AEGP_StreamGroupingType_NONE;
+    A_long effect_group_count = 0;
+    if (dynamic_suite->AEGP_GetStreamGroupingType(
+            effect_group_owner.get(), &effect_grouping) != A_Err_NONE
+        || effect_grouping != AEGP_StreamGroupingType_INDEXED_GROUP
+        || dynamic_suite->AEGP_GetNumStreamsInGroup(
+            effect_group_owner.get(), &effect_group_count) != A_Err_NONE
+        || effect_group_count < 0
+        || static_cast<std::size_t>(effect_group_count) != after_keys->size()) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "applied effect group did not match the native effect stack");
+    }
+    const A_long insertion_index = static_cast<A_long>(before_keys->size());
+    AEGP_StreamRefH effect_stream = nullptr;
+    if (dynamic_suite->AEGP_GetNewStreamRefByIndex(
+            plugin_id_, effect_group_owner.get(), insertion_index,
+            &effect_stream) != A_Err_NONE
+        || effect_stream == nullptr) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "applied effect stream could not be resolved from the effect group");
+    }
+    StreamRefOwner effect_stream_owner(stream_suite.get(), effect_stream);
+    std::array<A_char, AEGP_MAX_STREAM_MATCH_NAME_SIZE> applied_match_name{};
+    if (dynamic_suite->AEGP_GetMatchName(
+            effect_stream_owner.get(), applied_match_name.data()) != A_Err_NONE
+        || std::find(applied_match_name.begin(), applied_match_name.end(), '\0')
+            == applied_match_name.end()
+        || std::string_view(applied_match_name.data()) != command.effect_match_name) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "applied effect stream did not match the requested effect");
+    }
+    A_long verified_insertion_index = -1;
+    if (dynamic_suite->AEGP_GetStreamIndexInParent(
+            effect_stream_owner.get(), &verified_insertion_index) != A_Err_NONE
+        || verified_insertion_index != insertion_index
+        || (*after_keys)[static_cast<std::size_t>(insertion_index)] != matched_key) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "applied effect index could not be verified from its native stream");
+    }
+
+    // AEGP_GetEffectName does not promise UTF-8, so localized hosts can return
+    // bytes that strict JSON evidence must reject. Read the exact applied
+    // stream's UTF-16 name instead and convert it through MemHandleOwner.
+    AEGP_MemHandle effect_name_handle = nullptr;
+    const A_Err effect_name_error = stream_suite->AEGP_GetStreamName(
+        plugin_id_, effect_stream_owner.get(), FALSE, &effect_name_handle);
+    MemHandleOwner effect_name_owner(memory_suite.get(), effect_name_handle);
+    if (effect_name_error != A_Err_NONE || effect_name_handle == nullptr) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "applied effect UTF-16 name could not be read");
+    }
+    const auto applied_effect_name = effect_name_owner.utf8();
+    if (!applied_effect_name.has_value() || applied_effect_name->empty()) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "applied effect UTF-16 name was missing or invalid");
+    }
+    matched_name = std::move(*applied_effect_name);
+    if (budget_expired()) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "effect was applied after the validation budget elapsed");
+    }
+
+    bool invalidated = false;
+    try {
+      invalidated = graph_.invalidate_project();
+    } catch (...) {
+      invalidated = false;
+    }
+    if (!invalidated) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "effect was applied but fresh locator generation failed");
+    }
+    aemcp::native::LayerEffectApplied applied;
+    applied.changed = true;
+    applied.layer_locator = graph_.layer_locator(
+        layer_address->composition_item_id,
+        layer_address->layer_id,
+        command.host_instance_id,
+        command.session_id,
+        command.layer_locator.object_id);
+    applied.name = std::move(matched_name);
+    applied.match_name = command.effect_match_name;
+    applied.effect_index = static_cast<std::uint64_t>(insertion_index) + 1U;
+    applied.effect_count_before = before_keys->size();
+    applied.effect_count_after = after_keys->size();
+    applied.matching_effect_count_before = matching_before;
+    applied.matching_effect_count_after = matching_after;
+    return HostLayerEffectApplyResult::success(std::move(applied));
+  }
+
   [[nodiscard]] HostLayerPropertiesResult list_layer_properties(
       const aemcp::native::LayerPropertiesQuery& query,
       TimePoint work_deadline) override {
@@ -3819,6 +4236,7 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
             std::string(kCompositionTimeSetContractDigest),
             std::string(kCompositionCreateContractDigest),
             std::string(kCompositionLayerCreateContractDigest),
+            std::string(kLayerEffectApplyContractDigest),
             std::string(kLayerPropertiesListContractDigest),
             std::string(kLayerPropertySetContractDigest),
             std::string(kCompositionSelectedLayersListContractDigest),
@@ -3902,6 +4320,7 @@ void log_load(PluginState& state) {
          << kCompositionTimeSetCapability << "\",\""
          << kCompositionCreateCapability << "\",\""
          << kCompositionLayerCreateCapability << "\",\""
+         << kLayerEffectApplyCapability << "\",\""
          << kLayerPropertiesListCapability << "\",\""
          << kLayerPropertySetCapability << "\"]}"
          ;
@@ -4025,6 +4444,19 @@ void log_completion(
              << ",\"projectGeneration\":"
              << completion.composition_layer_create_result
                     .composition_locator.generation;
+    } else if (completion.capability_id == kLayerEffectApplyCapability) {
+      output << ",\"result\":{\"changed\":true,\"effectIndex\":"
+             << completion.layer_effect_apply_result.effect_index
+             << ",\"effectCountBefore\":"
+             << completion.layer_effect_apply_result.effect_count_before
+             << ",\"effectCountAfter\":"
+             << completion.layer_effect_apply_result.effect_count_after
+             << ",\"matchingEffectCountBefore\":"
+             << completion.layer_effect_apply_result.matching_effect_count_before
+             << ",\"matchingEffectCountAfter\":"
+             << completion.layer_effect_apply_result.matching_effect_count_after
+             << ",\"projectGeneration\":"
+             << completion.layer_effect_apply_result.layer_locator.generation;
     } else if (completion.capability_id == kLayerPropertiesListCapability) {
       output << ",\"result\":{\"total\":"
              << completion.layer_properties_result.total

@@ -24,6 +24,7 @@ using aemcp::native::rpc::CompositionTimeSuccess;
 using aemcp::native::rpc::CompositionTimeSetSuccess;
 using aemcp::native::rpc::CompositionCreateSuccess;
 using aemcp::native::rpc::CompositionLayerCreateSuccess;
+using aemcp::native::rpc::LayerEffectApplySuccess;
 using aemcp::native::rpc::LayerPropertiesSuccess;
 using aemcp::native::rpc::LayerPropertySetSuccess;
 using aemcp::native::rpc::CapabilityDetail;
@@ -63,6 +64,7 @@ using aemcp::native::rpc::digest_composition_time_postcondition;
 using aemcp::native::rpc::digest_composition_time_set_postcondition;
 using aemcp::native::rpc::digest_composition_create_postcondition;
 using aemcp::native::rpc::digest_composition_layer_create_postcondition;
+using aemcp::native::rpc::digest_layer_effect_apply_postcondition;
 using aemcp::native::rpc::digest_layer_properties_postcondition;
 using aemcp::native::rpc::digest_layer_property_set_postcondition;
 using aemcp::native::rpc::digest_project_items_postcondition;
@@ -81,6 +83,7 @@ using aemcp::native::rpc::encode_composition_time_success;
 using aemcp::native::rpc::encode_composition_time_set_success;
 using aemcp::native::rpc::encode_composition_create_success;
 using aemcp::native::rpc::encode_composition_layer_create_success;
+using aemcp::native::rpc::encode_layer_effect_apply_success;
 using aemcp::native::rpc::encode_layer_properties_success;
 using aemcp::native::rpc::encode_layer_property_set_success;
 using aemcp::native::rpc::encode_project_items_success;
@@ -107,6 +110,8 @@ constexpr std::string_view kCompositionCreateContractDigest =
     "a5e0ccfc15086d1b10987246048e539cf6332a4e24114ac81783f4a9758ab6f6";
 constexpr std::string_view kCompositionLayerCreateContractDigest =
     "d48b5c0fcf9871ee579bf518679bc36277e2fd5194e70d9cc6fa1b2c573edeee";
+constexpr std::string_view kLayerEffectApplyContractDigest =
+    "5de12c7cd4ede09122a837c85ff2e589f695dd5377490b97b9de9d975ce00d77";
 constexpr std::string_view kLayerPropertiesContractDigest =
     "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba";
 constexpr std::string_view kLayerPropertySetContractDigest =
@@ -313,6 +318,20 @@ std::string composition_layer_create_invoke_json(
         "\"color\":{\"red\":12,\"green\":34,\"blue\":56,\"alpha\":255},"
         "\"width\":640,\"height\":360,\"duration\":{\"value\":5,\"scale\":1},"
         "\"idempotencyKey\":\"synthetic-layer-create-0001\""
+      + std::string(arguments_suffix) + "}}}";
+}
+
+std::string layer_effect_apply_invoke_json(
+    std::string_view request_id = "invoke-layer-effect-apply-1",
+    std::string_view arguments_suffix = {}) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.layer.effect.apply\","
+        "\"capabilityVersion\":1,\"arguments\":{\"layerLocator\":"
+      + locator_json("layer", "88888888-8888-4888-8888-888888888888")
+      + ",\"effectMatchName\":\"ADBE Slider Control\","
+        "\"idempotencyKey\":\"synthetic-effect-apply-0001\""
       + std::string(arguments_suffix) + "}}}";
 }
 
@@ -662,6 +681,21 @@ void project_graph_invokes_and_results_are_closed_and_deterministic() {
         "invoke-composition-layer-create-extra", ",\"extra\":true")));
   }, "INVALID_ARGUMENT", "composition layer create extra argument");
 
+  const ParsedRequest effect_apply_parsed = decode_request_frame(frame(
+      layer_effect_apply_invoke_json()));
+  const auto& effect_apply = std::get<InvokeParams>(effect_apply_parsed.params);
+  require(effect_apply.capability_id == "ae.layer.effect.apply"
+          && effect_apply.layer_locator.has_value()
+          && effect_apply.layer_locator->kind == "layer"
+          && effect_apply.layer_effect_match_name == "ADBE Slider Control"
+          && effect_apply.idempotency_key == "synthetic-effect-apply-0001"
+          && effect_apply_parsed.request_fingerprint_sha256.size() == 64,
+      "layer effect apply lost its closed locator, match name, or idempotency key");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(layer_effect_apply_invoke_json(
+        "invoke-layer-effect-apply-extra", ",\"extra\":true")));
+  }, "INVALID_ARGUMENT", "layer effect apply extra argument");
+
   const std::string parent_locator = locator_json(
       "stream", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
   const ParsedRequest properties_parsed = decode_request_frame(frame(
@@ -982,6 +1016,56 @@ void project_graph_invokes_and_results_are_closed_and_deterministic() {
   expect_codec_error([&] {
     (void)encode_composition_layer_create_success(bad_count);
   }, "INVALID_ARGUMENT", "composition layer create invalid count transition");
+
+  aemcp::native::LayerEffectApplied effect_applied;
+  effect_applied.changed = true;
+  effect_applied.layer_locator = locator(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  effect_applied.layer_locator.project_id =
+      "55555555-5555-4555-8555-555555555555";
+  effect_applied.layer_locator.generation = 9;
+  effect_applied.name = "Slider Control";
+  effect_applied.match_name = "ADBE Slider Control";
+  effect_applied.effect_index = 1;
+  effect_applied.effect_count_before = 0;
+  effect_applied.effect_count_after = 1;
+  effect_applied.matching_effect_count_before = 0;
+  effect_applied.matching_effect_count_after = 1;
+  LayerEffectApplySuccess effect_apply_success{
+      "invoke-layer-effect-apply-1",
+      std::string(kSession),
+      std::string(kHost),
+      effect_applied,
+      1'900'000'000'000ULL,
+      1'900'000'000'025ULL,
+      std::string(kDigest),
+      digest_layer_effect_apply_postcondition(effect_applied),
+      false};
+  require(effect_apply_success.postcondition_digest
+          == "52a696e6254c3fc97b2fdc5c64517cd5fc5fe685fff5b7905b1454b574e02cb5",
+      "layer effect apply postcondition digest diverged from JCS");
+  const std::string effect_apply_body = body(
+      encode_layer_effect_apply_success(effect_apply_success));
+  require(effect_apply_body.find("\"capabilityId\":\"ae.layer.effect.apply\"")
+              != std::string::npos
+          && effect_apply_body.find("\"kind\":\"layer-effect-apply\"")
+              != std::string::npos
+          && effect_apply_body.find("\"matchName\":\"ADBE Slider Control\"")
+              != std::string::npos
+          && effect_apply_body.find(
+              "\"undo\":{\"available\":true,\"verified\":false}")
+              != std::string::npos,
+      "layer effect apply success omitted typed mutation or Undo evidence");
+  effect_apply_success.replayed = true;
+  require(body(encode_layer_effect_apply_success(effect_apply_success)).find(
+              "\"replayed\":true") != std::string::npos,
+      "verified layer effect replay was not serializable");
+  LayerEffectApplySuccess bad_effect_count = effect_apply_success;
+  bad_effect_count.value.effect_count_after = 2;
+  bad_effect_count.postcondition_digest = std::string(kDigest);
+  expect_codec_error([&] {
+    (void)encode_layer_effect_apply_success(bad_effect_count);
+  }, "INVALID_ARGUMENT", "layer effect apply invalid count transition");
 
   aemcp::native::LayerPropertiesPage property_page;
   property_page.layer_locator = layer_page.layers[0].locator;
@@ -1403,6 +1487,8 @@ void response_helpers_are_bounded_and_typed() {
       std::string(kCompositionCreateContractDigest);
   capabilities.composition_layer_create_contract_digest =
       std::string(kCompositionLayerCreateContractDigest);
+  capabilities.layer_effect_apply_contract_digest =
+      std::string(kLayerEffectApplyContractDigest);
   capabilities.layer_properties_list_contract_digest =
       std::string(kLayerPropertiesContractDigest);
   capabilities.layer_property_set_contract_digest =

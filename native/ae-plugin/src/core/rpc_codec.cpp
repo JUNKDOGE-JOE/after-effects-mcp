@@ -634,6 +634,11 @@ std::string canonical_composition_create_arguments(
     const CompositionPositiveRatio& pixel_aspect_ratio,
     std::string_view idempotency_key);
 
+std::string canonical_layer_effect_apply_arguments(
+    const ObjectLocator& layer_locator,
+    std::string_view effect_match_name,
+    std::string_view idempotency_key);
+
 std::string canonical_request(const ParsedRequest& request) {
   std::string params;
   switch (request.method) {
@@ -724,6 +729,11 @@ std::string canonical_request(const ParsedRequest& request) {
             value.layer_create_width,
             value.layer_create_height,
             value.layer_create_duration,
+            value.idempotency_key);
+      } else if (value.capability_id == "ae.layer.effect.apply") {
+        arguments = canonical_layer_effect_apply_arguments(
+            *value.layer_locator,
+            value.layer_effect_match_name,
             value.idempotency_key);
       } else if (value.capability_id == "ae.layer.properties.list") {
         arguments = "{\"layerLocator\":" + locator_json(*value.layer_locator)
@@ -1237,6 +1247,31 @@ ParsedRequest classify_request(const JsonValue& root) {
                 result.layer_create_height,
                 result.layer_create_duration,
                 result.idempotency_key);
+      } else if (capability == "ae.layer.effect.apply") {
+        if (!exact_keys(
+                *arguments,
+                {"layerLocator", "effectMatchName", "idempotencyKey"},
+                {"layerLocator", "effectMatchName", "idempotencyKey"})) {
+          invalid_argument("layer effect apply arguments are not closed");
+        }
+        result.layer_locator = parse_locator(
+            *member(*arguments, "layerLocator"), "layer");
+        result.layer_effect_match_name = required_string(
+            *arguments, "effectMatchName", CodecErrorKind::kInvalidArgument);
+        if (result.layer_effect_match_name.find('\0') != std::string::npos
+            || validate_utf8_and_count(result.layer_effect_match_name) < 1
+            || validate_utf8_and_count(result.layer_effect_match_name) > 47) {
+          invalid_argument("invalid layer effect match name");
+        }
+        result.idempotency_key = required_string(
+            *arguments, "idempotencyKey", CodecErrorKind::kInvalidArgument);
+        if (!valid_idempotency_key(result.idempotency_key)) {
+          invalid_argument("invalid layer effect apply idempotency key");
+        }
+        result.arguments_fingerprint_sha256 = digest_layer_effect_apply_arguments(
+            *result.layer_locator,
+            result.layer_effect_match_name,
+            result.idempotency_key);
       } else if (capability == "ae.layer.properties.list") {
         if (!exact_keys(
                 *arguments,
@@ -1767,6 +1802,54 @@ std::string canonical_composition_layer_create_value(
       + ",\"stackIndex\":" + std::to_string(value.stack_index) + "}";
 }
 
+std::string canonical_layer_effect_apply_arguments(
+    const ObjectLocator& layer_locator,
+    std::string_view effect_match_name,
+    std::string_view idempotency_key) {
+  if (!valid_output_locator(layer_locator) || layer_locator.kind != "layer"
+      || effect_match_name.find('\0') != std::string_view::npos
+      || validate_utf8_and_count(effect_match_name) < 1
+      || validate_utf8_and_count(effect_match_name) > 47
+      || !valid_idempotency_key(idempotency_key)) {
+    invalid_argument("invalid layer effect apply arguments");
+  }
+  return "{\"effectMatchName\":" + json_string(effect_match_name)
+      + ",\"idempotencyKey\":" + json_string(idempotency_key)
+      + ",\"layerLocator\":" + locator_json(layer_locator) + "}";
+}
+
+std::string canonical_layer_effect_apply_value(
+    const LayerEffectApplied& value) {
+  if (!value.changed || !valid_output_locator(value.layer_locator)
+      || value.layer_locator.kind != "layer"
+      || value.name.find('\0') != std::string::npos
+      || validate_utf8_and_count(value.name) < 1
+      || validate_utf8_and_count(value.name) > 47
+      || value.match_name.find('\0') != std::string::npos
+      || validate_utf8_and_count(value.match_name) < 1
+      || validate_utf8_and_count(value.match_name) > 47
+      || value.effect_count_before > kMaxSafeInteger
+      || value.effect_count_after != value.effect_count_before + 1
+      || value.effect_index < 1 || value.effect_index > value.effect_count_after
+      || value.matching_effect_count_before > value.effect_count_before
+      || value.matching_effect_count_after
+          != value.matching_effect_count_before + 1
+      || value.matching_effect_count_after > value.effect_count_after) {
+    invalid_argument("invalid layer effect apply result");
+  }
+  return "{\"changed\":true,\"effectCountAfter\":"
+      + std::to_string(value.effect_count_after)
+      + ",\"effectCountBefore\":" + std::to_string(value.effect_count_before)
+      + ",\"effectIndex\":" + std::to_string(value.effect_index)
+      + ",\"layerLocator\":" + locator_json(value.layer_locator)
+      + ",\"matchName\":" + json_string(value.match_name)
+      + ",\"matchingEffectCountAfter\":"
+      + std::to_string(value.matching_effect_count_after)
+      + ",\"matchingEffectCountBefore\":"
+      + std::to_string(value.matching_effect_count_before)
+      + ",\"name\":" + json_string(value.name) + "}";
+}
+
 bool valid_decimal_string(std::string_view text) {
   if (text.empty() || text.size() > 32) return false;
   std::size_t index = text.front() == '-' ? 1U : 0U;
@@ -2231,6 +2314,21 @@ std::string digest_composition_layer_create_postcondition(
       "{\"capabilityId\":\"ae.composition.layer.create\","
       "\"capabilityVersion\":1,\"value\":"
       + canonical_composition_layer_create_value(value) + "}");
+}
+
+std::string digest_layer_effect_apply_arguments(
+    const ObjectLocator& layer_locator,
+    std::string_view effect_match_name,
+    std::string_view idempotency_key) {
+  return sha256_hex(canonical_layer_effect_apply_arguments(
+      layer_locator, effect_match_name, idempotency_key));
+}
+
+std::string digest_layer_effect_apply_postcondition(
+    const LayerEffectApplied& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.effect.apply\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_effect_apply_value(value) + "}");
 }
 
 std::string digest_layer_properties_postcondition(
@@ -2864,6 +2962,19 @@ std::string composition_layer_create_registry_descriptor(
   return descriptor;
 }
 
+std::string layer_effect_apply_descriptor(const CapabilitiesSuccess& response) {
+  if (response.detail == CapabilityDetail::kSummary) {
+    return R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"detail":"summary","id":"ae.layer.effect.apply","idempotency":"idempotency-key","mutability":"mutating","preconditions":["An After Effects project must be open.","layerLocator must come from ae.composition.layers.list@1.","effectMatchName must exactly identify one installed effect."],"risk":"write","schemaVersion":1,"sideEffectSummary":"Adds one installed effect to one layer and creates one After Effects Undo step.","summary":"Apply one installed After Effects effect to a layer by exact match name.","undo":"ae-undo-group","version":1})aemcp";
+  }
+  require_digest(response.layer_effect_apply_contract_digest, "contract digest");
+  if (response.layer_effect_apply_contract_digest
+      != "5de12c7cd4ede09122a837c85ff2e589f695dd5377490b97b9de9d975ce00d77") {
+    invalid_argument(
+        "layer effect apply contract digest does not match the compiled descriptor");
+  }
+  return R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"5de12c7cd4ede09122a837c85ff2e589f695dd5377490b97b9de9d975ce00d77","detail":"full","examples":[{"arguments":{"effectMatchName":"ADBE Slider Control","idempotencyKey":"synthetic-effect-apply-0001","layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}},"expected":{"outcome":"succeeded","value":{"changed":true,"effectCountAfter":1,"effectCountBefore":0,"effectIndex":1,"layerLocator":{"generation":9,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"55555555-5555-4555-8555-555555555555","sessionId":"11111111-1111-4111-8111-111111111111"},"matchName":"ADBE Slider Control","matchingEffectCountAfter":1,"matchingEffectCountBefore":0,"name":"Slider Control"}},"id":"aemcp-example-layer-effect-apply","kind":"positive","summary":"Apply and verify one Slider Control effect with Undo available."},{"arguments":{"effectMatchName":"ADBE Missing Synthetic Effect","idempotencyKey":"synthetic-effect-apply-0002","layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}},"expected":{"errorCode":"PRECONDITION_FAILED","recoveryAction":"change-arguments"},"id":"aemcp-example-layer-effect-apply-missing","kind":"negative","summary":"Reject a match name that does not identify an installed effect."}],"id":"ae.layer.effect.apply","idempotency":"idempotency-key","inputContractId":"aemcp.contract.ae.layer.effect.apply.input.v1","inputSchema":{"$defs":{"layerLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"layer"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"effectMatchName":{"maxLength":47,"minLength":1,"type":"string"},"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"layerLocator":{"$ref":"#/$defs/layerLocator"}},"required":["layerLocator","effectMatchName","idempotencyKey"],"type":"object"},"mutability":"mutating","preconditions":["An After Effects project must be open.","layerLocator must come from ae.composition.layers.list@1.","effectMatchName must exactly identify one installed effect."],"requirements":[{"contractVersion":1,"id":"aemcp.requirement.native.layer-effect-apply"}],"resultContractId":"aemcp.contract.ae.layer.effect.apply.result.v1","resultSchema":{"$defs":{"layerLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"layer"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"changed":{"const":true},"effectCountAfter":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"effectCountBefore":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"effectIndex":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"layerLocator":{"$ref":"#/$defs/layerLocator"},"matchName":{"maxLength":47,"minLength":1,"type":"string"},"matchingEffectCountAfter":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"matchingEffectCountBefore":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"name":{"maxLength":47,"minLength":1,"type":"string"}},"required":["changed","layerLocator","name","matchName","effectIndex","effectCountBefore","effectCountAfter","matchingEffectCountBefore","matchingEffectCountAfter"],"type":"object","x-invariant":"effectCountAfter-equals-effectCountBefore-plus-one;matchingEffectCountAfter-equals-matchingEffectCountBefore-plus-one;effectIndex-is-in-the-post-mutation-stack;matchName-equals-the-request"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Adds one installed effect to one layer and creates one After Effects Undo step.","summary":"Apply one installed After Effects effect to a layer by exact match name.","undo":"ae-undo-group","version":1})aemcp";
+}
+
 std::string layer_properties_list_descriptor(const CapabilitiesSuccess& response) {
   if (response.detail == CapabilityDetail::kSummary) {
     return R"aemcp({"detail":"summary","id":"ae.layer.properties.list","version":1,"schemaVersion":1,"summary":"List a bounded page of direct properties on an After Effects layer or property group.","risk":"read","mutability":"read-only","idempotency":"idempotent","cancellation":"before-dispatch","undo":"not-applicable","sideEffectSummary":"Reads layer properties and safe primitive values without changing After Effects state.","preconditions":["An After Effects project must be open.","layerLocator must come from ae.composition.layers.list@1.","parentPropertyLocator must come from ae.layer.properties.list@1 for the same layer."],"compatibility":{"status":"unverified","intendedPlatforms":["macos-arm64","windows-x64"]}})aemcp";
@@ -3046,6 +3157,11 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
   if (response.include_composition_layer_create) {
     if (needs_comma) items.push_back(',');
     items += composition_layer_create_registry_descriptor(response);
+    needs_comma = true;
+  }
+  if (response.include_layer_effect_apply) {
+    if (needs_comma) items.push_back(',');
+    items += layer_effect_apply_descriptor(response);
     needs_comma = true;
   }
   if (response.include_layer_properties_list) {
@@ -3466,6 +3582,48 @@ std::vector<std::uint8_t> encode_composition_layer_create_success(
       + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\",\"digest\":"
       + json_string(response.postcondition_digest)
       + ",\"kind\":\"composition-layer-create\",\"verified\":true},\"requestDigest\":"
+      + json_string(response.request_digest) + ",\"requestId\":"
+      + json_string(response.request_id) + ",\"sessionId\":"
+      + json_string(response.session_id) + ",\"startedAtUnixMs\":"
+      + std::to_string(response.started_at_unix_ms)
+      + ",\"undo\":{\"available\":true,\"verified\":false}},"
+        "\"outcome\":\"succeeded\",\"value\":" + value
+      + "},\"sessionId\":" + json_string(response.session_id)
+      + ",\"wireVersion\":1}";
+  return frame_output(std::move(json));
+}
+
+std::vector<std::uint8_t> encode_layer_effect_apply_success(
+    const LayerEffectApplySuccess& response) {
+  require_request_id(response.request_id);
+  require_uuid(response.session_id, "session ID");
+  require_uuid(response.host_instance_id, "host instance ID");
+  require_digest(response.request_digest, "request digest");
+  require_digest(response.postcondition_digest, "postcondition digest");
+  const std::string value = canonical_layer_effect_apply_value(response.value);
+  if (response.started_at_unix_ms < 1
+      || response.started_at_unix_ms > kMaxSafeInteger
+      || response.completed_at_unix_ms < response.started_at_unix_ms
+      || response.completed_at_unix_ms > kMaxSafeInteger
+      || response.value.layer_locator.host_instance_id != response.host_instance_id
+      || response.value.layer_locator.session_id != response.session_id
+      || response.postcondition_digest
+          != digest_layer_effect_apply_postcondition(response.value)) {
+    invalid_argument("invalid or unvalidated layer effect apply evidence");
+  }
+  const std::string replayed = response.replayed ? "true" : "false";
+  std::string json = "{\"kind\":\"response\",\"method\":\"invoke\",\"ok\":true,"
+      "\"replayed\":" + replayed + ",\"requestId\":"
+      + json_string(response.request_id)
+      + ",\"result\":{\"capabilityId\":\"ae.layer.effect.apply\","
+        "\"capabilityVersion\":1,\"engine\":\"native-aegp\",\"evidence\":{"
+        "\"capabilityId\":\"ae.layer.effect.apply\",\"capabilityVersion\":1,"
+        "\"completedAtUnixMs\":" + std::to_string(response.completed_at_unix_ms)
+      + ",\"effect\":\"committed\",\"engine\":\"native-aegp\",\"hostInstanceId\":"
+      + json_string(response.host_instance_id)
+      + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\",\"digest\":"
+      + json_string(response.postcondition_digest)
+      + ",\"kind\":\"layer-effect-apply\",\"verified\":true},\"requestDigest\":"
       + json_string(response.request_digest) + ",\"requestId\":"
       + json_string(response.request_id) + ",\"sessionId\":"
       + json_string(response.session_id) + ",\"startedAtUnixMs\":"
