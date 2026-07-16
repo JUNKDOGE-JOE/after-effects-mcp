@@ -38,6 +38,8 @@ inline constexpr std::string_view kCompositionCreateCapability =
     "ae.composition.create";
 inline constexpr std::string_view kCompositionLayerCreateCapability =
     "ae.composition.layer.create";
+inline constexpr std::string_view kLayerEffectApplyCapability =
+    "ae.layer.effect.apply";
 inline constexpr std::string_view kLayerPropertiesListCapability =
     "ae.layer.properties.list";
 inline constexpr std::string_view kLayerPropertySetCapability =
@@ -244,6 +246,18 @@ struct CompositionLayerCreated {
   std::optional<CompositionLayerSolidSpec> solid;
 };
 
+struct LayerEffectApplied {
+  bool changed{true};
+  ObjectLocator layer_locator;
+  std::string name;
+  std::string match_name;
+  std::uint64_t effect_index{0};
+  std::uint64_t effect_count_before{0};
+  std::uint64_t effect_count_after{0};
+  std::uint64_t matching_effect_count_before{0};
+  std::uint64_t matching_effect_count_after{0};
+};
+
 // Canonical reduced representation of value / scale. This deliberately
 // promotes signed SDK values before magnitude conversion so INT32_MIN is safe.
 [[nodiscard]] inline std::string canonical_seconds_rational(
@@ -386,6 +400,13 @@ struct CompositionLayerCreateCommand {
   std::optional<CompositionCurrentTime> duration;
 };
 
+struct LayerEffectApplyCommand {
+  std::string host_instance_id;
+  std::string session_id;
+  ObjectLocator layer_locator;
+  std::string effect_match_name;
+};
+
 struct LayerPropertiesQuery {
   std::string host_instance_id;
   std::string session_id;
@@ -510,6 +531,19 @@ struct HostCompositionLayerCreateResult {
       std::string code, std::string detail, std::string field = {});
 };
 
+struct HostLayerEffectApplyResult {
+  bool ok{false};
+  LayerEffectApplied value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostLayerEffectApplyResult success(
+      LayerEffectApplied value);
+  [[nodiscard]] static HostLayerEffectApplyResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
 struct HostLayerPropertiesResult {
   bool ok{false};
   LayerPropertiesPage value;
@@ -569,6 +603,8 @@ class HostApi {
       const CompositionCreateCommand& command, TimePoint work_deadline);
   [[nodiscard]] virtual HostCompositionLayerCreateResult create_composition_layer(
       const CompositionLayerCreateCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerEffectApplyResult apply_layer_effect(
+      const LayerEffectApplyCommand& command, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerPropertiesResult list_layer_properties(
       const LayerPropertiesQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerPropertyWriteResult set_layer_property(
@@ -610,7 +646,8 @@ struct Request {
       std::uint32_t composition_create_height_value = 0,
       CompositionCurrentTime composition_create_duration_value = {},
       CompositionPositiveRatio composition_create_frame_rate_value = {},
-      CompositionPositiveRatio composition_create_pixel_aspect_ratio_value = {})
+      CompositionPositiveRatio composition_create_pixel_aspect_ratio_value = {},
+      std::string layer_effect_match_name_value = {})
       : request_id(std::move(request_id_value)),
         capability_id(std::move(capability_id_value)),
         deadline(deadline_value),
@@ -642,7 +679,8 @@ struct Request {
         composition_create_duration(std::move(composition_create_duration_value)),
         composition_create_frame_rate(std::move(composition_create_frame_rate_value)),
         composition_create_pixel_aspect_ratio(
-            std::move(composition_create_pixel_aspect_ratio_value)) {}
+            std::move(composition_create_pixel_aspect_ratio_value)),
+        layer_effect_match_name(std::move(layer_effect_match_name_value)) {}
 
   std::string request_id;
   std::string capability_id;
@@ -678,6 +716,7 @@ struct Request {
   CompositionCurrentTime composition_create_duration;
   CompositionPositiveRatio composition_create_frame_rate;
   CompositionPositiveRatio composition_create_pixel_aspect_ratio;
+  std::string layer_effect_match_name;
 };
 
 enum class EnqueueCode {
@@ -725,6 +764,7 @@ struct Completion {
   CompositionTimeChanged composition_time_change_result;
   CompositionCreated composition_create_result;
   CompositionLayerCreated composition_layer_create_result;
+  LayerEffectApplied layer_effect_apply_result;
   LayerPropertiesPage layer_properties_result;
   LayerPropertyChanged layer_property_change_result;
   ProjectGraphInvalidation project_graph_invalidation_result;

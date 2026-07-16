@@ -871,6 +871,7 @@ def test_native_tool_registration_is_explicit():
         HANDLERS["ae.createCompositionLayer"][0]
         is schemas.AeCreateCompositionLayerArgs
     )
+    assert HANDLERS["ae.applyLayerEffect"][0] is schemas.AeApplyLayerEffectArgs
     assert HANDLERS["ae.projectSummary"][1] is not HANDLERS["ae.overview"][1]
 
 
@@ -986,6 +987,7 @@ def test_tool_filter_exposes_native_tools_only_for_native_adapter(monkeypatch):
     assert "ae.setProjectBitDepth" not in names
     assert "ae.setLayerPropertyValue" not in names
     assert "ae.createCompositionLayer" not in names
+    assert "ae.applyLayerEffect" not in names
     assert "ae.listSelectedLayers" not in names
 
     monkeypatch.setattr(backend_discovery, "select_backend", lambda: _NativeMock())
@@ -995,4 +997,5 @@ def test_tool_filter_exposes_native_tools_only_for_native_adapter(monkeypatch):
     assert "ae.setProjectBitDepth" in names
     assert "ae.setLayerPropertyValue" in names
     assert "ae.createCompositionLayer" in names
+    assert "ae.applyLayerEffect" in names
     assert "ae.listSelectedLayers" in names

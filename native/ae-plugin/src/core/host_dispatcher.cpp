@@ -124,6 +124,11 @@ bool valid_layer_create_request(const Request& request) {
       || valid_composition_time(*request.layer_create_duration);
 }
 
+bool valid_layer_effect_match_name(std::string_view value) {
+  return !value.empty() && value.size() <= 47
+      && value.find('\0') == std::string_view::npos;
+}
+
 bool valid_sha256(std::string_view value) {
   return value.size() == 64 && std::all_of(value.begin(), value.end(), [](char character) {
     return (character >= '0' && character <= '9')
@@ -194,6 +199,10 @@ bool rebind_creation_replay_session(Completion& replay, const Request& request) 
   if (replay.capability_id == kCompositionCreateCapability) {
     ObjectLocator& composition = replay.composition_create_result.composition_locator;
     return composition.kind == "composition" && rebind(composition);
+  }
+  if (replay.capability_id == kLayerEffectApplyCapability) {
+    ObjectLocator& layer = replay.layer_effect_apply_result.layer_locator;
+    return layer.kind == "layer" && rebind(layer);
   }
   if (replay.capability_id != kCompositionLayerCreateCapability) return false;
 
@@ -491,6 +500,23 @@ HostCompositionLayerCreateResult HostCompositionLayerCreateResult::failure(
   return result;
 }
 
+HostLayerEffectApplyResult HostLayerEffectApplyResult::success(
+    LayerEffectApplied value) {
+  HostLayerEffectApplyResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
+HostLayerEffectApplyResult HostLayerEffectApplyResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostLayerEffectApplyResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
+
 HostLayerPropertiesResult HostLayerPropertiesResult::success(
     LayerPropertiesPage value) {
   HostLayerPropertiesResult result;
@@ -593,6 +619,12 @@ HostCompositionLayerCreateResult HostApi::create_composition_layer(
       "NATIVE_UNSUPPORTED", "composition layer creation is unavailable");
 }
 
+HostLayerEffectApplyResult HostApi::apply_layer_effect(
+    const LayerEffectApplyCommand&, TimePoint) {
+  return HostLayerEffectApplyResult::failure(
+      "NATIVE_UNSUPPORTED", "layer effect application is unavailable");
+}
+
 HostLayerPropertiesResult HostApi::list_layer_properties(
     const LayerPropertiesQuery&, TimePoint) {
   return HostLayerPropertiesResult::failure(
@@ -659,6 +691,8 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       request.capability_id == kCompositionCreateCapability;
   const bool composition_layer_create =
       request.capability_id == kCompositionLayerCreateCapability;
+  const bool layer_effect_apply =
+      request.capability_id == kLayerEffectApplyCapability;
   const bool layer_properties_list =
       request.capability_id == kLayerPropertiesListCapability;
   const bool layer_property_set =
@@ -666,6 +700,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
   const bool mutation = project_bit_depth_set || composition_time_set
       || composition_create
       || composition_layer_create
+      || layer_effect_apply
       || layer_property_set;
   const bool project_graph_invalidate =
       request.capability_id == kProjectGraphInvalidateControl;
@@ -673,7 +708,8 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       && !project_items_list && !composition_layers_list
       && !composition_selected_layers_list && !composition_time_read
       && !composition_time_set && !composition_create && !composition_layer_create
-      && !layer_properties_list && !layer_property_set && !project_graph_invalidate) {
+      && !layer_effect_apply && !layer_properties_list && !layer_property_set
+      && !project_graph_invalidate) {
     return {EnqueueCode::kUnsupportedCapability, "NATIVE_UNSUPPORTED"};
   }
   if (project_graph_invalidate
@@ -693,6 +729,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           || request.layer_create_width.has_value()
           || request.layer_create_height.has_value()
           || request.layer_create_duration.has_value()
+          || !request.layer_effect_match_name.empty()
           || has_composition_create_arguments(request))) {
     return {
         EnqueueCode::kInvalidRequest,
@@ -829,6 +866,25 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         "native composition layer create arguments failed closed validation",
         "params.arguments"};
   }
+  if (layer_effect_apply
+      && (request.target_depth != 0
+          || !valid_idempotency_key(request.idempotency_key)
+          || !valid_sha256(request.arguments_fingerprint_sha256)
+          || !valid_uuid(request.host_instance_id) || !valid_uuid(request.session_id)
+          || request.offset != 0 || request.limit != 0
+          || request.project_locator.has_value()
+          || request.composition_locator.has_value()
+          || request.parent_property_locator.has_value()
+          || request.property_locator.has_value()
+          || !std::holds_alternative<std::monostate>(request.property_value)
+          || !request.layer_locator.has_value()
+          || !valid_layer_effect_match_name(request.layer_effect_match_name))) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "native layer effect apply arguments failed closed validation",
+        "params.arguments"};
+  }
   if (!composition_layer_create
       && (!request.layer_create_kind.empty()
           || !request.layer_create_name.empty()
@@ -847,6 +903,13 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         EnqueueCode::kInvalidRequest,
         "INVALID_ARGUMENT",
         "composition create arguments are not accepted by this capability",
+        "params.arguments"};
+  }
+  if (!layer_effect_apply && !request.layer_effect_match_name.empty()) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "layer effect apply arguments are not accepted by this capability",
         "params.arguments"};
   }
   if (project_items_list
@@ -906,7 +969,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           "params.arguments.compositionLocator"};
     }
   }
-  if ((layer_properties_list || layer_property_set)
+  if ((layer_properties_list || layer_property_set || layer_effect_apply)
       && (request.project_locator.has_value()
           || request.composition_locator.has_value()
           || !request.layer_locator.has_value())) {
@@ -916,7 +979,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         "layerLocator is required for layer property access",
         "params.arguments.layerLocator"};
   }
-  if (layer_properties_list || layer_property_set) {
+  if (layer_properties_list || layer_property_set || layer_effect_apply) {
     const ObjectLocator& layer = *request.layer_locator;
     if (!valid_locator(layer) || layer.kind != "layer") {
       return {
@@ -1012,7 +1075,8 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
     if (existing != idempotency_ledger_.end()) {
       const bool same_arguments = existing->second.arguments_fingerprint_sha256
           == request.arguments_fingerprint_sha256;
-      if ((composition_create || composition_layer_create) && same_arguments
+      if ((composition_create || composition_layer_create || layer_effect_apply)
+          && same_arguments
           && existing->second.state == IdempotencyState::kSucceeded
           && existing->second.replay_completion.has_value()) {
         if (outbound_.size() + active_requests_.size() >= config_.max_outbound_depth) {
@@ -1596,6 +1660,57 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
               completion.composition_layer_create_result = std::move(host_result.value);
             }
           }
+        } else if (request.capability_id == kLayerEffectApplyCapability) {
+          HostLayerEffectApplyResult host_result = host.apply_layer_effect(
+              LayerEffectApplyCommand{
+                  request.host_instance_id,
+                  request.session_id,
+                  *request.layer_locator,
+                  request.layer_effect_match_name},
+              request.deadline);
+          if (clock_.now() > request.deadline) {
+            completion = failure_for(
+                request,
+                "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write completed after its request deadline; inspect layer effects");
+            completion.late_result_discarded = true;
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else {
+            const LayerEffectApplied& value = host_result.value;
+            const bool verified = value.changed
+                && value.match_name == request.layer_effect_match_name
+                && !value.name.empty()
+                && value.effect_count_after == value.effect_count_before + 1
+                && value.matching_effect_count_after
+                    == value.matching_effect_count_before + 1
+                && value.effect_index >= 1
+                && value.effect_index <= value.effect_count_after
+                && value.layer_locator.kind == "layer"
+                && value.layer_locator.host_instance_id == request.host_instance_id
+                && value.layer_locator.session_id == request.session_id
+                && value.layer_locator.object_id == request.layer_locator->object_id
+                && value.layer_locator.generation > request.layer_locator->generation
+                && value.layer_locator.project_id != request.layer_locator->project_id;
+            if (!verified) {
+              completion = failure_for(
+                  request,
+                  "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                  "native write result did not verify the requested layer effect");
+            } else {
+              completion.request_id = request.request_id;
+              completion.capability_id = request.capability_id;
+              completion.route_id = request.route_id;
+              completion.session_generation = request.session_generation;
+              completion.idempotency_key = request.idempotency_key;
+              completion.ok = true;
+              completion.layer_effect_apply_result = std::move(host_result.value);
+            }
+          }
         } else if (request.capability_id == kLayerPropertiesListCapability) {
           HostLayerPropertiesResult host_result = host.list_layer_properties(
               LayerPropertiesQuery{
@@ -1721,6 +1836,7 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
                 || request.capability_id == kCompositionTimeSetCapability
                 || request.capability_id == kCompositionCreateCapability
                 || request.capability_id == kCompositionLayerCreateCapability
+                || request.capability_id == kLayerEffectApplyCapability
                 || request.capability_id == kLayerPropertySetCapability)
                 ? "POSSIBLY_SIDE_EFFECTING_FAILURE" : "CAPABILITY_FAILED",
             "native host adapter raised an exception");
@@ -1925,6 +2041,7 @@ void HostDispatcher::finish_idempotency_locked(
           && request.capability_id != kCompositionTimeSetCapability
           && request.capability_id != kCompositionCreateCapability
           && request.capability_id != kCompositionLayerCreateCapability
+          && request.capability_id != kLayerEffectApplyCapability
           && request.capability_id != kLayerPropertySetCapability)
       || request.idempotency_key.empty()) {
     return;
@@ -1934,7 +2051,8 @@ void HostDispatcher::finish_idempotency_locked(
   if (completion.ok) {
     entry->second.state = IdempotencyState::kSucceeded;
     if (request.capability_id == kCompositionCreateCapability
-        || request.capability_id == kCompositionLayerCreateCapability) {
+        || request.capability_id == kCompositionLayerCreateCapability
+        || request.capability_id == kLayerEffectApplyCapability) {
       entry->second.replay_completion = completion;
     }
     return;

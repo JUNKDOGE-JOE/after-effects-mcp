@@ -93,6 +93,7 @@ def _filtered_tool_names() -> set:
             "ae.setCompositionTime",
             "ae.createComposition",
             "ae.createCompositionLayer",
+            "ae.applyLayerEffect",
             "ae.listLayerProperties",
             "ae.setLayerPropertyValue",
         }
@@ -108,6 +109,7 @@ def _filtered_tool_names() -> set:
             "ae.setCompositionTime",
             "ae.createComposition",
             "ae.createCompositionLayer",
+            "ae.applyLayerEffect",
             "ae.listLayerProperties",
             "ae.setLayerPropertyValue",
         }
@@ -503,6 +505,58 @@ def _composition_layer_create_validation_error(
     return structured.public_dict()
 
 
+def _layer_effect_apply_validation_error(
+    error: JsonSchemaValidationError | PydanticValidationError,
+) -> dict[str, Any]:
+    """Preserve structured recovery for the native effect-apply surface."""
+    path: list[Any] = []
+    if isinstance(error, PydanticValidationError):
+        errors = error.errors(include_url=False, include_input=False)
+        if errors:
+            path = list(errors[0].get("loc") or ())
+    else:
+        path = list(error.absolute_path)
+        if error.validator == "required" and isinstance(error.instance, dict):
+            missing = [
+                key for key in error.validator_value if key not in error.instance
+            ]
+            if len(missing) == 1:
+                path.append(missing[0])
+        elif error.validator == "additionalProperties" and isinstance(
+            error.instance, dict
+        ):
+            properties = (
+                error.schema.get("properties", {})
+                if isinstance(error.schema, dict)
+                else {}
+            )
+            unexpected = sorted(set(error.instance) - set(properties))
+            if len(unexpected) == 1:
+                path.append(unexpected[0])
+    field = "arguments"
+    if path:
+        field += "." + ".".join(str(part) for part in path)
+    return NativeBackendError(
+        "INVALID_ARGUMENT",
+        "ae.applyLayerEffect arguments did not match the published schema.",
+        retryable=False,
+        side_effect="not-started",
+        recovery={
+            "action": "change-arguments",
+            "hint": (
+                "Copy a fresh layer locator from ae_listCompositionLayers, "
+                "provide an exact installed effect match name of at most 47 "
+                "characters, and supply a stable 16 to 64 character "
+                "idempotency key."
+            ),
+        },
+        details={
+            "field": field[:128],
+            "capabilityId": "ae.layer.effect.apply",
+        },
+    ).public_dict()
+
+
 def _selected_layers_validation_error(
     error: JsonSchemaValidationError | PydanticValidationError,
 ) -> dict[str, Any]:
@@ -681,6 +735,9 @@ def build_server() -> Server:
                 elif name == "ae.createCompositionLayer":
                     public_error = _composition_layer_create_validation_error(error)
                     payload = _format_result({"ok": False, "error": public_error})
+                elif name == "ae.applyLayerEffect":
+                    public_error = _layer_effect_apply_validation_error(error)
+                    payload = _format_result({"ok": False, "error": public_error})
                 elif name == "ae.listSelectedLayers":
                     public_error = _selected_layers_validation_error(error)
                     payload = _format_result({"ok": False, "error": public_error})
@@ -718,6 +775,10 @@ def build_server() -> Server:
                 e, PydanticValidationError
             ):
                 error = _composition_layer_create_validation_error(e)
+            elif name == "ae.applyLayerEffect" and isinstance(
+                e, PydanticValidationError
+            ):
+                error = _layer_effect_apply_validation_error(e)
             elif name == "ae.listSelectedLayers" and isinstance(
                 e, PydanticValidationError
             ):

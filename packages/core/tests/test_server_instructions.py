@@ -39,6 +39,7 @@ def test_instructions_explain_the_verified_native_graph_route_without_fallback()
     assert "ae_setLayerPropertyValue" in SERVER_INSTRUCTIONS
     assert "ae_createComposition" in SERVER_INSTRUCTIONS
     assert "ae_createCompositionLayer" in SERVER_INSTRUCTIONS
+    assert "ae_applyLayerEffect" in SERVER_INSTRUCTIONS
     assert "composition locator" in SERVER_INSTRUCTIONS
     assert "never fall back to JSX" in SERVER_INSTRUCTIONS
 

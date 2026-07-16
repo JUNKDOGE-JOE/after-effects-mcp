@@ -27,6 +27,7 @@ const COMPOSITION_TIME_READ_CAPABILITY = 'ae.composition.time.read';
 const COMPOSITION_TIME_SET_CAPABILITY = 'ae.composition.time.set';
 const COMPOSITION_CREATE_CAPABILITY = 'ae.composition.create';
 const COMPOSITION_LAYER_CREATE_CAPABILITY = 'ae.composition.layer.create';
+const LAYER_EFFECT_APPLY_CAPABILITY = 'ae.layer.effect.apply';
 const LAYER_PROPERTIES_LIST_CAPABILITY = 'ae.layer.properties.list';
 const LAYER_PROPERTY_SET_CAPABILITY = 'ae.layer.property.set';
 const PROJECT_BIT_DEPTH_READ_CONTRACT_DIGEST = '936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e';
@@ -38,6 +39,7 @@ const COMPOSITION_TIME_READ_CONTRACT_DIGEST = 'fda1027148fb5bd49cba6bc6f2b4b3264
 const COMPOSITION_TIME_SET_CONTRACT_DIGEST = '724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308';
 const COMPOSITION_CREATE_CONTRACT_DIGEST = 'a5e0ccfc15086d1b10987246048e539cf6332a4e24114ac81783f4a9758ab6f6';
 const COMPOSITION_LAYER_CREATE_CONTRACT_DIGEST = 'd48b5c0fcf9871ee579bf518679bc36277e2fd5194e70d9cc6fa1b2c573edeee';
+const LAYER_EFFECT_APPLY_CONTRACT_DIGEST = '5de12c7cd4ede09122a837c85ff2e589f695dd5377490b97b9de9d975ce00d77';
 // Kept in lockstep with the full descriptor in capabilities.json. The native
 // protocol build replaces this value only when the closed contract changes.
 const LAYER_PROPERTIES_LIST_CONTRACT_DIGEST = 'a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba';
@@ -491,6 +493,16 @@ function validCompositionLayerCreateArguments(value) {
         && (value.duration === undefined || validCompositionTime(value.duration, false));
 }
 
+function validLayerEffectApplyArguments(value) {
+    const matchNameLength = unicodeScalarLength(value?.effectMatchName);
+    return exactKeys(value, ['layerLocator', 'effectMatchName', 'idempotencyKey'])
+        && validLocator(value.layerLocator, ['layer'])
+        && matchNameLength !== null && matchNameLength >= 1 && matchNameLength <= 47
+        && typeof value.idempotencyKey === 'string'
+        && value.idempotencyKey.length >= 16
+        && TOKEN_PATTERN.test(value.idempotencyKey);
+}
+
 function validLayerPropertiesListArguments(value) {
     return exactKeys(value, ['layerLocator', 'offset', 'limit'], ['parentPropertyLocator'])
         && validLocator(value.layerLocator, ['layer'])
@@ -731,6 +743,32 @@ function validCompositionLayerCreateValue(value, argumentsValue, hostInstanceId,
         && (argumentsValue.height === undefined || value.solid.height === argumentsValue.height)
         && (argumentsValue.duration === undefined
             || compositionTimesEqual(value.solid.duration, argumentsValue.duration));
+}
+
+function validLayerEffectApplyValue(value, argumentsValue, hostInstanceId, sessionId) {
+    return exactKeys(value, [
+        'changed', 'layerLocator', 'name', 'matchName', 'effectIndex',
+        'effectCountBefore', 'effectCountAfter', 'matchingEffectCountBefore',
+        'matchingEffectCountAfter',
+    ])
+        && value.changed === true
+        && validLocator(value.layerLocator, ['layer'])
+        && value.layerLocator.hostInstanceId === hostInstanceId
+        && value.layerLocator.sessionId === sessionId
+        && value.layerLocator.objectId === argumentsValue.layerLocator.objectId
+        && value.layerLocator.generation > argumentsValue.layerLocator.generation
+        && value.layerLocator.projectId !== argumentsValue.layerLocator.projectId
+        && validBoundedUnicodeString(value.name, 47)
+        && validBoundedUnicodeString(value.matchName, 47)
+        && value.matchName === argumentsValue.effectMatchName
+        && Number.isSafeInteger(value.effectIndex) && value.effectIndex >= 1
+        && Number.isSafeInteger(value.effectCountBefore) && value.effectCountBefore >= 0
+        && value.effectCountAfter === value.effectCountBefore + 1
+        && value.effectIndex <= value.effectCountAfter
+        && Number.isSafeInteger(value.matchingEffectCountBefore)
+        && value.matchingEffectCountBefore >= 0
+        && value.matchingEffectCountAfter === value.matchingEffectCountBefore + 1
+        && value.matchingEffectCountAfter <= value.effectCountAfter;
 }
 
 const LAYER_PROPERTY_GROUPING_TYPES = new Set([
@@ -1028,6 +1066,24 @@ function compositionLayerCreatePostconditionDigest(value) {
     });
 }
 
+function layerEffectApplyPostconditionDigest(value) {
+    return sha256Canonical({
+        capabilityId: LAYER_EFFECT_APPLY_CAPABILITY,
+        capabilityVersion: 1,
+        value: {
+            changed: value.changed,
+            effectCountAfter: value.effectCountAfter,
+            effectCountBefore: value.effectCountBefore,
+            effectIndex: value.effectIndex,
+            layerLocator: canonicalLocator(value.layerLocator),
+            matchName: value.matchName,
+            matchingEffectCountAfter: value.matchingEffectCountAfter,
+            matchingEffectCountBefore: value.matchingEffectCountBefore,
+            name: value.name,
+        },
+    });
+}
+
 function canonicalLayerPropertyValue(value) {
     if (value === null) return null;
     if (value.kind === 'scalar') return { kind: value.kind, value: value.value };
@@ -1228,6 +1284,12 @@ function invokeRequestDigest(request) {
         if (request.params.arguments.width !== undefined) {
             argumentsValue.width = request.params.arguments.width;
         }
+    } else if (request.params.capabilityId === LAYER_EFFECT_APPLY_CAPABILITY) {
+        argumentsValue = {
+            effectMatchName: request.params.arguments.effectMatchName,
+            idempotencyKey: request.params.arguments.idempotencyKey,
+            layerLocator: canonicalLocator(request.params.arguments.layerLocator),
+        };
     } else if (request.params.capabilityId === LAYER_PROPERTIES_LIST_CAPABILITY) {
         argumentsValue = {
             layerLocator: canonicalLocator(request.params.arguments.layerLocator),
@@ -1296,6 +1358,7 @@ function createNativeAegpClient(options) {
     let compositionTimeSetContractDigest = null;
     let compositionCreateContractDigest = null;
     let compositionLayerCreateContractDigest = null;
+    let layerEffectApplyContractDigest = null;
     let layerPropertiesListContractDigest = null;
     let layerPropertySetContractDigest = null;
     let helloIdentity = null;
@@ -1350,6 +1413,7 @@ function createNativeAegpClient(options) {
         compositionTimeSetContractDigest = null;
         compositionCreateContractDigest = null;
         compositionLayerCreateContractDigest = null;
+        layerEffectApplyContractDigest = null;
         layerPropertiesListContractDigest = null;
         layerPropertySetContractDigest = null;
         helloIdentity = null;
@@ -1457,6 +1521,7 @@ function createNativeAegpClient(options) {
                 || params.capabilityId === COMPOSITION_TIME_SET_CAPABILITY
                 || params.capabilityId === COMPOSITION_CREATE_CAPABILITY
                 || params.capabilityId === COMPOSITION_LAYER_CREATE_CAPABILITY
+                || params.capabilityId === LAYER_EFFECT_APPLY_CAPABILITY
                 || params.capabilityId === LAYER_PROPERTY_SET_CAPABILITY);
         return new Promise(function (resolve, reject) {
             const remainingMs = deadlineUnixMs === undefined
@@ -1745,6 +1810,11 @@ function createNativeAegpClient(options) {
                 return candidate?.id === COMPOSITION_LAYER_CREATE_CAPABILITY;
             })
             : null;
+        const layerEffectApplyItem = Array.isArray(result?.items)
+            ? result.items.find(function (candidate) {
+                return candidate?.id === LAYER_EFFECT_APPLY_CAPABILITY;
+            })
+            : null;
         const layerPropertiesListItem = Array.isArray(result?.items)
             ? result.items.find(function (candidate) { return candidate?.id === LAYER_PROPERTIES_LIST_CAPABILITY; })
             : null;
@@ -1767,6 +1837,8 @@ function createNativeAegpClient(options) {
             || ids.includes(COMPOSITION_CREATE_CAPABILITY);
         const requiresCompositionLayerCreate = ids === undefined
             || ids.includes(COMPOSITION_LAYER_CREATE_CAPABILITY);
+        const requiresLayerEffectApply = ids === undefined
+            || ids.includes(LAYER_EFFECT_APPLY_CAPABILITY);
         const requiresLayerPropertiesList = ids === undefined
             || ids.includes(LAYER_PROPERTIES_LIST_CAPABILITY);
         const requiresLayerPropertySet = ids === undefined
@@ -1785,6 +1857,7 @@ function createNativeAegpClient(options) {
             || (requiresCompositionTimeSet && !compositionTimeSetItem)
             || (requiresCompositionCreate && !compositionCreateItem)
             || (requiresCompositionLayerCreate && !compositionLayerCreateItem)
+            || (requiresLayerEffectApply && !layerEffectApplyItem)
             || (requiresLayerPropertiesList && !layerPropertiesListItem)
             || (requiresLayerPropertySet && !layerPropertySetItem)
             || (summaryItem && (summaryItem.version !== 1 || summaryItem.detail !== requestedDetail
@@ -1832,6 +1905,11 @@ function createNativeAegpClient(options) {
                 || (requestedDetail === 'full'
                     && compositionLayerCreateItem.contractDigest
                         !== COMPOSITION_LAYER_CREATE_CONTRACT_DIGEST)))
+            || (layerEffectApplyItem && (layerEffectApplyItem.version !== 1
+                || layerEffectApplyItem.detail !== requestedDetail
+                || (requestedDetail === 'full'
+                    && layerEffectApplyItem.contractDigest
+                        !== LAYER_EFFECT_APPLY_CONTRACT_DIGEST)))
             || (layerPropertiesListItem && (layerPropertiesListItem.version !== 1
                 || layerPropertiesListItem.detail !== requestedDetail
                 || (requestedDetail === 'full'
@@ -1874,6 +1952,9 @@ function createNativeAegpClient(options) {
         }
         if (requestedDetail === 'full' && compositionLayerCreateItem) {
             compositionLayerCreateContractDigest = compositionLayerCreateItem.contractDigest;
+        }
+        if (requestedDetail === 'full' && layerEffectApplyItem) {
+            layerEffectApplyContractDigest = layerEffectApplyItem.contractDigest;
         }
         if (requestedDetail === 'full' && layerPropertiesListItem) {
             layerPropertiesListContractDigest = layerPropertiesListItem.contractDigest;
@@ -1920,6 +2001,9 @@ function createNativeAegpClient(options) {
             call.capabilityId === COMPOSITION_LAYER_CREATE_CAPABILITY
             && call.capabilityVersion === 1
             && validCompositionLayerCreateArguments(call.arguments);
+        const layerEffectApplyCall = call.capabilityId === LAYER_EFFECT_APPLY_CAPABILITY
+            && call.capabilityVersion === 1
+            && validLayerEffectApplyArguments(call.arguments);
         const layerPropertiesListCall = call.capabilityId === LAYER_PROPERTIES_LIST_CAPABILITY
             && call.capabilityVersion === 1
             && validLayerPropertiesListArguments(call.arguments);
@@ -1936,6 +2020,7 @@ function createNativeAegpClient(options) {
                 && !compositionTimeSetCall
                 && !compositionCreateCall
                 && !compositionLayerCreateCall
+                && !layerEffectApplyCall
                 && !layerPropertiesListCall && !layerPropertySetCall)
             || !Number.isSafeInteger(call.deadlineUnixMs) || call.deadlineUnixMs <= 0) {
             throw nativeError('INVALID_ARGUMENT', 'native invoke request is invalid', false);
@@ -1997,6 +2082,12 @@ function createNativeAegpClient(options) {
                 'native composition-layer create capability was not verified before dispatch',
             );
         }
+        if (layerEffectApplyCall
+            && layerEffectApplyContractDigest !== LAYER_EFFECT_APPLY_CONTRACT_DIGEST) {
+            throw nativeContractMismatch(
+                'native layer-effect apply capability was not verified before dispatch',
+            );
+        }
         if (layerPropertiesListCall
             && layerPropertiesListContractDigest !== LAYER_PROPERTIES_LIST_CONTRACT_DIGEST) {
             throw nativeContractMismatch(
@@ -2034,6 +2125,12 @@ function createNativeAegpClient(options) {
                     'ae_listLayerProperties',
                 ]);
             }
+        } else if (layerEffectApplyCall) {
+            locatorChecks = [[
+                call.arguments.layerLocator,
+                'layerLocator',
+                'ae_listCompositionLayers',
+            ]];
         } else if (layerPropertySetCall) {
             locatorChecks = [
                 [call.arguments.layerLocator, 'layerLocator', 'ae_listLayerProperties'],
@@ -2144,6 +2241,7 @@ function createNativeAegpClient(options) {
         if (!commonValid || !evidenceValid) {
             if (bitDepthSetCall || compositionTimeSetCall || compositionCreateCall
                 || compositionLayerCreateCall
+                || layerEffectApplyCall
                 || layerPropertySetCall) {
                 throw nativeMutationUncertain(
                     'Native mutation result lacked verified AEGP evidence.',
@@ -2244,6 +2342,21 @@ function createNativeAegpClient(options) {
             throw nativeMutationUncertain(
                 'Native composition-layer create result failed post-dispatch verification.',
                 COMPOSITION_LAYER_CREATE_CAPABILITY,
+            );
+        }
+        if (layerEffectApplyCall && (typeof result.replayed !== 'boolean'
+            || evidence.effect !== 'committed'
+            || evidence.postcondition.kind !== 'layer-effect-apply'
+            || !exactKeys(evidence.undo, ['available', 'verified'])
+            || evidence.undo.available !== true || evidence.undo.verified !== false
+            || layerEffectApplyContractDigest !== LAYER_EFFECT_APPLY_CONTRACT_DIGEST
+            || !validLayerEffectApplyValue(
+                value, call.arguments, endpoint.hostInstanceId, sessionId,
+            )
+            || evidence.postcondition.digest !== layerEffectApplyPostconditionDigest(value))) {
+            throw nativeMutationUncertain(
+                'Native layer-effect apply result failed post-dispatch verification.',
+                LAYER_EFFECT_APPLY_CAPABILITY,
             );
         }
         if (layerPropertySetCall && (result.replayed !== false
@@ -2406,6 +2519,7 @@ function createNativeAegpClient(options) {
                 compositionTimeSetContractDigest,
                 compositionCreateContractDigest,
                 compositionLayerCreateContractDigest,
+                layerEffectApplyContractDigest,
                 layerPropertiesListContractDigest,
                 layerPropertySetContractDigest,
             });

@@ -383,6 +383,60 @@ async def test_native_composition_layer_transport_loss_is_not_safe_to_retry(toke
 
 
 @pytest.mark.asyncio
+async def test_native_layer_effect_apply_preserves_replay_and_undo(token_file):
+    vector = _fixture("invoke-layer-effect-apply.json")
+    wire_request = vector["request"]
+    request = NativeInvokeRequest(
+        request_id=wire_request["requestId"],
+        capability_id="ae.layer.effect.apply",
+        capability_version=1,
+        arguments=wire_request["params"]["arguments"],
+        deadline_unix_ms=wire_request["deadlineUnixMs"],
+    )
+    raw = {**vector["response"]["result"], "replayed": True}
+    captured: dict = {}
+
+    def respond(http_request):
+        captured.update(json.loads(http_request.content))
+        return Response(200, json={"ok": True, "result": raw})
+
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/invoke").mock(side_effect=respond)
+        result = await HttpBridge("http://127.0.0.1:11488").invoke(request)
+
+    assert captured == request.model_dump(mode="json", by_alias=True)
+    assert result.replayed is True
+    assert result.value["matchName"] == "ADBE Slider Control"
+    assert result.evidence.effect == "committed"
+    assert result.evidence.undo is not None
+    assert result.evidence.undo.available is True
+    assert result.evidence.undo.verified is False
+
+
+@pytest.mark.asyncio
+async def test_native_layer_effect_transport_loss_is_not_safe_to_retry(token_file):
+    wire_request = _fixture("invoke-layer-effect-apply.json")["request"]
+    request = NativeInvokeRequest(
+        request_id="core-layer-effect-timeout",
+        capability_id="ae.layer.effect.apply",
+        capability_version=1,
+        arguments=wire_request["params"]["arguments"],
+        deadline_unix_ms=_DEADLINE,
+    )
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/invoke").mock(side_effect=ReadTimeout("lost response"))
+        with pytest.raises(NativeBackendError) as raised:
+            await HttpBridge("http://127.0.0.1:11488").invoke(request)
+
+    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert raised.value.side_effect == "may-have-occurred"
+    assert raised.value.retryable is False
+    assert raised.value.recovery.action == "inspect-state"
+    assert "Effects group" in raised.value.recovery.hint
+    assert raised.value.details == {"capabilityId": request.capability_id}
+
+
+@pytest.mark.asyncio
 async def test_native_layer_property_transport_loss_is_not_safe_to_retry(token_file):
     wire_request = _fixture("invoke-layer-property-set.json")["request"]
     request = NativeInvokeRequest(

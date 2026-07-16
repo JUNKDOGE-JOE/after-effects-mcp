@@ -144,7 +144,7 @@ v0.9.2 最终 Panel 生成的最小配置形态如下：
 | 分类 | Tools |
 |---|---|
 | Project | `ae_init`, `ae_overview`, `ae_layers`, `ae_listProjectItems`, `ae_listCompositionLayers`, `ae_listSelectedLayers`, `ae_getCompositionTime`, `ae_listLayerProperties`, `ae_setLayerPropertyValue`, `ae_readProps`, `ae_searchProject` |
-| Mutation | `ae_exec`, `ae_applyEffect`, `ae_createLayer`, `ae_createComposition`, `ae_createCompositionLayer`, `ae_setProperty`, `ae_moveLayer`, `ae_selectLayers`, `ae_setTime` |
+| Mutation | `ae_exec`, `ae_applyEffect`, `ae_applyLayerEffect`, `ae_createLayer`, `ae_createComposition`, `ae_createCompositionLayer`, `ae_setProperty`, `ae_moveLayer`, `ae_selectLayers`, `ae_setTime` |
 | Read-typed | `ae_getTime`, `ae_getProperties`, `ae_scanPropertyTree`, `ae_inspectPropertyCapabilities`, `ae_getExpressions`, `ae_validateExpressions`, `ae_getKeyframes` |
 | Preview / capture | `ae_previewFrame`, `ae_snapshot` |
 | Rigging | `ae_createRig` |
@@ -279,7 +279,12 @@ locator 再传回并只向下进入一层 group。原始值绑定当前合成时
 的颜色、尺寸与时长可选，省略时使用契约声明的默认值。结果返回修改后的新 locator、数量证据、
 原生 provenance 与 Undo 可用性；同一 intent 的 replay 不会重复创建。成功后旧图结构 generation
 已失效，后续读取应使用结果中的新 composition locator。原生通道不可用时这些工具会明确失败，
-不会回退到 JSX。
+不会回退到 JSX。将新鲜的 layer locator、已安装效果精确且不受语言影响的 matchName（例如
+`ADBE Slider Control`）和稳定幂等键传给 `ae_applyLayerEffect`，AEGP 主线程 dispatcher 会调用
+`AEGP_ApplyEffect`，并验证效果总数与同 matchName 数量都恰好增加 1。结果返回插入索引、效果
+身份、新 layer locator、原生 provenance、审计证据和 Undo 可用性；相同 intent 的 replay 不会
+重复添加。后续读取 Effects group 必须使用返回的新 locator；遇到
+`POSSIBLY_SIDE_EFFECTING_FAILURE` 时，先核对 AE 状态与审计，禁止盲目重试。
 
 CEP 面板 macOS 开发环境：
 

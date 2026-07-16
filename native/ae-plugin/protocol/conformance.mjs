@@ -98,6 +98,12 @@ export const INVOKE_REGISTRY = Object.freeze([
     resultContractId: 'aemcp.contract.ae.composition.layer.create.result.v1',
   }),
   Object.freeze({
+    id: 'ae.layer.effect.apply',
+    version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.effect.apply.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.effect.apply.result.v1',
+  }),
+  Object.freeze({
     id: 'ae.layer.properties.list',
     version: 1,
     inputContractId: 'aemcp.contract.ae.layer.properties.list.input.v1',
@@ -782,6 +788,19 @@ export function classifyRequest(message) {
           || !/^[A-Za-z0-9][A-Za-z0-9._:-]{15,63}$/u.test(args.idempotencyKey)) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
+    } else if (params.capabilityId === 'ae.layer.effect.apply') {
+      const args = params.arguments;
+      if (!exactKeys(
+        args,
+        new Set(['layerLocator', 'effectMatchName', 'idempotencyKey']),
+        ['layerLocator', 'effectMatchName', 'idempotencyKey'],
+      )
+          || !isLocatorShape(args.layerLocator, ['layer'])
+          || !isBoundedScalarString(args.effectMatchName, 1, 47)
+          || typeof args.idempotencyKey !== 'string'
+          || !/^[A-Za-z0-9][A-Za-z0-9._:-]{15,63}$/u.test(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
     } else if (params.capabilityId === 'ae.layer.properties.list') {
       const args = params.arguments;
       if (!exactKeys(
@@ -930,6 +949,7 @@ export function validateFailureExchange(
         || capabilityId === 'ae.composition.selected-layers.list'
         || capabilityId === 'ae.composition.time.read'
         || capabilityId === 'ae.composition.layer.create'
+        || capabilityId === 'ae.layer.effect.apply'
         || capabilityId === 'ae.layer.properties.list'
         || capabilityId === 'ae.layer.property.set')) {
     const expectedFields = capabilityId === 'ae.project.items.list'
@@ -944,6 +964,8 @@ export function validateFailureExchange(
             'params.arguments.layerLocator',
             'params.arguments.propertyLocator',
           ])
+          : capabilityId === 'ae.layer.effect.apply'
+            ? new Set(['params.arguments.layerLocator'])
           : new Set([
             'params.arguments.layerLocator',
             ...(request.params.arguments.parentPropertyLocator
@@ -1066,6 +1088,12 @@ export function compositionLayerCreateContractDigest(schema) {
   const resultSchema = structuredClone(
     schema.$defs.compositionLayerCreateResultSchemaContract.const,
   );
+  return sha256Jcs({ inputSchema, resultSchema });
+}
+
+export function layerEffectApplyContractDigest(schema) {
+  const inputSchema = structuredClone(schema.$defs.layerEffectApplyInputSchemaContract.const);
+  const resultSchema = structuredClone(schema.$defs.layerEffectApplyResultSchemaContract.const);
   return sha256Jcs({ inputSchema, resultSchema });
 }
 
@@ -1748,8 +1776,88 @@ export function compositionLayerCreateDescriptor(schema) {
   };
 }
 
-export function layerPropertiesListDescriptor(schema) {
+export function layerEffectApplyDescriptor(schema) {
   const registration = INVOKE_REGISTRY[10];
+  const layerLocator = syntheticDescriptorLocator(
+    'layer', '88888888-8888-4888-8888-888888888888',
+  );
+  const freshLayerLocator = {
+    ...layerLocator,
+    projectId: '55555555-5555-4555-8555-555555555555',
+    generation: 9,
+  };
+  return {
+    detail: 'full',
+    id: registration.id,
+    version: registration.version,
+    schemaVersion: 1,
+    summary: 'Apply one installed After Effects effect to a layer by exact match name.',
+    risk: 'write',
+    mutability: 'mutating',
+    idempotency: 'idempotency-key',
+    cancellation: 'before-dispatch',
+    undo: 'ae-undo-group',
+    sideEffectSummary: 'Adds one installed effect to one layer and creates one After Effects Undo step.',
+    preconditions: [
+      'An After Effects project must be open.',
+      'layerLocator must come from ae.composition.layers.list@1.',
+      'effectMatchName must exactly identify one installed non-internal effect.',
+    ],
+    compatibility: {
+      status: 'unverified',
+      intendedPlatforms: ['macos-arm64', 'windows-x64'],
+    },
+    inputContractId: registration.inputContractId,
+    resultContractId: registration.resultContractId,
+    contractDigest: layerEffectApplyContractDigest(schema),
+    inputSchema: structuredClone(schema.$defs.layerEffectApplyInputSchemaContract.const),
+    resultSchema: structuredClone(schema.$defs.layerEffectApplyResultSchemaContract.const),
+    requirements: [{
+      id: 'aemcp.requirement.native.layer-effect-apply',
+      contractVersion: 1,
+    }],
+    examples: [
+      {
+        id: 'aemcp-example-layer-effect-apply',
+        kind: 'positive',
+        summary: 'Apply and verify one Slider Control effect with Undo available.',
+        arguments: {
+          layerLocator,
+          effectMatchName: 'ADBE Slider Control',
+          idempotencyKey: 'synthetic-effect-apply-0001',
+        },
+        expected: {
+          outcome: 'succeeded',
+          value: {
+            changed: true,
+            layerLocator: freshLayerLocator,
+            name: 'Slider Control',
+            matchName: 'ADBE Slider Control',
+            effectIndex: 1,
+            effectCountBefore: 0,
+            effectCountAfter: 1,
+            matchingEffectCountBefore: 0,
+            matchingEffectCountAfter: 1,
+          },
+        },
+      },
+      {
+        id: 'aemcp-example-layer-effect-apply-missing',
+        kind: 'negative',
+        summary: 'Reject a match name that does not identify an installed effect.',
+        arguments: {
+          layerLocator,
+          effectMatchName: 'ADBE Missing Synthetic Effect',
+          idempotencyKey: 'synthetic-effect-apply-0002',
+        },
+        expected: { errorCode: 'PRECONDITION_FAILED', recoveryAction: 'change-arguments' },
+      },
+    ],
+  };
+}
+
+export function layerPropertiesListDescriptor(schema) {
+  const registration = INVOKE_REGISTRY[11];
   const layerLocator = syntheticDescriptorLocator(
     'layer', '88888888-8888-4888-8888-888888888888',
   );
@@ -1818,7 +1926,7 @@ export function layerPropertiesListDescriptor(schema) {
 }
 
 export function layerPropertySetDescriptor(schema) {
-  const registration = INVOKE_REGISTRY[11];
+  const registration = INVOKE_REGISTRY[12];
   const layerLocator = syntheticDescriptorLocator(
     'layer', '88888888-8888-4888-8888-888888888888',
   );
@@ -1907,6 +2015,7 @@ export function nativeCapabilityRegistry(schema) {
     compositionTimeSetDescriptor(schema),
     compositionCreateDescriptor(schema),
     compositionLayerCreateDescriptor(schema),
+    layerEffectApplyDescriptor(schema),
     layerPropertiesListDescriptor(schema),
     layerPropertySetDescriptor(schema),
   ];
@@ -2325,6 +2434,26 @@ function validateCompositionLayerCreateResult(request, result, helloContext, sch
   return true;
 }
 
+function validateLayerEffectApplyResult(request, result, helloContext, schema) {
+  if (request.params.capabilityId !== 'ae.layer.effect.apply') return true;
+  const args = request.params.arguments;
+  const value = result.value;
+  if (result.evidence.postcondition.kind !== 'layer-effect-apply'
+      || value.changed !== true
+      || value.matchName !== args.effectMatchName
+      || value.layerLocator.hostInstanceId !== helloContext.response.result.host.instanceId
+      || value.layerLocator.sessionId !== request.sessionId
+      || value.layerLocator.generation <= args.layerLocator.generation
+      || value.layerLocator.projectId === args.layerLocator.projectId
+      || value.effectCountAfter !== value.effectCountBefore + 1
+      || value.matchingEffectCountAfter !== value.matchingEffectCountBefore + 1
+      || value.effectIndex < 1 || value.effectIndex > value.effectCountAfter) return false;
+  const context = locatorContext(value.layerLocator);
+  return value.layerLocator.kind === 'layer'
+    && value.layerLocator.objectId === args.layerLocator.objectId
+    && validateLocator(value.layerLocator, context, schema);
+}
+
 export function validateCapabilitiesExchange(
   helloContext,
   request,
@@ -2678,7 +2807,7 @@ export function validateTranscript(context, request, messages) {
         && (descriptor.undo !== 'ae-undo-group'
           || (evidence.undo?.available === true
             && typeof evidence.undo?.verified === 'boolean'
-            && (!['ae.project.bit-depth.set', 'ae.composition.time.set', 'ae.composition.create', 'ae.composition.layer.create', 'ae.layer.property.set']
+            && (!['ae.project.bit-depth.set', 'ae.composition.time.set', 'ae.composition.create', 'ae.composition.layer.create', 'ae.layer.effect.apply', 'ae.layer.property.set']
               .includes(request.params.capabilityId)
               || request.params.capabilityVersion !== 1
               || evidence.undo.verified === false)))))
@@ -2690,6 +2819,7 @@ export function validateTranscript(context, request, messages) {
     && validateCompositionTimeSetResult(request, result, helloContext, schema)
     && validateCompositionCreateResult(request, result, helloContext, schema)
     && validateCompositionLayerCreateResult(request, result, helloContext, schema)
+    && validateLayerEffectApplyResult(request, result, helloContext, schema)
     && validateLayerPropertySetResult(request, result, helloContext, schema)
     && evidence.postcondition.verified === true
     && evidence.requestDigest === requestDigest

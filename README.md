@@ -109,7 +109,7 @@ External clients must run on the same machine as After Effects, or otherwise be 
 | Category | Tools |
 |---|---|
 | Project | `ae_init`, `ae_overview`, `ae_layers`, `ae_listProjectItems`, `ae_listCompositionLayers`, `ae_listSelectedLayers`, `ae_getCompositionTime`, `ae_listLayerProperties`, `ae_setLayerPropertyValue`, `ae_readProps`, `ae_searchProject` |
-| Mutation | `ae_exec`, `ae_applyEffect`, `ae_createLayer`, `ae_createComposition`, `ae_createCompositionLayer`, `ae_setProperty`, `ae_moveLayer`, `ae_selectLayers`, `ae_setTime` |
+| Mutation | `ae_exec`, `ae_applyEffect`, `ae_applyLayerEffect`, `ae_createLayer`, `ae_createComposition`, `ae_createCompositionLayer`, `ae_setProperty`, `ae_moveLayer`, `ae_selectLayers`, `ae_setTime` |
 | Read-typed | `ae_getTime`, `ae_getProperties`, `ae_scanPropertyTree`, `ae_inspectPropertyCapabilities`, `ae_getExpressions`, `ae_validateExpressions`, `ae_getKeyframes` |
 | Preview / capture | `ae_previewFrame`, `ae_snapshot` |
 | Rigging | `ae_createRig` |
@@ -264,6 +264,13 @@ optional and otherwise inherit documented defaults. The result returns fresh pos
 locators, count evidence, native provenance, and Undo availability; replaying the same intent does
 not create a duplicate. Use the returned composition locator after success because the prior graph
 generation is stale.
+Pass a fresh layer locator to `ae_applyLayerEffect` with an installed effect's exact,
+locale-independent match name (for example, `ADBE Slider Control`) and a stable idempotency key.
+The AEGP main-thread dispatcher calls `AEGP_ApplyEffect`, verifies that the total and matching
+effect counts each increased by exactly one, and returns the insertion index, effect identity, a
+fresh layer locator, native provenance, audit evidence, and Undo availability. The same intent
+replays without adding a duplicate. Use the returned locator to inspect the Effects group; after
+`POSSIBLY_SIDE_EFFECTING_FAILURE`, inspect AE state and audit before any retry.
 These native tools fail explicitly when the native plane is unavailable and never fall back to JSX.
 
 CEP panel macOS development setup:

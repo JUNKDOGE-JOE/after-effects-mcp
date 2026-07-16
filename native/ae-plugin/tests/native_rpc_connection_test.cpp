@@ -36,6 +36,7 @@ using aemcp::native::HostCompositionTimeResult;
 using aemcp::native::HostCompositionTimeWriteResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostIdleSignal;
+using aemcp::native::HostLayerEffectApplyResult;
 using aemcp::native::HostLayerPropertiesResult;
 using aemcp::native::HostProjectGraphInvalidationResult;
 using aemcp::native::HostReadResult;
@@ -275,6 +276,27 @@ class FakeHost final : public HostApi {
     return HostCompositionLayerCreateResult::success(std::move(created));
   }
 
+  [[nodiscard]] HostLayerEffectApplyResult apply_layer_effect(
+      const aemcp::native::LayerEffectApplyCommand& command,
+      TimePoint) override {
+    ++layer_effect_apply_calls;
+    observed_layer_effect_apply_command = command;
+    aemcp::native::LayerEffectApplied applied;
+    applied.changed = true;
+    applied.layer_locator = {
+        "layer", command.host_instance_id, command.session_id,
+        "55555555-5555-4555-8555-555555555555", 9,
+        command.layer_locator.object_id};
+    applied.name = "Slider Control";
+    applied.match_name = command.effect_match_name;
+    applied.effect_index = 1;
+    applied.effect_count_before = 0;
+    applied.effect_count_after = 1;
+    applied.matching_effect_count_before = 0;
+    applied.matching_effect_count_after = 1;
+    return HostLayerEffectApplyResult::success(std::move(applied));
+  }
+
   [[nodiscard]] HostCompositionCreateResult create_composition(
       const aemcp::native::CompositionCreateCommand& command,
       TimePoint) override {
@@ -392,6 +414,7 @@ class FakeHost final : public HostApi {
   int composition_time_write_calls{0};
   int composition_create_calls{0};
   int composition_layer_create_calls{0};
+  int layer_effect_apply_calls{0};
   int layer_properties_calls{0};
   int layer_property_write_calls{0};
   int project_graph_invalidation_calls{0};
@@ -400,6 +423,7 @@ class FakeHost final : public HostApi {
   aemcp::native::CompositionTimeSetCommand observed_time_set_command;
   aemcp::native::CompositionCreateCommand observed_composition_create_command;
   aemcp::native::CompositionLayerCreateCommand observed_layer_create_command;
+  aemcp::native::LayerEffectApplyCommand observed_layer_effect_apply_command;
 };
 
 struct EventRecord {
@@ -483,7 +507,7 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      "cee53bf620638964faf818c40dc22d13362ca33d6034a65cd9062a7d6c3c2f8c",
+      "fd1bec9a91d28b60324d64afadebdd245d097aa65af107a029ef289b38ba5eb4",
       "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
       "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
       "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
@@ -493,6 +517,7 @@ NativeRpcRuntimeInfo runtime() {
       "724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308",
       "a5e0ccfc15086d1b10987246048e539cf6332a4e24114ac81783f4a9758ab6f6",
       "d48b5c0fcf9871ee579bf518679bc36277e2fd5194e70d9cc6fa1b2c573edeee",
+      "5de12c7cd4ede09122a837c85ff2e589f695dd5377490b97b9de9d975ce00d77",
       "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba",
       "5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c",
       "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
@@ -739,6 +764,20 @@ std::string composition_layer_create_invoke_json(
         "\"idempotencyKey\":\"" + std::string(key) + "\"}}}";
 }
 
+std::string layer_effect_apply_invoke_json(
+    std::string_view request_id,
+    std::string_view key = "layer-effect-apply-intent-001",
+    std::string_view match_name = "ADBE Slider Control") {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.layer.effect.apply\","
+        "\"capabilityVersion\":1,\"arguments\":{\"layerLocator\":"
+      + graph_locator_json("layer", "88888888-8888-4888-8888-888888888888")
+      + ",\"effectMatchName\":\"" + std::string(match_name)
+      + "\",\"idempotencyKey\":\"" + std::string(key) + "\"}}}";
+}
+
 std::string composition_create_invoke_json(
     std::string_view request_id,
     std::string_view key = "composition-create-intent-001") {
@@ -955,6 +994,19 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(composition_layer_create_capabilities,
       "aemcp.requirement.native.composition-layer-create",
       "composition-layer create capabilities response");
+
+  send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-layer-effect-apply", "ae.layer.effect.apply"));
+  const std::string layer_effect_apply_capabilities = read_body(sockets[0]);
+  require_contains(layer_effect_apply_capabilities,
+      "\"id\":\"ae.layer.effect.apply\"",
+      "layer-effect apply capabilities response");
+  require_contains(layer_effect_apply_capabilities,
+      "\"contractDigest\":\"5de12c7cd4ede09122a837c85ff2e589f695dd5377490b97b9de9d975ce00d77\"",
+      "layer-effect apply capabilities response");
+  require_contains(layer_effect_apply_capabilities,
+      "aemcp.requirement.native.layer-effect-apply",
+      "layer-effect apply capabilities response");
 
   send_json(sockets[0], bit_depth_capabilities_json(
       "capabilities-layer-properties", "ae.layer.properties.list"));
@@ -1325,6 +1377,52 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require(host.composition_layer_create_calls == 1 && !wait_readable(sockets[0], 100ms),
       "same-key composition-layer replay reached HostApi or emitted extra output");
 
+  send_json(sockets[0], layer_effect_apply_invoke_json(
+      "invoke-layer-effect-apply"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "layer-effect apply progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued layer-effect apply invoke");
+  const auto layer_effect_apply_batch = dispatcher.drain(host);
+  require(layer_effect_apply_batch.completions.size() == 1
+          && layer_effect_apply_batch.completions[0].ok,
+      "owner dispatcher did not produce the layer-effect apply result");
+  const std::string layer_effect_apply = read_body(sockets[0]);
+  require_contains(layer_effect_apply,
+      "\"capabilityId\":\"ae.layer.effect.apply\"",
+      "layer-effect apply response");
+  require_contains(layer_effect_apply,
+      "\"matchName\":\"ADBE Slider Control\"",
+      "layer-effect apply response");
+  require_contains(layer_effect_apply,
+      "\"effectCountAfter\":1,\"effectCountBefore\":0",
+      "layer-effect apply response");
+  require_contains(layer_effect_apply,
+      "\"undo\":{\"available\":true,\"verified\":false}",
+      "layer-effect apply response");
+  wait_until([&] {
+    return !observer.terminal("invoke-layer-effect-apply").request_id.empty();
+  }, "layer-effect apply terminal audit");
+  const TerminalRecord layer_effect_apply_terminal =
+      observer.terminal("invoke-layer-effect-apply");
+  require(layer_effect_apply_terminal.ok
+          && layer_effect_apply_terminal.request_digest.size() == 64
+          && layer_effect_apply_terminal.postcondition_digest.size() == 64
+          && host.layer_effect_apply_calls == 1
+          && host.observed_layer_effect_apply_command.effect_match_name
+              == "ADBE Slider Control",
+      "layer-effect apply terminal evidence was not verified");
+
+  send_json(sockets[0], layer_effect_apply_invoke_json(
+      "invoke-layer-effect-apply-replay"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "same-key layer-effect replay progress");
+  const std::string layer_effect_apply_replay = read_body(sockets[0]);
+  require_contains(layer_effect_apply_replay, "\"replayed\":true",
+      "same-key layer-effect replay");
+  require(host.layer_effect_apply_calls == 1 && !wait_readable(sockets[0], 100ms),
+      "same-key layer-effect replay reached HostApi or emitted extra output");
+
   send_json(sockets[0], invalidate_graph_json("invalidate-after-layer-create"));
   require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
       "post-create graph invalidation progress");
@@ -1354,6 +1452,15 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
               == std::string::npos
           && host.composition_layer_create_calls == 1,
       "graph invalidation emitted stale verified create replay evidence");
+
+  send_json(sockets[0], layer_effect_apply_invoke_json(
+      "invoke-layer-effect-apply-after-invalidation"));
+  const std::string layer_effect_apply_after_invalidation = read_body(sockets[0]);
+  require_contains(layer_effect_apply_after_invalidation,
+      "\"code\":\"DUPLICATE_REQUEST\"",
+      "same-key layer-effect replay after graph invalidation");
+  require(host.layer_effect_apply_calls == 1,
+      "graph invalidation allowed a duplicate layer-effect mutation");
 
   send_json(sockets[0], composition_layer_create_invoke_json(
       "invoke-composition-layer-create-conflict",
@@ -1532,8 +1639,9 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(cancel, "\"terminalResponseExpected\":true", "cancel response");
   const std::string cancelled_terminal = read_body(sockets[0]);
   require_contains(cancelled_terminal, "\"code\":\"CANCELLED\"", "cancel terminal");
-  require(idle_signal.calls() == 19,
-      "accepted invokes did not each schedule exactly one idle wake");
+  require(idle_signal.calls() == 21,
+      "accepted invokes did not each schedule exactly one idle wake; observed "
+          + std::to_string(idle_signal.calls()));
 
   require(dispatcher.enqueue(Request{
       "wrong-generation",

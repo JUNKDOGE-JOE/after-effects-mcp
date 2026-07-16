@@ -37,6 +37,7 @@ const COMPOSITION_TIME_READ_CAPABILITY = 'ae.composition.time.read';
 const COMPOSITION_TIME_SET_CAPABILITY = 'ae.composition.time.set';
 const COMPOSITION_CREATE_CAPABILITY = 'ae.composition.create';
 const COMPOSITION_LAYER_CREATE_CAPABILITY = 'ae.composition.layer.create';
+const LAYER_EFFECT_APPLY_CAPABILITY = 'ae.layer.effect.apply';
 const LAYER_PROPERTIES_LIST_CAPABILITY = 'ae.layer.properties.list';
 const LAYER_PROPERTY_SET_CAPABILITY = 'ae.layer.property.set';
 const NATIVE_LOCATOR_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -391,6 +392,15 @@ function validCompositionLayerCreateArguments(value) {
             || (Number.isInteger(value.height) && value.height >= 1 && value.height <= 30000));
 }
 
+function validLayerEffectApplyArguments(value) {
+    return exactBody(value, ['layerLocator', 'effectMatchName', 'idempotencyKey'])
+        && validNativeLocator(value.layerLocator, 'layer')
+        && validUnicodeScalarCount(value.effectMatchName, 1, 47)
+        && typeof value.idempotencyKey === 'string'
+        && value.idempotencyKey.length >= 16
+        && NATIVE_REQUEST_ID_PATTERN.test(value.idempotencyKey);
+}
+
 function validLayerPropertiesListArguments(value) {
     return exactBody(value, ['layerLocator', 'offset', 'limit'], ['parentPropertyLocator'])
         && validNativeLocator(value.layerLocator, 'layer')
@@ -478,6 +488,10 @@ function validNativeInvokeBody(body) {
     if (body.capabilityId === COMPOSITION_LAYER_CREATE_CAPABILITY
         && body.capabilityVersion === 1) {
         return validCompositionLayerCreateArguments(body.arguments);
+    }
+    if (body.capabilityId === LAYER_EFFECT_APPLY_CAPABILITY
+        && body.capabilityVersion === 1) {
+        return validLayerEffectApplyArguments(body.arguments);
     }
     if (body.capabilityId === LAYER_PROPERTIES_LIST_CAPABILITY
         && body.capabilityVersion === 1) {

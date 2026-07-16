@@ -212,6 +212,7 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
       || runtime_.composition_selected_layers_list_contract_digest.size() != 64
       || runtime_.composition_time_read_contract_digest.size() != 64
       || runtime_.composition_time_set_contract_digest.size() != 64
+      || runtime_.layer_effect_apply_contract_digest.size() != 64
       || runtime_.layer_properties_list_contract_digest.size() != 64
       || runtime_.layer_property_set_contract_digest.size() != 64) {
     throw std::invalid_argument("invalid native RPC runtime identity");
@@ -305,6 +306,9 @@ void NativeRpcConnectionHandler::serve(
               postcondition_digest =
                   rpc::digest_composition_layer_create_postcondition(
                       completion.composition_layer_create_result);
+            } else if (completion.capability_id == kLayerEffectApplyCapability) {
+              postcondition_digest = rpc::digest_layer_effect_apply_postcondition(
+                  completion.layer_effect_apply_result);
             } else if (completion.capability_id == kLayerPropertiesListCapability) {
               postcondition_digest = rpc::digest_layer_properties_postcondition(
                   completion.layer_properties_result);
@@ -324,6 +328,7 @@ void NativeRpcConnectionHandler::serve(
               || completion.capability_id == kCompositionTimeSetCapability
               || completion.capability_id == kCompositionCreateCapability
               || completion.capability_id == kCompositionLayerCreateCapability
+              || completion.capability_id == kLayerEffectApplyCapability
               || completion.capability_id == kLayerPropertySetCapability;
           completion.error_code = mutating
               ? "POSSIBLY_SIDE_EFFECTING_FAILURE"
@@ -481,6 +486,18 @@ void NativeRpcConnectionHandler::serve(
                 postcondition_digest,
                 completion.replayed,
             });
+          } else if (completion.capability_id == kLayerEffectApplyCapability) {
+            response = rpc::encode_layer_effect_apply_success({
+                completion.request_id,
+                connection.session_id,
+                runtime_.host_instance_id,
+                completion.layer_effect_apply_result,
+                started_at,
+                completed_at,
+                request_digest,
+                postcondition_digest,
+                completion.replayed,
+            });
           } else if (completion.capability_id == kLayerPropertiesListCapability) {
             response = rpc::encode_layer_properties_success({
                 completion.request_id,
@@ -619,6 +636,9 @@ void NativeRpcConnectionHandler::serve(
               || std::find(
                   query.ids->begin(), query.ids->end(),
                   "ae.composition.layer.create") != query.ids->end();
+          const bool include_layer_effect_apply = !query.ids.has_value() || std::find(
+              query.ids->begin(), query.ids->end(), "ae.layer.effect.apply")
+                  != query.ids->end();
           const bool include_layer_properties = !query.ids.has_value() || std::find(
               query.ids->begin(), query.ids->end(), "ae.layer.properties.list")
                   != query.ids->end();
@@ -635,6 +655,7 @@ void NativeRpcConnectionHandler::serve(
               + static_cast<std::size_t>(include_composition_time_set)
               + static_cast<std::size_t>(include_composition_create)
               + static_cast<std::size_t>(include_composition_layer_create)
+              + static_cast<std::size_t>(include_layer_effect_apply)
               + static_cast<std::size_t>(include_layer_properties)
               + static_cast<std::size_t>(include_layer_property_set);
           if (selected > query.limit) {
@@ -679,6 +700,8 @@ void NativeRpcConnectionHandler::serve(
                   runtime_.layer_property_set_contract_digest,
                   include_composition_selected_layers,
                   runtime_.composition_selected_layers_list_contract_digest,
+                  include_layer_effect_apply,
+                  runtime_.layer_effect_apply_contract_digest,
               }))) {
             connected = false;
             break;
@@ -765,6 +788,7 @@ void NativeRpcConnectionHandler::serve(
               invoke.composition_create_duration,
               invoke.composition_create_frame_rate,
               invoke.composition_create_pixel_aspect_ratio,
+              invoke.layer_effect_match_name,
           };
         }
         const std::string dispatched_capability = dispatch_request.capability_id;
