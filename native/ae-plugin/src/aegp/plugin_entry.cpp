@@ -680,14 +680,24 @@ class ProjectGraphRegistry final {
       A_long composition_item_id,
       AEGP_LayerIDVal layer_id,
       std::string_view host,
-      std::string_view session) {
+      std::string_view session,
+      std::string_view preserved_object_id = {}) {
     const std::string key = std::to_string(composition_item_id) + ":"
         + std::to_string(static_cast<A_long>(layer_id));
     auto found = layer_object_ids_.find(key);
     if (found == layer_object_ids_.end()) {
-      found = layer_object_ids_.emplace(key, aemcp::native::secure_uuid_v4()).first;
+      const std::string object_id = preserved_object_id.empty()
+          ? aemcp::native::secure_uuid_v4()
+          : std::string(preserved_object_id);
+      if (layers_by_object_.contains(object_id)) {
+        throw std::runtime_error("layer locator object identity is already bound");
+      }
+      found = layer_object_ids_.emplace(key, object_id).first;
       layers_by_object_.emplace(
           found->second, LayerAddress{composition_item_id, layer_id});
+    } else if (!preserved_object_id.empty()
+        && found->second != preserved_object_id) {
+      throw std::runtime_error("layer locator object identity does not match");
     }
     return make_locator("layer", found->second, host, session);
   }
@@ -3369,7 +3379,8 @@ class AegpHostApi final : public HostApi {
         layer_address->composition_item_id,
         layer_address->layer_id,
         command.host_instance_id,
-        command.session_id);
+        command.session_id,
+        command.layer_locator.object_id);
     applied.name = std::move(matched_name);
     applied.match_name = command.effect_match_name;
     applied.effect_index = static_cast<std::uint64_t>(*insertion_index) + 1U;
