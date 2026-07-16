@@ -29,11 +29,12 @@ const REQUIRED_RULES = [
 
 export const FINAL_WORKTREES = [
   '<repo-root>',
-  '<repo-root>/.worktrees/issue-73-rollback-29e7931',
-  '<repo-root>/.worktrees/issue-78-native-undoable-write',
-  '<repo-root>/.worktrees/issue-97-native-artifact-stage',
   '<repo-root>/.worktrees/platform-contracts',
 ];
+
+export const REQUIRED_ARCHIVE_REFS = new Map([
+  ['archive/rollback/issue-73-29e7931-20260716', '29e7931fc9b1243896c1ff473b7c7ceb61b68825'],
+]);
 
 const INITIAL_WORKTREES = [
   '<repo-root>',
@@ -142,7 +143,25 @@ export function inspectLiveWorktrees(repoRoot, inventoryText, canonicalRoot = re
   for (const missing of missingFinalWorktrees(livePaths)) {
     errors.push(`required retained worktree is missing: ${missing}`);
   }
+  errors.push(...validateArchiveRefs((ref) => git(repoRoot, ['rev-parse', `${ref}^{commit}`]).trim()));
   return { errors, rows };
+}
+
+export function validateArchiveRefs(resolveRef) {
+  const errors = [];
+  for (const [ref, expected] of REQUIRED_ARCHIVE_REFS) {
+    let actual;
+    try {
+      actual = resolveRef(ref);
+    } catch {
+      errors.push(`required archive ref is missing: ${ref}`);
+      continue;
+    }
+    if (actual !== expected) {
+      errors.push(`required archive ref points to ${actual}, expected ${expected}: ${ref}`);
+    }
+  }
+  return errors;
 }
 
 export function missingFinalWorktrees(livePaths) {

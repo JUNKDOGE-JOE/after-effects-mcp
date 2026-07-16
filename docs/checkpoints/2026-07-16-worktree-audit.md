@@ -108,12 +108,9 @@ The retained `platform-contracts` worktree was not modified. Its four untracked 
 | Path | Required final state | Purpose |
 | --- | --- | --- |
 | `<repo-root>` | clean `main`, synchronized with `origin/main` | canonical integration checkout |
-| `<repo-root>/.worktrees/issue-73-rollback-29e7931` | clean detached snapshot | explicit #73 rollback evidence |
-| `<repo-root>/.worktrees/issue-78-native-undoable-write` | clean | retained patch-distinct #78 squash-merge history |
-| `<repo-root>/.worktrees/issue-97-native-artifact-stage` | clean | retained patch-distinct #97 squash-merge history |
 | `<repo-root>/.worktrees/platform-contracts` | retain-dirty | unmerged/superseded platform history and evidence |
 
-While a branch is under review, the worktree invoking the check is the sole allowed addition to this final set. Therefore candidate validation accepts the active #109 worktree, while the post-merge check invoked from root `main` rejects it until it is removed. The local `--worktrees` governance check rejects all other live worktree drift and rejects dirty worktrees unless the final table explicitly gives their state as `retain-dirty`. CI runs the deterministic tracked-file contract; live worktree state remains a local closure gate because CI cannot see a developer machine's worktree registry.
+While a branch is under review, the worktree invoking the check is the sole allowed addition to this final set. Candidate validation therefore accepts the active Issue worktree, while the post-merge check invoked from root `main` rejects it until it is removed. The local `--worktrees` governance check rejects all other live worktree drift and rejects dirty worktrees unless the final table explicitly gives their state as `retain-dirty`. CI runs the deterministic tracked-file contract; live worktree state remains a local closure gate because CI cannot see a developer machine's worktree registry.
 
 ## Cleanup execution record
 
@@ -121,3 +118,20 @@ While a branch is under review, the worktree invoking the check is the sole allo
 - Two removals (#99 and macOS provider integration) unregistered correctly but could not remove directories containing ignored dependencies. The now-unregistered orphan directories were deleted only after confirming their `.git` pointers targeted absent registry entries and their branch refs remained preserved.
 - Six worktrees remain registered during #109: root, active #109, #73 rollback, clean patch-distinct #78 history, clean patch-distinct #97 history, and dirty/unmerged `platform-contracts` history.
 - Root artifacts were archived with matching post-move SHA-256 values. Root tracked dirt was restored only after its patch was written to the ignored archive.
+
+## Post-#126 reconciliation — Issue #130
+
+The #109 table above remains the immutable 26-worktree audit record. Issue #130 rechecked the live registry after the #124/#126 native capability closures and reconciled the machine gate with subsequent, separately authorized cleanup.
+
+| Path before #130 cleanup | Exact HEAD | State and upstream | Issue / PR mapping | Disposition |
+| --- | --- | --- | --- | --- |
+| `<repo-root>` | `5ebb77b09f4990339852fcf17698184018c5d32f` | clean `main`; synchronized with `origin/main` | #126 / PR #129 clean-main acceptance source | retain |
+| `<repo-root>/.worktrees/issue-124-native-apply-effect` | `4375ac0d966f48d04141e15b4e9829ce5402b541` | clean; upstream synchronized; branch tree is the current main feature minus the later #126 fix | #124 / PR #125 merged | remove completed worktree; retain branch ref |
+| `<repo-root>/.worktrees/issue-126-effect-undo-identity` | `c9dcf064b6b0389296c3db640918029d3e159ce7` | clean; upstream synchronized; fully merged into `main` | #126 / PR #129 merged | remove completed worktree; retain branch ref |
+| `<repo-root>/.worktrees/platform-contracts` | `c8393232d4c372a18c10f3afddc7c882f8d0a9c1` | retain-dirty; upstream gone; 18 branch-only commits and four untracked files | PR #52 closed unmerged and superseded by merged PR #53; Tool Library WIP excluded from #53 | retain unchanged |
+
+The three historical worktrees that #109 initially retained (#73 rollback, #78 squash history, and #97 squash history) were later unregistered. Review of #130 found that the exact #73 rollback commit was still present only through reflog/object retention and was not reachable from the issue-73 branch. Before accepting the cleanup, #130 created the durable annotated tag `archive/rollback/issue-73-29e7931-20260716` at exact commit `29e7931fc9b1243896c1ff473b7c7ceb61b68825`; the local `--worktrees` gate now fails if that tag is absent or peels to another commit. The #78 and #97 commits remain reachable through their remote-tracking branches. Issue #130 does not delete or rewrite any of those refs.
+
+The four `platform-contracts` untracked-file hashes still match the **Retained dirty-file identity** table exactly. Their corresponding tracked filenames are content-distinct: the Tool Library plan differs by 3 insertions/3 deletions, `skill_store 2.py` by 411 insertions/39 deletions, `test_skill_store 2.py` by 75 insertions/1 deletion, and `app 2.js` has a distinct binary hash. This WIP is not disposable.
+
+The ignored root archive remains at `.local-workspace-archive/2026-07-16/root-pre-main/` with the fixture, two autosaves, three one-off scripts, the governance-source copy, the tracked `schemas.py` patch, and its manifest. No archived user content was deleted. After removing the two completed worktrees, the persistent live registry is exactly the clean root plus retained-dirty `platform-contracts`; the active #130 worktree is permitted only while this Issue is under review.

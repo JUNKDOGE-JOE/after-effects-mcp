@@ -5,10 +5,12 @@ import {
   GOVERNANCE_PATH,
   FINAL_WORKTREES,
   INVENTORY_PATH,
+  REQUIRED_ARCHIVE_REFS,
   extractFinalRetainedWorktrees,
   normalizeWorktreePath,
   missingFinalWorktrees,
   parseWorktreePorcelain,
+  validateArchiveRefs,
   validateGovernance,
 } from '../../check-repository-governance.mjs';
 
@@ -58,6 +60,23 @@ test('live registry validation rejects a missing required retained worktree', ()
     missingFinalWorktrees(new Set(FINAL_WORKTREES.slice(1))),
     [FINAL_WORKTREES[0]],
   );
+});
+
+test('post-#126 retained set keeps only root and the dirty platform WIP', () => {
+  assert.deepEqual(FINAL_WORKTREES, [
+    '<repo-root>',
+    '<repo-root>/.worktrees/platform-contracts',
+  ]);
+});
+
+test('rollback archive ref must exist and peel to the audited commit', () => {
+  const [[ref, sha]] = REQUIRED_ARCHIVE_REFS;
+  assert.deepEqual(validateArchiveRefs((candidate) => {
+    assert.equal(candidate, ref);
+    return sha;
+  }), []);
+  assert.match(validateArchiveRefs(() => '0'.repeat(40))[0], /expected/u);
+  assert.match(validateArchiveRefs(() => { throw new Error('missing'); })[0], /missing/u);
 });
 
 test('worktree porcelain parsing and path normalization are deterministic', () => {
