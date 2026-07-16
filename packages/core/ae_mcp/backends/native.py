@@ -5462,6 +5462,46 @@ async def invoke_composition_create(
             recovery=NativeRecovery(action="inspect-state", hint=inspect_hint),
             details={"capabilityId": COMPOSITION_CREATE_CAPABILITY_ID},
         )
+    if result.replayed:
+        try:
+            replay_check = await invoke_composition_layers_list(
+                backend,
+                request_id=(
+                    "replay-check-"
+                    + hashlib.sha256(request_id.encode("utf-8")).hexdigest()[:32]
+                ),
+                composition_locator=created.composition_locator,
+                offset=0,
+                limit=1,
+                deadline_unix_ms=deadline_unix_ms,
+                cancellation=cancellation,
+            )
+        except NativeBackendError as exc:
+            raise _structured_error(
+                "DUPLICATE_REQUEST",
+                "The committed composition-create key no longer identifies "
+                "a verifiable composition in the current After Effects state.",
+                details={
+                    "field": "params.arguments.idempotencyKey",
+                    "capabilityId": COMPOSITION_CREATE_CAPABILITY_ID,
+                },
+                recovery_hint=inspect_hint,
+            ) from exc
+        if (
+            replay_check.value.composition_locator
+            != created.composition_locator
+            or replay_check.value.composition_name != created.name
+        ):
+            raise _structured_error(
+                "DUPLICATE_REQUEST",
+                "The committed composition-create key no longer matches the "
+                "current After Effects composition identity.",
+                details={
+                    "field": "params.arguments.idempotencyKey",
+                    "capabilityId": COMPOSITION_CREATE_CAPABILITY_ID,
+                },
+                recovery_hint=inspect_hint,
+            )
     return CompositionCreateExecution(
         implementation=descriptor,
         negotiation=negotiation,

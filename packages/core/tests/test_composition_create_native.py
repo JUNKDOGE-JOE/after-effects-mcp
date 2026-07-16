@@ -28,12 +28,14 @@ def _json(path: Path) -> dict[str, Any]:
 VECTOR = _json(FIXTURE_ROOT / "invoke-composition-create.json")
 INPUT = VECTOR["request"]["params"]["arguments"]
 RESULT = VECTOR["response"]["result"]
+LAYERS_VECTOR = _json(FIXTURE_ROOT / "invoke-composition-layers-list.json")
+LAYERS_RESULT = LAYERS_VECTOR["response"]["result"]
 
 
-def _descriptor() -> N.NativeCapabilityDescriptor:
+def _descriptor(capability_id: str) -> N.NativeCapabilityDescriptor:
     items = _json(FIXTURE_ROOT / "capabilities.json")["response"]["result"]["items"]
     return N.NativeCapabilityDescriptor.model_validate(
-        next(item for item in items if item["id"] == N.COMPOSITION_CREATE_CAPABILITY_ID)
+        next(item for item in items if item["id"] == capability_id)
     )
 
 
@@ -41,7 +43,10 @@ class CreateBackend(N.NativeInvokeBackend):
     name = "composition-create-fixture"
 
     def __init__(self) -> None:
-        self.items = (_descriptor(),)
+        self.items = (
+            _descriptor(N.COMPOSITION_CREATE_CAPABILITY_ID),
+            _descriptor(N.COMPOSITION_LAYERS_LIST_CAPABILITY_ID),
+        )
         self.negotiation = N.NativeNegotiation(
             selected_wire_version=1,
             plugin_version="0.9.2",
@@ -56,6 +61,7 @@ class CreateBackend(N.NativeInvokeBackend):
         self.requests: list[N.NativeInvokeRequest] = []
         self.replayed = False
         self.tamper_postcondition = False
+        self.replay_check_stale = False
 
     async def negotiate(self, **_kwargs):
         return self.negotiation
@@ -76,6 +82,42 @@ class CreateBackend(N.NativeInvokeBackend):
     async def invoke(self, request, *, cancellation=None):
         del cancellation
         self.requests.append(request)
+        if request.capability_id == N.COMPOSITION_LAYERS_LIST_CAPABILITY_ID:
+            if self.replay_check_stale:
+                raise N._structured_error(
+                    "STALE_LOCATOR",
+                    "compositionLocator no longer resolves",
+                    details={
+                        "field": "params.arguments.compositionLocator",
+                        "capabilityId": N.COMPOSITION_LAYERS_LIST_CAPABILITY_ID,
+                    },
+                )
+            raw = json.loads(json.dumps(LAYERS_RESULT))
+            raw["value"].update(
+                {
+                    "compositionLocator": request.arguments["compositionLocator"],
+                    "compositionName": INPUT["name"],
+                    "total": 0,
+                    "offset": request.arguments["offset"],
+                    "limit": request.arguments["limit"],
+                    "returned": 0,
+                    "hasMore": False,
+                    "nextOffset": None,
+                    "layers": [],
+                }
+            )
+            raw["evidence"]["requestId"] = request.request_id
+            raw["evidence"]["startedAtUnixMs"] = request.deadline_unix_ms - 100
+            raw["evidence"]["completedAtUnixMs"] = request.deadline_unix_ms - 1
+            raw["evidence"]["requestDigest"] = N._invoke_request_digest(
+                request, self.negotiation
+            )
+            value = N.CompositionLayersListValue.model_validate(raw["value"])
+            raw["evidence"]["postcondition"]["digest"] = (
+                N._composition_layers_list_digest(value)
+            )
+            raw["replayed"] = False
+            return N.NativeInvokeResult.model_validate(raw)
         raw = json.loads(json.dumps(RESULT))
         raw["evidence"]["requestId"] = request.request_id
         raw["evidence"]["startedAtUnixMs"] = request.deadline_unix_ms - 100
@@ -127,7 +169,7 @@ async def test_create_binds_exact_settings_and_returns_verified_fresh_locator():
 
 
 @pytest.mark.asyncio
-async def test_verified_transport_replay_is_exposed_without_second_dispatch():
+async def test_verified_transport_replay_is_revalidated_before_exposure():
     backend = CreateBackend()
     backend.replayed = True
     execution = await N.invoke_composition_create(
@@ -143,9 +185,44 @@ async def test_verified_transport_replay_is_exposed_without_second_dispatch():
         deadline_unix_ms=_deadline(),
     )
 
-    assert len(backend.requests) == 1
+    assert len(backend.requests) == 2
+    assert (
+        backend.requests[1].capability_id
+        == N.COMPOSITION_LAYERS_LIST_CAPABILITY_ID
+    )
     assert execution.replayed is True
     assert execution.audit_fields()["replayed"] is True
+
+
+@pytest.mark.asyncio
+async def test_transport_replay_with_stale_composition_requires_state_inspection():
+    backend = CreateBackend()
+    backend.replayed = True
+    backend.replay_check_stale = True
+
+    with pytest.raises(N.NativeBackendError) as raised:
+        await N.invoke_composition_create(
+            backend,
+            request_id="core-composition-create-stale-replay",
+            name=INPUT["name"],
+            width=INPUT["width"],
+            height=INPUT["height"],
+            duration=INPUT["duration"],
+            frame_rate=INPUT["frameRate"],
+            pixel_aspect_ratio=INPUT["pixelAspectRatio"],
+            idempotency_key=INPUT["idempotencyKey"],
+            deadline_unix_ms=_deadline(),
+        )
+
+    assert len(backend.requests) == 2
+    assert raised.value.code == "DUPLICATE_REQUEST"
+    assert raised.value.retryable is False
+    assert raised.value.side_effect == "not-started"
+    assert raised.value.recovery.action == "inspect-state"
+    assert raised.value.details == {
+        "field": "params.arguments.idempotencyKey",
+        "capabilityId": N.COMPOSITION_CREATE_CAPABILITY_ID,
+    }
 
 
 def test_create_models_reject_surrogates_non_positive_duration_and_bad_counts():
