@@ -1801,7 +1801,7 @@ export function layerEffectApplyDescriptor(schema) {
     preconditions: [
       'An After Effects project must be open.',
       'layerLocator must come from ae.composition.layers.list@1.',
-      'effectMatchName must exactly identify one installed non-internal effect.',
+      'effectMatchName must exactly identify one installed effect.',
     ],
     compatibility: {
       status: 'unverified',

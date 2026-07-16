@@ -2823,7 +2823,7 @@
           "preconditions": [
             "An After Effects project must be open.",
             "layerLocator must come from ae.composition.layers.list@1.",
-            "effectMatchName must exactly identify one installed non-internal effect."
+            "effectMatchName must exactly identify one installed effect."
           ],
           "compatibility": {
             "status": "unverified",
@@ -4164,7 +4164,7 @@
       ],
       "nextCursor": null,
       "queryDigest": "1c9d06b8b5f876c7b41fb00204efe2f5c5e62502bb188fa8a1e5eae5e59d0c3b",
-      "capabilitiesDigest": "fd1bec9a91d28b60324d64afadebdd245d097aa65af107a029ef289b38ba5eb4"
+      "capabilitiesDigest": "b54fa28c9d04b248db56b27d652ab3fd37016bb3c44904f4949258f72e25d65b"
     }
   }
 }

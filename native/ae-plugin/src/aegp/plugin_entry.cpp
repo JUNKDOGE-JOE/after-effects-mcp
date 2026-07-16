@@ -112,7 +112,7 @@ constexpr std::string_view kSdkVersion = "25.6.61";
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::string_view kCapabilitiesDigest =
-    "fd1bec9a91d28b60324d64afadebdd245d097aa65af107a029ef289b38ba5eb4";
+    "b54fa28c9d04b248db56b27d652ab3fd37016bb3c44904f4949258f72e25d65b";
 constexpr std::string_view kProjectSummaryContractDigest =
     "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
 constexpr std::string_view kProjectBitDepthReadContractDigest =
@@ -3236,11 +3236,9 @@ class AegpHostApi final : public HostApi {
           "PRECONDITION_FAILED", "effect match name is not installed in After Effects",
           "params.arguments.effectMatchName");
     }
-    A_Boolean internal = FALSE;
     std::array<A_char, AEGP_MAX_EFFECT_NAME_SIZE> display_name{};
     std::array<A_char, AEGP_MAX_EFFECT_MATCH_NAME_SIZE> verified_match_name{};
-    if (effect_suite->AEGP_GetIsInternalEffect(matched_key, &internal) != A_Err_NONE
-        || effect_suite->AEGP_GetEffectName(matched_key, display_name.data()) != A_Err_NONE
+    if (effect_suite->AEGP_GetEffectName(matched_key, display_name.data()) != A_Err_NONE
         || effect_suite->AEGP_GetEffectMatchName(
             matched_key, verified_match_name.data()) != A_Err_NONE
         || std::find(display_name.begin(), display_name.end(), '\0')
@@ -3250,11 +3248,6 @@ class AegpHostApi final : public HostApi {
         || std::string_view(verified_match_name.data()) != command.effect_match_name) {
       return HostLayerEffectApplyResult::failure(
           "CAPABILITY_FAILED", "installed effect metadata could not be verified");
-    }
-    if (internal != FALSE) {
-      return HostLayerEffectApplyResult::failure(
-          "PRECONDITION_FAILED", "internal effects cannot be applied by this capability",
-          "params.arguments.effectMatchName");
     }
     matched_name.assign(display_name.data());
     if (matched_name.empty()) {

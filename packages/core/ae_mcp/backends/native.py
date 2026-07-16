@@ -3977,7 +3977,7 @@ def _validate_layer_effect_apply_descriptor(
         == (
             "An After Effects project must be open.",
             "layerLocator must come from ae.composition.layers.list@1.",
-            "effectMatchName must exactly identify one installed non-internal effect.",
+            "effectMatchName must exactly identify one installed effect.",
         )
         and descriptor.input_contract_id == LAYER_EFFECT_APPLY_INPUT_CONTRACT_ID
         and descriptor.result_contract_id == LAYER_EFFECT_APPLY_RESULT_CONTRACT_ID

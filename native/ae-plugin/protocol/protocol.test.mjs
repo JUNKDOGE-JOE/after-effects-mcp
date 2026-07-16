@@ -872,7 +872,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     layerEffectApplyCapability,
     layerPropertiesDescriptor,
     layerPropertyDescriptor,
-  ]), 'fd1bec9a91d28b60324d64afadebdd245d097aa65af107a029ef289b38ba5eb4');
+  ]), 'b54fa28c9d04b248db56b27d652ab3fd37016bb3c44904f4949258f72e25d65b');
   assert.ok(Buffer.byteLength(canonicalize(descriptor), 'utf8') < LIMITS.maxFrameBytes);
 });
 
