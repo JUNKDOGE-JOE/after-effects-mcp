@@ -1,4 +1,4 @@
-#include "aemcp_native/effect_identity.hpp"
+#include "aemcp_native/effect_stack.hpp"
 #include "aemcp_native/host_dispatcher.hpp"
 #include "aemcp_native/endpoint_registry_macos.hpp"
 #include "aemcp_native/mac_ipc_server.hpp"
@@ -107,7 +107,7 @@ using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kLayerPropertiesListCapability;
 using aemcp::native::kLayerPropertySetCapability;
 using aemcp::native::kProjectGraphInvalidateControl;
-using aemcp::native::locate_unique_effect_identity;
+using aemcp::native::locate_unique_insertion;
 
 constexpr std::string_view kPluginVersion = AE_MCP_PRODUCT_VERSION;
 constexpr std::string_view kSdkVersion = "25.6.61";
@@ -3263,24 +3263,19 @@ class AegpHostApi final : public HostApi {
           "CAPABILITY_FAILED", "installed effect metadata could not be verified");
     }
 
-    struct EffectStackSnapshot final {
-      std::vector<AEGP_InstalledEffectKey> keys;
-      std::vector<std::uintptr_t> identities;
-    };
-    const auto read_effect_stack = [&]() -> std::optional<EffectStackSnapshot> {
+    const auto read_effect_keys = [&]() -> std::optional<std::vector<AEGP_InstalledEffectKey>> {
       A_long count = 0;
       if (effect_suite->AEGP_GetLayerNumEffects(layer, &count) != A_Err_NONE
           || count < 0 || count > kMaximumLayerEffects) {
         return std::nullopt;
       }
-      EffectStackSnapshot snapshot;
-      snapshot.keys.reserve(static_cast<std::size_t>(count));
-      snapshot.identities.reserve(static_cast<std::size_t>(count));
+      std::vector<AEGP_InstalledEffectKey> keys;
+      keys.reserve(static_cast<std::size_t>(count));
       for (A_long index = 0; index < count; ++index) {
         AEGP_EffectRefH effect_ref = nullptr;
         if (effect_suite->AEGP_GetLayerEffectByIndex(
                 plugin_id_, layer, index, &effect_ref) != A_Err_NONE
-            || effect_ref == nullptr || *effect_ref == nullptr) {
+            || effect_ref == nullptr) {
           return std::nullopt;
         }
         EffectRefOwner effect_owner(effect_suite.get(), effect_ref);
@@ -3290,19 +3285,56 @@ class AegpHostApi final : public HostApi {
             || key == AEGP_InstalledEffectKey_NONE) {
           return std::nullopt;
         }
-        snapshot.keys.push_back(key);
-        snapshot.identities.push_back(
-            reinterpret_cast<std::uintptr_t>(*effect_owner.get()));
+        keys.push_back(key);
       }
-      return snapshot;
+      return keys;
     };
-    const auto before_stack = read_effect_stack();
-    if (!before_stack.has_value()) {
+    const auto before_keys = read_effect_keys();
+    if (!before_keys.has_value()) {
       return HostLayerEffectApplyResult::failure(
           "CAPABILITY_FAILED", "could not read layer effects before mutation");
     }
     const std::uint64_t matching_before = static_cast<std::uint64_t>(
-        std::count(before_stack->keys.begin(), before_stack->keys.end(), matched_key));
+        std::count(before_keys->begin(), before_keys->end(), matched_key));
+    // AE 26.3 cannot return the implicit input-layer stream at parameter index
+    // zero. A first zero-user-parameter effect is still identifiable by the
+    // unique installed-key transition, but adding an indistinguishable second
+    // instance cannot be proven after the mutation. Reject that case before
+    // entering an Undo group instead of returning an uncertain side effect.
+    if (matching_before > 0) {
+      bool inspected_duplicate = false;
+      for (std::size_t index = 0; index < before_keys->size(); ++index) {
+        if ((*before_keys)[index] != matched_key) continue;
+        AEGP_EffectRefH existing_ref = nullptr;
+        if (effect_suite->AEGP_GetLayerEffectByIndex(
+                plugin_id_, layer, static_cast<A_long>(index), &existing_ref)
+                != A_Err_NONE
+            || existing_ref == nullptr) {
+          return HostLayerEffectApplyResult::failure(
+              "CAPABILITY_FAILED", "could not inspect an existing matching effect");
+        }
+        EffectRefOwner existing_owner(effect_suite.get(), existing_ref);
+        A_long existing_parameter_count = 0;
+        if (stream_suite->AEGP_GetEffectNumParamStreams(
+                existing_owner.get(), &existing_parameter_count) != A_Err_NONE
+            || existing_parameter_count < 1 || existing_parameter_count > 4096) {
+          return HostLayerEffectApplyResult::failure(
+              "CAPABILITY_FAILED", "existing effect parameter metadata was invalid");
+        }
+        if (existing_parameter_count == 1) {
+          return HostLayerEffectApplyResult::failure(
+              "PRECONDITION_FAILED",
+              "this host cannot safely identify a duplicate effect with no user parameters",
+              "params.arguments.effectMatchName");
+        }
+        inspected_duplicate = true;
+        break;
+      }
+      if (!inspected_duplicate) {
+        return HostLayerEffectApplyResult::failure(
+            "CAPABILITY_FAILED", "matching effect count could not be inspected");
+      }
+    }
     if (budget_expired()) {
       return HostLayerEffectApplyResult::failure(
           "DEADLINE_EXCEEDED", "layer effect application budget elapsed");
@@ -3322,46 +3354,31 @@ class AegpHostApi final : public HostApi {
         ? A_Err_GENERIC
         : effect_suite->AEGP_GetInstalledKeyFromLayerEffect(
             applied_owner.get(), &applied_key);
-    const std::uintptr_t applied_identity =
-        applied_ref == nullptr || *applied_ref == nullptr
-        ? 0 : reinterpret_cast<std::uintptr_t>(*applied_ref);
-    // Re-enumerate the stack while the returned ApplyEffect ref is alive. The
-    // shared opaque pointee identifies the exact new instance even when every
-    // installed key and display name is duplicated. This does not reorder the
-    // stack, so AE's one-step Undo continues to target the applied instance.
-    const auto after_stack = apply_error == A_Err_NONE
-        && applied_key_error == A_Err_NONE && applied_key == matched_key
-        ? read_effect_stack() : std::nullopt;
-    const std::optional<std::size_t> applied_index = after_stack.has_value()
-        ? locate_unique_effect_identity(applied_identity, after_stack->identities)
-        : std::nullopt;
     const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    const auto after_keys = read_effect_keys();
     if (apply_error != A_Err_NONE || applied_ref == nullptr
         || applied_key_error != A_Err_NONE || applied_key != matched_key
-        || applied_identity == 0 || !after_stack.has_value()
-        || !applied_index.has_value() || end_error != A_Err_NONE) {
+        || end_error != A_Err_NONE || !after_keys.has_value()) {
       return HostLayerEffectApplyResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
           "effect may have been applied but exact instance readback or Undo validation failed");
     }
     const std::uint64_t matching_after = static_cast<std::uint64_t>(
-        std::count(after_stack->keys.begin(), after_stack->keys.end(), matched_key));
-    bool preserved_existing_order = applied_index.value() < after_stack->keys.size();
-    for (std::size_t before_index = 0;
-         preserved_existing_order && before_index < before_stack->keys.size();
-         ++before_index) {
-      const std::size_t after_index = before_index < applied_index.value()
-          ? before_index : before_index + 1U;
-      preserved_existing_order =
-          before_stack->keys[before_index] == after_stack->keys[after_index];
-    }
-    if (after_stack->keys.size() != before_stack->keys.size() + 1
-        || matching_after != matching_before + 1
-        || after_stack->keys[applied_index.value()] != matched_key
-        || !preserved_existing_order) {
+        std::count(after_keys->begin(), after_keys->end(), matched_key));
+    if (after_keys->size() != before_keys->size() + 1
+        || matching_after != matching_before + 1) {
       return HostLayerEffectApplyResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
           "effect application did not produce one exact native effect");
+    }
+
+    A_long parameter_count = 0;
+    if (stream_suite->AEGP_GetEffectNumParamStreams(
+            applied_owner.get(), &parameter_count) != A_Err_NONE
+        || parameter_count < 1 || parameter_count > 4096) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "applied effect parameter stream count was missing or invalid");
     }
 
     AEGP_StreamRefH root_stream = nullptr;
@@ -3391,20 +3408,53 @@ class AegpHostApi final : public HostApi {
         || dynamic_suite->AEGP_GetNumStreamsInGroup(
             effect_group_owner.get(), &effect_group_count) != A_Err_NONE
         || effect_group_count < 0
-        || static_cast<std::size_t>(effect_group_count) != after_stack->keys.size()) {
+        || static_cast<std::size_t>(effect_group_count) != after_keys->size()) {
       return HostLayerEffectApplyResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
           "applied effect group did not match the native effect stack");
     }
-    const A_long insertion_index = static_cast<A_long>(applied_index.value());
+
+    A_long insertion_index = -1;
     AEGP_StreamRefH effect_stream = nullptr;
-    if (dynamic_suite->AEGP_GetNewStreamRefByIndex(
-            plugin_id_, effect_group_owner.get(), insertion_index,
-            &effect_stream) != A_Err_NONE
-        || effect_stream == nullptr) {
-      return HostLayerEffectApplyResult::failure(
-          "POSSIBLY_SIDE_EFFECTING_FAILURE",
-          "applied effect stream could not be resolved from the effect group");
+    if (parameter_count >= 2) {
+      // Parameter stream 1 belongs to the exact EffectRef returned by
+      // AEGP_ApplyEffect. Its dynamic parent is therefore the exact applied
+      // effect even when adjacent instances share keys and display names.
+      AEGP_StreamRefH parameter_stream = nullptr;
+      if (stream_suite->AEGP_GetNewEffectStreamByIndex(
+              plugin_id_, applied_owner.get(), 1, &parameter_stream) != A_Err_NONE
+          || parameter_stream == nullptr) {
+        return HostLayerEffectApplyResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "applied effect parameter stream could not be resolved");
+      }
+      StreamRefOwner parameter_stream_owner(stream_suite.get(), parameter_stream);
+      if (dynamic_suite->AEGP_GetNewParentStreamRef(
+              plugin_id_, parameter_stream_owner.get(), &effect_stream) != A_Err_NONE
+          || effect_stream == nullptr) {
+        return HostLayerEffectApplyResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "applied effect stream could not be resolved from its parameter");
+      }
+    } else {
+      const auto located_index = locate_unique_insertion<AEGP_InstalledEffectKey>(
+          std::span<const AEGP_InstalledEffectKey>(*before_keys),
+          std::span<const AEGP_InstalledEffectKey>(*after_keys),
+          matched_key);
+      if (!located_index.has_value()) {
+        return HostLayerEffectApplyResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "zero-parameter effect insertion was not uniquely identifiable");
+      }
+      insertion_index = static_cast<A_long>(located_index.value());
+      if (dynamic_suite->AEGP_GetNewStreamRefByIndex(
+              plugin_id_, effect_group_owner.get(), insertion_index,
+              &effect_stream) != A_Err_NONE
+          || effect_stream == nullptr) {
+        return HostLayerEffectApplyResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "applied effect stream could not be resolved from the effect group");
+      }
     }
     StreamRefOwner effect_stream_owner(stream_suite.get(), effect_stream);
     std::array<A_char, AEGP_MAX_STREAM_MATCH_NAME_SIZE> applied_match_name{};
@@ -3420,11 +3470,28 @@ class AegpHostApi final : public HostApi {
     A_long verified_insertion_index = -1;
     if (dynamic_suite->AEGP_GetStreamIndexInParent(
             effect_stream_owner.get(), &verified_insertion_index) != A_Err_NONE
-        || verified_insertion_index != insertion_index
-        || after_stack->keys[static_cast<std::size_t>(insertion_index)] != matched_key) {
+        || verified_insertion_index < 0
+        || static_cast<std::size_t>(verified_insertion_index) >= after_keys->size()
+        || (insertion_index >= 0 && verified_insertion_index != insertion_index)) {
       return HostLayerEffectApplyResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
           "applied effect index could not be verified from its native stream");
+    }
+    insertion_index = verified_insertion_index;
+    bool preserved_existing_order =
+        static_cast<std::size_t>(insertion_index) < after_keys->size()
+        && (*after_keys)[static_cast<std::size_t>(insertion_index)] == matched_key;
+    for (std::size_t before_index = 0;
+         preserved_existing_order && before_index < before_keys->size();
+         ++before_index) {
+      const std::size_t after_index = before_index < static_cast<std::size_t>(insertion_index)
+          ? before_index : before_index + 1U;
+      preserved_existing_order = (*before_keys)[before_index] == (*after_keys)[after_index];
+    }
+    if (!preserved_existing_order) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "applied effect index did not preserve the existing native stack");
     }
 
     // AEGP_GetEffectName does not promise UTF-8, so localized hosts can return
@@ -3474,8 +3541,8 @@ class AegpHostApi final : public HostApi {
     applied.name = std::move(matched_name);
     applied.match_name = command.effect_match_name;
     applied.effect_index = static_cast<std::uint64_t>(insertion_index) + 1U;
-    applied.effect_count_before = before_stack->keys.size();
-    applied.effect_count_after = after_stack->keys.size();
+    applied.effect_count_before = before_keys->size();
+    applied.effect_count_after = after_keys->size();
     applied.matching_effect_count_before = matching_before;
     applied.matching_effect_count_after = matching_after;
     return HostLayerEffectApplyResult::success(std::move(applied));
