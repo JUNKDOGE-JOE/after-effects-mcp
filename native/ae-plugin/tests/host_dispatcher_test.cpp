@@ -29,6 +29,7 @@ using aemcp::native::HostBitDepthWriteResult;
 using aemcp::native::HostCompositionLayersResult;
 using aemcp::native::HostCompositionTimeResult;
 using aemcp::native::HostDispatcher;
+using aemcp::native::HostLayerPropertyWriteResult;
 using aemcp::native::HostProjectItemsResult;
 using aemcp::native::HostReadResult;
 using aemcp::native::ObjectLocator;
@@ -44,6 +45,7 @@ using aemcp::native::kCompositionSelectedLayersListCapability;
 using aemcp::native::kCompositionTimeReadCapability;
 using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kProjectSummaryCapability;
+using aemcp::native::kLayerPropertySetCapability;
 using aemcp::native::json_encoded_string_size;
 using aemcp::native::canonical_seconds_rational;
 using aemcp::native::normalize_selected_layer_collection;
@@ -397,6 +399,34 @@ class FakeHost final : public HostApi {
     return HostCompositionTimeResult::success(std::move(result));
   }
 
+  [[nodiscard]] HostLayerPropertyWriteResult set_layer_property(
+      const aemcp::native::LayerPropertySetCommand& command,
+      TimePoint work_deadline) override {
+    require(std::this_thread::get_id() == expected_thread_,
+        "layer property write HostApi ran off owner thread");
+    observed_deadline = work_deadline;
+    observed_property_command = command;
+    ++layer_property_write_calls;
+    if (!layer_property_write_error_code.empty()) {
+      return HostLayerPropertyWriteResult::failure(
+          layer_property_write_error_code,
+          "fake layer property write error",
+          "params.arguments.value");
+    }
+    aemcp::native::LayerPropertyChanged changed;
+    changed.layer_locator = command.layer_locator;
+    changed.property_locator = command.property_locator;
+    changed.value_type = "one-d";
+    changed.before_value = aemcp::native::LayerPropertyScalarValue{"25"};
+    changed.after_value = command.value;
+    if (const auto* requested =
+            std::get_if<aemcp::native::LayerPropertyScalarValue>(&command.value);
+        requested != nullptr && requested->value == "4e1") {
+      changed.after_value = aemcp::native::LayerPropertyScalarValue{"40"};
+    }
+    return HostLayerPropertyWriteResult::success(std::move(changed));
+  }
+
   [[nodiscard]] static ObjectLocator locator(std::string kind, std::string object_id) {
     return {
         std::move(kind),
@@ -417,6 +447,7 @@ class FakeHost final : public HostApi {
   std::string write_error_field;
   std::string composition_time_error_code;
   std::string composition_time_error_field;
+  std::string layer_property_write_error_code;
   std::int32_t current_bits_per_channel{8};
   std::int32_t observed_target_depth{0};
   int calls{0};
@@ -426,6 +457,7 @@ class FakeHost final : public HostApi {
   int composition_layers_calls{0};
   int composition_selected_layers_calls{0};
   int composition_time_calls{0};
+  int layer_property_write_calls{0};
   std::int32_t composition_time_value{3003};
   std::uint32_t composition_time_scale{1000};
   bool mismatch_project_page{false};
@@ -436,6 +468,7 @@ class FakeHost final : public HostApi {
   aemcp::native::CompositionLayersQuery observed_layers_query;
   aemcp::native::CompositionLayersQuery observed_selected_layers_query;
   aemcp::native::CompositionTimeQuery observed_time_query;
+  aemcp::native::LayerPropertySetCommand observed_property_command;
 };
 
 class BlockingHost final : public HostApi {
@@ -522,6 +555,28 @@ Request bit_depth_set_request(
       std::move(key),
       std::move(fingerprint),
   };
+}
+
+Request layer_property_set_request(
+    FakeClock& clock,
+    std::string id,
+    std::string key = "layer-property-intent-001",
+    std::string fingerprint = std::string(64, 'e'),
+    std::string value = "40") {
+  Request result;
+  result.request_id = std::move(id);
+  result.capability_id = std::string(kLayerPropertySetCapability);
+  result.deadline = clock.now() + 100ms;
+  result.idempotency_key = std::move(key);
+  result.arguments_fingerprint_sha256 = std::move(fingerprint);
+  result.host_instance_id = "22222222-2222-4222-8222-222222222222";
+  result.session_id = "11111111-1111-4111-8111-111111111111";
+  result.layer_locator = FakeHost::locator(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  result.property_locator = FakeHost::locator(
+      "stream", "cccccccc-cccc-4ccc-8ccc-cccccccccccc");
+  result.property_value = aemcp::native::LayerPropertyScalarValue{std::move(value)};
+  return result;
 }
 
 Request project_items_request(
@@ -1013,6 +1068,44 @@ void bit_depth_write_uses_request_deadline_and_stops_an_overrun_idle_batch() {
       "overrun idle batch cleanup lost the queued request");
 }
 
+void layer_property_write_is_typed_context_bound_and_idempotent() {
+  FakeClock clock;
+  const auto owner = std::this_thread::get_id();
+  HostDispatcher dispatcher(owner, clock, config(4, 4, 4ms));
+  FakeHost host(clock, owner);
+
+  Request stale = layer_property_set_request(clock, "property-stale");
+  stale.property_locator->generation += 1;
+  const auto rejected = dispatcher.enqueue(std::move(stale));
+  require(rejected.code == EnqueueCode::kInvalidRequest
+          && rejected.error_code == "STALE_LOCATOR"
+          && rejected.error_field == "params.arguments.propertyLocator",
+      "cross-context property locator reached HostApi");
+
+  require(dispatcher.enqueue(layer_property_set_request(
+      clock, "property-set-1", "layer-property-intent-001",
+      std::string(64, 'e'), "4e1")).code == EnqueueCode::kAccepted,
+      "valid layer property mutation was rejected");
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1 && batch.completions[0].ok
+          && host.layer_property_write_calls == 1,
+      "layer property mutation did not run exactly once on the owner thread");
+  const auto& changed = batch.completions[0].layer_property_change_result;
+  require(changed.changed && changed.value_type == "one-d"
+          && changed.after_value
+              == aemcp::native::LayerPropertyValue{
+                  aemcp::native::LayerPropertyScalarValue{"40"}}
+          && host.observed_property_command.property_locator
+              == *layer_property_set_request(clock, "ignored").property_locator,
+      "layer property mutation lost its typed locator or before/after evidence");
+
+  const auto duplicate = dispatcher.enqueue(layer_property_set_request(
+      clock, "property-set-2"));
+  require(duplicate.code == EnqueueCode::kDuplicateRequest
+          && duplicate.error_field == "params.arguments.idempotencyKey",
+      "successful layer property idempotency key was allowed to mutate again");
+}
+
 void worker_to_owner_dispatch_and_outbound_transfer() {
   FakeClock clock;
   const auto owner = std::this_thread::get_id();
@@ -1367,6 +1460,7 @@ int main() {
   bit_depth_write_releases_only_safe_failures_and_fails_closed_when_full();
   bit_depth_write_validates_before_dispatch_and_late_results_are_ambiguous();
   bit_depth_write_uses_request_deadline_and_stops_an_overrun_idle_batch();
+  layer_property_write_is_typed_context_bound_and_idempotent();
   worker_to_owner_dispatch_and_outbound_transfer();
   admission_is_closed_and_bounded();
   request_identity_is_route_scoped_and_tombstones_expire();

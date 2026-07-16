@@ -100,6 +100,7 @@ async def test_status_reports_native_plane_without_claiming_active_routing(monke
     assert "ae.listSelectedLayers" in _filtered_tool_names()
     assert "ae.getCompositionTime" in _filtered_tool_names()
     assert "ae.listLayerProperties" in _filtered_tool_names()
+    assert "ae.setLayerPropertyValue" in _filtered_tool_names()
     schema_cls, run_fn = _load_status_handler()
     result = await run_fn(schema_cls(), None)
 

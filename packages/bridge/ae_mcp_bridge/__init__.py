@@ -21,6 +21,7 @@ from ae_mcp.backends.native import (
     NativeInvokeResult,
     NativeNegotiation,
     NativeRecovery,
+    LAYER_PROPERTY_SET_CAPABILITY_ID,
     PROJECT_BIT_DEPTH_SET_CAPABILITY_ID,
 )
 
@@ -136,6 +137,12 @@ class HttpBridge(Backend, NativeInvokeBackend):
         message: str,
         capability_id: str,
     ) -> NativeBackendError:
+        recovery_hint = (
+            "Read the property with fresh locators and inspect the Undo stack "
+            "before retrying."
+            if capability_id == LAYER_PROPERTY_SET_CAPABILITY_ID
+            else "Inspect the project bit depth and Undo stack before retrying."
+        )
         return NativeBackendError(
             "POSSIBLY_SIDE_EFFECTING_FAILURE",
             message,
@@ -143,7 +150,7 @@ class HttpBridge(Backend, NativeInvokeBackend):
             side_effect="may-have-occurred",
             recovery=NativeRecovery(
                 action="inspect-state",
-                hint="Inspect the project bit depth and Undo stack before retrying.",
+                hint=recovery_hint,
             ),
             details={"capabilityId": capability_id},
         )
@@ -531,7 +538,10 @@ class HttpBridge(Backend, NativeInvokeBackend):
         *,
         cancellation: NativeCancellationToken | None = None,
     ) -> NativeInvokeResult:
-        mutating = request.capability_id == PROJECT_BIT_DEPTH_SET_CAPABILITY_ID
+        mutating = request.capability_id in {
+            PROJECT_BIT_DEPTH_SET_CAPABILITY_ID,
+            LAYER_PROPERTY_SET_CAPABILITY_ID,
+        }
         try:
             raw = await self._native_post(
                 "/native/invoke",

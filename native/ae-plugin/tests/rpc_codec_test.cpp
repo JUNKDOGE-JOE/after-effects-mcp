@@ -22,6 +22,7 @@ using aemcp::native::rpc::CompositionLayersSuccess;
 using aemcp::native::rpc::CompositionSelectedLayersSuccess;
 using aemcp::native::rpc::CompositionTimeSuccess;
 using aemcp::native::rpc::LayerPropertiesSuccess;
+using aemcp::native::rpc::LayerPropertySetSuccess;
 using aemcp::native::rpc::CapabilityDetail;
 using aemcp::native::rpc::CancelState;
 using aemcp::native::rpc::CancelSuccess;
@@ -57,6 +58,7 @@ using aemcp::native::rpc::digest_composition_layers_postcondition;
 using aemcp::native::rpc::digest_composition_selected_layers_postcondition;
 using aemcp::native::rpc::digest_composition_time_postcondition;
 using aemcp::native::rpc::digest_layer_properties_postcondition;
+using aemcp::native::rpc::digest_layer_property_set_postcondition;
 using aemcp::native::rpc::digest_project_items_postcondition;
 using aemcp::native::rpc::encode_capabilities_success;
 using aemcp::native::rpc::encode_cancel_success;
@@ -71,6 +73,7 @@ using aemcp::native::rpc::encode_composition_layers_success;
 using aemcp::native::rpc::encode_composition_selected_layers_success;
 using aemcp::native::rpc::encode_composition_time_success;
 using aemcp::native::rpc::encode_layer_properties_success;
+using aemcp::native::rpc::encode_layer_property_set_success;
 using aemcp::native::rpc::encode_project_items_success;
 using aemcp::native::rpc::kMaxFrameBytes;
 
@@ -91,6 +94,8 @@ constexpr std::string_view kCompositionTimeContractDigest =
     "fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd";
 constexpr std::string_view kLayerPropertiesContractDigest =
     "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba";
+constexpr std::string_view kLayerPropertySetContractDigest =
+    "5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c";
 
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "FAIL: " << message << '\n';
@@ -817,6 +822,31 @@ void project_graph_invokes_and_results_are_closed_and_deterministic() {
           && properties_body.find("\"components\":[\"10\",\"20\"]")
             != std::string::npos,
       "layer-properties success omitted its typed native contract");
+  aemcp::native::LayerPropertyChanged changed;
+  changed.layer_locator = property_page.layer_locator;
+  changed.property_locator = position.property_locator;
+  changed.value_type = "two-d-spatial";
+  changed.before_value = aemcp::native::LayerPropertyVectorValue{{"10", "20"}};
+  changed.after_value = aemcp::native::LayerPropertyVectorValue{{"30", "40"}};
+  LayerPropertySetSuccess property_set{
+      "invoke-layer-property-set-1",
+      std::string(kSession),
+      std::string(kHost),
+      changed,
+      1'900'000'000'000ULL,
+      1'900'000'000'025ULL,
+      std::string(kDigest),
+      digest_layer_property_set_postcondition(changed),
+      false};
+  const std::string property_set_body = body(
+      encode_layer_property_set_success(property_set));
+  require(property_set_body.find("\"capabilityId\":\"ae.layer.property.set\"")
+          != std::string::npos
+          && property_set_body.find("\"kind\":\"layer-property-set\"")
+              != std::string::npos
+          && property_set_body.find("\"effect\":\"committed\"")
+              != std::string::npos,
+      "layer-property mutation success omitted committed Undo evidence");
   LayerPropertiesSuccess unknown_unsupported = properties_success;
   unknown_unsupported.value.properties[1].value_type = "unknown";
   unknown_unsupported.postcondition_digest =
@@ -1145,6 +1175,8 @@ void response_helpers_are_bounded_and_typed() {
       std::string(kCompositionTimeContractDigest);
   capabilities.layer_properties_list_contract_digest =
       std::string(kLayerPropertiesContractDigest);
+  capabilities.layer_property_set_contract_digest =
+      std::string(kLayerPropertySetContractDigest);
   capabilities.include_composition_selected_layers_list = true;
   capabilities.composition_selected_layers_list_contract_digest =
       std::string(kCompositionLayersContractDigest);

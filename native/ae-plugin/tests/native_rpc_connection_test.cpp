@@ -258,6 +258,33 @@ class FakeHost final : public HostApi {
     return HostLayerPropertiesResult::success(std::move(page));
   }
 
+  [[nodiscard]] aemcp::native::HostLayerPropertyWriteResult set_layer_property(
+      const aemcp::native::LayerPropertySetCommand& command, TimePoint) override {
+    ++layer_property_write_calls;
+    observed_property_command = command;
+    if (const auto* scalar =
+            std::get_if<aemcp::native::LayerPropertyScalarValue>(&command.value);
+        scalar != nullptr && scalar->value == "41") {
+      return aemcp::native::HostLayerPropertyWriteResult::failure(
+          "PRECONDITION_FAILED",
+          "property must be non-keyframed",
+          "params.arguments.propertyLocator");
+    }
+    if (const auto* scalar =
+            std::get_if<aemcp::native::LayerPropertyScalarValue>(&command.value);
+        scalar != nullptr && scalar->value == "42") {
+      return aemcp::native::HostLayerPropertyWriteResult::failure(
+          "PRECONDITION_FAILED", "an After Effects project must be open");
+    }
+    aemcp::native::LayerPropertyChanged changed;
+    changed.layer_locator = command.layer_locator;
+    changed.property_locator = command.property_locator;
+    changed.value_type = "one-d";
+    changed.before_value = aemcp::native::LayerPropertyScalarValue{"25"};
+    changed.after_value = command.value;
+    return aemcp::native::HostLayerPropertyWriteResult::success(std::move(changed));
+  }
+
   [[nodiscard]] HostProjectGraphInvalidationResult invalidate_project_graph(
       TimePoint) override {
     ++project_graph_invalidation_calls;
@@ -293,8 +320,10 @@ class FakeHost final : public HostApi {
   int composition_selected_layers_calls{0};
   int composition_time_calls{0};
   int layer_properties_calls{0};
+  int layer_property_write_calls{0};
   int project_graph_invalidation_calls{0};
   std::thread::id project_graph_invalidation_thread;
+  aemcp::native::LayerPropertySetCommand observed_property_command;
 };
 
 struct EventRecord {
@@ -378,7 +407,7 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      "04ad7c01ea1bf9c2837d7f55184fe0453b2edf6027c1ec36c44a8c8a17d46296",
+      "b32ad50eb0dcbe47098192787038a9cac6479aa948a487ae02dd18d307136a66",
       "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
       "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
       "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
@@ -386,6 +415,7 @@ NativeRpcRuntimeInfo runtime() {
       "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
       "fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd",
       "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba",
+      "5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c",
       "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
   };
 }
@@ -536,6 +566,24 @@ std::string bit_depth_set_invoke_json(
       + std::string(key) + "\"}}}";
 }
 
+std::string graph_locator_json(std::string_view kind, std::string_view object_id);
+
+std::string layer_property_set_invoke_json(
+    std::string_view request_id,
+    std::string_view key = "layer-property-intent-001",
+    std::string_view value = "40") {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.layer.property.set\","
+        "\"capabilityVersion\":1,\"arguments\":{\"layerLocator\":"
+      + graph_locator_json("layer", "88888888-8888-4888-8888-888888888888")
+      + ",\"propertyLocator\":"
+      + graph_locator_json("stream", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+      + ",\"value\":{\"kind\":\"scalar\",\"value\":\"" + std::string(value)
+      + "\"},\"idempotencyKey\":\"" + std::string(key) + "\"}}}";
+}
+
 std::string graph_locator_json(std::string_view kind, std::string_view object_id) {
   return "{\"kind\":\"" + std::string(kind)
       + "\",\"hostInstanceId\":\"" + std::string(kHost)
@@ -681,6 +729,19 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(bit_depth_set_capabilities,
       "\"targetDepth\":{\"enum\":[8,16,32]",
       "bit-depth set capabilities response");
+
+  send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-layer-property-set", "ae.layer.property.set"));
+  const std::string property_set_capabilities = read_body(sockets[0]);
+  require_contains(property_set_capabilities,
+      "\"id\":\"ae.layer.property.set\"",
+      "layer-property set capabilities response");
+  require_contains(property_set_capabilities,
+      "\"contractDigest\":\"5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c\"",
+      "layer-property set capabilities response");
+  require_contains(property_set_capabilities,
+      "aemcp.requirement.native.layer-property-set",
+      "layer-property set capabilities response");
 
   send_json(sockets[0], bit_depth_capabilities_json(
       "capabilities-project-items", "ae.project.items.list"));
@@ -990,6 +1051,81 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
           && host.layer_properties_calls == 1,
       "layer-properties terminal evidence was not verified");
 
+  send_json(sockets[0], layer_property_set_invoke_json("invoke-layer-property-set"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "layer-property set progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued layer-property set invoke");
+  const auto layer_property_set_batch = dispatcher.drain(host);
+  require(layer_property_set_batch.completions.size() == 1
+          && layer_property_set_batch.completions[0].ok,
+      "owner dispatcher did not produce the layer-property set result");
+  const std::string layer_property_set = read_body(sockets[0]);
+  require_contains(layer_property_set,
+      "\"capabilityId\":\"ae.layer.property.set\"",
+      "layer-property set response");
+  require_contains(layer_property_set,
+      "\"effect\":\"committed\"", "layer-property set response");
+  require_contains(layer_property_set,
+      "\"undo\":{\"available\":true,\"verified\":false}",
+      "layer-property set response");
+  require_contains(layer_property_set,
+      "\"afterValue\":{\"kind\":\"scalar\",\"value\":\"40\"}",
+      "layer-property set response");
+  wait_until([&] {
+    return !observer.terminal("invoke-layer-property-set").request_id.empty();
+  }, "layer-property set terminal audit");
+  const TerminalRecord property_set_terminal =
+      observer.terminal("invoke-layer-property-set");
+  require(property_set_terminal.ok
+          && property_set_terminal.request_digest.size() == 64
+          && property_set_terminal.postcondition_digest.size() == 64
+          && host.layer_property_write_calls == 1,
+      "layer-property set terminal evidence was not verified");
+
+  send_json(sockets[0], layer_property_set_invoke_json(
+      "invoke-layer-property-set-duplicate"));
+  const std::string property_duplicate = read_body(sockets[0]);
+  require_contains(property_duplicate, "\"code\":\"DUPLICATE_REQUEST\"",
+      "same-key layer-property duplicate");
+  require(host.layer_property_write_calls == 1 && !wait_readable(sockets[0], 100ms),
+      "same-key layer-property duplicate reached HostApi");
+
+  send_json(sockets[0], layer_property_set_invoke_json(
+      "invoke-layer-property-precondition", "layer-property-intent-002", "41"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "layer-property precondition progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued layer-property precondition invoke");
+  const auto property_precondition_batch = dispatcher.drain(host);
+  require(property_precondition_batch.completions.size() == 1
+          && !property_precondition_batch.completions[0].ok,
+      "owner dispatcher did not preserve property precondition failure");
+  const std::string property_precondition = read_body(sockets[0]);
+  require_contains(property_precondition, "\"code\":\"PRECONDITION_FAILED\"",
+      "layer-property precondition response");
+  require_contains(property_precondition, "\"action\":\"change-arguments\"",
+      "layer-property precondition recovery");
+  require_contains(property_precondition,
+      "\"field\":\"params.arguments.propertyLocator\"",
+      "layer-property precondition field");
+
+  send_json(sockets[0], layer_property_set_invoke_json(
+      "invoke-layer-property-no-project", "layer-property-intent-003", "42"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "layer-property no-project progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued layer-property no-project invoke");
+  const auto property_no_project_batch = dispatcher.drain(host);
+  require(property_no_project_batch.completions.size() == 1
+          && !property_no_project_batch.completions[0].ok,
+      "owner dispatcher did not preserve no-project precondition failure");
+  const std::string property_no_project = read_body(sockets[0]);
+  require_contains(property_no_project, "\"code\":\"PRECONDITION_FAILED\"",
+      "layer-property no-project response");
+  require_contains(property_no_project, "\"action\":\"open-project\"",
+      "layer-property no-project recovery");
+
   send_json(sockets[0], bit_depth_set_invoke_json("invoke-bit-depth-set"));
   require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
       "bit-depth set progress");
@@ -1052,7 +1188,7 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(cancel, "\"terminalResponseExpected\":true", "cancel response");
   const std::string cancelled_terminal = read_body(sockets[0]);
   require_contains(cancelled_terminal, "\"code\":\"CANCELLED\"", "cancel terminal");
-  require(idle_signal.calls() == 10,
+  require(idle_signal.calls() == 13,
       "accepted invokes did not each schedule exactly one idle wake");
 
   require(dispatcher.enqueue(Request{

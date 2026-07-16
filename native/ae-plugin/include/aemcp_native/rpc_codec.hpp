@@ -75,6 +75,8 @@ struct InvokeParams {
   std::optional<ObjectLocator> composition_locator;
   std::optional<ObjectLocator> layer_locator;
   std::optional<ObjectLocator> parent_property_locator;
+  std::optional<ObjectLocator> property_locator;
+  LayerPropertyValue property_value;
 };
 
 struct CancelParams {
@@ -133,6 +135,13 @@ struct ParsedRequest {
     const CompositionTimeRead& value);
 [[nodiscard]] std::string digest_layer_properties_postcondition(
     const LayerPropertiesPage& page);
+[[nodiscard]] std::string digest_layer_property_set_arguments(
+    const ObjectLocator& layer_locator,
+    const ObjectLocator& property_locator,
+    const LayerPropertyValue& value,
+    std::string_view idempotency_key);
+[[nodiscard]] std::string digest_layer_property_set_postcondition(
+    const LayerPropertyChanged& value);
 
 class FrameDecoder final {
  public:
@@ -297,6 +306,7 @@ struct CapabilitiesSuccess {
   bool include_composition_layers_list{true};
   bool include_composition_time_read{true};
   bool include_layer_properties_list{true};
+  bool include_layer_property_set{true};
   std::string query_digest;
   std::string capabilities_digest;
   // Required only for detail=full when the descriptor is included.
@@ -307,6 +317,7 @@ struct CapabilitiesSuccess {
   std::string composition_layers_list_contract_digest;
   std::string composition_time_read_contract_digest;
   std::string layer_properties_list_contract_digest;
+  std::string layer_property_set_contract_digest;
   bool include_composition_selected_layers_list{false};
   std::string composition_selected_layers_list_contract_digest;
 };
@@ -412,6 +423,18 @@ struct LayerPropertiesSuccess {
   bool replayed{false};
 };
 
+struct LayerPropertySetSuccess {
+  std::string request_id;
+  std::string session_id;
+  std::string host_instance_id;
+  LayerPropertyChanged value;
+  std::uint64_t started_at_unix_ms{0};
+  std::uint64_t completed_at_unix_ms{0};
+  std::string request_digest;
+  std::string postcondition_digest;
+  bool replayed{false};
+};
+
 enum class CancelState {
   kQueuedCancelled,
   kRunningCancelRequested,
@@ -468,6 +491,7 @@ struct ErrorResponse {
   RpcErrorCode code{RpcErrorCode::kInvalidRequest};
   std::string message;
   std::string recovery_hint;
+  std::optional<std::string> recovery_action;
   std::optional<std::uint32_t> retry_after_ms;
   std::optional<ErrorDetails> details;
 };
@@ -492,6 +516,8 @@ struct ErrorResponse {
     const CompositionTimeSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_layer_properties_success(
     const LayerPropertiesSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_property_set_success(
+    const LayerPropertySetSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_cancel_success(
     const CancelSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_project_graph_invalidate_success(

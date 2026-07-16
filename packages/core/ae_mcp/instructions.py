@@ -29,7 +29,10 @@ WORKFLOW — every task follows this loop:
                 ae_listSelectedLayers. Copy a
                 returned layer locator into ae_listLayerProperties; copy a
                 returned property-group locator back into that tool to descend
-                one bounded level. ae_listSelectedLayers reports only selected
+                one bounded level. To change a non-keyframed primitive leaf,
+                copy both returned locators and the typed value shape into
+                ae_setLayerPropertyValue, supply one stable idempotency key,
+                then read the property again. ae_listSelectedLayers reports only selected
                 layers, not property, mask, effect, or keyframe selections.
                 These reads fail explicitly when native AEGP is unavailable;
                 they never fall back to JSX.

@@ -64,6 +64,8 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
         "invoke-composition-layers-list.json",
         "invoke-composition-selected-layers-list.json",
         "invoke-composition-time-read.json",
+        "invoke-layer-properties-list.json",
+        "invoke-layer-property-set.json",
         "cancel.json",
     ):
         fixture = _json(FIXTURE_ROOT / name)
@@ -89,6 +91,8 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
         "invoke-composition-layers-list.json",
         "invoke-composition-selected-layers-list.json",
         "invoke-composition-time-read.json",
+        "invoke-layer-properties-list.json",
+        "invoke-layer-property-set.json",
         "cancel.json",
         "errors.json",
         "negative-corpus.json",
@@ -154,6 +158,7 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
         "ae.composition.selected-layers.list",
         "ae.composition.time.read",
         "ae.layer.properties.list",
+        "ae.layer.property.set",
     ]
     assert capabilities["response"]["result"]["capabilitiesDigest"] == hello[
         "response"

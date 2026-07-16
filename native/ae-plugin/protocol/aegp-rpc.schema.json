@@ -364,6 +364,23 @@
         }
       }
     },
+    "layerPropertySetArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layerLocator", "propertyLocator", "value", "idempotencyKey"],
+      "properties": {
+        "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "propertyLocator": { "$ref": "#/$defs/streamLocator" },
+        "value": { "$ref": "#/$defs/layerPropertyPrimitiveValue" },
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      },
+      "x-invariant": "both-locators-must-share-one-host-session-project-generation"
+    },
     "projectItemsListInputSchemaContract": {
       "const": {
         "type": "object",
@@ -901,6 +918,96 @@
         "x-invariant": "returned-equals-properties-length-and-page-metadata-and-value-types-are-self-consistent"
       }
     },
+    "layerPropertySetInputSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["layerLocator", "propertyLocator", "value", "idempotencyKey"],
+        "properties": {
+          "layerLocator": { "$ref": "#/$defs/layerLocator" },
+          "propertyLocator": { "$ref": "#/$defs/streamLocator" },
+          "value": { "$ref": "#/$defs/primitiveValue" },
+          "idempotencyKey": { "type": "string", "minLength": 16, "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$" }
+        },
+        "$defs": {
+          "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+          "locatorBase": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "hostInstanceId", "sessionId", "projectId", "generation", "objectId"],
+            "properties": {
+              "kind": { "enum": ["layer", "stream"] },
+              "hostInstanceId": { "$ref": "#/$defs/uuid" },
+              "sessionId": { "$ref": "#/$defs/uuid" },
+              "projectId": { "$ref": "#/$defs/uuid" },
+              "generation": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              "objectId": { "$ref": "#/$defs/uuid" }
+            }
+          },
+          "layerLocator": {
+            "allOf": [
+              { "$ref": "#/$defs/locatorBase" },
+              { "properties": { "kind": { "const": "layer" } } }
+            ]
+          },
+          "streamLocator": {
+            "allOf": [
+              { "$ref": "#/$defs/locatorBase" },
+              { "properties": { "kind": { "const": "stream" } } }
+            ]
+          },
+          "primitiveValue": {
+            "oneOf": [
+              { "type": "object", "additionalProperties": false, "required": ["kind", "value"], "properties": { "kind": { "const": "scalar" }, "value": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$" } } },
+              { "type": "object", "additionalProperties": false, "required": ["kind", "components"], "properties": { "kind": { "const": "vector" }, "components": { "type": "array", "minItems": 2, "maxItems": 3, "items": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$" } } } },
+              { "type": "object", "additionalProperties": false, "required": ["kind", "alpha", "red", "green", "blue"], "properties": { "kind": { "const": "color" }, "alpha": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$" }, "red": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$" }, "green": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$" }, "blue": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$" } } }
+            ]
+          }
+        },
+        "x-invariant": "both-locators-must-share-one-host-session-project-generation"
+      }
+    },
+    "layerPropertySetResultSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["changed", "layerLocator", "propertyLocator", "valueType", "beforeValue", "afterValue"],
+        "properties": {
+          "changed": { "const": true },
+          "layerLocator": { "$ref": "#/$defs/layerLocator" },
+          "propertyLocator": { "$ref": "#/$defs/streamLocator" },
+          "valueType": { "enum": ["one-d", "two-d", "two-d-spatial", "three-d", "three-d-spatial", "color"] },
+          "beforeValue": { "$ref": "#/$defs/primitiveValue" },
+          "afterValue": { "$ref": "#/$defs/primitiveValue" }
+        },
+        "$defs": {
+          "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+          "locatorBase": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "hostInstanceId", "sessionId", "projectId", "generation", "objectId"],
+            "properties": {
+              "kind": { "enum": ["layer", "stream"] },
+              "hostInstanceId": { "$ref": "#/$defs/uuid" },
+              "sessionId": { "$ref": "#/$defs/uuid" },
+              "projectId": { "$ref": "#/$defs/uuid" },
+              "generation": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              "objectId": { "$ref": "#/$defs/uuid" }
+            }
+          },
+          "layerLocator": { "allOf": [{ "$ref": "#/$defs/locatorBase" }, { "properties": { "kind": { "const": "layer" } } }] },
+          "streamLocator": { "allOf": [{ "$ref": "#/$defs/locatorBase" }, { "properties": { "kind": { "const": "stream" } } }] },
+          "primitiveValue": {
+            "oneOf": [
+              { "type": "object", "additionalProperties": false, "required": ["kind", "value"], "properties": { "kind": { "const": "scalar" }, "value": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$" } } },
+              { "type": "object", "additionalProperties": false, "required": ["kind", "components"], "properties": { "kind": { "const": "vector" }, "components": { "type": "array", "minItems": 2, "maxItems": 3, "items": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$" } } } },
+              { "type": "object", "additionalProperties": false, "required": ["kind", "alpha", "red", "green", "blue"], "properties": { "kind": { "const": "color" }, "alpha": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$" }, "red": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$" }, "green": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$" }, "blue": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$" } } }
+            ]
+          }
+        },
+        "x-invariant": "beforeValue-must-differ-from-afterValue-and-values-must-match-valueType"
+      }
+    },
     "projectSummaryInvokeParams": {
       "type": "object",
       "additionalProperties": false,
@@ -981,6 +1088,16 @@
         "arguments": { "$ref": "#/$defs/layerPropertiesListArguments" }
       }
     },
+    "layerPropertySetInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.property.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/layerPropertySetArguments" }
+      }
+    },
     "invokeParams": {
       "oneOf": [
         { "$ref": "#/$defs/projectSummaryInvokeParams" },
@@ -990,7 +1107,8 @@
         { "$ref": "#/$defs/compositionLayersListInvokeParams" },
         { "$ref": "#/$defs/compositionSelectedLayersListInvokeParams" },
         { "$ref": "#/$defs/compositionTimeReadInvokeParams" },
-        { "$ref": "#/$defs/layerPropertiesListInvokeParams" }
+        { "$ref": "#/$defs/layerPropertiesListInvokeParams" },
+        { "$ref": "#/$defs/layerPropertySetInvokeParams" }
       ],
       "x-invariant": "every-invoke-variant-is-compile-time-allowlisted-and-closed"
     },
@@ -1247,7 +1365,8 @@
         { "$ref": "#/$defs/projectItemsListArguments" },
         { "$ref": "#/$defs/compositionLayersListArguments" },
         { "$ref": "#/$defs/compositionTimeReadArguments" },
-        { "$ref": "#/$defs/layerPropertiesListArguments" }
+        { "$ref": "#/$defs/layerPropertiesListArguments" },
+        { "$ref": "#/$defs/layerPropertySetArguments" }
       ]
     },
     "capabilityValue": {
@@ -1258,7 +1377,8 @@
         { "$ref": "#/$defs/projectItemsListValue" },
         { "$ref": "#/$defs/compositionLayersListValue" },
         { "$ref": "#/$defs/compositionTimeReadValue" },
-        { "$ref": "#/$defs/layerPropertiesListValue" }
+        { "$ref": "#/$defs/layerPropertiesListValue" },
+        { "$ref": "#/$defs/layerPropertySetValue" }
       ]
     },
     "capabilityInputSchemaContract": {
@@ -1268,7 +1388,8 @@
         { "$ref": "#/$defs/projectItemsListInputSchemaContract" },
         { "$ref": "#/$defs/compositionLayersListInputSchemaContract" },
         { "$ref": "#/$defs/compositionTimeReadInputSchemaContract" },
-        { "$ref": "#/$defs/layerPropertiesListInputSchemaContract" }
+        { "$ref": "#/$defs/layerPropertiesListInputSchemaContract" },
+        { "$ref": "#/$defs/layerPropertySetInputSchemaContract" }
       ]
     },
     "capabilityResultSchemaContract": {
@@ -1279,7 +1400,8 @@
         { "$ref": "#/$defs/projectItemsListResultSchemaContract" },
         { "$ref": "#/$defs/compositionLayersListResultSchemaContract" },
         { "$ref": "#/$defs/compositionTimeReadResultSchemaContract" },
-        { "$ref": "#/$defs/layerPropertiesListResultSchemaContract" }
+        { "$ref": "#/$defs/layerPropertiesListResultSchemaContract" },
+        { "$ref": "#/$defs/layerPropertySetResultSchemaContract" }
       ]
     },
     "positiveCapabilityExample": {
@@ -1743,6 +1865,59 @@
         }
       ]
     },
+    "layerPropertyPrimitiveValue": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "value"],
+          "properties": {
+            "kind": { "const": "scalar" },
+            "value": { "$ref": "#/$defs/decimalString" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "components"],
+          "properties": {
+            "kind": { "const": "vector" },
+            "components": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 3,
+              "items": { "$ref": "#/$defs/decimalString" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "alpha", "red", "green", "blue"],
+          "properties": {
+            "kind": { "const": "color" },
+            "alpha": { "$ref": "#/$defs/decimalString" },
+            "red": { "$ref": "#/$defs/decimalString" },
+            "green": { "$ref": "#/$defs/decimalString" },
+            "blue": { "$ref": "#/$defs/decimalString" }
+          }
+        }
+      ]
+    },
+    "layerPropertySetValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changed", "layerLocator", "propertyLocator", "valueType", "beforeValue", "afterValue"],
+      "properties": {
+        "changed": { "const": true },
+        "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "propertyLocator": { "$ref": "#/$defs/streamLocator" },
+        "valueType": { "enum": ["one-d", "two-d", "two-d-spatial", "three-d", "three-d-spatial", "color"] },
+        "beforeValue": { "$ref": "#/$defs/layerPropertyPrimitiveValue" },
+        "afterValue": { "$ref": "#/$defs/layerPropertyPrimitiveValue" }
+      },
+      "x-invariant": "beforeValue-must-differ-from-afterValue-and-values-must-match-valueType"
+    },
     "layerPropertyEntryValue": {
       "type": "object",
       "additionalProperties": false,
@@ -1900,6 +2075,19 @@
         "evidence": { "$ref": "#/$defs/executionEvidence" }
       }
     },
+    "layerPropertySetInvokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.property.set" },
+        "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" },
+        "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/layerPropertySetValue" },
+        "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
     "invokeResult": {
       "oneOf": [
         { "$ref": "#/$defs/projectSummaryInvokeResult" },
@@ -1909,7 +2097,8 @@
         { "$ref": "#/$defs/compositionLayersListInvokeResult" },
         { "$ref": "#/$defs/compositionSelectedLayersListInvokeResult" },
         { "$ref": "#/$defs/compositionTimeReadInvokeResult" },
-        { "$ref": "#/$defs/layerPropertiesListInvokeResult" }
+        { "$ref": "#/$defs/layerPropertiesListInvokeResult" },
+        { "$ref": "#/$defs/layerPropertySetInvokeResult" }
       ]
     },
     "cancelResult": {
@@ -2049,7 +2238,11 @@
             "code": { "const": "PRECONDITION_FAILED" },
             "retryable": { "const": false },
             "sideEffect": { "const": "not-started" },
-            "recovery": { "properties": { "action": { "const": "open-project" } } }
+            "recovery": {
+              "properties": {
+                "action": { "enum": ["open-project", "change-arguments"] }
+              }
+            }
           }
         },
         {
@@ -2192,7 +2385,7 @@
             "properties": {
               "result": {
                 "properties": {
-                  "capabilityId": { "const": "ae.project.bit-depth.set" }
+                  "capabilityId": { "enum": ["ae.project.bit-depth.set", "ae.layer.property.set"] }
                 },
                 "required": ["capabilityId"]
               }

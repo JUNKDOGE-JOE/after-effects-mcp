@@ -663,6 +663,29 @@ async def test_composition_time_real_mcp_surface_is_strict_and_structured(monkey
                 idempotency_key="bit-depth-intent-0001",
             ),
         ),
+        (
+            native_handler._run_set_layer_property_value,
+            schemas.AeSetLayerPropertyValueArgs(
+                layer_locator={
+                    "kind": "layer",
+                    "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                    "sessionId": "11111111-1111-4111-8111-111111111111",
+                    "projectId": "44444444-4444-4444-8444-444444444444",
+                    "generation": 8,
+                    "objectId": "88888888-8888-4888-8888-888888888888",
+                },
+                property_locator={
+                    "kind": "stream",
+                    "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                    "sessionId": "11111111-1111-4111-8111-111111111111",
+                    "projectId": "44444444-4444-4444-8444-444444444444",
+                    "generation": 8,
+                    "objectId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                },
+                value={"kind": "scalar", "value": "40"},
+                idempotency_key="layer-property-intent-0001",
+            ),
+        ),
     ],
 )
 async def test_native_public_tools_never_fall_back_to_legacy_exec(
@@ -690,6 +713,10 @@ def test_native_tool_registration_is_explicit():
     assert HANDLERS["ae.getCompositionTime"][0] is schemas.AeGetCompositionTimeArgs
     assert HANDLERS["ae.getProjectBitDepth"][0] is schemas.AeGetProjectBitDepthArgs
     assert HANDLERS["ae.setProjectBitDepth"][0] is schemas.AeSetProjectBitDepthArgs
+    assert (
+        HANDLERS["ae.setLayerPropertyValue"][0]
+        is schemas.AeSetLayerPropertyValueArgs
+    )
     assert HANDLERS["ae.projectSummary"][1] is not HANDLERS["ae.overview"][1]
 
 
@@ -803,6 +830,7 @@ def test_tool_filter_exposes_native_tools_only_for_native_adapter(monkeypatch):
     assert "ae.projectSummary" not in names
     assert "ae.getProjectBitDepth" not in names
     assert "ae.setProjectBitDepth" not in names
+    assert "ae.setLayerPropertyValue" not in names
     assert "ae.listSelectedLayers" not in names
 
     monkeypatch.setattr(backend_discovery, "select_backend", lambda: _NativeMock())
@@ -810,4 +838,5 @@ def test_tool_filter_exposes_native_tools_only_for_native_adapter(monkeypatch):
     assert "ae.projectSummary" in names
     assert "ae.getProjectBitDepth" in names
     assert "ae.setProjectBitDepth" in names
+    assert "ae.setLayerPropertyValue" in names
     assert "ae.listSelectedLayers" in names

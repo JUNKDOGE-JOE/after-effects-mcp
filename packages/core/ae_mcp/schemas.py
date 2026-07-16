@@ -267,6 +267,68 @@ class AeListLayerPropertiesArgs(_StrictModel):
     )
 
 
+_PROPERTY_DECIMAL = r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+
+
+class AePropertyScalarInput(_StrictModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    kind: Literal["scalar"]
+    value: str = Field(..., min_length=1, max_length=32, pattern=_PROPERTY_DECIMAL)
+
+
+class AePropertyVectorInput(_StrictModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    kind: Literal["vector"]
+    components: List[
+        Annotated[str, Field(min_length=1, max_length=32, pattern=_PROPERTY_DECIMAL)]
+    ] = Field(..., min_length=2, max_length=3)
+
+
+class AePropertyColorInput(_StrictModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    kind: Literal["color"]
+    alpha: str = Field(..., min_length=1, max_length=32, pattern=_PROPERTY_DECIMAL)
+    red: str = Field(..., min_length=1, max_length=32, pattern=_PROPERTY_DECIMAL)
+    green: str = Field(..., min_length=1, max_length=32, pattern=_PROPERTY_DECIMAL)
+    blue: str = Field(..., min_length=1, max_length=32, pattern=_PROPERTY_DECIMAL)
+
+
+class AeSetLayerPropertyValueArgs(_StrictModel):
+    """ae.setLayerPropertyValue — set one primitive native layer property.
+
+    Copy both locators from ae_listLayerProperties. The first slice accepts
+    only non-keyframed scalar/vector/color streams and never falls back to JSX.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    layer_locator: AeLayerLocator = Field(
+        ...,
+        description="Layer locator used to obtain the property locator.",
+    )
+    property_locator: AePropertyLocator = Field(
+        ...,
+        description="Leaf property locator returned by ae_listLayerProperties.",
+    )
+    value: Union[
+        AePropertyScalarInput,
+        AePropertyVectorInput,
+        AePropertyColorInput,
+    ] = Field(
+        ...,
+        description="Typed scalar, 2/3 component vector, or ARGB color value.",
+    )
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        description=(
+            "Stable key for one property-write intent. Never reuse it for a new value."
+        ),
+    )
+
+
 class AeLayersArgs(_StrictModel):
     """ae.layers — list layers in a comp (paginated)."""
     comp_id: Optional[str] = Field(
@@ -832,6 +894,7 @@ SCHEMAS = {
     "ae.listSelectedLayers": AeListSelectedLayersArgs,
     "ae.getCompositionTime": AeGetCompositionTimeArgs,
     "ae.listLayerProperties": AeListLayerPropertiesArgs,
+    "ae.setLayerPropertyValue": AeSetLayerPropertyValueArgs,
     "ae.layers": AeLayersArgs,
     "ae.readProps": AeReadPropsArgs,
     "ae.exec": AeExecArgs,
@@ -876,4 +939,4 @@ SCHEMAS = {
     "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 52, f"expected 52 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 53, f"expected 53 verbs, got {len(SCHEMAS)}"

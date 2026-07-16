@@ -85,6 +85,12 @@ export const INVOKE_REGISTRY = Object.freeze([
     inputContractId: 'aemcp.contract.ae.layer.properties.list.input.v1',
     resultContractId: 'aemcp.contract.ae.layer.properties.list.result.v1',
   }),
+  Object.freeze({
+    id: 'ae.layer.property.set',
+    version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.property.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.property.set.result.v1',
+  }),
 ]);
 const ENVELOPE_KEYS = new Set([
   'wireVersion', 'kind', 'sessionId', 'requestId', 'method', 'deadlineUnixMs', 'params',
@@ -147,6 +153,11 @@ function isLocatorShape(value, allowedKinds) {
     && ['hostInstanceId', 'sessionId', 'projectId', 'objectId']
       .every((key) => UUID.test(value[key] ?? ''))
     && Number.isSafeInteger(value.generation) && value.generation >= 1;
+}
+
+function sameLocatorContext(left, right) {
+  return ['hostInstanceId', 'sessionId', 'projectId', 'generation']
+    .every((field) => left?.[field] === right?.[field]);
 }
 
 function resolveSchemaRef(root, reference) {
@@ -660,7 +671,7 @@ export function classifyRequest(message) {
       ) || !isLocatorShape(args.compositionLocator, ['composition'])) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
-    } else {
+    } else if (params.capabilityId === 'ae.layer.properties.list') {
       const args = params.arguments;
       if (!exactKeys(
         args,
@@ -673,6 +684,21 @@ export function classifyRequest(message) {
             && !isLocatorShape(args.parentPropertyLocator, ['stream']))
           || !Number.isSafeInteger(args.offset) || args.offset < 0
           || !Number.isSafeInteger(args.limit) || args.limit < 1 || args.limit > 25) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else {
+      const args = params.arguments;
+      if (!exactKeys(
+        args,
+        new Set(['layerLocator', 'propertyLocator', 'value', 'idempotencyKey']),
+        ['layerLocator', 'propertyLocator', 'value', 'idempotencyKey'],
+      )
+          || !isLocatorShape(args.layerLocator, ['layer'])
+          || !isLocatorShape(args.propertyLocator, ['stream'])
+          || !sameLocatorContext(args.layerLocator, args.propertyLocator)
+          || !validatePrimitivePropertyValue(args.value)
+          || typeof args.idempotencyKey !== 'string'
+          || !/^[A-Za-z0-9][A-Za-z0-9._:-]{15,63}$/u.test(args.idempotencyKey)) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
     }
@@ -745,8 +771,12 @@ export function validateErrorPolicy(error, schema) {
   const expected = ERROR_POLICIES[error?.code];
   if (!expected) return false;
   const [retryable, sideEffect, action] = expected;
+  const propertyPrecondition = error.code === 'PRECONDITION_FAILED'
+    && error.details?.capabilityId === 'ae.layer.property.set'
+    && error.details?.field === 'params.arguments.propertyLocator'
+    && error.recovery?.action === 'change-arguments';
   if (error.retryable !== retryable || error.sideEffect !== sideEffect
-      || error.recovery?.action !== action) return false;
+      || (error.recovery?.action !== action && !propertyPrecondition)) return false;
   if (error.code === 'QUEUE_FULL'
       && (!Number.isInteger(error.recovery.retryAfterMs) || error.recovery.retryAfterMs < 1)) return false;
   if (error.code !== 'QUEUE_FULL' && error.recovery.retryAfterMs !== undefined) return false;
@@ -788,18 +818,24 @@ export function validateFailureExchange(
         || capabilityId === 'ae.composition.layers.list'
         || capabilityId === 'ae.composition.selected-layers.list'
         || capabilityId === 'ae.composition.time.read'
-        || capabilityId === 'ae.layer.properties.list')) {
+        || capabilityId === 'ae.layer.properties.list'
+        || capabilityId === 'ae.layer.property.set')) {
     const expectedFields = capabilityId === 'ae.project.items.list'
       ? new Set(['params.arguments.projectLocator'])
       : capabilityId === 'ae.composition.layers.list'
           || capabilityId === 'ae.composition.selected-layers.list'
           || capabilityId === 'ae.composition.time.read'
         ? new Set(['params.arguments.compositionLocator'])
-        : new Set([
-          'params.arguments.layerLocator',
-          ...(request.params.arguments.parentPropertyLocator
-            ? ['params.arguments.parentPropertyLocator'] : []),
-        ]);
+        : capabilityId === 'ae.layer.property.set'
+          ? new Set([
+            'params.arguments.layerLocator',
+            'params.arguments.propertyLocator',
+          ])
+          : new Set([
+            'params.arguments.layerLocator',
+            ...(request.params.arguments.parentPropertyLocator
+              ? ['params.arguments.parentPropertyLocator'] : []),
+          ]);
     const currentGeneration = response.error.details?.currentGeneration;
     if (!expectedFields.has(response.error.details?.field)
         || (currentGeneration !== undefined
@@ -901,6 +937,12 @@ export function compositionTimeReadContractDigest(schema) {
 export function layerPropertiesListContractDigest(schema) {
   const inputSchema = structuredClone(schema.$defs.layerPropertiesListInputSchemaContract.const);
   const resultSchema = structuredClone(schema.$defs.layerPropertiesListResultSchemaContract.const);
+  return sha256Jcs({ inputSchema, resultSchema });
+}
+
+export function layerPropertySetContractDigest(schema) {
+  const inputSchema = structuredClone(schema.$defs.layerPropertySetInputSchemaContract.const);
+  const resultSchema = structuredClone(schema.$defs.layerPropertySetResultSchemaContract.const);
   return sha256Jcs({ inputSchema, resultSchema });
 }
 
@@ -1395,6 +1437,84 @@ export function layerPropertiesListDescriptor(schema) {
   };
 }
 
+export function layerPropertySetDescriptor(schema) {
+  const registration = INVOKE_REGISTRY[8];
+  const layerLocator = syntheticDescriptorLocator(
+    'layer', '88888888-8888-4888-8888-888888888888',
+  );
+  const propertyLocator = syntheticDescriptorLocator(
+    'stream', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  );
+  return {
+    detail: 'full',
+    id: registration.id,
+    version: registration.version,
+    schemaVersion: 1,
+    summary: 'Set one non-keyframed primitive After Effects layer property value.',
+    risk: 'write',
+    mutability: 'mutating',
+    idempotency: 'idempotency-key',
+    cancellation: 'before-dispatch',
+    undo: 'ae-undo-group',
+    sideEffectSummary: 'Changes one primitive layer property and creates one After Effects Undo step.',
+    preconditions: [
+      'An After Effects project must be open.',
+      'Both locators must come from ae.layer.properties.list@1 for the same layer.',
+      'The property must be a non-keyframed scalar, vector, or color leaf stream.',
+      "value must differ from the property's current sampled value.",
+    ],
+    compatibility: {
+      status: 'unverified',
+      intendedPlatforms: ['macos-arm64', 'windows-x64'],
+    },
+    inputContractId: registration.inputContractId,
+    resultContractId: registration.resultContractId,
+    contractDigest: layerPropertySetContractDigest(schema),
+    inputSchema: structuredClone(schema.$defs.layerPropertySetInputSchemaContract.const),
+    resultSchema: structuredClone(schema.$defs.layerPropertySetResultSchemaContract.const),
+    requirements: [{
+      id: 'aemcp.requirement.native.layer-property-set',
+      contractVersion: 1,
+    }],
+    examples: [
+      {
+        id: 'aemcp-example-layer-property-set',
+        kind: 'positive',
+        summary: 'Change one non-keyframed scalar property with Undo available.',
+        arguments: {
+          layerLocator,
+          propertyLocator,
+          value: { kind: 'scalar', value: '40' },
+          idempotencyKey: 'synthetic-property-0001',
+        },
+        expected: {
+          outcome: 'succeeded',
+          value: {
+            changed: true,
+            layerLocator,
+            propertyLocator,
+            valueType: 'one-d',
+            beforeValue: { kind: 'scalar', value: '25' },
+            afterValue: { kind: 'scalar', value: '40' },
+          },
+        },
+      },
+      {
+        id: 'aemcp-example-layer-property-set-keyframed',
+        kind: 'negative',
+        summary: 'Reject a keyframed stream without changing After Effects state.',
+        arguments: {
+          layerLocator,
+          propertyLocator,
+          value: { kind: 'scalar', value: '40' },
+          idempotencyKey: 'synthetic-property-0002',
+        },
+        expected: { errorCode: 'PRECONDITION_FAILED', recoveryAction: 'change-arguments' },
+      },
+    ],
+  };
+}
+
 export function nativeCapabilityRegistry(schema) {
   return [
     projectSummaryDescriptor(schema),
@@ -1405,6 +1525,7 @@ export function nativeCapabilityRegistry(schema) {
     compositionSelectedLayersListDescriptor(schema),
     compositionTimeReadDescriptor(schema),
     layerPropertiesListDescriptor(schema),
+    layerPropertySetDescriptor(schema),
   ];
 }
 
@@ -1474,6 +1595,45 @@ function validateDecimalWireValue(value) {
     if (match[1] === '-' || !isTextualZero) return false;
   }
   return true;
+}
+
+function validatePrimitivePropertyValue(value) {
+  if (!isPlainObject(value)) return false;
+  if (value.kind === 'scalar') {
+    return exactKeys(value, new Set(['kind', 'value']), ['kind', 'value'])
+      && validateDecimalWireValue(value.value);
+  }
+  if (value.kind === 'vector') {
+    return exactKeys(value, new Set(['kind', 'components']), ['kind', 'components'])
+      && Array.isArray(value.components)
+      && [2, 3].includes(value.components.length)
+      && value.components.every(validateDecimalWireValue);
+  }
+  if (value.kind === 'color') {
+    return exactKeys(
+      value,
+      new Set(['kind', 'alpha', 'red', 'green', 'blue']),
+      ['kind', 'alpha', 'red', 'green', 'blue'],
+    ) && ['alpha', 'red', 'green', 'blue']
+      .every((component) => validateDecimalWireValue(value[component]));
+  }
+  return false;
+}
+
+function primitivePropertyValuesEqual(left, right) {
+  if (!validatePrimitivePropertyValue(left)
+      || !validatePrimitivePropertyValue(right)
+      || left.kind !== right.kind) return false;
+  const decimalEqual = (first, second) => Number(first) === Number(second);
+  if (left.kind === 'scalar') return decimalEqual(left.value, right.value);
+  if (left.kind === 'vector') {
+    return left.components.length === right.components.length
+      && left.components.every(
+        (component, index) => decimalEqual(component, right.components[index]),
+      );
+  }
+  return ['alpha', 'red', 'green', 'blue']
+    .every((component) => decimalEqual(left[component], right[component]));
 }
 
 function validateSampledPropertyValue(property) {
@@ -1643,6 +1803,31 @@ function validateNavigationResult(request, result, helloContext, schema) {
     previousStackIndex = layer.stackIndex;
   }
   return true;
+}
+
+function validateLayerPropertySetResult(request, result, helloContext, schema) {
+  if (request.params.capabilityId !== 'ae.layer.property.set') return true;
+  const args = request.params.arguments;
+  const value = result.value;
+  if (result.evidence.postcondition.kind !== 'layer-property-set'
+      || value.changed !== true
+      || !jsonDeepEqual(value.layerLocator, args.layerLocator)
+      || !jsonDeepEqual(value.propertyLocator, args.propertyLocator)
+      || !primitivePropertyValuesEqual(value.afterValue, args.value)
+      || primitivePropertyValuesEqual(value.beforeValue, value.afterValue)
+      || !validatePrimitivePropertyValue(value.beforeValue)
+      || !validatePrimitivePropertyValue(value.afterValue)
+      || !validateSampledPropertyValue({ valueType: value.valueType, value: value.beforeValue })
+      || !validateSampledPropertyValue({ valueType: value.valueType, value: value.afterValue })) {
+    return false;
+  }
+  const context = locatorContext(value.layerLocator);
+  return value.layerLocator.kind === 'layer'
+    && value.propertyLocator.kind === 'stream'
+    && value.layerLocator.hostInstanceId === helloContext.response.result.host.instanceId
+    && value.layerLocator.sessionId === request.sessionId
+    && validateLocator(value.layerLocator, context, schema)
+    && validateLocator(value.propertyLocator, context, schema);
 }
 
 export function validateCapabilitiesExchange(
@@ -1998,7 +2183,8 @@ export function validateTranscript(context, request, messages) {
         && (descriptor.undo !== 'ae-undo-group'
           || (evidence.undo?.available === true
             && typeof evidence.undo?.verified === 'boolean'
-            && (request.params.capabilityId !== 'ae.project.bit-depth.set'
+            && (!['ae.project.bit-depth.set', 'ae.layer.property.set']
+              .includes(request.params.capabilityId)
               || request.params.capabilityVersion !== 1
               || evidence.undo.verified === false)))))
     && (request.params.capabilityId !== 'ae.project.bit-depth.set'
@@ -2006,6 +2192,7 @@ export function validateTranscript(context, request, messages) {
       || (result.value.beforeBitsPerChannel !== result.value.afterBitsPerChannel
         && result.value.afterBitsPerChannel === request.params.arguments.targetDepth))
     && validateNavigationResult(request, result, helloContext, schema)
+    && validateLayerPropertySetResult(request, result, helloContext, schema)
     && evidence.postcondition.verified === true
     && evidence.requestDigest === requestDigest
     && evidence.postcondition.digest === resultDigest;
