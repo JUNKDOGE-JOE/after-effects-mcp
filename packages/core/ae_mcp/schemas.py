@@ -274,6 +274,86 @@ class AeSetCompositionTimeArgs(_StrictModel):
     )
 
 
+class AeLayerSolidColorInput(_StrictModel):
+    """Integer RGBA color avoids ambiguous floating-point JSON."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    red: int = Field(255, ge=0, le=255)
+    green: int = Field(255, ge=0, le=255)
+    blue: int = Field(255, ge=0, le=255)
+    alpha: int = Field(255, ge=0, le=255)
+
+
+class AeCreateCompositionLayerArgs(_StrictModel):
+    """ae.createCompositionLayer — create one native null or solid layer.
+
+    Copy composition_locator from ae_listProjectItems. Omitted solid dimensions
+    and duration inherit the composition, while omitted color is opaque white.
+    This native-only write never falls back to JSX.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    composition_locator: AeCompositionLocator = Field(
+        ...,
+        description="Fresh composition locator returned by ae_listProjectItems.",
+    )
+    kind: Literal["null", "solid"] = Field(
+        ...,
+        description="The bounded native layer kind to create.",
+    )
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Exact layer name (1–255 Unicode scalar values).",
+    )
+    color: Optional[AeLayerSolidColorInput] = Field(
+        None,
+        description="Solid-only RGBA channels from 0 to 255; omit for opaque white.",
+    )
+    width: Optional[int] = Field(
+        None,
+        ge=1,
+        le=30_000,
+        description="Solid-only width; omit to inherit the composition width.",
+    )
+    height: Optional[int] = Field(
+        None,
+        ge=1,
+        le=30_000,
+        description="Solid-only height; omit to inherit the composition height.",
+    )
+    duration: Optional[AeCompositionTimeInput] = Field(
+        None,
+        description="Solid-only exact duration; omit to inherit composition duration.",
+    )
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        description=(
+            "Stable key for one layer-create intent. Reusing it replays the "
+            "verified result and never creates a duplicate."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _solid_fields_match_kind(self) -> "AeCreateCompositionLayerArgs":
+        if any(0xD800 <= ord(character) <= 0xDFFF for character in self.name):
+            raise ValueError("name must contain only Unicode scalar values")
+        if self.kind == "null" and any(
+            value is not None
+            for value in (self.color, self.width, self.height, self.duration)
+        ):
+            raise ValueError(
+                "color, width, height, and duration are accepted only for kind='solid'"
+            )
+        return self
+
+
 class AeListLayerPropertiesArgs(_StrictModel):
     """ae.listLayerProperties — list direct native properties on a layer/group.
 
@@ -935,6 +1015,7 @@ SCHEMAS = {
     "ae.listSelectedLayers": AeListSelectedLayersArgs,
     "ae.getCompositionTime": AeGetCompositionTimeArgs,
     "ae.setCompositionTime": AeSetCompositionTimeArgs,
+    "ae.createCompositionLayer": AeCreateCompositionLayerArgs,
     "ae.listLayerProperties": AeListLayerPropertiesArgs,
     "ae.setLayerPropertyValue": AeSetLayerPropertyValueArgs,
     "ae.layers": AeLayersArgs,
@@ -981,4 +1062,4 @@ SCHEMAS = {
     "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 54, f"expected 54 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 55, f"expected 55 verbs, got {len(SCHEMAS)}"

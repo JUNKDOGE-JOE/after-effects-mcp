@@ -35,6 +35,7 @@ const COMPOSITION_LAYERS_LIST_CAPABILITY = 'ae.composition.layers.list';
 const COMPOSITION_SELECTED_LAYERS_LIST_CAPABILITY = 'ae.composition.selected-layers.list';
 const COMPOSITION_TIME_READ_CAPABILITY = 'ae.composition.time.read';
 const COMPOSITION_TIME_SET_CAPABILITY = 'ae.composition.time.set';
+const COMPOSITION_LAYER_CREATE_CAPABILITY = 'ae.composition.layer.create';
 const LAYER_PROPERTIES_LIST_CAPABILITY = 'ae.layer.properties.list';
 const LAYER_PROPERTY_SET_CAPABILITY = 'ae.layer.property.set';
 const NATIVE_LOCATOR_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -310,6 +311,57 @@ function validCompositionTimeSetArguments(value) {
         && NATIVE_REQUEST_ID_PATTERN.test(value.idempotencyKey);
 }
 
+function validUnicodeScalarCount(value, minimum, maximum) {
+    if (typeof value !== 'string') return false;
+    let count = 0;
+    for (let index = 0; index < value.length; index += 1) {
+        const code = value.charCodeAt(index);
+        if (code >= 0xd800 && code <= 0xdbff) {
+            const next = value.charCodeAt(index + 1);
+            if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+            index += 1;
+        } else if (code >= 0xdc00 && code <= 0xdfff) {
+            return false;
+        }
+        count += 1;
+    }
+    return count >= minimum && count <= maximum;
+}
+
+function validCompositionLayerCreateArguments(value) {
+    if (!exactBody(value, [
+        'compositionLocator', 'kind', 'name', 'idempotencyKey',
+    ], ['color', 'width', 'height', 'duration'])
+        || !validNativeLocator(value.compositionLocator, 'composition')
+        || !['null', 'solid'].includes(value.kind)
+        || !validUnicodeScalarCount(value.name, 1, 255)
+        || typeof value.idempotencyKey !== 'string'
+        || value.idempotencyKey.length < 16
+        || !NATIVE_REQUEST_ID_PATTERN.test(value.idempotencyKey)) return false;
+    const solidOnlyProvided = ['color', 'width', 'height', 'duration'].some(function (key) {
+        return Object.hasOwn(value, key);
+    });
+    const validColor = value.color === undefined || (exactBody(
+        value.color, ['red', 'green', 'blue', 'alpha'],
+    ) && ['red', 'green', 'blue', 'alpha'].every(function (channel) {
+        return Number.isInteger(value.color[channel])
+            && value.color[channel] >= 0 && value.color[channel] <= 255;
+    }));
+    const validDuration = value.duration === undefined || (exactBody(
+        value.duration, ['value', 'scale'],
+    ) && Number.isInteger(value.duration.value)
+        && value.duration.value >= -2147483648
+        && value.duration.value <= 2147483647
+        && Number.isInteger(value.duration.scale)
+        && value.duration.scale >= 1 && value.duration.scale <= 4294967295);
+    return !(value.kind === 'null' && solidOnlyProvided)
+        && validColor && validDuration
+        && (value.width === undefined
+            || (Number.isInteger(value.width) && value.width >= 1 && value.width <= 30000))
+        && (value.height === undefined
+            || (Number.isInteger(value.height) && value.height >= 1 && value.height <= 30000));
+}
+
 function validLayerPropertiesListArguments(value) {
     return exactBody(value, ['layerLocator', 'offset', 'limit'], ['parentPropertyLocator'])
         && validNativeLocator(value.layerLocator, 'layer')
@@ -389,6 +441,10 @@ function validNativeInvokeBody(body) {
     if (body.capabilityId === COMPOSITION_TIME_SET_CAPABILITY
         && body.capabilityVersion === 1) {
         return validCompositionTimeSetArguments(body.arguments);
+    }
+    if (body.capabilityId === COMPOSITION_LAYER_CREATE_CAPABILITY
+        && body.capabilityVersion === 1) {
+        return validCompositionLayerCreateArguments(body.arguments);
     }
     if (body.capabilityId === LAYER_PROPERTIES_LIST_CAPABILITY
         && body.capabilityVersion === 1) {

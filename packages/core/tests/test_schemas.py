@@ -9,7 +9,7 @@ from ae_mcp import schemas as S
 
 
 def test_registry_has_all_verbs():
-    assert len(S.SCHEMAS) == 54, f"expected 54 verbs, got {len(S.SCHEMAS)}"
+    assert len(S.SCHEMAS) == 55, f"expected 55 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.projectSummary",
         "ae.getProjectBitDepth", "ae.setProjectBitDepth",
@@ -17,6 +17,7 @@ def test_registry_has_all_verbs():
         "ae.getCompositionTime", "ae.setCompositionTime",
         "ae.listLayerProperties",
         "ae.setLayerPropertyValue",
+        "ae.createCompositionLayer",
         "ae.layers", "ae.readProps", "ae.exec",
         "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.previewFrame",
         "ae.applyEffect", "ae.ping", "ae.status", "ae.diagnose",

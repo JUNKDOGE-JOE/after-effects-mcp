@@ -18,6 +18,7 @@ from ae_mcp.backends.native import (
     invoke_selected_composition_layers_list,
     invoke_composition_time_read,
     invoke_composition_time_set,
+    invoke_composition_layer_create,
     invoke_layer_properties_list,
     invoke_layer_property_set,
     invoke_project_bit_depth_read,
@@ -36,6 +37,7 @@ _COMPOSITION_LAYERS_LIST_TIMEOUT_MS = 10_000
 _SELECTED_COMPOSITION_LAYERS_LIST_TIMEOUT_MS = 10_000
 _COMPOSITION_TIME_READ_TIMEOUT_MS = 10_000
 _COMPOSITION_TIME_SET_TIMEOUT_MS = 10_000
+_COMPOSITION_LAYER_CREATE_TIMEOUT_MS = 10_000
 _LAYER_PROPERTIES_LIST_TIMEOUT_MS = 10_000
 _LAYER_PROPERTY_SET_TIMEOUT_MS = 10_000
 
@@ -420,6 +422,113 @@ async def _run_set_composition_time(
     }
 
 
+async def _run_create_composition_layer(
+    args: schemas.AeCreateCompositionLayerArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _COMPOSITION_LAYER_CREATE_TIMEOUT_MS
+    request_id = f"mcp-{uuid.uuid4().hex}"
+
+    async def _call():
+        return await invoke_composition_layer_create(
+            _backend(),
+            request_id=request_id,
+            composition_locator=args.composition_locator.model_dump(
+                mode="json", by_alias=True
+            ),
+            kind=args.kind,
+            name=args.name,
+            color=(
+                args.color.model_dump(mode="json", by_alias=True)
+                if args.color is not None
+                else None
+            ),
+            width=args.width,
+            height=args.height,
+            duration=(
+                args.duration.model_dump(mode="json", by_alias=True)
+                if args.duration is not None
+                else None
+            ),
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    call_task = asyncio.create_task(_call())
+    try:
+        execution = await progress.with_heartbeat(
+            ctx,
+            asyncio.shield(call_task),
+            start_msg=(
+                "ae.createCompositionLayer native AEGP write; after dispatch, "
+                "wait for the verified terminal result..."
+            ),
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        execution = await asyncio.shield(call_task)
+
+    implementation = execution.implementation
+    audit = execution.audit_fields()
+    return {
+        "ok": True,
+        "replayed": execution.replayed,
+        "value": execution.value.model_dump(mode="json", by_alias=True),
+        "implementation": {
+            "engine": execution.engine,
+            "capabilityId": implementation.capability_id,
+            "capabilityVersion": implementation.capability_version,
+            "contractDigest": implementation.contract_digest,
+            "risk": implementation.risk,
+            "mutability": implementation.mutability,
+            "idempotency": implementation.idempotency,
+            "cancellation": implementation.cancellation,
+            "undo": implementation.undo,
+            "sideEffectSummary": implementation.side_effect_summary,
+            "preconditions": list(implementation.preconditions),
+        },
+        "provenance": {
+            key: audit[key]
+            for key in (
+                "engine",
+                "selectedWireVersion",
+                "pluginVersion",
+                "compiledSdkVersion",
+                "sourceCommit",
+                "hostInstanceId",
+                "sessionId",
+                "sessionGeneration",
+                "capabilitiesDigest",
+            )
+        },
+        "audit": {
+            key: audit[key]
+            for key in (
+                "requestId",
+                "evidenceRequestId",
+                "idempotencyKey",
+                "replayed",
+                "capabilityId",
+                "capabilityVersion",
+                "contractDigest",
+                "effect",
+                "requestDigest",
+                "postconditionAlgorithm",
+                "postconditionDigest",
+                "undoAvailable",
+                "undoVerified",
+                "startedAtUnixMs",
+                "completedAtUnixMs",
+            )
+        },
+        "evidence": execution.evidence.model_dump(
+            mode="json", by_alias=True, exclude_none=True
+        ),
+    }
+
+
 async def _run_list_layer_properties(
     args: schemas.AeListLayerPropertiesArgs,
     ctx: Any,
@@ -760,6 +869,11 @@ register(
     _run_set_composition_time,
 )
 register(
+    "ae.createCompositionLayer",
+    schemas.AeCreateCompositionLayerArgs,
+    _run_create_composition_layer,
+)
+register(
     "ae.listLayerProperties",
     schemas.AeListLayerPropertiesArgs,
     _run_list_layer_properties,
@@ -784,6 +898,7 @@ register(
 __all__ = [
     "_run_get_composition_time",
     "_run_get_project_bit_depth",
+    "_run_create_composition_layer",
     "_run_list_composition_layers",
     "_run_list_layer_properties",
     "_run_list_project_items",

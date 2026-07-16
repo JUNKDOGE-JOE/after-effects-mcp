@@ -29,6 +29,7 @@ using aemcp::native::HostBitDepthWriteResult;
 using aemcp::native::HostCompositionLayersResult;
 using aemcp::native::HostCompositionTimeResult;
 using aemcp::native::HostCompositionTimeWriteResult;
+using aemcp::native::HostCompositionLayerCreateResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostLayerPropertyWriteResult;
 using aemcp::native::HostProjectItemsResult;
@@ -45,6 +46,7 @@ using aemcp::native::kCompositionLayersListCapability;
 using aemcp::native::kCompositionSelectedLayersListCapability;
 using aemcp::native::kCompositionTimeReadCapability;
 using aemcp::native::kCompositionTimeSetCapability;
+using aemcp::native::kCompositionLayerCreateCapability;
 using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kProjectSummaryCapability;
 using aemcp::native::kLayerPropertySetCapability;
@@ -430,6 +432,49 @@ class FakeHost final : public HostApi {
     return HostCompositionTimeWriteResult::success(std::move(changed));
   }
 
+  [[nodiscard]] HostCompositionLayerCreateResult create_composition_layer(
+      const aemcp::native::CompositionLayerCreateCommand& command,
+      TimePoint work_deadline) override {
+    require(std::this_thread::get_id() == expected_thread_,
+        "composition layer create HostApi ran off owner thread");
+    observed_deadline = work_deadline;
+    observed_layer_create_command = command;
+    ++composition_layer_create_calls;
+    if (!composition_layer_create_error_code.empty()) {
+      return HostCompositionLayerCreateResult::failure(
+          composition_layer_create_error_code,
+          "fake composition layer create error",
+          composition_layer_create_error_field);
+    }
+    aemcp::native::CompositionLayerCreated created;
+    created.kind = command.kind;
+    created.name = command.name;
+    created.stack_index = 1;
+    created.composition_locator = command.composition_locator;
+    created.composition_locator.project_id =
+        "55555555-5555-4555-8555-555555555555";
+    created.composition_locator.generation = 9;
+    created.layer_locator = created.composition_locator;
+    created.layer_locator.kind = "layer";
+    created.layer_locator.object_id = "99999999-9999-4999-8999-999999999999";
+    created.layer_count_before = 0;
+    created.layer_count_after = mismatch_layer_create ? 2 : 1;
+    created.project_item_count_before = 2;
+    created.project_item_count_after = command.kind == "solid" ? 3 : 2;
+    if (command.kind == "solid") {
+      created.source_item_locator = created.composition_locator;
+      created.source_item_locator->kind = "item";
+      created.source_item_locator->object_id =
+          "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+      created.solid = aemcp::native::CompositionLayerSolidSpec{
+          command.color.value_or(aemcp::native::CompositionLayerCreateColor{}),
+          command.width.value_or(1920),
+          command.height.value_or(1080),
+          command.duration.value_or(aemcp::native::CompositionCurrentTime{5, 1, "5"})};
+    }
+    return HostCompositionLayerCreateResult::success(std::move(created));
+  }
+
   [[nodiscard]] HostLayerPropertyWriteResult set_layer_property(
       const aemcp::native::LayerPropertySetCommand& command,
       TimePoint work_deadline) override {
@@ -480,6 +525,8 @@ class FakeHost final : public HostApi {
   std::string composition_time_error_field;
   std::string composition_time_write_error_code;
   std::string composition_time_write_error_field;
+  std::string composition_layer_create_error_code;
+  std::string composition_layer_create_error_field;
   std::string layer_property_write_error_code;
   std::int32_t current_bits_per_channel{8};
   std::int32_t observed_target_depth{0};
@@ -491,6 +538,7 @@ class FakeHost final : public HostApi {
   int composition_selected_layers_calls{0};
   int composition_time_calls{0};
   int composition_time_write_calls{0};
+  int composition_layer_create_calls{0};
   int layer_property_write_calls{0};
   std::int32_t composition_time_value{3003};
   std::uint32_t composition_time_scale{1000};
@@ -499,11 +547,13 @@ class FakeHost final : public HostApi {
   bool mismatch_selected_composition_page{false};
   bool mismatch_composition_time{false};
   bool mismatch_composition_time_write{false};
+  bool mismatch_layer_create{false};
   aemcp::native::ProjectItemsQuery observed_items_query;
   aemcp::native::CompositionLayersQuery observed_layers_query;
   aemcp::native::CompositionLayersQuery observed_selected_layers_query;
   aemcp::native::CompositionTimeQuery observed_time_query;
   aemcp::native::CompositionTimeSetCommand observed_time_set_command;
+  aemcp::native::CompositionLayerCreateCommand observed_layer_create_command;
   aemcp::native::LayerPropertySetCommand observed_property_command;
 };
 
@@ -723,6 +773,35 @@ Request composition_time_set_request(
   result.session_id = "11111111-1111-4111-8111-111111111111";
   result.composition_locator = std::move(composition_locator);
   result.target_time = std::move(target);
+  return result;
+}
+
+Request composition_layer_create_request(
+    FakeClock& clock,
+    std::string id,
+    ObjectLocator composition_locator,
+    std::string key = "composition-layer-create-intent-001",
+    std::string fingerprint = std::string(64, '9'),
+    std::string kind = "solid") {
+  Request result;
+  result.request_id = std::move(id);
+  result.capability_id = std::string(kCompositionLayerCreateCapability);
+  result.deadline = clock.now() + 100ms;
+  result.route_id = "route-layer-create";
+  result.session_generation = 7;
+  result.idempotency_key = std::move(key);
+  result.arguments_fingerprint_sha256 = std::move(fingerprint);
+  result.host_instance_id = "22222222-2222-4222-8222-222222222222";
+  result.session_id = "11111111-1111-4111-8111-111111111111";
+  result.composition_locator = std::move(composition_locator);
+  result.layer_create_kind = std::move(kind);
+  result.layer_create_name = "SYNTHETIC_SOLID";
+  if (result.layer_create_kind == "solid") {
+    result.layer_create_color = {12, 34, 56, 255};
+    result.layer_create_width = 640;
+    result.layer_create_height = 360;
+    result.layer_create_duration = {5, 1, "5"};
+  }
   return result;
 }
 
@@ -1000,6 +1079,82 @@ void composition_time_write_is_typed_main_thread_bound_and_idempotent() {
           && mismatch.completions[0].error_code
               == "POSSIBLY_SIDE_EFFECTING_FAILURE",
       "unverified composition time write was mislabeled side-effect free");
+}
+
+void composition_layer_create_is_verified_and_replays_without_duplicate_mutation() {
+  FakeClock clock;
+  const auto owner = std::this_thread::get_id();
+  HostDispatcher dispatcher(owner, clock, config(8, 8, 4ms));
+  FakeHost host(clock, owner);
+  const ObjectLocator composition = FakeHost::locator(
+      "composition", "66666666-6666-4666-8666-666666666666");
+
+  Request invalid_null = composition_layer_create_request(
+      clock, "create-invalid-null", composition,
+      "composition-layer-create-intent-invalid", std::string(64, '8'), "null");
+  invalid_null.layer_create_width = 640;
+  const auto invalid = dispatcher.enqueue(std::move(invalid_null));
+  require(invalid.code == EnqueueCode::kInvalidRequest
+          && invalid.error_field == "params.arguments",
+      "null layer accepted solid-only options");
+
+  require(dispatcher.enqueue(composition_layer_create_request(
+      clock, "create-solid-1", composition)).code == EnqueueCode::kAccepted,
+      "valid solid layer create was rejected");
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1 && batch.completions[0].ok
+          && host.composition_layer_create_calls == 1,
+      "solid layer create did not run exactly once on the owner thread");
+  const auto& created = batch.completions[0].composition_layer_create_result;
+  require(created.kind == "solid" && created.name == "SYNTHETIC_SOLID"
+          && created.layer_count_before == 0 && created.layer_count_after == 1
+          && created.project_item_count_before == 2
+          && created.project_item_count_after == 3
+          && created.composition_locator.generation == 9
+          && created.layer_locator.kind == "layer"
+          && created.solid.has_value()
+          && created.solid->color
+              == aemcp::native::CompositionLayerCreateColor{12, 34, 56, 255}
+          && created.solid->width == 640 && created.solid->height == 360
+          && host.observed_layer_create_command.composition_locator == composition,
+      "solid layer create lost its verified state or fresh locator evidence");
+
+  const auto original_outbound = dispatcher.take_outbound();
+  require(original_outbound.size() == 1 && !original_outbound[0].replayed,
+      "original layer creation terminal was not observable");
+  const auto replay = dispatcher.enqueue(composition_layer_create_request(
+      clock, "create-solid-replay", composition));
+  require(replay.code == EnqueueCode::kAccepted
+          && host.composition_layer_create_calls == 1,
+      "identical layer create replay reached HostApi");
+  const auto replay_outbound = dispatcher.take_outbound();
+  require(replay_outbound.size() == 1 && replay_outbound[0].ok
+          && replay_outbound[0].replayed
+          && replay_outbound[0].request_id == "create-solid-replay"
+          && replay_outbound[0].composition_layer_create_result.layer_locator
+              == created.layer_locator
+          && host.composition_layer_create_calls == 1,
+      "layer create replay did not return the cached verified terminal");
+
+  const auto conflict = dispatcher.enqueue(composition_layer_create_request(
+      clock, "create-solid-conflict", composition,
+      "composition-layer-create-intent-001", std::string(64, '7')));
+  require(conflict.code == EnqueueCode::kDuplicateRequest
+          && conflict.error_field == "params.arguments.idempotencyKey"
+          && host.composition_layer_create_calls == 1,
+      "layer create idempotency key was rebound to different arguments");
+
+  host.mismatch_layer_create = true;
+  require(dispatcher.enqueue(composition_layer_create_request(
+      clock, "create-solid-mismatch", composition,
+      "composition-layer-create-intent-002", std::string(64, '6'))).code
+      == EnqueueCode::kAccepted,
+      "layer create mismatch setup was rejected before HostApi");
+  const auto mismatch = dispatcher.drain(host);
+  require(mismatch.completions.size() == 1
+          && mismatch.completions[0].error_code
+              == "POSSIBLY_SIDE_EFFECTING_FAILURE",
+      "unverified layer creation was mislabeled side-effect free");
 }
 
 void bit_depth_read_and_write_are_main_thread_bound_and_write_is_idempotent() {
@@ -1580,6 +1735,7 @@ int main() {
   selected_layers_read_is_closed_main_thread_bound_and_request_verified();
   composition_time_read_is_closed_main_thread_bound_and_verified();
   composition_time_write_is_typed_main_thread_bound_and_idempotent();
+  composition_layer_create_is_verified_and_replays_without_duplicate_mutation();
   bit_depth_read_and_write_are_main_thread_bound_and_write_is_idempotent();
   bit_depth_write_releases_only_safe_failures_and_fails_closed_when_full();
   bit_depth_write_validates_before_dispatch_and_late_results_are_ambiguous();

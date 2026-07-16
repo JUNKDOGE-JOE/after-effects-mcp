@@ -59,6 +59,38 @@ bool composition_times_equal(
           * static_cast<std::int64_t>(left.scale);
 }
 
+bool valid_layer_create_color(const CompositionLayerCreateColor& value) {
+  return value.red <= 255 && value.green <= 255
+      && value.blue <= 255 && value.alpha <= 255;
+}
+
+bool valid_layer_create_request(const Request& request) {
+  if ((request.layer_create_kind != "null"
+          && request.layer_create_kind != "solid")
+      || request.layer_create_name.empty()
+      || request.layer_create_name.size() > 1024
+      || request.layer_create_name.find('\0') != std::string::npos) {
+    return false;
+  }
+  const bool has_solid_options = request.layer_create_color.has_value()
+      || request.layer_create_width.has_value()
+      || request.layer_create_height.has_value()
+      || request.layer_create_duration.has_value();
+  if (request.layer_create_kind == "null" && has_solid_options) return false;
+  if (request.layer_create_color.has_value()
+      && !valid_layer_create_color(*request.layer_create_color)) return false;
+  if (request.layer_create_width.has_value()
+      && (*request.layer_create_width < 1 || *request.layer_create_width > 30000)) {
+    return false;
+  }
+  if (request.layer_create_height.has_value()
+      && (*request.layer_create_height < 1 || *request.layer_create_height > 30000)) {
+    return false;
+  }
+  return !request.layer_create_duration.has_value()
+      || valid_composition_time(*request.layer_create_duration);
+}
+
 bool valid_sha256(std::string_view value) {
   return value.size() == 64 && std::all_of(value.begin(), value.end(), [](char character) {
     return (character >= '0' && character <= '9')
@@ -361,6 +393,23 @@ HostCompositionTimeWriteResult HostCompositionTimeWriteResult::failure(
   return result;
 }
 
+HostCompositionLayerCreateResult HostCompositionLayerCreateResult::success(
+    CompositionLayerCreated value) {
+  HostCompositionLayerCreateResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
+HostCompositionLayerCreateResult HostCompositionLayerCreateResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostCompositionLayerCreateResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
+
 HostLayerPropertiesResult HostLayerPropertiesResult::success(
     LayerPropertiesPage value) {
   HostLayerPropertiesResult result;
@@ -451,6 +500,12 @@ HostCompositionTimeWriteResult HostApi::set_composition_time(
       "NATIVE_UNSUPPORTED", "composition time writes are unavailable");
 }
 
+HostCompositionLayerCreateResult HostApi::create_composition_layer(
+    const CompositionLayerCreateCommand&, TimePoint) {
+  return HostCompositionLayerCreateResult::failure(
+      "NATIVE_UNSUPPORTED", "composition layer creation is unavailable");
+}
+
 HostLayerPropertiesResult HostApi::list_layer_properties(
     const LayerPropertiesQuery&, TimePoint) {
   return HostLayerPropertiesResult::failure(
@@ -513,18 +568,21 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       request.capability_id == kCompositionTimeReadCapability;
   const bool composition_time_set =
       request.capability_id == kCompositionTimeSetCapability;
+  const bool composition_layer_create =
+      request.capability_id == kCompositionLayerCreateCapability;
   const bool layer_properties_list =
       request.capability_id == kLayerPropertiesListCapability;
   const bool layer_property_set =
       request.capability_id == kLayerPropertySetCapability;
   const bool mutation = project_bit_depth_set || composition_time_set
+      || composition_layer_create
       || layer_property_set;
   const bool project_graph_invalidate =
       request.capability_id == kProjectGraphInvalidateControl;
   if (!project_summary && !project_bit_depth_read && !project_bit_depth_set
       && !project_items_list && !composition_layers_list
       && !composition_selected_layers_list && !composition_time_read
-      && !composition_time_set
+      && !composition_time_set && !composition_layer_create
       && !layer_properties_list && !layer_property_set && !project_graph_invalidate) {
     return {EnqueueCode::kUnsupportedCapability, "NATIVE_UNSUPPORTED"};
   }
@@ -538,7 +596,13 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           || request.layer_locator.has_value()
           || request.parent_property_locator.has_value()
           || request.property_locator.has_value()
-          || !std::holds_alternative<std::monostate>(request.property_value))) {
+          || !std::holds_alternative<std::monostate>(request.property_value)
+          || !request.layer_create_kind.empty()
+          || !request.layer_create_name.empty()
+          || request.layer_create_color.has_value()
+          || request.layer_create_width.has_value()
+          || request.layer_create_height.has_value()
+          || request.layer_create_duration.has_value())) {
     return {
         EnqueueCode::kInvalidRequest,
         "INVALID_ARGUMENT",
@@ -632,6 +696,36 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         "native composition time write arguments failed closed validation",
         "params.arguments"};
   }
+  if (composition_layer_create
+      && (request.target_depth != 0
+          || !valid_idempotency_key(request.idempotency_key)
+          || !valid_sha256(request.arguments_fingerprint_sha256)
+          || !valid_uuid(request.host_instance_id) || !valid_uuid(request.session_id)
+          || request.offset != 0 || request.limit != 0
+          || request.project_locator.has_value() || request.layer_locator.has_value()
+          || request.parent_property_locator.has_value()
+          || request.property_locator.has_value()
+          || !std::holds_alternative<std::monostate>(request.property_value)
+          || !valid_layer_create_request(request))) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "native composition layer create arguments failed closed validation",
+        "params.arguments"};
+  }
+  if (!composition_layer_create
+      && (!request.layer_create_kind.empty()
+          || !request.layer_create_name.empty()
+          || request.layer_create_color.has_value()
+          || request.layer_create_width.has_value()
+          || request.layer_create_height.has_value()
+          || request.layer_create_duration.has_value())) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "composition layer create arguments are not accepted by this capability",
+        "params.arguments"};
+  }
   if (project_items_list
       && ((request.offset > 0 && !request.project_locator.has_value())
           || request.composition_locator.has_value())) {
@@ -660,7 +754,8 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
     }
   }
   if ((composition_layers_list || composition_selected_layers_list
-          || composition_time_read || composition_time_set)
+          || composition_time_read || composition_time_set
+          || composition_layer_create)
       && (request.project_locator.has_value() || !request.composition_locator.has_value())) {
     return {
         EnqueueCode::kInvalidRequest,
@@ -669,7 +764,8 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         "params.arguments.compositionLocator"};
   }
   if (composition_layers_list || composition_selected_layers_list
-      || composition_time_read || composition_time_set) {
+      || composition_time_read || composition_time_set
+      || composition_layer_create) {
     const ObjectLocator& locator = *request.composition_locator;
     if (!valid_locator(locator) || locator.kind != "composition") {
       return {
@@ -793,6 +889,22 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
     if (existing != idempotency_ledger_.end()) {
       const bool same_arguments = existing->second.arguments_fingerprint_sha256
           == request.arguments_fingerprint_sha256;
+      if (composition_layer_create && same_arguments
+          && existing->second.state == IdempotencyState::kSucceeded
+          && existing->second.replay_completion.has_value()) {
+        if (outbound_.size() + active_requests_.size() >= config_.max_outbound_depth) {
+          return {EnqueueCode::kQueueFull, "QUEUE_FULL"};
+        }
+        Completion replay = *existing->second.replay_completion;
+        replay.request_id = request.request_id;
+        replay.route_id = request.route_id;
+        replay.session_generation = request.session_generation;
+        replay.idempotency_key = request.idempotency_key;
+        replay.replayed = true;
+        replay.route_revoked = false;
+        finish_request_locked(key, replay, now);
+        return {EnqueueCode::kAccepted, {}};
+      }
       return {
           EnqueueCode::kDuplicateRequest,
           "DUPLICATE_REQUEST",
@@ -826,7 +938,8 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           request.idempotency_key,
           IdempotencyEntry{
               request.arguments_fingerprint_sha256,
-              IdempotencyState::kReserved}).second;
+              IdempotencyState::kReserved,
+              std::nullopt}).second;
       if (!reserved) {
         active_requests_.erase(active);
         return {
@@ -1200,6 +1313,94 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
             completion.ok = true;
             completion.composition_time_change_result = std::move(host_result.value);
           }
+        } else if (request.capability_id == kCompositionLayerCreateCapability) {
+          HostCompositionLayerCreateResult host_result = host.create_composition_layer(
+              CompositionLayerCreateCommand{
+                  request.host_instance_id,
+                  request.session_id,
+                  *request.composition_locator,
+                  request.layer_create_kind,
+                  request.layer_create_name,
+                  request.layer_create_color,
+                  request.layer_create_width,
+                  request.layer_create_height,
+                  request.layer_create_duration},
+              request.deadline);
+          if (clock_.now() > request.deadline) {
+            completion = failure_for(
+                request,
+                "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write completed after its request deadline; inspect composition layers");
+            completion.late_result_discarded = true;
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else {
+            const CompositionLayerCreated& value = host_result.value;
+            bool verified = value.changed
+                && value.kind == request.layer_create_kind
+                && value.name == request.layer_create_name
+                && value.layer_count_after == value.layer_count_before + 1
+                && value.stack_index >= 1
+                && value.stack_index <= value.layer_count_after
+                && value.project_item_count_after >= value.project_item_count_before
+                && value.composition_locator.kind == "composition"
+                && value.layer_locator.kind == "layer"
+                && same_locator_context(
+                    value.composition_locator, value.layer_locator)
+                && value.composition_locator.host_instance_id
+                    == request.host_instance_id
+                && value.composition_locator.session_id == request.session_id
+                && value.composition_locator.generation
+                    > request.composition_locator->generation
+                && value.composition_locator.project_id
+                    != request.composition_locator->project_id;
+            if (value.source_item_locator.has_value()) {
+              verified = verified
+                  && (value.source_item_locator->kind == "item"
+                      || value.source_item_locator->kind == "composition")
+                  && same_locator_context(
+                      value.composition_locator, *value.source_item_locator);
+            }
+            if (request.layer_create_kind == "solid") {
+              verified = verified && value.solid.has_value()
+                  && value.source_item_locator.has_value()
+                  && value.project_item_count_after
+                      > value.project_item_count_before;
+              if (verified && request.layer_create_color.has_value()) {
+                verified = value.solid->color == *request.layer_create_color;
+              }
+              if (verified && request.layer_create_width.has_value()) {
+                verified = value.solid->width == *request.layer_create_width;
+              }
+              if (verified && request.layer_create_height.has_value()) {
+                verified = value.solid->height == *request.layer_create_height;
+              }
+              if (verified && request.layer_create_duration.has_value()) {
+                verified = composition_times_equal(
+                    value.solid->duration, *request.layer_create_duration);
+              }
+            } else {
+              verified = verified && !value.solid.has_value();
+            }
+            if (!verified) {
+              completion = failure_for(
+                  request,
+                  "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                  "native write result did not verify the requested composition layer");
+            } else {
+              completion.request_id = request.request_id;
+              completion.capability_id = request.capability_id;
+              completion.route_id = request.route_id;
+              completion.session_generation = request.session_generation;
+              completion.idempotency_key = request.idempotency_key;
+              completion.ok = true;
+              completion.composition_layer_create_result = std::move(host_result.value);
+            }
+          }
         } else if (request.capability_id == kLayerPropertiesListCapability) {
           HostLayerPropertiesResult host_result = host.list_layer_properties(
               LayerPropertiesQuery{
@@ -1323,6 +1524,7 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
             request,
             (request.capability_id == kProjectBitDepthSetCapability
                 || request.capability_id == kCompositionTimeSetCapability
+                || request.capability_id == kCompositionLayerCreateCapability
                 || request.capability_id == kLayerPropertySetCapability)
                 ? "POSSIBLY_SIDE_EFFECTING_FAILURE" : "CAPABILITY_FAILED",
             "native host adapter raised an exception");
@@ -1506,6 +1708,7 @@ void HostDispatcher::finish_idempotency_locked(
     const Request& request, const Completion& completion) {
   if ((request.capability_id != kProjectBitDepthSetCapability
           && request.capability_id != kCompositionTimeSetCapability
+          && request.capability_id != kCompositionLayerCreateCapability
           && request.capability_id != kLayerPropertySetCapability)
       || request.idempotency_key.empty()) {
     return;
@@ -1514,6 +1717,9 @@ void HostDispatcher::finish_idempotency_locked(
   if (entry == idempotency_ledger_.end()) return;
   if (completion.ok) {
     entry->second.state = IdempotencyState::kSucceeded;
+    if (request.capability_id == kCompositionLayerCreateCapability) {
+      entry->second.replay_completion = completion;
+    }
     return;
   }
   if (completion.error_code == "POSSIBLY_SIDE_EFFECTING_FAILURE") {

@@ -86,6 +86,12 @@ export const INVOKE_REGISTRY = Object.freeze([
     resultContractId: 'aemcp.contract.ae.composition.time.set.result.v1',
   }),
   Object.freeze({
+    id: 'ae.composition.layer.create',
+    version: 1,
+    inputContractId: 'aemcp.contract.ae.composition.layer.create.input.v1',
+    resultContractId: 'aemcp.contract.ae.composition.layer.create.result.v1',
+  }),
+  Object.freeze({
     id: 'ae.layer.properties.list',
     version: 1,
     inputContractId: 'aemcp.contract.ae.layer.properties.list.input.v1',
@@ -694,6 +700,46 @@ export function classifyRequest(message) {
           || !/^[A-Za-z0-9][A-Za-z0-9._:-]{15,63}$/u.test(args.idempotencyKey)) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
+    } else if (params.capabilityId === 'ae.composition.layer.create') {
+      const args = params.arguments;
+      const solidOnlyProvided = ['color', 'width', 'height', 'duration']
+        .some((key) => Object.hasOwn(args, key));
+      const validColor = args.color === undefined || (exactKeys(
+        args.color,
+        new Set(['red', 'green', 'blue', 'alpha']),
+        ['red', 'green', 'blue', 'alpha'],
+      ) && ['red', 'green', 'blue', 'alpha'].every((channel) => (
+        Number.isInteger(args.color[channel])
+          && args.color[channel] >= 0 && args.color[channel] <= 255
+      )));
+      const validDuration = args.duration === undefined || (exactKeys(
+        args.duration, new Set(['value', 'scale']), ['value', 'scale'],
+      ) && Number.isInteger(args.duration.value)
+        && args.duration.value >= -2147483648 && args.duration.value <= 2147483647
+        && Number.isInteger(args.duration.scale)
+        && args.duration.scale >= 1 && args.duration.scale <= 4294967295);
+      if (!exactKeys(
+        args,
+        new Set([
+          'compositionLocator', 'kind', 'name', 'color', 'width', 'height',
+          'duration', 'idempotencyKey',
+        ]),
+        ['compositionLocator', 'kind', 'name', 'idempotencyKey'],
+      )
+          || !isLocatorShape(args.compositionLocator, ['composition'])
+          || !['null', 'solid'].includes(args.kind)
+          || typeof args.name !== 'string' || hasLoneSurrogate(args.name)
+          || Array.from(args.name).length < 1 || Array.from(args.name).length > 255
+          || (args.kind === 'null' && solidOnlyProvided)
+          || !validColor || !validDuration
+          || (args.width !== undefined
+            && (!Number.isInteger(args.width) || args.width < 1 || args.width > 30000))
+          || (args.height !== undefined
+            && (!Number.isInteger(args.height) || args.height < 1 || args.height > 30000))
+          || typeof args.idempotencyKey !== 'string'
+          || !/^[A-Za-z0-9][A-Za-z0-9._:-]{15,63}$/u.test(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
     } else if (params.capabilityId === 'ae.layer.properties.list') {
       const args = params.arguments;
       if (!exactKeys(
@@ -841,6 +887,7 @@ export function validateFailureExchange(
         || capabilityId === 'ae.composition.layers.list'
         || capabilityId === 'ae.composition.selected-layers.list'
         || capabilityId === 'ae.composition.time.read'
+        || capabilityId === 'ae.composition.layer.create'
         || capabilityId === 'ae.layer.properties.list'
         || capabilityId === 'ae.layer.property.set')) {
     const expectedFields = capabilityId === 'ae.project.items.list'
@@ -848,6 +895,7 @@ export function validateFailureExchange(
       : capabilityId === 'ae.composition.layers.list'
           || capabilityId === 'ae.composition.selected-layers.list'
           || capabilityId === 'ae.composition.time.read'
+          || capabilityId === 'ae.composition.layer.create'
         ? new Set(['params.arguments.compositionLocator'])
         : capabilityId === 'ae.layer.property.set'
           ? new Set([
@@ -960,6 +1008,16 @@ export function compositionTimeReadContractDigest(schema) {
 export function compositionTimeSetContractDigest(schema) {
   const inputSchema = structuredClone(schema.$defs.compositionTimeSetInputSchemaContract.const);
   const resultSchema = structuredClone(schema.$defs.compositionTimeSetResultSchemaContract.const);
+  return sha256Jcs({ inputSchema, resultSchema });
+}
+
+export function compositionLayerCreateContractDigest(schema) {
+  const inputSchema = structuredClone(
+    schema.$defs.compositionLayerCreateInputSchemaContract.const,
+  );
+  const resultSchema = structuredClone(
+    schema.$defs.compositionLayerCreateResultSchemaContract.const,
+  );
   return sha256Jcs({ inputSchema, resultSchema });
 }
 
@@ -1467,8 +1525,102 @@ export function compositionTimeSetDescriptor(schema) {
   };
 }
 
-export function layerPropertiesListDescriptor(schema) {
+export function compositionLayerCreateDescriptor(schema) {
   const registration = INVOKE_REGISTRY[8];
+  const compositionLocator = syntheticDescriptorLocator(
+    'composition', '66666666-6666-4666-8666-666666666666',
+  );
+  const createdCompositionLocator = {
+    ...compositionLocator,
+    projectId: '55555555-5555-4555-8555-555555555555',
+    generation: 9,
+  };
+  const layerLocator = {
+    ...createdCompositionLocator,
+    kind: 'layer',
+    objectId: '99999999-9999-4999-8999-999999999999',
+  };
+  return {
+    detail: 'full',
+    id: registration.id,
+    version: registration.version,
+    schemaVersion: 1,
+    summary: 'Create one null or solid layer in an After Effects composition.',
+    risk: 'write',
+    mutability: 'mutating',
+    idempotency: 'idempotency-key',
+    cancellation: 'before-dispatch',
+    undo: 'ae-undo-group',
+    sideEffectSummary: 'Creates one composition layer, may create one solid project item, and creates one After Effects Undo step.',
+    preconditions: [
+      'An After Effects project must be open.',
+      'compositionLocator must come from ae.project.items.list@1.',
+      'kind must be null or solid and solid-only options require kind solid.',
+    ],
+    compatibility: {
+      status: 'unverified',
+      intendedPlatforms: ['macos-arm64', 'windows-x64'],
+    },
+    inputContractId: registration.inputContractId,
+    resultContractId: registration.resultContractId,
+    contractDigest: compositionLayerCreateContractDigest(schema),
+    inputSchema: structuredClone(
+      schema.$defs.compositionLayerCreateInputSchemaContract.const,
+    ),
+    resultSchema: structuredClone(
+      schema.$defs.compositionLayerCreateResultSchemaContract.const,
+    ),
+    requirements: [{
+      id: 'aemcp.requirement.native.composition-layer-create',
+      contractVersion: 1,
+    }],
+    examples: [
+      {
+        id: 'aemcp-example-composition-layer-create-null',
+        kind: 'positive',
+        summary: 'Create and verify one named null layer with Undo available.',
+        arguments: {
+          compositionLocator,
+          kind: 'null',
+          name: 'SYNTHETIC_NULL',
+          idempotencyKey: 'synthetic-layer-create-0001',
+        },
+        expected: {
+          outcome: 'succeeded',
+          value: {
+            changed: true,
+            kind: 'null',
+            name: 'SYNTHETIC_NULL',
+            stackIndex: 1,
+            compositionLocator: createdCompositionLocator,
+            layerLocator,
+            sourceItemLocator: null,
+            layerCountBefore: 0,
+            layerCountAfter: 1,
+            projectItemCountBefore: 2,
+            projectItemCountAfter: 2,
+            solid: null,
+          },
+        },
+      },
+      {
+        id: 'aemcp-example-composition-layer-create-stale',
+        kind: 'negative',
+        summary: 'Refresh a stale composition locator before creating a layer.',
+        arguments: {
+          compositionLocator,
+          kind: 'null',
+          name: 'SYNTHETIC_NULL',
+          idempotencyKey: 'synthetic-layer-create-0002',
+        },
+        expected: { errorCode: 'STALE_LOCATOR', recoveryAction: 'refresh-locator' },
+      },
+    ],
+  };
+}
+
+export function layerPropertiesListDescriptor(schema) {
+  const registration = INVOKE_REGISTRY[9];
   const layerLocator = syntheticDescriptorLocator(
     'layer', '88888888-8888-4888-8888-888888888888',
   );
@@ -1537,7 +1689,7 @@ export function layerPropertiesListDescriptor(schema) {
 }
 
 export function layerPropertySetDescriptor(schema) {
-  const registration = INVOKE_REGISTRY[9];
+  const registration = INVOKE_REGISTRY[10];
   const layerLocator = syntheticDescriptorLocator(
     'layer', '88888888-8888-4888-8888-888888888888',
   );
@@ -1624,6 +1776,7 @@ export function nativeCapabilityRegistry(schema) {
     compositionSelectedLayersListDescriptor(schema),
     compositionTimeReadDescriptor(schema),
     compositionTimeSetDescriptor(schema),
+    compositionLayerCreateDescriptor(schema),
     layerPropertiesListDescriptor(schema),
     layerPropertySetDescriptor(schema),
   ];
@@ -1955,6 +2108,39 @@ function validateCompositionTimeSetResult(request, result, helloContext, schema)
     && value.compositionLocator.hostInstanceId === helloContext.response.result.host.instanceId
     && value.compositionLocator.sessionId === request.sessionId
     && validateLocator(value.compositionLocator, context, schema);
+}
+
+function validateCompositionLayerCreateResult(request, result, helloContext, schema) {
+  if (request.params.capabilityId !== 'ae.composition.layer.create') return true;
+  const args = request.params.arguments;
+  const value = result.value;
+  if (result.evidence.postcondition.kind !== 'composition-layer-create'
+      || value.changed !== true || value.kind !== args.kind || value.name !== args.name
+      || value.compositionLocator.hostInstanceId
+        !== helloContext.response.result.host.instanceId
+      || value.compositionLocator.sessionId !== request.sessionId
+      || value.compositionLocator.generation <= args.compositionLocator.generation
+      || value.compositionLocator.projectId === args.compositionLocator.projectId
+      || value.layerCountAfter !== value.layerCountBefore + 1
+      || value.stackIndex > value.layerCountAfter
+      || value.projectItemCountAfter < value.projectItemCountBefore) return false;
+  const context = locatorContext(value.compositionLocator);
+  if (!validateLocator(value.compositionLocator, context, schema)
+      || !validateLocator(value.layerLocator, context, schema)
+      || value.layerLocator.kind !== 'layer'
+      || (value.sourceItemLocator !== null
+        && !validateLocator(value.sourceItemLocator, context, schema))) return false;
+  if (args.kind === 'null') return value.solid === null;
+  if (value.sourceItemLocator === null || value.solid === null
+      || value.projectItemCountAfter <= value.projectItemCountBefore
+      || canonicalSecondsRational(value.solid.duration?.value, value.solid.duration?.scale)
+        !== value.solid.duration?.secondsRational
+      || (args.color !== undefined && !jsonDeepEqual(value.solid.color, args.color))
+      || (args.width !== undefined && value.solid.width !== args.width)
+      || (args.height !== undefined && value.solid.height !== args.height)
+      || (args.duration !== undefined
+        && !compositionTimesEqual(value.solid.duration, args.duration))) return false;
+  return true;
 }
 
 export function validateCapabilitiesExchange(
@@ -2310,7 +2496,7 @@ export function validateTranscript(context, request, messages) {
         && (descriptor.undo !== 'ae-undo-group'
           || (evidence.undo?.available === true
             && typeof evidence.undo?.verified === 'boolean'
-            && (!['ae.project.bit-depth.set', 'ae.composition.time.set', 'ae.layer.property.set']
+            && (!['ae.project.bit-depth.set', 'ae.composition.time.set', 'ae.composition.layer.create', 'ae.layer.property.set']
               .includes(request.params.capabilityId)
               || request.params.capabilityVersion !== 1
               || evidence.undo.verified === false)))))
@@ -2320,6 +2506,7 @@ export function validateTranscript(context, request, messages) {
         && result.value.afterBitsPerChannel === request.params.arguments.targetDepth))
     && validateNavigationResult(request, result, helloContext, schema)
     && validateCompositionTimeSetResult(request, result, helloContext, schema)
+    && validateCompositionLayerCreateResult(request, result, helloContext, schema)
     && validateLayerPropertySetResult(request, result, helloContext, schema)
     && evidence.postcondition.verified === true
     && evidence.requestDigest === requestDigest

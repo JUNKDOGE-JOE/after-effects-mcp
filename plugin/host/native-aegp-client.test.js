@@ -41,6 +41,10 @@ const COMPOSITION_TIME_SET_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
     '../../native/ae-plugin/protocol/fixtures/invoke-composition-time-set.json',
 ), 'utf8'));
+const COMPOSITION_LAYER_CREATE_VECTOR = JSON.parse(fs.readFileSync(path.join(
+    __dirname,
+    '../../native/ae-plugin/protocol/fixtures/invoke-composition-layer-create.json',
+), 'utf8'));
 const LAYER_PROPERTIES_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
     '../../native/ae-plugin/protocol/fixtures/invoke-layer-properties-list.json',
@@ -255,6 +259,16 @@ function installProtocol(server, options) {
                         generation: 8,
                         invalidated: true,
                     };
+                } else if (request.params.capabilityId === 'ae.composition.layer.create') {
+                    result = structuredClone(COMPOSITION_LAYER_CREATE_VECTOR.response.result);
+                    result.evidence.requestId = request.requestId;
+                    result.evidence.requestDigest = invokeRequestDigest(request);
+                    result.evidence.postcondition.digest = jcsDigest({
+                        capabilityId: result.capabilityId,
+                        capabilityVersion: result.capabilityVersion,
+                        value: result.value,
+                    });
+                    if (input.mutateInvoke) input.mutateInvoke(result, request);
                 } else if (request.params.capabilityId === 'ae.composition.time.set') {
                     result = structuredClone(COMPOSITION_TIME_SET_VECTOR.response.result);
                     result.evidence.requestId = request.requestId;
@@ -392,6 +406,14 @@ function installProtocol(server, options) {
                     ? input.invokeError
                     : request.method === 'invalidateGraph'
                         ? input.invalidateError : null;
+                const replayed = responseError
+                    ? input.errorReplayed === true
+                    : (request.method === 'invoke'
+                        && request.params.capabilityId === 'ae.composition.layer.create'
+                        && request.requestId === input.createReplayedRequestId)
+                        || (request.method === 'invoke'
+                            && request.params.capabilityId === 'ae.project.summary'
+                            && input.summaryReplayed === true);
                 socket.write(frame({
                     wireVersion: 1,
                     kind: 'response',
@@ -399,11 +421,7 @@ function installProtocol(server, options) {
                     requestId: request.requestId,
                     method: request.method,
                     ok: responseError ? false : true,
-                    replayed: responseError
-                        ? input.errorReplayed === true
-                        : request.method === 'invoke'
-                            && request.params.capabilityId === 'ae.project.summary'
-                            && input.summaryReplayed === true,
+                    replayed,
                     ...(responseError ? { error: responseError } : { result }),
                 }));
             }
@@ -1419,6 +1437,82 @@ test('CEP composition-time mutation preserves exact rational intent and uncertai
         capabilityVersion: 1,
         arguments: uncertainArguments,
         deadlineUnixMs: 1900000002000,
+    }), {
+        code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
+        retryable: false,
+        sideEffect: 'may-have-occurred',
+    });
+});
+
+test('CEP composition-layer create verifies options, replay, and uncertain failures', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const ready = await readyNativeClient(t, {
+        createReplayedRequestId: 'composition-layer-create-client-replay',
+        mutateInvoke: function (result, request) {
+            if (request.requestId === 'composition-layer-create-client-uncertain') {
+                result.evidence.postcondition.digest = '0'.repeat(64);
+            }
+        },
+    });
+    const argumentsValue = structuredClone(
+        COMPOSITION_LAYER_CREATE_VECTOR.request.params.arguments,
+    );
+    const created = await ready.client.invoke({
+        requestId: 'composition-layer-create-client-1',
+        capabilityId: 'ae.composition.layer.create',
+        capabilityVersion: 1,
+        arguments: argumentsValue,
+        deadlineUnixMs: 1900000005000,
+    });
+    assert.equal(created.replayed, false);
+    assert.equal(created.value.kind, 'solid');
+    assert.deepEqual(created.value.solid, {
+        color: { red: 12, green: 34, blue: 56, alpha: 255 },
+        width: 640,
+        height: 360,
+        duration: { value: 5, scale: 1, secondsRational: '5' },
+    });
+    assert.deepEqual(created.evidence.undo, { available: true, verified: false });
+    const sent = ready.protocol.requests.at(-1);
+    assert.deepEqual(sent.params.arguments, argumentsValue);
+    assert.equal(created.evidence.requestDigest, invokeRequestDigest(sent));
+
+    const replayed = await ready.client.invoke({
+        requestId: 'composition-layer-create-client-replay',
+        capabilityId: 'ae.composition.layer.create',
+        capabilityVersion: 1,
+        arguments: argumentsValue,
+        deadlineUnixMs: 1900000005000,
+    });
+    assert.equal(replayed.replayed, true);
+    assert.deepEqual(replayed.value, created.value);
+
+    const requestCount = ready.protocol.requests.length;
+    const invalidArguments = {
+        compositionLocator: argumentsValue.compositionLocator,
+        kind: 'null',
+        name: 'Invalid Null',
+        width: 640,
+        idempotencyKey: 'synthetic-null-invalid-0001',
+    };
+    await assert.rejects(ready.client.invoke({
+        requestId: 'composition-layer-create-client-invalid',
+        capabilityId: 'ae.composition.layer.create',
+        capabilityVersion: 1,
+        arguments: invalidArguments,
+        deadlineUnixMs: 1900000005000,
+    }), { code: 'INVALID_ARGUMENT', retryable: false });
+    assert.equal(ready.protocol.requests.length, requestCount);
+
+    const uncertainArguments = structuredClone(argumentsValue);
+    uncertainArguments.idempotencyKey = 'synthetic-layer-create-uncertain-0001';
+    await assert.rejects(ready.client.invoke({
+        requestId: 'composition-layer-create-client-uncertain',
+        capabilityId: 'ae.composition.layer.create',
+        capabilityVersion: 1,
+        arguments: uncertainArguments,
+        deadlineUnixMs: 1900000005000,
     }), {
         code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
         retryable: false,
