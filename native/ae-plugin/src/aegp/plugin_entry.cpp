@@ -3096,13 +3096,18 @@ class AegpHostApi final : public HostApi {
         basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
     SuiteLease<AEGP_MemorySuite1> memory_suite(
         basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    SuiteLease<AEGP_StreamSuite6> stream_suite(
+        basic_, kAEGPStreamSuite, kAEGPStreamSuiteVersion6);
+    SuiteLease<AEGP_DynamicStreamSuite4> dynamic_suite(
+        basic_, kAEGPDynamicStreamSuite, kAEGPDynamicStreamSuiteVersion4);
     SuiteLease<AEGP_EffectSuite5> effect_suite(
         basic_, kAEGPEffectSuite, kAEGPEffectSuiteVersion5);
     SuiteLease<AEGP_UtilitySuite6> utility_suite(
         basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
     if (project_suite.get() == nullptr || item_suite.get() == nullptr
         || comp_suite.get() == nullptr || layer_suite.get() == nullptr
-        || memory_suite.get() == nullptr || effect_suite.get() == nullptr
+        || memory_suite.get() == nullptr || stream_suite.get() == nullptr
+        || dynamic_suite.get() == nullptr || effect_suite.get() == nullptr
         || utility_suite.get() == nullptr) {
       return HostLayerEffectApplyResult::failure(
           "NATIVE_UNSUPPORTED", "required layer effect suites are unavailable");
@@ -3246,23 +3251,14 @@ class AegpHostApi final : public HostApi {
           "PRECONDITION_FAILED", "effect match name is not installed in After Effects",
           "params.arguments.effectMatchName");
     }
-    std::array<A_char, AEGP_MAX_EFFECT_NAME_SIZE> display_name{};
     std::array<A_char, AEGP_MAX_EFFECT_MATCH_NAME_SIZE> verified_match_name{};
-    if (effect_suite->AEGP_GetEffectName(matched_key, display_name.data()) != A_Err_NONE
-        || effect_suite->AEGP_GetEffectMatchName(
+    if (effect_suite->AEGP_GetEffectMatchName(
             matched_key, verified_match_name.data()) != A_Err_NONE
-        || std::find(display_name.begin(), display_name.end(), '\0')
-            == display_name.end()
         || std::find(verified_match_name.begin(), verified_match_name.end(), '\0')
             == verified_match_name.end()
         || std::string_view(verified_match_name.data()) != command.effect_match_name) {
       return HostLayerEffectApplyResult::failure(
           "CAPABILITY_FAILED", "installed effect metadata could not be verified");
-    }
-    matched_name.assign(display_name.data());
-    if (matched_name.empty()) {
-      return HostLayerEffectApplyResult::failure(
-          "CAPABILITY_FAILED", "installed effect display name was empty");
     }
 
     const auto read_effect_keys = [&]() -> std::optional<std::vector<AEGP_InstalledEffectKey>> {
@@ -3356,6 +3352,86 @@ class AegpHostApi final : public HostApi {
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
           "applied effect index could not be verified from the layer effect sequence");
     }
+
+    // AEGP_GetEffectName does not promise UTF-8, so localized hosts can return
+    // bytes that strict JSON evidence must reject. Read the applied dynamic
+    // stream's UTF-16 name instead and convert it through MemHandleOwner.
+    AEGP_StreamRefH layer_stream = nullptr;
+    if (dynamic_suite->AEGP_GetNewStreamRefForLayer(
+            plugin_id_, layer, &layer_stream) != A_Err_NONE
+        || layer_stream == nullptr) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "applied effect name could not be resolved from the layer stream");
+    }
+    StreamRefOwner layer_stream_owner(stream_suite.get(), layer_stream);
+    A_long root_child_count = 0;
+    if (dynamic_suite->AEGP_GetNumStreamsInGroup(
+            layer_stream_owner.get(), &root_child_count) != A_Err_NONE
+        || root_child_count < 0 || root_child_count > 256) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "applied effect name traversal exceeded the layer stream bound");
+    }
+    std::optional<std::string> applied_effect_name;
+    for (A_long root_index = 0; root_index < root_child_count; ++root_index) {
+      AEGP_StreamRefH root_child = nullptr;
+      if (dynamic_suite->AEGP_GetNewStreamRefByIndex(
+              plugin_id_, layer_stream_owner.get(), root_index,
+              &root_child) != A_Err_NONE
+          || root_child == nullptr) {
+        return HostLayerEffectApplyResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "applied effect name traversal could not resolve a layer group");
+      }
+      StreamRefOwner root_child_owner(stream_suite.get(), root_child);
+      std::array<A_char, AEGP_MAX_STREAM_MATCH_NAME_SIZE> root_match_name{};
+      if (dynamic_suite->AEGP_GetMatchName(
+              root_child_owner.get(), root_match_name.data()) != A_Err_NONE
+          || std::find(root_match_name.begin(), root_match_name.end(), '\0')
+              == root_match_name.end()) {
+        return HostLayerEffectApplyResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "applied effect name traversal could not read a layer group identity");
+      }
+      if (std::string_view(root_match_name.data()) != "ADBE Effect Parade") continue;
+      A_long effect_child_count = 0;
+      if (dynamic_suite->AEGP_GetNumStreamsInGroup(
+              root_child_owner.get(), &effect_child_count) != A_Err_NONE
+          || effect_child_count < 0
+          || *insertion_index >= static_cast<std::size_t>(effect_child_count)) {
+        return HostLayerEffectApplyResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "applied effect name index was not present in the effect stream");
+      }
+      AEGP_StreamRefH effect_stream = nullptr;
+      if (dynamic_suite->AEGP_GetNewStreamRefByIndex(
+              plugin_id_, root_child_owner.get(),
+              static_cast<A_long>(*insertion_index), &effect_stream) != A_Err_NONE
+          || effect_stream == nullptr) {
+        return HostLayerEffectApplyResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "applied effect name stream could not be resolved");
+      }
+      StreamRefOwner effect_stream_owner(stream_suite.get(), effect_stream);
+      AEGP_MemHandle effect_name_handle = nullptr;
+      const A_Err effect_name_error = stream_suite->AEGP_GetStreamName(
+          plugin_id_, effect_stream_owner.get(), FALSE, &effect_name_handle);
+      MemHandleOwner effect_name_owner(memory_suite.get(), effect_name_handle);
+      if (effect_name_error != A_Err_NONE || effect_name_handle == nullptr) {
+        return HostLayerEffectApplyResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "applied effect UTF-16 name could not be read");
+      }
+      applied_effect_name = effect_name_owner.utf8();
+      break;
+    }
+    if (!applied_effect_name.has_value() || applied_effect_name->empty()) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "applied effect UTF-16 name was missing or invalid");
+    }
+    matched_name = std::move(*applied_effect_name);
     if (budget_expired()) {
       return HostLayerEffectApplyResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
