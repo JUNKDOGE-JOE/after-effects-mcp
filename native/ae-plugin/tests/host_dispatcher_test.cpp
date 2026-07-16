@@ -1,7 +1,9 @@
+#include "aemcp_native/effect_identity.hpp"
 #include "aemcp_native/host_dispatcher.hpp"
 #include "aemcp_native/project_epoch.hpp"
 #include "aemcp_native/selection_collection.hpp"
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -55,6 +57,7 @@ using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kProjectSummaryCapability;
 using aemcp::native::kLayerPropertySetCapability;
 using aemcp::native::json_encoded_string_size;
+using aemcp::native::locate_unique_effect_identity;
 using aemcp::native::canonical_seconds_rational;
 using aemcp::native::normalize_selected_layer_collection;
 using aemcp::native::NormalizedSelectedLayers;
@@ -109,6 +112,20 @@ void effective_layer_name_uses_sdk_source_fallback() {
   require(!select_effective_layer_name(
               std::nullopt, std::nullopt, std::nullopt).has_value(),
       "missing layer, source, and source Item handles produced a name");
+}
+
+void returned_effect_identity_selects_one_duplicate_without_reordering() {
+  const std::array<std::uintptr_t, 3> duplicate_effect_stack{101, 202, 303};
+  require(locate_unique_effect_identity(202, duplicate_effect_stack)
+              == std::optional<std::size_t>{1},
+      "returned effect identity did not select the exact duplicate instance");
+  require(!locate_unique_effect_identity(404, duplicate_effect_stack).has_value(),
+      "missing returned effect identity selected an existing duplicate");
+  const std::array<std::uintptr_t, 3> ambiguous_stack{101, 202, 202};
+  require(!locate_unique_effect_identity(202, ambiguous_stack).has_value(),
+      "ambiguous returned effect identity was accepted");
+  require(!locate_unique_effect_identity(0, duplicate_effect_stack).has_value(),
+      "null returned effect identity was accepted");
 }
 
 void selected_collection_ownership_and_mixed_filter_are_portable_tested() {
@@ -2030,6 +2047,7 @@ void idle_budget_and_shutdown_are_bounded() {
 int main() {
   bounded_page_budget_counts_codec_escaping_and_stops_before_overflow();
   effective_layer_name_uses_sdk_source_fallback();
+  returned_effect_identity_selects_one_duplicate_without_reordering();
   selected_collection_ownership_and_mixed_filter_are_portable_tested();
   composition_time_rational_is_exact_and_overflow_safe();
   project_epoch_fences_reused_aegp_handles();
