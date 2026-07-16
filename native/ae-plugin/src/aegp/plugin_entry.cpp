@@ -3330,102 +3330,70 @@ class AegpHostApi final : public HostApi {
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
           "effect application did not produce one exact native effect");
     }
-    std::optional<std::size_t> insertion_index;
-    for (std::size_t candidate = 0; candidate < after_keys->size(); ++candidate) {
-      if ((*after_keys)[candidate] != matched_key) continue;
-      bool same_without_candidate = true;
-      for (std::size_t before_index = 0; before_index < before_keys->size(); ++before_index) {
-        const std::size_t after_index = before_index < candidate
-            ? before_index : before_index + 1;
-        if ((*before_keys)[before_index] != (*after_keys)[after_index]) {
-          same_without_candidate = false;
-          break;
-        }
-      }
-      if (same_without_candidate) {
-        insertion_index = candidate;
-        break;
-      }
-    }
-    if (!insertion_index.has_value()) {
+    // Installed-effect keys identify effect types, not individual instances.
+    // Anchor readback to the exact EffectRef returned by AEGP_ApplyEffect so an
+    // existing instance with the same match name cannot be mistaken for the
+    // newly applied effect.
+    A_long parameter_count = 0;
+    if (stream_suite->AEGP_GetEffectNumParamStreams(
+            applied_owner.get(), &parameter_count) != A_Err_NONE
+        || parameter_count < 1 || parameter_count > 4096) {
       return HostLayerEffectApplyResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
-          "applied effect index could not be verified from the layer effect sequence");
+          "applied effect parameter stream count was missing or invalid");
+    }
+    AEGP_StreamRefH parameter_stream = nullptr;
+    if (stream_suite->AEGP_GetNewEffectStreamByIndex(
+            plugin_id_, applied_owner.get(), 0, &parameter_stream) != A_Err_NONE
+        || parameter_stream == nullptr) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "applied effect parameter stream could not be resolved");
+    }
+    StreamRefOwner parameter_stream_owner(stream_suite.get(), parameter_stream);
+    AEGP_StreamRefH effect_stream = nullptr;
+    if (dynamic_suite->AEGP_GetNewParentStreamRef(
+            plugin_id_, parameter_stream_owner.get(), &effect_stream) != A_Err_NONE
+        || effect_stream == nullptr) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "applied effect stream could not be resolved from its parameter");
+    }
+    StreamRefOwner effect_stream_owner(stream_suite.get(), effect_stream);
+    std::array<A_char, AEGP_MAX_STREAM_MATCH_NAME_SIZE> applied_match_name{};
+    if (dynamic_suite->AEGP_GetMatchName(
+            effect_stream_owner.get(), applied_match_name.data()) != A_Err_NONE
+        || std::find(applied_match_name.begin(), applied_match_name.end(), '\0')
+            == applied_match_name.end()
+        || std::string_view(applied_match_name.data()) != command.effect_match_name) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "applied effect stream did not match the requested effect");
+    }
+    A_long insertion_index = -1;
+    if (dynamic_suite->AEGP_GetStreamIndexInParent(
+            effect_stream_owner.get(), &insertion_index) != A_Err_NONE
+        || insertion_index < 0
+        || static_cast<std::size_t>(insertion_index) >= after_keys->size()
+        || (*after_keys)[static_cast<std::size_t>(insertion_index)] != matched_key) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "applied effect index could not be verified from its native stream");
     }
 
     // AEGP_GetEffectName does not promise UTF-8, so localized hosts can return
-    // bytes that strict JSON evidence must reject. Read the applied dynamic
+    // bytes that strict JSON evidence must reject. Read the exact applied
     // stream's UTF-16 name instead and convert it through MemHandleOwner.
-    AEGP_StreamRefH layer_stream = nullptr;
-    if (dynamic_suite->AEGP_GetNewStreamRefForLayer(
-            plugin_id_, layer, &layer_stream) != A_Err_NONE
-        || layer_stream == nullptr) {
+    AEGP_MemHandle effect_name_handle = nullptr;
+    const A_Err effect_name_error = stream_suite->AEGP_GetStreamName(
+        plugin_id_, effect_stream_owner.get(), FALSE, &effect_name_handle);
+    MemHandleOwner effect_name_owner(memory_suite.get(), effect_name_handle);
+    if (effect_name_error != A_Err_NONE || effect_name_handle == nullptr) {
       return HostLayerEffectApplyResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
-          "applied effect name could not be resolved from the layer stream");
+          "applied effect UTF-16 name could not be read");
     }
-    StreamRefOwner layer_stream_owner(stream_suite.get(), layer_stream);
-    A_long root_child_count = 0;
-    if (dynamic_suite->AEGP_GetNumStreamsInGroup(
-            layer_stream_owner.get(), &root_child_count) != A_Err_NONE
-        || root_child_count < 0 || root_child_count > 256) {
-      return HostLayerEffectApplyResult::failure(
-          "POSSIBLY_SIDE_EFFECTING_FAILURE",
-          "applied effect name traversal exceeded the layer stream bound");
-    }
-    std::optional<std::string> applied_effect_name;
-    for (A_long root_index = 0; root_index < root_child_count; ++root_index) {
-      AEGP_StreamRefH root_child = nullptr;
-      if (dynamic_suite->AEGP_GetNewStreamRefByIndex(
-              plugin_id_, layer_stream_owner.get(), root_index,
-              &root_child) != A_Err_NONE
-          || root_child == nullptr) {
-        return HostLayerEffectApplyResult::failure(
-            "POSSIBLY_SIDE_EFFECTING_FAILURE",
-            "applied effect name traversal could not resolve a layer group");
-      }
-      StreamRefOwner root_child_owner(stream_suite.get(), root_child);
-      std::array<A_char, AEGP_MAX_STREAM_MATCH_NAME_SIZE> root_match_name{};
-      if (dynamic_suite->AEGP_GetMatchName(
-              root_child_owner.get(), root_match_name.data()) != A_Err_NONE
-          || std::find(root_match_name.begin(), root_match_name.end(), '\0')
-              == root_match_name.end()) {
-        return HostLayerEffectApplyResult::failure(
-            "POSSIBLY_SIDE_EFFECTING_FAILURE",
-            "applied effect name traversal could not read a layer group identity");
-      }
-      if (std::string_view(root_match_name.data()) != "ADBE Effect Parade") continue;
-      A_long effect_child_count = 0;
-      if (dynamic_suite->AEGP_GetNumStreamsInGroup(
-              root_child_owner.get(), &effect_child_count) != A_Err_NONE
-          || effect_child_count < 0
-          || *insertion_index >= static_cast<std::size_t>(effect_child_count)) {
-        return HostLayerEffectApplyResult::failure(
-            "POSSIBLY_SIDE_EFFECTING_FAILURE",
-            "applied effect name index was not present in the effect stream");
-      }
-      AEGP_StreamRefH effect_stream = nullptr;
-      if (dynamic_suite->AEGP_GetNewStreamRefByIndex(
-              plugin_id_, root_child_owner.get(),
-              static_cast<A_long>(*insertion_index), &effect_stream) != A_Err_NONE
-          || effect_stream == nullptr) {
-        return HostLayerEffectApplyResult::failure(
-            "POSSIBLY_SIDE_EFFECTING_FAILURE",
-            "applied effect name stream could not be resolved");
-      }
-      StreamRefOwner effect_stream_owner(stream_suite.get(), effect_stream);
-      AEGP_MemHandle effect_name_handle = nullptr;
-      const A_Err effect_name_error = stream_suite->AEGP_GetStreamName(
-          plugin_id_, effect_stream_owner.get(), FALSE, &effect_name_handle);
-      MemHandleOwner effect_name_owner(memory_suite.get(), effect_name_handle);
-      if (effect_name_error != A_Err_NONE || effect_name_handle == nullptr) {
-        return HostLayerEffectApplyResult::failure(
-            "POSSIBLY_SIDE_EFFECTING_FAILURE",
-            "applied effect UTF-16 name could not be read");
-      }
-      applied_effect_name = effect_name_owner.utf8();
-      break;
-    }
+    const auto applied_effect_name = effect_name_owner.utf8();
     if (!applied_effect_name.has_value() || applied_effect_name->empty()) {
       return HostLayerEffectApplyResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
@@ -3459,7 +3427,7 @@ class AegpHostApi final : public HostApi {
         command.layer_locator.object_id);
     applied.name = std::move(matched_name);
     applied.match_name = command.effect_match_name;
-    applied.effect_index = static_cast<std::uint64_t>(*insertion_index) + 1U;
+    applied.effect_index = static_cast<std::uint64_t>(insertion_index) + 1U;
     applied.effect_count_before = before_keys->size();
     applied.effect_count_after = after_keys->size();
     applied.matching_effect_count_before = matching_before;
