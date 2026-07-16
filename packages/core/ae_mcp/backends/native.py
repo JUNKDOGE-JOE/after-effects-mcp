@@ -442,7 +442,10 @@ class NativeErrorPayload(_NativeModel):
         property_precondition = (
             self.code == "PRECONDITION_FAILED"
             and self.details is not None
-            and self.details.capability_id == LAYER_PROPERTY_SET_CAPABILITY_ID
+            and self.details.capability_id in {
+                LAYER_PROPERTY_SET_CAPABILITY_ID,
+                LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_ID,
+            }
             and self.details.field == "params.arguments.propertyLocator"
             and actual == (False, "not-started", "change-arguments")
         )
@@ -6621,19 +6624,43 @@ async def invoke_layer_property_keyframes_list(
         "Discard stale property locators, then call ae_listProjectItems, "
         "ae_listCompositionLayers, and ae_listLayerProperties again."
     )
-    negotiation, descriptor, _request, result = await _invoke_native_read_request(
-        backend,
-        request_id=request_id,
-        capability_id=LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_ID,
-        capability_version=LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_VERSION,
-        arguments=arguments.model_dump(mode="json", by_alias=True),
-        locator=arguments.property_locator,
-        locator_field="params.arguments.propertyLocator",
-        stale_locator_hint=stale_hint,
-        descriptor_validator=_validate_layer_property_keyframes_list_descriptor,
-        deadline_unix_ms=deadline_unix_ms,
-        cancellation=cancellation,
-    )
+    try:
+        negotiation, descriptor, _request, result = await _invoke_native_read_request(
+            backend,
+            request_id=request_id,
+            capability_id=LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_ID,
+            capability_version=LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_VERSION,
+            arguments=arguments.model_dump(mode="json", by_alias=True),
+            locator=arguments.property_locator,
+            locator_field="params.arguments.propertyLocator",
+            stale_locator_hint=stale_hint,
+            descriptor_validator=_validate_layer_property_keyframes_list_descriptor,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+    except NativeBackendError as exc:
+        if (
+            exc.code == "PRECONDITION_FAILED"
+            and exc.details is not None
+            and exc.details.get("capabilityId")
+            == LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_ID
+            and exc.details.get("field") == "params.arguments.propertyLocator"
+        ):
+            raise NativeBackendError(
+                "PRECONDITION_FAILED",
+                str(exc),
+                retryable=False,
+                side_effect="not-started",
+                recovery=NativeRecovery(
+                    action="change-arguments",
+                    hint=(
+                        "Copy a keyframeable primitive scalar, vector, or color "
+                        "leaf locator from ae_listLayerProperties."
+                    ),
+                ),
+                details=exc.details,
+            ) from exc
+        raise
     try:
         value = LayerPropertyKeyframesListValue.model_validate(result.value)
         postcondition_digest = _layer_property_keyframes_list_digest(value)

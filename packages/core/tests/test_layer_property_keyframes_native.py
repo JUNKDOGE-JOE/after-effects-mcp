@@ -130,6 +130,7 @@ class KeyframesBackend(N.NativeInvokeBackend):
         )
         self.requests: list[N.NativeInvokeRequest] = []
         self.tamper_postcondition = False
+        self.precondition_error = False
 
     async def negotiate(self, **_kwargs):
         return self.negotiation
@@ -150,6 +151,24 @@ class KeyframesBackend(N.NativeInvokeBackend):
     async def invoke(self, request, *, cancellation=None):
         del cancellation
         self.requests.append(request)
+        if self.precondition_error:
+            raise N.NativeBackendError(
+                "PRECONDITION_FAILED",
+                (
+                    "property must be a keyframeable primitive scalar, vector, "
+                    "or color leaf stream"
+                ),
+                retryable=False,
+                side_effect="not-started",
+                recovery=N.NativeRecovery(
+                    action="open-project",
+                    hint="Open the intended After Effects project, then retry.",
+                ),
+                details={
+                    "field": "params.arguments.propertyLocator",
+                    "capabilityId": N.LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_ID,
+                },
+            )
         raw_value = keyframes_value()
         value = N.LayerPropertyKeyframesListValue.model_validate(raw_value)
         digest = N._layer_property_keyframes_list_digest(value)
@@ -279,6 +298,35 @@ async def test_keyframe_read_rejects_stale_locator_and_tampered_evidence():
             deadline_unix_ms=int(time.time() * 1000) + 5_000,
         )
     assert tampered_error.value.code == "NATIVE_CONTRACT_MISMATCH"
+
+
+@pytest.mark.asyncio
+async def test_keyframe_property_precondition_has_actionable_recovery():
+    backend = KeyframesBackend()
+    backend.precondition_error = True
+    with pytest.raises(N.NativeBackendError) as raised:
+        await N.invoke_layer_property_keyframes_list(
+            backend,
+            request_id="keyframes-unsupported",
+            property_locator=PROPERTY_LOCATOR,
+            offset=0,
+            limit=2,
+            deadline_unix_ms=int(time.time() * 1000) + 5_000,
+        )
+    assert raised.value.code == "PRECONDITION_FAILED"
+    assert raised.value.retryable is False
+    assert raised.value.side_effect == "not-started"
+    assert raised.value.recovery == N.NativeRecovery(
+        action="change-arguments",
+        hint=(
+            "Copy a keyframeable primitive scalar, vector, or color leaf locator "
+            "from ae_listLayerProperties."
+        ),
+    )
+    assert raised.value.details == {
+        "field": "params.arguments.propertyLocator",
+        "capabilityId": N.LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_ID,
+    }
 
 
 @pytest.mark.asyncio
