@@ -26,6 +26,7 @@ using aemcp::native::rpc::CompositionCreateSuccess;
 using aemcp::native::rpc::CompositionLayerCreateSuccess;
 using aemcp::native::rpc::LayerEffectApplySuccess;
 using aemcp::native::rpc::LayerPropertiesSuccess;
+using aemcp::native::rpc::LayerPropertyKeyframesSuccess;
 using aemcp::native::rpc::LayerPropertySetSuccess;
 using aemcp::native::rpc::CapabilityDetail;
 using aemcp::native::rpc::CancelState;
@@ -66,6 +67,7 @@ using aemcp::native::rpc::digest_composition_create_postcondition;
 using aemcp::native::rpc::digest_composition_layer_create_postcondition;
 using aemcp::native::rpc::digest_layer_effect_apply_postcondition;
 using aemcp::native::rpc::digest_layer_properties_postcondition;
+using aemcp::native::rpc::digest_layer_property_keyframes_postcondition;
 using aemcp::native::rpc::digest_layer_property_set_postcondition;
 using aemcp::native::rpc::digest_project_items_postcondition;
 using aemcp::native::rpc::encode_capabilities_success;
@@ -85,6 +87,7 @@ using aemcp::native::rpc::encode_composition_create_success;
 using aemcp::native::rpc::encode_composition_layer_create_success;
 using aemcp::native::rpc::encode_layer_effect_apply_success;
 using aemcp::native::rpc::encode_layer_properties_success;
+using aemcp::native::rpc::encode_layer_property_keyframes_success;
 using aemcp::native::rpc::encode_layer_property_set_success;
 using aemcp::native::rpc::encode_project_items_success;
 using aemcp::native::rpc::kMaxFrameBytes;
@@ -114,6 +117,8 @@ constexpr std::string_view kLayerEffectApplyContractDigest =
     "5de12c7cd4ede09122a837c85ff2e589f695dd5377490b97b9de9d975ce00d77";
 constexpr std::string_view kLayerPropertiesContractDigest =
     "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba";
+constexpr std::string_view kLayerPropertyKeyframesContractDigest =
+    "f089d4cd1d35f492df660cbd83667968b2add70b5353172253691e33758e42bb";
 constexpr std::string_view kLayerPropertySetContractDigest =
     "5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c";
 
@@ -364,6 +369,18 @@ std::string layer_properties_invoke_json(
       + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
         "\"params\":{\"capabilityId\":\"ae.layer.properties.list\","
         "\"capabilityVersion\":1,\"arguments\":" + arguments + "}}";
+}
+
+std::string layer_property_keyframes_invoke_json(
+    std::string_view request_id = "invoke-layer-property-keyframes-1",
+    std::string_view arguments_suffix = {}) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.layer.property.keyframes.list\","
+        "\"capabilityVersion\":1,\"arguments\":{\"propertyLocator\":"
+      + locator_json("stream", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+      + ",\"offset\":0,\"limit\":2" + std::string(arguments_suffix) + "}}}";
 }
 
 void golden_requests_are_typed_and_closed() {
@@ -714,6 +731,20 @@ void project_graph_invokes_and_results_are_closed_and_deterministic() {
           && null_parent.request_fingerprint_sha256
               == omitted_parent.request_fingerprint_sha256,
       "explicit null parent locator was not normalized to omission");
+
+  const ParsedRequest keyframes_parsed = decode_request_frame(frame(
+      layer_property_keyframes_invoke_json()));
+  const auto& keyframes_args = std::get<InvokeParams>(keyframes_parsed.params);
+  require(keyframes_args.capability_id == "ae.layer.property.keyframes.list"
+          && keyframes_args.property_locator.has_value()
+          && keyframes_args.property_locator->kind == "stream"
+          && !keyframes_args.layer_locator.has_value()
+          && keyframes_args.offset == 0 && keyframes_args.limit == 2,
+      "keyframe invoke lost its property-only locator or bounded page");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(layer_property_keyframes_invoke_json(
+        "invoke-layer-property-keyframes-extra", ",\"extra\":true")));
+  }, "INVALID_ARGUMENT", "keyframe invoke extra argument");
 
   aemcp::native::ProjectItemsPage project_page;
   project_page.project_locator = locator(
@@ -1130,6 +1161,67 @@ void project_graph_invokes_and_results_are_closed_and_deterministic() {
           && properties_body.find("\"components\":[\"10\",\"20\"]")
             != std::string::npos,
       "layer-properties success omitted its typed native contract");
+
+  aemcp::native::LayerPropertyKeyframesPage keyframe_page;
+  keyframe_page.property_locator = position.property_locator;
+  keyframe_page.value_type = "one-d";
+  keyframe_page.total = 3;
+  keyframe_page.offset = 0;
+  keyframe_page.limit = 2;
+  keyframe_page.has_more = true;
+  keyframe_page.next_offset = 2;
+  keyframe_page.keyframes.push_back({
+      1,
+      {0, 1},
+      aemcp::native::LayerPropertyScalarValue{"10"},
+      "linear",
+      "linear"});
+  keyframe_page.keyframes.push_back({
+      2,
+      {5, 2},
+      aemcp::native::LayerPropertyScalarValue{"20.5"},
+      "bezier",
+      "hold"});
+  LayerPropertyKeyframesSuccess keyframes_success{
+      "invoke-layer-property-keyframes-1",
+      std::string(kSession),
+      std::string(kHost),
+      keyframe_page,
+      1'900'000'000'000ULL,
+      1'900'000'000'025ULL,
+      std::string(kDigest),
+      digest_layer_property_keyframes_postcondition(keyframe_page),
+      false};
+  require(keyframes_success.postcondition_digest
+          == "1ad0e47354fcfd091f0c252785c3ec1da1364f92a633e7e5f9dd2d2885223aa7",
+      "keyframe postcondition digest diverged from the protocol fixture");
+  const std::string keyframes_body = body(
+      encode_layer_property_keyframes_success(keyframes_success));
+  require(keyframes_body.find(
+              "\"capabilityId\":\"ae.layer.property.keyframes.list\"")
+              != std::string::npos
+          && keyframes_body.find("\"kind\":\"layer-property-keyframes-list\"")
+              != std::string::npos
+          && keyframes_body.find(
+              "\"time\":{\"mode\":\"comp-time\",\"scale\":2,\"value\":5}")
+              != std::string::npos
+          && keyframes_body.find("\"outInterpolation\":\"hold\"")
+              != std::string::npos,
+      "keyframe success omitted exact time, interpolation, or provenance");
+  LayerPropertyKeyframesSuccess repeated_time = keyframes_success;
+  repeated_time.value.keyframes[1].time = {0, 24};
+  repeated_time.postcondition_digest = std::string(kDigest);
+  expect_codec_error([&] {
+    (void)encode_layer_property_keyframes_success(repeated_time);
+  }, "INVALID_ARGUMENT", "keyframe response with non-increasing exact time");
+  LayerPropertyKeyframesSuccess wrong_keyframe_type = keyframes_success;
+  wrong_keyframe_type.value.keyframes[0].value =
+      aemcp::native::LayerPropertyVectorValue{{"1", "2"}};
+  wrong_keyframe_type.postcondition_digest = std::string(kDigest);
+  expect_codec_error([&] {
+    (void)encode_layer_property_keyframes_success(wrong_keyframe_type);
+  }, "INVALID_ARGUMENT", "keyframe response with wrong primitive type");
+
   aemcp::native::LayerPropertyChanged changed;
   changed.layer_locator = property_page.layer_locator;
   changed.property_locator = position.property_locator;
@@ -1491,6 +1583,8 @@ void response_helpers_are_bounded_and_typed() {
       std::string(kLayerEffectApplyContractDigest);
   capabilities.layer_properties_list_contract_digest =
       std::string(kLayerPropertiesContractDigest);
+  capabilities.layer_property_keyframes_list_contract_digest =
+      std::string(kLayerPropertyKeyframesContractDigest);
   capabilities.layer_property_set_contract_digest =
       std::string(kLayerPropertySetContractDigest);
   capabilities.include_composition_selected_layers_list = true;
@@ -1551,6 +1645,10 @@ void response_helpers_are_bounded_and_typed() {
       && capabilities_body.find(std::string(kCompositionCreateContractDigest))
           != std::string::npos
       && capabilities_body.find(std::string(kLayerPropertiesContractDigest))
+          != std::string::npos
+      && capabilities_body.find(std::string(kLayerPropertyKeyframesContractDigest))
+          != std::string::npos
+      && capabilities_body.find("\"id\":\"ae.layer.property.keyframes.list\"")
           != std::string::npos
       && capabilities_body.find("\"id\":\"ae.project.items.list\"")
           != std::string::npos

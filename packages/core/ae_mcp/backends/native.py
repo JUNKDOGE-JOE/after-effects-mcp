@@ -442,7 +442,10 @@ class NativeErrorPayload(_NativeModel):
         property_precondition = (
             self.code == "PRECONDITION_FAILED"
             and self.details is not None
-            and self.details.capability_id == LAYER_PROPERTY_SET_CAPABILITY_ID
+            and self.details.capability_id in {
+                LAYER_PROPERTY_SET_CAPABILITY_ID,
+                LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_ID,
+            }
             and self.details.field == "params.arguments.propertyLocator"
             and actual == (False, "not-started", "change-arguments")
         )
@@ -1025,6 +1028,18 @@ class LayerPropertiesListArguments(_NativeModel):
         return self
 
 
+class LayerPropertyKeyframesListArguments(_NativeModel):
+    property_locator: NativeLocator
+    offset: NonNegativeInt
+    limit: Annotated[StrictInt, Field(ge=1, le=25)]
+
+    @model_validator(mode="after")
+    def _locator_kind(self) -> "LayerPropertyKeyframesListArguments":
+        if self.property_locator.kind != "stream":
+            raise ValueError("propertyLocator must have kind stream")
+        return self
+
+
 class LayerPropertySampleTime(_NativeModel):
     value: SignedInt
     scale: PositiveInt
@@ -1273,6 +1288,76 @@ class LayerPropertiesListValue(_NativeModel):
         return self
 
 
+class LayerPropertyKeyframe(_NativeModel):
+    keyframe_index: PositiveInt
+    time: LayerPropertySampleTime
+    value: LayerPropertyScalarValue | LayerPropertyVectorValue | LayerPropertyColorValue
+    in_interpolation: Literal["none", "linear", "bezier", "hold"]
+    out_interpolation: Literal["none", "linear", "bezier", "hold"]
+
+
+class LayerPropertyKeyframesListValue(_NativeModel):
+    property_locator: NativeLocator
+    value_type: Literal[
+        "one-d",
+        "two-d",
+        "two-d-spatial",
+        "three-d",
+        "three-d-spatial",
+        "color",
+    ]
+    total: NonNegativeInt
+    offset: NonNegativeInt
+    limit: Annotated[StrictInt, Field(ge=1, le=25)]
+    returned: Annotated[StrictInt, Field(ge=0, le=25)]
+    has_more: StrictBool
+    next_offset: NonNegativeInt | None
+    keyframes: tuple[LayerPropertyKeyframe, ...] = Field(max_length=25)
+
+    @model_validator(mode="after")
+    def _verified_page(self) -> "LayerPropertyKeyframesListValue":
+        if self.property_locator.kind != "stream":
+            raise ValueError("propertyLocator must have kind stream")
+        if self.returned != len(self.keyframes) or self.returned > self.limit:
+            raise ValueError("keyframe page count does not match returned")
+        consumed = self.offset + self.returned
+        if consumed > self.total:
+            raise ValueError("keyframe page exceeds total")
+        expected_more = consumed < self.total
+        expected_next = consumed if expected_more else None
+        if expected_more and self.returned == 0:
+            raise ValueError("keyframe continuation page made no progress")
+        if self.has_more is not expected_more or self.next_offset != expected_next:
+            raise ValueError("keyframe continuation metadata is inconsistent")
+        previous_time: LayerPropertySampleTime | None = None
+        for index, keyframe in enumerate(self.keyframes):
+            if keyframe.keyframe_index != self.offset + index + 1:
+                raise ValueError("keyframeIndex does not match page order")
+            if self.value_type == "one-d":
+                valid_value = isinstance(keyframe.value, LayerPropertyScalarValue)
+            elif self.value_type in {"two-d", "two-d-spatial"}:
+                valid_value = (
+                    isinstance(keyframe.value, LayerPropertyVectorValue)
+                    and len(keyframe.value.components) == 2
+                )
+            elif self.value_type in {"three-d", "three-d-spatial"}:
+                valid_value = (
+                    isinstance(keyframe.value, LayerPropertyVectorValue)
+                    and len(keyframe.value.components) == 3
+                )
+            else:
+                valid_value = isinstance(keyframe.value, LayerPropertyColorValue)
+            if not valid_value:
+                raise ValueError("keyframe value does not match valueType")
+            if previous_time is not None and (
+                previous_time.value * keyframe.time.scale
+                >= keyframe.time.value * previous_time.scale
+            ):
+                raise ValueError("keyframe times must be strictly increasing")
+            previous_time = keyframe.time
+        return self
+
+
 def _native_read_audit_fields(
     implementation: NativeCapabilityDescriptor,
     negotiation: NativeNegotiation,
@@ -1451,6 +1536,19 @@ class LayerPropertiesListExecution(_NativeModel):
         )
 
 
+class LayerPropertyKeyframesListExecution(_NativeModel):
+    implementation: NativeCapabilityDescriptor
+    negotiation: NativeNegotiation
+    value: LayerPropertyKeyframesListValue
+    evidence: NativeExecutionEvidence
+    engine: Literal["native-aegp"] = "native-aegp"
+
+    def audit_fields(self) -> dict[str, Any]:
+        return _native_read_audit_fields(
+            self.implementation, self.negotiation, self.evidence
+        )
+
+
 PROJECT_ITEMS_LIST_CAPABILITY_ID = "ae.project.items.list"
 PROJECT_ITEMS_LIST_CAPABILITY_VERSION = 1
 PROJECT_ITEMS_LIST_INPUT_CONTRACT_ID = (
@@ -1539,6 +1637,15 @@ LAYER_PROPERTIES_LIST_INPUT_CONTRACT_ID = (
 )
 LAYER_PROPERTIES_LIST_RESULT_CONTRACT_ID = (
     "aemcp.contract.ae.layer.properties.list.result.v1"
+)
+
+LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_ID = "ae.layer.property.keyframes.list"
+LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_VERSION = 1
+LAYER_PROPERTY_KEYFRAMES_LIST_INPUT_CONTRACT_ID = (
+    "aemcp.contract.ae.layer.property.keyframes.list.input.v1"
+)
+LAYER_PROPERTY_KEYFRAMES_LIST_RESULT_CONTRACT_ID = (
+    "aemcp.contract.ae.layer.property.keyframes.list.result.v1"
 )
 
 LAYER_PROPERTY_SET_CAPABILITY_ID = "ae.layer.property.set"
@@ -2718,6 +2825,219 @@ _LAYER_PROPERTY_PRIMITIVE_VALUE_SCHEMA = {
     ]
 }
 
+_LAYER_PROPERTY_KEYFRAMES_LIST_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["propertyLocator", "offset", "limit"],
+    "properties": {
+        "propertyLocator": {"$ref": "#/$defs/streamLocator"},
+        "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": _SAFE_MAX,
+            "default": 0,
+            "x-omissionBehavior": 0,
+        },
+        "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 25,
+            "default": 25,
+            "x-omissionBehavior": 25,
+        },
+    },
+    "$defs": {
+        "uuid": {"type": "string", "pattern": _UUID},
+        "streamLocator": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "kind",
+                "hostInstanceId",
+                "sessionId",
+                "projectId",
+                "generation",
+                "objectId",
+            ],
+            "properties": {
+                "kind": {"const": "stream"},
+                "hostInstanceId": {"$ref": "#/$defs/uuid"},
+                "sessionId": {"$ref": "#/$defs/uuid"},
+                "projectId": {"$ref": "#/$defs/uuid"},
+                "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": _SAFE_MAX,
+                },
+                "objectId": {"$ref": "#/$defs/uuid"},
+            },
+        },
+    },
+}
+
+_LAYER_PROPERTY_KEYFRAMES_PRIMITIVE_SCHEMA = {
+    "oneOf": [
+        {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["kind", "value"],
+            "properties": {
+                "kind": {"const": "scalar"},
+                "value": {"$ref": "#/$defs/decimalString"},
+            },
+        },
+        {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["kind", "components"],
+            "properties": {
+                "kind": {"const": "vector"},
+                "components": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 3,
+                    "items": {"$ref": "#/$defs/decimalString"},
+                },
+            },
+        },
+        {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["kind", "alpha", "red", "green", "blue"],
+            "properties": {
+                "kind": {"const": "color"},
+                "alpha": {"$ref": "#/$defs/decimalString"},
+                "red": {"$ref": "#/$defs/decimalString"},
+                "green": {"$ref": "#/$defs/decimalString"},
+                "blue": {"$ref": "#/$defs/decimalString"},
+            },
+        },
+    ]
+}
+
+_LAYER_PROPERTY_KEYFRAMES_LIST_RESULT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "propertyLocator",
+        "valueType",
+        "total",
+        "offset",
+        "limit",
+        "returned",
+        "hasMore",
+        "nextOffset",
+        "keyframes",
+    ],
+    "properties": {
+        "propertyLocator": {"$ref": "#/$defs/streamLocator"},
+        "valueType": {
+            "enum": [
+                "one-d",
+                "two-d",
+                "two-d-spatial",
+                "three-d",
+                "three-d-spatial",
+                "color",
+            ]
+        },
+        "total": {"$ref": "#/$defs/safeNonnegativeInteger"},
+        "offset": {"$ref": "#/$defs/safeNonnegativeInteger"},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 25},
+        "returned": {"type": "integer", "minimum": 0, "maximum": 25},
+        "hasMore": {"type": "boolean"},
+        "nextOffset": {
+            "oneOf": [
+                {"type": "null"},
+                {"$ref": "#/$defs/safeNonnegativeInteger"},
+            ]
+        },
+        "keyframes": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "keyframeIndex",
+                    "time",
+                    "value",
+                    "inInterpolation",
+                    "outInterpolation",
+                ],
+                "properties": {
+                    "keyframeIndex": {"$ref": "#/$defs/safePositiveInteger"},
+                    "time": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["value", "scale", "mode"],
+                        "properties": {
+                            "value": {
+                                "type": "integer",
+                                "minimum": -_SAFE_MAX,
+                                "maximum": _SAFE_MAX,
+                            },
+                            "scale": {"$ref": "#/$defs/safePositiveInteger"},
+                            "mode": {"const": "comp-time"},
+                        },
+                    },
+                    "value": {"$ref": "#/$defs/primitiveValue"},
+                    "inInterpolation": {
+                        "enum": ["none", "linear", "bezier", "hold"]
+                    },
+                    "outInterpolation": {
+                        "enum": ["none", "linear", "bezier", "hold"]
+                    },
+                },
+            },
+        },
+    },
+    "$defs": {
+        "uuid": {"type": "string", "pattern": _UUID},
+        "safeNonnegativeInteger": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": _SAFE_MAX,
+        },
+        "safePositiveInteger": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": _SAFE_MAX,
+        },
+        "decimalString": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "pattern": _DECIMAL_STRING,
+        },
+        "streamLocator": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "kind",
+                "hostInstanceId",
+                "sessionId",
+                "projectId",
+                "generation",
+                "objectId",
+            ],
+            "properties": {
+                "kind": {"const": "stream"},
+                "hostInstanceId": {"$ref": "#/$defs/uuid"},
+                "sessionId": {"$ref": "#/$defs/uuid"},
+                "projectId": {"$ref": "#/$defs/uuid"},
+                "generation": {"$ref": "#/$defs/safePositiveInteger"},
+                "objectId": {"$ref": "#/$defs/uuid"},
+            },
+        },
+        "primitiveValue": _LAYER_PROPERTY_KEYFRAMES_PRIMITIVE_SCHEMA,
+    },
+    "x-invariant": (
+        "returned-equals-keyframes-length-and-index-page-time-order-and-value-types-"
+        "are-self-consistent"
+    ),
+}
+
 _LAYER_PROPERTY_SET_LOCATOR_DEFS = {
     "uuid": {"type": "string", "pattern": _UUID},
     "locatorBase": {
@@ -2828,6 +3148,9 @@ SELECTED_COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST = (
 )
 LAYER_PROPERTIES_LIST_CONTRACT_DIGEST = (
     "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba"
+)
+LAYER_PROPERTY_KEYFRAMES_LIST_CONTRACT_DIGEST = (
+    "f089d4cd1d35f492df660cbd83667968b2add70b5353172253691e33758e42bb"
 )
 LAYER_PROPERTY_SET_CONTRACT_DIGEST = (
     "5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c"
@@ -4028,6 +4351,42 @@ def _validate_layer_properties_list_descriptor(
     )
 
 
+def _validate_layer_property_keyframes_list_descriptor(
+    descriptor: NativeCapabilityDescriptor,
+    *,
+    host_platform: NativePlatform,
+) -> None:
+    _validate_navigation_descriptor(
+        descriptor,
+        host_platform=host_platform,
+        capability_id=LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_ID,
+        capability_version=LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_VERSION,
+        summary=(
+            "List a bounded page of exact keyframes on one After Effects layer "
+            "property."
+        ),
+        side_effect_summary=(
+            "Reads native keyframe times, primitive values, and interpolation "
+            "without changing After Effects state."
+        ),
+        preconditions=(
+            "An After Effects project must be open.",
+            "propertyLocator must come from ae.layer.properties.list@1 in the "
+            "current native session.",
+            "The property must be a keyframeable primitive scalar, vector, or "
+            "color leaf stream.",
+        ),
+        input_contract_id=LAYER_PROPERTY_KEYFRAMES_LIST_INPUT_CONTRACT_ID,
+        result_contract_id=LAYER_PROPERTY_KEYFRAMES_LIST_RESULT_CONTRACT_ID,
+        contract_digest=LAYER_PROPERTY_KEYFRAMES_LIST_CONTRACT_DIGEST,
+        input_schema=_LAYER_PROPERTY_KEYFRAMES_LIST_INPUT_SCHEMA,
+        result_schema=_LAYER_PROPERTY_KEYFRAMES_LIST_RESULT_SCHEMA,
+        requirement_id=(
+            "aemcp.requirement.native.layer-property-keyframes-list"
+        ),
+    )
+
+
 def _validate_layer_property_set_descriptor(
     descriptor: NativeCapabilityDescriptor,
     *,
@@ -4212,6 +4571,18 @@ def _layer_properties_list_digest(value: LayerPropertiesListValue) -> str:
         {
             "capabilityId": LAYER_PROPERTIES_LIST_CAPABILITY_ID,
             "capabilityVersion": LAYER_PROPERTIES_LIST_CAPABILITY_VERSION,
+            "value": value.model_dump(mode="json", by_alias=True),
+        }
+    )
+
+
+def _layer_property_keyframes_list_digest(
+    value: LayerPropertyKeyframesListValue,
+) -> str:
+    return _sha256_closed_json(
+        {
+            "capabilityId": LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_ID,
+            "capabilityVersion": LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_VERSION,
             "value": value.model_dump(mode="json", by_alias=True),
         }
     )
@@ -6232,6 +6603,94 @@ async def invoke_layer_properties_list(
     )
 
 
+async def invoke_layer_property_keyframes_list(
+    backend: NativeInvokeBackend,
+    *,
+    request_id: str,
+    property_locator: NativeLocator | Mapping[str, Any],
+    offset: int,
+    limit: int,
+    deadline_unix_ms: int,
+    cancellation: NativeCancellationToken | None = None,
+) -> LayerPropertyKeyframesListExecution:
+    """List one bounded page of exact native keyframes without JSX."""
+
+    arguments = LayerPropertyKeyframesListArguments(
+        property_locator=property_locator,
+        offset=offset,
+        limit=limit,
+    )
+    stale_hint = (
+        "Discard stale property locators, then call ae_listProjectItems, "
+        "ae_listCompositionLayers, and ae_listLayerProperties again."
+    )
+    try:
+        negotiation, descriptor, _request, result = await _invoke_native_read_request(
+            backend,
+            request_id=request_id,
+            capability_id=LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_ID,
+            capability_version=LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_VERSION,
+            arguments=arguments.model_dump(mode="json", by_alias=True),
+            locator=arguments.property_locator,
+            locator_field="params.arguments.propertyLocator",
+            stale_locator_hint=stale_hint,
+            descriptor_validator=_validate_layer_property_keyframes_list_descriptor,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+    except NativeBackendError as exc:
+        if (
+            exc.code == "PRECONDITION_FAILED"
+            and exc.details is not None
+            and exc.details.get("capabilityId")
+            == LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_ID
+            and exc.details.get("field") == "params.arguments.propertyLocator"
+        ):
+            raise NativeBackendError(
+                "PRECONDITION_FAILED",
+                str(exc),
+                retryable=False,
+                side_effect="not-started",
+                recovery=NativeRecovery(
+                    action="change-arguments",
+                    hint=(
+                        "Copy a keyframeable primitive scalar, vector, or color "
+                        "leaf locator from ae_listLayerProperties."
+                    ),
+                ),
+                details=exc.details,
+            ) from exc
+        raise
+    try:
+        value = LayerPropertyKeyframesListValue.model_validate(result.value)
+        postcondition_digest = _layer_property_keyframes_list_digest(value)
+    except (ValidationError, TypeError, ValueError, UnicodeError) as exc:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native keyframe page did not match its typed contract.",
+        ) from exc
+    if (
+        value.property_locator != arguments.property_locator
+        or value.offset != arguments.offset
+        or value.limit != arguments.limit
+        or value.property_locator.host_instance_id != negotiation.host_instance_id
+        or value.property_locator.session_id != negotiation.session_id
+        or result.evidence.postcondition.kind
+        != "layer-property-keyframes-list"
+        or result.evidence.postcondition.digest != postcondition_digest
+    ):
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native keyframe page was not bound to its request and evidence.",
+        )
+    return LayerPropertyKeyframesListExecution(
+        implementation=descriptor,
+        negotiation=negotiation,
+        value=value,
+        evidence=result.evidence,
+    )
+
+
 __all__ = [
     "CapabilityDetail",
     "CompositionLayer",
@@ -6298,6 +6757,10 @@ __all__ = [
     "LayerPropertiesListExecution",
     "LayerPropertiesListValue",
     "LayerProperty",
+    "LayerPropertyKeyframe",
+    "LayerPropertyKeyframesListArguments",
+    "LayerPropertyKeyframesListExecution",
+    "LayerPropertyKeyframesListValue",
     "LayerPropertyColorValue",
     "LayerPropertySampleTime",
     "LayerPropertyScalarValue",
@@ -6353,6 +6816,11 @@ __all__ = [
     "LAYER_PROPERTIES_LIST_CONTRACT_DIGEST",
     "LAYER_PROPERTIES_LIST_INPUT_CONTRACT_ID",
     "LAYER_PROPERTIES_LIST_RESULT_CONTRACT_ID",
+    "LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_ID",
+    "LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_VERSION",
+    "LAYER_PROPERTY_KEYFRAMES_LIST_CONTRACT_DIGEST",
+    "LAYER_PROPERTY_KEYFRAMES_LIST_INPUT_CONTRACT_ID",
+    "LAYER_PROPERTY_KEYFRAMES_LIST_RESULT_CONTRACT_ID",
     "LAYER_PROPERTY_SET_CAPABILITY_ID",
     "LAYER_PROPERTY_SET_CAPABILITY_VERSION",
     "LAYER_PROPERTY_SET_CONTRACT_DIGEST",
@@ -6376,6 +6844,7 @@ __all__ = [
     "invoke_composition_layer_create",
     "invoke_layer_effect_apply",
     "invoke_layer_properties_list",
+    "invoke_layer_property_keyframes_list",
     "invoke_layer_property_set",
     "invoke_project_items_list",
     "invoke_project_summary",

@@ -22,6 +22,7 @@ from ae_mcp.backends.native import (
     invoke_composition_layer_create,
     invoke_layer_effect_apply,
     invoke_layer_properties_list,
+    invoke_layer_property_keyframes_list,
     invoke_layer_property_set,
     invoke_project_bit_depth_read,
     invoke_project_bit_depth_set,
@@ -43,6 +44,7 @@ _COMPOSITION_CREATE_TIMEOUT_MS = 10_000
 _COMPOSITION_LAYER_CREATE_TIMEOUT_MS = 10_000
 _LAYER_EFFECT_APPLY_TIMEOUT_MS = 10_000
 _LAYER_PROPERTIES_LIST_TIMEOUT_MS = 10_000
+_LAYER_PROPERTY_KEYFRAMES_LIST_TIMEOUT_MS = 10_000
 _LAYER_PROPERTY_SET_TIMEOUT_MS = 10_000
 
 
@@ -727,6 +729,42 @@ async def _run_list_layer_properties(
     return _native_read_response(execution)
 
 
+async def _run_list_layer_property_keyframes(
+    args: schemas.AeListLayerPropertyKeyframesArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = (
+        int(time.time() * 1000) + _LAYER_PROPERTY_KEYFRAMES_LIST_TIMEOUT_MS
+    )
+    request_id = f"mcp-{uuid.uuid4().hex}"
+    property_locator = args.property_locator.model_dump(
+        mode="json", by_alias=True
+    )
+
+    async def _call():
+        return await invoke_layer_property_keyframes_list(
+            _backend(),
+            request_id=request_id,
+            property_locator=property_locator,
+            offset=args.offset,
+            limit=args.limit,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    try:
+        execution = await progress.with_heartbeat(
+            ctx,
+            _call(),
+            start_msg="ae.listLayerPropertyKeyframes native AEGP read...",
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        raise
+    return _native_read_response(execution)
+
+
 async def _run_get_project_bit_depth(
     args: schemas.AeGetProjectBitDepthArgs,
     ctx: Any,
@@ -1049,6 +1087,11 @@ register(
     _run_list_layer_properties,
 )
 register(
+    "ae.listLayerPropertyKeyframes",
+    schemas.AeListLayerPropertyKeyframesArgs,
+    _run_list_layer_property_keyframes,
+)
+register(
     "ae.getProjectBitDepth",
     schemas.AeGetProjectBitDepthArgs,
     _run_get_project_bit_depth,
@@ -1073,6 +1116,7 @@ __all__ = [
     "_run_apply_layer_effect",
     "_run_list_composition_layers",
     "_run_list_layer_properties",
+    "_run_list_layer_property_keyframes",
     "_run_list_project_items",
     "_run_project_summary",
     "_run_set_project_bit_depth",

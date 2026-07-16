@@ -74,6 +74,7 @@ using aemcp::native::HostReadResult;
 using aemcp::native::HostProjectItemsResult;
 using aemcp::native::HostProjectGraphInvalidationResult;
 using aemcp::native::HostLayerPropertiesResult;
+using aemcp::native::HostLayerPropertyKeyframesResult;
 using aemcp::native::HostLayerPropertyWriteResult;
 using aemcp::native::MacEndpointRegistry;
 using aemcp::native::MacIpcServer;
@@ -105,6 +106,7 @@ using aemcp::native::kCompositionLayerCreateCapability;
 using aemcp::native::kLayerEffectApplyCapability;
 using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kLayerPropertiesListCapability;
+using aemcp::native::kLayerPropertyKeyframesListCapability;
 using aemcp::native::kLayerPropertySetCapability;
 using aemcp::native::kProjectGraphInvalidateControl;
 using aemcp::native::locate_unique_insertion;
@@ -114,7 +116,7 @@ constexpr std::string_view kSdkVersion = "25.6.61";
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::string_view kCapabilitiesDigest =
-    "b54fa28c9d04b248db56b27d652ab3fd37016bb3c44904f4949258f72e25d65b";
+    "f2dfe6b726efb02a371ee45cfa814050e87122e81dd282a6b7797862c2a4638a";
 constexpr std::string_view kProjectSummaryContractDigest =
     "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
 constexpr std::string_view kProjectBitDepthReadContractDigest =
@@ -139,6 +141,8 @@ constexpr std::string_view kLayerEffectApplyContractDigest =
     "5de12c7cd4ede09122a837c85ff2e589f695dd5377490b97b9de9d975ce00d77";
 constexpr std::string_view kLayerPropertiesListContractDigest =
     "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba";
+constexpr std::string_view kLayerPropertyKeyframesListContractDigest =
+    "f089d4cd1d35f492df660cbd83667968b2add70b5353172253691e33758e42bb";
 constexpr std::string_view kLayerPropertySetContractDigest =
     "5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c";
 constexpr std::int64_t kMaximumProjectItems = 100000;
@@ -768,6 +772,27 @@ class ProjectGraphRegistry final {
     return found->second;
   }
 
+  [[nodiscard]] std::optional<StreamAddress> resolve_stream(
+      const ObjectLocator& locator,
+      std::string_view host,
+      std::string_view session) const {
+    if (locator.kind != "stream" || locator.host_instance_id != host
+        || locator.session_id != session || locator.project_id != project_id_
+        || locator.generation != epoch_.generation()) {
+      return std::nullopt;
+    }
+    const auto found = stream_addresses_.find(locator.object_id);
+    return found == stream_addresses_.end()
+        ? std::nullopt : std::optional<StreamAddress>(found->second);
+  }
+
+  [[nodiscard]] std::optional<LayerAddress> resolve_layer_object(
+      std::string_view object_id) const {
+    const auto found = layers_by_object_.find(std::string(object_id));
+    return found == layers_by_object_.end()
+        ? std::nullopt : std::optional<LayerAddress>(found->second);
+  }
+
   [[nodiscard]] bool matches_project(
       const ObjectLocator& locator,
       std::string_view host,
@@ -1020,6 +1045,17 @@ class ProjectGraphRegistry final {
   }
 }
 
+[[nodiscard]] std::optional<std::string> keyframe_interpolation_name(
+    AEGP_KeyframeInterpolationType type) {
+  switch (type) {
+    case AEGP_KeyInterp_NONE: return "none";
+    case AEGP_KeyInterp_LINEAR: return "linear";
+    case AEGP_KeyInterp_BEZIER: return "bezier";
+    case AEGP_KeyInterp_HOLD: return "hold";
+    default: return std::nullopt;
+  }
+}
+
 template <std::size_t Size>
 constexpr std::size_t literal_size(const char (&)[Size]) noexcept {
   return Size - 1;
@@ -1100,6 +1136,29 @@ constexpr std::size_t literal_size(const char (&)[Size]) noexcept {
       + aemcp::native::json_encoded_string_size(property.name)
       + aemcp::native::json_encoded_string_size(property.match_name)
       + value_size;
+}
+
+[[nodiscard]] std::size_t layer_property_keyframe_json_size(
+    const aemcp::native::LayerPropertyKeyframeEntry& keyframe) {
+  std::size_t value_size = 64U;
+  if (const auto* scalar =
+          std::get_if<aemcp::native::LayerPropertyScalarValue>(&keyframe.value)) {
+    value_size += aemcp::native::json_encoded_string_size(scalar->value);
+  } else if (const auto* vector =
+                 std::get_if<aemcp::native::LayerPropertyVectorValue>(&keyframe.value)) {
+    for (const std::string& component : vector->components) {
+      value_size += aemcp::native::json_encoded_string_size(component) + 1U;
+    }
+  } else if (const auto* color =
+                 std::get_if<aemcp::native::LayerPropertyColorValue>(&keyframe.value)) {
+    value_size += aemcp::native::json_encoded_string_size(color->alpha)
+        + aemcp::native::json_encoded_string_size(color->red)
+        + aemcp::native::json_encoded_string_size(color->green)
+        + aemcp::native::json_encoded_string_size(color->blue);
+  }
+  return 320U + value_size
+      + aemcp::native::json_encoded_string_size(keyframe.in_interpolation)
+      + aemcp::native::json_encoded_string_size(keyframe.out_interpolation);
 }
 
 class AegpHostApi final : public HostApi {
@@ -3973,6 +4032,294 @@ class AegpHostApi final : public HostApi {
     return HostLayerPropertiesResult::success(std::move(page));
   }
 
+  [[nodiscard]] HostLayerPropertyKeyframesResult list_layer_property_keyframes(
+      const aemcp::native::LayerPropertyKeyframesQuery& query,
+      TimePoint work_deadline) override {
+    const auto budget_expired = [work_deadline] {
+      return std::chrono::steady_clock::now() >= work_deadline;
+    };
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    SuiteLease<AEGP_StreamSuite6> stream_suite(
+        basic_, kAEGPStreamSuite, kAEGPStreamSuiteVersion6);
+    SuiteLease<AEGP_DynamicStreamSuite4> dynamic_suite(
+        basic_, kAEGPDynamicStreamSuite, kAEGPDynamicStreamSuiteVersion4);
+    SuiteLease<AEGP_KeyframeSuite5> keyframe_suite(
+        basic_, kAEGPKeyframeSuite, kAEGPKeyframeSuiteVersion5);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || memory_suite.get() == nullptr || stream_suite.get() == nullptr
+        || dynamic_suite.get() == nullptr || keyframe_suite.get() == nullptr) {
+      return HostLayerPropertyKeyframesResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer keyframe suites are unavailable");
+    }
+    if (budget_expired()) {
+      return HostLayerPropertyKeyframesResult::failure(
+          "DEADLINE_EXCEEDED", "layer keyframe list budget elapsed");
+    }
+
+    A_long project_count = 0;
+    if (project_suite->AEGP_GetNumProjects(&project_count) != A_Err_NONE) {
+      return HostLayerPropertyKeyframesResult::failure(
+          "CAPABILITY_FAILED", "could not read project count");
+    }
+    if (project_count <= 0) {
+      graph_.project_closed();
+      return HostLayerPropertyKeyframesResult::failure(
+          "PRECONDITION_FAILED", "an After Effects project must be open");
+    }
+    AEGP_ProjectH project = nullptr;
+    AEGP_ItemH root_item = nullptr;
+    A_long root_id = 0;
+    if (project_suite->AEGP_GetProjectByIndex(0, &project) != A_Err_NONE
+        || project == nullptr
+        || project_suite->AEGP_GetProjectRootFolder(project, &root_item) != A_Err_NONE
+        || root_item == nullptr
+        || item_suite->AEGP_GetItemID(root_item, &root_id) != A_Err_NONE) {
+      return HostLayerPropertyKeyframesResult::failure(
+          "CAPABILITY_FAILED", "could not resolve the open project's root item");
+    }
+    std::optional<std::string> project_path = read_project_path(
+        project_suite.get(), memory_suite.get(), project);
+    if (!project_path.has_value()) {
+      return HostLayerPropertyKeyframesResult::failure(
+          "CAPABILITY_FAILED", "could not read the open project path for locator identity");
+    }
+    try {
+      graph_.observe_project(
+          reinterpret_cast<std::uintptr_t>(project),
+          reinterpret_cast<std::uintptr_t>(root_item),
+          root_id,
+          std::move(*project_path));
+    } catch (...) {
+      return HostLayerPropertyKeyframesResult::failure(
+          "CAPABILITY_FAILED", "could not establish project locator identity");
+    }
+    const auto stream_address = graph_.resolve_stream(
+        query.property_locator, query.host_instance_id, query.session_id);
+    if (!stream_address.has_value()) {
+      return HostLayerPropertyKeyframesResult::failure(
+          "STALE_LOCATOR",
+          "propertyLocator does not identify a property in the current project",
+          "params.arguments.propertyLocator");
+    }
+    const auto layer_address = graph_.resolve_layer_object(
+        stream_address->layer_object_id);
+    if (!layer_address.has_value()) {
+      return HostLayerPropertyKeyframesResult::failure(
+          "STALE_LOCATOR", "property layer no longer exists",
+          "params.arguments.propertyLocator");
+    }
+
+    AEGP_ItemH item = nullptr;
+    if (item_suite->AEGP_GetNextProjItem(project, root_item, &item) != A_Err_NONE) {
+      return HostLayerPropertyKeyframesResult::failure(
+          "CAPABILITY_FAILED", "could not begin composition lookup");
+    }
+    AEGP_ItemH composition_item = nullptr;
+    std::uint64_t visited = 0;
+    while (item != nullptr) {
+      if (budget_expired()) {
+        return HostLayerPropertyKeyframesResult::failure(
+            "DEADLINE_EXCEEDED", "composition lookup budget elapsed");
+      }
+      if (++visited > static_cast<std::uint64_t>(kMaximumProjectItems)) {
+        return HostLayerPropertyKeyframesResult::failure(
+            "CAPABILITY_FAILED", "project item bound exceeded during composition lookup");
+      }
+      A_long item_id = 0;
+      if (item_suite->AEGP_GetItemID(item, &item_id) != A_Err_NONE) {
+        return HostLayerPropertyKeyframesResult::failure(
+            "CAPABILITY_FAILED", "could not read project item identity");
+      }
+      if (item_id == layer_address->composition_item_id) {
+        composition_item = item;
+        break;
+      }
+      AEGP_ItemH next = nullptr;
+      if (item_suite->AEGP_GetNextProjItem(project, item, &next) != A_Err_NONE) {
+        return HostLayerPropertyKeyframesResult::failure(
+            "CAPABILITY_FAILED", "composition lookup traversal failed");
+      }
+      item = next;
+    }
+    if (composition_item == nullptr) {
+      return HostLayerPropertyKeyframesResult::failure(
+          "STALE_LOCATOR", "property composition no longer exists",
+          "params.arguments.propertyLocator");
+    }
+    AEGP_CompH composition = nullptr;
+    AEGP_LayerH layer = nullptr;
+    if (comp_suite->AEGP_GetCompFromItem(composition_item, &composition) != A_Err_NONE
+        || composition == nullptr
+        || layer_suite->AEGP_GetLayerFromLayerID(
+            composition, layer_address->layer_id, &layer) != A_Err_NONE
+        || layer == nullptr) {
+      return HostLayerPropertyKeyframesResult::failure(
+          "STALE_LOCATOR", "property layer can no longer be resolved",
+          "params.arguments.propertyLocator");
+    }
+
+    AEGP_StreamRefH root_stream = nullptr;
+    if (dynamic_suite->AEGP_GetNewStreamRefForLayer(
+            plugin_id_, layer, &root_stream) != A_Err_NONE
+        || root_stream == nullptr) {
+      return HostLayerPropertyKeyframesResult::failure(
+          "CAPABILITY_FAILED", "could not resolve the layer property root");
+    }
+    StreamRefOwner property_stream(stream_suite.get(), root_stream);
+    for (std::size_t depth = 0; depth < stream_address->child_indices.size(); ++depth) {
+      if (budget_expired()) {
+        return HostLayerPropertyKeyframesResult::failure(
+            "DEADLINE_EXCEEDED", "property traversal budget elapsed");
+      }
+      AEGP_StreamGroupingType grouping = AEGP_StreamGroupingType_NONE;
+      A_long child_count = 0;
+      if (dynamic_suite->AEGP_GetStreamGroupingType(
+              property_stream.get(), &grouping) != A_Err_NONE
+          || grouping == AEGP_StreamGroupingType_LEAF
+          || dynamic_suite->AEGP_GetNumStreamsInGroup(
+              property_stream.get(), &child_count) != A_Err_NONE
+          || stream_address->child_indices[depth] < 0
+          || stream_address->child_indices[depth] >= child_count) {
+        return HostLayerPropertyKeyframesResult::failure(
+            "STALE_LOCATOR", "property path no longer exists",
+            "params.arguments.propertyLocator");
+      }
+      AEGP_StreamRefH next_stream = nullptr;
+      if (dynamic_suite->AEGP_GetNewStreamRefByIndex(
+              plugin_id_, property_stream.get(), stream_address->child_indices[depth],
+              &next_stream) != A_Err_NONE
+          || next_stream == nullptr) {
+        return HostLayerPropertyKeyframesResult::failure(
+            "STALE_LOCATOR", "property path could not be reacquired",
+            "params.arguments.propertyLocator");
+      }
+      StreamRefOwner next_owner(stream_suite.get(), next_stream);
+      std::int32_t unique_id = 0;
+      if (stream_suite->AEGP_GetUniqueStreamID(next_owner.get(), &unique_id)
+              != A_Err_NONE
+          || unique_id != stream_address->unique_ids[depth]) {
+        return HostLayerPropertyKeyframesResult::failure(
+            "STALE_LOCATOR", "property identity changed",
+            "params.arguments.propertyLocator");
+      }
+      property_stream = std::move(next_owner);
+    }
+
+    AEGP_StreamGroupingType grouping = AEGP_StreamGroupingType_NONE;
+    AEGP_StreamType type = AEGP_StreamType_NO_DATA;
+    A_Boolean can_vary = FALSE;
+    A_long keyframe_count = 0;
+    if (dynamic_suite->AEGP_GetStreamGroupingType(property_stream.get(), &grouping)
+            != A_Err_NONE
+        || stream_suite->AEGP_GetStreamType(property_stream.get(), &type) != A_Err_NONE
+        || stream_suite->AEGP_CanVaryOverTime(property_stream.get(), &can_vary)
+            != A_Err_NONE
+        || keyframe_suite->AEGP_GetStreamNumKFs(
+            property_stream.get(), &keyframe_count) != A_Err_NONE) {
+      return HostLayerPropertyKeyframesResult::failure(
+          "CAPABILITY_FAILED", "could not inspect the target property's keyframes");
+    }
+    const bool primitive = type == AEGP_StreamType_OneD
+        || type == AEGP_StreamType_TwoD || type == AEGP_StreamType_TwoD_SPATIAL
+        || type == AEGP_StreamType_ThreeD || type == AEGP_StreamType_ThreeD_SPATIAL
+        || type == AEGP_StreamType_COLOR;
+    if (grouping != AEGP_StreamGroupingType_LEAF || can_vary == FALSE
+        || keyframe_count == AEGP_NumKF_NO_DATA || !primitive) {
+      return HostLayerPropertyKeyframesResult::failure(
+          "PRECONDITION_FAILED",
+          "property must be a keyframeable primitive scalar, vector, or color leaf stream",
+          "params.arguments.propertyLocator");
+    }
+    if (keyframe_count < 0) {
+      return HostLayerPropertyKeyframesResult::failure(
+          "CAPABILITY_FAILED", "After Effects returned an invalid keyframe count");
+    }
+    const std::uint64_t total = static_cast<std::uint64_t>(keyframe_count);
+    if (query.offset > total) {
+      return HostLayerPropertyKeyframesResult::failure(
+          "INVALID_ARGUMENT", "offset exceeds the property's keyframe count",
+          "params.arguments.offset");
+    }
+
+    aemcp::native::LayerPropertyKeyframesPage page;
+    page.property_locator = query.property_locator;
+    page.value_type = stream_type_name(type);
+    page.total = total;
+    page.offset = query.offset;
+    page.limit = query.limit;
+    aemcp::native::BoundedPageBudget page_budget(
+        512U + locator_json_size(query.property_locator));
+    const std::uint64_t end = std::min<std::uint64_t>(
+        total, query.offset + static_cast<std::uint64_t>(query.limit));
+    for (std::uint64_t index = query.offset; index < end; ++index) {
+      if (budget_expired()) {
+        return HostLayerPropertyKeyframesResult::failure(
+            "DEADLINE_EXCEEDED", "layer keyframe page budget elapsed");
+      }
+      A_Time key_time{};
+      StreamValueOwner key_value(stream_suite.get());
+      AEGP_KeyframeInterpolationType in_interpolation = AEGP_KeyInterp_NONE;
+      AEGP_KeyframeInterpolationType out_interpolation = AEGP_KeyInterp_NONE;
+      const auto sdk_index = static_cast<AEGP_KeyframeIndex>(index);
+      if (keyframe_suite->AEGP_GetKeyframeTime(
+              property_stream.get(), sdk_index, AEGP_LTimeMode_CompTime, &key_time)
+              != A_Err_NONE
+          || key_time.scale <= 0
+          || keyframe_suite->AEGP_GetNewKeyframeValue(
+              plugin_id_, property_stream.get(), sdk_index, key_value.out())
+              != A_Err_NONE) {
+        return HostLayerPropertyKeyframesResult::failure(
+            "CAPABILITY_FAILED", "could not read a keyframe's exact time and value");
+      }
+      key_value.mark_initialized();
+      if (keyframe_suite->AEGP_GetKeyframeInterpolation(
+              property_stream.get(), sdk_index,
+              &in_interpolation, &out_interpolation) != A_Err_NONE) {
+        return HostLayerPropertyKeyframesResult::failure(
+            "CAPABILITY_FAILED", "could not read keyframe interpolation metadata");
+      }
+      const auto value = primitive_stream_value(type, key_value.value());
+      const auto in_name = keyframe_interpolation_name(in_interpolation);
+      const auto out_name = keyframe_interpolation_name(out_interpolation);
+      if (!value.has_value() || !in_name.has_value() || !out_name.has_value()) {
+        return HostLayerPropertyKeyframesResult::failure(
+            "CAPABILITY_FAILED", "keyframe value or interpolation was not representable");
+      }
+      aemcp::native::LayerPropertyKeyframeEntry entry;
+      entry.keyframe_index = index + 1U;
+      entry.time = {
+          static_cast<std::int64_t>(key_time.value),
+          static_cast<std::uint64_t>(key_time.scale)};
+      entry.value = *value;
+      entry.in_interpolation = *in_name;
+      entry.out_interpolation = *out_name;
+      const std::size_t entry_bytes = layer_property_keyframe_json_size(entry)
+          + (page.keyframes.empty() ? 0U : 1U);
+      if (!page_budget.try_reserve(entry_bytes)) {
+        if (page.keyframes.empty()) {
+          return HostLayerPropertyKeyframesResult::failure(
+              "CAPABILITY_FAILED",
+              "one keyframe exceeds the bounded native response budget");
+        }
+        break;
+      }
+      page.keyframes.push_back(std::move(entry));
+    }
+    page.has_more = query.offset + page.keyframes.size() < page.total;
+    if (page.has_more) page.next_offset = query.offset + page.keyframes.size();
+    return HostLayerPropertyKeyframesResult::success(std::move(page));
+  }
+
   [[nodiscard]] HostLayerPropertyWriteResult set_layer_property(
       const aemcp::native::LayerPropertySetCommand& command,
       TimePoint work_deadline) override {
@@ -4322,6 +4669,7 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
             std::string(kCompositionLayerCreateContractDigest),
             std::string(kLayerEffectApplyContractDigest),
             std::string(kLayerPropertiesListContractDigest),
+            std::string(kLayerPropertyKeyframesListContractDigest),
             std::string(kLayerPropertySetContractDigest),
             std::string(kCompositionSelectedLayersListContractDigest),
         },
@@ -4406,6 +4754,7 @@ void log_load(PluginState& state) {
          << kCompositionLayerCreateCapability << "\",\""
          << kLayerEffectApplyCapability << "\",\""
          << kLayerPropertiesListCapability << "\",\""
+         << kLayerPropertyKeyframesListCapability << "\",\""
          << kLayerPropertySetCapability << "\"]}"
          ;
   state.log.append(output.str());
@@ -4550,6 +4899,16 @@ void log_completion(
              << (completion.layer_properties_result.has_more ? "true" : "false")
              << ",\"projectGeneration\":"
              << completion.layer_properties_result.layer_locator.generation;
+    } else if (completion.capability_id == kLayerPropertyKeyframesListCapability) {
+      output << ",\"result\":{\"total\":"
+             << completion.layer_property_keyframes_result.total
+             << ",\"offset\":" << completion.layer_property_keyframes_result.offset
+             << ",\"returned\":"
+             << completion.layer_property_keyframes_result.keyframes.size()
+             << ",\"hasMore\":"
+             << (completion.layer_property_keyframes_result.has_more ? "true" : "false")
+             << ",\"projectGeneration\":"
+             << completion.layer_property_keyframes_result.property_locator.generation;
     } else if (completion.capability_id == kLayerPropertySetCapability) {
       output << ",\"result\":{\"changed\":true,\"valueType\":\""
              << json_escape(completion.layer_property_change_result.value_type)

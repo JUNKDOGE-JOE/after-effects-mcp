@@ -21,6 +21,7 @@ ALL_VERBS: Set[str] = {
     "ae.createCompositionLayer",
     "ae.applyLayerEffect",
     "ae.listLayerProperties",
+    "ae.listLayerPropertyKeyframes",
     "ae.setLayerPropertyValue",
     "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.applyEffect",
     "ae.previewFrame",

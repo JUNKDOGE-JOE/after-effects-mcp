@@ -95,6 +95,7 @@ def _filtered_tool_names() -> set:
             "ae.createCompositionLayer",
             "ae.applyLayerEffect",
             "ae.listLayerProperties",
+            "ae.listLayerPropertyKeyframes",
             "ae.setLayerPropertyValue",
         }
     else:
@@ -111,6 +112,7 @@ def _filtered_tool_names() -> set:
             "ae.createCompositionLayer",
             "ae.applyLayerEffect",
             "ae.listLayerProperties",
+            "ae.listLayerPropertyKeyframes",
             "ae.setLayerPropertyValue",
         }
     return supported | {"ae.status", "ae.diagnose"}
@@ -237,6 +239,54 @@ def _layer_properties_validation_error(
         details={
             "field": field[:128],
             "capabilityId": "ae.layer.properties.list",
+        },
+    )
+    return structured.public_dict()
+
+
+def _layer_property_keyframes_validation_error(
+    error: JsonSchemaValidationError | PydanticValidationError,
+) -> dict[str, Any]:
+    """Preserve structured recovery for the native keyframe read."""
+    path: list[Any] = []
+    if isinstance(error, PydanticValidationError):
+        errors = error.errors(include_url=False, include_input=False)
+        if errors:
+            path = list(errors[0].get("loc") or ())
+    else:
+        path = list(error.absolute_path)
+        if (
+            error.validator == "required"
+            and isinstance(error.instance, dict)
+            and isinstance(error.validator_value, list)
+        ):
+            missing = [
+                key for key in error.validator_value if key not in error.instance
+            ]
+            if len(missing) == 1:
+                path.append(missing[0])
+
+    field = "arguments"
+    if path:
+        field += "." + ".".join(str(part) for part in path)
+    structured = NativeBackendError(
+        "INVALID_ARGUMENT",
+        (
+            "ae.listLayerPropertyKeyframes arguments did not match the "
+            "published schema."
+        ),
+        retryable=False,
+        side_effect="not-started",
+        recovery={
+            "action": "change-arguments",
+            "hint": (
+                "Use a leaf property locator from ae_listLayerProperties, "
+                "offset >= 0, and limit 1..25."
+            ),
+        },
+        details={
+            "field": field[:128],
+            "capabilityId": "ae.layer.property.keyframes.list",
         },
     )
     return structured.public_dict()
@@ -720,6 +770,9 @@ def build_server() -> Server:
                 if name == "ae.listLayerProperties":
                     public_error: Any = _layer_properties_validation_error(error)
                     payload = _format_result({"ok": False, "error": public_error})
+                elif name == "ae.listLayerPropertyKeyframes":
+                    public_error = _layer_property_keyframes_validation_error(error)
+                    payload = _format_result({"ok": False, "error": public_error})
                 elif name == "ae.setLayerPropertyValue":
                     public_error = _layer_property_set_validation_error(error)
                     payload = _format_result({"ok": False, "error": public_error})
@@ -755,6 +808,10 @@ def build_server() -> Server:
                 e, PydanticValidationError
             ):
                 error: Any = _layer_properties_validation_error(e)
+            elif name == "ae.listLayerPropertyKeyframes" and isinstance(
+                e, PydanticValidationError
+            ):
+                error = _layer_property_keyframes_validation_error(e)
             elif name == "ae.setLayerPropertyValue" and isinstance(
                 e, PydanticValidationError
             ):

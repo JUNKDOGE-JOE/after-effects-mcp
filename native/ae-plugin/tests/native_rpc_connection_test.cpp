@@ -38,6 +38,7 @@ using aemcp::native::HostDispatcher;
 using aemcp::native::HostIdleSignal;
 using aemcp::native::HostLayerEffectApplyResult;
 using aemcp::native::HostLayerPropertiesResult;
+using aemcp::native::HostLayerPropertyKeyframesResult;
 using aemcp::native::HostProjectGraphInvalidationResult;
 using aemcp::native::HostReadResult;
 using aemcp::native::HostProjectItemsResult;
@@ -350,6 +351,26 @@ class FakeHost final : public HostApi {
     return HostLayerPropertiesResult::success(std::move(page));
   }
 
+  [[nodiscard]] HostLayerPropertyKeyframesResult list_layer_property_keyframes(
+      const aemcp::native::LayerPropertyKeyframesQuery& query, TimePoint) override {
+    ++layer_property_keyframes_calls;
+    aemcp::native::LayerPropertyKeyframesPage page;
+    page.property_locator = query.property_locator;
+    page.value_type = "one-d";
+    page.total = 3;
+    page.offset = query.offset;
+    page.limit = query.limit;
+    page.has_more = true;
+    page.next_offset = 2;
+    page.keyframes.push_back({
+        1, {0, 1}, aemcp::native::LayerPropertyScalarValue{"10"},
+        "linear", "linear"});
+    page.keyframes.push_back({
+        2, {5, 2}, aemcp::native::LayerPropertyScalarValue{"20.5"},
+        "bezier", "hold"});
+    return HostLayerPropertyKeyframesResult::success(std::move(page));
+  }
+
   [[nodiscard]] aemcp::native::HostLayerPropertyWriteResult set_layer_property(
       const aemcp::native::LayerPropertySetCommand& command, TimePoint) override {
     ++layer_property_write_calls;
@@ -416,6 +437,7 @@ class FakeHost final : public HostApi {
   int composition_layer_create_calls{0};
   int layer_effect_apply_calls{0};
   int layer_properties_calls{0};
+  int layer_property_keyframes_calls{0};
   int layer_property_write_calls{0};
   int project_graph_invalidation_calls{0};
   std::thread::id project_graph_invalidation_thread;
@@ -507,7 +529,7 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      "b54fa28c9d04b248db56b27d652ab3fd37016bb3c44904f4949258f72e25d65b",
+      "f2dfe6b726efb02a371ee45cfa814050e87122e81dd282a6b7797862c2a4638a",
       "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
       "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
       "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
@@ -519,6 +541,7 @@ NativeRpcRuntimeInfo runtime() {
       "d48b5c0fcf9871ee579bf518679bc36277e2fd5194e70d9cc6fa1b2c573edeee",
       "5de12c7cd4ede09122a837c85ff2e589f695dd5377490b97b9de9d975ce00d77",
       "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba",
+      "f089d4cd1d35f492df660cbd83667968b2add70b5353172253691e33758e42bb",
       "5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c",
       "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
   };
@@ -539,7 +562,7 @@ AuthenticatedConnection connection(int socket_fd, std::string route, std::uint32
 }
 
 std::vector<std::uint8_t> frame(std::string_view json) {
-  require(!json.empty() && json.size() <= 65'536, "test JSON frame size is invalid");
+  require(!json.empty() && json.size() <= 131'072, "test JSON frame size is invalid");
   std::vector<std::uint8_t> output(json.size() + 4);
   const auto size = static_cast<std::uint32_t>(json.size());
   output[0] = static_cast<std::uint8_t>(size >> 24U);
@@ -591,7 +614,7 @@ std::string read_body(int socket_fd) {
       | (static_cast<std::uint32_t>(prefix[1]) << 16U)
       | (static_cast<std::uint32_t>(prefix[2]) << 8U)
       | static_cast<std::uint32_t>(prefix[3]);
-  require(size > 0 && size <= 65'536, "response frame prefix is invalid");
+  require(size > 0 && size <= 131'072, "response frame prefix is invalid");
   std::vector<std::uint8_t> body(size);
   read_exact(socket_fd, body.data(), body.size());
   return std::string(reinterpret_cast<const char*>(body.data()), body.size());
@@ -802,6 +825,16 @@ std::string layer_properties_invoke_json(std::string_view request_id) {
       + ",\"parentPropertyLocator\":"
       + graph_locator_json("stream", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
       + ",\"offset\":0,\"limit\":25}}}";
+}
+
+std::string layer_property_keyframes_invoke_json(std::string_view request_id) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.layer.property.keyframes.list\","
+        "\"capabilityVersion\":1,\"arguments\":{\"propertyLocator\":"
+      + graph_locator_json("stream", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+      + ",\"offset\":0,\"limit\":2}}}";
 }
 
 std::string cancel_json(std::string_view request_id, std::string_view target_request_id) {
@@ -1502,6 +1535,41 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
           && host.layer_properties_calls == 1,
       "layer-properties terminal evidence was not verified");
 
+  send_json(sockets[0], layer_property_keyframes_invoke_json(
+      "invoke-layer-property-keyframes"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "layer-property keyframes progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued layer-property keyframes invoke");
+  const auto layer_property_keyframes_batch = dispatcher.drain(host);
+  require(layer_property_keyframes_batch.completions.size() == 1
+          && layer_property_keyframes_batch.completions[0].ok,
+      "owner dispatcher did not produce the layer-property keyframes result");
+  const std::string layer_property_keyframes = read_body(sockets[0]);
+  require_contains(layer_property_keyframes,
+      "\"capabilityId\":\"ae.layer.property.keyframes.list\"",
+      "layer-property keyframes response");
+  require_contains(layer_property_keyframes,
+      "\"kind\":\"layer-property-keyframes-list\"",
+      "layer-property keyframes response");
+  require_contains(layer_property_keyframes,
+      "\"time\":{\"mode\":\"comp-time\",\"scale\":2,\"value\":5}",
+      "layer-property keyframes response");
+  require_contains(layer_property_keyframes,
+      "\"outInterpolation\":\"hold\"",
+      "layer-property keyframes response");
+  wait_until([&] {
+    return !observer.terminal(
+        "invoke-layer-property-keyframes").request_id.empty();
+  }, "layer-property keyframes terminal audit");
+  const TerminalRecord layer_property_keyframes_terminal =
+      observer.terminal("invoke-layer-property-keyframes");
+  require(layer_property_keyframes_terminal.ok
+          && layer_property_keyframes_terminal.request_digest.size() == 64
+          && layer_property_keyframes_terminal.postcondition_digest.size() == 64
+          && host.layer_property_keyframes_calls == 1,
+      "layer-property keyframes terminal evidence was not verified");
+
   send_json(sockets[0], layer_property_set_invoke_json("invoke-layer-property-set"));
   require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
       "layer-property set progress");
@@ -1639,7 +1707,7 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(cancel, "\"terminalResponseExpected\":true", "cancel response");
   const std::string cancelled_terminal = read_body(sockets[0]);
   require_contains(cancelled_terminal, "\"code\":\"CANCELLED\"", "cancel terminal");
-  require(idle_signal.calls() == 21,
+  require(idle_signal.calls() == 22,
       "accepted invokes did not each schedule exactly one idle wake; observed "
           + std::to_string(idle_signal.calls()));
 

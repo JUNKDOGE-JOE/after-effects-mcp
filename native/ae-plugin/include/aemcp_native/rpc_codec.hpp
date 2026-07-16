@@ -17,7 +17,7 @@
 namespace aemcp::native::rpc {
 
 inline constexpr std::size_t kFramePrefixBytes = 4;
-inline constexpr std::size_t kMaxFrameBytes = 65'536;
+inline constexpr std::size_t kMaxFrameBytes = 131'072;
 inline constexpr std::size_t kMaxJsonDepth = 16;
 inline constexpr std::size_t kMaxJsonNodes = 4'096;
 inline constexpr std::size_t kMaxStringScalars = 8'192;
@@ -182,6 +182,8 @@ struct ParsedRequest {
     const LayerEffectApplied& value);
 [[nodiscard]] std::string digest_layer_properties_postcondition(
     const LayerPropertiesPage& page);
+[[nodiscard]] std::string digest_layer_property_keyframes_postcondition(
+    const LayerPropertyKeyframesPage& page);
 [[nodiscard]] std::string digest_layer_property_set_arguments(
     const ObjectLocator& layer_locator,
     const ObjectLocator& property_locator,
@@ -312,7 +314,7 @@ class RpcSessionFrontDoor final {
 };
 
 struct NegotiatedLimits {
-  std::uint32_t max_frame_bytes{65'536};
+  std::uint32_t max_frame_bytes{131'072};
   std::uint16_t max_in_flight{8};
   std::uint16_t max_queue_depth{32};
   std::uint32_t max_deadline_ms{30'000};
@@ -356,6 +358,7 @@ struct CapabilitiesSuccess {
   bool include_composition_create{true};
   bool include_composition_layer_create{true};
   bool include_layer_properties_list{true};
+  bool include_layer_property_keyframes_list{true};
   bool include_layer_property_set{true};
   std::string query_digest;
   std::string capabilities_digest;
@@ -370,6 +373,7 @@ struct CapabilitiesSuccess {
   std::string composition_create_contract_digest;
   std::string composition_layer_create_contract_digest;
   std::string layer_properties_list_contract_digest;
+  std::string layer_property_keyframes_list_contract_digest;
   std::string layer_property_set_contract_digest;
   bool include_composition_selected_layers_list{false};
   std::string composition_selected_layers_list_contract_digest;
@@ -526,6 +530,18 @@ struct LayerPropertiesSuccess {
   bool replayed{false};
 };
 
+struct LayerPropertyKeyframesSuccess {
+  std::string request_id;
+  std::string session_id;
+  std::string host_instance_id;
+  LayerPropertyKeyframesPage value;
+  std::uint64_t started_at_unix_ms{0};
+  std::uint64_t completed_at_unix_ms{0};
+  std::string request_digest;
+  std::string postcondition_digest;
+  bool replayed{false};
+};
+
 struct LayerPropertySetSuccess {
   std::string request_id;
   std::string session_id;
@@ -627,6 +643,8 @@ struct ErrorResponse {
     const LayerEffectApplySuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_layer_properties_success(
     const LayerPropertiesSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_property_keyframes_success(
+    const LayerPropertyKeyframesSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_layer_property_set_success(
     const LayerPropertySetSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_cancel_success(

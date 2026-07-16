@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 
 export const LIMITS = Object.freeze({
-  maxFrameBytes: 65536,
+  maxFrameBytes: 131072,
   maxJsonDepth: 16,
   maxJsonNodes: 4096,
   maxStringLength: 8192,
@@ -108,6 +108,12 @@ export const INVOKE_REGISTRY = Object.freeze([
     version: 1,
     inputContractId: 'aemcp.contract.ae.layer.properties.list.input.v1',
     resultContractId: 'aemcp.contract.ae.layer.properties.list.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.layer.property.keyframes.list',
+    version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.property.keyframes.list.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.property.keyframes.list.result.v1',
   }),
   Object.freeze({
     id: 'ae.layer.property.set',
@@ -816,6 +822,18 @@ export function classifyRequest(message) {
           || !Number.isSafeInteger(args.limit) || args.limit < 1 || args.limit > 25) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
+    } else if (params.capabilityId === 'ae.layer.property.keyframes.list') {
+      const args = params.arguments;
+      if (!exactKeys(
+        args,
+        new Set(['propertyLocator', 'offset', 'limit']),
+        ['propertyLocator', 'offset', 'limit'],
+      )
+          || !isLocatorShape(args.propertyLocator, ['stream'])
+          || !Number.isSafeInteger(args.offset) || args.offset < 0
+          || !Number.isSafeInteger(args.limit) || args.limit < 1 || args.limit > 25) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
     } else {
       const args = params.arguments;
       if (!exactKeys(
@@ -902,7 +920,8 @@ export function validateErrorPolicy(error, schema) {
   if (!expected) return false;
   const [retryable, sideEffect, action] = expected;
   const propertyPrecondition = error.code === 'PRECONDITION_FAILED'
-    && error.details?.capabilityId === 'ae.layer.property.set'
+    && ['ae.layer.property.set', 'ae.layer.property.keyframes.list']
+      .includes(error.details?.capabilityId)
     && error.details?.field === 'params.arguments.propertyLocator'
     && error.recovery?.action === 'change-arguments';
   if (error.retryable !== retryable || error.sideEffect !== sideEffect
@@ -951,6 +970,7 @@ export function validateFailureExchange(
         || capabilityId === 'ae.composition.layer.create'
         || capabilityId === 'ae.layer.effect.apply'
         || capabilityId === 'ae.layer.properties.list'
+        || capabilityId === 'ae.layer.property.keyframes.list'
         || capabilityId === 'ae.layer.property.set')) {
     const expectedFields = capabilityId === 'ae.project.items.list'
       ? new Set(['params.arguments.projectLocator'])
@@ -964,6 +984,8 @@ export function validateFailureExchange(
             'params.arguments.layerLocator',
             'params.arguments.propertyLocator',
           ])
+          : capabilityId === 'ae.layer.property.keyframes.list'
+            ? new Set(['params.arguments.propertyLocator'])
           : capabilityId === 'ae.layer.effect.apply'
             ? new Set(['params.arguments.layerLocator'])
           : new Set([
@@ -1100,6 +1122,16 @@ export function layerEffectApplyContractDigest(schema) {
 export function layerPropertiesListContractDigest(schema) {
   const inputSchema = structuredClone(schema.$defs.layerPropertiesListInputSchemaContract.const);
   const resultSchema = structuredClone(schema.$defs.layerPropertiesListResultSchemaContract.const);
+  return sha256Jcs({ inputSchema, resultSchema });
+}
+
+export function layerPropertyKeyframesListContractDigest(schema) {
+  const inputSchema = structuredClone(
+    schema.$defs.layerPropertyKeyframesListInputSchemaContract.const,
+  );
+  const resultSchema = structuredClone(
+    schema.$defs.layerPropertyKeyframesListResultSchemaContract.const,
+  );
   return sha256Jcs({ inputSchema, resultSchema });
 }
 
@@ -1925,8 +1957,79 @@ export function layerPropertiesListDescriptor(schema) {
   };
 }
 
-export function layerPropertySetDescriptor(schema) {
+export function layerPropertyKeyframesListDescriptor(schema) {
   const registration = INVOKE_REGISTRY[12];
+  const propertyLocator = syntheticDescriptorLocator(
+    'stream', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  );
+  return {
+    detail: 'full',
+    id: registration.id,
+    version: registration.version,
+    schemaVersion: 1,
+    summary: 'List a bounded page of exact keyframes on one After Effects layer property.',
+    risk: 'read',
+    mutability: 'read-only',
+    idempotency: 'idempotent',
+    cancellation: 'before-dispatch',
+    undo: 'not-applicable',
+    sideEffectSummary: 'Reads native keyframe times, primitive values, and interpolation without changing After Effects state.',
+    preconditions: [
+      'An After Effects project must be open.',
+      'propertyLocator must come from ae.layer.properties.list@1 in the current native session.',
+      'The property must be a keyframeable primitive scalar, vector, or color leaf stream.',
+    ],
+    compatibility: {
+      status: 'unverified',
+      intendedPlatforms: ['macos-arm64', 'windows-x64'],
+    },
+    inputContractId: registration.inputContractId,
+    resultContractId: registration.resultContractId,
+    contractDigest: layerPropertyKeyframesListContractDigest(schema),
+    inputSchema: structuredClone(
+      schema.$defs.layerPropertyKeyframesListInputSchemaContract.const,
+    ),
+    resultSchema: structuredClone(
+      schema.$defs.layerPropertyKeyframesListResultSchemaContract.const,
+    ),
+    requirements: [{
+      id: 'aemcp.requirement.native.layer-property-keyframes-list',
+      contractVersion: 1,
+    }],
+    examples: [
+      {
+        id: 'aemcp-example-layer-property-keyframes-list-empty',
+        kind: 'positive',
+        summary: 'Read an empty first keyframe page from a keyframeable property.',
+        arguments: { propertyLocator, offset: 0, limit: 25 },
+        expected: {
+          outcome: 'succeeded',
+          value: {
+            propertyLocator,
+            valueType: 'one-d',
+            total: 0,
+            offset: 0,
+            limit: 25,
+            returned: 0,
+            hasMore: false,
+            nextOffset: null,
+            keyframes: [],
+          },
+        },
+      },
+      {
+        id: 'aemcp-example-layer-property-keyframes-list-unsupported',
+        kind: 'negative',
+        summary: 'Reject a property whose native value cannot be represented safely.',
+        arguments: { propertyLocator, offset: 0, limit: 25 },
+        expected: { errorCode: 'PRECONDITION_FAILED', recoveryAction: 'change-arguments' },
+      },
+    ],
+  };
+}
+
+export function layerPropertySetDescriptor(schema) {
+  const registration = INVOKE_REGISTRY[13];
   const layerLocator = syntheticDescriptorLocator(
     'layer', '88888888-8888-4888-8888-888888888888',
   );
@@ -2017,6 +2120,7 @@ export function nativeCapabilityRegistry(schema) {
     compositionLayerCreateDescriptor(schema),
     layerEffectApplyDescriptor(schema),
     layerPropertiesListDescriptor(schema),
+    layerPropertyKeyframesListDescriptor(schema),
     layerPropertySetDescriptor(schema),
   ];
 }
@@ -2352,6 +2456,45 @@ function validateLayerPropertySetResult(request, result, helloContext, schema) {
     && value.layerLocator.sessionId === request.sessionId
     && validateLocator(value.layerLocator, context, schema)
     && validateLocator(value.propertyLocator, context, schema);
+}
+
+function validateLayerPropertyKeyframesResult(request, result, helloContext, schema) {
+  if (request.params.capabilityId !== 'ae.layer.property.keyframes.list') return true;
+  const args = request.params.arguments;
+  const value = result.value;
+  if (result.evidence.postcondition.kind !== 'layer-property-keyframes-list'
+      || !jsonDeepEqual(value.propertyLocator, args.propertyLocator)
+      || !validatePageMetadata(value, args, 'keyframes')
+      || !['one-d', 'two-d', 'two-d-spatial', 'three-d', 'three-d-spatial', 'color']
+        .includes(value.valueType)) return false;
+  const context = locatorContext(value.propertyLocator);
+  if (value.propertyLocator.kind !== 'stream'
+      || value.propertyLocator.hostInstanceId
+        !== helloContext.response.result.host.instanceId
+      || value.propertyLocator.sessionId !== request.sessionId
+      || !validateLocator(value.propertyLocator, context, schema)) return false;
+  let previousTime = null;
+  for (let index = 0; index < value.keyframes.length; index += 1) {
+    const keyframe = value.keyframes[index];
+    if (keyframe.keyframeIndex !== value.offset + index + 1
+        || !Number.isSafeInteger(keyframe.time?.value)
+        || !Number.isSafeInteger(keyframe.time?.scale)
+        || keyframe.time.scale < 1 || keyframe.time.mode !== 'comp-time'
+        || !validatePrimitivePropertyValue(keyframe.value)
+        || !validateSampledPropertyValue({
+          valueType: value.valueType,
+          value: keyframe.value,
+        })
+        || !['none', 'linear', 'bezier', 'hold'].includes(keyframe.inInterpolation)
+        || !['none', 'linear', 'bezier', 'hold'].includes(keyframe.outInterpolation)) {
+      return false;
+    }
+    if (previousTime !== null
+        && BigInt(previousTime.value) * BigInt(keyframe.time.scale)
+          >= BigInt(keyframe.time.value) * BigInt(previousTime.scale)) return false;
+    previousTime = keyframe.time;
+  }
+  return true;
 }
 
 function validateCompositionTimeSetResult(request, result, helloContext, schema) {
@@ -2820,6 +2963,7 @@ export function validateTranscript(context, request, messages) {
     && validateCompositionCreateResult(request, result, helloContext, schema)
     && validateCompositionLayerCreateResult(request, result, helloContext, schema)
     && validateLayerEffectApplyResult(request, result, helloContext, schema)
+    && validateLayerPropertyKeyframesResult(request, result, helloContext, schema)
     && validateLayerPropertySetResult(request, result, helloContext, schema)
     && evidence.postcondition.verified === true
     && evidence.requestDigest === requestDigest

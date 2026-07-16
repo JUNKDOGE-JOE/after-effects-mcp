@@ -489,6 +489,34 @@ class AeListLayerPropertiesArgs(_StrictModel):
     )
 
 
+class AeListLayerPropertyKeyframesArgs(_StrictModel):
+    """ae.listLayerPropertyKeyframes — list exact native keyframes on one property.
+
+    Copy property_locator from ae_listLayerProperties. This bounded read returns
+    exact composition-time fractions, primitive values, and unambiguous native
+    interpolation. It never falls back to JSX.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    property_locator: AePropertyLocator = Field(
+        ...,
+        description="Leaf property locator returned by ae_listLayerProperties.",
+    )
+    offset: int = Field(
+        0,
+        ge=0,
+        le=9_007_199_254_740_991,
+        description="Zero-based keyframe offset.",
+    )
+    limit: int = Field(
+        25,
+        ge=1,
+        le=25,
+        description="Maximum keyframes requested (default 25, max 25).",
+    )
+
+
 _PROPERTY_DECIMAL = r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
 
 
@@ -1120,6 +1148,7 @@ SCHEMAS = {
     "ae.createCompositionLayer": AeCreateCompositionLayerArgs,
     "ae.applyLayerEffect": AeApplyLayerEffectArgs,
     "ae.listLayerProperties": AeListLayerPropertiesArgs,
+    "ae.listLayerPropertyKeyframes": AeListLayerPropertyKeyframesArgs,
     "ae.setLayerPropertyValue": AeSetLayerPropertyValueArgs,
     "ae.layers": AeLayersArgs,
     "ae.readProps": AeReadPropsArgs,
@@ -1165,4 +1194,4 @@ SCHEMAS = {
     "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 57, f"expected 57 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 58, f"expected 58 verbs, got {len(SCHEMAS)}"

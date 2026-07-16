@@ -46,6 +46,10 @@ const layerPropertiesVector = require(
     '../../native/ae-plugin/protocol/fixtures/invoke-layer-properties-list.json'
 );
 const layerPropertiesFixture = layerPropertiesVector.response.result;
+const layerPropertyKeyframesVector = require(
+    '../../native/ae-plugin/protocol/fixtures/invoke-layer-property-keyframes-list.json'
+);
+const layerPropertyKeyframesFixture = layerPropertyKeyframesVector.response.result;
 const layerPropertySetVector = require(
     '../../native/ae-plugin/protocol/fixtures/invoke-layer-property-set.json'
 );
@@ -292,6 +296,12 @@ function fakeNativeClient() {
                 result.evidence.requestId = request.requestId;
                 return result;
             }
+            if (request.capabilityId === 'ae.layer.property.keyframes.list') {
+                const result = structuredClone(layerPropertyKeyframesFixture);
+                result.replayed = false;
+                result.evidence.requestId = request.requestId;
+                return result;
+            }
             if (request.capabilityId === 'ae.project.items.list'
                 || request.capabilityId === 'ae.composition.layers.list'
                 || request.capabilityId === 'ae.composition.selected-layers.list'
@@ -392,6 +402,10 @@ function fakeNativeClient() {
                 layerPropertiesListContractDigest:
                     nativeCapabilitiesFixture.items.find(function (item) {
                         return item.id === 'ae.layer.properties.list';
+                    })?.contractDigest || null,
+                layerPropertyKeyframesListContractDigest:
+                    nativeCapabilitiesFixture.items.find(function (item) {
+                        return item.id === 'ae.layer.property.keyframes.list';
                     })?.contractDigest || null,
             };
         },
@@ -583,6 +597,22 @@ test('native routes require the shared token and reject an open-ended invoke env
         });
         assert.strictEqual(overLimitPropertyPage.status, 400);
         assert.strictEqual(overLimitPropertyPage.body.error.code, 'INVALID_ARGUMENT');
+        const invalidKeyframePage = await post(port, '/native/invoke', {
+            'X-AE-MCP-Token': 'known-secret-token',
+        }, {
+            requestId: 'core-layer-property-keyframes-invalid',
+            capabilityId: 'ae.layer.property.keyframes.list',
+            capabilityVersion: 1,
+            arguments: {
+                ...structuredClone(
+                    layerPropertyKeyframesVector.request.params.arguments,
+                ),
+                limit: 26,
+            },
+            deadlineUnixMs: Date.now() + 10000,
+        });
+        assert.strictEqual(invalidKeyframePage.status, 400);
+        assert.strictEqual(invalidKeyframePage.body.error.code, 'INVALID_ARGUMENT');
         assert.doesNotMatch(JSON.stringify(server.activity.list()), /r{65}/);
         assert.deepStrictEqual(nativeClient.calls, []);
     } finally {
@@ -644,6 +674,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
                 'ae.composition.layer.create',
                 'ae.layer.effect.apply',
                 'ae.layer.properties.list',
+                'ae.layer.property.keyframes.list',
                 'ae.layer.property.set',
             ],
         );
@@ -854,6 +885,27 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
         );
         assert.strictEqual(layerProperties.status, 200);
         assert.strictEqual(layerProperties.body.result.value.properties[1].value.value, '73.5');
+        const layerPropertyKeyframesRequest = {
+            requestId: 'core-layer-property-keyframes-1',
+            capabilityId: 'ae.layer.property.keyframes.list',
+            capabilityVersion: 1,
+            arguments: structuredClone(
+                layerPropertyKeyframesVector.request.params.arguments,
+            ),
+            deadlineUnixMs,
+        };
+        const layerPropertyKeyframes = await post(
+            port, '/native/invoke', headers, layerPropertyKeyframesRequest,
+        );
+        assert.strictEqual(layerPropertyKeyframes.status, 200);
+        assert.strictEqual(
+            layerPropertyKeyframes.body.result.value.keyframes[1].time.value,
+            5,
+        );
+        assert.strictEqual(
+            layerPropertyKeyframes.body.result.value.keyframes[1].outInterpolation,
+            'hold',
+        );
         const layerPropertySetRequest = {
             requestId: 'core-layer-property-set-1',
             capabilityId: 'ae.layer.property.set',
@@ -889,6 +941,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
             ['invoke', compositionLayerCreateRequest],
             ['invoke', layerEffectApplyRequest],
             ['invoke', layerPropertiesRequest],
+            ['invoke', layerPropertyKeyframesRequest],
             ['invoke', layerPropertySetRequest],
         ]);
     } finally {

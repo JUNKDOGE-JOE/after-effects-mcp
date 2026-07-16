@@ -39,6 +39,8 @@ import {
   layerEffectApplyDescriptor,
   layerPropertiesListContractDigest,
   layerPropertiesListDescriptor,
+  layerPropertyKeyframesListContractDigest,
+  layerPropertyKeyframesListDescriptor,
   layerPropertySetContractDigest,
   layerPropertySetDescriptor,
   projectBitDepthReadDescriptor,
@@ -182,7 +184,7 @@ test('schema locks strict framing, bounded defaults, rate limits, and native pro
     lengthPrefixBytes: 4,
     byteOrder: 'big-endian',
     encoding: 'utf-8',
-    maxFrameBytes: 65536,
+    maxFrameBytes: 131072,
     maxJsonDepth: 16,
     maxJsonNodes: 4096,
     maxStringLength: 8192,
@@ -238,6 +240,7 @@ test('all checked-in vectors are synthetic and contain no host or Adobe suite cl
     'invoke-composition-layer-create.json',
     'invoke-layer-effect-apply.json',
     'invoke-layer-properties-list.json',
+    'invoke-layer-property-keyframes-list.json',
     'invoke-layer-property-set.json',
     'invalidate-graph.json',
     'cancel.json',
@@ -279,6 +282,7 @@ test('golden requests, events, responses, and bound error policies validate', ()
     'invoke-composition-layer-create.json',
     'invoke-layer-effect-apply.json',
     'invoke-layer-properties-list.json',
+    'invoke-layer-property-keyframes-list.json',
     'invoke-layer-property-set.json',
     'invalidate-graph.json',
     'cancel.json',
@@ -325,7 +329,7 @@ test('strict framing handles UTF-8, fragments, multiple frames, and malformed JS
     canonicalize(first), canonicalize(second),
   ]);
 
-  const boundedItems = Array.from({ length: 1000 }, () => 'x'.repeat(58));
+  const boundedItems = Array.from({ length: 1000 }, () => 'x'.repeat(120));
   const emptyPadLength = Buffer.byteLength(canonicalize({ items: boundedItems, pad: '' }), 'utf8');
   const exactMaximum = { items: boundedItems, pad: 'x'.repeat(LIMITS.maxFrameBytes - emptyPadLength) };
   const maximumFrame = encodeFrame(exactMaximum);
@@ -605,7 +609,7 @@ test('graph invalidation is an exact authenticated internal lifecycle exchange',
     ), false);
   }
 
-  assert.equal(nativeCapabilityRegistry(schema).length, 13);
+  assert.equal(nativeCapabilityRegistry(schema).length, 14);
   assert.doesNotMatch(JSON.stringify(golden('capabilities.json')), /invalidateGraph/u);
   const disguisedInvoke = structuredClone(golden('invoke-project-summary.json').request);
   disguisedInvoke.params.capabilityId = 'ae.invalidateGraph';
@@ -793,6 +797,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
   const compositionLayerCreateCapability = compositionLayerCreateDescriptor(schema);
   const layerEffectApplyCapability = layerEffectApplyDescriptor(schema);
   const layerPropertiesDescriptor = layerPropertiesListDescriptor(schema);
+  const layerPropertyKeyframesDescriptor = layerPropertyKeyframesListDescriptor(schema);
   const layerPropertyDescriptor = layerPropertySetDescriptor(schema);
   const containsRef = (value) => {
     if (Array.isArray(value)) return value.some(containsRef);
@@ -854,6 +859,10 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     layerEffectApplyContractDigest(schema));
   assert.equal(layerPropertiesDescriptor.contractDigest,
     'a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba');
+  assert.equal(layerPropertyKeyframesDescriptor.contractDigest,
+    'f089d4cd1d35f492df660cbd83667968b2add70b5353172253691e33758e42bb');
+  assert.equal(layerPropertyKeyframesDescriptor.contractDigest,
+    layerPropertyKeyframesListContractDigest(schema));
   assert.equal(layerPropertyDescriptor.contractDigest,
     '5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c');
   assert.equal(layerPropertyDescriptor.contractDigest,
@@ -871,8 +880,9 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     compositionLayerCreateCapability,
     layerEffectApplyCapability,
     layerPropertiesDescriptor,
+    layerPropertyKeyframesDescriptor,
     layerPropertyDescriptor,
-  ]), 'b54fa28c9d04b248db56b27d652ab3fd37016bb3c44904f4949258f72e25d65b');
+  ]), 'f2dfe6b726efb02a371ee45cfa814050e87122e81dd282a6b7797862c2a4638a');
   assert.ok(Buffer.byteLength(canonicalize(descriptor), 'utf8') < LIMITS.maxFrameBytes);
 });
 
@@ -881,7 +891,7 @@ test('v1 capability discovery is single-page, fail-closed, and never replayed', 
   const exchange = golden('capabilities.json');
   assert.equal(exchange.request.params.limit, 100);
   assert.equal(Object.hasOwn(exchange.request.params, 'ids'), false);
-  assert.equal(exchange.response.result.items.length, 13);
+  assert.equal(exchange.response.result.items.length, 14);
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, exchange.response, schema), true);
 
   const zeroLimit = structuredClone(exchange.request);
@@ -1703,6 +1713,8 @@ test('native project navigation vectors bind bounded pagination and locator prov
       compositionSelectedLayersListDescriptor(schema)],
     ['invoke-composition-time-read.json', compositionTimeReadDescriptor(schema)],
     ['invoke-layer-properties-list.json', layerPropertiesListDescriptor(schema)],
+    ['invoke-layer-property-keyframes-list.json',
+      layerPropertyKeyframesListDescriptor(schema)],
   ]) {
     const fixture = golden(name);
     const context = {
@@ -1944,6 +1956,40 @@ test('native project navigation vectors bind bounded pagination and locator prov
     golden('hello.json'), properties.request, propertyStale,
     layerPropertiesListDescriptor(schema), schema,
   ), true);
+});
+
+test('native keyframe pages bind exact time, order, primitive type, and pagination', () => {
+  const fixture = golden('invoke-layer-property-keyframes-list.json');
+  const context = {
+    hello: golden('hello.json'),
+    descriptor: layerPropertyKeyframesListDescriptor(schema),
+    schema,
+    brokerSendUnixMs: 1900000000000,
+    effectiveDeadlineUnixMs: fixture.request.deadlineUnixMs,
+    terminalObservedUnixMs: 1900000000030,
+  };
+  assert.equal(context.descriptor.contractDigest,
+    layerPropertyKeyframesListContractDigest(schema));
+  assert.equal(validateTranscript(
+    context, fixture.request, [...fixture.events, fixture.response],
+  ), true);
+
+  for (const mutate of [
+    (value) => { value.propertyLocator.objectId = '99999999-9999-4999-8999-999999999999'; },
+    (value) => { value.keyframes[1].keyframeIndex = 3; },
+    (value) => { value.keyframes[1].time = { value: 0, scale: 24, mode: 'comp-time' }; },
+    (value) => { value.keyframes[0].value = { kind: 'vector', components: ['1', '2'] }; },
+    (value) => { value.keyframes[0].inInterpolation = 'auto'; },
+    (value) => { value.returned = 1; },
+    (value) => { value.nextOffset = 1; },
+  ]) {
+    const malformed = structuredClone(fixture.response);
+    mutate(malformed.result.value);
+    malformed.result.evidence.postcondition.digest = postconditionDigest(malformed.result);
+    assert.equal(validateTranscript(
+      context, fixture.request, [...fixture.events, malformed],
+    ), false);
+  }
 });
 
 test('server-issued locators reject pointer shapes and stale host/session/project/generation', () => {

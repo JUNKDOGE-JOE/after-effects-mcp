@@ -69,6 +69,7 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
             "invoke-composition-layer-create.json",
             "invoke-layer-effect-apply.json",
             "invoke-layer-properties-list.json",
+            "invoke-layer-property-keyframes-list.json",
         "invoke-layer-property-set.json",
         "cancel.json",
     ):
@@ -100,6 +101,7 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
             "invoke-composition-layer-create.json",
             "invoke-layer-effect-apply.json",
             "invoke-layer-properties-list.json",
+            "invoke-layer-property-keyframes-list.json",
         "invoke-layer-property-set.json",
         "cancel.json",
         "errors.json",
@@ -170,6 +172,7 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
         "ae.composition.layer.create",
         "ae.layer.effect.apply",
         "ae.layer.properties.list",
+        "ae.layer.property.keyframes.list",
         "ae.layer.property.set",
     ]
     assert capabilities["response"]["result"]["capabilitiesDigest"] == hello[
