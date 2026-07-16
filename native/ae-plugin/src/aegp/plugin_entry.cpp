@@ -3313,11 +3313,24 @@ class AegpHostApi final : public HostApi {
         ? A_Err_GENERIC
         : effect_suite->AEGP_GetInstalledKeyFromLayerEffect(
             applied_owner.get(), &applied_key);
+    // Effect refs identify instances even when several effects have the same
+    // installed key. Move the returned instance to the end of the stack while
+    // the apply Undo group is still open so its public index and dynamic stream
+    // can be reacquired without depending on the effect having a user-visible
+    // parameter stream. This also supports effects whose only parameter is the
+    // implicit input layer.
+    A_Err reorder_error = A_Err_GENERIC;
+    if (apply_error == A_Err_NONE && applied_ref != nullptr
+        && applied_key_error == A_Err_NONE && applied_key == matched_key) {
+      reorder_error = effect_suite->AEGP_ReorderEffect(
+          applied_owner.get(), static_cast<A_long>(before_keys->size()));
+    }
     const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
     const auto after_keys = read_effect_keys();
     if (apply_error != A_Err_NONE || applied_ref == nullptr
         || applied_key_error != A_Err_NONE || applied_key != matched_key
-        || end_error != A_Err_NONE || !after_keys.has_value()) {
+        || reorder_error != A_Err_NONE || end_error != A_Err_NONE
+        || !after_keys.has_value()) {
       return HostLayerEffectApplyResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
           "effect may have been applied but native readback or Undo validation failed");
@@ -3325,41 +3338,56 @@ class AegpHostApi final : public HostApi {
     const std::uint64_t matching_after = static_cast<std::uint64_t>(
         std::count(after_keys->begin(), after_keys->end(), matched_key));
     if (after_keys->size() != before_keys->size() + 1
-        || matching_after != matching_before + 1) {
+        || matching_after != matching_before + 1
+        || !std::equal(
+            before_keys->begin(), before_keys->end(), after_keys->begin())
+        || after_keys->back() != matched_key) {
       return HostLayerEffectApplyResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
           "effect application did not produce one exact native effect");
     }
-    // Installed-effect keys identify effect types, not individual instances.
-    // Anchor readback to the exact EffectRef returned by AEGP_ApplyEffect so an
-    // existing instance with the same match name cannot be mistaken for the
-    // newly applied effect.
-    A_long parameter_count = 0;
-    if (stream_suite->AEGP_GetEffectNumParamStreams(
-            applied_owner.get(), &parameter_count) != A_Err_NONE
-        || parameter_count < 2 || parameter_count > 4096) {
+
+    AEGP_StreamRefH root_stream = nullptr;
+    if (dynamic_suite->AEGP_GetNewStreamRefForLayer(
+            plugin_id_, layer, &root_stream) != A_Err_NONE
+        || root_stream == nullptr) {
       return HostLayerEffectApplyResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
-          "applied effect parameter stream count was missing or invalid");
+          "applied effect layer property root could not be resolved");
     }
-    // AE 26.3 validates effect parameter streams as [1, count - 1]; index 0
-    // is the logical input-layer slot but is not retrievable as a stream ref.
-    AEGP_StreamRefH parameter_stream = nullptr;
-    if (stream_suite->AEGP_GetNewEffectStreamByIndex(
-            plugin_id_, applied_owner.get(), 1, &parameter_stream) != A_Err_NONE
-        || parameter_stream == nullptr) {
+    StreamRefOwner root_stream_owner(stream_suite.get(), root_stream);
+    AEGP_StreamRefH effect_group_stream = nullptr;
+    if (dynamic_suite->AEGP_GetNewStreamRefByMatchname(
+            plugin_id_, root_stream_owner.get(), "ADBE Effect Parade",
+            &effect_group_stream) != A_Err_NONE
+        || effect_group_stream == nullptr) {
       return HostLayerEffectApplyResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
-          "applied effect parameter stream could not be resolved");
+          "applied effect group could not be resolved");
     }
-    StreamRefOwner parameter_stream_owner(stream_suite.get(), parameter_stream);
+    StreamRefOwner effect_group_owner(stream_suite.get(), effect_group_stream);
+    AEGP_StreamGroupingType effect_grouping = AEGP_StreamGroupingType_NONE;
+    A_long effect_group_count = 0;
+    if (dynamic_suite->AEGP_GetStreamGroupingType(
+            effect_group_owner.get(), &effect_grouping) != A_Err_NONE
+        || effect_grouping != AEGP_StreamGroupingType_INDEXED_GROUP
+        || dynamic_suite->AEGP_GetNumStreamsInGroup(
+            effect_group_owner.get(), &effect_group_count) != A_Err_NONE
+        || effect_group_count < 0
+        || static_cast<std::size_t>(effect_group_count) != after_keys->size()) {
+      return HostLayerEffectApplyResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "applied effect group did not match the native effect stack");
+    }
+    const A_long insertion_index = static_cast<A_long>(before_keys->size());
     AEGP_StreamRefH effect_stream = nullptr;
-    if (dynamic_suite->AEGP_GetNewParentStreamRef(
-            plugin_id_, parameter_stream_owner.get(), &effect_stream) != A_Err_NONE
+    if (dynamic_suite->AEGP_GetNewStreamRefByIndex(
+            plugin_id_, effect_group_owner.get(), insertion_index,
+            &effect_stream) != A_Err_NONE
         || effect_stream == nullptr) {
       return HostLayerEffectApplyResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
-          "applied effect stream could not be resolved from its parameter");
+          "applied effect stream could not be resolved from the effect group");
     }
     StreamRefOwner effect_stream_owner(stream_suite.get(), effect_stream);
     std::array<A_char, AEGP_MAX_STREAM_MATCH_NAME_SIZE> applied_match_name{};
@@ -3372,11 +3400,10 @@ class AegpHostApi final : public HostApi {
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
           "applied effect stream did not match the requested effect");
     }
-    A_long insertion_index = -1;
+    A_long verified_insertion_index = -1;
     if (dynamic_suite->AEGP_GetStreamIndexInParent(
-            effect_stream_owner.get(), &insertion_index) != A_Err_NONE
-        || insertion_index < 0
-        || static_cast<std::size_t>(insertion_index) >= after_keys->size()
+            effect_stream_owner.get(), &verified_insertion_index) != A_Err_NONE
+        || verified_insertion_index != insertion_index
         || (*after_keys)[static_cast<std::size_t>(insertion_index)] != matched_key) {
       return HostLayerEffectApplyResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
