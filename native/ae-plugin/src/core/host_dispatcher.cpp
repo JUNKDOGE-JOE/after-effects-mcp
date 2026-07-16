@@ -181,6 +181,37 @@ bool same_locator_context(const ObjectLocator& left, const ObjectLocator& right)
       && left.generation == right.generation;
 }
 
+bool rebind_creation_replay_session(Completion& replay, const Request& request) {
+  const auto rebind = [&](ObjectLocator& locator) {
+    if (!valid_locator(locator)
+        || locator.host_instance_id != request.host_instance_id) {
+      return false;
+    }
+    locator.session_id = request.session_id;
+    return valid_locator(locator);
+  };
+
+  if (replay.capability_id == kCompositionCreateCapability) {
+    ObjectLocator& composition = replay.composition_create_result.composition_locator;
+    return composition.kind == "composition" && rebind(composition);
+  }
+  if (replay.capability_id != kCompositionLayerCreateCapability) return false;
+
+  CompositionLayerCreated& created = replay.composition_layer_create_result;
+  if (created.composition_locator.kind != "composition"
+      || created.layer_locator.kind != "layer"
+      || !rebind(created.composition_locator)
+      || !rebind(created.layer_locator)
+      || !same_locator_context(created.composition_locator, created.layer_locator)) {
+    return false;
+  }
+  if (!created.source_item_locator.has_value()) return true;
+  ObjectLocator& source = *created.source_item_locator;
+  return (source.kind == "item" || source.kind == "composition")
+      && rebind(source)
+      && same_locator_context(created.composition_locator, source);
+}
+
 bool property_value_matches_type(
     const LayerPropertyValue& value, std::string_view value_type) {
   if (value_type == "one-d") {
@@ -988,14 +1019,18 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           return {EnqueueCode::kQueueFull, "QUEUE_FULL"};
         }
         Completion replay = *existing->second.replay_completion;
-        replay.request_id = request.request_id;
-        replay.route_id = request.route_id;
-        replay.session_generation = request.session_generation;
-        replay.idempotency_key = request.idempotency_key;
-        replay.replayed = true;
-        replay.route_revoked = false;
-        finish_request_locked(key, replay, now);
-        return {EnqueueCode::kAccepted, {}};
+        if (rebind_creation_replay_session(replay, request)) {
+          replay.request_id = request.request_id;
+          replay.route_id = request.route_id;
+          replay.session_generation = request.session_generation;
+          replay.idempotency_key = request.idempotency_key;
+          replay.replayed = true;
+          replay.route_revoked = false;
+          finish_request_locked(key, replay, now);
+          return {EnqueueCode::kAccepted, {}};
+        }
+        existing->second.state = IdempotencyState::kAmbiguous;
+        existing->second.replay_completion.reset();
       }
       return {
           EnqueueCode::kDuplicateRequest,

@@ -13,6 +13,7 @@ from ae_mcp import client_identity
 from ae_mcp.backends.base import Backend, BackendError
 from ae_mcp.backends.native import (
     CapabilityDetail,
+    COMPOSITION_CREATE_CAPABILITY_ID,
     NativeBackendError,
     NativeCancellationToken,
     NativeCapabilities,
@@ -148,6 +149,11 @@ class HttpBridge(Backend, NativeInvokeBackend):
             recovery_hint = (
                 "Read the composition time with a fresh locator and inspect the "
                 "Undo stack before retrying."
+            )
+        elif capability_id == COMPOSITION_CREATE_CAPABILITY_ID:
+            recovery_hint = (
+                "List project items with fresh locators and inspect the Undo stack "
+                "before retrying."
             )
         elif capability_id == COMPOSITION_LAYER_CREATE_CAPABILITY_ID:
             recovery_hint = (
@@ -554,6 +560,7 @@ class HttpBridge(Backend, NativeInvokeBackend):
         mutating = request.capability_id in {
             PROJECT_BIT_DEPTH_SET_CAPABILITY_ID,
             COMPOSITION_TIME_SET_CAPABILITY_ID,
+            COMPOSITION_CREATE_CAPABILITY_ID,
             COMPOSITION_LAYER_CREATE_CAPABILITY_ID,
             LAYER_PROPERTY_SET_CAPABILITY_ID,
         }

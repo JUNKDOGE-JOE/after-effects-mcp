@@ -1186,6 +1186,22 @@ void composition_create_is_verified_and_replays_without_duplicate_mutation() {
               == created.composition_locator,
       "composition create replay did not return the cached verified terminal");
 
+  Request reconnected = composition_create_request(
+      clock, "composition-create-reconnected-replay");
+  reconnected.route_id = "route-composition-create-reconnected";
+  reconnected.session_generation = 8;
+  reconnected.session_id = "33333333-3333-4333-8333-333333333333";
+  require(dispatcher.enqueue(std::move(reconnected)).code == EnqueueCode::kAccepted,
+      "composition create replay was rejected after native reconnection");
+  const auto reconnected_outbound = dispatcher.take_outbound();
+  require(reconnected_outbound.size() == 1 && reconnected_outbound[0].ok
+          && reconnected_outbound[0].replayed
+          && reconnected_outbound[0].composition_create_result
+              .composition_locator.session_id
+              == "33333333-3333-4333-8333-333333333333"
+          && host.composition_create_calls == 1,
+      "composition create replay retained a locator from the old native session");
+
   dispatcher.invalidate_composition_creation_replays();
   const auto stale_replay = dispatcher.enqueue(composition_create_request(
       clock, "composition-create-after-invalidation"));
@@ -1259,6 +1275,29 @@ void composition_layer_create_is_verified_and_replays_without_duplicate_mutation
               == created.layer_locator
           && host.composition_layer_create_calls == 1,
       "layer create replay did not return the cached verified terminal");
+
+  Request reconnected = composition_layer_create_request(
+      clock, "create-solid-reconnected-replay", composition);
+  reconnected.route_id = "route-layer-create-reconnected";
+  reconnected.session_generation = 8;
+  reconnected.session_id = "33333333-3333-4333-8333-333333333333";
+  reconnected.composition_locator->session_id = reconnected.session_id;
+  require(dispatcher.enqueue(std::move(reconnected)).code == EnqueueCode::kAccepted,
+      "layer create replay was rejected after native reconnection");
+  const auto reconnected_outbound = dispatcher.take_outbound();
+  require(reconnected_outbound.size() == 1 && reconnected_outbound[0].ok
+          && reconnected_outbound[0].replayed
+          && reconnected_outbound[0].composition_layer_create_result
+              .composition_locator.session_id
+              == "33333333-3333-4333-8333-333333333333"
+          && reconnected_outbound[0].composition_layer_create_result
+              .layer_locator.session_id
+              == "33333333-3333-4333-8333-333333333333"
+          && reconnected_outbound[0].composition_layer_create_result
+              .source_item_locator->session_id
+              == "33333333-3333-4333-8333-333333333333"
+          && host.composition_layer_create_calls == 1,
+      "layer create replay retained locators from the old native session");
 
   dispatcher.invalidate_composition_creation_replays();
   const auto stale_replay = dispatcher.enqueue(composition_layer_create_request(
