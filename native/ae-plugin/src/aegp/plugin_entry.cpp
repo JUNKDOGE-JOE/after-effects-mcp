@@ -2651,9 +2651,20 @@ class AegpHostApi final : public HostApi {
     const A_Err rename_error = create_error == A_Err_NONE && created_layer != nullptr
         ? layer_suite->AEGP_SetLayerName(created_layer, utf16_name->data())
         : create_error;
+    A_Err duration_error = A_Err_NONE;
+    if (create_error == A_Err_NONE && created_layer != nullptr && solid) {
+      A_Time in_point{};
+      duration_error = layer_suite->AEGP_GetLayerInPoint(
+          created_layer, AEGP_LTimeMode_CompTime, &in_point);
+      if (duration_error == A_Err_NONE) {
+        duration_error = layer_suite->AEGP_SetLayerInPointAndDuration(
+            created_layer, AEGP_LTimeMode_CompTime, &in_point, &sdk_duration);
+      }
+    }
     const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
     if (create_error != A_Err_NONE || rename_error != A_Err_NONE
-        || end_error != A_Err_NONE || created_layer == nullptr) {
+        || duration_error != A_Err_NONE || end_error != A_Err_NONE
+        || created_layer == nullptr) {
       return HostCompositionLayerCreateResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
           "composition layer may have been created but mutation or Undo validation failed");
