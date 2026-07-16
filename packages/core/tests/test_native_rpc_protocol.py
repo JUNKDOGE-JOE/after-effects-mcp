@@ -158,9 +158,10 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
         "ae.project.items.list",
         "ae.composition.layers.list",
         "ae.composition.selected-layers.list",
-            "ae.composition.time.read",
-            "ae.composition.time.set",
-            "ae.layer.properties.list",
+        "ae.composition.time.read",
+        "ae.composition.time.set",
+        "ae.composition.layer.create",
+        "ae.layer.properties.list",
         "ae.layer.property.set",
     ]
     assert capabilities["response"]["result"]["capabilitiesDigest"] == hello[

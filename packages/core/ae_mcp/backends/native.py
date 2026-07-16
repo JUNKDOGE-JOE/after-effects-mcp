@@ -1504,6 +1504,18 @@ COMPOSITION_TIME_SET_CONTRACT_DIGEST = (
     "724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308"
 )
 
+COMPOSITION_LAYER_CREATE_CAPABILITY_ID = "ae.composition.layer.create"
+COMPOSITION_LAYER_CREATE_CAPABILITY_VERSION = 1
+COMPOSITION_LAYER_CREATE_INPUT_CONTRACT_ID = (
+    "aemcp.contract.ae.composition.layer.create.input.v1"
+)
+COMPOSITION_LAYER_CREATE_RESULT_CONTRACT_ID = (
+    "aemcp.contract.ae.composition.layer.create.result.v1"
+)
+COMPOSITION_LAYER_CREATE_CONTRACT_DIGEST = (
+    "d48b5c0fcf9871ee579bf518679bc36277e2fd5194e70d9cc6fa1b2c573edeee"
+)
+
 LAYER_PROPERTIES_LIST_CAPABILITY_ID = "ae.layer.properties.list"
 LAYER_PROPERTIES_LIST_CAPABILITY_VERSION = 1
 LAYER_PROPERTIES_LIST_INPUT_CONTRACT_ID = (
@@ -2025,6 +2037,177 @@ _COMPOSITION_TIME_SET_RESULT_SCHEMA = {
     },
     "x-invariant": (
         "beforeTime-must-differ-from-afterTime-and-afterTime-must-equal-targetTime"
+    ),
+}
+
+_COMPOSITION_LAYER_CREATE_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["compositionLocator", "kind", "name", "idempotencyKey"],
+    "properties": {
+        "compositionLocator": {"$ref": "#/$defs/compositionLocator"},
+        "kind": {"enum": ["null", "solid"]},
+        "name": {"type": "string", "minLength": 1, "maxLength": 255},
+        "color": {
+            "$ref": "#/$defs/color",
+            "default": {"red": 255, "green": 255, "blue": 255, "alpha": 255},
+            "x-omissionBehavior": "opaque-white",
+        },
+        "width": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30_000,
+            "x-omissionBehavior": "composition-width",
+        },
+        "height": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30_000,
+            "x-omissionBehavior": "composition-height",
+        },
+        "duration": {
+            "$ref": "#/$defs/timeInput",
+            "x-omissionBehavior": "composition-duration",
+        },
+        "idempotencyKey": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 64,
+            "pattern": _IDEMPOTENCY_KEY_PATTERN,
+        },
+    },
+    "$defs": {
+        "uuid": {"type": "string", "pattern": _UUID},
+        "compositionLocator": _COMPOSITION_TIME_READ_INPUT_SCHEMA["$defs"][
+            "compositionLocator"
+        ],
+        "timeInput": _COMPOSITION_TIME_SET_INPUT_SCHEMA["$defs"]["timeInput"],
+        "color": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["red", "green", "blue", "alpha"],
+            "properties": {
+                channel: {"type": "integer", "minimum": 0, "maximum": 255}
+                for channel in ("red", "green", "blue", "alpha")
+            },
+        },
+    },
+    "x-invariant": "solid-options-are-forbidden-when-kind-is-null",
+}
+
+_COMPOSITION_LAYER_CREATE_RESULT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "changed",
+        "kind",
+        "name",
+        "stackIndex",
+        "compositionLocator",
+        "layerLocator",
+        "sourceItemLocator",
+        "layerCountBefore",
+        "layerCountAfter",
+        "projectItemCountBefore",
+        "projectItemCountAfter",
+        "solid",
+    ],
+    "properties": {
+        "changed": {"const": True},
+        "kind": {"enum": ["null", "solid"]},
+        "name": {"type": "string", "minLength": 1, "maxLength": 255},
+        "stackIndex": {"type": "integer", "minimum": 1, "maximum": _SAFE_MAX},
+        "compositionLocator": {"$ref": "#/$defs/compositionLocator"},
+        "layerLocator": {"$ref": "#/$defs/layerLocator"},
+        "sourceItemLocator": {
+            "oneOf": [
+                {"type": "null"},
+                {"$ref": "#/$defs/itemLocator"},
+            ]
+        },
+        "layerCountBefore": {"type": "integer", "minimum": 0, "maximum": _SAFE_MAX},
+        "layerCountAfter": {"type": "integer", "minimum": 1, "maximum": _SAFE_MAX},
+        "projectItemCountBefore": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": _SAFE_MAX,
+        },
+        "projectItemCountAfter": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": _SAFE_MAX,
+        },
+        "solid": {
+            "oneOf": [
+                {"type": "null"},
+                {"$ref": "#/$defs/solidSpec"},
+            ]
+        },
+    },
+    "$defs": {
+        "uuid": {"type": "string", "pattern": _UUID},
+        "locatorBase": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "kind",
+                "hostInstanceId",
+                "sessionId",
+                "projectId",
+                "generation",
+                "objectId",
+            ],
+            "properties": {
+                "kind": {"enum": ["composition", "layer", "item"]},
+                "hostInstanceId": {"$ref": "#/$defs/uuid"},
+                "sessionId": {"$ref": "#/$defs/uuid"},
+                "projectId": {"$ref": "#/$defs/uuid"},
+                "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": _SAFE_MAX,
+                },
+                "objectId": {"$ref": "#/$defs/uuid"},
+            },
+        },
+        "compositionLocator": {
+            "allOf": [
+                {"$ref": "#/$defs/locatorBase"},
+                {"properties": {"kind": {"const": "composition"}}},
+            ]
+        },
+        "layerLocator": {
+            "allOf": [
+                {"$ref": "#/$defs/locatorBase"},
+                {"properties": {"kind": {"const": "layer"}}},
+            ]
+        },
+        "itemLocator": {
+            "allOf": [
+                {"$ref": "#/$defs/locatorBase"},
+                {"properties": {"kind": {"enum": ["item", "composition"]}}},
+            ]
+        },
+        "currentTime": _COMPOSITION_TIME_READ_RESULT_SCHEMA["properties"][
+            "currentTime"
+        ],
+        "color": _COMPOSITION_LAYER_CREATE_INPUT_SCHEMA["$defs"]["color"],
+        "solidSpec": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["color", "width", "height", "duration"],
+            "properties": {
+                "color": {"$ref": "#/$defs/color"},
+                "width": {"type": "integer", "minimum": 1, "maximum": 30_000},
+                "height": {"type": "integer", "minimum": 1, "maximum": 30_000},
+                "duration": {"$ref": "#/$defs/currentTime"},
+            },
+        },
+    },
+    "x-invariant": (
+        "new-locators-share-one-post-mutation-generation;"
+        "layerCountAfter-equals-layerCountBefore-plus-one;"
+        "solid-requires-source-item-and-solid-metadata"
     ),
 }
 
@@ -2658,6 +2841,136 @@ class ProjectBitDepthSetExecution(_NativeModel):
         }
 
 
+class CompositionLayerCreateColor(_NativeModel):
+    red: Annotated[StrictInt, Field(ge=0, le=255)]
+    green: Annotated[StrictInt, Field(ge=0, le=255)]
+    blue: Annotated[StrictInt, Field(ge=0, le=255)]
+    alpha: Annotated[StrictInt, Field(ge=0, le=255)]
+
+
+class CompositionLayerCreateArguments(_NativeModel):
+    composition_locator: NativeLocator
+    kind: Literal["null", "solid"]
+    name: Annotated[StrictStr, Field(min_length=1, max_length=255)]
+    color: CompositionLayerCreateColor | None = None
+    width: Annotated[StrictInt, Field(ge=1, le=30_000)] | None = None
+    height: Annotated[StrictInt, Field(ge=1, le=30_000)] | None = None
+    duration: CompositionTimeTarget | None = None
+    idempotency_key: Annotated[
+        StrictStr,
+        Field(min_length=16, max_length=64, pattern=_IDEMPOTENCY_KEY_PATTERN),
+    ]
+
+    @model_validator(mode="after")
+    def _closed_create_shape(self) -> "CompositionLayerCreateArguments":
+        if any(0xD800 <= ord(character) <= 0xDFFF for character in self.name):
+            raise ValueError("name must contain only Unicode scalar values")
+        if self.composition_locator.kind != "composition":
+            raise ValueError("compositionLocator must have kind composition")
+        if self.kind == "null" and any(
+            value is not None
+            for value in (self.color, self.width, self.height, self.duration)
+        ):
+            raise ValueError("solid-only fields require kind solid")
+        return self
+
+
+class CompositionLayerSolidSpec(_NativeModel):
+    color: CompositionLayerCreateColor
+    width: Annotated[StrictInt, Field(ge=1, le=30_000)]
+    height: Annotated[StrictInt, Field(ge=1, le=30_000)]
+    duration: CompositionCurrentTime
+
+
+class CompositionLayerCreateValue(_NativeModel):
+    changed: Literal[True]
+    kind: Literal["null", "solid"]
+    name: Annotated[StrictStr, Field(min_length=1, max_length=255)]
+    stack_index: PositiveInt
+    composition_locator: NativeLocator
+    layer_locator: NativeLocator
+    source_item_locator: NativeLocator | None
+    layer_count_before: NonNegativeInt
+    layer_count_after: PositiveInt
+    project_item_count_before: NonNegativeInt
+    project_item_count_after: NonNegativeInt
+    solid: CompositionLayerSolidSpec | None
+
+    @model_validator(mode="after")
+    def _verified_create(self) -> "CompositionLayerCreateValue":
+        if any(0xD800 <= ord(character) <= 0xDFFF for character in self.name):
+            raise ValueError("name must contain only Unicode scalar values")
+        if self.composition_locator.kind != "composition":
+            raise ValueError("compositionLocator must have kind composition")
+        if self.layer_locator.kind != "layer":
+            raise ValueError("layerLocator must have kind layer")
+        context = self.composition_locator.context()
+        if self.layer_locator.context() != context:
+            raise ValueError("created layer locator escaped the composition context")
+        if self.source_item_locator is not None:
+            if self.source_item_locator.kind not in {"item", "composition"}:
+                raise ValueError("sourceItemLocator must identify a project item")
+            if self.source_item_locator.context() != context:
+                raise ValueError("source item locator escaped the composition context")
+        if self.layer_count_after != self.layer_count_before + 1:
+            raise ValueError("native create must add exactly one composition layer")
+        if self.stack_index > self.layer_count_after:
+            raise ValueError("created layer stackIndex exceeds the new layer count")
+        if self.project_item_count_after < self.project_item_count_before:
+            raise ValueError("native create unexpectedly reduced the project item count")
+        if self.kind == "solid":
+            if self.solid is None or self.source_item_locator is None:
+                raise ValueError("solid creation requires verified source and solid metadata")
+            if self.project_item_count_after <= self.project_item_count_before:
+                raise ValueError("solid creation did not add a project item")
+        elif self.solid is not None:
+            raise ValueError("null creation cannot return solid metadata")
+        return self
+
+
+class CompositionLayerCreateExecution(_NativeModel):
+    implementation: NativeCapabilityDescriptor
+    negotiation: NativeNegotiation
+    transport_request_id: RequestId
+    idempotency_key: Annotated[
+        StrictStr,
+        Field(min_length=16, max_length=64, pattern=_IDEMPOTENCY_KEY_PATTERN),
+    ]
+    replayed: StrictBool
+    value: CompositionLayerCreateValue
+    evidence: NativeExecutionEvidence
+    engine: Literal["native-aegp"] = "native-aegp"
+
+    def audit_fields(self) -> dict[str, Any]:
+        undo = self.evidence.undo
+        return {
+            "engine": self.engine,
+            "capabilityId": self.evidence.capability_id,
+            "capabilityVersion": self.evidence.capability_version,
+            "contractDigest": self.implementation.contract_digest,
+            "selectedWireVersion": self.negotiation.selected_wire_version,
+            "pluginVersion": self.negotiation.plugin_version,
+            "compiledSdkVersion": self.negotiation.compiled_sdk_version,
+            "sourceCommit": self.negotiation.source_commit,
+            "hostInstanceId": self.evidence.host_instance_id,
+            "sessionId": self.evidence.session_id,
+            "sessionGeneration": self.negotiation.session_generation,
+            "capabilitiesDigest": self.negotiation.capabilities_digest,
+            "requestId": self.transport_request_id,
+            "evidenceRequestId": self.evidence.request_id,
+            "idempotencyKey": self.idempotency_key,
+            "replayed": self.replayed,
+            "effect": self.evidence.effect,
+            "requestDigest": self.evidence.request_digest,
+            "postconditionAlgorithm": self.evidence.postcondition.algorithm,
+            "postconditionDigest": self.evidence.postcondition.digest,
+            "undoAvailable": undo.available if undo is not None else False,
+            "undoVerified": undo.verified if undo is not None else False,
+            "startedAtUnixMs": self.evidence.started_at_unix_ms,
+            "completedAtUnixMs": self.evidence.completed_at_unix_ms,
+        }
+
+
 class LayerPropertySetArguments(_NativeModel):
     layer_locator: NativeLocator
     property_locator: NativeLocator
@@ -3169,6 +3482,58 @@ def _validate_composition_time_set_descriptor(
         )
 
 
+def _validate_composition_layer_create_descriptor(
+    descriptor: NativeCapabilityDescriptor,
+    *,
+    host_platform: NativePlatform,
+) -> None:
+    schemas_digest = _sha256_closed_json(
+        {
+            "inputSchema": descriptor.input_schema,
+            "resultSchema": descriptor.result_schema,
+        }
+    )
+    requirements = tuple(
+        (requirement.id, requirement.contract_version)
+        for requirement in descriptor.requirements
+    )
+    expected = (
+        descriptor.capability_id == COMPOSITION_LAYER_CREATE_CAPABILITY_ID
+        and descriptor.capability_version == COMPOSITION_LAYER_CREATE_CAPABILITY_VERSION
+        and descriptor.schema_version == 1
+        and descriptor.engine == "native-aegp"
+        and descriptor.summary
+        == "Create one null or solid layer in an After Effects composition."
+        and descriptor.risk == "write"
+        and descriptor.mutability == "mutating"
+        and descriptor.idempotency == "idempotency-key"
+        and descriptor.cancellation == "before-dispatch"
+        and descriptor.undo == "ae-undo-group"
+        and descriptor.side_effect_summary
+        == "Creates one composition layer, may create one solid project item, and creates one After Effects Undo step."
+        and descriptor.preconditions
+        == (
+            "An After Effects project must be open.",
+            "compositionLocator must come from ae.project.items.list@1.",
+            "kind must be null or solid and solid-only options require kind solid.",
+        )
+        and descriptor.input_contract_id == COMPOSITION_LAYER_CREATE_INPUT_CONTRACT_ID
+        and descriptor.result_contract_id == COMPOSITION_LAYER_CREATE_RESULT_CONTRACT_ID
+        and descriptor.contract_digest == COMPOSITION_LAYER_CREATE_CONTRACT_DIGEST
+        and schemas_digest == descriptor.contract_digest
+        and descriptor.input_schema == _COMPOSITION_LAYER_CREATE_INPUT_SCHEMA
+        and descriptor.result_schema == _COMPOSITION_LAYER_CREATE_RESULT_SCHEMA
+        and requirements
+        == (("aemcp.requirement.native.composition-layer-create", 1),)
+        and host_platform in descriptor.compatibility.intended_platforms
+    )
+    if not expected:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Negotiated ae.composition.layer.create contract does not match Core.",
+        )
+
+
 def _validate_layer_properties_list_descriptor(
     descriptor: NativeCapabilityDescriptor,
     *,
@@ -3346,6 +3711,16 @@ def _composition_time_set_digest(value: CompositionTimeSetValue) -> str:
         {
             "capabilityId": COMPOSITION_TIME_SET_CAPABILITY_ID,
             "capabilityVersion": COMPOSITION_TIME_SET_CAPABILITY_VERSION,
+            "value": value.model_dump(mode="json", by_alias=True),
+        }
+    )
+
+
+def _composition_layer_create_digest(value: CompositionLayerCreateValue) -> str:
+    return _sha256_closed_json(
+        {
+            "capabilityId": COMPOSITION_LAYER_CREATE_CAPABILITY_ID,
+            "capabilityVersion": COMPOSITION_LAYER_CREATE_CAPABILITY_VERSION,
             "value": value.model_dump(mode="json", by_alias=True),
         }
     )
@@ -4661,6 +5036,223 @@ async def invoke_composition_time_set(
     )
 
 
+async def invoke_composition_layer_create(
+    backend: NativeInvokeBackend,
+    *,
+    request_id: str,
+    composition_locator: NativeLocator | Mapping[str, Any],
+    kind: Literal["null", "solid"],
+    name: str,
+    color: CompositionLayerCreateColor | Mapping[str, Any] | None,
+    width: int | None,
+    height: int | None,
+    duration: CompositionTimeTarget | Mapping[str, Any] | None,
+    idempotency_key: str,
+    deadline_unix_ms: int,
+    cancellation: NativeCancellationToken | None = None,
+) -> CompositionLayerCreateExecution:
+    """Create one null/solid layer through the negotiated native AEGP plane."""
+
+    stale_hint = (
+        "Discard the stale composition locator, call ae_listProjectItems, "
+        "and copy a fresh composition locator."
+    )
+    inspect_hint = (
+        "Call ae_listProjectItems and ae_listCompositionLayers with fresh "
+        "locators, then inspect the Undo stack before issuing another create."
+    )
+    try:
+        arguments = CompositionLayerCreateArguments(
+            composition_locator=composition_locator,
+            kind=kind,
+            name=name,
+            color=color,
+            width=width,
+            height=height,
+            duration=duration,
+            idempotency_key=idempotency_key,
+        )
+    except ValidationError as exc:
+        raise _structured_error(
+            "INVALID_ARGUMENT",
+            "Composition-layer create arguments did not match the published contract.",
+            details={"capabilityId": COMPOSITION_LAYER_CREATE_CAPABILITY_ID},
+            recovery_hint=(
+                "Use a fresh composition locator, kind null or solid, a bounded "
+                "name, solid-only options when needed, and a stable 16 to 64 "
+                "character idempotency key."
+            ),
+        ) from exc
+
+    _ensure_active(deadline_unix_ms, cancellation)
+    negotiation = await backend.negotiate(
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    _ensure_active(deadline_unix_ms, cancellation)
+    capability_ids: tuple[str, ...] | None = None
+    capability_detail: CapabilityDetail = "full"
+    capability_limit = 100
+    capabilities = await backend.capabilities(
+        ids=capability_ids,
+        detail=capability_detail,
+        limit=capability_limit,
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    expected_query_digest = _capabilities_query_digest(
+        session_id=negotiation.session_id,
+        ids=capability_ids,
+        detail=capability_detail,
+        limit=capability_limit,
+    )
+    try:
+        registry_digest = _capabilities_registry_digest(capabilities.items)
+    except (TypeError, ValueError, UnicodeError) as exc:
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native capability registry could not be verified.",
+        ) from exc
+    if (
+        capabilities.session_id != negotiation.session_id
+        or capabilities.detail != capability_detail
+        or capabilities.next_cursor is not None
+        or capabilities.query_digest != expected_query_digest
+        or capabilities.capabilities_digest != registry_digest
+        or capabilities.capabilities_digest != negotiation.capabilities_digest
+    ):
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native capabilities were not bound to the negotiated session.",
+        )
+    matches = [
+        item
+        for item in capabilities.items
+        if item.capability_id == COMPOSITION_LAYER_CREATE_CAPABILITY_ID
+        and item.capability_version == COMPOSITION_LAYER_CREATE_CAPABILITY_VERSION
+    ]
+    descriptor = matches[0] if len(matches) == 1 else None
+    if descriptor is None:
+        raise _structured_error(
+            "NATIVE_UNSUPPORTED",
+            "Native host did not advertise ae.composition.layer.create@1.",
+        )
+    _validate_composition_layer_create_descriptor(
+        descriptor,
+        host_platform=negotiation.host_platform,
+    )
+    locator = arguments.composition_locator
+    if (
+        locator.host_instance_id != negotiation.host_instance_id
+        or locator.session_id != negotiation.session_id
+    ):
+        raise _structured_error(
+            "STALE_LOCATOR",
+            "Native locator does not belong to the negotiated host session.",
+            details={
+                "field": "params.arguments.compositionLocator",
+                "capabilityId": COMPOSITION_LAYER_CREATE_CAPABILITY_ID,
+            },
+            recovery_hint=stale_hint,
+        )
+    _ensure_active(deadline_unix_ms, cancellation)
+
+    request = NativeInvokeRequest(
+        request_id=request_id,
+        capability_id=COMPOSITION_LAYER_CREATE_CAPABILITY_ID,
+        capability_version=COMPOSITION_LAYER_CREATE_CAPABILITY_VERSION,
+        arguments=arguments.model_dump(
+            mode="json", by_alias=True, exclude_none=True
+        ),
+        deadline_unix_ms=deadline_unix_ms,
+    )
+    try:
+        result = await backend.invoke(request, cancellation=cancellation)
+    except NativeBackendError as exc:
+        _validate_invoke_error_binding(exc, request)
+        raise
+    expected_request_digest = _invoke_request_digest(request, negotiation)
+    undo = result.evidence.undo
+    if (
+        result.capability_id != request.capability_id
+        or result.capability_version != request.capability_version
+        or result.engine != "native-aegp"
+        or result.evidence.request_id != request.request_id
+        or result.evidence.host_instance_id != negotiation.host_instance_id
+        or result.evidence.session_id != negotiation.session_id
+        or result.evidence.effect != "committed"
+        or undo is None
+        or undo.available is not True
+        or undo.verified is not False
+        or undo.group_id is not None
+        or result.evidence.completed_at_unix_ms > deadline_unix_ms
+        or result.evidence.request_digest != expected_request_digest
+    ):
+        raise NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "Native composition-layer result could not be verified after dispatch.",
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery=NativeRecovery(action="inspect-state", hint=inspect_hint),
+            details={"capabilityId": COMPOSITION_LAYER_CREATE_CAPABILITY_ID},
+        )
+    try:
+        created = CompositionLayerCreateValue.model_validate(result.value)
+        postcondition_digest = _composition_layer_create_digest(created)
+    except (ValidationError, TypeError, ValueError, UnicodeError) as exc:
+        raise NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "Native composition-layer value was malformed after dispatch.",
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery=NativeRecovery(action="inspect-state", hint=inspect_hint),
+            details={"capabilityId": COMPOSITION_LAYER_CREATE_CAPABILITY_ID},
+        ) from exc
+
+    solid_matches = True
+    if arguments.kind == "solid":
+        solid_matches = created.solid is not None
+        if solid_matches and arguments.color is not None:
+            solid_matches = created.solid.color == arguments.color
+        if solid_matches and arguments.width is not None:
+            solid_matches = created.solid.width == arguments.width
+        if solid_matches and arguments.height is not None:
+            solid_matches = created.solid.height == arguments.height
+        if solid_matches and arguments.duration is not None:
+            solid_matches = _composition_times_equal(
+                created.solid.duration, arguments.duration
+            )
+    if (
+        created.kind != arguments.kind
+        or created.name != arguments.name
+        or created.composition_locator.host_instance_id
+        != negotiation.host_instance_id
+        or created.composition_locator.session_id != negotiation.session_id
+        or created.composition_locator.generation <= locator.generation
+        or created.composition_locator.project_id == locator.project_id
+        or not solid_matches
+        or result.evidence.postcondition.kind != "composition-layer-create"
+        or result.evidence.postcondition.digest != postcondition_digest
+    ):
+        raise NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "Native composition-layer postcondition evidence did not verify.",
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery=NativeRecovery(action="inspect-state", hint=inspect_hint),
+            details={"capabilityId": COMPOSITION_LAYER_CREATE_CAPABILITY_ID},
+        )
+    return CompositionLayerCreateExecution(
+        implementation=descriptor,
+        negotiation=negotiation,
+        transport_request_id=request.request_id,
+        idempotency_key=arguments.idempotency_key,
+        replayed=result.replayed,
+        value=created,
+        evidence=result.evidence,
+    )
+
+
 async def invoke_layer_properties_list(
     backend: NativeInvokeBackend,
     *,
@@ -4770,6 +5362,11 @@ __all__ = [
     "CompositionTimeSetExecution",
     "CompositionTimeSetValue",
     "CompositionTimeTarget",
+    "CompositionLayerCreateArguments",
+    "CompositionLayerCreateColor",
+    "CompositionLayerCreateExecution",
+    "CompositionLayerCreateValue",
+    "CompositionLayerSolidSpec",
     "ExecutionEngine",
     "NativeBackendError",
     "NativeBrokerErrorCode",
@@ -4846,6 +5443,11 @@ __all__ = [
     "COMPOSITION_TIME_SET_CONTRACT_DIGEST",
     "COMPOSITION_TIME_SET_INPUT_CONTRACT_ID",
     "COMPOSITION_TIME_SET_RESULT_CONTRACT_ID",
+    "COMPOSITION_LAYER_CREATE_CAPABILITY_ID",
+    "COMPOSITION_LAYER_CREATE_CAPABILITY_VERSION",
+    "COMPOSITION_LAYER_CREATE_CONTRACT_DIGEST",
+    "COMPOSITION_LAYER_CREATE_INPUT_CONTRACT_ID",
+    "COMPOSITION_LAYER_CREATE_RESULT_CONTRACT_ID",
     "LAYER_PROPERTIES_LIST_CAPABILITY_ID",
     "LAYER_PROPERTIES_LIST_CAPABILITY_VERSION",
     "LAYER_PROPERTIES_LIST_CONTRACT_DIGEST",
@@ -4870,6 +5472,7 @@ __all__ = [
     "invoke_selected_composition_layers_list",
     "invoke_composition_time_read",
     "invoke_composition_time_set",
+    "invoke_composition_layer_create",
     "invoke_layer_properties_list",
     "invoke_layer_property_set",
     "invoke_project_items_list",

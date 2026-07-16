@@ -1037,15 +1037,2511 @@
             }
           ]
         },
-        {"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75","detail":"full","examples":[{"arguments":{"compositionLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"composition","objectId":"66666666-6666-4666-8666-666666666666","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"limit":25,"offset":0},"expected":{"outcome":"succeeded","value":{"compositionLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"composition","objectId":"66666666-6666-4666-8666-666666666666","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"compositionName":"SYNTHETIC_COMPOSITION","hasMore":false,"layers":[],"limit":25,"nextOffset":null,"offset":0,"returned":0,"total":0}},"id":"aemcp-example-composition-selected-layers-list-empty","kind":"positive","summary":"List an empty selected-layer page for a composition."},{"arguments":{"compositionLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"composition","objectId":"66666666-6666-4666-8666-666666666666","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"limit":25,"offset":0},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"},"id":"aemcp-example-composition-selected-layers-list-stale","kind":"negative","summary":"Refresh a stale composition locator before listing selected layers."}],"id":"ae.composition.selected-layers.list","idempotency":"idempotent","inputContractId":"aemcp.contract.ae.composition.selected-layers.list.input.v1","inputSchema":{"$defs":{"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"composition"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"compositionLocator":{"$ref":"#/$defs/compositionLocator"},"limit":{"default":25,"maximum":50,"minimum":1,"type":"integer","x-omissionBehavior":25},"offset":{"default":0,"maximum":9007199254740991,"minimum":0,"type":"integer","x-omissionBehavior":0}},"required":["compositionLocator","offset","limit"],"type":"object"},"mutability":"read-only","preconditions":["An After Effects project must be open.","compositionLocator must come from ae.project.items.list@1."],"requirements":[{"contractVersion":1,"id":"aemcp.requirement.native.composition-selected-layers-list"}],"resultContractId":"aemcp.contract.ae.composition.selected-layers.list.result.v1","resultSchema":{"$defs":{"compositionLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"composition"}}}]},"layerLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"layer"}}}]},"locatorBase":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"enum":["project","item","composition","layer","stream"]},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"sourceItemLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"enum":["item","composition"]}}}]},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"compositionLocator":{"$ref":"#/$defs/compositionLocator"},"compositionName":{"maxLength":1024,"type":"string"},"hasMore":{"type":"boolean"},"layers":{"items":{"additionalProperties":false,"properties":{"isThreeD":{"type":"boolean"},"locator":{"$ref":"#/$defs/layerLocator"},"locked":{"type":"boolean"},"name":{"maxLength":1024,"type":"string"},"parentLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/layerLocator"}]},"sourceItemLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/sourceItemLocator"}]},"stackIndex":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"type":{"enum":["av","camera","light","text","shape","model3d","null","adjustment","unknown"]},"videoEnabled":{"type":"boolean"}},"required":["locator","stackIndex","name","type","videoEnabled","isThreeD","locked","parentLocator","sourceItemLocator"],"type":"object"},"maxItems":50,"type":"array"},"limit":{"maximum":50,"minimum":1,"type":"integer"},"nextOffset":{"oneOf":[{"type":"null"},{"maximum":9007199254740991,"minimum":0,"type":"integer"}]},"offset":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"returned":{"maximum":50,"minimum":0,"type":"integer"},"total":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["compositionLocator","compositionName","total","offset","limit","returned","hasMore","nextOffset","layers"],"type":"object","x-invariant":"returned-equals-layers-length-and-page-metadata-is-self-consistent"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads selected composition layers without changing After Effects state.","summary":"List a bounded page of selected layers in one After Effects composition.","undo":"not-applicable","version":1},
-        {"detail":"full","id":"ae.composition.time.read","version":1,"schemaVersion":1,"summary":"Read the current time of one After Effects composition.","risk":"read","mutability":"read-only","idempotency":"idempotent","cancellation":"before-dispatch","undo":"not-applicable","sideEffectSummary":"Reads composition time without changing After Effects state.","preconditions":["An After Effects project must be open.","compositionLocator must come from ae.project.items.list@1."],"compatibility":{"status":"unverified","intendedPlatforms":["macos-arm64","windows-x64"]},"inputContractId":"aemcp.contract.ae.composition.time.read.input.v1","resultContractId":"aemcp.contract.ae.composition.time.read.result.v1","contractDigest":"fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd","inputSchema":{"type":"object","additionalProperties":false,"required":["compositionLocator"],"properties":{"compositionLocator":{"$ref":"#/$defs/compositionLocator"}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"compositionLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"composition"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}}}},"resultSchema":{"type":"object","additionalProperties":false,"required":["compositionLocator","currentTime"],"properties":{"compositionLocator":{"$ref":"#/$defs/compositionLocator"},"currentTime":{"type":"object","additionalProperties":false,"required":["value","scale","secondsRational"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295},"secondsRational":{"type":"string","minLength":1,"maxLength":28,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"}}}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"compositionLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"composition"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}}},"x-invariant":"secondsRational-is-the-reduced-canonical-form-of-value-over-scale"},"requirements":[{"id":"aemcp.requirement.native.composition-time-read","contractVersion":1}],"examples":[{"id":"aemcp-example-composition-time-read","kind":"positive","summary":"Read an exact rational current time from a composition.","arguments":{"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"}},"expected":{"outcome":"succeeded","value":{"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"currentTime":{"value":3003,"scale":1000,"secondsRational":"3003/1000"}}}},{"id":"aemcp-example-composition-time-read-stale","kind":"negative","summary":"Refresh a stale composition locator before reading current time.","arguments":{"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"}},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"}}]},
-        {"detail":"full","id":"ae.composition.time.set","version":1,"schemaVersion":1,"summary":"Set the current time of one After Effects composition.","risk":"write","mutability":"mutating","idempotency":"idempotency-key","cancellation":"before-dispatch","undo":"ae-undo-group","sideEffectSummary":"Changes composition current time and creates one After Effects Undo step.","preconditions":["An After Effects project must be open.","compositionLocator must come from ae.project.items.list@1.","targetTime must differ from the composition's current time."],"compatibility":{"status":"unverified","intendedPlatforms":["macos-arm64","windows-x64"]},"inputContractId":"aemcp.contract.ae.composition.time.set.input.v1","resultContractId":"aemcp.contract.ae.composition.time.set.result.v1","contractDigest":"724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308","inputSchema":{"type":"object","additionalProperties":false,"required":["compositionLocator","targetTime","idempotencyKey"],"properties":{"compositionLocator":{"$ref":"#/$defs/compositionLocator"},"targetTime":{"$ref":"#/$defs/timeInput"},"idempotencyKey":{"type":"string","minLength":16,"maxLength":64,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$"}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"compositionLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"composition"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}},"timeInput":{"type":"object","additionalProperties":false,"required":["value","scale"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295}}}}},"resultSchema":{"type":"object","additionalProperties":false,"required":["changed","compositionLocator","beforeTime","afterTime"],"properties":{"changed":{"const":true},"compositionLocator":{"$ref":"#/$defs/compositionLocator"},"beforeTime":{"$ref":"#/$defs/currentTime"},"afterTime":{"$ref":"#/$defs/currentTime"}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"compositionLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"composition"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}},"currentTime":{"type":"object","additionalProperties":false,"required":["value","scale","secondsRational"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295},"secondsRational":{"type":"string","minLength":1,"maxLength":28,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"}}}},"x-invariant":"beforeTime-must-differ-from-afterTime-and-afterTime-must-equal-targetTime"},"requirements":[{"id":"aemcp.requirement.native.composition-time-set","contractVersion":1}],"examples":[{"id":"aemcp-example-composition-time-set","kind":"positive","summary":"Set and verify an exact rational composition time.","arguments":{"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"targetTime":{"value":1,"scale":1},"idempotencyKey":"synthetic-comp-time-0001"},"expected":{"outcome":"succeeded","value":{"changed":true,"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"beforeTime":{"value":0,"scale":1,"secondsRational":"0"},"afterTime":{"value":1,"scale":1,"secondsRational":"1"}}}},{"id":"aemcp-example-composition-time-set-stale","kind":"negative","summary":"Refresh a stale composition locator before setting current time.","arguments":{"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"targetTime":{"value":1,"scale":1},"idempotencyKey":"synthetic-comp-time-0002"},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"}}]},
-        {"detail":"full","id":"ae.layer.properties.list","version":1,"schemaVersion":1,"summary":"List a bounded page of direct properties on an After Effects layer or property group.","risk":"read","mutability":"read-only","idempotency":"idempotent","cancellation":"before-dispatch","undo":"not-applicable","sideEffectSummary":"Reads layer properties and safe primitive values without changing After Effects state.","preconditions":["An After Effects project must be open.","layerLocator must come from ae.composition.layers.list@1.","parentPropertyLocator must come from ae.layer.properties.list@1 for the same layer."],"compatibility":{"status":"unverified","intendedPlatforms":["macos-arm64","windows-x64"]},"inputContractId":"aemcp.contract.ae.layer.properties.list.input.v1","resultContractId":"aemcp.contract.ae.layer.properties.list.result.v1","contractDigest":"a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba","inputSchema":{"type":"object","additionalProperties":false,"required":["layerLocator","offset","limit"],"properties":{"layerLocator":{"$ref":"#/$defs/layerLocator"},"parentPropertyLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/streamLocator"}]},"offset":{"type":"integer","minimum":0,"maximum":9007199254740991,"default":0,"x-omissionBehavior":0},"limit":{"type":"integer","minimum":1,"maximum":25,"default":25,"x-omissionBehavior":25}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}},"streamLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"stream"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}}}},"resultSchema":{"type":"object","additionalProperties":false,"required":["layerLocator","parentPropertyLocator","layerName","sampleTime","total","offset","limit","returned","hasMore","nextOffset","properties"],"properties":{"layerLocator":{"$ref":"#/$defs/layerLocator"},"parentPropertyLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/streamLocator"}]},"layerName":{"type":"string","maxLength":1024},"sampleTime":{"type":"object","additionalProperties":false,"required":["value","scale","mode"],"properties":{"value":{"type":"integer","minimum":-9007199254740991,"maximum":9007199254740991},"scale":{"type":"integer","minimum":1,"maximum":9007199254740991},"mode":{"const":"comp-time"}}},"total":{"type":"integer","minimum":0,"maximum":9007199254740991},"offset":{"type":"integer","minimum":0,"maximum":9007199254740991},"limit":{"type":"integer","minimum":1,"maximum":25},"returned":{"type":"integer","minimum":0,"maximum":25},"hasMore":{"type":"boolean"},"nextOffset":{"oneOf":[{"type":"null"},{"type":"integer","minimum":0,"maximum":9007199254740991}]},"properties":{"type":"array","maxItems":25,"items":{"type":"object","additionalProperties":false,"required":["propertyLocator","propertyIndex","name","matchName","groupingType","childCount","hidden","disabled","modified","canVaryOverTime","timeVarying","valueType","valueStatus","value"],"properties":{"propertyLocator":{"$ref":"#/$defs/streamLocator"},"propertyIndex":{"type":"integer","minimum":1,"maximum":9007199254740991},"name":{"type":"string","maxLength":1024},"matchName":{"type":"string","maxLength":40},"groupingType":{"enum":["leaf","named-group","indexed-group"]},"childCount":{"type":"integer","minimum":0,"maximum":9007199254740991},"hidden":{"type":"boolean"},"disabled":{"type":"boolean"},"modified":{"type":"boolean"},"canVaryOverTime":{"oneOf":[{"type":"null"},{"type":"boolean"}]},"timeVarying":{"oneOf":[{"type":"null"},{"type":"boolean"}]},"valueType":{"enum":["none","one-d","two-d","two-d-spatial","three-d","three-d-spatial","color","arb","marker","layer-id","mask-id","mask","text-document","unknown"]},"valueStatus":{"enum":["group","sampled","no-data","unsupported"]},"value":{"oneOf":[{"type":"null"},{"type":"object","additionalProperties":false,"required":["kind","value"],"properties":{"kind":{"const":"scalar"},"value":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}},{"type":"object","additionalProperties":false,"required":["kind","components"],"properties":{"kind":{"const":"vector"},"components":{"type":"array","minItems":2,"maxItems":3,"items":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}}},{"type":"object","additionalProperties":false,"required":["kind","alpha","red","green","blue"],"properties":{"kind":{"const":"color"},"alpha":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"red":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"green":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"blue":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}}]}}}}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"locatorBase":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"enum":["project","item","composition","layer","stream"]},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}},"layerLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"layer"}}}]},"streamLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"stream"}}}]}},"x-invariant":"returned-equals-properties-length-and-page-metadata-and-value-types-are-self-consistent"},"requirements":[{"id":"aemcp.requirement.native.layer-properties-list","contractVersion":1}],"examples":[{"id":"aemcp-example-layer-properties-list-empty","kind":"positive","summary":"List the first bounded page of direct properties on a layer.","arguments":{"layerLocator":{"kind":"layer","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"88888888-8888-4888-8888-888888888888"},"offset":0,"limit":25},"expected":{"outcome":"succeeded","value":{"layerLocator":{"kind":"layer","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"88888888-8888-4888-8888-888888888888"},"parentPropertyLocator":null,"layerName":"SYNTHETIC_LAYER","sampleTime":{"value":0,"scale":1,"mode":"comp-time"},"total":0,"offset":0,"limit":25,"returned":0,"hasMore":false,"nextOffset":null,"properties":[]}}},{"id":"aemcp-example-layer-properties-list-stale","kind":"negative","summary":"Refresh stale layer and property locators before listing properties.","arguments":{"layerLocator":{"kind":"layer","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"88888888-8888-4888-8888-888888888888"},"offset":0,"limit":25},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"}}]}
-        ,{"detail":"full","id":"ae.layer.property.set","version":1,"schemaVersion":1,"summary":"Set one non-keyframed primitive After Effects layer property value.","risk":"write","mutability":"mutating","idempotency":"idempotency-key","cancellation":"before-dispatch","undo":"ae-undo-group","sideEffectSummary":"Changes one primitive layer property and creates one After Effects Undo step.","preconditions":["An After Effects project must be open.","Both locators must come from ae.layer.properties.list@1 for the same layer.","The property must be a non-keyframed scalar, vector, or color leaf stream.","value must differ from the property's current sampled value."],"compatibility":{"status":"unverified","intendedPlatforms":["macos-arm64","windows-x64"]},"inputContractId":"aemcp.contract.ae.layer.property.set.input.v1","resultContractId":"aemcp.contract.ae.layer.property.set.result.v1","contractDigest":"5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c","inputSchema":{"type":"object","additionalProperties":false,"required":["layerLocator","propertyLocator","value","idempotencyKey"],"properties":{"layerLocator":{"$ref":"#/$defs/layerLocator"},"propertyLocator":{"$ref":"#/$defs/streamLocator"},"value":{"$ref":"#/$defs/primitiveValue"},"idempotencyKey":{"type":"string","minLength":16,"maxLength":64,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$"}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"locatorBase":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"enum":["layer","stream"]},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}},"layerLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"layer"}}}]},"streamLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"stream"}}}]},"primitiveValue":{"oneOf":[{"type":"object","additionalProperties":false,"required":["kind","value"],"properties":{"kind":{"const":"scalar"},"value":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}},{"type":"object","additionalProperties":false,"required":["kind","components"],"properties":{"kind":{"const":"vector"},"components":{"type":"array","minItems":2,"maxItems":3,"items":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}}},{"type":"object","additionalProperties":false,"required":["kind","alpha","red","green","blue"],"properties":{"kind":{"const":"color"},"alpha":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"red":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"green":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"blue":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}}]}},"x-invariant":"both-locators-must-share-one-host-session-project-generation"},"resultSchema":{"type":"object","additionalProperties":false,"required":["changed","layerLocator","propertyLocator","valueType","beforeValue","afterValue"],"properties":{"changed":{"const":true},"layerLocator":{"$ref":"#/$defs/layerLocator"},"propertyLocator":{"$ref":"#/$defs/streamLocator"},"valueType":{"enum":["one-d","two-d","two-d-spatial","three-d","three-d-spatial","color"]},"beforeValue":{"$ref":"#/$defs/primitiveValue"},"afterValue":{"$ref":"#/$defs/primitiveValue"}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"locatorBase":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"enum":["layer","stream"]},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}},"layerLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"layer"}}}]},"streamLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"stream"}}}]},"primitiveValue":{"oneOf":[{"type":"object","additionalProperties":false,"required":["kind","value"],"properties":{"kind":{"const":"scalar"},"value":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}},{"type":"object","additionalProperties":false,"required":["kind","components"],"properties":{"kind":{"const":"vector"},"components":{"type":"array","minItems":2,"maxItems":3,"items":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}}},{"type":"object","additionalProperties":false,"required":["kind","alpha","red","green","blue"],"properties":{"kind":{"const":"color"},"alpha":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"red":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"green":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"blue":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}}]}},"x-invariant":"beforeValue-must-differ-from-afterValue-and-values-must-match-valueType"},"requirements":[{"id":"aemcp.requirement.native.layer-property-set","contractVersion":1}],"examples":[{"id":"aemcp-example-layer-property-set","kind":"positive","summary":"Change one non-keyframed scalar property with Undo available.","arguments":{"layerLocator":{"kind":"layer","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"88888888-8888-4888-8888-888888888888"},"propertyLocator":{"kind":"stream","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"cccccccc-cccc-4ccc-8ccc-cccccccccccc"},"value":{"kind":"scalar","value":"40"},"idempotencyKey":"synthetic-property-0001"},"expected":{"outcome":"succeeded","value":{"changed":true,"layerLocator":{"kind":"layer","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"88888888-8888-4888-8888-888888888888"},"propertyLocator":{"kind":"stream","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"cccccccc-cccc-4ccc-8ccc-cccccccccccc"},"valueType":"one-d","beforeValue":{"kind":"scalar","value":"25"},"afterValue":{"kind":"scalar","value":"40"}}}},{"id":"aemcp-example-layer-property-set-keyframed","kind":"negative","summary":"Reject a keyframed stream without changing After Effects state.","arguments":{"layerLocator":{"kind":"layer","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"88888888-8888-4888-8888-888888888888"},"propertyLocator":{"kind":"stream","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"cccccccc-cccc-4ccc-8ccc-cccccccccccc"},"value":{"kind":"scalar","value":"40"},"idempotencyKey":"synthetic-property-0002"},"expected":{"errorCode":"PRECONDITION_FAILED","recoveryAction":"change-arguments"}}]}
+        {
+          "detail": "full",
+          "id": "ae.composition.selected-layers.list",
+          "version": 1,
+          "schemaVersion": 1,
+          "summary": "List a bounded page of selected layers in one After Effects composition.",
+          "risk": "read",
+          "mutability": "read-only",
+          "idempotency": "idempotent",
+          "cancellation": "before-dispatch",
+          "undo": "not-applicable",
+          "sideEffectSummary": "Reads selected composition layers without changing After Effects state.",
+          "preconditions": [
+            "An After Effects project must be open.",
+            "compositionLocator must come from ae.project.items.list@1."
+          ],
+          "compatibility": {
+            "status": "unverified",
+            "intendedPlatforms": [
+              "macos-arm64",
+              "windows-x64"
+            ]
+          },
+          "inputContractId": "aemcp.contract.ae.composition.selected-layers.list.input.v1",
+          "resultContractId": "aemcp.contract.ae.composition.selected-layers.list.result.v1",
+          "contractDigest": "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "compositionLocator",
+              "offset",
+              "limit"
+            ],
+            "properties": {
+              "compositionLocator": {
+                "$ref": "#/$defs/compositionLocator"
+              },
+              "offset": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "default": 0,
+                "x-omissionBehavior": 0
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 50,
+                "default": 25,
+                "x-omissionBehavior": 25
+              }
+            },
+            "$defs": {
+              "uuid": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "compositionLocator": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "hostInstanceId",
+                  "sessionId",
+                  "projectId",
+                  "generation",
+                  "objectId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "composition"
+                  },
+                  "hostInstanceId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "sessionId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "projectId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "objectId": {
+                    "$ref": "#/$defs/uuid"
+                  }
+                }
+              }
+            }
+          },
+          "resultSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "compositionLocator",
+              "compositionName",
+              "total",
+              "offset",
+              "limit",
+              "returned",
+              "hasMore",
+              "nextOffset",
+              "layers"
+            ],
+            "properties": {
+              "compositionLocator": {
+                "$ref": "#/$defs/compositionLocator"
+              },
+              "compositionName": {
+                "type": "string",
+                "maxLength": 1024
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "offset": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 50
+              },
+              "returned": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 50
+              },
+              "hasMore": {
+                "type": "boolean"
+              },
+              "nextOffset": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                ]
+              },
+              "layers": {
+                "type": "array",
+                "maxItems": 50,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "locator",
+                    "stackIndex",
+                    "name",
+                    "type",
+                    "videoEnabled",
+                    "isThreeD",
+                    "locked",
+                    "parentLocator",
+                    "sourceItemLocator"
+                  ],
+                  "properties": {
+                    "locator": {
+                      "$ref": "#/$defs/layerLocator"
+                    },
+                    "stackIndex": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "name": {
+                      "type": "string",
+                      "maxLength": 1024
+                    },
+                    "type": {
+                      "enum": [
+                        "av",
+                        "camera",
+                        "light",
+                        "text",
+                        "shape",
+                        "model3d",
+                        "null",
+                        "adjustment",
+                        "unknown"
+                      ]
+                    },
+                    "videoEnabled": {
+                      "type": "boolean"
+                    },
+                    "isThreeD": {
+                      "type": "boolean"
+                    },
+                    "locked": {
+                      "type": "boolean"
+                    },
+                    "parentLocator": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "$ref": "#/$defs/layerLocator"
+                        }
+                      ]
+                    },
+                    "sourceItemLocator": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "$ref": "#/$defs/sourceItemLocator"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "$defs": {
+              "uuid": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "locatorBase": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "hostInstanceId",
+                  "sessionId",
+                  "projectId",
+                  "generation",
+                  "objectId"
+                ],
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "project",
+                      "item",
+                      "composition",
+                      "layer",
+                      "stream"
+                    ]
+                  },
+                  "hostInstanceId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "sessionId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "projectId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "objectId": {
+                    "$ref": "#/$defs/uuid"
+                  }
+                }
+              },
+              "compositionLocator": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/locatorBase"
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "composition"
+                      }
+                    }
+                  }
+                ]
+              },
+              "layerLocator": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/locatorBase"
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "layer"
+                      }
+                    }
+                  }
+                ]
+              },
+              "sourceItemLocator": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/locatorBase"
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "item",
+                          "composition"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "x-invariant": "returned-equals-layers-length-and-page-metadata-is-self-consistent"
+          },
+          "requirements": [
+            {
+              "id": "aemcp.requirement.native.composition-selected-layers-list",
+              "contractVersion": 1
+            }
+          ],
+          "examples": [
+            {
+              "id": "aemcp-example-composition-selected-layers-list-empty",
+              "kind": "positive",
+              "summary": "List an empty selected-layer page for a composition.",
+              "arguments": {
+                "compositionLocator": {
+                  "kind": "composition",
+                  "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                  "sessionId": "11111111-1111-4111-8111-111111111111",
+                  "projectId": "44444444-4444-4444-8444-444444444444",
+                  "generation": 8,
+                  "objectId": "66666666-6666-4666-8666-666666666666"
+                },
+                "offset": 0,
+                "limit": 25
+              },
+              "expected": {
+                "outcome": "succeeded",
+                "value": {
+                  "compositionLocator": {
+                    "kind": "composition",
+                    "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                    "sessionId": "11111111-1111-4111-8111-111111111111",
+                    "projectId": "44444444-4444-4444-8444-444444444444",
+                    "generation": 8,
+                    "objectId": "66666666-6666-4666-8666-666666666666"
+                  },
+                  "compositionName": "SYNTHETIC_COMPOSITION",
+                  "total": 0,
+                  "offset": 0,
+                  "limit": 25,
+                  "returned": 0,
+                  "hasMore": false,
+                  "nextOffset": null,
+                  "layers": []
+                }
+              }
+            },
+            {
+              "id": "aemcp-example-composition-selected-layers-list-stale",
+              "kind": "negative",
+              "summary": "Refresh a stale composition locator before listing selected layers.",
+              "arguments": {
+                "compositionLocator": {
+                  "kind": "composition",
+                  "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                  "sessionId": "11111111-1111-4111-8111-111111111111",
+                  "projectId": "44444444-4444-4444-8444-444444444444",
+                  "generation": 8,
+                  "objectId": "66666666-6666-4666-8666-666666666666"
+                },
+                "offset": 0,
+                "limit": 25
+              },
+              "expected": {
+                "errorCode": "STALE_LOCATOR",
+                "recoveryAction": "refresh-locator"
+              }
+            }
+          ]
+        },
+        {
+          "detail": "full",
+          "id": "ae.composition.time.read",
+          "version": 1,
+          "schemaVersion": 1,
+          "summary": "Read the current time of one After Effects composition.",
+          "risk": "read",
+          "mutability": "read-only",
+          "idempotency": "idempotent",
+          "cancellation": "before-dispatch",
+          "undo": "not-applicable",
+          "sideEffectSummary": "Reads composition time without changing After Effects state.",
+          "preconditions": [
+            "An After Effects project must be open.",
+            "compositionLocator must come from ae.project.items.list@1."
+          ],
+          "compatibility": {
+            "status": "unverified",
+            "intendedPlatforms": [
+              "macos-arm64",
+              "windows-x64"
+            ]
+          },
+          "inputContractId": "aemcp.contract.ae.composition.time.read.input.v1",
+          "resultContractId": "aemcp.contract.ae.composition.time.read.result.v1",
+          "contractDigest": "fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd",
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "compositionLocator"
+            ],
+            "properties": {
+              "compositionLocator": {
+                "$ref": "#/$defs/compositionLocator"
+              }
+            },
+            "$defs": {
+              "uuid": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "compositionLocator": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "hostInstanceId",
+                  "sessionId",
+                  "projectId",
+                  "generation",
+                  "objectId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "composition"
+                  },
+                  "hostInstanceId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "sessionId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "projectId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "objectId": {
+                    "$ref": "#/$defs/uuid"
+                  }
+                }
+              }
+            }
+          },
+          "resultSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "compositionLocator",
+              "currentTime"
+            ],
+            "properties": {
+              "compositionLocator": {
+                "$ref": "#/$defs/compositionLocator"
+              },
+              "currentTime": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "value",
+                  "scale",
+                  "secondsRational"
+                ],
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": -2147483648,
+                    "maximum": 2147483647
+                  },
+                  "scale": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4294967295
+                  },
+                  "secondsRational": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 28,
+                    "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+                  }
+                }
+              }
+            },
+            "$defs": {
+              "uuid": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "compositionLocator": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "hostInstanceId",
+                  "sessionId",
+                  "projectId",
+                  "generation",
+                  "objectId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "composition"
+                  },
+                  "hostInstanceId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "sessionId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "projectId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "objectId": {
+                    "$ref": "#/$defs/uuid"
+                  }
+                }
+              }
+            },
+            "x-invariant": "secondsRational-is-the-reduced-canonical-form-of-value-over-scale"
+          },
+          "requirements": [
+            {
+              "id": "aemcp.requirement.native.composition-time-read",
+              "contractVersion": 1
+            }
+          ],
+          "examples": [
+            {
+              "id": "aemcp-example-composition-time-read",
+              "kind": "positive",
+              "summary": "Read an exact rational current time from a composition.",
+              "arguments": {
+                "compositionLocator": {
+                  "kind": "composition",
+                  "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                  "sessionId": "11111111-1111-4111-8111-111111111111",
+                  "projectId": "44444444-4444-4444-8444-444444444444",
+                  "generation": 8,
+                  "objectId": "66666666-6666-4666-8666-666666666666"
+                }
+              },
+              "expected": {
+                "outcome": "succeeded",
+                "value": {
+                  "compositionLocator": {
+                    "kind": "composition",
+                    "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                    "sessionId": "11111111-1111-4111-8111-111111111111",
+                    "projectId": "44444444-4444-4444-8444-444444444444",
+                    "generation": 8,
+                    "objectId": "66666666-6666-4666-8666-666666666666"
+                  },
+                  "currentTime": {
+                    "value": 3003,
+                    "scale": 1000,
+                    "secondsRational": "3003/1000"
+                  }
+                }
+              }
+            },
+            {
+              "id": "aemcp-example-composition-time-read-stale",
+              "kind": "negative",
+              "summary": "Refresh a stale composition locator before reading current time.",
+              "arguments": {
+                "compositionLocator": {
+                  "kind": "composition",
+                  "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                  "sessionId": "11111111-1111-4111-8111-111111111111",
+                  "projectId": "44444444-4444-4444-8444-444444444444",
+                  "generation": 8,
+                  "objectId": "66666666-6666-4666-8666-666666666666"
+                }
+              },
+              "expected": {
+                "errorCode": "STALE_LOCATOR",
+                "recoveryAction": "refresh-locator"
+              }
+            }
+          ]
+        },
+        {
+          "detail": "full",
+          "id": "ae.composition.time.set",
+          "version": 1,
+          "schemaVersion": 1,
+          "summary": "Set the current time of one After Effects composition.",
+          "risk": "write",
+          "mutability": "mutating",
+          "idempotency": "idempotency-key",
+          "cancellation": "before-dispatch",
+          "undo": "ae-undo-group",
+          "sideEffectSummary": "Changes composition current time and creates one After Effects Undo step.",
+          "preconditions": [
+            "An After Effects project must be open.",
+            "compositionLocator must come from ae.project.items.list@1.",
+            "targetTime must differ from the composition's current time."
+          ],
+          "compatibility": {
+            "status": "unverified",
+            "intendedPlatforms": [
+              "macos-arm64",
+              "windows-x64"
+            ]
+          },
+          "inputContractId": "aemcp.contract.ae.composition.time.set.input.v1",
+          "resultContractId": "aemcp.contract.ae.composition.time.set.result.v1",
+          "contractDigest": "724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308",
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "compositionLocator",
+              "targetTime",
+              "idempotencyKey"
+            ],
+            "properties": {
+              "compositionLocator": {
+                "$ref": "#/$defs/compositionLocator"
+              },
+              "targetTime": {
+                "$ref": "#/$defs/timeInput"
+              },
+              "idempotencyKey": {
+                "type": "string",
+                "minLength": 16,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+              }
+            },
+            "$defs": {
+              "uuid": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "compositionLocator": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "hostInstanceId",
+                  "sessionId",
+                  "projectId",
+                  "generation",
+                  "objectId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "composition"
+                  },
+                  "hostInstanceId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "sessionId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "projectId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "objectId": {
+                    "$ref": "#/$defs/uuid"
+                  }
+                }
+              },
+              "timeInput": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "value",
+                  "scale"
+                ],
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": -2147483648,
+                    "maximum": 2147483647
+                  },
+                  "scale": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4294967295
+                  }
+                }
+              }
+            }
+          },
+          "resultSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "changed",
+              "compositionLocator",
+              "beforeTime",
+              "afterTime"
+            ],
+            "properties": {
+              "changed": {
+                "const": true
+              },
+              "compositionLocator": {
+                "$ref": "#/$defs/compositionLocator"
+              },
+              "beforeTime": {
+                "$ref": "#/$defs/currentTime"
+              },
+              "afterTime": {
+                "$ref": "#/$defs/currentTime"
+              }
+            },
+            "$defs": {
+              "uuid": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "compositionLocator": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "hostInstanceId",
+                  "sessionId",
+                  "projectId",
+                  "generation",
+                  "objectId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "composition"
+                  },
+                  "hostInstanceId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "sessionId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "projectId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "objectId": {
+                    "$ref": "#/$defs/uuid"
+                  }
+                }
+              },
+              "currentTime": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "value",
+                  "scale",
+                  "secondsRational"
+                ],
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": -2147483648,
+                    "maximum": 2147483647
+                  },
+                  "scale": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4294967295
+                  },
+                  "secondsRational": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 28,
+                    "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+                  }
+                }
+              }
+            },
+            "x-invariant": "beforeTime-must-differ-from-afterTime-and-afterTime-must-equal-targetTime"
+          },
+          "requirements": [
+            {
+              "id": "aemcp.requirement.native.composition-time-set",
+              "contractVersion": 1
+            }
+          ],
+          "examples": [
+            {
+              "id": "aemcp-example-composition-time-set",
+              "kind": "positive",
+              "summary": "Set and verify an exact rational composition time.",
+              "arguments": {
+                "compositionLocator": {
+                  "kind": "composition",
+                  "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                  "sessionId": "11111111-1111-4111-8111-111111111111",
+                  "projectId": "44444444-4444-4444-8444-444444444444",
+                  "generation": 8,
+                  "objectId": "66666666-6666-4666-8666-666666666666"
+                },
+                "targetTime": {
+                  "value": 1,
+                  "scale": 1
+                },
+                "idempotencyKey": "synthetic-comp-time-0001"
+              },
+              "expected": {
+                "outcome": "succeeded",
+                "value": {
+                  "changed": true,
+                  "compositionLocator": {
+                    "kind": "composition",
+                    "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                    "sessionId": "11111111-1111-4111-8111-111111111111",
+                    "projectId": "44444444-4444-4444-8444-444444444444",
+                    "generation": 8,
+                    "objectId": "66666666-6666-4666-8666-666666666666"
+                  },
+                  "beforeTime": {
+                    "value": 0,
+                    "scale": 1,
+                    "secondsRational": "0"
+                  },
+                  "afterTime": {
+                    "value": 1,
+                    "scale": 1,
+                    "secondsRational": "1"
+                  }
+                }
+              }
+            },
+            {
+              "id": "aemcp-example-composition-time-set-stale",
+              "kind": "negative",
+              "summary": "Refresh a stale composition locator before setting current time.",
+              "arguments": {
+                "compositionLocator": {
+                  "kind": "composition",
+                  "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                  "sessionId": "11111111-1111-4111-8111-111111111111",
+                  "projectId": "44444444-4444-4444-8444-444444444444",
+                  "generation": 8,
+                  "objectId": "66666666-6666-4666-8666-666666666666"
+                },
+                "targetTime": {
+                  "value": 1,
+                  "scale": 1
+                },
+                "idempotencyKey": "synthetic-comp-time-0002"
+              },
+              "expected": {
+                "errorCode": "STALE_LOCATOR",
+                "recoveryAction": "refresh-locator"
+              }
+            }
+          ]
+        },
+        {
+          "detail": "full",
+          "id": "ae.composition.layer.create",
+          "version": 1,
+          "schemaVersion": 1,
+          "summary": "Create one null or solid layer in an After Effects composition.",
+          "risk": "write",
+          "mutability": "mutating",
+          "idempotency": "idempotency-key",
+          "cancellation": "before-dispatch",
+          "undo": "ae-undo-group",
+          "sideEffectSummary": "Creates one composition layer, may create one solid project item, and creates one After Effects Undo step.",
+          "preconditions": [
+            "An After Effects project must be open.",
+            "compositionLocator must come from ae.project.items.list@1.",
+            "kind must be null or solid and solid-only options require kind solid."
+          ],
+          "compatibility": {
+            "status": "unverified",
+            "intendedPlatforms": [
+              "macos-arm64",
+              "windows-x64"
+            ]
+          },
+          "inputContractId": "aemcp.contract.ae.composition.layer.create.input.v1",
+          "resultContractId": "aemcp.contract.ae.composition.layer.create.result.v1",
+          "contractDigest": "d48b5c0fcf9871ee579bf518679bc36277e2fd5194e70d9cc6fa1b2c573edeee",
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "compositionLocator",
+              "kind",
+              "name",
+              "idempotencyKey"
+            ],
+            "properties": {
+              "compositionLocator": {
+                "$ref": "#/$defs/compositionLocator"
+              },
+              "kind": {
+                "enum": [
+                  "null",
+                  "solid"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255
+              },
+              "color": {
+                "$ref": "#/$defs/color",
+                "default": {
+                  "red": 255,
+                  "green": 255,
+                  "blue": 255,
+                  "alpha": 255
+                },
+                "x-omissionBehavior": "opaque-white"
+              },
+              "width": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 30000,
+                "x-omissionBehavior": "composition-width"
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 30000,
+                "x-omissionBehavior": "composition-height"
+              },
+              "duration": {
+                "$ref": "#/$defs/timeInput",
+                "x-omissionBehavior": "composition-duration"
+              },
+              "idempotencyKey": {
+                "type": "string",
+                "minLength": 16,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+              }
+            },
+            "$defs": {
+              "uuid": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "compositionLocator": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "hostInstanceId",
+                  "sessionId",
+                  "projectId",
+                  "generation",
+                  "objectId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "composition"
+                  },
+                  "hostInstanceId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "sessionId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "projectId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "objectId": {
+                    "$ref": "#/$defs/uuid"
+                  }
+                }
+              },
+              "timeInput": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "value",
+                  "scale"
+                ],
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": -2147483648,
+                    "maximum": 2147483647
+                  },
+                  "scale": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4294967295
+                  }
+                }
+              },
+              "color": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "red",
+                  "green",
+                  "blue",
+                  "alpha"
+                ],
+                "properties": {
+                  "red": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "green": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "blue": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "alpha": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  }
+                }
+              }
+            },
+            "x-invariant": "solid-options-are-forbidden-when-kind-is-null"
+          },
+          "resultSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "changed",
+              "kind",
+              "name",
+              "stackIndex",
+              "compositionLocator",
+              "layerLocator",
+              "sourceItemLocator",
+              "layerCountBefore",
+              "layerCountAfter",
+              "projectItemCountBefore",
+              "projectItemCountAfter",
+              "solid"
+            ],
+            "properties": {
+              "changed": {
+                "const": true
+              },
+              "kind": {
+                "enum": [
+                  "null",
+                  "solid"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255
+              },
+              "stackIndex": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "compositionLocator": {
+                "$ref": "#/$defs/compositionLocator"
+              },
+              "layerLocator": {
+                "$ref": "#/$defs/layerLocator"
+              },
+              "sourceItemLocator": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/itemLocator"
+                  }
+                ]
+              },
+              "layerCountBefore": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "layerCountAfter": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "projectItemCountBefore": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "projectItemCountAfter": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "solid": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/solidSpec"
+                  }
+                ]
+              }
+            },
+            "$defs": {
+              "uuid": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "locatorBase": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "hostInstanceId",
+                  "sessionId",
+                  "projectId",
+                  "generation",
+                  "objectId"
+                ],
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "composition",
+                      "layer",
+                      "item"
+                    ]
+                  },
+                  "hostInstanceId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "sessionId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "projectId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "objectId": {
+                    "$ref": "#/$defs/uuid"
+                  }
+                }
+              },
+              "compositionLocator": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/locatorBase"
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "composition"
+                      }
+                    }
+                  }
+                ]
+              },
+              "layerLocator": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/locatorBase"
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "layer"
+                      }
+                    }
+                  }
+                ]
+              },
+              "itemLocator": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/locatorBase"
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "item",
+                          "composition"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              },
+              "currentTime": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "value",
+                  "scale",
+                  "secondsRational"
+                ],
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": -2147483648,
+                    "maximum": 2147483647
+                  },
+                  "scale": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4294967295
+                  },
+                  "secondsRational": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 28,
+                    "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+                  }
+                }
+              },
+              "color": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "red",
+                  "green",
+                  "blue",
+                  "alpha"
+                ],
+                "properties": {
+                  "red": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "green": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "blue": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "alpha": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  }
+                }
+              },
+              "solidSpec": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "color",
+                  "width",
+                  "height",
+                  "duration"
+                ],
+                "properties": {
+                  "color": {
+                    "$ref": "#/$defs/color"
+                  },
+                  "width": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 30000
+                  },
+                  "height": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 30000
+                  },
+                  "duration": {
+                    "$ref": "#/$defs/currentTime"
+                  }
+                }
+              }
+            },
+            "x-invariant": "new-locators-share-one-post-mutation-generation;layerCountAfter-equals-layerCountBefore-plus-one;solid-requires-source-item-and-solid-metadata"
+          },
+          "requirements": [
+            {
+              "id": "aemcp.requirement.native.composition-layer-create",
+              "contractVersion": 1
+            }
+          ],
+          "examples": [
+            {
+              "id": "aemcp-example-composition-layer-create-null",
+              "kind": "positive",
+              "summary": "Create and verify one named null layer with Undo available.",
+              "arguments": {
+                "compositionLocator": {
+                  "kind": "composition",
+                  "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                  "sessionId": "11111111-1111-4111-8111-111111111111",
+                  "projectId": "44444444-4444-4444-8444-444444444444",
+                  "generation": 8,
+                  "objectId": "66666666-6666-4666-8666-666666666666"
+                },
+                "kind": "null",
+                "name": "SYNTHETIC_NULL",
+                "idempotencyKey": "synthetic-layer-create-0001"
+              },
+              "expected": {
+                "outcome": "succeeded",
+                "value": {
+                  "changed": true,
+                  "kind": "null",
+                  "name": "SYNTHETIC_NULL",
+                  "stackIndex": 1,
+                  "compositionLocator": {
+                    "kind": "composition",
+                    "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                    "sessionId": "11111111-1111-4111-8111-111111111111",
+                    "projectId": "55555555-5555-4555-8555-555555555555",
+                    "generation": 9,
+                    "objectId": "66666666-6666-4666-8666-666666666666"
+                  },
+                  "layerLocator": {
+                    "kind": "layer",
+                    "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                    "sessionId": "11111111-1111-4111-8111-111111111111",
+                    "projectId": "55555555-5555-4555-8555-555555555555",
+                    "generation": 9,
+                    "objectId": "99999999-9999-4999-8999-999999999999"
+                  },
+                  "sourceItemLocator": null,
+                  "layerCountBefore": 0,
+                  "layerCountAfter": 1,
+                  "projectItemCountBefore": 2,
+                  "projectItemCountAfter": 2,
+                  "solid": null
+                }
+              }
+            },
+            {
+              "id": "aemcp-example-composition-layer-create-stale",
+              "kind": "negative",
+              "summary": "Refresh a stale composition locator before creating a layer.",
+              "arguments": {
+                "compositionLocator": {
+                  "kind": "composition",
+                  "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                  "sessionId": "11111111-1111-4111-8111-111111111111",
+                  "projectId": "44444444-4444-4444-8444-444444444444",
+                  "generation": 8,
+                  "objectId": "66666666-6666-4666-8666-666666666666"
+                },
+                "kind": "null",
+                "name": "SYNTHETIC_NULL",
+                "idempotencyKey": "synthetic-layer-create-0002"
+              },
+              "expected": {
+                "errorCode": "STALE_LOCATOR",
+                "recoveryAction": "refresh-locator"
+              }
+            }
+          ]
+        },
+        {
+          "detail": "full",
+          "id": "ae.layer.properties.list",
+          "version": 1,
+          "schemaVersion": 1,
+          "summary": "List a bounded page of direct properties on an After Effects layer or property group.",
+          "risk": "read",
+          "mutability": "read-only",
+          "idempotency": "idempotent",
+          "cancellation": "before-dispatch",
+          "undo": "not-applicable",
+          "sideEffectSummary": "Reads layer properties and safe primitive values without changing After Effects state.",
+          "preconditions": [
+            "An After Effects project must be open.",
+            "layerLocator must come from ae.composition.layers.list@1.",
+            "parentPropertyLocator must come from ae.layer.properties.list@1 for the same layer."
+          ],
+          "compatibility": {
+            "status": "unverified",
+            "intendedPlatforms": [
+              "macos-arm64",
+              "windows-x64"
+            ]
+          },
+          "inputContractId": "aemcp.contract.ae.layer.properties.list.input.v1",
+          "resultContractId": "aemcp.contract.ae.layer.properties.list.result.v1",
+          "contractDigest": "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba",
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "layerLocator",
+              "offset",
+              "limit"
+            ],
+            "properties": {
+              "layerLocator": {
+                "$ref": "#/$defs/layerLocator"
+              },
+              "parentPropertyLocator": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/streamLocator"
+                  }
+                ]
+              },
+              "offset": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "default": 0,
+                "x-omissionBehavior": 0
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 25,
+                "default": 25,
+                "x-omissionBehavior": 25
+              }
+            },
+            "$defs": {
+              "uuid": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "layerLocator": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "hostInstanceId",
+                  "sessionId",
+                  "projectId",
+                  "generation",
+                  "objectId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "layer"
+                  },
+                  "hostInstanceId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "sessionId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "projectId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "objectId": {
+                    "$ref": "#/$defs/uuid"
+                  }
+                }
+              },
+              "streamLocator": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "hostInstanceId",
+                  "sessionId",
+                  "projectId",
+                  "generation",
+                  "objectId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "stream"
+                  },
+                  "hostInstanceId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "sessionId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "projectId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "objectId": {
+                    "$ref": "#/$defs/uuid"
+                  }
+                }
+              }
+            }
+          },
+          "resultSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "layerLocator",
+              "parentPropertyLocator",
+              "layerName",
+              "sampleTime",
+              "total",
+              "offset",
+              "limit",
+              "returned",
+              "hasMore",
+              "nextOffset",
+              "properties"
+            ],
+            "properties": {
+              "layerLocator": {
+                "$ref": "#/$defs/layerLocator"
+              },
+              "parentPropertyLocator": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/streamLocator"
+                  }
+                ]
+              },
+              "layerName": {
+                "type": "string",
+                "maxLength": 1024
+              },
+              "sampleTime": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "value",
+                  "scale",
+                  "mode"
+                ],
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "scale": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "mode": {
+                    "const": "comp-time"
+                  }
+                }
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "offset": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 25
+              },
+              "returned": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 25
+              },
+              "hasMore": {
+                "type": "boolean"
+              },
+              "nextOffset": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                ]
+              },
+              "properties": {
+                "type": "array",
+                "maxItems": 25,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "propertyLocator",
+                    "propertyIndex",
+                    "name",
+                    "matchName",
+                    "groupingType",
+                    "childCount",
+                    "hidden",
+                    "disabled",
+                    "modified",
+                    "canVaryOverTime",
+                    "timeVarying",
+                    "valueType",
+                    "valueStatus",
+                    "value"
+                  ],
+                  "properties": {
+                    "propertyLocator": {
+                      "$ref": "#/$defs/streamLocator"
+                    },
+                    "propertyIndex": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "name": {
+                      "type": "string",
+                      "maxLength": 1024
+                    },
+                    "matchName": {
+                      "type": "string",
+                      "maxLength": 40
+                    },
+                    "groupingType": {
+                      "enum": [
+                        "leaf",
+                        "named-group",
+                        "indexed-group"
+                      ]
+                    },
+                    "childCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "hidden": {
+                      "type": "boolean"
+                    },
+                    "disabled": {
+                      "type": "boolean"
+                    },
+                    "modified": {
+                      "type": "boolean"
+                    },
+                    "canVaryOverTime": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "boolean"
+                        }
+                      ]
+                    },
+                    "timeVarying": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "boolean"
+                        }
+                      ]
+                    },
+                    "valueType": {
+                      "enum": [
+                        "none",
+                        "one-d",
+                        "two-d",
+                        "two-d-spatial",
+                        "three-d",
+                        "three-d-spatial",
+                        "color",
+                        "arb",
+                        "marker",
+                        "layer-id",
+                        "mask-id",
+                        "mask",
+                        "text-document",
+                        "unknown"
+                      ]
+                    },
+                    "valueStatus": {
+                      "enum": [
+                        "group",
+                        "sampled",
+                        "no-data",
+                        "unsupported"
+                      ]
+                    },
+                    "value": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "properties": {
+                            "kind": {
+                              "const": "scalar"
+                            },
+                            "value": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 32,
+                              "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "kind",
+                            "components"
+                          ],
+                          "properties": {
+                            "kind": {
+                              "const": "vector"
+                            },
+                            "components": {
+                              "type": "array",
+                              "minItems": 2,
+                              "maxItems": 3,
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32,
+                                "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "kind",
+                            "alpha",
+                            "red",
+                            "green",
+                            "blue"
+                          ],
+                          "properties": {
+                            "kind": {
+                              "const": "color"
+                            },
+                            "alpha": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 32,
+                              "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                            },
+                            "red": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 32,
+                              "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                            },
+                            "green": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 32,
+                              "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                            },
+                            "blue": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 32,
+                              "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "$defs": {
+              "uuid": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "locatorBase": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "hostInstanceId",
+                  "sessionId",
+                  "projectId",
+                  "generation",
+                  "objectId"
+                ],
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "project",
+                      "item",
+                      "composition",
+                      "layer",
+                      "stream"
+                    ]
+                  },
+                  "hostInstanceId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "sessionId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "projectId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "objectId": {
+                    "$ref": "#/$defs/uuid"
+                  }
+                }
+              },
+              "layerLocator": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/locatorBase"
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "layer"
+                      }
+                    }
+                  }
+                ]
+              },
+              "streamLocator": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/locatorBase"
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "stream"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "x-invariant": "returned-equals-properties-length-and-page-metadata-and-value-types-are-self-consistent"
+          },
+          "requirements": [
+            {
+              "id": "aemcp.requirement.native.layer-properties-list",
+              "contractVersion": 1
+            }
+          ],
+          "examples": [
+            {
+              "id": "aemcp-example-layer-properties-list-empty",
+              "kind": "positive",
+              "summary": "List the first bounded page of direct properties on a layer.",
+              "arguments": {
+                "layerLocator": {
+                  "kind": "layer",
+                  "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                  "sessionId": "11111111-1111-4111-8111-111111111111",
+                  "projectId": "44444444-4444-4444-8444-444444444444",
+                  "generation": 8,
+                  "objectId": "88888888-8888-4888-8888-888888888888"
+                },
+                "offset": 0,
+                "limit": 25
+              },
+              "expected": {
+                "outcome": "succeeded",
+                "value": {
+                  "layerLocator": {
+                    "kind": "layer",
+                    "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                    "sessionId": "11111111-1111-4111-8111-111111111111",
+                    "projectId": "44444444-4444-4444-8444-444444444444",
+                    "generation": 8,
+                    "objectId": "88888888-8888-4888-8888-888888888888"
+                  },
+                  "parentPropertyLocator": null,
+                  "layerName": "SYNTHETIC_LAYER",
+                  "sampleTime": {
+                    "value": 0,
+                    "scale": 1,
+                    "mode": "comp-time"
+                  },
+                  "total": 0,
+                  "offset": 0,
+                  "limit": 25,
+                  "returned": 0,
+                  "hasMore": false,
+                  "nextOffset": null,
+                  "properties": []
+                }
+              }
+            },
+            {
+              "id": "aemcp-example-layer-properties-list-stale",
+              "kind": "negative",
+              "summary": "Refresh stale layer and property locators before listing properties.",
+              "arguments": {
+                "layerLocator": {
+                  "kind": "layer",
+                  "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                  "sessionId": "11111111-1111-4111-8111-111111111111",
+                  "projectId": "44444444-4444-4444-8444-444444444444",
+                  "generation": 8,
+                  "objectId": "88888888-8888-4888-8888-888888888888"
+                },
+                "offset": 0,
+                "limit": 25
+              },
+              "expected": {
+                "errorCode": "STALE_LOCATOR",
+                "recoveryAction": "refresh-locator"
+              }
+            }
+          ]
+        },
+        {
+          "detail": "full",
+          "id": "ae.layer.property.set",
+          "version": 1,
+          "schemaVersion": 1,
+          "summary": "Set one non-keyframed primitive After Effects layer property value.",
+          "risk": "write",
+          "mutability": "mutating",
+          "idempotency": "idempotency-key",
+          "cancellation": "before-dispatch",
+          "undo": "ae-undo-group",
+          "sideEffectSummary": "Changes one primitive layer property and creates one After Effects Undo step.",
+          "preconditions": [
+            "An After Effects project must be open.",
+            "Both locators must come from ae.layer.properties.list@1 for the same layer.",
+            "The property must be a non-keyframed scalar, vector, or color leaf stream.",
+            "value must differ from the property's current sampled value."
+          ],
+          "compatibility": {
+            "status": "unverified",
+            "intendedPlatforms": [
+              "macos-arm64",
+              "windows-x64"
+            ]
+          },
+          "inputContractId": "aemcp.contract.ae.layer.property.set.input.v1",
+          "resultContractId": "aemcp.contract.ae.layer.property.set.result.v1",
+          "contractDigest": "5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c",
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "layerLocator",
+              "propertyLocator",
+              "value",
+              "idempotencyKey"
+            ],
+            "properties": {
+              "layerLocator": {
+                "$ref": "#/$defs/layerLocator"
+              },
+              "propertyLocator": {
+                "$ref": "#/$defs/streamLocator"
+              },
+              "value": {
+                "$ref": "#/$defs/primitiveValue"
+              },
+              "idempotencyKey": {
+                "type": "string",
+                "minLength": 16,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+              }
+            },
+            "$defs": {
+              "uuid": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "locatorBase": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "hostInstanceId",
+                  "sessionId",
+                  "projectId",
+                  "generation",
+                  "objectId"
+                ],
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "layer",
+                      "stream"
+                    ]
+                  },
+                  "hostInstanceId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "sessionId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "projectId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "objectId": {
+                    "$ref": "#/$defs/uuid"
+                  }
+                }
+              },
+              "layerLocator": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/locatorBase"
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "layer"
+                      }
+                    }
+                  }
+                ]
+              },
+              "streamLocator": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/locatorBase"
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "stream"
+                      }
+                    }
+                  }
+                ]
+              },
+              "primitiveValue": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "value"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "scalar"
+                      },
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32,
+                        "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "components"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "vector"
+                      },
+                      "components": {
+                        "type": "array",
+                        "minItems": 2,
+                        "maxItems": 3,
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 32,
+                          "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "alpha",
+                      "red",
+                      "green",
+                      "blue"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "color"
+                      },
+                      "alpha": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32,
+                        "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                      },
+                      "red": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32,
+                        "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                      },
+                      "green": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32,
+                        "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                      },
+                      "blue": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32,
+                        "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "x-invariant": "both-locators-must-share-one-host-session-project-generation"
+          },
+          "resultSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "changed",
+              "layerLocator",
+              "propertyLocator",
+              "valueType",
+              "beforeValue",
+              "afterValue"
+            ],
+            "properties": {
+              "changed": {
+                "const": true
+              },
+              "layerLocator": {
+                "$ref": "#/$defs/layerLocator"
+              },
+              "propertyLocator": {
+                "$ref": "#/$defs/streamLocator"
+              },
+              "valueType": {
+                "enum": [
+                  "one-d",
+                  "two-d",
+                  "two-d-spatial",
+                  "three-d",
+                  "three-d-spatial",
+                  "color"
+                ]
+              },
+              "beforeValue": {
+                "$ref": "#/$defs/primitiveValue"
+              },
+              "afterValue": {
+                "$ref": "#/$defs/primitiveValue"
+              }
+            },
+            "$defs": {
+              "uuid": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "locatorBase": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "hostInstanceId",
+                  "sessionId",
+                  "projectId",
+                  "generation",
+                  "objectId"
+                ],
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "layer",
+                      "stream"
+                    ]
+                  },
+                  "hostInstanceId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "sessionId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "projectId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "objectId": {
+                    "$ref": "#/$defs/uuid"
+                  }
+                }
+              },
+              "layerLocator": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/locatorBase"
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "layer"
+                      }
+                    }
+                  }
+                ]
+              },
+              "streamLocator": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/locatorBase"
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "stream"
+                      }
+                    }
+                  }
+                ]
+              },
+              "primitiveValue": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "value"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "scalar"
+                      },
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32,
+                        "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "components"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "vector"
+                      },
+                      "components": {
+                        "type": "array",
+                        "minItems": 2,
+                        "maxItems": 3,
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 32,
+                          "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "alpha",
+                      "red",
+                      "green",
+                      "blue"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "color"
+                      },
+                      "alpha": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32,
+                        "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                      },
+                      "red": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32,
+                        "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                      },
+                      "green": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32,
+                        "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                      },
+                      "blue": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32,
+                        "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "x-invariant": "beforeValue-must-differ-from-afterValue-and-values-must-match-valueType"
+          },
+          "requirements": [
+            {
+              "id": "aemcp.requirement.native.layer-property-set",
+              "contractVersion": 1
+            }
+          ],
+          "examples": [
+            {
+              "id": "aemcp-example-layer-property-set",
+              "kind": "positive",
+              "summary": "Change one non-keyframed scalar property with Undo available.",
+              "arguments": {
+                "layerLocator": {
+                  "kind": "layer",
+                  "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                  "sessionId": "11111111-1111-4111-8111-111111111111",
+                  "projectId": "44444444-4444-4444-8444-444444444444",
+                  "generation": 8,
+                  "objectId": "88888888-8888-4888-8888-888888888888"
+                },
+                "propertyLocator": {
+                  "kind": "stream",
+                  "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                  "sessionId": "11111111-1111-4111-8111-111111111111",
+                  "projectId": "44444444-4444-4444-8444-444444444444",
+                  "generation": 8,
+                  "objectId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+                },
+                "value": {
+                  "kind": "scalar",
+                  "value": "40"
+                },
+                "idempotencyKey": "synthetic-property-0001"
+              },
+              "expected": {
+                "outcome": "succeeded",
+                "value": {
+                  "changed": true,
+                  "layerLocator": {
+                    "kind": "layer",
+                    "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                    "sessionId": "11111111-1111-4111-8111-111111111111",
+                    "projectId": "44444444-4444-4444-8444-444444444444",
+                    "generation": 8,
+                    "objectId": "88888888-8888-4888-8888-888888888888"
+                  },
+                  "propertyLocator": {
+                    "kind": "stream",
+                    "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                    "sessionId": "11111111-1111-4111-8111-111111111111",
+                    "projectId": "44444444-4444-4444-8444-444444444444",
+                    "generation": 8,
+                    "objectId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+                  },
+                  "valueType": "one-d",
+                  "beforeValue": {
+                    "kind": "scalar",
+                    "value": "25"
+                  },
+                  "afterValue": {
+                    "kind": "scalar",
+                    "value": "40"
+                  }
+                }
+              }
+            },
+            {
+              "id": "aemcp-example-layer-property-set-keyframed",
+              "kind": "negative",
+              "summary": "Reject a keyframed stream without changing After Effects state.",
+              "arguments": {
+                "layerLocator": {
+                  "kind": "layer",
+                  "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                  "sessionId": "11111111-1111-4111-8111-111111111111",
+                  "projectId": "44444444-4444-4444-8444-444444444444",
+                  "generation": 8,
+                  "objectId": "88888888-8888-4888-8888-888888888888"
+                },
+                "propertyLocator": {
+                  "kind": "stream",
+                  "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                  "sessionId": "11111111-1111-4111-8111-111111111111",
+                  "projectId": "44444444-4444-4444-8444-444444444444",
+                  "generation": 8,
+                  "objectId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+                },
+                "value": {
+                  "kind": "scalar",
+                  "value": "40"
+                },
+                "idempotencyKey": "synthetic-property-0002"
+              },
+              "expected": {
+                "errorCode": "PRECONDITION_FAILED",
+                "recoveryAction": "change-arguments"
+              }
+            }
+          ]
+        }
       ],
       "nextCursor": null,
       "queryDigest": "1c9d06b8b5f876c7b41fb00204efe2f5c5e62502bb188fa8a1e5eae5e59d0c3b",
-      "capabilitiesDigest": "b256e21ccb0022c25ccd52b4b18a33f660d7ccc2fe971211280b67ab78030190"
+      "capabilitiesDigest": "1a2c7fa5d6ca0b53b90a6c8d17739b027755fa70d03d2ef545c1238889e98a8a"
     }
   }
 }

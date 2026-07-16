@@ -615,6 +615,16 @@ std::string locator_json(const ObjectLocator& locator) {
       + ",\"sessionId\":" + json_string(locator.session_id) + "}";
 }
 
+std::string canonical_composition_layer_create_arguments(
+    const ObjectLocator& composition_locator,
+    std::string_view kind,
+    std::string_view name,
+    const std::optional<CompositionLayerCreateColor>& color,
+    const std::optional<std::uint32_t>& width,
+    const std::optional<std::uint32_t>& height,
+    const std::optional<CompositionCurrentTime>& duration,
+    std::string_view idempotency_key);
+
 std::string canonical_request(const ParsedRequest& request) {
   std::string params;
   switch (request.method) {
@@ -687,6 +697,16 @@ std::string canonical_request(const ParsedRequest& request) {
             + ",\"targetTime\":{\"scale\":"
             + std::to_string(value.target_time.scale) + ",\"value\":"
             + std::to_string(value.target_time.value) + "}}";
+      } else if (value.capability_id == "ae.composition.layer.create") {
+        arguments = canonical_composition_layer_create_arguments(
+            *value.composition_locator,
+            value.layer_create_kind,
+            value.layer_create_name,
+            value.layer_create_color,
+            value.layer_create_width,
+            value.layer_create_height,
+            value.layer_create_duration,
+            value.idempotency_key);
       } else if (value.capability_id == "ae.layer.properties.list") {
         arguments = "{\"layerLocator\":" + locator_json(*value.layer_locator)
             + ",\"limit\":" + std::to_string(value.limit)
@@ -1041,6 +1061,93 @@ ParsedRequest classify_request(const JsonValue& root) {
             *result.composition_locator,
             result.target_time,
             result.idempotency_key);
+      } else if (capability == "ae.composition.layer.create") {
+        if (!exact_keys(
+                *arguments,
+                {"compositionLocator", "kind", "name", "color", "width",
+                    "height", "duration", "idempotencyKey"},
+                {"compositionLocator", "kind", "name", "idempotencyKey"})) {
+          invalid_argument("composition layer create arguments are not closed");
+        }
+        result.composition_locator = parse_locator(
+            *member(*arguments, "compositionLocator"), "composition");
+        result.layer_create_kind = required_string(
+            *arguments, "kind", CodecErrorKind::kInvalidArgument);
+        result.layer_create_name = required_string(
+            *arguments, "name", CodecErrorKind::kInvalidArgument);
+        if ((result.layer_create_kind != "null"
+                && result.layer_create_kind != "solid")
+            || validate_utf8_and_count(result.layer_create_name) < 1
+            || validate_utf8_and_count(result.layer_create_name) > 255) {
+          invalid_argument("invalid composition layer kind or name");
+        }
+        if (const JsonValue* color_value = member(*arguments, "color")) {
+          const JsonValue::Object* color = object_of(*color_value);
+          if (color == nullptr
+              || !exact_keys(
+                  *color, {"red", "green", "blue", "alpha"},
+                  {"red", "green", "blue", "alpha"})) {
+            invalid_argument("composition layer color is not closed RGBA");
+          }
+          result.layer_create_color = CompositionLayerCreateColor{
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "red", CodecErrorKind::kInvalidArgument, 0, 255)),
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "green", CodecErrorKind::kInvalidArgument, 0, 255)),
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "blue", CodecErrorKind::kInvalidArgument, 0, 255)),
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "alpha", CodecErrorKind::kInvalidArgument, 0, 255)),
+          };
+        }
+        if (member(*arguments, "width") != nullptr) {
+          result.layer_create_width = static_cast<std::uint32_t>(required_uint(
+              *arguments, "width", CodecErrorKind::kInvalidArgument, 1, 30000));
+        }
+        if (member(*arguments, "height") != nullptr) {
+          result.layer_create_height = static_cast<std::uint32_t>(required_uint(
+              *arguments, "height", CodecErrorKind::kInvalidArgument, 1, 30000));
+        }
+        if (const JsonValue* duration_value = member(*arguments, "duration")) {
+          const JsonValue::Object* duration = object_of(*duration_value);
+          if (duration == nullptr
+              || !exact_keys(*duration, {"value", "scale"}, {"value", "scale"})) {
+            invalid_argument("composition layer duration must be an exact time pair");
+          }
+          CompositionCurrentTime parsed_duration;
+          parsed_duration.value = static_cast<std::int32_t>(required_int(
+              *duration, "value", CodecErrorKind::kInvalidArgument,
+              std::numeric_limits<std::int32_t>::min(),
+              std::numeric_limits<std::int32_t>::max()));
+          parsed_duration.scale = static_cast<std::uint32_t>(required_uint(
+              *duration, "scale", CodecErrorKind::kInvalidArgument, 1,
+              std::numeric_limits<std::uint32_t>::max()));
+          parsed_duration.seconds_rational = canonical_seconds_rational(
+              parsed_duration.value, parsed_duration.scale);
+          result.layer_create_duration = parsed_duration;
+        }
+        if (result.layer_create_kind == "null"
+            && (result.layer_create_color.has_value()
+                || result.layer_create_width.has_value()
+                || result.layer_create_height.has_value()
+                || result.layer_create_duration.has_value())) {
+          invalid_argument("solid-only options require kind solid");
+        }
+        result.idempotency_key = required_string(
+            *arguments, "idempotencyKey", CodecErrorKind::kInvalidArgument);
+        if (!valid_idempotency_key(result.idempotency_key)) {
+          invalid_argument("invalid composition layer create idempotency key");
+        }
+        result.arguments_fingerprint_sha256 =
+            digest_composition_layer_create_arguments(
+                *result.composition_locator,
+                result.layer_create_kind,
+                result.layer_create_name,
+                result.layer_create_color,
+                result.layer_create_width,
+                result.layer_create_height,
+                result.layer_create_duration,
+                result.idempotency_key);
       } else if (capability == "ae.layer.properties.list") {
         if (!exact_keys(
                 *arguments,
@@ -1380,6 +1487,128 @@ std::string canonical_composition_time_set_value(
       + ",\"beforeTime\":" + canonical_current_time(value.before_time)
       + ",\"changed\":true,\"compositionLocator\":"
       + locator_json(value.composition_locator) + "}";
+}
+
+std::string canonical_layer_create_color(
+    const CompositionLayerCreateColor& color) {
+  if (color.red > 255 || color.green > 255
+      || color.blue > 255 || color.alpha > 255) {
+    invalid_argument("invalid composition layer create color");
+  }
+  return "{\"alpha\":" + std::to_string(color.alpha)
+      + ",\"blue\":" + std::to_string(color.blue)
+      + ",\"green\":" + std::to_string(color.green)
+      + ",\"red\":" + std::to_string(color.red) + "}";
+}
+
+std::string canonical_composition_layer_create_arguments(
+    const ObjectLocator& composition_locator,
+    std::string_view kind,
+    std::string_view name,
+    const std::optional<CompositionLayerCreateColor>& color,
+    const std::optional<std::uint32_t>& width,
+    const std::optional<std::uint32_t>& height,
+    const std::optional<CompositionCurrentTime>& duration,
+    std::string_view idempotency_key) {
+  if (!valid_output_locator(composition_locator)
+      || composition_locator.kind != "composition"
+      || (kind != "null" && kind != "solid")
+      || validate_utf8_and_count(name) < 1
+      || validate_utf8_and_count(name) > 255
+      || !valid_idempotency_key(idempotency_key)
+      || (kind == "null" && (color.has_value() || width.has_value()
+          || height.has_value() || duration.has_value()))
+      || (width.has_value() && (*width < 1 || *width > 30000))
+      || (height.has_value() && (*height < 1 || *height > 30000))) {
+    invalid_argument("invalid composition layer create arguments");
+  }
+  std::vector<std::string> members{
+      "\"compositionLocator\":" + locator_json(composition_locator),
+      "\"idempotencyKey\":" + json_string(idempotency_key),
+      "\"kind\":" + json_string(kind),
+      "\"name\":" + json_string(name),
+  };
+  if (color.has_value()) {
+    members.push_back("\"color\":" + canonical_layer_create_color(*color));
+  }
+  if (duration.has_value()) {
+    members.push_back("\"duration\":{\"scale\":"
+        + std::to_string(duration->scale) + ",\"value\":"
+        + std::to_string(duration->value) + "}");
+  }
+  if (height.has_value()) {
+    members.push_back("\"height\":" + std::to_string(*height));
+  }
+  if (width.has_value()) {
+    members.push_back("\"width\":" + std::to_string(*width));
+  }
+  std::sort(members.begin(), members.end());
+  std::string result = "{";
+  for (std::size_t index = 0; index < members.size(); ++index) {
+    if (index != 0) result.push_back(',');
+    result += members[index];
+  }
+  result.push_back('}');
+  return result;
+}
+
+std::string canonical_composition_layer_create_value(
+    const CompositionLayerCreated& value) {
+  if (!value.changed || (value.kind != "null" && value.kind != "solid")
+      || validate_utf8_and_count(value.name) < 1
+      || validate_utf8_and_count(value.name) > 255
+      || value.stack_index < 1 || value.stack_index > kMaxSafeInteger
+      || !valid_output_locator(value.composition_locator)
+      || value.composition_locator.kind != "composition"
+      || !valid_output_locator(value.layer_locator)
+      || value.layer_locator.kind != "layer"
+      || !same_locator_scope(value.composition_locator, value.layer_locator)
+      || value.layer_count_before > kMaxSafeInteger
+      || value.layer_count_after != value.layer_count_before + 1
+      || value.stack_index > value.layer_count_after
+      || value.project_item_count_before > kMaxSafeInteger
+      || value.project_item_count_after > kMaxSafeInteger
+      || value.project_item_count_after < value.project_item_count_before) {
+    invalid_argument("invalid composition layer create result");
+  }
+  if (value.source_item_locator.has_value()
+      && (!valid_output_locator(*value.source_item_locator)
+          || (value.source_item_locator->kind != "item"
+              && value.source_item_locator->kind != "composition")
+          || !same_locator_scope(
+              value.composition_locator, *value.source_item_locator))) {
+    invalid_argument("invalid created layer source item locator");
+  }
+  std::string solid = "null";
+  if (value.kind == "solid") {
+    if (!value.solid.has_value() || !value.source_item_locator.has_value()
+        || value.project_item_count_after <= value.project_item_count_before
+        || value.solid->width < 1 || value.solid->width > 30000
+        || value.solid->height < 1 || value.solid->height > 30000) {
+      invalid_argument("invalid solid layer create result");
+    }
+    solid = "{\"color\":" + canonical_layer_create_color(value.solid->color)
+        + ",\"duration\":" + canonical_current_time(value.solid->duration)
+        + ",\"height\":" + std::to_string(value.solid->height)
+        + ",\"width\":" + std::to_string(value.solid->width) + "}";
+  } else if (value.solid.has_value()) {
+    invalid_argument("null layer create returned solid metadata");
+  }
+  return "{\"changed\":true,\"compositionLocator\":"
+      + locator_json(value.composition_locator)
+      + ",\"kind\":" + json_string(value.kind)
+      + ",\"layerCountAfter\":" + std::to_string(value.layer_count_after)
+      + ",\"layerCountBefore\":" + std::to_string(value.layer_count_before)
+      + ",\"layerLocator\":" + locator_json(value.layer_locator)
+      + ",\"name\":" + json_string(value.name)
+      + ",\"projectItemCountAfter\":"
+      + std::to_string(value.project_item_count_after)
+      + ",\"projectItemCountBefore\":"
+      + std::to_string(value.project_item_count_before)
+      + ",\"solid\":" + solid
+      + ",\"sourceItemLocator\":"
+      + nullable_locator_json(value.source_item_locator)
+      + ",\"stackIndex\":" + std::to_string(value.stack_index) + "}";
 }
 
 bool valid_decimal_string(std::string_view text) {
@@ -1798,6 +2027,34 @@ std::string digest_composition_time_set_postcondition(
   return sha256_hex(
       "{\"capabilityId\":\"ae.composition.time.set\",\"capabilityVersion\":1,\"value\":"
       + canonical_composition_time_set_value(value) + "}");
+}
+
+std::string digest_composition_layer_create_arguments(
+    const ObjectLocator& composition_locator,
+    std::string_view kind,
+    std::string_view name,
+    const std::optional<CompositionLayerCreateColor>& color,
+    const std::optional<std::uint32_t>& width,
+    const std::optional<std::uint32_t>& height,
+    const std::optional<CompositionCurrentTime>& duration,
+    std::string_view idempotency_key) {
+  return sha256_hex(canonical_composition_layer_create_arguments(
+      composition_locator,
+      kind,
+      name,
+      color,
+      width,
+      height,
+      duration,
+      idempotency_key));
+}
+
+std::string digest_composition_layer_create_postcondition(
+    const CompositionLayerCreated& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.composition.layer.create\","
+      "\"capabilityVersion\":1,\"value\":"
+      + canonical_composition_layer_create_value(value) + "}");
 }
 
 std::string digest_layer_properties_postcondition(
@@ -2371,6 +2628,53 @@ std::string composition_time_set_descriptor(const CapabilitiesSuccess& response)
   return R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308","detail":"full","examples":[{"arguments":{"compositionLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"composition","objectId":"66666666-6666-4666-8666-666666666666","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"idempotencyKey":"synthetic-comp-time-0001","targetTime":{"scale":1,"value":1}},"expected":{"outcome":"succeeded","value":{"afterTime":{"scale":1,"secondsRational":"1","value":1},"beforeTime":{"scale":1,"secondsRational":"0","value":0},"changed":true,"compositionLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"composition","objectId":"66666666-6666-4666-8666-666666666666","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}}},"id":"aemcp-example-composition-time-set","kind":"positive","summary":"Set and verify an exact rational composition time."},{"arguments":{"compositionLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"composition","objectId":"66666666-6666-4666-8666-666666666666","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"idempotencyKey":"synthetic-comp-time-0002","targetTime":{"scale":1,"value":1}},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"},"id":"aemcp-example-composition-time-set-stale","kind":"negative","summary":"Refresh a stale composition locator before setting current time."}],"id":"ae.composition.time.set","idempotency":"idempotency-key","inputContractId":"aemcp.contract.ae.composition.time.set.input.v1","inputSchema":{"$defs":{"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"composition"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"timeInput":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"compositionLocator":{"$ref":"#/$defs/compositionLocator"},"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"targetTime":{"$ref":"#/$defs/timeInput"}},"required":["compositionLocator","targetTime","idempotencyKey"],"type":"object"},"mutability":"mutating","preconditions":["An After Effects project must be open.","compositionLocator must come from ae.project.items.list@1.","targetTime must differ from the composition's current time."],"requirements":[{"contractVersion":1,"id":"aemcp.requirement.native.composition-time-set"}],"resultContractId":"aemcp.contract.ae.composition.time.set.result.v1","resultSchema":{"$defs":{"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"composition"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"currentTime":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"afterTime":{"$ref":"#/$defs/currentTime"},"beforeTime":{"$ref":"#/$defs/currentTime"},"changed":{"const":true},"compositionLocator":{"$ref":"#/$defs/compositionLocator"}},"required":["changed","compositionLocator","beforeTime","afterTime"],"type":"object","x-invariant":"beforeTime-must-differ-from-afterTime-and-afterTime-must-equal-targetTime"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes composition current time and creates one After Effects Undo step.","summary":"Set the current time of one After Effects composition.","undo":"ae-undo-group","version":1})aemcp";
 }
 
+std::string composition_layer_create_descriptor(const CapabilitiesSuccess& response) {
+  if (response.detail == CapabilityDetail::kSummary) {
+    return R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"detail":"summary","id":"ae.composition.layer.create","idempotency":"idempotency-key","mutability":"mutating","preconditions":["An After Effects project must be open.","compositionLocator must come from ae.project.items.list@1.","kind must be null or solid and solid-only options require kind solid."],"risk":"write","schemaVersion":1,"sideEffectSummary":"Creates one composition layer, may create one solid project item, and creates one After Effects Undo step.","summary":"Create one null or solid layer in an After Effects composition.","undo":"ae-undo-group","version":1})aemcp";
+  }
+  require_digest(response.composition_layer_create_contract_digest, "contract digest");
+  if (response.composition_layer_create_contract_digest
+      != "d48b5c0fcf9871ee579bf518679bc36277e2fd5194e70d9cc6fa1b2c573edeee") {
+    invalid_argument(
+        "composition layer create contract digest does not match the compiled descriptor");
+  }
+  return R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"d48b5c0fcf9871ee579bf518679bc36277e2fd5194e70d9cc6fa1b2c573edeee","detail":"full","examples":[{"arguments":{"compositionLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"composition","objectId":"66666666-6666-4666-8666-666666666666","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"idempotencyKey":"synthetic-layer-create-0001","kind":"null","name":"Controller"},"expected":{"outcome":"succeeded","value":{"changed":true,"compositionLocator":{"generation":9,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"composition","objectId":"77777777-7777-4777-8777-777777777777","projectId":"55555555-5555-4555-8555-555555555555","sessionId":"11111111-1111-4111-8111-111111111111"},"kind":"null","layerCountAfter":1,"layerCountBefore":0,"layerLocator":{"generation":9,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"55555555-5555-4555-8555-555555555555","sessionId":"11111111-1111-4111-8111-111111111111"},"name":"Controller","projectItemCountAfter":1,"projectItemCountBefore":1,"solid":null,"sourceItemLocator":null,"stackIndex":1}},"id":"aemcp-example-composition-layer-create-null","kind":"positive","summary":"Create one null layer and return fresh post-mutation locators."}],"id":"ae.composition.layer.create","idempotency":"idempotency-key","inputContractId":"aemcp.contract.ae.composition.layer.create.input.v1","inputSchema":{"$defs":{"color":{"additionalProperties":false,"properties":{"alpha":{"maximum":255,"minimum":0,"type":"integer"},"blue":{"maximum":255,"minimum":0,"type":"integer"},"green":{"maximum":255,"minimum":0,"type":"integer"},"red":{"maximum":255,"minimum":0,"type":"integer"}},"required":["red","green","blue","alpha"],"type":"object"},"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"composition"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"timeInput":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"color":{"$ref":"#/$defs/color","default":{"alpha":255,"blue":255,"green":255,"red":255},"x-omissionBehavior":"opaque-white"},"compositionLocator":{"$ref":"#/$defs/compositionLocator"},"duration":{"$ref":"#/$defs/timeInput","x-omissionBehavior":"composition-duration"},"height":{"maximum":30000,"minimum":1,"type":"integer","x-omissionBehavior":"composition-height"},"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"kind":{"enum":["null","solid"]},"name":{"maxLength":255,"minLength":1,"type":"string"},"width":{"maximum":30000,"minimum":1,"type":"integer","x-omissionBehavior":"composition-width"}},"required":["compositionLocator","kind","name","idempotencyKey"],"type":"object","x-invariant":"solid-options-are-forbidden-when-kind-is-null"},"mutability":"mutating","preconditions":["An After Effects project must be open.","compositionLocator must come from ae.project.items.list@1.","kind must be null or solid and solid-only options require kind solid."],"requirements":[{"contractVersion":1,"id":"aemcp.requirement.native.composition-layer-create"}],"resultContractId":"aemcp.contract.ae.composition.layer.create.result.v1","resultSchema":{"$defs":{"color":{"additionalProperties":false,"properties":{"alpha":{"maximum":255,"minimum":0,"type":"integer"},"blue":{"maximum":255,"minimum":0,"type":"integer"},"green":{"maximum":255,"minimum":0,"type":"integer"},"red":{"maximum":255,"minimum":0,"type":"integer"}},"required":["red","green","blue","alpha"],"type":"object"},"compositionLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"composition"}}}]},"currentTime":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"itemLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"enum":["item","composition"]}}}]},"layerLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"layer"}}}]},"locatorBase":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"enum":["composition","layer","item"]},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"solidSpec":{"additionalProperties":false,"properties":{"color":{"$ref":"#/$defs/color"},"duration":{"$ref":"#/$defs/currentTime"},"height":{"maximum":30000,"minimum":1,"type":"integer"},"width":{"maximum":30000,"minimum":1,"type":"integer"}},"required":["color","width","height","duration"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"changed":{"const":true},"compositionLocator":{"$ref":"#/$defs/compositionLocator"},"kind":{"enum":["null","solid"]},"layerCountAfter":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"layerCountBefore":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"layerLocator":{"$ref":"#/$defs/layerLocator"},"name":{"maxLength":255,"minLength":1,"type":"string"},"projectItemCountAfter":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"projectItemCountBefore":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"solid":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/solidSpec"}]},"sourceItemLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/itemLocator"}]},"stackIndex":{"maximum":9007199254740991,"minimum":1,"type":"integer"}},"required":["changed","kind","name","stackIndex","compositionLocator","layerLocator","sourceItemLocator","layerCountBefore","layerCountAfter","projectItemCountBefore","projectItemCountAfter","solid"],"type":"object","x-invariant":"new-locators-share-one-post-mutation-generation;layerCountAfter-equals-layerCountBefore-plus-one;solid-requires-source-item-and-solid-metadata"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Creates one composition layer, may create one solid project item, and creates one After Effects Undo step.","summary":"Create one null or solid layer in an After Effects composition.","undo":"ae-undo-group","version":1})aemcp";
+}
+
+std::string composition_layer_create_registry_descriptor(
+    const CapabilitiesSuccess& response) {
+  std::string descriptor = composition_layer_create_descriptor(response);
+  if (response.detail == CapabilityDetail::kSummary) return descriptor;
+
+  descriptor = replace_descriptor_text(
+      std::move(descriptor), "Controller", "SYNTHETIC_NULL");
+  descriptor = replace_descriptor_text(
+      std::move(descriptor),
+      "77777777-7777-4777-8777-777777777777",
+      "66666666-6666-4666-8666-666666666666");
+  descriptor = replace_descriptor_text(
+      std::move(descriptor),
+      "88888888-8888-4888-8888-888888888888",
+      "99999999-9999-4999-8999-999999999999");
+  descriptor = replace_descriptor_text(
+      std::move(descriptor),
+      "\"projectItemCountAfter\":1,\"projectItemCountBefore\":1",
+      "\"projectItemCountAfter\":2,\"projectItemCountBefore\":2");
+  descriptor = replace_descriptor_text(
+      std::move(descriptor),
+      "Create one null layer and return fresh post-mutation locators.",
+      "Create and verify one named null layer with Undo available.");
+
+  constexpr std::string_view kStaleExample =
+      R"aemcp({"arguments":{"compositionLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"composition","objectId":"66666666-6666-4666-8666-666666666666","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"idempotencyKey":"synthetic-layer-create-0002","kind":"null","name":"SYNTHETIC_NULL"},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"},"id":"aemcp-example-composition-layer-create-stale","kind":"negative","summary":"Refresh a stale composition locator before creating a layer."})aemcp";
+  descriptor = replace_descriptor_text(
+      std::move(descriptor),
+      "}],\"id\":\"ae.composition.layer.create\"",
+      "}," + std::string(kStaleExample) +
+          "],\"id\":\"ae.composition.layer.create\"");
+  return descriptor;
+}
+
 std::string layer_properties_list_descriptor(const CapabilitiesSuccess& response) {
   if (response.detail == CapabilityDetail::kSummary) {
     return R"aemcp({"detail":"summary","id":"ae.layer.properties.list","version":1,"schemaVersion":1,"summary":"List a bounded page of direct properties on an After Effects layer or property group.","risk":"read","mutability":"read-only","idempotency":"idempotent","cancellation":"before-dispatch","undo":"not-applicable","sideEffectSummary":"Reads layer properties and safe primitive values without changing After Effects state.","preconditions":["An After Effects project must be open.","layerLocator must come from ae.composition.layers.list@1.","parentPropertyLocator must come from ae.layer.properties.list@1 for the same layer."],"compatibility":{"status":"unverified","intendedPlatforms":["macos-arm64","windows-x64"]}})aemcp";
@@ -2543,6 +2847,11 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
   if (response.include_composition_time_set) {
     if (needs_comma) items.push_back(',');
     items += composition_time_set_descriptor(response);
+    needs_comma = true;
+  }
+  if (response.include_composition_layer_create) {
+    if (needs_comma) items.push_back(',');
+    items += composition_layer_create_registry_descriptor(response);
     needs_comma = true;
   }
   if (response.include_layer_properties_list) {
@@ -2885,6 +3194,49 @@ std::vector<std::uint8_t> encode_composition_time_set_success(
       + ",\"undo\":{\"available\":true,\"verified\":false}},"
         "\"outcome\":\"succeeded\",\"value\":" + value
       + "},\"sessionId\":" + json_string(response.session_id) + ",\"wireVersion\":1}";
+  return frame_output(std::move(json));
+}
+
+std::vector<std::uint8_t> encode_composition_layer_create_success(
+    const CompositionLayerCreateSuccess& response) {
+  require_request_id(response.request_id);
+  require_uuid(response.session_id, "session ID");
+  require_uuid(response.host_instance_id, "host instance ID");
+  require_digest(response.request_digest, "request digest");
+  require_digest(response.postcondition_digest, "postcondition digest");
+  const std::string value = canonical_composition_layer_create_value(response.value);
+  if (response.started_at_unix_ms < 1
+      || response.started_at_unix_ms > kMaxSafeInteger
+      || response.completed_at_unix_ms < response.started_at_unix_ms
+      || response.completed_at_unix_ms > kMaxSafeInteger
+      || response.value.composition_locator.host_instance_id
+          != response.host_instance_id
+      || response.value.composition_locator.session_id != response.session_id
+      || response.postcondition_digest
+          != digest_composition_layer_create_postcondition(response.value)) {
+    invalid_argument("invalid or unvalidated composition layer create evidence");
+  }
+  const std::string replayed = response.replayed ? "true" : "false";
+  std::string json = "{\"kind\":\"response\",\"method\":\"invoke\",\"ok\":true,"
+      "\"replayed\":" + replayed + ",\"requestId\":"
+      + json_string(response.request_id)
+      + ",\"result\":{\"capabilityId\":\"ae.composition.layer.create\","
+        "\"capabilityVersion\":1,\"engine\":\"native-aegp\",\"evidence\":{"
+        "\"capabilityId\":\"ae.composition.layer.create\",\"capabilityVersion\":1,"
+        "\"completedAtUnixMs\":" + std::to_string(response.completed_at_unix_ms)
+      + ",\"effect\":\"committed\",\"engine\":\"native-aegp\",\"hostInstanceId\":"
+      + json_string(response.host_instance_id)
+      + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\",\"digest\":"
+      + json_string(response.postcondition_digest)
+      + ",\"kind\":\"composition-layer-create\",\"verified\":true},\"requestDigest\":"
+      + json_string(response.request_digest) + ",\"requestId\":"
+      + json_string(response.request_id) + ",\"sessionId\":"
+      + json_string(response.session_id) + ",\"startedAtUnixMs\":"
+      + std::to_string(response.started_at_unix_ms)
+      + ",\"undo\":{\"available\":true,\"verified\":false}},"
+        "\"outcome\":\"succeeded\",\"value\":" + value
+      + "},\"sessionId\":" + json_string(response.session_id)
+      + ",\"wireVersion\":1}";
   return frame_output(std::move(json));
 }
 

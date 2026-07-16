@@ -65,6 +65,7 @@ using aemcp::native::HostBitDepthWriteResult;
 using aemcp::native::HostCompositionLayersResult;
 using aemcp::native::HostCompositionTimeResult;
 using aemcp::native::HostCompositionTimeWriteResult;
+using aemcp::native::HostCompositionLayerCreateResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostReadResult;
 using aemcp::native::HostProjectItemsResult;
@@ -96,6 +97,7 @@ using aemcp::native::kCompositionLayersListCapability;
 using aemcp::native::kCompositionSelectedLayersListCapability;
 using aemcp::native::kCompositionTimeReadCapability;
 using aemcp::native::kCompositionTimeSetCapability;
+using aemcp::native::kCompositionLayerCreateCapability;
 using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kLayerPropertiesListCapability;
 using aemcp::native::kLayerPropertySetCapability;
@@ -106,7 +108,7 @@ constexpr std::string_view kSdkVersion = "25.6.61";
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::string_view kCapabilitiesDigest =
-    "b256e21ccb0022c25ccd52b4b18a33f660d7ccc2fe971211280b67ab78030190";
+    "1a2c7fa5d6ca0b53b90a6c8d17739b027755fa70d03d2ef545c1238889e98a8a";
 constexpr std::string_view kProjectSummaryContractDigest =
     "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
 constexpr std::string_view kProjectBitDepthReadContractDigest =
@@ -123,6 +125,8 @@ constexpr std::string_view kCompositionTimeReadContractDigest =
     "fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd";
 constexpr std::string_view kCompositionTimeSetContractDigest =
     "724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308";
+constexpr std::string_view kCompositionLayerCreateContractDigest =
+    "d48b5c0fcf9871ee579bf518679bc36277e2fd5194e70d9cc6fa1b2c573edeee";
 constexpr std::string_view kLayerPropertiesListContractDigest =
     "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba";
 constexpr std::string_view kLayerPropertySetContractDigest =
@@ -367,6 +371,77 @@ class MemHandleOwner final {
   AEGP_MemHandle handle_{nullptr};
   bool locked_{false};
 };
+
+[[nodiscard]] std::optional<std::vector<A_UTF16Char>> utf16_layer_name(
+    std::string_view input) {
+  if (input.empty() || input.size() > 1024) return std::nullopt;
+  std::vector<A_UTF16Char> output;
+  output.reserve(input.size() + 1);
+  std::size_t scalars = 0;
+  for (std::size_t index = 0; index < input.size();) {
+    const std::uint8_t first = static_cast<std::uint8_t>(input[index++]);
+    std::uint32_t scalar = 0;
+    std::size_t trailing = 0;
+    if (first <= 0x7fU) {
+      scalar = first;
+    } else if (first >= 0xc2U && first <= 0xdfU) {
+      scalar = first & 0x1fU;
+      trailing = 1;
+    } else if (first >= 0xe0U && first <= 0xefU) {
+      scalar = first & 0x0fU;
+      trailing = 2;
+    } else if (first >= 0xf0U && first <= 0xf4U) {
+      scalar = first & 0x07U;
+      trailing = 3;
+    } else {
+      return std::nullopt;
+    }
+    if (index + trailing > input.size()) return std::nullopt;
+    for (std::size_t offset = 0; offset < trailing; ++offset) {
+      const std::uint8_t byte = static_cast<std::uint8_t>(input[index++]);
+      if ((byte & 0xc0U) != 0x80U) return std::nullopt;
+      scalar = (scalar << 6U) | (byte & 0x3fU);
+    }
+    if ((trailing == 2 && scalar < 0x800U)
+        || (trailing == 3 && scalar < 0x10000U)
+        || scalar == 0 || scalar > 0x10ffffU
+        || (scalar >= 0xd800U && scalar <= 0xdfffU)
+        || ++scalars > 255) {
+      return std::nullopt;
+    }
+    if (scalar <= 0xffffU) {
+      output.push_back(static_cast<A_UTF16Char>(scalar));
+    } else {
+      scalar -= 0x10000U;
+      output.push_back(static_cast<A_UTF16Char>(0xd800U + (scalar >> 10U)));
+      output.push_back(static_cast<A_UTF16Char>(0xdc00U + (scalar & 0x3ffU)));
+    }
+  }
+  output.push_back(0);
+  return output;
+}
+
+[[nodiscard]] std::optional<std::uint64_t> count_project_items(
+    const AEGP_ItemSuite9* item_suite,
+    AEGP_ProjectH project,
+    AEGP_ItemH root) {
+  AEGP_ItemH item = nullptr;
+  if (item_suite->AEGP_GetNextProjItem(project, root, &item) != A_Err_NONE) {
+    return std::nullopt;
+  }
+  std::uint64_t count = 0;
+  while (item != nullptr) {
+    if (++count > static_cast<std::uint64_t>(kMaximumProjectItems)) {
+      return std::nullopt;
+    }
+    AEGP_ItemH next = nullptr;
+    if (item_suite->AEGP_GetNextProjItem(project, item, &next) != A_Err_NONE) {
+      return std::nullopt;
+    }
+    item = next;
+  }
+  return count;
+}
 
 [[nodiscard]] std::optional<std::string> read_project_path(
     const AEGP_ProjSuite6* project_suite,
@@ -2363,6 +2438,371 @@ class AegpHostApi final : public HostApi {
     return HostCompositionTimeWriteResult::success(std::move(changed));
   }
 
+  [[nodiscard]] HostCompositionLayerCreateResult create_composition_layer(
+      const aemcp::native::CompositionLayerCreateCommand& command,
+      TimePoint work_deadline) override {
+    const auto budget_expired = [work_deadline] {
+      return std::chrono::steady_clock::now() >= work_deadline;
+    };
+    const bool solid = command.kind == "solid";
+    if ((!solid && command.kind != "null") || command.name.empty()
+        || (command.kind == "null"
+            && (command.color.has_value() || command.width.has_value()
+                || command.height.has_value() || command.duration.has_value()))) {
+      return HostCompositionLayerCreateResult::failure(
+          "INVALID_ARGUMENT", "invalid composition layer create shape",
+          "params.arguments.kind");
+    }
+    const auto utf16_name = utf16_layer_name(command.name);
+    if (!utf16_name.has_value()) {
+      return HostCompositionLayerCreateResult::failure(
+          "INVALID_ARGUMENT", "name must contain 1 to 255 valid Unicode scalars",
+          "params.arguments.name");
+    }
+
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_FootageSuite5> footage_suite(
+        basic_, kAEGPFootageSuite, kAEGPFootageSuiteVersion5);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || footage_suite.get() == nullptr || memory_suite.get() == nullptr
+        || utility_suite.get() == nullptr) {
+      return HostCompositionLayerCreateResult::failure(
+          "NATIVE_UNSUPPORTED", "required composition layer creation suites are unavailable");
+    }
+    if (budget_expired()) {
+      return HostCompositionLayerCreateResult::failure(
+          "DEADLINE_EXCEEDED", "composition layer creation budget elapsed");
+    }
+
+    A_long project_count = 0;
+    if (project_suite->AEGP_GetNumProjects(&project_count) != A_Err_NONE) {
+      return HostCompositionLayerCreateResult::failure(
+          "CAPABILITY_FAILED", "could not read project count before layer creation");
+    }
+    if (project_count <= 0) {
+      graph_.project_closed();
+      return HostCompositionLayerCreateResult::failure(
+          "PRECONDITION_FAILED", "an After Effects project must be open");
+    }
+    AEGP_ProjectH project = nullptr;
+    AEGP_ItemH root = nullptr;
+    A_long root_id = 0;
+    if (project_suite->AEGP_GetProjectByIndex(0, &project) != A_Err_NONE
+        || project == nullptr
+        || project_suite->AEGP_GetProjectRootFolder(project, &root) != A_Err_NONE
+        || root == nullptr
+        || item_suite->AEGP_GetItemID(root, &root_id) != A_Err_NONE) {
+      return HostCompositionLayerCreateResult::failure(
+          "CAPABILITY_FAILED", "could not resolve the open project's root item");
+    }
+    std::optional<std::string> project_path = read_project_path(
+        project_suite.get(), memory_suite.get(), project);
+    if (!project_path.has_value()) {
+      return HostCompositionLayerCreateResult::failure(
+          "CAPABILITY_FAILED", "could not read the open project path for locator identity");
+    }
+    try {
+      graph_.observe_project(
+          reinterpret_cast<std::uintptr_t>(project),
+          reinterpret_cast<std::uintptr_t>(root),
+          root_id,
+          std::move(*project_path));
+    } catch (...) {
+      return HostCompositionLayerCreateResult::failure(
+          "CAPABILITY_FAILED", "could not establish project locator identity");
+    }
+    const std::optional<A_long> composition_id = graph_.resolve_composition(
+        command.composition_locator, command.host_instance_id, command.session_id);
+    if (!composition_id.has_value()) {
+      return HostCompositionLayerCreateResult::failure(
+          "STALE_LOCATOR",
+          "compositionLocator does not identify an item in the currently open project",
+          "params.arguments.compositionLocator");
+    }
+
+    AEGP_ItemH item = nullptr;
+    if (item_suite->AEGP_GetNextProjItem(project, root, &item) != A_Err_NONE) {
+      return HostCompositionLayerCreateResult::failure(
+          "CAPABILITY_FAILED", "could not begin composition lookup");
+    }
+    AEGP_ItemH composition_item = nullptr;
+    std::uint64_t visited = 0;
+    while (item != nullptr) {
+      if (budget_expired()) {
+        return HostCompositionLayerCreateResult::failure(
+            "DEADLINE_EXCEEDED", "composition lookup budget elapsed");
+      }
+      if (++visited > static_cast<std::uint64_t>(kMaximumProjectItems)) {
+        return HostCompositionLayerCreateResult::failure(
+            "CAPABILITY_FAILED", "project item bound exceeded during composition lookup");
+      }
+      A_long item_id = 0;
+      if (item_suite->AEGP_GetItemID(item, &item_id) != A_Err_NONE) {
+        return HostCompositionLayerCreateResult::failure(
+            "CAPABILITY_FAILED", "could not read project item identity");
+      }
+      if (item_id == *composition_id) {
+        composition_item = item;
+        break;
+      }
+      AEGP_ItemH next = nullptr;
+      if (item_suite->AEGP_GetNextProjItem(project, item, &next) != A_Err_NONE) {
+        return HostCompositionLayerCreateResult::failure(
+            "CAPABILITY_FAILED", "composition lookup traversal failed");
+      }
+      item = next;
+    }
+    if (composition_item == nullptr) {
+      return HostCompositionLayerCreateResult::failure(
+          "STALE_LOCATOR", "composition item no longer exists in the open project",
+          "params.arguments.compositionLocator");
+    }
+    AEGP_ItemType item_type = AEGP_ItemType_NONE;
+    AEGP_CompH composition = nullptr;
+    if (item_suite->AEGP_GetItemType(composition_item, &item_type) != A_Err_NONE
+        || item_type != AEGP_ItemType_COMP
+        || comp_suite->AEGP_GetCompFromItem(composition_item, &composition) != A_Err_NONE
+        || composition == nullptr) {
+      return HostCompositionLayerCreateResult::failure(
+          "PRECONDITION_FAILED", "compositionLocator no longer identifies a composition",
+          "params.arguments.compositionLocator");
+    }
+
+    A_long layer_count_before = 0;
+    A_long comp_width = 0;
+    A_long comp_height = 0;
+    A_Time comp_duration{};
+    const auto project_items_before = count_project_items(
+        item_suite.get(), project, root);
+    if (layer_suite->AEGP_GetCompNumLayers(composition, &layer_count_before)
+            != A_Err_NONE
+        || layer_count_before < 0
+        || item_suite->AEGP_GetItemDimensions(
+            composition_item, &comp_width, &comp_height) != A_Err_NONE
+        || comp_width < 1 || comp_width > 30000
+        || comp_height < 1 || comp_height > 30000
+        || item_suite->AEGP_GetItemDuration(composition_item, &comp_duration)
+            != A_Err_NONE
+        || comp_duration.scale <= 0
+        || !project_items_before.has_value()) {
+      return HostCompositionLayerCreateResult::failure(
+          "CAPABILITY_FAILED", "could not read composition state before layer creation");
+    }
+    const std::uint32_t width = command.width.value_or(
+        static_cast<std::uint32_t>(comp_width));
+    const std::uint32_t height = command.height.value_or(
+        static_cast<std::uint32_t>(comp_height));
+    const aemcp::native::CompositionLayerCreateColor color =
+        command.color.value_or(aemcp::native::CompositionLayerCreateColor{});
+    aemcp::native::CompositionCurrentTime duration = command.duration.value_or(
+        aemcp::native::CompositionCurrentTime{
+            static_cast<std::int32_t>(comp_duration.value),
+            static_cast<std::uint32_t>(comp_duration.scale),
+            aemcp::native::canonical_seconds_rational(
+                comp_duration.value, comp_duration.scale)});
+    if (width < 1 || width > 30000 || height < 1 || height > 30000
+        || color.red > 255 || color.green > 255
+        || color.blue > 255 || color.alpha > 255
+        || duration.scale == 0
+        || duration.seconds_rational != aemcp::native::canonical_seconds_rational(
+            duration.value, duration.scale)) {
+      return HostCompositionLayerCreateResult::failure(
+          "INVALID_ARGUMENT", "solid options are outside After Effects bounds",
+          "params.arguments");
+    }
+    if (budget_expired()) {
+      return HostCompositionLayerCreateResult::failure(
+          "DEADLINE_EXCEEDED", "composition layer creation budget elapsed");
+    }
+
+    A_Time sdk_duration{
+        static_cast<A_long>(duration.value),
+        static_cast<A_u_long>(duration.scale)};
+    AEGP_ColorVal sdk_color{
+        static_cast<A_FpLong>(color.alpha) / 255.0,
+        static_cast<A_FpLong>(color.red) / 255.0,
+        static_cast<A_FpLong>(color.green) / 255.0,
+        static_cast<A_FpLong>(color.blue) / 255.0};
+    static constexpr char kUndoLabel[] = "ae-mcp: Create composition layer";
+    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+      return HostCompositionLayerCreateResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    AEGP_LayerH created_layer = nullptr;
+    const A_Err create_error = solid
+        ? comp_suite->AEGP_CreateSolidInComp(
+            utf16_name->data(), static_cast<A_long>(width),
+            static_cast<A_long>(height), &sdk_color, composition,
+            &sdk_duration, &created_layer)
+        : comp_suite->AEGP_CreateNullInComp(
+            utf16_name->data(), composition, &sdk_duration, &created_layer);
+    const A_Err rename_error = create_error == A_Err_NONE && created_layer != nullptr
+        ? layer_suite->AEGP_SetLayerName(created_layer, utf16_name->data())
+        : create_error;
+    A_Err duration_error = A_Err_NONE;
+    if (create_error == A_Err_NONE && created_layer != nullptr && solid) {
+      A_Time in_point{};
+      duration_error = layer_suite->AEGP_GetLayerInPoint(
+          created_layer, AEGP_LTimeMode_CompTime, &in_point);
+      if (duration_error == A_Err_NONE) {
+        duration_error = layer_suite->AEGP_SetLayerInPointAndDuration(
+            created_layer, AEGP_LTimeMode_CompTime, &in_point, &sdk_duration);
+      }
+    }
+    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    if (create_error != A_Err_NONE || rename_error != A_Err_NONE
+        || duration_error != A_Err_NONE || end_error != A_Err_NONE
+        || created_layer == nullptr) {
+      return HostCompositionLayerCreateResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "composition layer may have been created but mutation or Undo validation failed");
+    }
+
+    AEGP_CompH parent_composition = nullptr;
+    A_long layer_index = -1;
+    A_long layer_count_after = 0;
+    AEGP_LayerIDVal layer_id = 0;
+    A_Time actual_duration{};
+    AEGP_ItemH source_item = nullptr;
+    const auto project_items_after = count_project_items(
+        item_suite.get(), project, root);
+    if (layer_suite->AEGP_GetLayerParentComp(created_layer, &parent_composition)
+            != A_Err_NONE
+        || parent_composition != composition
+        || layer_suite->AEGP_GetLayerIndex(created_layer, &layer_index) != A_Err_NONE
+        || layer_index < 0
+        || layer_suite->AEGP_GetLayerID(created_layer, &layer_id) != A_Err_NONE
+        || layer_id == 0
+        || layer_suite->AEGP_GetCompNumLayers(composition, &layer_count_after)
+            != A_Err_NONE
+        || layer_count_after != layer_count_before + 1
+        || layer_suite->AEGP_GetLayerDuration(
+            created_layer, AEGP_LTimeMode_CompTime, &actual_duration) != A_Err_NONE
+        || actual_duration.scale <= 0
+        || layer_suite->AEGP_GetLayerSourceItem(created_layer, &source_item)
+            != A_Err_NONE
+        || !project_items_after.has_value()) {
+      return HostCompositionLayerCreateResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "created layer did not pass native identity and count readback");
+    }
+    std::string layer_name_error;
+    const std::optional<std::string> actual_name = read_effective_layer_name(
+        layer_suite.get(), item_suite.get(), memory_suite.get(), plugin_id_,
+        created_layer, layer_name_error);
+    if (!actual_name.has_value() || *actual_name != command.name) {
+      return HostCompositionLayerCreateResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "created layer name did not match the requested name");
+    }
+
+    std::optional<A_long> source_id;
+    AEGP_ItemType source_type = AEGP_ItemType_NONE;
+    aemcp::native::CompositionLayerSolidSpec solid_spec;
+    if (source_item != nullptr) {
+      A_long read_source_id = 0;
+      if (item_suite->AEGP_GetItemID(source_item, &read_source_id) != A_Err_NONE
+          || item_suite->AEGP_GetItemType(source_item, &source_type) != A_Err_NONE) {
+        return HostCompositionLayerCreateResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "created layer source identity could not be verified");
+      }
+      source_id = read_source_id;
+    }
+    if (solid) {
+      A_long actual_width = 0;
+      A_long actual_height = 0;
+      AEGP_ColorVal actual_color{};
+      if (source_item == nullptr
+          || item_suite->AEGP_GetItemDimensions(
+              source_item, &actual_width, &actual_height) != A_Err_NONE
+          || actual_width != static_cast<A_long>(width)
+          || actual_height != static_cast<A_long>(height)
+          || footage_suite->AEGP_GetSolidFootageColor(
+              source_item, FALSE, &actual_color) != A_Err_NONE) {
+        return HostCompositionLayerCreateResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "solid source dimensions or color could not be verified");
+      }
+      const auto channel = [](A_FpLong value) -> std::uint16_t {
+        const double bounded = std::clamp(static_cast<double>(value), 0.0, 1.0);
+        return static_cast<std::uint16_t>(std::lround(bounded * 255.0));
+      };
+      solid_spec.color = {
+          channel(actual_color.redF),
+          channel(actual_color.greenF),
+          channel(actual_color.blueF),
+          channel(actual_color.alphaF)};
+      solid_spec.width = static_cast<std::uint32_t>(actual_width);
+      solid_spec.height = static_cast<std::uint32_t>(actual_height);
+      solid_spec.duration = {
+          static_cast<std::int32_t>(actual_duration.value),
+          static_cast<std::uint32_t>(actual_duration.scale),
+          aemcp::native::canonical_seconds_rational(
+              actual_duration.value, actual_duration.scale)};
+      const auto same_time = [](const auto& left, const auto& right) {
+        return static_cast<std::int64_t>(left.value)
+                * static_cast<std::int64_t>(right.scale)
+            == static_cast<std::int64_t>(right.value)
+                * static_cast<std::int64_t>(left.scale);
+      };
+      if (solid_spec.color != color || !same_time(solid_spec.duration, duration)) {
+        return HostCompositionLayerCreateResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "solid source readback did not match the requested color or duration");
+      }
+    }
+    if (budget_expired()) {
+      return HostCompositionLayerCreateResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "composition layer was created after the validation budget elapsed");
+    }
+
+    bool invalidated = false;
+    try {
+      invalidated = graph_.invalidate_project();
+    } catch (...) {
+      invalidated = false;
+    }
+    if (!invalidated) {
+      return HostCompositionLayerCreateResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "composition layer was created but fresh locator generation failed");
+    }
+    aemcp::native::CompositionLayerCreated created;
+    created.changed = true;
+    created.kind = command.kind;
+    created.name = *actual_name;
+    created.stack_index = static_cast<std::uint64_t>(layer_index) + 1U;
+    created.composition_locator = graph_.item_locator(
+        *composition_id, true, command.host_instance_id, command.session_id);
+    created.layer_locator = graph_.layer_locator(
+        *composition_id, layer_id, command.host_instance_id, command.session_id);
+    if (source_id.has_value()) {
+      created.source_item_locator = graph_.item_locator(
+          *source_id, source_type == AEGP_ItemType_COMP,
+          command.host_instance_id, command.session_id);
+    }
+    created.layer_count_before = static_cast<std::uint64_t>(layer_count_before);
+    created.layer_count_after = static_cast<std::uint64_t>(layer_count_after);
+    created.project_item_count_before = *project_items_before;
+    created.project_item_count_after = *project_items_after;
+    if (solid) created.solid = solid_spec;
+    return HostCompositionLayerCreateResult::success(std::move(created));
+  }
+
   [[nodiscard]] HostLayerPropertiesResult list_layer_properties(
       const aemcp::native::LayerPropertiesQuery& query,
       TimePoint work_deadline) override {
@@ -3133,6 +3573,7 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
             std::string(kCompositionLayersListContractDigest),
             std::string(kCompositionTimeReadContractDigest),
             std::string(kCompositionTimeSetContractDigest),
+            std::string(kCompositionLayerCreateContractDigest),
             std::string(kLayerPropertiesListContractDigest),
             std::string(kLayerPropertySetContractDigest),
             std::string(kCompositionSelectedLayersListContractDigest),
@@ -3214,6 +3655,7 @@ void log_load(PluginState& state) {
          << kCompositionSelectedLayersListCapability << "\",\""
          << kCompositionTimeReadCapability << "\",\""
          << kCompositionTimeSetCapability << "\",\""
+         << kCompositionLayerCreateCapability << "\",\""
          << kLayerPropertiesListCapability << "\",\""
          << kLayerPropertySetCapability << "\"]}"
          ;
@@ -3310,6 +3752,18 @@ void log_completion(
              << completion.composition_time_change_result.after_time.scale
              << "},\"projectGeneration\":"
              << completion.composition_time_change_result
+                    .composition_locator.generation;
+    } else if (completion.capability_id == kCompositionLayerCreateCapability) {
+      output << ",\"result\":{\"changed\":true,\"kind\":\""
+             << json_escape(completion.composition_layer_create_result.kind)
+             << "\",\"stackIndex\":"
+             << completion.composition_layer_create_result.stack_index
+             << ",\"layerCountBefore\":"
+             << completion.composition_layer_create_result.layer_count_before
+             << ",\"layerCountAfter\":"
+             << completion.composition_layer_create_result.layer_count_after
+             << ",\"projectGeneration\":"
+             << completion.composition_layer_create_result
                     .composition_locator.generation;
     } else if (completion.capability_id == kLayerPropertiesListCapability) {
       output << ",\"result\":{\"total\":"
@@ -3459,6 +3913,7 @@ A_Err command_hook(
     if (state == nullptr) return A_Err_GENERIC;
     if (command != state->pairing_command) {
       const bool invalidated = state->project_graph.invalidate_project();
+      state->dispatcher.invalidate_composition_layer_replays();
       state->log.append(event_prefix(*state, "project.command-invalidation")
           + ",\"command\":" + std::to_string(command)
           + ",\"phase\":\"before-ae\",\"invalidated\":"

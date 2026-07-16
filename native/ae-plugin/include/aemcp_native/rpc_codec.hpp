@@ -78,6 +78,12 @@ struct InvokeParams {
   std::optional<ObjectLocator> parent_property_locator;
   std::optional<ObjectLocator> property_locator;
   LayerPropertyValue property_value;
+  std::string layer_create_kind;
+  std::string layer_create_name;
+  std::optional<CompositionLayerCreateColor> layer_create_color;
+  std::optional<std::uint32_t> layer_create_width;
+  std::optional<std::uint32_t> layer_create_height;
+  std::optional<CompositionCurrentTime> layer_create_duration;
 };
 
 struct CancelParams {
@@ -140,6 +146,17 @@ struct ParsedRequest {
     std::string_view idempotency_key);
 [[nodiscard]] std::string digest_composition_time_set_postcondition(
     const CompositionTimeChanged& value);
+[[nodiscard]] std::string digest_composition_layer_create_arguments(
+    const ObjectLocator& composition_locator,
+    std::string_view kind,
+    std::string_view name,
+    const std::optional<CompositionLayerCreateColor>& color,
+    const std::optional<std::uint32_t>& width,
+    const std::optional<std::uint32_t>& height,
+    const std::optional<CompositionCurrentTime>& duration,
+    std::string_view idempotency_key);
+[[nodiscard]] std::string digest_composition_layer_create_postcondition(
+    const CompositionLayerCreated& value);
 [[nodiscard]] std::string digest_layer_properties_postcondition(
     const LayerPropertiesPage& page);
 [[nodiscard]] std::string digest_layer_property_set_arguments(
@@ -313,6 +330,7 @@ struct CapabilitiesSuccess {
   bool include_composition_layers_list{true};
   bool include_composition_time_read{true};
   bool include_composition_time_set{true};
+  bool include_composition_layer_create{true};
   bool include_layer_properties_list{true};
   bool include_layer_property_set{true};
   std::string query_digest;
@@ -325,6 +343,7 @@ struct CapabilitiesSuccess {
   std::string composition_layers_list_contract_digest;
   std::string composition_time_read_contract_digest;
   std::string composition_time_set_contract_digest;
+  std::string composition_layer_create_contract_digest;
   std::string layer_properties_list_contract_digest;
   std::string layer_property_set_contract_digest;
   bool include_composition_selected_layers_list{false};
@@ -425,6 +444,18 @@ struct CompositionTimeSetSuccess {
   std::string session_id;
   std::string host_instance_id;
   CompositionTimeChanged value;
+  std::uint64_t started_at_unix_ms{0};
+  std::uint64_t completed_at_unix_ms{0};
+  std::string request_digest;
+  std::string postcondition_digest;
+  bool replayed{false};
+};
+
+struct CompositionLayerCreateSuccess {
+  std::string request_id;
+  std::string session_id;
+  std::string host_instance_id;
+  CompositionLayerCreated value;
   std::uint64_t started_at_unix_ms{0};
   std::uint64_t completed_at_unix_ms{0};
   std::string request_digest;
@@ -537,6 +568,8 @@ struct ErrorResponse {
     const CompositionTimeSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_composition_time_set_success(
     const CompositionTimeSetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_composition_layer_create_success(
+    const CompositionLayerCreateSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_layer_properties_success(
     const LayerPropertiesSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_layer_property_set_success(

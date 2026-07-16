@@ -30,6 +30,7 @@ using aemcp::native::HostApi;
 using aemcp::native::HostBitDepthReadResult;
 using aemcp::native::HostBitDepthWriteResult;
 using aemcp::native::HostCompositionLayersResult;
+using aemcp::native::HostCompositionLayerCreateResult;
 using aemcp::native::HostCompositionTimeResult;
 using aemcp::native::HostCompositionTimeWriteResult;
 using aemcp::native::HostDispatcher;
@@ -239,6 +240,40 @@ class FakeHost final : public HostApi {
     return HostCompositionTimeWriteResult::success(std::move(changed));
   }
 
+  [[nodiscard]] HostCompositionLayerCreateResult create_composition_layer(
+      const aemcp::native::CompositionLayerCreateCommand& command,
+      TimePoint) override {
+    ++composition_layer_create_calls;
+    observed_layer_create_command = command;
+    aemcp::native::CompositionLayerCreated created;
+    created.changed = true;
+    created.kind = command.kind;
+    created.name = command.name;
+    created.stack_index = 1;
+    created.composition_locator = {
+        "composition", command.host_instance_id, command.session_id,
+        "55555555-5555-4555-8555-555555555555", 9,
+        command.composition_locator.object_id};
+    created.layer_locator = {
+        "layer", command.host_instance_id, command.session_id,
+        "55555555-5555-4555-8555-555555555555", 9,
+        "99999999-9999-4999-8999-999999999999"};
+    created.source_item_locator = aemcp::native::ObjectLocator{
+        "item", command.host_instance_id, command.session_id,
+        "55555555-5555-4555-8555-555555555555", 9,
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"};
+    created.layer_count_before = 0;
+    created.layer_count_after = 1;
+    created.project_item_count_before = 2;
+    created.project_item_count_after = 3;
+    created.solid = aemcp::native::CompositionLayerSolidSpec{
+        command.color.value(),
+        command.width.value(),
+        command.height.value(),
+        {command.duration->value, command.duration->scale, "5"}};
+    return HostCompositionLayerCreateResult::success(std::move(created));
+  }
+
   [[nodiscard]] HostLayerPropertiesResult list_layer_properties(
       const aemcp::native::LayerPropertiesQuery& query, TimePoint) override {
     ++layer_properties_calls;
@@ -332,12 +367,14 @@ class FakeHost final : public HostApi {
   int composition_selected_layers_calls{0};
   int composition_time_calls{0};
   int composition_time_write_calls{0};
+  int composition_layer_create_calls{0};
   int layer_properties_calls{0};
   int layer_property_write_calls{0};
   int project_graph_invalidation_calls{0};
   std::thread::id project_graph_invalidation_thread;
   aemcp::native::LayerPropertySetCommand observed_property_command;
   aemcp::native::CompositionTimeSetCommand observed_time_set_command;
+  aemcp::native::CompositionLayerCreateCommand observed_layer_create_command;
 };
 
 struct EventRecord {
@@ -421,7 +458,7 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      "b256e21ccb0022c25ccd52b4b18a33f660d7ccc2fe971211280b67ab78030190",
+      "1a2c7fa5d6ca0b53b90a6c8d17739b027755fa70d03d2ef545c1238889e98a8a",
       "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
       "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
       "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
@@ -429,6 +466,7 @@ NativeRpcRuntimeInfo runtime() {
       "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
       "fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd",
       "724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308",
+      "d48b5c0fcf9871ee579bf518679bc36277e2fd5194e70d9cc6fa1b2c573edeee",
       "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba",
       "5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c",
       "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
@@ -659,6 +697,22 @@ std::string composition_time_set_invoke_json(
       + std::string(key) + "\"}}}";
 }
 
+std::string composition_layer_create_invoke_json(
+    std::string_view request_id,
+    std::string_view key = "composition-layer-intent-001",
+    std::string_view name = "Fixture Solid") {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.composition.layer.create\","
+        "\"capabilityVersion\":1,\"arguments\":{\"compositionLocator\":"
+      + graph_locator_json("composition", "66666666-6666-4666-8666-666666666666")
+      + ",\"kind\":\"solid\",\"name\":\"" + std::string(name)
+      + "\",\"color\":{\"red\":12,\"green\":34,\"blue\":56,\"alpha\":255},"
+        "\"width\":640,\"height\":360,\"duration\":{\"value\":5,\"scale\":1},"
+        "\"idempotencyKey\":\"" + std::string(key) + "\"}}}";
+}
+
 std::string layer_properties_invoke_json(std::string_view request_id) {
   return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
       + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
@@ -835,6 +889,19 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(composition_time_set_capabilities,
       "aemcp.requirement.native.composition-time-set",
       "composition-time set capabilities response");
+
+  send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-composition-layer-create", "ae.composition.layer.create"));
+  const std::string composition_layer_create_capabilities = read_body(sockets[0]);
+  require_contains(composition_layer_create_capabilities,
+      "\"id\":\"ae.composition.layer.create\"",
+      "composition-layer create capabilities response");
+  require_contains(composition_layer_create_capabilities,
+      "\"contractDigest\":\"d48b5c0fcf9871ee579bf518679bc36277e2fd5194e70d9cc6fa1b2c573edeee\"",
+      "composition-layer create capabilities response");
+  require_contains(composition_layer_create_capabilities,
+      "aemcp.requirement.native.composition-layer-create",
+      "composition-layer create capabilities response");
 
   send_json(sockets[0], bit_depth_capabilities_json(
       "capabilities-layer-properties", "ae.layer.properties.list"));
@@ -1105,6 +1172,99 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require(host.composition_time_write_calls == 1 && !wait_readable(sockets[0], 100ms),
       "same-key composition-time duplicate reached HostApi");
 
+  send_json(sockets[0], composition_layer_create_invoke_json(
+      "invoke-composition-layer-create"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "composition-layer create progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued composition-layer create invoke");
+  const auto composition_layer_create_batch = dispatcher.drain(host);
+  require(composition_layer_create_batch.completions.size() == 1
+          && composition_layer_create_batch.completions[0].ok,
+      "owner dispatcher did not produce the composition-layer create result");
+  const std::string composition_layer_create = read_body(sockets[0]);
+  require_contains(composition_layer_create,
+      "\"capabilityId\":\"ae.composition.layer.create\"",
+      "composition-layer create response");
+  require_contains(composition_layer_create,
+      "\"effect\":\"committed\"", "composition-layer create response");
+  require_contains(composition_layer_create,
+      "\"undo\":{\"available\":true,\"verified\":false}",
+      "composition-layer create response");
+  require_contains(composition_layer_create,
+      "\"kind\":\"solid\"", "composition-layer create response");
+  require_contains(composition_layer_create,
+      "\"color\":{\"alpha\":255,\"blue\":56,\"green\":34,\"red\":12}",
+      "composition-layer create response");
+  require_contains(composition_layer_create,
+      "\"layerCountAfter\":1,\"layerCountBefore\":0",
+      "composition-layer create response");
+  wait_until([&] {
+    return !observer.terminal("invoke-composition-layer-create").request_id.empty();
+  }, "composition-layer create terminal audit");
+  const TerminalRecord composition_layer_create_terminal =
+      observer.terminal("invoke-composition-layer-create");
+  require(composition_layer_create_terminal.ok
+          && composition_layer_create_terminal.request_digest.size() == 64
+          && composition_layer_create_terminal.postcondition_digest.size() == 64
+          && host.composition_layer_create_calls == 1
+          && host.observed_layer_create_command.kind == "solid"
+          && host.observed_layer_create_command.name == "Fixture Solid",
+      "composition-layer create terminal evidence was not verified");
+
+  send_json(sockets[0], composition_layer_create_invoke_json(
+      "invoke-composition-layer-create-replay"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "same-key composition-layer replay progress");
+  const std::string composition_layer_create_replay = read_body(sockets[0]);
+  require_contains(composition_layer_create_replay, "\"replayed\":true",
+      "same-key composition-layer replay");
+  require_contains(composition_layer_create_replay,
+      "\"capabilityId\":\"ae.composition.layer.create\"",
+      "same-key composition-layer replay");
+  require(host.composition_layer_create_calls == 1 && !wait_readable(sockets[0], 100ms),
+      "same-key composition-layer replay reached HostApi or emitted extra output");
+
+  send_json(sockets[0], invalidate_graph_json("invalidate-after-layer-create"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "post-create graph invalidation progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued post-create graph invalidation");
+  const auto post_create_invalidation = dispatcher.drain(host);
+  require(post_create_invalidation.completions.size() == 1
+          && post_create_invalidation.completions[0].ok
+          && post_create_invalidation.completions[0]
+              .project_graph_invalidation_result.invalidated,
+      "post-create graph invalidation did not complete");
+  require_contains(read_body(sockets[0]), "\"method\":\"invalidateGraph\"",
+      "post-create graph invalidation response");
+
+  send_json(sockets[0], composition_layer_create_invoke_json(
+      "invoke-composition-layer-create-after-invalidation"));
+  const std::string composition_layer_create_after_invalidation = read_body(sockets[0]);
+  require_contains(composition_layer_create_after_invalidation,
+      "\"code\":\"DUPLICATE_REQUEST\"",
+      "same-key composition-layer replay after graph invalidation");
+  require_contains(composition_layer_create_after_invalidation,
+      "current-state inspection",
+      "same-key composition-layer replay recovery hint");
+  require(composition_layer_create_after_invalidation.find("\"replayed\":true")
+          == std::string::npos
+          && composition_layer_create_after_invalidation.find("\"verified\":true")
+              == std::string::npos
+          && host.composition_layer_create_calls == 1,
+      "graph invalidation emitted stale verified create replay evidence");
+
+  send_json(sockets[0], composition_layer_create_invoke_json(
+      "invoke-composition-layer-create-conflict",
+      "composition-layer-intent-001", "Different Solid"));
+  const std::string composition_layer_create_conflict = read_body(sockets[0]);
+  require_contains(composition_layer_create_conflict,
+      "\"code\":\"DUPLICATE_REQUEST\"",
+      "different-args composition-layer duplicate");
+  require(host.composition_layer_create_calls == 1,
+      "different-args composition-layer duplicate reached HostApi");
+
   send_json(sockets[0], layer_properties_invoke_json("invoke-layer-properties"));
   require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
       "layer-properties progress");
@@ -1272,7 +1432,7 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(cancel, "\"terminalResponseExpected\":true", "cancel response");
   const std::string cancelled_terminal = read_body(sockets[0]);
   require_contains(cancelled_terminal, "\"code\":\"CANCELLED\"", "cancel terminal");
-  require(idle_signal.calls() == 14,
+  require(idle_signal.calls() == 17,
       "accepted invokes did not each schedule exactly one idle wake");
 
   require(dispatcher.enqueue(Request{

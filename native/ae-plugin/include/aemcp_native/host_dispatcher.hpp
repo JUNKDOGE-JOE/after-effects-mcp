@@ -34,6 +34,8 @@ inline constexpr std::string_view kCompositionTimeReadCapability =
     "ae.composition.time.read";
 inline constexpr std::string_view kCompositionTimeSetCapability =
     "ae.composition.time.set";
+inline constexpr std::string_view kCompositionLayerCreateCapability =
+    "ae.composition.layer.create";
 inline constexpr std::string_view kLayerPropertiesListCapability =
     "ae.layer.properties.list";
 inline constexpr std::string_view kLayerPropertySetCapability =
@@ -187,6 +189,37 @@ struct CompositionTimeChanged {
   CompositionCurrentTime after_time;
 };
 
+struct CompositionLayerCreateColor {
+  std::uint16_t red{255};
+  std::uint16_t green{255};
+  std::uint16_t blue{255};
+  std::uint16_t alpha{255};
+
+  [[nodiscard]] bool operator==(const CompositionLayerCreateColor&) const = default;
+};
+
+struct CompositionLayerSolidSpec {
+  CompositionLayerCreateColor color;
+  std::uint32_t width{0};
+  std::uint32_t height{0};
+  CompositionCurrentTime duration;
+};
+
+struct CompositionLayerCreated {
+  bool changed{true};
+  std::string kind;
+  std::string name;
+  std::uint64_t stack_index{0};
+  ObjectLocator composition_locator;
+  ObjectLocator layer_locator;
+  std::optional<ObjectLocator> source_item_locator;
+  std::uint64_t layer_count_before{0};
+  std::uint64_t layer_count_after{0};
+  std::uint64_t project_item_count_before{0};
+  std::uint64_t project_item_count_after{0};
+  std::optional<CompositionLayerSolidSpec> solid;
+};
+
 // Canonical reduced representation of value / scale. This deliberately
 // promotes signed SDK values before magnitude conversion so INT32_MIN is safe.
 [[nodiscard]] inline std::string canonical_seconds_rational(
@@ -306,6 +339,18 @@ struct CompositionTimeSetCommand {
   CompositionCurrentTime target_time;
 };
 
+struct CompositionLayerCreateCommand {
+  std::string host_instance_id;
+  std::string session_id;
+  ObjectLocator composition_locator;
+  std::string kind;
+  std::string name;
+  std::optional<CompositionLayerCreateColor> color;
+  std::optional<std::uint32_t> width;
+  std::optional<std::uint32_t> height;
+  std::optional<CompositionCurrentTime> duration;
+};
+
 struct LayerPropertiesQuery {
   std::string host_instance_id;
   std::string session_id;
@@ -405,6 +450,19 @@ struct HostCompositionTimeWriteResult {
       std::string code, std::string detail, std::string field = {});
 };
 
+struct HostCompositionLayerCreateResult {
+  bool ok{false};
+  CompositionLayerCreated value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostCompositionLayerCreateResult success(
+      CompositionLayerCreated value);
+  [[nodiscard]] static HostCompositionLayerCreateResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
 struct HostLayerPropertiesResult {
   bool ok{false};
   LayerPropertiesPage value;
@@ -460,6 +518,8 @@ class HostApi {
       const CompositionTimeQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostCompositionTimeWriteResult set_composition_time(
       const CompositionTimeSetCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostCompositionLayerCreateResult create_composition_layer(
+      const CompositionLayerCreateCommand& command, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerPropertiesResult list_layer_properties(
       const LayerPropertiesQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerPropertyWriteResult set_layer_property(
@@ -489,7 +549,13 @@ struct Request {
       std::optional<ObjectLocator> parent_property_locator_value = std::nullopt,
       std::optional<ObjectLocator> property_locator_value = std::nullopt,
       LayerPropertyValue property_value_value = {},
-      CompositionCurrentTime target_time_value = {})
+      CompositionCurrentTime target_time_value = {},
+      std::string layer_create_kind_value = {},
+      std::string layer_create_name_value = {},
+      std::optional<CompositionLayerCreateColor> layer_create_color_value = std::nullopt,
+      std::optional<std::uint32_t> layer_create_width_value = std::nullopt,
+      std::optional<std::uint32_t> layer_create_height_value = std::nullopt,
+      std::optional<CompositionCurrentTime> layer_create_duration_value = std::nullopt)
       : request_id(std::move(request_id_value)),
         capability_id(std::move(capability_id_value)),
         deadline(deadline_value),
@@ -508,7 +574,13 @@ struct Request {
         parent_property_locator(std::move(parent_property_locator_value)),
         property_locator(std::move(property_locator_value)),
         property_value(std::move(property_value_value)),
-        target_time(std::move(target_time_value)) {}
+        target_time(std::move(target_time_value)),
+        layer_create_kind(std::move(layer_create_kind_value)),
+        layer_create_name(std::move(layer_create_name_value)),
+        layer_create_color(std::move(layer_create_color_value)),
+        layer_create_width(layer_create_width_value),
+        layer_create_height(layer_create_height_value),
+        layer_create_duration(std::move(layer_create_duration_value)) {}
 
   std::string request_id;
   std::string capability_id;
@@ -532,6 +604,12 @@ struct Request {
   std::optional<ObjectLocator> property_locator;
   LayerPropertyValue property_value;
   CompositionCurrentTime target_time;
+  std::string layer_create_kind;
+  std::string layer_create_name;
+  std::optional<CompositionLayerCreateColor> layer_create_color;
+  std::optional<std::uint32_t> layer_create_width;
+  std::optional<std::uint32_t> layer_create_height;
+  std::optional<CompositionCurrentTime> layer_create_duration;
 };
 
 enum class EnqueueCode {
@@ -577,6 +655,7 @@ struct Completion {
   CompositionLayersPage composition_selected_layers_result;
   CompositionTimeRead composition_time_result;
   CompositionTimeChanged composition_time_change_result;
+  CompositionLayerCreated composition_layer_create_result;
   LayerPropertiesPage layer_properties_result;
   LayerPropertyChanged layer_property_change_result;
   ProjectGraphInvalidation project_graph_invalidation_result;
@@ -586,6 +665,7 @@ struct Completion {
   std::string message;
   std::string error_field;
   bool late_result_discarded{false};
+  bool replayed{false};
   // This is a snapshot for audit/filtering, not a send authorization. A
   // transport must exact-match route+generation under the same connection lock
   // used by close/revoke immediately before writing to a socket.
@@ -664,6 +744,7 @@ class HostDispatcher final {
       std::uint64_t session_generation,
       std::string_view request_id);
   void mark_idempotency_ambiguous(std::string_view idempotency_key);
+  void invalidate_composition_layer_replays();
   [[nodiscard]] bool running() const;
 
  private:
@@ -691,6 +772,7 @@ class HostDispatcher final {
   struct IdempotencyEntry {
     std::string arguments_fingerprint_sha256;
     IdempotencyState state{IdempotencyState::kReserved};
+    std::optional<Completion> replay_completion;
   };
 
   [[nodiscard]] Completion expired(const Request& request, bool late) const;
@@ -703,6 +785,7 @@ class HostDispatcher final {
   [[nodiscard]] bool terminal_locked(const RequestKey& key) const;
   void purge_terminal_locked(TimePoint now);
   void remember_terminal_locked(RequestKey key, TimePoint now);
+  void invalidate_composition_layer_replays_locked();
   [[nodiscard]] bool fence_route_locked(
       std::string route_id, std::uint64_t session_generation);
   void finish_request_locked(const RequestKey& key, Completion& completion, TimePoint now);

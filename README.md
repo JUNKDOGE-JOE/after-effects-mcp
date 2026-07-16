@@ -109,7 +109,7 @@ External clients must run on the same machine as After Effects, or otherwise be 
 | Category | Tools |
 |---|---|
 | Project | `ae_init`, `ae_overview`, `ae_layers`, `ae_listProjectItems`, `ae_listCompositionLayers`, `ae_listSelectedLayers`, `ae_getCompositionTime`, `ae_listLayerProperties`, `ae_setLayerPropertyValue`, `ae_readProps`, `ae_searchProject` |
-| Mutation | `ae_exec`, `ae_applyEffect`, `ae_createLayer`, `ae_setProperty`, `ae_moveLayer`, `ae_selectLayers`, `ae_setTime` |
+| Mutation | `ae_exec`, `ae_applyEffect`, `ae_createLayer`, `ae_createCompositionLayer`, `ae_setProperty`, `ae_moveLayer`, `ae_selectLayers`, `ae_setTime` |
 | Read-typed | `ae_getTime`, `ae_getProperties`, `ae_scanPropertyTree`, `ae_inspectPropertyCapabilities`, `ae_getExpressions`, `ae_validateExpressions`, `ae_getKeyframes` |
 | Preview / capture | `ae_previewFrame`, `ae_snapshot` |
 | Rigging | `ae_createRig` |
@@ -253,6 +253,12 @@ Pass a returned layer locator and primitive leaf locator to `ae_setLayerProperty
 idempotency key to perform a native `AEGP_SetStreamValue` write. The result includes verified
 before/after values, audit provenance, and AE Undo availability. If a post-dispatch response is
 uncertain, inspect AE state before retrying.
+Pass a fresh composition locator to `ae_createCompositionLayer` to create one native null or solid
+layer with an exact name and stable idempotency key. Solid color, dimensions, and duration are
+optional and otherwise inherit documented defaults. The result returns fresh post-mutation
+locators, count evidence, native provenance, and Undo availability; replaying the same intent does
+not create a duplicate. Use the returned composition locator after success because the prior graph
+generation is stale.
 These native tools fail explicitly when the native plane is unavailable and never fall back to JSX.
 
 CEP panel macOS development setup:

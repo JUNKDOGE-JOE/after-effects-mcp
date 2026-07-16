@@ -38,8 +38,12 @@ WORKFLOW — every task follows this loop:
                 ae_setCompositionTime likewise requires an exact value/scale,
                 a fresh composition locator, and one stable idempotency key;
                 verify it with ae_getCompositionTime before any retry.
-                These reads fail explicitly when native AEGP is unavailable;
-                they never fall back to JSX.
+                To create one native null or solid, call
+                ae_createCompositionLayer with a fresh composition locator,
+                exact name, and stable idempotency key. Solid-only options are
+                optional; after success, use the returned fresh composition
+                locator. These native tools fail explicitly when AEGP is
+                unavailable and never fall back to JSX.
   2. Act      — Prefer the typed verbs (ae_createLayer, ae_setProperty,
                 ae_applyEffect, ae_moveLayer, ae_createRig). Drop to ae_exec
                 only for logic the typed verbs can't express.
