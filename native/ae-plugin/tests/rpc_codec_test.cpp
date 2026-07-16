@@ -1381,6 +1381,15 @@ void response_helpers_are_bounded_and_typed() {
           != std::string::npos
       && capabilities_body.find("\"id\":\"ae.composition.time.set\"")
           != std::string::npos
+      && capabilities_body.find("\"id\":\"ae.composition.layer.create\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"aemcp-example-composition-layer-create-stale\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "Create and verify one named null layer with Undo available.")
+          != std::string::npos
+      && capabilities_body.find("Controller") == std::string::npos
       && capabilities_body.find("\"id\":\"ae.layer.properties.list\"")
           != std::string::npos,
       "full capability serializer omitted the closed contract");
