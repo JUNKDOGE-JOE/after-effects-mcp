@@ -3337,14 +3337,16 @@ class AegpHostApi final : public HostApi {
     A_long parameter_count = 0;
     if (stream_suite->AEGP_GetEffectNumParamStreams(
             applied_owner.get(), &parameter_count) != A_Err_NONE
-        || parameter_count < 1 || parameter_count > 4096) {
+        || parameter_count < 2 || parameter_count > 4096) {
       return HostLayerEffectApplyResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
           "applied effect parameter stream count was missing or invalid");
     }
+    // AE 26.3 validates effect parameter streams as [1, count - 1]; index 0
+    // is the logical input-layer slot but is not retrievable as a stream ref.
     AEGP_StreamRefH parameter_stream = nullptr;
     if (stream_suite->AEGP_GetNewEffectStreamByIndex(
-            plugin_id_, applied_owner.get(), 0, &parameter_stream) != A_Err_NONE
+            plugin_id_, applied_owner.get(), 1, &parameter_stream) != A_Err_NONE
         || parameter_stream == nullptr) {
       return HostLayerEffectApplyResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
