@@ -285,6 +285,64 @@ class AeLayerSolidColorInput(_StrictModel):
     alpha: int = Field(255, ge=0, le=255)
 
 
+class AePositiveRatioInput(_StrictModel):
+    """Exact positive numerator/denominator pair for native A_Ratio values."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    numerator: int = Field(..., ge=1, le=2_147_483_647)
+    denominator: int = Field(..., ge=1, le=2_147_483_647)
+
+
+class AeCreateCompositionArgs(_StrictModel):
+    """ae.createComposition — create one root composition through native AEGP.
+
+    Defaults describe a common 1920x1080, five-second, 24 fps square-pixel
+    composition. The write never falls back to JSX.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Exact composition name (1–255 Unicode scalar values).",
+    )
+    width: int = Field(1920, ge=1, le=30_000)
+    height: int = Field(1080, ge=1, le=30_000)
+    duration: AeCompositionTimeInput = Field(
+        default_factory=lambda: AeCompositionTimeInput(value=5, scale=1),
+        description="Exact positive duration; defaults to five seconds.",
+    )
+    frame_rate: AePositiveRatioInput = Field(
+        default_factory=lambda: AePositiveRatioInput(numerator=24, denominator=1),
+        description="Exact positive frames-per-second ratio; defaults to 24/1.",
+    )
+    pixel_aspect_ratio: AePositiveRatioInput = Field(
+        default_factory=lambda: AePositiveRatioInput(numerator=1, denominator=1),
+        description="Exact positive pixel-aspect ratio; defaults to square pixels.",
+    )
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        description=(
+            "Stable key for one composition-create intent. Reusing it never "
+            "creates a duplicate composition."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _valid_native_values(self) -> "AeCreateCompositionArgs":
+        if any(0xD800 <= ord(character) <= 0xDFFF for character in self.name):
+            raise ValueError("name must contain only Unicode scalar values")
+        if self.duration.value <= 0:
+            raise ValueError("duration must be positive")
+        return self
+
+
 class AeCreateCompositionLayerArgs(_StrictModel):
     """ae.createCompositionLayer — create one native null or solid layer.
 
@@ -1015,6 +1073,7 @@ SCHEMAS = {
     "ae.listSelectedLayers": AeListSelectedLayersArgs,
     "ae.getCompositionTime": AeGetCompositionTimeArgs,
     "ae.setCompositionTime": AeSetCompositionTimeArgs,
+    "ae.createComposition": AeCreateCompositionArgs,
     "ae.createCompositionLayer": AeCreateCompositionLayerArgs,
     "ae.listLayerProperties": AeListLayerPropertiesArgs,
     "ae.setLayerPropertyValue": AeSetLayerPropertyValueArgs,
@@ -1062,4 +1121,4 @@ SCHEMAS = {
     "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 55, f"expected 55 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 56, f"expected 56 verbs, got {len(SCHEMAS)}"

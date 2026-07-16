@@ -25,6 +25,7 @@ struct NativeRpcRuntimeInfo {
   std::string composition_layers_list_contract_digest;
   std::string composition_time_read_contract_digest;
   std::string composition_time_set_contract_digest;
+  std::string composition_create_contract_digest;
   std::string composition_layer_create_contract_digest;
   std::string layer_properties_list_contract_digest;
   std::string layer_property_set_contract_digest;

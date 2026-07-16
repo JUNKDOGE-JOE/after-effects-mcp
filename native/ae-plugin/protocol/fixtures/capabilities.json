@@ -1926,6 +1926,370 @@
         },
         {
           "detail": "full",
+          "id": "ae.composition.create",
+          "version": 1,
+          "schemaVersion": 1,
+          "summary": "Create one root composition in After Effects.",
+          "risk": "write",
+          "mutability": "mutating",
+          "idempotency": "idempotency-key",
+          "cancellation": "before-dispatch",
+          "undo": "ae-undo-group",
+          "sideEffectSummary": "Creates one root composition and one After Effects Undo step.",
+          "preconditions": [
+            "An After Effects project must be open."
+          ],
+          "compatibility": {
+            "status": "unverified",
+            "intendedPlatforms": [
+              "macos-arm64",
+              "windows-x64"
+            ]
+          },
+          "inputContractId": "aemcp.contract.ae.composition.create.input.v1",
+          "resultContractId": "aemcp.contract.ae.composition.create.result.v1",
+          "contractDigest": "a5e0ccfc15086d1b10987246048e539cf6332a4e24114ac81783f4a9758ab6f6",
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "width",
+              "height",
+              "duration",
+              "frameRate",
+              "pixelAspectRatio",
+              "idempotencyKey"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255
+              },
+              "width": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 30000
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 30000
+              },
+              "duration": {
+                "$ref": "#/$defs/positiveTime"
+              },
+              "frameRate": {
+                "$ref": "#/$defs/positiveRatio"
+              },
+              "pixelAspectRatio": {
+                "$ref": "#/$defs/positiveRatio"
+              },
+              "idempotencyKey": {
+                "type": "string",
+                "minLength": 16,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+              }
+            },
+            "$defs": {
+              "positiveTime": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "value",
+                  "scale"
+                ],
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "scale": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4294967295
+                  }
+                }
+              },
+              "positiveRatio": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "numerator",
+                  "denominator"
+                ],
+                "properties": {
+                  "numerator": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "denominator": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  }
+                }
+              }
+            }
+          },
+          "resultSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "changed",
+              "name",
+              "compositionLocator",
+              "projectItemCountBefore",
+              "projectItemCountAfter",
+              "layerCount",
+              "width",
+              "height",
+              "duration",
+              "frameRate",
+              "pixelAspectRatio"
+            ],
+            "properties": {
+              "changed": {
+                "const": true
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255
+              },
+              "compositionLocator": {
+                "$ref": "#/$defs/compositionLocator"
+              },
+              "projectItemCountBefore": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "projectItemCountAfter": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "layerCount": {
+                "const": 0
+              },
+              "width": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 30000
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 30000
+              },
+              "duration": {
+                "$ref": "#/$defs/currentTime"
+              },
+              "frameRate": {
+                "$ref": "#/$defs/positiveRatio"
+              },
+              "pixelAspectRatio": {
+                "$ref": "#/$defs/positiveRatio"
+              }
+            },
+            "$defs": {
+              "uuid": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "compositionLocator": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "hostInstanceId",
+                  "sessionId",
+                  "projectId",
+                  "generation",
+                  "objectId"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "composition"
+                  },
+                  "hostInstanceId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "sessionId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "projectId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "generation": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "objectId": {
+                    "$ref": "#/$defs/uuid"
+                  }
+                }
+              },
+              "currentTime": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "value",
+                  "scale",
+                  "secondsRational"
+                ],
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": -2147483648,
+                    "maximum": 2147483647
+                  },
+                  "scale": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4294967295
+                  },
+                  "secondsRational": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 28,
+                    "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+                  }
+                }
+              },
+              "positiveRatio": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "numerator",
+                  "denominator",
+                  "rational"
+                ],
+                "properties": {
+                  "numerator": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "denominator": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "rational": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 28,
+                    "pattern": "^[1-9][0-9]*(?:/[1-9][0-9]*)?$"
+                  }
+                },
+                "x-invariant": "rational-is-the-reduced-canonical-form-of-numerator-over-denominator"
+              }
+            },
+            "x-invariant": "projectItemCountAfter-equals-projectItemCountBefore-plus-one;layerCount-is-zero;all-settings-match-the-request"
+          },
+          "requirements": [
+            {
+              "id": "aemcp.requirement.native.composition-create",
+              "contractVersion": 1
+            }
+          ],
+          "examples": [
+            {
+              "id": "aemcp-example-composition-create",
+              "kind": "positive",
+              "summary": "Create and verify one root composition with exact settings.",
+              "arguments": {
+                "name": "SYNTHETIC_COMP",
+                "width": 1920,
+                "height": 1080,
+                "duration": {
+                  "value": 5,
+                  "scale": 1
+                },
+                "frameRate": {
+                  "numerator": 24,
+                  "denominator": 1
+                },
+                "pixelAspectRatio": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "idempotencyKey": "synthetic-comp-create-0001"
+              },
+              "expected": {
+                "outcome": "succeeded",
+                "value": {
+                  "changed": true,
+                  "name": "SYNTHETIC_COMP",
+                  "compositionLocator": {
+                    "kind": "composition",
+                    "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+                    "sessionId": "11111111-1111-4111-8111-111111111111",
+                    "projectId": "44444444-4444-4444-8444-444444444444",
+                    "generation": 8,
+                    "objectId": "77777777-7777-4777-8777-777777777777"
+                  },
+                  "projectItemCountBefore": 1,
+                  "projectItemCountAfter": 2,
+                  "layerCount": 0,
+                  "width": 1920,
+                  "height": 1080,
+                  "duration": {
+                    "value": 5,
+                    "scale": 1,
+                    "secondsRational": "5"
+                  },
+                  "frameRate": {
+                    "numerator": 24,
+                    "denominator": 1,
+                    "rational": "24"
+                  },
+                  "pixelAspectRatio": {
+                    "numerator": 1,
+                    "denominator": 1,
+                    "rational": "1"
+                  }
+                }
+              }
+            },
+            {
+              "id": "aemcp-example-composition-create-duplicate",
+              "kind": "negative",
+              "summary": "Inspect state when an idempotency key is already bound.",
+              "arguments": {
+                "name": "SYNTHETIC_COMP",
+                "width": 1920,
+                "height": 1080,
+                "duration": {
+                  "value": 5,
+                  "scale": 1
+                },
+                "frameRate": {
+                  "numerator": 24,
+                  "denominator": 1
+                },
+                "pixelAspectRatio": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "idempotencyKey": "synthetic-comp-create-0002"
+              },
+              "expected": {
+                "errorCode": "DUPLICATE_REQUEST",
+                "recoveryAction": "inspect-state"
+              }
+            }
+          ]
+        },
+        {
+          "detail": "full",
           "id": "ae.composition.layer.create",
           "version": 1,
           "schemaVersion": 1,
@@ -3541,7 +3905,7 @@
       ],
       "nextCursor": null,
       "queryDigest": "1c9d06b8b5f876c7b41fb00204efe2f5c5e62502bb188fa8a1e5eae5e59d0c3b",
-      "capabilitiesDigest": "1a2c7fa5d6ca0b53b90a6c8d17739b027755fa70d03d2ef545c1238889e98a8a"
+      "capabilitiesDigest": "cee53bf620638964faf818c40dc22d13362ca33d6034a65cd9062a7d6c3c2f8c"
     }
   }
 }

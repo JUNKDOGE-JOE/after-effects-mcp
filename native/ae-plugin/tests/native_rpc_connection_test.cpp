@@ -30,6 +30,7 @@ using aemcp::native::HostApi;
 using aemcp::native::HostBitDepthReadResult;
 using aemcp::native::HostBitDepthWriteResult;
 using aemcp::native::HostCompositionLayersResult;
+using aemcp::native::HostCompositionCreateResult;
 using aemcp::native::HostCompositionLayerCreateResult;
 using aemcp::native::HostCompositionTimeResult;
 using aemcp::native::HostCompositionTimeWriteResult;
@@ -274,6 +275,28 @@ class FakeHost final : public HostApi {
     return HostCompositionLayerCreateResult::success(std::move(created));
   }
 
+  [[nodiscard]] HostCompositionCreateResult create_composition(
+      const aemcp::native::CompositionCreateCommand& command,
+      TimePoint) override {
+    ++composition_create_calls;
+    observed_composition_create_command = command;
+    aemcp::native::CompositionCreated created;
+    created.name = command.name;
+    created.composition_locator = {
+        "composition", command.host_instance_id, command.session_id,
+        "55555555-5555-4555-8555-555555555555", 9,
+        "77777777-7777-4777-8777-777777777777"};
+    created.project_item_count_before = 1;
+    created.project_item_count_after = 2;
+    created.layer_count = 0;
+    created.width = command.width;
+    created.height = command.height;
+    created.duration = command.duration;
+    created.frame_rate = command.frame_rate;
+    created.pixel_aspect_ratio = command.pixel_aspect_ratio;
+    return HostCompositionCreateResult::success(std::move(created));
+  }
+
   [[nodiscard]] HostLayerPropertiesResult list_layer_properties(
       const aemcp::native::LayerPropertiesQuery& query, TimePoint) override {
     ++layer_properties_calls;
@@ -367,6 +390,7 @@ class FakeHost final : public HostApi {
   int composition_selected_layers_calls{0};
   int composition_time_calls{0};
   int composition_time_write_calls{0};
+  int composition_create_calls{0};
   int composition_layer_create_calls{0};
   int layer_properties_calls{0};
   int layer_property_write_calls{0};
@@ -374,6 +398,7 @@ class FakeHost final : public HostApi {
   std::thread::id project_graph_invalidation_thread;
   aemcp::native::LayerPropertySetCommand observed_property_command;
   aemcp::native::CompositionTimeSetCommand observed_time_set_command;
+  aemcp::native::CompositionCreateCommand observed_composition_create_command;
   aemcp::native::CompositionLayerCreateCommand observed_layer_create_command;
 };
 
@@ -458,7 +483,7 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      "1a2c7fa5d6ca0b53b90a6c8d17739b027755fa70d03d2ef545c1238889e98a8a",
+      "cee53bf620638964faf818c40dc22d13362ca33d6034a65cd9062a7d6c3c2f8c",
       "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
       "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
       "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
@@ -466,6 +491,7 @@ NativeRpcRuntimeInfo runtime() {
       "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
       "fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd",
       "724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308",
+      "a5e0ccfc15086d1b10987246048e539cf6332a4e24114ac81783f4a9758ab6f6",
       "d48b5c0fcf9871ee579bf518679bc36277e2fd5194e70d9cc6fa1b2c573edeee",
       "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba",
       "5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c",
@@ -713,6 +739,20 @@ std::string composition_layer_create_invoke_json(
         "\"idempotencyKey\":\"" + std::string(key) + "\"}}}";
 }
 
+std::string composition_create_invoke_json(
+    std::string_view request_id,
+    std::string_view key = "composition-create-intent-001") {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.composition.create\","
+        "\"capabilityVersion\":1,\"arguments\":{\"name\":\"Fixture Comp Created\","
+        "\"width\":1920,\"height\":1080,\"duration\":{\"value\":5,\"scale\":1},"
+        "\"frameRate\":{\"numerator\":24,\"denominator\":1},"
+        "\"pixelAspectRatio\":{\"numerator\":1,\"denominator\":1},"
+        "\"idempotencyKey\":\"" + std::string(key) + "\"}}}";
+}
+
 std::string layer_properties_invoke_json(std::string_view request_id) {
   return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
       + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
@@ -889,6 +929,19 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(composition_time_set_capabilities,
       "aemcp.requirement.native.composition-time-set",
       "composition-time set capabilities response");
+
+  send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-composition-create", "ae.composition.create"));
+  const std::string composition_create_capabilities = read_body(sockets[0]);
+  require_contains(composition_create_capabilities,
+      "\"id\":\"ae.composition.create\"",
+      "composition create capabilities response");
+  require_contains(composition_create_capabilities,
+      "\"contractDigest\":\"a5e0ccfc15086d1b10987246048e539cf6332a4e24114ac81783f4a9758ab6f6\"",
+      "composition create capabilities response");
+  require_contains(composition_create_capabilities,
+      "aemcp.requirement.native.composition-create",
+      "composition create capabilities response");
 
   send_json(sockets[0], bit_depth_capabilities_json(
       "capabilities-composition-layer-create", "ae.composition.layer.create"));
@@ -1172,6 +1225,53 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require(host.composition_time_write_calls == 1 && !wait_readable(sockets[0], 100ms),
       "same-key composition-time duplicate reached HostApi");
 
+  send_json(sockets[0], composition_create_invoke_json(
+      "invoke-composition-create"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "composition create progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued composition create invoke");
+  const auto composition_create_batch = dispatcher.drain(host);
+  require(composition_create_batch.completions.size() == 1
+          && composition_create_batch.completions[0].ok,
+      "owner dispatcher did not produce the composition create result");
+  const std::string composition_create = read_body(sockets[0]);
+  require_contains(composition_create,
+      "\"capabilityId\":\"ae.composition.create\"",
+      "composition create response");
+  require_contains(composition_create,
+      "\"effect\":\"committed\"", "composition create response");
+  require_contains(composition_create,
+      "\"undo\":{\"available\":true,\"verified\":false}",
+      "composition create response");
+  require_contains(composition_create,
+      "\"name\":\"Fixture Comp Created\"", "composition create response");
+  require_contains(composition_create,
+      "\"projectItemCountAfter\":2,\"projectItemCountBefore\":1",
+      "composition create response");
+  wait_until([&] {
+    return !observer.terminal("invoke-composition-create").request_id.empty();
+  }, "composition create terminal audit");
+  const TerminalRecord composition_create_terminal =
+      observer.terminal("invoke-composition-create");
+  require(composition_create_terminal.ok
+          && composition_create_terminal.request_digest.size() == 64
+          && composition_create_terminal.postcondition_digest.size() == 64
+          && host.composition_create_calls == 1
+          && host.observed_composition_create_command.name == "Fixture Comp Created"
+          && host.observed_composition_create_command.frame_rate.numerator == 24,
+      "composition create terminal evidence was not verified");
+
+  send_json(sockets[0], composition_create_invoke_json(
+      "invoke-composition-create-replay"));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "same-key composition create replay progress");
+  const std::string composition_create_replay = read_body(sockets[0]);
+  require_contains(composition_create_replay, "\"replayed\":true",
+      "same-key composition create replay");
+  require(host.composition_create_calls == 1 && !wait_readable(sockets[0], 100ms),
+      "same-key composition create replay reached HostApi or emitted extra output");
+
   send_json(sockets[0], composition_layer_create_invoke_json(
       "invoke-composition-layer-create"));
   require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
@@ -1432,7 +1532,7 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(cancel, "\"terminalResponseExpected\":true", "cancel response");
   const std::string cancelled_terminal = read_body(sockets[0]);
   require_contains(cancelled_terminal, "\"code\":\"CANCELLED\"", "cancel terminal");
-  require(idle_signal.calls() == 17,
+  require(idle_signal.calls() == 19,
       "accepted invokes did not each schedule exactly one idle wake");
 
   require(dispatcher.enqueue(Request{

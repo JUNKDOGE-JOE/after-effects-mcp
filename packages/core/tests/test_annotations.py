@@ -30,6 +30,9 @@ def test_exec_is_destructive_and_reads_are_readonly():
     assert VERB_ANNOTATIONS["ae.setLayerPropertyValue"].readOnlyHint is False
     assert VERB_ANNOTATIONS["ae.setLayerPropertyValue"].destructiveHint is False
     assert VERB_ANNOTATIONS["ae.setLayerPropertyValue"].idempotentHint is True
+    assert VERB_ANNOTATIONS["ae.createComposition"].readOnlyHint is False
+    assert VERB_ANNOTATIONS["ae.createComposition"].destructiveHint is False
+    assert VERB_ANNOTATIONS["ae.createComposition"].idempotentHint is True
     assert VERB_ANNOTATIONS["ae.createCompositionLayer"].readOnlyHint is False
     assert VERB_ANNOTATIONS["ae.createCompositionLayer"].destructiveHint is False
     assert VERB_ANNOTATIONS["ae.createCompositionLayer"].idempotentHint is True

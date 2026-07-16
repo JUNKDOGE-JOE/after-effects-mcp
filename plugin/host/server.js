@@ -35,6 +35,7 @@ const COMPOSITION_LAYERS_LIST_CAPABILITY = 'ae.composition.layers.list';
 const COMPOSITION_SELECTED_LAYERS_LIST_CAPABILITY = 'ae.composition.selected-layers.list';
 const COMPOSITION_TIME_READ_CAPABILITY = 'ae.composition.time.read';
 const COMPOSITION_TIME_SET_CAPABILITY = 'ae.composition.time.set';
+const COMPOSITION_CREATE_CAPABILITY = 'ae.composition.create';
 const COMPOSITION_LAYER_CREATE_CAPABILITY = 'ae.composition.layer.create';
 const LAYER_PROPERTIES_LIST_CAPABILITY = 'ae.layer.properties.list';
 const LAYER_PROPERTY_SET_CAPABILITY = 'ae.layer.property.set';
@@ -328,6 +329,34 @@ function validUnicodeScalarCount(value, minimum, maximum) {
     return count >= minimum && count <= maximum;
 }
 
+function validPositiveRatio(value) {
+    return exactBody(value, ['numerator', 'denominator'])
+        && Number.isInteger(value.numerator) && value.numerator >= 1
+        && value.numerator <= 2147483647
+        && Number.isInteger(value.denominator) && value.denominator >= 1
+        && value.denominator <= 2147483647;
+}
+
+function validCompositionCreateArguments(value) {
+    return exactBody(value, [
+        'name', 'width', 'height', 'duration', 'frameRate',
+        'pixelAspectRatio', 'idempotencyKey',
+    ])
+        && validUnicodeScalarCount(value.name, 1, 255)
+        && Number.isInteger(value.width) && value.width >= 1 && value.width <= 30000
+        && Number.isInteger(value.height) && value.height >= 1 && value.height <= 30000
+        && exactBody(value.duration, ['value', 'scale'])
+        && Number.isInteger(value.duration.value)
+        && value.duration.value >= 1 && value.duration.value <= 2147483647
+        && Number.isInteger(value.duration.scale)
+        && value.duration.scale >= 1 && value.duration.scale <= 4294967295
+        && validPositiveRatio(value.frameRate)
+        && validPositiveRatio(value.pixelAspectRatio)
+        && typeof value.idempotencyKey === 'string'
+        && value.idempotencyKey.length >= 16
+        && NATIVE_REQUEST_ID_PATTERN.test(value.idempotencyKey);
+}
+
 function validCompositionLayerCreateArguments(value) {
     if (!exactBody(value, [
         'compositionLocator', 'kind', 'name', 'idempotencyKey',
@@ -441,6 +470,10 @@ function validNativeInvokeBody(body) {
     if (body.capabilityId === COMPOSITION_TIME_SET_CAPABILITY
         && body.capabilityVersion === 1) {
         return validCompositionTimeSetArguments(body.arguments);
+    }
+    if (body.capabilityId === COMPOSITION_CREATE_CAPABILITY
+        && body.capabilityVersion === 1) {
+        return validCompositionCreateArguments(body.arguments);
     }
     if (body.capabilityId === COMPOSITION_LAYER_CREATE_CAPABILITY
         && body.capabilityVersion === 1) {

@@ -297,6 +297,9 @@ void NativeRpcConnectionHandler::serve(
             } else if (completion.capability_id == kCompositionTimeSetCapability) {
               postcondition_digest = rpc::digest_composition_time_set_postcondition(
                   completion.composition_time_change_result);
+            } else if (completion.capability_id == kCompositionCreateCapability) {
+              postcondition_digest = rpc::digest_composition_create_postcondition(
+                  completion.composition_create_result);
             } else if (completion.capability_id
                 == kCompositionLayerCreateCapability) {
               postcondition_digest =
@@ -319,6 +322,7 @@ void NativeRpcConnectionHandler::serve(
           completion.ok = false;
           const bool mutating = completion.capability_id == kProjectBitDepthSetCapability
               || completion.capability_id == kCompositionTimeSetCapability
+              || completion.capability_id == kCompositionCreateCapability
               || completion.capability_id == kCompositionLayerCreateCapability
               || completion.capability_id == kLayerPropertySetCapability;
           completion.error_code = mutating
@@ -446,6 +450,18 @@ void NativeRpcConnectionHandler::serve(
                 connection.session_id,
                 runtime_.host_instance_id,
                 completion.composition_time_change_result,
+                started_at,
+                completed_at,
+                request_digest,
+                postcondition_digest,
+                completion.replayed,
+            });
+          } else if (completion.capability_id == kCompositionCreateCapability) {
+            response = rpc::encode_composition_create_success({
+                completion.request_id,
+                connection.session_id,
+                runtime_.host_instance_id,
+                completion.composition_create_result,
                 started_at,
                 completed_at,
                 request_digest,
@@ -596,6 +612,9 @@ void NativeRpcConnectionHandler::serve(
           const bool include_composition_time_set = !query.ids.has_value() || std::find(
               query.ids->begin(), query.ids->end(), "ae.composition.time.set")
                   != query.ids->end();
+          const bool include_composition_create = !query.ids.has_value() || std::find(
+              query.ids->begin(), query.ids->end(), "ae.composition.create")
+                  != query.ids->end();
           const bool include_composition_layer_create = !query.ids.has_value()
               || std::find(
                   query.ids->begin(), query.ids->end(),
@@ -614,6 +633,7 @@ void NativeRpcConnectionHandler::serve(
               + static_cast<std::size_t>(include_composition_selected_layers)
               + static_cast<std::size_t>(include_composition_time)
               + static_cast<std::size_t>(include_composition_time_set)
+              + static_cast<std::size_t>(include_composition_create)
               + static_cast<std::size_t>(include_composition_layer_create)
               + static_cast<std::size_t>(include_layer_properties)
               + static_cast<std::size_t>(include_layer_property_set);
@@ -640,6 +660,7 @@ void NativeRpcConnectionHandler::serve(
                   include_composition_layers,
                   include_composition_time,
                   include_composition_time_set,
+                  include_composition_create,
                   include_composition_layer_create,
                   include_layer_properties,
                   include_layer_property_set,
@@ -652,6 +673,7 @@ void NativeRpcConnectionHandler::serve(
                   runtime_.composition_layers_list_contract_digest,
                   runtime_.composition_time_read_contract_digest,
                   runtime_.composition_time_set_contract_digest,
+                  runtime_.composition_create_contract_digest,
                   runtime_.composition_layer_create_contract_digest,
                   runtime_.layer_properties_list_contract_digest,
                   runtime_.layer_property_set_contract_digest,
@@ -737,6 +759,12 @@ void NativeRpcConnectionHandler::serve(
               invoke.layer_create_width,
               invoke.layer_create_height,
               invoke.layer_create_duration,
+              invoke.composition_create_name,
+              invoke.composition_create_width,
+              invoke.composition_create_height,
+              invoke.composition_create_duration,
+              invoke.composition_create_frame_rate,
+              invoke.composition_create_pixel_aspect_ratio,
           };
         }
         const std::string dispatched_capability = dispatch_request.capability_id;

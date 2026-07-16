@@ -303,6 +303,29 @@ async def test_native_bit_depth_transport_loss_preserves_side_effect_uncertainty
 
 
 @pytest.mark.asyncio
+async def test_native_composition_create_transport_loss_is_not_safe_to_retry(token_file):
+    wire_request = _fixture("invoke-composition-create.json")["request"]
+    request = NativeInvokeRequest(
+        request_id="core-composition-create-timeout",
+        capability_id="ae.composition.create",
+        capability_version=1,
+        arguments=wire_request["params"]["arguments"],
+        deadline_unix_ms=_DEADLINE,
+    )
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/invoke").mock(side_effect=ReadTimeout("lost response"))
+        with pytest.raises(NativeBackendError) as raised:
+            await HttpBridge("http://127.0.0.1:11488").invoke(request)
+
+    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert raised.value.side_effect == "may-have-occurred"
+    assert raised.value.retryable is False
+    assert raised.value.recovery.action == "inspect-state"
+    assert "project items" in raised.value.recovery.hint
+    assert raised.value.details == {"capabilityId": request.capability_id}
+
+
+@pytest.mark.asyncio
 async def test_native_composition_layer_create_preserves_replay_and_undo(token_file):
     vector = _fixture("invoke-composition-layer-create.json")
     wire_request = vector["request"]

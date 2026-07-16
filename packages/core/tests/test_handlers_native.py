@@ -864,6 +864,10 @@ def test_native_tool_registration_is_explicit():
         is schemas.AeSetLayerPropertyValueArgs
     )
     assert (
+        HANDLERS["ae.createComposition"][0]
+        is schemas.AeCreateCompositionArgs
+    )
+    assert (
         HANDLERS["ae.createCompositionLayer"][0]
         is schemas.AeCreateCompositionLayerArgs
     )

@@ -86,6 +86,12 @@ export const INVOKE_REGISTRY = Object.freeze([
     resultContractId: 'aemcp.contract.ae.composition.time.set.result.v1',
   }),
   Object.freeze({
+    id: 'ae.composition.create',
+    version: 1,
+    inputContractId: 'aemcp.contract.ae.composition.create.input.v1',
+    resultContractId: 'aemcp.contract.ae.composition.create.result.v1',
+  }),
+  Object.freeze({
     id: 'ae.composition.layer.create',
     version: 1,
     inputContractId: 'aemcp.contract.ae.composition.layer.create.input.v1',
@@ -165,6 +171,14 @@ function isLocatorShape(value, allowedKinds) {
     && ['hostInstanceId', 'sessionId', 'projectId', 'objectId']
       .every((key) => UUID.test(value[key] ?? ''))
     && Number.isSafeInteger(value.generation) && value.generation >= 1;
+}
+
+function isPositiveRatioInput(value) {
+  return exactKeys(value, new Set(['numerator', 'denominator']), ['numerator', 'denominator'])
+    && Number.isInteger(value.numerator) && value.numerator >= 1
+    && value.numerator <= 2147483647
+    && Number.isInteger(value.denominator) && value.denominator >= 1
+    && value.denominator <= 2147483647;
 }
 
 function sameLocatorContext(left, right) {
@@ -700,6 +714,34 @@ export function classifyRequest(message) {
           || !/^[A-Za-z0-9][A-Za-z0-9._:-]{15,63}$/u.test(args.idempotencyKey)) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
+    } else if (params.capabilityId === 'ae.composition.create') {
+      const args = params.arguments;
+      if (!exactKeys(
+        args,
+        new Set([
+          'name', 'width', 'height', 'duration', 'frameRate',
+          'pixelAspectRatio', 'idempotencyKey',
+        ]),
+        [
+          'name', 'width', 'height', 'duration', 'frameRate',
+          'pixelAspectRatio', 'idempotencyKey',
+        ],
+      )
+          || typeof args.name !== 'string' || hasLoneSurrogate(args.name)
+          || Array.from(args.name).length < 1 || Array.from(args.name).length > 255
+          || !Number.isInteger(args.width) || args.width < 1 || args.width > 30000
+          || !Number.isInteger(args.height) || args.height < 1 || args.height > 30000
+          || !exactKeys(args.duration, new Set(['value', 'scale']), ['value', 'scale'])
+          || !Number.isInteger(args.duration.value)
+          || args.duration.value < 1 || args.duration.value > 2147483647
+          || !Number.isInteger(args.duration.scale)
+          || args.duration.scale < 1 || args.duration.scale > 4294967295
+          || !isPositiveRatioInput(args.frameRate)
+          || !isPositiveRatioInput(args.pixelAspectRatio)
+          || typeof args.idempotencyKey !== 'string'
+          || !/^[A-Za-z0-9][A-Za-z0-9._:-]{15,63}$/u.test(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
     } else if (params.capabilityId === 'ae.composition.layer.create') {
       const args = params.arguments;
       const solidOnlyProvided = ['color', 'width', 'height', 'duration']
@@ -1008,6 +1050,12 @@ export function compositionTimeReadContractDigest(schema) {
 export function compositionTimeSetContractDigest(schema) {
   const inputSchema = structuredClone(schema.$defs.compositionTimeSetInputSchemaContract.const);
   const resultSchema = structuredClone(schema.$defs.compositionTimeSetResultSchemaContract.const);
+  return sha256Jcs({ inputSchema, resultSchema });
+}
+
+export function compositionCreateContractDigest(schema) {
+  const inputSchema = structuredClone(schema.$defs.compositionCreateInputSchemaContract.const);
+  const resultSchema = structuredClone(schema.$defs.compositionCreateResultSchemaContract.const);
   return sha256Jcs({ inputSchema, resultSchema });
 }
 
@@ -1525,8 +1573,89 @@ export function compositionTimeSetDescriptor(schema) {
   };
 }
 
-export function compositionLayerCreateDescriptor(schema) {
+export function compositionCreateDescriptor(schema) {
   const registration = INVOKE_REGISTRY[8];
+  const compositionLocator = syntheticDescriptorLocator(
+    'composition', '77777777-7777-4777-8777-777777777777',
+  );
+  return {
+    detail: 'full',
+    id: registration.id,
+    version: registration.version,
+    schemaVersion: 1,
+    summary: 'Create one root composition in After Effects.',
+    risk: 'write',
+    mutability: 'mutating',
+    idempotency: 'idempotency-key',
+    cancellation: 'before-dispatch',
+    undo: 'ae-undo-group',
+    sideEffectSummary: 'Creates one root composition and one After Effects Undo step.',
+    preconditions: ['An After Effects project must be open.'],
+    compatibility: {
+      status: 'unverified',
+      intendedPlatforms: ['macos-arm64', 'windows-x64'],
+    },
+    inputContractId: registration.inputContractId,
+    resultContractId: registration.resultContractId,
+    contractDigest: compositionCreateContractDigest(schema),
+    inputSchema: structuredClone(schema.$defs.compositionCreateInputSchemaContract.const),
+    resultSchema: structuredClone(schema.$defs.compositionCreateResultSchemaContract.const),
+    requirements: [{
+      id: 'aemcp.requirement.native.composition-create',
+      contractVersion: 1,
+    }],
+    examples: [
+      {
+        id: 'aemcp-example-composition-create',
+        kind: 'positive',
+        summary: 'Create and verify one root composition with exact settings.',
+        arguments: {
+          name: 'SYNTHETIC_COMP',
+          width: 1920,
+          height: 1080,
+          duration: { value: 5, scale: 1 },
+          frameRate: { numerator: 24, denominator: 1 },
+          pixelAspectRatio: { numerator: 1, denominator: 1 },
+          idempotencyKey: 'synthetic-comp-create-0001',
+        },
+        expected: {
+          outcome: 'succeeded',
+          value: {
+            changed: true,
+            name: 'SYNTHETIC_COMP',
+            compositionLocator,
+            projectItemCountBefore: 1,
+            projectItemCountAfter: 2,
+            layerCount: 0,
+            width: 1920,
+            height: 1080,
+            duration: { value: 5, scale: 1, secondsRational: '5' },
+            frameRate: { numerator: 24, denominator: 1, rational: '24' },
+            pixelAspectRatio: { numerator: 1, denominator: 1, rational: '1' },
+          },
+        },
+      },
+      {
+        id: 'aemcp-example-composition-create-duplicate',
+        kind: 'negative',
+        summary: 'Inspect state when an idempotency key is already bound.',
+        arguments: {
+          name: 'SYNTHETIC_COMP',
+          width: 1920,
+          height: 1080,
+          duration: { value: 5, scale: 1 },
+          frameRate: { numerator: 24, denominator: 1 },
+          pixelAspectRatio: { numerator: 1, denominator: 1 },
+          idempotencyKey: 'synthetic-comp-create-0002',
+        },
+        expected: { errorCode: 'DUPLICATE_REQUEST', recoveryAction: 'inspect-state' },
+      },
+    ],
+  };
+}
+
+export function compositionLayerCreateDescriptor(schema) {
+  const registration = INVOKE_REGISTRY[9];
   const compositionLocator = syntheticDescriptorLocator(
     'composition', '66666666-6666-4666-8666-666666666666',
   );
@@ -1620,7 +1749,7 @@ export function compositionLayerCreateDescriptor(schema) {
 }
 
 export function layerPropertiesListDescriptor(schema) {
-  const registration = INVOKE_REGISTRY[9];
+  const registration = INVOKE_REGISTRY[10];
   const layerLocator = syntheticDescriptorLocator(
     'layer', '88888888-8888-4888-8888-888888888888',
   );
@@ -1689,7 +1818,7 @@ export function layerPropertiesListDescriptor(schema) {
 }
 
 export function layerPropertySetDescriptor(schema) {
-  const registration = INVOKE_REGISTRY[10];
+  const registration = INVOKE_REGISTRY[11];
   const layerLocator = syntheticDescriptorLocator(
     'layer', '88888888-8888-4888-8888-888888888888',
   );
@@ -1776,6 +1905,7 @@ export function nativeCapabilityRegistry(schema) {
     compositionSelectedLayersListDescriptor(schema),
     compositionTimeReadDescriptor(schema),
     compositionTimeSetDescriptor(schema),
+    compositionCreateDescriptor(schema),
     compositionLayerCreateDescriptor(schema),
     layerPropertiesListDescriptor(schema),
     layerPropertySetDescriptor(schema),
@@ -1970,6 +2100,31 @@ function compositionTimesEqual(left, right) {
     === BigInt(right.value) * BigInt(left.scale);
 }
 
+function canonicalPositiveRatio(numerator, denominator) {
+  if (!Number.isInteger(numerator) || numerator < 1 || numerator > 2147483647
+      || !Number.isInteger(denominator) || denominator < 1
+      || denominator > 2147483647) return null;
+  const gcd = (left, right) => {
+    let a = left;
+    let b = right;
+    while (b !== 0) [a, b] = [b, a % b];
+    return a;
+  };
+  const divisor = gcd(numerator, denominator);
+  const reducedNumerator = numerator / divisor;
+  const reducedDenominator = denominator / divisor;
+  return reducedDenominator === 1
+    ? String(reducedNumerator)
+    : `${reducedNumerator}/${reducedDenominator}`;
+}
+
+function positiveRatiosEqual(left, right) {
+  return canonicalPositiveRatio(left?.numerator, left?.denominator) !== null
+    && canonicalPositiveRatio(right?.numerator, right?.denominator) !== null
+    && BigInt(left.numerator) * BigInt(right.denominator)
+      === BigInt(right.numerator) * BigInt(left.denominator);
+}
+
 function validateNavigationResult(request, result, helloContext, schema) {
   const capabilityId = request.params.capabilityId;
   if (capabilityId !== 'ae.project.items.list'
@@ -2107,6 +2262,33 @@ function validateCompositionTimeSetResult(request, result, helloContext, schema)
   return value.compositionLocator.kind === 'composition'
     && value.compositionLocator.hostInstanceId === helloContext.response.result.host.instanceId
     && value.compositionLocator.sessionId === request.sessionId
+    && validateLocator(value.compositionLocator, context, schema);
+}
+
+function validateCompositionCreateResult(request, result, helloContext, schema) {
+  if (request.params.capabilityId !== 'ae.composition.create') return true;
+  const args = request.params.arguments;
+  const value = result.value;
+  if (result.evidence.postcondition.kind !== 'composition-create'
+      || value.changed !== true || value.name !== args.name
+      || value.width !== args.width || value.height !== args.height
+      || value.layerCount !== 0
+      || value.projectItemCountAfter !== value.projectItemCountBefore + 1
+      || !compositionTimesEqual(value.duration, args.duration)
+      || canonicalSecondsRational(value.duration?.value, value.duration?.scale)
+        !== value.duration?.secondsRational
+      || !positiveRatiosEqual(value.frameRate, args.frameRate)
+      || !positiveRatiosEqual(value.pixelAspectRatio, args.pixelAspectRatio)
+      || canonicalPositiveRatio(value.frameRate?.numerator, value.frameRate?.denominator)
+        !== value.frameRate?.rational
+      || canonicalPositiveRatio(
+        value.pixelAspectRatio?.numerator, value.pixelAspectRatio?.denominator,
+      ) !== value.pixelAspectRatio?.rational
+      || value.compositionLocator.hostInstanceId
+        !== helloContext.response.result.host.instanceId
+      || value.compositionLocator.sessionId !== request.sessionId) return false;
+  const context = locatorContext(value.compositionLocator);
+  return value.compositionLocator.kind === 'composition'
     && validateLocator(value.compositionLocator, context, schema);
 }
 
@@ -2496,7 +2678,7 @@ export function validateTranscript(context, request, messages) {
         && (descriptor.undo !== 'ae-undo-group'
           || (evidence.undo?.available === true
             && typeof evidence.undo?.verified === 'boolean'
-            && (!['ae.project.bit-depth.set', 'ae.composition.time.set', 'ae.composition.layer.create', 'ae.layer.property.set']
+            && (!['ae.project.bit-depth.set', 'ae.composition.time.set', 'ae.composition.create', 'ae.composition.layer.create', 'ae.layer.property.set']
               .includes(request.params.capabilityId)
               || request.params.capabilityVersion !== 1
               || evidence.undo.verified === false)))))
@@ -2506,6 +2688,7 @@ export function validateTranscript(context, request, messages) {
         && result.value.afterBitsPerChannel === request.params.arguments.targetDepth))
     && validateNavigationResult(request, result, helloContext, schema)
     && validateCompositionTimeSetResult(request, result, helloContext, schema)
+    && validateCompositionCreateResult(request, result, helloContext, schema)
     && validateCompositionLayerCreateResult(request, result, helloContext, schema)
     && validateLayerPropertySetResult(request, result, helloContext, schema)
     && evidence.postcondition.verified === true
