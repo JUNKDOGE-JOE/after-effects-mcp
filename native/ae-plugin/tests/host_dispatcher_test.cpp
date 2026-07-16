@@ -1,7 +1,9 @@
+#include "aemcp_native/effect_stack.hpp"
 #include "aemcp_native/host_dispatcher.hpp"
 #include "aemcp_native/project_epoch.hpp"
 #include "aemcp_native/selection_collection.hpp"
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -55,6 +57,7 @@ using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kProjectSummaryCapability;
 using aemcp::native::kLayerPropertySetCapability;
 using aemcp::native::json_encoded_string_size;
+using aemcp::native::locate_unique_insertion;
 using aemcp::native::canonical_seconds_rational;
 using aemcp::native::normalize_selected_layer_collection;
 using aemcp::native::NormalizedSelectedLayers;
@@ -109,6 +112,20 @@ void effective_layer_name_uses_sdk_source_fallback() {
   require(!select_effective_layer_name(
               std::nullopt, std::nullopt, std::nullopt).has_value(),
       "missing layer, source, and source Item handles produced a name");
+}
+
+void effect_stack_transition_requires_one_unambiguous_insertion() {
+  const std::array<int, 3> before{11, 22, 33};
+  const std::array<int, 4> after{11, 44, 22, 33};
+  require(locate_unique_insertion<int>(before, after, 44)
+              == std::optional<std::size_t>{1},
+      "unique effect insertion was not located");
+  const std::array<int, 4> ambiguous{11, 22, 22, 33};
+  require(!locate_unique_insertion<int>(before, ambiguous, 22).has_value(),
+      "ambiguous duplicate effect insertion was accepted");
+  const std::array<int, 3> missing{11, 22, 33};
+  require(!locate_unique_insertion<int>(before, missing, 44).has_value(),
+      "non-insertion transition was accepted");
 }
 
 void selected_collection_ownership_and_mixed_filter_are_portable_tested() {
@@ -2030,6 +2047,7 @@ void idle_budget_and_shutdown_are_bounded() {
 int main() {
   bounded_page_budget_counts_codec_escaping_and_stops_before_overflow();
   effective_layer_name_uses_sdk_source_fallback();
+  effect_stack_transition_requires_one_unambiguous_insertion();
   selected_collection_ownership_and_mixed_filter_are_portable_tested();
   composition_time_rational_is_exact_and_overflow_safe();
   project_epoch_fences_reused_aegp_handles();

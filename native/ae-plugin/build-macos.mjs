@@ -388,6 +388,7 @@ async function buildMacPluginInternal({
     await fs.promises.mkdir(stage, { mode: 0o700 });
     stageOwned = true;
     const productInputPaths = [
+      'native/ae-plugin/include/aemcp_native/effect_stack.hpp',
       'native/ae-plugin/include/aemcp_native/endpoint_registry_macos.hpp',
       'native/ae-plugin/include/aemcp_native/host_dispatcher.hpp',
       'native/ae-plugin/include/aemcp_native/mac_ipc_server.hpp',
