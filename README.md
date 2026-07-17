@@ -126,6 +126,8 @@ The Tools tab stores native artifacts under `~/.ae-mcp/tools` and indexes existi
 
 Discovery is progressive: call `ae_toolIndex`, then `ae_toolSearch`, then `ae_toolInspect`. Non-executing rendering uses `ae_toolUse(action="render")`; execute/apply operations use the content-bound prepare → grant → execute sequence. The plan binds the artifact and dependency hashes, normalized arguments, operation, target, risk, and expiry; grants are short-lived and one-time. Read-only denies writes, manual asks for writes, auto allows ordinary writes, and destructive/external plans always require a fresh decision even in bypass mode. Session approval is available only for write-risk plans and is bound to artifact content, operation, and normalized target rather than the tool name.
 
+Give each side-effecting start/execute request a stable `operation_id` and reuse it only for retries of the same `planHash`. Concurrent Core clients sharing the Tool Library return the same queued/running/terminal execution for that pair, so only the reservation owner dispatches the backend; reusing the operation ID with another plan returns `tool_operation_conflict`. If an owner exits after dispatch, recovery becomes `outcome-unknown` with `inspect-state`; check AE state and audit evidence before using a new operation ID.
+
 ## Usage Notes
 
 AI is not a finished-motion-design replacement. ae-mcp works best when you keep creative direction, taste, and final compositing judgment in human hands, while delegating repetitive operations, procedural animation, expression work, project cleanup, and refactoring of reusable AE structures.

@@ -2,16 +2,21 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import json
+import multiprocessing
 import re
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from mcp.types import ToolAnnotations
 
+from ae_mcp import schemas as S
 from ae_mcp import tool_execution as execution_module
 from ae_mcp.backends.native import NativeBackendError
 from ae_mcp.handlers import HANDLERS, load_all
+from ae_mcp.handlers import tools as tool_handlers
 from ae_mcp.tool_artifact import (
     ToolArtifact,
     ToolSource,
@@ -33,8 +38,38 @@ from ae_mcp.tool_execution import (
     normalize_args,
     normalize_target,
 )
-from ae_mcp.tool_execution_history import ExecutionJobStore
+from ae_mcp.tool_execution_history import ExecutionJobStore, ExecutionJobStoreError
 from ae_mcp.tool_store import StoreMutation
+
+
+def _claim_operation_in_spawned_process(
+    root: str,
+    start: Any,
+    results: Any,
+    execution_id: str,
+) -> None:
+    store = ExecutionJobStore(Path(root), reservation_lease_ms=60_000)
+    start.wait(10)
+    claim = store.claim(
+        {
+            "executionId": execution_id,
+            "operationId": "operation-spawned-process-claim",
+            "artifactId": "user:one",
+            "contentHash": "a" * 64,
+            "artifactRevision": 1,
+            "planHash": "b" * 64,
+            "operation": "execute",
+            "initiator": execution_id,
+            "status": "queued",
+            "createdAt": 1,
+        }
+    )
+    results.put(
+        {
+            "owned": claim.owned,
+            "executionId": claim.record["executionId"],
+        }
+    )
 
 
 def _source() -> ToolSource:
@@ -1223,6 +1258,314 @@ async def test_outcome_unknown_survives_restart_with_recovery_and_no_redispatch(
     assert second_backend.calls == []
 
 
+@pytest.mark.asyncio
+async def test_shared_job_store_claims_operation_before_cross_process_dispatch(
+    tmp_path: Path,
+) -> None:
+    artifact = _artifact()
+    first_backend = _BlockingBackend()
+    second_backend = _BlockingBackend()
+    first = ToolExecutionEngine(
+        _Store(artifact),
+        first_backend,
+        job_store=ExecutionJobStore(tmp_path),
+        now=lambda: 30_000,
+    )
+    second = ToolExecutionEngine(
+        _Store(artifact),
+        second_backend,
+        job_store=ExecutionJobStore(tmp_path),
+        now=lambda: 30_000,
+    )
+    first_plan = first.prepare(artifact.id, operation="execute", args={}, target={})
+    second_plan = second.prepare(artifact.id, operation="execute", args={}, target={})
+    assert first_plan.plan_hash == second_plan.plan_hash
+    first_grant = first.grants.issue_once(first_plan)
+    second_grant = second.grants.issue_once(second_plan)
+
+    first_started, second_started = await asyncio.gather(
+        first.start_job(
+            first_plan.plan_hash,
+            first_grant.grant_id,
+            operation_id="operation-cross-process-claim",
+            ctx=None,
+            initiator="first-core",
+        ),
+        second.start_job(
+            second_plan.plan_hash,
+            second_grant.grant_id,
+            operation_id="operation-cross-process-claim",
+            ctx=None,
+            initiator="second-core",
+        ),
+    )
+    assert first_started["executionId"] == second_started["executionId"]
+    await asyncio.sleep(0)
+    assert len(first_backend.calls) + len(second_backend.calls) == 1
+
+    if first_backend.calls:
+        first_backend.release.set()
+    else:
+        second_backend.release.set()
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    execution_id = first_started["executionId"]
+    assert first.job_status(execution_id)["status"] == "succeeded"
+    assert second.job_status(execution_id)["status"] == "succeeded"
+    assert len(first_backend.calls) + len(second_backend.calls) == 1
+    assert len(first.job_history(artifact.id)["executions"]) == 1
+    assert len(second.job_history(artifact.id)["executions"]) == 1
+
+    with pytest.raises(ToolExecutionError) as conflict:
+        await second.start_job(
+            "f" * 64,
+            second_grant.grant_id,
+            operation_id="operation-cross-process-claim",
+            ctx=None,
+            initiator="second-core",
+        )
+    assert conflict.value.code == "tool_operation_conflict"
+
+
+@pytest.mark.asyncio
+async def test_public_tool_use_returns_shared_execution_without_second_dispatch(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    artifact = _artifact()
+    first_backend = _BlockingBackend()
+    second_backend = _BlockingBackend()
+    first = ToolExecutionEngine(
+        _Store(artifact),
+        first_backend,
+        job_store=ExecutionJobStore(tmp_path),
+        now=lambda: 35_000,
+    )
+    second = ToolExecutionEngine(
+        _Store(artifact),
+        second_backend,
+        job_store=ExecutionJobStore(tmp_path),
+        now=lambda: 35_000,
+    )
+    first_plan = first.prepare(artifact.id, operation="execute", args={}, target={})
+    second_plan = second.prepare(artifact.id, operation="execute", args={}, target={})
+    first_grant = first.grants.issue_once(first_plan)
+    second_grant = second.grants.issue_once(second_plan)
+    services = iter(
+        [SimpleNamespace(execution=first), SimpleNamespace(execution=second)]
+    )
+    monkeypatch.setattr(tool_handlers, "default_tool_service", lambda: next(services))
+    first_started, second_started = await asyncio.gather(
+        tool_handlers._run_tool_use(
+            S.AeToolUseArgs(
+                action="start",
+                plan_hash=first_plan.plan_hash,
+                grant_id=first_grant.grant_id,
+                operation_id="operation-public-cross-core",
+            ),
+            None,
+        ),
+        tool_handlers._run_tool_use(
+            S.AeToolUseArgs(
+                action="start",
+                plan_hash=second_plan.plan_hash,
+                grant_id=second_grant.grant_id,
+                operation_id="operation-public-cross-core",
+            ),
+            None,
+        ),
+    )
+    assert first_started["executionId"] == second_started["executionId"]
+    await asyncio.sleep(0)
+    assert len(first_backend.calls) + len(second_backend.calls) == 1
+
+    monkeypatch.setattr(
+        tool_handlers,
+        "default_tool_service",
+        lambda: SimpleNamespace(execution=second),
+    )
+    conflict = await tool_handlers._run_tool_use(
+        S.AeToolUseArgs(
+            action="start",
+            plan_hash="f" * 64,
+            grant_id=second_grant.grant_id,
+            operation_id="operation-public-cross-core",
+        ),
+        None,
+    )
+    assert conflict["ok"] is False
+    assert conflict["error"] == "tool_operation_conflict"
+
+    if first_backend.calls:
+        first_backend.release.set()
+    else:
+        second_backend.release.set()
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert len(first_backend.calls) + len(second_backend.calls) == 1
+
+
+def test_operation_claim_is_atomic_across_spawned_processes(tmp_path: Path) -> None:
+    context = multiprocessing.get_context("spawn")
+    start = context.Event()
+    results = context.Queue()
+    processes = [
+        context.Process(
+            target=_claim_operation_in_spawned_process,
+            args=(str(tmp_path), start, results, f"spawned-execution-{index}"),
+        )
+        for index in range(2)
+    ]
+    for process in processes:
+        process.start()
+    start.set()
+    for process in processes:
+        process.join(15)
+        assert process.exitcode == 0
+
+    claims = [results.get(timeout=5) for _ in processes]
+    assert sum(1 for claim in claims if claim["owned"]) == 1
+    assert len({claim["executionId"] for claim in claims}) == 1
+    [reservation] = ExecutionJobStore(tmp_path).snapshot()
+    assert reservation["executionId"] == claims[0]["executionId"]
+    assert reservation["status"] == "queued"
+    assert reservation["terminal"] is False
+
+
+def test_orphaned_shared_reservation_recovers_without_blind_redispatch(
+    tmp_path: Path,
+) -> None:
+    clock = [40_000]
+    store = ExecutionJobStore(
+        tmp_path,
+        now=lambda: clock[0],
+        reservation_lease_ms=1_000,
+    )
+    queued = {
+        "executionId": "execution-orphan-running",
+        "operationId": "operation-orphan-running",
+        "artifactId": "user:one",
+        "contentHash": "a" * 64,
+        "artifactRevision": 1,
+        "planHash": "b" * 64,
+        "operation": "execute",
+        "initiator": "first-core",
+        "status": "queued",
+        "createdAt": clock[0],
+        "startedAt": None,
+        "finishedAt": None,
+        "cancelRequested": False,
+        "result": None,
+        "error": None,
+        "audit": None,
+    }
+    claim = store.claim(queued)
+    assert claim.owned is True
+    assert claim.owner_token is not None
+    store.mark_running(
+        "execution-orphan-running",
+        owner_token=claim.owner_token,
+        started_at=40_100,
+    )
+
+    clock[0] = 41_001
+    recovered = store.lookup_operation("operation-orphan-running")
+    assert recovered is not None
+    assert recovered["status"] == "outcome-unknown"
+    assert recovered["outcomeUnknown"] is True
+    assert recovered["error"]["sideEffect"] == "may-have-occurred"
+    assert recovered["error"]["recovery"]["action"] == "inspect-state"
+
+    retry = dict(queued)
+    retry["executionId"] = "execution-orphan-retry"
+    duplicate = store.claim(retry)
+    assert duplicate.owned is False
+    assert duplicate.record["executionId"] == "execution-orphan-running"
+    assert duplicate.record["status"] == "outcome-unknown"
+    persisted = (tmp_path / "execution-history.json").read_text(encoding="utf-8")
+    assert "ownerToken" not in persisted
+
+
+@pytest.mark.asyncio
+async def test_running_job_renews_its_shared_reservation_lease(
+    tmp_path: Path,
+) -> None:
+    clock = [60_000]
+    artifact = _artifact()
+    backend = _BlockingBackend()
+    store = ExecutionJobStore(
+        tmp_path,
+        now=lambda: clock[0],
+        reservation_lease_ms=60,
+    )
+    engine = ToolExecutionEngine(
+        _Store(artifact),
+        backend,
+        job_store=store,
+        now=lambda: clock[0],
+    )
+    plan = engine.prepare(artifact.id, operation="execute", args={}, target={})
+    grant = engine.grants.issue_once(plan)
+    started = await engine.start_job(
+        plan.plan_hash,
+        grant.grant_id,
+        operation_id="operation-renew-running-lease",
+        ctx=None,
+        initiator="first-core",
+    )
+    await backend.started.wait()
+
+    clock[0] = 60_050
+    await asyncio.sleep(0.08)
+    clock[0] = 60_070
+    reservation = store.lookup_execution(started["executionId"])
+    assert reservation is not None
+    assert reservation["status"] == "running"
+
+    backend.release.set()
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert engine.job_status(started["executionId"])["status"] == "succeeded"
+
+
+@pytest.mark.asyncio
+async def test_terminal_persistence_failure_keeps_local_outcome_unknown(
+    tmp_path: Path,
+) -> None:
+    class FailingCompletionStore(ExecutionJobStore):
+        def complete(self, record, *, owner_token):
+            raise ExecutionJobStoreError("fixture completion failure")
+
+    artifact = _artifact()
+    backend = _Backend()
+    engine = ToolExecutionEngine(
+        _Store(artifact),
+        backend,
+        job_store=FailingCompletionStore(tmp_path),
+        now=lambda: 50_000,
+    )
+    plan = engine.prepare(artifact.id, operation="execute", args={}, target={})
+    grant = engine.grants.issue_once(plan)
+    started = await engine.start_job(
+        plan.plan_hash,
+        grant.grant_id,
+        operation_id="operation-persistence-failure",
+        ctx=None,
+        initiator="first-core",
+    )
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    status = engine.job_status(started["executionId"])
+    assert status["status"] == "outcome-unknown"
+    assert status["error"]["sideEffect"] == "may-have-occurred"
+    assert status["error"]["recovery"]["action"] == "inspect-state"
+    assert len(backend.calls) == 1
+    [durable] = ExecutionJobStore(tmp_path).snapshot()
+    assert durable["status"] == "running"
+
+
 def test_execution_job_store_bounds_retention_and_redacts_secrets(
     tmp_path: Path,
 ) -> None:
@@ -1295,3 +1638,41 @@ def test_execution_job_store_accepts_full_public_client_identity(
     )
 
     assert store.load()[0]["initiator"] == initiator
+
+
+def test_execution_job_store_migrates_legacy_terminal_history(tmp_path: Path) -> None:
+    legacy = {
+        "schemaVersion": 1,
+        "executions": [
+            {
+                "executionId": "execution-legacy-terminal",
+                "operationId": "operation-legacy-terminal",
+                "artifactId": "user:one",
+                "contentHash": "a" * 64,
+                "artifactRevision": 1,
+                "planHash": "b" * 64,
+                "operation": "execute",
+                "initiator": "panel-direct",
+                "status": "succeeded",
+                "createdAt": 100,
+                "startedAt": 101,
+                "finishedAt": 102,
+                "cancelRequested": False,
+                "result": {"ok": True},
+                "error": None,
+                "audit": None,
+            }
+        ],
+    }
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "execution-history.json").write_text(
+        json.dumps(legacy), encoding="utf-8"
+    )
+
+    [recovered] = ExecutionJobStore(tmp_path).load()
+    assert recovered["executionId"] == "execution-legacy-terminal"
+    upgraded = json.loads(
+        (tmp_path / "execution-history.json").read_text(encoding="utf-8")
+    )
+    assert upgraded["schemaVersion"] == 2
+    assert upgraded["reservations"] == []

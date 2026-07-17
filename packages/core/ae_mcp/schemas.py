@@ -1001,8 +1001,10 @@ class AeToolUseArgs(_StrictModel):
         min_length=16,
         max_length=128,
         description=(
-            "Stable caller-generated id for execute/start. Reuse it when a response "
-            "is lost; changing it authorizes a distinct execution."
+            "Stable caller-generated id for execute/start. Reuse it only for the "
+            "same planHash after a lost response or across Core clients; the server "
+            "returns the existing execution. A different planHash conflicts, while "
+            "changing operation_id authorizes a distinct execution."
         ),
     )
     limit: Optional[int] = Field(None, ge=1, le=100)

@@ -32,7 +32,11 @@ from ae_mcp.tool_artifact import (
     validate_args_schema,
 )
 from ae_mcp.tool_audit import AuditRecord, ToolAuditLog, redact_audit_value
-from ae_mcp.tool_execution_history import ExecutionJobStore, ExecutionJobStoreError
+from ae_mcp.tool_execution_history import (
+    ExecutionJobStore,
+    ExecutionJobStoreError,
+    ExecutionOperationConflict,
+)
 from ae_mcp.tool_secrets import RegexSecretScanner, SecretScanner
 
 
@@ -709,6 +713,7 @@ class _ExecutionJob:
     result: Mapping[str, JsonValue] | None = None
     error: Mapping[str, JsonValue] | None = None
     audit: Mapping[str, JsonValue] | None = None
+    owner_token: str | None = None
 
     @classmethod
     def from_record(cls, value: Mapping[str, JsonValue]) -> "_ExecutionJob":
@@ -876,7 +881,7 @@ class ToolExecutionEngine:
         self._job_tasks: dict[str, asyncio.Task[None]] = {}
         self._job_lock = threading.RLock()
         if self.job_store is not None:
-            for record in self.job_store.load():
+            for record in self.job_store.snapshot():
                 job = _ExecutionJob.from_record(record)
                 self._jobs[job.execution_id] = job
                 self._job_operations[job.operation_id] = job.execution_id
@@ -889,6 +894,53 @@ class ToolExecutionEngine:
         if self._unsubscribe is not None:
             self._unsubscribe()
             self._unsubscribe = None
+
+    @staticmethod
+    def _job_store_failure(
+        exc: ExecutionJobStoreError, message: str
+    ) -> ToolExecutionError:
+        if isinstance(exc, ExecutionOperationConflict):
+            return ToolExecutionError("tool_operation_conflict", str(exc))
+        return ToolExecutionError(
+            exc.code,
+            message,
+            error_details={
+                "sideEffect": "not-started",
+                "recovery": {
+                    "action": "retry-later",
+                    "hint": "Repair the Tool Library execution store before retrying.",
+                },
+            },
+        )
+
+    def _remember_shared_record(
+        self, record: Mapping[str, JsonValue]
+    ) -> _ExecutionJob:
+        incoming = _ExecutionJob.from_record(record)
+        with self._job_lock:
+            current = self._jobs.get(incoming.execution_id)
+            # The reservation owner can have more recent in-memory knowledge
+            # than the durable queued/running row. In particular, AE may have
+            # finished while terminal persistence failed. Preserve the local
+            # outcome-unknown record so a refresh cannot invite a blind retry.
+            if current is not None and current.owner_token is not None:
+                return current
+            self._jobs[incoming.execution_id] = incoming
+            self._job_operations[incoming.operation_id] = incoming.execution_id
+            return incoming
+
+    def _lookup_shared_operation(self, operation_id: str) -> _ExecutionJob | None:
+        if self.job_store is None:
+            return None
+        try:
+            record = self.job_store.lookup_operation(operation_id)
+        except ExecutionJobStoreError as exc:
+            raise self._job_store_failure(
+                exc, "Execution reservation state could not be read."
+            ) from exc
+        if record is None:
+            return None
+        return self._remember_shared_record(record)
 
     @staticmethod
     def describe(artifact: ToolArtifact) -> dict[str, JsonValue]:
@@ -1219,16 +1271,29 @@ class ToolExecutionEngine:
         if self.job_store is None:
             return
         try:
-            self.job_store.upsert(job.public_dict())
+            if job.owner_token is None:
+                self.job_store.upsert(job.public_dict())
+            else:
+                self.job_store.complete(
+                    job.public_dict(), owner_token=job.owner_token
+                )
+                job.owner_token = None
         except ExecutionJobStoreError as exc:
+            dispatched = job.started_at is not None
             raise ToolExecutionError(
                 exc.code,
                 "Execution recovery state could not be persisted.",
                 error_details={
-                    "sideEffect": "not-started",
+                    "sideEffect": (
+                        "may-have-occurred" if dispatched else "not-started"
+                    ),
                     "recovery": {
-                        "action": "retry-later",
-                        "hint": "Repair the Tool Library store before retrying.",
+                        "action": "inspect-state" if dispatched else "retry-later",
+                        "hint": (
+                            "Inspect AE state and audit evidence before retrying."
+                            if dispatched
+                            else "Repair the Tool Library store before retrying."
+                        ),
                     },
                 },
             ) from exc
@@ -1255,7 +1320,20 @@ class ToolExecutionEngine:
                         "tool_operation_conflict",
                         "Operation id is already bound to a different execution plan.",
                     )
-                return existing.public_dict()
+                if not (
+                    self.job_store is not None
+                    and existing.owner_token is None
+                    and existing.status in {"queued", "running"}
+                ):
+                    return existing.public_dict()
+        shared = self._lookup_shared_operation(operation_id)
+        if shared is not None:
+            if shared.plan_hash != plan_hash:
+                raise ToolExecutionError(
+                    "tool_operation_conflict",
+                    "Operation id is already bound to a different execution plan.",
+                )
+            return shared.public_dict()
         plan = self.prepared_plans.get(plan_hash)
         self.grants.peek(grant_id, plan)
         artifact, _analysis = self._assert_current(plan)
@@ -1282,6 +1360,22 @@ class ToolExecutionEngine:
                 status="queued",
                 created_at=self._now(),
             )
+            if self.job_store is not None:
+                try:
+                    claim = self.job_store.claim(job.public_dict())
+                except ExecutionJobStoreError as exc:
+                    raise self._job_store_failure(
+                        exc, "Execution operation could not be reserved before dispatch."
+                    ) from exc
+                if not claim.owned:
+                    existing = self._remember_shared_record(claim.record)
+                    if existing.plan_hash != plan_hash:
+                        raise ToolExecutionError(
+                            "tool_operation_conflict",
+                            "Operation id is already bound to a different execution plan.",
+                        )
+                    return existing.public_dict()
+                job.owner_token = claim.owner_token
             self._jobs[execution_id] = job
             self._job_operations[operation_id] = execution_id
             task = asyncio.create_task(
@@ -1376,6 +1470,38 @@ class ToolExecutionEngine:
                         },
                     }
             return
+        if self.job_store is not None and job.owner_token is not None:
+            try:
+                self.job_store.mark_running(
+                    job.execution_id,
+                    owner_token=job.owner_token,
+                    started_at=cast(int, job.started_at),
+                )
+            except ExecutionJobStoreError:
+                with self._job_lock:
+                    job.status = "failed"
+                    job.finished_at = self._now()
+                    job.error = {
+                        "code": "tool_execution_history_failed",
+                        "message": "Execution reservation could not be confirmed before dispatch.",
+                        "sideEffect": "not-started",
+                        "recovery": {
+                            "action": "retry-later",
+                            "hint": "Repair the Tool Library execution store before retrying.",
+                        },
+                    }
+                    self._job_tasks.pop(job.execution_id, None)
+                try:
+                    self._persist_job(job)
+                except ToolExecutionError:
+                    pass
+                return
+        heartbeat: asyncio.Task[None] | None = None
+        if self.job_store is not None and job.owner_token is not None:
+            heartbeat = asyncio.create_task(
+                self._renew_job_reservation(job),
+                name=f"ae-mcp-tool-lease-{job.execution_id}",
+            )
         try:
             result = await self.execute(job.plan_hash, grant_id, ctx=ctx)
         except ToolExecutionError as exc:
@@ -1413,6 +1539,8 @@ class ToolExecutionEngine:
                 job.finished_at = self._now()
                 job.audit = self._latest_audit(job.plan_hash, job.artifact_id)
         finally:
+            if heartbeat is not None:
+                heartbeat.cancel()
             with self._job_lock:
                 self._job_tasks.pop(job.execution_id, None)
         try:
@@ -1431,8 +1559,42 @@ class ToolExecutionEngine:
                 }
                 job.status = "outcome-unknown"
                 job.finished_at = self._now()
+        if heartbeat is not None:
+            try:
+                await heartbeat
+            except asyncio.CancelledError:
+                pass
+
+    async def _renew_job_reservation(self, job: _ExecutionJob) -> None:
+        store = self.job_store
+        owner_token = job.owner_token
+        if store is None or owner_token is None:
+            return
+        interval = max(0.05, min(5.0, store.reservation_lease_ms / 3_000))
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                store.renew(job.execution_id, owner_token=owner_token)
+            except ExecutionJobStoreError:
+                # The write may already be running. Stopping or retrying it here
+                # would be unsafe. Terminal persistence will either reconcile the
+                # reservation or return outcome-unknown with inspect-state.
+                return
 
     def job_status(self, execution_id: str) -> Mapping[str, JsonValue]:
+        with self._job_lock:
+            job = self._jobs.get(execution_id)
+            if job is not None and job.owner_token is not None:
+                return job.public_dict()
+        if self.job_store is not None:
+            try:
+                record = self.job_store.lookup_execution(execution_id)
+            except ExecutionJobStoreError as exc:
+                raise self._job_store_failure(
+                    exc, "Execution status could not be refreshed."
+                ) from exc
+            if record is not None:
+                return self._remember_shared_record(record).public_dict()
         with self._job_lock:
             job = self._jobs.get(execution_id)
             if job is None:
@@ -1444,7 +1606,13 @@ class ToolExecutionEngine:
             job = self._jobs.get(execution_id)
             if job is None:
                 raise ToolExecutionError("tool_execution_not_found", "Execution was not found.")
-            if job.status == "queued":
+            if (
+                self.job_store is not None
+                and job.owner_token is None
+                and job.status in {"queued", "running"}
+            ):
+                disposition = "owned-by-another-core"
+            elif job.status == "queued":
                 job.cancel_requested = True
                 disposition = "cancelled-before-dispatch"
             elif job.status == "running":
@@ -1461,6 +1629,15 @@ class ToolExecutionEngine:
     ) -> Mapping[str, JsonValue]:
         if not 1 <= limit <= 100:
             raise ToolExecutionError("tool_invalid_input", "History limit is invalid.")
+        if self.job_store is not None:
+            try:
+                shared = self.job_store.snapshot()
+            except ExecutionJobStoreError as exc:
+                raise self._job_store_failure(
+                    exc, "Execution history could not be refreshed."
+                ) from exc
+            for record in shared:
+                self._remember_shared_record(record)
         with self._job_lock:
             rows = [job for job in self._jobs.values() if job.artifact_id == artifact_id]
             rows.sort(key=lambda job: (job.created_at, job.execution_id), reverse=True)
