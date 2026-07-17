@@ -484,7 +484,6 @@ export function createRuntimeManager({
   function ensureReady() {
     if (readinessPromise) return readinessPromise;
     const pending = withLock(async () => {
-      const packaged = await verifyPackagedPayload();
       const current = await pointerState(paths.currentPointer);
       const previous = await pointerState(paths.previousPointer);
       if (!current.ok && previous.ok) {
@@ -502,6 +501,26 @@ export function createRuntimeManager({
             code: 'RUNTIME_CURRENT_INVALID_FALLBACK',
             message: 'The current runtime was invalid; RuntimeManager activated the previous verified runtime once.',
             failedCode: current.code,
+          }],
+        };
+      }
+      let packaged;
+      try {
+        packaged = await verifyPackagedPayload();
+      } catch (error) {
+        if (!current.ok) throw error;
+        await installLauncher(current);
+        return {
+          ok: true,
+          action: 'retained',
+          launcher: paths.launcher,
+          relative: current.relative,
+          version: current.record.version,
+          sourceCommitSha: current.record.sourceCommitSha,
+          diagnostics: [{
+            code: 'RUNTIME_PACKAGED_PAYLOAD_INVALID_ACTIVE_RETAINED',
+            message: 'The extension runtime payload was invalid; RuntimeManager retained the previously verified active runtime.',
+            failedCode: error?.code || 'RUNTIME_PACKAGED_PAYLOAD_INVALID',
           }],
         };
       }

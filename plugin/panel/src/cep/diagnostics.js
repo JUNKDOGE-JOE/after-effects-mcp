@@ -69,7 +69,15 @@ async function execCode(fetchImpl, port, token, code) {
   return { response, body: await readJson(response) };
 }
 
-export async function runDiagnostics({ getHost, port, fs, fetchImpl, platform, runtimeManager }) {
+export async function runDiagnostics({
+  getHost,
+  port,
+  fs,
+  fetchImpl,
+  platform,
+  runtimeManager,
+  allowDevelopmentPath = false,
+}) {
   const adapter = platform || createPlatformAdapter();
   const fileSystem = fs || adapter.fs;
   const fetcher = fetchImpl || globalThis.fetch;
@@ -199,7 +207,7 @@ export async function runDiagnostics({ getHost, port, fs, fetchImpl, platform, r
   for (const id of runtimeManager ? ['claude', 'codex'] : ['ae-mcp', 'node', 'claude', 'codex']) {
     const options = id === 'node'
       ? { minimumVersion: '24.17.0', requiredArch: adapter.id === 'macos-arm64' ? 'arm64' : 'x64' }
-      : {};
+      : (id === 'ae-mcp' && allowDevelopmentPath ? { allowDevelopmentPath: true } : {});
     const result = await adapter.resolveExecutable(id, options);
     const action = id === 'ae-mcp' || id === 'node'
       ? { kind: 'repair-runtime' }

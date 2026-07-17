@@ -565,14 +565,18 @@ function Shell({ cs }) {
   const runtimeRef = React.useRef({ providerProfile, providerCandidate: null, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: 'subscription', claudeApiProvider: null });
   const previousCodexProviderProfileRef = React.useRef(providerProfile);
   const extRoot = React.useMemo(() => readCepSystemPath({ cs, platform }), [cs, platform]);
-  const runtimeManager = React.useMemo(() => {
-    if (platform.id !== 'macos-arm64') return null;
+  const developmentRuntimeFallback = React.useMemo(() => {
+    if (platform.id !== 'macos-arm64') return false;
     const debugMarker = platform.paths.join([extRoot, '.debug']);
     const bundleManifest = platform.paths.join([extRoot, 'bundle-manifest.json']);
-    const developmentFallback = platform.fs.existsSync(debugMarker)
+    return platform.fs.existsSync(debugMarker)
       && !platform.fs.existsSync(bundleManifest);
-    return developmentFallback ? null : createRuntimeManager({ platform, extensionRoot: extRoot });
   }, [extRoot, platform]);
+  const runtimeManager = React.useMemo(() => (
+    platform.id === 'macos-arm64' && !developmentRuntimeFallback
+      ? createRuntimeManager({ platform, extensionRoot: extRoot })
+      : null
+  ), [developmentRuntimeFallback, extRoot, platform]);
   const mcpCommand = runtimeManager ? platform.paths.launcher : 'ae-mcp';
   const resolvePanelNode = React.useCallback(
     ({ platform: requestedPlatform } = {}) => (runtimeManager
@@ -1249,12 +1253,13 @@ function Shell({ cs }) {
         fetchImpl: window.fetch.bind(window),
         platform,
         runtimeManager,
+        allowDevelopmentPath: developmentRuntimeFallback,
       });
       setDiagnostics(items);
     } catch (e) {
       setDiagnostics([{ id: 'host-listening', ok: false, detail: String(e && e.message), fixHint: { zh: '诊断执行失败，重启面板后重试。', en: 'Diagnostics failed to run; reload the panel and retry.' } }]);
     }
-  }, [getHost, platform, runtimeManager, status.port]);
+  }, [developmentRuntimeFallback, getHost, platform, runtimeManager, status.port]);
 
   const togglePause = () => {
     const host = getHost();

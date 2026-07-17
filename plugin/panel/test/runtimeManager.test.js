@@ -231,6 +231,28 @@ test('a corrupt current runtime falls back once, then a later call repairs from 
   assert.equal((await two.inspect()).ok, true);
 });
 
+test('a corrupt extension update retains the previously verified active runtime', async (t) => {
+  const h = await harness(t);
+  const payload = await packageFixture(h.root, {
+    version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'retained',
+  });
+  const manager = managerFor(h, payload.extensionRoot);
+  const installed = await manager.ensureReady();
+  await fs.promises.appendFile(path.join(payload.extensionRoot, 'bundle-manifest.json'), 'corrupt update');
+
+  const retained = await manager.ensureReady();
+
+  assert.equal(retained.action, 'retained');
+  assert.equal(retained.relative, installed.relative);
+  assert.equal(retained.sourceCommitSha, '1'.repeat(40));
+  assert.equal(retained.diagnostics[0].code, 'RUNTIME_PACKAGED_PAYLOAD_INVALID_ACTIVE_RETAINED');
+  assert.equal((await manager.inspect()).ok, true);
+  const launched = await execFileAsync(retained.launcher, ['--after-corrupt-update'], {
+    env: { HOME: h.home, AE_MCP_HOME: h.platform.paths.configRoot, PATH: '/usr/bin:/bin' },
+  });
+  assert.match(launched.stdout, /core-started:retained:-I -m ae_mcp --after-corrupt-update/);
+});
+
 test('repair creates a fresh verified generation and uninstall removes active pointers', async (t) => {
   const h = await harness(t);
   const payload = await packageFixture(h.root, {

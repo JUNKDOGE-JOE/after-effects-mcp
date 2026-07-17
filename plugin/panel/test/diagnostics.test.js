@@ -183,3 +183,16 @@ test('runDiagnostics inspects the RuntimeManager after resolveNode repairs it', 
   assert.match(items.find((item) => item.id === 'ae-mcp').detail, /0\.9\.3.*b{40}/);
   assert.equal(items.find((item) => item.id === 'node').ok, true);
 });
+
+test('runDiagnostics allows ae-mcp PATH lookup only for an explicit development install', async () => {
+  const deps = makeDeps();
+  const options = [];
+  deps.platform.resolveExecutable = async (id, received) => {
+    if (id === 'ae-mcp') options.push(received);
+    return { ok: true, id, path: `/development/${id}`, version: '1.0.0' };
+  };
+
+  await runDiagnostics({ ...deps, port: 11488, allowDevelopmentPath: true });
+
+  assert.deepEqual(options, [{ allowDevelopmentPath: true }]);
+});

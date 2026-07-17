@@ -17861,7 +17861,6 @@
     function ensureReady() {
       if (readinessPromise) return readinessPromise;
       const pending = withLock(async () => {
-        const packaged = await verifyPackagedPayload();
         const current = await pointerState(paths.currentPointer);
         const previous = await pointerState(paths.previousPointer);
         if (!current.ok && previous.ok) {
@@ -17879,6 +17878,26 @@
               code: "RUNTIME_CURRENT_INVALID_FALLBACK",
               message: "The current runtime was invalid; RuntimeManager activated the previous verified runtime once.",
               failedCode: current.code
+            }]
+          };
+        }
+        let packaged;
+        try {
+          packaged = await verifyPackagedPayload();
+        } catch (error) {
+          if (!current.ok) throw error;
+          await installLauncher(current);
+          return {
+            ok: true,
+            action: "retained",
+            launcher: paths.launcher,
+            relative: current.relative,
+            version: current.record.version,
+            sourceCommitSha: current.record.sourceCommitSha,
+            diagnostics: [{
+              code: "RUNTIME_PACKAGED_PAYLOAD_INVALID_ACTIVE_RETAINED",
+              message: "The extension runtime payload was invalid; RuntimeManager retained the previously verified active runtime.",
+              failedCode: (error == null ? void 0 : error.code) || "RUNTIME_PACKAGED_PAYLOAD_INVALID"
             }]
           };
         }
@@ -33880,7 +33899,15 @@ data: ${JSON.stringify(payload)}
     });
     return { response, body: await readJson(response) };
   }
-  async function runDiagnostics({ getHost, port, fs, fetchImpl, platform, runtimeManager }) {
+  async function runDiagnostics({
+    getHost,
+    port,
+    fs,
+    fetchImpl,
+    platform,
+    runtimeManager,
+    allowDevelopmentPath = false
+  }) {
     var _a, _b, _c;
     const adapter = platform || createPlatformAdapter();
     const fileSystem = fs || adapter.fs;
@@ -34000,7 +34027,7 @@ data: ${JSON.stringify(payload)}
       }
     }
     for (const id of runtimeManager ? ["claude", "codex"] : ["ae-mcp", "node", "claude", "codex"]) {
-      const options = id === "node" ? { minimumVersion: "24.17.0", requiredArch: adapter.id === "macos-arm64" ? "arm64" : "x64" } : {};
+      const options = id === "node" ? { minimumVersion: "24.17.0", requiredArch: adapter.id === "macos-arm64" ? "arm64" : "x64" } : id === "ae-mcp" && allowDevelopmentPath ? { allowDevelopmentPath: true } : {};
       const result = await adapter.resolveExecutable(id, options);
       const action = id === "ae-mcp" || id === "node" ? { kind: "repair-runtime" } : { kind: "open-login-terminal", tool: id };
       items.push({
@@ -35353,13 +35380,13 @@ ${baseUrl}`),
     const runtimeRef = import_react45.default.useRef({ providerProfile, providerCandidate: null, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: "subscription", claudeApiProvider: null });
     const previousCodexProviderProfileRef = import_react45.default.useRef(providerProfile);
     const extRoot = import_react45.default.useMemo(() => readCepSystemPath({ cs: cs2, platform }), [cs2, platform]);
-    const runtimeManager = import_react45.default.useMemo(() => {
-      if (platform.id !== "macos-arm64") return null;
+    const developmentRuntimeFallback = import_react45.default.useMemo(() => {
+      if (platform.id !== "macos-arm64") return false;
       const debugMarker = platform.paths.join([extRoot, ".debug"]);
       const bundleManifest = platform.paths.join([extRoot, "bundle-manifest.json"]);
-      const developmentFallback = platform.fs.existsSync(debugMarker) && !platform.fs.existsSync(bundleManifest);
-      return developmentFallback ? null : createRuntimeManager({ platform, extensionRoot: extRoot });
+      return platform.fs.existsSync(debugMarker) && !platform.fs.existsSync(bundleManifest);
     }, [extRoot, platform]);
+    const runtimeManager = import_react45.default.useMemo(() => platform.id === "macos-arm64" && !developmentRuntimeFallback ? createRuntimeManager({ platform, extensionRoot: extRoot }) : null, [developmentRuntimeFallback, extRoot, platform]);
     const mcpCommand = runtimeManager ? platform.paths.launcher : "ae-mcp";
     const resolvePanelNode = import_react45.default.useCallback(
       ({ platform: requestedPlatform } = {}) => runtimeManager ? runtimeManager.resolveNode() : resolveSystemNode({ platform: requestedPlatform || platform }),
@@ -35991,13 +36018,14 @@ ${baseUrl}`),
           fs: cepRequire4("fs"),
           fetchImpl: window.fetch.bind(window),
           platform,
-          runtimeManager
+          runtimeManager,
+          allowDevelopmentPath: developmentRuntimeFallback
         });
         setDiagnostics(items);
       } catch (e) {
         setDiagnostics([{ id: "host-listening", ok: false, detail: String(e && e.message), fixHint: { zh: "\u8BCA\u65AD\u6267\u884C\u5931\u8D25\uFF0C\u91CD\u542F\u9762\u677F\u540E\u91CD\u8BD5\u3002", en: "Diagnostics failed to run; reload the panel and retry." } }]);
       }
-    }, [getHost, platform, runtimeManager, status.port]);
+    }, [developmentRuntimeFallback, getHost, platform, runtimeManager, status.port]);
     const togglePause = () => {
       const host = getHost();
       if (!host || typeof host.setPaused !== "function") {
