@@ -45,6 +45,17 @@ test('_createRpc rejects timed out requests', async () => {
   await assert.rejects(io.rpc.request('slow', {}), /timed out/);
 });
 
+test('_createRpc supports a longer timeout for cold-start initialization', async () => {
+  const io = makeRpc(5);
+
+  const pending = io.rpc.request('initialize', {}, 50);
+  const id = JSON.parse(io.writes[0]).id;
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  io.pushChunk(JSON.stringify({ jsonrpc: '2.0', id, result: { ok: true } }) + '\n');
+
+  assert.deepEqual(await pending, { ok: true });
+});
+
 test('_createRpc rejects JSON-RPC error responses', async () => {
   const io = makeRpc();
 
@@ -112,18 +123,34 @@ test('resolveMcpCommand reports a repair hint when no executable can be found', 
 
 function makeFakeProc() {
   const stdoutHandlers = [];
+  let killed = false;
   return {
     stdin: { write() {} },
     stdout: { on(event, handler) { if (event === 'data') stdoutHandlers.push(handler); } },
     stderr: { on() {} },
     on() {},
-    kill() {},
+    kill() { killed = true; },
+    get killed() { return killed; },
     pushStdout(message) {
       const line = typeof message === 'string' ? message : JSON.stringify(message) + '\n';
       for (const handler of stdoutHandlers) handler(line);
     },
   };
 }
+
+test('createMcpClient terminates a child that cannot initialize in time', async () => {
+  const proc = makeFakeProc();
+  const client = createMcpClient({
+    spawnImpl: () => proc,
+    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
+    initializeTimeoutMs: 5,
+    retryDelays: [],
+  });
+
+  await assert.rejects(client.start(), /initialize timed out after 5ms/);
+  assert.equal(proc.killed, true);
+  assert.equal(client.state().status, 'error');
+});
 
 // Spawn fake that auto-answers initialize (with a configurable result) and
 // tools/list so createMcpClient.start() resolves to ready.

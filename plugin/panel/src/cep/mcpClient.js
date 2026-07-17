@@ -3,6 +3,7 @@ import { expertGuidanceEnv } from './externalClients.js';
 import { createPlatformAdapter } from './platform/index.js';
 
 const DEFAULT_TIMEOUT_MS = 30000;
+const INITIALIZE_TIMEOUT_MS = 120000;
 const MCP_PROTOCOL_VERSION = '2025-06-18';
 export const PANEL_VERSION = '0.9.2';
 
@@ -150,12 +151,15 @@ export function _createRpc(stdinWrite, onLine, options = {}) {
 
   if (onLine) onLine(handleChunk);
 
-  function request(method, params) {
+  function request(method, params, timeoutOverrideMs) {
     const id = nextId++;
     const message = { jsonrpc: '2.0', id, method };
     if (params !== undefined) message.params = params;
+    const limit = Number.isFinite(timeoutOverrideMs) && timeoutOverrideMs > 0
+      ? timeoutOverrideMs
+      : timeoutMs;
     const promise = new Promise((resolve, reject) => {
-      const timer = setTimeout(() => rejectPending(id, new Error(method + ' timed out after ' + timeoutMs + 'ms')), timeoutMs);
+      const timer = setTimeout(() => rejectPending(id, new Error(method + ' timed out after ' + limit + 'ms')), limit);
       pending.set(id, { resolve, reject, timer });
     });
     writeMessage(message);
@@ -188,6 +192,7 @@ export function createMcpClient({
   getExpertGuidance = () => true,
   packageVersion = PANEL_VERSION,
   retryDelays = [1000, 2000, 4000],
+  initializeTimeoutMs = INITIALIZE_TIMEOUT_MS,
 } = {}) {
   let proc = null;
   let rpc = null;
@@ -267,20 +272,25 @@ export function createMcpClient({
       } else {
         proc = spawnImpl(commandSpec.command, commandSpec.args || [], { ...options, shell: false });
       }
+      const spawnedProc = proc;
       rpc = _createRpc(
-        (line) => proc.stdin.write(line),
-        (handler) => proc.stdout.on('data', handler),
+        (line) => spawnedProc.stdin.write(line),
+        (handler) => spawnedProc.stdout.on('data', handler),
         { onRequest: handleServerRequest },
       );
-      proc.on('exit', (code, signal) => handleExit(code, signal));
-      proc.on('error', (err) => handleCrash(err));
+      proc.on('exit', (code, signal) => {
+        if (proc === spawnedProc) handleExit(code, signal);
+      });
+      proc.on('error', (err) => {
+        if (proc === spawnedProc) handleCrash(err);
+      });
       if (proc.stderr && proc.stderr.on) proc.stderr.on('data', () => {});
 
       const initResult = await rpc.request('initialize', {
         protocolVersion: MCP_PROTOCOL_VERSION,
         clientInfo: { name: 'panel-chat', version: packageVersion },
         capabilities: { elicitation: {} },
-      });
+      }, initializeTimeoutMs);
       serverInstructions = (initResult && initResult.instructions) || '';
       serverInfo = initResult && initResult.serverInfo && typeof initResult.serverInfo === 'object'
         ? { ...initResult.serverInfo }
@@ -298,6 +308,14 @@ export function createMcpClient({
     try {
       return await startPromise;
     } catch (e) {
+      const failedRpc = rpc;
+      const failedProc = proc;
+      rpc = null;
+      proc = null;
+      if (failedRpc) failedRpc.close(e instanceof Error ? e : new Error('MCP initialization failed'));
+      if (failedProc && failedProc.kill) {
+        try { failedProc.kill(); } catch (killError) { /* best effort */ }
+      }
       status = 'error';
       lastError = e;
       throw e;
