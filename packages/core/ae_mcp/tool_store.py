@@ -327,7 +327,9 @@ _ENTRY_KEYS = frozenset(
         "sourceType",
     }
 )
-_KINDS = frozenset({"jsx", "expression", "prompt-skill", "recipe", "diagnostic"})
+_KINDS = frozenset(
+    {"jsx", "expression", "prompt-skill", "recipe", "diagnostic", "system-command"}
+)
 _STATUSES = frozenset({"candidate", "saved", "pinned", "archived", "deprecated"})
 _RISKS = frozenset({"read", "write", "destructive", "external"})
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")

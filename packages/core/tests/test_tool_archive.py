@@ -319,6 +319,24 @@ def test_system_command_import_is_classified_external_and_quarantined(
     assert str(tmp_path) not in created[0].source.ref
 
 
+def test_system_command_import_remains_readable_after_persisting(tmp_path: Path) -> None:
+    root = tmp_path / "tools"
+    manager = make_manager(ToolArtifactStore(root), RegexSecretScanner(), tmp_path)
+    source = tmp_path / "developer.ps1"
+    source.write_text("Write-Output blocked\n", encoding="utf-8")
+
+    preview = manager.preview_import(source)
+    [created] = manager.commit_import(preview.import_id, {})
+
+    reopened = ToolArtifactStore(root)
+    [summary] = reopened.list(statuses={"candidate"})
+    persisted = reopened.get(created.id)
+    assert summary.kind == "system-command"
+    assert persisted.kind == "system-command"
+    assert persisted.declared_risk == "external"
+    assert persisted.content == "Write-Output blocked\n"
+
+
 @pytest.mark.parametrize(
     "entry_name",
     [
