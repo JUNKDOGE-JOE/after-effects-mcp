@@ -2387,6 +2387,22 @@ std::string digest_composition_create_postcondition(
       + canonical_composition_create_value(value) + "}");
 }
 
+std::string composition_create_persistent_diagnostic_fields(
+    const CompositionCreated& value) {
+  // Deliberately keep the user-provided composition name out of the persistent
+  // native JSONL diagnostics. The immediate, already-validated RPC response
+  // remains unchanged and still returns the name.
+  return "\"changed\":true,\"nameRedacted\":true,\"projectItemCountBefore\":"
+      + std::to_string(value.project_item_count_before)
+      + ",\"projectItemCountAfter\":"
+      + std::to_string(value.project_item_count_after)
+      + ",\"layerCount\":" + std::to_string(value.layer_count)
+      + ",\"width\":" + std::to_string(value.width)
+      + ",\"height\":" + std::to_string(value.height)
+      + ",\"projectGeneration\":"
+      + std::to_string(value.composition_locator.generation);
+}
+
 std::string digest_composition_layer_create_arguments(
     const ObjectLocator& composition_locator,
     std::string_view kind,

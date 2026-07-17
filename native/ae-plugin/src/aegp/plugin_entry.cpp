@@ -4852,19 +4852,9 @@ void log_completion(
              << completion.composition_time_change_result
                     .composition_locator.generation;
     } else if (completion.capability_id == kCompositionCreateCapability) {
-      output << ",\"result\":{\"changed\":true,\"name\":\""
-             << json_escape(completion.composition_create_result.name)
-             << "\",\"projectItemCountBefore\":"
-             << completion.composition_create_result.project_item_count_before
-             << ",\"projectItemCountAfter\":"
-             << completion.composition_create_result.project_item_count_after
-             << ",\"layerCount\":"
-             << completion.composition_create_result.layer_count
-             << ",\"width\":" << completion.composition_create_result.width
-             << ",\"height\":" << completion.composition_create_result.height
-             << ",\"projectGeneration\":"
-             << completion.composition_create_result
-                    .composition_locator.generation;
+      output << ",\"result\":{"
+             << aemcp::native::rpc::composition_create_persistent_diagnostic_fields(
+                    completion.composition_create_result);
     } else if (completion.capability_id == kCompositionLayerCreateCapability) {
       output << ",\"result\":{\"changed\":true,\"kind\":\""
              << json_escape(completion.composition_layer_create_result.kind)

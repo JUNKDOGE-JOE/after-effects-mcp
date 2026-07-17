@@ -64,6 +64,7 @@ using aemcp::native::rpc::digest_composition_selected_layers_postcondition;
 using aemcp::native::rpc::digest_composition_time_postcondition;
 using aemcp::native::rpc::digest_composition_time_set_postcondition;
 using aemcp::native::rpc::digest_composition_create_postcondition;
+using aemcp::native::rpc::composition_create_persistent_diagnostic_fields;
 using aemcp::native::rpc::digest_composition_layer_create_postcondition;
 using aemcp::native::rpc::digest_layer_effect_apply_postcondition;
 using aemcp::native::rpc::digest_layer_properties_postcondition;
@@ -980,6 +981,32 @@ void project_graph_invokes_and_results_are_closed_and_deterministic() {
           && composition_create_body.find("\"projectItemCountAfter\":2")
               != std::string::npos,
       "composition create success omitted typed mutation evidence");
+  auto private_composition_created = composition_created;
+  private_composition_created.name = "PRIVATE_CUSTOMER_COMPOSITION_123";
+  const std::string persistent_diagnostic = "{"
+      + composition_create_persistent_diagnostic_fields(private_composition_created)
+      + ",\"postconditionDigest\":\"fixture-digest\"}";
+  require(persistent_diagnostic.find(private_composition_created.name)
+              == std::string::npos
+          && persistent_diagnostic.find("\"name\":") == std::string::npos
+          && persistent_diagnostic.find("\"nameRedacted\":true")
+              != std::string::npos
+          && persistent_diagnostic.find("\"projectItemCountBefore\":1")
+              != std::string::npos
+          && persistent_diagnostic.find("\"projectItemCountAfter\":2")
+              != std::string::npos
+          && persistent_diagnostic.find("\"layerCount\":0")
+              != std::string::npos
+          && persistent_diagnostic.find("\"width\":1920")
+              != std::string::npos
+          && persistent_diagnostic.find("\"height\":1080")
+              != std::string::npos
+          && persistent_diagnostic.find("\"projectGeneration\":9")
+              != std::string::npos
+          && persistent_diagnostic.find(
+                 "\"postconditionDigest\":\"fixture-digest\"")
+              != std::string::npos,
+      "persistent composition-create diagnostics exposed the name or lost bounded evidence");
   composition_create_success.replayed = true;
   require(body(encode_composition_create_success(composition_create_success)).find(
               "\"replayed\":true") != std::string::npos,
