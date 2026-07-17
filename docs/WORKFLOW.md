@@ -173,6 +173,8 @@ ae_toolIndex
 
 Index/Search 只含摘要；Inspect 才读取完整、按 user-untrusted 处理的 content。只渲染、不执行时，在 Inspect 后调用 `ae_toolUse(action="render")`，不需要 grant。candidate、archived、deprecated 不能执行；history candidate 用 `ae_toolPromoteFromHistory` 保存，imported candidate 用 `ae_toolEdit` 将 status 改为 saved，操作前都应检查内容。Prepare 后不要改制品、参数 schema、target 或 recipe/handler 依赖；任何变化都会让旧 `planHash`/grant 失效。grant 只能消费一次，destructive/external 不提供 session 放行。
 
+start/execute 必须携带稳定的 `operation_id`；相同 operation ID 只用于同一 `planHash` 的网络重试或跨 Core 恢复。共享 Tool Library 的 Core 会原子预约该标识，未持有预约的进程返回已有 execution 而不会再次执行；不同计划会明确冲突。`outcome-unknown` 不能自动重试，应先用 status/history、AE 状态和审计记录核对副作用。
+
 ## 7. 常见故障定位
 
 如果工具可见但调用失败，按这个顺序排：
@@ -379,6 +381,8 @@ ae_toolIndex
 ```
 
 Index/Search contain summaries only; Inspect is the first call that reads full content, which remains user-untrusted. For rendering without execution, call `ae_toolUse(action="render")` after Inspect; no grant is required. Candidate, archived, and deprecated artifacts cannot execute. Save history candidates with `ae_toolPromoteFromHistory`; save imported candidates by changing status to saved with `ae_toolEdit`, inspecting content before either operation. After Prepare, do not change content, argument schema, target, or recipe/handler dependencies: any change invalidates the old `planHash` and grant. Grants are one-time, and destructive/external plans never offer session approval.
+
+Start/execute requests must carry a stable `operation_id`; reuse an operation ID only for network retries or cross-Core recovery of the same `planHash`. Cores sharing a Tool Library atomically reserve the identifier, and a non-owner returns the existing execution without dispatching again; a different plan fails with an explicit conflict. Never auto-retry `outcome-unknown`: reconcile status/history, AE state, and audit evidence first.
 
 ## 7. Common Failure Isolation
 

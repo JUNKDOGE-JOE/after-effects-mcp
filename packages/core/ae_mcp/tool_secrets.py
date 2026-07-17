@@ -177,10 +177,19 @@ _JSON_SCHEMA_TYPES = frozenset(
     {"array", "boolean", "integer", "null", "number", "object", "string"}
 )
 
+# Operational request de-duplication identifiers are not credentials. Keep
+# scanning their values for concrete secret formats (JWTs, sk-* tokens, private
+# keys, and so on), but do not reject a Tool Library recipe merely because the
+# public native write contract names this field ``idempotency_key``.
+_NON_CREDENTIAL_KEY_NAMES = frozenset({"idempotencykey"})
+
 
 def _sensitive_name(value: str) -> bool:
     raw = value.strip()
     if not raw:
+        return False
+    compact = re.sub(r"[^a-z0-9]+", "", raw.lower())
+    if compact in _NON_CREDENTIAL_KEY_NAMES:
         return False
     separated = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", raw)
     separated = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", separated)
@@ -191,7 +200,6 @@ def _sensitive_name(value: str) -> bool:
     )
     if any(segment in _SENSITIVE_KEY_SEGMENTS for segment in segments):
         return True
-    compact = re.sub(r"[^a-z0-9]+", "", raw.lower())
     if any(fragment in compact for fragment in _STRONG_SENSITIVE_FRAGMENTS):
         return True
     if not compact.endswith("key"):

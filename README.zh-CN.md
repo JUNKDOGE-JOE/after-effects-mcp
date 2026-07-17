@@ -161,6 +161,8 @@ v0.9.2 最终 Panel 生成的最小配置形态如下：
 
 发现顺序是 `ae_toolIndex` → `ae_toolSearch` → `ae_toolInspect`。只渲染、不执行时使用 `ae_toolUse(action="render")`；execute/apply 操作使用 prepare → grant → execute 三阶段协议。计划绑定制品及依赖哈希、规范化参数、operation、target、risk 与过期时间；grant 短时有效且只能消费一次。session 放行只适用于 write 风险，并绑定 content hash、operation 和规范化 target，不能按工具名缓存。
 
+每次有副作用的 start/execute 请求都应使用稳定的 `operation_id`，且只能在重试同一 `planHash` 时复用。共享同一 Tool Library 的多个 Core 会为这组标识返回同一个 queued/running/terminal execution，只有预约持有者会分发 backend；同一 operation ID 配另一个计划会返回 `tool_operation_conflict`。若持有者在分发后退出，恢复结果会是 `outcome-unknown` 与 `inspect-state`；使用新 operation ID 前必须先核对 AE 状态和审计证据。
+
 ## 使用建议
 
 AI 目前还不能稳定替代动效师、合成师或设计师的最终判断。更可靠的使用方式是分工协作：
