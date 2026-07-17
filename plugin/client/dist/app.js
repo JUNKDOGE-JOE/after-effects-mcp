@@ -8740,13 +8740,13 @@
   function expertGuidanceEnv(on) {
     return on ? {} : { AE_MCP_EXPERT_GUIDANCE: "0" };
   }
-  function zcodeMcpConfig(port = 11488, expertGuidance = true) {
+  function zcodeMcpConfig(port = 11488, expertGuidance = true, command = "ae-mcp") {
     return {
       mcp: {
         servers: {
           ae: {
             name: "ae",
-            command: "ae-mcp",
+            command,
             args: [],
             env: Object.assign(
               { AE_MCP_BACKEND: "ae-mcp" },
@@ -8758,12 +8758,12 @@
       }
     };
   }
-  function mcpConfigFor(client, port = 11488, expertGuidance = true) {
-    if (client && client.id === "zcode") return zcodeMcpConfig(port, expertGuidance);
+  function mcpConfigFor(client, port = 11488, expertGuidance = true, command = "ae-mcp") {
+    if (client && client.id === "zcode") return zcodeMcpConfig(port, expertGuidance, command);
     return {
       mcpServers: {
         ae: {
-          command: "ae-mcp",
+          command,
           env: {
             AE_MCP_BACKEND: "ae-mcp",
             ...expertGuidanceEnv(expertGuidance !== false),
@@ -9502,12 +9502,13 @@
       const env = hasExplicitEnv ? completeEnvironment(options.env || {}) : completeSpawnEnv();
       const envKey = "AE_MCP_" + id.toUpperCase().replace("-", "_") + "_CLI";
       const override = String(options.overridePath || environmentValue(env, envKey, windows) || "").trim();
+      const stableLauncherOnly = !windows && id === "ae-mcp" && options.allowDevelopmentPath !== true;
       const attempts = [];
       let strongestFailure = "NOT_FOUND";
       const groups = [
         { source: "override", values: override ? [override] : [] },
         { source: "runtime", values: runtimeCandidates(id) },
-        { source: "path", values: pathCandidates(id, env) }
+        ...stableLauncherOnly ? [] : [{ source: "path", values: pathCandidates(id, env) }]
       ];
       for (const group of groups) {
         for (const path of group.values) {
@@ -9525,13 +9526,13 @@
           strongestFailure = result.failure === "ARCH_MISMATCH" ? result.failure : strongestFailure === "NOT_FOUND" || strongestFailure === "PROBE_FAILED" && result.failure === "VERSION_TOO_OLD" ? result.failure : strongestFailure;
         }
       }
-      const shellCandidate = await loginShellCandidate(id, env, attempts);
+      const shellCandidate = stableLauncherOnly ? null : await loginShellCandidate(id, env, attempts);
       if (shellCandidate) {
         const result = await probe(shellCandidate, id, { ...options, env }, attempts);
         if (result.success) return result.success;
         strongestFailure = result.failure;
       }
-      for (const path of standardCandidates(id, env)) {
+      for (const path of stableLauncherOnly ? [] : standardCandidates(id, env)) {
         const rawCandidate = fileCandidate(path, "standard", env, id !== "node");
         if (!rawCandidate) continue;
         const materialized = await materializeScriptCandidate(rawCandidate, id, { ...options, env }, attempts);
@@ -9924,6 +9925,7 @@
     port = 11488,
     onApplyPort,
     mcpConfig,
+    mcpCommand = "ae-mcp",
     logs = [],
     clients = [],
     onBlockClient,
@@ -10085,7 +10087,12 @@
         ] }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Section, { id: "externalClients", title: t.externalClients, caption: t.externalClientsCap, expanded: sections.externalClients, onToggle: onToggleSection, children: EXTERNAL_CLIENTS.map((externalClient) => {
-        const configText = JSON.stringify(mcpConfigFor(externalClient, Number(draftPort) || port || 11488, expertGuidance), null, 2);
+        const configText = JSON.stringify(mcpConfigFor(
+          externalClient,
+          Number(draftPort) || port || 11488,
+          expertGuidance,
+          mcpCommand
+        ), null, 2);
         return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
           ExternalClientRow,
           {
@@ -10689,6 +10696,7 @@
     onClient,
     clientName = "Claude Desktop",
     mcpConfig = "",
+    mcpCommand = "ae-mcp",
     port = 11488,
     expertGuidance = true,
     onNext,
@@ -10701,13 +10709,14 @@
     onInstall,
     onOpenLogin,
     commandPreviews = {},
+    localSteps = LOCAL_STEPS,
     channels = { claude: [], codex: [], zcode: [] },
     activeChannel = ""
   }) {
     const t = W[lang] || W.zh;
     const clientOptions = [{ id: "builtin", name: "builtin" }, ...EXTERNAL_CLIENTS];
     const selectedExternalClient = EXTERNAL_CLIENTS.find((item) => item.id === client);
-    const selectedMcpConfig = selectedExternalClient && selectedExternalClient.kind === "mcp-stdio" ? JSON.stringify(mcpConfigFor(selectedExternalClient, port, expertGuidance), null, 2) : "";
+    const selectedMcpConfig = selectedExternalClient && selectedExternalClient.kind === "mcp-stdio" ? JSON.stringify(mcpConfigFor(selectedExternalClient, port, expertGuidance, mcpCommand), null, 2) : "";
     return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "var(--space-6) var(--space-5) var(--space-5)" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", gap: 5 }, children: [1, 2, 3].map((n) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { width: n === step ? 14 : 5, height: 5, borderRadius: 3, background: n === step ? "var(--gray-11)" : n < step ? "var(--gray-9)" : "var(--gray-6)", transition: "width var(--dur-base) var(--ease-out)" } }, n)) }),
@@ -10728,7 +10737,7 @@
         step === 2 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
           /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t2 }),
           /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b2 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: LOCAL_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: localSteps.map((id) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
             InstallStepRow,
             {
               label: STEP_LABELS[id],
@@ -17401,12 +17410,570 @@
     return dispose;
   }
 
+  // src/cep/runtimeManager.js
+  var RUNTIME_PLATFORM = "macos-arm64";
+  var LOCK_NAME = ".runtime-manager.lock";
+  var INSTALL_RECORD = "install-record.json";
+  var SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+  var SOURCE_SHA = /^[0-9a-f]{40}$/;
+  var SHA256 = /^[0-9a-f]{64}$/;
+  var RuntimeManagerError = class extends Error {
+    constructor(code, message, details = {}) {
+      super(message);
+      this.name = "RuntimeManagerError";
+      this.code = code;
+      this.details = details;
+    }
+  };
+  function failure(code, message, details) {
+    throw new RuntimeManagerError(code, message, details);
+  }
+  function exactKeys(value, keys) {
+    return value !== null && typeof value === "object" && !Array.isArray(value) && JSON.stringify(Object.keys(value).sort()) === JSON.stringify(keys.slice().sort());
+  }
+  function portablePath(value) {
+    if (typeof value !== "string" || !value || value.length > 1024 || value.includes("\\") || value.includes("\0") || value.startsWith("/")) return false;
+    return value.split("/").every((part) => part && part !== "." && part !== "..");
+  }
+  function pointerValue(value, platformId = RUNTIME_PLATFORM) {
+    const text = String(value || "").trim();
+    const parts = text.split("/");
+    if (!portablePath(text) || parts.length !== 2 || parts[1] !== platformId) return "";
+    return text;
+  }
+  function compareSemver(left, right) {
+    const numbers = (value) => String(value).split(/[+-]/, 1)[0].split(".").map(Number);
+    const a = numbers(left);
+    const b = numbers(right);
+    for (let index = 0; index < 3; index += 1) {
+      if (a[index] !== b[index]) return a[index] < b[index] ? -1 : 1;
+    }
+    return 0;
+  }
+  function compareUtf8(left, right) {
+    return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
+  }
+  function modeOf(stats) {
+    return (stats.mode & 511).toString(8).padStart(4, "0");
+  }
+  function runtimeError(error, fallbackCode = "RUNTIME_MANAGER_FAILED") {
+    if (error instanceof RuntimeManagerError) return error;
+    return new RuntimeManagerError(fallbackCode, String((error == null ? void 0 : error.message) || error), {
+      causeCode: typeof (error == null ? void 0 : error.code) === "string" ? error.code : void 0
+    });
+  }
+  function defaultSleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+  function defaultRandomBytes(size) {
+    var _a, _b, _c;
+    const requireImpl = ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) || ((_c = globalThis.window) == null ? void 0 : _c.require) || globalThis.require;
+    if (typeof requireImpl !== "function") {
+      failure("RUNTIME_CRYPTO_UNAVAILABLE", "CEP Node crypto is unavailable");
+    }
+    return requireImpl("crypto").randomBytes(size);
+  }
+  function randomHex(randomBytes, size = 8) {
+    return Buffer.from(randomBytes(size)).toString("hex");
+  }
+  function createRuntimeManager({
+    platform,
+    extensionRoot,
+    fsImpl,
+    cryptoImpl,
+    randomBytes = defaultRandomBytes,
+    now = () => Date.now(),
+    sleep: sleep2 = defaultSleep,
+    pid = Number(((_c) => (_c = ((_b) => (_b = ((_a) => (_a = globalThis.window) == null ? void 0 : _a.cep_node)()) == null ? void 0 : _b.process)()) == null ? void 0 : _c.pid)() || ((_d) => (_d = globalThis.process) == null ? void 0 : _d.pid)() || 0),
+    lockTimeoutMs = 1e4,
+    lockPollMs = 25
+  } = {}) {
+    if (!platform || platform.id !== RUNTIME_PLATFORM) {
+      failure("RUNTIME_PLATFORM_UNSUPPORTED", "RuntimeManager currently supports Apple Silicon macOS only");
+    }
+    if (!platform.paths || !platform.fs || !extensionRoot) {
+      failure("RUNTIME_MANAGER_INPUT_INVALID", "RuntimeManager requires a platform adapter and extension root");
+    }
+    const fs = fsImpl || platform.fs;
+    const paths = platform.paths;
+    const promises = fs.promises;
+    if (!promises) failure("RUNTIME_FILESYSTEM_UNAVAILABLE", "CEP Node filesystem promises are unavailable");
+    const crypto = cryptoImpl || (() => {
+      var _a2, _b2, _c2;
+      const requireImpl = ((_b2 = (_a2 = globalThis.window) == null ? void 0 : _a2.cep_node) == null ? void 0 : _b2.require) || ((_c2 = globalThis.window) == null ? void 0 : _c2.require) || globalThis.require;
+      return typeof requireImpl === "function" ? requireImpl("crypto") : null;
+    })();
+    if (!crypto || typeof crypto.createHash !== "function") {
+      failure("RUNTIME_CRYPTO_UNAVAILABLE", "CEP Node crypto is unavailable");
+    }
+    const root = paths.runtimeRoot;
+    const lockPath = paths.join([root, LOCK_NAME]);
+    const packageManifestPath = paths.join([extensionRoot, "bundle-manifest.json"]);
+    const packagedRuntimeRoot = paths.join([extensionRoot, "runtime", platform.id]);
+    const packagedRuntimeManifest = paths.join([packagedRuntimeRoot, "runtime-manifest.json"]);
+    const packagedLauncher = paths.join([extensionRoot, "platform", platform.id, "bin", "ae-mcp"]);
+    async function sha256File(filePath) {
+      var _a2;
+      const info = await promises.lstat(filePath);
+      if (!info.isFile() || ((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) || info.nlink !== 1) {
+        failure("RUNTIME_FILE_INVALID", "Runtime payload requires an ordinary file", { path: filePath });
+      }
+      const bytes = await promises.readFile(filePath);
+      return crypto.createHash("sha256").update(bytes).digest("hex");
+    }
+    async function readJson2(filePath, code) {
+      var _a2;
+      try {
+        const info = await promises.lstat(filePath);
+        if (!info.isFile() || ((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) || info.nlink !== 1) {
+          failure(code, "Runtime metadata is not an ordinary file", { path: filePath });
+        }
+        return JSON.parse(String(await promises.readFile(filePath, "utf8")));
+      } catch (error) {
+        if (error instanceof RuntimeManagerError) throw error;
+        failure(code, "Runtime metadata is missing or invalid", { path: filePath });
+      }
+    }
+    function validateRuntimeManifest(value) {
+      var _a2, _b2;
+      if (!value || value.schemaVersion !== 1 || value.platform !== platform.id || ((_a2 = value.node) == null ? void 0 : _a2.version) !== "24.17.0" || ((_b2 = value.python) == null ? void 0 : _b2.version) !== "3.13.14" || !Array.isArray(value.files) || value.files.length === 0) {
+        failure("RUNTIME_MANIFEST_INVALID", "Runtime manifest identity is invalid");
+      }
+      const seen = /* @__PURE__ */ new Set();
+      let previous = "";
+      for (const record of value.files) {
+        if (!exactKeys(record, ["mode", "path", "sha256", "size", "type"]) || !portablePath(record.path) || !["file", "symlink"].includes(record.type) || !SHA256.test(record.sha256) || !Number.isSafeInteger(record.size) || record.size < 0 || !/^[0-7]{4}$/.test(record.mode) || seen.has(record.path) || previous && compareUtf8(record.path, previous) <= 0) {
+          failure("RUNTIME_MANIFEST_INVALID", "Runtime manifest file inventory is invalid");
+        }
+        seen.add(record.path);
+        previous = record.path;
+      }
+      return value;
+    }
+    async function actualRuntimePaths(directory, prefix = "", values = []) {
+      var _a2;
+      const entries = await promises.readdir(directory, { withFileTypes: true });
+      for (const entry of entries) {
+        const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+        if (!portablePath(relative)) failure("RUNTIME_FILE_INVALID", "Runtime contains an unsafe path");
+        const absolute = paths.join([directory, entry.name]);
+        const info = await promises.lstat(absolute);
+        if (info.isDirectory() && !((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info))) {
+          await actualRuntimePaths(absolute, relative, values);
+        } else if (relative !== "runtime-manifest.json") {
+          values.push(relative);
+        }
+      }
+      return values;
+    }
+    async function verifyRuntime(directory, expectedManifestSha256) {
+      var _a2, _b2;
+      const manifestPath = paths.join([directory, "runtime-manifest.json"]);
+      if (expectedManifestSha256 && await sha256File(manifestPath) !== expectedManifestSha256) {
+        failure("RUNTIME_HASH_MISMATCH", "Runtime manifest digest does not match its install record");
+      }
+      const manifest = validateRuntimeManifest(await readJson2(manifestPath, "RUNTIME_MANIFEST_INVALID"));
+      const expectedPaths = manifest.files.map((record) => record.path);
+      const actualPaths = (await actualRuntimePaths(directory)).sort(compareUtf8);
+      if (JSON.stringify(actualPaths) !== JSON.stringify(expectedPaths)) {
+        failure("RUNTIME_INCOMPLETE", "Runtime file inventory is incomplete or contains unexpected files");
+      }
+      for (const record of manifest.files) {
+        const absolute = paths.join([directory, ...record.path.split("/")]);
+        const info = await promises.lstat(absolute);
+        if (modeOf(info) !== record.mode) {
+          failure("RUNTIME_METADATA_MISMATCH", "Runtime file mode does not match the manifest", { path: record.path });
+        }
+        let bytes;
+        if (record.type === "symlink") {
+          if (!((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info))) failure("RUNTIME_METADATA_MISMATCH", "Runtime symlink is missing", { path: record.path });
+          const target = await promises.readlink(absolute);
+          const lexical = paths.resolve([paths.dirname(absolute), target]);
+          if (paths.isAbsolute(target) || !paths.contains(directory, lexical)) {
+            failure("RUNTIME_SYMLINK_UNSAFE", "Runtime symlink escapes its version directory", { path: record.path });
+          }
+          bytes = Buffer.from(target, "utf8");
+        } else {
+          if (!info.isFile() || ((_b2 = info.isSymbolicLink) == null ? void 0 : _b2.call(info)) || info.nlink !== 1) {
+            failure("RUNTIME_METADATA_MISMATCH", "Runtime ordinary file is missing", { path: record.path });
+          }
+          bytes = await promises.readFile(absolute);
+        }
+        const digest = crypto.createHash("sha256").update(bytes).digest("hex");
+        if (bytes.length !== record.size || digest !== record.sha256) {
+          failure("RUNTIME_HASH_MISMATCH", "Runtime file digest does not match the manifest", { path: record.path });
+        }
+      }
+      return manifest;
+    }
+    function validateBundleManifest(value) {
+      var _a2;
+      if (!value || value.schemaVersion !== 1 || value.platform !== platform.id || !SEMVER.test(value.version || "") || !SOURCE_SHA.test(value.sourceCommitSha || "") || !SHA256.test(((_a2 = value.runtime) == null ? void 0 : _a2.manifestSha256) || "") || !Array.isArray(value.files) || value.files.length === 0) {
+        failure("RUNTIME_BUNDLE_INVALID", "Packaged runtime bundle manifest is invalid");
+      }
+      const byPath = /* @__PURE__ */ new Map();
+      for (const record of value.files) {
+        if (!portablePath(record == null ? void 0 : record.path) || !SHA256.test((record == null ? void 0 : record.sha256) || "") || !["file", "symlink"].includes(record == null ? void 0 : record.type) || byPath.has(record.path)) {
+          failure("RUNTIME_BUNDLE_INVALID", "Packaged runtime bundle inventory is invalid");
+        }
+        byPath.set(record.path, record);
+      }
+      return { manifest: value, byPath };
+    }
+    async function verifyPackagedPayload() {
+      const { manifest, byPath } = validateBundleManifest(
+        await readJson2(packageManifestPath, "RUNTIME_BUNDLE_INVALID")
+      );
+      const runtimeManifestRelative = `runtime/${platform.id}/runtime-manifest.json`;
+      const launcherRelative = `platform/${platform.id}/bin/ae-mcp`;
+      const runtimeRecord = byPath.get(runtimeManifestRelative);
+      const launcherRecord = byPath.get(launcherRelative);
+      if (!runtimeRecord || runtimeRecord.type !== "file" || runtimeRecord.sha256 !== manifest.runtime.manifestSha256 || !launcherRecord || launcherRecord.type !== "file") {
+        failure("RUNTIME_BUNDLE_INVALID", "Packaged runtime or stable launcher is not declared");
+      }
+      if (await sha256File(packagedRuntimeManifest) !== runtimeRecord.sha256 || await sha256File(packagedLauncher) !== launcherRecord.sha256) {
+        failure("RUNTIME_BUNDLE_CORRUPT", "Packaged runtime or stable launcher failed SHA-256 verification");
+      }
+      await verifyRuntime(packagedRuntimeRoot, manifest.runtime.manifestSha256);
+      return {
+        version: manifest.version,
+        sourceCommitSha: manifest.sourceCommitSha,
+        runtimeManifestSha256: manifest.runtime.manifestSha256,
+        launcherSha256: launcherRecord.sha256
+      };
+    }
+    function installRecordPath(relative) {
+      return paths.join([root, relative.split("/")[0], INSTALL_RECORD]);
+    }
+    async function verifyInstalled(relative) {
+      const normalized = pointerValue(relative, platform.id);
+      if (!normalized) failure("RUNTIME_POINTER_INVALID", "Runtime pointer is invalid");
+      const record = await readJson2(installRecordPath(normalized), "RUNTIME_INSTALL_RECORD_INVALID");
+      if (!exactKeys(record, [
+        "installedAt",
+        "launcherSha256",
+        "platform",
+        "relative",
+        "runtimeManifestSha256",
+        "schemaVersion",
+        "sourceCommitSha",
+        "version"
+      ]) || record.schemaVersion !== 1 || record.platform !== platform.id || record.relative !== normalized || !SEMVER.test(record.version) || !SOURCE_SHA.test(record.sourceCommitSha) || !SHA256.test(record.runtimeManifestSha256) || !SHA256.test(record.launcherSha256) || !Number.isSafeInteger(record.installedAt) || record.installedAt < 0) {
+        failure("RUNTIME_INSTALL_RECORD_INVALID", "Runtime install record is invalid");
+      }
+      const directory = paths.join([root, ...normalized.split("/")]);
+      await verifyRuntime(directory, record.runtimeManifestSha256);
+      return { relative: normalized, directory, record };
+    }
+    async function pointerState(pointerPath) {
+      var _a2;
+      try {
+        const info = await promises.lstat(pointerPath);
+        if (!info.isFile() || ((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) || info.nlink !== 1) {
+          return { exists: true, ok: false, code: "RUNTIME_POINTER_INVALID" };
+        }
+        const relative = pointerValue(await promises.readFile(pointerPath, "utf8"), platform.id);
+        if (!relative) return { exists: true, ok: false, code: "RUNTIME_POINTER_INVALID" };
+        try {
+          return { exists: true, ok: true, ...await verifyInstalled(relative) };
+        } catch (error) {
+          const normalized = runtimeError(error);
+          return { exists: true, ok: false, relative, code: normalized.code, detail: normalized.message };
+        }
+      } catch (error) {
+        if ((error == null ? void 0 : error.code) === "ENOENT") return { exists: false, ok: false, code: "RUNTIME_POINTER_MISSING" };
+        throw error;
+      }
+    }
+    async function atomicWrite(filePath, value, mode = 384) {
+      await promises.mkdir(paths.dirname(filePath), { recursive: true, mode: 448 });
+      const temporary = paths.join([
+        paths.dirname(filePath),
+        `.${paths.basename(filePath)}.${pid}.${randomHex(randomBytes)}.tmp`
+      ]);
+      try {
+        await promises.writeFile(temporary, value, { flag: "wx", mode });
+        await promises.rename(temporary, filePath);
+      } finally {
+        await promises.rm(temporary, { force: true }).catch(() => {
+        });
+      }
+    }
+    async function writePointer(pointerPath, relative) {
+      const normalized = pointerValue(relative, platform.id);
+      if (!normalized) failure("RUNTIME_POINTER_INVALID", "Refused to write an invalid runtime pointer");
+      await atomicWrite(pointerPath, `${normalized}
+`);
+    }
+    async function removePointer(pointerPath) {
+      await promises.rm(pointerPath, { force: true });
+    }
+    async function copyTree(source, destination) {
+      var _a2, _b2, _c2;
+      await promises.mkdir(destination, { recursive: true, mode: 448 });
+      const entries = await promises.readdir(source, { withFileTypes: true });
+      for (const entry of entries) {
+        const from = paths.join([source, entry.name]);
+        const to = paths.join([destination, entry.name]);
+        const info = await promises.lstat(from);
+        if (info.isDirectory() && !((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info))) {
+          await copyTree(from, to);
+        } else if ((_b2 = info.isSymbolicLink) == null ? void 0 : _b2.call(info)) {
+          await promises.symlink(await promises.readlink(from), to);
+        } else if (info.isFile() && info.nlink === 1) {
+          await promises.copyFile(from, to, (_c2 = fs.constants) == null ? void 0 : _c2.COPYFILE_EXCL);
+          await promises.chmod(to, info.mode & 511);
+        } else {
+          failure("RUNTIME_FILE_INVALID", "Packaged runtime contains an unsupported filesystem entry");
+        }
+      }
+    }
+    async function installLauncher(packaged) {
+      var _a2;
+      try {
+        const info = await promises.lstat(paths.launcher);
+        if (info.isFile() && !((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) && info.nlink === 1 && modeOf(info) === "0755" && await sha256File(paths.launcher) === packaged.launcherSha256) return;
+      } catch (error) {
+        if ((error == null ? void 0 : error.code) !== "ENOENT" && !(error instanceof RuntimeManagerError)) throw error;
+      }
+      await promises.mkdir(paths.binRoot, { recursive: true, mode: 448 });
+      const bytes = await promises.readFile(packagedLauncher);
+      await atomicWrite(paths.launcher, bytes, 493);
+      await promises.chmod(paths.launcher, 493);
+      if (await sha256File(paths.launcher) !== packaged.launcherSha256) {
+        failure("RUNTIME_LAUNCHER_CORRUPT", "Installed stable launcher failed verification");
+      }
+    }
+    async function installPackaged(packaged, { repair: repair2 = false } = {}) {
+      const identity = `${packaged.version}-${packaged.sourceCommitSha}`;
+      let runtimeId = identity;
+      const normalRelative = `${runtimeId}/${platform.id}`;
+      try {
+        const existing = await verifyInstalled(normalRelative);
+        if (!repair2 && existing.record.runtimeManifestSha256 === packaged.runtimeManifestSha256) return existing;
+        runtimeId = `${identity}-repair-${randomHex(randomBytes, 6)}`;
+      } catch (error) {
+        if ((error == null ? void 0 : error.code) !== "ENOENT" && !(error instanceof RuntimeManagerError)) throw error;
+        try {
+          await promises.lstat(paths.join([root, identity]));
+          runtimeId = `${identity}-repair-${randomHex(randomBytes, 6)}`;
+        } catch (missing) {
+          if ((missing == null ? void 0 : missing.code) !== "ENOENT") throw missing;
+        }
+      }
+      const relative = `${runtimeId}/${platform.id}`;
+      const temporary = paths.join([root, `.stage-${runtimeId}-${randomHex(randomBytes, 6)}`]);
+      const finalRoot = paths.join([root, runtimeId]);
+      try {
+        await promises.mkdir(root, { recursive: true, mode: 448 });
+        await promises.mkdir(temporary, { mode: 448 });
+        await copyTree(packagedRuntimeRoot, paths.join([temporary, platform.id]));
+        const record = {
+          schemaVersion: 1,
+          platform: platform.id,
+          version: packaged.version,
+          sourceCommitSha: packaged.sourceCommitSha,
+          runtimeManifestSha256: packaged.runtimeManifestSha256,
+          launcherSha256: packaged.launcherSha256,
+          relative,
+          installedAt: Math.max(0, Math.floor(now()))
+        };
+        await promises.writeFile(
+          paths.join([temporary, INSTALL_RECORD]),
+          `${JSON.stringify(record, null, 2)}
+`,
+          { flag: "wx", mode: 384 }
+        );
+        await verifyRuntime(paths.join([temporary, platform.id]), packaged.runtimeManifestSha256);
+        await promises.rename(temporary, finalRoot);
+        return verifyInstalled(relative);
+      } catch (error) {
+        await promises.rm(temporary, { recursive: true, force: true }).catch(() => {
+        });
+        throw runtimeError(error, "RUNTIME_INSTALL_FAILED");
+      }
+    }
+    async function activate(selected, previous) {
+      if ((previous == null ? void 0 : previous.ok) && previous.relative !== selected.relative) {
+        await writePointer(paths.previousPointer, previous.relative);
+      } else {
+        await removePointer(paths.previousPointer);
+      }
+      await writePointer(paths.currentPointer, selected.relative);
+    }
+    async function acquireLock() {
+      await promises.mkdir(root, { recursive: true, mode: 448 });
+      const deadline = now() + lockTimeoutMs;
+      while (true) {
+        try {
+          const handle = await promises.open(lockPath, "wx", 384);
+          try {
+            await handle.writeFile(`${JSON.stringify({ pid, acquiredAt: Math.floor(now()) })}
+`);
+          } catch (error) {
+            await handle.close().catch(() => {
+            });
+            await promises.rm(lockPath, { force: true }).catch(() => {
+            });
+            throw error;
+          }
+          await handle.close();
+          return;
+        } catch (error) {
+          if ((error == null ? void 0 : error.code) !== "EEXIST") throw error;
+          if (now() >= deadline) {
+            failure("RUNTIME_MANAGER_LOCKED", "Another panel is updating the runtime; retry after it finishes");
+          }
+          await sleep2(lockPollMs);
+        }
+      }
+    }
+    async function withLock(callback) {
+      await acquireLock();
+      try {
+        return await callback();
+      } finally {
+        await promises.rm(lockPath, { force: true }).catch(() => {
+        });
+      }
+    }
+    async function ensureReady() {
+      return withLock(async () => {
+        const packaged = await verifyPackagedPayload();
+        const current = await pointerState(paths.currentPointer);
+        const previous = await pointerState(paths.previousPointer);
+        if (!current.ok && previous.ok) {
+          await installLauncher(packaged);
+          await writePointer(paths.currentPointer, previous.relative);
+          await removePointer(paths.previousPointer);
+          return {
+            ok: true,
+            action: "fallback",
+            launcher: paths.launcher,
+            relative: previous.relative,
+            version: previous.record.version,
+            sourceCommitSha: previous.record.sourceCommitSha,
+            diagnostics: [{
+              code: "RUNTIME_CURRENT_INVALID_FALLBACK",
+              message: "The current runtime was invalid; RuntimeManager activated the previous verified runtime once.",
+              failedCode: current.code
+            }]
+          };
+        }
+        if (current.ok && current.record.version === packaged.version && current.record.sourceCommitSha === packaged.sourceCommitSha && current.record.runtimeManifestSha256 === packaged.runtimeManifestSha256) {
+          await installLauncher(packaged);
+          return {
+            ok: true,
+            action: "ready",
+            launcher: paths.launcher,
+            relative: current.relative,
+            version: current.record.version,
+            sourceCommitSha: current.record.sourceCommitSha,
+            diagnostics: []
+          };
+        }
+        const selected = await installPackaged(packaged);
+        await installLauncher(packaged);
+        await activate(selected, current);
+        const action = current.ok ? compareSemver(packaged.version, current.record.version) < 0 ? "downgrade" : "upgrade" : current.exists ? "repair" : "install";
+        return {
+          ok: true,
+          action,
+          launcher: paths.launcher,
+          relative: selected.relative,
+          version: selected.record.version,
+          sourceCommitSha: selected.record.sourceCommitSha,
+          diagnostics: current.exists && !current.ok ? [{
+            code: "RUNTIME_CURRENT_REPAIRED",
+            message: "The active runtime was invalid and no verified previous runtime was available; the packaged runtime was repaired offline.",
+            failedCode: current.code
+          }] : []
+        };
+      });
+    }
+    async function repair() {
+      return withLock(async () => {
+        const packaged = await verifyPackagedPayload();
+        const current = await pointerState(paths.currentPointer);
+        const selected = await installPackaged(packaged, { repair: true });
+        await installLauncher(packaged);
+        await activate(selected, current);
+        return {
+          ok: true,
+          action: "repair",
+          launcher: paths.launcher,
+          relative: selected.relative,
+          version: selected.record.version,
+          sourceCommitSha: selected.record.sourceCommitSha,
+          diagnostics: []
+        };
+      });
+    }
+    async function rollback() {
+      return withLock(async () => {
+        const packaged = await verifyPackagedPayload();
+        const current = await pointerState(paths.currentPointer);
+        const previous = await pointerState(paths.previousPointer);
+        if (!previous.ok) failure("RUNTIME_ROLLBACK_UNAVAILABLE", "No verified previous runtime is available");
+        await installLauncher(packaged);
+        await writePointer(paths.currentPointer, previous.relative);
+        if (current.ok && current.relative !== previous.relative) await writePointer(paths.previousPointer, current.relative);
+        else await removePointer(paths.previousPointer);
+        return {
+          ok: true,
+          action: "rollback",
+          launcher: paths.launcher,
+          relative: previous.relative,
+          version: previous.record.version,
+          sourceCommitSha: previous.record.sourceCommitSha,
+          diagnostics: []
+        };
+      });
+    }
+    async function uninstall() {
+      return withLock(async () => {
+        await removePointer(paths.currentPointer);
+        await removePointer(paths.previousPointer);
+        await promises.rm(paths.launcher, { force: true });
+        const entries = await promises.readdir(root, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+          const recordPath = paths.join([root, entry.name, INSTALL_RECORD]);
+          try {
+            const record = await readJson2(recordPath, "RUNTIME_INSTALL_RECORD_INVALID");
+            if ((record == null ? void 0 : record.schemaVersion) === 1 && record.platform === platform.id) {
+              await promises.rm(paths.join([root, entry.name]), { recursive: true, force: true });
+            }
+          } catch (error) {
+          }
+        }
+        return { ok: true, action: "uninstall", launcher: paths.launcher, relative: "", diagnostics: [] };
+      });
+    }
+    async function inspect() {
+      var _a2;
+      const current = await pointerState(paths.currentPointer);
+      const previous = await pointerState(paths.previousPointer);
+      let launcher = { ok: false, code: "RUNTIME_LAUNCHER_MISSING", path: paths.launcher };
+      try {
+        const info = await promises.lstat(paths.launcher);
+        const digestOk = current.ok ? await sha256File(paths.launcher) === current.record.launcherSha256 : true;
+        launcher = info.isFile() && !((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) && modeOf(info) === "0755" && digestOk ? { ok: true, path: paths.launcher } : { ok: false, code: "RUNTIME_LAUNCHER_INVALID", path: paths.launcher };
+      } catch (error) {
+        if ((error == null ? void 0 : error.code) !== "ENOENT") launcher = { ok: false, code: "RUNTIME_LAUNCHER_INVALID", path: paths.launcher };
+      }
+      return { ok: current.ok && launcher.ok, current, previous, launcher };
+    }
+    return Object.freeze({ ensureReady, inspect, repair, rollback, uninstall });
+  }
+  var _runtimeManagerInternals = Object.freeze({ pointerValue, compareSemver });
+
   // src/cep/mcpClient.js
   var DEFAULT_TIMEOUT_MS2 = 3e4;
   var INITIALIZE_TIMEOUT_MS = 12e4;
   var MCP_PROTOCOL_VERSION = "2025-06-18";
   var PANEL_VERSION = "0.9.2";
-  function defaultRandomBytes(size) {
+  function defaultRandomBytes2(size) {
     const cryptoImpl = globalThis.crypto;
     if (!cryptoImpl || typeof cryptoImpl.getRandomValues !== "function") {
       throw new Error("Secure random generation is unavailable");
@@ -17434,12 +18001,27 @@
   }
   async function resolveMcpCommand({
     explicitPath,
-    platform
+    platform,
+    extRoot,
+    runtimeManager
   } = {}) {
     const configured = String(explicitPath || "").trim();
     if (configured) return { command: configured, args: [], source: "explicit" };
     const adapter = platform || createPlatformAdapter();
-    const resolved = await adapter.resolveExecutable("ae-mcp");
+    const debugMarker = extRoot && adapter.paths.join([extRoot, ".debug"]);
+    const bundleManifest = extRoot && adapter.paths.join([extRoot, "bundle-manifest.json"]);
+    const developmentFallback = adapter.id === "macos-arm64" && debugMarker && adapter.fs.existsSync(debugMarker) && !adapter.fs.existsSync(bundleManifest);
+    if (adapter.id === "macos-arm64" && (runtimeManager || extRoot && !developmentFallback)) {
+      const manager = runtimeManager || createRuntimeManager({ platform: adapter, extensionRoot: extRoot });
+      const selected = await manager.ensureReady();
+      return {
+        command: selected.launcher,
+        args: [],
+        source: selected.action === "fallback" ? "runtime-fallback" : "runtime-manager",
+        runtime: selected
+      };
+    }
+    const resolved = await adapter.resolveExecutable("ae-mcp", developmentFallback ? { allowDevelopmentPath: true } : {});
     if (resolved.ok) return { command: resolved.path, args: [...resolved.argsPrefix], source: resolved.source };
     throw new Error("Unable to find ae-mcp. Repair the installed runtime launcher at " + adapter.paths.launcher + ".");
   }
@@ -17588,7 +18170,7 @@
     packageVersion = PANEL_VERSION,
     retryDelays = [1e3, 2e3, 4e3],
     initializeTimeoutMs = INITIALIZE_TIMEOUT_MS,
-    randomBytes = defaultRandomBytes
+    randomBytes = defaultRandomBytes2
   } = {}) {
     let proc = null;
     let rpc = null;
@@ -17927,13 +18509,13 @@
     error.code = "ZCODE_CREDENTIAL_UNAVAILABLE";
     return error;
   }
-  function exactKeys(value, expected) {
+  function exactKeys2(value, expected) {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
     const keys = Object.keys(value).sort();
     return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
   }
   function normalizeValueRef(value) {
-    if (!exactKeys(value, VALUE_REF_KEYS) || value.kind !== "secret") throw credentialError();
+    if (!exactKeys2(value, VALUE_REF_KEYS) || value.kind !== "secret") throw credentialError();
     let parsed;
     try {
       parsed = parseProviderSecretReference(value.reference);
@@ -26334,7 +26916,7 @@ data: ${JSON.stringify(payload)}
       if (!activeRun || providerRecoveryInFlight || turnFailureInFlight) return;
       turnFailureInFlight = true;
       try {
-        let failure = {
+        let failure2 = {
           kind: error == null ? void 0 : error.kind,
           code: error == null ? void 0 : error.code,
           message: redactValue((error == null ? void 0 : error.message) || "Failed to start Codex turn.", providerSensitiveValues)
@@ -26342,19 +26924,19 @@ data: ${JSON.stringify(payload)}
         try {
           if (await attemptProviderRecovery(error)) return;
         } catch (recoveryError) {
-          failure = {
+          failure2 = {
             kind: recoveryError == null ? void 0 : recoveryError.kind,
             code: recoveryError == null ? void 0 : recoveryError.code,
             message: redactValue((recoveryError == null ? void 0 : recoveryError.message) || "Failed to start Codex turn.", providerSensitiveValues)
           };
         }
         providerDeltaRedactor.discard();
-        const message = (failure == null ? void 0 : failure.message) || "Failed to start Codex turn.";
+        const message = (failure2 == null ? void 0 : failure2.message) || "Failed to start Codex turn.";
         const providerHttpFailure = /\bunexpected status\s+\d{3}\b.*\burl:\s*https?:\/\//i.test(message);
         emit({
           type: "error",
-          kind: (failure == null ? void 0 : failure.kind) || (providerHttpFailure || /model/i.test(message) ? "model" : "mcp"),
-          ...(failure == null ? void 0 : failure.code) ? { code: failure.code } : {},
+          kind: (failure2 == null ? void 0 : failure2.kind) || (providerHttpFailure || /model/i.test(message) ? "model" : "mcp"),
+          ...(failure2 == null ? void 0 : failure2.code) ? { code: failure2.code } : {},
           message
         });
         finishActive();
@@ -27841,7 +28423,7 @@ data: ${JSON.stringify(payload)}
       revision: valueRef.revision
     };
   }
-  function defaultRandomBytes2(size) {
+  function defaultRandomBytes3(size) {
     if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === "function") {
       const bytes = new Uint8Array(size);
       globalThis.crypto.getRandomValues(bytes);
@@ -27875,7 +28457,7 @@ data: ${JSON.stringify(payload)}
   function createProviderSecretService({
     getHost,
     createReference = createProviderSecretReference,
-    randomBytes = defaultRandomBytes2
+    randomBytes = defaultRandomBytes3
   } = {}) {
     if (typeof getHost !== "function") throw new TypeError("getHost must be a function");
     if (typeof createReference !== "function") throw new TypeError("createReference must be a function");
@@ -30746,8 +31328,8 @@ data: ${JSON.stringify(payload)}
         if (validToolResponse(protocol, result)) {
           return featureResult("supported", `${protocol}-tool-call-valid`);
         }
-        const failure = featureFailure(result, `${protocol}-tool`);
-        if (failure.status === "unknown") return failure;
+        const failure2 = featureFailure(result, `${protocol}-tool`);
+        if (failure2.status === "unknown") return failure2;
         const schema = protocol === "responses" ? responsesSchema(result) : protocol === "messages" ? messagesSchema(result) : chatSchema(result);
         if (!retryToolBudget(protocol, schema)) break;
       }
@@ -31853,15 +32435,15 @@ data: ${JSON.stringify(payload)}
   ]);
   function providerInitFailure(error) {
     const code = typeof (error == null ? void 0 : error.code) === "string" ? error.code : "";
-    let failure = "PROVIDER_INITIALIZATION_FAILED";
+    let failure2 = "PROVIDER_INITIALIZATION_FAILED";
     if (code === "HELPER_UNAVAILABLE" || code === "HELPER_START_FAILED") {
-      failure = "PLATFORM_HELPER_START_FAILED";
-    } else if (HELPER_FAILURE_CODES.has(code)) failure = "PLATFORM_HELPER_REPAIR_REQUIRED";
-    else if (code === "PROVIDER_STORE_INVALID" || code === "PROVIDER_STORE_CREDENTIAL_CONTAMINATION") failure = "PROVIDER_STORE_CORRUPT";
-    else if (code === "PROVIDER_STORE_UNAVAILABLE") failure = "PROVIDER_STORE_UNAVAILABLE";
-    else if (MIGRATION_FAILURE_CODES.has(code)) failure = "PROVIDER_MIGRATION_CONFLICT";
-    else if (SECRET_MISMATCH_CODES.has(code)) failure = "PROVIDER_SECRET_MISMATCH";
-    return { state: "unavailable", error: failure };
+      failure2 = "PLATFORM_HELPER_START_FAILED";
+    } else if (HELPER_FAILURE_CODES.has(code)) failure2 = "PLATFORM_HELPER_REPAIR_REQUIRED";
+    else if (code === "PROVIDER_STORE_INVALID" || code === "PROVIDER_STORE_CREDENTIAL_CONTAMINATION") failure2 = "PROVIDER_STORE_CORRUPT";
+    else if (code === "PROVIDER_STORE_UNAVAILABLE") failure2 = "PROVIDER_STORE_UNAVAILABLE";
+    else if (MIGRATION_FAILURE_CODES.has(code)) failure2 = "PROVIDER_MIGRATION_CONFLICT";
+    else if (SECRET_MISMATCH_CODES.has(code)) failure2 = "PROVIDER_SECRET_MISMATCH";
+    return { state: "unavailable", error: failure2 };
   }
   function assertProviderStateCredentialFree(providerState, exactSecrets = []) {
     if (!containsExactSecret(providerState == null ? void 0 : providerState.providers, exactSecrets)) return providerState;
@@ -32960,10 +33542,18 @@ data: ${JSON.stringify(payload)}
   var OUTPUT_TAIL = 8192;
   var REPO = "https://github.com/JUNKDOGE-JOE/after-effects-mcp";
   var TOOL_IDS = { aeMcp: "ae-mcp", uv: "uv", node: "node", claude: "claude" };
-  async function detectTool(id, { platform } = {}) {
+  async function detectTool(id, { platform, extRoot, runtimeManager } = {}) {
     const adapter = platform || createPlatformAdapter();
     const executableId = TOOL_IDS[id];
     if (!executableId) return { ok: false, detail: "unsupported tool id" };
+    if (id === "aeMcp" && adapter.id === "macos-arm64" && (runtimeManager || extRoot)) {
+      try {
+        const resolved2 = await resolveMcpCommand({ platform: adapter, extRoot, runtimeManager });
+        return { ok: true, version: resolved2.command, path: resolved2.command, source: resolved2.source };
+      } catch (error) {
+        return { ok: false, detail: (error == null ? void 0 : error.code) || (error == null ? void 0 : error.message) || "RUNTIME_MANAGER_FAILED" };
+      }
+    }
     const options = executableId === "node" ? { minimumVersion: "18.0.0" } : {};
     const resolved = await adapter.resolveExecutable(executableId, options);
     if (!resolved.ok) return { ok: false, detail: resolved.code, resolution: resolved };
@@ -33041,7 +33631,7 @@ data: ${JSON.stringify(payload)}
     const text = String(output || "").toLowerCase();
     return text.includes("winget") && (text.includes("not recognized") || text.includes("not found") || text.includes("enoent") || text.includes("cannot find"));
   }
-  function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin } = {}) {
+  function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin, platform, runtimeManager } = {}) {
     const [stepStates, dispatch] = import_react44.default.useReducer(stepReducer, null, initialStepStates);
     const [useUvFallback, setUseUvFallback] = import_react44.default.useState(false);
     const repoRoot = import_react44.default.useMemo(() => {
@@ -33053,19 +33643,24 @@ data: ${JSON.stringify(payload)}
     }, [extRoot]);
     const cmds = import_react44.default.useMemo(() => buildInstallCommands({
       panelVersion: PANEL_VERSION,
-      repoRoot
-    }), [repoRoot]);
+      repoRoot,
+      platform
+    }), [platform, repoRoot]);
+    const localSteps = import_react44.default.useMemo(
+      () => (platform == null ? void 0 : platform.id) === "macos-arm64" && runtimeManager ? ["aeMcp"] : LOCAL_STEPS,
+      [platform, runtimeManager]
+    );
     const activeCmds = import_react44.default.useMemo(() => ({
       ...cmds,
       uv: useUvFallback ? cmds.uvFallback : cmds.uv
     }), [cmds, useUvFallback]);
     const commandPreviews = import_react44.default.useMemo(() => ({
       uv: commandPreview(activeCmds.uv),
-      aeMcp: commandPreview(activeCmds.aeMcp),
+      aeMcp: (platform == null ? void 0 : platform.id) === "macos-arm64" && runtimeManager ? lang === "zh" ? "\u9A8C\u8BC1\u5E76\u6FC0\u6D3B\u63D2\u4EF6\u5185\u7F6E\u79BB\u7EBF\u8FD0\u884C\u65F6" : "Verify and activate the bundled offline runtime" : commandPreview(activeCmds.aeMcp),
       node: commandPreview(activeCmds.node),
       claude: commandPreview(activeCmds.claude),
       login: "claude"
-    }), [activeCmds]);
+    }), [activeCmds, lang, platform, runtimeManager]);
     const detect = import_react44.default.useCallback(async (id) => {
       dispatch({ type: "detect-start", id });
       if (id === "login") {
@@ -33077,11 +33672,25 @@ data: ${JSON.stringify(payload)}
         dispatch({ type: "detect-result", id, ok, version: ok ? versionFrom(claudeStatus) : "" });
         return { ok, version: versionFrom(claudeStatus) };
       }
-      const result = await detectTool(id);
+      const result = await detectTool(id, { platform, extRoot, runtimeManager });
       dispatch({ type: "detect-result", id, ok: result.ok, version: result.version || "" });
       return result;
-    }, [claudeStatus, recheckLogin]);
+    }, [claudeStatus, extRoot, platform, recheckLogin, runtimeManager]);
     const install = import_react44.default.useCallback(async (id) => {
+      if (id === "aeMcp" && (platform == null ? void 0 : platform.id) === "macos-arm64" && runtimeManager) {
+        dispatch({ type: "run-start", id });
+        try {
+          const repaired = await runtimeManager.repair();
+          const output = `Offline runtime ${repaired.version} activated at ${repaired.launcher}`;
+          dispatch({ type: "run-done", id, ok: true, output });
+          await detect(id);
+          return { ok: true, output };
+        } catch (error) {
+          const output = `${(error == null ? void 0 : error.code) || "RUNTIME_MANAGER_FAILED"}: ${(error == null ? void 0 : error.message) || error}`;
+          dispatch({ type: "run-done", id, ok: false, output });
+          return { ok: false, output };
+        }
+      }
       const cmd = activeCmds[id];
       if (!cmd) return { ok: false, output: "No command configured for " + id };
       if (id === "uv" && useUvFallback) {
@@ -33108,7 +33717,7 @@ data: ${JSON.stringify(payload)}
       dispatch({ type: "run-done", id, ok: result.ok, output: result.output });
       await detect(id);
       return result;
-    }, [activeCmds, detect, lang, useUvFallback]);
+    }, [activeCmds, detect, lang, platform, runtimeManager, useUvFallback]);
     const openLogin = import_react44.default.useCallback(() => {
       openLoginTerminal({ tool: "claude" });
       dispatch({ type: "detect-result", id: "login", ok: false });
@@ -33117,10 +33726,10 @@ data: ${JSON.stringify(payload)}
     import_react44.default.useEffect(() => {
       if (bootDetectRef.current) return;
       bootDetectRef.current = true;
-      ["uv", "aeMcp", "node", "claude"].forEach((id) => {
+      [...localSteps, ...SUBSCRIPTION_STEPS].forEach((id) => {
         detect(id);
       });
-    }, [detect]);
+    }, [detect, localSteps]);
     import_react44.default.useEffect(() => {
       if (!claudeStatus) return;
       if (claudeStatus.state === "checking") {
@@ -33135,6 +33744,7 @@ data: ${JSON.stringify(payload)}
       props: {
         stepStates,
         commandPreviews,
+        localSteps,
         onDetect: detect,
         onInstall: install,
         onOpenLogin: openLogin
@@ -33207,7 +33817,8 @@ data: ${JSON.stringify(payload)}
     });
     return { response, body: await readJson(response) };
   }
-  async function runDiagnostics({ getHost, port, fs, fetchImpl, platform }) {
+  async function runDiagnostics({ getHost, port, fs, fetchImpl, platform, runtimeManager }) {
+    var _a, _b, _c;
     const adapter = platform || createPlatformAdapter();
     const fileSystem = fs || adapter.fs;
     const fetcher = fetchImpl || globalThis.fetch;
@@ -33280,7 +33891,28 @@ data: ${JSON.stringify(payload)}
     } catch (e) {
       items.push({ id: "extendscript-ping", ok: false, detail: e.message, fixHint: HINTS["extendscript-ping"] });
     }
-    for (const id of ["ae-mcp", "node", "claude", "codex"]) {
+    if (runtimeManager) {
+      try {
+        const state = await runtimeManager.inspect();
+        const current = ((_a = state.current) == null ? void 0 : _a.ok) ? state.current.record : null;
+        items.push({
+          id: "ae-mcp",
+          ok: state.ok,
+          detail: state.ok ? `${current.version} \xB7 ${state.launcher.path} \xB7 ${current.sourceCommitSha}` : [(_b = state.current) == null ? void 0 : _b.code, (_c = state.launcher) == null ? void 0 : _c.code].filter(Boolean).join(" \xB7 "),
+          fixHint: HINTS["ae-mcp"],
+          action: { kind: "repair-runtime" }
+        });
+      } catch (error) {
+        items.push({
+          id: "ae-mcp",
+          ok: false,
+          detail: (error == null ? void 0 : error.code) || (error == null ? void 0 : error.message) || "RUNTIME_MANAGER_FAILED",
+          fixHint: HINTS["ae-mcp"],
+          action: { kind: "repair-runtime" }
+        });
+      }
+    }
+    for (const id of runtimeManager ? ["node", "claude", "codex"] : ["ae-mcp", "node", "claude", "codex"]) {
       const options = id === "node" ? { minimumVersion: "24.17.0", requiredArch: adapter.id === "macos-arm64" ? "arm64" : "x64" } : {};
       const result = await adapter.resolveExecutable(id, options);
       const action = id === "ae-mcp" || id === "node" ? { kind: "repair-runtime" } : { kind: "open-login-terminal", tool: id };
@@ -33324,11 +33956,11 @@ data: ${JSON.stringify(payload)}
     } catch (e) {
     }
   }
-  function buildMcpConfig(port, expertGuidance = true) {
+  function buildMcpConfig(port, expertGuidance = true, command = "ae-mcp") {
     return {
       mcpServers: {
         ae: {
-          command: "ae-mcp",
+          command,
           env: Object.assign(
             { AE_MCP_BACKEND: "ae-mcp" },
             expertGuidanceEnv(expertGuidance !== false),
@@ -34634,11 +35266,19 @@ ${baseUrl}`),
     const runtimeRef = import_react45.default.useRef({ providerProfile, providerCandidate: null, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: "subscription", claudeApiProvider: null });
     const previousCodexProviderProfileRef = import_react45.default.useRef(providerProfile);
     const extRoot = import_react45.default.useMemo(() => readCepSystemPath({ cs: cs2, platform }), [cs2, platform]);
+    const runtimeManager = import_react45.default.useMemo(() => {
+      if (platform.id !== "macos-arm64") return null;
+      const debugMarker = platform.paths.join([extRoot, ".debug"]);
+      const bundleManifest = platform.paths.join([extRoot, "bundle-manifest.json"]);
+      const developmentFallback = platform.fs.existsSync(debugMarker) && !platform.fs.existsSync(bundleManifest);
+      return developmentFallback ? null : createRuntimeManager({ platform, extensionRoot: extRoot });
+    }, [extRoot, platform]);
+    const mcpCommand = runtimeManager ? platform.paths.launcher : "ae-mcp";
     const sidecarPath = import_react45.default.useMemo(() => resolveSidecarPath({ extRoot, platform }), [extRoot, platform]);
     const getMcpSpec = import_react45.default.useCallback(async () => withToolApprovalTier(
-      await resolveMcpCommand({ extRoot, platform }),
+      await resolveMcpCommand({ extRoot, platform, runtimeManager }),
       approvalTierFile
-    ), [approvalTierFile, extRoot, platform]);
+    ), [approvalTierFile, extRoot, platform, runtimeManager]);
     const mcp = import_react45.default.useMemo(() => createMcpClient({
       platform,
       extRoot,
@@ -35257,13 +35897,15 @@ ${baseUrl}`),
           getHost,
           port: status.port,
           fs: cepRequire4("fs"),
-          fetchImpl: window.fetch.bind(window)
+          fetchImpl: window.fetch.bind(window),
+          platform,
+          runtimeManager
         });
         setDiagnostics(items);
       } catch (e) {
         setDiagnostics([{ id: "host-listening", ok: false, detail: String(e && e.message), fixHint: { zh: "\u8BCA\u65AD\u6267\u884C\u5931\u8D25\uFF0C\u91CD\u542F\u9762\u677F\u540E\u91CD\u8BD5\u3002", en: "Diagnostics failed to run; reload the panel and retry." } }]);
       }
-    }, [getHost, status.port]);
+    }, [getHost, platform, runtimeManager, status.port]);
     const togglePause = () => {
       const host = getHost();
       if (!host || typeof host.setPaused !== "function") {
@@ -35288,9 +35930,20 @@ ${baseUrl}`),
       markWizardDone(window.localStorage);
       setWizardDone(true);
     };
-    const mcpConfigStr = JSON.stringify(buildMcpConfig(status.port, expertGuidance), null, 2);
+    const mcpConfigStr = JSON.stringify(buildMcpConfig(
+      status.port,
+      expertGuidance,
+      mcpCommand
+    ), null, 2);
     const claudeStatus = probe === null ? { state: "checking" } : probe.nodeOk === false ? { state: "no-node", detail: probe.detail } : probe.loggedIn === false ? { state: "not-logged-in", detail: probe.detail } : { state: "ready", nodeVersion: probe.nodeVersion };
-    const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
+    const wizard = useWizardWiring({
+      extRoot,
+      lang,
+      claudeStatus,
+      recheckLogin: runClaudeProbe,
+      platform,
+      runtimeManager
+    });
     if (!wizardDone) {
       return /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
         WizardScreen,
@@ -35302,6 +35955,7 @@ ${baseUrl}`),
           onClient: setWizClient,
           clientName: (CLIENT_NAMES[wizClient] || CLIENT_NAMES["claude-desktop"])[lang],
           mcpConfig: mcpConfigStr,
+          mcpCommand,
           port: status.port,
           expertGuidance,
           channels,
@@ -35401,6 +36055,7 @@ ${baseUrl}`),
             port: status.port,
             onApplyPort: applyPort,
             mcpConfig: mcpConfigStr,
+            mcpCommand,
             logs,
             clients,
             onBlockClient: (label, v) => {

@@ -53,6 +53,14 @@ test('mcpConfigFor returns ae-mcp stdio config with panel plugin URL', () => {
   });
 });
 
+test('mcpConfigFor emits an expanded stable launcher when the panel supplies one', () => {
+  const launcher = '/Users/测试 User/.ae-mcp/bin/ae-mcp';
+  const standard = mcpConfigFor({ kind: 'mcp-stdio' }, 11488, true, launcher);
+  const zcode = mcpConfigFor({ id: 'zcode' }, 11488, true, launcher);
+  assert.equal(standard.mcpServers.ae.command, launcher);
+  assert.equal(zcode.mcp.servers.ae.command, launcher);
+});
+
 test('mcpConfigFor emits ZCode mcp.servers format (object env, not array)', () => {
   const config = mcpConfigFor({ id: 'zcode' }, 11488);
 

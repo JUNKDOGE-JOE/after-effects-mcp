@@ -65,6 +65,7 @@ import { writeLogExport, revealInExplorer } from '../cep/logExportFs.js';
 import { reconcileStableJsonValue } from '../lib/stableValue.js';
 import { createPlatformAdapter } from '../cep/platform/index.js';
 import { readCepSystemPath } from '../cep/platform/paths.js';
+import { createRuntimeManager } from '../cep/runtimeManager.js';
 import { createElicitationCoordinator } from '../lib/elicitationCoordinator.js';
 import { decideToolPlan } from '../../../shared/tool-approval.mjs';
 
@@ -564,11 +565,20 @@ function Shell({ cs }) {
   const runtimeRef = React.useRef({ providerProfile, providerCandidate: null, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: 'subscription', claudeApiProvider: null });
   const previousCodexProviderProfileRef = React.useRef(providerProfile);
   const extRoot = React.useMemo(() => readCepSystemPath({ cs, platform }), [cs, platform]);
+  const runtimeManager = React.useMemo(() => {
+    if (platform.id !== 'macos-arm64') return null;
+    const debugMarker = platform.paths.join([extRoot, '.debug']);
+    const bundleManifest = platform.paths.join([extRoot, 'bundle-manifest.json']);
+    const developmentFallback = platform.fs.existsSync(debugMarker)
+      && !platform.fs.existsSync(bundleManifest);
+    return developmentFallback ? null : createRuntimeManager({ platform, extensionRoot: extRoot });
+  }, [extRoot, platform]);
+  const mcpCommand = runtimeManager ? platform.paths.launcher : 'ae-mcp';
   const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot, platform }), [extRoot, platform]);
   const getMcpSpec = React.useCallback(async () => withToolApprovalTier(
-    await resolveMcpCommand({ extRoot, platform }),
+    await resolveMcpCommand({ extRoot, platform, runtimeManager }),
     approvalTierFile,
-  ), [approvalTierFile, extRoot, platform]);
+  ), [approvalTierFile, extRoot, platform, runtimeManager]);
   const mcp = React.useMemo(() => createMcpClient({
     platform,
     extRoot,
@@ -1230,12 +1240,14 @@ function Shell({ cs }) {
         port: status.port,
         fs: cepRequire('fs'),
         fetchImpl: window.fetch.bind(window),
+        platform,
+        runtimeManager,
       });
       setDiagnostics(items);
     } catch (e) {
       setDiagnostics([{ id: 'host-listening', ok: false, detail: String(e && e.message), fixHint: { zh: '诊断执行失败，重启面板后重试。', en: 'Diagnostics failed to run; reload the panel and retry.' } }]);
     }
-  }, [getHost, status.port]);
+  }, [getHost, platform, runtimeManager, status.port]);
 
   const togglePause = () => {
     const host = getHost();
@@ -1264,12 +1276,23 @@ function Shell({ cs }) {
     setWizardDone(true);
   };
 
-  const mcpConfigStr = JSON.stringify(buildMcpConfig(status.port, expertGuidance), null, 2);
+  const mcpConfigStr = JSON.stringify(buildMcpConfig(
+    status.port,
+    expertGuidance,
+    mcpCommand,
+  ), null, 2);
   const claudeStatus = probe === null ? { state: 'checking' }
     : probe.nodeOk === false ? { state: 'no-node', detail: probe.detail }
     : probe.loggedIn === false ? { state: 'not-logged-in', detail: probe.detail }
     : { state: 'ready', nodeVersion: probe.nodeVersion };
-  const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
+  const wizard = useWizardWiring({
+    extRoot,
+    lang,
+    claudeStatus,
+    recheckLogin: runClaudeProbe,
+    platform,
+    runtimeManager,
+  });
 
   if (!wizardDone) {
     return (
@@ -1281,6 +1304,7 @@ function Shell({ cs }) {
         onClient={setWizClient}
         clientName={(CLIENT_NAMES[wizClient] || CLIENT_NAMES['claude-desktop'])[lang]}
         mcpConfig={mcpConfigStr}
+        mcpCommand={mcpCommand}
         port={status.port}
         expertGuidance={expertGuidance}
         channels={channels}
@@ -1375,6 +1399,7 @@ function Shell({ cs }) {
             port={status.port}
             onApplyPort={applyPort}
             mcpConfig={mcpConfigStr}
+            mcpCommand={mcpCommand}
             logs={logs}
             clients={clients}
             onBlockClient={(label, v) => {

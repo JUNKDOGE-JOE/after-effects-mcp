@@ -223,7 +223,9 @@ test('user docs distinguish the Windows v0.9.2 release from deferred v0.9.3 work
 
   for (const value of [readme, readmeZh, workflow]) {
     assert.match(value, /\/Users\/<USER>\/\.ae-mcp\/bin\/ae-mcp/);
-    assert.match(value, /RuntimeManager[\s\S]{0,400}(?:bare PATH|裸 PATH)/i);
+    assert.match(value, /RuntimeManager/i);
+    assert.match(value, /(?:bare PATH|裸 PATH)/i);
+    assert.match(value, /(?:absolute|绝对)/i);
   }
   assert.match(install, /\/Users\/<USER>\/\.ae-mcp\/bin\/ae-mcp/);
 });

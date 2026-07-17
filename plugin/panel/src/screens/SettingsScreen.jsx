@@ -283,6 +283,7 @@ export function SettingsScreen({
   port = 11488,
   onApplyPort,
   mcpConfig,
+  mcpCommand = 'ae-mcp',
   logs = [],
   clients = [],
   onBlockClient,
@@ -476,7 +477,12 @@ export function SettingsScreen({
 
       <Section id="externalClients" title={t.externalClients} caption={t.externalClientsCap} expanded={sections.externalClients} onToggle={onToggleSection}>
         {EXTERNAL_CLIENTS.map((externalClient) => {
-          const configText = JSON.stringify(mcpConfigFor(externalClient, Number(draftPort) || port || 11488, expertGuidance), null, 2);
+          const configText = JSON.stringify(mcpConfigFor(
+            externalClient,
+            Number(draftPort) || port || 11488,
+            expertGuidance,
+            mcpCommand,
+          ), null, 2);
           return (
             <ExternalClientRow
               key={externalClient.id}

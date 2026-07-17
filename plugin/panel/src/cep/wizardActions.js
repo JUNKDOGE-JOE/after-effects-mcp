@@ -1,16 +1,24 @@
 // Legacy wizard orchestration. Task 11 replaces the online install catalog;
 // this module only keeps business code behind the shared platform boundary.
-import { findProjectRoot } from './mcpClient.js';
+import { findProjectRoot, resolveMcpCommand } from './mcpClient.js';
 import { createPlatformAdapter } from './platform/index.js';
 
 const OUTPUT_TAIL = 8192;
 const REPO = 'https://github.com/JUNKDOGE-JOE/after-effects-mcp';
 const TOOL_IDS = { aeMcp: 'ae-mcp', uv: 'uv', node: 'node', claude: 'claude' };
 
-export async function detectTool(id, { platform } = {}) {
+export async function detectTool(id, { platform, extRoot, runtimeManager } = {}) {
   const adapter = platform || createPlatformAdapter();
   const executableId = TOOL_IDS[id];
   if (!executableId) return { ok: false, detail: 'unsupported tool id' };
+  if (id === 'aeMcp' && adapter.id === 'macos-arm64' && (runtimeManager || extRoot)) {
+    try {
+      const resolved = await resolveMcpCommand({ platform: adapter, extRoot, runtimeManager });
+      return { ok: true, version: resolved.command, path: resolved.command, source: resolved.source };
+    } catch (error) {
+      return { ok: false, detail: error?.code || error?.message || 'RUNTIME_MANAGER_FAILED' };
+    }
+  }
   const options = executableId === 'node' ? { minimumVersion: '18.0.0' } : {};
   const resolved = await adapter.resolveExecutable(executableId, options);
   if (!resolved.ok) return { ok: false, detail: resolved.code, resolution: resolved };

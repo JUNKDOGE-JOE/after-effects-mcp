@@ -78,13 +78,13 @@ export function expertGuidanceEnv(on) {
 // {name, command, args, env} where env is an OBJECT {KEY:VALUE} (ZCode runs
 // Object.entries(env) internally, so an array would corrupt the values).
 // See issue #36 / the ZCode config debugging saga.
-function zcodeMcpConfig(port = 11488, expertGuidance = true) {
+function zcodeMcpConfig(port = 11488, expertGuidance = true, command = 'ae-mcp') {
   return {
     mcp: {
       servers: {
         ae: {
           name: 'ae',
-          command: 'ae-mcp',
+          command,
           args: [],
           env: Object.assign(
             { AE_MCP_BACKEND: 'ae-mcp' },
@@ -97,12 +97,12 @@ function zcodeMcpConfig(port = 11488, expertGuidance = true) {
   };
 }
 
-export function mcpConfigFor(client, port = 11488, expertGuidance = true) {
-  if (client && client.id === 'zcode') return zcodeMcpConfig(port, expertGuidance);
+export function mcpConfigFor(client, port = 11488, expertGuidance = true, command = 'ae-mcp') {
+  if (client && client.id === 'zcode') return zcodeMcpConfig(port, expertGuidance, command);
   return {
     mcpServers: {
       ae: {
-        command: 'ae-mcp',
+        command,
         env: {
           AE_MCP_BACKEND: 'ae-mcp',
           ...expertGuidanceEnv(expertGuidance !== false),

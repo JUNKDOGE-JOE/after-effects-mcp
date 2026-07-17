@@ -104,7 +104,7 @@ flowchart TD
     I --> J["Start with ae_ping / ae_overview"]
 ```
 
-最终首跑向导契约只解包、校验并原子激活签名资产内的 runtime。`uv`、pip/npm 解析与本地 `packages/*` 只属于开发 checkout，不是 release 用户路径；RuntimeManager 获批实现前，这不是当前完成声明。
+首跑向导只校验、复制并原子激活发布资产内的 runtime。`uv`、pip/npm 解析与本地 `packages/*` 只属于开发 checkout，不是 release 用户路径；v0.9.3 macOS RuntimeManager 已实现这条离线路径。
 
 ## 4. 外部客户端
 
@@ -124,7 +124,7 @@ flowchart TD
 }
 ```
 
-上例是最终稳定 launcher 契约；macOS 必须把 `<USER>` 替换为实际账户名，Windows 使用展开后的 `%USERPROFILE%\.ae-mcp\bin\ae-mcp.exe` 绝对路径。RuntimeManager 获批实施后必须把当前 Panel 生成器的裸 PATH `ae-mcp` 改为该平台绝对路径；在此之前，fail-closed 原生/产品验收 build guard 不允许发布候选。
+上例是稳定 launcher 契约。v0.9.3 macOS Panel 输出展开后的绝对路径，RuntimeManager 在启动前校验 active runtime，且不会回退到裸 PATH；Windows v0.9.2 行为保持不变。
 
 已覆盖的客户端形态包括 Claude Desktop、Claude Code、Cursor、OpenCode、OpenClaw、AstrBot、Gemini Antigravity 等。OpenCode 在 v0.7.0 属于外部客户端，不是面板内嵌后端。
 
@@ -310,7 +310,7 @@ flowchart TD
     I --> J["Start with ae_ping / ae_overview"]
 ```
 
-The final wizard contract only unpacks, verifies, and atomically activates the runtime already inside the signed asset. `uv`, pip/npm resolution, and local `packages/*` are development-checkout concerns, not the release-user path. This is not a current completion claim before approved RuntimeManager implementation.
+The first-run wizard only verifies, copies, and atomically activates the runtime already inside the release asset. `uv`, pip/npm resolution, and local `packages/*` are development-checkout concerns, not the release-user path. The v0.9.3 macOS RuntimeManager implements this offline path.
 
 ## 4. External Clients
 
@@ -330,7 +330,7 @@ External clients use stdio MCP config:
 }
 ```
 
-This is the final stable-launcher contract; replace `<USER>` with the actual macOS account name, while Windows uses the expanded absolute `%USERPROFILE%\.ae-mcp\bin\ae-mcp.exe` path. The approved RuntimeManager implementation must replace the current Panel generator's bare PATH `ae-mcp` with that platform path. Until then, the fail-closed native/product-acceptance build guard prevents candidate publication.
+This is the stable-launcher contract. The v0.9.3 macOS Panel emits the expanded absolute path, RuntimeManager verifies the active runtime before spawn, and `ae-mcp` never falls back to bare PATH. Windows v0.9.2 behavior remains unchanged.
 
 Covered client shapes include Claude Desktop, Claude Code, Cursor, OpenCode, OpenClaw, AstrBot, Gemini Antigravity, and similar clients. OpenCode is external in v0.7.0; it is not an embedded panel backend.
 

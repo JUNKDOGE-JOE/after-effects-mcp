@@ -100,6 +100,48 @@ test('resolveMcpCommand prefers the installed stable launcher on both platforms'
   });
 });
 
+test('resolveMcpCommand lets the macOS RuntimeManager verify and activate before spawn', async () => {
+  const platform = fakeCommandPlatform({ launcher: '/Users/a/.ae-mcp/bin/ae-mcp' });
+  const calls = [];
+  const result = await resolveMcpCommand({
+    platform,
+    extRoot: '/Applications/AE MCP 插件',
+    runtimeManager: {
+      async ensureReady() {
+        calls.push('ensureReady');
+        return {
+          action: 'install',
+          launcher: platform.paths.launcher,
+          version: '0.9.3',
+          sourceCommitSha: 'a'.repeat(40),
+        };
+      },
+    },
+  });
+
+  assert.deepEqual(calls, ['ensureReady']);
+  assert.equal(result.command, platform.paths.launcher);
+  assert.equal(result.source, 'runtime-manager');
+  assert.equal(result.runtime.version, '0.9.3');
+});
+
+test('resolveMcpCommand allows PATH only for an explicit .debug install without a bundle', async () => {
+  const calls = [];
+  const platform = fakeCommandPlatform({
+    launcher: '/Users/a/.ae-mcp/bin/ae-mcp',
+    exists: (candidate) => candidate === '/Applications/AE MCP/.debug',
+  });
+  platform.resolveExecutable = async (_id, options) => {
+    calls.push(options);
+    return { ok: true, path: '/Users/a/.local/bin/ae-mcp', argsPrefix: [], source: 'path' };
+  };
+
+  const result = await resolveMcpCommand({ platform, extRoot: '/Applications/AE MCP' });
+
+  assert.equal(result.command, '/Users/a/.local/bin/ae-mcp');
+  assert.deepEqual(calls, [{ allowDevelopmentPath: true }]);
+});
+
 test('findProjectRoot is exported for wizard repo probing', () => {
   const platform = fakeCommandPlatform({ launcher: 'E:\\Users\\a\\.ae-mcp\\bin\\ae-mcp.exe' });
   const root = findProjectRoot({

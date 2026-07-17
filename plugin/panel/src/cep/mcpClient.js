@@ -1,6 +1,7 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
 import { expertGuidanceEnv } from './externalClients.js';
 import { createPlatformAdapter } from './platform/index.js';
+import { createRuntimeManager } from './runtimeManager.js';
 
 const DEFAULT_TIMEOUT_MS = 30000;
 const INITIALIZE_TIMEOUT_MS = 120000;
@@ -40,11 +41,31 @@ export function findProjectRoot({ extRoot, repoRoot, fsImpl, platform }) {
 export async function resolveMcpCommand({
   explicitPath,
   platform,
+  extRoot,
+  runtimeManager,
 } = {}) {
   const configured = String(explicitPath || '').trim();
   if (configured) return { command: configured, args: [], source: 'explicit' };
   const adapter = platform || createPlatformAdapter();
-  const resolved = await adapter.resolveExecutable('ae-mcp');
+  const debugMarker = extRoot && adapter.paths.join([extRoot, '.debug']);
+  const bundleManifest = extRoot && adapter.paths.join([extRoot, 'bundle-manifest.json']);
+  const developmentFallback = adapter.id === 'macos-arm64'
+    && debugMarker
+    && adapter.fs.existsSync(debugMarker)
+    && !adapter.fs.existsSync(bundleManifest);
+  if (adapter.id === 'macos-arm64' && (runtimeManager || (extRoot && !developmentFallback))) {
+    const manager = runtimeManager || createRuntimeManager({ platform: adapter, extensionRoot: extRoot });
+    const selected = await manager.ensureReady();
+    return {
+      command: selected.launcher,
+      args: [],
+      source: selected.action === 'fallback' ? 'runtime-fallback' : 'runtime-manager',
+      runtime: selected,
+    };
+  }
+  const resolved = await adapter.resolveExecutable('ae-mcp', developmentFallback
+    ? { allowDevelopmentPath: true }
+    : {});
   if (resolved.ok) return { command: resolved.path, args: [...resolved.argsPrefix], source: resolved.source };
   throw new Error('Unable to find ae-mcp. Repair the installed runtime launcher at ' + adapter.paths.launcher + '.');
 }

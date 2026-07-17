@@ -108,3 +108,32 @@ test('runDiagnostics reports bundled runtime and optional CLI resolutions with s
   assert.deepEqual(items.find((i) => i.id === 'claude').action, { kind: 'open-login-terminal', tool: 'claude' });
   assert.doesNotMatch(JSON.stringify(items), /winget|PowerShell|npm install|\buv\b/i);
 });
+
+test('runDiagnostics reports RuntimeManager provenance and corruption diagnostics', async () => {
+  const deps = makeDeps();
+  const runtimeManager = {
+    async inspect() {
+      return {
+        ok: true,
+        current: {
+          ok: true,
+          record: { version: '0.9.3', sourceCommitSha: 'a'.repeat(40) },
+        },
+        launcher: { ok: true, path: '/Users/tester/.ae-mcp/bin/ae-mcp' },
+      };
+    },
+  };
+  const healthy = await runDiagnostics({ ...deps, port: 11488, runtimeManager });
+  const runtime = healthy.find((item) => item.id === 'ae-mcp');
+  assert.equal(runtime.ok, true);
+  assert.match(runtime.detail, /0\.9\.3.*[a-f0-9]{40}/);
+
+  runtimeManager.inspect = async () => ({
+    ok: false,
+    current: { ok: false, code: 'RUNTIME_HASH_MISMATCH' },
+    launcher: { ok: true, path: '/Users/tester/.ae-mcp/bin/ae-mcp' },
+  });
+  const corrupt = await runDiagnostics({ ...deps, port: 11488, runtimeManager });
+  assert.equal(corrupt.find((item) => item.id === 'ae-mcp').ok, false);
+  assert.match(corrupt.find((item) => item.id === 'ae-mcp').detail, /RUNTIME_HASH_MISMATCH/);
+});

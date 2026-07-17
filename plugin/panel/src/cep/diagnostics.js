@@ -69,7 +69,7 @@ async function execCode(fetchImpl, port, token, code) {
   return { response, body: await readJson(response) };
 }
 
-export async function runDiagnostics({ getHost, port, fs, fetchImpl, platform }) {
+export async function runDiagnostics({ getHost, port, fs, fetchImpl, platform, runtimeManager }) {
   const adapter = platform || createPlatformAdapter();
   const fileSystem = fs || adapter.fs;
   const fetcher = fetchImpl || globalThis.fetch;
@@ -148,7 +148,31 @@ export async function runDiagnostics({ getHost, port, fs, fetchImpl, platform })
     items.push({ id: 'extendscript-ping', ok: false, detail: e.message, fixHint: HINTS['extendscript-ping'] });
   }
 
-  for (const id of ['ae-mcp', 'node', 'claude', 'codex']) {
+  if (runtimeManager) {
+    try {
+      const state = await runtimeManager.inspect();
+      const current = state.current?.ok ? state.current.record : null;
+      items.push({
+        id: 'ae-mcp',
+        ok: state.ok,
+        detail: state.ok
+          ? `${current.version} · ${state.launcher.path} · ${current.sourceCommitSha}`
+          : [state.current?.code, state.launcher?.code].filter(Boolean).join(' · '),
+        fixHint: HINTS['ae-mcp'],
+        action: { kind: 'repair-runtime' },
+      });
+    } catch (error) {
+      items.push({
+        id: 'ae-mcp',
+        ok: false,
+        detail: error?.code || error?.message || 'RUNTIME_MANAGER_FAILED',
+        fixHint: HINTS['ae-mcp'],
+        action: { kind: 'repair-runtime' },
+      });
+    }
+  }
+
+  for (const id of runtimeManager ? ['node', 'claude', 'codex'] : ['ae-mcp', 'node', 'claude', 'codex']) {
     const options = id === 'node'
       ? { minimumVersion: '24.17.0', requiredArch: adapter.id === 'macos-arm64' ? 'arm64' : 'x64' }
       : {};
