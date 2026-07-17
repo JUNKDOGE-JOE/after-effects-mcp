@@ -354,6 +354,16 @@ class FakeHost final : public HostApi {
   [[nodiscard]] HostLayerPropertyKeyframesResult list_layer_property_keyframes(
       const aemcp::native::LayerPropertyKeyframesQuery& query, TimePoint) override {
     ++layer_property_keyframes_calls;
+    if (query.offset == 1) {
+      return HostLayerPropertyKeyframesResult::failure(
+          "PRECONDITION_FAILED",
+          "property must be a keyframeable primitive scalar, vector, or color leaf stream",
+          "params.arguments.propertyLocator");
+    }
+    if (query.offset == 2) {
+      return HostLayerPropertyKeyframesResult::failure(
+          "PRECONDITION_FAILED", "an After Effects project must be open");
+    }
     aemcp::native::LayerPropertyKeyframesPage page;
     page.property_locator = query.property_locator;
     page.value_type = "one-d";
@@ -827,14 +837,15 @@ std::string layer_properties_invoke_json(std::string_view request_id) {
       + ",\"offset\":0,\"limit\":25}}}";
 }
 
-std::string layer_property_keyframes_invoke_json(std::string_view request_id) {
+std::string layer_property_keyframes_invoke_json(
+    std::string_view request_id, std::size_t offset = 0) {
   return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
       + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
       + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
         "\"params\":{\"capabilityId\":\"ae.layer.property.keyframes.list\","
         "\"capabilityVersion\":1,\"arguments\":{\"propertyLocator\":"
       + graph_locator_json("stream", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
-      + ",\"offset\":0,\"limit\":2}}}";
+      + ",\"offset\":" + std::to_string(offset) + ",\"limit\":2}}}";
 }
 
 std::string cancel_json(std::string_view request_id, std::string_view target_request_id) {
@@ -1570,6 +1581,44 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
           && host.layer_property_keyframes_calls == 1,
       "layer-property keyframes terminal evidence was not verified");
 
+  send_json(sockets[0], layer_property_keyframes_invoke_json(
+      "invoke-layer-property-keyframes-precondition", 1));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "layer-property keyframes precondition progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued layer-property keyframes precondition invoke");
+  const auto keyframes_precondition_batch = dispatcher.drain(host);
+  require(keyframes_precondition_batch.completions.size() == 1
+          && !keyframes_precondition_batch.completions[0].ok,
+      "owner dispatcher did not preserve keyframe property precondition failure");
+  const std::string keyframes_precondition = read_body(sockets[0]);
+  require_contains(keyframes_precondition, "\"code\":\"PRECONDITION_FAILED\"",
+      "layer-property keyframes precondition response");
+  require_contains(keyframes_precondition, "\"action\":\"change-arguments\"",
+      "layer-property keyframes precondition recovery");
+  require_contains(keyframes_precondition,
+      "Copy a keyframeable primitive scalar, vector, or color leaf locator from ae_listLayerProperties.",
+      "layer-property keyframes precondition hint");
+  require_contains(keyframes_precondition,
+      "\"field\":\"params.arguments.propertyLocator\"",
+      "layer-property keyframes precondition field");
+
+  send_json(sockets[0], layer_property_keyframes_invoke_json(
+      "invoke-layer-property-keyframes-no-project", 2));
+  require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+      "layer-property keyframes no-project progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued layer-property keyframes no-project invoke");
+  const auto keyframes_no_project_batch = dispatcher.drain(host);
+  require(keyframes_no_project_batch.completions.size() == 1
+          && !keyframes_no_project_batch.completions[0].ok,
+      "owner dispatcher did not preserve keyframe no-project failure");
+  const std::string keyframes_no_project = read_body(sockets[0]);
+  require_contains(keyframes_no_project, "\"code\":\"PRECONDITION_FAILED\"",
+      "layer-property keyframes no-project response");
+  require_contains(keyframes_no_project, "\"action\":\"open-project\"",
+      "layer-property keyframes no-project recovery");
+
   send_json(sockets[0], layer_property_set_invoke_json("invoke-layer-property-set"));
   require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
       "layer-property set progress");
@@ -1707,7 +1756,7 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(cancel, "\"terminalResponseExpected\":true", "cancel response");
   const std::string cancelled_terminal = read_body(sockets[0]);
   require_contains(cancelled_terminal, "\"code\":\"CANCELLED\"", "cancel terminal");
-  require(idle_signal.calls() == 22,
+  require(idle_signal.calls() == 24,
       "accepted invokes did not each schedule exactly one idle wake; observed "
           + std::to_string(idle_signal.calls()));
 
