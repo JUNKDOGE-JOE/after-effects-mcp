@@ -33,6 +33,7 @@ from ae_mcp.tool_execution import (
     normalize_args,
     normalize_target,
 )
+from ae_mcp.tool_execution_history import ExecutionJobStore
 from ae_mcp.tool_store import StoreMutation
 
 
@@ -1050,3 +1051,247 @@ async def test_native_uncertain_write_keeps_recovery_and_is_never_blindly_retrie
         )
     assert second.value.public_dict()["executionId"] == public["executionId"]
     assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_terminal_job_survives_restart_and_same_operation_is_not_redispatched(
+    tmp_path: Path,
+) -> None:
+    artifact = _artifact()
+    first_backend = _Backend()
+    first = ToolExecutionEngine(
+        _Store(artifact),
+        first_backend,
+        audit_log=ToolAuditLog(tmp_path),
+        job_store=ExecutionJobStore(tmp_path),
+        now=lambda: 10_000,
+    )
+    plan = first.prepare(artifact.id, operation="execute", args={}, target={})
+    grant = first.grants.issue_once(plan)
+    started = await first.start_job(
+        plan.plan_hash,
+        grant.grant_id,
+        operation_id="operation-restart-success",
+        ctx=None,
+        initiator="panel-direct",
+    )
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert first.job_status(started["executionId"])["status"] == "succeeded"
+    assert len(first_backend.calls) == 1
+    first.close()
+
+    second_backend = _Backend()
+    second = ToolExecutionEngine(
+        _Store(artifact),
+        second_backend,
+        audit_log=ToolAuditLog(tmp_path),
+        job_store=ExecutionJobStore(tmp_path),
+        now=lambda: 10_000,
+    )
+    recovered = second.job_status(started["executionId"])
+    assert recovered["status"] == "succeeded"
+    assert recovered["result"] == {"ok": True}
+    assert recovered["audit"]["outcome"] == "success"
+    assert second.job_history(artifact.id)["executions"][0]["executionId"] == started[
+        "executionId"
+    ]
+
+    second.prepared_plans.put(plan)
+    replacement_grant = second.grants.issue_once(plan)
+    duplicate = await second.start_job(
+        plan.plan_hash,
+        replacement_grant.grant_id,
+        operation_id="operation-restart-success",
+        ctx=None,
+        initiator="panel-direct",
+    )
+    assert duplicate["executionId"] == started["executionId"]
+    assert second_backend.calls == []
+    with pytest.raises(ToolExecutionError) as conflict:
+        await second.start_job(
+            "f" * 64,
+            replacement_grant.grant_id,
+            operation_id="operation-restart-success",
+            ctx=None,
+            initiator="panel-direct",
+        )
+    assert conflict.value.code == "tool_operation_conflict"
+
+
+@pytest.mark.asyncio
+async def test_failed_job_survives_restart_without_backend_replay(
+    tmp_path: Path,
+) -> None:
+    artifact = _artifact()
+    first_backend = _Backend(RuntimeError("private failure detail"))
+    first = ToolExecutionEngine(
+        _Store(artifact),
+        first_backend,
+        job_store=ExecutionJobStore(tmp_path),
+        now=lambda: 15_000,
+    )
+    plan = first.prepare(artifact.id, operation="execute", args={}, target={})
+    grant = first.grants.issue_once(plan)
+    started = await first.start_job(
+        plan.plan_hash,
+        grant.grant_id,
+        operation_id="operation-restart-failure",
+        ctx=None,
+        initiator="agent",
+    )
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert first.job_status(started["executionId"])["status"] == "failed"
+    first.close()
+
+    second_backend = _Backend()
+    second = ToolExecutionEngine(
+        _Store(artifact),
+        second_backend,
+        job_store=ExecutionJobStore(tmp_path),
+        now=lambda: 15_000,
+    )
+    recovered = second.job_status(started["executionId"])
+    assert recovered["status"] == "failed"
+    assert recovered["error"]["code"] == "tool_backend_failed"
+    assert "private failure detail" not in (
+        tmp_path / "execution-history.json"
+    ).read_text(encoding="utf-8")
+
+    second.prepared_plans.put(plan)
+    replacement_grant = second.grants.issue_once(plan)
+    duplicate = await second.start_job(
+        plan.plan_hash,
+        replacement_grant.grant_id,
+        operation_id="operation-restart-failure",
+        ctx=None,
+        initiator="agent",
+    )
+    assert duplicate["executionId"] == started["executionId"]
+    assert second_backend.calls == []
+
+
+@pytest.mark.asyncio
+async def test_outcome_unknown_survives_restart_with_recovery_and_no_redispatch(
+    tmp_path: Path,
+) -> None:
+    artifact = _artifact()
+    first_backend = _Backend(asyncio.TimeoutError())
+    first = ToolExecutionEngine(
+        _Store(artifact),
+        first_backend,
+        job_store=ExecutionJobStore(tmp_path),
+        now=lambda: 20_000,
+    )
+    plan = first.prepare(artifact.id, operation="execute", args={}, target={})
+    grant = first.grants.issue_once(plan)
+    started = await first.start_job(
+        plan.plan_hash,
+        grant.grant_id,
+        operation_id="operation-restart-unknown",
+        ctx=None,
+        initiator="agent",
+    )
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert first.job_status(started["executionId"])["status"] == "outcome-unknown"
+    first.close()
+
+    second_backend = _Backend()
+    second = ToolExecutionEngine(
+        _Store(artifact),
+        second_backend,
+        job_store=ExecutionJobStore(tmp_path),
+        now=lambda: 20_000,
+    )
+    recovered = second.job_status(started["executionId"])
+    assert recovered["status"] == "outcome-unknown"
+    assert recovered["error"]["code"] == "tool_backend_timeout"
+    assert recovered["outcomeUnknown"] is True
+
+    second.prepared_plans.put(plan)
+    replacement_grant = second.grants.issue_once(plan)
+    duplicate = await second.start_job(
+        plan.plan_hash,
+        replacement_grant.grant_id,
+        operation_id="operation-restart-unknown",
+        ctx=None,
+        initiator="agent",
+    )
+    assert duplicate["executionId"] == started["executionId"]
+    assert second_backend.calls == []
+
+
+def test_execution_job_store_bounds_retention_and_redacts_secrets(
+    tmp_path: Path,
+) -> None:
+    store = ExecutionJobStore(tmp_path, max_records=2)
+    for index in range(3):
+        store.upsert(
+            {
+                "executionId": f"execution-{index:02d}",
+                "operationId": f"operation-retention-{index:02d}",
+                "artifactId": "user:one",
+                "contentHash": "a" * 64,
+                "artifactRevision": 1,
+                "planHash": chr(ord("b") + index) * 64,
+                "operation": "execute",
+                "initiator": "panel-direct",
+                "status": "failed",
+                "createdAt": 100 + index,
+                "startedAt": 100 + index,
+                "finishedAt": 100 + index,
+                "cancelRequested": False,
+                "result": None,
+                "error": {
+                    "code": "fixture",
+                    "message": f"Bearer private-secret-{index}",
+                },
+                "audit": {
+                    "grantId": f"grant-secret-{index}",
+                    "grantScope": "once",
+                    "outcome": "failed",
+                },
+            }
+        )
+
+    recovered = store.load()
+    assert [row["executionId"] for row in recovered] == [
+        "execution-01",
+        "execution-02",
+    ]
+    persisted = (tmp_path / "execution-history.json").read_text(encoding="utf-8")
+    assert "private-secret" not in persisted
+    assert "grant-secret" not in persisted
+    assert "grantId" not in persisted
+    assert "[REDACTED]" in persisted
+
+
+def test_execution_job_store_accepts_full_public_client_identity(
+    tmp_path: Path,
+) -> None:
+    store = ExecutionJobStore(tmp_path)
+    initiator = "c" * 120
+    store.upsert(
+        {
+            "executionId": "execution-client-identity",
+            "operationId": "operation-client-identity",
+            "artifactId": "user:one",
+            "contentHash": "a" * 64,
+            "artifactRevision": 1,
+            "planHash": "b" * 64,
+            "operation": "execute",
+            "initiator": initiator,
+            "status": "succeeded",
+            "createdAt": 100,
+            "startedAt": 100,
+            "finishedAt": 101,
+            "cancelRequested": False,
+            "result": {"ok": True},
+            "error": None,
+            "audit": None,
+        }
+    )
+
+    assert store.load()[0]["initiator"] == initiator

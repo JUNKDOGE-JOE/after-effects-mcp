@@ -32,6 +32,7 @@ from ae_mcp.tool_artifact import (
     validate_args_schema,
 )
 from ae_mcp.tool_audit import AuditRecord, ToolAuditLog, redact_audit_value
+from ae_mcp.tool_execution_history import ExecutionJobStore, ExecutionJobStoreError
 from ae_mcp.tool_secrets import RegexSecretScanner, SecretScanner
 
 
@@ -709,6 +710,27 @@ class _ExecutionJob:
     error: Mapping[str, JsonValue] | None = None
     audit: Mapping[str, JsonValue] | None = None
 
+    @classmethod
+    def from_record(cls, value: Mapping[str, JsonValue]) -> "_ExecutionJob":
+        return cls(
+            execution_id=cast(str, value["executionId"]),
+            operation_id=cast(str, value["operationId"]),
+            artifact_id=cast(str, value["artifactId"]),
+            content_hash=cast(str, value["contentHash"]),
+            artifact_revision=cast(int, value["artifactRevision"]),
+            plan_hash=cast(str, value["planHash"]),
+            operation=cast(ArtifactOperation, value["operation"]),
+            initiator=cast(str, value["initiator"]),
+            status=cast(str, value["status"]),
+            created_at=cast(int, value["createdAt"]),
+            started_at=cast(int | None, value.get("startedAt")),
+            finished_at=cast(int | None, value.get("finishedAt")),
+            cancel_requested=cast(bool, value.get("cancelRequested", False)),
+            result=cast(Mapping[str, JsonValue] | None, value.get("result")),
+            error=cast(Mapping[str, JsonValue] | None, value.get("error")),
+            audit=cast(Mapping[str, JsonValue] | None, value.get("audit")),
+        )
+
     def public_dict(self) -> dict[str, JsonValue]:
         terminal = self.status in {"succeeded", "failed", "cancelled", "outcome-unknown"}
         progress = 100 if terminal else 25 if self.status == "running" else 0
@@ -838,6 +860,7 @@ class ToolExecutionEngine:
         audit_log: ToolAuditLog | None = None,
         prepared_plans: PreparedPlanStore | None = None,
         grants: GrantStore | None = None,
+        job_store: ExecutionJobStore | None = None,
         now: Callable[[], int] | None = None,
     ) -> None:
         self.store = store
@@ -847,10 +870,16 @@ class ToolExecutionEngine:
         self._now = now or _now_ms
         self.prepared_plans = prepared_plans or PreparedPlanStore(now=self._now)
         self.grants = grants or GrantStore(now=self._now)
+        self.job_store = job_store
         self._jobs: dict[str, _ExecutionJob] = {}
         self._job_operations: dict[str, str] = {}
         self._job_tasks: dict[str, asyncio.Task[None]] = {}
         self._job_lock = threading.RLock()
+        if self.job_store is not None:
+            for record in self.job_store.load():
+                job = _ExecutionJob.from_record(record)
+                self._jobs[job.execution_id] = job
+                self._job_operations[job.operation_id] = job.execution_id
         self._unsubscribe: Callable[[], None] | None = None
         subscribe = getattr(store, "subscribe", None)
         if callable(subscribe):
@@ -1186,6 +1215,24 @@ class ToolExecutionEngine:
             # write failure must never invite a duplicate side-effecting retry.
             return
 
+    def _persist_job(self, job: _ExecutionJob) -> None:
+        if self.job_store is None:
+            return
+        try:
+            self.job_store.upsert(job.public_dict())
+        except ExecutionJobStoreError as exc:
+            raise ToolExecutionError(
+                exc.code,
+                "Execution recovery state could not be persisted.",
+                error_details={
+                    "sideEffect": "not-started",
+                    "recovery": {
+                        "action": "retry-later",
+                        "hint": "Repair the Tool Library store before retrying.",
+                    },
+                },
+            ) from exc
+
     async def start_job(
         self,
         plan_hash: str,
@@ -1298,6 +1345,7 @@ class ToolExecutionEngine:
 
     async def _run_job(self, job: _ExecutionJob, *, grant_id: str, ctx: Any) -> None:
         await asyncio.sleep(0)
+        cancelled_before_dispatch = False
         with self._job_lock:
             if job.cancel_requested:
                 try:
@@ -1308,9 +1356,26 @@ class ToolExecutionEngine:
                 job.status = "cancelled"
                 job.finished_at = self._now()
                 self._job_tasks.pop(job.execution_id, None)
-                return
-            job.status = "running"
-            job.started_at = self._now()
+                cancelled_before_dispatch = True
+            else:
+                job.status = "running"
+                job.started_at = self._now()
+        if cancelled_before_dispatch:
+            try:
+                self._persist_job(job)
+            except ToolExecutionError:
+                with self._job_lock:
+                    job.status = "failed"
+                    job.error = {
+                        "code": "tool_execution_history_failed",
+                        "message": "Cancellation recovery state could not be persisted.",
+                        "sideEffect": "not-started",
+                        "recovery": {
+                            "action": "retry-later",
+                            "hint": "Repair the Tool Library store before retrying.",
+                        },
+                    }
+            return
         try:
             result = await self.execute(job.plan_hash, grant_id, ctx=ctx)
         except ToolExecutionError as exc:
@@ -1350,6 +1415,22 @@ class ToolExecutionEngine:
         finally:
             with self._job_lock:
                 self._job_tasks.pop(job.execution_id, None)
+        try:
+            self._persist_job(job)
+        except ToolExecutionError:
+            with self._job_lock:
+                job.result = None
+                job.error = {
+                    "code": "tool_execution_history_failed",
+                    "message": "Execution finished but durable recovery could not be confirmed.",
+                    "sideEffect": "may-have-occurred",
+                    "recovery": {
+                        "action": "inspect-state",
+                        "hint": "Inspect AE state and audit evidence before retrying.",
+                    },
+                }
+                job.status = "outcome-unknown"
+                job.finished_at = self._now()
 
     def job_status(self, execution_id: str) -> Mapping[str, JsonValue]:
         with self._job_lock:
