@@ -35,7 +35,7 @@ const TEXT = {
     edit: '编辑', duplicate: '副本', archive: '归档', delete: '删除', pin: '置顶', unpin: '取消置顶',
     verify: '标记已审阅', promote: '提升为已保存', copy: '复制', renderCopy: '渲染并复制', run: '运行',
     metadata: '元数据', content: '内容（不可信用户数据）', args: '参数', result: '执行结果',
-    advancedJson: '高级 JSON', formView: '表单', cancelRun: '取消运行', history: '执行历史',
+    advancedJson: '高级 JSON', formView: '表单', cancelRun: '取消运行', resumeRun: '恢复状态', history: '执行历史',
     developerTools: '开发者工具', incompatible: '当前不可运行', progress: '进度',
     compId: 'Comp ID', layerId: 'Layer ID', propertyPath: '属性路径', refresh: '刷新',
     importTitle: '导入预览', importChanges: '扫描后差异', importConflict: '冲突', keep: '保留现有',
@@ -54,7 +54,7 @@ const TEXT = {
     edit: 'Edit', duplicate: 'Duplicate', archive: 'Archive', delete: 'Delete', pin: 'Pin', unpin: 'Unpin',
     verify: 'Mark reviewed', promote: 'Promote to saved', copy: 'Copy', renderCopy: 'Render & copy', run: 'Run',
     metadata: 'Metadata', content: 'Content (untrusted user data)', args: 'Arguments', result: 'Execution result',
-    advancedJson: 'Advanced JSON', formView: 'Form', cancelRun: 'Cancel run', history: 'Execution history',
+    advancedJson: 'Advanced JSON', formView: 'Form', cancelRun: 'Cancel run', resumeRun: 'Resume status', history: 'Execution history',
     developerTools: 'Developer Tools', incompatible: 'Unavailable', progress: 'Progress',
     compId: 'Comp ID', layerId: 'Layer ID', propertyPath: 'Property path', refresh: 'Refresh',
     importTitle: 'Import preview', importChanges: 'Post-scan changes', importConflict: 'Conflict', keep: 'Keep existing',
@@ -168,6 +168,7 @@ export function ToolsScreen({
   const rowRunLock = React.useRef(false);
   const selectedSummary = state.summaries.find((row) => row.id === state.selectedId) || null;
   const artifact = state.inspected && state.inspected.artifact || null;
+  const runPending = Boolean(runJob && !runJob.terminal);
 
   const load = React.useCallback(async () => {
     if (!api) return;
@@ -361,6 +362,7 @@ export function ToolsScreen({
   };
 
   const executeArtifact = async (artifactToRun, args, normalizedTarget = {}) => {
+    if (runPending) return;
     const capability = toolExecutionCapabilities(artifactToRun);
     const operation = capability.operation;
     if (!capability.directRun || !operation) return;
@@ -381,6 +383,7 @@ export function ToolsScreen({
       setRunJob(completed);
       setRunResult(completed);
     } catch (error) {
+      if (error && error.execution) setRunJob(error.execution);
       dispatch({ type: 'load-error', error });
     } finally {
       setBusy(false);
@@ -388,7 +391,7 @@ export function ToolsScreen({
   };
 
   const execute = async () => {
-    if (!artifact) return;
+    if (!artifact || runPending) return;
     let args;
     try {
       args = advancedJson
@@ -412,7 +415,7 @@ export function ToolsScreen({
   };
 
   const inspectForRun = async (row) => {
-    if (busy || rowRunLock.current || !row) return;
+    if (busy || runPending || rowRunLock.current || !row) return;
     rowRunLock.current = true;
     try {
       const payload = await inspect(row.id);
@@ -439,6 +442,24 @@ export function ToolsScreen({
       setRunJob(next);
     } catch (error) {
       dispatch({ type: 'load-error', error });
+    }
+  };
+
+  const resumeExecution = async () => {
+    if (!runJob || runJob.terminal) return;
+    setBusy(true);
+    try {
+      const completed = await waitForToolExecution(api, runJob, {
+        onProgress: setRunJob,
+      });
+      await refreshAndInspect(completed.artifactId);
+      setRunJob(completed);
+      setRunResult(completed);
+    } catch (error) {
+      if (error && error.execution) setRunJob(error.execution);
+      dispatch({ type: 'load-error', error });
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -523,6 +544,8 @@ export function ToolsScreen({
           <Button size="sm" variant="primary" icon="plus" onClick={() => dispatch({ type: 'edit-start', editor: { mode: 'create', artifact: null } })}>{t.new}</Button>
           <Button size="sm" variant="secondary" icon="download" onClick={previewImport} disabled={busy}>{t.import}</Button>
           <Button size="sm" variant="secondary" icon="external-link" onClick={exportPackage} disabled={busy || !state.summaries.length}>{t.export}</Button>
+          {runPending ? <Button size="sm" variant="secondary" onClick={resumeExecution} disabled={busy}>{t.resumeRun}</Button> : null}
+          {runPending ? <Button size="sm" variant="danger" onClick={cancelExecution} disabled={busy}>{t.cancelRun}</Button> : null}
           <Button size="sm" variant={developerMode ? 'danger' : 'ghost'} onClick={() => setDeveloperMode((value) => !value)} disabled={busy}>{t.developerTools}</Button>
         </div>
       </header>
@@ -561,7 +584,7 @@ export function ToolsScreen({
               selected={row.id === state.selectedId}
               onSelect={inspect}
               onRun={inspectForRun}
-              runDisabled={busy}
+              runDisabled={busy || runPending}
               lang={lang}
             />
           )) : (
@@ -665,8 +688,7 @@ export function ToolsScreen({
                   ) : null}
                   <div className="tools-runner__actions">
                     {execution.render ? <Button variant="secondary" onClick={renderAndCopy} disabled={busy}>{t.renderCopy}</Button> : null}
-                    {execution.directRun ? <Button variant="primary" onClick={execute} disabled={busy}>{t.run}</Button> : null}
-                    {runJob && !runJob.terminal ? <Button variant="danger" onClick={cancelExecution}>{t.cancelRun}</Button> : null}
+                    {execution.directRun ? <Button variant="primary" onClick={execute} disabled={busy || runPending}>{t.run}</Button> : null}
                   </div>
                   {runJob ? <div>{t.progress}: {runJob.progress}% · {runJob.status}</div> : null}
                   {runResult ? (

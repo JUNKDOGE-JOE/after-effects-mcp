@@ -12828,6 +12828,7 @@
   }
   async function waitForToolExecution(api, execution, {
     pollIntervalMs = 250,
+    statusRetryLimit = 2,
     onProgress = () => {
     },
     wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
@@ -12836,7 +12837,22 @@
     onProgress(current);
     while (!current.terminal) {
       await wait(pollIntervalMs);
-      current = await api.use({ action: "status", execution_id: current.executionId });
+      let lastError;
+      for (let attempt = 0; attempt <= statusRetryLimit; attempt += 1) {
+        try {
+          current = await api.use({ action: "status", execution_id: current.executionId });
+          lastError = null;
+          break;
+        } catch (error) {
+          lastError = error;
+          if (attempt < statusRetryLimit) await wait(pollIntervalMs);
+        }
+      }
+      if (lastError) {
+        lastError.execution = current;
+        lastError.recoveryAction = "resume-status";
+        throw lastError;
+      }
       onProgress(current);
     }
     return current;
@@ -12956,6 +12972,7 @@
       advancedJson: "\u9AD8\u7EA7 JSON",
       formView: "\u8868\u5355",
       cancelRun: "\u53D6\u6D88\u8FD0\u884C",
+      resumeRun: "\u6062\u590D\u72B6\u6001",
       history: "\u6267\u884C\u5386\u53F2",
       developerTools: "\u5F00\u53D1\u8005\u5DE5\u5177",
       incompatible: "\u5F53\u524D\u4E0D\u53EF\u8FD0\u884C",
@@ -13022,6 +13039,7 @@
       advancedJson: "Advanced JSON",
       formView: "Form",
       cancelRun: "Cancel run",
+      resumeRun: "Resume status",
       history: "Execution history",
       developerTools: "Developer Tools",
       incompatible: "Unavailable",
@@ -13147,6 +13165,7 @@
     const rowRunLock = import_react40.default.useRef(false);
     const selectedSummary = state.summaries.find((row) => row.id === state.selectedId) || null;
     const artifact = state.inspected && state.inspected.artifact || null;
+    const runPending = Boolean(runJob && !runJob.terminal);
     const load = import_react40.default.useCallback(async () => {
       if (!api) return;
       const sequence = loadSequence.current + 1;
@@ -13315,6 +13334,7 @@
       }
     };
     const executeArtifact = async (artifactToRun, args, normalizedTarget = {}) => {
+      if (runPending) return;
       const capability = toolExecutionCapabilities(artifactToRun);
       const operation = capability.operation;
       if (!capability.directRun || !operation) return;
@@ -13335,13 +13355,14 @@
         setRunJob(completed);
         setRunResult(completed);
       } catch (error) {
+        if (error && error.execution) setRunJob(error.execution);
         dispatch({ type: "load-error", error });
       } finally {
         setBusy(false);
       }
     };
     const execute = async () => {
-      if (!artifact) return;
+      if (!artifact || runPending) return;
       let args;
       try {
         args = advancedJson ? asObject(runArgs) : buildToolArgs(artifact.argsSchema, runForm);
@@ -13362,7 +13383,7 @@
       await executeArtifact(artifact, args, normalizedTarget);
     };
     const inspectForRun = async (row) => {
-      if (busy || rowRunLock.current || !row) return;
+      if (busy || runPending || rowRunLock.current || !row) return;
       rowRunLock.current = true;
       try {
         const payload = await inspect(row.id);
@@ -13386,6 +13407,23 @@
         setRunJob(next);
       } catch (error) {
         dispatch({ type: "load-error", error });
+      }
+    };
+    const resumeExecution = async () => {
+      if (!runJob || runJob.terminal) return;
+      setBusy(true);
+      try {
+        const completed = await waitForToolExecution(api, runJob, {
+          onProgress: setRunJob
+        });
+        await refreshAndInspect(completed.artifactId);
+        setRunJob(completed);
+        setRunResult(completed);
+      } catch (error) {
+        if (error && error.execution) setRunJob(error.execution);
+        dispatch({ type: "load-error", error });
+      } finally {
+        setBusy(false);
       }
     };
     const previewImport = async () => {
@@ -13464,6 +13502,8 @@
           /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "primary", icon: "plus", onClick: () => dispatch({ type: "edit-start", editor: { mode: "create", artifact: null } }), children: t.new }),
           /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "secondary", icon: "download", onClick: previewImport, disabled: busy, children: t.import }),
           /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "secondary", icon: "external-link", onClick: exportPackage, disabled: busy || !state.summaries.length, children: t.export }),
+          runPending ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "secondary", onClick: resumeExecution, disabled: busy, children: t.resumeRun }) : null,
+          runPending ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "danger", onClick: cancelExecution, disabled: busy, children: t.cancelRun }) : null,
           /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: developerMode ? "danger" : "ghost", onClick: () => setDeveloperMode((value) => !value), disabled: busy, children: t.developerTools })
         ] })
       ] }),
@@ -13496,7 +13536,7 @@
             selected: row.id === state.selectedId,
             onSelect: inspect,
             onRun: inspectForRun,
-            runDisabled: busy,
+            runDisabled: busy || runPending,
             lang
           },
           row.id
@@ -13583,8 +13623,7 @@
             ] }) : null,
             /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-runner__actions", children: [
               execution.render ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "secondary", onClick: renderAndCopy, disabled: busy, children: t.renderCopy }) : null,
-              execution.directRun ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "primary", onClick: execute, disabled: busy, children: t.run }) : null,
-              runJob && !runJob.terminal ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "danger", onClick: cancelExecution, children: t.cancelRun }) : null
+              execution.directRun ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "primary", onClick: execute, disabled: busy || runPending, children: t.run }) : null
             ] }),
             runJob ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { children: [
               t.progress,

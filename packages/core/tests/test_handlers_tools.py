@@ -162,8 +162,12 @@ class _Execution:
             grant_id="g", plan_hash=plan_hash, scope="once", expires_at=123
         )
 
-    async def execute_tracked(self, plan_hash, grant_id, *, ctx, initiator):
-        self.calls.append(("execute", plan_hash, grant_id, ctx, initiator))
+    async def execute_tracked(
+        self, plan_hash, grant_id, *, operation_id, ctx, initiator
+    ):
+        self.calls.append(
+            ("execute", plan_hash, grant_id, operation_id, ctx, initiator)
+        )
         return {"ok": True, "result": 1}
 
     async def start_job(
@@ -456,7 +460,12 @@ async def test_tool_use_dispatches_staged_protocol_exactly(service, action):
             target={},
         ),
         "grant": dict(action="grant", plan_hash="p", grant_scope="once"),
-        "execute": dict(action="execute", plan_hash="p", grant_id="g"),
+        "execute": dict(
+            action="execute",
+            plan_hash="p",
+            grant_id="g",
+            operation_id="operation-handler-execute",
+        ),
         "start": dict(
             action="start",
             plan_hash="p",

@@ -586,7 +586,12 @@ def test_tool_use_enforces_the_staged_protocol():
         action="prepare", artifact_id="user:1", operation="execute"
     )
     S.AeToolUseArgs(action="grant", plan_hash="p", grant_scope="once")
-    S.AeToolUseArgs(action="execute", plan_hash="p", grant_id="g")
+    S.AeToolUseArgs(
+        action="execute",
+        plan_hash="p",
+        grant_id="g",
+        operation_id="operation-schema-execute",
+    )
     S.AeToolUseArgs(
         action="start",
         plan_hash="p",
@@ -599,6 +604,7 @@ def test_tool_use_enforces_the_staged_protocol():
         {"action": "prepare", "artifact_id": "user:1"},
         {"action": "grant", "plan_hash": "p"},
         {"action": "execute", "plan_hash": "p"},
+        {"action": "execute", "plan_hash": "p", "grant_id": "g"},
         {"action": "start", "plan_hash": "p", "grant_id": "g"},
         {"action": "execute", "plan_hash": "p", "grant_id": "g", "artifact_id": "user:1"},
     ]

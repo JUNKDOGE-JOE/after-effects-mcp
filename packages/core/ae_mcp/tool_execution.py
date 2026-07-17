@@ -1249,13 +1249,14 @@ class ToolExecutionEngine:
         plan_hash: str,
         grant_id: str,
         *,
+        operation_id: str,
         ctx: Any,
         initiator: str,
     ) -> Mapping[str, JsonValue]:
         started = await self.start_job(
             plan_hash,
             grant_id,
-            operation_id=uuid4().hex,
+            operation_id=operation_id,
             ctx=ctx,
             initiator=initiator,
         )
@@ -1275,9 +1276,24 @@ class ToolExecutionEngine:
         error = status.get("error")
         code = error.get("code") if isinstance(error, Mapping) else None
         message = error.get("message") if isinstance(error, Mapping) else None
+        error_details: dict[str, JsonValue] = {
+            key: cast(JsonValue, value)
+            for key, value in error.items()
+            if key not in {"code", "message"}
+        } if isinstance(error, Mapping) else {}
+        error_details.update(
+            {
+                "executionId": execution_id,
+                "operationId": operation_id,
+                "status": cast(JsonValue, status["status"]),
+                "outcomeUnknown": cast(JsonValue, status["outcomeUnknown"]),
+                "audit": cast(JsonValue, status.get("audit")),
+            }
+        )
         raise ToolExecutionError(
             str(code or "tool_execution_failed"),
             str(message or "Tool execution did not complete successfully."),
+            error_details=error_details,
         )
 
     async def _run_job(self, job: _ExecutionJob, *, grant_id: str, ctx: Any) -> None:

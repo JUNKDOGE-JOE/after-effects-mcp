@@ -996,7 +996,15 @@ class AeToolUseArgs(_StrictModel):
     grant_id: Optional[str] = Field(None, min_length=1, max_length=256)
     grant_scope: Optional[Literal["once", "session"]] = None
     execution_id: Optional[str] = Field(None, min_length=1, max_length=256)
-    operation_id: Optional[str] = Field(None, min_length=16, max_length=128)
+    operation_id: Optional[str] = Field(
+        None,
+        min_length=16,
+        max_length=128,
+        description=(
+            "Stable caller-generated id for execute/start. Reuse it when a response "
+            "is lost; changing it authorizes a distinct execution."
+        ),
+    )
     limit: Optional[int] = Field(None, ge=1, le=100)
 
     @model_validator(mode="after")
@@ -1060,10 +1068,8 @@ class AeToolUseArgs(_StrictModel):
         elif self.action in {"execute", "start"}:
             if self.plan_hash is None or self.grant_id is None:
                 raise ValueError(f"{self.action} requires plan_hash and grant_id")
-            if self.action == "start" and self.operation_id is None:
-                raise ValueError("start requires operation_id")
-            if self.action == "execute" and self.operation_id is not None:
-                raise ValueError("execute forbids operation_id")
+            if self.operation_id is None:
+                raise ValueError(f"{self.action} requires operation_id")
             if any(
                 value is not None
                 for value in (

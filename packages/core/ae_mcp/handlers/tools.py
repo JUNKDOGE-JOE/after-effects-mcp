@@ -222,6 +222,7 @@ async def _run_tool_use(args: schemas.AeToolUseArgs, ctx: Any) -> Any:
             return await service.execution.execute_tracked(
                 cast(str, args.plan_hash),
                 cast(str, args.grant_id),
+                operation_id=cast(str, args.operation_id),
                 ctx=ctx,
                 initiator=client_identity.get_client() or "mcp-client",
             )

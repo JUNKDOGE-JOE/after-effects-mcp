@@ -150,6 +150,44 @@ test('waitForToolExecution reports late terminal completion without a second sta
   ]);
 });
 
+test('waitForToolExecution retries status with the same execution id', async () => {
+  const calls = [];
+  let attempts = 0;
+  const result = await waitForToolExecution({
+    async use(input) {
+      calls.push(input);
+      attempts += 1;
+      if (attempts < 3) throw new Error('status response lost');
+      return { executionId: 'execution-1', status: 'succeeded', terminal: true };
+    },
+  }, { executionId: 'execution-1', status: 'running', terminal: false }, {
+    wait: async () => {},
+  });
+  assert.equal(result.status, 'succeeded');
+  assert.equal(calls.length, 3);
+  assert.ok(calls.every((input) => input.execution_id === 'execution-1'));
+});
+
+test('waitForToolExecution preserves a nonterminal job for explicit status resume', async () => {
+  const current = {
+    executionId: 'execution-1', operationId: 'operation-1', status: 'running', terminal: false,
+  };
+  const calls = [];
+  await assert.rejects(
+    waitForToolExecution({
+      async use(input) {
+        calls.push(input);
+        throw new Error('status unavailable');
+      },
+    }, current, { wait: async () => {}, statusRetryLimit: 1 }),
+    (error) => error.execution === current && error.recoveryAction === 'resume-status',
+  );
+  assert.deepEqual(calls, [
+    { action: 'status', execution_id: 'execution-1' },
+    { action: 'status', execution_id: 'execution-1' },
+  ]);
+});
+
 test('parseMcpPayload joins text blocks and preserves structured errors', () => {
   assert.deepEqual(parseMcpPayload({
     isError: false,
@@ -185,6 +223,7 @@ test('executeToolPlan binds prepare, once grant, and execute in order', async ()
     operation: 'apply',
     args: { amount: 2 },
     target: { compId: '7', layerId: 1, path: 'Transform/Opacity' },
+    operationId: 'operation-execute-0001',
   }), { ok: true });
   assert.deepEqual(calls, [
     {
@@ -195,6 +234,9 @@ test('executeToolPlan binds prepare, once grant, and execute in order', async ()
       target: { compId: '7', layerId: 1, path: 'Transform/Opacity' },
     },
     { action: 'grant', plan_hash: 'plan-1', grant_scope: 'once' },
-    { action: 'execute', plan_hash: 'plan-1', grant_id: 'grant-1' },
+    {
+      action: 'execute', plan_hash: 'plan-1', grant_id: 'grant-1',
+      operation_id: 'operation-execute-0001',
+    },
   ]);
 });

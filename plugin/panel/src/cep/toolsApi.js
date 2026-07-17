@@ -85,6 +85,7 @@ export async function executeToolPlan(api, {
   operation,
   args = {},
   target = {},
+  operationId = api.newOperationId(),
 }) {
   const plan = await api.use({
     artifact_id: artifactId,
@@ -102,6 +103,7 @@ export async function executeToolPlan(api, {
     action: 'execute',
     plan_hash: plan.planHash,
     grant_id: grant.grantId,
+    operation_id: operationId,
   });
 }
 
@@ -146,6 +148,7 @@ export async function startToolPlan(api, {
 
 export async function waitForToolExecution(api, execution, {
   pollIntervalMs = 250,
+  statusRetryLimit = 2,
   onProgress = () => {},
   wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
 } = {}) {
@@ -153,7 +156,22 @@ export async function waitForToolExecution(api, execution, {
   onProgress(current);
   while (!current.terminal) {
     await wait(pollIntervalMs);
-    current = await api.use({ action: 'status', execution_id: current.executionId });
+    let lastError;
+    for (let attempt = 0; attempt <= statusRetryLimit; attempt += 1) {
+      try {
+        current = await api.use({ action: 'status', execution_id: current.executionId });
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (attempt < statusRetryLimit) await wait(pollIntervalMs);
+      }
+    }
+    if (lastError) {
+      lastError.execution = current;
+      lastError.recoveryAction = 'resume-status';
+      throw lastError;
+    }
     onProgress(current);
   }
   return current;

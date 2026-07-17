@@ -1011,21 +1011,42 @@ async def test_native_uncertain_write_keeps_recovery_and_is_never_blindly_retrie
     )
     plan = engine.prepare(artifact.id, operation="execute", args={}, target={})
     grant = engine.grants.issue_once(plan)
-    started = await engine.start_job(
-        plan.plan_hash,
-        grant.grant_id,
-        operation_id="operation-native-uncertain",
-        ctx=None,
-        initiator="panel-direct",
-    )
-    await asyncio.sleep(0)
-    await asyncio.sleep(0)
+    with pytest.raises(ToolExecutionError) as first:
+        await engine.execute_tracked(
+            plan.plan_hash,
+            grant.grant_id,
+            operation_id="operation-native-uncertain",
+            ctx=None,
+            initiator="agent",
+        )
 
-    status = engine.job_status(started["executionId"])
+    public = first.value.public_dict()
+    assert public["error"] == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert public["operationId"] == "operation-native-uncertain"
+    assert public["outcomeUnknown"] is True
+    assert public["sideEffect"] == "may-have-occurred"
+    assert public["recovery"]["action"] == "inspect-state"
+    assert public["audit"]["outcome"] == "outcome-unknown"
+    assert public["audit"]["backend"] == "native-aegp"
+
+    status = engine.job_status(public["executionId"])
     assert status["status"] == "outcome-unknown"
     assert status["error"]["code"] == "POSSIBLY_SIDE_EFFECTING_FAILURE"
     assert status["error"]["sideEffect"] == "may-have-occurred"
     assert status["error"]["recovery"]["action"] == "inspect-state"
     assert status["audit"]["outcome"] == "outcome-unknown"
     assert status["audit"]["backend"] == "native-aegp"
+
+    # A lost agent response can be retried only with the same operation id.
+    # The server returns the existing terminal job and never dispatches again.
+    retry_grant = engine.grants.issue_once(plan)
+    with pytest.raises(ToolExecutionError) as second:
+        await engine.execute_tracked(
+            plan.plan_hash,
+            retry_grant.grant_id,
+            operation_id="operation-native-uncertain",
+            ctx=None,
+            initiator="agent",
+        )
+    assert second.value.public_dict()["executionId"] == public["executionId"]
     assert calls == 1
