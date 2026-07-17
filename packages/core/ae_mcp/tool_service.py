@@ -23,6 +23,7 @@ from ae_mcp.tool_artifact import (
 )
 from ae_mcp.tool_audit import ToolAuditLog
 from ae_mcp.tool_execution import ToolExecutionEngine
+from ae_mcp.tool_execution_history import ExecutionJobStore
 from ae_mcp.tool_legacy import LegacyMetadataStore, LegacySkillAdapter
 from ae_mcp.tool_migrations import ToolDataMigrator
 from ae_mcp.tool_secrets import RegexSecretScanner
@@ -414,6 +415,7 @@ def default_tool_service() -> ToolLibraryService:
             discovery.select_backend,
             scanner=scanner,
             audit_log=ToolAuditLog(root),
+            job_store=ExecutionJobStore(root),
         )
         packages = ToolPackageManager(store, scanner)
         _default_service = ToolLibraryService(

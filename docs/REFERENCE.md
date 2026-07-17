@@ -244,6 +244,8 @@ Edit 的 `changes` 只允许 `name`, `description`, `kind`, `category`, `tags`, 
 
 grant 只能消费一次。execute 前会重新读取制品、args schema 与 recipe/handler 依赖，任一变化都会使旧 plan/grant 失效。
 
+完成后的 Tool Library execution job 会以最多 500 条的脱敏终态记录保存在 Tool Library 根目录的 `execution-history.json`。`status`/`history` 因此可在 Core 重启后恢复 `succeeded`、`failed`、`cancelled` 或 `outcome-unknown`；相同 `operation_id` 与相同 plan 返回原 execution，不会再次派发 backend，若 plan 不同则返回 `tool_operation_conflict`。该记录只用于执行恢复，与 artifact 的 `lastUsedAt` 和追加式 `audit.jsonl` 各自独立；它不保存 grant、批准秘密、panel capability token 或未脱敏参数。只有已经终止的 job 进入该文件，不能把尚未产生终态的进程中任务描述成已持久恢复。
+
 四档最低策略：read 始终可读；readonly 拒绝其他风险；manual 对 write/destructive/external 询问；auto/none 自动放行普通 write，但 destructive/external 仍逐次询问。只有 write plan 可获得 session 放行；destructive/external 只能 once。write 的 session key 绑定 artifact/content/operation/normalized target，不按工具名缓存。
 
 Import flow：
@@ -567,6 +569,8 @@ The exact `ae.toolUse` action shapes are:
 | `execute` | `action`, `plan_hash`, `grant_id` | none | the kind/operation-specific render, backend, or handler result with `ok: true`; recipes return `results[]` |
 
 A grant is consumed once. Immediately before execution the artifact, args schema, and recipe/handler dependencies are re-read, so any change invalidates the old plan/grant.
+
+Completed Tool Library execution jobs are retained as at most 500 redacted terminal records in `execution-history.json` under the Tool Library root. `status` and `history` can therefore recover `succeeded`, `failed`, `cancelled`, or `outcome-unknown` after a Core restart. Reusing the same `operation_id` with the same plan returns the original execution without backend redispatch; a different plan returns `tool_operation_conflict`. This recovery record is separate from artifact `lastUsedAt` metadata and the append-only `audit.jsonl`. It stores no grants, approval secrets, panel capability tokens, or unredacted arguments. Only terminal jobs enter this file; an in-process job that has not reached a terminal state must not be described as durably recovered.
 
 Minimum four-tier policy: reads are allowed; readonly denies other risks; manual asks for write/destructive/external; auto and none allow ordinary writes, while destructive/external always ask. Only write plans can receive session approval; destructive/external plans are once-only. A write session key binds artifact/content/operation/normalized target and is never cached by tool name.
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -19,6 +20,7 @@ from ae_mcp.tool_archive import (
 )
 from ae_mcp.tool_artifact import (
     ToolArtifact,
+    ToolArtifactDraft,
     ToolSource,
     ToolSummary,
     ToolVerification,
@@ -484,6 +486,119 @@ async def test_tool_use_dispatches_staged_protocol_exactly(service, action):
     else:
         assert result["ok"] is True
     assert service.execution.calls[0][0] == action
+
+
+@pytest.mark.asyncio
+async def test_public_status_history_and_start_recover_after_default_service_restart(
+    monkeypatch, tmp_path
+):
+    from ae_mcp import tool_service as service_module
+
+    class Backend:
+        name = "restart-fixture"
+
+        def __init__(self):
+            self.calls = []
+
+        async def exec(self, code, **kwargs):
+            self.calls.append((code, kwargs))
+            return '{"ok":true}'
+
+    reset_default_tool_service_for_tests()
+    monkeypatch.setenv("AE_MCP_TOOL_DIR", str(tmp_path / "tools"))
+    monkeypatch.setenv("AE_MCP_SKILL_DIR", str(tmp_path / "skills"))
+    backend = Backend()
+    monkeypatch.setattr(service_module.discovery, "select_backend", lambda: backend)
+
+    draft = ToolArtifactDraft(
+        name="restart fixture",
+        description="",
+        kind="jsx",
+        category="verification",
+        tags=(),
+        compatibility={},
+        declared_risk="read",
+        source=ToolSource("user", "manual", None, None, {}),
+        status="saved",
+        content="return true;",
+        args_schema={},
+    )
+    try:
+        first = default_tool_service()
+        artifact = first.store.create(draft)
+        plan = first.execution.prepare(
+            artifact.id, operation="execute", args={}, target={}
+        )
+        grant = first.execution.grants.issue_once(plan)
+        started = await first.execution.start_job(
+            plan.plan_hash,
+            grant.grant_id,
+            operation_id="operation-public-restart",
+            ctx=None,
+            initiator="panel-direct",
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert (
+            first.execution.job_status(started["executionId"])["status"]
+            == "succeeded"
+        )
+        reset_default_tool_service_for_tests()
+
+        recovered_status = await handlers._run_tool_use(
+            S.AeToolUseArgs(
+                action="status", execution_id=started["executionId"]
+            ),
+            None,
+        )
+        recovered_history = await handlers._run_tool_use(
+            S.AeToolUseArgs(
+                action="history", artifact_id=artifact.id, limit=10
+            ),
+            None,
+        )
+        duplicate_start = await handlers._run_tool_use(
+            S.AeToolUseArgs(
+                action="start",
+                plan_hash=plan.plan_hash,
+                grant_id=grant.grant_id,
+                operation_id="operation-public-restart",
+            ),
+            None,
+        )
+
+        assert recovered_status["executionId"] == started["executionId"]
+        assert recovered_status["status"] == "succeeded"
+        assert (
+            recovered_history["executions"][0]["executionId"]
+            == started["executionId"]
+        )
+        assert duplicate_start["executionId"] == started["executionId"]
+        assert len(backend.calls) == 1
+    finally:
+        reset_default_tool_service_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_corrupt_execution_history_fails_closed_through_public_index(
+    monkeypatch, tmp_path
+):
+    reset_default_tool_service_for_tests()
+    tool_root = tmp_path / "tools"
+    tool_root.mkdir()
+    (tool_root / "execution-history.json").write_text("{broken", encoding="utf-8")
+    monkeypatch.setenv("AE_MCP_TOOL_DIR", str(tool_root))
+    monkeypatch.setenv("AE_MCP_SKILL_DIR", str(tmp_path / "skills"))
+
+    try:
+        result = await handlers._run_tool_index(S.AeToolIndexArgs(), None)
+        assert result == {
+            "ok": False,
+            "error": "tool_execution_history_failed",
+            "message": "Execution history cannot be read.",
+        }
+    finally:
+        reset_default_tool_service_for_tests()
 
 
 @pytest.mark.asyncio
