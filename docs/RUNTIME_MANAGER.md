@@ -13,12 +13,13 @@ v0.9.3 macOS 面板只使用已安装扩展中自带的 runtime，不会通过 H
   runtime/previous                   verified rollback pointer / 已校验回滚指针
   runtime/<version>-<source-sha>/
     install-record.json
+    ae-mcp-launcher                    launcher bound to this generation / 与该版本绑定的入口
     macos-arm64/                     verified packaged runtime / 已校验包内运行时
 ```
 
-`current` and `previous` are ordinary text files. RuntimeManager writes each pointer through a sibling temporary file and an atomic rename. A process-safe exclusive lock serializes panel instances while they verify, install, activate, repair, roll back, or uninstall a runtime. The stable launcher reads only `current` and invokes the selected packaged Python with `-I -m ae_mcp`.
+`current` and `previous` are ordinary text files. RuntimeManager writes each pointer through a sibling temporary file and an atomic rename. A process-safe exclusive lock serializes panel instances while they verify, install, activate, repair, roll back, or uninstall a runtime. Each generation retains its verified launcher bytes so rollback and fallback select a matching launcher. The stable launcher reads only `current` and invokes the selected packaged Python with `-I -m ae_mcp`.
 
-`current` 与 `previous` 都是普通文本文件。RuntimeManager 通过同目录临时文件和原子 rename 写入每个指针；进程级互斥锁会串行化多个 Panel 实例的校验、安装、激活、修复、回滚和卸载操作。稳定 launcher 只读取 `current`，再以 `-I -m ae_mcp` 启动所选包内 Python。
+`current` 与 `previous` 都是普通文本文件。RuntimeManager 通过同目录临时文件和原子 rename 写入每个指针；进程级互斥锁会串行化多个 Panel 实例的校验、安装、激活、修复、回滚和卸载操作。每个 generation 会保留自身经过校验的 launcher 字节，确保回滚和 fallback 使用匹配入口。稳定 launcher 只读取 `current`，再以 `-I -m ae_mcp` 启动所选包内 Python。
 
 ## State transitions / 状态转换
 

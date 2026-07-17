@@ -68,7 +68,9 @@ export function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin, pla
     aeMcp: platform?.id === 'macos-arm64' && runtimeManager
       ? (lang === 'zh' ? '验证并激活插件内置离线运行时' : 'Verify and activate the bundled offline runtime')
       : commandPreview(activeCmds.aeMcp),
-    node: commandPreview(activeCmds.node),
+    node: platform?.id === 'macos-arm64' && runtimeManager
+      ? (lang === 'zh' ? '修复插件内置离线 Node 运行时' : 'Repair the bundled offline Node runtime')
+      : commandPreview(activeCmds.node),
     claude: commandPreview(activeCmds.claude),
     login: 'claude',
   }), [activeCmds, lang, platform, runtimeManager]);
@@ -92,7 +94,7 @@ export function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin, pla
   }, [claudeStatus, extRoot, platform, recheckLogin, runtimeManager]);
 
   const install = React.useCallback(async (id) => {
-    if (id === 'aeMcp' && platform?.id === 'macos-arm64' && runtimeManager) {
+    if (['aeMcp', 'node'].includes(id) && platform?.id === 'macos-arm64' && runtimeManager) {
       dispatch({ type: 'run-start', id });
       try {
         const repaired = await runtimeManager.repair();

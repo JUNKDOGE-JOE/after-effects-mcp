@@ -574,6 +574,12 @@ function Shell({ cs }) {
     return developmentFallback ? null : createRuntimeManager({ platform, extensionRoot: extRoot });
   }, [extRoot, platform]);
   const mcpCommand = runtimeManager ? platform.paths.launcher : 'ae-mcp';
+  const resolvePanelNode = React.useCallback(
+    ({ platform: requestedPlatform } = {}) => (runtimeManager
+      ? runtimeManager.resolveNode()
+      : resolveSystemNode({ platform: requestedPlatform || platform })),
+    [platform, runtimeManager],
+  );
   const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot, platform }), [extRoot, platform]);
   const getMcpSpec = React.useCallback(async () => withToolApprovalTier(
     await resolveMcpCommand({ extRoot, platform, runtimeManager }),
@@ -661,7 +667,7 @@ function Shell({ cs }) {
   // recreating the backend and silently dropping its conversation on language switch.
   const claudeBackend = React.useMemo(() => createClaudeAgentBackend({
     platform,
-    resolveNode: resolveSystemNode,
+    resolveNode: resolvePanelNode,
     sidecarPath,
     getMcpSpec,
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
@@ -684,7 +690,7 @@ function Shell({ cs }) {
     onProviderProfileRecovered: refreshRuntimeProviders,
     lang,
     onEvent: handleChatEvent,
-  }), [getMcpSpec, sidecarPath, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders]);
+  }), [getMcpSpec, sidecarPath, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders, resolvePanelNode]);
 
   const codexBackend = React.useMemo(() => createCodexBackend({
     platform,
@@ -945,7 +951,8 @@ function Shell({ cs }) {
     let alive = true;
     setProbe(null);
     probeClaudeLogin({
-      resolveNode: resolveSystemNode,
+      platform,
+      resolveNode: resolvePanelNode,
       sidecarPath,
     }).then((result) => {
       if (alive) setProbe(result);
@@ -953,7 +960,7 @@ function Shell({ cs }) {
       if (alive) setProbe({ loggedIn: false, nodeOk: false, detail: e && e.message ? e.message : String(e) });
     });
     return () => { alive = false; };
-  }, [sidecarPath]);
+  }, [platform, resolvePanelNode, sidecarPath]);
 
   React.useEffect(() => {
     if (backendPref !== 'subscription') return undefined;

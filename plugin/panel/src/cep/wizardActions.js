@@ -11,6 +11,14 @@ export async function detectTool(id, { platform, extRoot, runtimeManager } = {})
   const adapter = platform || createPlatformAdapter();
   const executableId = TOOL_IDS[id];
   if (!executableId) return { ok: false, detail: 'unsupported tool id' };
+  if (id === 'node' && adapter.id === 'macos-arm64' && runtimeManager) {
+    try {
+      const resolved = await runtimeManager.resolveNode();
+      return { ok: true, version: resolved.version, path: resolved.nodePath, source: 'runtime-manager' };
+    } catch (error) {
+      return { ok: false, detail: error?.code || error?.message || 'RUNTIME_MANAGER_FAILED' };
+    }
+  }
   if (id === 'aeMcp' && adapter.id === 'macos-arm64' && (runtimeManager || extRoot)) {
     try {
       const resolved = await resolveMcpCommand({ platform: adapter, extRoot, runtimeManager });

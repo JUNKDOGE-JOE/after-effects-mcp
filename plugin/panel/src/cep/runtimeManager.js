@@ -1,6 +1,7 @@
 const RUNTIME_PLATFORM = 'macos-arm64';
 const LOCK_NAME = '.runtime-manager.lock';
 const INSTALL_RECORD = 'install-record.json';
+const GENERATION_LAUNCHER = 'ae-mcp-launcher';
 const SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const SOURCE_SHA = /^[0-9a-f]{40}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -268,6 +269,10 @@ export function createRuntimeManager({
     return paths.join([root, relative.split('/')[0], INSTALL_RECORD]);
   }
 
+  function generationLauncherPath(relative) {
+    return paths.join([root, relative.split('/')[0], GENERATION_LAUNCHER]);
+  }
+
   async function verifyInstalled(relative) {
     const normalized = pointerValue(relative, platform.id);
     if (!normalized) failure('RUNTIME_POINTER_INVALID', 'Runtime pointer is invalid');
@@ -284,7 +289,13 @@ export function createRuntimeManager({
     }
     const directory = paths.join([root, ...normalized.split('/')]);
     await verifyRuntime(directory, record.runtimeManifestSha256);
-    return { relative: normalized, directory, record };
+    const launcher = generationLauncherPath(normalized);
+    const launcherInfo = await promises.lstat(launcher);
+    if (!launcherInfo.isFile() || launcherInfo.isSymbolicLink?.() || launcherInfo.nlink !== 1
+        || modeOf(launcherInfo) !== '0755' || await sha256File(launcher) !== record.launcherSha256) {
+      failure('RUNTIME_LAUNCHER_CORRUPT', 'Runtime generation launcher failed verification');
+    }
+    return { relative: normalized, directory, launcher, record };
   }
 
   async function pointerState(pointerPath) {
@@ -351,19 +362,19 @@ export function createRuntimeManager({
     }
   }
 
-  async function installLauncher(packaged) {
+  async function installLauncher(selected) {
     try {
       const info = await promises.lstat(paths.launcher);
       if (info.isFile() && !info.isSymbolicLink?.() && info.nlink === 1
-          && modeOf(info) === '0755' && await sha256File(paths.launcher) === packaged.launcherSha256) return;
+          && modeOf(info) === '0755' && await sha256File(paths.launcher) === selected.record.launcherSha256) return;
     } catch (error) {
       if (error?.code !== 'ENOENT' && !(error instanceof RuntimeManagerError)) throw error;
     }
     await promises.mkdir(paths.binRoot, { recursive: true, mode: 0o700 });
-    const bytes = await promises.readFile(packagedLauncher);
+    const bytes = await promises.readFile(selected.launcher);
     await atomicWrite(paths.launcher, bytes, 0o755);
     await promises.chmod(paths.launcher, 0o755);
-    if (await sha256File(paths.launcher) !== packaged.launcherSha256) {
+    if (await sha256File(paths.launcher) !== selected.record.launcherSha256) {
       failure('RUNTIME_LAUNCHER_CORRUPT', 'Installed stable launcher failed verification');
     }
   }
@@ -392,6 +403,12 @@ export function createRuntimeManager({
       await promises.mkdir(root, { recursive: true, mode: 0o700 });
       await promises.mkdir(temporary, { mode: 0o700 });
       await copyTree(packagedRuntimeRoot, paths.join([temporary, platform.id]));
+      await promises.copyFile(
+        packagedLauncher,
+        paths.join([temporary, GENERATION_LAUNCHER]),
+        fs.constants?.COPYFILE_EXCL,
+      );
+      await promises.chmod(paths.join([temporary, GENERATION_LAUNCHER]), 0o755);
       const record = {
         schemaVersion: 1,
         platform: platform.id,
@@ -408,6 +425,9 @@ export function createRuntimeManager({
         { flag: 'wx', mode: 0o600 },
       );
       await verifyRuntime(paths.join([temporary, platform.id]), packaged.runtimeManifestSha256);
+      if (await sha256File(paths.join([temporary, GENERATION_LAUNCHER])) !== packaged.launcherSha256) {
+        failure('RUNTIME_LAUNCHER_CORRUPT', 'Staged runtime launcher failed verification');
+      }
       await promises.rename(temporary, finalRoot);
       return verifyInstalled(relative);
     } catch (error) {
@@ -465,7 +485,7 @@ export function createRuntimeManager({
       const current = await pointerState(paths.currentPointer);
       const previous = await pointerState(paths.previousPointer);
       if (!current.ok && previous.ok) {
-        await installLauncher(packaged);
+        await installLauncher(previous);
         await writePointer(paths.currentPointer, previous.relative);
         await removePointer(paths.previousPointer);
         return {
@@ -486,14 +506,14 @@ export function createRuntimeManager({
           && current.record.version === packaged.version
           && current.record.sourceCommitSha === packaged.sourceCommitSha
           && current.record.runtimeManifestSha256 === packaged.runtimeManifestSha256) {
-        await installLauncher(packaged);
+        await installLauncher(current);
         return {
           ok: true, action: 'ready', launcher: paths.launcher, relative: current.relative,
           version: current.record.version, sourceCommitSha: current.record.sourceCommitSha, diagnostics: [],
         };
       }
       const selected = await installPackaged(packaged);
-      await installLauncher(packaged);
+      await installLauncher(selected);
       await activate(selected, current);
       const action = current.ok
         ? (compareSemver(packaged.version, current.record.version) < 0 ? 'downgrade' : 'upgrade')
@@ -515,7 +535,7 @@ export function createRuntimeManager({
       const packaged = await verifyPackagedPayload();
       const current = await pointerState(paths.currentPointer);
       const selected = await installPackaged(packaged, { repair: true });
-      await installLauncher(packaged);
+      await installLauncher(selected);
       await activate(selected, current);
       return {
         ok: true, action: 'repair', launcher: paths.launcher, relative: selected.relative,
@@ -527,11 +547,10 @@ export function createRuntimeManager({
 
   async function rollback() {
     return withLock(async () => {
-      const packaged = await verifyPackagedPayload();
       const current = await pointerState(paths.currentPointer);
       const previous = await pointerState(paths.previousPointer);
       if (!previous.ok) failure('RUNTIME_ROLLBACK_UNAVAILABLE', 'No verified previous runtime is available');
-      await installLauncher(packaged);
+      await installLauncher(previous);
       await writePointer(paths.currentPointer, previous.relative);
       if (current.ok && current.relative !== previous.relative) await writePointer(paths.previousPointer, current.relative);
       else await removePointer(paths.previousPointer);
@@ -583,7 +602,36 @@ export function createRuntimeManager({
     return { ok: current.ok && launcher.ok, current, previous, launcher };
   }
 
-  return Object.freeze({ ensureReady, inspect, repair, rollback, uninstall });
+  async function resolveNode() {
+    const selected = await ensureReady();
+    const nodePath = paths.join([
+      root,
+      ...selected.relative.split('/'),
+      'node',
+      'bin',
+      'node',
+    ]);
+    const info = await promises.lstat(nodePath);
+    if (!info.isFile() || info.isSymbolicLink?.() || info.nlink !== 1 || (info.mode & 0o111) === 0) {
+      failure('RUNTIME_NODE_INVALID', 'The verified runtime Node entrypoint is unavailable');
+    }
+    return {
+      ok: true,
+      nodePath,
+      version: '24.17.0',
+      executable: {
+        ok: true,
+        id: 'node',
+        path: nodePath,
+        argsPrefix: [],
+        source: 'runtime-manager',
+        version: '24.17.0',
+        arch: 'arm64',
+      },
+    };
+  }
+
+  return Object.freeze({ ensureReady, inspect, repair, resolveNode, rollback, uninstall });
 }
 
 export const _runtimeManagerInternals = Object.freeze({ pointerValue, compareSemver });

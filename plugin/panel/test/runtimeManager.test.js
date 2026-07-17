@@ -76,6 +76,7 @@ async function packageFixture(base, { version, sourceCommitSha, marker }) {
     0o755,
   );
   await writeFile(runtimeRoot, 'python/site-packages/ae_mcp/__init__.py', `MARKER = ${JSON.stringify(marker)}\n`);
+  await writeFile(runtimeRoot, 'node/bin/node', '#!/bin/sh\nexit 0\n', 0o755);
   await writeFile(runtimeRoot, 'node/host/package.json', '{"private":true}\n');
   await writeFile(runtimeRoot, 'licenses/许可 notice.txt', `license ${marker}\n`);
   const files = await inventory(runtimeRoot);
@@ -98,6 +99,7 @@ async function packageFixture(base, { version, sourceCommitSha, marker }) {
     'platform/macos-arm64/bin/ae-mcp',
     [
       '#!/bin/sh',
+      `# fixture:${marker}`,
       'set -eu',
       'base="${AE_MCP_HOME:-$HOME/.ae-mcp}"',
       'relative="$(/bin/cat "$base/runtime/current")"',
@@ -170,6 +172,9 @@ test('clean macOS install activates and starts the bundled core without PATH too
     env: { HOME: h.home, AE_MCP_HOME: h.platform.paths.configRoot, PATH: '/usr/bin:/bin' },
   });
   assert.match(launched.stdout, /core-started:clean:-I -m ae_mcp --fixture/);
+  const node = await manager.resolveNode();
+  assert.equal(node.nodePath, path.join(h.platform.paths.runtimeRoot, result.relative, 'node', 'bin', 'node'));
+  assert.equal(node.executable.source, 'runtime-manager');
   assert.equal((await manager.inspect()).ok, true);
 });
 
@@ -187,7 +192,10 @@ test('upgrade, downgrade, and rollback atomically select verified versions', asy
   await one.ensureReady();
   assert.equal((await two.ensureReady()).action, 'upgrade');
   assert.equal((await two.rollback()).version, '0.9.3');
+  assert.match(await fs.promises.readFile(h.platform.paths.launcher, 'utf8'), /fixture:one/);
+  assert.equal((await two.inspect()).ok, true);
   assert.equal((await two.ensureReady()).action, 'upgrade');
+  assert.match(await fs.promises.readFile(h.platform.paths.launcher, 'utf8'), /fixture:two/);
   assert.equal((await one.ensureReady()).action, 'downgrade');
   const state = await one.inspect();
   assert.equal(state.current.record.version, '0.9.3');
@@ -214,6 +222,8 @@ test('a corrupt current runtime falls back once, then a later call repairs from 
   assert.equal(fallback.action, 'fallback');
   assert.equal(fallback.version, '0.9.3');
   assert.equal(fallback.diagnostics[0].code, 'RUNTIME_CURRENT_INVALID_FALLBACK');
+  assert.match(await fs.promises.readFile(h.platform.paths.launcher, 'utf8'), /fixture:one/);
+  assert.equal((await two.inspect()).ok, true);
   await assert.rejects(fs.promises.readFile(h.platform.paths.previousPointer), { code: 'ENOENT' });
   const next = await two.ensureReady();
   assert.notEqual(next.action, 'fallback');

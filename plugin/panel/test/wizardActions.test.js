@@ -78,6 +78,31 @@ test('detectTool checks the stable ae-mcp launcher without direct system discove
   });
 });
 
+test('detectTool uses RuntimeManager for the bundled production Node', async () => {
+  const p = platform();
+  p.id = 'macos-arm64';
+  const calls = [];
+  const result = await detectTool('node', {
+    platform: p,
+    runtimeManager: {
+      async resolveNode() {
+        calls.push('resolveNode');
+        return {
+          ok: true,
+          version: '24.17.0',
+          nodePath: '/Users/a/.ae-mcp/runtime/example/macos-arm64/node/bin/node',
+        };
+      },
+    },
+  });
+
+  assert.deepEqual(calls, ['resolveNode']);
+  assert.equal(result.ok, true);
+  assert.equal(result.source, 'runtime-manager');
+  assert.match(result.path, /node\/bin\/node$/);
+  assert.deepEqual(p.calls, []);
+});
+
 test('ae-mcp install command pins the release tag for end users', () => {
   const cmds = buildInstallCommands({ panelVersion: '0.5.0', repoRoot: '', platform: platform() });
   const joined = cmds.aeMcp.args.join(' ');

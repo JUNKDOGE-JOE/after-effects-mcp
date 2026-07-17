@@ -17414,6 +17414,7 @@
   var RUNTIME_PLATFORM = "macos-arm64";
   var LOCK_NAME = ".runtime-manager.lock";
   var INSTALL_RECORD = "install-record.json";
+  var GENERATION_LAUNCHER = "ae-mcp-launcher";
   var SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
   var SOURCE_SHA = /^[0-9a-f]{40}$/;
   var SHA256 = /^[0-9a-f]{64}$/;
@@ -17645,7 +17646,11 @@
     function installRecordPath(relative) {
       return paths.join([root, relative.split("/")[0], INSTALL_RECORD]);
     }
+    function generationLauncherPath(relative) {
+      return paths.join([root, relative.split("/")[0], GENERATION_LAUNCHER]);
+    }
     async function verifyInstalled(relative) {
+      var _a2;
       const normalized = pointerValue(relative, platform.id);
       if (!normalized) failure("RUNTIME_POINTER_INVALID", "Runtime pointer is invalid");
       const record = await readJson2(installRecordPath(normalized), "RUNTIME_INSTALL_RECORD_INVALID");
@@ -17663,7 +17668,12 @@
       }
       const directory = paths.join([root, ...normalized.split("/")]);
       await verifyRuntime(directory, record.runtimeManifestSha256);
-      return { relative: normalized, directory, record };
+      const launcher = generationLauncherPath(normalized);
+      const launcherInfo = await promises.lstat(launcher);
+      if (!launcherInfo.isFile() || ((_a2 = launcherInfo.isSymbolicLink) == null ? void 0 : _a2.call(launcherInfo)) || launcherInfo.nlink !== 1 || modeOf(launcherInfo) !== "0755" || await sha256File(launcher) !== record.launcherSha256) {
+        failure("RUNTIME_LAUNCHER_CORRUPT", "Runtime generation launcher failed verification");
+      }
+      return { relative: normalized, directory, launcher, record };
     }
     async function pointerState(pointerPath) {
       var _a2;
@@ -17728,23 +17738,24 @@
         }
       }
     }
-    async function installLauncher(packaged) {
+    async function installLauncher(selected) {
       var _a2;
       try {
         const info = await promises.lstat(paths.launcher);
-        if (info.isFile() && !((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) && info.nlink === 1 && modeOf(info) === "0755" && await sha256File(paths.launcher) === packaged.launcherSha256) return;
+        if (info.isFile() && !((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) && info.nlink === 1 && modeOf(info) === "0755" && await sha256File(paths.launcher) === selected.record.launcherSha256) return;
       } catch (error) {
         if ((error == null ? void 0 : error.code) !== "ENOENT" && !(error instanceof RuntimeManagerError)) throw error;
       }
       await promises.mkdir(paths.binRoot, { recursive: true, mode: 448 });
-      const bytes = await promises.readFile(packagedLauncher);
+      const bytes = await promises.readFile(selected.launcher);
       await atomicWrite(paths.launcher, bytes, 493);
       await promises.chmod(paths.launcher, 493);
-      if (await sha256File(paths.launcher) !== packaged.launcherSha256) {
+      if (await sha256File(paths.launcher) !== selected.record.launcherSha256) {
         failure("RUNTIME_LAUNCHER_CORRUPT", "Installed stable launcher failed verification");
       }
     }
     async function installPackaged(packaged, { repair: repair2 = false } = {}) {
+      var _a2;
       const identity = `${packaged.version}-${packaged.sourceCommitSha}`;
       let runtimeId = identity;
       const normalRelative = `${runtimeId}/${platform.id}`;
@@ -17768,6 +17779,12 @@
         await promises.mkdir(root, { recursive: true, mode: 448 });
         await promises.mkdir(temporary, { mode: 448 });
         await copyTree(packagedRuntimeRoot, paths.join([temporary, platform.id]));
+        await promises.copyFile(
+          packagedLauncher,
+          paths.join([temporary, GENERATION_LAUNCHER]),
+          (_a2 = fs.constants) == null ? void 0 : _a2.COPYFILE_EXCL
+        );
+        await promises.chmod(paths.join([temporary, GENERATION_LAUNCHER]), 493);
         const record = {
           schemaVersion: 1,
           platform: platform.id,
@@ -17785,6 +17802,9 @@
           { flag: "wx", mode: 384 }
         );
         await verifyRuntime(paths.join([temporary, platform.id]), packaged.runtimeManifestSha256);
+        if (await sha256File(paths.join([temporary, GENERATION_LAUNCHER])) !== packaged.launcherSha256) {
+          failure("RUNTIME_LAUNCHER_CORRUPT", "Staged runtime launcher failed verification");
+        }
         await promises.rename(temporary, finalRoot);
         return verifyInstalled(relative);
       } catch (error) {
@@ -17843,7 +17863,7 @@
         const current = await pointerState(paths.currentPointer);
         const previous = await pointerState(paths.previousPointer);
         if (!current.ok && previous.ok) {
-          await installLauncher(packaged);
+          await installLauncher(previous);
           await writePointer(paths.currentPointer, previous.relative);
           await removePointer(paths.previousPointer);
           return {
@@ -17861,7 +17881,7 @@
           };
         }
         if (current.ok && current.record.version === packaged.version && current.record.sourceCommitSha === packaged.sourceCommitSha && current.record.runtimeManifestSha256 === packaged.runtimeManifestSha256) {
-          await installLauncher(packaged);
+          await installLauncher(current);
           return {
             ok: true,
             action: "ready",
@@ -17873,7 +17893,7 @@
           };
         }
         const selected = await installPackaged(packaged);
-        await installLauncher(packaged);
+        await installLauncher(selected);
         await activate(selected, current);
         const action = current.ok ? compareSemver(packaged.version, current.record.version) < 0 ? "downgrade" : "upgrade" : current.exists ? "repair" : "install";
         return {
@@ -17896,7 +17916,7 @@
         const packaged = await verifyPackagedPayload();
         const current = await pointerState(paths.currentPointer);
         const selected = await installPackaged(packaged, { repair: true });
-        await installLauncher(packaged);
+        await installLauncher(selected);
         await activate(selected, current);
         return {
           ok: true,
@@ -17911,11 +17931,11 @@
     }
     async function rollback() {
       return withLock(async () => {
-        const packaged = await verifyPackagedPayload();
+        await verifyPackagedPayload();
         const current = await pointerState(paths.currentPointer);
         const previous = await pointerState(paths.previousPointer);
         if (!previous.ok) failure("RUNTIME_ROLLBACK_UNAVAILABLE", "No verified previous runtime is available");
-        await installLauncher(packaged);
+        await installLauncher(previous);
         await writePointer(paths.currentPointer, previous.relative);
         if (current.ok && current.relative !== previous.relative) await writePointer(paths.previousPointer, current.relative);
         else await removePointer(paths.previousPointer);
@@ -17964,7 +17984,36 @@
       }
       return { ok: current.ok && launcher.ok, current, previous, launcher };
     }
-    return Object.freeze({ ensureReady, inspect, repair, rollback, uninstall });
+    async function resolveNode() {
+      var _a2;
+      const selected = await ensureReady();
+      const nodePath = paths.join([
+        root,
+        ...selected.relative.split("/"),
+        "node",
+        "bin",
+        "node"
+      ]);
+      const info = await promises.lstat(nodePath);
+      if (!info.isFile() || ((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) || info.nlink !== 1 || (info.mode & 73) === 0) {
+        failure("RUNTIME_NODE_INVALID", "The verified runtime Node entrypoint is unavailable");
+      }
+      return {
+        ok: true,
+        nodePath,
+        version: "24.17.0",
+        executable: {
+          ok: true,
+          id: "node",
+          path: nodePath,
+          argsPrefix: [],
+          source: "runtime-manager",
+          version: "24.17.0",
+          arch: "arm64"
+        }
+      };
+    }
+    return Object.freeze({ ensureReady, inspect, repair, resolveNode, rollback, uninstall });
   }
   var _runtimeManagerInternals = Object.freeze({ pointerValue, compareSemver });
 
@@ -33546,6 +33595,14 @@ data: ${JSON.stringify(payload)}
     const adapter = platform || createPlatformAdapter();
     const executableId = TOOL_IDS[id];
     if (!executableId) return { ok: false, detail: "unsupported tool id" };
+    if (id === "node" && adapter.id === "macos-arm64" && runtimeManager) {
+      try {
+        const resolved2 = await runtimeManager.resolveNode();
+        return { ok: true, version: resolved2.version, path: resolved2.nodePath, source: "runtime-manager" };
+      } catch (error) {
+        return { ok: false, detail: (error == null ? void 0 : error.code) || (error == null ? void 0 : error.message) || "RUNTIME_MANAGER_FAILED" };
+      }
+    }
     if (id === "aeMcp" && adapter.id === "macos-arm64" && (runtimeManager || extRoot)) {
       try {
         const resolved2 = await resolveMcpCommand({ platform: adapter, extRoot, runtimeManager });
@@ -33657,7 +33714,7 @@ data: ${JSON.stringify(payload)}
     const commandPreviews = import_react44.default.useMemo(() => ({
       uv: commandPreview(activeCmds.uv),
       aeMcp: (platform == null ? void 0 : platform.id) === "macos-arm64" && runtimeManager ? lang === "zh" ? "\u9A8C\u8BC1\u5E76\u6FC0\u6D3B\u63D2\u4EF6\u5185\u7F6E\u79BB\u7EBF\u8FD0\u884C\u65F6" : "Verify and activate the bundled offline runtime" : commandPreview(activeCmds.aeMcp),
-      node: commandPreview(activeCmds.node),
+      node: (platform == null ? void 0 : platform.id) === "macos-arm64" && runtimeManager ? lang === "zh" ? "\u4FEE\u590D\u63D2\u4EF6\u5185\u7F6E\u79BB\u7EBF Node \u8FD0\u884C\u65F6" : "Repair the bundled offline Node runtime" : commandPreview(activeCmds.node),
       claude: commandPreview(activeCmds.claude),
       login: "claude"
     }), [activeCmds, lang, platform, runtimeManager]);
@@ -33677,7 +33734,7 @@ data: ${JSON.stringify(payload)}
       return result;
     }, [claudeStatus, extRoot, platform, recheckLogin, runtimeManager]);
     const install = import_react44.default.useCallback(async (id) => {
-      if (id === "aeMcp" && (platform == null ? void 0 : platform.id) === "macos-arm64" && runtimeManager) {
+      if (["aeMcp", "node"].includes(id) && (platform == null ? void 0 : platform.id) === "macos-arm64" && runtimeManager) {
         dispatch({ type: "run-start", id });
         try {
           const repaired = await runtimeManager.repair();
@@ -33911,8 +33968,26 @@ data: ${JSON.stringify(payload)}
           action: { kind: "repair-runtime" }
         });
       }
+      try {
+        const node = await runtimeManager.resolveNode();
+        items.push({
+          id: "node",
+          ok: node.ok,
+          detail: node.ok ? [node.version, node.nodePath].filter(Boolean).join(" \xB7 ") : node.detail,
+          fixHint: HINTS.node,
+          action: { kind: "repair-runtime" }
+        });
+      } catch (error) {
+        items.push({
+          id: "node",
+          ok: false,
+          detail: (error == null ? void 0 : error.code) || (error == null ? void 0 : error.message) || "RUNTIME_MANAGER_FAILED",
+          fixHint: HINTS.node,
+          action: { kind: "repair-runtime" }
+        });
+      }
     }
-    for (const id of runtimeManager ? ["node", "claude", "codex"] : ["ae-mcp", "node", "claude", "codex"]) {
+    for (const id of runtimeManager ? ["claude", "codex"] : ["ae-mcp", "node", "claude", "codex"]) {
       const options = id === "node" ? { minimumVersion: "24.17.0", requiredArch: adapter.id === "macos-arm64" ? "arm64" : "x64" } : {};
       const result = await adapter.resolveExecutable(id, options);
       const action = id === "ae-mcp" || id === "node" ? { kind: "repair-runtime" } : { kind: "open-login-terminal", tool: id };
@@ -35274,6 +35349,10 @@ ${baseUrl}`),
       return developmentFallback ? null : createRuntimeManager({ platform, extensionRoot: extRoot });
     }, [extRoot, platform]);
     const mcpCommand = runtimeManager ? platform.paths.launcher : "ae-mcp";
+    const resolvePanelNode = import_react45.default.useCallback(
+      ({ platform: requestedPlatform } = {}) => runtimeManager ? runtimeManager.resolveNode() : resolveSystemNode({ platform: requestedPlatform || platform }),
+      [platform, runtimeManager]
+    );
     const sidecarPath = import_react45.default.useMemo(() => resolveSidecarPath({ extRoot, platform }), [extRoot, platform]);
     const getMcpSpec = import_react45.default.useCallback(async () => withToolApprovalTier(
       await resolveMcpCommand({ extRoot, platform, runtimeManager }),
@@ -35351,7 +35430,7 @@ ${baseUrl}`),
     }, [mcp, handleChatEvent, providerSecretService]);
     const claudeBackend = import_react45.default.useMemo(() => createClaudeAgentBackend({
       platform,
-      resolveNode: resolveSystemNode,
+      resolveNode: resolvePanelNode,
       sidecarPath,
       getMcpSpec,
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
@@ -35374,7 +35453,7 @@ ${baseUrl}`),
       onProviderProfileRecovered: refreshRuntimeProviders,
       lang,
       onEvent: handleChatEvent
-    }), [getMcpSpec, sidecarPath, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders]);
+    }), [getMcpSpec, sidecarPath, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders, resolvePanelNode]);
     const codexBackend = import_react45.default.useMemo(() => createCodexBackend({
       platform,
       getMcpSpec,
@@ -35611,7 +35690,8 @@ ${baseUrl}`),
       let alive = true;
       setProbe(null);
       probeClaudeLogin({
-        resolveNode: resolveSystemNode,
+        platform,
+        resolveNode: resolvePanelNode,
         sidecarPath
       }).then((result) => {
         if (alive) setProbe(result);
@@ -35621,7 +35701,7 @@ ${baseUrl}`),
       return () => {
         alive = false;
       };
-    }, [sidecarPath]);
+    }, [platform, resolvePanelNode, sidecarPath]);
     import_react45.default.useEffect(() => {
       if (backendPref !== "subscription") return void 0;
       return runClaudeProbe();

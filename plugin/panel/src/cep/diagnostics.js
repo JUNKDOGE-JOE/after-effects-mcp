@@ -170,9 +170,27 @@ export async function runDiagnostics({ getHost, port, fs, fetchImpl, platform, r
         action: { kind: 'repair-runtime' },
       });
     }
+    try {
+      const node = await runtimeManager.resolveNode();
+      items.push({
+        id: 'node',
+        ok: node.ok,
+        detail: node.ok ? [node.version, node.nodePath].filter(Boolean).join(' · ') : node.detail,
+        fixHint: HINTS.node,
+        action: { kind: 'repair-runtime' },
+      });
+    } catch (error) {
+      items.push({
+        id: 'node',
+        ok: false,
+        detail: error?.code || error?.message || 'RUNTIME_MANAGER_FAILED',
+        fixHint: HINTS.node,
+        action: { kind: 'repair-runtime' },
+      });
+    }
   }
 
-  for (const id of runtimeManager ? ['node', 'claude', 'codex'] : ['ae-mcp', 'node', 'claude', 'codex']) {
+  for (const id of runtimeManager ? ['claude', 'codex'] : ['ae-mcp', 'node', 'claude', 'codex']) {
     const options = id === 'node'
       ? { minimumVersion: '24.17.0', requiredArch: adapter.id === 'macos-arm64' ? 'arm64' : 'x64' }
       : {};
