@@ -111,6 +111,25 @@ def test_scan_json_allows_schema_objects_and_empty_sensitive_defaults():
     ) == ()
 
 
+@pytest.mark.parametrize("key", ["idempotency_key", "idempotencyKey"])
+def test_scan_json_allows_native_write_idempotency_fields(key):
+    assert RegexSecretScanner().scan_json(
+        "native-recipe.json",
+        {
+            "ref": "ae.createComposition",
+            "args": {key: "issue139-native-write-intent-0001"},
+        },
+    ) == ()
+
+
+def test_scan_json_still_detects_concrete_secret_in_idempotency_field():
+    findings = RegexSecretScanner().scan_json(
+        "native-recipe.json",
+        {"args": {"idempotency_key": "sk-this-is-still-a-provider-secret"}},
+    )
+    assert any(finding.kind == "sk-key" for finding in findings)
+
+
 @pytest.mark.parametrize(
     "value",
     [
