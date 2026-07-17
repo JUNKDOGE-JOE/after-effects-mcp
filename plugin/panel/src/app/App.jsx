@@ -65,6 +65,7 @@ import { writeLogExport, revealInExplorer } from '../cep/logExportFs.js';
 import { reconcileStableJsonValue } from '../lib/stableValue.js';
 import { createPlatformAdapter } from '../cep/platform/index.js';
 import { readCepSystemPath } from '../cep/platform/paths.js';
+import { createRuntimeManager } from '../cep/runtimeManager.js';
 import { createElicitationCoordinator } from '../lib/elicitationCoordinator.js';
 import { decideToolPlan } from '../../../shared/tool-approval.mjs';
 
@@ -564,11 +565,72 @@ function Shell({ cs }) {
   const runtimeRef = React.useRef({ providerProfile, providerCandidate: null, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: 'subscription', claudeApiProvider: null });
   const previousCodexProviderProfileRef = React.useRef(providerProfile);
   const extRoot = React.useMemo(() => readCepSystemPath({ cs, platform }), [cs, platform]);
+  const developmentRuntimeFallback = React.useMemo(() => {
+    if (platform.id !== 'macos-arm64') return false;
+    const debugMarker = platform.paths.join([extRoot, '.debug']);
+    const bundleManifest = platform.paths.join([extRoot, 'bundle-manifest.json']);
+    return platform.fs.existsSync(debugMarker)
+      && !platform.fs.existsSync(bundleManifest);
+  }, [extRoot, platform]);
+  const runtimeManager = React.useMemo(() => (
+    platform.id === 'macos-arm64' && !developmentRuntimeFallback
+      ? createRuntimeManager({ platform, extensionRoot: extRoot })
+      : null
+  ), [developmentRuntimeFallback, extRoot, platform]);
+  const [runtimeActivation, setRuntimeActivation] = React.useState(() => ({
+    state: runtimeManager ? 'starting' : 'ready',
+    result: null,
+    error: null,
+  }));
+  const markRuntimeReady = React.useCallback((result) => {
+    setRuntimeActivation({ state: 'ready', result: result || null, error: null });
+  }, []);
+  React.useEffect(() => {
+    if (!runtimeManager) {
+      setRuntimeActivation({ state: 'ready', result: null, error: null });
+      return undefined;
+    }
+    let alive = true;
+    setRuntimeActivation({ state: 'starting', result: null, error: null });
+    let retryTimer = null;
+    const activate = () => {
+      runtimeManager.ensureReady().then((result) => {
+        if (alive) markRuntimeReady(result);
+      }).catch((error) => {
+        if (!alive) return;
+        setRuntimeActivation({ state: 'error', result: null, error });
+        // A second panel can hold the short-lived install lock during boot.
+        // Keep configuration hidden, then retry without requiring a reload.
+        if (error && error.code === 'RUNTIME_MANAGER_LOCKED') {
+          retryTimer = setTimeout(activate, 1000);
+        }
+      });
+    };
+    activate();
+    return () => {
+      alive = false;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [markRuntimeReady, runtimeManager]);
+  const runtimeReady = runtimeActivation.state === 'ready';
+  const mcpCommand = runtimeManager ? platform.paths.launcher : 'ae-mcp';
+  const resolvePanelNode = React.useCallback(
+    ({ platform: requestedPlatform } = {}) => (runtimeManager
+      ? runtimeManager.resolveNode()
+      : resolveSystemNode({ platform: requestedPlatform || platform })),
+    [platform, runtimeManager],
+  );
   const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot, platform }), [extRoot, platform]);
-  const getMcpSpec = React.useCallback(async () => withToolApprovalTier(
-    await resolveMcpCommand({ extRoot, platform }),
-    approvalTierFile,
-  ), [approvalTierFile, extRoot, platform]);
+  const getMcpSpec = React.useCallback(async () => {
+    try {
+      const spec = await resolveMcpCommand({ extRoot, platform, runtimeManager });
+      if (runtimeManager && spec.runtime) markRuntimeReady(spec.runtime);
+      return withToolApprovalTier(spec, approvalTierFile);
+    } catch (error) {
+      if (runtimeManager) setRuntimeActivation({ state: 'error', result: null, error });
+      throw error;
+    }
+  }, [approvalTierFile, extRoot, markRuntimeReady, platform, runtimeManager]);
   const mcp = React.useMemo(() => createMcpClient({
     platform,
     extRoot,
@@ -651,7 +713,7 @@ function Shell({ cs }) {
   // recreating the backend and silently dropping its conversation on language switch.
   const claudeBackend = React.useMemo(() => createClaudeAgentBackend({
     platform,
-    resolveNode: resolveSystemNode,
+    resolveNode: resolvePanelNode,
     sidecarPath,
     getMcpSpec,
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
@@ -674,7 +736,7 @@ function Shell({ cs }) {
     onProviderProfileRecovered: refreshRuntimeProviders,
     lang,
     onEvent: handleChatEvent,
-  }), [getMcpSpec, sidecarPath, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders]);
+  }), [getMcpSpec, sidecarPath, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders, resolvePanelNode]);
 
   const codexBackend = React.useMemo(() => createCodexBackend({
     platform,
@@ -935,7 +997,8 @@ function Shell({ cs }) {
     let alive = true;
     setProbe(null);
     probeClaudeLogin({
-      resolveNode: resolveSystemNode,
+      platform,
+      resolveNode: resolvePanelNode,
       sidecarPath,
     }).then((result) => {
       if (alive) setProbe(result);
@@ -943,7 +1006,7 @@ function Shell({ cs }) {
       if (alive) setProbe({ loggedIn: false, nodeOk: false, detail: e && e.message ? e.message : String(e) });
     });
     return () => { alive = false; };
-  }, [sidecarPath]);
+  }, [platform, resolvePanelNode, sidecarPath]);
 
   React.useEffect(() => {
     if (backendPref !== 'subscription') return undefined;
@@ -1230,12 +1293,17 @@ function Shell({ cs }) {
         port: status.port,
         fs: cepRequire('fs'),
         fetchImpl: window.fetch.bind(window),
+        platform,
+        runtimeManager,
+        allowDevelopmentPath: developmentRuntimeFallback,
       });
+      const verifiedRuntime = items.find((item) => item.id === 'node' && item.ok && item.runtime)?.runtime;
+      if (verifiedRuntime) markRuntimeReady(verifiedRuntime);
       setDiagnostics(items);
     } catch (e) {
       setDiagnostics([{ id: 'host-listening', ok: false, detail: String(e && e.message), fixHint: { zh: '诊断执行失败，重启面板后重试。', en: 'Diagnostics failed to run; reload the panel and retry.' } }]);
     }
-  }, [getHost, status.port]);
+  }, [developmentRuntimeFallback, getHost, markRuntimeReady, platform, runtimeManager, status.port]);
 
   const togglePause = () => {
     const host = getHost();
@@ -1264,12 +1332,24 @@ function Shell({ cs }) {
     setWizardDone(true);
   };
 
-  const mcpConfigStr = JSON.stringify(buildMcpConfig(status.port, expertGuidance), null, 2);
+  const mcpConfigStr = runtimeReady ? JSON.stringify(buildMcpConfig(
+    status.port,
+    expertGuidance,
+    mcpCommand,
+  ), null, 2) : '';
   const claudeStatus = probe === null ? { state: 'checking' }
     : probe.nodeOk === false ? { state: 'no-node', detail: probe.detail }
     : probe.loggedIn === false ? { state: 'not-logged-in', detail: probe.detail }
     : { state: 'ready', nodeVersion: probe.nodeVersion };
-  const wizard = useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin: runClaudeProbe });
+  const wizard = useWizardWiring({
+    extRoot,
+    lang,
+    claudeStatus,
+    recheckLogin: runClaudeProbe,
+    platform,
+    runtimeManager,
+    onRuntimeReady: markRuntimeReady,
+  });
 
   if (!wizardDone) {
     return (
@@ -1281,6 +1361,8 @@ function Shell({ cs }) {
         onClient={setWizClient}
         clientName={(CLIENT_NAMES[wizClient] || CLIENT_NAMES['claude-desktop'])[lang]}
         mcpConfig={mcpConfigStr}
+        mcpCommand={mcpCommand}
+        mcpReady={runtimeReady}
         port={status.port}
         expertGuidance={expertGuidance}
         channels={channels}
@@ -1375,6 +1457,8 @@ function Shell({ cs }) {
             port={status.port}
             onApplyPort={applyPort}
             mcpConfig={mcpConfigStr}
+            mcpCommand={mcpCommand}
+            mcpReady={runtimeReady}
             logs={logs}
             clients={clients}
             onBlockClient={(label, v) => {
@@ -1490,6 +1574,7 @@ function Shell({ cs }) {
         lang={lang}
         info={connInfo || {}}
         diagnostics={Array.isArray(diagnostics) ? diagnostics : []}
+        copyReady={runtimeReady}
         onDiagnose={runDiag}
         onCopyConfig={() => copyText(mcpConfigStr)}
         onRestart={() => applyPort(status.port)}

@@ -574,11 +574,87 @@ async function removeMatchingDirectories(parent, pattern) {
     .map((entry) => fs.promises.rm(path.join(parent, entry.name), { recursive: true, force: true })));
 }
 
+async function pruneDevelopmentArtifacts(root) {
+  if (!(await pathExists(root))) return;
+  const entries = await fs.promises.readdir(root, { withFileTypes: true });
+  await Promise.all(entries.map(async (entry) => {
+    const destination = path.join(root, entry.name);
+    if (
+      (entry.isDirectory() && /^(?:test|tests|__pycache__|\.cache)$/i.test(entry.name))
+      || (entry.isFile() && /(?:^|\.)test\.[^/]+$/i.test(entry.name))
+    ) {
+      await fs.promises.rm(destination, { recursive: true, force: true });
+      return;
+    }
+    if (entry.isDirectory()) await pruneDevelopmentArtifacts(destination);
+  }));
+}
+
+function pythonRecordPath(line) {
+  if (!line.startsWith('"')) return line.split(',', 1)[0];
+  let value = '';
+  for (let index = 1; index < line.length; index += 1) {
+    if (line[index] === '"') {
+      if (line[index + 1] === '"') {
+        value += '"';
+        index += 1;
+      } else {
+        return value;
+      }
+    } else {
+      value += line[index];
+    }
+  }
+  throw codedError('RUNTIME_PYTHON_RECORD_INVALID', `invalid Python RECORD line: ${line}`);
+}
+
+function isDevelopmentArtifactPath(relative) {
+  const segments = relative.split('/');
+  return segments.some((segment) => /^(?:test|tests|__pycache__|\.cache)$/i.test(segment))
+    || /(?:^|\.)test\.[^/]+$/i.test(segments.at(-1) ?? '');
+}
+
+async function normalizePythonRecords({ runtimeRoot, platform }) {
+  const sitePackages = platform === 'windows-x64'
+    ? path.join(runtimeRoot, 'python', 'Lib', 'site-packages')
+    : path.join(runtimeRoot, 'python', 'lib', 'python3.13', 'site-packages');
+  if (!(await pathExists(sitePackages))) return;
+  const entries = await fs.promises.readdir(sitePackages, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.endsWith('.dist-info')) continue;
+    const record = path.join(sitePackages, entry.name, 'RECORD');
+    if (!(await pathExists(record))) continue;
+    const lines = (await fs.promises.readFile(record, 'utf8')).split(/\r?\n/).filter(Boolean);
+    const retained = [];
+    for (const line of lines) {
+      const relative = pythonRecordPath(line);
+      const absolute = path.resolve(sitePackages, relative.split('/').join(path.sep));
+      const insideRuntime = path.relative(runtimeRoot, absolute);
+      if (insideRuntime.startsWith('..') || path.isAbsolute(insideRuntime)) {
+        throw codedError(
+          'RUNTIME_PYTHON_RECORD_INVALID',
+          `Python RECORD path escapes runtime root: ${relative}`,
+        );
+      }
+      if ((await pathExists(absolute)) || !isDevelopmentArtifactPath(relative)) retained.push(line);
+    }
+    if (retained.length !== lines.length) {
+      await fs.promises.writeFile(record, `${retained.join('\n')}\n`);
+    }
+  }
+}
+
+async function pruneRuntimeDevelopmentArtifacts({ runtimeRoot, platform }) {
+  await pruneDevelopmentArtifacts(runtimeRoot);
+  await normalizePythonRecords({ runtimeRoot, platform });
+}
+
 export async function pruneBundledRuntimeTools({ runtimeRoot, platform }) {
   const nodeRoot = path.join(runtimeRoot, 'node');
   const pythonRoot = path.join(runtimeRoot, 'python');
   const nodePaths = platform === 'windows-x64'
     ? [
+      'include',
       'node_modules/npm',
       'node_modules/corepack',
       'npm', 'npm.cmd', 'npm.ps1',
@@ -590,6 +666,7 @@ export async function pruneBundledRuntimeTools({ runtimeRoot, platform }) {
       'yarnpkg', 'yarnpkg.cmd', 'yarnpkg.ps1',
     ]
     : [
+      'include',
       'lib/node_modules/npm',
       'lib/node_modules/corepack',
       'bin/npm', 'bin/npx', 'bin/corepack',
@@ -619,6 +696,7 @@ export async function pruneBundledRuntimeTools({ runtimeRoot, platform }) {
   await fs.promises.rm(path.join(sitePackages, 'distutils-precedence.pth'), { force: true });
   await removeMatchingDirectories(sitePackages, /^pip-.*\.dist-info$/i);
   await removeMatchingDirectories(sitePackages, /^setuptools-.*\.dist-info$/i);
+  await pruneRuntimeDevelopmentArtifacts({ runtimeRoot, platform });
 }
 
 async function assertPeX64(filePath) {
@@ -935,6 +1013,7 @@ export async function buildPortableRuntime({ platform, outDir, repoRoot }) {
       platform,
       runtimeLock,
     });
+    await pruneRuntimeDevelopmentArtifacts({ runtimeRoot: temporary, platform });
     await fs.promises.rm(buildRoot, { recursive: true, force: true });
     const manifest = await generateRuntimeInventory({
       platform,

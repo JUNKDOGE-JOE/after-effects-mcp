@@ -43,8 +43,8 @@ test('semantic rule reversal and final retained-set removal fail closed', () => 
   assert.ok(validateGovernance({ agentsText: weakened, inventoryText, trackedPaths })
     .some((error) => error.includes('locked SHA-256')));
   const otherWeakening = agentsText.replace(
-    'Use one worktree and one branch for each issue.',
-    'Do not use one worktree and one branch for each issue.',
+    'Use one worktree and one branch for each capability package.',
+    'Do not use one worktree and one branch for each capability package.',
   );
   assert.ok(validateGovernance({ agentsText: otherWeakening, inventoryText, trackedPaths })
     .some((error) => error.includes('locked SHA-256')));

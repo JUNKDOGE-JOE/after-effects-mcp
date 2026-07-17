@@ -137,6 +137,46 @@ test('the stable ae-mcp launcher is presence-checked without starting its stdio 
   assert.deepEqual(harness.calls, []);
 });
 
+test('ae-mcp never falls back to PATH, login shell, or standard package-manager locations', async () => {
+  const harness = macHarness({
+    files: ['/path/bin/ae-mcp', '/usr/local/bin/ae-mcp', '/bin/zsh'],
+  });
+
+  const result = await harness.adapter.resolveExecutable('ae-mcp');
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'NOT_FOUND');
+  assert.deepEqual(harness.calls, []);
+});
+
+test('ae-mcp PATH discovery is available only through the explicit development option', async () => {
+  const executable = '/path/bin/ae-mcp';
+  const harness = macHarness({ files: [executable] });
+
+  const result = await harness.adapter.resolveExecutable('ae-mcp', { allowDevelopmentPath: true });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.path, executable);
+  assert.equal(result.source, 'path');
+  assert.deepEqual(harness.calls, []);
+});
+
+test('Windows ae-mcp discovery retains its existing PATH behavior', async () => {
+  const executable = 'C:\\Tools\\ae-mcp.exe';
+  const calls = [];
+  const adapter = createWindowsAdapter({
+    platform: 'win32', arch: 'x64', home: 'C:\\Users\\a', temp: 'C:\\Temp',
+    env: { Path: 'C:\\Tools' }, fs: fakeFs(new Set([executable])),
+    spawnImpl: processFactory([{ stdout: 'ae-mcp 0.9.2 x64' }], calls), now: () => 0,
+  });
+
+  const result = await adapter.resolveExecutable('ae-mcp');
+
+  assert.equal(result.ok, true);
+  assert.equal(result.path, executable);
+  assert.equal(result.source, 'path');
+});
+
 test('macOS executable candidates require execute permission, including the stable launcher', async () => {
   const launcher = '/Users/a/.ae-mcp/bin/ae-mcp';
   const modes = [];

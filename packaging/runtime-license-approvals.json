@@ -1,4 +1,47 @@
 {
   "schemaVersion": 1,
-  "approvals": []
+  "approvals": [
+    {
+      "package": "@anthropic-ai/claude-agent-sdk",
+      "version": "0.3.174",
+      "sourceSha256": "849f53c5926f1c8706afc68bd0e6b8bb0a1ca6e40e80de49683a4d04acda1e44",
+      "licenseRef": "LicenseRef-Anthropic-Agent-SDK-Terms",
+      "approvalId": "OWNER-APPROVED-2026-07-18"
+    },
+    {
+      "package": "@anthropic-ai/claude-agent-sdk-darwin-arm64",
+      "version": "0.3.174",
+      "sourceSha256": "aeef155b96cdaeff784f47f57bf6878015641d1155d5d8eae9794f095a5f3eea",
+      "licenseRef": "LicenseRef-Anthropic-Claude-Code-Legal-Agreements",
+      "approvalId": "OWNER-APPROVED-2026-07-18"
+    },
+    {
+      "package": "node-runtime:icu",
+      "version": "78.3",
+      "sourceSha256": "a7ab562ed2369a29c68b72fa00e3103bcdfe37063dff799c6acc8e404e275fcd",
+      "licenseRef": "LicenseRef-Node-ICU-Bundle",
+      "approvalId": "OWNER-APPROVED-2026-07-18"
+    },
+    {
+      "package": "node-runtime:v8",
+      "version": "13.6.233.17-node.49",
+      "sourceSha256": "a7ab562ed2369a29c68b72fa00e3103bcdfe37063dff799c6acc8e404e275fcd",
+      "licenseRef": "LicenseRef-Node-V8-Bundle",
+      "approvalId": "OWNER-APPROVED-2026-07-18"
+    },
+    {
+      "package": "python-standalone:itcl",
+      "version": "4.3.5",
+      "sourceSha256": "2537ba0c86112c8c953f7c09d33f134dd45c0fb3a71f2d7f7691fd301d2c33a6",
+      "licenseRef": "LicenseRef-Itcl-4.3.5",
+      "approvalId": "OWNER-APPROVED-2026-07-18"
+    },
+    {
+      "package": "python-standalone:tcl-thread",
+      "version": "3.0.4",
+      "sourceSha256": "2537ba0c86112c8c953f7c09d33f134dd45c0fb3a71f2d7f7691fd301d2c33a6",
+      "licenseRef": "LicenseRef-Tcl-Thread-3.0.4",
+      "approvalId": "OWNER-APPROVED-2026-07-18"
+    }
+  ]
 }

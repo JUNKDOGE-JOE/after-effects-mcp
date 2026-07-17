@@ -1397,7 +1397,10 @@ test('license policy explicitly forbids UNKNOWN', () => {
   const policy = JSON.parse(fs.readFileSync('packaging/license-policy.json', 'utf8'));
   assert.equal(policy.schemaVersion, 1);
   assert.ok(policy.forbidden.includes('UNKNOWN'));
-  assert.ok(policy.restrictedLicenseRefs.includes('LicenseRef-Anthropic-Commercial'));
+  assert.ok(policy.restrictedLicenseRefs.includes('LicenseRef-Anthropic-Agent-SDK-Terms'));
+  assert.ok(policy.restrictedLicenseRefs.includes(
+    'LicenseRef-Anthropic-Claude-Code-Legal-Agreements',
+  ));
   assert.ok(policy.restrictedLicenseRefs.includes('LicenseRef-Microsoft-Visual-Cpp-Runtime'));
   assert.ok(policy.restrictedLicenseRefs.includes('LicenseRef-Node-ICU-Bundle'));
   assert.ok(policy.restrictedLicenseRefs.includes('LicenseRef-Node-V8-Bundle'));
@@ -1405,14 +1408,24 @@ test('license policy explicitly forbids UNKNOWN', () => {
   assert.ok(policy.restrictedLicenseRefs.includes('LicenseRef-Tcl-Thread-3.0.4'));
   assert.ok(policy.restrictedLicenseRefs.includes('LicenseRef-Tix-8.4.3.6'));
   assert.deepEqual(policy.reviewedNonRestrictedLicenseRefs, ['LicenseRef-SQLite-Public-Domain']);
-  assert.deepEqual(policy.trustedApprovals, []);
-  assert.ok(policy.allowedLicenseRefs.includes('LicenseRef-Anthropic-Commercial'));
+  assert.equal(policy.trustedApprovals.length, 6);
+  assert.ok(policy.trustedApprovals.every(
+    (approval) => approval.approvalId === 'OWNER-APPROVED-2026-07-18',
+  ));
+  assert.ok(policy.allowedLicenseRefs.includes('LicenseRef-Anthropic-Agent-SDK-Terms'));
+  assert.ok(policy.allowedLicenseRefs.includes(
+    'LicenseRef-Anthropic-Claude-Code-Legal-Agreements',
+  ));
   assert.ok(policy.allowedLicenseRefs.includes('LicenseRef-Microsoft-Visual-Cpp-Runtime'));
   assert.ok(policy.allowedLicenseRefs.includes('LicenseRef-SQLite-Public-Domain'));
   assert.ok(policy.allowedSpdxLicenses.includes('MIT'));
   assert.equal(
     policy.classifications['npm:@anthropic-ai/claude-agent-sdk'],
-    'LicenseRef-Anthropic-Commercial',
+    'LicenseRef-Anthropic-Agent-SDK-Terms',
+  );
+  assert.equal(
+    policy.classifications['npm:@anthropic-ai/claude-agent-sdk-darwin-arm64'],
+    'LicenseRef-Anthropic-Claude-Code-Legal-Agreements',
   );
   assert.ok(Object.values(policy.classifications).every((license) => license !== 'UNKNOWN'));
 });

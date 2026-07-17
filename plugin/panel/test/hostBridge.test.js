@@ -156,6 +156,12 @@ test('buildMcpConfig matches the real shape - no --port args, no token', () => {
   assert.equal(JSON.stringify(c).includes('token'), false);
 });
 
+test('buildMcpConfig accepts the verified absolute stable launcher path', () => {
+  const launcher = '/Users/测试 User/.ae-mcp/bin/ae-mcp';
+  const config = buildMcpConfig(11488, true, launcher);
+  assert.equal(config.mcpServers.ae.command, launcher);
+});
+
 test('port persistence round-trip with fake storage', () => {
   const mem = new Map();
   const storage = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, v) };

@@ -112,6 +112,9 @@ jobs:
       - name: Run native AEGP RPC contract tests
         run: node --test native/ae-plugin/protocol/protocol.test.mjs
 
+      - name: Run macOS RuntimeManager POSIX contract tests
+        run: node --test plugin/panel/test/runtimeManager.test.js
+
       - name: Run Unix native AEGP client transport tests
         run: node --test plugin/host/native-aegp-client.test.js
 

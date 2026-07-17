@@ -532,12 +532,13 @@ export function createProcessBoundary({ deps, paths, platform }) {
       : completeSpawnEnv();
     const envKey = 'AE_MCP_' + id.toUpperCase().replace('-', '_') + '_CLI';
     const override = String(options.overridePath || environmentValue(env, envKey, windows) || '').trim();
+    const stableLauncherOnly = !windows && id === 'ae-mcp' && options.allowDevelopmentPath !== true;
     const attempts = [];
     let strongestFailure = 'NOT_FOUND';
     const groups = [
       { source: 'override', values: override ? [override] : [] },
       { source: 'runtime', values: runtimeCandidates(id) },
-      { source: 'path', values: pathCandidates(id, env) },
+      ...(stableLauncherOnly ? [] : [{ source: 'path', values: pathCandidates(id, env) }]),
     ];
     for (const group of groups) {
       for (const path of group.values) {
@@ -556,13 +557,13 @@ export function createProcessBoundary({ deps, paths, platform }) {
           : (strongestFailure === 'NOT_FOUND' || (strongestFailure === 'PROBE_FAILED' && result.failure === 'VERSION_TOO_OLD') ? result.failure : strongestFailure);
       }
     }
-    const shellCandidate = await loginShellCandidate(id, env, attempts);
+    const shellCandidate = stableLauncherOnly ? null : await loginShellCandidate(id, env, attempts);
     if (shellCandidate) {
       const result = await probe(shellCandidate, id, { ...options, env }, attempts);
       if (result.success) return result.success;
       strongestFailure = result.failure;
     }
-    for (const path of standardCandidates(id, env)) {
+    for (const path of stableLauncherOnly ? [] : standardCandidates(id, env)) {
       const rawCandidate = fileCandidate(path, 'standard', env, id !== 'node');
       if (!rawCandidate) continue;
       const materialized = await materializeScriptCandidate(rawCandidate, id, { ...options, env }, attempts);

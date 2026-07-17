@@ -174,6 +174,31 @@ test('lipo architecture verification uses the current input-first CLI grammar', 
   assert.doesNotMatch(script, /\['-verify_arch', 'arm64', filePath\]/);
 });
 
+test('mac addon compilation always receives an explicit SDK root', () => {
+  const script = fs.readFileSync(
+    path.join(repoRoot, 'scripts/package/build-platform-helper.mjs'),
+    'utf8',
+  );
+  const start = script.indexOf('async function buildAddon');
+  const end = script.indexOf('async function verifyArm64', start);
+  const block = script.slice(start, end);
+  assert.match(block, /AE_MCP_MACOS_SDK/);
+  assert.match(block, /\['--show-sdk-path'\]/);
+  assert.match(block, /const sdkArgs = \['-isysroot', sdkPath\]/);
+  assert.ok(block.indexOf('const sdkArgs') < block.indexOf("'-c', path.join(sourceRoot, 'common.cpp')"));
+});
+
+test('mac launcher disables bytecode writes before starting the inventory-bound runtime', () => {
+  const script = fs.readFileSync(
+    path.join(repoRoot, 'scripts/package/build-platform-helper.mjs'),
+    'utf8',
+  );
+  assert.match(
+    script,
+    /python\/bin\/python3\" -B -I -m ae_mcp/,
+  );
+});
+
 test('locked archive digest is verified before tar sees attacker-controlled bytes', () => {
   const script = fs.readFileSync(
     path.join(repoRoot, 'scripts/package/build-platform-helper.mjs'),

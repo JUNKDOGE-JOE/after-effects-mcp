@@ -15,6 +15,14 @@ import {
   rewriteStageManifests,
 } from './helpers/platform-bundle-fixture.mjs';
 
+function universalMachOBytes(cpuTypes) {
+  const bytes = Buffer.alloc(8 + (cpuTypes.length * 20));
+  bytes.writeUInt32BE(0xcafebabe, 0);
+  bytes.writeUInt32BE(cpuTypes.length, 4);
+  cpuTypes.forEach((cpu, index) => bytes.writeUInt32BE(cpu, 8 + (index * 20)));
+  return bytes;
+}
+
 test('verification accepts an untouched platform bundle without network access', async (t) => {
   const h = await makeStageHarness(t, 'macos-arm64');
   await stagePlatformBundle(h.input);
@@ -210,6 +218,35 @@ test('verification detects the staged AEGP executable architecture from bytes', 
   h.verifyInput.dependencies.verifyMacPlugin = async () => (
     structuredClone(JSON.parse(await fs.promises.readFile(receiptPath, 'utf8')).artifact)
   );
+  await assert.rejects(
+    verifyPlatformBundle(h.verifyInput),
+    { code: 'BUNDLE_ARCH_MISMATCH' },
+  );
+});
+
+test('verification accepts universal Mach-O dependencies only when they include arm64', async (t) => {
+  const h = await makeStageHarness(t, 'macos-arm64');
+  await stagePlatformBundle(h.input);
+  const nativeDependency = path.join(
+    h.outDir,
+    'runtime',
+    'macos-arm64',
+    'python',
+    'lib',
+    'python3.13',
+    'site-packages',
+    'fixture.abi3.so',
+  );
+  await fs.promises.mkdir(path.dirname(nativeDependency), { recursive: true });
+  await fs.promises.writeFile(
+    nativeDependency,
+    universalMachOBytes([0x0100000c, 0x01000007]),
+  );
+  await rewriteStageManifests(h);
+  await verifyPlatformBundle(h.verifyInput);
+
+  await fs.promises.writeFile(nativeDependency, universalMachOBytes([0x01000007, 0x00000012]));
+  await rewriteStageManifests(h);
   await assert.rejects(
     verifyPlatformBundle(h.verifyInput),
     { code: 'BUNDLE_ARCH_MISMATCH' },
@@ -651,6 +688,26 @@ test('verification rejects foreign platform payload after manifests are made sel
     verifyPlatformBundle(h.verifyInput),
     { code: 'BUNDLE_FOREIGN_PLATFORM' },
   );
+});
+
+test('verification permits cross-platform pure Python standard-library modules', async (t) => {
+  const h = await makeStageHarness(t, 'macos-arm64');
+  await stagePlatformBundle(h.input);
+  const standardLibraryModule = path.join(
+    h.outDir,
+    'runtime',
+    'macos-arm64',
+    'python',
+    'lib',
+    'python3.13',
+    'multiprocessing',
+    'popen_spawn_win32.py',
+  );
+  await fs.promises.mkdir(path.dirname(standardLibraryModule), { recursive: true });
+  await fs.promises.writeFile(standardLibraryModule, 'raise ImportError("Windows only")\n');
+  await rewriteStageManifests(h);
+
+  await verifyPlatformBundle(h.verifyInput);
 });
 
 test('verification rejects helper architecture drift after helper and bundle hashes are refreshed', async (t) => {

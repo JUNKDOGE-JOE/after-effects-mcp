@@ -29,7 +29,7 @@ Embedded panel chat or external MCP client
 
 `ae_previewFrame` renders real comp pixels through `CompItem.saveFrameToPng`, with viewer snapshot only as a fallback. `packages/snapshot-mss` provides the cross-platform `mss` screenshot backend for `ae_snapshot` screen capture.
 
-The MCP core is backend-agnostic: external clients can talk to AE through the stdio server, while the CEP panel can also host built-in agent chat. The existing panel layer handles backend setup, approvals, diagnostics, and activity history. The final v0.9.2 contract additionally requires first-run bundled-runtime verification, but that RuntimeManager behavior remains gated and is not claimed as delivered. Claude, Codex, and ZCode are built-in panel backends; OpenCode and other tools can still connect as external MCP clients.
+The MCP core is backend-agnostic: external clients can talk to AE through the stdio server, while the CEP panel can also host built-in agent chat. The existing panel layer handles backend setup, approvals, diagnostics, and activity history. The published v0.9.2 Windows asset predates bundled-runtime activation; current v0.9.3 macOS development includes a panel RuntimeManager that verifies, installs, atomically activates, repairs, rolls back, and uninstalls the packaged runtime without using an online package manager. Claude, Codex, and ZCode are built-in panel backends; OpenCode and other tools can still connect as external MCP clients.
 
 ## v0.9.2 Release Candidate Scope
 
@@ -69,7 +69,7 @@ Claude Code CLI is separate from Claude Desktop. Claude Desktop MCP configuratio
 - Activity stream for agent operations.
 - Local Tools library for generated JSX, expressions, prompt skills, recipes, and diagnostics. Index/search responses stay summary-only; full content appears only after Inspect.
 - Kill switch to stop all AI operations immediately.
-- Current diagnostics cover host status, access token, Python client signal, AE project state, ExtendScript ping, and optional channel CLIs. Installed-runtime diagnostics belong to the gated RuntimeManager contract.
+- Current diagnostics cover host status, access token, Python client signal, AE project state, ExtendScript ping, optional channel CLIs, and verified RuntimeManager state on macOS development builds.
 - Log export for issue reports and debugging.
 - AE expert guidance injection. This optional setting adds AE command and data-structure guidance to reduce scripting mistakes at the cost of extra prompt tokens.
 
@@ -84,7 +84,7 @@ Claude Code CLI is separate from Claude Desktop. Claude Desktop MCP configuratio
 
 ## External MCP Clients
 
-The final v0.9.2 panel-generated MCP config for external clients has this shape:
+The v0.9.3 macOS panel-generated MCP config for external clients has this shape:
 
 ```json
 {
@@ -100,7 +100,7 @@ The final v0.9.2 panel-generated MCP config for external clients has this shape:
 }
 ```
 
-This is the final stable-launcher contract. Replace `<USER>` with the actual macOS account name; the final Panel generator must emit that expanded absolute path. On Windows, use the expanded absolute path for `%USERPROFILE%\.ae-mcp\bin\ae-mcp.exe`. The approved RuntimeManager implementation must replace the current Panel generator's bare PATH `ae-mcp`; the fail-closed native/product-acceptance build guard prevents publishing v0.9.2 while that mismatch remains.
+This is the stable-launcher contract. On macOS the Panel now emits the expanded absolute launcher path and never resolves `ae-mcp` from bare PATH; the RuntimeManager verifies and activates the packaged runtime before the launcher is used. Windows v0.9.2 behavior remains unchanged in this implementation. See [RuntimeManager](docs/RUNTIME_MANAGER.md).
 
 External clients must run on the same machine as After Effects, or otherwise be able to reach `127.0.0.1:11488` on the AE machine. This matters for long-running or Dockerized IM-bot frameworks such as OpenClaw and AstrBot.
 

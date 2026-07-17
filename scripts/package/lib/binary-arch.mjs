@@ -5,6 +5,24 @@ const MACHO_X64_CPU = 0x01000007;
 const PE_AMD64_MACHINE = 0x8664;
 const PE_ARM64_MACHINE = 0xaa64;
 
+function detectUniversalMachO(bytes, magicBig) {
+  const is64 = magicBig === 0xcafebabf || magicBig === 0xbfbafeca;
+  const littleEndian = magicBig === 0xbebafeca || magicBig === 0xbfbafeca;
+  const read32 = littleEndian
+    ? (offset) => bytes.readUInt32LE(offset)
+    : (offset) => bytes.readUInt32BE(offset);
+  if (bytes.length < 8) return 'macho-universal';
+  const count = read32(4);
+  const entrySize = is64 ? 32 : 20;
+  if (count > Math.floor((bytes.length - 8) / entrySize)) return 'macho-universal';
+  for (let index = 0; index < count; index += 1) {
+    if (read32(8 + (index * entrySize)) === MACHO_ARM64_CPU) {
+      return 'macho-universal-arm64';
+    }
+  }
+  return 'macho-universal';
+}
+
 export function architectureError(code, message) {
   const error = new Error(message);
   error.code = code;
@@ -27,9 +45,8 @@ export function detectBinaryArchitecture(bytes) {
     if (cpu === MACHO_X64_CPU) return 'macho-x64';
     return 'macho-unknown';
   }
-  if ([0xcafebabe, 0xcafebabf].includes(magicBig)
-      || [0xbebafeca, 0xbfbafeca].includes(magicLittle)) {
-    return 'macho-universal';
+  if ([0xcafebabe, 0xcafebabf, 0xbebafeca, 0xbfbafeca].includes(magicBig)) {
+    return detectUniversalMachO(bytes, magicBig);
   }
   if (bytes[0] !== 0x4d || bytes[1] !== 0x5a || bytes.length < 0x40) return null;
   const peOffset = bytes.readUInt32LE(0x3c);

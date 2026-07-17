@@ -31,11 +31,11 @@ export function savePort(storage, port) {
   }
 }
 
-export function buildMcpConfig(port, expertGuidance = true) {
+export function buildMcpConfig(port, expertGuidance = true, command = 'ae-mcp') {
   return {
     mcpServers: {
       ae: {
-        command: 'ae-mcp',
+        command,
         env: Object.assign(
           { AE_MCP_BACKEND: 'ae-mcp' },
           expertGuidanceEnv(expertGuidance !== false),

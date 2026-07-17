@@ -141,6 +141,8 @@ export function WizardScreen({
   onClient,
   clientName = 'Claude Desktop',
   mcpConfig = '',
+  mcpCommand = 'ae-mcp',
+  mcpReady = true,
   port = 11488,
   expertGuidance = true,
   onNext,
@@ -153,6 +155,7 @@ export function WizardScreen({
   onInstall,
   onOpenLogin,
   commandPreviews = {},
+  localSteps = LOCAL_STEPS,
   channels = { claude: [], codex: [], zcode: [] },
   activeChannel = '',
 }) {
@@ -161,8 +164,8 @@ export function WizardScreen({
   const selectedExternalClient = EXTERNAL_CLIENTS.find((item) => item.id === client);
   // Prefer the per-client config (so ZCode shows its mcp.servers format, etc.);
   // fall back to the generic connection config passed from App.
-  const selectedMcpConfig = selectedExternalClient && selectedExternalClient.kind === 'mcp-stdio'
-    ? JSON.stringify(mcpConfigFor(selectedExternalClient, port, expertGuidance), null, 2)
+  const selectedMcpConfig = mcpReady && selectedExternalClient && selectedExternalClient.kind === 'mcp-stdio'
+    ? JSON.stringify(mcpConfigFor(selectedExternalClient, port, expertGuidance, mcpCommand), null, 2)
     : '';
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 'var(--space-6) var(--space-5) var(--space-5)' }}>
@@ -197,7 +200,7 @@ export function WizardScreen({
             <div style={{ font: '600 20px/1.35 var(--font-ui)', color: 'var(--text-primary)' }}>{t.t2}</div>
             <div style={{ font: '400 12px/1.55 var(--font-ui)', color: 'var(--text-secondary)' }}>{t.b2}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {LOCAL_STEPS.map((id) => (
+              {localSteps.map((id) => (
                 <InstallStepRow
                   key={id}
                   label={STEP_LABELS[id]}
@@ -227,7 +230,7 @@ export function WizardScreen({
                 />
               ))}
             </div>
-            {selectedExternalClient && selectedExternalClient.kind === 'mcp-stdio' ? <CodeBlock code={selectedMcpConfig} copyLabel={t.copy} onCopy={() => (onCopy ? onCopy(selectedMcpConfig) : copyText(selectedMcpConfig))} maxHeight={150} /> : null}
+            {selectedExternalClient && selectedExternalClient.kind === 'mcp-stdio' && selectedMcpConfig ? <CodeBlock code={selectedMcpConfig} copyLabel={t.copy} onCopy={() => (onCopy ? onCopy(selectedMcpConfig) : copyText(selectedMcpConfig))} maxHeight={150} /> : null}
             {selectedExternalClient && selectedExternalClient.kind === 'mcp-doc' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--bg-panel)' }}>
                 <a href={selectedExternalClient.docsUrl} target="_blank" rel="noreferrer" style={{ font: '500 12px/1.35 var(--font-ui)', color: 'var(--accent)' }}>{t.docClient}</a>

@@ -8,7 +8,7 @@ import {
   openLoginTerminal,
   runAction,
 } from '../cep/wizardActions.js';
-import { initialStepStates, stepReducer } from '../lib/wizardSteps.js';
+import { initialStepStates, LOCAL_STEPS, SUBSCRIPTION_STEPS, stepReducer } from '../lib/wizardSteps.js';
 
 // App's claudeStatus shape is { state: 'checking'|'ready'|'not-logged-in'|'no-node',
 // nodeVersion?, detail? } — see SettingsScreen's claudeState handling.
@@ -35,7 +35,7 @@ function wingetMissing(output) {
 // App.jsx接线（orchestrator合并时加）：
 //   const wizard = useWizardWiring({ extRoot, lang }); // 内部 useReducer(stepReducer)
 //   <WizardScreen {...现有props} {...wizard.props} />
-export function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin } = {}) {
+export function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin, platform, runtimeManager, onRuntimeReady } = {}) {
   const [stepStates, dispatch] = React.useReducer(stepReducer, null, initialStepStates);
   const [useUvFallback, setUseUvFallback] = React.useState(false);
 
@@ -50,7 +50,13 @@ export function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin } = 
   const cmds = React.useMemo(() => buildInstallCommands({
     panelVersion: PANEL_VERSION,
     repoRoot,
-  }), [repoRoot]);
+    platform,
+  }), [platform, repoRoot]);
+
+  const localSteps = React.useMemo(
+    () => (platform?.id === 'macos-arm64' && runtimeManager ? ['aeMcp'] : LOCAL_STEPS),
+    [platform, runtimeManager],
+  );
 
   const activeCmds = React.useMemo(() => ({
     ...cmds,
@@ -59,11 +65,15 @@ export function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin } = 
 
   const commandPreviews = React.useMemo(() => ({
     uv: commandPreview(activeCmds.uv),
-    aeMcp: commandPreview(activeCmds.aeMcp),
-    node: commandPreview(activeCmds.node),
+    aeMcp: platform?.id === 'macos-arm64' && runtimeManager
+      ? (lang === 'zh' ? '验证并激活插件内置离线运行时' : 'Verify and activate the bundled offline runtime')
+      : commandPreview(activeCmds.aeMcp),
+    node: platform?.id === 'macos-arm64' && runtimeManager
+      ? (lang === 'zh' ? '修复插件内置离线 Node 运行时' : 'Repair the bundled offline Node runtime')
+      : commandPreview(activeCmds.node),
     claude: commandPreview(activeCmds.claude),
     login: 'claude',
-  }), [activeCmds]);
+  }), [activeCmds, lang, platform, runtimeManager]);
 
   const detect = React.useCallback(async (id) => {
     dispatch({ type: 'detect-start', id });
@@ -78,12 +88,28 @@ export function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin } = 
       dispatch({ type: 'detect-result', id, ok, version: ok ? versionFrom(claudeStatus) : '' });
       return { ok, version: versionFrom(claudeStatus) };
     }
-    const result = await detectTool(id);
+    const result = await detectTool(id, { platform, extRoot, runtimeManager });
+    if (result.ok && result.runtime && onRuntimeReady) onRuntimeReady(result.runtime);
     dispatch({ type: 'detect-result', id, ok: result.ok, version: result.version || '' });
     return result;
-  }, [claudeStatus, recheckLogin]);
+  }, [claudeStatus, extRoot, onRuntimeReady, platform, recheckLogin, runtimeManager]);
 
   const install = React.useCallback(async (id) => {
+    if (['aeMcp', 'node'].includes(id) && platform?.id === 'macos-arm64' && runtimeManager) {
+      dispatch({ type: 'run-start', id });
+      try {
+        const repaired = await runtimeManager.repair();
+        if (onRuntimeReady) onRuntimeReady(repaired);
+        const output = `Offline runtime ${repaired.version} activated at ${repaired.launcher}`;
+        dispatch({ type: 'run-done', id, ok: true, output });
+        await detect(id);
+        return { ok: true, output };
+      } catch (error) {
+        const output = `${error?.code || 'RUNTIME_MANAGER_FAILED'}: ${error?.message || error}`;
+        dispatch({ type: 'run-done', id, ok: false, output });
+        return { ok: false, output };
+      }
+    }
     const cmd = activeCmds[id];
     if (!cmd) return { ok: false, output: 'No command configured for ' + id };
     if (id === 'uv' && useUvFallback) {
@@ -112,7 +138,7 @@ export function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin } = 
     dispatch({ type: 'run-done', id, ok: result.ok, output: result.output });
     await detect(id);
     return result;
-  }, [activeCmds, detect, lang, useUvFallback]);
+  }, [activeCmds, detect, lang, onRuntimeReady, platform, runtimeManager, useUvFallback]);
 
   const openLogin = React.useCallback(() => {
     openLoginTerminal({ tool: 'claude' });
@@ -125,8 +151,8 @@ export function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin } = 
   React.useEffect(() => {
     if (bootDetectRef.current) return;
     bootDetectRef.current = true;
-    ['uv', 'aeMcp', 'node', 'claude'].forEach((id) => { detect(id); });
-  }, [detect]);
+    [...localSteps, ...SUBSCRIPTION_STEPS].forEach((id) => { detect(id); });
+  }, [detect, localSteps]);
 
   React.useEffect(() => {
     if (!claudeStatus) return;
@@ -143,6 +169,7 @@ export function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin } = 
     props: {
       stepStates,
       commandPreviews,
+      localSteps,
       onDetect: detect,
       onInstall: install,
       onOpenLogin: openLogin,

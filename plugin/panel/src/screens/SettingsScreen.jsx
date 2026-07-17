@@ -219,7 +219,7 @@ function ClientRow({ name, lastActive, blocked, onBlock, blockLabel }) {
   );
 }
 
-function ExternalClientRow({ client, t, configText, copied, onCopy }) {
+function ExternalClientRow({ client, t, configText, copied, onCopy, copyDisabled = false }) {
   const isStdio = client.kind === 'mcp-stdio';
   return (
     <details style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-well)', padding: '7px 8px' }}>
@@ -228,7 +228,7 @@ function ExternalClientRow({ client, t, configText, copied, onCopy }) {
           <span style={{ display: 'block', font: '500 12px/1.35 var(--font-ui)', color: 'var(--text-primary)' }}>{client.name}</span>
           <span style={{ display: 'block', font: '400 10px/1.35 var(--font-ui)', color: 'var(--text-tertiary)' }}>{isStdio ? t.mcpStdio : t.mcpDoc}</span>
         </span>
-        {isStdio ? <Button variant="secondary" size="sm" icon="copy" onClick={(e) => { e.preventDefault(); onCopy(); }}>{copied ? t.copied : t.copy}</Button> : null}
+        {isStdio ? <Button variant="secondary" size="sm" icon="copy" disabled={copyDisabled} onClick={(e) => { e.preventDefault(); if (!copyDisabled) onCopy(); }}>{copied && !copyDisabled ? t.copied : t.copy}</Button> : null}
       </summary>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
         {client.installHint ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-secondary)' }}>{client.installHint}</div> : null}
@@ -283,6 +283,8 @@ export function SettingsScreen({
   port = 11488,
   onApplyPort,
   mcpConfig,
+  mcpCommand = 'ae-mcp',
+  mcpReady = true,
   logs = [],
   clients = [],
   onBlockClient,
@@ -469,14 +471,19 @@ export function SettingsScreen({
         <Field label={t.mcp} caption={copied === 'mcp' ? t.copied : null}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <pre style={{ margin: 0, maxHeight: 160, overflow: 'auto', padding: 8, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--bg-well)', color: 'var(--text-secondary)', font: '400 10px/1.4 var(--font-mono)' }}>{mcpConfig}</pre>
-            <Button variant="secondary" icon="copy" onClick={() => copy('mcp', mcpConfig)}>{t.copy}</Button>
+            <Button variant="secondary" icon="copy" disabled={!mcpReady} onClick={() => copy('mcp', mcpConfig)}>{t.copy}</Button>
           </div>
         </Field>
       </Section>
 
       <Section id="externalClients" title={t.externalClients} caption={t.externalClientsCap} expanded={sections.externalClients} onToggle={onToggleSection}>
         {EXTERNAL_CLIENTS.map((externalClient) => {
-          const configText = JSON.stringify(mcpConfigFor(externalClient, Number(draftPort) || port || 11488, expertGuidance), null, 2);
+          const configText = mcpReady ? JSON.stringify(mcpConfigFor(
+            externalClient,
+            Number(draftPort) || port || 11488,
+            expertGuidance,
+            mcpCommand,
+          ), null, 2) : '';
           return (
             <ExternalClientRow
               key={externalClient.id}
@@ -484,6 +491,7 @@ export function SettingsScreen({
               t={t}
               configText={configText}
               copied={copied === externalClient.id}
+              copyDisabled={!mcpReady}
               onCopy={() => copy(externalClient.id, configText)}
             />
           );

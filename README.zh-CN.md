@@ -29,7 +29,7 @@ v0.9.2 已发布资产面向以下已验证范围：
 
 `ae_previewFrame` 通过 `CompItem.saveFrameToPng` 渲染真实合成像素，viewer snapshot 只作为 fallback。`packages/snapshot-mss` 提供跨平台 `mss` 截图后端，用于 `ae_snapshot` 屏幕捕获。
 
-MCP core 本身保持后端无关：外部客户端可以通过 stdio server 与 AE 对话，CEP 面板也可以在 AE 内承载内嵌 agent 对话。现有面板层负责后端配置、审批、诊断和活动历史。v0.9.2 最终契约还要求首跑包内 runtime 校验，但 RuntimeManager 行为仍受门禁，本文不声称它已经交付。Claude、Codex、ZCode 是面板内置后端；OpenCode 和其他工具仍可以作为外部 MCP 客户端接入。
+MCP core 本身保持后端无关：外部客户端可以通过 stdio server 与 AE 对话，CEP 面板也可以在 AE 内承载内嵌 agent 对话。现有面板层负责后端配置、审批、诊断和活动历史。已发布的 v0.9.2 Windows 资产早于包内 runtime 激活能力；当前 v0.9.3 macOS 开发版本已经实现 Panel RuntimeManager，可在不调用在线包管理器的情况下校验、安装、原子激活、修复、回滚和卸载包内 runtime。Claude、Codex、ZCode 是面板内置后端；OpenCode 和其他工具仍可以作为外部 MCP 客户端接入。
 
 ## v0.9.2 候选范围
 
@@ -92,7 +92,7 @@ Tools 标签页管理本地生成的 JSX、表达式、提示词 skill、recipe 
 - Kill switch 可以一键熔断所有 AI 操作，发现方向不对时可以立刻停手。
 - 撤销仍走 AE 自己的 Undo 体系。插件会尽量把操作封装进 undo group，通常可以直接在 AE 里 `Ctrl+Z`。
 - 对风险较高的大改，建议使用 `ae_checkpoint` 或在 `ae_exec` 中传入 `checkpoint_label`，后续可通过 `ae_revert` 回到检查点。检查点功能需要 AE 工程先保存到磁盘。
-- 当前诊断页检查 host、访问 token、Python 客户端信号、AE project、ExtendScript ping 与可选通道 CLI；已安装 runtime 诊断属于受门禁的 RuntimeManager 契约。
+- 当前诊断页检查 host、访问 token、Python 客户端信号、AE project、ExtendScript ping、可选通道 CLI，以及 macOS 开发版本中经过校验的 RuntimeManager 状态。
 - 日志导出可以把面板日志、host 信息和 sidecar tail 汇总出来，方便提交 issue 时定位问题。
 
 ## 设置项
@@ -119,7 +119,7 @@ Tools 标签页管理本地生成的 JSX、表达式、提示词 skill、recipe 
 
 面板内对话覆盖 Claude、Codex、ZCode 三类后端。如果你使用 Cursor、Claude Desktop、Claude Code、OpenCode、OpenClaw、AstrBot、Gemini Antigravity、ZCode 等外部客户端，可以通过面板生成的 MCP config 接入。
 
-v0.9.2 最终 Panel 生成的最小配置形态如下：
+v0.9.3 macOS Panel 生成的最小配置形态如下：
 
 ```json
 {
@@ -135,7 +135,7 @@ v0.9.2 最终 Panel 生成的最小配置形态如下：
 }
 ```
 
-这是最终稳定 launcher 契约。请把 `<USER>` 替换为实际 macOS 账户名；最终 Panel 生成器必须输出展开后的绝对路径。Windows 必须使用 `%USERPROFILE%\.ae-mcp\bin\ae-mcp.exe` 展开后的绝对路径。RuntimeManager 获批实施后必须把当前 Panel 生成器的裸 PATH `ae-mcp` 改为平台绝对路径；fail-closed 原生/产品验收 build guard 会在该差异存在时阻止发布 v0.9.2。
+这是稳定 launcher 契约。macOS Panel 现在会输出展开后的绝对 launcher 路径，且不会再从裸 PATH 解析 `ae-mcp`；RuntimeManager 会在使用 launcher 前校验并激活包内 runtime。本项实现保持 Windows v0.9.2 行为不变。详见 [RuntimeManager](docs/RUNTIME_MANAGER.md)。
 
 关键限制：ae-mcp 默认通过 `127.0.0.1:11488` 连到 AE 面板，所以外部客户端必须和 After Effects 在同一台机器上，或者能访问 AE 所在机器的这个端口。OpenClaw、AstrBot 这类常驻或 Docker 化的 IM-bot 框架尤其要注意。
 

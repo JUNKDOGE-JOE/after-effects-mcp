@@ -743,6 +743,7 @@ test('portable runtime pruning removes bundled package managers but keeps runtim
   const { pruneBundledRuntimeTools } = await import('../build-portable-runtime.mjs');
   const runtimeRoot = await makeTempDir(t);
   const removed = [
+    'node/include/node/openssl/archs/VC-WIN32/asm/crypto/buildinf.h',
     'node/lib/node_modules/npm/index.js',
     'node/lib/node_modules/corepack/index.js',
     'node/bin/npm',
@@ -755,6 +756,10 @@ test('portable runtime pruning removes bundled package managers but keeps runtim
     'python/lib/python3.13/site-packages/pip-26.1.2.dist-info/METADATA',
     'python/lib/python3.13/site-packages/setuptools/__init__.py',
     'python/lib/python3.13/site-packages/setuptools-80.0.0.dist-info/METADATA',
+    'node/host/node_modules/fixture/tests/case.js',
+    'node/sidecar/node_modules/fixture/test/case.js',
+    'node/sidecar/node_modules/fixture/example.test.mjs',
+    'python/lib/python3.13/site-packages/runtime_dependency/__pycache__/module.pyc',
   ];
   for (const relative of removed) {
     const destination = path.join(runtimeRoot, relative);
@@ -772,11 +777,30 @@ test('portable runtime pruning removes bundled package managers but keeps runtim
     await fs.promises.mkdir(path.dirname(destination), { recursive: true });
     await fs.promises.writeFile(destination, 'keep');
   }
+  const record = path.join(
+    runtimeRoot,
+    'python/lib/python3.13/site-packages/runtime_dependency-1.0.0.dist-info/RECORD',
+  );
+  await fs.promises.mkdir(path.dirname(record), { recursive: true });
+  await fs.promises.writeFile(record, [
+    'runtime_dependency/__init__.py,,',
+    'runtime_dependency/__pycache__/module.pyc,,',
+    'runtime_dependency-1.0.0.dist-info/RECORD,,',
+    '',
+  ].join('\n'));
 
   await pruneBundledRuntimeTools({ runtimeRoot, platform: 'macos-arm64' });
 
   for (const relative of removed) assert.equal(fs.existsSync(path.join(runtimeRoot, relative)), false);
   for (const relative of retained) assert.equal(fs.existsSync(path.join(runtimeRoot, relative)), true);
+  assert.equal(
+    await fs.promises.readFile(record, 'utf8'),
+    [
+      'runtime_dependency/__init__.py,,',
+      'runtime_dependency-1.0.0.dist-info/RECORD,,',
+      '',
+    ].join('\n'),
+  );
 });
 
 test('portable builder copies a locked Node license notice into the runtime payload', async (t) => {

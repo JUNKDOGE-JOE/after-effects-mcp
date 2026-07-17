@@ -337,9 +337,12 @@ async function buildAddon({ repoRoot, scratchRoot, includeDir, environment, outp
   const macObject = path.join(scratchRoot, 'addon_macos.o');
   const { stdout } = await run('/usr/bin/xcrun', ['--find', 'clang++']);
   const compiler = stdout.trim();
-  const sdkArgs = environment.AE_MCP_MACOS_SDK
-    ? ['-isysroot', environment.AE_MCP_MACOS_SDK]
-    : [];
+  const sdkPath = environment.AE_MCP_MACOS_SDK
+    ?? (await run('/usr/bin/xcrun', ['--show-sdk-path'])).stdout.trim();
+  if (!path.isAbsolute(sdkPath)) {
+    throw helperError('HELPER_MACOS_SDK_INVALID', 'macOS SDK path must be absolute');
+  }
+  const sdkArgs = ['-isysroot', sdkPath];
   const compile = [
     '-std=c++20',
     '-target', 'arm64-apple-macos14.0',
@@ -465,7 +468,7 @@ export async function buildPlatformHelper({
       'case "$relative" in',
       '  ""|/*|*..*) exit 78 ;;',
       'esac',
-      'exec "$base/runtime/$relative/python/bin/python3" -I -m ae_mcp "$@"',
+      'exec "$base/runtime/$relative/python/bin/python3" -B -I -m ae_mcp "$@"',
       '',
     ].join('\n'), { mode: 0o755, flag: 'wx' });
     await fs.promises.chmod(launcherPath, 0o755);
