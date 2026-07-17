@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 
 import mcp.types as types
 import pytest
 from mcp.shared.memory import create_connected_server_and_client_session
+from pydantic import ValidationError
 
 from ae_mcp.handlers import HANDLERS, load_all
 from ae_mcp.server import (
@@ -155,6 +157,116 @@ async def test_list_tools_descriptions_lead_with_exposed_name(_full_tool_listing
         assert not tool.description.startswith("ae."), (
             f"{tool.name!r} description still leads with a dotted verb"
         )
+
+
+async def test_tool_use_reference_tracks_public_schema_and_action_requirements(
+    _full_tool_listing,
+):
+    tools = await _full_tool_listing._ae_list_tools()
+    by_name = {tool.name: tool for tool in tools}
+    public_schema = by_name["ae_toolUse"].inputSchema
+
+    required = {
+        "render": {"action", "artifact_id"},
+        "prepare": {"action", "artifact_id", "operation"},
+        "grant": {"action", "plan_hash", "grant_scope"},
+        "execute": {"action", "plan_hash", "grant_id", "operation_id"},
+        "start": {"action", "plan_hash", "grant_id", "operation_id"},
+        "status": {"action", "execution_id"},
+        "cancel": {"action", "execution_id"},
+        "history": {"action", "artifact_id"},
+    }
+    optional = {
+        "render": {"args", "operation"},
+        "prepare": {"args", "target"},
+        "grant": set(),
+        "execute": set(),
+        "start": set(),
+        "status": set(),
+        "cancel": set(),
+        "history": {"limit"},
+    }
+    assert set(public_schema["properties"]["action"]["enum"]) == set(required)
+
+    reference = (
+        Path(__file__).resolve().parents[3] / "docs" / "REFERENCE.md"
+    ).read_text("utf-8")
+    quick_reference_row = (
+        "| `ae.toolUse` | staged action fields | "
+        "render/prepare/grant/execute/start/status/cancel/history |"
+    )
+    assert reference.count(quick_reference_row) == 2
+    for disposition in (
+        "cancelled-before-dispatch",
+        "not-cancellable-after-dispatch",
+        "owned-by-another-core",
+        "already-terminal",
+    ):
+        assert reference.count(f"`{disposition}`") == 2
+    bilingual_recovery_contract = (
+        "仅在 execution record 或 reservation 仍被保留时成立",
+        "only while the execution record or reservation is retained",
+        "若当前 Core 尚未观察该 reservation",
+        "Before this Core has observed any shared reservation",
+        "跨 Core 缓存可能仍停留在旧 reservation",
+        "cross-Core caches can still hold an older reservation",
+        "Inspect 返回包含完整 `content`",
+        "receives the artifact's full `content` from Inspect",
+        "非终态 `reservations`（`queued`/`running`）",
+        "nonterminal `reservations` (`queued`/`running`)",
+    )
+    for contract in bilingual_recovery_contract:
+        assert reference.count(contract) == 1
+    rows: dict[str, list[tuple[str, str]]] = {}
+    for line in reference.splitlines():
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) != 4 or not cells[0].startswith("`"):
+            continue
+        action = cells[0].strip("`")
+        if action in required:
+            rows.setdefault(action, []).append((cells[1], cells[2]))
+
+    assert set(rows) == set(required)
+    field_names = set().union(*required.values(), *optional.values())
+    for action in required:
+        assert len(rows[action]) == 2, f"expected Chinese and English rows for {action}"
+        for required_cell, optional_cell in rows[action]:
+            documented_required = set(re.findall(r"`([a-z_]+)`", required_cell))
+            documented_optional = set(re.findall(r"`([a-z_]+)`", optional_cell))
+            assert documented_required & field_names == required[action]
+            assert documented_optional & field_names == optional[action]
+
+    valid = {
+        "render": {"action": "render", "artifact_id": "user:1"},
+        "prepare": {
+            "action": "prepare", "artifact_id": "user:1", "operation": "execute",
+        },
+        "grant": {"action": "grant", "plan_hash": "p", "grant_scope": "once"},
+        "execute": {
+            "action": "execute", "plan_hash": "p", "grant_id": "g",
+            "operation_id": "operation-doc-execute",
+        },
+        "start": {
+            "action": "start", "plan_hash": "p", "grant_id": "g",
+            "operation_id": "operation-doc-start",
+        },
+        "status": {"action": "status", "execution_id": "execution-doc"},
+        "cancel": {"action": "cancel", "execution_id": "execution-doc"},
+        "history": {"action": "history", "artifact_id": "user:1"},
+    }
+    schema_cls, _ = HANDLERS["ae.toolUse"]
+    for action, payload in valid.items():
+        schema_cls(**payload)
+        for field in required[action]:
+            missing = dict(payload)
+            missing.pop(field)
+            with pytest.raises(ValidationError):
+                schema_cls(**missing)
+
+    for name in ("ae_toolIndex", "ae_toolSearch", "ae_toolInspect", "ae_toolUse"):
+        encoded = json.dumps(by_name[name].inputSchema, sort_keys=True)
+        assert "developer_mode" not in encoded
+        assert "system-command" not in encoded
 
 
 async def test_call_tool_dispatches_to_canonical_verb(monkeypatch):

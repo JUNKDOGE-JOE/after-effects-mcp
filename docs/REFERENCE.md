@@ -110,7 +110,7 @@ MCP client
 | `ae.toolIndex` | `kinds?`, `statuses?`, `source_types?`, `include_candidates?`, `limit?` | 只列制品摘要 |
 | `ae.toolSearch` | `query`, `kinds?`, `categories?`, `tags?`, `risks?`, `statuses?`, `source_types?`, `offset?`, `limit?` | 搜索摘要；不返回 content |
 | `ae.toolInspect` | `artifact_id` | 首个返回完整 content 的调用 |
-| `ae.toolUse` | staged action fields | render 或 prepare/grant/execute |
+| `ae.toolUse` | staged action fields | render/prepare/grant/execute/start/status/cancel/history |
 | `ae.toolCreate` | `name`, `kind`, `content` 及可选元数据字段 | 创建原生制品 |
 | `ae.toolEdit` | `artifact_id`, `changes`, `expected_revision`, `expected_content_hash`, `replace_artifact_id?` | 编辑或验证制品 |
 | `ae.toolDelete` | `artifact_id`, `expected_revision`, `expected_content_hash` | 永久删除用户制品 |
@@ -208,7 +208,7 @@ Skill 存储在 `~/.ae-mcp/skills/<name>.json`：
 | `ae.toolIndex` | `ae_toolIndex` | 无 | `kinds`, `statuses`, `source_types`, `include_candidates`, `limit` | `ok`, `artifacts[]`（`ToolSummary`，无 content） |
 | `ae.toolSearch` | `ae_toolSearch` | `query` | `kinds`, `categories`, `tags`, `risks`, `statuses`, `source_types`, `offset`, `limit` | `ok`, `artifacts[]`, `total`, `offset`, `limit`；无 content |
 | `ae.toolInspect` | `ae_toolInspect` | `artifact_id` | 无 | `ok`, 完整 `artifact`, `trust` |
-| `ae.toolUse` | `ae_toolUse` | `action` 及对应 action 字段 | 见下方 action 表 | render，或 plan/grant/execute 结果 |
+| `ae.toolUse` | `ae_toolUse` | `action` 及对应 action 字段 | 见下方 action 表 | render、plan/grant、execution job 或同步 execute 结果 |
 | `ae.toolCreate` | `ae_toolCreate` | `name`, `kind`, `content` | `description`, `category`, `tags`, `compatibility`, `declared_risk`, `status`, `args_schema`, `expected_store_revision` | `ok`, 完整新 `artifact` |
 | `ae.toolEdit` | `ae_toolEdit` | `artifact_id`, `changes`, `expected_revision`, `expected_content_hash` | `replace_artifact_id` | `ok`, 完整更新 `artifact` |
 | `ae.toolDelete` | `ae_toolDelete` | `artifact_id`, `expected_revision`, `expected_content_hash` | 无 | `ok`, `deleted` |
@@ -240,11 +240,23 @@ Edit 的 `changes` 只允许 `name`, `description`, `kind`, `category`, `tags`, 
 | `render` | `action`, `artifact_id` | `args`；`operation` 若传只能是 `render` | `ok`, `artifactId`, `contentHash`, `trust`，以及 `rendered` 或 `untrustedContext` |
 | `prepare` | `action`, `artifact_id`, `operation` | `args` 和 `target`（默认都为 `{}`） | 裸 plan object：`artifactId`, `contentHash`, `operation`, `normalizedArgs`, `target`, `dependencyHashes`, `planHash`, `risk`, `expiresAt`；不含 `ok` |
 | `grant` | `action`, `plan_hash`, `grant_scope` (`once`/`session`) | 无 | `ok`, `grantId`, `planHash`, `scope`, `expiresAt` |
-| `execute` | `action`, `plan_hash`, `grant_id` | 无 | 依 kind/operation 返回 `ok: true` 的 render/backend/handler 结果；recipe 返回 `results[]` |
+| `execute` | `action`, `plan_hash`, `grant_id`, `operation_id` | 无 | 同步等待终态；成功时返回依 kind/operation 而定的 `ok: true` render/backend/handler 结果，recipe 返回 `results[]`；失败包含 execution/recovery 证据 |
+| `start` | `action`, `plan_hash`, `grant_id`, `operation_id` | 无 | 立即返回 execution job；通常先为 `queued`，调用方用 `executionId` 查询 |
+| `status` | `action`, `execution_id` | 无 | 当前 execution job；终态可在 Core 重启后恢复 |
+| `cancel` | `action`, `execution_id` | 无 | 当前 execution job，加 `cancelDisposition` |
+| `history` | `action`, `artifact_id` | `limit`（1..100，默认 20） | `ok`, `artifactId`, `executions[]`，按最新优先排序 |
 
 grant 只能消费一次。execute 前会重新读取制品、args schema 与 recipe/handler 依赖，任一变化都会使旧 plan/grant 失效。
 
-完成后的 Tool Library execution job 会以最多 500 条的脱敏终态记录保存在 Tool Library 根目录的 `execution-history.json`。`status`/`history` 因此可在 Core 重启后恢复 `succeeded`、`failed`、`cancelled` 或 `outcome-unknown`；相同 `operation_id` 与相同 plan 返回原 execution，不会再次派发 backend，若 plan 不同则返回 `tool_operation_conflict`。该记录只用于执行恢复，与 artifact 的 `lastUsedAt` 和追加式 `audit.jsonl` 各自独立；它不保存 grant、批准秘密、panel capability token 或未脱敏参数。只有已经终止的 job 进入该文件，不能把尚未产生终态的进程中任务描述成已持久恢复。
+`execute` 和 `start` 都要求调用方生成稳定的 `operation_id`（16..128 字符）。同一 plan 丢失响应后，使用同一个 `operation_id` 再次 `start` 会返回原 `executionId`，不会重新派发 backend；该去重保证仅在 execution record 或 reservation 仍被保留时成立，终态记录超过保留上限被淘汰后不能再依赖旧 ID 去重。如果已经拿到 `executionId`，直接用 `status` 恢复。不得在状态与审计尚未核对时换一个新的 `operation_id` 重试。相同 `operation_id` 若绑定不同 plan，会返回 `tool_operation_conflict`。
+
+Execution job 的公共字段包括 `executionId`, `operationId`, `artifactId`, `contentHash`, `artifactRevision`, `planHash`, `operation`, `initiator`, `status`, `progress`, `terminal`, `cancelRequested`, `outcomeUnknown`, 时间字段，以及可空的 `result`, `error`, `audit`。`status` 为 `queued`, `running`, `succeeded`, `failed`, `cancelled`, `outcome-unknown` 之一。`error` 保留可用的 `sideEffect` 与 `recovery` 元数据；`outcomeUnknown=true` 时必须先检查 AE 状态和 audit，不能盲目重新执行。
+
+`cancel` 只保证报告结构化 disposition：本 Core 拥有的排队任务可返回 `cancelled-before-dispatch`，已派发的运行任务返回 `not-cancellable-after-dispatch`；共享 Tool Library 中由另一个 Core 拥有、且当前 Core 已经通过启动加载、`status`/`history` 或重复 `start` 观察到的排队或运行任务返回 `owned-by-another-core`。当前 Core 已经观察到终态时返回 `already-terminal`；跨 Core 缓存可能仍停留在旧 reservation，因此取消前先用 `status` 或 `history` 刷新。若当前 Core 尚未观察该 reservation，直接 `cancel` 可能返回 `tool_execution_not_found`；先调用 `status` 加载共享状态。它绝不把“请求取消”表述成 AE 已经停止。
+
+普通公开 MCP schema 没有 `developer_mode` 开关，公开 Tool Library kind 也不包含 `system-command`。持有私有 capability 的开发者面板可查看隔离的 system-command 元数据，并通过 Inspect 返回包含完整 `content` 的制品；其 direct-run capability 仍为不可用，`ae.toolUse` 仍拒绝执行，普通 agent 也无法发现该类制品。
+
+Tool Library 根目录的 `execution-history.json` 分别保存最多 500 条脱敏终态 `executions`，以及用于跨 Core 原子占用 operation ID 的非终态 `reservations`（`queued`/`running`）。`status`/`history` 可在 Core 重启后恢复仍被保留的 `succeeded`、`failed`、`cancelled` 或 `outcome-unknown`；在对应 execution 或 reservation 仍被保留时，相同 `operation_id` 与相同 plan 返回原 execution，不会再次派发 backend，若 plan 不同则返回 `tool_operation_conflict`。该文件只用于执行与占用恢复，与 artifact 的 `lastUsedAt` 和追加式 `audit.jsonl` 各自独立；它不保存 grant、批准秘密、panel capability token 或未脱敏参数。`queued`/`running` reservation 只证明 operation ID 已占用，不能描述成已获得持久终态；失效 reservation 会按是否已经运行恢复为 `failed` 或 `outcome-unknown`。
 
 四档最低策略：read 始终可读；readonly 拒绝其他风险；manual 对 write/destructive/external 询问；auto/none 自动放行普通 write，但 destructive/external 仍逐次询问。只有 write plan 可获得 session 放行；destructive/external 只能 once。write 的 session key 绑定 artifact/content/operation/normalized target，不按工具名缓存。
 
@@ -430,7 +442,7 @@ Unless noted otherwise, tools return JSON with `ok: true` on success, or `ok: fa
 | `ae.toolIndex` | `kinds?`, `statuses?`, `source_types?`, `include_candidates?`, `limit?` | list summaries only |
 | `ae.toolSearch` | `query`, `kinds?`, `categories?`, `tags?`, `risks?`, `statuses?`, `source_types?`, `offset?`, `limit?` | search summaries; no content |
 | `ae.toolInspect` | `artifact_id` | first content-bearing call |
-| `ae.toolUse` | staged action fields | render or prepare/grant/execute |
+| `ae.toolUse` | staged action fields | render/prepare/grant/execute/start/status/cancel/history |
 | `ae.toolCreate` | `name`, `kind`, `content`, plus optional metadata fields | create native artifact |
 | `ae.toolEdit` | `artifact_id`, `changes`, `expected_revision`, `expected_content_hash`, `replace_artifact_id?` | edit or verify artifact |
 | `ae.toolDelete` | `artifact_id`, `expected_revision`, `expected_content_hash` | permanently delete user artifact |
@@ -534,7 +546,7 @@ Skills live in `~/.ae-mcp/skills/<name>.json`:
 | `ae.toolIndex` | `ae_toolIndex` | none | `kinds`, `statuses`, `source_types`, `include_candidates`, `limit` | `ok`, summary-only `artifacts[]` |
 | `ae.toolSearch` | `ae_toolSearch` | `query` | `kinds`, `categories`, `tags`, `risks`, `statuses`, `source_types`, `offset`, `limit` | `ok`, `artifacts[]`, `total`, `offset`, `limit`; no content |
 | `ae.toolInspect` | `ae_toolInspect` | `artifact_id` | none | `ok`, full `artifact`, `trust` |
-| `ae.toolUse` | `ae_toolUse` | `action` and that action's fields | see the action table below | render or plan/grant/execute result |
+| `ae.toolUse` | `ae_toolUse` | `action` and that action's fields | see the action table below | render, plan/grant, execution-job, or synchronous execute result |
 | `ae.toolCreate` | `ae_toolCreate` | `name`, `kind`, `content` | `description`, `category`, `tags`, `compatibility`, `declared_risk`, `status`, `args_schema`, `expected_store_revision` | `ok`, full new `artifact` |
 | `ae.toolEdit` | `ae_toolEdit` | `artifact_id`, `changes`, `expected_revision`, `expected_content_hash` | `replace_artifact_id` | `ok`, full updated `artifact` |
 | `ae.toolDelete` | `ae_toolDelete` | `artifact_id`, `expected_revision`, `expected_content_hash` | none | `ok`, `deleted` |
@@ -566,11 +578,23 @@ The exact `ae.toolUse` action shapes are:
 | `render` | `action`, `artifact_id` | `args`; if present, `operation` must be `render` | `ok`, `artifactId`, `contentHash`, `trust`, plus `rendered` or `untrustedContext` |
 | `prepare` | `action`, `artifact_id`, `operation` | `args` and `target` (both default to `{}`) | bare plan object: `artifactId`, `contentHash`, `operation`, `normalizedArgs`, `target`, `dependencyHashes`, `planHash`, `risk`, `expiresAt`; no `ok` |
 | `grant` | `action`, `plan_hash`, `grant_scope` (`once`/`session`) | none | `ok`, `grantId`, `planHash`, `scope`, `expiresAt` |
-| `execute` | `action`, `plan_hash`, `grant_id` | none | the kind/operation-specific render, backend, or handler result with `ok: true`; recipes return `results[]` |
+| `execute` | `action`, `plan_hash`, `grant_id`, `operation_id` | none | waits for a terminal state; success returns the kind/operation-specific render, backend, or handler result with `ok: true`, and recipes return `results[]`; failure carries execution/recovery evidence |
+| `start` | `action`, `plan_hash`, `grant_id`, `operation_id` | none | returns an execution job immediately, normally first as `queued`; poll it by `executionId` |
+| `status` | `action`, `execution_id` | none | current execution job, including terminal recovery after a Core restart |
+| `cancel` | `action`, `execution_id` | none | current execution job plus `cancelDisposition` |
+| `history` | `action`, `artifact_id` | `limit` (1..100, default 20) | `ok`, `artifactId`, newest-first `executions[]` |
 
 A grant is consumed once. Immediately before execution the artifact, args schema, and recipe/handler dependencies are re-read, so any change invalidates the old plan/grant.
 
-Completed Tool Library execution jobs are retained as at most 500 redacted terminal records in `execution-history.json` under the Tool Library root. `status` and `history` can therefore recover `succeeded`, `failed`, `cancelled`, or `outcome-unknown` after a Core restart. Reusing the same `operation_id` with the same plan returns the original execution without backend redispatch; a different plan returns `tool_operation_conflict`. This recovery record is separate from artifact `lastUsedAt` metadata and the append-only `audit.jsonl`. It stores no grants, approval secrets, panel capability tokens, or unredacted arguments. Only terminal jobs enter this file; an in-process job that has not reached a terminal state must not be described as durably recovered.
+Both `execute` and `start` require a stable caller-generated `operation_id` of 16..128 characters. After losing a response for the same plan, repeat `start` with that same `operation_id` to recover the original `executionId` without redispatching the backend. This deduplication guarantee applies only while the execution record or reservation is retained; once a terminal record ages out of retention, an old ID must not be relied on for deduplication. If the `executionId` is already known, resume with `status`. Do not mint a new `operation_id` and retry until state and audit evidence have been reconciled. Reusing an operation ID with a different plan returns `tool_operation_conflict`.
+
+The public execution-job shape contains `executionId`, `operationId`, `artifactId`, `contentHash`, `artifactRevision`, `planHash`, `operation`, `initiator`, `status`, `progress`, `terminal`, `cancelRequested`, `outcomeUnknown`, timestamps, and nullable `result`, `error`, and `audit`. Status is one of `queued`, `running`, `succeeded`, `failed`, `cancelled`, or `outcome-unknown`. The `error` retains available `sideEffect` and `recovery` metadata. When `outcomeUnknown=true`, inspect AE state and audit before any retry.
+
+`cancel` promises only a structured disposition. A queued job owned by this Core can report `cancelled-before-dispatch`; a dispatched running job reports `not-cancellable-after-dispatch`. A queued or running job owned by another Core sharing the Tool Library reports `owned-by-another-core` only after this Core has observed the reservation during startup, `status`/`history`, or a duplicate `start`. `already-terminal` is returned when this Core has observed the terminal state; cross-Core caches can still hold an older reservation, so refresh with `status` or `history` before cancelling. Before this Core has observed any shared reservation, direct `cancel` can return `tool_execution_not_found`, so call `status` first to load shared state. A cancellation request never claims that AE has stopped.
+
+The ordinary public MCP schema has no `developer_mode` switch, and public Tool Library kinds exclude `system-command`. A Developer Panel holding the private capability can inspect quarantined system-command metadata and receives the artifact's full `content` from Inspect. Direct run remains unavailable, `ae.toolUse` still denies execution, and ordinary agents cannot discover these artifacts.
+
+`execution-history.json` under the Tool Library root separately stores at most 500 redacted terminal `executions` and nonterminal `reservations` (`queued`/`running`) used to reserve operation IDs atomically across Core processes. `status` and `history` can recover retained `succeeded`, `failed`, `cancelled`, or `outcome-unknown` records after a Core restart. While the corresponding execution or reservation remains retained, reusing the same `operation_id` with the same plan returns the original execution without backend redispatch; a different plan returns `tool_operation_conflict`. The file is separate from artifact `lastUsedAt` metadata and the append-only `audit.jsonl`, and stores no grants, approval secrets, panel capability tokens, or unredacted arguments. A `queued`/`running` reservation proves only that the operation ID is reserved, not that a durable terminal outcome exists; an expired reservation recovers to `failed` or `outcome-unknown` depending on whether it had entered running state.
 
 Minimum four-tier policy: reads are allowed; readonly denies other risks; manual asks for write/destructive/external; auto and none allow ordinary writes, while destructive/external always ask. Only write plans can receive session approval; destructive/external plans are once-only. A write session key binds artifact/content/operation/normalized target and is never cached by tool name.
 
