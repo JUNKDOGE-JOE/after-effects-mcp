@@ -12,8 +12,9 @@ These rules apply to human developers and coding agents working in this reposito
 ## 2. Prioritize by dependency and user value
 
 - Do not implement issues by issue number or creation order. Maintain P0/P1/P2/P3 priorities based on dependency and user value.
-- Work on one dependent P0 issue at a time. Do not start or stack the next dependent issue before the current issue has completed its full closure loop.
-- The closure loop is: implement -> automated tests -> independent diff review -> CI -> exact-build hardware validation -> merge -> rebuild/reinstall from `main` -> hardware revalidation -> close the issue and update its parent epic.
+- Work on one dependent P0 capability package at a time. A capability package normally groups about 5-15 tightly related tools that share an AEGP SDK suite, dispatcher, fixture, Undo model, or user scenario. Small infrastructure changes and isolated fixes may remain single-Issue packages when they do not belong to a tool family.
+- A capability package may retain multiple child Issues and acceptance checklists, but it uses one branch/worktree, one PR, one concentrated review, one exact-candidate hardware acceptance run, and one clean-`main` hardware revalidation. Close each child Issue only when its own acceptance result passed in the package evidence.
+- The package closure loop is: design the public MCP schemas and interaction matrix -> implement with incremental unit/contract/compile tests -> independent diff review -> CI -> exact-build package hardware validation -> merge -> rebuild/reinstall from `main` -> package hardware revalidation -> close accepted child Issues and update their parent epic.
 - Parallel work is allowed only when it is genuinely independent and cannot cause mixed builds, shared-fixture conflicts, or premature assumptions about an unmerged interface.
 
 ## 3. Define the public vertical-slice acceptance test first
@@ -35,9 +36,11 @@ public MCP tool
 - Use the public MCP tool name and request shape that a model will see. Internal calls may diagnose a failure but cannot replace end-to-end acceptance.
 - AEGP expands the capability ceiling; it is not a mechanical routing rule. Do not design a complex AEGP/JSX resolver until the real AEGP execution plane and useful native capability set are working.
 
-## 4. Hardware validation is a merge gate
+## 4. Layer hardware validation by native novelty and capability package
 
-- Any change whose acceptance depends on AE loading, lifecycle, GUI state, main-thread behavior, CEP/native communication, or project mutation requires real-machine validation before merge.
+- When a package introduces a new AEGP SDK suite, object-lifecycle rule, main-thread mechanism, or other unverified native primitive, run one narrow intermediate hardware smoke as soon as that primitive is testable. Once the mechanism is proven, do not redeploy for each simple tool built on it.
+- Complete the package with one exact-SHA real-machine run through the public MCP surface that exercises every included tool and their important interactions in the same disposable AE fixture. Batch the structured response, AE state, native provenance, audit, recovery, and write-tool Undo evidence.
+- Any package whose acceptance depends on AE loading, lifecycle, GUI state, main-thread behavior, CEP/native communication, or project mutation still requires this package-level real-machine validation before merge.
 - Automated tests and CI never substitute for hardware validation.
 - Build, install, and test the exact candidate commit. Core, CEP host, native plugin, protocol metadata, and test evidence must report the same full commit SHA. Abort validation on any mismatch.
 - After merge, repeat the relevant public MCP smoke test from a clean `main` build. Do not rely on the pre-merge installation.
@@ -66,7 +69,7 @@ Classify every newly discovered risk or reviewer comment before implementing it:
 
 ## 7. Preserve build and workspace identity
 
-- Use one worktree and one branch for each issue. Know which worktree owns every build, install, test artifact, and running process.
+- Use one worktree and one branch for each capability package. Record the child Issues and acceptance matrix owned by that worktree, and know which package owns every build, install, test artifact, and running process.
 - Before building or deploying, record `git rev-parse HEAD`, dirty state, artifact hashes, installed paths, and runtime-reported source commit.
 - Never mix Core, CEP, native plugin, or protocol files from different commits. A convenient partial redeploy is not valid evidence.
 - Keep backup, staging, rollback, and evidence directories outside Adobe's plugin scan roots.
@@ -103,9 +106,9 @@ Treat this Skip -> Continue sequence as established project knowledge. Do not re
 
 ## 9. Completion evidence
 
-An issue completion report must include:
+A capability-package completion report must include:
 
-- issue and PR links, exact tested commit, and merge commit;
+- package PR, parent Epic and child Issue links, per-Issue acceptance disposition, exact tested commit, and merge commit;
 - the public MCP request and structured response;
 - AE state evidence before and after the operation;
 - native/AEGP provenance and matching source commit;
@@ -116,9 +119,9 @@ An issue completion report must include:
 
 Do not claim completion using only "tests passed", "CI is green", "the plugin compiled", or "the PR merged".
 
-## 10. Stop conditions before starting the next issue
+## 10. Stop conditions before starting the next dependent capability package
 
-Do not proceed to the next dependent issue when any of the following is true:
+Do not proceed to the next dependent capability package when any of the following is true:
 
 - the current public MCP acceptance test has not passed on real AE;
 - the installed components do not share an exact source commit;

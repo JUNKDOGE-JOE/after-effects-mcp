@@ -9,18 +9,19 @@ import { fileURLToPath } from 'node:url';
 
 export const GOVERNANCE_PATH = 'AGENTS.md';
 export const INVENTORY_PATH = 'docs/checkpoints/2026-07-16-worktree-audit.md';
-export const GOVERNANCE_SHA256 = '48f64cbdeff4618367a3770ebbf6ae234e70ea16f375427764a1967b17c05fc0';
+export const GOVERNANCE_SHA256 = 'cf384c1e4c800fc9b784cbcb01edc1534ef24a720c87218c8c7741e433b49da6';
 
 const REQUIRED_RULES = [
   '# Repository Development and Delivery Rules',
   '## 1. Measure outcomes, not activity',
   'public MCP surface',
-  '## 4. Hardware validation is a merge gate',
+  '## 4. Layer hardware validation by native novelty and capability package',
   'Core, CEP host, native plugin',
   'POSSIBLY_SIDE_EFFECTING_FAILURE',
-  'one worktree and one branch for each issue',
+  'one worktree and one branch for each capability package',
+  'one branch/worktree, one PR, one concentrated review',
   '## 9. Completion evidence',
-  '## 10. Stop conditions before starting the next issue',
+  '## 10. Stop conditions before starting the next dependent capability package',
   'Do not implement issues by issue number or creation order.',
   'Automated tests and CI never substitute for hardware validation.',
   'After merge, repeat the relevant public MCP smoke test from a clean `main` build.',
