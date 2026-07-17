@@ -139,6 +139,19 @@ def _deadline() -> int:
     return int(time.time() * 1000) + 5_000
 
 
+def test_typed_native_arguments_reject_nul_and_keep_valid_unicode():
+    arguments = {
+        **INPUT,
+        "name": "合成😀",
+    }
+    assert N.CompositionCreateArguments.model_validate(arguments).name == "合成😀"
+
+    with pytest.raises(ValidationError):
+        N.CompositionCreateArguments.model_validate(
+            {**arguments, "name": "SYNTHETIC\x00COMP"}
+        )
+
+
 @pytest.mark.asyncio
 async def test_create_binds_exact_settings_and_returns_verified_fresh_locator():
     backend = CreateBackend()
@@ -300,6 +313,7 @@ async def test_public_mcp_schema_is_registered_and_rejects_before_dispatch(monke
         public_schema = listed.tools[0].inputSchema
         duration_ref = public_schema["properties"]["duration"]["$ref"]
         duration_schema = public_schema["$defs"][duration_ref.rsplit("/", 1)[1]]
+        assert public_schema["properties"]["name"]["pattern"] == r"^[^\u0000]+$"
         assert duration_schema["properties"]["value"] == {
             "maximum": 2_147_483_647,
             "minimum": 1,
@@ -326,18 +340,36 @@ async def test_public_mcp_schema_is_registered_and_rejects_before_dispatch(monke
                 "field": "arguments.duration.value",
                 "capabilityId": "ae.composition.create",
             }
+
+        nul_name = await client.call_tool(
+            "ae_createComposition",
+            {
+                "name": "SYNTHETIC\x00COMP",
+                "idempotency_key": "synthetic-comp-create-0004",
+            },
+        )
+        assert nul_name.isError is True
+        nul_payload = json.loads(nul_name.content[0].text)
+        assert nul_payload["error"]["code"] == "INVALID_ARGUMENT"
+        assert nul_payload["error"]["sideEffect"] == "not-started"
+        assert nul_payload["error"]["recovery"]["action"] == "change-arguments"
+        assert nul_payload["error"]["details"] == {
+            "field": "arguments.name",
+            "capabilityId": "ae.composition.create",
+        }
         assert dispatches == []
 
         accepted = await client.call_tool(
             "ae_createComposition",
             {
-                "name": "SYNTHETIC_COMP",
+                "name": "合成😀",
                 "duration": {"value": 5, "scale": 2},
                 "idempotency_key": "synthetic-comp-create-0004",
             },
         )
         assert accepted.isError is False
         assert len(dispatches) == 1
+        assert dispatches[0].name == "合成😀"
         assert dispatches[0].duration.value == 5
         assert dispatches[0].duration.scale == 2
 

@@ -827,6 +827,19 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
             arguments: structuredClone(compositionCreateVector.request.params.arguments),
             deadlineUnixMs,
         };
+        const nulCompositionCreateRequest = structuredClone(compositionCreateRequest);
+        nulCompositionCreateRequest.requestId = 'core-composition-create-nul';
+        nulCompositionCreateRequest.arguments.name = 'SYNTHETIC\u0000COMP';
+        const nulCompositionCreate = await post(
+            port, '/native/invoke', headers, nulCompositionCreateRequest,
+        );
+        assert.strictEqual(nulCompositionCreate.status, 400);
+        assert.strictEqual(nulCompositionCreate.body.error.code, 'INVALID_ARGUMENT');
+        assert.strictEqual(nulCompositionCreate.body.error.sideEffect, 'not-started');
+        assert.strictEqual(
+            nulCompositionCreate.body.error.recovery.action,
+            'change-arguments',
+        );
         const compositionCreate = await post(
             port, '/native/invoke', headers, compositionCreateRequest,
         );

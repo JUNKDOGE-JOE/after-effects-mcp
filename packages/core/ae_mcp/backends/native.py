@@ -1607,7 +1607,7 @@ COMPOSITION_CREATE_CAPABILITY_VERSION = 1
 COMPOSITION_CREATE_INPUT_CONTRACT_ID = "aemcp.contract.ae.composition.create.input.v1"
 COMPOSITION_CREATE_RESULT_CONTRACT_ID = "aemcp.contract.ae.composition.create.result.v1"
 COMPOSITION_CREATE_CONTRACT_DIGEST = (
-    "a5e0ccfc15086d1b10987246048e539cf6332a4e24114ac81783f4a9758ab6f6"
+    "0e65175a0d85640eda3eb58b08d4cabc0aa9f085068225e1b44f9cf01467310d"
 )
 
 COMPOSITION_LAYER_CREATE_CAPABILITY_ID = "ae.composition.layer.create"
@@ -2196,7 +2196,12 @@ _COMPOSITION_CREATE_INPUT_SCHEMA = {
         "pixelAspectRatio", "idempotencyKey",
     ],
     "properties": {
-        "name": {"type": "string", "minLength": 1, "maxLength": 255},
+        "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": r"^[^\u0000]+$",
+        },
         "width": {"type": "integer", "minimum": 1, "maximum": 30_000},
         "height": {"type": "integer", "minimum": 1, "maximum": 30_000},
         "duration": {"$ref": "#/$defs/positiveTime"},
@@ -3354,7 +3359,10 @@ class PositiveRatioValue(PositiveRatioTarget):
 
 
 class CompositionCreateArguments(_NativeModel):
-    name: Annotated[StrictStr, Field(min_length=1, max_length=255)]
+    name: Annotated[
+        StrictStr,
+        Field(min_length=1, max_length=255, pattern=r"^[^\u0000]+$"),
+    ]
     width: Annotated[StrictInt, Field(ge=1, le=30_000)]
     height: Annotated[StrictInt, Field(ge=1, le=30_000)]
     duration: CompositionTimeTarget

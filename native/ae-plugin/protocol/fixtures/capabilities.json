@@ -1948,7 +1948,7 @@
           },
           "inputContractId": "aemcp.contract.ae.composition.create.input.v1",
           "resultContractId": "aemcp.contract.ae.composition.create.result.v1",
-          "contractDigest": "a5e0ccfc15086d1b10987246048e539cf6332a4e24114ac81783f4a9758ab6f6",
+          "contractDigest": "0e65175a0d85640eda3eb58b08d4cabc0aa9f085068225e1b44f9cf01467310d",
           "inputSchema": {
             "type": "object",
             "additionalProperties": false,
@@ -1965,7 +1965,8 @@
               "name": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 255
+                "maxLength": 255,
+                "pattern": "^[^\\u0000]+$"
               },
               "width": {
                 "type": "integer",
@@ -4571,7 +4572,7 @@
       ],
       "nextCursor": null,
       "queryDigest": "1c9d06b8b5f876c7b41fb00204efe2f5c5e62502bb188fa8a1e5eae5e59d0c3b",
-      "capabilitiesDigest": "f2dfe6b726efb02a371ee45cfa814050e87122e81dd282a6b7797862c2a4638a"
+      "capabilitiesDigest": "f589837c77ed835fc240c010e2a7a8c5582fbbe92130cbc84595abb33bb22236"
     }
   }
 }

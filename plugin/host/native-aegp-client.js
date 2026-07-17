@@ -38,7 +38,7 @@ const COMPOSITION_LAYERS_LIST_CONTRACT_DIGEST = '3bd877e708d62ca1003e65498ebd86a
 const COMPOSITION_SELECTED_LAYERS_LIST_CONTRACT_DIGEST = '3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75';
 const COMPOSITION_TIME_READ_CONTRACT_DIGEST = 'fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd';
 const COMPOSITION_TIME_SET_CONTRACT_DIGEST = '724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308';
-const COMPOSITION_CREATE_CONTRACT_DIGEST = 'a5e0ccfc15086d1b10987246048e539cf6332a4e24114ac81783f4a9758ab6f6';
+const COMPOSITION_CREATE_CONTRACT_DIGEST = '0e65175a0d85640eda3eb58b08d4cabc0aa9f085068225e1b44f9cf01467310d';
 const COMPOSITION_LAYER_CREATE_CONTRACT_DIGEST = 'd48b5c0fcf9871ee579bf518679bc36277e2fd5194e70d9cc6fa1b2c573edeee';
 const LAYER_EFFECT_APPLY_CONTRACT_DIGEST = '5de12c7cd4ede09122a837c85ff2e589f695dd5377490b97b9de9d975ce00d77';
 // Kept in lockstep with the full descriptor in capabilities.json. The native
@@ -453,6 +453,7 @@ function validCompositionCreateArguments(value) {
         && unicodeScalarLength(value.name) !== null
         && unicodeScalarLength(value.name) >= 1
         && unicodeScalarLength(value.name) <= 255
+        && !value.name.includes('\u0000')
         && Number.isInteger(value.width) && value.width >= 1 && value.width <= 30000
         && Number.isInteger(value.height) && value.height >= 1 && value.height <= 30000
         && validCompositionTime(value.duration, false) && value.duration.value > 0

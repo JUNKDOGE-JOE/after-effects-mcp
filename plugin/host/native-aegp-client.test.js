@@ -1655,6 +1655,17 @@ test('CEP composition create verifies settings, replay, and uncertain failures',
     }), { code: 'INVALID_ARGUMENT', retryable: false });
     assert.equal(ready.protocol.requests.length, requestCount);
 
+    const nulNameArguments = structuredClone(argumentsValue);
+    nulNameArguments.name = 'SYNTHETIC\u0000COMP';
+    await assert.rejects(ready.client.invoke({
+        requestId: 'composition-create-client-nul',
+        capabilityId: 'ae.composition.create',
+        capabilityVersion: 1,
+        arguments: nulNameArguments,
+        deadlineUnixMs: 1900000005000,
+    }), { code: 'INVALID_ARGUMENT', retryable: false });
+    assert.equal(ready.protocol.requests.length, requestCount);
+
     const uncertainArguments = structuredClone(argumentsValue);
     uncertainArguments.idempotencyKey = 'synthetic-comp-create-uncertain-0001';
     await assert.rejects(ready.client.invoke({

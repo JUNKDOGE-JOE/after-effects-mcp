@@ -345,6 +345,7 @@ function validCompositionCreateArguments(value) {
         'pixelAspectRatio', 'idempotencyKey',
     ])
         && validUnicodeScalarCount(value.name, 1, 255)
+        && !value.name.includes('\u0000')
         && Number.isInteger(value.width) && value.width >= 1 && value.width <= 30000
         && Number.isInteger(value.height) && value.height >= 1 && value.height <= 30000
         && exactBody(value.duration, ['value', 'scale'])
