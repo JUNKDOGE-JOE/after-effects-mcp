@@ -379,6 +379,20 @@ export function createRuntimeManager({
     }
   }
 
+  function assertLauncherTransitionCompatible(selected, current) {
+    if (!current?.ok || current.relative === selected.relative) return;
+    if (current.record.launcherSha256 !== selected.record.launcherSha256) {
+      failure(
+        'RUNTIME_LAUNCHER_MIGRATION_REQUIRED',
+        'The stable launcher contract changed; keep the active runtime until a dedicated launcher migration is available',
+        {
+          currentSourceCommitSha: current.record.sourceCommitSha,
+          selectedSourceCommitSha: selected.record.sourceCommitSha,
+        },
+      );
+    }
+  }
+
   async function installPackaged(packaged, { repair = false } = {}) {
     const identity = `${packaged.version}-${packaged.sourceCommitSha}`;
     let runtimeId = identity;
@@ -535,6 +549,7 @@ export function createRuntimeManager({
         };
       }
       const selected = await installPackaged(packaged);
+      assertLauncherTransitionCompatible(selected, current);
       await installLauncher(selected);
       await activate(selected, current);
       const action = current.ok
@@ -562,6 +577,7 @@ export function createRuntimeManager({
       const packaged = await verifyPackagedPayload();
       const current = await pointerState(paths.currentPointer);
       const selected = await installPackaged(packaged, { repair: true });
+      assertLauncherTransitionCompatible(selected, current);
       await installLauncher(selected);
       await activate(selected, current);
       return {
@@ -577,6 +593,7 @@ export function createRuntimeManager({
       const current = await pointerState(paths.currentPointer);
       const previous = await pointerState(paths.previousPointer);
       if (!previous.ok) failure('RUNTIME_ROLLBACK_UNAVAILABLE', 'No verified previous runtime is available');
+      assertLauncherTransitionCompatible(previous, current);
       await installLauncher(previous);
       await writePointer(paths.currentPointer, previous.relative);
       if (current.ok && current.relative !== previous.relative) await writePointer(paths.previousPointer, current.relative);

@@ -66,7 +66,12 @@ function adapter(home) {
   });
 }
 
-async function packageFixture(base, { version, sourceCommitSha, marker }) {
+async function packageFixture(base, {
+  version,
+  sourceCommitSha,
+  marker,
+  launcherVersion = 'v1',
+}) {
   const extensionRoot = path.join(base, `AE MCP 插件 ${version}`);
   const runtimeRoot = path.join(extensionRoot, 'runtime', 'macos-arm64');
   const python = await writeFile(
@@ -99,7 +104,7 @@ async function packageFixture(base, { version, sourceCommitSha, marker }) {
     'platform/macos-arm64/bin/ae-mcp',
     [
       '#!/bin/sh',
-      `# fixture:${marker}`,
+      `# fixture-launcher:${launcherVersion}`,
       'set -eu',
       'base="${AE_MCP_HOME:-$HOME/.ae-mcp}"',
       'relative="$(/bin/cat "$base/runtime/current")"',
@@ -194,11 +199,21 @@ test('upgrade, downgrade, and rollback atomically select verified versions', asy
   await one.ensureReady();
   assert.equal((await two.ensureReady()).action, 'upgrade');
   assert.equal((await two.rollback()).version, '0.9.3');
-  assert.match(await fs.promises.readFile(h.platform.paths.launcher, 'utf8'), /fixture:one/);
+  let launched = await execFileAsync(h.platform.paths.launcher, ['--rollback'], {
+    env: { HOME: h.home, AE_MCP_HOME: h.platform.paths.configRoot, PATH: '/usr/bin:/bin' },
+  });
+  assert.match(launched.stdout, /core-started:one:-B -I -m ae_mcp --rollback/);
   assert.equal((await two.inspect()).ok, true);
   assert.equal((await two.ensureReady()).action, 'upgrade');
-  assert.match(await fs.promises.readFile(h.platform.paths.launcher, 'utf8'), /fixture:two/);
+  launched = await execFileAsync(h.platform.paths.launcher, ['--upgrade'], {
+    env: { HOME: h.home, AE_MCP_HOME: h.platform.paths.configRoot, PATH: '/usr/bin:/bin' },
+  });
+  assert.match(launched.stdout, /core-started:two:-B -I -m ae_mcp --upgrade/);
   assert.equal((await one.ensureReady()).action, 'downgrade');
+  launched = await execFileAsync(h.platform.paths.launcher, ['--downgrade'], {
+    env: { HOME: h.home, AE_MCP_HOME: h.platform.paths.configRoot, PATH: '/usr/bin:/bin' },
+  });
+  assert.match(launched.stdout, /core-started:one:-B -I -m ae_mcp --downgrade/);
   const state = await one.inspect();
   assert.equal(state.current.record.version, '0.9.3');
   assert.equal(state.previous.record.version, '0.10.0');
@@ -224,13 +239,40 @@ test('a corrupt current runtime falls back once, then a later call repairs from 
   assert.equal(fallback.action, 'fallback');
   assert.equal(fallback.version, '0.9.3');
   assert.equal(fallback.diagnostics[0].code, 'RUNTIME_CURRENT_INVALID_FALLBACK');
-  assert.match(await fs.promises.readFile(h.platform.paths.launcher, 'utf8'), /fixture:one/);
+  const launched = await execFileAsync(h.platform.paths.launcher, ['--fallback'], {
+    env: { HOME: h.home, AE_MCP_HOME: h.platform.paths.configRoot, PATH: '/usr/bin:/bin' },
+  });
+  assert.match(launched.stdout, /core-started:one:-B -I -m ae_mcp --fallback/);
   assert.equal((await two.inspect()).ok, true);
   await assert.rejects(fs.promises.readFile(h.platform.paths.previousPointer), { code: 'ENOENT' });
   const next = await two.ensureReady();
   assert.notEqual(next.action, 'fallback');
   assert.equal(next.version, '0.10.0');
   assert.equal((await two.inspect()).ok, true);
+});
+
+test('a launcher contract change cannot publish a mixed launcher/runtime selection', async (t) => {
+  const h = await harness(t);
+  const v1 = await packageFixture(h.root, {
+    version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'one', launcherVersion: 'v1',
+  });
+  const v2 = await packageFixture(h.root, {
+    version: '0.10.0', sourceCommitSha: '2'.repeat(40), marker: 'two', launcherVersion: 'v2',
+  });
+  const one = managerFor(h, v1.extensionRoot);
+  const two = managerFor(h, v2.extensionRoot);
+  const installed = await one.ensureReady();
+  const pointerBefore = await fs.promises.readFile(h.platform.paths.currentPointer, 'utf8');
+  const launcherBefore = await fs.promises.readFile(h.platform.paths.launcher);
+
+  await assert.rejects(two.ensureReady(), { code: 'RUNTIME_LAUNCHER_MIGRATION_REQUIRED' });
+
+  assert.equal(await fs.promises.readFile(h.platform.paths.currentPointer, 'utf8'), pointerBefore);
+  assert.deepEqual(await fs.promises.readFile(h.platform.paths.launcher), launcherBefore);
+  const launched = await execFileAsync(installed.launcher, ['--unchanged'], {
+    env: { HOME: h.home, AE_MCP_HOME: h.platform.paths.configRoot, PATH: '/usr/bin:/bin' },
+  });
+  assert.match(launched.stdout, /core-started:one:-B -I -m ae_mcp --unchanged/);
 });
 
 test('a corrupt extension update retains the previously verified active runtime', async (t) => {
