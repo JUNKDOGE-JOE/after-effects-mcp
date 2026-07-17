@@ -1406,6 +1406,73 @@ async def test_public_tool_use_returns_shared_execution_without_second_dispatch(
     assert len(first_backend.calls) + len(second_backend.calls) == 1
 
 
+@pytest.mark.asyncio
+async def test_public_synchronous_execute_waits_for_shared_terminal_result(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    artifact = _artifact()
+    first_backend = _BlockingBackend()
+    second_backend = _BlockingBackend()
+    first = ToolExecutionEngine(
+        _Store(artifact),
+        first_backend,
+        job_store=ExecutionJobStore(tmp_path),
+        now=lambda: 37_000,
+    )
+    second = ToolExecutionEngine(
+        _Store(artifact),
+        second_backend,
+        job_store=ExecutionJobStore(tmp_path),
+        now=lambda: 37_000,
+    )
+    first_plan = first.prepare(artifact.id, operation="execute", args={}, target={})
+    second_plan = second.prepare(artifact.id, operation="execute", args={}, target={})
+    first_grant = first.grants.issue_once(first_plan)
+    second_grant = second.grants.issue_once(second_plan)
+    services = iter(
+        [SimpleNamespace(execution=first), SimpleNamespace(execution=second)]
+    )
+    monkeypatch.setattr(tool_handlers, "default_tool_service", lambda: next(services))
+
+    first_call = asyncio.create_task(
+        tool_handlers._run_tool_use(
+            S.AeToolUseArgs(
+                action="execute",
+                plan_hash=first_plan.plan_hash,
+                grant_id=first_grant.grant_id,
+                operation_id="operation-public-sync-cross-core",
+            ),
+            None,
+        )
+    )
+    second_call = asyncio.create_task(
+        tool_handlers._run_tool_use(
+            S.AeToolUseArgs(
+                action="execute",
+                plan_hash=second_plan.plan_hash,
+                grant_id=second_grant.grant_id,
+                operation_id="operation-public-sync-cross-core",
+            ),
+            None,
+        )
+    )
+    while len(first_backend.calls) + len(second_backend.calls) == 0:
+        await asyncio.sleep(0)
+    assert not first_call.done()
+    assert not second_call.done()
+    assert len(first_backend.calls) + len(second_backend.calls) == 1
+
+    if first_backend.calls:
+        first_backend.release.set()
+    else:
+        second_backend.release.set()
+    first_result, second_result = await asyncio.gather(first_call, second_call)
+    assert first_result == {"ok": True}
+    assert second_result == {"ok": True}
+    assert len(first_backend.calls) + len(second_backend.calls) == 1
+
+
 def test_operation_claim_is_atomic_across_spawned_processes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1493,6 +1560,71 @@ def test_orphaned_shared_reservation_recovers_without_blind_redispatch(
     assert duplicate.record["status"] == "outcome-unknown"
     persisted = (tmp_path / "execution-history.json").read_text(encoding="utf-8")
     assert "ownerToken" not in persisted
+
+
+def test_orphan_recovery_tombstone_survives_full_history_pruning(
+    tmp_path: Path,
+) -> None:
+    clock = [100]
+    store = ExecutionJobStore(
+        tmp_path,
+        max_records=2,
+        now=lambda: clock[0],
+        reservation_lease_ms=100,
+    )
+    queued = {
+        "executionId": "execution-old-orphan",
+        "operationId": "operation-old-orphan",
+        "artifactId": "user:one",
+        "contentHash": "a" * 64,
+        "artifactRevision": 1,
+        "planHash": "b" * 64,
+        "operation": "execute",
+        "initiator": "first-core",
+        "status": "queued",
+        "createdAt": 100,
+    }
+    claim = store.claim(queued)
+    assert claim.owner_token is not None
+    store.mark_running(
+        "execution-old-orphan",
+        owner_token=claim.owner_token,
+        started_at=101,
+    )
+    for index in range(2):
+        store.upsert(
+            {
+                "executionId": f"execution-newer-{index}",
+                "operationId": f"operation-newer-{index}",
+                "artifactId": "user:one",
+                "contentHash": "a" * 64,
+                "artifactRevision": 1,
+                "planHash": chr(ord("c") + index) * 64,
+                "operation": "execute",
+                "initiator": "other-core",
+                "status": "succeeded",
+                "createdAt": 200 + index,
+                "startedAt": 200 + index,
+                "finishedAt": 200 + index,
+                "cancelRequested": False,
+                "result": {"ok": True},
+                "error": None,
+                "audit": None,
+            }
+        )
+
+    clock[0] = 201
+    recovered = store.lookup_operation("operation-old-orphan")
+    assert recovered is not None
+    assert recovered["status"] == "outcome-unknown"
+    assert len(store.snapshot()) == 2
+
+    retry = dict(queued)
+    retry["executionId"] = "execution-old-orphan-retry"
+    duplicate = store.claim(retry)
+    assert duplicate.owned is False
+    assert duplicate.record["executionId"] == "execution-old-orphan"
+    assert duplicate.record["status"] == "outcome-unknown"
 
 
 @pytest.mark.asyncio

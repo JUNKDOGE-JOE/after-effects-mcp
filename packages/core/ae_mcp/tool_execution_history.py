@@ -282,16 +282,32 @@ class ExecutionJobStore:
         return executions, reservations, cast(int, schema)
 
     def _prune(
-        self, records: list[dict[str, JsonValue]]
+        self,
+        records: list[dict[str, JsonValue]],
+        *,
+        protected_operation_ids: frozenset[str] = frozenset(),
     ) -> list[dict[str, JsonValue]]:
-        records.sort(
+        protected = [
+            row
+            for row in records
+            if cast(str, row["operationId"]) in protected_operation_ids
+        ]
+        unprotected = [
+            row
+            for row in records
+            if cast(str, row["operationId"]) not in protected_operation_ids
+        ]
+        unprotected.sort(
             key=lambda row: (
                 cast(int, row["createdAt"]),
                 cast(str, row["executionId"]),
             ),
             reverse=True,
         )
-        kept = records[: self.max_records]
+        kept = [
+            *protected,
+            *unprotected[: max(0, self.max_records - len(protected))],
+        ]
         kept.sort(
             key=lambda row: (
                 cast(int, row["createdAt"]),
@@ -321,6 +337,7 @@ class ExecutionJobStore:
     ) -> tuple[list[dict[str, JsonValue]], list[dict[str, JsonValue]], bool]:
         now = self._now()
         retained: list[dict[str, JsonValue]] = []
+        recovered_operation_ids: set[str] = set()
         changed = False
         for reservation in reservations:
             owner = cast(Mapping[str, JsonValue], reservation["owner"])
@@ -371,8 +388,16 @@ class ExecutionJobStore:
                 }
             )
             executions.append(_normalize(terminal))
+            recovered_operation_ids.add(cast(str, reservation["operationId"]))
             changed = True
-        return self._prune(executions), retained, changed
+        return (
+            self._prune(
+                executions,
+                protected_operation_ids=frozenset(recovered_operation_ids),
+            ),
+            retained,
+            changed,
+        )
 
     @staticmethod
     def _same_identity(

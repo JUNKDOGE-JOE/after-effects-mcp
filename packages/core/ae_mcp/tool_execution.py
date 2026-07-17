@@ -1402,11 +1402,19 @@ class ToolExecutionEngine:
             initiator=initiator,
         )
         execution_id = cast(str, started["executionId"])
-        with self._job_lock:
-            task = self._job_tasks.get(execution_id)
-        if task is not None:
-            await asyncio.shield(task)
-        status = self.job_status(execution_id)
+        while True:
+            with self._job_lock:
+                task = self._job_tasks.get(execution_id)
+            if task is not None:
+                await asyncio.shield(task)
+            status = self.job_status(execution_id)
+            if cast(bool, status["terminal"]):
+                break
+            # A synchronous execute routed to a different Core must retain its
+            # synchronous contract. The shared owner has the only local task,
+            # so refresh the durable reservation until it reaches a terminal
+            # result instead of reporting a still-running execution as failed.
+            await asyncio.sleep(0.05)
         if status["status"] == "succeeded":
             result = status.get("result")
             if isinstance(result, Mapping):
