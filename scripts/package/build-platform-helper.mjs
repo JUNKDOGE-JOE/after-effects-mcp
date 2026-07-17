@@ -468,7 +468,7 @@ export async function buildPlatformHelper({
       'case "$relative" in',
       '  ""|/*|*..*) exit 78 ;;',
       'esac',
-      'exec "$base/runtime/$relative/python/bin/python3" -I -m ae_mcp "$@"',
+      'exec "$base/runtime/$relative/python/bin/python3" -B -I -m ae_mcp "$@"',
       '',
     ].join('\n'), { mode: 0o755, flag: 'wx' });
     await fs.promises.chmod(launcherPath, 0o755);

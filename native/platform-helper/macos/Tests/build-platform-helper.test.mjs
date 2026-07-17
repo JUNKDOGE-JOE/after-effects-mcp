@@ -188,6 +188,17 @@ test('mac addon compilation always receives an explicit SDK root', () => {
   assert.ok(block.indexOf('const sdkArgs') < block.indexOf("'-c', path.join(sourceRoot, 'common.cpp')"));
 });
 
+test('mac launcher disables bytecode writes before starting the inventory-bound runtime', () => {
+  const script = fs.readFileSync(
+    path.join(repoRoot, 'scripts/package/build-platform-helper.mjs'),
+    'utf8',
+  );
+  assert.match(
+    script,
+    /python\/bin\/python3\" -B -I -m ae_mcp/,
+  );
+});
+
 test('locked archive digest is verified before tar sees attacker-controlled bytes', () => {
   const script = fs.readFileSync(
     path.join(repoRoot, 'scripts/package/build-platform-helper.mjs'),

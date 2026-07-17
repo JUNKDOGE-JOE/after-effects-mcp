@@ -104,7 +104,7 @@ async function packageFixture(base, { version, sourceCommitSha, marker }) {
       'base="${AE_MCP_HOME:-$HOME/.ae-mcp}"',
       'relative="$(/bin/cat "$base/runtime/current")"',
       'case "$relative" in ""|/*|*..*) exit 78 ;; esac',
-      'exec "$base/runtime/$relative/python/bin/python3" -I -m ae_mcp "$@"',
+      'exec "$base/runtime/$relative/python/bin/python3" -B -I -m ae_mcp "$@"',
       '',
     ].join('\n'),
     0o755,
@@ -171,7 +171,7 @@ test('clean macOS install activates and starts the bundled core without PATH too
   const launched = await execFileAsync(result.launcher, ['--fixture'], {
     env: { HOME: h.home, AE_MCP_HOME: h.platform.paths.configRoot, PATH: '/usr/bin:/bin' },
   });
-  assert.match(launched.stdout, /core-started:clean:-I -m ae_mcp --fixture/);
+  assert.match(launched.stdout, /core-started:clean:-B -I -m ae_mcp --fixture/);
   const node = await manager.resolveNode();
   assert.equal(node.nodePath, path.join(h.platform.paths.runtimeRoot, result.relative, 'node', 'bin', 'node'));
   assert.equal(node.runtime.relative, result.relative);
@@ -252,7 +252,7 @@ test('a corrupt extension update retains the previously verified active runtime'
   const launched = await execFileAsync(retained.launcher, ['--after-corrupt-update'], {
     env: { HOME: h.home, AE_MCP_HOME: h.platform.paths.configRoot, PATH: '/usr/bin:/bin' },
   });
-  assert.match(launched.stdout, /core-started:retained:-I -m ae_mcp --after-corrupt-update/);
+  assert.match(launched.stdout, /core-started:retained:-B -I -m ae_mcp --after-corrupt-update/);
 });
 
 test('repair creates a fresh verified generation and uninstall removes active pointers', async (t) => {
